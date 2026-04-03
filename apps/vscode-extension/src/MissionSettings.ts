@@ -8,7 +8,7 @@ import * as vscode from 'vscode';
 import {
 	getDefaultMissionRepoSettings,
 	getMissionDirectoryPath,
-	getMissionMissionsPath,
+	getMissionWorktreesPath,
 	readMissionRepoSettings
 } from '@flying-pillow/mission-core';
 
@@ -27,7 +27,7 @@ export class MissionSettings {
 
 	public static resolveMissionFolderPath(rootPath: string, scope?: MissionScope): string {
 		const configured = this.getConfiguration(scope).get<string>('missionFolder')?.trim();
-		return this.resolvePath(configured || '.mission/missions', rootPath, scope) ?? getMissionMissionsPath(rootPath);
+		return this.resolvePath(configured || '.mission/worktrees', rootPath, scope) ?? getMissionWorktreesPath(rootPath);
 	}
 
 	public static resolveSkillsFolderPath(rootPath: string, scope?: MissionScope): string {

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { initializeMissionRepository } from './initializeMissionRepository.js';
 
 describe('initializeMissionRepository', () => {
-	it('scaffolds neutral settings without a default runtime provider', async () => {
+	it('scaffolds neutral settings without a default control agent configuration', async () => {
 		const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-init-'));
 
 		try {
@@ -16,8 +16,10 @@ describe('initializeMissionRepository', () => {
 			expect(settings['trackingProvider']).toBe('github');
 			expect(settings['instructionsPath']).toBe('.agents');
 			expect(settings['skillsPath']).toBe('.agents/skills');
-			expect(settings['runtimeProvider']).toBeUndefined();
-			expect(settings['runtimeCommand']).toBeUndefined();
+			expect(settings['serverPort']).toBeUndefined();
+			expect(settings['agentRunner']).toBeUndefined();
+			expect(settings['defaultAgentMode']).toBeUndefined();
+			expect(settings['defaultModel']).toBeUndefined();
 		} finally {
 			await fs.rm(repoRoot, { recursive: true, force: true });
 		}

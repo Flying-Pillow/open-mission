@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { MISSION_STAGES, type MissionStageId } from '@flying-pillow/mission-core';
 import type {
@@ -86,12 +87,7 @@ export class MissionSessionController implements vscode.Disposable {
 
 	public async openMissionFolder(): Promise<void> {
 		const status = await this.requireStatus();
-		if (!status.missionDir) {
-			throw new Error('The active mission does not expose a mission directory.');
-		}
-
-		const uri = vscode.Uri.file(status.missionDir);
-		await vscode.commands.executeCommand('revealFileInOS', uri);
+		await this.switchToMissionWorkspace(status);
 	}
 
 	public async openMissionArtifact(reference?: MissionArtifactReference): Promise<void> {
@@ -125,6 +121,7 @@ export class MissionSessionController implements vscode.Disposable {
 		this.currentSnapshot = { status };
 		this.updateStatusBar();
 		this.missionChangedEmitter.fire(this.currentSnapshot);
+		await this.switchToMissionWorkspace(status);
 	}
 
 	public async prepareMissionArtifact(action: MissionArtifactPreparationAction): Promise<void> {
@@ -243,6 +240,22 @@ export class MissionSessionController implements vscode.Disposable {
 			return delta > 0 ? MISSION_STAGES[0] : undefined;
 		}
 		return MISSION_STAGES[index + delta];
+	}
+
+	private async switchToMissionWorkspace(status: { missionDir?: string }): Promise<void> {
+		if (!status.missionDir) {
+			throw new Error('The selected mission does not expose a mission directory.');
+		}
+
+		const missionDir = path.resolve(status.missionDir);
+		const workspaceAlreadyOpen = (vscode.workspace.workspaceFolders ?? []).some(
+			(folder) => path.resolve(folder.uri.fsPath) === missionDir
+		);
+		if (workspaceAlreadyOpen) {
+			return;
+		}
+
+		await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(missionDir), false);
 	}
 }
 

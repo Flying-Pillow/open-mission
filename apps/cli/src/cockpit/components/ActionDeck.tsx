@@ -15,7 +15,7 @@ export function ActionDeck(props: ActionDeckProps) {
 	return (
 		<SelectPanel
 			title="ACTION DECK"
-			focused={props.focusArea === 'actions'}
+			focused={props.focusArea === 'flow'}
 			items={props.commandItems}
 			selectedItemId={props.selectedAction?.id}
 			emptyLabel="No action available"

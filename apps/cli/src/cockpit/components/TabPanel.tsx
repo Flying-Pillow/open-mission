@@ -1,10 +1,11 @@
 /** @jsxImportSource @opentui/solid */
 
-import { For, createMemo } from 'solid-js';
+import { For, Show, createMemo, type JSXElement } from 'solid-js';
 import { useTerminalDimensions } from '@opentui/solid';
+import type { PanelBadge, PanelBadgeTone } from './Panel.js';
 import { cockpitTheme } from './cockpitTheme.js';
 
-export type TabPanelTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger';
+type PanelStyle = Record<string, string | number | undefined>;
 
 export type TabPanelTab = {
 	id: string;
@@ -17,34 +18,43 @@ export type TabPanelLine = {
 	fg: string;
 };
 
-export type TabPanelBadge = {
-	text: string;
-	tone?: TabPanelTone;
-};
-
-type TabPanelProps = {
+export type TabPanelProps = {
 	focused: boolean;
 	tabs: TabPanelTab[];
 	selectedTabId: string | undefined;
-	bodyLines: TabPanelLine[];
-	bodyRows: number;
-	footerBadges?: TabPanelBadge[];
+	tabsFocusable?: boolean;
+	title?: string;
+	titleColor?: string;
+	borderColor?: string;
+	backgroundColor?: string;
+	footerBadges?: PanelBadge[];
+	style?: PanelStyle;
+	contentStyle?: PanelStyle;
+	bodyLines?: TabPanelLine[];
+	bodyRows?: number;
+	children?: JSXElement;
 };
 
 export function TabPanel(props: TabPanelProps) {
+	void props.title;
+	void props.titleColor;
+
 	const terminal = useTerminalDimensions();
-	const borderColor = createMemo(() => (props.focused ? cockpitTheme.accent : cockpitTheme.border));
 	const panelWidth = createMemo(() => Math.max(terminal().width - 2, 20));
 	const interiorWidth = createMemo(() => Math.max(panelWidth() - 2, 18));
-	const tabsLeftPadding = 1;
-	const tabGap = 2;
+	const rows = createMemo(() => Math.max(1, props.bodyRows ?? 1));
+	const borderColor = createMemo(() =>
+		props.borderColor ?? (props.focused ? cockpitTheme.accent : cockpitTheme.border)
+	);
+	const panelBackground = createMemo(() => props.backgroundColor ?? cockpitTheme.panelBackground);
+
 	const tabLayouts = createMemo(() => {
 		const layouts: Array<{ tab: TabPanelTab; x: number; width: number }> = [];
-		let cursor = tabsLeftPadding;
+		let cursor = 1;
 		for (const tab of props.tabs) {
 			const width = tab.label.length + 4;
 			if (layouts.length > 0) {
-				cursor += tabGap;
+				cursor += 2;
 			}
 			if (cursor + width > interiorWidth()) {
 				break;
@@ -54,22 +64,22 @@ export function TabPanel(props: TabPanelProps) {
 		}
 		return layouts;
 	});
+
 	const selectedLayout = createMemo(() => {
 		const selectedId = props.selectedTabId;
 		return tabLayouts().find((layout) => layout.tab.id === selectedId) ?? tabLayouts()[0];
 	});
+
 	const renderedTabLayouts = createMemo(() => {
 		const layouts = tabLayouts();
 		return layouts.map((layout, index) => {
 			const previous = layouts[index - 1];
 			const previousEnd = previous ? previous.x + previous.width : 0;
 			const gap = index === 0 ? layout.x + 1 : Math.max(layout.x - previousEnd, 0);
-			return {
-				...layout,
-				gap
-			};
+			return { ...layout, gap };
 		});
 	});
+
 	const topTabLine = createMemo(() => {
 		const selected = selectedLayout();
 		if (!selected) {
@@ -78,6 +88,7 @@ export function TabPanel(props: TabPanelProps) {
 		const line = `${' '.repeat(selected.x + 1)}╭${'─'.repeat(Math.max(selected.width - 2, 1))}╮`;
 		return line.padEnd(panelWidth(), ' ');
 	});
+
 	const topBorderLine = createMemo(() => {
 		const selected = selectedLayout();
 		if (!selected) {
@@ -88,7 +99,9 @@ export function TabPanel(props: TabPanelProps) {
 		const rightWidth = Math.max(interiorWidth() - selected.x - selected.width, 0);
 		return `╭${left}╯${gap}╰${'─'.repeat(rightWidth)}╮`;
 	});
+
 	const bottomBorderLine = createMemo(() => `╰${'─'.repeat(interiorWidth())}╯`);
+
 	const tabLabelSegments = createMemo(() => {
 		const segments: Array<{ text: string; fg: string }> = [];
 		const selectedId = selectedLayout()?.tab.id;
@@ -104,7 +117,7 @@ export function TabPanel(props: TabPanelProps) {
 				segments.push({ text: layout.tab.label, fg: cockpitTheme.brightText });
 				segments.push({ text: ' │', fg: borderColor() });
 			} else {
-				segments.push({ text: `  ${layout.tab.label}  `, fg: cockpitTheme.mutedText });
+				segments.push({ text: `  ${layout.tab.label}  `, fg: layout.tab.labelColor ?? cockpitTheme.mutedText });
 			}
 			usedWidth += layout.width;
 		}
@@ -113,59 +126,104 @@ export function TabPanel(props: TabPanelProps) {
 			segments.push({ text: ' '.repeat(panelWidth() - usedWidth), fg: borderColor() });
 		}
 
+		if (props.tabsFocusable === true) {
+			const marker = props.focused ? '<>' : '  ';
+			if (segments.length > 0) {
+				const last = segments[segments.length - 1];
+				if (last && last.text.length >= marker.length) {
+					last.text = `${last.text.slice(0, Math.max(last.text.length - marker.length, 0))}${marker}`;
+				}
+			}
+		}
+
 		return segments;
 	});
+
 	const visibleBodyLines = createMemo(() => {
-		const lines = props.bodyLines.slice(0, props.bodyRows);
-		while (lines.length < props.bodyRows) {
+		const lines = (props.bodyLines ?? []).slice(0, rows());
+		while (lines.length < rows()) {
 			lines.push({ text: '', fg: cockpitTheme.bodyText });
 		}
 		return lines;
 	});
+
 	const footerSegments = createMemo(() => renderFooterSegments(props.footerBadges ?? []));
-	const footerWidth = createMemo(() => footerSegments().reduce((total, segment) => total + segment.text.length, 0));
-	const footerPadding = createMemo(() => ' '.repeat(Math.max(interiorWidth() - footerWidth(), 0)));
 
 	return (
-		<box style={{ flexDirection: 'column', flexGrow: 1 }}>
+		<box style={{ flexDirection: 'column', ...(props.style ?? {}) }}>
 			<text style={{ fg: borderColor() }}>{topTabLine()}</text>
-			<box style={{ flexDirection: 'row' }}>
+			<box style={{ flexDirection: 'row', backgroundColor: panelBackground() }}>
 				<For each={tabLabelSegments()}>
 					{(segment) => <text style={{ fg: segment.fg }}>{segment.text}</text>}
 				</For>
 			</box>
 			<text style={{ fg: borderColor() }}>{topBorderLine()}</text>
 
-			<For each={visibleBodyLines()}>
-				{(line) => (
-					<box style={{ flexDirection: 'row', backgroundColor: cockpitTheme.panelBackground }}>
-						<text style={{ fg: borderColor() }}>│</text>
-						<text style={{ fg: line.fg }}>{fitPanelText(line.text, interiorWidth())}</text>
-						<text style={{ fg: borderColor() }}>│</text>
+			<Show
+				when={props.children !== undefined}
+				fallback={
+					<For each={visibleBodyLines()}>
+						{(line) => (
+							<box style={{ flexDirection: 'row', backgroundColor: panelBackground() }}>
+								<text style={{ fg: borderColor() }}>│</text>
+								<text style={{ fg: line.fg }}>{fitPanelText(line.text, interiorWidth())}</text>
+								<text style={{ fg: borderColor() }}>│</text>
+							</box>
+						)}
+					</For>
+				}
+			>
+				<box
+					style={{
+						flexDirection: 'row',
+						backgroundColor: panelBackground(),
+						...(props.contentStyle ?? {})
+					}}
+				>
+					<text style={{ fg: borderColor() }}>│</text>
+					<box style={{ flexDirection: 'column', flexGrow: 1 }}>
+						{props.children}
 					</box>
-				)}
-			</For>
+					<text style={{ fg: borderColor() }}>│</text>
+				</box>
+			</Show>
 
-			<box style={{ flexDirection: 'row', backgroundColor: cockpitTheme.panelBackground }}>
-				<text style={{ fg: borderColor() }}>│</text>
-				<text>{footerPadding()}</text>
-				<For each={footerSegments()}>
-					{(segment) => <text style={{ fg: footerToneColor(segment.tone) }}>{segment.text}</text>}
-				</For>
-				<text style={{ fg: borderColor() }}>│</text>
-			</box>
+			<Show when={footerSegments().length > 0}>
+				<box
+					style={{
+						flexDirection: 'row',
+						justifyContent: 'flex-end',
+						paddingRight: 2,
+						marginBottom: -1
+					}}
+				>
+					<For each={footerSegments()}>
+						{(segment) => <text style={{ fg: footerToneColor(segment.tone) }}>{segment.text}</text>}
+					</For>
+				</box>
+			</Show>
 
 			<text style={{ fg: borderColor() }}>{bottomBorderLine()}</text>
 		</box>
 	);
 }
 
+
 function fitPanelText(text: string, width: number): string {
-	return text.slice(0, width).padEnd(width, ' ');
+	if (width <= 0) {
+		return '';
+	}
+	if (width === 1) {
+		return ' ';
+	}
+	const innerWidth = width - 1;
+	return ` ${text.slice(0, innerWidth).padEnd(innerWidth, ' ')}`;
 }
 
-function renderFooterSegments(badges: TabPanelBadge[]): Array<{ text: string; tone?: TabPanelTone }> {
-	const segments: Array<{ text: string; tone?: TabPanelTone }> = [];
+function renderFooterSegments(
+	badges: PanelBadge[]
+): Array<{ text: string; tone?: PanelBadgeTone }> {
+	const segments: Array<{ text: string; tone?: PanelBadgeTone }> = [];
 	for (let index = 0; index < badges.length; index += 1) {
 		const badge = badges[index];
 		if (!badge) {
@@ -174,12 +232,15 @@ function renderFooterSegments(badges: TabPanelBadge[]): Array<{ text: string; to
 		if (index > 0) {
 			segments.push({ text: '  ' });
 		}
-		segments.push(badge.tone ? { text: `[${badge.text}]`, tone: badge.tone } : { text: `[${badge.text}]` });
+		const badgeText = badge.framed === false ? badge.text : `[${badge.text}]`;
+		segments.push(
+			badge.tone ? { text: badgeText, tone: badge.tone } : { text: badgeText }
+		);
 	}
 	return segments;
 }
 
-function footerToneColor(tone: TabPanelTone | undefined): string {
+function footerToneColor(tone: PanelBadgeTone | undefined): string {
 	if (tone === 'accent') {
 		return cockpitTheme.accent;
 	}

@@ -1,8 +1,8 @@
 {
-  "runtimeProvider": "copilot-cli",
-  "runtimeCommand": "copilot",
   "trackingProvider": "github",
   "instructionsPath": ".agents",
   "skillsPath": ".agents/skills",
-  "serverPort": 4317
+  "agentRunner": "copilot",
+  "defaultAgentMode": "interactive",
+  "defaultModel": "gpt-5.4"
 }

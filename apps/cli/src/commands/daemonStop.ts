@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import { note, outro } from '@clack/prompts';
 import {
+	getDaemonRuntimePath,
 	getDaemonManifestPath,
 	readDaemonManifest
 } from '@flying-pillow/mission-core';
@@ -58,6 +59,9 @@ export async function runDaemonStop(context: CommandContext): Promise<void> {
 	if (manifest.endpoint.transport === 'ipc') {
 		await fs.rm(manifest.endpoint.path, { force: true }).catch(() => undefined);
 	}
+	await fs.rm(getDaemonRuntimePath(context.repoRoot), { recursive: true, force: true }).catch(
+		() => undefined
+	);
 
 	const result: DaemonStopResult = {
 		stopped: true,

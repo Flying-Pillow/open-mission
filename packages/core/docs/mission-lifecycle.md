@@ -12,7 +12,7 @@ The core principle is simple:
 - `FilesystemAdapter` is the only class that knows how markdown/frontmatter and filesystem persistence work.
 - `templates/mission/` is the source tree for BRIEF, stage product, and default task templates.
 
-The public package surface now exposes thin client mirrors for `Mission`, `Stage`, and `Task`, while the authoritative workflow model lives under `daemon/mission`.
+The authoritative workflow model lives under `daemon/mission` and is surfaced through the daemon/client boundary.
 
 ## Source Layout
 
@@ -21,10 +21,7 @@ packages/core/src/
   client/
     DaemonClient.ts
     DaemonProcess.ts
-    mission/
-      Mission.ts
-      Stage.ts
-      Task.ts
+    operations.ts
   adapters/
     CopilotAgentRuntime.ts
   daemon/
@@ -177,7 +174,7 @@ It is not responsible for:
 
 It is responsible for:
 
-- mission discovery and resolution from `.mission/missions/active/*`
+- mission discovery and resolution from `.mission/worktrees/*`
 - branch lookup and branch switching
 - safe filesystem reads and writes
 - parsing and rendering markdown frontmatter

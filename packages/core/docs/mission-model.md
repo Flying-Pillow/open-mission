@@ -12,7 +12,7 @@ Mission is modeled as a set of first-class domain objects:
 - `AgentSession`: runtime-backed execution object owned by a task
 - `Artifact`: persisted markdown record owned by a mission, stage, or task
 
-The public package surface exposes thin client mirrors for `Mission`, `Stage`, and `Task`; the authoritative workflow model lives under `packages/core/src/daemon/mission`.
+The authoritative workflow model lives under `packages/core/src/daemon/mission` and is surfaced through daemon and client APIs.
 
 Persistence and markdown handling live outside the domain:
 
@@ -23,7 +23,7 @@ All first-party mission markdown templates now live under [packages/core/src/tem
 
 ## Repository Layout
 
-Mission stores state under `.mission/`.
+Mission stores repo-controlled state under `.mission/`.
 
 A newly created mission starts small.
 
@@ -34,14 +34,13 @@ Immediately after `Factory.create(...)` returns, only the mission environment an
 ```text
 .mission/
   settings.json
-  missions/
-    active/
-      <mission-id>/
-        BRIEF.md
-        PRD.md
-        tasks/
-          PRD/
-            01-prd-from-brief.md
+  worktrees/
+    <mission-id>/
+      BRIEF.md
+      PRD.md
+      tasks/
+        PRD/
+          01-prd-from-brief.md
 ```
 
 ### After Entering Later Stages
@@ -51,33 +50,30 @@ As the workflow advances, more stage-owned artifacts and task artifacts appear:
 ```text
 .mission/
   settings.json
-  missions/
-    active/
-      <mission-id>/
-        BRIEF.md
-        mission.json
-        PRD.md
-        SPEC.md              # created when spec stage is entered
-        PLAN.md              # created when plan stage is entered
-        VERIFICATION.md      # created when verification stage is entered
-        AUDIT.md             # created when audit stage is entered
-        tasks/
-          PRD/
-            01-prd-from-brief.md
-          SPEC/
-            01-spec-from-prd.md
-          PLAN/
-            01-plan-from-spec.md
-          IMPLEMENTATION/
-          VERIFICATION/
-          AUDIT/
-            01-debrief.md
-            02-touchdown.md
-  daemon/
-    daemon.json
-    sessions/
-      <mission-id>.json     # machine-local agent session state
+  worktrees/
+    <mission-id>/
+      BRIEF.md
+      mission.json
+      PRD.md
+      SPEC.md              # created when spec stage is entered
+      PLAN.md              # created when plan stage is entered
+      VERIFICATION.md      # created when verification stage is entered
+      AUDIT.md             # created when audit stage is entered
+      tasks/
+        PRD/
+          01-prd-from-brief.md
+        SPEC/
+          01-spec-from-prd.md
+        PLAN/
+          01-plan-from-spec.md
+        IMPLEMENTATION/
+        VERIFICATION/
+        AUDIT/
+          01-debrief.md
+          02-touchdown.md
 ```
+
+Machine-local daemon runtime state lives outside the repository under the hashed runtime directory for the control repo, for example `$XDG_RUNTIME_DIR/mission/<repo-hash>/daemon.json` and `sessions/<mission-id>.json` on Unix systems, with the OS temp directory as the fallback when `XDG_RUNTIME_DIR` is unavailable.
 
 The important rule is that stage entry materializes stage-owned files. They are not all created up front.
 
@@ -221,7 +217,7 @@ Tasks added later by planning or implementation work are also task-owned artifac
 
 ### Task-Owned Agent Sessions
 
-Agent sessions are persisted under `.mission/daemon/sessions/<mission-id>.json`, but they are owned by tasks, not by the mission as a whole.
+Agent sessions are persisted under the machine-local daemon runtime directory keyed by repo root, but they are owned by tasks, not by the mission as a whole.
 
 Each `MissionAgentSessionRecord` may carry:
 
@@ -252,7 +248,7 @@ Generated keys:
 ---
 issueId: 123                # optional
 title: "Mission title"
-type: "feat"              # feat | fix | docs | refactor | task
+type: "feature"           # feature | fix | docs | refactor | task
 branchRef: "mission/123-some-title"
 createdAt: "2026-04-01T12:34:56.000Z"
 url: "https://..."         # optional
@@ -345,7 +341,7 @@ Mission status is derived from the materialized filesystem state.
 
 Key rules:
 
-- `FilesystemAdapter.listMissions()` discovers missions from `.mission/missions/active/*`
+- `FilesystemAdapter.listMissions()` discovers missions from `.mission/worktrees/*`
 - `FilesystemAdapter.readMissionDescriptor()` derives the descriptor from `BRIEF.md`
 - `FilesystemAdapter.reconcileMissionControlState()` keeps `mission.json` aligned with the current task files
 - `FilesystemAdapter.listTaskStates()` derives task content and `dependsOn` metadata from task files, then joins mutable workflow state from `mission.json`

@@ -6,11 +6,58 @@
 import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { MissionSelector } from '../types.js';
+import { getMissionWorktreesPath } from './repoConfig.js';
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 
+export type MissionWorkspaceContext =
+	| {
+			kind: 'control-root';
+			repoRoot: string;
+			selector: MissionSelector;
+	  }
+	| {
+			kind: 'mission-worktree';
+			repoRoot: string;
+			missionId: string;
+			missionDir: string;
+			selector: MissionSelector;
+	  };
+
 export function getRepoRoot(startPath = process.cwd()): string {
 	return resolveGitControlRepoRoot(startPath) ?? path.resolve(currentDirectory, '../..');
+}
+
+export function resolveMissionWorkspaceContext(
+	startPath = process.cwd(),
+	repoRoot = getRepoRoot(startPath)
+): MissionWorkspaceContext {
+	const absoluteStartPath = path.resolve(startPath);
+	const worktreesRoot = path.resolve(getMissionWorktreesPath(repoRoot));
+	const relativeToWorktrees = path.relative(worktreesRoot, absoluteStartPath);
+	if (
+		relativeToWorktrees.length > 0 &&
+		!relativeToWorktrees.startsWith('..') &&
+		!path.isAbsolute(relativeToWorktrees)
+	) {
+		const [missionId] = relativeToWorktrees.split(path.sep).filter(Boolean);
+		if (missionId) {
+			return {
+				kind: 'mission-worktree',
+				repoRoot,
+				missionId,
+				missionDir: path.join(worktreesRoot, missionId),
+				selector: { missionId }
+			};
+		}
+	}
+
+	return {
+		kind: 'control-root',
+		repoRoot,
+		selector: {}
+	};
 }
 
 export function resolveGitControlRepoRoot(startPath = process.cwd()): string | undefined {

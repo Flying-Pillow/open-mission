@@ -19,7 +19,6 @@ coverage/
 
 # local test repositories
 .test
-opentui-examples
 
 # Generated source-adjacent outputs from local TypeScript builds
 **/*.d.ts
@@ -44,6 +43,7 @@ yarn-error.log*
 
 # Repo-local Mission runtime state
 .mission/worktrees/
+.vscode/*.sock
 
 # OS/editor files
 .DS_Store

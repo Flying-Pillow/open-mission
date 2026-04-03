@@ -2,24 +2,24 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { getMissionDirectoryPath } from '../lib/repoConfig.js';
 import type { Manifest } from './protocol.js';
 
-const MISSION_DAEMON_DIRECTORY = 'daemon';
+const MISSION_RUNTIME_DIRECTORY = 'mission';
 const MISSION_DAEMON_MANIFEST_FILE = 'daemon.json';
 const MISSION_DAEMON_SESSIONS_DIRECTORY = 'sessions';
+const MISSION_DAEMON_SOCKET_FILE = 'daemon.sock';
 
-export function getMissionDaemonStatePath(repoRoot: string): string {
-	return path.join(getMissionDirectoryPath(repoRoot), MISSION_DAEMON_DIRECTORY);
+export function getDaemonRuntimePath(repoRoot: string): string {
+	return path.join(resolveDaemonRuntimeRoot(), createRepoHash(repoRoot));
 }
 
 export function getDaemonManifestPath(repoRoot: string): string {
-	return path.join(getMissionDaemonStatePath(repoRoot), MISSION_DAEMON_MANIFEST_FILE);
+	return path.join(getDaemonRuntimePath(repoRoot), MISSION_DAEMON_MANIFEST_FILE);
 }
 
 export function getDaemonSessionStatePath(repoRoot: string, missionId: string): string {
 	return path.join(
-		getMissionDaemonStatePath(repoRoot),
+		getDaemonRuntimePath(repoRoot),
 		MISSION_DAEMON_SESSIONS_DIRECTORY,
 		`${missionId}.json`
 	);
@@ -34,15 +34,12 @@ export function resolveDaemonSocketPath(
 		return path.resolve(normalizedOverride);
 	}
 
-	const repoHash = createHash('sha256')
-		.update(path.resolve(repoRoot), 'utf8')
-		.digest('hex')
-		.slice(0, 16);
+	const repoHash = createRepoHash(repoRoot);
 	if (process.platform === 'win32') {
 		return `\\\\.\\pipe\\mission-${repoHash}`;
 	}
 
-	return path.join(os.tmpdir(), 'mission', `${repoHash}.sock`);
+	return path.join(getDaemonRuntimePath(repoRoot), MISSION_DAEMON_SOCKET_FILE);
 }
 
 export function isNamedPipePath(candidatePath: string): boolean {
@@ -58,4 +55,20 @@ export async function readDaemonManifest(
 	} catch {
 		return undefined;
 	}
+}
+
+function resolveDaemonRuntimeRoot(): string {
+	const xdgRuntimeDirectory = process.env['XDG_RUNTIME_DIR']?.trim();
+	if (xdgRuntimeDirectory) {
+		return path.join(xdgRuntimeDirectory, MISSION_RUNTIME_DIRECTORY);
+	}
+
+	return path.join(os.tmpdir(), MISSION_RUNTIME_DIRECTORY);
+}
+
+function createRepoHash(repoRoot: string): string {
+	return createHash('sha256')
+		.update(path.resolve(repoRoot), 'utf8')
+		.digest('hex')
+		.slice(0, 16);
 }

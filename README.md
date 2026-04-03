@@ -1,3 +1,4 @@
+
 # 🌍 Mission
 
 **The orchestration engine for AI-driven software development.**
@@ -28,16 +29,18 @@ By shifting the workflow from **prompt-driven** to **spec-driven**, Mission lock
 
 ## Core Capabilities
 
-*   📜 **Architectural Governance (The Constitution)** 
+*   📜 **Architectural Governance** 
     Define your repository's specific engineering standards in a single `.agents/constitution.md` file. Mission injects these laws into every session, ensuring the AI respects your tech stack, formatting, and structural boundaries.
+*   📦 **Isolated Git Worktrees** 
+    Never let an AI hallucination corrupt your local workspace again. Mission automatically provisions a dedicated, isolated Git worktree for every active mission. The AI is physically jailed to this directory, leaving your primary branch pristine.
 *   🗺️ **Spec-Driven Execution** 
-    Stop chatting and start building. Mission translates your GitHub or Jira issues into strict `SPEC.md` blueprints and `TASKS.md` ledgers. The AI is mathematically constrained to the approved file-impact matrix.
+    Stop chatting and start building. Mission translates your GitHub or Jira issues into strict `SPEC.md` blueprints and bounded task ledgers. The AI is mathematically constrained to the approved file-impact matrix.
 *   🛑 **Deterministic CI Gating** 
-    Mission disables AI self-praise. An agent cannot simply claim a task is "done." Mission gates all progress behind your actual CI pipeline (linters, unit tests). If the AI's code fails, Mission rolls back the state and forces the agent to try again.
+    Mission disables AI self-praise. An agent cannot simply claim a task is "done." Mission gates all progress behind your actual CI pipeline (linters, unit tests). If the AI's code fails, Mission blocks the transition and forces the agent to fix it.
 *   🤖 **Agent-Agnostic** 
-    Avoid vendor lock-in. Mission manages the state machine, allowing you to seamlessly swap the underlying compute engine (Copilot, Claude, etc.) as the AI landscape evolves.
-*   🎛️ **Operator Surfaces** 
-    Steer missions from the `mission` CLI and the VS Code cockpit while keeping one governed mission model.
+    Avoid vendor lock-in. Mission manages the state machine, allowing you to seamlessly swap the underlying compute engine (Copilot, Claude, Aider, etc.) as the AI landscape evolves.
+*   🎛️ **The Interactive Cockpit** 
+    Steer missions through a powerful Terminal User Interface (TUI). Because Mission runs as a persistent background daemon, you can safely detach from the cockpit, close your terminal, and reconnect later without interrupting the AI's flight.
 
 ---
 
@@ -45,44 +48,33 @@ By shifting the workflow from **prompt-driven** to **spec-driven**, Mission lock
 
 Mission is designed to be lightweight and frictionless to install in any existing repository.
 
-**1. Install workspace dependencies:**
+**1. Install globally:**
 ```bash
-pnpm install
-pnpm build
+npm install -g @flying-pillow/mission
 ```
 
 **2. Initialize your repository:**
 This command safely scaffolds the `.mission/` state directory and the default Mission settings file.
 ```bash
-./mission init
+mission init
 ```
 
-**3. Start a Mission:**
-Open the cockpit. Mission will auto-start the daemon, and you can bootstrap a mission from the tracker inside the interactive surface.
+**3. Launch the Cockpit:**
+Open the interactive terminal surface. Mission will automatically start the background daemon, allowing you to bootstrap a new mission from your issue tracker directly inside the UI.
 ```bash
-./mission
+mission
 ```
 
-**4. Inspect and steer the mission:**
-```bash
-./mission
-mission daemon:stop
-```
+---
 
 ## Command Surface
 
-Run `mission help` for the current command surface. As of this release, the implemented commands are:
+Run `mission help` for the complete command reference. Because Mission relies on a persistent sidecar daemon, state transitions, agent execution, and delivery are now handled via Cockpit-driven RPC actions rather than standalone top-level commands.
 
-- `mission [--issue <id>] [--branch <ref>]`
-- `mission --hmr [--issue <id>] [--branch <ref>]`
-- `mission init`
-- `mission daemon:stop [--json]`
+Currently implemented CLI entry points:
 
-Notes:
-
-- Bare `mission` is the primary entrypoint and launches the interactive cockpit.
-- `mission --hmr` runs the cockpit with automatic restart when CLI cockpit source files change.
-- Mission bootstrap, status, gates, transitions, delivery, and agent execution are now cockpit-driven RPC actions instead of standalone top-level CLI commands.
+*   `mission [--hmr] [--banner] [--no-banner]` — Launches the interactive cockpit (auto-starts the daemon if not running). Starting from a mission worktree auto-selects that mission; starting from the control checkout opens Mission control mode.
+*   `mission daemon:stop [--json]` — Gracefully terminates the background orchestration daemon.
 
 ---
 
@@ -94,4 +86,4 @@ You no longer have to review every line of code as it is being typed. You define
 
 ## License
 
-..
+...

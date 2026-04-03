@@ -18,6 +18,13 @@ describe('FilesystemAdapter', () => {
 		expect(adapter.deriveMissionBranchName(42)).toBe('mission/42');
 	});
 
+	it('derives draft mission branch names with the draft placeholder', () => {
+		const adapter = new FilesystemAdapter('/tmp/repo');
+		expect(adapter.deriveDraftMissionBranchName('Filesystem mission model')).toMatch(
+			/^mission\/draft-\d{14}-filesystem-mission-model$/u
+		);
+	});
+
 	it('persists and rehydrates the mission descriptor through BRIEF.md', async () => {
 		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-'));
 		try {

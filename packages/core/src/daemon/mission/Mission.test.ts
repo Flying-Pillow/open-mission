@@ -160,7 +160,7 @@ describe('Mission', () => {
 					issueId: 104,
 					title: 'Parallel implementation slices',
 					body: 'Allow dependency-driven parallel work inside one stage.',
-					type: 'feat'
+					type: 'feature'
 				},
 				branchRef: adapter.deriveMissionBranchName(104, 'Parallel implementation slices'),
 				agentContext: MissionAgentContext.build()

@@ -1,5 +1,6 @@
 import type { AgentContext, AgentEnvironment, AgentMode } from './agents/agentContext.js';
 import type { MissionAgentSessionRecord } from './daemon/MissionAgentRuntime.js';
+import type { MissionRepoSettings } from './lib/repoConfig.js';
 
 export type { AgentContext, AgentEnvironment, AgentMode };
 
@@ -59,7 +60,7 @@ export const MISSION_GATE_INTENTS: GateIntent[] = [
 	'deliver'
 ];
 
-export type MissionType = 'feat' | 'fix' | 'docs' | 'refactor' | 'task';
+export type MissionType = 'feature' | 'fix' | 'docs' | 'refactor' | 'task';
 export type MissionTaskStatus = 'todo' | 'active' | 'blocked' | 'done';
 export type MissionTaskAgent = string;
 export type MissionStageProgress = 'pending' | 'active' | 'blocked' | 'done';
@@ -165,6 +166,47 @@ export type MissionStageStatus = {
 
 export type MissionCommandScope = 'mission' | 'stage' | 'task' | 'session';
 
+export type MissionCommandFlowSelectionMode = 'single' | 'multiple';
+export type MissionCommandFlowTextMode = 'compact' | 'expanded';
+export type MissionCommandFlowTextFormat = 'plain' | 'markdown';
+
+export type MissionCommandFlowOption = {
+	id: string;
+	label: string;
+	description: string;
+};
+
+export type MissionCommandFlowSelectionStep = {
+	kind: 'selection';
+	id: string;
+	label: string;
+	title: string;
+	emptyLabel: string;
+	helperText: string;
+	selectionMode: MissionCommandFlowSelectionMode;
+	options: MissionCommandFlowOption[];
+};
+
+export type MissionCommandFlowTextStep = {
+	kind: 'text';
+	id: string;
+	label: string;
+	title: string;
+	helperText: string;
+	placeholder: string;
+	initialValue?: string;
+	inputMode: MissionCommandFlowTextMode;
+	format: MissionCommandFlowTextFormat;
+};
+
+export type MissionCommandFlowStep = MissionCommandFlowSelectionStep | MissionCommandFlowTextStep;
+
+export type MissionCommandFlowDescriptor = {
+	targetLabel: string;
+	actionLabel: string;
+	steps: MissionCommandFlowStep[];
+};
+
 export type MissionCommandDescriptor = {
 	id: string;
 	label: string;
@@ -173,6 +215,7 @@ export type MissionCommandDescriptor = {
 	targetId?: string;
 	enabled: boolean;
 	reason?: string;
+	flow?: MissionCommandFlowDescriptor;
 };
 
 export type MissionSelectionCandidate = {
@@ -183,12 +226,37 @@ export type MissionSelectionCandidate = {
 	issueId?: number;
 };
 
-export type MissionRepoMode = 'idle' | 'selected';
+export type MissionOperationalMode = 'setup' | 'root' | 'mission';
+
+export type MissionControlPlaneStatus = {
+	controlRepoRoot: string;
+	missionDirectory: string;
+	settingsPath: string;
+	worktreesPath: string;
+	currentBranch?: string;
+	settings: MissionRepoSettings;
+	isGitRepository: boolean;
+	initialized: boolean;
+	settingsPresent: boolean;
+	settingsComplete: boolean;
+	trackingProvider?: 'github';
+	githubRepository?: string;
+	issuesConfigured: boolean;
+	githubAuthenticated?: boolean;
+	githubUser?: string;
+	githubAuthMessage?: string;
+	agentSessions?: MissionAgentSessionRecord[];
+	availableMissionCount: number;
+	problems: string[];
+	warnings: string[];
+};
 
 export type StageData = MissionStageStatus;
 
 export type MissionStatus = {
 	found: boolean;
+	operationalMode?: MissionOperationalMode;
+	control?: MissionControlPlaneStatus;
 	missionId?: string;
 	title?: string;
 	issueId?: number;
@@ -205,10 +273,6 @@ export type MissionStatus = {
 	recommendedCommand?: string;
 	availableCommands?: MissionCommandDescriptor[];
 	availableMissions?: MissionSelectionCandidate[];
-	repoMode?: MissionRepoMode;
-	repoCurrentBranch?: string;
-	repoIsGitRepository?: boolean;
-	repoTrackingEnabled?: boolean;
 };
 
 export type MissionData = MissionStatus;

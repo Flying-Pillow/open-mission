@@ -193,7 +193,7 @@ Actors:
 Products:
 
 - updated `PRD.md`
-- session record under `.mission/daemon/sessions/<mission-id>.json`
+- session record under the machine-local daemon runtime directory keyed by repo root
 - task state update in `mission.json`
 
 Notes:
@@ -343,7 +343,7 @@ This example implies the following object model:
 - `Task` owns execution and completion.
 - `AgentSession` is a child of `Task` and represents a concrete execution attempt.
 
-That means session persistence should conceptually hang off the task lifecycle, even if the runtime state file remains machine-local under `.mission/daemon/`.
+That means session persistence should conceptually hang off the task lifecycle, even if the runtime state file remains machine-local outside the repository.
 
 ## Testability Value
 

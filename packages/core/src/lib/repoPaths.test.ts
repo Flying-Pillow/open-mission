@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
-import { getRepoRoot, resolveGitControlRepoRoot } from './repoPaths.js';
+import { getRepoRoot, resolveGitControlRepoRoot, resolveMissionWorkspaceContext } from './repoPaths.js';
 
 describe('repoPaths', () => {
 	it('resolves the control repository root from within a git worktree', async () => {
@@ -15,8 +15,44 @@ describe('repoPaths', () => {
 
 			expect(resolveGitControlRepoRoot(worktreePath)).toBe(repoRoot);
 			expect(getRepoRoot(worktreePath)).toBe(repoRoot);
+			expect(resolveMissionWorkspaceContext(worktreePath)).toMatchObject({
+				kind: 'control-root',
+				repoRoot,
+				selector: {}
+			});
 		} finally {
 			runGit(repoRoot, ['worktree', 'remove', '--force', worktreePath]);
+			await fs.rm(repoRoot, { recursive: true, force: true });
+		}
+	});
+
+	it('detects mission worktrees under .mission/worktrees and derives mission selectors automatically', async () => {
+		const repoRoot = await createTempRepo();
+		const missionId = 'mission-123-auto-select';
+		const missionWorktreePath = path.join(repoRoot, '.mission', 'worktrees', missionId);
+		const nestedPath = path.join(missionWorktreePath, 'src');
+
+		try {
+			await fs.mkdir(path.dirname(missionWorktreePath), { recursive: true });
+			runGit(repoRoot, ['worktree', 'add', missionWorktreePath, '-b', 'mission/test-auto-select']);
+			await fs.mkdir(nestedPath, { recursive: true });
+
+			expect(resolveMissionWorkspaceContext(missionWorktreePath, repoRoot)).toMatchObject({
+				kind: 'mission-worktree',
+				repoRoot,
+				missionId,
+				missionDir: missionWorktreePath,
+				selector: { missionId }
+			});
+			expect(resolveMissionWorkspaceContext(nestedPath, repoRoot)).toMatchObject({
+				kind: 'mission-worktree',
+				repoRoot,
+				missionId,
+				missionDir: missionWorktreePath,
+				selector: { missionId }
+			});
+		} finally {
+			runGit(repoRoot, ['worktree', 'remove', '--force', missionWorktreePath]);
 			await fs.rm(repoRoot, { recursive: true, force: true });
 		}
 	});

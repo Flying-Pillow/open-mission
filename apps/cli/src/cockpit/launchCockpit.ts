@@ -1,10 +1,14 @@
 import {
 	connectDaemonClient,
-	Mission,
+	getControlStatus,
+	getMissionStatus,
 	type MissionSelector,
 	resolveDaemonLaunchModeFromModule
 } from '@flying-pillow/mission-core';
-import { resolveMissionSelector } from '../commands/daemonClient.js';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { resolveCockpitWorkspaceContext } from '../commands/daemonClient.js';
 import type { CommandContext } from '../commands/types.js';
 import { applyCockpitTheme, type CockpitThemeName } from './components/cockpitTheme.js';
 import { playMissionStartupBanner } from './components/MissionStartupBanner.js';
@@ -15,11 +19,12 @@ export async function launchCockpit(context: CommandContext): Promise<void> {
 		context.args.includes('-h') ||
 		context.args.includes('help')
 	) {
-		process.stdout.write('mission [--issue <id>] [--branch <ref>]\n');
+		process.stdout.write('mission [--hmr] [--banner] [--no-banner]\n');
 		return;
 	}
 
-	const flags = new Map<string, string | true>();
+	const flags = new Set<string>();
+	const supportedFlags = new Set(['hmr', 'banner', 'no-banner']);
 	for (let index = 0; index < context.args.length; index += 1) {
 		const token = context.args[index];
 		if (!token?.startsWith('--')) {
@@ -27,27 +32,25 @@ export async function launchCockpit(context: CommandContext): Promise<void> {
 		}
 
 		const flag = token.slice(2);
-		const [key, inlineValue] = flag.split('=', 2);
-		if (!key) {
+		if (!flag) {
 			continue;
 		}
-
-		if (inlineValue !== undefined) {
-			flags.set(key, inlineValue);
-			continue;
+		if (flag.includes('=')) {
+			throw new Error(`Unsupported cockpit flag '${token}'. Mission only accepts bare flags here.`);
 		}
-
-		const nextToken = context.args[index + 1];
-		if (nextToken && !nextToken.startsWith('--')) {
-			flags.set(key, nextToken);
-			index += 1;
-			continue;
+		if (!supportedFlags.has(flag)) {
+			throw new Error(`Unsupported cockpit flag '${token}'. Supported flags: --hmr, --banner, --no-banner.`);
 		}
-
-		flags.set(key, true);
+		flags.add(flag);
 	}
 
-	const { selector } = resolveMissionSelector(flags);
+	if (flags.has('hmr')) {
+		await runCockpitWithHmr(context, context.args);
+		return;
+	}
+
+	const workspaceContext = resolveCockpitWorkspaceContext(context);
+	const selector = workspaceContext.selector;
 	const initialTheme: CockpitThemeName = 'ocean';
 	applyCockpitTheme(initialTheme);
 	const connect = async (nextSelector: MissionSelector = selector) => {
@@ -55,10 +58,11 @@ export async function launchCockpit(context: CommandContext): Promise<void> {
 			repoRoot: context.repoRoot,
 			preferredLaunchMode: resolveDaemonLaunchModeFromModule(import.meta.url)
 		});
-		const mission = new Mission(client);
-		const status = await mission.withSelector(nextSelector).status();
+		const status = nextSelector.missionId
+			? await getMissionStatus(client, nextSelector)
+			: await getControlStatus(client);
 		return {
-			mission,
+			client,
 			status,
 			dispose: () => {
 				client.dispose();
@@ -68,8 +72,10 @@ export async function launchCockpit(context: CommandContext): Promise<void> {
 
 	let initialConnection: Awaited<ReturnType<typeof connect>> | undefined;
 	let initialConnectionError: string | undefined;
+	let initialSelector = selector;
 	try {
 		initialConnection = await connect(selector);
+		initialSelector = buildSelectorFromStatus(initialConnection.status, selector);
 	} catch (error) {
 		initialConnectionError = error instanceof Error ? error.message : String(error);
 	}
@@ -80,14 +86,17 @@ export async function launchCockpit(context: CommandContext): Promise<void> {
 		);
 	}
 
-	await playMissionStartupBanner();
+	if (!flags.has('no-banner')) {
+		await playMissionStartupBanner();
+	}
 
 	const { runCockpitApp } = await import('./runCockpitApp.js');
 
 	try {
 		await runCockpitApp({
-			initialSelector: selector,
+			initialSelector,
 			initialTheme,
+			workspaceContext,
 			...(initialConnection ? { initialConnection } : {}),
 			...(initialConnectionError ? { initialConnectionError } : {}),
 			connect
@@ -95,4 +104,59 @@ export async function launchCockpit(context: CommandContext): Promise<void> {
 	} finally {
 		initialConnection?.dispose();
 	}
+}
+
+async function runCockpitWithHmr(
+	context: CommandContext,
+	args: string[]
+): Promise<void> {
+	const cliRoot = resolveCliPackageRoot();
+	const forwardedArgs = args.filter((arg) => arg !== '--hmr');
+	const child = spawn(
+		'pnpm',
+		[
+			'--dir',
+			cliRoot,
+			'exec',
+			'tsx',
+			'watch',
+			'src/index.ts',
+			'--',
+			...forwardedArgs
+		],
+		{
+			stdio: 'inherit',
+			env: {
+				...process.env,
+				MISSION_REPO_ROOT: context.repoRoot,
+				MISSION_LAUNCH_CWD: context.launchCwd
+			}
+		}
+	);
+
+	await new Promise<void>((resolve, reject) => {
+		child.once('error', reject);
+		child.once('close', (code) => {
+			if ((code ?? 0) === 0) {
+				resolve();
+				return;
+			}
+			reject(new Error(`Mission cockpit HMR exited with code ${String(code ?? 'unknown')}.`));
+		});
+	});
+}
+
+function resolveCliPackageRoot(): string {
+	const launchCockpitPath = fileURLToPath(import.meta.url);
+	return path.resolve(path.dirname(launchCockpitPath), '..', '..');
+}
+
+function buildSelectorFromStatus(
+	status: { missionId?: string },
+	fallback: MissionSelector
+): MissionSelector {
+	if (status.missionId) {
+		return { missionId: status.missionId };
+	}
+	return fallback.missionId ? { missionId: fallback.missionId } : {};
 }

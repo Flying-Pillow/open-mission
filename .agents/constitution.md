@@ -19,8 +19,8 @@ The system must remain spec-driven, mission-centered, repo-native, and object-or
 
 1. All meaningful work is bounded by a Mission.
 2. A Mission is not merely a ticket reference. It is the governed unit that owns intent, artifacts, stage transitions, gate legality, and delivery readiness.
-3. The canonical mission workspace is repo-local under `.mission/missions`.
-4. The canonical artifact chain is `PRD.md`, `SPEC.md`, `TASKS.md`, `VERIFY.md`, and `AUDIT.md`.
+3. The canonical mission workspace is repo-local under `.mission/worktrees`.
+4. The canonical artifact chain is `BRIEF.md`, `PRD.md`, `SPEC.md`, `PLAN.md`, `VERIFICATION.md`, and `AUDIT.md`.
 5. No feature, fix, refactor, docs change, or delivery workflow may bypass the Mission model.
 
 ---

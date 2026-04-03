@@ -1,16 +1,15 @@
 import * as fs from 'node:fs/promises';
 import {
 	getDefaultMissionRepoSettingsWithOverrides,
-	getMissionActiveMissionsPath,
 	getMissionDirectoryPath,
-	getMissionMissionsPath,
+	getMissionWorktreesPath,
 	getMissionSettingsPath
 } from './lib/repoConfig.js';
 
 export type MissionRepositoryInitialization = {
 	controlDirectoryPath: string;
 	settingsPath: string;
-	missionsRoot: string;
+	worktreesRoot: string;
 };
 
 export async function initializeMissionRepository(
@@ -18,13 +17,11 @@ export async function initializeMissionRepository(
 ): Promise<MissionRepositoryInitialization> {
 	const controlDirectoryPath = getMissionDirectoryPath(repoRoot);
 	const settingsPath = getMissionSettingsPath(repoRoot);
-	const missionsRoot = getMissionMissionsPath(repoRoot);
-	const activeMissionsRoot = getMissionActiveMissionsPath(repoRoot);
+	const worktreesRoot = getMissionWorktreesPath(repoRoot);
 
 	await Promise.all([
 		fs.mkdir(controlDirectoryPath, { recursive: true }),
-		fs.mkdir(missionsRoot, { recursive: true }),
-		fs.mkdir(activeMissionsRoot, { recursive: true })
+		fs.mkdir(worktreesRoot, { recursive: true })
 	]);
 
 	const settings = getDefaultMissionRepoSettingsWithOverrides();
@@ -34,6 +31,6 @@ export async function initializeMissionRepository(
 	return {
 		controlDirectoryPath,
 		settingsPath,
-		missionsRoot
+		worktreesRoot
 	};
 }

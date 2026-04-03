@@ -99,6 +99,12 @@ export type MissionAgentRuntimeCapabilities = {
 
 export type MissionAgentScope =
 	| {
+			kind: 'control';
+			repoRoot?: string;
+			repoName?: string;
+			branch?: string;
+		}
+	| {
 			kind: 'mission';
 			missionId?: string;
 			stage?: string;
@@ -337,6 +343,13 @@ export function cloneMissionAgentScope(
 	}
 
 	switch (scope.kind) {
+		case 'control':
+			return {
+				kind: 'control',
+				...(scope.repoRoot ? { repoRoot: scope.repoRoot } : {}),
+				...(scope.repoName ? { repoName: scope.repoName } : {}),
+				...(scope.branch ? { branch: scope.branch } : {})
+			};
 		case 'mission':
 			return {
 				kind: 'mission',
@@ -569,6 +582,13 @@ export function renderMissionAgentScope(scope: MissionAgentScope | undefined): s
 	}
 
 	switch (scope.kind) {
+		case 'control':
+			return [
+				'Scope: control',
+				scope.repoName ? `Repository: ${scope.repoName}` : '',
+				scope.repoRoot ? `Repository root: ${scope.repoRoot}` : '',
+				scope.branch ? `Branch: ${scope.branch}` : ''
+			].filter(Boolean);
 		case 'mission':
 			return [
 				'Scope: mission',

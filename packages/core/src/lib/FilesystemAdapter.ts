@@ -6,7 +6,7 @@ import {
 	renderFrontmatterDocument,
 	type FrontmatterValue
 } from './frontmatter.js';
-import { getMissionActiveMissionsPath } from './repoConfig.js';
+import { getMissionWorktreesPath } from './repoConfig.js';
 import {
 	MISSION_ARTIFACTS,
 	MISSION_CONTROL_FILE_NAME,
@@ -79,7 +79,7 @@ export class FilesystemAdapter {
 	}
 
 	public getMissionsPath(): string {
-		return getMissionActiveMissionsPath(this.repoRoot);
+		return getMissionWorktreesPath(this.repoRoot);
 	}
 
 	public getMissionDir(missionId: string): string {
@@ -94,8 +94,8 @@ export class FilesystemAdapter {
 		return path.join(this.getTasksPath(missionDir), MISSION_TASK_STAGE_DIRECTORIES[stage]);
 	}
 
-	public getCurrentBranch(): string {
-		return this.runGit(['rev-parse', '--abbrev-ref', 'HEAD']);
+	public getCurrentBranch(startPath = this.repoRoot): string {
+		return this.runGit(['rev-parse', '--abbrev-ref', 'HEAD'], startPath);
 	}
 
 	public isGitRepository(): boolean {
@@ -107,30 +107,53 @@ export class FilesystemAdapter {
 		return slug.length > 0 ? `mission/${String(issueId)}-${slug}` : `mission/${String(issueId)}`;
 	}
 
-	public ensureMissionBranch(branchRef: string): string {
+	public deriveDraftMissionBranchName(title?: string): string {
+		const slug = this.slugify(title, 48);
+		const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+		return slug.length > 0
+			? `mission/draft-${timestamp}-${slug}`
+			: `mission/draft-${timestamp}`;
+	}
+
+	public async materializeMissionWorktree(missionDir: string, branchRef: string): Promise<string> {
 		const normalizedBranch = branchRef.trim();
 		if (!normalizedBranch) {
 			throw new Error('Mission branch cannot be empty.');
 		}
 
-		const currentBranch = this.getCurrentBranch();
-		if (currentBranch === normalizedBranch) {
-			return normalizedBranch;
+		const existingMissionPath = await fs.lstat(missionDir).then(
+			(stats) => stats.isDirectory(),
+			() => false
+		);
+		if (existingMissionPath) {
+			throw new Error(`Mission worktree path '${missionDir}' already exists.`);
 		}
+
+		await fs.mkdir(path.dirname(missionDir), { recursive: true });
 
 		const branchExists = this.runGit(['rev-parse', '--verify', `refs/heads/${normalizedBranch}`]);
-		if (branchExists) {
-			this.assertGit(['switch', normalizedBranch]);
-		} else {
-			this.assertGit(['switch', '-c', normalizedBranch]);
+		try {
+			if (branchExists) {
+				this.assertGit(['worktree', 'add', missionDir, normalizedBranch]);
+			} else {
+				this.assertGit(['worktree', 'add', '-b', normalizedBranch, missionDir]);
+			}
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			if (message.includes('already checked out')) {
+				throw new Error(
+					`Mission branch '${normalizedBranch}' is already checked out in another worktree. Switch that worktree away before adopting it as a mission.`
+				);
+			}
+			throw error;
 		}
 
-		const nextBranch = this.getCurrentBranch();
+		const nextBranch = this.getCurrentBranch(missionDir);
 		if (nextBranch !== normalizedBranch) {
-			throw new Error(`Failed to switch to mission branch '${normalizedBranch}'.`);
+			throw new Error(`Failed to materialize mission worktree for branch '${normalizedBranch}'.`);
 		}
 
-		return nextBranch;
+		return normalizedBranch;
 	}
 
 	public createMissionId(brief: MissionBrief): string {
@@ -213,7 +236,7 @@ export class FilesystemAdapter {
 		const type = this.readMissionTypeAttribute(brief.attributes, 'type', brief.filePath) ?? 'task';
 		const branchRef =
 			this.readOptionalStringAttribute(brief.attributes, 'branchRef', brief.filePath) ??
-			this.getCurrentBranch() ??
+			this.getCurrentBranch(missionDir) ??
 			'HEAD';
 		const createdAt =
 			this.readOptionalStringAttribute(brief.attributes, 'createdAt', brief.filePath) ??
@@ -788,7 +811,7 @@ export class FilesystemAdapter {
 			return undefined;
 		}
 		if (
-			value !== 'feat' &&
+			value !== 'feature' &&
 			value !== 'fix' &&
 			value !== 'docs' &&
 			value !== 'refactor' &&
@@ -962,18 +985,18 @@ export class FilesystemAdapter {
 			.slice(0, maxLength);
 	}
 
-	private runGit(args: string[]): string {
+	private runGit(args: string[], cwd = this.repoRoot): string {
 		const result = spawnSync('git', args, {
-			cwd: this.repoRoot,
+			cwd,
 			encoding: 'utf8'
 		});
 
 		return result.status === 0 ? result.stdout.trim() : '';
 	}
 
-	private assertGit(args: string[]): string {
+	private assertGit(args: string[], cwd = this.repoRoot): string {
 		const result = spawnSync('git', args, {
-			cwd: this.repoRoot,
+			cwd,
 			encoding: 'utf8'
 		});
 

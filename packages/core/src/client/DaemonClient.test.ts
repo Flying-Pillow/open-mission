@@ -3,7 +3,11 @@ import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { isNamedPipePath, resolveDaemonSocketPath } from '../daemon/daemonPaths.js';
+import {
+	getDaemonRuntimePath,
+	isNamedPipePath,
+	resolveDaemonSocketPath
+} from '../daemon/daemonPaths.js';
 import { DaemonClient } from './DaemonClient.js';
 
 describe('DaemonClient', () => {
@@ -13,6 +17,10 @@ describe('DaemonClient', () => {
 		const server = net.createServer();
 
 		try {
+			if (!isNamedPipePath(socketPath)) {
+				await fs.mkdir(path.dirname(socketPath), { recursive: true });
+			}
+
 			await new Promise<void>((resolve, reject) => {
 				server.once('error', reject);
 				server.listen(socketPath, () => {
@@ -35,7 +43,9 @@ describe('DaemonClient', () => {
 				});
 			});
 			if (!isNamedPipePath(socketPath)) {
-				await fs.rm(socketPath, { force: true }).catch(() => undefined);
+				await fs.rm(getDaemonRuntimePath(repoRoot), { recursive: true, force: true }).catch(
+					() => undefined
+				);
 			}
 			await fs.rm(repoRoot, { recursive: true, force: true });
 		}

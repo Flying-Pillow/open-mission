@@ -4,17 +4,29 @@ import { spawnSync } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import {
+	activateTask,
+	completeTask,
 	DaemonClient,
+	deliverMission,
+	evaluateMissionGate,
+	getControlStatus,
 	MISSION_STAGES,
+	getMissionStatus,
+	getSessionConsoleState,
 	getDaemonManifestPath,
+	getDaemonRuntimePath,
 	initializeMissionRepository,
+	launchTaskSession,
 	MissionAgentContext,
-	Mission,
 	readDaemonManifest,
 	resolveDaemonLaunchModeFromModule,
 	startDaemonProcess,
+	startMission,
+	terminateSession,
+	transitionMissionStage,
 	type MissionAgentTurnRequest,
 	type MissionBrief,
+	type MissionSelector,
 	type MissionStageId,
 	type MissionStatus,
 	type MissionTaskState
@@ -54,16 +66,26 @@ async function main(): Promise<void> {
 
 		client = await connectToStartedDaemon(repoRoot);
 
-		const mission = new Mission(client);
+		let selector: MissionSelector;
 		if (options.resumeExisting) {
-			await mission.status();
+			const status = await getControlStatus(client);
+			const missionId = status.missionId ?? status.availableMissions?.[0]?.missionId;
+			if (!missionId) {
+				throw new Error('No existing mission is available to resume.');
+			}
+			selector = { missionId };
+			await getMissionStatus(client, selector);
 		} else {
-			await mission.start({
+			const started = await startMission(client, {
 				brief: createSmokeBrief(),
 				agentContext: MissionAgentContext.build({ mode: 'interactive', environment: 'local' })
 			});
+			if (!started.missionId) {
+				throw new Error('Mission start did not return a mission id.');
+			}
+			selector = { missionId: started.missionId };
 		}
-		const finalStatus = await driveMissionToCompletion(mission, repoRoot);
+		const finalStatus = await driveMissionToCompletion(client, selector, repoRoot);
 
 		const report = createReport(repoRoot, finalStatus, options.keepRepo);
 		if (options.json) {
@@ -181,13 +203,14 @@ async function connectToStartedDaemon(repoRoot: string): Promise<DaemonClient> {
 }
 
 async function driveMissionToCompletion(
-	mission: Mission,
+	client: DaemonClient,
+	selector: MissionSelector,
 	repoRoot: string
 ): Promise<MissionStatus> {
 	const timeoutAt = Date.now() + 10 * 60 * 1000;
 
 	while (Date.now() < timeoutAt) {
-		const status = await mission.status();
+		const status = await getMissionStatus(client, selector);
 		if (status.deliveredAt) {
 			return status;
 		}
@@ -200,29 +223,29 @@ async function driveMissionToCompletion(
 		const nextTask = pickNextTask(status);
 		if (nextTask) {
 			if (nextTask.status !== 'active') {
-				await mission.setTaskState(nextTask.taskId, { status: 'active' });
+				await activateTask(client, selector, nextTask.taskId);
 			}
-			await executeTask(mission, nextTask, status, repoRoot);
-			await mission.setTaskState(nextTask.taskId, { status: 'done' });
+			await executeTask(client, selector, nextTask, status, repoRoot);
+			await completeTask(client, selector, nextTask.taskId);
 			continue;
 		}
 
 		const nextStage = findNextStage(status);
 		if (nextStage) {
-			await mission.transition(nextStage);
+			await transitionMissionStage(client, selector, nextStage);
 			continue;
 		}
 
-		const deliveryGate = await mission.evaluateGate('deliver');
+		const deliveryGate = await evaluateMissionGate(client, selector, 'deliver');
 		if (deliveryGate.allowed) {
-			await mission.deliver();
+			await deliverMission(client, selector);
 			continue;
 		}
 
 		await delay(500);
 	}
 
-	const finalStatus = await mission.status();
+	const finalStatus = await getMissionStatus(client, selector);
 	throw new Error(
 		`Timed out driving the staged mission to completion. Last stage: ${finalStatus.stage ?? 'unknown'}.`
 	);
@@ -253,14 +276,14 @@ function findNextStage(status: MissionStatus): MissionStageId | undefined {
 }
 
 async function executeTask(
-	mission: Mission,
+	client: DaemonClient,
+	selector: MissionSelector,
 	task: MissionTaskState,
 	status: MissionStatus,
 	repoRoot: string
 ): Promise<void> {
 	const request = createTaskTurnRequest(task, status, repoRoot);
 	const launchRequest = {
-		taskId: task.taskId,
 		workingDirectory: request.workingDirectory,
 		prompt: request.prompt,
 		startFreshSession: true,
@@ -268,20 +291,21 @@ async function executeTask(
 		...(request.operatorIntent ? { operatorIntent: request.operatorIntent } : {}),
 		...(request.scope ? { scope: request.scope } : {})
 	};
-	const session = await mission.launchAgentSession(launchRequest);
+	const session = await launchTaskSession(client, selector, task.taskId, launchRequest);
 
-	await waitForTaskSessionCompletion(mission, session.sessionId, task.taskId);
+	await waitForTaskSessionCompletion(client, selector, session.sessionId, task.taskId);
 }
 
 async function waitForTaskSessionCompletion(
-	mission: Mission,
+	client: DaemonClient,
+	selector: MissionSelector,
 	sessionId: string,
 	taskId: string
 ): Promise<void> {
 	const timeoutAt = Date.now() + 5 * 60 * 1000;
 
 	while (Date.now() < timeoutAt) {
-		const status = await mission.status();
+		const status = await getMissionStatus(client, selector);
 		const session = (status.agentSessions ?? []).find((candidate) => candidate.sessionId === sessionId);
 		if (!session) {
 			await delay(250);
@@ -299,7 +323,7 @@ async function waitForTaskSessionCompletion(
 		}
 
 		if (session.lifecycleState === 'awaiting-input') {
-			const consoleState = await mission.getAgentConsoleState(sessionId);
+			const consoleState = await getSessionConsoleState(client, selector, sessionId);
 			throw new Error(
 				[
 					`Mission task session '${sessionId}' unexpectedly requested input for '${taskId}'.`,
@@ -311,7 +335,12 @@ async function waitForTaskSessionCompletion(
 		await delay(500);
 	}
 
-	await mission.terminateAgentSession(sessionId, `Timed out waiting for '${taskId}' to finish.`).catch(() => undefined);
+	await terminateSession(
+		client,
+		selector,
+		sessionId,
+		`Timed out waiting for '${taskId}' to finish.`
+	).catch(() => undefined);
 	throw new Error(`Timed out waiting for mission task session '${sessionId}' to complete for '${taskId}'.`);
 }
 
@@ -372,6 +401,9 @@ async function stopDaemon(repoRoot: string): Promise<void> {
 	if (manifest.endpoint.transport === 'ipc') {
 		await fs.rm(manifest.endpoint.path, { force: true }).catch(() => undefined);
 	}
+	await fs.rm(getDaemonRuntimePath(repoRoot), { recursive: true, force: true }).catch(
+		() => undefined
+	);
 }
 
 function createReport(repoRoot: string, status: MissionStatus, keptRepo: boolean): SmokeTestReport {

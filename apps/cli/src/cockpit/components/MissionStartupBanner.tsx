@@ -40,7 +40,6 @@ const BANNER_FRAMES: BannerFrame[] = [
 ];
 
 const BANNER_TEXT_COLOR = '#b388ff';
-const FINAL_BANNER_HOLD_MS = 3_000;
 
 export function shouldShowMissionStartupBanner(): boolean {
 	if (!process.stdout.isTTY) {
@@ -67,7 +66,6 @@ export async function playMissionStartupBanner(): Promise<void> {
 	const input = process.stdin;
 	const previousRawMode = 'isRaw' in input ? input.isRaw : false;
 	let skipRequested = false;
-	let animationCompleted = true;
 
 	const onData = () => {
 		skipRequested = true;
@@ -86,13 +84,8 @@ export async function playMissionStartupBanner(): Promise<void> {
 			renderBannerFrame(frame, output);
 			await waitForFrameDuration(frame.duration, () => skipRequested);
 			if (skipRequested) {
-				animationCompleted = false;
 				break;
 			}
-		}
-
-		if (animationCompleted) {
-			await sleep(FINAL_BANNER_HOLD_MS);
 		}
 	} finally {
 		if (input.isTTY) {
@@ -223,12 +216,6 @@ async function waitForFrameDuration(duration: number, shouldStop: () => boolean)
 			setTimeout(resolve, 16);
 		});
 	}
-}
-
-async function sleep(duration: number): Promise<void> {
-	await new Promise<void>((resolve) => {
-		setTimeout(resolve, duration);
-	});
 }
 
 const ANSI_RESET = '\x1b[0m';

@@ -41,7 +41,7 @@ export type CopilotAgentRuntimeOptions = {
 type CopilotProcessLaunchMode = 'interactive' | 'prompt';
 
 export class CopilotAgentRuntime implements MissionAgentRuntime {
-	public readonly id = 'copilot-cli';
+	public readonly id = 'copilot';
 	public readonly displayName = 'Copilot CLI';
 	public readonly capabilities: MissionAgentRuntimeCapabilities = {
 		persistentSessions: true,

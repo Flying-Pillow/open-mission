@@ -17,28 +17,33 @@ import type {
 	MissionAgentSessionRecord,
 	MissionAgentTurnRequest
 } from './MissionAgentRuntime.js';
-import type { MissionTaskUpdate } from '../types.js';
 
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 7;
 
 export type Method =
 	| 'ping'
-	| 'mission.bootstrap'
-	| 'mission.start'
+	| 'command.execute'
+	| 'control.session.launch'
+	| 'control.status'
+	| 'control.settings.update'
+	| 'control.mission.bootstrap'
+	| 'control.mission.start'
+	| 'control.issues.list'
 	| 'mission.status'
 	| 'mission.gate.evaluate'
-	| 'mission.transition'
 	| 'mission.deliver'
-	| 'mission.task.update'
-	| 'mission.agent.sessions'
-	| 'mission.agent.launch'
-	| 'mission.agent.console.state'
-	| 'mission.agent.turn.submit'
-	| 'mission.agent.input'
-	| 'mission.agent.resize'
-	| 'mission.agent.cancel'
-	| 'mission.agent.terminate'
-	| 'github.issues.list';
+	| 'stage.transition'
+	| 'task.activate'
+	| 'task.block'
+	| 'task.complete'
+	| 'task.launch'
+	| 'session.list'
+	| 'session.console.state'
+	| 'session.turn.submit'
+	| 'session.send'
+	| 'session.resize'
+	| 'session.cancel'
+	| 'session.terminate';
 
 export type Endpoint = {
 	transport: 'ipc';
@@ -65,62 +70,95 @@ export type MissionSelect = {
 	selector?: MissionSelector;
 };
 
-export type MissionStart = {
+export type CommandExecuteSelectionStep = {
+	kind: 'selection';
+	stepId: string;
+	optionIds: string[];
+};
+
+export type CommandExecuteTextStep = {
+	kind: 'text';
+	stepId: string;
+	value: string;
+};
+
+export type CommandExecuteStep = CommandExecuteSelectionStep | CommandExecuteTextStep;
+
+export type CommandExecute = MissionSelect & {
+	commandId: string;
+	steps: CommandExecuteStep[];
+};
+
+export type CommandExecuteResult = {
+	status?: MissionStatus;
+	session?: MissionAgentSessionRecord;
+	issues?: TrackedIssueSummary[];
+};
+
+export type ControlMissionStart = {
 	brief: MissionBrief;
 	branchRef?: string;
 	agentContext?: AgentContext;
 };
 
-export type MissionBootstrap = {
+export type ControlMissionBootstrap = {
 	issueNumber: number;
 	agentContext?: AgentContext;
+};
+
+export type ControlSettingsUpdate = {
+	field: 'agentRunner' | 'defaultAgentMode' | 'defaultModel' | 'instructionsPath' | 'skillsPath';
+	value: string;
+};
+
+export type ControlSessionLaunch = {
+	request?: Partial<Omit<MissionAgentSessionLaunchRequest, 'taskId'>> & {
+		runtimeId?: string;
+	};
 };
 
 export type MissionGateEvaluate = MissionSelect & {
 	intent: GateIntent;
 };
 
-export type MissionTransition = MissionSelect & {
+export type StageTransition = MissionSelect & {
 	toStage: MissionStageId;
 };
 
-export type TaskUpdate = MissionSelect & {
+export type TaskSelect = MissionSelect & {
 	taskId: string;
-	changes: MissionTaskUpdate;
 };
 
-export type AgentLaunch = MissionSelect & {
-	request: Omit<MissionAgentSessionLaunchRequest, 'runtimeId'> & {
+export type TaskLaunch = TaskSelect & {
+	request?: Partial<Omit<MissionAgentSessionLaunchRequest, 'runtimeId' | 'taskId'>> & {
 		runtimeId?: string;
 	};
 };
 
-export type AgentTurnSubmit = {
+export type SessionSelect = MissionSelect & {
 	sessionId: string;
+};
+
+export type SessionTurnSubmit = SessionSelect & {
 	request: MissionAgentTurnRequest;
 };
 
-export type AgentConsoleState = {
-	sessionId: string;
-};
+export type SessionConsoleState = SessionSelect;
 
-export type AgentInput = {
-	sessionId: string;
+export type SessionInput = SessionSelect & {
 	text: string;
 };
 
-export type AgentResize = {
-	sessionId: string;
+export type SessionResize = SessionSelect & {
 	cols: number;
 	rows: number;
 };
 
-export type AgentControl = {
-	sessionId: string;
+export type SessionControl = SessionSelect & {
 	reason?: string;
 };
 
-export type GitHubIssuesList = {
+export type ControlIssuesList = {
 	limit?: number;
 };
 
@@ -131,17 +169,19 @@ export type Notification =
 			status: MissionStatus;
 	  }
 	| {
-			type: 'mission.agent.console';
+			type: 'session.console';
 			missionId: string;
+	sessionId: string;
 			event: MissionAgentConsoleEvent;
 	  }
 	| {
-			type: 'mission.agent.event';
+			type: 'session.event';
 			missionId: string;
+			sessionId: string;
 			event: MissionAgentEvent;
 	  }
 	| {
-			type: 'mission.agent.session';
+			type: 'session.lifecycle';
 			missionId: string;
 			sessionId: string;
 			phase: 'spawned' | 'active' | 'terminated';
@@ -161,6 +201,7 @@ export type SuccessResponse = {
 	ok: true;
 	result:
 		| Ping
+		| CommandExecuteResult
 		| MissionStatus
 		| MissionGateResult
 		| MissionAgentConsoleState

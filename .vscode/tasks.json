@@ -1,42 +1,42 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "mission: build",
-            "type": "shell",
-            "command": "pnpm",
-            "args": [
-                "run",
-                "build"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}/apps/vscode-extension"
-            },
-            "group": "build",
-            "problemMatcher": [
-                "$tsc"
-            ]
-        },
-        {
-            "label": "mission: watch",
-            "type": "shell",
-            "command": "pnpm",
-            "args": [
-                "run",
-                "watch"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}/apps/vscode-extension"
-            },
-            "isBackground": true,
-            "group": "build",
-            "problemMatcher": [
-                "$tsc-watch"
-            ],
-            "presentation": {
-                "reveal": "always",
-                "panel": "dedicated"
-            }
-        }
-    ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "mission: build",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"build"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/apps/vscode-extension"
+			},
+			"group": "build",
+			"problemMatcher": [
+				"$tsc"
+			]
+		},
+		{
+			"label": "mission: watch",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"watch"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/apps/vscode-extension"
+			},
+			"isBackground": true,
+			"group": "build",
+			"problemMatcher": [
+				"$tsc-watch"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated"
+			}
+		}
+	]
 }

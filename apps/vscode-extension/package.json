@@ -203,8 +203,8 @@
 				},
 				"mission.missionFolder": {
 					"type": "string",
-					"default": ".mission/missions",
-					"markdownDescription": "Optional override for the mission directory. By default Mission uses .mission/missions under the derived repo root. Supports `${workspaceFolder}` and `${PWD}` tokens."
+					"default": ".mission/worktrees",
+					"markdownDescription": "Optional override for the mission directory. By default Mission uses .mission/worktrees under the derived repo root. Supports `${workspaceFolder}` and `${PWD}` tokens."
 				},
 				"mission.skillsFolder": {
 					"type": "string",

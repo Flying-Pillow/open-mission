@@ -68,6 +68,7 @@ export function ConsolePanel(props: ConsolePanelProps) {
 			focused={props.focused}
 			tabs={panelTabs()}
 			selectedTabId={props.selectedTabId}
+			tabsFocusable={props.tabs.length > 1}
 			bodyLines={bodyLines()}
 			bodyRows={props.bodyRows}
 		/>

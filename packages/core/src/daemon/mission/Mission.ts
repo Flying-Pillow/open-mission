@@ -26,6 +26,7 @@ import {
 	type MissionProductKey,
 	type MissionRecord,
 	type MissionCommandDescriptor,
+	type MissionCommandFlowDescriptor,
 	type MissionStageId,
 	type MissionStageStatus,
 	type MissionStatus,
@@ -281,7 +282,7 @@ export class Mission {
 		const stages = status.stages ?? [];
 		const errors: string[] = [];
 		const warnings: string[] = [];
-		const currentBranch = this.adapter.getCurrentBranch();
+		const currentBranch = this.adapter.getCurrentBranch(this.missionDir);
 
 		if (status.deliveredAt) {
 			errors.push('This mission has already been delivered.');
@@ -426,7 +427,12 @@ export class Mission {
 				label: 'Refresh mission status',
 				command: '/status',
 				scope: 'mission',
-				enabled: true
+				enabled: true,
+				flow: {
+					targetLabel: 'MISSION',
+					actionLabel: 'REFRESH',
+					steps: []
+				}
 			}
 		];
 
@@ -440,6 +446,11 @@ export class Mission {
 			command: '/deliver',
 			scope: 'mission',
 			enabled: canDeliver,
+			flow: {
+				targetLabel: 'MISSION',
+				actionLabel: 'DELIVER',
+				steps: []
+			},
 			...(canDeliver ? {} : { reason: deliveredAt ? 'Mission already delivered.' : 'Audit and all tasks must be complete.' })
 		});
 
@@ -455,6 +466,7 @@ export class Mission {
 				scope: 'stage',
 				targetId: stage.stage,
 				enabled: canTransition,
+				flow: this.buildStageTransitionFlow(stage.stage),
 				...(canTransition ? {} : { reason: deliveredAt ? 'Mission already delivered.' : 'Previous stages must be complete.' })
 			});
 			for (const task of stage.tasks) {
@@ -466,6 +478,11 @@ export class Mission {
 					scope: 'task',
 					targetId: task.taskId,
 					enabled: canLaunch,
+					flow: {
+						targetLabel: 'AGENT',
+						actionLabel: 'LAUNCH',
+						steps: []
+					},
 					...(canLaunch ? {} : { reason: this.taskLaunchBlockedReason(task, deliveredAt) })
 				});
 			}
@@ -483,6 +500,11 @@ export class Mission {
 				scope: 'session',
 				targetId: session.sessionId,
 				enabled: canControl,
+				flow: {
+					targetLabel: 'AGENT',
+					actionLabel: 'CANCEL',
+					steps: []
+				},
 				...(canControl ? {} : { reason: 'Session is not active.' })
 			});
 			commands.push({
@@ -492,11 +514,24 @@ export class Mission {
 				scope: 'session',
 				targetId: session.sessionId,
 				enabled: canControl,
+				flow: {
+					targetLabel: 'AGENT',
+					actionLabel: 'TERMINATE',
+					steps: []
+				},
 				...(canControl ? {} : { reason: 'Session is not active.' })
 			});
 		}
 
 		return commands;
+	}
+
+	private buildStageTransitionFlow(stageId: MissionStageId): MissionCommandFlowDescriptor {
+		return {
+			targetLabel: stageId.toUpperCase(),
+			actionLabel: 'APPROVE',
+			steps: []
+		};
 	}
 
 	private canLaunchTask(task: MissionTaskState, deliveredAt: string | undefined): boolean {

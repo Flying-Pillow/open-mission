@@ -6,24 +6,29 @@ import { readMissionRepoSettings } from '../../core/build/lib/repoConfig.js';
 
 export { CopilotAgentRuntime };
 
+type ConfiguredAgentSettings = {
+	agentRunner?: string;
+	defaultModel?: string;
+};
+
 export async function createConfiguredMissionRuntimes(options: {
 	repoRoot: string;
 	logLine?: (line: string) => void;
 }): Promise<MissionAgentRuntime[]> {
-	const repoSettings = readMissionRepoSettings(options.repoRoot);
-	const runtimeProvider = repoSettings?.runtimeProvider?.trim();
+	const repoSettings = readMissionRepoSettings(options.repoRoot) as ConfiguredAgentSettings | undefined;
+	const agentRunner = repoSettings?.agentRunner?.trim();
 
-	if (!runtimeProvider) {
+	if (!agentRunner) {
 		return [];
 	}
 
-	if (runtimeProvider !== 'copilot-cli') {
-		throw new Error(`Mission adapters do not support runtime provider '${runtimeProvider}'.`);
+	if (agentRunner !== 'copilot') {
+		throw new Error(`Mission adapters do not support agent runner '${agentRunner}'.`);
 	}
 
 	return [
 		new CopilotAgentRuntime({
-			...(repoSettings?.runtimeCommand ? { command: repoSettings.runtimeCommand } : {}),
+			...(repoSettings?.defaultModel ? { additionalArgs: ['--model', repoSettings.defaultModel] } : {}),
 			...(options.logLine ? { logLine: options.logLine } : {})
 		})
 	];

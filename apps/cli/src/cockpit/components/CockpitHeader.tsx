@@ -1,52 +1,46 @@
 /** @jsxImportSource @opentui/solid */
 
 import { cockpitTheme } from './cockpitTheme.js';
-import { Panel, type PanelBadgeTone } from './Panel.js';
+import type { PanelBadge } from './Panel.js';
+import { TabPanel, type TabPanelLine, type TabPanelTab } from './TabPanel.js';
 
 const HEADER_BORDER_PURPLE = '#a855f7';
 
 type PanelStyle = Record<string, string | number | undefined>;
 
+export type CockpitHeaderTab = TabPanelTab;
+
 type CockpitHeaderProps = {
+	panelTitle: string;
 	title: string;
-	missionStatus: string;
-	stageLabel: string;
-	taskLabel: string;
-	connectionLabel: string;
-	connectionColor: string;
+	tabs: CockpitHeaderTab[];
+	selectedTabId: string | undefined;
+	tabsFocusable: boolean;
+	focused: boolean;
+	statusLines: string[];
+	footerBadges: PanelBadge[];
 	style?: PanelStyle;
 };
 
 export function CockpitHeader(props: CockpitHeaderProps) {
+	const bodyLines: TabPanelLine[] = [
+		{ text: props.title, fg: cockpitTheme.brightText },
+		...props.statusLines.slice(0, 2).map((line) => ({ text: line, fg: cockpitTheme.metaText }))
+	];
 	return (
-		<Panel
-			title="MISSION"
+		<TabPanel
+			title={props.panelTitle}
 			titleColor={cockpitTheme.title}
-			borderColor={HEADER_BORDER_PURPLE}
+			borderColor={props.focused ? cockpitTheme.accent : HEADER_BORDER_PURPLE}
 			backgroundColor={cockpitTheme.headerBackground}
-			style={{ height: 6, ...(props.style ?? {}) }}
-			contentStyle={{ gap: 1 }}
-			footerBadges={[
-				{ text: `stage ${props.stageLabel}`, tone: 'accent' },
-				{ text: `task ${props.taskLabel}` },
-				{ text: '●', tone: connectionTone(props.connectionColor), framed: false }
-			]}
-		>
-			<text style={{ fg: cockpitTheme.brightText }}>{props.title}</text>
-			<text style={{ fg: cockpitTheme.metaText }}>{props.missionStatus}</text>
-		</Panel>
+			tabs={props.tabs}
+			selectedTabId={props.selectedTabId}
+			tabsFocusable={props.tabsFocusable}
+			focused={props.focused}
+			{...(props.style ? { style: props.style } : {})}
+			footerBadges={props.footerBadges}
+			bodyLines={bodyLines}
+			bodyRows={3}
+		/>
 	);
-}
-
-function connectionTone(color: string): PanelBadgeTone {
-	if (color === cockpitTheme.success) {
-		return 'success';
-	}
-	if (color === cockpitTheme.warning) {
-		return 'warning';
-	}
-	if (color === cockpitTheme.danger) {
-		return 'danger';
-	}
-	return 'accent';
 }

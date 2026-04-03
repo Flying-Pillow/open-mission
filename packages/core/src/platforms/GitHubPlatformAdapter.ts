@@ -1,5 +1,18 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import type { MissionBrief, MissionType, TrackedIssueSummary } from '../types.js';
+
+export function resolveGitHubRepositoryFromWorkspace(repoRoot: string): string | undefined {
+	const remoteNames = runGitLines(repoRoot, ['remote']);
+	const orderedRemoteNames = ['origin', ...remoteNames.filter((name) => name !== 'origin')];
+	for (const remoteName of orderedRemoteNames) {
+		const remoteUrl = runGitOutput(repoRoot, ['remote', 'get-url', remoteName]);
+		const repository = parseGitHubRepositoryFromRemote(remoteUrl);
+		if (repository) {
+			return repository;
+		}
+	}
+	return undefined;
+}
 
 type GitHubIssuePayload = {
 	number: number;
@@ -17,7 +30,7 @@ function mapLabelsToMissionType(labels: string[]): MissionType | undefined {
 		return 'fix';
 	}
 	if (normalizedLabels.includes('enhancement')) {
-		return 'feat';
+		return 'feature';
 	}
 	if (normalizedLabels.includes('documentation')) {
 		return 'docs';
@@ -124,4 +137,44 @@ export class GitHubPlatformAdapter {
 			});
 		});
 	}
+}
+
+function runGitLines(repoRoot: string, args: string[]): string[] {
+	const output = runGitOutput(repoRoot, args);
+	if (!output) {
+		return [];
+	}
+	return output
+		.split(/\r?\n/u)
+		.map((line) => line.trim())
+		.filter(Boolean);
+}
+
+function runGitOutput(repoRoot: string, args: string[]): string {
+	const result = spawnSync('git', args, {
+		cwd: repoRoot,
+		encoding: 'utf8',
+		stdio: ['ignore', 'pipe', 'ignore']
+	});
+	return result.status === 0 ? result.stdout.trim() : '';
+}
+
+function parseGitHubRepositoryFromRemote(remoteUrl: string): string | undefined {
+	const normalized = remoteUrl.trim();
+	if (!normalized) {
+		return undefined;
+	}
+	const sshMatch = normalized.match(/^git@github\.com:(?<owner>[^/]+)\/(?<repo>[^/]+?)(?:\.git)?$/u);
+	if (sshMatch?.groups?.['owner'] && sshMatch.groups['repo']) {
+		return `${sshMatch.groups['owner']}/${sshMatch.groups['repo']}`;
+	}
+	const sshProtocolMatch = normalized.match(/^ssh:\/\/git@github\.com\/(?<owner>[^/]+)\/(?<repo>[^/]+?)(?:\.git)?$/u);
+	if (sshProtocolMatch?.groups?.['owner'] && sshProtocolMatch.groups['repo']) {
+		return `${sshProtocolMatch.groups['owner']}/${sshProtocolMatch.groups['repo']}`;
+	}
+	const httpsMatch = normalized.match(/^https?:\/\/github\.com\/(?<owner>[^/]+)\/(?<repo>[^/]+?)(?:\.git)?(?:\/)?$/u);
+	if (httpsMatch?.groups?.['owner'] && httpsMatch.groups['repo']) {
+		return `${httpsMatch.groups['owner']}/${httpsMatch.groups['repo']}`;
+	}
+	return undefined;
 }
