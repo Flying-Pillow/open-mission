@@ -4,7 +4,7 @@ import { createMemo } from 'solid-js';
 import { cockpitTheme } from './cockpitTheme.js';
 import { TabPanel, type TabPanelLine, type TabPanelTab } from './TabPanel.js';
 
-export type ConsoleTabKind = 'artifact' | 'task' | 'session' | 'daemon';
+export type ConsoleTabKind = 'artifact' | 'task' | 'session' | 'control' | 'daemon';
 
 export type ConsolePanelTab = {
 	id: string;
@@ -84,6 +84,9 @@ function tabLabelColor(kind: ConsoleTabKind): string {
 	}
 	if (kind === 'session') {
 		return cockpitTheme.success;
+	}
+	if (kind === 'control') {
+		return cockpitTheme.accent;
 	}
 	return cockpitTheme.metaText;
 }

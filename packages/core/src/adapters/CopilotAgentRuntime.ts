@@ -172,6 +172,7 @@ class CopilotAgentSession implements MissionAgentSession {
 	public async submitTurn(request: MissionAgentTurnRequest): Promise<void> {
 		const renderedPrompt = renderMissionAgentPrompt(request);
 		const launchMode = this.resolveLaunchMode(request);
+		const hasLiveProcess = this.hasLiveProcess();
 		this.updateSessionState(
 			{
 				workingDirectory: request.workingDirectory,
@@ -180,15 +181,20 @@ class CopilotAgentSession implements MissionAgentSession {
 				awaitingPermission: null,
 				failureMessage: null
 			},
-			this.activeProcess && !this.activeProcess.killed ? 'running' : 'starting'
+			hasLiveProcess ? 'running' : 'starting'
 		);
 
-		if (launchMode === 'prompt' || !this.activeProcess || this.activeProcess.killed) {
+		if (launchMode === 'prompt' || !hasLiveProcess) {
 			await this.startProcess(request, renderedPrompt, launchMode);
 			return;
 		}
 
-		this.activeProcess.stdin.write(`${renderedPrompt}\n`);
+		const activeProcess = this.activeProcess;
+		if (!activeProcess) {
+			await this.startProcess(request, renderedPrompt, launchMode);
+			return;
+		}
+		activeProcess.stdin.write(`${renderedPrompt}\n`);
 		this.appendConsoleLines(
 			[`> Submitted follow-up turn${request.title ? `: ${request.title}` : ''}`],
 			'system'
@@ -197,7 +203,7 @@ class CopilotAgentSession implements MissionAgentSession {
 	}
 
 	public sendInput(text: string): Promise<void> {
-		if (!this.activeProcess || !this.activeProcess.stdin.writable) {
+		if (!this.hasLiveProcess() || !this.activeProcess?.stdin.writable) {
 			return Promise.reject(
 				new Error('The mission agent is not currently waiting for operator input.')
 			);
@@ -347,6 +353,7 @@ class CopilotAgentSession implements MissionAgentSession {
 			});
 
 			child.once('error', (error) => {
+				this.activeProcess = undefined;
 				this.finishConsoleState();
 				this.updateSessionState({ failureMessage: error.message }, 'failed');
 				this.eventEmitter.fire({
@@ -362,6 +369,7 @@ class CopilotAgentSession implements MissionAgentSession {
 			});
 
 			child.once('close', (code) => {
+				this.activeProcess = undefined;
 				if (stdoutPartial.trim().length > 0) {
 					this.appendConsoleLines([stdoutPartial.trim()], 'stdout');
 					this.maybeUpdateTelemetry([stdoutPartial.trim()]);
@@ -415,6 +423,13 @@ class CopilotAgentSession implements MissionAgentSession {
 				this.appendConsoleLines([errorMessage], 'system');
 			});
 		});
+	}
+
+	private hasLiveProcess(): boolean {
+		if (!this.activeProcess || this.activeProcess.killed) {
+			return false;
+		}
+		return this.activeProcess.exitCode === null && this.activeProcess.signalCode === null;
 	}
 
 	private resolveLaunchMode(request: MissionAgentTurnRequest): CopilotProcessLaunchMode {

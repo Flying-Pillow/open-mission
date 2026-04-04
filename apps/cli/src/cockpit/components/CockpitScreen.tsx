@@ -62,7 +62,7 @@ export function CockpitScreen(props: CockpitScreenProps) {
 		terminal().height - (2 + cockpitLayout.headerHeight + progressRailsHeight + cockpitLayout.commandDockHeight + cockpitLayout.commandHelpHeight + gapRows),
 		8
 	);
-	const consoleBodyRows = Math.max(mainPanelHeight - 5, 3);
+	const consoleBodyRows = Math.max(mainPanelHeight - 4, 3);
 
 	return (
 		<Show
@@ -99,16 +99,18 @@ export function CockpitScreen(props: CockpitScreenProps) {
 						</>
 					) : null}
 
-					{props.mainPanel ?? (
-						<ConsolePanel
-							focused={props.focusArea === 'sessions'}
-							tabs={props.consoleTabs}
-							selectedTabId={props.selectedConsoleTabId}
-							content={props.consoleContent}
-							bodyRows={consoleBodyRows}
-							onTabSelect={props.onConsoleTabSelect}
-						/>
-					)}
+					<box style={{ flexGrow: 1, height: mainPanelHeight }}>
+						{props.mainPanel ?? (
+							<ConsolePanel
+								focused={props.focusArea === 'sessions'}
+								tabs={props.consoleTabs}
+								selectedTabId={props.selectedConsoleTabId}
+								content={props.consoleContent}
+								bodyRows={consoleBodyRows}
+								onTabSelect={props.onConsoleTabSelect}
+							/>
+						)}
+					</box>
 
 					<CommandDock
 						title={props.commandDockTitle}
@@ -154,7 +156,7 @@ export function CockpitScreen(props: CockpitScreenProps) {
 							style={{ height: cockpitLayout.headerHeight, flexShrink: 0 }}
 						/>
 
-						<box style={{ flexGrow: 1, minHeight: expandedCommandPanelHeight }}>
+						<box style={{ flexGrow: 1, height: expandedCommandPanelHeight }}>
 							{expandedCommandPanel()}
 						</box>
 

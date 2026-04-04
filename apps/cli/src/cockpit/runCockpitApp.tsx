@@ -39,7 +39,6 @@ import {
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from '@opentui/solid';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSXElement, untrack } from 'solid-js';
 import { CockpitScreen } from './components/CockpitScreen.js';
-import { ControlStatusPanel } from './components/ControlStatusPanel.js';
 import {
 	applyCockpitTheme,
 	cockpitThemes,
@@ -171,13 +170,18 @@ type ConsoleTabDescriptor =
 	| {
 		id: string;
 		label: string;
+		kind: 'control';
+	  }
+	| {
+		id: string;
+		label: string;
 		kind: 'daemon';
 	  };
 
 const CONTROL_SESSION_CHANNEL_ID = '__control__';
 
 const missionFocusOrder: FocusArea[] = ['header', 'stages', 'tasks', 'sessions', 'command'];
-const controlFocusOrder: FocusArea[] = ['header', 'command'];
+const controlFocusOrder: FocusArea[] = ['header', 'sessions', 'command'];
 
 export async function runCockpitApp(options: RunCockpitAppOptions): Promise<void> {
 	const renderer = await createCliRenderer({
@@ -241,6 +245,7 @@ function MissionCockpitApp({
 	const [isControlBranchProbeInFlight, setIsControlBranchProbeInFlight] = createSignal<boolean>(false);
 	const [knownAvailableMissions, setKnownAvailableMissions] = createSignal<MissionStatus['availableMissions']>([]);
 	const [selectedHeaderTabId, setSelectedHeaderTabId] = createSignal<string | undefined>();
+	const [hasAttemptedControlAutoLaunch, setHasAttemptedControlAutoLaunch] = createSignal<boolean>(false);
 
 	const client = createMemo(() => connection()?.client);
 	const currentMissionId = createMemo(() => selector().missionId ?? status().missionId);
@@ -257,6 +262,22 @@ function MissionCockpitApp({
 		const currentId = selectedTaskId();
 		return stageTasks().find((task) => task.taskId === currentId);
 	});
+	const controlSessions = createMemo(() =>
+		sessions()
+			.filter((session) => !session.taskId)
+			.slice()
+			.sort((left, right) => {
+				const lifecycleOrder = controlSessionPriority(left) - controlSessionPriority(right);
+				if (lifecycleOrder !== 0) {
+					return lifecycleOrder;
+				}
+				const createdAtOrder = right.createdAt.localeCompare(left.createdAt);
+				if (createdAtOrder !== 0) {
+					return createdAtOrder;
+				}
+				return left.sessionId.localeCompare(right.sessionId);
+			})
+	);
 	const sessionsForTask = createMemo(() => {
 		const taskId = selectedTask()?.taskId;
 		if (!taskId) {
@@ -273,6 +294,9 @@ function MissionCockpitApp({
 				return left.sessionId.localeCompare(right.sessionId);
 			});
 	});
+	const visibleSessions = createMemo(() =>
+		status().found ? sessionsForTask() : controlSessions()
+	);
 	const currentTask = createMemo(() =>
 		selectedTask() ?? status().activeTasks?.[0] ?? status().readyTasks?.[0]
 	);
@@ -482,6 +506,7 @@ function MissionCockpitApp({
 			availableCommands: availableCommands(),
 			inputValue: inputValue(),
 			status: status(),
+			selectedConsoleTabKind: inferConsoleTabKindFromId(selectedConsoleTabId()),
 			selectedSessionId: selectedSessionId(),
 			selectedStageId: selectedStageId(),
 			currentTaskLabel: currentTask()?.subject
@@ -532,12 +557,20 @@ function MissionCockpitApp({
 			});
 		}
 
-		for (const session of sessionsForTask()) {
+		for (const session of visibleSessions()) {
 			tabs.push({
 				id: createSessionTabId(session.sessionId),
 				label: formatSessionTabLabel(session),
 				kind: 'session',
 				sessionId: session.sessionId
+			});
+		}
+
+		if (!status().found) {
+			tabs.push({
+				id: controlTabId,
+				label: 'CONTROL',
+				kind: 'control'
 			});
 		}
 
@@ -573,6 +606,13 @@ function MissionCockpitApp({
 				kind: 'output',
 				lines: lines.slice(-availableConsoleHeight()),
 				emptyLabel: 'No output has been recorded for this session yet.'
+			};
+		}
+		if (selectedTab.kind === 'control') {
+			return {
+				kind: 'output',
+				lines: buildControlStatusLines(status(), workspaceContext),
+				emptyLabel: 'Control status is unavailable.'
 			};
 		}
 		const documentState = markdownDocumentByPath()[selectedTab.sourcePath];
@@ -684,16 +724,7 @@ function MissionCockpitApp({
 						);
 					}
 				}
-				return cockpitMode() === 'mission'
-					? undefined
-					: (
-						<ControlStatusPanel
-							mode={cockpitMode() === 'setup' ? 'setup' : 'root'}
-							control={controlStatus()}
-							availableMissions={status().availableMissions ?? []}
-							workspaceContextLabel={describeWorkspaceContext(workspaceContext)}
-						/>
-					);
+				return undefined;
 		}
 	});
 
@@ -717,7 +748,7 @@ function MissionCockpitApp({
 	});
 
 	createEffect(() => {
-		setSelectedSessionId((current) => pickPreferredSessionId(sessionsForTask(), current));
+		setSelectedSessionId((current) => pickPreferredSessionId(visibleSessions(), current));
 	});
 
 	createEffect(() => {
@@ -919,6 +950,7 @@ function MissionCockpitApp({
 				return;
 			}
 			if (event.type === 'session.lifecycle') {
+				updateControlSessionLifecycle(event.sessionId, event.lifecycleState);
 				appendLog(`session ${event.phase}: ${event.sessionId} (${event.lifecycleState})`);
 				return;
 			}
@@ -932,17 +964,60 @@ function MissionCockpitApp({
 	});
 
 	createEffect(() => {
-		const currentClient = client();
-		const missionSelector = currentMissionSelector();
-		const taskSessions = sessionsForTask();
-		if (!currentClient || !missionSelector || taskSessions.length === 0) {
+		if (status().found) {
+			setHasAttemptedControlAutoLaunch(false);
+		}
+	});
+
+	createEffect(() => {
+		if (hasAttemptedControlAutoLaunch()) {
 			return;
 		}
-		for (const session of taskSessions) {
+		if (status().found || cockpitMode() !== 'root') {
+			return;
+		}
+		const control = controlStatus();
+		if (!control?.settingsComplete) {
+			return;
+		}
+		if (hasUsableControlSession(controlSessions())) {
+			setHasAttemptedControlAutoLaunch(true);
+			return;
+		}
+		const currentClient = client();
+		if (!currentClient) {
+			return;
+		}
+		setHasAttemptedControlAutoLaunch(true);
+		void launchControlSession(currentClient)
+			.then(async (session) => {
+				setSelectedSessionId(session.sessionId);
+				setSelectedConsoleTabId(createSessionTabId(session.sessionId));
+				const next = await getControlStatus(currentClient);
+				applyMissionStatus(next);
+				appendLog(`Auto-launched ${session.runtimeId} for repository root.`);
+			})
+			.catch((error) => {
+				appendLog(`Unable to auto-launch control session: ${toErrorMessage(error)}`);
+			});
+	});
+
+	createEffect(() => {
+		const currentClient = client();
+		const missionSelector = currentMissionSelector();
+		const targetSessions = visibleSessions();
+		if (!currentClient || targetSessions.length === 0) {
+			return;
+		}
+		if (status().found && !missionSelector) {
+			return;
+		}
+		const sessionSelector = status().found ? missionSelector : undefined;
+		for (const session of targetSessions) {
 			if (consoleStateBySessionId()[session.sessionId]) {
 				continue;
 			}
-			void getSessionConsoleState(currentClient, missionSelector, session.sessionId)
+			void getSessionConsoleState(currentClient, sessionSelector, session.sessionId)
 				.then((nextConsole: MissionAgentConsoleState | null) => {
 					const nextSessionId = nextConsole?.sessionId;
 					if (nextSessionId) {
@@ -1250,6 +1325,8 @@ function MissionCockpitApp({
 		const nextTab = consoleTabs().find((tab) => tab.id === tabId);
 		if (nextTab?.kind === 'session') {
 			setSelectedSessionId(nextTab.sessionId);
+		} else {
+			setSelectedSessionId(undefined);
 		}
 		if (nextTab) {
 			void reloadConsoleTab(nextTab);
@@ -1305,6 +1382,82 @@ function MissionCockpitApp({
 		for (const line of lines) {
 			appendLog(line);
 		}
+	}
+
+	function updateControlSessionRecord(record: MissionAgentSessionRecord): void {
+		if (record.taskId) {
+			return;
+		}
+		setStatus((current) => {
+			const nextAgentSessions = upsertSessionRecord(current.agentSessions, record);
+			const currentControl = current.control;
+			const nextControl = currentControl
+				? {
+					...currentControl,
+					agentSessions: upsertSessionRecord(currentControl.agentSessions, record)
+				}
+				: currentControl;
+			return {
+				...current,
+				agentSessions: nextAgentSessions,
+				...(nextControl ? { control: nextControl } : {})
+			};
+		});
+	}
+
+	function updateControlSessionLifecycle(
+		sessionId: string,
+		lifecycleState: MissionAgentSessionRecord['lifecycleState']
+	): void {
+		setStatus((current) => {
+			let changed = false;
+			const updateState = (sessions: MissionAgentSessionRecord[] | undefined): MissionAgentSessionRecord[] | undefined => {
+				if (!sessions || sessions.length === 0) {
+					return sessions;
+				}
+				const next = sessions.map((session) => {
+					if (session.sessionId !== sessionId || session.lifecycleState === lifecycleState) {
+						return session;
+					}
+					changed = true;
+					return {
+						...session,
+						lifecycleState
+					};
+				});
+				return changed ? next : sessions;
+			};
+
+			const nextAgentSessions = updateState(current.agentSessions);
+			const currentControl = current.control;
+			const nextControlSessions = updateState(currentControl?.agentSessions);
+			const nextControl = currentControl
+				? {
+					...currentControl,
+					...(nextControlSessions ? { agentSessions: nextControlSessions } : {})
+				}
+				: currentControl;
+
+			if (!changed) {
+				return current;
+			}
+			return {
+				...current,
+				...(nextAgentSessions ? { agentSessions: nextAgentSessions } : {}),
+				...(nextControl ? { control: nextControl } : {})
+			};
+		});
+	}
+
+	function resolveInputTargetSessionId(): string | undefined {
+		if (cockpitMode() === 'mission') {
+			return selectedSessionId();
+		}
+		const consoleTab = selectedConsoleTab();
+		if (consoleTab?.kind === 'session') {
+			return consoleTab.sessionId;
+		}
+		return selectedSessionId() ?? controlSessions()[0]?.sessionId;
 	}
 
 	function openMissionPicker(): void {
@@ -1855,14 +2008,19 @@ function MissionCockpitApp({
 		setIsRunningCommand(true);
 		try {
 			if (!trimmed.startsWith('/')) {
-				const sessionId = selectedSessionId();
+				const sessionId = resolveInputTargetSessionId();
 				const missionSelector = currentMissionSelector();
 				const currentClient = client() ?? (await connectClient(missionSelector ?? selector()));
 				if (!sessionId || !currentClient) {
-					appendLog('No selected session is available. Use /launch first.');
+					appendLog(
+						cockpitMode() === 'mission'
+							? 'No selected session is available. Use /launch first.'
+							: 'No control agent session is selected. Select the runtime tab and use /launch if needed.'
+					);
 					return;
 				}
-				await sendSessionInput(currentClient, missionSelector, sessionId, trimmed);
+				const updatedSession = await sendSessionInput(currentClient, missionSelector, sessionId, trimmed);
+				updateControlSessionRecord(updatedSession);
 				appendLog(`Sent input to ${sessionId}.`);
 				return;
 			}
@@ -2603,6 +2761,7 @@ function normalizeCommandInputValue(value: string): string {
 	return value;
 }
 
+const controlTabId = 'control';
 const daemonTabId = 'daemon';
 
 function stageArtifactProductKey(stage: MissionStageId): MissionProductKey | undefined {
@@ -2622,6 +2781,28 @@ function createTaskTabId(taskId: string): string {
 
 function createSessionTabId(sessionId: string): string {
 	return `session:${sessionId}`;
+}
+
+function inferConsoleTabKindFromId(tabId: string | undefined): ConsoleTabDescriptor['kind'] | undefined {
+	if (!tabId) {
+		return undefined;
+	}
+	if (tabId.startsWith('artifact:')) {
+		return 'artifact';
+	}
+	if (tabId.startsWith('task:')) {
+		return 'task';
+	}
+	if (tabId.startsWith('session:')) {
+		return 'session';
+	}
+	if (tabId === controlTabId) {
+		return 'control';
+	}
+	if (tabId === daemonTabId) {
+		return 'daemon';
+	}
+	return undefined;
 }
 
 function formatSessionTabLabel(session: MissionAgentSessionRecord): string {
@@ -3083,6 +3264,69 @@ function describeWorkspaceContext(workspaceContext: MissionWorkspaceContext): st
 		: 'the repository root';
 }
 
+function buildControlStatusLines(
+	status: MissionStatus,
+	workspaceContext: MissionWorkspaceContext
+): string[] {
+	const control = status.control;
+	if (!control) {
+		return ['Waiting for daemon control status...'];
+	}
+	const lines = [
+		status.operationalMode === 'setup'
+			? 'Finish setup before starting your first mission.'
+			: 'Mission control is ready.',
+		`Opened from ${describeWorkspaceContext(workspaceContext)}.`,
+		'',
+		`Files: ${control.initialized ? 'ready' : 'missing'} | Settings: ${control.settingsComplete ? 'ready' : 'needs attention'} | Issue intake: ${controlIssueStatusLabel(control)}`,
+		`GitHub auth: ${controlGithubStatusLabel(control)} | Active missions: ${String(control.availableMissionCount)}`
+	];
+	if (control.githubRepository) {
+		lines.push(`GitHub repository: ${control.githubRepository}`);
+	}
+	for (const notice of [...control.problems, ...control.warnings].slice(0, 4)) {
+		lines.push(`* ${notice}`);
+	}
+	const missions = status.availableMissions ?? [];
+	if (missions.length === 0) {
+		lines.push(
+			status.operationalMode === 'setup'
+				? 'No mission worktrees yet. Finish setup, then create your first mission with /start.'
+				: 'No mission worktrees yet. Use /start from the repository root to create your first mission.'
+		);
+		return lines;
+	}
+	lines.push('Missions:');
+	for (const mission of missions.slice(0, 10)) {
+		const issueLabel = mission.issueId !== undefined ? `#${String(mission.issueId)} ` : '';
+		lines.push(`${issueLabel}${mission.missionId} | ${mission.branchRef}`);
+	}
+	return lines;
+}
+
+function controlIssueStatusLabel(control: MissionStatus['control']): string {
+	if (!control?.issuesConfigured) {
+		return 'not ready';
+	}
+	if (control.githubAuthenticated === false) {
+		return 'waiting for GitHub auth';
+	}
+	if (control.githubAuthenticated === true) {
+		return 'ready';
+	}
+	return 'preparing';
+}
+
+function controlGithubStatusLabel(control: MissionStatus['control']): string {
+	if (control?.githubAuthenticated === true) {
+		return 'ok';
+	}
+	if (control?.githubAuthenticated === false) {
+		return 'required';
+	}
+	return 'n/a';
+}
+
 function shouldExecuteCommandSelection(command: string): boolean {
 	return command === '/setup'
 		|| command === '/init'
@@ -3105,6 +3349,7 @@ function buildCommandDockDescriptor(input: {
 	availableCommands: MissionCommandDescriptor[];
 	inputValue: string;
 	status: MissionStatus;
+	selectedConsoleTabKind: ConsoleTabDescriptor['kind'] | undefined;
 	selectedSessionId: string | undefined;
 	selectedStageId: MissionStageId | undefined;
 	currentTaskLabel: string | undefined;
@@ -3150,10 +3395,12 @@ function buildCommandDockDescriptor(input: {
 	}
 	const trimmed = input.inputValue.trim();
 	if (!trimmed) {
-		if (input.status.found && input.selectedSessionId) {
+		if (input.selectedConsoleTabKind === 'session' && input.selectedSessionId) {
 			return {
-				title: 'AGENT <> SEND',
-				placeholder: 'Type a reply for the selected agent session or start a command with /'
+				title: 'AGENT > SEND',
+				placeholder: input.status.found
+					? 'Type a reply for the selected agent session or start a command with /'
+					: 'Type a reply for the root agent session or start a command with /'
 			};
 		}
 		const scope = commandScopeLabel(input.status);
@@ -3166,7 +3413,7 @@ function buildCommandDockDescriptor(input: {
 	}
 	if (!trimmed.startsWith('/')) {
 		return {
-			title: 'AGENT <> SEND',
+			title: 'AGENT > SEND',
 			placeholder: 'Type a reply for the selected agent session'
 		};
 	}
@@ -3471,11 +3718,13 @@ function buildHeaderFooterBadges(input: {
 	const control = input.status.control;
 	if (input.mode === 'root') {
 		return [
+			...buildControlHeaderAgentConnectionBadges(input.status),
 			...buildControlHeaderGitHubBadges(control, input.fallbackGitHubUser),
 			{ text: '●', tone: daemonStateTone(input.daemonState), framed: false }
 		];
 	}
 	return [
+		...buildControlHeaderAgentConnectionBadges(input.status),
 		...buildControlHeaderGitHubBadges(control, input.fallbackGitHubUser),
 		{ text: '●', tone: daemonStateTone(input.daemonState), framed: false }
 	];
@@ -3517,6 +3766,89 @@ function buildControlHeaderGitHubBadges(
 		return [{ text: githubUser, tone: 'success' }];
 	}
 	return [];
+}
+
+function buildControlHeaderAgentConnectionBadges(
+	status: MissionStatus
+): Array<{ text: string; tone?: 'neutral' | 'accent' | 'success' | 'warning' | 'danger'; framed?: boolean }> {
+	const candidateSessions = [
+		...(status.agentSessions ?? []).filter((candidate) => !candidate.taskId),
+		...(status.control?.agentSessions ?? [])
+	];
+	const session = candidateSessions
+		.slice()
+		.sort((left, right) => {
+			const lifecycleOrder = controlSessionPriority(left) - controlSessionPriority(right);
+			if (lifecycleOrder !== 0) {
+				return lifecycleOrder;
+			}
+			const createdAtOrder = right.createdAt.localeCompare(left.createdAt);
+			if (createdAtOrder !== 0) {
+				return createdAtOrder;
+			}
+			return left.sessionId.localeCompare(right.sessionId);
+		})[0];
+	const runtimeId = session?.runtimeId?.trim() || status.control?.settings?.agentRunner?.trim();
+	if (!runtimeId) {
+		return [];
+	}
+	return [{
+		text: `[${runtimeId}]`,
+		tone: controlSessionTone(session?.lifecycleState)
+	}];
+}
+
+function controlSessionTone(
+	lifecycleState: MissionAgentSessionRecord['lifecycleState'] | undefined
+): 'success' | 'warning' | 'danger' {
+	if (!lifecycleState) {
+		return 'warning';
+	}
+	if (lifecycleState === 'starting' || lifecycleState === 'running' || lifecycleState === 'awaiting-input') {
+		return 'success';
+	}
+	if (lifecycleState === 'idle') {
+		return 'warning';
+	}
+	return 'danger';
+}
+
+function controlSessionPriority(session: MissionAgentSessionRecord): number {
+	const state = session.lifecycleState;
+	if (state === 'running' || state === 'awaiting-input' || state === 'starting') {
+		return 0;
+	}
+	if (state === 'idle') {
+		return 1;
+	}
+	return 2;
+}
+
+function hasUsableControlSession(sessions: MissionAgentSessionRecord[]): boolean {
+	return sessions.some((session) => !isTerminalControlSessionLifecycle(session.lifecycleState));
+}
+
+function isTerminalControlSessionLifecycle(
+	lifecycleState: MissionAgentSessionRecord['lifecycleState']
+): boolean {
+	return lifecycleState === 'completed' || lifecycleState === 'failed' || lifecycleState === 'cancelled';
+}
+
+function upsertSessionRecord(
+	sessions: MissionAgentSessionRecord[] | undefined,
+	record: MissionAgentSessionRecord
+): MissionAgentSessionRecord[] {
+	if (!sessions || sessions.length === 0) {
+		return [record];
+	}
+	const next = sessions.slice();
+	const existingIndex = next.findIndex((session) => session.sessionId === record.sessionId);
+	if (existingIndex >= 0) {
+		next[existingIndex] = record;
+		return next;
+	}
+	next.push(record);
+	return next;
 }
 
 function parseGitHubUserFromAuthDetail(detail: string | undefined): string | undefined {

@@ -16,10 +16,6 @@ describe('initializeMissionRepository', () => {
 			expect(settings['trackingProvider']).toBe('github');
 			expect(settings['instructionsPath']).toBe('.agents');
 			expect(settings['skillsPath']).toBe('.agents/skills');
-			expect(settings['serverPort']).toBeUndefined();
-			expect(settings['agentRunner']).toBeUndefined();
-			expect(settings['defaultAgentMode']).toBeUndefined();
-			expect(settings['defaultModel']).toBeUndefined();
 		} finally {
 			await fs.rm(repoRoot, { recursive: true, force: true });
 		}

@@ -20,7 +20,8 @@ import {
 	type MissionAgentRuntime,
 	type MissionAgentSession,
 	type MissionAgentSessionLaunchRequest,
-	type MissionAgentSessionRecord
+	type MissionAgentSessionRecord,
+	type MissionAgentTurnRequest
 } from './MissionAgentRuntime.js';
 import {
 	getDefaultMissionRepoSettingsWithOverrides,
@@ -776,11 +777,42 @@ export class Daemon {
 	private async sendAgentInput(params: SessionInput) {
 		if (!params.selector?.missionId) {
 			const managed = this.requireControlManagedSession(params.sessionId);
-			await managed.sendInput(params.text);
+			try {
+				await managed.sendInput(params.text);
+			} catch (error) {
+				const shouldRestartTurn = this.shouldRestartControlSessionFromInput(error, managed.getSessionState().lifecycleState);
+				if (!shouldRestartTurn) {
+					throw error;
+				}
+				await managed.submitTurn(this.buildControlFollowUpTurnRequest(managed, params.text));
+			}
 			return this.requirePersistedControlAgentSession(params.sessionId);
 		}
 		const loadedMission = await this.requireMissionSession(params);
 		return loadedMission.mission.sendAgentInput(params.sessionId, params.text);
+	}
+
+	private shouldRestartControlSessionFromInput(
+		error: unknown,
+		lifecycleState: MissionAgentSessionRecord['lifecycleState']
+	): boolean {
+		if (lifecycleState === 'completed' || lifecycleState === 'failed' || lifecycleState === 'cancelled') {
+			return true;
+		}
+		const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+		return message.includes('not currently waiting for operator input');
+	}
+
+	private buildControlFollowUpTurnRequest(managed: AgentSession, prompt: string): MissionAgentTurnRequest {
+		const state = managed.getSessionState();
+		return {
+			workingDirectory: state.workingDirectory ?? this.repoRoot,
+			prompt,
+			...(state.scope ? { scope: state.scope } : { scope: this.createControlAgentScope() }),
+			...(state.currentTurnTitle ? { title: state.currentTurnTitle } : { title: 'Repository root operator session' }),
+			operatorIntent: 'Treat this as the next operator instruction for the repository root session.',
+			startFreshSession: false
+		};
 	}
 
 	private async resizeAgentSession(params: SessionResize) {
