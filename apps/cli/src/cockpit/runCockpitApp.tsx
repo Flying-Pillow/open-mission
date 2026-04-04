@@ -26,11 +26,9 @@ import type {
 import {
 	bootstrapMissionFromIssue,
 	executeCommand as executeDaemonOperation,
-	getControlStatus,
 	evaluateMissionGate,
 	getMissionStatus,
 	getSessionConsoleState,
-	launchControlSession,
 	launchTaskSession,
 	listOpenGitHubIssues,
 	sendSessionInput,
@@ -178,10 +176,8 @@ type ConsoleTabDescriptor =
 		kind: 'daemon';
 	  };
 
-const CONTROL_SESSION_CHANNEL_ID = '__control__';
-
 const missionFocusOrder: FocusArea[] = ['header', 'stages', 'tasks', 'sessions', 'command'];
-const controlFocusOrder: FocusArea[] = ['header', 'sessions', 'command'];
+const controlFocusOrder: FocusArea[] = ['header', 'command'];
 
 export async function runCockpitApp(options: RunCockpitAppOptions): Promise<void> {
 	const renderer = await createCliRenderer({
@@ -245,11 +241,8 @@ function MissionCockpitApp({
 	const [isControlBranchProbeInFlight, setIsControlBranchProbeInFlight] = createSignal<boolean>(false);
 	const [knownAvailableMissions, setKnownAvailableMissions] = createSignal<MissionStatus['availableMissions']>([]);
 	const [selectedHeaderTabId, setSelectedHeaderTabId] = createSignal<string | undefined>();
-	const [hasAttemptedControlAutoLaunch, setHasAttemptedControlAutoLaunch] = createSignal<boolean>(false);
-
 	const client = createMemo(() => connection()?.client);
 	const currentMissionId = createMemo(() => selector().missionId ?? status().missionId);
-	const currentSessionChannelId = createMemo(() => currentMissionId() ?? CONTROL_SESSION_CHANNEL_ID);
 	const controlStatus = createMemo(() => status().control);
 	const stages = createMemo(() => status().stages ?? []);
 	const sessions = createMemo(() => status().agentSessions ?? []);
@@ -262,22 +255,6 @@ function MissionCockpitApp({
 		const currentId = selectedTaskId();
 		return stageTasks().find((task) => task.taskId === currentId);
 	});
-	const controlSessions = createMemo(() =>
-		sessions()
-			.filter((session) => !session.taskId)
-			.slice()
-			.sort((left, right) => {
-				const lifecycleOrder = controlSessionPriority(left) - controlSessionPriority(right);
-				if (lifecycleOrder !== 0) {
-					return lifecycleOrder;
-				}
-				const createdAtOrder = right.createdAt.localeCompare(left.createdAt);
-				if (createdAtOrder !== 0) {
-					return createdAtOrder;
-				}
-				return left.sessionId.localeCompare(right.sessionId);
-			})
-	);
 	const sessionsForTask = createMemo(() => {
 		const taskId = selectedTask()?.taskId;
 		if (!taskId) {
@@ -294,9 +271,7 @@ function MissionCockpitApp({
 				return left.sessionId.localeCompare(right.sessionId);
 			});
 	});
-	const visibleSessions = createMemo(() =>
-		status().found ? sessionsForTask() : controlSessions()
-	);
+	const visibleSessions = createMemo(() => sessionsForTask());
 	const currentTask = createMemo(() =>
 		selectedTask() ?? status().activeTasks?.[0] ?? status().readyTasks?.[0]
 	);
@@ -924,7 +899,7 @@ function MissionCockpitApp({
 		}
 		const subscription = currentClient.onDidEvent((event) => {
 			setLastEvent(event.type);
-			if (event.missionId !== currentSessionChannelId()) {
+			if (event.missionId !== currentMissionId()) {
 				return;
 			}
 			const missionStatusEvent = asMissionStatusNotification(event);
@@ -949,11 +924,6 @@ function MissionCockpitApp({
 				}
 				return;
 			}
-			if (event.type === 'session.lifecycle') {
-				updateControlSessionLifecycle(event.sessionId, event.lifecycleState);
-				appendLog(`session ${event.phase}: ${event.sessionId} (${event.lifecycleState})`);
-				return;
-			}
 			if (event.type === 'session.event') {
 				appendLog(describeAgentEvent(event.event));
 			}
@@ -961,45 +931,6 @@ function MissionCockpitApp({
 		onCleanup(() => {
 			subscription.dispose();
 		});
-	});
-
-	createEffect(() => {
-		if (status().found) {
-			setHasAttemptedControlAutoLaunch(false);
-		}
-	});
-
-	createEffect(() => {
-		if (hasAttemptedControlAutoLaunch()) {
-			return;
-		}
-		if (status().found || cockpitMode() !== 'root') {
-			return;
-		}
-		const control = controlStatus();
-		if (!control?.settingsComplete) {
-			return;
-		}
-		if (hasUsableControlSession(controlSessions())) {
-			setHasAttemptedControlAutoLaunch(true);
-			return;
-		}
-		const currentClient = client();
-		if (!currentClient) {
-			return;
-		}
-		setHasAttemptedControlAutoLaunch(true);
-		void launchControlSession(currentClient)
-			.then(async (session) => {
-				setSelectedSessionId(session.sessionId);
-				setSelectedConsoleTabId(createSessionTabId(session.sessionId));
-				const next = await getControlStatus(currentClient);
-				applyMissionStatus(next);
-				appendLog(`Auto-launched ${session.runtimeId} for repository root.`);
-			})
-			.catch((error) => {
-				appendLog(`Unable to auto-launch control session: ${toErrorMessage(error)}`);
-			});
 	});
 
 	createEffect(() => {
@@ -1067,10 +998,6 @@ function MissionCockpitApp({
 		}
 		if (key.ctrl && key.name === 'p' && canToggleExpandedPreview()) {
 			setExpandedComposerTab((current) => (current === 'write' ? 'preview' : 'write'));
-			return;
-		}
-		if (key.ctrl && key.name === 'g' && canGenerateBodyDraft()) {
-			void generateMissionBodyDraft();
 			return;
 		}
 		if (key.name === 'tab' && focusArea() === 'flow' && canToggleExpandedPreview()) {
@@ -1384,80 +1311,8 @@ function MissionCockpitApp({
 		}
 	}
 
-	function updateControlSessionRecord(record: MissionAgentSessionRecord): void {
-		if (record.taskId) {
-			return;
-		}
-		setStatus((current) => {
-			const nextAgentSessions = upsertSessionRecord(current.agentSessions, record);
-			const currentControl = current.control;
-			const nextControl = currentControl
-				? {
-					...currentControl,
-					agentSessions: upsertSessionRecord(currentControl.agentSessions, record)
-				}
-				: currentControl;
-			return {
-				...current,
-				agentSessions: nextAgentSessions,
-				...(nextControl ? { control: nextControl } : {})
-			};
-		});
-	}
-
-	function updateControlSessionLifecycle(
-		sessionId: string,
-		lifecycleState: MissionAgentSessionRecord['lifecycleState']
-	): void {
-		setStatus((current) => {
-			let changed = false;
-			const updateState = (sessions: MissionAgentSessionRecord[] | undefined): MissionAgentSessionRecord[] | undefined => {
-				if (!sessions || sessions.length === 0) {
-					return sessions;
-				}
-				const next = sessions.map((session) => {
-					if (session.sessionId !== sessionId || session.lifecycleState === lifecycleState) {
-						return session;
-					}
-					changed = true;
-					return {
-						...session,
-						lifecycleState
-					};
-				});
-				return changed ? next : sessions;
-			};
-
-			const nextAgentSessions = updateState(current.agentSessions);
-			const currentControl = current.control;
-			const nextControlSessions = updateState(currentControl?.agentSessions);
-			const nextControl = currentControl
-				? {
-					...currentControl,
-					...(nextControlSessions ? { agentSessions: nextControlSessions } : {})
-				}
-				: currentControl;
-
-			if (!changed) {
-				return current;
-			}
-			return {
-				...current,
-				...(nextAgentSessions ? { agentSessions: nextAgentSessions } : {}),
-				...(nextControl ? { control: nextControl } : {})
-			};
-		});
-	}
-
 	function resolveInputTargetSessionId(): string | undefined {
-		if (cockpitMode() === 'mission') {
-			return selectedSessionId();
-		}
-		const consoleTab = selectedConsoleTab();
-		if (consoleTab?.kind === 'session') {
-			return consoleTab.sessionId;
-		}
-		return selectedSessionId() ?? controlSessions()[0]?.sessionId;
+		return selectedSessionId();
 	}
 
 	function openMissionPicker(): void {
@@ -1859,6 +1714,13 @@ function MissionCockpitApp({
 		return nextSelector;
 	}
 
+	function updateMissionSessionRecord(record: MissionAgentSessionRecord): void {
+		setStatus((currentStatus) => ({
+			...currentStatus,
+			agentSessions: upsertSessionRecord(currentStatus.agentSessions, record)
+		}));
+	}
+
 	async function selectThemeById(themeId: string): Promise<void> {
 		if (!isCockpitThemeName(themeId)) {
 			appendLog(`Unknown theme '${themeId}'.`);
@@ -2012,15 +1874,11 @@ function MissionCockpitApp({
 				const missionSelector = currentMissionSelector();
 				const currentClient = client() ?? (await connectClient(missionSelector ?? selector()));
 				if (!sessionId || !currentClient) {
-					appendLog(
-						cockpitMode() === 'mission'
-							? 'No selected session is available. Use /launch first.'
-							: 'No control agent session is selected. Select the runtime tab and use /launch if needed.'
-					);
+					appendLog('No selected session is available. Use /launch first.');
 					return;
 				}
 				const updatedSession = await sendSessionInput(currentClient, missionSelector, sessionId, trimmed);
-				updateControlSessionRecord(updatedSession);
+				updateMissionSessionRecord(updatedSession);
 				appendLog(`Sent input to ${sessionId}.`);
 				return;
 			}
@@ -2038,10 +1896,9 @@ function MissionCockpitApp({
 						...(workspaceContext.kind === 'control-root' ? ['/root'] : []),
 						'/issues',
 						'/issue <number>',
-							'/start',
-							'/select',
-						'/draft [guidance]',
-						'/launch [runtimeId]',
+						'/start',
+						'/select',
+						...(status().found ? ['/launch [runtimeId]'] : []),
 						'/gate [implement|verify|audit|deliver]',
 						'/transition <stage>',
 						'/cancel [sessionId]',
@@ -2159,17 +2016,6 @@ function MissionCockpitApp({
 						appendLog('Unable to connect to launch an agent session.');
 						return;
 					}
-					if (!status().found) {
-						const session = await launchControlSession(currentClient, {
-							...(runtimeId ? { runtimeId } : {})
-						});
-						setSelectedSessionId(session.sessionId);
-						setSelectedConsoleTabId(createSessionTabId(session.sessionId));
-						const next = await getControlStatus(currentClient);
-						applyMissionStatus(next);
-						appendLog(`Launched ${session.runtimeId} for repository root.`);
-						return;
-					}
 					if (!missionSelector) {
 						appendLog(noMissionSelectedMessage(status()));
 						return;
@@ -2195,10 +2041,11 @@ function MissionCockpitApp({
 					appendLog(`Launched ${session.runtimeId} for ${task.subject}.`);
 					return;
 				}
-				case '/draft':
-					await generateMissionBodyDraft(args.join(' ').trim());
-					return;
 				case '/sessions':
+					if (!status().found) {
+						appendLog('No mission is selected.');
+						return;
+					}
 					if (sessions().length === 0) {
 						appendLog('No agent sessions are currently attached to this mission.');
 						return;
@@ -2369,63 +2216,6 @@ function MissionCockpitApp({
 		</Show>
 	);
 
-	function canGenerateBodyDraft(): boolean {
-		const step = currentCommandFlowStep();
-		if (!step || step.kind !== 'text') {
-			return false;
-		}
-		return step.id === 'body' && step.inputMode === 'expanded';
-	}
-
-	async function generateMissionBodyDraft(operatorGuidance = ''): Promise<void> {
-		if (!canGenerateBodyDraft()) {
-			appendLog('Body draft generation is available during the BODY step of /start.');
-			return;
-		}
-
-		const flow = currentCommandFlow();
-		if (!flow) {
-			appendLog('No active command flow is available for draft generation.');
-			return;
-		}
-
-		const missionTitle = commandFlowTextStepValue(flow.steps, 'title')?.value.trim();
-		const missionType = commandFlowSelectionStepValue(flow.steps, 'type')?.optionLabels[0]
-			?? commandFlowSelectionStepValue(flow.steps, 'type')?.optionIds[0];
-		if (!missionTitle || !missionType) {
-			appendLog('Complete TYPE and TITLE before generating a BODY draft.');
-			return;
-		}
-
-		setIsRunningCommand(true);
-		const controlSettings = status().control?.settings as ConfiguredControlAgentSettings | undefined;
-		appendLog(`Generating BODY draft with ${describeConfiguredAgentDraftTarget(controlSettings)}...`);
-		try {
-			const prompt = buildMissionBodyDraftPromptTemplate({
-				title: missionTitle,
-				type: missionType,
-				currentBody: commandFlowTextValue(),
-				operatorGuidance
-			});
-			const draft = await runConfiguredAgentPrompt(prompt, workspaceContext.repoRoot, controlSettings);
-			if (draft.trim().length === 0) {
-				appendLog('Copilot returned an empty draft.');
-				return;
-			}
-			const currentBody = commandFlowTextValue().trim();
-			const nextBody = currentBody.length > 0
-				? `${commandFlowTextValue().trimEnd()}\n\n${draft.trim()}`
-				: draft.trim();
-			setCommandFlowTextValue(nextBody);
-			setExpandedComposerTab('write');
-			setFocusArea('flow');
-			appendLog('BODY draft appended from copilot output.');
-		} catch (error) {
-			appendLog(toErrorMessage(error));
-		} finally {
-			setIsRunningCommand(false);
-		}
-	}
 }
 
 function buildAdaptiveSetupCommandFlowSteps(
@@ -2962,138 +2752,6 @@ function buildFocusOrder(input: {
 	return ['flow', ...baseOrder.filter((area) => area !== 'flow' && area !== 'command'), 'command'];
 }
 
-function commandFlowSelectionStepValue(
-	steps: CommandFlowStepValue[],
-	stepId: string
-): CommandFlowSelectionValue | undefined {
-	return steps.find(
-		(step): step is CommandFlowSelectionValue => step.kind === 'selection' && step.stepId === stepId
-	);
-}
-
-function commandFlowTextStepValue(
-	steps: CommandFlowStepValue[],
-	stepId: string
-): CommandFlowTextValue | undefined {
-	return steps.find(
-		(step): step is CommandFlowTextValue => step.kind === 'text' && step.stepId === stepId
-	);
-}
-
-function buildMissionBodyDraftPromptTemplate(input: {
-	title: string;
-	type: string;
-	currentBody: string;
-	operatorGuidance: string;
-}): string {
-	const guidance = input.operatorGuidance.trim();
-	return [
-		'You are helping draft a Mission brief BODY in Markdown.',
-		'',
-		'Produce a concise, actionable brief body with these sections:',
-		'## Objective',
-		'## Scope',
-		'## Constraints',
-		'## Acceptance Criteria',
-		'## Risks',
-		'',
-		'Rules:',
-		'- Tailor to the mission type and title.',
-		'- Be specific and implementation-aware for a software repository.',
-		'- Keep total length between 180 and 350 words.',
-		'- Return only Markdown body content, no code fences and no preamble.',
-		'',
-		`Mission type: ${input.type}`,
-		`Mission title: ${input.title}`,
-		...(guidance.length > 0
-			? [
-				'',
-				'Operator guidance from command dock:',
-				guidance
-			]
-			: []),
-		'',
-		'Current draft body (may be empty):',
-		input.currentBody.trim().length > 0 ? input.currentBody : '(empty)'
-	].join('\n');
-}
-
-function describeConfiguredAgentDraftTarget(settings: ConfiguredControlAgentSettings | undefined): string {
-	const agentRunner = settings?.agentRunner?.trim();
-	const defaultModel = settings?.defaultModel?.trim();
-	if (!agentRunner) {
-		return 'the configured agent runner';
-	}
-	return defaultModel ? `${agentRunner} (${defaultModel})` : agentRunner;
-}
-
-async function runConfiguredAgentPrompt(
-	prompt: string,
-	cwd: string,
-	settings: ConfiguredControlAgentSettings | undefined
-): Promise<string> {
-	const agentRunner = settings?.agentRunner?.trim();
-	if (agentRunner !== 'copilot') {
-		throw new Error(
-			agentRunner
-				? `Mission BODY draft generation does not support agent runner '${agentRunner}'.`
-				: 'Mission control agent runner is not configured. Run /setup first.'
-		);
-	}
-
-	const defaultModel = settings?.defaultModel?.trim();
-	if (!defaultModel) {
-		throw new Error('Mission control default model is not configured. Run /setup first.');
-	}
-
-	return new Promise<string>((resolve, reject) => {
-		let stdout = '';
-		let stderr = '';
-		const child = spawn(
-			'copilot',
-			[
-				'--model',
-				defaultModel,
-				'--prompt',
-				prompt,
-				'--allow-all-tools',
-				'--allow-all-paths',
-				'--allow-all-urls',
-				'--no-ask-user',
-				'--silent'
-			],
-			{
-				cwd,
-				env: {
-					...process.env,
-					NO_COLOR: '1',
-					TERM: 'dumb'
-				},
-				stdio: ['ignore', 'pipe', 'pipe']
-			}
-		);
-		child.stdout.setEncoding('utf8');
-		child.stderr.setEncoding('utf8');
-		child.stdout.on('data', (chunk: string) => {
-			stdout += chunk;
-		});
-		child.stderr.on('data', (chunk: string) => {
-			stderr += chunk;
-		});
-		child.once('error', (error) => {
-			reject(new Error(`Failed to launch copilot: ${error.message}`));
-		});
-		child.once('close', (code) => {
-			if (code === 0) {
-				resolve(stdout.trim());
-				return;
-			}
-			const detail = stderr.trim() || stdout.trim() || 'No output from copilot.';
-			reject(new Error(`Copilot draft generation failed (exit ${String(code ?? 'unknown')}): ${detail}`));
-		});
-	});
-}
-
 async function resolveGitHubCliUser(cwd: string): Promise<string | undefined> {
 	return new Promise<string | undefined>((resolve) => {
 		const child = spawn('gh', ['api', 'user', '--jq', '.login'], {
@@ -3398,9 +3056,7 @@ function buildCommandDockDescriptor(input: {
 		if (input.selectedConsoleTabKind === 'session' && input.selectedSessionId) {
 			return {
 				title: 'AGENT > SEND',
-				placeholder: input.status.found
-					? 'Type a reply for the selected agent session or start a command with /'
-					: 'Type a reply for the root agent session or start a command with /'
+				placeholder: 'Type a reply for the selected agent session or start a command with /'
 			};
 		}
 		const scope = commandScopeLabel(input.status);
@@ -3580,11 +3236,6 @@ function describeCommandDockIntent(
 				placeholder: currentTaskLabel
 					? `Launch an agent for ${currentTaskLabel}.`
 					: 'Launch an agent for the selected task.'
-			};
-		case '/draft':
-			return {
-				title: 'BODY > DRAFT > COPILOT',
-				placeholder: 'Press Enter to spawn Copilot draft generation. Add optional guidance after /draft.'
 			};
 		case '/sessions':
 			return {
@@ -3769,69 +3420,9 @@ function buildControlHeaderGitHubBadges(
 }
 
 function buildControlHeaderAgentConnectionBadges(
-	status: MissionStatus
+	_status: MissionStatus
 ): Array<{ text: string; tone?: 'neutral' | 'accent' | 'success' | 'warning' | 'danger'; framed?: boolean }> {
-	const candidateSessions = [
-		...(status.agentSessions ?? []).filter((candidate) => !candidate.taskId),
-		...(status.control?.agentSessions ?? [])
-	];
-	const session = candidateSessions
-		.slice()
-		.sort((left, right) => {
-			const lifecycleOrder = controlSessionPriority(left) - controlSessionPriority(right);
-			if (lifecycleOrder !== 0) {
-				return lifecycleOrder;
-			}
-			const createdAtOrder = right.createdAt.localeCompare(left.createdAt);
-			if (createdAtOrder !== 0) {
-				return createdAtOrder;
-			}
-			return left.sessionId.localeCompare(right.sessionId);
-		})[0];
-	const runtimeId = session?.runtimeId?.trim() || status.control?.settings?.agentRunner?.trim();
-	if (!runtimeId) {
-		return [];
-	}
-	return [{
-		text: `[${runtimeId}]`,
-		tone: controlSessionTone(session?.lifecycleState)
-	}];
-}
-
-function controlSessionTone(
-	lifecycleState: MissionAgentSessionRecord['lifecycleState'] | undefined
-): 'success' | 'warning' | 'danger' {
-	if (!lifecycleState) {
-		return 'warning';
-	}
-	if (lifecycleState === 'starting' || lifecycleState === 'running' || lifecycleState === 'awaiting-input') {
-		return 'success';
-	}
-	if (lifecycleState === 'idle') {
-		return 'warning';
-	}
-	return 'danger';
-}
-
-function controlSessionPriority(session: MissionAgentSessionRecord): number {
-	const state = session.lifecycleState;
-	if (state === 'running' || state === 'awaiting-input' || state === 'starting') {
-		return 0;
-	}
-	if (state === 'idle') {
-		return 1;
-	}
-	return 2;
-}
-
-function hasUsableControlSession(sessions: MissionAgentSessionRecord[]): boolean {
-	return sessions.some((session) => !isTerminalControlSessionLifecycle(session.lifecycleState));
-}
-
-function isTerminalControlSessionLifecycle(
-	lifecycleState: MissionAgentSessionRecord['lifecycleState']
-): boolean {
-	return lifecycleState === 'completed' || lifecycleState === 'failed' || lifecycleState === 'cancelled';
+	return [];
 }
 
 function upsertSessionRecord(

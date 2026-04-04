@@ -8,6 +8,7 @@ export * from './lib/frontmatter.js';
 export * from './lib/repoConfig.js';
 export * from './lib/repoPaths.js';
 export * from './daemon/Daemon.js';
+export * from './daemon/runDaemonMain.js';
 export * from './daemon/protocol.js';
 export * from './daemon/daemonPaths.js';
 export * from './types.js';

@@ -1,7 +1,7 @@
 import type {
 	MissionAgentConsoleState,
-	MissionAgentSessionLaunchRequest,
 	MissionAgentSessionRecord,
+	MissionAgentSessionLaunchRequest,
 	MissionAgentTurnRequest
 } from '../daemon/MissionAgentRuntime.js';
 import type {
@@ -9,7 +9,6 @@ import type {
 	CommandExecuteResult,
 	ControlMissionBootstrap,
 	ControlMissionStart,
-	ControlSessionLaunch,
 	ControlSettingsUpdate
 } from '../daemon/protocol.js';
 import type {
@@ -24,13 +23,6 @@ import type { DaemonClient } from './DaemonClient.js';
 
 export async function getControlStatus(client: DaemonClient): Promise<MissionStatus> {
 	return client.request<MissionStatus>('control.status');
-}
-
-export async function launchControlSession(
-	client: DaemonClient,
-	request?: ControlSessionLaunch['request']
-): Promise<MissionAgentSessionRecord> {
-	return client.request<MissionAgentSessionRecord>('control.session.launch', request ? { request } : {});
 }
 
 export async function updateControlSetting(

@@ -2,8 +2,8 @@ import * as fs from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import {
 	getMissionDirectoryPath,
-	getMissionMissionsPath,
 	getMissionSettingsPath,
+	getMissionWorktreesPath,
 	readMissionRepoSettings,
 	type MissionRepoSettings
 } from '@flying-pillow/mission-core';
@@ -23,7 +23,7 @@ export type CockpitRepoState = {
 
 export async function detectCockpitRepoState(repoRoot: string): Promise<CockpitRepoState> {
 	const missionDirectoryPath = getMissionDirectoryPath(repoRoot);
-	const missionsRoot = getMissionMissionsPath(repoRoot);
+	const missionsRoot = getMissionWorktreesPath(repoRoot);
 	const settingsPath = getMissionSettingsPath(repoRoot);
 	const settings = readMissionRepoSettings(repoRoot);
 	const isMissionInitialized = await pathExists(settingsPath);

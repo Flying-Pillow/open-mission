@@ -6,28 +6,14 @@ import { describe, expect, it } from 'vitest';
 import { DaemonClient } from '../client/DaemonClient.js';
 import {
 	executeCommand,
-	getSessionConsoleState,
 	getControlStatus,
-	launchControlSession,
 	getMissionStatus,
-	sendSessionInput,
 	startMission,
 	updateControlSetting
 } from '../client/operations.js';
 import { getMissionSettingsPath } from '../lib/repoConfig.js';
 import { startDaemon } from './Daemon.js';
 import { getDaemonManifestPath, getDaemonRuntimePath } from './daemonPaths.js';
-import {
-	MissionAgentEventEmitter,
-	createEmptyMissionAgentConsoleState,
-	createEmptyMissionAgentSessionState,
-	type MissionAgentConsoleEvent,
-	type MissionAgentEvent,
-	type MissionAgentRuntime,
-	type MissionAgentRuntimeCapabilities,
-	type MissionAgentSession,
-	type MissionAgentTurnRequest
-} from './MissionAgentRuntime.js';
 
 describe('Daemon', () => {
 	it('scaffolds the control repository when the daemon starts', async () => {
@@ -267,44 +253,6 @@ describe('Daemon', () => {
 		}
 	});
 
-	it('launches a control-root agent session and accepts plain input without a mission selector', async () => {
-		const repoRoot = await createTempRepo();
-
-		try {
-			const daemon = await startDaemon({
-				repoRoot,
-				runtimes: [new TestRuntime('copilot')]
-			});
-			const client = new DaemonClient();
-
-			try {
-				await client.connect({ repoRoot });
-				await updateControlSetting(client, 'agentRunner', 'copilot');
-				await updateControlSetting(client, 'defaultAgentMode', 'interactive');
-				await updateControlSetting(client, 'defaultModel', 'gpt-5.4');
-
-				const session = await launchControlSession(client);
-				await sendSessionInput(client, undefined, session.sessionId, 'hello from root');
-				const consoleState = await getSessionConsoleState(client, undefined, session.sessionId);
-				const status = await getControlStatus(client);
-
-				expect(session.runtimeId).toBe('copilot');
-				expect(session.scope).toMatchObject({
-					kind: 'control',
-					repoRoot
-				});
-				expect(consoleState?.lines.join('\n')).toContain('hello from root');
-				expect(status.agentSessions?.map((record) => record.sessionId)).toContain(session.sessionId);
-				expect(status.control?.agentSessions?.map((record) => record.sessionId)).toContain(session.sessionId);
-			} finally {
-				client.dispose();
-				await daemon.close();
-			}
-		} finally {
-			await fs.rm(repoRoot, { recursive: true, force: true });
-		}
-	});
-
 	it('resolves missions by explicit missionId without an ambient active mission', async () => {
 		const repoRoot = await createTempRepo();
 
@@ -447,138 +395,4 @@ function readGitOutput(repoRoot: string, args: string[]): string {
 		throw new Error(result.stderr.trim() || `git ${args.join(' ')} failed.`);
 	}
 	return result.stdout.trim();
-}
-
-class TestRuntime implements MissionAgentRuntime {
-	public readonly displayName = 'Test Runtime';
-	public readonly capabilities: MissionAgentRuntimeCapabilities = {
-		persistentSessions: false,
-		interactiveInput: true,
-		scopedPrompts: true,
-		resumableSessions: false,
-		toolPermissionRequests: false,
-		contextWindowVisibility: false,
-		tokenUsageVisibility: false,
-		costVisibility: false,
-		customInstructions: false,
-		telemetry: false,
-		interruptible: true
-	};
-
-	public constructor(public readonly id: string) {}
-
-	public async isAvailable() {
-		return { available: true };
-	}
-
-	public async createSession(): Promise<MissionAgentSession> {
-		return new TestSession(this.id, this.displayName);
-	}
-}
-
-class TestSession implements MissionAgentSession {
-	public readonly capabilities: MissionAgentRuntimeCapabilities = {
-		persistentSessions: false,
-		interactiveInput: true,
-		scopedPrompts: true,
-		resumableSessions: false,
-		toolPermissionRequests: false,
-		contextWindowVisibility: false,
-		tokenUsageVisibility: false,
-		costVisibility: false,
-		customInstructions: false,
-		telemetry: false,
-		interruptible: true
-	};
-	public readonly sessionId = `test-${Math.random().toString(36).slice(2, 10)}`;
-	private readonly consoleEmitter = new MissionAgentEventEmitter<MissionAgentConsoleEvent>();
-	private readonly eventEmitter = new MissionAgentEventEmitter<MissionAgentEvent>();
-	private consoleState;
-	private sessionState;
-
-	public constructor(
-		public readonly runtimeId: string,
-		runtimeLabel: string
-	) {
-		this.consoleState = createEmptyMissionAgentConsoleState({
-			runtimeId,
-			runtimeLabel,
-			sessionId: this.sessionId,
-			awaitingInput: false,
-			lines: []
-		});
-		this.sessionState = createEmptyMissionAgentSessionState({
-			runtimeId,
-			runtimeLabel,
-			sessionId: this.sessionId,
-			lifecycleState: 'starting'
-		});
-	}
-
-	public readonly onDidConsoleEvent = this.consoleEmitter.event;
-	public readonly onDidEvent = this.eventEmitter.event;
-
-	public getConsoleState() {
-		return structuredClone(this.consoleState);
-	}
-
-	public getSessionState() {
-		return structuredClone(this.sessionState);
-	}
-
-	public async submitTurn(request: MissionAgentTurnRequest): Promise<void> {
-		this.sessionState = createEmptyMissionAgentSessionState({
-			...this.sessionState,
-			lifecycleState: 'awaiting-input',
-			workingDirectory: request.workingDirectory,
-			...(request.title ? { currentTurnTitle: request.title } : {}),
-			...(request.scope ? { scope: request.scope } : {}),
-			lastUpdatedAt: new Date().toISOString()
-		});
-		this.consoleState = createEmptyMissionAgentConsoleState({
-			...this.consoleState,
-			awaitingInput: true,
-			lines: [...this.consoleState.lines, `prompt:${request.prompt}`]
-		});
-		this.consoleEmitter.fire({ type: 'reset', state: this.getConsoleState() });
-		this.eventEmitter.fire({ type: 'session-started', state: this.getSessionState() });
-	}
-
-	public async sendInput(text: string): Promise<void> {
-		this.consoleState = createEmptyMissionAgentConsoleState({
-			...this.consoleState,
-			awaitingInput: true,
-			lines: [...this.consoleState.lines, `input:${text}`]
-		});
-		this.sessionState = createEmptyMissionAgentSessionState({
-			...this.sessionState,
-			lifecycleState: 'awaiting-input',
-			lastUpdatedAt: new Date().toISOString()
-		});
-		this.consoleEmitter.fire({ type: 'lines', lines: [`input:${text}`], state: this.getConsoleState() });
-		this.eventEmitter.fire({ type: 'session-state-changed', state: this.getSessionState() });
-	}
-
-	public async cancel(): Promise<void> {
-		this.sessionState = createEmptyMissionAgentSessionState({
-			...this.sessionState,
-			lifecycleState: 'cancelled',
-			lastUpdatedAt: new Date().toISOString()
-		});
-		this.eventEmitter.fire({ type: 'session-cancelled', state: this.getSessionState() });
-	}
-
-	public async terminate(): Promise<void> {
-		this.sessionState = createEmptyMissionAgentSessionState({
-			...this.sessionState,
-			lifecycleState: 'completed',
-			lastUpdatedAt: new Date().toISOString()
-		});
-		this.eventEmitter.fire({ type: 'session-completed', exitCode: 0, state: this.getSessionState() });
-	}
-
-	public dispose(): void {
-		this.consoleEmitter.dispose();
-		this.eventEmitter.dispose();
-	}
 }

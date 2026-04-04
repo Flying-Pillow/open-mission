@@ -5,7 +5,8 @@
 	"type": "module",
 	"private": true,
 	"bin": {
-		"mission": "./build/index.js"
+		"mission": "./build/index.js",
+		"missiond": "./build/daemon.js"
 	},
 	"scripts": {
 		"build": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && rm -rf build && rm -f tsconfig.tsbuildinfo && tsc -p tsconfig.json",

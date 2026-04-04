@@ -5,7 +5,6 @@ import type { Socket } from 'node:net';
 import { spawnSync } from 'node:child_process';
 import { Mission } from './mission/Mission.js';
 import { Factory } from './mission/Factory.js';
-import { AgentSession, type AgentSessionMetadata } from './mission/AgentSession.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import {
 	GitHubPlatformAdapter,
@@ -18,10 +17,8 @@ import {
 	type MissionAgentDisposable,
 	type MissionAgentEvent,
 	type MissionAgentRuntime,
-	type MissionAgentSession,
 	type MissionAgentSessionLaunchRequest,
-	type MissionAgentSessionRecord,
-	type MissionAgentTurnRequest
+	type MissionAgentSessionRecord
 } from './MissionAgentRuntime.js';
 import {
 	getDefaultMissionRepoSettingsWithOverrides,
@@ -53,7 +50,6 @@ import {
 	type ControlIssuesList,
 	type ControlMissionBootstrap,
 	type ControlMissionStart,
-	type ControlSessionLaunch,
 	type ControlSettingsUpdate,
 	type ErrorResponse,
 	type Manifest,
@@ -91,8 +87,6 @@ type LoadedMission = {
 	autopilotQueue: Promise<void>;
 };
 
-const CONTROL_SESSION_CHANNEL_ID = '__control__';
-
 export type DaemonOptions = {
 	logLine?: (line: string) => void;
 	socketPath?: string;
@@ -105,8 +99,6 @@ export class Daemon {
 	private readonly store: FilesystemAdapter;
 	private readonly runtimes = new Map<string, MissionAgentRuntime>();
 	private readonly loadedMissions = new Map<string, LoadedMission>();
-	private readonly controlManagedSessions = new Map<string, AgentSession>();
-	private controlAgentSessions: MissionAgentSessionRecord[] = [];
 	private readonly shutdownPromise: Promise<void>;
 	private readonly socketPath: string;
 	private readonly logLine: ((line: string) => void) | undefined;
@@ -190,7 +182,6 @@ export class Daemon {
 			client.destroy();
 		}
 		this.clients.clear();
-		this.disposeControlSessions();
 
 		await new Promise<void>((resolve, reject) => {
 			if (!this.server.listening) {
@@ -295,8 +286,6 @@ export class Daemon {
 			}
 				case 'command.execute':
 					return this.executeCommand(request.params as CommandExecute);
-				case 'control.session.launch':
-					return this.launchControlSession((request.params as ControlSessionLaunch | undefined) ?? {});
 			case 'control.status':
 				return this.buildIdleMissionStatus();
 			case 'control.settings.update':
@@ -562,19 +551,6 @@ export class Daemon {
 				...(availableMissions.length > 0 ? {} : { reason: 'No active missions are available.' })
 			},
 			{
-				id: 'control.session.launch',
-				label: 'Launch root agent session',
-				command: '/launch',
-				scope: 'mission',
-				enabled: control.settingsComplete,
-				flow: {
-					targetLabel: 'AGENT',
-					actionLabel: 'LAUNCH',
-					steps: []
-				},
-				...(control.settingsComplete ? {} : { reason: 'Complete setup before launching a root agent session.' })
-			},
-			{
 				id: 'control.issues.list',
 				label: 'Browse open GitHub issues',
 				command: '/issues',
@@ -588,7 +564,6 @@ export class Daemon {
 			found: false,
 			operationalMode: this.resolveOperationalMode(control),
 			control,
-			agentSessions: this.getControlAgentSessions(),
 			availableCommands,
 			...(availableMissions.length > 0 ? { availableMissions } : {})
 		};
@@ -640,69 +615,9 @@ export class Daemon {
 
 	private async listAgentSessions(
 		params: MissionSelect = {}
-	): Promise<MissionAgentSessionRecord[]> {
-		if (!params.selector?.missionId) {
-			return this.getControlAgentSessions();
-		}
+	) {
 		const loadedMission = await this.requireMissionContext(params.selector);
 		return loadedMission.mission.getAgentSessions();
-	}
-
-	private async launchControlSession(params: ControlSessionLaunch): Promise<MissionAgentSessionRecord> {
-		await this.ensureRepositoryInitialized();
-		const settings = getDefaultMissionRepoSettingsWithOverrides(readMissionRepoSettings(this.repoRoot) ?? {});
-		if (!settings.agentRunner?.trim()) {
-			throw new Error('Mission control agent runner is not configured. Run /setup first.');
-		}
-
-		const runtimeId = this.resolveConfiguredControlRuntimeId(settings.agentRunner);
-		const runtime = this.requireRuntime(runtimeId);
-		const availability = await runtime.isAvailable();
-		if (!availability.available) {
-			throw new Error(availability.detail ?? `${runtime.displayName} is unavailable.`);
-		}
-
-		const request = params.request;
-		const existingRecord = request?.sessionId ? this.getControlAgentSession(request.sessionId) : undefined;
-		let managed = request?.sessionId ? this.controlManagedSessions.get(request.sessionId) : undefined;
-		if (managed && managed.runtimeId !== runtime.id) {
-			throw new Error(
-				`Mission control session '${managed.sessionId}' is attached to runtime '${managed.runtimeId}', not '${runtime.id}'.`
-			);
-		}
-
-		if (!managed || request?.startFreshSession === true) {
-			if (managed) {
-				this.detachControlAgentSession(managed.sessionId);
-			}
-
-			if (request?.sessionId && !runtime.resumeSession && !request.startFreshSession) {
-				throw new Error(
-					`${runtime.displayName} cannot resume session '${request.sessionId}'. Start a fresh session instead.`
-				);
-			}
-
-			const session: MissionAgentSession =
-				request?.sessionId && runtime.resumeSession
-					? await runtime.resumeSession(request.sessionId)
-					: await runtime.createSession();
-			managed = this.attachControlAgentSession(runtime, session, {
-				createdAt: existingRecord?.createdAt ?? new Date().toISOString(),
-				assignmentLabel: existingRecord?.assignmentLabel ?? this.repoRoot
-			});
-			await managed.persist();
-		}
-
-		await managed.submitTurn({
-			workingDirectory: request?.workingDirectory ?? this.repoRoot,
-			prompt: request?.prompt ?? 'You are attached to the repository root. Enter standby, but treat the next plain-text operator message in this session as the active instruction to follow.',
-			scope: request?.scope ?? this.createControlAgentScope(),
-			title: request?.title ?? 'Repository root operator session',
-			...(request?.operatorIntent ? { operatorIntent: request.operatorIntent } : {}),
-			...(request?.startFreshSession !== undefined ? { startFreshSession: request.startFreshSession } : {})
-		});
-
-		return this.requirePersistedControlAgentSession(managed.sessionId);
 	}
 
 	private async launchTaskSession(params: TaskLaunch) {
@@ -731,11 +646,11 @@ export class Daemon {
 		}
 		return {
 			...(overrides.runtimeId ? { runtimeId: overrides.runtimeId } : {}),
-			workingDirectory: overrides.workingDirectory ?? status.missionDir ?? this.repoRoot,
-			prompt: overrides.prompt ?? task.instruction,
-			title: overrides.title ?? task.subject,
-			assignmentLabel: overrides.assignmentLabel ?? task.relativePath,
-			scope: overrides.scope ?? {
+			workingDirectory: overrides['workingDirectory'] ?? status.missionDir ?? this.repoRoot,
+			prompt: overrides['prompt'] ?? task.instruction,
+			title: overrides['title'] ?? task.subject,
+			assignmentLabel: overrides['assignmentLabel'] ?? task.relativePath,
+			scope: overrides['scope'] ?? {
 				kind: 'slice',
 				sliceTitle: task.subject,
 				verificationTargets: [],
@@ -749,80 +664,29 @@ export class Daemon {
 				...(task.subject ? { taskSummary: task.subject } : {}),
 				...(task.instruction ? { taskInstruction: task.instruction } : {})
 			},
-			...(overrides.operatorIntent ? { operatorIntent: overrides.operatorIntent } : {}),
-			startFreshSession: overrides.startFreshSession ?? true
+			...(overrides['operatorIntent'] ? { operatorIntent: overrides['operatorIntent'] } : {}),
+			startFreshSession: overrides['startFreshSession'] ?? true
 		};
 	}
 
 	private async getAgentConsoleState(
 		params: SessionConsoleState
 	): Promise<MissionAgentConsoleState | null> {
-		if (!params.selector?.missionId) {
-			return this.controlManagedSessions.get(params.sessionId)?.getConsoleState() ?? null;
-		}
 		const loadedMission = await this.requireMissionSession(params);
 		return loadedMission.mission.getAgentConsoleState(params.sessionId) ?? null;
 	}
 
 	private async submitAgentTurn(params: SessionTurnSubmit) {
-		if (!params.selector?.missionId) {
-			const managed = this.requireControlManagedSession(params.sessionId);
-			await managed.submitTurn(params.request);
-			return this.requirePersistedControlAgentSession(params.sessionId);
-		}
 		const loadedMission = await this.requireMissionSession(params);
 		return loadedMission.mission.submitAgentTurn(params.sessionId, params.request);
 	}
 
 	private async sendAgentInput(params: SessionInput) {
-		if (!params.selector?.missionId) {
-			const managed = this.requireControlManagedSession(params.sessionId);
-			try {
-				await managed.sendInput(params.text);
-			} catch (error) {
-				const shouldRestartTurn = this.shouldRestartControlSessionFromInput(error, managed.getSessionState().lifecycleState);
-				if (!shouldRestartTurn) {
-					throw error;
-				}
-				await managed.submitTurn(this.buildControlFollowUpTurnRequest(managed, params.text));
-			}
-			return this.requirePersistedControlAgentSession(params.sessionId);
-		}
 		const loadedMission = await this.requireMissionSession(params);
 		return loadedMission.mission.sendAgentInput(params.sessionId, params.text);
 	}
 
-	private shouldRestartControlSessionFromInput(
-		error: unknown,
-		lifecycleState: MissionAgentSessionRecord['lifecycleState']
-	): boolean {
-		if (lifecycleState === 'completed' || lifecycleState === 'failed' || lifecycleState === 'cancelled') {
-			return true;
-		}
-		const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-		return message.includes('not currently waiting for operator input');
-	}
-
-	private buildControlFollowUpTurnRequest(managed: AgentSession, prompt: string): MissionAgentTurnRequest {
-		const state = managed.getSessionState();
-		return {
-			workingDirectory: state.workingDirectory ?? this.repoRoot,
-			prompt,
-			...(state.scope ? { scope: state.scope } : { scope: this.createControlAgentScope() }),
-			...(state.currentTurnTitle ? { title: state.currentTurnTitle } : { title: 'Repository root operator session' }),
-			operatorIntent: 'Treat this as the next operator instruction for the repository root session.',
-			startFreshSession: false
-		};
-	}
-
 	private async resizeAgentSession(params: SessionResize) {
-		if (!params.selector?.missionId) {
-			const managed = this.requireControlManagedSession(params.sessionId);
-			const cols = Math.max(1, Math.floor(params.cols));
-			const rows = Math.max(1, Math.floor(params.rows));
-			await managed.resize({ cols, rows });
-			return this.requirePersistedControlAgentSession(params.sessionId);
-		}
 		const loadedMission = await this.requireMissionSession(params);
 		return loadedMission.mission.resizeAgentSession(params.sessionId, {
 			cols: params.cols,
@@ -831,21 +695,11 @@ export class Daemon {
 	}
 
 	private async cancelAgentSession(params: SessionControl) {
-		if (!params.selector?.missionId) {
-			const managed = this.requireControlManagedSession(params.sessionId);
-			await managed.cancel(params.reason);
-			return this.requirePersistedControlAgentSession(params.sessionId);
-		}
 		const loadedMission = await this.requireMissionSession(params);
 		return loadedMission.mission.cancelAgentSession(params.sessionId, params.reason);
 	}
 
 	private async terminateAgentSession(params: SessionControl) {
-		if (!params.selector?.missionId) {
-			const managed = this.requireControlManagedSession(params.sessionId);
-			await managed.terminate(params.reason);
-			return this.requirePersistedControlAgentSession(params.sessionId);
-		}
 		const loadedMission = await this.requireMissionSession(params);
 		return loadedMission.mission.terminateAgentSession(params.sessionId, params.reason);
 	}
@@ -982,7 +836,6 @@ export class Daemon {
 			...(githubAuthenticated !== undefined ? { githubAuthenticated } : {}),
 			...(githubUser ? { githubUser } : {}),
 			...(githubAuthMessage ? { githubAuthMessage } : {}),
-			...(this.controlAgentSessions.length > 0 ? { agentSessions: this.getControlAgentSessions() } : {}),
 			availableMissionCount:
 				availableMissionCount ?? (await this.store.listMissions()).length,
 			problems,
@@ -1771,126 +1624,6 @@ export class Daemon {
 			throw new Error(`Mission agent runtime '${runtimeId}' is not registered in the server.`);
 		}
 		return runtime;
-	}
-
-	private resolveConfiguredControlRuntimeId(agentRunner: string): string {
-		return this.resolveRuntimeId(agentRunner);
-	}
-
-	private createControlAgentScope() {
-		const currentBranch = this.store.getCurrentBranch(this.repoRoot);
-		return {
-			kind: 'control' as const,
-			repoRoot: this.repoRoot,
-			repoName: path.basename(this.repoRoot),
-			...(currentBranch ? { branch: currentBranch } : {})
-		};
-	}
-
-	private getControlAgentSessions(): MissionAgentSessionRecord[] {
-		return this.controlAgentSessions.map((record) => structuredClone(record));
-	}
-
-	private getControlAgentSession(sessionId: string): MissionAgentSessionRecord | undefined {
-		const record = this.controlAgentSessions.find((candidate) => candidate.sessionId === sessionId);
-		return record ? structuredClone(record) : undefined;
-	}
-
-	private requirePersistedControlAgentSession(sessionId: string): MissionAgentSessionRecord {
-		const record = this.controlAgentSessions.find((candidate) => candidate.sessionId === sessionId);
-		if (!record) {
-			throw new Error(`Mission control session '${sessionId}' is not recorded in daemon state.`);
-		}
-		return structuredClone(record);
-	}
-
-	private requireControlManagedSession(sessionId: string): AgentSession {
-		const managed = this.controlManagedSessions.get(sessionId);
-		if (managed) {
-			return managed;
-		}
-		const persisted = this.controlAgentSessions.find((candidate) => candidate.sessionId === sessionId);
-		if (persisted) {
-			throw new Error(
-				`Mission control session '${sessionId}' is recorded for runtime '${persisted.runtimeId}' but is not attached in this process.`
-			);
-		}
-		throw new Error(`Mission control session '${sessionId}' is not attached to this daemon.`);
-	}
-
-	private attachControlAgentSession(
-		runtime: MissionAgentRuntime,
-		session: MissionAgentSession,
-		metadata: AgentSessionMetadata
-	): AgentSession {
-		const managed = new AgentSession(runtime, session, metadata, {
-			persistRecord: async (record) => {
-				this.persistControlAgentSessionRecord(record);
-			},
-			emitConsoleEvent: (event) => {
-				if (!event.state.sessionId) {
-					return;
-				}
-				this.broadcast({
-					type: 'event',
-					event: {
-						type: 'session.console',
-						missionId: CONTROL_SESSION_CHANNEL_ID,
-						sessionId: event.state.sessionId,
-						event
-					}
-				});
-			},
-			emitEvent: (event) => {
-				this.broadcast({
-					type: 'event',
-					event: {
-						type: 'session.event',
-						missionId: CONTROL_SESSION_CHANNEL_ID,
-						sessionId: event.state.sessionId,
-						event
-					}
-				});
-				const phaseEvent = this.toSessionPhaseNotification(CONTROL_SESSION_CHANNEL_ID, event);
-				if (phaseEvent) {
-					this.broadcast({
-						type: 'event',
-						event: phaseEvent
-					});
-				}
-			}
-		});
-
-		this.controlManagedSessions.set(session.sessionId, managed);
-		return managed;
-	}
-
-	private detachControlAgentSession(sessionId: string): void {
-		const managed = this.controlManagedSessions.get(sessionId);
-		if (!managed) {
-			return;
-		}
-
-		managed.dispose();
-		this.controlManagedSessions.delete(sessionId);
-	}
-
-	private persistControlAgentSessionRecord(record: MissionAgentSessionRecord): void {
-		const nextRecords = this.controlAgentSessions.map((candidate) => structuredClone(candidate));
-		const existingIndex = nextRecords.findIndex((candidate) => candidate.sessionId === record.sessionId);
-		if (existingIndex >= 0) {
-			nextRecords[existingIndex] = structuredClone(record);
-		} else {
-			nextRecords.push(structuredClone(record));
-		}
-		this.controlAgentSessions = nextRecords;
-	}
-
-	private disposeControlSessions(): void {
-		for (const sessionId of this.controlManagedSessions.keys()) {
-			this.detachControlAgentSession(sessionId);
-		}
-		this.controlAgentSessions = [];
 	}
 
 	private toSessionPhaseNotification(

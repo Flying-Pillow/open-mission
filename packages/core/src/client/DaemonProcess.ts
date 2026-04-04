@@ -23,6 +23,7 @@ type DaemonStartCommand = {
 	command: string;
 	args: string[];
 	launchMode: DaemonLaunchMode;
+	shell?: boolean;
 };
 
 class IncompatibleDaemonError extends Error {
@@ -103,13 +104,15 @@ export async function startDaemonProcess(
 		env: {
 			...process.env,
 			MISSION_REPO_ROOT: options.repoRoot,
+			MISSION_DAEMON_LAUNCH_MODE: startCommand.launchMode,
 			...(runtimeFactoryModulePath
 				? { MISSION_RUNTIME_FACTORY_MODULE: runtimeFactoryModulePath }
 				: {})
 		},
 		stdio: 'ignore',
 		detached: true,
-		windowsHide: true
+		windowsHide: true,
+		...(startCommand.shell ? { shell: startCommand.shell } : {})
 	});
 	child.unref();
 }
@@ -140,21 +143,13 @@ function createDaemonStartCommand(
 	options: ConnectDaemonClientOptions
 ): DaemonStartCommand {
 	const launchMode = resolveAvailableDaemonLaunchMode(options.preferredLaunchMode);
-	const packageRoot = getDaemonPackageRoot();
+	const missiondCommand = resolveMissiondCommand();
 	const socketArgs = options.socketPath ? ['--socket', options.socketPath] : [];
-
-	if (launchMode === 'source') {
-		return {
-			command: 'pnpm',
-			args: ['--dir', packageRoot, 'exec', 'tsx', path.join(packageRoot, 'src', 'daemon', 'main.ts'), ...socketArgs],
-			launchMode
-		};
-	}
-
 	return {
-		command: process.execPath,
-		args: [path.join(packageRoot, 'build', 'daemon', 'main.js'), ...socketArgs],
-		launchMode
+		command: missiondCommand,
+		args: ['start', ...socketArgs],
+		launchMode,
+		...(process.platform === 'win32' ? { shell: true } : {})
 	};
 }
 
@@ -197,6 +192,15 @@ function getDaemonPackageRoot(): string {
 	return baseDirectory === 'src' || baseDirectory === 'build'
 		? path.dirname(currentDirectory)
 		: currentDirectory;
+}
+
+function resolveMissiondCommand(): string {
+	const configuredCommand = process.env['MISSION_DAEMON_COMMAND']?.trim();
+	if (configuredCommand) {
+		return configuredCommand;
+	}
+
+	return process.platform === 'win32' ? 'missiond.cmd' : 'missiond';
 }
 
 async function ensureCompatibleDaemon(client: DaemonClient): Promise<void> {

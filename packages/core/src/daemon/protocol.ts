@@ -23,7 +23,6 @@ export const PROTOCOL_VERSION = 7;
 export type Method =
 	| 'ping'
 	| 'command.execute'
-	| 'control.session.launch'
 	| 'control.status'
 	| 'control.settings.update'
 	| 'control.mission.bootstrap'
@@ -109,12 +108,6 @@ export type ControlMissionBootstrap = {
 export type ControlSettingsUpdate = {
 	field: 'agentRunner' | 'defaultAgentMode' | 'defaultModel' | 'instructionsPath' | 'skillsPath';
 	value: string;
-};
-
-export type ControlSessionLaunch = {
-	request?: Partial<Omit<MissionAgentSessionLaunchRequest, 'taskId'>> & {
-		runtimeId?: string;
-	};
 };
 
 export type MissionGateEvaluate = MissionSelect & {

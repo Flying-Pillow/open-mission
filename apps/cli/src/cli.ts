@@ -42,6 +42,6 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<vo
 
 export function printHelp(): void {
 	process.stdout.write(
-		`Mission CLI\n\nCommands:\n  mission [--hmr] [--banner] [--no-banner]\n  mission daemon:stop [--json]\n\nNotes:\n  Bare 'mission' opens the interactive cockpit.\n  Launching from a mission worktree auto-selects that mission.\n  Launching from the control checkout opens Mission control mode.\n  The OpenTUI cockpit currently requires Bun at runtime.\n  Use '--hmr' to run the cockpit with automatic restart on CLI source changes.\n  Starting Mission will scaffold control-repo state automatically if it is missing.\n`
+		`Mission CLI\n\nCommands:\n  mission [--hmr] [--banner] [--no-banner]\n  mission daemon:stop [--json]\n\nRelated commands:\n  missiond [--socket <path>]\n\nNotes:\n  Bare 'mission' opens the interactive cockpit.\n  Launching from a mission worktree auto-selects that mission.\n  Launching from the control checkout opens Mission control mode.\n  The OpenTUI cockpit currently requires Bun at runtime.\n  Use '--hmr' to run the cockpit with automatic restart on CLI source changes.\n  The cockpit will auto-start the daemon with 'missiond' if it is not already running.\n  Starting Mission will scaffold control-repo state automatically if it is missing.\n`
 	);
 }

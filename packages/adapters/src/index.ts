@@ -1,14 +1,16 @@
 import {
- 	type MissionAgentRuntime
+	type MissionAgentRuntime
 } from '../../core/build/daemon/MissionAgentRuntime.js';
 import { CopilotAgentRuntime } from '../../core/build/adapters/CopilotAgentRuntime.js';
 import { readMissionRepoSettings } from '../../core/build/lib/repoConfig.js';
+import path from 'node:path';
 
 export { CopilotAgentRuntime };
 
 type ConfiguredAgentSettings = {
 	agentRunner?: string;
 	defaultModel?: string;
+	skillsPath?: string;
 };
 
 export async function createConfiguredMissionRuntimes(options: {
@@ -28,7 +30,16 @@ export async function createConfiguredMissionRuntimes(options: {
 
 	return [
 		new CopilotAgentRuntime({
-			...(repoSettings?.defaultModel ? { additionalArgs: ['--model', repoSettings.defaultModel] } : {}),
+			...(repoSettings?.defaultModel ? { defaultModel: repoSettings.defaultModel } : {}),
+			...(repoSettings?.skillsPath
+				? {
+					skillDirectories: [
+						path.isAbsolute(repoSettings.skillsPath)
+							? repoSettings.skillsPath
+							: path.join(options.repoRoot, repoSettings.skillsPath)
+					]
+				}
+				: {}),
 			...(options.logLine ? { logLine: options.logLine } : {})
 		})
 	];

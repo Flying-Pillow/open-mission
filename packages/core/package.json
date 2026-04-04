@@ -21,6 +21,7 @@
 		"build"
 	],
 	"dependencies": {
+		"@github/copilot-sdk": "^0.2.1",
 		"gray-matter": "^4.0.3"
 	},
 	"devDependencies": {

@@ -1,0 +1,31 @@
+#!/usr/bin/env sh
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(git -C "${MISSION_REPO_ROOT:-$PWD}" rev-parse --show-toplevel 2>/dev/null || {
+	if [ -n "${MISSION_REPO_ROOT:-}" ]; then
+		printf '%s\n' "$MISSION_REPO_ROOT"
+	else
+		CDPATH= cd -- "$script_dir/../.."
+		pwd
+	fi
+})
+
+launch_mode=${MISSION_DAEMON_LAUNCH_MODE:-auto}
+source_entry="$script_dir/src/daemon.ts"
+build_entry="$script_dir/build/daemon.js"
+
+if [ "$launch_mode" = "source" ] && [ -f "$source_entry" ]; then
+	exec env MISSION_REPO_ROOT="$repo_root" pnpm --dir "$script_dir" exec tsx "$source_entry" "$@"
+fi
+
+if [ -f "$build_entry" ]; then
+	exec env MISSION_REPO_ROOT="$repo_root" node "$build_entry" "$@"
+fi
+
+if [ -f "$source_entry" ]; then
+	exec env MISSION_REPO_ROOT="$repo_root" pnpm --dir "$script_dir" exec tsx "$source_entry" "$@"
+fi
+
+printf '%s\n' "missiond: no daemon entrypoint found. Build the CLI package first." >&2
+exit 1

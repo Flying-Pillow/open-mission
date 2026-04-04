@@ -245,7 +245,6 @@ export type MissionControlPlaneStatus = {
 	githubAuthenticated?: boolean;
 	githubUser?: string;
 	githubAuthMessage?: string;
-	agentSessions?: MissionAgentSessionRecord[];
 	availableMissionCount: number;
 	problems: string[];
 	warnings: string[];
