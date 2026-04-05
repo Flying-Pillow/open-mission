@@ -2,10 +2,14 @@
 
 import { cockpitTheme } from './cockpitTheme.js';
 
-export function KeyHintsRow() {
+type KeyHintsRowProps = {
+	text: string;
+};
+
+export function KeyHintsRow(props: KeyHintsRowProps) {
 	return (
 		<text style={{ fg: cockpitTheme.mutedText }}>
-			↑↓ panels | ↑↓ lane | ←→ select | Enter submit | /launch selected task | q quit
+			{props.text}
 		</text>
 	);
 }

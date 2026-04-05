@@ -21,18 +21,18 @@ export type MissionAgentConsoleState = {
 
 export type MissionAgentConsoleEvent =
 	| {
-			type: 'reset';
-			state: MissionAgentConsoleState;
-	  }
+		type: 'reset';
+		state: MissionAgentConsoleState;
+	}
 	| {
-			type: 'lines';
-			lines: string[];
-			state: MissionAgentConsoleState;
-	  }
+		type: 'lines';
+		lines: string[];
+		state: MissionAgentConsoleState;
+	}
 	| {
-			type: 'prompt';
-			state: MissionAgentConsoleState;
-	  };
+		type: 'prompt';
+		state: MissionAgentConsoleState;
+	};
 
 export type MissionAgentLifecycleState =
 	| 'idle'
@@ -99,52 +99,52 @@ export type MissionAgentRuntimeCapabilities = {
 
 export type MissionAgentScope =
 	| {
-			kind: 'control';
-			repoRoot?: string;
-			repoName?: string;
-			branch?: string;
-		}
+		kind: 'control';
+		workspaceRoot?: string;
+		repoName?: string;
+		branch?: string;
+	}
 	| {
-			kind: 'mission';
-			missionId?: string;
-			stage?: string;
-			currentSlice?: string;
-			readyTaskIds?: string[];
-			readyTaskTitle?: string;
-			readyTaskInstruction?: string;
-	  }
+		kind: 'mission';
+		missionId?: string;
+		stage?: string;
+		currentSlice?: string;
+		readyTaskIds?: string[];
+		readyTaskTitle?: string;
+		readyTaskInstruction?: string;
+	}
 	| {
-			kind: 'artifact';
-			missionId?: string;
-			stage?: string;
-			artifactKey: string;
-			artifactPath?: string;
-			checkpoint?: string;
-			validation?: string;
-	  }
+		kind: 'artifact';
+		missionId?: string;
+		stage?: string;
+		artifactKey: string;
+		artifactPath?: string;
+		checkpoint?: string;
+		validation?: string;
+	}
 	| {
-			kind: 'slice';
-			missionId?: string;
-			missionDir?: string;
-			stage?: string;
-			sliceTitle: string;
-			sliceId?: string;
-			taskId?: string;
-			taskTitle?: string;
-			taskSummary?: string;
-			taskInstruction?: string;
-			doneWhen?: string[];
-			stopCondition?: string;
-			verificationTargets: string[];
-			requiredSkills: string[];
-			dependsOn: string[];
-	  }
+		kind: 'slice';
+		missionId?: string;
+		missionDir?: string;
+		stage?: string;
+		sliceTitle: string;
+		sliceId?: string;
+		taskId?: string;
+		taskTitle?: string;
+		taskSummary?: string;
+		taskInstruction?: string;
+		doneWhen?: string[];
+		stopCondition?: string;
+		verificationTargets: string[];
+		requiredSkills: string[];
+		dependsOn: string[];
+	}
 	| {
-			kind: 'gate';
-			missionId?: string;
-			stage?: string;
-			intent: string;
-	  };
+		kind: 'gate';
+		missionId?: string;
+		stage?: string;
+		intent: string;
+	};
 
 export type MissionAgentTurnRequest = {
 	workingDirectory: string;
@@ -199,71 +199,71 @@ export type MissionAgentSessionLaunchRequest = MissionAgentTurnRequest & {
 
 export type MissionAgentEvent =
 	| {
-			type: 'session-state-changed';
-			state: MissionAgentSessionState;
-	  }
+		type: 'session-state-changed';
+		state: MissionAgentSessionState;
+	}
 	| {
-			type: 'session-started';
-			state: MissionAgentSessionState;
-	  }
+		type: 'session-started';
+		state: MissionAgentSessionState;
+	}
 	| {
-			type: 'session-resumed';
-			state: MissionAgentSessionState;
-	  }
+		type: 'session-resumed';
+		state: MissionAgentSessionState;
+	}
 	| {
-			type: 'agent-message';
-			channel: 'stdout' | 'stderr' | 'system';
-			text: string;
-			state: MissionAgentSessionState;
-	  }
+		type: 'agent-message';
+		channel: 'stdout' | 'stderr' | 'system';
+		text: string;
+		state: MissionAgentSessionState;
+	}
 	| {
-			type: 'permission-requested';
-			request: MissionAgentPermissionRequest;
-			state: MissionAgentSessionState;
-	  }
+		type: 'permission-requested';
+		request: MissionAgentPermissionRequest;
+		state: MissionAgentSessionState;
+	}
 	| {
-			type: 'tool-started';
-			toolName: string;
-			summary?: string;
-			state: MissionAgentSessionState;
-	  }
+		type: 'tool-started';
+		toolName: string;
+		summary?: string;
+		state: MissionAgentSessionState;
+	}
 	| {
-			type: 'tool-finished';
-			toolName: string;
-			summary?: string;
-			state: MissionAgentSessionState;
-	  }
+		type: 'tool-finished';
+		toolName: string;
+		summary?: string;
+		state: MissionAgentSessionState;
+	}
 	| {
-			type: 'telemetry-updated';
-			telemetry: MissionAgentTelemetrySnapshot;
-			state: MissionAgentSessionState;
-	  }
+		type: 'telemetry-updated';
+		telemetry: MissionAgentTelemetrySnapshot;
+		state: MissionAgentSessionState;
+	}
 	| {
-			type: 'context-updated';
-			telemetry: MissionAgentTelemetrySnapshot;
-			state: MissionAgentSessionState;
-	  }
+		type: 'context-updated';
+		telemetry: MissionAgentTelemetrySnapshot;
+		state: MissionAgentSessionState;
+	}
 	| {
-			type: 'cost-updated';
-			telemetry: MissionAgentTelemetrySnapshot;
-			state: MissionAgentSessionState;
-	  }
+		type: 'cost-updated';
+		telemetry: MissionAgentTelemetrySnapshot;
+		state: MissionAgentSessionState;
+	}
 	| {
-			type: 'session-completed';
-			exitCode: number;
-			state: MissionAgentSessionState;
-	  }
+		type: 'session-completed';
+		exitCode: number;
+		state: MissionAgentSessionState;
+	}
 	| {
-			type: 'session-failed';
-			errorMessage: string;
-			exitCode?: number;
-			state: MissionAgentSessionState;
-	  }
+		type: 'session-failed';
+		errorMessage: string;
+		exitCode?: number;
+		state: MissionAgentSessionState;
+	}
 	| {
-			type: 'session-cancelled';
-			reason?: string;
-			state: MissionAgentSessionState;
-	  };
+		type: 'session-cancelled';
+		reason?: string;
+		state: MissionAgentSessionState;
+	};
 
 export interface MissionAgentSession extends MissionAgentDisposable {
 	readonly runtimeId: string;
@@ -346,7 +346,7 @@ export function cloneMissionAgentScope(
 		case 'control':
 			return {
 				kind: 'control',
-				...(scope.repoRoot ? { repoRoot: scope.repoRoot } : {}),
+				...(scope.workspaceRoot ? { workspaceRoot: scope.workspaceRoot } : {}),
 				...(scope.repoName ? { repoName: scope.repoName } : {}),
 				...(scope.branch ? { branch: scope.branch } : {})
 			};
@@ -586,7 +586,7 @@ export function renderMissionAgentScope(scope: MissionAgentScope | undefined): s
 			return [
 				'Scope: control',
 				scope.repoName ? `Repository: ${scope.repoName}` : '',
-				scope.repoRoot ? `Repository root: ${scope.repoRoot}` : '',
+				scope.workspaceRoot ? `Workspace root: ${scope.workspaceRoot}` : '',
 				scope.branch ? `Branch: ${scope.branch}` : ''
 			].filter(Boolean);
 		case 'mission':

@@ -6,10 +6,11 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
-	getDefaultMissionRepoSettings,
+	getDefaultMissionDaemonSettings,
+	getMissionDaemonSettingsPath,
 	getMissionDirectoryPath,
 	getMissionWorktreesPath,
-	readMissionRepoSettings
+	readMissionDaemonSettings
 } from '@flying-pillow/mission-core';
 
 type MissionScope = vscode.WorkspaceFolder | vscode.Uri | undefined;
@@ -27,18 +28,22 @@ export class MissionSettings {
 
 	public static resolveMissionFolderPath(rootPath: string, scope?: MissionScope): string {
 		const configured = this.getConfiguration(scope).get<string>('missionFolder')?.trim();
-		return this.resolvePath(configured || '.mission/worktrees', rootPath, scope) ?? getMissionWorktreesPath(rootPath);
+		return this.resolvePath(configured || '.missions/active', rootPath, scope) ?? getMissionWorktreesPath(rootPath);
 	}
 
 	public static resolveSkillsFolderPath(rootPath: string, scope?: MissionScope): string {
-		const repoSettings = readMissionRepoSettings(rootPath);
+		const daemonSettings = readMissionDaemonSettings(rootPath);
 		const configured = this.getConfiguration(scope).get<string>('skillsFolder')?.trim();
-		const fallback = repoSettings?.skillsPath ?? getDefaultMissionRepoSettings().skillsPath ?? '.agents/skills';
+		const fallback = daemonSettings?.skillsPath ?? getDefaultMissionDaemonSettings().skillsPath ?? '.agents/skills';
 		return this.resolvePath(configured || fallback, rootPath, scope) ?? path.join(rootPath, '.agents', 'skills');
 	}
 
 	public static resolveControlDirectoryPath(rootPath: string): string {
 		return getMissionDirectoryPath(rootPath);
+	}
+
+	public static resolveSettingsPath(rootPath: string): string {
+		return getMissionDaemonSettingsPath(rootPath);
 	}
 
 	public static resolvePath(

@@ -134,8 +134,8 @@ function buildControlLines(props: ControlStatusPanelProps): TabPanelLine[] {
 	if (props.availableMissions.length === 0) {
 		lines.push({
 			text: props.mode === 'setup'
-				? 'No mission worktrees yet. Finish setup, then create your first mission with /start.'
-				: 'No mission worktrees yet. Use /start from the repository root to create your first mission.',
+				? 'No active missions yet. Finish setup, then create your first mission with /start.'
+				: 'No active missions yet. Use /start from the repository root to create your first mission.',
 			fg: cockpitTheme.mutedText
 		});
 		return lines;

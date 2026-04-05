@@ -25,7 +25,8 @@ export default tseslint.config(
 			ecmaVersion: 'latest',
 			sourceType: 'module',
 			parserOptions: {
-				projectService: true
+				projectService: true,
+				tsconfigRootDir: import.meta.dirname
 			},
 			globals: {
 				...globals.node
@@ -44,7 +45,8 @@ export default tseslint.config(
 		languageOptions: {
 			parserOptions: {
 				projectService: true,
-				extraFileExtensions: ['.svelte']
+				extraFileExtensions: ['.svelte'],
+				tsconfigRootDir: import.meta.dirname
 			},
 			globals: {
 				...globals.browser,
@@ -56,7 +58,8 @@ export default tseslint.config(
 		files: ['apps/vscode-extension/src/**/*.ts'],
 		ignores: ['apps/vscode-extension/src/webview/**/*'],
 		languageOptions: {
-			parserOptions: {
+			parserOptions: {,
+				tsconfigRootDir: import.meta.dirname
 				projectService: true
 			},
 			globals: {

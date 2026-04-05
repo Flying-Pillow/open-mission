@@ -1,53 +1,64 @@
 import type { AgentContext, AgentEnvironment, AgentMode } from './agents/agentContext.js';
 import type { MissionAgentSessionRecord } from './daemon/MissionAgentRuntime.js';
-import type { MissionRepoSettings } from './lib/repoConfig.js';
+import type { MissionDaemonSettings } from './lib/daemonConfig.js';
+import {
+	MISSION_ARTIFACT_KEYS,
+	MISSION_ARTIFACT_LABELS,
+	MISSION_ARTIFACTS,
+	MISSION_STAGES,
+	MISSION_TASK_STAGE_DIRECTORIES,
+	evaluateMissionStageStatusIntent,
+	evaluateMissionTaskLaunchEligibility,
+	evaluateMissionTaskStatusIntent,
+	getPrimaryMissionStageStatusIntent,
+	getMissionTaskPairingDefinition,
+	isMissionArtifactKey,
+	isMissionStageId,
+	isMissionStageProgress,
+	type MissionArtifactKey,
+	type MissionStageId,
+	type MissionStageStatusIntent,
+	type MissionTaskPairingDefinition,
+	type MissionStageProgress,
+	type MissionTaskStatusIntent,
+	type MissionWorkflowTaskStatus
+} from './workflow/manifest.js';
 
 export type { AgentContext, AgentEnvironment, AgentMode };
 
-export type MissionStageId = 'prd' | 'spec' | 'plan' | 'implementation' | 'verification' | 'audit';
+export {
+	MISSION_ARTIFACT_LABELS,
+	MISSION_ARTIFACTS,
+	MISSION_STAGES,
+	MISSION_TASK_STAGE_DIRECTORIES,
+	evaluateMissionStageStatusIntent,
+	evaluateMissionTaskLaunchEligibility,
+	evaluateMissionTaskStatusIntent,
+	getPrimaryMissionStageStatusIntent,
+	getMissionTaskPairingDefinition,
+	isMissionArtifactKey,
+	isMissionStageId,
+	isMissionStageProgress
+};
 
-export const MISSION_STAGES: MissionStageId[] = [
-	'prd',
-	'spec',
-	'plan',
-	'implementation',
-	'verification',
-	'audit'
-];
+export type {
+	MissionArtifactKey,
+	MissionStageId,
+	MissionStageProgress,
+	MissionStageStatusIntent,
+	MissionTaskPairingDefinition,
+	MissionTaskStatusIntent,
+	MissionWorkflowTaskStatus
+};
 
-export type MissionProductKey = 'brief' | 'prd' | 'spec' | 'plan' | 'verification' | 'audit';
-
-export const MISSION_ARTIFACTS = {
-	brief: 'BRIEF.md',
-	prd: 'PRD.md',
-	spec: 'SPEC.md',
-	plan: 'PLAN.md',
-	verification: 'VERIFICATION.md',
-	audit: 'AUDIT.md'
-} as const satisfies Record<MissionProductKey, string>;
-
-export const MISSION_ARTIFACT_LABELS = {
-	brief: 'Brief',
-	prd: 'Requirements',
-	spec: 'Specification',
-	plan: 'Plan',
-	verification: 'Verification',
-	audit: 'Audit'
-} as const satisfies Record<MissionProductKey, string>;
-
-export const MISSION_TASK_STAGE_DIRECTORIES = {
-	prd: 'PRD',
-	spec: 'SPEC',
-	plan: 'PLAN',
-	implementation: 'IMPLEMENTATION',
-	verification: 'VERIFICATION',
-	audit: 'AUDIT'
-} as const satisfies Record<MissionStageId, string>;
+export type MissionProductKey = MissionArtifactKey;
 
 export const MISSION_CONTROL_FILE_NAME = 'mission.json';
-export const MISSION_CONTROL_SCHEMA_VERSION = 1;
+export const MISSION_CONTROL_SCHEMA_VERSION = 3;
 
-export const MISSION_ARTIFACT_FILE_NAMES: string[] = Object.values(MISSION_ARTIFACTS);
+export const MISSION_ARTIFACT_FILE_NAMES: string[] = MISSION_ARTIFACT_KEYS.map(
+	(artifactKey) => MISSION_ARTIFACTS[artifactKey]
+);
 export const MISSION_TRACKED_FILE_NAMES: string[] = [...MISSION_ARTIFACT_FILE_NAMES];
 
 export type GateIntent = 'implement' | 'commit' | 'verify' | 'audit' | 'deliver';
@@ -61,9 +72,8 @@ export const MISSION_GATE_INTENTS: GateIntent[] = [
 ];
 
 export type MissionType = 'feature' | 'fix' | 'docs' | 'refactor' | 'task';
-export type MissionTaskStatus = 'todo' | 'active' | 'blocked' | 'done';
+export type MissionTaskStatus = MissionWorkflowTaskStatus;
 export type MissionTaskAgent = string;
-export type MissionStageProgress = 'pending' | 'active' | 'blocked' | 'done';
 
 export type MissionBrief = {
 	issueId?: number;
@@ -99,27 +109,35 @@ export type MissionDescriptor = {
 };
 
 export type MissionTaskControlState = {
+	id: string;
 	status: MissionTaskStatus;
 	agent: MissionTaskAgent;
 	retries: number;
 	updatedAt: string;
 };
 
+export type MissionStageControlState = {
+	id: MissionStageId;
+	folder: string;
+	status: MissionStageProgress;
+	tasks: MissionTaskControlState[];
+};
+
 export type MissionControlState = {
 	schemaVersion: typeof MISSION_CONTROL_SCHEMA_VERSION;
 	updatedAt: string;
-	deliveredAt?: string;
-	tasks: Record<string, MissionTaskControlState>;
+	stages: MissionStageControlState[];
 };
 
 export type MissionRecord = {
 	id: string;
 	brief: MissionBrief;
 	missionDir: string;
+	missionRootDir?: string;
+	flightDeckDir?: string;
 	branchRef: string;
 	createdAt: string;
 	stage: MissionStageId;
-	deliveredAt?: string;
 	agentContext?: AgentContext;
 	agentSessions: MissionAgentSessionRecord[];
 };
@@ -207,6 +225,12 @@ export type MissionCommandFlowDescriptor = {
 	steps: MissionCommandFlowStep[];
 };
 
+export type MissionCommandUiMetadata = {
+	toolbarLabel?: string;
+	requiresConfirmation?: boolean;
+	confirmationPrompt?: string;
+};
+
 export type MissionCommandDescriptor = {
 	id: string;
 	label: string;
@@ -216,6 +240,7 @@ export type MissionCommandDescriptor = {
 	enabled: boolean;
 	reason?: string;
 	flow?: MissionCommandFlowDescriptor;
+	ui?: MissionCommandUiMetadata;
 };
 
 export type MissionSelectionCandidate = {
@@ -229,12 +254,12 @@ export type MissionSelectionCandidate = {
 export type MissionOperationalMode = 'setup' | 'root' | 'mission';
 
 export type MissionControlPlaneStatus = {
-	controlRepoRoot: string;
+	controlRoot: string;
 	missionDirectory: string;
 	settingsPath: string;
 	worktreesPath: string;
 	currentBranch?: string;
-	settings: MissionRepoSettings;
+	settings: MissionDaemonSettings;
 	isGitRepository: boolean;
 	initialized: boolean;
 	settingsPresent: boolean;
@@ -261,10 +286,11 @@ export type MissionStatus = {
 	issueId?: number;
 	type?: MissionType;
 	stage?: MissionStageId;
-	deliveredAt?: string;
 	branchRef?: string;
 	missionDir?: string;
-	productFiles?: Partial<Record<MissionProductKey, string>>;
+	missionRootDir?: string;
+	flightDeckDir?: string;
+	productFiles?: Partial<Record<MissionArtifactKey, string>>;
 	activeTasks?: MissionTaskState[];
 	readyTasks?: MissionTaskState[];
 	stages?: MissionStageStatus[];
@@ -275,14 +301,6 @@ export type MissionStatus = {
 };
 
 export type MissionData = MissionStatus;
-
-export function isMissionStageId(value: unknown): value is MissionStageId {
-	return typeof value === 'string' && (MISSION_STAGES as readonly string[]).includes(value);
-}
-
-export function isMissionProductKey(value: unknown): value is MissionProductKey {
-	return typeof value === 'string' && value in MISSION_ARTIFACTS;
-}
 
 export function isMissionTaskStatus(value: unknown): value is MissionTaskStatus {
 	return value === 'todo' || value === 'active' || value === 'blocked' || value === 'done';

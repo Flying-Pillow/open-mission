@@ -1,5 +1,5 @@
 import { note, outro } from '@clack/prompts';
-import { getRepoRoot, getDaemonManifestPath, runMissionDaemon } from '@flying-pillow/mission-core';
+import { getDaemonManifestPath, runMissionDaemon } from '@flying-pillow/mission-core';
 import { getMissionDaemonStatus, startMissionDaemon, stopMissionDaemon } from './commands/daemonControl.js';
 
 function parseDaemonArgs(argv: string[]): {
@@ -19,8 +19,6 @@ function parseDaemonArgs(argv: string[]): {
 	const socketPath = socketFlagIndex >= 0 ? filtered[socketFlagIndex + 1] : undefined;
 	return { command, ...(socketPath ? { socketPath } : {}), json };
 }
-
-const repoRoot = process.env['MISSION_REPO_ROOT']?.trim() || getRepoRoot();
 const parsed = parseDaemonArgs(process.argv.slice(2));
 
 switch (parsed.command) {
@@ -29,7 +27,6 @@ switch (parsed.command) {
 		break;
 	case 'start': {
 		const result = await startMissionDaemon({
-			repoRoot,
 			...(parsed.socketPath ? { socketPath: parsed.socketPath } : {})
 		});
 		if (parsed.json) {
@@ -38,7 +35,7 @@ switch (parsed.command) {
 		}
 		note(
 			[
-				`manifest: ${getDaemonManifestPath(repoRoot)}`,
+				`manifest: ${getDaemonManifestPath()}`,
 				...(result.endpointPath ? [`socket: ${result.endpointPath}`] : []),
 				...(result.pid !== undefined ? [`pid: ${String(result.pid)}`] : []),
 				`status: ${result.alreadyRunning ? 'already running' : 'started'}`
@@ -49,7 +46,7 @@ switch (parsed.command) {
 		break;
 	}
 	case 'stop': {
-		const result = await stopMissionDaemon(repoRoot);
+		const result = await stopMissionDaemon();
 		if (parsed.json) {
 			process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 			break;
@@ -67,9 +64,8 @@ switch (parsed.command) {
 		break;
 	}
 	case 'restart': {
-		await stopMissionDaemon(repoRoot);
+		await stopMissionDaemon();
 		const result = await startMissionDaemon({
-			repoRoot,
 			...(parsed.socketPath ? { socketPath: parsed.socketPath } : {})
 		});
 		if (parsed.json) {
@@ -89,7 +85,7 @@ switch (parsed.command) {
 		break;
 	}
 	case 'status': {
-		const result = await getMissionDaemonStatus(repoRoot);
+		const result = await getMissionDaemonStatus();
 		if (parsed.json) {
 			process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 			break;

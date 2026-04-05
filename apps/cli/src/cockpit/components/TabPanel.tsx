@@ -14,8 +14,12 @@ export type TabPanelTab = {
 };
 
 export type TabPanelLine = {
-	text: string;
-	fg: string;
+	text?: string;
+	fg?: string;
+	segments?: Array<{
+		text: string;
+		fg: string;
+	}>;
 };
 
 export type TabPanelProps = {
@@ -49,17 +53,19 @@ export function TabPanel(props: TabPanelProps) {
 	const panelBackground = createMemo(() => props.backgroundColor ?? cockpitTheme.panelBackground);
 
 	const tabLayouts = createMemo(() => {
-		const layouts: Array<{ tab: TabPanelTab; x: number; width: number }> = [];
+		const layouts: Array<{ tab: TabPanelTab; x: number; width: number; renderedLabel: string }> = [];
 		let cursor = 1;
 		for (const tab of props.tabs) {
-			const width = tab.label.length + 4;
 			if (layouts.length > 0) {
 				cursor += 2;
 			}
-			if (cursor + width > interiorWidth()) {
+			const remainingWidth = interiorWidth() - cursor;
+			if (remainingWidth < 5) {
 				break;
 			}
-			layouts.push({ tab, x: cursor, width });
+			const renderedLabel = fitTabLabel(tab.label, remainingWidth - 4);
+			const width = renderedLabel.length + 4;
+			layouts.push({ tab, x: cursor, width, renderedLabel });
 			cursor += width;
 		}
 		return layouts;
@@ -114,14 +120,13 @@ export function TabPanel(props: TabPanelProps) {
 
 			if (layout.tab.id === selectedId) {
 				segments.push({ text: '│ ', fg: borderColor() });
-				segments.push({ text: layout.tab.label, fg: cockpitTheme.brightText });
+				segments.push({ text: layout.renderedLabel, fg: cockpitTheme.brightText });
 				segments.push({ text: ' │', fg: borderColor() });
 			} else {
-				segments.push({ text: `  ${layout.tab.label}  `, fg: layout.tab.labelColor ?? cockpitTheme.mutedText });
+				segments.push({ text: `  ${layout.renderedLabel}  `, fg: layout.tab.labelColor ?? cockpitTheme.mutedText });
 			}
 			usedWidth += layout.width;
 		}
-
 		if (usedWidth < panelWidth()) {
 			segments.push({ text: ' '.repeat(panelWidth() - usedWidth), fg: borderColor() });
 		}
@@ -166,7 +171,14 @@ export function TabPanel(props: TabPanelProps) {
 						{(line) => (
 							<box style={{ flexDirection: 'row', backgroundColor: panelBackground() }}>
 								<text style={{ fg: borderColor() }}>│</text>
-								<text style={{ fg: line.fg }}>{fitPanelText(line.text, interiorWidth())}</text>
+								<Show
+									when={line.segments !== undefined && line.segments.length > 0}
+									fallback={<text style={{ fg: line.fg ?? cockpitTheme.bodyText }}>{fitPanelText(line.text ?? '', interiorWidth())}</text>}
+								>
+									<For each={fitPanelSegments(line.segments ?? [], interiorWidth(), line.fg ?? cockpitTheme.bodyText)}>
+										{(segment) => <text style={{ fg: segment.fg }}>{segment.text}</text>}
+									</For>
+								</Show>
 								<text style={{ fg: borderColor() }}>│</text>
 							</box>
 						)}
@@ -176,12 +188,22 @@ export function TabPanel(props: TabPanelProps) {
 				<box
 					style={{
 						flexDirection: 'row',
+						width: panelWidth(),
 						backgroundColor: panelBackground(),
 						...(props.contentStyle ?? {})
 					}}
 				>
 					<text style={{ fg: borderColor() }}>│</text>
-					<box style={{ flexDirection: 'column', flexGrow: 1 }}>
+					<box
+						style={{
+							flexDirection: 'column',
+							width: interiorWidth(),
+							minWidth: interiorWidth(),
+							maxWidth: interiorWidth(),
+							flexGrow: 1,
+							flexShrink: 1
+						}}
+					>
 						{props.children}
 					</box>
 					<text style={{ fg: borderColor() }}>│</text>
@@ -208,6 +230,17 @@ export function TabPanel(props: TabPanelProps) {
 	);
 }
 
+function fitTabLabel(label: string, maxWidth: number): string {
+	const safeWidth = Math.max(1, maxWidth);
+	if (label.length <= safeWidth) {
+		return label;
+	}
+	if (safeWidth <= 3) {
+		return label.slice(0, safeWidth);
+	}
+	return `${label.slice(0, safeWidth - 3)}...`;
+}
+
 
 function fitPanelText(text: string, width: number): string {
 	if (width <= 0) {
@@ -218,6 +251,37 @@ function fitPanelText(text: string, width: number): string {
 	}
 	const innerWidth = width - 1;
 	return ` ${text.slice(0, innerWidth).padEnd(innerWidth, ' ')}`;
+}
+
+function fitPanelSegments(
+	segments: Array<{ text: string; fg: string }>,
+	width: number,
+	fallbackFg: string
+): Array<{ text: string; fg: string }> {
+	if (width <= 0) {
+		return [];
+	}
+
+	const fitted: Array<{ text: string; fg: string }> = [];
+	let remainingWidth = width;
+
+	for (const segment of segments) {
+		if (remainingWidth <= 0) {
+			break;
+		}
+		const clipped = segment.text.slice(0, remainingWidth);
+		if (clipped.length === 0) {
+			continue;
+		}
+		fitted.push({ text: clipped, fg: segment.fg });
+		remainingWidth -= clipped.length;
+	}
+
+	if (remainingWidth > 0) {
+		fitted.push({ text: ' '.repeat(remainingWidth), fg: fallbackFg });
+	}
+
+	return fitted;
 }
 
 function renderFooterSegments(

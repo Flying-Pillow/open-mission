@@ -1,5 +1,5 @@
 import { intro } from '@clack/prompts';
-import { getRepoRoot } from '@flying-pillow/mission-core';
+import { getWorkspaceRoot } from '@flying-pillow/mission-core';
 import { launchCockpit } from './cockpit/launchCockpit.js';
 import { runDaemonStop } from './commands/daemonStop.js';
 import type { CommandContext, CommandHandler } from './commands/types.js';
@@ -21,7 +21,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<vo
 	}
 
 	const context: CommandContext = {
-		repoRoot: process.env['MISSION_REPO_ROOT']?.trim() || getRepoRoot(),
+		controlRoot: process.env['MISSION_CONTROL_ROOT']?.trim() || getWorkspaceRoot(),
 		launchCwd: process.env['MISSION_LAUNCH_CWD']?.trim() || process.cwd(),
 		args,
 		json

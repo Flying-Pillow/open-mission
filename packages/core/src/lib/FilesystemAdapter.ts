@@ -8,17 +8,16 @@ import {
 } from './frontmatter.js';
 import { getMissionWorktreesPath } from './repoConfig.js';
 import {
-	MISSION_ARTIFACTS,
 	MISSION_CONTROL_FILE_NAME,
 	MISSION_CONTROL_SCHEMA_VERSION,
 	MISSION_STAGES,
-	MISSION_TASK_STAGE_DIRECTORIES,
 	isMissionTaskAgent,
 	isMissionTaskStatus,
 	type MissionBrief,
+	type MissionStageControlState,
 	type MissionControlState,
 	type MissionDescriptor,
-	type MissionProductKey,
+	type MissionArtifactKey,
 	type MissionSelector,
 	type MissionStageId,
 	type MissionTaskControlState,
@@ -28,6 +27,13 @@ import {
 	type MissionType
 } from '../types.js';
 import { renderMissionBriefBody } from '../templates/mission/index.js';
+import {
+	getInitialMissionStageProgress,
+	getMissionArtifactDefinition,
+	getMissionStageDefinition,
+	isMissionStageId,
+	isMissionStageProgress
+} from '../workflow/manifest.js';
 
 export class ArtifactFormatError extends Error {
 	public constructor(message: string) {
@@ -44,7 +50,7 @@ export class ArtifactTypeError extends Error {
 }
 
 export type ArtifactRecord = {
-	artifact: MissionProductKey;
+	artifact: MissionArtifactKey;
 	fileName: string;
 	filePath: string;
 	relativePath: string;
@@ -72,29 +78,41 @@ export type ResolvedMission = {
 };
 
 export class FilesystemAdapter {
-	public constructor(private readonly repoRoot: string) {}
+	public constructor(private readonly workspaceRoot: string) { }
 
-	public getRepoRoot(): string {
-		return this.repoRoot;
+	public getWorkspaceRoot(): string {
+		return this.workspaceRoot;
 	}
 
 	public getMissionsPath(): string {
-		return getMissionWorktreesPath(this.repoRoot);
+		return getMissionWorktreesPath(this.workspaceRoot);
 	}
 
 	public getMissionDir(missionId: string): string {
 		return path.join(this.getMissionsPath(), missionId);
 	}
 
+	public getMissionFlightDeckPath(missionDir: string): string {
+		return path.join(missionDir, 'flight-deck');
+	}
+
+	public getMissionWorkspacePath(missionDir: string): string {
+		return path.join(missionDir, 'workspace');
+	}
+
+	public getMissionStagePath(missionDir: string, stage: MissionStageId): string {
+		return path.join(this.getMissionFlightDeckPath(missionDir), getMissionStageDefinition(stage).folder);
+	}
+
 	public getTasksPath(missionDir: string): string {
-		return path.join(missionDir, 'tasks');
+		return this.getMissionFlightDeckPath(missionDir);
 	}
 
 	public getStageTasksPath(missionDir: string, stage: MissionStageId): string {
-		return path.join(this.getTasksPath(missionDir), MISSION_TASK_STAGE_DIRECTORIES[stage]);
+		return path.join(this.getMissionStagePath(missionDir, stage), 'tasks');
 	}
 
-	public getCurrentBranch(startPath = this.repoRoot): string {
+	public getCurrentBranch(startPath = this.workspaceRoot): string {
 		return this.runGit(['rev-parse', '--abbrev-ref', 'HEAD'], startPath);
 	}
 
@@ -117,6 +135,7 @@ export class FilesystemAdapter {
 
 	public async materializeMissionWorktree(missionDir: string, branchRef: string): Promise<string> {
 		const normalizedBranch = branchRef.trim();
+		const workspacePath = this.getMissionWorkspacePath(missionDir);
 		if (!normalizedBranch) {
 			throw new Error('Mission branch cannot be empty.');
 		}
@@ -129,14 +148,14 @@ export class FilesystemAdapter {
 			throw new Error(`Mission worktree path '${missionDir}' already exists.`);
 		}
 
-		await fs.mkdir(path.dirname(missionDir), { recursive: true });
+		await fs.mkdir(missionDir, { recursive: true });
 
 		const branchExists = this.runGit(['rev-parse', '--verify', `refs/heads/${normalizedBranch}`]);
 		try {
 			if (branchExists) {
-				this.assertGit(['worktree', 'add', missionDir, normalizedBranch]);
+				this.assertGit(['worktree', 'add', workspacePath, normalizedBranch]);
 			} else {
-				this.assertGit(['worktree', 'add', '-b', normalizedBranch, missionDir]);
+				this.assertGit(['worktree', 'add', '-b', normalizedBranch, workspacePath]);
 			}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
@@ -148,7 +167,7 @@ export class FilesystemAdapter {
 			throw error;
 		}
 
-		const nextBranch = this.getCurrentBranch(missionDir);
+		const nextBranch = this.getCurrentBranch(workspacePath);
 		if (nextBranch !== normalizedBranch) {
 			throw new Error(`Failed to materialize mission worktree for branch '${normalizedBranch}'.`);
 		}
@@ -159,15 +178,18 @@ export class FilesystemAdapter {
 	public createMissionId(brief: MissionBrief): string {
 		const slug = this.slugify(brief.title, 48);
 		if (brief.issueId !== undefined) {
-			return slug.length > 0 ? `mission-${String(brief.issueId)}-${slug}` : `mission-${String(brief.issueId)}`;
+			return slug.length > 0 ? `${String(brief.issueId)}-${slug}` : String(brief.issueId);
 		}
 
 		const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
-		return slug.length > 0 ? `mission-${timestamp}-${slug}` : `mission-${timestamp}`;
+		return slug.length > 0 ? `draft-${timestamp}-${slug}` : `draft-${timestamp}`;
 	}
 
 	public async initializeMissionEnvironment(missionDir: string): Promise<void> {
-		await fs.mkdir(missionDir, { recursive: true });
+		await Promise.all([
+			fs.mkdir(missionDir, { recursive: true }),
+			fs.mkdir(this.getMissionFlightDeckPath(missionDir), { recursive: true })
+		]);
 	}
 
 	public async ensureStageDirectory(missionDir: string, stage: MissionStageId): Promise<string> {
@@ -232,11 +254,13 @@ export class FilesystemAdapter {
 
 		const issueId = this.readOptionalNumberAttribute(brief.attributes, 'issueId', brief.filePath);
 		const title =
-			this.readOptionalStringAttribute(brief.attributes, 'title', brief.filePath) ?? path.basename(missionDir);
+			this.readOptionalStringAttribute(brief.attributes, 'title', brief.filePath)
+			?? this.extractBriefTitle(brief.body)
+			?? path.basename(missionDir);
 		const type = this.readMissionTypeAttribute(brief.attributes, 'type', brief.filePath) ?? 'task';
 		const branchRef =
 			this.readOptionalStringAttribute(brief.attributes, 'branchRef', brief.filePath) ??
-			this.getCurrentBranch(missionDir) ??
+			this.getCurrentBranch(this.getMissionWorkspacePath(missionDir)) ??
 			'HEAD';
 		const createdAt =
 			this.readOptionalStringAttribute(brief.attributes, 'createdAt', brief.filePath) ??
@@ -266,14 +290,18 @@ export class FilesystemAdapter {
 				type: descriptor.brief.type,
 				branchRef: descriptor.branchRef,
 				createdAt: descriptor.createdAt,
+				updatedAt: descriptor.createdAt,
 				...(descriptor.brief.url ? { url: descriptor.brief.url } : {})
 			},
-			body: renderMissionBriefBody(descriptor.brief)
+			body: await renderMissionBriefBody({
+				brief: descriptor.brief,
+				branchRef: descriptor.branchRef
+			})
 		});
 	}
 
 	public getMissionControlStatePath(missionDir: string): string {
-		return path.join(missionDir, MISSION_CONTROL_FILE_NAME);
+		return path.join(this.getMissionFlightDeckPath(missionDir), MISSION_CONTROL_FILE_NAME);
 	}
 
 	public async readMissionControlState(missionDir: string): Promise<MissionControlState | undefined> {
@@ -294,29 +322,31 @@ export class FilesystemAdapter {
 
 	public async reconcileMissionControlState(missionDir: string): Promise<MissionControlState> {
 		const existing = await this.readMissionControlState(missionDir);
-		const nextTasks: Record<string, MissionTaskControlState> = {};
-		const legacyDeliveredAt = existing?.deliveredAt ?? (await this.readLegacyMissionDeliveredAt(missionDir));
+		const nextStages = await Promise.all(
+			MISSION_STAGES.map(async (stageId) => {
+				const existingStage = existing?.stages.find((stage) => stage.id === stageId);
+				const fileNames = await this.listTaskFileNames(missionDir, stageId);
+				const tasks = fileNames.map((fileName) => {
+					const taskKey = path.basename(fileName, '.md');
+					const existingTaskState = existingStage?.tasks.find((task) => task.id === taskKey);
+					return existingTaskState
+						? { ...existingTaskState }
+						: this.createTaskControlState({ id: taskKey });
+				});
 
-		for (const stage of MISSION_STAGES) {
-			for (const fileName of await this.listTaskFileNames(missionDir, stage)) {
-				const taskId = this.createTaskId(stage, fileName);
-				const existingTaskState = existing?.tasks[taskId];
-				if (existingTaskState) {
-					nextTasks[taskId] = { ...existingTaskState };
-					continue;
-				}
-
-				nextTasks[taskId] = existing
-					? this.createTaskControlState()
-					: await this.readLegacyTaskControlState(missionDir, stage, fileName);
-			}
-		}
+				return {
+					id: stageId,
+					folder: getMissionStageDefinition(stageId).folder,
+					status: existingStage?.status ?? getInitialMissionStageProgress(stageId),
+					tasks
+				} satisfies MissionStageControlState;
+			})
+		);
 
 		const candidateState: MissionControlState = {
 			schemaVersion: MISSION_CONTROL_SCHEMA_VERSION,
 			updatedAt: existing?.updatedAt ?? new Date().toISOString(),
-			...(legacyDeliveredAt ? { deliveredAt: legacyDeliveredAt } : {}),
-			tasks: nextTasks
+			stages: nextStages
 		};
 
 		if (existing && this.isMissionControlStateEqual(existing, candidateState)) {
@@ -335,17 +365,52 @@ export class FilesystemAdapter {
 		missionDir: string,
 		deliveredAt: string
 	): Promise<MissionControlState> {
+		void deliveredAt;
 		const controlState = await this.reconcileMissionControlState(missionDir);
 		const nextState: MissionControlState = {
 			...controlState,
-			deliveredAt,
-			updatedAt: new Date().toISOString()
+			updatedAt: new Date().toISOString(),
+			stages: controlState.stages.map((stage) => ({
+				...stage,
+				status: stage.id === 'delivery' ? 'done' : stage.status
+			}))
 		};
 		await this.writeMissionControlState(missionDir, nextState);
 		return nextState;
 	}
 
-	public async artifactExists(missionDir: string, artifact: MissionProductKey): Promise<boolean> {
+	public async activateMissionStage(
+		missionDir: string,
+		stageId: MissionStageId
+	): Promise<MissionControlState> {
+		const controlState = await this.reconcileMissionControlState(missionDir);
+		const targetIndex = MISSION_STAGES.indexOf(stageId);
+		if (targetIndex < 0) {
+			throw new Error(`Unknown mission stage '${stageId}'.`);
+		}
+
+		const nextState: MissionControlState = {
+			...controlState,
+			updatedAt: new Date().toISOString(),
+			stages: controlState.stages.map((stage) => {
+				const stageIndex = MISSION_STAGES.indexOf(stage.id);
+				return {
+					...stage,
+					status:
+						stageIndex < targetIndex
+							? 'done'
+							: stage.id === stageId
+								? 'active'
+								: 'pending'
+				};
+			})
+		};
+
+		await this.writeMissionControlState(missionDir, nextState);
+		return nextState;
+	}
+
+	public async artifactExists(missionDir: string, artifact: MissionArtifactKey): Promise<boolean> {
 		try {
 			await fs.stat(this.getArtifactPath(missionDir, artifact));
 			return true;
@@ -356,7 +421,7 @@ export class FilesystemAdapter {
 
 	public async readArtifactRecord(
 		missionDir: string,
-		artifact: MissionProductKey
+		artifact: MissionArtifactKey
 	): Promise<ArtifactRecord | undefined> {
 		const filePath = this.getArtifactPath(missionDir, artifact);
 		try {
@@ -380,7 +445,7 @@ export class FilesystemAdapter {
 
 	public async writeArtifactRecord(
 		missionDir: string,
-		artifact: MissionProductKey,
+		artifact: MissionArtifactKey,
 		record: ArtifactRecordWrite
 	): Promise<void> {
 		const filePath = this.getArtifactPath(missionDir, artifact);
@@ -458,14 +523,22 @@ export class FilesystemAdapter {
 		const nextState: MissionControlState = {
 			...controlState,
 			updatedAt: new Date().toISOString(),
-			tasks: {
-				...controlState.tasks,
-				[taskId]: this.createTaskControlState({
-					status: record.status ?? 'todo',
-					agent: record.agent,
-					retries: record.retries ?? 0
-				})
-			}
+			stages: controlState.stages.map((stageState) =>
+				stageState.id !== stage
+					? stageState
+					: {
+						...stageState,
+						tasks: [
+							...stageState.tasks.filter((taskState) => taskState.id !== path.basename(taskId, '.md')),
+							this.createTaskControlState({
+								id: path.basename(taskId, '.md'),
+								status: record.status ?? 'todo',
+								agent: record.agent,
+								retries: record.retries ?? 0
+							})
+						]
+					}
+			)
 		};
 		await this.writeMissionControlState(missionDir, nextState);
 	}
@@ -476,7 +549,7 @@ export class FilesystemAdapter {
 	): Promise<void> {
 		const missionDir = this.resolveMissionDirFromTask(task);
 		const controlState = await this.reconcileMissionControlState(missionDir);
-		const taskState = controlState.tasks[task.taskId];
+		const taskState = this.getTaskControlState(controlState, task.stage, task.fileName);
 		if (!taskState) {
 			throw new ArtifactFormatError(`Mission control state is missing task '${task.taskId}'.`);
 		}
@@ -484,22 +557,33 @@ export class FilesystemAdapter {
 		const nextState: MissionControlState = {
 			...controlState,
 			updatedAt: new Date().toISOString(),
-			tasks: {
-				...controlState.tasks,
-				[task.taskId]: {
-					...taskState,
-					...(changes.status ? { status: changes.status } : {}),
-					...(changes.agent ? { agent: changes.agent } : {}),
-					...(changes.retries !== undefined ? { retries: changes.retries } : {}),
-					updatedAt: new Date().toISOString()
-				}
-			}
+			stages: controlState.stages.map((stageState) =>
+				stageState.id !== task.stage
+					? stageState
+					: {
+						...stageState,
+						tasks: stageState.tasks.map((candidateTaskState) =>
+							candidateTaskState.id !== path.basename(task.fileName, '.md')
+								? candidateTaskState
+								: {
+									...candidateTaskState,
+									...(changes.status ? { status: changes.status } : {}),
+									...(changes.agent ? { agent: changes.agent } : {}),
+									...(changes.retries !== undefined ? { retries: changes.retries } : {}),
+									updatedAt: new Date().toISOString()
+								}
+						)
+					}
+			)
 		};
 		await this.writeMissionControlState(missionDir, nextState);
 	}
 
-	private getArtifactPath(missionDir: string, artifact: MissionProductKey): string {
-		return path.join(missionDir, MISSION_ARTIFACTS[artifact]);
+	private getArtifactPath(missionDir: string, artifact: MissionArtifactKey): string {
+		const definition = getMissionArtifactDefinition(artifact);
+		return definition.stageId
+			? path.join(this.getMissionStagePath(missionDir, definition.stageId), definition.fileName)
+			: path.join(this.getMissionFlightDeckPath(missionDir), definition.fileName);
 	}
 
 	private getTaskPath(missionDir: string, stage: MissionStageId, fileName: string): string {
@@ -523,8 +607,7 @@ export class FilesystemAdapter {
 		const candidateState = rawState as {
 			schemaVersion?: unknown;
 			updatedAt?: unknown;
-			deliveredAt?: unknown;
-			tasks?: unknown;
+			stages?: unknown;
 		};
 		if (candidateState.schemaVersion !== MISSION_CONTROL_SCHEMA_VERSION) {
 			throw new ArtifactTypeError(
@@ -535,70 +618,113 @@ export class FilesystemAdapter {
 			throw new ArtifactTypeError(`Mission control state '${filePath}' is missing updatedAt.`);
 		}
 		if (
-			candidateState.tasks === undefined ||
-			typeof candidateState.tasks !== 'object' ||
-			candidateState.tasks === null ||
-			Array.isArray(candidateState.tasks)
+			!Array.isArray(candidateState.stages)
 		) {
-			throw new ArtifactTypeError(`Mission control state '${filePath}' must contain a tasks object.`);
+			throw new ArtifactTypeError(`Mission control state '${filePath}' must contain a stages array.`);
 		}
 
-		const tasks: Record<string, MissionTaskControlState> = {};
-		for (const [taskId, rawTaskState] of Object.entries(candidateState.tasks)) {
-			if (!rawTaskState || typeof rawTaskState !== 'object' || Array.isArray(rawTaskState)) {
+		const stages = candidateState.stages.map((rawStageState, stageIndex) => {
+			if (!rawStageState || typeof rawStageState !== 'object' || Array.isArray(rawStageState)) {
 				throw new ArtifactTypeError(
-					`Mission control state '${filePath}' task '${taskId}' must be an object.`
+					`Mission control state '${filePath}' stage at index '${String(stageIndex)}' must be an object.`
 				);
 			}
 
-			const candidateTaskState = rawTaskState as {
+			const candidateStageState = rawStageState as {
+				id?: unknown;
+				folder?: unknown;
 				status?: unknown;
-				agent?: unknown;
-				retries?: unknown;
-				updatedAt?: unknown;
+				tasks?: unknown;
 			};
-			if (!isMissionTaskStatus(candidateTaskState.status)) {
+			if (!isMissionStageId(candidateStageState.id)) {
 				throw new ArtifactTypeError(
-					`Mission control state '${filePath}' task '${taskId}' has invalid status '${String(candidateTaskState.status)}'.`
+					`Mission control state '${filePath}' has invalid stage id '${String(candidateStageState.id)}'.`
 				);
 			}
-			if (!isMissionTaskAgent(candidateTaskState.agent)) {
+			const stageId = candidateStageState.id;
+			if (candidateStageState.folder !== getMissionStageDefinition(stageId).folder) {
 				throw new ArtifactTypeError(
-					`Mission control state '${filePath}' task '${taskId}' has invalid agent '${String(candidateTaskState.agent)}'.`
+					`Mission control state '${filePath}' stage '${stageId}' has invalid folder '${String(candidateStageState.folder)}'.`
 				);
 			}
-			if (
-				typeof candidateTaskState.retries !== 'number' ||
-				!Number.isFinite(candidateTaskState.retries)
-			) {
+			if (!isMissionStageProgress(candidateStageState.status)) {
 				throw new ArtifactTypeError(
-					`Mission control state '${filePath}' task '${taskId}' has invalid retries '${String(candidateTaskState.retries)}'.`
+					`Mission control state '${filePath}' stage '${stageId}' has invalid status '${String(candidateStageState.status)}'.`
 				);
 			}
-			if (
-				typeof candidateTaskState.updatedAt !== 'string' ||
-				candidateTaskState.updatedAt.trim().length === 0
-			) {
+			if (!Array.isArray(candidateStageState.tasks)) {
 				throw new ArtifactTypeError(
-					`Mission control state '${filePath}' task '${taskId}' is missing updatedAt.`
+					`Mission control state '${filePath}' stage '${stageId}' must contain a tasks array.`
 				);
 			}
 
-			tasks[taskId] = {
-				status: candidateTaskState.status,
-				agent: candidateTaskState.agent,
-				retries: candidateTaskState.retries,
-				updatedAt: candidateTaskState.updatedAt
-			};
-		}
+			const tasks = candidateStageState.tasks.map((rawTaskState, taskIndex) => {
+				if (!rawTaskState || typeof rawTaskState !== 'object' || Array.isArray(rawTaskState)) {
+					throw new ArtifactTypeError(
+						`Mission control state '${filePath}' stage '${stageId}' task at index '${String(taskIndex)}' must be an object.`
+					);
+				}
+
+				const candidateTaskState = rawTaskState as {
+					id?: unknown;
+					status?: unknown;
+					agent?: unknown;
+					retries?: unknown;
+					updatedAt?: unknown;
+				};
+				if (typeof candidateTaskState.id !== 'string' || candidateTaskState.id.trim().length === 0) {
+					throw new ArtifactTypeError(
+						`Mission control state '${filePath}' stage '${stageId}' has a task with invalid id '${String(candidateTaskState.id)}'.`
+					);
+				}
+				if (!isMissionTaskStatus(candidateTaskState.status)) {
+					throw new ArtifactTypeError(
+						`Mission control state '${filePath}' task '${candidateTaskState.id}' has invalid status '${String(candidateTaskState.status)}'.`
+					);
+				}
+				if (!isMissionTaskAgent(candidateTaskState.agent)) {
+					throw new ArtifactTypeError(
+						`Mission control state '${filePath}' task '${candidateTaskState.id}' has invalid agent '${String(candidateTaskState.agent)}'.`
+					);
+				}
+				if (
+					typeof candidateTaskState.retries !== 'number' ||
+					!Number.isFinite(candidateTaskState.retries)
+				) {
+					throw new ArtifactTypeError(
+						`Mission control state '${filePath}' task '${candidateTaskState.id}' has invalid retries '${String(candidateTaskState.retries)}'.`
+					);
+				}
+				if (
+					typeof candidateTaskState.updatedAt !== 'string' ||
+					candidateTaskState.updatedAt.trim().length === 0
+				) {
+					throw new ArtifactTypeError(
+						`Mission control state '${filePath}' task '${candidateTaskState.id}' is missing updatedAt.`
+					);
+				}
+
+				return {
+					id: candidateTaskState.id.trim(),
+					status: candidateTaskState.status,
+					agent: candidateTaskState.agent,
+					retries: candidateTaskState.retries,
+					updatedAt: candidateTaskState.updatedAt
+				} satisfies MissionTaskControlState;
+			});
+
+			return {
+				id: stageId,
+				folder: candidateStageState.folder,
+				status: candidateStageState.status,
+				tasks
+			} satisfies MissionStageControlState;
+		});
 
 		return {
 			schemaVersion: MISSION_CONTROL_SCHEMA_VERSION,
 			updatedAt: candidateState.updatedAt,
-			...(typeof candidateState.deliveredAt === 'string' && candidateState.deliveredAt.trim().length > 0
-				? { deliveredAt: candidateState.deliveredAt }
-				: {}),
-			tasks
+			stages
 		};
 	}
 
@@ -623,9 +749,14 @@ export class FilesystemAdapter {
 	}
 
 	private createTaskControlState(
-		overrides: Partial<Pick<MissionTaskControlState, 'status' | 'agent' | 'retries'>> = {}
+		overrides: Partial<Pick<MissionTaskControlState, 'id' | 'status' | 'agent' | 'retries'>> = {}
 	): MissionTaskControlState {
+		if (!overrides.id) {
+			throw new Error('Mission task control state requires an id.');
+		}
+
 		return {
+			id: overrides.id,
 			status: overrides.status ?? 'todo',
 			agent: overrides.agent ?? 'default',
 			retries: overrides.retries ?? 0,
@@ -654,30 +785,6 @@ export class FilesystemAdapter {
 		return path.resolve(task.filePath, ...task.relativePath.split('/').map(() => '..'));
 	}
 
-	private async readLegacyMissionDeliveredAt(missionDir: string): Promise<string | undefined> {
-		const brief = await this.readArtifactRecord(missionDir, 'brief');
-		if (!brief) {
-			return undefined;
-		}
-
-		return this.readOptionalStringAttribute(brief.attributes, 'deliveredAt', brief.filePath);
-	}
-
-	private async readLegacyTaskControlState(
-		missionDir: string,
-		stage: MissionStageId,
-		fileName: string
-	): Promise<MissionTaskControlState> {
-		const filePath = this.getTaskPath(missionDir, stage, fileName);
-		const content = await fs.readFile(filePath, 'utf8');
-		const document = parseFrontmatterDocument(content);
-		return this.createTaskControlState({
-			status: this.readTaskStatus(document.attributes, filePath),
-			agent: this.readTaskAgent(document.attributes, filePath),
-			retries: this.readTaskRetries(document.attributes, filePath)
-		});
-	}
-
 	private async readTaskStateInternal(
 		missionDir: string,
 		stage: MissionStageId,
@@ -692,7 +799,7 @@ export class FilesystemAdapter {
 		const sequence = this.parseTaskSequence(fileName, sequenceFallback);
 		const parsedTaskBody = this.parseTaskBody(body, fileName);
 		const taskId = this.createTaskId(stage, fileName);
-		const taskControlState = controlState.tasks[taskId];
+		const taskControlState = this.getTaskControlState(controlState, stage, fileName);
 		if (!taskControlState) {
 			throw new ArtifactFormatError(`Mission control state is missing task '${taskId}'.`);
 		}
@@ -715,37 +822,14 @@ export class FilesystemAdapter {
 		};
 	}
 
-	private readTaskStatus(attributes: Record<string, FrontmatterValue>, filePath: string): MissionTaskStatus {
-		const value = attributes['status'];
-		if (value === undefined) {
-			return 'todo';
-		}
-		if (!isMissionTaskStatus(value)) {
-			throw new ArtifactTypeError(`Task '${filePath}' has invalid status '${String(value)}'.`);
-		}
-		return value;
-	}
-
-	private readTaskAgent(attributes: Record<string, FrontmatterValue>, filePath: string): MissionTaskAgent {
-		const value = attributes['agent'];
-		if (value === undefined) {
-			return 'default';
-		}
-		if (!isMissionTaskAgent(value)) {
-			throw new ArtifactTypeError(`Task '${filePath}' has invalid agent '${String(value)}'.`);
-		}
-		return value;
-	}
-
-	private readTaskRetries(attributes: Record<string, FrontmatterValue>, filePath: string): number {
-		const value = attributes['retries'];
-		if (value === undefined) {
-			return 0;
-		}
-		if (typeof value !== 'number' || !Number.isFinite(value)) {
-			throw new ArtifactTypeError(`Task '${filePath}' has invalid retries '${String(value)}'.`);
-		}
-		return value;
+	private getTaskControlState(
+		controlState: MissionControlState,
+		stage: MissionStageId,
+		fileName: string
+	): MissionTaskControlState | undefined {
+		const stageState = controlState.stages.find((candidateStage) => candidateStage.id === stage);
+		const taskId = path.basename(fileName, '.md');
+		return stageState?.tasks.find((candidateTask) => candidateTask.id === taskId);
 	}
 
 	private readTaskDependsOn(
@@ -841,6 +925,20 @@ export class FilesystemAdapter {
 		}
 
 		return lines.join('\n').trim();
+	}
+
+	private extractBriefTitle(body: string): string | undefined {
+		const firstNonEmptyLine = body.split(/\r?\n/u).find((line) => line.trim().length > 0);
+		if (!firstNonEmptyLine?.trim().startsWith('#')) {
+			return undefined;
+		}
+
+		const heading = firstNonEmptyLine.replace(/^#+\s*/u, '').trim();
+		if (heading.length === 0) {
+			return undefined;
+		}
+
+		return heading.replace(/^BRIEF:\s*/u, '').trim() || undefined;
 	}
 
 	private renderDocument(attributes: Record<string, FrontmatterValue>, body: string): string {
@@ -985,7 +1083,7 @@ export class FilesystemAdapter {
 			.slice(0, maxLength);
 	}
 
-	private runGit(args: string[], cwd = this.repoRoot): string {
+	private runGit(args: string[], cwd = this.workspaceRoot): string {
 		const result = spawnSync('git', args, {
 			cwd,
 			encoding: 'utf8'
@@ -994,7 +1092,7 @@ export class FilesystemAdapter {
 		return result.status === 0 ? result.stdout.trim() : '';
 	}
 
-	private assertGit(args: string[], cwd = this.repoRoot): string {
+	private assertGit(args: string[], cwd = this.workspaceRoot): string {
 		const result = spawnSync('git', args, {
 			cwd,
 			encoding: 'utf8'

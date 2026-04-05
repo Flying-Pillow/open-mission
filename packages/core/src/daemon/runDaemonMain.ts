@@ -1,13 +1,17 @@
-import { getRepoRoot } from '../lib/repoPaths.js';
 import type { MissionAgentRuntime } from './MissionAgentRuntime.js';
 import { startDaemon } from './Daemon.js';
+import { resolveGitWorkspaceRoot } from '../lib/workspacePaths.js';
 
 type RuntimeFactoryModule = {
 	createConfiguredMissionRuntimes?: (options: {
-		repoRoot: string;
+		controlRoot: string;
 		logLine?: (line: string) => void;
 	}) => Promise<MissionAgentRuntime[]> | MissionAgentRuntime[];
 };
+
+function writeDaemonLogLine(line: string): void {
+	process.stdout.write(`[Mission daemon ${new Date().toISOString()}] ${line}\n`);
+}
 
 function readSocketPathFromArgv(argv: string[]): string | undefined {
 	const socketFlagIndex = argv.indexOf('--socket');
@@ -18,11 +22,13 @@ function readSocketPathFromArgv(argv: string[]): string | undefined {
 	return argv[socketFlagIndex + 1];
 }
 
-async function loadConfiguredRuntimes(repoRoot: string): Promise<MissionAgentRuntime[]> {
+async function loadConfiguredRuntimes(logLine?: (line: string) => void): Promise<MissionAgentRuntime[]> {
 	const modulePath = process.env['MISSION_RUNTIME_FACTORY_MODULE']?.trim();
 	if (!modulePath) {
 		return [];
 	}
+	const surfacePath = process.env['MISSION_SURFACE_PATH']?.trim() || process.cwd();
+	const controlRoot = resolveGitWorkspaceRoot(surfacePath) ?? surfacePath;
 
 	const loadedModule = (await import(modulePath)) as RuntimeFactoryModule;
 	if (typeof loadedModule.createConfiguredMissionRuntimes !== 'function') {
@@ -31,22 +37,27 @@ async function loadConfiguredRuntimes(repoRoot: string): Promise<MissionAgentRun
 		);
 	}
 
-	return await loadedModule.createConfiguredMissionRuntimes({ repoRoot });
+	return await loadedModule.createConfiguredMissionRuntimes({
+		controlRoot,
+		...(logLine ? { logLine } : {})
+	});
 }
 
 export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): Promise<void> {
-	const repoRoot = process.env['MISSION_REPO_ROOT']?.trim() || getRepoRoot();
 	const socketPath = readSocketPathFromArgv(argv);
-	const runtimes = await loadConfiguredRuntimes(repoRoot);
+	const logLine = writeDaemonLogLine;
+	const runtimes = await loadConfiguredRuntimes(logLine);
 	const daemon = await startDaemon({
-		repoRoot,
+		logLine,
 		runtimes,
 		...(socketPath ? { socketPath } : {})
 	});
 
+	logLine(`Listening on ${daemon.getManifest()?.endpoint.path ?? 'unknown socket'}.`);
 	process.stdout.write(`${JSON.stringify(daemon.getManifest(), null, 2)}\n`);
 
 	const stopDaemon = async () => {
+		logLine('Shutdown requested.');
 		await daemon.close();
 	};
 

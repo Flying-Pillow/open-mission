@@ -9,24 +9,25 @@ const MISSION_DAEMON_MANIFEST_FILE = 'daemon.json';
 const MISSION_DAEMON_SESSIONS_DIRECTORY = 'sessions';
 const MISSION_DAEMON_SOCKET_FILE = 'daemon.sock';
 
-export function getDaemonRuntimePath(repoRoot: string): string {
-	return path.join(resolveDaemonRuntimeRoot(), createRepoHash(repoRoot));
+export function getDaemonRuntimePath(): string {
+	return resolveDaemonRuntimeRoot();
 }
 
-export function getDaemonManifestPath(repoRoot: string): string {
-	return path.join(getDaemonRuntimePath(repoRoot), MISSION_DAEMON_MANIFEST_FILE);
+export function getDaemonManifestPath(): string {
+	return path.join(getDaemonRuntimePath(), MISSION_DAEMON_MANIFEST_FILE);
 }
 
-export function getDaemonSessionStatePath(repoRoot: string, missionId: string): string {
+export function getDaemonSessionStatePath(workspaceRoot: string, missionId: string): string {
 	return path.join(
-		getDaemonRuntimePath(repoRoot),
+		getDaemonRuntimePath(),
+		'workspaces',
+		createWorkspaceHash(workspaceRoot),
 		MISSION_DAEMON_SESSIONS_DIRECTORY,
 		`${missionId}.json`
 	);
 }
 
 export function resolveDaemonSocketPath(
-	repoRoot: string,
 	overridePath?: string
 ): string {
 	const normalizedOverride = overridePath?.trim();
@@ -34,23 +35,20 @@ export function resolveDaemonSocketPath(
 		return path.resolve(normalizedOverride);
 	}
 
-	const repoHash = createRepoHash(repoRoot);
 	if (process.platform === 'win32') {
-		return `\\\\.\\pipe\\mission-${repoHash}`;
+		return `\\\\.\\pipe\\mission-daemon`;
 	}
 
-	return path.join(getDaemonRuntimePath(repoRoot), MISSION_DAEMON_SOCKET_FILE);
+	return path.join(getDaemonRuntimePath(), MISSION_DAEMON_SOCKET_FILE);
 }
 
 export function isNamedPipePath(candidatePath: string): boolean {
 	return candidatePath.startsWith('\\\\.\\pipe\\');
 }
 
-export async function readDaemonManifest(
-	repoRoot: string
-): Promise<Manifest | undefined> {
+export async function readDaemonManifest(): Promise<Manifest | undefined> {
 	try {
-		const content = await fs.readFile(getDaemonManifestPath(repoRoot), 'utf8');
+		const content = await fs.readFile(getDaemonManifestPath(), 'utf8');
 		return JSON.parse(content) as Manifest;
 	} catch {
 		return undefined;
@@ -66,9 +64,9 @@ function resolveDaemonRuntimeRoot(): string {
 	return path.join(os.tmpdir(), MISSION_RUNTIME_DIRECTORY);
 }
 
-function createRepoHash(repoRoot: string): string {
+function createWorkspaceHash(workspaceRoot: string): string {
 	return createHash('sha256')
-		.update(path.resolve(repoRoot), 'utf8')
+		.update(path.resolve(workspaceRoot), 'utf8')
 		.digest('hex')
 		.slice(0, 16);
 }

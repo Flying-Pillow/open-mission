@@ -1,14 +1,18 @@
 import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import {
 	MISSION_STAGE_TEMPLATE_DEFINITIONS,
+	renderMissionProductTemplate,
+	renderMissionTaskTemplate,
 	type MissionStageTemplateDefinition
 } from '../../templates/mission/index.js';
+import { renderMissionArtifactTitle } from '../../templates/mission/common.js';
 import {
 	MISSION_STAGES,
 	MISSION_TASK_STAGE_DIRECTORIES,
 	type MissionDescriptor,
 	type MissionStageId
 } from '../../types.js';
+import { getMissionArtifactDefinition } from '../../workflow/manifest.js';
 import { Artifact } from './Artifact.js';
 import { Task } from './Task.js';
 
@@ -17,7 +21,7 @@ export class Stage {
 		private readonly descriptor: MissionDescriptor,
 		private readonly currentStage: MissionStageId,
 		private readonly delivered = false
-	) {}
+	) { }
 
 	public get stage(): MissionStageId {
 		return this.currentStage;
@@ -72,20 +76,43 @@ export class Stage {
 		return currentIndex >= 0 && targetIndex >= 0 && Math.abs(targetIndex - currentIndex) === 1;
 	}
 
-	public getArtifacts(): Artifact[] {
-		return this.getDefinition().artifacts.map(
-			(template) =>
+	public async getArtifacts(): Promise<Artifact[]> {
+		const timestamp = new Date().toISOString();
+		return Promise.all(
+			this.getDefinition().artifacts.map(async (template) =>
 				new Artifact(this.descriptor.missionDir, {
 					kind: 'product',
 					key: template.key,
-					body: template.body(this.descriptor.brief, this.descriptor.branchRef)
+					attributes: {
+						title: renderMissionArtifactTitle(template.key, this.descriptor.brief),
+						artifact: template.key,
+						createdAt: timestamp,
+						updatedAt: timestamp,
+						...(getMissionArtifactDefinition(template.key).stageId
+							? { stage: getMissionArtifactDefinition(template.key).stageId }
+							: {})
+					},
+					body: await renderMissionProductTemplate(template, {
+						brief: this.descriptor.brief,
+						branchRef: this.descriptor.branchRef
+					})
 				})
+			)
 		);
 	}
 
-	public getDefaultTasks(): Task[] {
-		return this.getDefinition().defaultTasks.map(
-			(template) => new Task(this.descriptor.missionDir, this.currentStage, template)
+	public async getDefaultTasks(): Promise<Task[]> {
+		return Promise.all(
+			this.getDefinition().defaultTasks.map(async (templateRef) =>
+				new Task(
+					this.descriptor.missionDir,
+					this.currentStage,
+					await renderMissionTaskTemplate(templateRef, {
+						brief: this.descriptor.brief,
+						branchRef: this.descriptor.branchRef
+					})
+				)
+			)
 		);
 	}
 
@@ -97,11 +124,11 @@ export class Stage {
 			await adapter.ensureStageDirectory(this.descriptor.missionDir, this.currentStage);
 		}
 
-		for (const artifact of this.getArtifacts()) {
+		for (const artifact of await this.getArtifacts()) {
 			await artifact.materialize(adapter);
 		}
 
-		for (const task of this.getDefaultTasks()) {
+		for (const task of await this.getDefaultTasks()) {
 			await task.materialize(adapter);
 		}
 

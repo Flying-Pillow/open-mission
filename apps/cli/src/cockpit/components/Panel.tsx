@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 
-import { For, Show, type ParentProps } from 'solid-js';
+import { useTerminalDimensions } from '@opentui/solid';
+import { For, Show, createMemo, type ParentProps } from 'solid-js';
 import { cockpitTheme } from './cockpitTheme.js';
 
 type PanelStyle = Record<string, string | number | undefined>;
@@ -13,6 +14,12 @@ export type PanelBadge = {
 	framed?: boolean;
 };
 
+export type PanelBodyLine = {
+	text: string;
+	fg?: string;
+	backgroundColor?: string;
+};
+
 type PanelProps = ParentProps<{
 	title?: string;
 	titleColor?: string;
@@ -20,11 +27,36 @@ type PanelProps = ParentProps<{
 	borderColor?: string;
 	backgroundColor?: string;
 	footerBadges?: PanelBadge[];
+	bodyLines?: PanelBodyLine[];
+	bodyRows?: number;
+	contentWidth?: number;
 	style?: PanelStyle;
 	contentStyle?: PanelStyle;
 }>;
 
 export function Panel(props: PanelProps) {
+	const terminal = useTerminalDimensions();
+	const resolvedContentWidth = createMemo(() => {
+		if (typeof props.contentWidth === 'number') {
+			return Math.max(1, Math.floor(props.contentWidth));
+		}
+		return Math.max(1, terminal().width - 8);
+	});
+	const renderedBodyLines = createMemo<PanelBodyLine[]>(() => {
+		const rows = Math.max(0, props.bodyRows ?? 0);
+		const source = props.bodyLines ?? [];
+		if (rows === 0) {
+			return source;
+		}
+		const clipped = source.slice(0, rows);
+		const padded = [...clipped];
+		while (padded.length < rows) {
+			padded.push({ text: '' });
+		}
+		return padded;
+	});
+	const hasBodyLines = createMemo(() => renderedBodyLines().length > 0);
+
 	return (
 		<box
 			border={props.border ?? true}
@@ -33,7 +65,7 @@ export function Panel(props: PanelProps) {
 			style={{
 				flexDirection: 'column',
 				paddingTop: props.border === false ? 0 : 1,
-				paddingBottom: props.border === false ? 0 : 1,
+				paddingBottom: 0,
 				paddingLeft: 1,
 				paddingRight: 1,
 				borderColor: props.borderColor ?? cockpitTheme.border,
@@ -46,11 +78,29 @@ export function Panel(props: PanelProps) {
 				style={{
 					flexDirection: 'column',
 					paddingTop: 0,
-					paddingBottom: props.footerBadges?.length ? 1 : props.border === false ? 0 : 1,
+					paddingBottom: props.footerBadges?.length ? 0 : props.border === false ? 0 : 1,
 					...(props.contentStyle ?? {})
 				}}
 			>
-				{props.children}
+				<Show
+					when={hasBodyLines()}
+					fallback={props.children}
+				>
+					<For each={renderedBodyLines()}>
+						{(line) => (
+							<box
+								style={{
+									flexDirection: 'row',
+									backgroundColor: line.backgroundColor ?? cockpitTheme.panelBackground
+								}}
+							>
+								<text style={{ fg: line.fg ?? cockpitTheme.bodyText }}>
+									{fitPanelRow(line.text, resolvedContentWidth())}
+								</text>
+							</box>
+						)}
+					</For>
+				</Show>
 			</box>
 			<Show when={props.footerBadges && props.footerBadges.length > 0}>
 				<box
@@ -58,6 +108,7 @@ export function Panel(props: PanelProps) {
 						flexDirection: 'row',
 						justifyContent: 'flex-end',
 						paddingTop: 0,
+						paddingRight: props.border === false ? 0 : 1,
 						...(props.border === false ? {} : { marginBottom: -1 })
 					}}
 				>
@@ -68,6 +119,12 @@ export function Panel(props: PanelProps) {
 			</Show>
 		</box>
 	);
+}
+
+function fitPanelRow(text: string, width: number): string {
+	const safeWidth = Math.max(1, width);
+	const clipped = text.slice(0, safeWidth);
+	return clipped.padEnd(safeWidth, ' ');
 }
 
 function renderBadgeLine(badges: PanelBadge[]): Array<{ text: string; tone?: PanelBadgeTone }> {

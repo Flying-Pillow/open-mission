@@ -24,9 +24,9 @@ import type { MissionStageStatus } from '../../types.js';
 
 describe('Mission', () => {
 	it('creates the mission environment and only materializes the first stage on creation', async () => {
-		const repoRoot = await createTempRepo();
+		const workspaceRoot = await createTempRepo();
 		try {
-			const adapter = new FilesystemAdapter(repoRoot);
+			const adapter = new FilesystemAdapter(workspaceRoot);
 			const mission = await Factory.create(adapter, {
 				brief: {
 					issueId: 101,
@@ -47,21 +47,20 @@ describe('Mission', () => {
 			expect(status.stages?.map((stage: MissionStageStatus) => `${stage.stage}:${stage.taskCount}`)).toEqual([
 				'prd:1',
 				'spec:0',
-				'plan:0',
 				'implementation:0',
-				'verification:0',
-				'audit:0'
+				'audit:0',
+				'delivery:0'
 			]);
 			mission.dispose();
 		} finally {
-			await fs.rm(repoRoot, { recursive: true, force: true });
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}
 	});
 
-	it('materializes spec and plan as separate stages with their own templates and tasks', async () => {
-		const repoRoot = await createTempRepo();
+	it('materializes spec planning tasks inside the spec stage before implementation', async () => {
+		const workspaceRoot = await createTempRepo();
 		try {
-			const adapter = new FilesystemAdapter(repoRoot);
+			const adapter = new FilesystemAdapter(workspaceRoot);
 			const mission = await Factory.create(adapter, {
 				brief: {
 					issueId: 102,
@@ -82,51 +81,86 @@ describe('Mission', () => {
 
 			const specStatus = await mission.status();
 			expect(specStatus.stage).toBe('spec');
-			expect(specStatus.activeTasks?.map((task) => task.subject)).toEqual(['Spec From PRD']);
+			expect(specStatus.activeTasks?.map((task) => task.subject)).toEqual(['Draft Spec']);
 			expect(Object.keys(specStatus.productFiles ?? {}).sort()).toEqual(['brief', 'prd', 'spec']);
 			expect(specStatus.stages?.map((stage: MissionStageStatus) => `${stage.stage}:${stage.taskCount}`)).toEqual([
 				'prd:1',
-				'spec:1',
-				'plan:0',
+				'spec:2',
 				'implementation:0',
-				'verification:0',
-				'audit:0'
+				'audit:0',
+				'delivery:0'
 			]);
 
-			const [specTask] = await adapter.listTaskStates(mission.getMissionDir(), 'spec');
+			const [specTask, planningTask] = await adapter.listTaskStates(mission.getMissionDir(), 'spec');
 			if (!specTask) {
 				throw new Error('Expected the SPEC stage to contain an initial task.');
 			}
+			if (!planningTask) {
+				throw new Error('Expected the SPEC stage to contain a planning task.');
+			}
 			await adapter.updateTaskState(specTask, { status: 'done' });
-			await mission.transition('plan');
+			await adapter.updateTaskState(planningTask, { status: 'done' });
+			await mission.transition('implementation');
+			await adapter.writeTaskRecord(mission.getMissionDir(), 'implementation', '01-bootstrap.md', {
+				subject: 'Bootstrap Implementation',
+				instruction: 'Create the first implementation slice.',
+				agent: 'copilot'
+			});
 
-			const planStatus = await mission.status();
-			expect(planStatus.stage).toBe('plan');
-			expect(planStatus.activeTasks?.map((task) => task.subject)).toEqual(['Plan From Spec']);
-			expect(Object.keys(planStatus.productFiles ?? {}).sort()).toEqual([
+			const implementationStatus = await mission.status();
+			expect(implementationStatus.stage).toBe('implementation');
+			expect(Object.keys(implementationStatus.productFiles ?? {}).sort()).toEqual([
 				'brief',
-				'plan',
 				'prd',
-				'spec'
+				'spec',
+				'verify'
 			]);
-			expect(planStatus.stages?.map((stage: MissionStageStatus) => `${stage.stage}:${stage.taskCount}`)).toEqual([
+			expect(implementationStatus.stages?.map((stage: MissionStageStatus) => `${stage.stage}:${stage.taskCount}`)).toEqual([
 				'prd:1',
-				'spec:1',
-				'plan:1',
-				'implementation:0',
-				'verification:0',
-				'audit:0'
+				'spec:2',
+				'implementation:1',
+				'audit:0',
+				'delivery:0'
 			]);
 			mission.dispose();
 		} finally {
-			await fs.rm(repoRoot, { recursive: true, force: true });
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		}
+	});
+
+	it('materializes product artifacts with informational frontmatter', async () => {
+		const workspaceRoot = await createTempRepo();
+		try {
+			const adapter = new FilesystemAdapter(workspaceRoot);
+			const mission = await Factory.create(adapter, {
+				brief: {
+					issueId: 105,
+					title: 'Artifact metadata contract',
+					body: 'Persist stable metadata for mission product artifacts.',
+					type: 'task'
+				},
+				branchRef: adapter.deriveMissionBranchName(105, 'Artifact metadata contract'),
+				agentContext: MissionAgentContext.build()
+			});
+
+			const prd = await adapter.readArtifactRecord(mission.getMissionDir(), 'prd');
+			expect(prd?.attributes).toMatchObject({
+				title: 'PRD: #105 - Artifact metadata contract',
+				artifact: 'prd',
+				stage: 'prd'
+			});
+			expect(typeof prd?.attributes['createdAt']).toBe('string');
+			expect(typeof prd?.attributes['updatedAt']).toBe('string');
+			mission.dispose();
+		} finally {
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}
 	});
 
 	it('reports delivery state from mission.json rather than BRIEF frontmatter', async () => {
-		const repoRoot = await createTempRepo();
+		const workspaceRoot = await createTempRepo();
 		try {
-			const adapter = new FilesystemAdapter(repoRoot);
+			const adapter = new FilesystemAdapter(workspaceRoot);
 			const mission = await Factory.create(adapter, {
 				brief: {
 					issueId: 103,
@@ -141,20 +175,20 @@ describe('Mission', () => {
 			await adapter.setMissionDeliveredAt(mission.getMissionDir(), '2026-04-01T12:34:56.000Z');
 
 			const status = await mission.status();
-			expect(status.deliveredAt).toBe('2026-04-01T12:34:56.000Z');
+			expect(status.stages?.find((stage) => stage.stage === 'delivery')?.status).toBe('done');
 
 			const brief = await adapter.readArtifactRecord(mission.getMissionDir(), 'brief');
 			expect(brief?.attributes['deliveredAt']).toBeUndefined();
 			mission.dispose();
 		} finally {
-			await fs.rm(repoRoot, { recursive: true, force: true });
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}
 	});
 
 	it('surfaces multiple ready and active tasks when dependencies allow parallel work', async () => {
-		const repoRoot = await createTempRepo();
+		const workspaceRoot = await createTempRepo();
 		try {
-			const adapter = new FilesystemAdapter(repoRoot);
+			const adapter = new FilesystemAdapter(workspaceRoot);
 			const mission = await Factory.create(adapter, {
 				brief: {
 					issueId: 104,
@@ -169,8 +203,6 @@ describe('Mission', () => {
 			await completeStage(adapter, mission.getMissionDir(), 'prd');
 			await mission.transition('spec');
 			await completeStage(adapter, mission.getMissionDir(), 'spec');
-			await mission.transition('plan');
-			await completeStage(adapter, mission.getMissionDir(), 'plan');
 			await mission.transition('implementation');
 
 			await adapter.writeTaskRecord(mission.getMissionDir(), 'implementation', '01-base.md', {
@@ -218,7 +250,7 @@ describe('Mission', () => {
 
 			await expect(
 				mission.updateTaskState('implementation/04-polish', { status: 'active' })
-			).rejects.toThrow(/waiting on/u);
+			).rejects.toThrow(/Waiting on/u);
 
 			await mission.updateTaskState('implementation/02-api', { status: 'done' });
 			await mission.updateTaskState('implementation/03-ui', { status: 'done' });
@@ -226,14 +258,116 @@ describe('Mission', () => {
 			expect(status.readyTasks?.map((task) => task.taskId)).toEqual(['implementation/04-polish']);
 			mission.dispose();
 		} finally {
-			await fs.rm(repoRoot, { recursive: true, force: true });
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		}
+	});
+
+	it('anchors task transition commands to workflow rules and prevents invalid reversions', async () => {
+		const workspaceRoot = await createTempRepo();
+		try {
+			const adapter = new FilesystemAdapter(workspaceRoot);
+			const mission = await Factory.create(adapter, {
+				brief: {
+					issueId: 106,
+					title: 'Manifest task transition policy',
+					body: 'Evaluate command availability and state transitions from one ruleset.',
+					type: 'refactor'
+				},
+				branchRef: adapter.deriveMissionBranchName(106, 'Manifest task transition policy'),
+				agentContext: MissionAgentContext.build()
+			});
+
+			const initialStatus = await mission.status();
+			const taskId = initialStatus.readyTasks?.[0]?.taskId;
+			if (!taskId) {
+				throw new Error('Expected at least one ready task.');
+			}
+
+			await mission.updateTaskState(taskId, { status: 'blocked' });
+			const blockedStatus = await mission.status();
+			const activateFromBlocked = blockedStatus.availableCommands?.find(
+				(command) => command.id === `task.activate.${taskId}`
+			);
+			expect(activateFromBlocked?.enabled).toBe(true);
+
+			await mission.updateTaskState(taskId, { status: 'active' });
+			await mission.updateTaskState(taskId, { status: 'done' });
+
+			const doneStatus = await mission.status();
+			const blockFromDone = doneStatus.availableCommands?.find(
+				(command) => command.id === `task.block.${taskId}`
+			);
+			expect(blockFromDone?.enabled).toBe(false);
+			expect(blockFromDone?.reason).toMatch(/cannot transition to blocked/u);
+
+			await expect(mission.updateTaskState(taskId, { status: 'active' })).rejects.toThrow(/cannot transition/u);
+			mission.dispose();
+		} finally {
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		}
+	});
+
+	it('anchors stage actions to workflow rules and restarts completed stages by resetting their tasks', async () => {
+		const workspaceRoot = await createTempRepo();
+		try {
+			const adapter = new FilesystemAdapter(workspaceRoot);
+			const mission = await Factory.create(adapter, {
+				brief: {
+					issueId: 107,
+					title: 'Manifest stage transition policy',
+					body: 'Drive stage actions from workflow rules and reset tasks on restart.',
+					type: 'refactor'
+				},
+				branchRef: adapter.deriveMissionBranchName(107, 'Manifest stage transition policy'),
+				agentContext: MissionAgentContext.build()
+			});
+
+			let status = await mission.status();
+			const startSpecInitially = status.availableCommands?.find(
+				(command) => command.id === 'stage.start.spec'
+			);
+			expect(startSpecInitially?.enabled).toBe(false);
+			expect(startSpecInitially?.reason).toMatch(/Previous stages must be complete/u);
+
+			await completeStage(adapter, mission.getMissionDir(), 'prd');
+			status = await mission.status();
+			expect(status.availableCommands?.find((command) => command.id === 'stage.start.spec')?.enabled).toBe(true);
+
+			await mission.transition('spec');
+			await completeStage(adapter, mission.getMissionDir(), 'spec');
+			await mission.transition('implementation');
+
+			status = await mission.status();
+			const restartSpec = status.availableCommands?.find(
+				(command) => command.id === 'stage.restart.spec'
+			);
+			expect(restartSpec?.enabled).toBe(true);
+
+			await mission.updateStageState('spec', 'restart');
+
+			status = await mission.status();
+			expect(status.stage).toBe('spec');
+			expect(status.stages?.find((stage) => stage.stage === 'spec')?.completedTaskCount).toBe(0);
+			expect(status.stages?.find((stage) => stage.stage === 'implementation')?.status).toBe('pending');
+			expect(status.activeTasks?.map((task) => task.taskId)).toEqual(['spec/01-draft-spec']);
+			expect(
+				status.stages
+					?.find((stage) => stage.stage === 'spec')
+					?.tasks.map((task) => task.status)
+			).toEqual(['active', 'todo']);
+			expect(
+				status.availableCommands?.find((command) => command.id === 'stage.start.implementation')?.enabled
+			).toBe(false);
+			mission.dispose();
+		} finally {
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}
 	});
 
 	it('launches task-owned agent sessions through the AgentSession domain object', async () => {
-		const repoRoot = await createTempRepo();
+		const workspaceRoot = await createTempRepo();
 		try {
-			const adapter = new FilesystemAdapter(repoRoot);
+			const adapter = new FilesystemAdapter(workspaceRoot);
 			const mission = await Factory.create(adapter, {
 				brief: {
 					issueId: 105,
@@ -257,12 +391,12 @@ describe('Mission', () => {
 			const sessionRecord = await mission.launchAgentSession({
 				runtimeId: runtime.id,
 				taskId,
-				workingDirectory: mission.getMissionDir(),
+				workingDirectory: status.missionDir ?? adapter.getMissionWorkspacePath(mission.getMissionDir()),
 				prompt: 'Complete the task-owned session refactor.'
 			});
 
 			expect(sessionRecord.taskId).toBe(taskId);
-			expect(sessionRecord.assignmentLabel).toContain('tasks/PRD/');
+			expect(sessionRecord.assignmentLabel).toContain('flight-deck/01-PRD/tasks/');
 			expect(runtime.lastSubmittedTurn?.scope).toMatchObject({
 				kind: 'slice',
 				taskId
@@ -272,7 +406,7 @@ describe('Mission', () => {
 			expect(updatedStatus.activeTasks?.map((task) => task.taskId)).toContain(taskId);
 			mission.dispose();
 		} finally {
-			await fs.rm(repoRoot, { recursive: true, force: true });
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}
 	});
 });
@@ -299,7 +433,7 @@ class TestRuntime implements MissionAgentRuntime {
 	public constructor(
 		public readonly id: string,
 		public readonly displayName: string
-	) {}
+	) { }
 
 	public get capabilities(): MissionAgentRuntimeCapabilities {
 		return TEST_RUNTIME_CAPABILITIES;
@@ -381,7 +515,7 @@ class TestSession implements MissionAgentSession {
 		});
 	}
 
-	public async sendInput(): Promise<void> {}
+	public async sendInput(): Promise<void> { }
 
 	public async cancel(reason?: string): Promise<void> {
 		this.sessionState = {
@@ -405,7 +539,7 @@ class TestSession implements MissionAgentSession {
 async function completeStage(
 	adapter: FilesystemAdapter,
 	missionDir: string,
-	stage: 'prd' | 'spec' | 'plan'
+	stage: 'prd' | 'spec'
 ): Promise<void> {
 	const tasks = await adapter.listTaskStates(missionDir, stage);
 	for (const task of tasks) {
@@ -414,19 +548,19 @@ async function completeStage(
 }
 
 async function createTempRepo(): Promise<string> {
-	const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-core-'));
-	runGit(repoRoot, ['init']);
-	runGit(repoRoot, ['config', 'user.email', 'mission@example.com']);
-	runGit(repoRoot, ['config', 'user.name', 'Mission Test']);
-	await fs.writeFile(path.join(repoRoot, 'README.md'), '# Mission Test\n', 'utf8');
-	runGit(repoRoot, ['add', 'README.md']);
-	runGit(repoRoot, ['commit', '-m', 'init']);
-	return repoRoot;
+	const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-core-'));
+	runGit(workspaceRoot, ['init']);
+	runGit(workspaceRoot, ['config', 'user.email', 'mission@example.com']);
+	runGit(workspaceRoot, ['config', 'user.name', 'Mission Test']);
+	await fs.writeFile(path.join(workspaceRoot, 'README.md'), '# Mission Test\n', 'utf8');
+	runGit(workspaceRoot, ['add', 'README.md']);
+	runGit(workspaceRoot, ['commit', '-m', 'init']);
+	return workspaceRoot;
 }
 
-function runGit(repoRoot: string, args: string[]): void {
+function runGit(workspaceRoot: string, args: string[]): void {
 	const result = spawnSync('git', args, {
-		cwd: repoRoot,
+		cwd: workspaceRoot,
 		encoding: 'utf8'
 	});
 	if (result.status !== 0) {

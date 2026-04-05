@@ -11,7 +11,7 @@ import { DaemonClient } from './DaemonClient.js';
 export type DaemonLaunchMode = 'build' | 'source';
 
 export type ConnectDaemonClientOptions = {
-	repoRoot: string;
+	surfacePath: string;
 	socketPath?: string;
 	preferredLaunchMode?: DaemonLaunchMode;
 	startupTimeoutMs?: number;
@@ -51,7 +51,7 @@ export async function connectDaemonClient(
 	const immediateClient = new DaemonClient();
 	try {
 		await immediateClient.connect({
-			repoRoot: options.repoRoot,
+			surfacePath: options.surfacePath,
 			...(options.socketPath ? { socketPath: options.socketPath } : {})
 		});
 		await ensureCompatibleDaemon(immediateClient);
@@ -69,7 +69,7 @@ export async function connectDaemonClient(
 		const retryClient = new DaemonClient();
 		try {
 			await retryClient.connect({
-				repoRoot: options.repoRoot,
+				surfacePath: options.surfacePath,
 				...(options.socketPath ? { socketPath: options.socketPath } : {})
 			});
 			await ensureCompatibleDaemon(retryClient);
@@ -100,10 +100,10 @@ export async function startDaemonProcess(
 	);
 
 	const child = spawn(startCommand.command, startCommand.args, {
-		cwd: options.repoRoot,
+		cwd: options.surfacePath,
 		env: {
 			...process.env,
-			MISSION_REPO_ROOT: options.repoRoot,
+			MISSION_SURFACE_PATH: options.surfacePath,
 			MISSION_DAEMON_LAUNCH_MODE: startCommand.launchMode,
 			...(runtimeFactoryModulePath
 				? { MISSION_RUNTIME_FACTORY_MODULE: runtimeFactoryModulePath }
@@ -235,7 +235,7 @@ async function stopIncompatibleDaemon(
 }
 
 async function waitForDaemonShutdown(options: ConnectDaemonClientOptions): Promise<void> {
-	const socketPath = resolveDaemonSocketPath(options.repoRoot, options.socketPath);
+	const socketPath = resolveDaemonSocketPath(options.socketPath);
 	const timeoutAt = Date.now() + 5000;
 	while (Date.now() < timeoutAt) {
 		if (!(await canConnectToSocket(socketPath))) {

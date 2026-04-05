@@ -2,6 +2,7 @@
 
 import { For, Show } from 'solid-js';
 import { cockpitTheme } from './cockpitTheme.js';
+import { progressConnectorTone, progressStateTone } from './progressStateTone.js';
 
 export type ProgressRailItemState = 'done' | 'active' | 'blocked' | 'pending';
 
@@ -77,27 +78,9 @@ function markerColor(state: ProgressRailItemState, selected: boolean): string {
 }
 
 function labelColor(state: ProgressRailItemState): string {
-	if (state === 'done') {
-		return cockpitTheme.success;
-	}
-	if (state === 'active') {
-		return cockpitTheme.warning;
-	}
-	if (state === 'blocked') {
-		return cockpitTheme.danger;
-	}
-	return cockpitTheme.secondaryText;
+	return progressStateTone(state);
 }
 
 function connectorColor(state: ProgressRailItemState): string {
-	if (state === 'done') {
-		return cockpitTheme.success;
-	}
-	if (state === 'active') {
-		return cockpitTheme.accent;
-	}
-	if (state === 'blocked') {
-		return cockpitTheme.danger;
-	}
-	return cockpitTheme.borderMuted;
+	return progressConnectorTone(state);
 }

@@ -1,13 +1,13 @@
 /**
  * @file apps/vscode-extension/src/MissionWorkspaceResolver.ts
- * @description Resolves the operational Mission repository root from the current VS Code workspace context.
+ * @description Resolves the operational Mission workspace root from the current VS Code workspace context.
  */
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
-	resolveGitControlRepoRoot,
+	resolveGitWorkspaceRoot,
 	resolveMissionWorkspaceContext,
 	type MissionWorkspaceContext
 } from '@flying-pillow/mission-core';
@@ -19,14 +19,14 @@ type WorkspaceCandidate = {
 };
 
 export type ResolvedMissionWorkspace = {
-	repoRoot: string;
+	workspaceRoot: string;
 	workspaceContext: MissionWorkspaceContext;
 	resolvedPath: string;
 };
 
 export class MissionWorkspaceResolver {
 	public static async resolveOperationalRoot(preferredUri?: vscode.Uri): Promise<string | undefined> {
-		return (await this.resolveWorkspaceContext(preferredUri))?.repoRoot;
+		return (await this.resolveWorkspaceContext(preferredUri))?.workspaceRoot;
 	}
 
 	public static async resolveWorkspaceContext(
@@ -36,33 +36,33 @@ export class MissionWorkspaceResolver {
 		for (const candidate of candidates) {
 			const configuredRoot = MissionSettings.getRootFolder(candidate.scope);
 			if (configuredRoot && (await this.pathExists(configuredRoot))) {
-				const repoRoot =
-					resolveGitControlRepoRoot(candidate.path)
-					?? resolveGitControlRepoRoot(configuredRoot)
+				const workspaceRoot =
+					resolveGitWorkspaceRoot(candidate.path)
+					?? resolveGitWorkspaceRoot(configuredRoot)
 					?? configuredRoot;
 				return {
-					repoRoot,
-					workspaceContext: resolveMissionWorkspaceContext(candidate.path, repoRoot),
+					workspaceRoot,
+					workspaceContext: resolveMissionWorkspaceContext(candidate.path, workspaceRoot),
 					resolvedPath: candidate.path
 				};
 			}
 
-			const controlGitRoot = resolveGitControlRepoRoot(candidate.path);
-			if (controlGitRoot) {
+			const controlGitWorkspaceRoot = resolveGitWorkspaceRoot(candidate.path);
+			if (controlGitWorkspaceRoot) {
 				return {
-					repoRoot: controlGitRoot,
-					workspaceContext: resolveMissionWorkspaceContext(candidate.path, controlGitRoot),
+					workspaceRoot: controlGitWorkspaceRoot,
+					workspaceContext: resolveMissionWorkspaceContext(candidate.path, controlGitWorkspaceRoot),
 					resolvedPath: candidate.path
 				};
 			}
 
-			const repoLocalRoot = await this.findAncestor(candidate.path, async (currentPath) =>
+			const localWorkspaceRoot = await this.findAncestor(candidate.path, async (currentPath) =>
 				this.pathExists(MissionSettings.resolveControlDirectoryPath(currentPath))
 			);
-			if (repoLocalRoot) {
+			if (localWorkspaceRoot) {
 				return {
-					repoRoot: repoLocalRoot,
-					workspaceContext: resolveMissionWorkspaceContext(candidate.path, repoLocalRoot),
+					workspaceRoot: localWorkspaceRoot,
+					workspaceContext: resolveMissionWorkspaceContext(candidate.path, localWorkspaceRoot),
 					resolvedPath: candidate.path
 				};
 			}
@@ -84,19 +84,19 @@ export class MissionWorkspaceResolver {
 			});
 			if (configuredMarkerRoot) {
 				return {
-					repoRoot: configuredMarkerRoot,
+					workspaceRoot: configuredMarkerRoot,
 					workspaceContext: resolveMissionWorkspaceContext(candidate.path, configuredMarkerRoot),
 					resolvedPath: candidate.path
 				};
 			}
 
-			const monorepoRoot = await this.findAncestor(candidate.path, async (currentPath) =>
+			const monorepoWorkspaceRoot = await this.findAncestor(candidate.path, async (currentPath) =>
 				this.pathExists(path.join(currentPath, 'pnpm-workspace.yaml'))
 			);
-			if (monorepoRoot) {
+			if (monorepoWorkspaceRoot) {
 				return {
-					repoRoot: monorepoRoot,
-					workspaceContext: resolveMissionWorkspaceContext(candidate.path, monorepoRoot),
+					workspaceRoot: monorepoWorkspaceRoot,
+					workspaceContext: resolveMissionWorkspaceContext(candidate.path, monorepoWorkspaceRoot),
 					resolvedPath: candidate.path
 				};
 			}
@@ -106,7 +106,7 @@ export class MissionWorkspaceResolver {
 			);
 			if (gitRoot) {
 				return {
-					repoRoot: gitRoot,
+					workspaceRoot: gitRoot,
 					workspaceContext: resolveMissionWorkspaceContext(candidate.path, gitRoot),
 					resolvedPath: candidate.path
 				};
@@ -118,7 +118,7 @@ export class MissionWorkspaceResolver {
 			return undefined;
 		}
 		return {
-			repoRoot: fallbackPath,
+			workspaceRoot: fallbackPath,
 			workspaceContext: resolveMissionWorkspaceContext(fallbackPath, fallbackPath),
 			resolvedPath: fallbackPath
 		};

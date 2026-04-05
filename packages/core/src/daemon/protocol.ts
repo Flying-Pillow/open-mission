@@ -7,7 +7,7 @@ import type {
 	MissionStatus,
 	MissionStageId,
 	TrackedIssueSummary
-	} from '../types.js';
+} from '../types.js';
 import type {
 	MissionAgentConsoleEvent,
 	MissionAgentConsoleState,
@@ -18,7 +18,7 @@ import type {
 	MissionAgentTurnRequest
 } from './MissionAgentRuntime.js';
 
-export const PROTOCOL_VERSION = 7;
+export const PROTOCOL_VERSION = 8;
 
 export type Method =
 	| 'ping'
@@ -50,7 +50,6 @@ export type Endpoint = {
 };
 
 export type Manifest = {
-	repoRoot: string;
 	pid: number;
 	startedAt: string;
 	protocolVersion: typeof PROTOCOL_VERSION;
@@ -59,7 +58,6 @@ export type Manifest = {
 
 export type Ping = {
 	ok: true;
-	repoRoot: string;
 	pid: number;
 	startedAt: string;
 	protocolVersion: typeof PROTOCOL_VERSION;
@@ -106,7 +104,7 @@ export type ControlMissionBootstrap = {
 };
 
 export type ControlSettingsUpdate = {
-	field: 'agentRunner' | 'defaultAgentMode' | 'defaultModel' | 'instructionsPath' | 'skillsPath';
+	field: 'agentRunner' | 'defaultAgentMode' | 'defaultModel' | 'cockpitTheme' | 'instructionsPath' | 'skillsPath';
 	value: string;
 };
 
@@ -157,34 +155,35 @@ export type ControlIssuesList = {
 
 export type Notification =
 	| {
-			type: 'mission.status';
-			missionId: string;
-			status: MissionStatus;
-	  }
+		type: 'mission.status';
+		missionId: string;
+		status: MissionStatus;
+	}
 	| {
-			type: 'session.console';
-			missionId: string;
-	sessionId: string;
-			event: MissionAgentConsoleEvent;
-	  }
+		type: 'session.console';
+		missionId: string;
+		sessionId: string;
+		event: MissionAgentConsoleEvent;
+	}
 	| {
-			type: 'session.event';
-			missionId: string;
-			sessionId: string;
-			event: MissionAgentEvent;
-	  }
+		type: 'session.event';
+		missionId: string;
+		sessionId: string;
+		event: MissionAgentEvent;
+	}
 	| {
-			type: 'session.lifecycle';
-			missionId: string;
-			sessionId: string;
-			phase: 'spawned' | 'active' | 'terminated';
-			lifecycleState: MissionAgentLifecycleState;
-	  };
+		type: 'session.lifecycle';
+		missionId: string;
+		sessionId: string;
+		phase: 'spawned' | 'active' | 'terminated';
+		lifecycleState: MissionAgentLifecycleState;
+	};
 
 export type Request = {
 	type: 'request';
 	id: string;
 	method: Method;
+	surfacePath?: string;
 	params?: unknown;
 };
 
@@ -193,15 +192,15 @@ export type SuccessResponse = {
 	id: string;
 	ok: true;
 	result:
-		| Ping
-		| CommandExecuteResult
-		| MissionStatus
-		| MissionGateResult
-		| MissionAgentConsoleState
-		| null
-		| MissionAgentSessionRecord
-		| MissionAgentSessionRecord[]
-		| TrackedIssueSummary[];
+	| Ping
+	| CommandExecuteResult
+	| MissionStatus
+	| MissionGateResult
+	| MissionAgentConsoleState
+	| null
+	| MissionAgentSessionRecord
+	| MissionAgentSessionRecord[]
+	| TrackedIssueSummary[];
 };
 
 export type ErrorResponse = {
@@ -210,6 +209,7 @@ export type ErrorResponse = {
 	ok: false;
 	error: {
 		message: string;
+		code?: string;
 	};
 };
 

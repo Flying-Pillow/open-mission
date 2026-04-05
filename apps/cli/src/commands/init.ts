@@ -6,11 +6,11 @@ import type { CommandContext } from './types.js';
 export async function runInit(context: CommandContext): Promise<void> {
 	const progress = spinner();
 	progress.start('Scaffolding Mission root');
-	const initialization = await initializeMissionRepository(context.repoRoot);
+	const initialization = await initializeMissionRepository(context.controlRoot);
 
 	progress.stop('Mission root ready');
 	note(
-		`control: ${path.relative(context.repoRoot, initialization.controlDirectoryPath)}\nsettings: ${path.relative(context.repoRoot, initialization.settingsPath)}\nworktrees: ${path.relative(context.repoRoot, path.join(initialization.controlDirectoryPath, 'worktrees'))}\nruntime: no default agent runtime configured`,
+		`control: ${path.relative(context.controlRoot, initialization.controlDirectoryPath)}\ndaemon settings: ${initialization.daemonSettingsPath}\nactive: ${path.relative(context.controlRoot, initialization.worktreesRoot)}\nruntime: no default agent runtime configured`,
 		'Workspace state'
 	);
 	outro('Mission repo scaffolding is ready.');

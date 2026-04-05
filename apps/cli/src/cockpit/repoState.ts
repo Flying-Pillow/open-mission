@@ -1,38 +1,41 @@
 import * as fs from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import {
+	getMissionDaemonSettingsPath,
 	getMissionDirectoryPath,
-	getMissionSettingsPath,
 	getMissionWorktreesPath,
-	readMissionRepoSettings,
-	type MissionRepoSettings
+	readMissionDaemonSettings,
+	type MissionDaemonSettings
 } from '@flying-pillow/mission-core';
 
 export type CockpitRepoState = {
-	repoRoot: string;
+	workspaceRoot: string;
 	missionDirectoryPath: string;
 	missionsRoot: string;
 	settingsPath: string;
 	isGitRepository: boolean;
 	currentBranch?: string;
 	isMissionInitialized: boolean;
-	settings?: MissionRepoSettings;
+	settings?: MissionDaemonSettings;
 	trackingEnabled: boolean;
 	hasDetachedHead: boolean;
 };
 
-export async function detectCockpitRepoState(repoRoot: string): Promise<CockpitRepoState> {
-	const missionDirectoryPath = getMissionDirectoryPath(repoRoot);
-	const missionsRoot = getMissionWorktreesPath(repoRoot);
-	const settingsPath = getMissionSettingsPath(repoRoot);
-	const settings = readMissionRepoSettings(repoRoot);
-	const isMissionInitialized = await pathExists(settingsPath);
-	const isGitRepository = runGit(repoRoot, ['rev-parse', '--is-inside-work-tree']) === 'true';
-	const rawBranch = isGitRepository ? runGit(repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD']) : undefined;
+export async function detectCockpitRepoState(workspaceRoot: string): Promise<CockpitRepoState> {
+	const missionDirectoryPath = getMissionDirectoryPath(workspaceRoot);
+	const missionsRoot = getMissionWorktreesPath(workspaceRoot);
+	const settingsPath = getMissionDaemonSettingsPath(workspaceRoot);
+	const settings = readMissionDaemonSettings(workspaceRoot);
+	const isMissionInitialized = await Promise.all([
+		pathExists(missionDirectoryPath),
+		pathExists(missionsRoot)
+	]).then(([hasMissionDirectory, hasMissionsRoot]) => hasMissionDirectory && hasMissionsRoot);
+	const isGitRepository = runGit(workspaceRoot, ['rev-parse', '--is-inside-work-tree']) === 'true';
+	const rawBranch = isGitRepository ? runGit(workspaceRoot, ['rev-parse', '--abbrev-ref', 'HEAD']) : undefined;
 	const currentBranch = rawBranch && rawBranch.length > 0 ? rawBranch : undefined;
 
 	return {
-		repoRoot,
+		workspaceRoot,
 		missionDirectoryPath,
 		missionsRoot,
 		settingsPath,
@@ -54,9 +57,9 @@ async function pathExists(candidatePath: string): Promise<boolean> {
 	}
 }
 
-function runGit(repoRoot: string, args: string[]): string | undefined {
+function runGit(workspaceRoot: string, args: string[]): string | undefined {
 	const result = spawnSync('git', args, {
-		cwd: repoRoot,
+		cwd: workspaceRoot,
 		encoding: 'utf8',
 		stdio: ['ignore', 'pipe', 'ignore']
 	});

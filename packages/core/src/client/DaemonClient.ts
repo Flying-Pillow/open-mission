@@ -25,15 +25,17 @@ export class DaemonClient implements MissionAgentDisposable {
 	private nextRequestId = 0;
 	private readonly pendingRequests = new Map<string, PendingRequest>();
 	private readonly eventEmitter = new MissionAgentEventEmitter<Notification>();
+	private surfacePath = '';
 
 	public readonly onDidEvent = this.eventEmitter.event;
 
-	public async connect(options: { repoRoot: string; socketPath?: string }): Promise<this> {
+	public async connect(options: { surfacePath: string; socketPath?: string }): Promise<this> {
+		this.surfacePath = options.surfacePath;
 		if (this.socket && !this.socket.destroyed) {
 			return this;
 		}
 
-		const socketPath = options.socketPath?.trim() || (await this.resolveSocketPath(options.repoRoot));
+		const socketPath = options.socketPath?.trim() || (await this.resolveSocketPath());
 		await new Promise<void>((resolve, reject) => {
 			const socket = net.createConnection(socketPath);
 			socket.setEncoding('utf8');
@@ -59,10 +61,12 @@ export class DaemonClient implements MissionAgentDisposable {
 		}
 
 		const id = `request-${String(++this.nextRequestId)}`;
+		const includeSurfacePath = shouldIncludeSurfacePath(method, params);
 		const request: Request = {
 			type: 'request',
 			id,
 			method,
+			...(includeSurfacePath ? { surfacePath: this.surfacePath } : {}),
 			...(params === undefined ? {} : { params })
 		};
 
@@ -140,8 +144,31 @@ export class DaemonClient implements MissionAgentDisposable {
 		this.pendingRequests.clear();
 	}
 
-	private async resolveSocketPath(repoRoot: string): Promise<string> {
-		const manifest = await readDaemonManifest(repoRoot);
-		return manifest?.endpoint.path ?? resolveDaemonSocketPath(repoRoot);
+	private async resolveSocketPath(): Promise<string> {
+		const manifest = await readDaemonManifest();
+		return manifest?.endpoint.path ?? resolveDaemonSocketPath();
 	}
+}
+
+function shouldIncludeSurfacePath(method: Method, params: unknown): boolean {
+	if (
+		method === 'control.status'
+		|| method === 'control.settings.update'
+		|| method === 'control.mission.bootstrap'
+		|| method === 'control.mission.start'
+		|| method === 'control.issues.list'
+	) {
+		return true;
+	}
+
+	if (method !== 'command.execute') {
+		return false;
+	}
+
+	if (!params || typeof params !== 'object' || !('selector' in params)) {
+		return true;
+	}
+
+	const selector = (params as { selector?: { missionId?: string } }).selector;
+	return !selector?.missionId;
 }

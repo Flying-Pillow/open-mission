@@ -38,7 +38,7 @@ The extension is a Mission cockpit surface backed by the Mission sidecar server.
 ## Workspace Settings
 
 - `mission.rootFolder`: optional explicit operational root folder. Supports `${workspaceFolder}` and `${PWD}`.
-- `mission.missionFolder`: mission content folder relative to the operational root. Default: `.mission/worktrees`.
+- `mission.missionFolder`: mission content folder relative to the operational root. Default: `.missions/active`.
 - `mission.skillsFolder`: skills folder relative to the operational root. Default: `.agents/skills`.
 
 Repository workspaces can override these defaults in `.vscode/settings.json`.

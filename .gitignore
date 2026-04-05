@@ -41,8 +41,10 @@ yarn-error.log*
 .env.local
 .env.*.local
 
-# Repo-local Mission runtime state
-.mission/worktrees/
+# Repo-local Mission state
+.missions/pending/
+.missions/active/
+.missions/completed/
 .vscode/*.sock
 
 # OS/editor files

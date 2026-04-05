@@ -3,15 +3,16 @@ import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import {
 	MISSION_ARTIFACTS,
 	MISSION_TASK_STAGE_DIRECTORIES,
-	type MissionProductKey,
+	type MissionArtifactKey,
 	type MissionStageId,
 	type MissionTaskAgent,
 	type MissionTaskStatus
 } from '../../types.js';
+import { getMissionArtifactDefinition } from '../../workflow/manifest.js';
 
 type ProductArtifactDefinition = {
 	kind: 'product';
-	key: MissionProductKey;
+	key: MissionArtifactKey;
 	body: string;
 	attributes?: Record<string, FrontmatterValue>;
 };
@@ -32,7 +33,7 @@ export class Artifact {
 	public constructor(
 		private readonly missionDir: string,
 		private readonly definition: ProductArtifactDefinition | TaskArtifactDefinition
-	) {}
+	) { }
 
 	public getFileName(): string {
 		return this.definition.kind === 'product'
@@ -42,10 +43,13 @@ export class Artifact {
 
 	public getRelativePath(): string {
 		if (this.definition.kind === 'product') {
-			return MISSION_ARTIFACTS[this.definition.key];
+			const definition = getMissionArtifactDefinition(this.definition.key);
+			return definition.stageId
+				? `flight-deck/${MISSION_TASK_STAGE_DIRECTORIES[definition.stageId]}/${MISSION_ARTIFACTS[this.definition.key]}`
+				: `flight-deck/${MISSION_ARTIFACTS[this.definition.key]}`;
 		}
 
-		return `tasks/${MISSION_TASK_STAGE_DIRECTORIES[this.definition.stageId]}/${this.definition.fileName}`;
+		return `flight-deck/${MISSION_TASK_STAGE_DIRECTORIES[this.definition.stageId]}/tasks/${this.definition.fileName}`;
 	}
 
 	public async exists(adapter: FilesystemAdapter): Promise<boolean> {

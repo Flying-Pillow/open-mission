@@ -2,6 +2,7 @@ import {
 	connectDaemonClient,
 	getControlStatus,
 	getMissionStatus,
+	readMissionDaemonSettings,
 	type MissionSelector,
 	resolveDaemonLaunchModeFromModule
 } from '@flying-pillow/mission-core';
@@ -51,16 +52,20 @@ export async function launchCockpit(context: CommandContext): Promise<void> {
 
 	const workspaceContext = resolveCockpitWorkspaceContext(context);
 	const selector = workspaceContext.selector;
-	const initialTheme: CockpitThemeName = 'ocean';
+	const configuredTheme = readMissionDaemonSettings(context.controlRoot)?.cockpitTheme;
+	const initialTheme: CockpitThemeName = configuredTheme === 'sand' || configuredTheme === 'mono' || configuredTheme === 'paper' || configuredTheme === 'ocean'
+		? configuredTheme
+		: 'ocean';
 	applyCockpitTheme(initialTheme);
 	const connect = async (nextSelector: MissionSelector = selector) => {
 		const client = await connectDaemonClient({
-			repoRoot: context.repoRoot,
+			surfacePath: context.launchCwd,
 			preferredLaunchMode: resolveDaemonLaunchModeFromModule(import.meta.url)
 		});
+		const discoveryStatus = await getControlStatus(client);
 		const status = nextSelector.missionId
 			? await getMissionStatus(client, nextSelector)
-			: await getControlStatus(client);
+			: discoveryStatus;
 		return {
 			client,
 			status,
@@ -128,7 +133,7 @@ async function runCockpitWithHmr(
 			stdio: 'inherit',
 			env: {
 				...process.env,
-				MISSION_REPO_ROOT: context.repoRoot,
+				MISSION_CONTROL_ROOT: context.controlRoot,
 				MISSION_LAUNCH_CWD: context.launchCwd
 			}
 		}

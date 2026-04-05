@@ -1,11 +1,11 @@
 import { spawn, spawnSync } from 'node:child_process';
 import type { MissionBrief, MissionType, TrackedIssueSummary } from '../types.js';
 
-export function resolveGitHubRepositoryFromWorkspace(repoRoot: string): string | undefined {
-	const remoteNames = runGitLines(repoRoot, ['remote']);
+export function resolveGitHubRepositoryFromWorkspace(workspaceRoot: string): string | undefined {
+	const remoteNames = runGitLines(workspaceRoot, ['remote']);
 	const orderedRemoteNames = ['origin', ...remoteNames.filter((name) => name !== 'origin')];
 	for (const remoteName of orderedRemoteNames) {
-		const remoteUrl = runGitOutput(repoRoot, ['remote', 'get-url', remoteName]);
+		const remoteUrl = runGitOutput(workspaceRoot, ['remote', 'get-url', remoteName]);
 		const repository = parseGitHubRepositoryFromRemote(remoteUrl);
 		if (repository) {
 			return repository;
@@ -40,9 +40,9 @@ function mapLabelsToMissionType(labels: string[]): MissionType | undefined {
 
 export class GitHubPlatformAdapter {
 	public constructor(
-		private readonly repoRoot: string,
+		private readonly workspaceRoot: string,
 		private readonly repository?: string
-	) {}
+	) { }
 
 	public async fetchIssue(issueId: string): Promise<MissionBrief> {
 		const payload = await this.runJsonProcess<GitHubIssuePayload>([
@@ -99,7 +99,7 @@ export class GitHubPlatformAdapter {
 	private async runJsonProcess<T>(args: string[]): Promise<T> {
 		return new Promise<T>((resolve, reject) => {
 			const child = spawn('gh', args, {
-				cwd: this.repoRoot,
+				cwd: this.workspaceRoot,
 				env: process.env,
 				stdio: ['ignore', 'pipe', 'pipe']
 			});
@@ -139,8 +139,8 @@ export class GitHubPlatformAdapter {
 	}
 }
 
-function runGitLines(repoRoot: string, args: string[]): string[] {
-	const output = runGitOutput(repoRoot, args);
+function runGitLines(workspaceRoot: string, args: string[]): string[] {
+	const output = runGitOutput(workspaceRoot, args);
 	if (!output) {
 		return [];
 	}
@@ -150,9 +150,9 @@ function runGitLines(repoRoot: string, args: string[]): string[] {
 		.filter(Boolean);
 }
 
-function runGitOutput(repoRoot: string, args: string[]): string {
+function runGitOutput(workspaceRoot: string, args: string[]): string {
 	const result = spawnSync('git', args, {
-		cwd: repoRoot,
+		cwd: workspaceRoot,
 		encoding: 'utf8',
 		stdio: ['ignore', 'pipe', 'ignore']
 	});

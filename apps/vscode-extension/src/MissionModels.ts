@@ -2,14 +2,14 @@ import type {
 	GateIntent,
 	MissionAgentConsoleEvent,
 	MissionAgentConsoleState,
-	MissionProductKey,
+	MissionArtifactKey,
 	MissionStageId,
 	MissionStatus,
 	TrackedIssueSummary
 } from '@flying-pillow/mission-core';
 import {
 	isGateIntent,
-	isMissionProductKey,
+	isMissionArtifactKey as isCoreMissionArtifactKey,
 	isMissionStageId as isCoreMissionStageId,
 	MISSION_ARTIFACTS,
 	MISSION_ARTIFACT_FILE_NAMES,
@@ -28,7 +28,6 @@ export {
 	MISSION_TRACKED_FILE_NAMES
 };
 
-export type MissionArtifactKey = MissionProductKey;
 export type MissionGateIntent = GateIntent;
 export type MissionMissionStatus = MissionStatus;
 export type MissionGitHubIssue = TrackedIssueSummary;
@@ -37,7 +36,7 @@ export type MissionOperatorConsoleEvent = MissionAgentConsoleEvent;
 
 export type MissionMissionSnapshot = {
 	status: MissionStatus;
-	workspaceRoot?: string;
+	controlRoot?: string;
 	errorMessage?: string;
 };
 
@@ -84,5 +83,5 @@ export function isMissionGateIntent(value: unknown): value is MissionGateIntent 
 }
 
 export function isMissionArtifactKey(value: unknown): value is MissionArtifactKey {
-	return isMissionProductKey(value);
+	return isCoreMissionArtifactKey(value);
 }

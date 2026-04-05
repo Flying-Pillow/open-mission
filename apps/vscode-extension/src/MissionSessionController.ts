@@ -260,13 +260,13 @@ export class MissionSessionController implements vscode.Disposable {
 }
 
 function defaultGateIntentForStage(stage: MissionStageId | undefined): MissionGateIntent {
-	if (stage === 'prd' || stage === 'spec' || stage === 'plan') {
+	if (stage === 'prd' || stage === 'spec') {
 		return 'implement';
 	}
 	if (stage === 'implementation') {
 		return 'verify';
 	}
-	if (stage === 'verification') {
+	if (stage === 'audit') {
 		return 'audit';
 	}
 	return 'deliver';

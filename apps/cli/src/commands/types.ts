@@ -1,5 +1,5 @@
 export type CommandContext = {
-	repoRoot: string;
+	controlRoot: string;
 	launchCwd: string;
 	args: string[];
 	json: boolean;

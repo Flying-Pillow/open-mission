@@ -1,8 +1,0 @@
-{
-  "trackingProvider": "github",
-  "instructionsPath": ".agents",
-  "skillsPath": ".agents/skills",
-  "agentRunner": "copilot",
-  "defaultAgentMode": "interactive",
-  "defaultModel": "gpt-5.4"
-}

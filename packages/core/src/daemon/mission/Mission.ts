@@ -18,18 +18,25 @@ import {
 	MISSION_ARTIFACTS,
 	MISSION_STAGES,
 	MISSION_TASK_STAGE_DIRECTORIES,
+	evaluateMissionStageStatusIntent,
+	evaluateMissionTaskLaunchEligibility,
+	evaluateMissionTaskStatusIntent,
+	getPrimaryMissionStageStatusIntent,
 	type MissionTaskUpdate,
+	type MissionStageControlState,
 	type MissionControlState,
 	type GateIntent,
 	type MissionDescriptor,
 	type MissionGateResult,
-	type MissionProductKey,
+	type MissionArtifactKey,
 	type MissionRecord,
 	type MissionCommandDescriptor,
 	type MissionCommandFlowDescriptor,
 	type MissionStageId,
 	type MissionStageStatus,
+	type MissionStageStatusIntent,
 	type MissionStatus,
+	type MissionTaskStatusIntent,
 	type MissionTaskState
 } from '../../types.js';
 import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
@@ -38,6 +45,7 @@ import { getDaemonSessionStatePath } from '../daemonPaths.js';
 type StageInventory = {
 	stage: MissionStageId;
 	directoryName: string;
+	status: MissionStageStatus['status'];
 	tasks: MissionTaskState[];
 	taskCount: number;
 	completedTaskCount: number;
@@ -84,14 +92,17 @@ export class Mission {
 	}
 
 	public getRecord(): MissionRecord {
+		const workspaceDir = this.adapter.getMissionWorkspacePath(this.missionDir);
+		const flightDeckDir = this.adapter.getMissionFlightDeckPath(this.missionDir);
 		return {
 			id: this.descriptor.missionId,
 			brief: { ...this.descriptor.brief },
-			missionDir: this.missionDir,
+			missionDir: workspaceDir,
+			missionRootDir: this.missionDir,
+			flightDeckDir,
 			branchRef: this.descriptor.branchRef,
 			createdAt: this.descriptor.createdAt,
 			stage: this.lastKnownStatus?.stage ?? 'prd',
-			...(this.lastKnownStatus?.deliveredAt ? { deliveredAt: this.lastKnownStatus.deliveredAt } : {}),
 			agentSessions: this.getAgentSessions()
 		};
 	}
@@ -282,9 +293,9 @@ export class Mission {
 		const stages = status.stages ?? [];
 		const errors: string[] = [];
 		const warnings: string[] = [];
-		const currentBranch = this.adapter.getCurrentBranch(this.missionDir);
+		const currentBranch = this.adapter.getCurrentBranch(this.adapter.getMissionWorkspacePath(this.missionDir));
 
-		if (status.deliveredAt) {
+		if (this.isDelivered(status.stages ?? [])) {
 			errors.push('This mission has already been delivered.');
 		}
 
@@ -299,12 +310,12 @@ export class Mission {
 					errors.push(`Intent '${intent}' requires stage 'implementation'. Current stage: '${status.stage ?? 'unknown'}'.`);
 				}
 				if (!this.arePreviousStagesComplete(stages, 'implementation')) {
-						errors.push('PRD, SPEC, and PLAN tasks must be complete before implementation actions are allowed.');
+					errors.push('PRD and SPEC tasks must be complete before implementation actions are allowed.');
 				}
 				break;
 			case 'verify':
-				if (status.stage !== 'verification') {
-					errors.push(`Intent 'verify' requires stage 'verification'. Current stage: '${status.stage ?? 'unknown'}'.`);
+				if (status.stage !== 'implementation') {
+					errors.push(`Intent 'verify' requires stage 'implementation'. Current stage: '${status.stage ?? 'unknown'}'.`);
 				}
 				if (!this.isStageComplete(stages, 'implementation')) {
 					errors.push('Implementation tasks must be complete before verification can begin.');
@@ -314,11 +325,14 @@ export class Mission {
 				if (status.stage !== 'audit') {
 					errors.push(`Intent 'audit' requires stage 'audit'. Current stage: '${status.stage ?? 'unknown'}'.`);
 				}
-				if (!this.isStageComplete(stages, 'verification')) {
-					errors.push('Verification tasks must be complete before audit can begin.');
+				if (!this.isStageComplete(stages, 'implementation')) {
+					errors.push('Implementation tasks must be complete before audit can begin.');
 				}
 				break;
 			case 'deliver':
+				if (status.stage !== 'delivery') {
+					errors.push(`Intent 'deliver' requires stage 'delivery'. Current stage: '${status.stage ?? 'unknown'}'.`);
+				}
 				if (!this.isStageComplete(stages, 'audit')) {
 					errors.push('Audit tasks must be complete before delivery.');
 				}
@@ -339,23 +353,20 @@ export class Mission {
 
 	public async transition(toStage: MissionStageId): Promise<MissionRecord> {
 		const status = await this.status();
-		if (status.deliveredAt) {
-			throw new Error('Delivered missions cannot change stage.');
-		}
+		const stage = this.requireStageStatus(status.stages ?? [], toStage);
+		const intent = getPrimaryMissionStageStatusIntent(stage.status);
+		await this.applyStageIntent(stage, intent, status.stages ?? []);
+		await this.status();
+		return this.getRecord();
+	}
 
-		const currentStage = status.stage ?? 'prd';
-		if (toStage !== currentStage) {
-			const stageState = this.createStage(currentStage);
-			if (!stageState.isAdjacentTransition(toStage)) {
-				throw new Error(`Invalid stage transition '${currentStage}' -> '${toStage}'.`);
-			}
-		}
-
-		if (!this.arePreviousStagesComplete(status.stages ?? [], toStage)) {
-			throw new Error(`All prior stage tasks must be done before entering '${toStage}'.`);
-		}
-
-		await this.activateStage(toStage);
+	public async updateStageState(
+		stageId: MissionStageId,
+		intent: MissionStageStatusIntent
+	): Promise<MissionRecord> {
+		const status = await this.status();
+		const stage = this.requireStageStatus(status.stages ?? [], stageId);
+		await this.applyStageIntent(stage, intent, status.stages ?? []);
 		await this.status();
 		return this.getRecord();
 	}
@@ -375,7 +386,13 @@ export class Mission {
 	public async updateTaskState(taskId: string, changes: MissionTaskUpdate): Promise<MissionTaskState> {
 		const task = await this.requireTaskState(taskId);
 		if (changes.status === 'active') {
-			await this.ensureTaskCanActivate(task);
+			this.ensureTaskStatusCanTransition(task, 'active');
+		}
+		if (changes.status === 'done') {
+			this.ensureTaskStatusCanTransition(task, 'done');
+		}
+		if (changes.status === 'blocked') {
+			this.ensureTaskStatusCanTransition(task, 'blocked');
 		}
 
 		await this.adapter.updateTaskState(task, changes);
@@ -394,6 +411,7 @@ export class Mission {
 		const activeTasks = this.resolveActiveTasks(currentStage);
 		const readyTasks = this.resolveReadyTasks(currentStage);
 		const productFiles = await this.collectProductFiles();
+		const delivered = this.isDelivered(stages);
 
 		return {
 			found: true,
@@ -402,16 +420,17 @@ export class Mission {
 			...(this.descriptor.brief.issueId !== undefined ? { issueId: this.descriptor.brief.issueId } : {}),
 			type: this.descriptor.brief.type,
 			stage: currentStageId,
-			...(controlState.deliveredAt ? { deliveredAt: controlState.deliveredAt } : {}),
 			branchRef: this.descriptor.branchRef,
-			missionDir: this.missionDir,
+			missionDir: this.adapter.getMissionWorkspacePath(this.missionDir),
+			missionRootDir: this.missionDir,
+			flightDeckDir: this.adapter.getMissionFlightDeckPath(this.missionDir),
 			productFiles,
 			...(activeTasks.length > 0 ? { activeTasks } : {}),
 			...(readyTasks.length > 0 ? { readyTasks } : {}),
 			stages,
 			agentSessions: this.getAgentSessions(),
 			recommendedCommand: this.buildRecommendedCommand(currentStageId, activeTasks, readyTasks),
-			availableCommands: this.buildAvailableCommands(stages, currentStageId, this.getAgentSessions(), controlState.deliveredAt)
+			availableCommands: this.buildAvailableCommands(stages, currentStageId, this.getAgentSessions(), delivered)
 		};
 	}
 
@@ -419,25 +438,13 @@ export class Mission {
 		stages: MissionStageStatus[],
 		currentStageId: MissionStageId,
 		sessions: MissionAgentSessionRecord[],
-		deliveredAt: string | undefined
+		delivered: boolean
 	): MissionCommandDescriptor[] {
-		const commands: MissionCommandDescriptor[] = [
-			{
-				id: 'mission.status',
-				label: 'Refresh mission status',
-				command: '/status',
-				scope: 'mission',
-				enabled: true,
-				flow: {
-					targetLabel: 'MISSION',
-					actionLabel: 'REFRESH',
-					steps: []
-				}
-			}
-		];
+		const commands: MissionCommandDescriptor[] = [];
 
 		const canDeliver =
-			!deliveredAt &&
+			!delivered &&
+			currentStageId === 'delivery' &&
 			this.isStageComplete(stages, 'audit') &&
 			stages.every((stage) => stage.completedTaskCount === stage.taskCount);
 		commands.push({
@@ -446,44 +453,133 @@ export class Mission {
 			command: '/deliver',
 			scope: 'mission',
 			enabled: canDeliver,
+			ui: {
+				toolbarLabel: 'DELIVER',
+				requiresConfirmation: true,
+				confirmationPrompt: 'Deliver this mission now?'
+			},
 			flow: {
 				targetLabel: 'MISSION',
 				actionLabel: 'DELIVER',
 				steps: []
 			},
-			...(canDeliver ? {} : { reason: deliveredAt ? 'Mission already delivered.' : 'Audit and all tasks must be complete.' })
+			...(canDeliver ? {} : { reason: delivered ? 'Mission already delivered.' : 'Audit must be complete and the mission must be in delivery.' })
 		});
 
 		for (const stage of stages) {
-			const canTransition =
-				!deliveredAt &&
-				stage.stage !== currentStageId &&
-				this.arePreviousStagesComplete(stages, stage.stage);
+			const stageIntent = getPrimaryMissionStageStatusIntent(stage.status);
+			const stageRule = this.evaluateStageStatusTransition(
+				stage,
+				delivered,
+				stageIntent,
+				stages
+			);
 			commands.push({
-				id: `stage.transition.${stage.stage}`,
-				label: `Transition to ${stage.stage}`,
-				command: `/transition ${stage.stage}`,
+				id: `stage.${stageIntent}.${stage.stage}`,
+				label: this.buildStageCommandLabel(stage.stage, stageIntent),
+				command:
+					stageIntent === 'start'
+						? `/stage start ${stage.stage}`
+						: `/stage restart ${stage.stage}`,
 				scope: 'stage',
 				targetId: stage.stage,
-				enabled: canTransition,
-				flow: this.buildStageTransitionFlow(stage.stage),
-				...(canTransition ? {} : { reason: deliveredAt ? 'Mission already delivered.' : 'Previous stages must be complete.' })
+				enabled: stageRule.enabled,
+				ui: {
+					toolbarLabel: stageIntent === 'start' ? 'START STAGE' : 'RESTART STAGE',
+					requiresConfirmation: true,
+					confirmationPrompt:
+						stageIntent === 'start'
+							? `Start ${stage.stage.toUpperCase()} stage?`
+							: `Restart ${stage.stage.toUpperCase()} stage and reset its tasks?`
+				},
+				flow: this.buildStageTransitionFlow(stage.stage, stageIntent),
+				...(stageRule.enabled ? {} : { reason: stageRule.reason })
 			});
 			for (const task of stage.tasks) {
-				const canLaunch = this.canLaunchTask(task, deliveredAt);
+				const activateRule = this.evaluateTaskStatusTransition(task, delivered, 'active');
+				commands.push({
+					id: `task.activate.${task.taskId}`,
+					label: `Set ${task.subject} active`,
+					command: '/task active',
+					scope: 'task',
+					targetId: task.taskId,
+					enabled: activateRule.enabled,
+					ui: {
+						toolbarLabel: 'START TASK',
+						requiresConfirmation: false
+					},
+					flow: {
+						targetLabel: 'TASK',
+						actionLabel: 'ACTIVE',
+						steps: []
+					},
+					...(activateRule.enabled ? {} : { reason: activateRule.reason })
+				});
+
+				const completeRule = this.evaluateTaskStatusTransition(task, delivered, 'done');
+				commands.push({
+					id: `task.complete.${task.taskId}`,
+					label: `Mark ${task.subject} done`,
+					command: '/task done',
+					scope: 'task',
+					targetId: task.taskId,
+					enabled: completeRule.enabled,
+					ui: {
+						toolbarLabel: 'COMPLETE TASK',
+						requiresConfirmation: true,
+						confirmationPrompt: 'Mark this task as done?'
+					},
+					flow: {
+						targetLabel: 'TASK',
+						actionLabel: 'DONE',
+						steps: []
+					},
+					...(completeRule.enabled ? {} : { reason: completeRule.reason })
+				});
+
+				const blockRule = this.evaluateTaskStatusTransition(task, delivered, 'blocked');
+				commands.push({
+					id: `task.block.${task.taskId}`,
+					label: `Mark ${task.subject} blocked`,
+					command: '/task blocked',
+					scope: 'task',
+					targetId: task.taskId,
+					enabled: blockRule.enabled,
+					ui: {
+						toolbarLabel: 'PAUSE TASK',
+						requiresConfirmation: true,
+						confirmationPrompt: 'Pause this task and mark it blocked?'
+					},
+					flow: {
+						targetLabel: 'TASK',
+						actionLabel: 'BLOCKED',
+						steps: []
+					},
+					...(blockRule.enabled ? {} : { reason: blockRule.reason })
+				});
+
+				const launchRule = evaluateMissionTaskLaunchEligibility({
+					currentStatus: task.status,
+					blockedBy: task.blockedBy,
+					delivered
+				});
 				commands.push({
 					id: `task.launch.${task.taskId}`,
 					label: `Launch agent for ${task.subject}`,
 					command: '/launch',
 					scope: 'task',
 					targetId: task.taskId,
-					enabled: canLaunch,
+					enabled: launchRule.enabled,
+					ui: {
+						toolbarLabel: 'START AGENT',
+						requiresConfirmation: false
+					},
 					flow: {
 						targetLabel: 'AGENT',
 						actionLabel: 'LAUNCH',
 						steps: []
 					},
-					...(canLaunch ? {} : { reason: this.taskLaunchBlockedReason(task, deliveredAt) })
+					...(launchRule.enabled ? {} : { reason: launchRule.reason })
 				});
 			}
 		}
@@ -500,6 +596,11 @@ export class Mission {
 				scope: 'session',
 				targetId: session.sessionId,
 				enabled: canControl,
+				ui: {
+					toolbarLabel: 'STOP AGENT',
+					requiresConfirmation: true,
+					confirmationPrompt: 'Stop the running agent session?'
+				},
 				flow: {
 					targetLabel: 'AGENT',
 					actionLabel: 'CANCEL',
@@ -514,6 +615,11 @@ export class Mission {
 				scope: 'session',
 				targetId: session.sessionId,
 				enabled: canControl,
+				ui: {
+					toolbarLabel: 'FORCE STOP',
+					requiresConfirmation: true,
+					confirmationPrompt: 'Force stop this agent session?'
+				},
 				flow: {
 					targetLabel: 'AGENT',
 					actionLabel: 'TERMINATE',
@@ -526,53 +632,69 @@ export class Mission {
 		return commands;
 	}
 
-	private buildStageTransitionFlow(stageId: MissionStageId): MissionCommandFlowDescriptor {
+	private buildStageTransitionFlow(
+		stageId: MissionStageId,
+		intent: MissionStageStatusIntent
+	): MissionCommandFlowDescriptor {
 		return {
 			targetLabel: stageId.toUpperCase(),
-			actionLabel: 'APPROVE',
+			actionLabel: intent === 'start' ? 'START' : 'RESTART',
 			steps: []
 		};
 	}
 
-	private canLaunchTask(task: MissionTaskState, deliveredAt: string | undefined): boolean {
-		if (deliveredAt) {
-			return false;
-		}
-		if (task.status === 'done' || task.status === 'blocked') {
-			return false;
-		}
-		if (task.blockedBy.length > 0) {
-			return false;
-		}
-		return true;
+	private buildStageCommandLabel(
+		stageId: MissionStageId,
+		intent: MissionStageStatusIntent
+	): string {
+		return intent === 'start' ? `Start ${stageId}` : `Restart ${stageId}`;
 	}
 
-	private taskLaunchBlockedReason(task: MissionTaskState, deliveredAt: string | undefined): string {
-		if (deliveredAt) {
-			return 'Mission already delivered.';
-		}
-		if (task.status === 'done') {
-			return 'Task is already complete.';
-		}
-		if (task.status === 'blocked') {
-			return 'Task is blocked.';
-		}
-		if (task.blockedBy.length > 0) {
-			return `Waiting on ${task.blockedBy.join(', ')}.`;
-		}
-		return 'Task cannot be launched in the current state.';
+	private evaluateStageStatusTransition(
+		stage: MissionStageStatus,
+		delivered: boolean,
+		intent: MissionStageStatusIntent,
+		stages: MissionStageStatus[]
+	): { enabled: boolean; reason?: string } {
+		const evaluation = evaluateMissionStageStatusIntent(intent, {
+			currentStatus: stage.status,
+			previousStagesComplete: this.arePreviousStagesComplete(stages, stage.stage),
+			delivered
+		});
+		return {
+			enabled: evaluation.enabled,
+			...(evaluation.reason ? { reason: evaluation.reason } : {})
+		};
+	}
+
+	private evaluateTaskStatusTransition(
+		task: MissionTaskState,
+		delivered: boolean,
+		intent: MissionTaskStatusIntent
+	): { enabled: boolean; reason?: string } {
+		const evaluation = evaluateMissionTaskStatusIntent(intent, {
+			currentStatus: task.status,
+			blockedBy: task.blockedBy,
+			delivered
+		});
+		return {
+			enabled: evaluation.enabled,
+			...(evaluation.reason ? { reason: evaluation.reason } : {})
+		};
 	}
 
 	private async readStageInventory(
 		stage: MissionStageId,
 		controlState: MissionControlState
 	): Promise<StageInventory> {
+		const stageState = this.getStageControlState(controlState, stage);
 		const directoryName = this.createStage(stage).getDirectoryName();
 		const tasks = await this.adapter.listTaskStates(this.missionDir, stage, controlState);
 
 		return {
 			stage,
 			directoryName,
+			status: stageState?.status ?? 'pending',
 			tasks,
 			taskCount: tasks.length,
 			completedTaskCount: tasks.filter((task) => task.status === 'done').length
@@ -580,15 +702,17 @@ export class Mission {
 	}
 
 	private resolveCurrentStage(inventories: StageInventory[]): MissionStageId {
-		const firstIncomplete = inventories.find(
-			(inventory) => inventory.taskCount > 0 && inventory.completedTaskCount < inventory.taskCount
-		);
-		if (firstIncomplete) {
-			return firstIncomplete.stage;
+		const activeStage = inventories.find((inventory) => inventory.status === 'active');
+		if (activeStage) {
+			return activeStage.stage;
 		}
 
-		const lastPopulated = [...inventories].reverse().find((inventory) => inventory.taskCount > 0);
-		return lastPopulated?.stage ?? 'prd';
+		const pendingStage = inventories.find((inventory) => inventory.status === 'pending');
+		if (pendingStage) {
+			return pendingStage.stage;
+		}
+
+		return inventories[inventories.length - 1]?.stage ?? 'prd';
 	}
 
 	private toStageStatus(
@@ -596,32 +720,15 @@ export class Mission {
 		currentStageId: MissionStageId,
 		stageIndex: number
 	): MissionStageStatus {
-		const currentIndex = MISSION_STAGES.indexOf(currentStageId);
-		const isCurrentStage = inventory.stage === currentStageId;
+		void currentStageId;
+		void stageIndex;
 		const activeTasks = inventory.tasks.filter((task) => task.status === 'active');
 		const readyTasks = inventory.tasks.filter((task) => this.isTaskReady(task));
-		const hasBlockedPendingTask = inventory.tasks.some(
-			(task) => task.status === 'blocked' || (task.status === 'todo' && task.blockedBy.length > 0)
-		);
-		const status =
-			inventory.taskCount === 0
-				? stageIndex < currentIndex
-					? 'done'
-					: 'pending'
-				: inventory.completedTaskCount === inventory.taskCount
-					? 'done'
-					: isCurrentStage
-						? hasBlockedPendingTask && activeTasks.length === 0 && readyTasks.length === 0
-							? 'blocked'
-							: 'active'
-						: stageIndex < currentIndex
-							? 'done'
-							: 'pending';
 
 		return {
 			stage: inventory.stage,
 			directoryName: inventory.directoryName,
-			status,
+			status: inventory.status,
 			taskCount: inventory.taskCount,
 			completedTaskCount: inventory.completedTaskCount,
 			activeTaskIds: activeTasks.map((task) => task.taskId),
@@ -651,7 +758,7 @@ export class Mission {
 		activeTasks: MissionTaskState[],
 		readyTasks: MissionTaskState[]
 	): string {
-		if (this.lastKnownStatus?.deliveredAt) {
+		if (this.isDelivered(this.lastKnownStatus?.stages ?? [])) {
 			return 'Mission delivered.';
 		}
 
@@ -674,19 +781,25 @@ export class Mission {
 				: `Activate one or more ready tasks through Mission controls, starting with ${leadTask?.relativePath}.`;
 		}
 
+		if (stage === 'delivery') {
+			return 'Complete DELIVERY.md and deliver the mission.';
+		}
+
 		return `Review tasks/${MISSION_TASK_STAGE_DIRECTORIES[stage]} and add the next task file.`;
 	}
 
-	private async collectProductFiles(): Promise<Partial<Record<MissionProductKey, string>>> {
+	private async collectProductFiles(): Promise<Partial<Record<MissionArtifactKey, string>>> {
 		const entries = await Promise.all(
-			(Object.keys(MISSION_ARTIFACTS) as MissionProductKey[]).map(async (artifact) => {
-				const filePath = path.join(this.missionDir, MISSION_ARTIFACTS[artifact]);
+			(Object.keys(MISSION_ARTIFACTS) as MissionArtifactKey[]).map(async (artifact) => {
+				const filePath = await this.adapter.readArtifactRecord(this.missionDir, artifact).then(
+					(record) => record?.filePath
+				);
 				const exists = await this.adapter.artifactExists(this.missionDir, artifact);
-				return exists ? ([artifact, filePath] as const) : undefined;
+				return exists && filePath ? ([artifact, filePath] as const) : undefined;
 			})
 		);
 
-		const result: Partial<Record<MissionProductKey, string>> = {};
+		const result: Partial<Record<MissionArtifactKey, string>> = {};
 		for (const entry of entries) {
 			if (!entry) {
 				continue;
@@ -718,19 +831,64 @@ export class Mission {
 
 	private isStageComplete(stages: MissionStageStatus[], targetStage: MissionStageId): boolean {
 		const stage = stages.find((candidate) => candidate.stage === targetStage);
-		return stage !== undefined && stage.completedTaskCount === stage.taskCount;
+		return stage !== undefined && stage.status === 'done';
+	}
+
+	private getStageControlState(
+		controlState: MissionControlState,
+		stageId: MissionStageId
+	): MissionStageControlState | undefined {
+		return controlState.stages.find((stage) => stage.id === stageId);
+	}
+
+	private isDelivered(stages: MissionStageStatus[]): boolean {
+		return stages.some((stage) => stage.stage === 'delivery' && stage.status === 'done');
+	}
+
+	private requireStageStatus(
+		stages: MissionStageStatus[],
+		stageId: MissionStageId
+	): MissionStageStatus {
+		const stage = stages.find((candidate) => candidate.stage === stageId);
+		if (!stage) {
+			throw new Error(`Mission stage '${stageId}' does not exist.`);
+		}
+		return stage;
+	}
+
+	private async applyStageIntent(
+		stage: MissionStageStatus,
+		intent: MissionStageStatusIntent,
+		stages: MissionStageStatus[]
+	): Promise<void> {
+		this.ensureStageStatusCanTransition(stage, intent, stages);
+		if (intent === 'restart') {
+			await this.resetStageTasks(stage.stage);
+		}
+		await this.activateStage(stage.stage);
 	}
 
 	private async activateStage(stageId: MissionStageId): Promise<void> {
 		await this.createStage(stageId).enter(this.adapter, { activateNextTask: true });
+		await this.adapter.activateMissionStage(this.missionDir, stageId);
+	}
+
+	private async resetStageTasks(stageId: MissionStageId): Promise<void> {
+		const tasks = await this.adapter.listTaskStates(this.missionDir, stageId);
+		for (const task of tasks) {
+			await this.adapter.updateTaskState(task, {
+				status: 'todo',
+				retries: 0
+			});
+		}
 	}
 
 	private createStage(stageId: MissionStageId): Stage {
-		return new Stage(this.descriptor, stageId, Boolean(this.lastKnownStatus?.deliveredAt));
+		return new Stage(this.descriptor, stageId, this.isDelivered(this.lastKnownStatus?.stages ?? []));
 	}
 
 	private getAgentSessionsFilePath(): string {
-		return getDaemonSessionStatePath(this.adapter.getRepoRoot(), this.descriptor.missionId);
+		return getDaemonSessionStatePath(this.adapter.getWorkspaceRoot(), this.descriptor.missionId);
 	}
 
 	private async readPersistedAgentSessions(): Promise<MissionAgentSessionRecord[]> {
@@ -774,18 +932,33 @@ export class Mission {
 		return task.status === 'todo' && task.blockedBy.length === 0;
 	}
 
-	private async ensureTaskCanActivate(task: MissionTaskState): Promise<void> {
-		if (task.status === 'done') {
-			throw new Error(`Mission task '${task.taskId}' is already complete.`);
-		}
-
-		if (task.status === 'blocked') {
-			throw new Error(`Mission task '${task.taskId}' is manually blocked.`);
-		}
-
-		if (task.blockedBy.length > 0) {
+	private ensureTaskStatusCanTransition(
+		task: MissionTaskState,
+		intent: MissionTaskStatusIntent
+	): void {
+		const delivered = this.isDelivered(this.lastKnownStatus?.stages ?? []);
+		const evaluation = this.evaluateTaskStatusTransition(task, delivered, intent);
+		if (!evaluation.enabled) {
 			throw new Error(
-				`Mission task '${task.taskId}' is waiting on: ${task.blockedBy.join(', ')}.`
+				evaluation.reason
+					? `Mission task '${task.taskId}' cannot transition: ${evaluation.reason}`
+					: `Mission task '${task.taskId}' cannot transition via '${intent}'.`
+			);
+		}
+	}
+
+	private ensureStageStatusCanTransition(
+		stage: MissionStageStatus,
+		intent: MissionStageStatusIntent,
+		stages: MissionStageStatus[]
+	): void {
+		const delivered = this.isDelivered(this.lastKnownStatus?.stages ?? stages);
+		const evaluation = this.evaluateStageStatusTransition(stage, delivered, intent, stages);
+		if (!evaluation.enabled) {
+			throw new Error(
+				evaluation.reason
+					? `Mission stage '${stage.stage}' cannot transition: ${evaluation.reason}`
+					: `Mission stage '${stage.stage}' cannot transition via '${intent}'.`
 			);
 		}
 	}
@@ -820,7 +993,7 @@ export class Mission {
 			return task;
 		}
 
-		await this.ensureTaskCanActivate(task);
+		this.ensureTaskStatusCanTransition(task, 'active');
 		await this.adapter.updateTaskState(task, { status: 'active' });
 		await this.status();
 		return this.requireTaskState(taskId);
@@ -834,7 +1007,9 @@ export class Mission {
 			requiredSkills: [],
 			dependsOn: [...task.dependsOn],
 			...(this.descriptor.missionId ? { missionId: this.descriptor.missionId } : {}),
-			...(this.missionDir ? { missionDir: this.missionDir } : {}),
+			...(this.adapter.getMissionWorkspacePath(this.missionDir)
+				? { missionDir: this.adapter.getMissionWorkspacePath(this.missionDir) }
+				: {}),
 			...(task.stage ? { stage: task.stage } : {}),
 			...(task.taskId ? { taskId: task.taskId } : {}),
 			...(task.subject ? { taskTitle: task.subject } : {}),

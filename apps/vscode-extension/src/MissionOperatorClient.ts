@@ -27,10 +27,10 @@ export class MissionOperatorClient implements vscode.Disposable {
 	private readonly missionStatusEmitter = new vscode.EventEmitter<MissionStatus>();
 	private readonly notificationEmitter = new vscode.EventEmitter<Notification>();
 	private lastStatus?: MissionStatus;
-	private connectedRepoRoot?: string;
+	private connectedWorkspaceRoot?: string;
 	private selectorState: MissionSelector = {};
 
-	public constructor(private readonly outputChannel: vscode.OutputChannel) {}
+	public constructor(private readonly outputChannel: vscode.OutputChannel) { }
 
 	public readonly onDidMissionStatusChange = this.missionStatusEmitter.event;
 	public readonly onDidNotification = this.notificationEmitter.event;
@@ -40,7 +40,7 @@ export class MissionOperatorClient implements vscode.Disposable {
 		this.daemonClientSubscription = undefined;
 		this.daemonClient?.dispose();
 		this.daemonClient = undefined;
-		this.connectedRepoRoot = undefined;
+		this.connectedWorkspaceRoot = undefined;
 		this.selectorState = {};
 		this.missionStatusEmitter.dispose();
 		this.notificationEmitter.dispose();
@@ -58,9 +58,10 @@ export class MissionOperatorClient implements vscode.Disposable {
 				? workspaceResolution.workspaceContext.missionId
 				: undefined;
 		const missionId = workspaceMissionId ?? this.selectorState.missionId ?? this.lastStatus?.missionId;
+		const discoveryStatus = await getControlStatus(client);
 		const status = missionId
 			? await getMissionStatus(client, { missionId })
-			: await getControlStatus(client);
+			: discoveryStatus;
 		this.updateStatus(status);
 		return status;
 	}
@@ -109,12 +110,12 @@ export class MissionOperatorClient implements vscode.Disposable {
 
 	private async getClient(): Promise<DaemonClient> {
 		const workspaceResolution = await MissionWorkspaceResolver.resolveWorkspaceContext();
-		const repoRoot = workspaceResolution?.repoRoot;
-		if (!repoRoot) {
+		const workspaceRoot = workspaceResolution?.workspaceRoot;
+		if (!workspaceRoot) {
 			throw new Error('Mission could not resolve an operational workspace root.');
 		}
 
-		if (this.daemonClient && this.connectedRepoRoot === repoRoot) {
+		if (this.daemonClient && this.connectedWorkspaceRoot === workspaceRoot) {
 			return this.daemonClient;
 		}
 
@@ -123,16 +124,16 @@ export class MissionOperatorClient implements vscode.Disposable {
 			this.daemonClientSubscription = undefined;
 			this.daemonClient.dispose();
 			this.daemonClient = undefined;
-			this.connectedRepoRoot = undefined;
+			this.connectedWorkspaceRoot = undefined;
 			this.selectorState = {};
 			this.lastStatus = undefined;
 		}
 
 		this.outputChannel.appendLine(
-			`Mission connecting daemon client for ${repoRoot} (${workspaceResolution.workspaceContext.kind === 'mission-worktree' ? `worktree ${workspaceResolution.workspaceContext.missionId}` : 'control-root'}).`
+			`Mission connecting daemon client for ${workspaceRoot} (${workspaceResolution.workspaceContext.kind === 'mission-worktree' ? `worktree ${workspaceResolution.workspaceContext.missionId}` : 'control-root'}).`
 		);
 		const daemonClient = await connectDaemonClient({
-			repoRoot,
+			surfacePath: workspaceResolution.resolvedPath,
 			preferredLaunchMode: resolveDaemonLaunchModeFromModule(import.meta.url)
 		});
 		this.daemonClientSubscription = daemonClient.onDidEvent((event) => {
@@ -161,7 +162,7 @@ export class MissionOperatorClient implements vscode.Disposable {
 			}
 		});
 		this.daemonClient = daemonClient;
-		this.connectedRepoRoot = repoRoot;
+		this.connectedWorkspaceRoot = workspaceRoot;
 		return daemonClient;
 	}
 

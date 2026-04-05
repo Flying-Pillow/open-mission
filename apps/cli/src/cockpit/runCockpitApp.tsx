@@ -27,28 +27,34 @@ import {
 	bootstrapMissionFromIssue,
 	executeCommand as executeDaemonOperation,
 	evaluateMissionGate,
-	getMissionStatus,
 	getSessionConsoleState,
-	launchTaskSession,
 	listOpenGitHubIssues,
 	sendSessionInput,
 	selectorFromStatus,
+	updateControlSetting,
 } from '@flying-pillow/mission-core';
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from '@opentui/solid';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSXElement, untrack } from 'solid-js';
 import { CockpitScreen } from './components/CockpitScreen.js';
+import type { CommandToolbarItem } from './components/CommandDock.js';
 import {
 	applyCockpitTheme,
 	cockpitThemes,
 	type CockpitThemeName,
 	isCockpitThemeName
 } from './components/cockpitTheme.js';
-import type { ConsolePanelContent, ConsolePanelTab } from './components/ConsolePanel.js';
+import { type ConsolePanelContent, type ConsolePanelTab } from './components/ConsolePanel.js';
 import { cockpitTheme } from './components/cockpitTheme.js';
 import type { ProgressRailItem, ProgressRailItemState } from './components/ProgressRail.js';
 import { ExpandedCommandComposer, type ComposerTab } from './components/ExpandedCommandComposer.js';
 import { FlowSummaryPanel } from './components/FlowSummaryPanel.js';
 import { SelectPanel } from './components/SelectPanel.js';
+import {
+	MissionTreePanel,
+	type MissionTreeStageNode,
+	type MissionTreeTaskNode,
+	type MissionTreeSessionNode
+} from './components/MissionTreePanel.js';
 import type { CommandItem, FocusArea, SelectItem } from './components/types.js';
 
 type CockpitConnection = {
@@ -71,7 +77,48 @@ type CockpitShellProps = RunCockpitAppOptions;
 type DaemonState = 'connected' | 'degraded' | 'booting';
 type CockpitMode = 'setup' | 'root' | 'mission';
 type PickerMode = 'command-select' | 'command-flow';
-type CenterPanelMode = 'console' | 'command-select' | 'command-flow' | 'command-flow-editor';
+type CenterPanelMode = 'console' | 'console-fullscreen' | 'command-select' | 'command-flow' | 'command-flow-editor';
+type CockpitLayoutRoute = {
+	layout: 'split' | 'overlay';
+	centerPanelMode: CenterPanelMode;
+};
+
+function resolveCockpitLayoutRoute(options: {
+	showCommandPicker: boolean;
+	showCommandFlow: boolean;
+	isExpandedCommandFlowTextStep: boolean;
+	consoleFullscreen: boolean;
+}): CockpitLayoutRoute {
+	if (options.isExpandedCommandFlowTextStep) {
+		return {
+			layout: 'overlay',
+			centerPanelMode: 'command-flow-editor'
+		};
+	}
+	if (options.showCommandFlow) {
+		return {
+			layout: 'split',
+			centerPanelMode: 'command-flow'
+		};
+	}
+	if (options.showCommandPicker) {
+		return {
+			layout: 'split',
+			centerPanelMode: 'command-select'
+		};
+	}
+	if (options.consoleFullscreen) {
+		return {
+			layout: 'overlay',
+			centerPanelMode: 'console-fullscreen'
+		};
+	}
+	return {
+		layout: 'split',
+		centerPanelMode: 'console'
+	};
+}
+
 type CommandFlowSelectionValue = {
 	kind: 'selection';
 	stepId: string;
@@ -84,6 +131,7 @@ type ConfiguredControlAgentSettings = {
 	agentRunner?: string;
 	defaultAgentMode?: string;
 	defaultModel?: string;
+	cockpitTheme?: string;
 	instructionsPath?: string;
 	skillsPath?: string;
 };
@@ -169,14 +217,28 @@ type ConsoleTabDescriptor =
 		id: string;
 		label: string;
 		kind: 'control';
-	  }
-	| {
-		id: string;
-		label: string;
-		kind: 'daemon';
 	  };
 
-const missionFocusOrder: FocusArea[] = ['header', 'stages', 'tasks', 'sessions', 'command'];
+type TreeTargetDescriptor = {
+	id: string;
+	title: string;
+	kind: 'stage' | 'stage-artifact' | 'task' | 'task-artifact' | 'session';
+	collapsible: boolean;
+	tabId?: string;
+	stageId?: MissionStageId;
+	taskId?: string;
+	sessionId?: string;
+};
+
+type TreeTargetKind = TreeTargetDescriptor['kind'];
+
+type CommandTargetContext = {
+	stageId: MissionStageId | undefined;
+	taskId: string | undefined;
+	sessionId: string | undefined;
+};
+
+const missionFocusOrder: FocusArea[] = ['header', 'tree', 'sessions', 'command'];
 const controlFocusOrder: FocusArea[] = ['header', 'command'];
 
 export async function runCockpitApp(options: RunCockpitAppOptions): Promise<void> {
@@ -228,19 +290,25 @@ function MissionCockpitApp({
 		pickPreferredSessionId(initialConnection?.status.agentSessions ?? [], undefined)
 	);
 	const [selectedConsoleTabId, setSelectedConsoleTabId] = createSignal<string | undefined>();
+	const [selectedTreeTargetId, setSelectedTreeTargetId] = createSignal<string | undefined>();
+	const [collapsedTreeNodeIds, setCollapsedTreeNodeIds] = createSignal<Set<string>>(new Set<string>());
+	const [collapseDefaultsMissionId, setCollapseDefaultsMissionId] = createSignal<string | undefined>();
 	const [consoleReloadNonce, setConsoleReloadNonce] = createSignal<number>(0);
 	const [selectedThemeName, setSelectedThemeName] = createSignal<CockpitThemeName>(initialTheme);
 	const [commandFlow, setCommandFlow] = createSignal<CommandFlowState | undefined>();
 	const [commandFlowSelectionDraft, setCommandFlowSelectionDraft] = createSignal<string[]>([]);
 	const [commandFlowTextValue, setCommandFlowTextValue] = createSignal<string>('');
 	const [expandedComposerTab, setExpandedComposerTab] = createSignal<ComposerTab>('write');
-	const [lastEvent, setLastEvent] = createSignal<string>('none');
 	const [fallbackGitHubUser, setFallbackGitHubUser] = createSignal<string | undefined>();
 	const [isGitHubUserProbeInFlight, setIsGitHubUserProbeInFlight] = createSignal<boolean>(false);
 	const [fallbackControlBranch, setFallbackControlBranch] = createSignal<string | undefined>();
 	const [isControlBranchProbeInFlight, setIsControlBranchProbeInFlight] = createSignal<boolean>(false);
 	const [knownAvailableMissions, setKnownAvailableMissions] = createSignal<MissionStatus['availableMissions']>([]);
 	const [selectedHeaderTabId, setSelectedHeaderTabId] = createSignal<string | undefined>();
+	const [isConsoleFullscreen, setIsConsoleFullscreen] = createSignal<boolean>(false);
+	const [selectedToolbarCommandId, setSelectedToolbarCommandId] = createSignal<string | undefined>();
+	const [confirmingToolbarCommandId, setConfirmingToolbarCommandId] = createSignal<string | undefined>();
+	const [toolbarConfirmationChoice, setToolbarConfirmationChoice] = createSignal<'confirm' | 'cancel'>('confirm');
 	const client = createMemo(() => connection()?.client);
 	const currentMissionId = createMemo(() => selector().missionId ?? status().missionId);
 	const controlStatus = createMemo(() => status().control);
@@ -272,9 +340,6 @@ function MissionCockpitApp({
 			});
 	});
 	const visibleSessions = createMemo(() => sessionsForTask());
-	const currentTask = createMemo(() =>
-		selectedTask() ?? status().activeTasks?.[0] ?? status().readyTasks?.[0]
-	);
 	const availableConsoleHeight = createMemo(() => Math.max(terminal().height - 26, 8));
 	const stageItems = createMemo<ProgressRailItem[]>(() =>
 		stages().map((stage) => ({
@@ -355,14 +420,14 @@ function MissionCockpitApp({
 		return buildCommandFlowSummaryItems(flow.steps);
 	});
 	const headerPanelTitle = createMemo(() => {
-		const repoLabel = resolveHeaderRepoLabel(status().control, workspaceContext.repoRoot);
+		const workspaceLabel = resolveHeaderWorkspaceLabel(status().control, workspaceContext.workspaceRoot);
 		if (cockpitMode() === 'setup') {
-			return `SETUP ${repoLabel}`;
+			return `SETUP ${workspaceLabel}`;
 		}
 		if (cockpitMode() === 'root') {
-			return repoLabel;
+			return workspaceLabel;
 		}
-		return repoLabel;
+		return workspaceLabel;
 	});
 	const headerTabs = createMemo<HeaderTab[]>(() =>
 		buildHeaderTabs(status(), knownAvailableMissions())
@@ -373,63 +438,58 @@ function MissionCockpitApp({
 		return missionId ? `mission:${missionId}` : 'control';
 	});
 	const headerStatusLines = createMemo(() =>
-		buildHeaderStatusLines({
-			mode: cockpitMode(),
-			status: status(),
-			lastEvent: lastEvent(),
-			fallbackControlBranch: fallbackControlBranch(),
-			workspaceContext,
-			selectedTaskLabel: selectedTask()?.subject
-		})
+		buildHeaderStatusLines(status(), workspaceContext.workspaceRoot)
 	);
 	const headerFooterBadges = createMemo(() =>
 		buildHeaderFooterBadges({
 			mode: cockpitMode(),
 			status: status(),
 			daemonState: daemonState(),
-			fallbackGitHubUser: fallbackGitHubUser(),
-			workspaceContext,
-			selectedStageLabel: selectedStage()?.stage ?? status().stage,
-			selectedTaskLabel: selectedTask()?.subject
+			fallbackGitHubUser: fallbackGitHubUser()
 		})
 	);
-	const availableCommands = createMemo<MissionCommandDescriptor[]>(() => {
-		const filtered = (status().availableCommands ?? [])
-			.filter((command) => {
-			if (command.scope === 'mission') {
-				return true;
-			}
-			if (command.scope === 'stage') {
-				return command.targetId === selectedStageId();
-			}
-			if (command.scope === 'task') {
-				return command.targetId === selectedTaskId();
-			}
-			if (command.scope === 'session') {
-				return command.targetId === selectedSessionId();
-			}
-			return false;
-			})
-			.filter((command) => isCommandVisible(command, cockpitMode(), workspaceContext.kind));
-		return [
-			...filtered,
-			...(workspaceContext.kind === 'control-root' && cockpitMode() === 'mission'
-				? [rootCommandDescriptor]
-				: []),
-			themeCommandDescriptor
-		];
+	const commandTargetContext = createMemo<CommandTargetContext>(() => {
+		return {
+			stageId: selectedStageId(),
+			taskId: selectedTaskId() || undefined,
+			sessionId: selectedSessionId()
+		};
 	});
-	const availableCommandByCommand = createMemo(() => {
+	const availableCommands = createMemo<MissionCommandDescriptor[]>(() =>
+		resolveAvailableCommandsForContext(status().availableCommands ?? [], commandTargetContext())
+	);
+	const availableCommandById = createMemo(() => {
 		const entries = new Map<string, MissionCommandDescriptor>();
 		for (const command of availableCommands()) {
-			if (!entries.has(command.command)) {
-				entries.set(command.command, command);
-			}
+			entries.set(command.id, command);
 		}
 		return entries;
 	});
+	const toolbarCommandDescriptors = createMemo<MissionCommandDescriptor[]>(() =>
+		resolveToolbarCommandsForContext(availableCommands(), commandTargetContext())
+	);
+	const toolbarCommands = createMemo<CommandToolbarItem[]>(() =>
+		toolbarCommandDescriptors().map((command) => ({
+			id: command.id,
+			label: formatToolbarCommandLabel(command),
+			enabled: command.enabled,
+			...(command.ui?.requiresConfirmation !== undefined
+				? { requiresConfirmation: command.ui.requiresConfirmation }
+				: {}),
+			...(command.ui?.confirmationPrompt
+				? { confirmationPrompt: command.ui.confirmationPrompt }
+				: {}),
+			...(command.reason ? { reason: command.reason } : {})
+		}))
+	);
+	const selectedToolbarCommand = createMemo(() =>
+		availableCommandById().get(selectedToolbarCommandId() ?? '')
+	);
 	const commandPickerItems = createMemo<CommandItem[]>(() =>
 		buildCommandPickerItems(availableCommands(), commandQuery())
+	);
+	const commandCycleItems = createMemo<CommandItem[]>(() =>
+		buildCommandPickerItems(availableCommands(), '')
 	);
 	const showCommandPicker = createMemo(
 		() => activePicker() === 'command-select' && commandQuery().length > 0
@@ -437,21 +497,22 @@ function MissionCockpitApp({
 	const selectedCommandPickerItemId = createMemo(() =>
 		pickSelectItemId(commandPickerItems(), selectedPickerItemId())
 	);
-	const centerPanelMode = createMemo<CenterPanelMode>(() => {
-		if (isExpandedCommandFlowTextStep()) {
-			return 'command-flow-editor';
-		}
-		if (showCommandFlow()) {
-			return 'command-flow';
-		}
-		if (showCommandPicker()) {
-			return 'command-select';
-		}
-		return 'console';
-	});
+	const layoutRoute = createMemo<CockpitLayoutRoute>(() =>
+		resolveCockpitLayoutRoute({
+			showCommandPicker: showCommandPicker(),
+			showCommandFlow: showCommandFlow(),
+			isExpandedCommandFlowTextStep: isExpandedCommandFlowTextStep(),
+			consoleFullscreen: isConsoleFullscreen()
+		})
+	);
+	const centerPanelMode = createMemo<CenterPanelMode>(() => layoutRoute().centerPanelMode);
 	const focusOrder = createMemo<FocusArea[]>(() =>
 		buildFocusOrder({
-			baseOrder: cockpitMode() === 'mission' ? missionFocusOrder : controlFocusOrder,
+			baseOrder: layoutRoute().centerPanelMode === 'console-fullscreen'
+				? ['sessions', 'command']
+				: cockpitMode() === 'mission'
+					? missionFocusOrder
+					: controlFocusOrder,
 			headerTabsFocusable: headerTabsFocusable(),
 			showCommandFlow: showCommandFlow(),
 			showCommandPicker: showCommandPicker(),
@@ -472,27 +533,20 @@ function MissionCockpitApp({
 		}
 		return `Available: ${uniqueCommands.join(', ')}`;
 	});
-	const commandDockDescriptor = createMemo<CommandDockDescriptor>(() =>
-		buildCommandDockDescriptor({
-			commandFlow: currentCommandFlow(),
-			currentCommandFlowStep: currentCommandFlowStep(),
-			showCommandPicker: showCommandPicker(),
-			selectedCommandId: showCommandPicker() ? selectedCommandPickerItemId() : undefined,
-			availableCommands: availableCommands(),
-			inputValue: inputValue(),
-			status: status(),
-			selectedConsoleTabKind: inferConsoleTabKindFromId(selectedConsoleTabId()),
-			selectedSessionId: selectedSessionId(),
-			selectedStageId: selectedStageId(),
-			currentTaskLabel: currentTask()?.subject
+	const keyHintsText = createMemo(() =>
+		buildKeyHintsText({
+			focusArea: focusArea(),
+			activePicker: activePicker(),
+			commandItems: commandCycleItems(),
+			inputValue: inputValue()
 		})
 	);
 	const screenTitle = createMemo(() => {
 		if (cockpitMode() === 'setup') {
-			return resolveHeaderRepoLabel(status().control, workspaceContext.repoRoot);
+			return resolveHeaderWorkspaceLabel(status().control, workspaceContext.workspaceRoot);
 		}
 		if (cockpitMode() === 'root') {
-			return resolveHeaderRepoLabel(status().control, workspaceContext.repoRoot);
+			return resolveHeaderWorkspaceLabel(status().control, workspaceContext.workspaceRoot);
 		}
 		return status().title ?? status().missionId ?? 'Mission';
 	});
@@ -509,30 +563,30 @@ function MissionCockpitApp({
 	});
 	const consoleTabs = createMemo<ConsoleTabDescriptor[]>(() => {
 		const tabs: ConsoleTabDescriptor[] = [];
-		const stage = selectedStageId();
-		const stageArtifact = stage ? stageArtifactProductKey(stage) : undefined;
-		const stageArtifactPath = stageArtifact ? status().productFiles?.[stageArtifact] : undefined;
-
-		if (stageArtifact && stageArtifactPath) {
-			tabs.push({
-				id: createArtifactTabId(stageArtifact),
-				label: path.basename(stageArtifactPath),
-				kind: 'artifact',
-				sourcePath: stageArtifactPath
-			});
+		for (const stage of stages()) {
+			const stageArtifact = stageArtifactProductKey(stage.stage);
+			const stageArtifactPath = stageArtifact ? status().productFiles?.[stageArtifact] : undefined;
+			if (stageArtifact && stageArtifactPath) {
+				tabs.push({
+					id: createArtifactTabId(stageArtifact),
+					label: path.basename(stageArtifactPath),
+					kind: 'artifact',
+					sourcePath: stageArtifactPath
+				});
+			}
+			for (const task of stage.tasks) {
+				if (task.filePath) {
+					tabs.push({
+						id: createTaskTabId(task.taskId),
+						label: task.fileName,
+						kind: 'task',
+						sourcePath: task.filePath
+					});
+				}
+			}
 		}
 
-		const task = selectedTask();
-		if (task?.filePath) {
-			tabs.push({
-				id: createTaskTabId(task.taskId),
-				label: task.fileName,
-				kind: 'task',
-				sourcePath: task.filePath
-			});
-		}
-
-		for (const session of visibleSessions()) {
+		for (const session of sessions()) {
 			tabs.push({
 				id: createSessionTabId(session.sessionId),
 				label: formatSessionTabLabel(session),
@@ -549,26 +603,90 @@ function MissionCockpitApp({
 			});
 		}
 
-		tabs.push({
-			id: daemonTabId,
-			label: 'DAEMON',
-			kind: 'daemon'
-		});
-
 		return tabs;
 	});
+	const treeTargets = createMemo<TreeTargetDescriptor[]>(() =>
+		buildMissionTreeTargets({
+			stages: stages(),
+			sessions: sessions(),
+			productFiles: status().productFiles
+		})
+	);
+	const visibleTreeTargets = createMemo<TreeTargetDescriptor[]>(() =>
+		buildVisibleTreeTargets(treeTargets(), collapsedTreeNodeIds())
+	);
 	const renderedConsoleTabs = createMemo<ConsolePanelTab[]>(() =>
 		consoleTabs().map((tab) => ({ id: tab.id, label: tab.label, kind: tab.kind }))
 	);
+	const selectedTreeTarget = createMemo(() => {
+		const preferredId = pickPreferredTreeTargetId(visibleTreeTargets(), selectedTreeTargetId(), {
+			selectedStageId: selectedStageId(),
+			selectedTaskId: selectedTaskId(),
+			selectedSessionId: selectedSessionId()
+		});
+		return visibleTreeTargets().find((target) => target.id === preferredId);
+	});
+	const commandDockDescriptor = createMemo<CommandDockDescriptor>(() =>
+		buildCommandDockDescriptor({
+			commandFlow: currentCommandFlow(),
+			currentCommandFlowStep: currentCommandFlowStep(),
+			showCommandPicker: showCommandPicker(),
+			selectedCommandId: showCommandPicker() ? selectedCommandPickerItemId() : undefined,
+			availableCommands: availableCommands(),
+			inputValue: inputValue(),
+			status: status(),
+			selectedConsoleTabKind: inferConsoleTabKindFromId(selectedConsoleTabId()),
+			selectedSessionId: selectedSessionId(),
+			selectedStageId: selectedStageId(),
+			selectedTreeTargetTitle: selectedTreeTarget()?.title,
+			selectedTreeTargetKind: selectedTreeTarget()?.kind
+		})
+	);
 	const selectedConsoleTab = createMemo(() => {
-		const preferredId = pickPreferredConsoleTabId(consoleTabs(), selectedConsoleTabId(), selectedSessionId());
-		return consoleTabs().find((tab) => tab.id === preferredId) ?? consoleTabs()[0];
+		const selectedTarget = selectedTreeTarget();
+		if (selectedTarget?.tabId) {
+			return consoleTabs().find((tab) => tab.id === selectedTarget.tabId);
+		}
+		if (!status().found) {
+			const preferredId = pickPreferredConsoleTabId(consoleTabs(), selectedConsoleTabId(), selectedSessionId());
+			return consoleTabs().find((tab) => tab.id === preferredId) ?? consoleTabs()[0];
+		}
+		return undefined;
+	});
+	const selectedSessionRecord = createMemo(() => {
+		const sessionId = selectedSessionId();
+		if (!sessionId) {
+			return undefined;
+		}
+		return sessions().find((session) => session.sessionId === sessionId);
+	});
+	const canSendSessionText = createMemo(() => {
+		const tab = selectedConsoleTab();
+		if (tab?.kind !== 'session') {
+			return false;
+		}
+		const session = selectedSessionRecord();
+		if (!session) {
+			return false;
+		}
+		return session.lifecycleState !== 'completed'
+			&& session.lifecycleState !== 'failed'
+			&& session.lifecycleState !== 'cancelled';
+	});
+	const commandDockMode = createMemo<'input' | 'toolbar'>(() => {
+		if (isCompactCommandFlowTextStep() || isExpandedCommandFlowTextStep()) {
+			return 'input';
+		}
+		if (canSendSessionText()) {
+			return 'input';
+		}
+		return 'toolbar';
 	});
 	const consoleContent = createMemo<ConsolePanelContent>(() => {
 		const selectedTab = selectedConsoleTab();
 		const reloadNonce = consoleReloadNonce();
 		void reloadNonce;
-		if (!selectedTab || selectedTab.kind === 'daemon') {
+		if (!selectedTab) {
 			return {
 				kind: 'output',
 				lines: activityLog().slice(-availableConsoleHeight()),
@@ -613,32 +731,30 @@ function MissionCockpitApp({
 			emptyLabel: 'The markdown file is empty.'
 		};
 	});
-	const mainPanel = createMemo<JSXElement | undefined>(() => {
+	const missionTreeStages = createMemo<MissionTreeStageNode[]>(() =>
+		buildMissionTreeStages({
+			stages: stages(),
+			sessions: sessions(),
+			productFiles: status().productFiles,
+			collapsedTreeNodeIds: collapsedTreeNodeIds(),
+			selectedTreeTargetId: selectedTreeTarget()?.id
+		})
+	);
+	const missionTreePanel = createMemo<JSXElement | undefined>(() => {
+		if (cockpitMode() !== 'mission') {
+			return undefined;
+		}
+		return (
+			<MissionTreePanel
+				focused={focusArea() === 'tree'}
+				stages={missionTreeStages()}
+				emptyLabel="No mission structure is available yet."
+			/>
+		);
+	});
+	const rightPanelTitle = createMemo(() => selectedTreeTarget()?.title ?? 'TARGET');
+	const splitPanel = createMemo<JSXElement | undefined>(() => {
 		switch (centerPanelMode()) {
-			case 'command-flow-editor': {
-				const flow = currentCommandFlow();
-				const step = currentCommandFlowStep();
-				if (!flow || !step || step.kind !== 'text' || step.inputMode !== 'expanded') {
-					return undefined;
-				}
-				return (
-					<ExpandedCommandComposer
-						title={buildFlowStepTitle(flow.definition.targetLabel, step.label, flow.definition.actionLabel)}
-						stepLabel={step.label}
-						helperText={step.helperText}
-						initialValue={commandFlowTextValue()}
-						placeholder={step.placeholder}
-						focused={focusArea() === 'flow'}
-						format={step.format}
-						activeTab={expandedComposerTab()}
-						onTabChange={setExpandedComposerTab}
-						onValueChange={setCommandFlowTextValue}
-						onSubmit={(value) => {
-							void submitCommandFlowTextStep(value);
-						}}
-					/>
-				);
-			}
 			case 'command-flow': {
 				const step = currentCommandFlowStep();
 				if (!step || step.kind !== 'selection') {
@@ -679,7 +795,7 @@ function MissionCockpitApp({
 							setSelectedPickerItemId(itemId);
 						}}
 						onItemSelect={(itemId) => {
-							selectCommandById(itemId, { execute: shouldExecuteCommandSelection(itemId) });
+							selectCommandById(itemId);
 						}}
 					/>
 				);
@@ -702,16 +818,31 @@ function MissionCockpitApp({
 				return undefined;
 		}
 	});
-
 	createEffect(() => {
-		const nextMissionId = currentMissionId();
 		setMarkdownDocumentByPath((current) => (Object.keys(current).length === 0 ? current : {}));
 		setConsoleStateBySessionId((current) => (Object.keys(current).length === 0 ? current : {}));
 		setSelectedConsoleTabId(undefined);
+		setSelectedTreeTargetId(undefined);
+		setCollapsedTreeNodeIds(new Set<string>());
+		setCollapseDefaultsMissionId(undefined);
 		setSelectedSessionId(undefined);
 		setSelectedTaskId('');
 		setSelectedStageId(undefined);
-		setLastEvent(nextMissionId ? 'bound' : 'root');
+	});
+
+	createEffect(() => {
+		if (cockpitMode() !== 'mission') {
+			return;
+		}
+		const missionId = currentMissionId();
+		if (!missionId || collapseDefaultsMissionId() === missionId) {
+			return;
+		}
+		if (stages().length === 0) {
+			return;
+		}
+		setCollapsedTreeNodeIds(buildDefaultCollapsedTreeNodeIds(stages(), sessions()));
+		setCollapseDefaultsMissionId(missionId);
 	});
 
 	createEffect(() => {
@@ -719,6 +850,13 @@ function MissionCockpitApp({
 	});
 
 	createEffect(() => {
+		if (cockpitMode() === 'mission') {
+			const target = selectedTreeTarget();
+			if (target && !target.taskId) {
+				setSelectedTaskId('');
+				return;
+			}
+		}
 		setSelectedTaskId((current) => pickPreferredTaskId(stageTasks(), current));
 	});
 
@@ -727,7 +865,59 @@ function MissionCockpitApp({
 	});
 
 	createEffect(() => {
+		setSelectedTreeTargetId((current) =>
+			pickPreferredTreeTargetId(visibleTreeTargets(), current, {
+				selectedStageId: selectedStageId(),
+				selectedTaskId: selectedTaskId(),
+				selectedSessionId: selectedSessionId()
+			})
+		);
+	});
+
+	createEffect(() => {
+		if (cockpitMode() === 'mission') {
+			const target = selectedTreeTarget();
+			if (!target) {
+				return;
+			}
+			if (target.stageId && target.stageId !== selectedStageId()) {
+				setSelectedStageId(target.stageId);
+			}
+			const nextTaskId = target.taskId ?? '';
+			if (nextTaskId !== selectedTaskId()) {
+				setSelectedTaskId(nextTaskId);
+			}
+			if (target.sessionId !== selectedSessionId()) {
+				setSelectedSessionId(target.sessionId);
+			}
+			if (target.tabId !== selectedConsoleTabId()) {
+				setSelectedConsoleTabId(target.tabId);
+			}
+			return;
+		}
 		setSelectedConsoleTabId((current) => pickPreferredConsoleTabId(consoleTabs(), current, selectedSessionId()));
+	});
+
+	createEffect(() => {
+		setSelectedToolbarCommandId((current) =>
+			pickPreferredToolbarCommandId(toolbarCommands(), current)
+		);
+	});
+
+	createEffect(() => {
+		if (commandDockMode() !== 'toolbar') {
+			setConfirmingToolbarCommandId(undefined);
+			setToolbarConfirmationChoice('confirm');
+			return;
+		}
+		const confirming = confirmingToolbarCommandId();
+		if (!confirming) {
+			return;
+		}
+		if (!toolbarCommands().some((item) => item.id === confirming)) {
+			setConfirmingToolbarCommandId(undefined);
+			setToolbarConfirmationChoice('confirm');
+		}
 	});
 
 	createEffect(() => {
@@ -799,6 +989,9 @@ function MissionCockpitApp({
 		if (selectedField === 'defaultModel') {
 			return settings.defaultModel ?? configuredInitialValue;
 		}
+		if (selectedField === 'cockpitTheme') {
+			return settings.cockpitTheme ?? configuredInitialValue;
+		}
 		return configuredInitialValue;
 	}
 
@@ -830,7 +1023,7 @@ function MissionCockpitApp({
 			return;
 		}
 		setIsGitHubUserProbeInFlight(true);
-		void resolveGitHubCliUser(workspaceContext.repoRoot)
+		void resolveGitHubCliUser(workspaceContext.workspaceRoot)
 			.then((user) => {
 				if (user) {
 					setFallbackGitHubUser(user);
@@ -857,7 +1050,7 @@ function MissionCockpitApp({
 			return;
 		}
 		setIsControlBranchProbeInFlight(true);
-		void resolveGitBranchName(workspaceContext.repoRoot)
+		void resolveGitBranchName(workspaceContext.workspaceRoot)
 			.then((branch) => {
 				if (branch && branch !== 'HEAD') {
 					setFallbackControlBranch(branch);
@@ -898,7 +1091,6 @@ function MissionCockpitApp({
 			return;
 		}
 		const subscription = currentClient.onDidEvent((event) => {
-			setLastEvent(event.type);
 			if (event.missionId !== currentMissionId()) {
 				return;
 			}
@@ -969,7 +1161,33 @@ function MissionCockpitApp({
 			}
 		}
 	});
-
+	const expandedCommandPanel = createMemo<JSXElement | undefined>(() => {
+		if (layoutRoute().layout !== 'overlay' || centerPanelMode() !== 'command-flow-editor') {
+			return undefined;
+		}
+		const flow = currentCommandFlow();
+		const step = currentCommandFlowStep();
+		if (!flow || !step || step.kind !== 'text' || step.inputMode !== 'expanded') {
+			return undefined;
+		}
+		return (
+			<ExpandedCommandComposer
+				title={buildFlowStepTitle(flow.definition.targetLabel, step.label, flow.definition.actionLabel)}
+				stepLabel={step.label}
+				helperText={step.helperText}
+				initialValue={commandFlowTextValue()}
+				placeholder={step.placeholder}
+				focused={focusArea() === 'flow'}
+				format={step.format}
+				activeTab={expandedComposerTab()}
+				onTabChange={setExpandedComposerTab}
+				onValueChange={setCommandFlowTextValue}
+				onSubmit={(value) => {
+					void submitCommandFlowTextStep(value);
+				}}
+			/>
+		);
+	});
 	createEffect(() => {
 		const tab = selectedConsoleTab();
 		if (!tab) {
@@ -980,6 +1198,9 @@ function MissionCockpitApp({
 
 	onMount(() => {
 		renderer.setBackgroundColor(cockpitTheme.background);
+		if (!initialConnection) {
+			void connectClient(initialSelector);
+		}
 	});
 
 	createEffect(() => {
@@ -996,12 +1217,21 @@ function MissionCockpitApp({
 			renderer.destroy();
 			return;
 		}
+		if (isConsoleFullscreenToggleKey(key)) {
+			toggleConsoleFullscreen();
+			return;
+		}
+		if (key.name === 'escape' && layoutRoute().centerPanelMode === 'console-fullscreen' && activePicker() === undefined) {
+			setIsConsoleFullscreen(false);
+			setFocusArea('command');
+			return;
+		}
 		if (key.ctrl && key.name === 'p' && canToggleExpandedPreview()) {
 			setExpandedComposerTab((current) => (current === 'write' ? 'preview' : 'write'));
 			return;
 		}
-		if (key.name === 'tab' && focusArea() === 'flow' && canToggleExpandedPreview()) {
-			setExpandedComposerTab((current) => (current === 'write' ? 'preview' : 'write'));
+		if (key.name === 'tab') {
+			moveFocus(key.shift ? -1 : 1);
 			return;
 		}
 		if (
@@ -1072,18 +1302,27 @@ function MissionCockpitApp({
 				previewCommandPickerSelection(-1);
 				return;
 			}
-			moveFocus(-1);
-			return;
+			if (moveSelection(-1)) {
+				return;
+			}
 		}
 		if (key.name === 'down') {
 			if (focusArea() === 'command' && showCommandPicker()) {
 				previewCommandPickerSelection(1);
 				return;
 			}
-			moveFocus(1);
-			return;
+			if (moveSelection(1)) {
+				return;
+			}
 		}
 		if (key.name === 'escape' && focusArea() === 'command') {
+			if (commandDockMode() === 'toolbar') {
+				if (confirmingToolbarCommandId()) {
+					setConfirmingToolbarCommandId(undefined);
+					setToolbarConfirmationChoice('confirm');
+				}
+				return;
+			}
 			if (activePicker() === 'command-select') {
 				closePicker({ clearCommandInput: commandQuery() === '/' });
 				return;
@@ -1102,14 +1341,48 @@ function MissionCockpitApp({
 			return;
 		}
 		if (focusArea() === 'command') {
+			if (commandDockMode() === 'toolbar') {
+				if (key.name === 'left') {
+					if (confirmingToolbarCommandId()) {
+						moveToolbarConfirmationSelection(-1);
+					} else {
+						moveToolbarCommandSelection(-1);
+					}
+					return;
+				}
+				if (key.name === 'right') {
+					if (confirmingToolbarCommandId()) {
+						moveToolbarConfirmationSelection(1);
+					} else {
+						moveToolbarCommandSelection(1);
+					}
+					return;
+				}
+				if (key.name === 'space' || key.name === 'enter' || key.name === 'return') {
+					void submitToolbarConfirmation();
+					return;
+				}
+				if (key.name === 'escape' && confirmingToolbarCommandId()) {
+					setConfirmingToolbarCommandId(undefined);
+					setToolbarConfirmationChoice('confirm');
+					return;
+				}
+			}
+			return;
+		}
+		if ((key.name === 'enter' || key.name === 'return') && focusArea() === 'tree' && cockpitMode() === 'mission') {
+			activateTreeTarget(selectedTreeTargetId());
 			return;
 		}
 		if (key.name === 'left') {
-			moveSelection(-1);
-			return;
+			if (moveSelection(-1)) {
+				return;
+			}
 		}
 		if (key.name === 'right') {
-			moveSelection(1);
+			if (moveSelection(1)) {
+				return;
+			}
 		}
 	});
 
@@ -1120,27 +1393,36 @@ function MissionCockpitApp({
 		setFocusArea(order[nextIndex] ?? 'command');
 	}
 
-	function moveSelection(delta: number): void {
+	function moveSelection(delta: number): boolean {
 		switch (focusArea()) {
 			case 'header': {
 				previewHeaderTabSelection(delta);
-				break;
+				return true;
 			}
 			case 'stages': {
 				const nextStageId = moveStageSelection(stages(), selectedStageId(), delta);
 				selectStage(nextStageId);
-				break;
+				return true;
 			}
 			case 'tasks': {
 				const nextTaskId = moveTaskSelection(stageTasks(), selectedTaskId(), delta);
 				selectTask(nextTaskId);
-				break;
+				return true;
 			}
+			case 'tree':
+				if (cockpitMode() === 'mission') {
+					selectTreeTarget(moveTreeTargetSelection(visibleTreeTargets(), selectedTreeTargetId(), delta));
+					return true;
+				}
+				return false;
 			case 'sessions':
-				selectConsoleTab(moveConsoleTabSelection(consoleTabs(), selectedConsoleTabId(), delta));
-				break;
+				if (cockpitMode() !== 'mission' || centerPanelMode() === 'console-fullscreen') {
+					selectConsoleTab(moveConsoleTabSelection(consoleTabs(), selectedConsoleTabId(), delta));
+					return true;
+				}
+				return false;
 			default:
-				break;
+				return false;
 		}
 	}
 
@@ -1170,10 +1452,6 @@ function MissionCockpitApp({
 		if (selectedTab.target.kind === 'control') {
 			if (!currentMissionId()) {
 				setSelectedHeaderTabId('control');
-				return;
-			}
-			if (workspaceContext.kind !== 'control-root') {
-				appendLog('This cockpit is locked to the current mission worktree. Relaunch from the repository root to browse missions.');
 				return;
 			}
 			await connectClient({});
@@ -1248,6 +1526,13 @@ function MissionCockpitApp({
 		if (!tabId) {
 			return;
 		}
+		if (cockpitMode() === 'mission') {
+			const target = treeTargets().find((candidate) => candidate.tabId === tabId);
+			if (target) {
+				selectTreeTarget(target.id);
+			}
+			return;
+		}
 		setSelectedConsoleTabId(tabId);
 		const nextTab = consoleTabs().find((tab) => tab.id === tabId);
 		if (nextTab?.kind === 'session') {
@@ -1259,6 +1544,53 @@ function MissionCockpitApp({
 			void reloadConsoleTab(nextTab);
 		}
 		setFocusArea('command');
+	}
+
+	function selectTreeTarget(targetId: string | undefined): void {
+		if (!targetId) {
+			return;
+		}
+		setSelectedTreeTargetId(targetId);
+		const target = visibleTreeTargets().find((candidate) => candidate.id === targetId)
+			?? treeTargets().find((candidate) => candidate.id === targetId);
+		if (!target) {
+			return;
+		}
+		if (target.stageId) {
+			setSelectedStageId(target.stageId);
+		}
+		setSelectedTaskId(target.taskId ?? '');
+		setSelectedSessionId(target.sessionId);
+		setSelectedConsoleTabId(target.tabId);
+		if (target.tabId) {
+			const nextTab = consoleTabs().find((tab) => tab.id === target.tabId);
+			if (nextTab) {
+				void reloadConsoleTab(nextTab);
+			}
+		}
+	}
+
+	function activateTreeTarget(targetId: string | undefined): void {
+		if (!targetId) {
+			return;
+		}
+		const target = treeTargets().find((candidate) => candidate.id === targetId);
+		if (!target) {
+			return;
+		}
+		if (target.collapsible) {
+			setCollapsedTreeNodeIds((current) => {
+				const next = new Set(current);
+				if (next.has(target.id)) {
+					next.delete(target.id);
+				} else {
+					next.add(target.id);
+				}
+				return next;
+			});
+			return;
+		}
+		selectTreeTarget(targetId);
 	}
 
 	function selectStage(stageId: MissionStageId | undefined): void {
@@ -1315,27 +1647,6 @@ function MissionCockpitApp({
 		return selectedSessionId();
 	}
 
-	function openMissionPicker(): void {
-		if (workspaceContext.kind !== 'control-root') {
-			appendLog('Mission selection is only available from the repository root.');
-			return;
-		}
-		openDaemonCommandFlow('/select', {}, (result) => {
-			const missionId = result.status?.missionId;
-			return missionId ? `Selected mission ${missionId}.` : 'Selected mission.';
-		});
-	}
-
-	function openStartFlow(): void {
-		openDaemonCommandFlow('/start', {}, (result) => {
-			const nextStatus = result.status;
-			if (!nextStatus) {
-				return 'Mission started.';
-			}
-			return `Mission ${nextStatus.missionId ?? 'unknown'} started on ${nextStatus.branchRef ?? 'its mission branch'}.`;
-		});
-	}
-
 	function openIssuePicker(): void {
 		if (openIssues().length === 0) {
 			appendLog('No open GitHub issues are available.');
@@ -1381,6 +1692,31 @@ function MissionCockpitApp({
 		}
 	}
 
+	function cycleCommandInput(delta: number): void {
+		if (isCompactCommandFlowTextStep() || isExpandedCommandFlowTextStep()) {
+			return;
+		}
+		if (activePicker() === 'command-flow') {
+			return;
+		}
+		const items = commandCycleItems();
+		if (items.length === 0) {
+			return;
+		}
+		const currentText = inputValue().trim();
+		const currentIndex = items.findIndex((item) => item.command === currentText);
+		const seedIndex = currentIndex >= 0 ? currentIndex : 0;
+		const nextIndex = (seedIndex + delta + items.length) % items.length;
+		const nextCommand = items[nextIndex];
+		if (!nextCommand) {
+			return;
+		}
+		setInputValue(nextCommand.command);
+		updateCommandPicker(nextCommand.command);
+		setSelectedPickerItemId(nextCommand.id);
+		setFocusArea('command');
+	}
+
 	function selectCommandById(
 		commandId: string,
 		options?: { execute?: boolean; items?: CommandItem[] }
@@ -1388,10 +1724,10 @@ function MissionCockpitApp({
 		const nextCommand = options?.items?.find((item) => item.id === commandId)
 			?? commandPickerItems().find((item) => item.id === commandId)
 			?? (() => {
-				const command = availableCommandByCommand().get(commandId);
+				const command = availableCommandById().get(commandId);
 				return command
 					? {
-						id: command.command,
+						id: command.id,
 						command: command.command,
 						label: command.command,
 						description: command.label
@@ -1410,34 +1746,6 @@ function MissionCockpitApp({
 		}
 		setInputValue(nextCommand.command);
 		closePicker();
-	}
-
-	function openSetupWizard(): void {
-		if (!controlStatus()?.settings) {
-			appendLog('Mission control status is still loading. Try /status and then /setup again.');
-			return;
-		}
-		openDaemonCommandFlow('/setup', {}, (_result, flowResult) => {
-			const fieldStep = flowResult.steps.find(
-				(step): step is CommandFlowSelectionValue => step.kind === 'selection' && step.stepId === 'field'
-			);
-			const label = fieldStep?.optionLabels[0];
-			return label ? `${label} saved.` : 'Setting saved.';
-		});
-	}
-
-	function openDaemonCommandFlow(
-		commandText: string,
-		executeSelector: MissionSelector = currentMissionSelector() ?? {},
-		onCompleteLog?: (result: Awaited<ReturnType<typeof executeDaemonCommandById>>, flowResult: CommandFlowResult) => string | undefined
-	): void {
-		const command = availableCommandByCommand().get(commandText);
-		const definition = buildCommandFlowFromCommand(command, executeSelector, onCompleteLog);
-		if (!definition) {
-			appendLog(`Mission command ${commandText} is not available right now.`);
-			return;
-		}
-		startCommandFlow(definition);
 	}
 
 	function startCommandFlow(definition: CommandFlowDefinition, options?: { selectedItemId?: string }): void {
@@ -1684,7 +1992,7 @@ function MissionCockpitApp({
 				}
 				if (command.id === 'control.setup.edit') {
 					const nextDefinition = buildCommandFlowFromCommand(
-						availableCommandByCommand().get(command.command),
+							availableCommandById().get(command.id),
 						executeSelector,
 						onCompleteLog
 					);
@@ -1726,10 +2034,20 @@ function MissionCockpitApp({
 			appendLog(`Unknown theme '${themeId}'.`);
 			return;
 		}
+		const currentClient = client() ?? (await connectClient({}));
+		if (currentClient) {
+			try {
+				const nextStatus = await updateControlSetting(currentClient, 'cockpitTheme', themeId);
+				applyMissionStatus(nextStatus, selector());
+			} catch (error) {
+				appendLog(`Unable to persist theme '${themeId}': ${toErrorMessage(error)}`);
+				return;
+			}
+		}
 		applyCockpitTheme(themeId);
 		setSelectedThemeName(themeId);
 		setSelectedPickerItemId(themeId);
-		appendLog(`Theme set to ${themeId} for this cockpit session.`);
+		appendLog(`Theme set to ${themeId}.`);
 		closePicker();
 		setFocusArea('command');
 	}
@@ -1761,27 +2079,6 @@ function MissionCockpitApp({
 			setDaemonState('degraded');
 			appendLog(toErrorMessage(error));
 			return undefined;
-		}
-	}
-
-	async function refreshMissionStatus(): Promise<void> {
-		if (!selector().missionId && !status().missionId) {
-			await connectClient({});
-			return;
-		}
-		const currentClient = client() ?? (await connectClient(selector()));
-		const missionSelector = currentMissionSelector();
-		if (!currentClient || !missionSelector) {
-			await connectClient(selector());
-			return;
-		}
-		try {
-			const next = await getMissionStatus(currentClient, missionSelector);
-			applyMissionStatus(next);
-			setDaemonState('connected');
-		} catch (error) {
-			setDaemonState('degraded');
-			appendLog(toErrorMessage(error));
 		}
 	}
 
@@ -1862,6 +2159,206 @@ function MissionCockpitApp({
 		return missionId ? { missionId } : undefined;
 	}
 
+	function resolveCommandExecutionSelector(command: MissionCommandDescriptor): MissionSelector {
+		if (command.id.startsWith('control.')) {
+			return {};
+		}
+		return currentMissionSelector() ?? {};
+	}
+
+	async function executeAvailableCommandByText(commandText: string): Promise<boolean> {
+		const command = findAvailableCommandByText(availableCommands(), commandText);
+		if (!command) {
+			return false;
+		}
+		return executeAvailableCommandById(command.id);
+	}
+
+	async function executeAvailableCommandById(commandId: string): Promise<boolean> {
+		const command = availableCommandById().get(commandId);
+		if (!command) {
+			return false;
+		}
+
+		if (!command.enabled) {
+			appendLog(command.reason ?? `Command ${command.command} is not available for the selected target.`);
+			return true;
+		}
+
+		if (!command.id.startsWith('control.') && !currentMissionSelector()) {
+			appendLog(noMissionSelectedMessage(status()));
+			return true;
+		}
+
+		if (command.id === 'control.issues.list') {
+			await loadIssues();
+			return true;
+		}
+
+		const flowSteps = command.flow?.steps ?? [];
+		if (flowSteps.length > 0) {
+			const definition = buildCommandFlowFromCommand(
+				command,
+				resolveCommandExecutionSelector(command),
+				(result) => {
+					if (command.id === 'control.mission.start') {
+						const nextStatus = result.status;
+						if (!nextStatus) {
+							return 'Mission started.';
+						}
+						return `Mission ${nextStatus.missionId ?? 'unknown'} started on ${nextStatus.branchRef ?? 'its mission branch'}.`;
+					}
+					if (command.id === 'control.mission.select') {
+						const missionId = result.status?.missionId;
+						return missionId ? `Selected mission ${missionId}.` : 'Selected mission.';
+					}
+					if (command.id === 'control.setup.edit') {
+						return 'Setting saved.';
+					}
+					return undefined;
+				}
+			);
+			if (!definition) {
+				appendLog(`Mission command ${command.command} is not available right now.`);
+				return true;
+			}
+			startCommandFlow(definition);
+			return true;
+		}
+
+		const result = await executeDaemonCommandById(
+			command.id,
+			[],
+			resolveCommandExecutionSelector(command)
+		);
+
+		if (command.id === 'mission.deliver') {
+			appendLog(result.status && isMissionDelivered(result.status) ? 'Mission delivered.' : 'Mission delivery completed.');
+			return true;
+		}
+
+		if (command.id.startsWith('stage.transition.')) {
+			appendLog(`Transitioned mission to ${result.status?.stage ?? command.targetId ?? 'next stage'}.`);
+			return true;
+		}
+
+		if (command.id.startsWith('task.activate.') || command.id.startsWith('task.complete.') || command.id.startsWith('task.block.')) {
+			const action = command.id.startsWith('task.activate.')
+				? 'active'
+				: command.id.startsWith('task.complete.')
+					? 'done'
+					: 'blocked';
+			appendLog(`Task ${command.targetId ?? 'unknown'} set to ${action}.`);
+			return true;
+		}
+
+		if (command.id.startsWith('task.launch.')) {
+			const session = result.session;
+			if (session) {
+				appendLog(`Launched ${session.runtimeId} for ${session.assignmentLabel ?? command.targetId ?? 'task'}.`);
+			} else {
+				appendLog(`Launch requested for ${command.targetId ?? 'task'}.`);
+			}
+			return true;
+		}
+
+		if (command.id.startsWith('session.cancel.')) {
+			appendLog(`Cancellation requested for ${command.targetId ?? 'session'}.`);
+			return true;
+		}
+
+		if (command.id.startsWith('session.terminate.')) {
+			appendLog(`Termination requested for ${command.targetId ?? 'session'}.`);
+			return true;
+		}
+
+		appendLog(`Executed ${command.command}.`);
+		return true;
+	}
+
+	function moveToolbarCommandSelection(delta: number): void {
+		const items = toolbarCommands().filter((item) => item.enabled);
+		if (items.length === 0) {
+			setSelectedToolbarCommandId(undefined);
+			return;
+		}
+		const current = selectedToolbarCommandId();
+		const currentIndex = Math.max(0, items.findIndex((item) => item.id === current));
+		const nextIndex = (currentIndex + delta + items.length) % items.length;
+		setSelectedToolbarCommandId(items[nextIndex]?.id);
+	}
+
+	function moveToolbarConfirmationSelection(delta: number): void {
+		if (delta === 0) {
+			return;
+		}
+		setToolbarConfirmationChoice((current) => (current === 'confirm' ? 'cancel' : 'confirm'));
+	}
+
+	function openToolbarConfirmation(): void {
+		const command = selectedToolbarCommand();
+		if (!command) {
+			appendLog('No command is selected.');
+			return;
+		}
+		if (!command.enabled) {
+			appendLog(command.reason ?? `Command ${command.command} is not available for the selected target.`);
+			return;
+		}
+		setConfirmingToolbarCommandId(command.id);
+		setToolbarConfirmationChoice('confirm');
+	}
+
+	async function submitToolbarConfirmation(): Promise<void> {
+		const commandId = confirmingToolbarCommandId();
+		if (!commandId) {
+			const selected = selectedToolbarCommand();
+			if (!selected) {
+				appendLog('No command is selected.');
+				return;
+			}
+			if (!selected.enabled) {
+				appendLog(selected.reason ?? `Command ${selected.command} is not available for the selected target.`);
+				return;
+			}
+			if (selected.ui?.requiresConfirmation === true) {
+				openToolbarConfirmation();
+				return;
+			}
+			appendLog(`Executing ${selected.command}.`);
+			setIsRunningCommand(true);
+			try {
+				await executeAvailableCommandById(selected.id);
+			} catch (error) {
+				appendLog(toErrorMessage(error));
+			} finally {
+				setIsRunningCommand(false);
+			}
+			return;
+		}
+		if (toolbarConfirmationChoice() === 'cancel') {
+			setConfirmingToolbarCommandId(undefined);
+			setToolbarConfirmationChoice('confirm');
+			return;
+		}
+		const command = availableCommandById().get(commandId);
+		setConfirmingToolbarCommandId(undefined);
+		setToolbarConfirmationChoice('confirm');
+		if (!command) {
+			appendLog('Selected command is no longer available.');
+			return;
+		}
+		appendLog(`Executing ${command.command}.`);
+		setIsRunningCommand(true);
+		try {
+			await executeAvailableCommandById(command.id);
+		} catch (error) {
+			appendLog(toErrorMessage(error));
+		} finally {
+			setIsRunningCommand(false);
+		}
+	}
+
 	async function executeCommand(rawCommand: string): Promise<void> {
 		const trimmed = rawCommand.trim();
 		if (!trimmed) {
@@ -1874,7 +2371,7 @@ function MissionCockpitApp({
 				const missionSelector = currentMissionSelector();
 				const currentClient = client() ?? (await connectClient(missionSelector ?? selector()));
 				if (!sessionId || !currentClient) {
-					appendLog('No selected session is available. Use /launch first.');
+					appendLog('No selected session is available. Select a session target first.');
 					return;
 				}
 				const updatedSession = await sendSessionInput(currentClient, missionSelector, sessionId, trimmed);
@@ -1883,6 +2380,8 @@ function MissionCockpitApp({
 				return;
 			}
 
+			appendLog(`Executing ${trimmed}.`);
+
 			const [instruction, ...args] = trimmed.split(/\s+/u);
 			if (!instruction) {
 				return;
@@ -1890,7 +2389,7 @@ function MissionCockpitApp({
 			switch (instruction.toLowerCase()) {
 				case '/help':
 					appendLogLines([
-						'/status',
+						'/console',
 						'/setup',
 						'/theme [ocean|sand]',
 						...(workspaceContext.kind === 'control-root' ? ['/root'] : []),
@@ -1898,16 +2397,19 @@ function MissionCockpitApp({
 						'/issue <number>',
 						'/start',
 						'/select',
-						...(status().found ? ['/launch [runtimeId]'] : []),
+						...(status().found ? ['/launch', '/task <active|done|blocked>'] : []),
 						'/gate [implement|verify|audit|deliver]',
 						'/transition <stage>',
-						'/cancel [sessionId]',
-						'/terminate [sessionId]',
+						'/cancel',
+						'/terminate',
 						'/deliver',
 						'/sessions',
 						'/clear',
 						'/quit'
 					]);
+					return;
+				case '/console':
+					toggleConsoleFullscreen();
 					return;
 				case '/clear':
 					setActivityLog([]);
@@ -1915,19 +2417,21 @@ function MissionCockpitApp({
 				case '/quit':
 					renderer.destroy();
 					return;
-				case '/status':
-					await refreshMissionStatus();
-					appendLog(describeStatusRefresh(status()));
-					return;
-					case '/setup':
-					case '/init': {
-						if (status().found) {
-							appendLog('Setup is only available in Mission control. Use /root first.');
-							return;
-						}
-						openSetupWizard();
+				case '/setup':
+				case '/init':
+				case '/start':
+				case '/select':
+				case '/launch':
+				case '/task':
+				case '/transition':
+				case '/cancel':
+				case '/terminate':
+				case '/deliver':
+					if (await executeAvailableCommandByText(trimmed)) {
 						return;
 					}
+					appendLog(`Command ${trimmed} is not available for the selected target.`);
+					return;
 				case '/root': {
 					if (workspaceContext.kind !== 'control-root') {
 						appendLog('This cockpit is locked to the current mission worktree. Relaunch from the repository root to browse missions.');
@@ -1967,80 +2471,6 @@ function MissionCockpitApp({
 					await selectIssueByNumber(Number(issueNumber));
 					return;
 				}
-				case '/start': {
-					if (workspaceContext.kind !== 'control-root') {
-						appendLog('Mission creation is only available from the repository root.');
-						return;
-					}
-					if (status().found) {
-						appendLog('Mission creation is only available in Mission control. Use /root first.');
-						return;
-					}
-						if (cockpitMode() === 'setup') {
-							appendLog('Mission setup is incomplete. Run /setup before creating a mission.');
-							openSetupWizard();
-							return;
-						}
-					if (controlStatus()?.isGitRepository === false) {
-						appendLog('Mission requires a Git repository before creating missions.');
-						return;
-					}
-						if (args.length > 0) {
-							appendLog('Usage: /start');
-							return;
-						}
-						openStartFlow();
-					return;
-				}
-				case '/select': {
-					if (workspaceContext.kind !== 'control-root') {
-						appendLog('Mission selection is only available from the repository root.');
-						return;
-					}
-					if (status().found) {
-						appendLog('A mission is already active. Use /root before selecting another mission.');
-						return;
-					}
-						if (args.length > 0) {
-							appendLog('Usage: /select');
-							return;
-						}
-						openMissionPicker();
-					return;
-				}
-				case '/launch': {
-					const missionSelector = currentMissionSelector();
-					const runtimeId = args[0] || undefined;
-					const currentClient = client() ?? (await connectClient(missionSelector ?? selector()));
-					if (!currentClient) {
-						appendLog('Unable to connect to launch an agent session.');
-						return;
-					}
-					if (!missionSelector) {
-						appendLog(noMissionSelectedMessage(status()));
-						return;
-					}
-					const task = currentTask();
-					if (!task) {
-						appendLog('Select a task before launching a session.');
-						return;
-					}
-					const session = runtimeId
-						? await launchTaskSession(currentClient, missionSelector, task.taskId, { runtimeId })
-						: (await executeDaemonCommandById(`task.launch.${task.taskId}`, [], missionSelector)).session;
-					if (!session) {
-						appendLog(`Task ${task.taskId} did not produce a launchable session.`);
-						return;
-					}
-					if (runtimeId) {
-						setSelectedSessionId(session.sessionId);
-						setSelectedConsoleTabId(createSessionTabId(session.sessionId));
-						const next = await getMissionStatus(currentClient, missionSelector);
-						applyMissionStatus(next);
-					}
-					appendLog(`Launched ${session.runtimeId} for ${task.subject}.`);
-					return;
-				}
 				case '/sessions':
 					if (!status().found) {
 						appendLog('No mission is selected.');
@@ -2069,58 +2499,10 @@ function MissionCockpitApp({
 					appendLog(gate.allowed ? `Gate ${intent} passed.` : `Gate ${intent} blocked: ${gate.errors.join(' | ')}`);
 					return;
 				}
-				case '/transition': {
-					const nextStage = (args[0] as MissionStageId | undefined) ?? selectedStageId();
-					if (!status().found) {
-						appendLog(noMissionSelectedMessage(status()));
-						return;
-					}
-					if (!nextStage) {
-						appendLog('Usage: /transition <prd|spec|plan|implementation|verification|audit>');
-						return;
-					}
-					const next = (await executeDaemonCommandById(`stage.transition.${nextStage}`, [])).status;
-					if (!next) {
-						appendLog(`Stage ${nextStage} did not return an updated mission status.`);
-						return;
-					}
-					appendLog(`Transitioned mission to ${next.stage ?? nextStage}.`);
-					return;
-				}
-				case '/cancel': {
-					const sessionId = args[0] ?? selectedSessionId();
-					if (!sessionId) {
-						appendLog('Usage: /cancel <sessionId>');
-						return;
-					}
-					await executeDaemonCommandById(`session.cancel.${sessionId}`, []);
-					appendLog(`Cancellation requested for ${sessionId}.`);
-					return;
-				}
-				case '/terminate': {
-					const sessionId = args[0] ?? selectedSessionId();
-					if (!sessionId) {
-						appendLog('Usage: /terminate <sessionId>');
-						return;
-					}
-					await executeDaemonCommandById(`session.terminate.${sessionId}`, []);
-					appendLog(`Termination requested for ${sessionId}.`);
-					return;
-				}
-				case '/deliver': {
-					if (!status().found) {
-						appendLog(noMissionSelectedMessage(status()));
-						return;
-					}
-					const next = (await executeDaemonCommandById('mission.deliver', [])).status;
-					if (!next) {
-						appendLog('Mission delivery did not return an updated mission status.');
-						return;
-					}
-					appendLog(`Mission delivered at ${next.deliveredAt ?? 'unknown time'}.`);
-					return;
-				}
 				default:
+					if (await executeAvailableCommandByText(trimmed)) {
+						return;
+					}
 					appendLog(`Unknown command '${trimmed}'. Type /help.`);
 					return;
 			}
@@ -2131,30 +2513,48 @@ function MissionCockpitApp({
 		}
 	}
 
+	function toggleConsoleFullscreen(): void {
+		setIsConsoleFullscreen((current) => !current);
+		if (layoutRoute().centerPanelMode !== 'console-fullscreen' && focusArea() !== 'command') {
+			setFocusArea('sessions');
+		}
+	}
+
 	return (
 		<Show when={selectedThemeName()} keyed>
 			<CockpitScreen
 				headerPanelTitle={headerPanelTitle()}
+				showHeader={centerPanelMode() !== 'console-fullscreen'}
 				title={screenTitle()}
 				headerTabs={headerTabs().map((tab) => ({ id: tab.id, label: tab.label }))}
 				headerSelectedTabId={selectedHeaderTabId()}
 				headerTabsFocusable={headerTabsFocusable()}
 				headerStatusLines={headerStatusLines()}
 				headerFooterBadges={headerFooterBadges()}
-				showProgressRails={cockpitMode() === 'mission'}
+				expandedCommandPanel={expandedCommandPanel()}
+				showProgressRails={false}
 				stageItems={stageItems()}
 				taskItems={taskItems()}
 				focusArea={focusArea()}
 				consoleTabs={renderedConsoleTabs()}
 				selectedConsoleTabId={selectedConsoleTab()?.id}
 				consoleContent={consoleContent()}
+				rightPanelTitle={rightPanelTitle()}
 				onConsoleTabSelect={selectConsoleTab}
-				mainPanel={mainPanel()}
+				missionTreePanel={missionTreePanel()}
+				hideMissionTreePanel={centerPanelMode() === 'console-fullscreen'}
+				mainPanel={splitPanel()}
 				commandDockTitle={commandDockDescriptor().title}
 				commandDockPlaceholder={commandDockDescriptor().placeholder}
+				commandDockMode={commandDockMode()}
+				toolbarItems={toolbarCommands()}
+				selectedToolbarItemId={selectedToolbarCommandId()}
+				confirmingToolbarItemId={confirmingToolbarCommandId()}
+				confirmationChoice={toolbarConfirmationChoice()}
 				isRunningCommand={isRunningCommand()}
 				inputValue={inputValue()}
 				commandHelp={commandHelp()}
+				keyHintsText={keyHintsText()}
 				onInputChange={(value) => {
 					const nextValue = isCompactCommandFlowTextStep()
 						? value
@@ -2175,16 +2575,15 @@ function MissionCockpitApp({
 						void submitCommandFlowTextStep(value);
 						return;
 					}
+					const trimmedValue = value.trim();
 					const submittedQuery = parseCommandQuery(value);
 					const submittedCommandItems = submittedQuery
 						? buildCommandPickerItems(availableCommands(), submittedQuery)
 						: [];
-					const exactCommand = findAvailableCommandByText(availableCommands(), value.trim());
+					const exactCommand = findAvailableCommandByText(availableCommands(), trimmedValue);
 					if (exactCommand) {
-						selectCommandById(exactCommand.command, {
-							execute: shouldExecuteCommandSelection(exactCommand.command),
-							items: submittedCommandItems
-						});
+						setInputValue('');
+						void executeCommand(trimmedValue);
 						return;
 					}
 					if (submittedQuery && submittedCommandItems.length > 0) {
@@ -2194,7 +2593,7 @@ function MissionCockpitApp({
 						) ?? submittedCommandItems[0]?.id;
 						if (selectedCommandId) {
 							selectCommandById(selectedCommandId, {
-								execute: shouldExecuteCommandSelection(selectedCommandId),
+								execute: true,
 								items: submittedCommandItems
 							});
 						}
@@ -2210,7 +2609,41 @@ function MissionCockpitApp({
 						return;
 					}
 					setInputValue('');
-					void executeCommand(value);
+					void executeCommand(trimmedValue);
+				}}
+				onInputKeyDown={(event) => {
+					if (event.name === 'escape') {
+						if (focusArea() !== 'command') {
+							return;
+						}
+						event.preventDefault();
+						event.stopPropagation();
+						if (activePicker() === 'command-select') {
+							closePicker({ clearCommandInput: commandQuery() === '/' });
+							return;
+						}
+						if (activePicker() === 'command-flow' && isCompactCommandFlowTextStep()) {
+							closePicker({ clearCommandInput: true });
+							setFocusArea('command');
+							return;
+						}
+						setInputValue('');
+						setFocusArea('command');
+						return;
+					}
+					if (event.name !== 'left' && event.name !== 'right') {
+						return;
+					}
+					if (focusArea() !== 'command') {
+						return;
+					}
+					const trimmed = inputValue().trim();
+					if (trimmed.length > 0 && !trimmed.startsWith('/')) {
+						return;
+					}
+					event.preventDefault();
+					event.stopPropagation();
+					cycleCommandInput(event.name === 'left' ? -1 : 1);
 				}}
 			/>
 		</Show>
@@ -2247,6 +2680,12 @@ function buildAdaptiveSetupCommandFlowSteps(
 				if (selectedField === 'defaultAgentMode') {
 					return buildAgentModeItems(resolveConfiguredAgentRunner(stepValues, getSettings));
 				}
+				if (selectedField === 'cockpitTheme') {
+					const configuredTheme = getSettings()?.cockpitTheme;
+					return buildThemePickerItems(
+						isCockpitThemeName(configuredTheme) ? configuredTheme : 'ocean'
+					);
+				}
 				return [];
 			}
 		};
@@ -2269,6 +2708,7 @@ function resolveCommandFlowStep(
 	const selectedField = getSetupFieldSelection(stepValues);
 	if (
 		selectedField === 'agentRunner'
+		|| selectedField === 'cockpitTheme'
 		|| selectedField === 'defaultAgentMode'
 	) {
 		return step;
@@ -2307,6 +2747,9 @@ function resolveCommandFlowSelectionInitialItemId(
 	}
 	if (selectedField === 'defaultAgentMode') {
 		return settings.defaultAgentMode;
+	}
+	if (selectedField === 'cockpitTheme' && isCockpitThemeName(settings.cockpitTheme)) {
+		return settings.cockpitTheme;
 	}
 	if (selectedField === 'defaultModel') {
 		return settings.defaultModel;
@@ -2480,6 +2923,20 @@ function moveConsoleTabSelection(
 	return tabs[nextIndex]?.id;
 }
 
+function moveTreeTargetSelection(
+	targets: TreeTargetDescriptor[],
+	current: string | undefined,
+	delta: number
+): string | undefined {
+	if (targets.length === 0) {
+		return undefined;
+	}
+	const currentId = current && targets.some((target) => target.id === current) ? current : targets[0]?.id;
+	const currentIndex = Math.max(0, targets.findIndex((target) => target.id === currentId));
+	const nextIndex = clampIndex(currentIndex + delta, targets.length);
+	return targets[nextIndex]?.id;
+}
+
 function clampIndex(index: number, length: number): number {
 	return Math.max(0, Math.min(length - 1, index));
 }
@@ -2514,8 +2971,8 @@ function formatStageLabel(stage: MissionStageId): string {
 	if (stage === 'implementation') {
 		return 'IMPLEMENT';
 	}
-	if (stage === 'verification') {
-		return 'VERIFY';
+	if (stage === 'delivery') {
+		return 'DELIVER';
 	}
 	return stage.toUpperCase();
 }
@@ -2552,10 +3009,12 @@ function normalizeCommandInputValue(value: string): string {
 }
 
 const controlTabId = 'control';
-const daemonTabId = 'daemon';
 
 function stageArtifactProductKey(stage: MissionStageId): MissionProductKey | undefined {
-	if (stage === 'prd' || stage === 'spec' || stage === 'plan' || stage === 'verification' || stage === 'audit') {
+	if (stage === 'implementation') {
+		return 'verify';
+	}
+	if (stage === 'prd' || stage === 'spec' || stage === 'audit' || stage === 'delivery') {
 		return stage;
 	}
 	return undefined;
@@ -2571,6 +3030,279 @@ function createTaskTabId(taskId: string): string {
 
 function createSessionTabId(sessionId: string): string {
 	return `session:${sessionId}`;
+}
+
+function createStageNodeId(stage: MissionStageId): string {
+	return `tree:stage:${stage}`;
+}
+
+function createStageArtifactNodeId(stage: MissionStageId): string {
+	return `tree:stage-artifact:${stage}`;
+}
+
+function createTaskNodeId(taskId: string): string {
+	return `tree:task:${taskId}`;
+}
+
+function createTaskArtifactNodeId(taskId: string): string {
+	return `tree:task-artifact:${taskId}`;
+}
+
+function createSessionNodeId(sessionId: string): string {
+	return `tree:session:${sessionId}`;
+}
+
+function buildMissionTreeTargets(input: {
+	stages: MissionStageStatus[];
+	sessions: MissionAgentSessionRecord[];
+	productFiles: MissionStatus['productFiles'];
+}): TreeTargetDescriptor[] {
+	const targets: TreeTargetDescriptor[] = [];
+	for (const stage of input.stages) {
+		const stageArtifact = stageArtifactProductKey(stage.stage);
+		const stageArtifactPath = stageArtifact ? input.productFiles?.[stageArtifact] : undefined;
+		const stageArtifactTabId = stageArtifact && stageArtifactPath ? createArtifactTabId(stageArtifact) : undefined;
+		const stageTarget: TreeTargetDescriptor = {
+			id: createStageNodeId(stage.stage),
+			title: formatStageLabel(stage.stage),
+			kind: 'stage',
+			collapsible: Boolean(stageArtifactTabId) || stage.tasks.length > 0,
+			stageId: stage.stage,
+			...(stageArtifactTabId ? { tabId: stageArtifactTabId } : {})
+		};
+		targets.push(stageTarget);
+		if (stageArtifactTabId) {
+			targets.push({
+				id: createStageArtifactNodeId(stage.stage),
+				title: path.basename(stageArtifactPath ?? ''),
+				kind: 'stage-artifact',
+				collapsible: false,
+				tabId: stageArtifactTabId,
+				stageId: stage.stage
+			});
+		}
+
+		for (const task of stage.tasks) {
+			const taskTabId = task.filePath ? createTaskTabId(task.taskId) : undefined;
+			const taskTarget: TreeTargetDescriptor = {
+				id: createTaskNodeId(task.taskId),
+				title: `${String(task.sequence)} ${task.subject}`,
+				kind: 'task',
+				collapsible: Boolean(taskTabId) || input.sessions.some((session) => session.taskId === task.taskId),
+				stageId: stage.stage,
+				taskId: task.taskId,
+				...(taskTabId ? { tabId: taskTabId } : {})
+			};
+			targets.push(taskTarget);
+			if (taskTabId) {
+				targets.push({
+					id: createTaskArtifactNodeId(task.taskId),
+					title: task.fileName,
+					kind: 'task-artifact',
+					collapsible: false,
+					tabId: taskTabId,
+					stageId: stage.stage,
+					taskId: task.taskId
+				});
+			}
+
+			const taskSessions = input.sessions
+				.filter((session) => session.taskId === task.taskId)
+				.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+			for (const session of taskSessions) {
+				targets.push({
+					id: createSessionNodeId(session.sessionId),
+					title: formatSessionTabLabel(session),
+					kind: 'session',
+					collapsible: false,
+					tabId: createSessionTabId(session.sessionId),
+					stageId: stage.stage,
+					taskId: task.taskId,
+					sessionId: session.sessionId
+				});
+			}
+		}
+	}
+	return targets;
+}
+
+function buildVisibleTreeTargets(
+	targets: TreeTargetDescriptor[],
+	collapsedTreeNodeIds: ReadonlySet<string>
+): TreeTargetDescriptor[] {
+	const visible: TreeTargetDescriptor[] = [];
+	const hiddenBranches = new Set<string>();
+	for (const target of targets) {
+		if (target.kind === 'stage') {
+			visible.push(target);
+			if (collapsedTreeNodeIds.has(target.id) && target.stageId) {
+				hiddenBranches.add(`stage:${target.stageId}`);
+			} else if (target.stageId) {
+				hiddenBranches.delete(`stage:${target.stageId}`);
+			}
+			continue;
+		}
+
+		if (target.stageId && hiddenBranches.has(`stage:${target.stageId}`)) {
+			continue;
+		}
+
+		if (target.kind === 'task') {
+			visible.push(target);
+			if (collapsedTreeNodeIds.has(target.id) && target.taskId) {
+				hiddenBranches.add(`task:${target.taskId}`);
+			} else if (target.taskId) {
+				hiddenBranches.delete(`task:${target.taskId}`);
+			}
+			continue;
+		}
+
+		if (target.taskId && hiddenBranches.has(`task:${target.taskId}`)) {
+			continue;
+		}
+
+		visible.push(target);
+	}
+	return visible;
+}
+
+function buildDefaultCollapsedTreeNodeIds(
+	stages: MissionStageStatus[],
+	sessions: MissionAgentSessionRecord[]
+): Set<string> {
+	const collapsed = new Set<string>();
+	const runningSessionTaskIds = new Set(
+		sessions
+			.filter((session) =>
+				session.lifecycleState === 'running'
+				|| session.lifecycleState === 'starting'
+				|| session.lifecycleState === 'awaiting-input'
+			)
+			.map((session) => session.taskId)
+			.filter((taskId): taskId is string => typeof taskId === 'string' && taskId.length > 0)
+	);
+
+	for (const stage of stages) {
+		const stageNodeId = createStageNodeId(stage.stage);
+		const hasExpandedTask = stage.tasks.some(
+			(task) => task.status === 'active' || runningSessionTaskIds.has(task.taskId)
+		);
+		if (stage.status !== 'active' && !hasExpandedTask) {
+			collapsed.add(stageNodeId);
+		}
+
+		for (const task of stage.tasks) {
+			const taskNodeId = createTaskNodeId(task.taskId);
+			if (task.status !== 'active' && !runningSessionTaskIds.has(task.taskId)) {
+				collapsed.add(taskNodeId);
+			}
+		}
+	}
+
+	return collapsed;
+}
+
+function pickPreferredTreeTargetId(
+	targets: TreeTargetDescriptor[],
+	current: string | undefined,
+	selected: {
+		selectedStageId: MissionStageId | undefined;
+		selectedTaskId: string;
+		selectedSessionId: string | undefined;
+	}
+): string | undefined {
+	if (targets.length === 0) {
+		return undefined;
+	}
+	if (current && targets.some((target) => target.id === current)) {
+		return current;
+	}
+	if (selected.selectedSessionId) {
+		const sessionNodeId = createSessionNodeId(selected.selectedSessionId);
+		if (targets.some((target) => target.id === sessionNodeId)) {
+			return sessionNodeId;
+		}
+	}
+	if (selected.selectedTaskId) {
+		const taskArtifactId = createTaskArtifactNodeId(selected.selectedTaskId);
+		if (targets.some((target) => target.id === taskArtifactId)) {
+			return taskArtifactId;
+		}
+		const taskNodeId = createTaskNodeId(selected.selectedTaskId);
+		if (targets.some((target) => target.id === taskNodeId)) {
+			return taskNodeId;
+		}
+	}
+	if (selected.selectedStageId) {
+		const stageArtifactId = createStageArtifactNodeId(selected.selectedStageId);
+		if (targets.some((target) => target.id === stageArtifactId)) {
+			return stageArtifactId;
+		}
+		const stageNodeId = createStageNodeId(selected.selectedStageId);
+		if (targets.some((target) => target.id === stageNodeId)) {
+			return stageNodeId;
+		}
+	}
+	return targets[0]?.id;
+}
+
+function buildMissionTreeStages(input: {
+	stages: MissionStageStatus[];
+	sessions: MissionAgentSessionRecord[];
+	productFiles: MissionStatus['productFiles'];
+	collapsedTreeNodeIds: ReadonlySet<string>;
+	selectedTreeTargetId: string | undefined;
+}): MissionTreeStageNode[] {
+	return input.stages.map((stage) => {
+		const stageArtifact = stageArtifactProductKey(stage.stage);
+		const stageArtifactPath = stageArtifact ? input.productFiles?.[stageArtifact] : undefined;
+		const stageNodeId = createStageNodeId(stage.stage);
+		const tasks: MissionTreeTaskNode[] = stage.tasks.map((task) => {
+			const taskSessions = input.sessions
+				.filter((session) => session.taskId === task.taskId)
+				.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+			const taskNodeId = createTaskNodeId(task.taskId);
+			const sessionNodes: MissionTreeSessionNode[] = taskSessions.map((session) => ({
+				id: createSessionNodeId(session.sessionId),
+				label: formatSessionTabLabel(session),
+				selected: input.selectedTreeTargetId === createSessionNodeId(session.sessionId),
+				lifecycleState: session.lifecycleState
+			}));
+			const taskNode: MissionTreeTaskNode = {
+				id: taskNodeId,
+				label: `${String(task.sequence)} ${task.subject}`,
+				selected: input.selectedTreeTargetId === taskNodeId,
+				collapsed: input.collapsedTreeNodeIds.has(taskNodeId),
+				status: task.status,
+				sessions: sessionNodes
+			};
+			if (task.filePath) {
+				taskNode.artifact = {
+					id: createTaskArtifactNodeId(task.taskId),
+					label: path.basename(task.filePath),
+					selected: input.selectedTreeTargetId === createTaskArtifactNodeId(task.taskId)
+				};
+			}
+			return taskNode;
+		});
+
+		const stageNode: MissionTreeStageNode = {
+			id: stageNodeId,
+			label: formatStageLabel(stage.stage),
+			selected: input.selectedTreeTargetId === stageNodeId,
+			collapsed: input.collapsedTreeNodeIds.has(stageNodeId),
+			status: stage.status,
+			tasks
+		};
+		if (stageArtifactPath) {
+			stageNode.artifact = {
+				id: createStageArtifactNodeId(stage.stage),
+				label: path.basename(stageArtifactPath),
+				selected: input.selectedTreeTargetId === createStageArtifactNodeId(stage.stage)
+			};
+		}
+		return stageNode;
+	});
 }
 
 function inferConsoleTabKindFromId(tabId: string | undefined): ConsoleTabDescriptor['kind'] | undefined {
@@ -2589,9 +3321,6 @@ function inferConsoleTabKindFromId(tabId: string | undefined): ConsoleTabDescrip
 	if (tabId === controlTabId) {
 		return 'control';
 	}
-	if (tabId === daemonTabId) {
-		return 'daemon';
-	}
 	return undefined;
 }
 
@@ -2603,26 +3332,30 @@ function isPrintableCommandFilterKey(sequence: string | undefined): boolean {
 	return typeof sequence === 'string' && /^[ -~]$/u.test(sequence);
 }
 
+function isConsoleFullscreenToggleKey(key: {
+	ctrl?: boolean;
+	name?: string;
+	sequence?: string;
+}): boolean {
+	if (key.ctrl === true && (key.name === 'space' || key.sequence === ' ')) {
+		return true;
+	}
+	// Many terminals encode Ctrl+Space as NUL instead of setting ctrl/name flags.
+	return key.sequence === '\u0000';
+}
+
 function buildCommandPickerItems(
 	commands: MissionCommandDescriptor[],
 	query: string
 ): CommandItem[] {
 	const normalizedQuery = query.toLowerCase();
-	const seenCommands = new Set<string>();
 	return commands
 		.filter((command) => command.enabled)
-		.filter((command) => {
-			if (seenCommands.has(command.command)) {
-				return false;
-			}
-			seenCommands.add(command.command);
-			return true;
-		})
 		.map((command) => ({
-			id: command.command,
+			id: command.id,
 			command: command.command,
 			label: command.command,
-			description: command.label
+			description: command.targetId ? `${command.label} [${command.targetId}]` : command.label
 		}))
 		.filter((command) => {
 			if (!normalizedQuery) {
@@ -2637,6 +3370,27 @@ function buildCommandPickerItems(
 				descriptionText.includes(normalizedQuery)
 			);
 		});
+}
+
+function resolveAvailableCommandsForContext(
+	commands: MissionCommandDescriptor[],
+	context: CommandTargetContext
+): MissionCommandDescriptor[] {
+	return commands.filter((command) => {
+		if (command.scope === 'mission') {
+			return true;
+		}
+		if (command.scope === 'stage') {
+			return Boolean(context.stageId) && command.targetId === context.stageId;
+		}
+		if (command.scope === 'task') {
+			return Boolean(context.taskId) && command.targetId === context.taskId;
+		}
+		if (command.scope === 'session') {
+			return Boolean(context.sessionId) && command.targetId === context.sessionId;
+		}
+		return false;
+	});
 }
 
 function buildThemePickerItems(selectedTheme: CockpitThemeName): SelectItem[] {
@@ -2669,17 +3423,24 @@ function buildHeaderTabs(
 			target: { kind: 'control' }
 		}
 	];
+	const missionCandidates = status.availableMissions ?? fallbackMissions ?? [];
 	const seenMissionIds = new Set<string>();
 	const activeMissionId = status.missionId?.trim();
 	if (activeMissionId) {
+		const activeMissionTitle = status.title?.trim() || missionCandidates.find(
+			(candidate) => candidate.missionId === activeMissionId
+		)?.title;
 		tabs.push({
 			id: `mission:${activeMissionId}`,
-			label: formatHeaderMissionLabel(activeMissionId, status.title),
+			label: formatHeaderMissionLabel(activeMissionId, activeMissionTitle),
 			target: { kind: 'mission', missionId: activeMissionId }
 		});
 		seenMissionIds.add(activeMissionId);
 	}
-	for (const candidate of status.availableMissions ?? fallbackMissions ?? []) {
+	for (const candidate of missionCandidates) {
+		if (activeMissionId) {
+			break;
+		}
 		if (!candidate.missionId || seenMissionIds.has(candidate.missionId)) {
 			continue;
 		}
@@ -2699,7 +3460,7 @@ function formatHeaderMissionLabel(missionId: string, title?: string): string {
 		return missionId;
 	}
 	const normalized = trimmedTitle.replace(/\s+/gu, ' ').trim();
-	return normalized.length <= 22 ? normalized : `${normalized.slice(0, 19)}...`;
+	return normalized.length <= 40 ? normalized : `${normalized.slice(0, 37)}...`;
 }
 
 function pickPreferredHeaderTabId(
@@ -2824,6 +3585,49 @@ function pickSelectItemId(items: SelectItem[], current: string | undefined): str
 	return items[0]?.id;
 }
 
+function pickPreferredToolbarCommandId(
+	items: CommandToolbarItem[],
+	current: string | undefined
+): string | undefined {
+	const enabledItems = items.filter((item) => item.enabled);
+	if (enabledItems.length === 0) {
+		return undefined;
+	}
+	if (current && enabledItems.some((item) => item.id === current)) {
+		return current;
+	}
+	return enabledItems[0]?.id;
+}
+
+function formatToolbarCommandLabel(command: MissionCommandDescriptor): string {
+	if (command.ui?.toolbarLabel) {
+		return command.ui.toolbarLabel.trim().toUpperCase();
+	}
+	const normalized = command.command.trim().replace(/^\/+/u, '').replace(/\s+/gu, ' ');
+	return normalized.toUpperCase();
+}
+
+function resolveToolbarCommandsForContext(
+	commands: MissionCommandDescriptor[],
+	context: CommandTargetContext
+): MissionCommandDescriptor[] {
+	const enabled = commands.filter((command) => command.enabled);
+
+	if (context.sessionId) {
+		return enabled.filter((command) => command.scope === 'session' && command.targetId === context.sessionId);
+	}
+
+	if (context.taskId) {
+		return enabled.filter((command) => command.scope === 'task' && command.targetId === context.taskId);
+	}
+
+	if (context.stageId) {
+		return enabled.filter((command) => command.scope === 'stage' && command.targetId === context.stageId);
+	}
+
+	return enabled.filter((command) => command.scope === 'mission');
+}
+
 function movePickerSelection(items: SelectItem[], current: string | undefined, delta: number): string | undefined {
 	if (items.length === 0) {
 		return undefined;
@@ -2839,37 +3643,31 @@ function formatIssueDescription(issue: TrackedIssueSummary): string {
 	return `${issue.url} | ${labelText}`;
 }
 
-const themeCommandDescriptor: MissionCommandDescriptor = {
-	id: 'builtin:theme',
-	label: 'Select cockpit session theme',
-	command: '/theme',
-	scope: 'mission',
-	enabled: true
-};
+function buildKeyHintsText(input: {
+	focusArea: FocusArea;
+	activePicker: PickerMode | undefined;
+	commandItems: CommandItem[];
+	inputValue: string;
+}): string {
+	if (input.focusArea === 'command') {
+		if (input.activePicker === 'command-flow') {
+			return 'Tab/Shift+Tab focus | Ctrl+Space console | Enter continue | Esc close flow | q quit';
+		}
+		const commandHint = buildCommandCycleHint(input.commandItems, input.inputValue);
+		return `Tab/Shift+Tab focus | Ctrl+Space console | Esc collapse console | ${commandHint} | Enter submit | q quit`;
+	}
+	return 'Tab/Shift+Tab focus | Ctrl+Space console | Esc collapse console | ↑↓ navigate | Enter select | / commands | q quit';
+}
 
-const rootCommandDescriptor: MissionCommandDescriptor = {
-	id: 'builtin:root',
-	label: 'Return to Mission control',
-	command: '/root',
-	scope: 'mission',
-	enabled: true
-};
-
-function isCommandVisible(
-	command: MissionCommandDescriptor,
-	mode: CockpitMode,
-	workspaceKind: MissionWorkspaceContext['kind']
-): boolean {
-	if (mode === 'setup') {
-		return command.command === '/setup' || command.command === '/select';
+function buildCommandCycleHint(commands: CommandItem[], inputValue: string): string {
+	if (commands.length === 0) {
+		return '←→ command (none available)';
 	}
-	if (workspaceKind === 'mission-worktree') {
-		return command.command !== '/start' && command.command !== '/select' && command.command !== '/issues';
-	}
-	if (mode === 'mission') {
-		return command.command !== '/start' && command.command !== '/select' && command.command !== '/issues';
-	}
-	return true;
+	const trimmed = inputValue.trim();
+	const currentIndex = commands.findIndex((command) => command.command === trimmed);
+	const activeIndex = currentIndex >= 0 ? currentIndex : 0;
+	const activeCommand = commands[activeIndex]?.command ?? commands[0]?.command ?? '/';
+	return `←→ command ${String(activeIndex + 1)}/${String(commands.length)} ${activeCommand}`;
 }
 
 function canUseIssueIntake(control: MissionStatus['control']): boolean {
@@ -2897,16 +3695,6 @@ function describeControlConnection(status: MissionStatus): string {
 	return control.problems.length > 0
 		? 'Connected to Mission setup. Run /setup to finish configuration.'
 		: 'Connected to Mission control.';
-}
-
-function describeStatusRefresh(status: MissionStatus): string {
-	if (status.found) {
-		return `Mission ${status.missionId ?? 'unknown'} refreshed.`;
-	}
-	if (status.operationalMode === 'setup') {
-		return 'Mission setup refreshed.';
-	}
-	return 'Mission control refreshed.';
 }
 
 function noMissionSelectedMessage(status: MissionStatus): string {
@@ -2949,8 +3737,8 @@ function buildControlStatusLines(
 	if (missions.length === 0) {
 		lines.push(
 			status.operationalMode === 'setup'
-				? 'No mission worktrees yet. Finish setup, then create your first mission with /start.'
-				: 'No mission worktrees yet. Use /start from the repository root to create your first mission.'
+				? 'No active missions yet. Finish setup, then create your first mission with /start.'
+				: 'No active missions yet. Use /start from the repository root to create your first mission.'
 		);
 		return lines;
 	}
@@ -2985,20 +3773,6 @@ function controlGithubStatusLabel(control: MissionStatus['control']): string {
 	return 'n/a';
 }
 
-function shouldExecuteCommandSelection(command: string): boolean {
-	return command === '/setup'
-		|| command === '/init'
-		|| command === '/status'
-		|| command === '/issues'
-		|| command === '/start'
-		|| command === '/select'
-		|| command === '/root'
-		|| command === '/theme'
-		|| command === '/sessions'
-		|| command === '/clear'
-		|| command === '/quit';
-}
-
 function buildCommandDockDescriptor(input: {
 	commandFlow: CommandFlowState | undefined;
 	currentCommandFlowStep: CommandFlowStep | undefined;
@@ -3010,7 +3784,8 @@ function buildCommandDockDescriptor(input: {
 	selectedConsoleTabKind: ConsoleTabDescriptor['kind'] | undefined;
 	selectedSessionId: string | undefined;
 	selectedStageId: MissionStageId | undefined;
-	currentTaskLabel: string | undefined;
+	selectedTreeTargetTitle: string | undefined;
+	selectedTreeTargetKind: TreeTargetKind | undefined;
 }): CommandDockDescriptor {
 	if (input.currentCommandFlowStep?.kind === 'text') {
 		return {
@@ -3049,7 +3824,7 @@ function buildCommandDockDescriptor(input: {
 		};
 	}
 	if (input.showCommandPicker && input.selectedCommandId) {
-		return describeCommandDockIntent(input.selectedCommandId, input.status, input.selectedStageId, input.currentTaskLabel);
+		return describeCommandDockIntent(input.selectedCommandId, input.status, input.selectedStageId);
 	}
 	const trimmed = input.inputValue.trim();
 	if (!trimmed) {
@@ -3057,6 +3832,16 @@ function buildCommandDockDescriptor(input: {
 			return {
 				title: 'AGENT > SEND',
 				placeholder: 'Type a reply for the selected agent session or start a command with /'
+			};
+		}
+		if (input.status.found && input.selectedTreeTargetTitle) {
+			return {
+				title: buildFlowStepTitle(
+					dockTargetLabel(input.selectedTreeTargetKind),
+					input.selectedTreeTargetTitle,
+					'COMMAND'
+				),
+				placeholder: 'Enter a command for the selected target or use left/right to browse available commands.'
 			};
 		}
 		const scope = commandScopeLabel(input.status);
@@ -3073,7 +3858,7 @@ function buildCommandDockDescriptor(input: {
 			placeholder: 'Type a reply for the selected agent session'
 		};
 	}
-	return describeCommandDockIntent(trimmed, input.status, input.selectedStageId, input.currentTaskLabel);
+	return describeCommandDockIntent(trimmed, input.status, input.selectedStageId);
 }
 
 function findAvailableCommandByText(
@@ -3168,8 +3953,7 @@ function buildFlowStepTitle(
 function describeCommandDockIntent(
 	commandLine: string,
 	status: MissionStatus,
-	selectedStageId: MissionStageId | undefined,
-	currentTaskLabel: string | undefined
+	selectedStageId: MissionStageId | undefined
 ): CommandDockDescriptor {
 	const [instruction, ...args] = commandLine.trim().split(/\s+/u);
 	if (!instruction) {
@@ -3184,11 +3968,6 @@ function describeCommandDockIntent(
 			return {
 					title: 'SETUP > SETTING > SAVE',
 					placeholder: 'Press Enter to open the guided setup flow.'
-			};
-		case '/status':
-			return {
-				title: `${commandScopeLabel(status)} > REFRESH`,
-				placeholder: 'Press Enter to refresh the current daemon snapshot.'
 			};
 		case '/root':
 			return {
@@ -3220,6 +3999,18 @@ function describeCommandDockIntent(
 				title: 'THEME > APPLY',
 				placeholder: 'Enter a theme name or open the theme selector.'
 			};
+		case '/launch':
+			return {
+				title: 'TASK > SESSION > LAUNCH',
+				placeholder: 'Launch an agent session for the selected task target.'
+			};
+		case '/task': {
+			const action = (args[0] ?? 'state').toUpperCase();
+			return {
+				title: `TASK > ${action}`,
+				placeholder: 'Set selected task state using active, done, or blocked.'
+			};
+		}
 		case '/start':
 			return {
 				title: 'MISSION > START',
@@ -3229,13 +4020,6 @@ function describeCommandDockIntent(
 			return {
 				title: 'MISSION > SWITCH',
 				placeholder: 'Enter a mission id or open the mission selector.'
-			};
-		case '/launch':
-			return {
-				title: 'AGENT > LAUNCH',
-				placeholder: currentTaskLabel
-					? `Launch an agent for ${currentTaskLabel}.`
-					: 'Launch an agent for the selected task.'
 			};
 		case '/sessions':
 			return {
@@ -3298,33 +4082,38 @@ function formatDockStageLabel(stage: MissionStageId | undefined): string {
 	return (stage ?? 'stage').toUpperCase();
 }
 
-function buildHeaderStatusLines(input: {
-	mode: CockpitMode;
-	status: MissionStatus;
-	lastEvent: string;
-	fallbackControlBranch: string | undefined;
-	workspaceContext: MissionWorkspaceContext;
-	selectedTaskLabel: string | undefined;
-}): string[] {
-	if (input.mode === 'mission') {
-		return [
-			`mission=${input.status.missionId ?? 'unknown'} | branch=${input.status.branchRef ?? 'unknown'}`,
-			`repo=${input.workspaceContext.repoRoot} | task=${input.selectedTaskLabel ?? 'none'}`
-		];
+function dockTargetLabel(kind: TreeTargetKind | undefined): string {
+	if (!kind) {
+		return 'TARGET';
 	}
-	if (input.mode === 'root') {
-		return [
-			`repo=${input.workspaceContext.repoRoot}`,
-			formatControlBranchLabel(input.status.control, input.fallbackControlBranch)
-		];
+	if (kind === 'stage' || kind === 'stage-artifact') {
+		return 'STAGE';
 	}
-	const control = input.status.control;
-	if (!control) {
-		return ['Mission control status is loading.'];
+	if (kind === 'task' || kind === 'task-artifact') {
+		return 'TASK';
 	}
+	if (kind === 'session') {
+		return 'SESSION';
+	}
+	return 'TARGET';
+}
+
+function buildHeaderStatusLines(
+	status: MissionStatus,
+	workspaceRoot: string
+): Array<{ segments: Array<{ text: string; fg: string }> }> {
+	const workspaceBaseName = path.basename(workspaceRoot.trim());
+	const repository = resolvedControlGitHubRepository(status.control)
+		?? (workspaceBaseName.length > 0 ? workspaceBaseName : 'workspace');
+	const normalizedWorkspaceRoot = workspaceRoot.trim() || 'workspace';
 	return [
-		`repo=${input.workspaceContext.repoRoot}`,
-		formatControlBranchLabel(control, input.fallbackControlBranch)
+		{
+			segments: [
+				{ text: ` ${repository}`, fg: cockpitTheme.accent },
+				{ text: ' | ', fg: cockpitTheme.metaText },
+				{ text: normalizedWorkspaceRoot, fg: cockpitTheme.metaText }
+			]
+		}
 	];
 }
 
@@ -3336,13 +4125,13 @@ function resolvedControlGitHubRepository(control: MissionStatus['control']): str
 	return typeof repository === 'string' && repository.trim().length > 0 ? repository : undefined;
 }
 
-function resolveHeaderRepoLabel(control: MissionStatus['control'], repoRoot: string): string {
+function resolveHeaderWorkspaceLabel(control: MissionStatus['control'], workspaceRoot: string): string {
 	const githubRepository = resolvedControlGitHubRepository(control);
 	if (githubRepository) {
 		return githubRepository;
 	}
-	const normalizedRoot = repoRoot.trim();
-	return normalizedRoot.length > 0 ? normalizedRoot : 'repo';
+	const normalizedRoot = workspaceRoot.trim();
+	return normalizedRoot.length > 0 ? normalizedRoot : 'workspace';
 }
 
 function buildHeaderFooterBadges(input: {
@@ -3350,32 +4139,9 @@ function buildHeaderFooterBadges(input: {
 	status: MissionStatus;
 	daemonState: DaemonState;
 	fallbackGitHubUser: string | undefined;
-	workspaceContext: MissionWorkspaceContext;
-	selectedStageLabel: MissionStageId | undefined;
-	selectedTaskLabel: string | undefined;
 }): Array<{ text: string; tone?: 'neutral' | 'accent' | 'success' | 'warning' | 'danger'; framed?: boolean }> {
-	const contextBadge = {
-		text: input.workspaceContext.kind === 'mission-worktree' ? 'worktree' : 'repo-root'
-	} as const;
-	if (input.mode === 'mission') {
-		return [
-			{ text: `stage ${input.selectedStageLabel ?? input.status.stage ?? 'none'}`, tone: 'accent' },
-			{ text: `task ${input.selectedTaskLabel ?? 'none'}` },
-			{ text: `branch ${input.status.branchRef ?? 'unknown'}` },
-			contextBadge,
-			{ text: '●', tone: daemonStateTone(input.daemonState), framed: false }
-		];
-	}
 	const control = input.status.control;
-	if (input.mode === 'root') {
-		return [
-			...buildControlHeaderAgentConnectionBadges(input.status),
-			...buildControlHeaderGitHubBadges(control, input.fallbackGitHubUser),
-			{ text: '●', tone: daemonStateTone(input.daemonState), framed: false }
-		];
-	}
 	return [
-		...buildControlHeaderAgentConnectionBadges(input.status),
 		...buildControlHeaderGitHubBadges(control, input.fallbackGitHubUser),
 		{ text: '●', tone: daemonStateTone(input.daemonState), framed: false }
 	];
@@ -3391,38 +4157,32 @@ function daemonStateTone(state: DaemonState): 'accent' | 'success' | 'warning' |
 	return 'danger';
 }
 
-function formatControlBranchLabel(
-	control: MissionStatus['control'],
-	fallbackBranch?: string
-): string {
-	const daemonBranch = control?.currentBranch?.trim();
-	const branch = daemonBranch && daemonBranch.length > 0 && daemonBranch !== 'HEAD' && daemonBranch.toLowerCase() !== 'unknown'
-		? daemonBranch
-		: fallbackBranch?.trim();
-	return `branch=${branch && branch.length > 0 ? branch : 'unknown'}`;
-}
-
 function buildControlHeaderGitHubBadges(
 	control: MissionStatus['control'],
 	fallbackGitHubUser?: string
 ): Array<{ text: string; tone?: 'neutral' | 'accent' | 'success' | 'warning' | 'danger'; framed?: boolean }> {
+	const githubUser = resolveHeaderGitHubUser(control, fallbackGitHubUser);
+	if (githubUser && githubUser.length > 0) {
+		return [{ text: githubUser, tone: 'success' }];
+	}
+	if (control?.githubAuthenticated === true) {
+		return [{ text: 'github', tone: 'success' }];
+	}
+	return [{ text: 'github', tone: 'danger' }];
+}
+
+function resolveHeaderGitHubUser(
+	control: MissionStatus['control'],
+	fallbackGitHubUser?: string
+): string | undefined {
 	if (control?.githubAuthenticated === false) {
-		return [];
+		return undefined;
 	}
 	const githubUser =
 		control?.githubUser?.trim()
 			|| parseGitHubUserFromAuthDetail(control?.githubAuthMessage)?.trim()
 			|| fallbackGitHubUser?.trim();
-	if (githubUser && githubUser.length > 0) {
-		return [{ text: githubUser, tone: 'success' }];
-	}
-	return [];
-}
-
-function buildControlHeaderAgentConnectionBadges(
-	_status: MissionStatus
-): Array<{ text: string; tone?: 'neutral' | 'accent' | 'success' | 'warning' | 'danger'; framed?: boolean }> {
-	return [];
+	return githubUser && githubUser.length > 0 ? githubUser : undefined;
 }
 
 function upsertSessionRecord(
@@ -3464,14 +4224,18 @@ function parseGitHubUserFromAuthDetail(detail: string | undefined): string | und
 }
 
 function gateIntentForStage(stage: MissionStageId | undefined): GateIntent {
-	if (stage === 'prd' || stage === 'spec' || stage === 'plan') {
+	if (stage === 'prd' || stage === 'spec') {
 		return 'implement';
 	}
 	if (stage === 'implementation') {
 		return 'verify';
 	}
-	if (stage === 'verification') {
+	if (stage === 'audit') {
 		return 'audit';
 	}
 	return 'deliver';
+}
+
+function isMissionDelivered(status: MissionStatus): boolean {
+	return Boolean(status.stages?.some((stage) => stage.stage === 'delivery' && stage.status === 'done'));
 }

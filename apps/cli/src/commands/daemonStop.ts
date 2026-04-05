@@ -6,8 +6,8 @@ import { stopMissionDaemon } from './daemonControl.js';
 import type { CommandContext } from './types.js';
 
 export async function runDaemonStop(context: CommandContext): Promise<void> {
-	const manifestPath = getDaemonManifestPath(context.repoRoot);
-	const result = await stopMissionDaemon(context.repoRoot);
+	const manifestPath = getDaemonManifestPath();
+	const result = await stopMissionDaemon();
 
 	if (context.json) {
 		process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -22,7 +22,7 @@ export async function runDaemonStop(context: CommandContext): Promise<void> {
 			`killed: ${result.killed ? 'yes' : 'no'}`,
 			`status: ${result.killed || result.endpointPath ? 'stopped' : 'already stopped'}`
 		].join('\n'),
-			'Daemon surface'
+		'Daemon surface'
 	);
 	outro(result.message);
 }

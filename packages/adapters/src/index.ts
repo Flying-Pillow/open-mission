@@ -2,7 +2,7 @@ import {
 	type MissionAgentRuntime
 } from '../../core/build/daemon/MissionAgentRuntime.js';
 import { CopilotAgentRuntime } from '../../core/build/adapters/CopilotAgentRuntime.js';
-import { readMissionRepoSettings } from '../../core/build/lib/repoConfig.js';
+import { readMissionDaemonSettings } from '../../core/build/lib/daemonConfig.js';
 import path from 'node:path';
 
 export { CopilotAgentRuntime };
@@ -14,11 +14,11 @@ type ConfiguredAgentSettings = {
 };
 
 export async function createConfiguredMissionRuntimes(options: {
-	repoRoot: string;
+	controlRoot: string;
 	logLine?: (line: string) => void;
 }): Promise<MissionAgentRuntime[]> {
-	const repoSettings = readMissionRepoSettings(options.repoRoot) as ConfiguredAgentSettings | undefined;
-	const agentRunner = repoSettings?.agentRunner?.trim();
+	const daemonSettings = readMissionDaemonSettings(options.controlRoot) as ConfiguredAgentSettings | undefined;
+	const agentRunner = daemonSettings?.agentRunner?.trim();
 
 	if (!agentRunner) {
 		return [];
@@ -30,13 +30,13 @@ export async function createConfiguredMissionRuntimes(options: {
 
 	return [
 		new CopilotAgentRuntime({
-			...(repoSettings?.defaultModel ? { defaultModel: repoSettings.defaultModel } : {}),
-			...(repoSettings?.skillsPath
+			...(daemonSettings?.defaultModel ? { defaultModel: daemonSettings.defaultModel } : {}),
+			...(daemonSettings?.skillsPath
 				? {
 					skillDirectories: [
-						path.isAbsolute(repoSettings.skillsPath)
-							? repoSettings.skillsPath
-							: path.join(options.repoRoot, repoSettings.skillsPath)
+						path.isAbsolute(daemonSettings.skillsPath)
+							? daemonSettings.skillsPath
+							: path.join(options.controlRoot, daemonSettings.skillsPath)
 					]
 				}
 				: {}),

@@ -12,8 +12,8 @@ import { DaemonClient } from './DaemonClient.js';
 
 describe('DaemonClient', () => {
 	it('connects through the deterministic socket path when the manifest is missing', async () => {
-		const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'daemon-client-'));
-		const socketPath = resolveDaemonSocketPath(repoRoot);
+		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'daemon-client-'));
+		const socketPath = resolveDaemonSocketPath();
 		const server = net.createServer();
 
 		try {
@@ -30,7 +30,7 @@ describe('DaemonClient', () => {
 			});
 
 			const client = new DaemonClient();
-			await expect(client.connect({ repoRoot })).resolves.toBe(client);
+			await expect(client.connect({ surfacePath: workspaceRoot })).resolves.toBe(client);
 			client.dispose();
 		} finally {
 			await new Promise<void>((resolve, reject) => {
@@ -43,11 +43,11 @@ describe('DaemonClient', () => {
 				});
 			});
 			if (!isNamedPipePath(socketPath)) {
-				await fs.rm(getDaemonRuntimePath(repoRoot), { recursive: true, force: true }).catch(
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(
 					() => undefined
 				);
 			}
-			await fs.rm(repoRoot, { recursive: true, force: true });
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}
 	});
 });
