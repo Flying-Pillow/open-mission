@@ -14,8 +14,7 @@ export class MissionCockpitViewProvider
 
     public constructor(
         private readonly extensionUri: vscode.Uri,
-        private readonly sessionController: MissionSessionController,
-        private readonly outputChannel: vscode.OutputChannel
+        private readonly sessionController: MissionSessionController
     ) {
         this.disposables.push(
             this.sessionController.onDidMissionStatusChange(() => {

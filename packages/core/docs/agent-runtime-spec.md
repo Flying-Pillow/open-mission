@@ -167,6 +167,31 @@ A normalized runtime fact emitted by a runner or session.
 
 Events are append-only observations.
 
+### Governed Terminal Input
+
+Input that Mission intentionally injects into a terminal-backed session.
+
+This may be expressed as:
+
+- prompt text
+- control-key signals such as `Ctrl+C`
+- line-oriented operator replies
+- other adapter-approved keystroke sequences
+
+Governed terminal input is part of the runtime control surface.
+
+It must not be treated as an invisible out-of-band action.
+
+### Semantic Runtime Messaging
+
+Structured messages exchanged between a running agent and Mission outside raw terminal text.
+
+The long-term preferred mechanism is a Mission-owned daemon MCP server exposed to the runtime when available.
+
+Semantic runtime messaging is additive.
+
+It does not replace the baseline prompt, command, and lifecycle requirements of this contract.
+
 ## Design Principles
 
 1. Core owns normalized contracts only.
@@ -191,6 +216,8 @@ Mission must be able to:
 - cancel a session
 - terminate a session
 
+For terminal-backed runtimes, session lifecycle control may be implemented through tmux target management plus process-state inspection, as long as the adapter exposes only normalized Mission session state.
+
 ### Prompt Submission
 
 Mission must be able to submit a freeform prompt to a running session.
@@ -198,6 +225,14 @@ Mission must be able to submit a freeform prompt to a running session.
 This is required.
 
 If a provider cannot accept prompts once running, then it is not a valid session runtime for the target architecture.
+
+For terminal-backed runtimes, prompt submission may be implemented by injecting line-oriented input into the live terminal session.
+
+That still counts as prompt submission as long as:
+
+- Mission intentionally initiates the input
+- the adapter reports acceptance or rejection explicitly
+- the resulting session snapshot remains authoritative
 
 ### Command Submission
 
@@ -224,6 +259,16 @@ The engine owns canonical command identifiers.
 
 Adapters must map those identifiers to provider-native operations or reject them with an explicit unsupported result.
 
+For terminal-backed runtimes, command mapping may use terminal signals or adapter-defined keystroke sequences.
+
+Example mappings may include:
+
+- `interrupt` to `Ctrl+C`
+- `continue` to an adapter-specific prompt or newline sequence
+- `checkpoint` to an engine-authored terminal instruction
+
+These mappings are adapter implementation details and must remain outside the normalized core contract.
+
 ### Event Streaming
 
 Mission must be able to subscribe to normalized session events.
@@ -242,6 +287,8 @@ At minimum the runtime must emit:
 - session cancelled
 - session terminated
 
+For terminal-backed runtimes, the adapter must also emit normalized events for Mission-governed input injection when that input materially changes control flow or auditability.
+
 ### Reconciliation
 
 Mission must be able to recover live session state after daemon restart.
@@ -251,6 +298,8 @@ At minimum a runner must support one of these patterns:
 - attach by session reference
 - list active sessions
 - return a terminal not-found result for dead sessions
+
+For tmux-backed runtimes, a session reference may be backed by persisted tmux identifiers plus Mission-owned metadata that can be reattached or reconciled after daemon restart.
 
 If `attachSession()` is called for a session that no longer exists, it must resolve to an `AgentSession` instance whose initial snapshot phase is `terminated` and which emits `session.terminated` immediately after subscription.
 
@@ -290,11 +339,20 @@ export interface AgentRunnerCapabilities {
   interruptible: boolean;
   interactiveInput: boolean;
   telemetry: boolean;
+  terminalTransport?: boolean;
+  governedInputInjection?: boolean;
+  semanticMessaging?: boolean;
 }
 
 export interface AgentSessionReference {
   runnerId: AgentRunnerId;
   sessionId: AgentSessionId;
+  transport?: {
+    kind: 'tmux';
+    sessionName: string;
+    windowName?: string;
+    paneId?: string;
+  };
 }
 
 export interface AgentSessionStartRequest {
@@ -327,6 +385,7 @@ export interface AgentSessionSnapshot {
   acceptsPrompts: boolean;
   acceptedCommands: AgentCommandKind[];
   awaitingInput: boolean;
+  transportKind?: 'tmux';
   failureMessage?: string;
   updatedAt: string;
 }
@@ -366,6 +425,12 @@ export interface AgentSession {
   dispose(): void;
 }
 ```
+
+The core contract does not require every runner to expose transport metadata.
+
+When transport metadata exists, it is diagnostic and reconciliation data only.
+
+Callers must not couple workflow logic to tmux naming details.
 
 ## Event Model
 
@@ -415,6 +480,20 @@ export type AgentSessionEvent =
       type: 'command.rejected';
       command: AgentCommand;
       reason: string;
+      snapshot: AgentSessionSnapshot;
+    }
+  | {
+      type: 'session.input-injected';
+      inputSource: 'engine' | 'operator';
+      mode: 'prompt' | 'signal' | 'keystroke';
+      text?: string;
+      snapshot: AgentSessionSnapshot;
+    }
+  | {
+      type: 'session.semantic-message';
+      channel: 'mcp' | 'adapter';
+      messageType: string;
+      body: Record<string, unknown>;
       snapshot: AgentSessionSnapshot;
     }
   | {
@@ -510,6 +589,8 @@ The core `AgentRunner` contract remains stateless regarding mission transcript h
 
 If future runtimes can expose richer prompt affordances, that may be added as metadata, not as a compatibility branch in the core contract.
 
+If future runtimes expose a Mission daemon MCP server, semantic runtime messages should flow through normalized session events rather than bypassing the runtime contract.
+
 ## Session Invariants
 
 The following invariants are required.
@@ -523,6 +604,8 @@ The following invariants are required.
 7. If a command kind is absent from `acceptedCommands`, `submitCommand` must reject explicitly.
 8. Session event order must be causally coherent for a single session.
 9. Every normalized session snapshot must include authoritative `missionId` and `taskId` values before it is emitted to the workflow engine.
+10. Mission-governed terminal input must produce auditable normalized events.
+11. Semantic runtime messages must not mutate mission state unless reduced through normal orchestrator policy.
 
 ## Orchestrator Rules
 
@@ -538,6 +621,15 @@ It must own:
 - prompt routing from operator surfaces into the session
 - command routing from workflow-engine requests into the session
 - restoration of `missionId` and `taskId` ownership when provider-native session state does not retain them
+
+For terminal-backed runtimes, the orchestrator also owns the distinction between:
+
+- governed Mission input routed through the adapter
+- uncontrolled manual terminal interaction outside Mission APIs
+
+The former is part of Mission state and audit.
+
+The latter may exist operationally, but should be surfaced as degraded-governance state when detectable.
 
 `AgentContext` is not part of this runtime boundary.
 
@@ -563,6 +655,14 @@ If an abstract base class exists, it may own only neutral behavior such as:
 It must not embed provider-specific protocol logic.
 
 Each concrete adapter must own only its provider translation.
+
+For tmux-backed runtimes, provider translation includes:
+
+- tmux target allocation and reconciliation
+- safe input injection
+- transcript capture
+- process exit detection
+- mapping raw terminal realities into normalized session phases
 
 ## Package Ownership
 
@@ -600,6 +700,7 @@ The first implementation pass should deliver:
 4. workflow engine integration that uses the new contract directly
 5. prompt submission into running sessions
 6. engine command submission into running sessions
+7. one tmux-backed process adapter suitable for CLI-native coding agents
 
 The first pass does not need:
 
@@ -607,6 +708,7 @@ The first pass does not need:
 2. multiple provider adapters
 3. advanced telemetry normalization
 4. UI-specific prompt suggestion systems
+5. daemon MCP semantic messaging
 
 ## Verification
 
@@ -619,6 +721,8 @@ The implementation must be proven with the following tests.
 5. Reconciliation tests: the orchestrator can reattach or reconcile sessions after restart when the adapter supports it.
 6. Workflow-engine integration tests: engine requests launch sessions, send commands, and reduce normalized session events without using a separate workflow-only runtime contract.
 7. Neutrality tests: a non-Copilot test adapter can satisfy the contract without importing any Copilot-specific core types.
+8. Governed-input tests: terminal-backed sessions emit explicit audit events when Mission injects prompts or control signals.
+9. Semantic-message tests: structured agent-to-Mission messages, when supported, are normalized without bypassing orchestrator policy.
 
 ## Decision
 

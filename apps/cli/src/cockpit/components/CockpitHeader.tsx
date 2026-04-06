@@ -9,6 +9,7 @@ import type { ProgressRailItem } from './progressModels.js';
 import { progressConnectorTone, progressStateTone } from './progressStateTone.js';
 
 const HEADER_BORDER_PURPLE = '#a855f7';
+const HEADER_BODY_ROWS = 3;
 
 type PanelStyle = Record<string, string | number | undefined>;
 
@@ -49,21 +50,18 @@ export function CockpitHeader(props: CockpitHeaderProps) {
 
 	const bodyLines = createMemo<TabPanelLine[]>(() => {
 		const lines: TabPanelLine[] = [];
-		lines.push({ text: '', fg: cockpitTheme.metaText });
-
-		for (const line of props.statusLines.slice(0, 1)) {
+		for (const line of props.statusLines.slice(0, 2)) {
 			lines.push(line);
 		}
 
 		if (props.stageItems.length > 0) {
-			lines.push({ text: '', fg: cockpitTheme.metaText });
 			lines.push({
 				segments: buildStageTimelineLine(props.stageItems, interiorWidth(), timelinePhase()),
 				fg: cockpitTheme.metaText
 			});
 		}
 
-		return lines;
+		return lines.slice(0, HEADER_BODY_ROWS);
 	});
 
 	return (
@@ -79,7 +77,7 @@ export function CockpitHeader(props: CockpitHeaderProps) {
 			{...(props.style ? { style: props.style } : {})}
 			footerBadges={props.footerBadges}
 			bodyLines={bodyLines()}
-			bodyRows={Math.max(1, bodyLines().length)}
+			bodyRows={HEADER_BODY_ROWS}
 		/>
 	);
 }

@@ -20,7 +20,7 @@ import {
 } from '../platforms/GitHubPlatformAdapter.js';
 import {
 	type MissionAgentDisposable
-	} from './events.js';
+} from './events.js';
 import {
 	getMissionDirectoryPath,
 	getMissionWorktreesPath,
@@ -307,7 +307,7 @@ export class MissionWorkspace {
 				body: params.brief.body
 			}).then((createdIssue) => ({
 				...params.brief,
-				issueId: createdIssue.issueId,
+				...(createdIssue.issueId !== undefined ? { issueId: createdIssue.issueId } : {}),
 				...(createdIssue.url ? { url: createdIssue.url } : {}),
 				...(createdIssue.labels ? { labels: createdIssue.labels } : {})
 			}));
@@ -325,6 +325,9 @@ export class MissionWorkspace {
 			brief: reconciledBrief,
 			...(params.branchRef ? { branchRef: params.branchRef } : { branchRef })
 		});
+		if (preparation.kind !== 'mission') {
+			throw new Error('Mission preparation returned a repository bootstrap result unexpectedly.');
+		}
 		return {
 			...(await this.buildIdleMissionStatus()),
 			missionId: preparation.missionId,

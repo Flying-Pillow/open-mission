@@ -14,8 +14,16 @@
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "exports": {
-    ".": "./build/index.js",
-    "./*": "./build/*"
+    ".": {
+      "typescript": "./src/index.ts",
+      "types": "./build/index.d.ts",
+      "import": "./build/index.js",
+      "default": "./build/index.js"
+    },
+    "./*": {
+      "typescript": "./src/*",
+      "default": "./build/*"
+    }
   },
   "files": [
     "build"

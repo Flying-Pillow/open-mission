@@ -45,8 +45,9 @@ class IncompatibleDaemonError extends Error {
 export async function connectMissionDaemon(
 	options: ConnectMissionDaemonOptions
 ): Promise<DaemonClient> {
+	const launchMode = options.launchMode ?? resolveMissionDaemonLaunchMode(import.meta.url);
 	const runtimeFactoryModulePath =
-		options.runtimeFactoryModulePath ?? resolveDefaultRuntimeFactoryModulePath();
+		options.runtimeFactoryModulePath ?? resolveDefaultRuntimeFactoryModulePath(launchMode);
 
 	try {
 		return await connectCompatibleDaemon(options.surfacePath, options.socketPath);
@@ -54,7 +55,13 @@ export async function connectMissionDaemon(
 		await stopIncompatibleDaemon(error, options);
 	}
 
-	await startMissionDaemon(options, runtimeFactoryModulePath);
+	await startMissionDaemon(
+		{
+			...options,
+			launchMode
+		},
+		runtimeFactoryModulePath
+	);
 
 	const timeoutAt = Date.now() + (options.startupTimeoutMs ?? 15_000);
 	let lastError: Error | undefined;
@@ -78,6 +85,11 @@ export async function connectMissionDaemon(
 export function resolveMissionDaemonLaunchMode(
 	moduleUrl: string | URL
 ): MissionDaemonLaunchMode {
+	const environmentLaunchMode = readConfiguredLaunchMode();
+	if (environmentLaunchMode) {
+		return environmentLaunchMode;
+	}
+
 	const modulePath = fileURLToPath(moduleUrl);
 	return modulePath.includes(`${path.sep}src${path.sep}`) ? 'source' : 'build';
 }
@@ -144,15 +156,21 @@ function createDaemonStartCommand(
 	};
 }
 
-function resolveDefaultRuntimeFactoryModulePath(): string | undefined {
+function resolveDefaultRuntimeFactoryModulePath(
+	launchMode: MissionDaemonLaunchMode
+): string | undefined {
 	const currentFilePath = fileURLToPath(import.meta.url);
 	const packageRoot = path.resolve(path.dirname(currentFilePath), '..');
 	const workspaceRoot = path.resolve(packageRoot, '..', '..');
 	const sourcePath = path.join(workspaceRoot, 'packages', 'adapters', 'src', 'index.ts');
 	const buildPath = path.join(workspaceRoot, 'packages', 'adapters', 'build', 'index.js');
 
-	if (currentFilePath.includes(`${path.sep}src${path.sep}`) && fs.existsSync(sourcePath)) {
+	if (launchMode === 'source' && fs.existsSync(sourcePath)) {
 		return sourcePath;
+	}
+
+	if (launchMode === 'build' && fs.existsSync(buildPath)) {
+		return buildPath;
 	}
 
 	if (fs.existsSync(buildPath)) {
@@ -164,6 +182,11 @@ function resolveDefaultRuntimeFactoryModulePath(): string | undefined {
 	}
 
 	return undefined;
+}
+
+function readConfiguredLaunchMode(): MissionDaemonLaunchMode | undefined {
+	const launchMode = process.env['MISSION_DAEMON_LAUNCH_MODE']?.trim();
+	return launchMode === 'source' || launchMode === 'build' ? launchMode : undefined;
 }
 
 async function stopIncompatibleDaemon(

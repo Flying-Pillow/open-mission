@@ -7,7 +7,7 @@ This package provides the Mission VS Code cockpit and mission explorer.
 The extension is a Mission cockpit surface backed by the Mission sidecar server.
 
 - It resolves mission state from the governed mission model.
-- It contributes the Mission activity-bar container with Flight Controller Cockpit and Mission Explorer views.
+- It contributes the Mission activity-bar container with Flight Controller Cockpit, Log, and Mission Explorer views.
 - It can run approved mission actions (artifact preparation, checkpoint approvals, stage transitions, gate previews, mission chat launch).
 - It does not redefine workflow law; legality remains in core and server mission logic.
 
@@ -21,6 +21,7 @@ The extension is a Mission cockpit surface backed by the Mission sidecar server.
 
 - Activity bar container: `Mission`
 - Webview: `Flight Controller Cockpit`
+- Webview: `Log`
 - Tree view: `Mission Explorer`
 - Title actions: refresh, settings, status, transition, launch agent
 - Tree items and cockpit actions open mission folders/docs and route actions through server-backed operators

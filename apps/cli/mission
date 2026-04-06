@@ -7,13 +7,136 @@ repo_root=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || {
 	pwd
 })
 preload_file="$script_dir/bun-preload.ts"
-daemon_command="$repo_root/missiond"
+daemon_command="$script_dir/missiond"
+typescript_conditions="--conditions=typescript"
+tmux_binary=${MISSION_TMUX_BINARY:-tmux}
+tmux_mode=${MISSION_TMUX_MODE:-auto}
+
+shell_quote() {
+	printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\''/g")"
+}
+
+build_command_string() {
+	command_string=
+	for command_arg in "$@"; do
+		quoted_arg=$(shell_quote "$command_arg")
+		if [ -n "$command_string" ]; then
+			command_string="$command_string $quoted_arg"
+		else
+			command_string=$quoted_arg
+		fi
+	done
+	printf '%s' "$command_string"
+}
+
+resolve_tmux_session_name() {
+	printf '%s' "${MISSION_TMUX_SESSION_NAME:-mission-$(basename "$repo_root")}"
+}
+
+resolve_daemon_log_path() {
+	runtime_root=${XDG_RUNTIME_DIR:-}
+	if [ -z "$runtime_root" ]; then
+		runtime_root=${TMPDIR:-/tmp}
+	fi
+	printf '%s/mission/daemon.stdout.log' "$runtime_root"
+}
+
+resolve_tmux_side_pane_command() {
+	if [ -n "${MISSION_TMUX_SIDE_PANE_COMMAND:-}" ]; then
+		printf '%s' "$MISSION_TMUX_SIDE_PANE_COMMAND"
+		return
+	fi
+
+	if [ -n "${MISSION_TMUX_AGENT_COMMAND:-}" ]; then
+		printf '%s' "$MISSION_TMUX_AGENT_COMMAND"
+		return
+	fi
+
+	daemon_log_path=$(resolve_daemon_log_path)
+	printf 'clear && tail -n 200 -F %s' "$(shell_quote "$daemon_log_path")"
+}
+
+tmux_session_has_live_primary_pane() {
+	session_name=$1
+	pane_state=$("$tmux_binary" list-panes -t "$session_name":0 -F '#{pane_index}:#{pane_dead}' 2>/dev/null || true)
+	if [ -z "$pane_state" ]; then
+		return 1
+	fi
+	printf '%s\n' "$pane_state" | grep -q '^0:0$'
+}
+
+launch_tmux_session() {
+	session_name=$(resolve_tmux_session_name)
+	split_size=${MISSION_TMUX_SIDE_PANE_SIZE:-${MISSION_TMUX_AGENT_PANE_SIZE:-40%}}
+	if [ "$hmr_mode" -eq 1 ]; then
+		left_command=$(build_command_string env MISSION_TMUX_ACTIVE=1 "$script_dir/mission" --hmr "$@")
+	else
+		left_command=$(build_command_string env MISSION_TMUX_ACTIVE=1 "$script_dir/mission" "$@")
+	fi
+	right_command=$(resolve_tmux_side_pane_command)
+
+	if "$tmux_binary" has-session -t "$session_name" 2>/dev/null; then
+		if ! tmux_session_has_live_primary_pane "$session_name"; then
+			"$tmux_binary" kill-session -t "$session_name" >/dev/null 2>&1 || true
+		else
+		"$tmux_binary" set-option -t "$session_name" -g mouse on >/dev/null
+		exec "$tmux_binary" attach-session -t "$session_name"
+		fi
+	fi
+
+	"$tmux_binary" new-session -d -s "$session_name" -c "$repo_root" sh -lc "$left_command"
+	"$tmux_binary" set-option -t "$session_name" -g mouse on >/dev/null
+	"$tmux_binary" setw -t "$session_name":0 remain-on-exit on >/dev/null
+	"$tmux_binary" split-window -h -l "$split_size" -t "$session_name":0.0 -c "$repo_root" sh -lc "$right_command"
+	"$tmux_binary" select-pane -t "$session_name":0.0 >/dev/null
+
+	exec "$tmux_binary" attach-session -t "$session_name"
+}
+
+should_launch_tmux() {
+	if [ "$cockpit_mode" -ne 1 ]; then
+		return 1
+	fi
+	if [ "${MISSION_TMUX_ACTIVE:-0}" = "1" ] || [ -n "${TMUX:-}" ]; then
+		return 1
+	fi
+	if [ ! -t 0 ] || [ ! -t 1 ]; then
+		if [ "$tmux_mode" = "force" ]; then
+			printf '%s\n' 'mission: tmux mode requires an interactive terminal.' >&2
+			exit 1
+		fi
+		return 1
+	fi
+	if command -v "$tmux_binary" >/dev/null 2>&1; then
+		return 0
+	fi
+	if [ "$tmux_mode" = "force" ]; then
+		printf '%s\n' "mission: tmux was requested but '$tmux_binary' was not found in PATH." >&2
+		exit 1
+	fi
+	return 1
+}
 
 hmr_mode=0
-if [ "${1:-}" = "--hmr" ]; then
-	hmr_mode=1
-	shift
-fi
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+		--hmr)
+			hmr_mode=1
+			shift
+			;;
+		--tmux)
+			tmux_mode=force
+			shift
+			;;
+		--no-tmux)
+			tmux_mode=off
+			shift
+			;;
+		*)
+			break
+			;;
+	esac
+done
 
 runner="tsx"
 first_arg=${1:-}
@@ -24,17 +147,20 @@ elif [ "${first_arg#--}" != "$first_arg" ]; then
 	cockpit_mode=1
 fi
 
+if [ "$first_arg" = "--help" ] || [ "$first_arg" = "-h" ]; then
+	tmux_mode=off
+fi
+
+if [ "$tmux_mode" != "off" ] && should_launch_tmux; then
+	launch_tmux_session "$@"
+fi
+
 if [ "$hmr_mode" -eq 1 ] && [ "$cockpit_mode" -eq 1 ]; then
-	if [ "${MISSION_BUN_WATCH:-0}" = "1" ]; then
-		exec env MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun --preload "$preload_file" --watch "$script_dir/src/index.ts" "$@"
-	fi
-	printf '%s\n' "mission: cockpit HMR watch is disabled by default because Bun can crash with ProcessFdQuotaExceeded."
-	printf '%s\n' "mission: set MISSION_BUN_WATCH=1 to force Bun watch mode."
-	exec env MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun --preload "$preload_file" "$script_dir/src/index.ts" "$@"
+	exec env MISSION_COCKPIT_HMR=1 MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun "$typescript_conditions" --watch --preload "$preload_file" "$script_dir/src/index.ts" "$@"
 elif [ "$hmr_mode" -eq 1 ]; then
 	runner="tsx watch"
 elif [ "$cockpit_mode" -eq 1 ]; then
-	exec env MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun --preload "$preload_file" "$script_dir/src/index.ts" "$@"
+	exec env MISSION_DAEMON_COMMAND="$daemon_command" MISSION_DAEMON_LAUNCH_MODE=source pnpm --dir "$repo_root" exec bun "$typescript_conditions" --preload "$preload_file" "$script_dir/src/index.ts" "$@"
 fi
 
 exec env MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$script_dir" exec $runner src/index.ts "$@"

@@ -26,7 +26,6 @@ import type {
 import {
 	DaemonApi,
 	DaemonMissionApi,
-	getDaemonLogPath,
 } from '@flying-pillow/mission-core';
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from '@opentui/solid';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSXElement, untrack } from 'solid-js';
@@ -38,11 +37,13 @@ import {
 	type CockpitThemeName,
 	isCockpitThemeName
 } from './components/cockpitTheme.js';
-import { type ConsolePanelContent, type ConsolePanelTab } from './components/ConsolePanel.js';
+import { type ConsolePanelContent } from './components/ConsolePanel.js';
+import { ConsoleContentPanel } from './components/ConsoleContentPanel.js';
 import { cockpitTheme } from './components/cockpitTheme.js';
 import type { ProgressRailItem, ProgressRailItemState } from './components/progressModels.js';
-import { ExpandedCommandComposer, type ComposerTab } from './components/ExpandedCommandComposer.js';
 import { FlowSummaryPanel } from './components/FlowSummaryPanel.js';
+import { MissionCenterPanel } from './components/MissionCenterPanel.js';
+import { RepositoryFlowPanel } from './components/RepositoryFlowPanel.js';
 import { SelectPanel } from './components/SelectPanel.js';
 import {
 	MissionTreePanel,
@@ -63,6 +64,7 @@ type RunCockpitAppOptions = {
 	workspaceContext: MissionWorkspaceContext;
 	initialSelector: MissionSelector;
 	initialTheme: CockpitThemeName;
+	initialShowIntroSplash?: boolean;
 	initialConnection?: CockpitConnection;
 	initialConnectionError?: string;
 	connect: (selector: MissionSelector) => Promise<CockpitConnection>;
@@ -71,49 +73,19 @@ type RunCockpitAppOptions = {
 type CockpitShellProps = RunCockpitAppOptions;
 
 type DaemonState = 'connected' | 'degraded' | 'booting';
-type CockpitMode = 'setup' | 'root' | 'mission';
-type PickerMode = 'command-select' | 'command-flow';
-type CenterPanelMode = 'console' | 'console-fullscreen' | 'command-select' | 'command-flow' | 'command-flow-editor';
-type CockpitLayoutRoute = {
-	layout: 'split' | 'overlay';
-	centerPanelMode: CenterPanelMode;
-};
-
-function resolveCockpitLayoutRoute(options: {
-	showCommandPicker: boolean;
-	showCommandFlow: boolean;
-	isExpandedCommandFlowTextStep: boolean;
-	consoleFullscreen: boolean;
-}): CockpitLayoutRoute {
-	if (options.isExpandedCommandFlowTextStep) {
-		return {
-			layout: 'overlay',
-			centerPanelMode: 'command-flow-editor'
-		};
-	}
-	if (options.showCommandFlow) {
-		return {
-			layout: 'split',
-			centerPanelMode: 'command-flow'
-		};
-	}
-	if (options.showCommandPicker) {
-		return {
-			layout: 'split',
-			centerPanelMode: 'command-select'
-		};
-	}
-	if (options.consoleFullscreen) {
-		return {
-			layout: 'overlay',
-			centerPanelMode: 'console-fullscreen'
-		};
-	}
-	return {
-		layout: 'split',
-		centerPanelMode: 'console'
-	};
-}
+type CockpitContext =
+	| { kind: 'repository' }
+	| { kind: 'mission'; missionId: string };
+type CockpitMode = 'repository' | 'mission';
+type PickerMode = 'command-select';
+type CenterRoute =
+	| { kind: 'repository-flow' }
+	| { kind: 'mission-split' };
+type ShellOverlay =
+	| { kind: 'none' }
+	| { kind: 'command-select' }
+	| { kind: 'mission-flow' }
+	| { kind: 'console-fullscreen' };
 
 type CommandFlowSelectionValue = {
 	kind: 'selection';
@@ -183,6 +155,16 @@ type CommandFlowState = {
 	stepIndex: number;
 	steps: CommandFlowStepValue[];
 };
+type ActiveFlowDraft =
+	| {
+		kind: 'selection';
+		highlightedItemId: string | undefined;
+		selectedItemIds: string[];
+	  }
+	| {
+		kind: 'text';
+		value: string;
+	  };
 type CommandDockDescriptor = {
 	title: string;
 	placeholder: string;
@@ -190,7 +172,13 @@ type CommandDockDescriptor = {
 type HeaderTab = {
 	id: string;
 	label: string;
-	target: { kind: 'control' } | { kind: 'mission'; missionId: string };
+	target: { kind: 'repository' } | { kind: 'mission'; missionId: string };
+};
+
+type HeaderMissionSummary = {
+	typeLabel: string;
+	numberLabel: string;
+	title: string;
 };
 type MarkdownDocumentState =
 	| { status: 'loading' }
@@ -208,11 +196,6 @@ type ConsoleTabDescriptor =
 		label: string;
 		kind: 'session';
 		sessionId: string;
-	  }
-	| {
-		id: string;
-		label: string;
-		kind: 'control';
 	  };
 
 type TreeTargetDescriptor = {
@@ -234,17 +217,32 @@ type CommandTargetContext = {
 	sessionId: string | undefined;
 };
 
-const missionFocusOrder: FocusArea[] = ['header', 'tree', 'sessions', 'command'];
-const controlFocusOrder: FocusArea[] = ['header', 'command'];
+const repositoryFocusOrder: FocusArea[] = ['header', 'flow', 'command'];
+const missionFocusOrder: FocusArea[] = ['header', 'tree', 'console', 'command'];
 
 export async function runCockpitApp(options: RunCockpitAppOptions): Promise<void> {
 	const renderer = await createCliRenderer({
 		exitOnCtrlC: false,
 		targetFps: 30
 	});
+	let exitAfterDestroy = false;
+	const teardownOnSignal = () => {
+		exitAfterDestroy = true;
+		renderer.destroy();
+	};
+	const signalNames: NodeJS.Signals[] = ['SIGTERM', 'SIGINT', 'SIGHUP'];
+	for (const signalName of signalNames) {
+		process.once(signalName, teardownOnSignal);
+	}
 	await render(() => <MissionCockpitApp {...options} />, renderer);
 	await new Promise<void>((resolve) => {
 		renderer.once('destroy', () => {
+			for (const signalName of signalNames) {
+				process.removeListener(signalName, teardownOnSignal);
+			}
+			if (exitAfterDestroy) {
+				process.exit(0);
+			}
 			resolve();
 		});
 	});
@@ -254,6 +252,7 @@ function MissionCockpitApp({
 	workspaceContext,
 	initialSelector,
 	initialTheme,
+	initialShowIntroSplash,
 	initialConnection,
 	initialConnectionError,
 	connect
@@ -269,7 +268,6 @@ function MissionCockpitApp({
 	const [activityLog, setActivityLog] = createSignal<string[]>([
 		createInitialStatusMessage(initialConnectionError)
 	]);
-	const [daemonOutputLines, setDaemonOutputLines] = createSignal<string[]>([]);
 	const [markdownDocumentByPath, setMarkdownDocumentByPath] = createSignal<Record<string, MarkdownDocumentState>>({});
 	const [consoleStateBySessionId, setConsoleStateBySessionId] = createSignal<
 		Record<string, MissionAgentConsoleState>
@@ -293,9 +291,7 @@ function MissionCockpitApp({
 	const [consoleReloadNonce, setConsoleReloadNonce] = createSignal<number>(0);
 	const [selectedThemeName, setSelectedThemeName] = createSignal<CockpitThemeName>(initialTheme);
 	const [commandFlow, setCommandFlow] = createSignal<CommandFlowState | undefined>();
-	const [commandFlowSelectionDraft, setCommandFlowSelectionDraft] = createSignal<string[]>([]);
-	const [commandFlowTextValue, setCommandFlowTextValue] = createSignal<string>('');
-	const [expandedComposerTab, setExpandedComposerTab] = createSignal<ComposerTab>('write');
+	const [activeFlowDraft, setActiveFlowDraft] = createSignal<ActiveFlowDraft | undefined>();
 	const [fallbackGitHubUser, setFallbackGitHubUser] = createSignal<string | undefined>();
 	const [isGitHubUserProbeInFlight, setIsGitHubUserProbeInFlight] = createSignal<boolean>(false);
 	const [fallbackControlBranch, setFallbackControlBranch] = createSignal<string | undefined>();
@@ -303,15 +299,61 @@ function MissionCockpitApp({
 	const [knownAvailableMissions, setKnownAvailableMissions] = createSignal<MissionStatus['availableMissions']>([]);
 	const [selectedHeaderTabId, setSelectedHeaderTabId] = createSignal<string | undefined>();
 	const [isConsoleFullscreen, setIsConsoleFullscreen] = createSignal<boolean>(false);
-	const [showIntroSplash, setShowIntroSplash] = createSignal<boolean>(true);
+	const [showIntroSplash, setShowIntroSplash] = createSignal<boolean>(initialShowIntroSplash ?? true);
 	const [selectedToolbarCommandId, setSelectedToolbarCommandId] = createSignal<string | undefined>();
 	const [confirmingToolbarCommandId, setConfirmingToolbarCommandId] = createSignal<string | undefined>();
 	const [toolbarConfirmationChoice, setToolbarConfirmationChoice] = createSignal<'confirm' | 'cancel'>('confirm');
 	const client = createMemo(() => connection()?.client);
 	const currentMissionId = createMemo(() => selector().missionId ?? status().missionId);
+	const headerTabs = createMemo<HeaderTab[]>(() =>
+		buildHeaderTabs(status(), knownAvailableMissions())
+	);
+	const activeHeaderTabId = createMemo(() => {
+		const missionId = currentMissionId();
+		return missionId ? `mission:${missionId}` : repositoryTabId;
+	});
+	const selectedHeaderTab = createMemo(() => {
+		const selectedTabId = selectedHeaderTabId() ?? activeHeaderTabId();
+		return headerTabs().find((tab) => tab.id === selectedTabId);
+	});
+	const cockpitContext = createMemo<CockpitContext>(() => {
+		const missionId = currentMissionId();
+		return missionId ? { kind: 'mission', missionId } : { kind: 'repository' };
+	});
+	const cockpitMode = createMemo<CockpitMode>(() => {
+		const target = selectedHeaderTab()?.target;
+		if (target?.kind === 'mission') {
+			return 'mission';
+		}
+		return 'repository';
+	});
+	const selectedMissionMatchesLoaded = createMemo(() => {
+		const target = selectedHeaderTab()?.target;
+		return target?.kind === 'mission'
+			&& status().found
+			&& target.missionId === currentMissionId();
+	});
+	const centerRoute = createMemo<CenterRoute>(() => {
+		if (cockpitMode() === 'mission') {
+			return { kind: 'mission-split' };
+		}
+		return { kind: 'repository-flow' };
+	});
+	const shellOverlay = createMemo<ShellOverlay>(() => {
+		if (isConsoleFullscreen()) {
+			return { kind: 'console-fullscreen' };
+		}
+		if (activePicker() === 'command-select' && commandQuery().length > 0) {
+			return { kind: 'command-select' };
+		}
+		if (cockpitMode() !== 'repository' && currentCommandFlowStep()) {
+			return { kind: 'mission-flow' };
+		}
+		return { kind: 'none' };
+	});
 	const controlStatus = createMemo(() => status().control);
-	const stages = createMemo(() => status().stages ?? []);
-	const sessions = createMemo(() => status().agentSessions ?? []);
+	const stages = createMemo(() => (cockpitContext().kind === 'mission' ? status().stages ?? [] : []));
+	const sessions = createMemo(() => (cockpitContext().kind === 'mission' ? status().agentSessions ?? [] : []));
 	const selectedStage = createMemo(() => {
 		const currentId = selectedStageId();
 		return stages().find((stage) => stage.stage === currentId);
@@ -348,9 +390,6 @@ function MissionCockpitApp({
 			subtitle: `${String(stage.completedTaskCount)}/${String(stage.taskCount)}`
 		}))
 	);
-	const cockpitMode = createMemo<CockpitMode>(() =>
-		status().operationalMode ?? (status().found ? 'mission' : 'root')
-	);
 	const themePickerItems = createMemo<SelectItem[]>(() =>
 		buildThemePickerItems(selectedThemeName())
 	);
@@ -366,10 +405,11 @@ function MissionCockpitApp({
 	const commandFlowItems = createMemo<SelectItem[]>(() => {
 		const step = currentCommandFlowStep();
 		const flow = currentCommandFlow();
-		if (!step || step.kind !== 'selection') {
+		const draft = activeFlowDraft();
+		if (!step || step.kind !== 'selection' || draft?.kind !== 'selection') {
 			return [];
 		}
-		const selectedIds = new Set(commandFlowSelectionDraft());
+		const selectedIds = new Set(draft.selectedItemIds);
 		return step.items(flow?.steps ?? []).map((item) => ({
 			...item,
 			...(step.selectionMode === 'multiple'
@@ -377,57 +417,42 @@ function MissionCockpitApp({
 				: {})
 		}));
 	});
-	const showCommandFlow = createMemo(() => {
+	const showCommandFlowOverlay = createMemo(() => {
 		const step = currentCommandFlowStep();
-		return activePicker() === 'command-flow' && step?.kind === 'selection';
+		return cockpitMode() !== 'repository' && step?.kind === 'selection';
 	});
-	const isCompactCommandFlowTextStep = createMemo(() => {
+	const isMissionFlowTextStep = createMemo(() => {
 		const step = currentCommandFlowStep();
-		return activePicker() === 'command-flow' && step?.kind === 'text' && step.inputMode === 'compact';
+		return cockpitMode() !== 'repository' && step?.kind === 'text';
 	});
-	const isExpandedCommandFlowTextStep = createMemo(() => {
-		const step = currentCommandFlowStep();
-		return activePicker() === 'command-flow' && step?.kind === 'text' && step.inputMode === 'expanded';
+	const selectedCommandFlowItemId = createMemo(() => {
+		const draft = activeFlowDraft();
+		return draft?.kind === 'selection'
+			? pickSelectItemId(commandFlowItems(), draft.highlightedItemId)
+			: undefined;
 	});
-	const canToggleExpandedPreview = createMemo(() => {
-		const step = currentCommandFlowStep();
-		return (
-			activePicker() === 'command-flow'
-			&& step?.kind === 'text'
-			&& step.inputMode === 'expanded'
-			&& step.format === 'markdown'
-		);
-	});
-	const selectedCommandFlowItemId = createMemo(() =>
-		pickSelectItemId(commandFlowItems(), selectedPickerItemId())
-	);
 	const commandFlowSummaryItems = createMemo(() => {
 		const flow = currentCommandFlow();
 		if (!flow) {
 			return [];
 		}
-		return buildCommandFlowSummaryItems(flow.steps);
+		return buildCommandFlowSummaryItems(flow.steps.slice(0, flow.stepIndex));
 	});
 	const headerPanelTitle = createMemo(() => {
 		const workspaceLabel = resolveHeaderWorkspaceLabel(status().control, workspaceContext.workspaceRoot);
-		if (cockpitMode() === 'setup') {
+		if (status().operationalMode === 'setup') {
 			return `SETUP ${workspaceLabel}`;
-		}
-		if (cockpitMode() === 'root') {
-			return workspaceLabel;
 		}
 		return workspaceLabel;
 	});
-	const headerTabs = createMemo<HeaderTab[]>(() =>
-		buildHeaderTabs(status(), knownAvailableMissions())
-	);
 	const headerTabsFocusable = createMemo(() => headerTabs().length > 1);
-	const activeHeaderTabId = createMemo(() => {
-		const missionId = currentMissionId();
-		return missionId ? `mission:${missionId}` : 'control';
-	});
 	const headerStatusLines = createMemo(() =>
-		buildHeaderStatusLines(status(), workspaceContext.workspaceRoot)
+		buildHeaderStatusLines(
+			status(),
+			workspaceContext.workspaceRoot,
+			selectedHeaderTab(),
+			knownAvailableMissions()
+		)
 	);
 	const headerFooterBadges = createMemo(() =>
 		buildHeaderFooterBadges({
@@ -444,9 +469,12 @@ function MissionCockpitApp({
 			sessionId: selectedSessionId()
 		};
 	});
-	const availableActions = createMemo<MissionActionDescriptor[]>(() =>
-		resolveAvailableCommandsForContext(status().availableActions ?? [], commandTargetContext())
-	);
+	const availableActions = createMemo<MissionActionDescriptor[]>(() => {
+		if (cockpitContext().kind === 'mission' && !selectedMissionMatchesLoaded()) {
+			return [];
+		}
+		return resolveAvailableCommandsForContext(status().availableActions ?? [], commandTargetContext());
+	});
 	const availableCommandById = createMemo(() => {
 		const entries = new Map<string, MissionActionDescriptor>();
 		for (const command of availableActions()) {
@@ -486,32 +514,26 @@ function MissionCockpitApp({
 	const selectedCommandPickerItemId = createMemo(() =>
 		pickSelectItemId(commandPickerItems(), selectedPickerItemId())
 	);
-	const layoutRoute = createMemo<CockpitLayoutRoute>(() =>
-		resolveCockpitLayoutRoute({
-			showCommandPicker: showCommandPicker(),
-			showCommandFlow: showCommandFlow(),
-			isExpandedCommandFlowTextStep: isExpandedCommandFlowTextStep(),
-			consoleFullscreen: isConsoleFullscreen()
-		})
-	);
-	const centerPanelMode = createMemo<CenterPanelMode>(() => layoutRoute().centerPanelMode);
 	const focusOrder = createMemo<FocusArea[]>(() =>
 		buildFocusOrder({
-			baseOrder: layoutRoute().centerPanelMode === 'console-fullscreen'
-				? ['sessions', 'command']
+			baseOrder: shellOverlay().kind === 'console-fullscreen'
+				? ['console', 'command']
 				: cockpitMode() === 'mission'
 					? missionFocusOrder
-					: controlFocusOrder,
+					: repositoryFocusOrder,
 			headerTabsFocusable: headerTabsFocusable(),
-			showCommandFlow: showCommandFlow(),
+			showCommandFlow: showCommandFlowOverlay(),
 			showCommandPicker: showCommandPicker(),
-			expandedComposer: isExpandedCommandFlowTextStep()
+			expandedComposer: false
 		})
 	);
 	const commandHelp = createMemo(() => {
 		const step = currentCommandFlowStep();
-		if (step) {
+		if (step && cockpitMode() !== 'repository') {
 			return step.helperText;
+		}
+		if (cockpitMode() === 'repository' && step) {
+			return 'Repository flow active. Tab to the flow panel to continue, or enter a new slash command here.';
 		}
 		const enabledCommands = availableActions()
 			.filter((command) => command.enabled)
@@ -527,24 +549,25 @@ function MissionCockpitApp({
 			focusArea: focusArea(),
 			activePicker: activePicker(),
 			commandItems: commandCycleItems(),
-			inputValue: inputValue()
+			inputValue: inputValue(),
+			selectedConsoleTabKind: inferConsoleTabKindFromId(selectedConsoleTabId()),
+			selectedHeaderTabKind: selectedHeaderTab()?.target.kind,
+			currentFlowStep: currentCommandFlowStep(),
+			cockpitMode: cockpitMode()
 		})
 	);
 	const screenTitle = createMemo(() => {
-		if (cockpitMode() === 'setup') {
+		if (cockpitMode() !== 'mission') {
 			return resolveHeaderWorkspaceLabel(status().control, workspaceContext.workspaceRoot);
 		}
-		if (cockpitMode() === 'root') {
-			return resolveHeaderWorkspaceLabel(status().control, workspaceContext.workspaceRoot);
-		}
-		return status().title ?? status().missionId ?? 'Mission';
+		return selectedMissionMatchesLoaded() ? status().title ?? status().missionId ?? 'Mission' : 'Mission';
 	});
 	const consoleEmptyLabel = createMemo(() => {
-		if (cockpitMode() === 'setup') {
+		if (status().operationalMode === 'setup') {
 			return 'Mission setup is incomplete. Use /setup to configure the repository before creating missions.';
 		}
 		if (cockpitMode() !== 'mission') {
-			return 'Mission control is active. Use /start to create a mission or /select to open an existing one from the repository root.';
+			return 'Repository mode is active. Use /start to create a mission or /select to open an existing one from the repository root.';
 		}
 		return selectedTask()
 			? 'No sessions for the selected task. Daemon output is shown below.'
@@ -584,14 +607,6 @@ function MissionCockpitApp({
 			});
 		}
 
-		if (!status().found) {
-			tabs.push({
-				id: controlTabId,
-				label: 'CONTROL',
-				kind: 'control'
-			});
-		}
-
 		return tabs;
 	});
 	const treeTargets = createMemo<TreeTargetDescriptor[]>(() =>
@@ -603,9 +618,6 @@ function MissionCockpitApp({
 	);
 	const visibleTreeTargets = createMemo<TreeTargetDescriptor[]>(() =>
 		buildVisibleTreeTargets(treeTargets(), collapsedTreeNodeIds())
-	);
-	const renderedConsoleTabs = createMemo<ConsolePanelTab[]>(() =>
-		consoleTabs().map((tab) => ({ id: tab.id, label: tab.label, kind: tab.kind }))
 	);
 	const selectedTreeTarget = createMemo(() => {
 		const preferredId = pickPreferredTreeTargetId(visibleTreeTargets(), selectedTreeTargetId(), {
@@ -632,15 +644,15 @@ function MissionCockpitApp({
 		})
 	);
 	const selectedConsoleTab = createMemo(() => {
+		if (cockpitContext().kind !== 'mission') {
+			return undefined;
+		}
 		const selectedTarget = selectedTreeTarget();
 		if (selectedTarget?.tabId) {
 			return consoleTabs().find((tab) => tab.id === selectedTarget.tabId);
 		}
-		if (!status().found) {
-			const preferredId = pickPreferredConsoleTabId(consoleTabs(), selectedConsoleTabId(), selectedSessionId());
-			return consoleTabs().find((tab) => tab.id === preferredId) ?? consoleTabs()[0];
-		}
-		return undefined;
+		const preferredId = pickPreferredConsoleTabId(consoleTabs(), selectedConsoleTabId(), selectedSessionId());
+		return consoleTabs().find((tab) => tab.id === preferredId) ?? consoleTabs()[0];
 	});
 	const selectedSessionRecord = createMemo(() => {
 		const sessionId = selectedSessionId();
@@ -663,7 +675,7 @@ function MissionCockpitApp({
 			&& session.lifecycleState !== 'cancelled';
 	});
 	const commandDockMode = createMemo<'input' | 'toolbar'>(() => {
-		if (isCompactCommandFlowTextStep() || isExpandedCommandFlowTextStep()) {
+		if (isMissionFlowTextStep()) {
 			return 'input';
 		}
 		if (canSendSessionText()) {
@@ -688,13 +700,6 @@ function MissionCockpitApp({
 				kind: 'output',
 				lines: lines.slice(-availableConsoleHeight()),
 				emptyLabel: 'No output has been recorded for this session yet.'
-			};
-		}
-		if (selectedTab.kind === 'control') {
-			return {
-				kind: 'output',
-				lines: daemonOutputLines().slice(-availableConsoleHeight()),
-				emptyLabel: 'Daemon stdout will appear here when the Mission daemon writes output.'
 			};
 		}
 		const documentState = markdownDocumentByPath()[selectedTab.sourcePath];
@@ -742,13 +747,150 @@ function MissionCockpitApp({
 		);
 	}
 	const rightPanelTitle = createMemo(() => selectedTreeTarget()?.title ?? 'TARGET');
-	function renderSplitPanel(): JSXElement | undefined {
-		switch (centerPanelMode()) {
-			case 'command-flow': {
-				const step = currentCommandFlowStep();
-				if (!step || step.kind !== 'selection') {
-					return undefined;
-				}
+	const repositoryFlowPanel = createMemo<JSXElement>(() => {
+		const step = currentCommandFlowStep();
+		const draft = activeFlowDraft();
+		const exactCommand = findAvailableCommandByText(availableActions(), inputValue().trim());
+		if (!step) {
+			return (
+				<RepositoryFlowPanel
+					title="REPOSITORY FLOW"
+					helperText="Use slash commands from the bottom dock to start a repository flow."
+					summaryItems={[]}
+					focused={focusArea() === 'flow'}
+					stepLabel="IDLE"
+					stepIndex={0}
+					stepCount={1}
+					statusTone="neutral"
+					statusText="idle"
+					body={{
+						kind: 'idle',
+						emptyLabel: 'Repository mode is ready. Start a slash-command flow from the command dock.',
+						...(exactCommand?.flow
+							? {
+								previewTitle: `${exactCommand.flow.targetLabel} > ${exactCommand.flow.actionLabel}`,
+								previewText: exactCommand.flow.steps[0]?.helperText ?? 'Press Enter in the command dock to start this flow.'
+							}
+							: {})
+					}}
+				/>
+			);
+		}
+		if (step.kind === 'selection' && draft?.kind === 'selection') {
+			return (
+				<RepositoryFlowPanel
+					title={step.title}
+					helperText={step.helperText}
+					summaryItems={commandFlowSummaryItems()}
+					focused={focusArea() === 'flow'}
+					stepLabel={step.label}
+					stepIndex={currentCommandFlow()?.stepIndex ?? 0}
+					stepCount={currentCommandFlow()?.definition.steps.length ?? 1}
+					statusTone={draft.selectedItemIds.length > 0 ? 'accent' : 'warning'}
+					statusText={draft.selectedItemIds.length > 0 ? 'ready' : 'blocked'}
+					body={{
+						kind: 'selection',
+						items: commandFlowItems(),
+						selectedItemId: selectedCommandFlowItemId(),
+						emptyLabel: step.emptyLabel,
+						selectionMode: step.selectionMode,
+						onItemChange: (itemId) => {
+							setFlowSelectionHighlight(itemId);
+						},
+						onItemSelect: (itemId) => {
+							setFlowSelectionHighlight(itemId);
+							void commitCurrentFlowStep();
+						}
+					}}
+				/>
+			);
+		}
+		if (step.kind === 'text' && draft?.kind === 'text') {
+			return (
+				<RepositoryFlowPanel
+					title={step.title}
+					helperText={step.helperText}
+					summaryItems={commandFlowSummaryItems()}
+					focused={focusArea() === 'flow'}
+					stepLabel={step.label}
+					stepIndex={currentCommandFlow()?.stepIndex ?? 0}
+					stepCount={currentCommandFlow()?.definition.steps.length ?? 1}
+					statusTone={draft.value.trim().length > 0 ? 'accent' : 'warning'}
+					statusText={draft.value.trim().length > 0 ? 'ready' : 'blocked'}
+					body={{
+						kind: 'text',
+						value: draft.value,
+						placeholder: step.placeholder,
+						onInputChange: (value) => {
+							setActiveFlowDraft({ kind: 'text', value });
+						},
+						onInputSubmit: () => {
+							void commitCurrentFlowStep();
+						}
+					}}
+				/>
+			);
+		}
+		return (
+			<RepositoryFlowPanel
+				title="REPOSITORY FLOW"
+				helperText="Preparing flow step..."
+				summaryItems={commandFlowSummaryItems()}
+				focused={focusArea() === 'flow'}
+				stepLabel="FLOW"
+				stepIndex={currentCommandFlow()?.stepIndex ?? 0}
+				stepCount={currentCommandFlow()?.definition.steps.length ?? 1}
+				statusTone="warning"
+				statusText="blocked"
+				body={{ kind: 'idle', emptyLabel: 'The current flow step is not ready yet.' }}
+			/>
+		);
+	});
+	const centerContent = createMemo<JSXElement>(() => {
+		switch (centerRoute().kind) {
+			case 'mission-split':
+				return (
+					<MissionCenterPanel
+						treePanel={renderMissionTreePanel() ?? <box />}
+						consoleTitle={rightPanelTitle()}
+						consoleContent={consoleContent()}
+						treeFocused={focusArea() === 'tree'}
+						consoleFocused={focusArea() === 'console'}
+						consoleBodyRows={availableConsoleHeight()}
+					/>
+				);
+			case 'repository-flow':
+			default:
+				return repositoryFlowPanel();
+		}
+	});
+	const overlayContent = createMemo<JSXElement | undefined>(() => {
+		if (shellOverlay().kind === 'command-select') {
+			return (
+				<SelectPanel
+					title="COMMANDS"
+					items={commandPickerItems()}
+					selectedItemId={selectedCommandPickerItemId()}
+					focused={focusArea() === 'flow' || focusArea() === 'command'}
+					showFooterBadges={false}
+					emptyLabel={
+						commandQuery() === '/'
+							? 'No commands are available for the current selection.'
+							: `No commands match ${commandQuery()}.`
+					}
+					helperText="Keep typing to filter. Use arrow keys to highlight a command. Enter inserts it. Esc closes the list."
+					onItemChange={(itemId) => {
+						setSelectedPickerItemId(itemId);
+					}}
+					onItemSelect={(itemId) => {
+						selectCommandById(itemId);
+					}}
+				/>
+			);
+		}
+		if (shellOverlay().kind === 'mission-flow') {
+			const step = currentCommandFlowStep();
+			if (step?.kind === 'selection') {
 				return (
 					<SelectPanel
 						title={step.title}
@@ -756,57 +898,42 @@ function MissionCockpitApp({
 						selectedItemId={selectedCommandFlowItemId()}
 						focused={focusArea() === 'flow'}
 						emptyLabel={step.emptyLabel}
-						helperText={commandHelp()}
+						helperText={step.helperText}
 						onItemChange={(itemId) => {
-							setSelectedPickerItemId(itemId);
+							setFlowSelectionHighlight(itemId);
 						}}
 						onItemSelect={(itemId) => {
-							void selectCommandFlowItem(itemId);
+							setFlowSelectionHighlight(itemId);
+							void commitCurrentFlowStep();
 						}}
 					/>
 				);
 			}
-			case 'command-select':
+			if (step?.kind === 'text') {
 				return (
-					<SelectPanel
-						title="COMMANDS"
-						items={commandPickerItems()}
-						selectedItemId={selectedCommandPickerItemId()}
-						focused={focusArea() === 'flow' || focusArea() === 'command'}
-						showFooterBadges={false}
-						emptyLabel={
-							commandQuery() === '/'
-								? 'No commands are available for the current selection.'
-								: `No commands match ${commandQuery()}.`
-						}
-						helperText="Keep typing to filter. Use arrow keys to highlight a command. Enter inserts it. Esc closes the list."
-						onItemChange={(itemId) => {
-							setSelectedPickerItemId(itemId);
-						}}
-						onItemSelect={(itemId) => {
-							selectCommandById(itemId);
-						}}
+					<FlowSummaryPanel
+						title={step.title}
+						stepLabel={step.label}
+						helperText={step.helperText}
+						items={commandFlowSummaryItems()}
+						focused={focusArea() === 'command'}
 					/>
 				);
-			case 'console':
-			default:
-				if (isCompactCommandFlowTextStep()) {
-					const step = currentCommandFlowStep();
-					if (step?.kind === 'text') {
-						return (
-							<FlowSummaryPanel
-								title={step.title}
-								stepLabel={step.label}
-								helperText={step.helperText}
-								items={commandFlowSummaryItems()}
-								focused={focusArea() === 'command'}
-							/>
-						);
-					}
-				}
-				return undefined;
+			}
 		}
-	}
+		if (shellOverlay().kind === 'console-fullscreen') {
+			return (
+				<ConsoleContentPanel
+					focused={focusArea() === 'console'}
+					title={rightPanelTitle()}
+					content={consoleContent()}
+					bodyRows={availableConsoleHeight() + 6}
+					contentWidth={Math.max(terminal().width - 10, 20)}
+				/>
+			);
+		}
+		return undefined;
+	});
 	createEffect(() => {
 		setMarkdownDocumentByPath((current) => (Object.keys(current).length === 0 ? current : {}));
 		setConsoleStateBySessionId((current) => (Object.keys(current).length === 0 ? current : {}));
@@ -910,46 +1037,36 @@ function MissionCockpitApp({
 	});
 
 	createEffect(() => {
-		if (activePicker() !== 'command-flow') {
-			return;
-		}
 		const flow = currentCommandFlow();
 		const step = currentCommandFlowStep();
 		if (!flow || !step) {
-			closePicker();
+			setActiveFlowDraft(undefined);
 			return;
 		}
-		if (step.kind === 'selection') {
-			const items = commandFlowItems();
-			setCommandFlowSelectionDraft([]);
+		const nextDraft = buildInitialFlowDraft(flow, step, () =>
+			status().control?.settings as ConfiguredControlAgentSettings | undefined
+		);
+		if (step.kind === 'selection' && nextDraft?.kind === 'selection') {
+			const items = step.items(flow.steps);
 			if (items.length === 0) {
 				appendLog(step.emptyLabel);
-				closePicker();
+				setCommandFlow(undefined);
+				setActiveFlowDraft(undefined);
 				return;
 			}
-			setSelectedPickerItemId(() =>
-				pickSelectItemId(
-					items,
-					resolveCommandFlowSelectionInitialItemId(
-						step,
-						flow.steps,
-						() => status().control?.settings as ConfiguredControlAgentSettings | undefined
-					)
-				)
-			);
-			setFocusArea('flow');
+			setActiveFlowDraft(nextDraft);
+			setFocusArea(cockpitMode() === 'repository' ? 'flow' : 'flow');
 			return;
 		}
-		const initialValue = resolveCommandFlowTextInitialValue(flow, step);
-		setCommandFlowTextValue(initialValue);
-		if (step.inputMode === 'expanded') {
-			setExpandedComposerTab('write');
-			setInputValue('');
-			setFocusArea('flow');
-			return;
+		if (step.kind === 'text' && nextDraft?.kind === 'text') {
+			setActiveFlowDraft(nextDraft);
+			if (cockpitMode() === 'repository') {
+				setFocusArea('flow');
+				return;
+			}
+			setInputValue(nextDraft.value);
+			setFocusArea('command');
 		}
-		setInputValue(initialValue);
-		setFocusArea('command');
 	});
 
 	function resolveCommandFlowTextInitialValue(
@@ -982,6 +1099,33 @@ function MissionCockpitApp({
 			return settings.cockpitTheme ?? configuredInitialValue;
 		}
 		return configuredInitialValue;
+	}
+
+	function buildInitialFlowDraft(
+		flow: CommandFlowState,
+		step: CommandFlowStep,
+		getSettings: () => ConfiguredControlAgentSettings | undefined
+	): ActiveFlowDraft | undefined {
+		const committedValue = flow.steps[flow.stepIndex];
+		if (step.kind === 'selection') {
+			const committedSelection = committedValue?.kind === 'selection' ? committedValue : undefined;
+			const selectedItemIds = committedSelection?.optionIds ?? [];
+			const highlightedItemId = pickSelectItemId(
+				step.items(flow.steps.slice(0, flow.stepIndex)),
+				committedSelection?.optionIds[0]
+					?? resolveCommandFlowSelectionInitialItemId(step, flow.steps, getSettings)
+			);
+			return {
+				kind: 'selection',
+				highlightedItemId,
+				selectedItemIds: [...selectedItemIds]
+			};
+		}
+		const committedText = committedValue?.kind === 'text' ? committedValue.value : undefined;
+		return {
+			kind: 'text',
+			value: committedText ?? resolveCommandFlowTextInitialValue(flow, step)
+		};
 	}
 
 	createEffect(() => {
@@ -1024,7 +1168,7 @@ function MissionCockpitApp({
 	});
 
 	createEffect(() => {
-		if (cockpitMode() !== 'root') {
+		if (cockpitMode() !== 'repository') {
 			setFallbackControlBranch(undefined);
 			setIsControlBranchProbeInFlight(false);
 			return;
@@ -1055,7 +1199,7 @@ function MissionCockpitApp({
 			return;
 		}
 		if (commandQuery().length === 0) {
-			closePicker();
+			closeCommandPicker();
 			return;
 		}
 		setSelectedPickerItemId((current) => pickSelectItemId(commandPickerItems(), current));
@@ -1072,16 +1216,6 @@ function MissionCockpitApp({
 		if (!order.includes(focusArea())) {
 			setFocusArea(order[0] ?? 'command');
 		}
-	});
-
-	onMount(() => {
-		void refreshDaemonOutput();
-		const intervalHandle = setInterval(() => {
-			void refreshDaemonOutput();
-		}, 750);
-		onCleanup(() => {
-			clearInterval(intervalHandle);
-		});
 	});
 
 	createEffect(() => {
@@ -1131,10 +1265,10 @@ function MissionCockpitApp({
 		if (!currentClient || targetSessions.length === 0) {
 			return;
 		}
-		if (status().found && !missionSelector) {
+		if (selectedMissionMatchesLoaded() && !missionSelector) {
 			return;
 		}
-		const sessionSelector = status().found ? missionSelector : undefined;
+		const sessionSelector = selectedMissionMatchesLoaded() ? missionSelector : undefined;
 		for (const session of targetSessions) {
 			if (consoleStateBySessionId()[session.sessionId]) {
 				continue;
@@ -1161,31 +1295,7 @@ function MissionCockpitApp({
 		}
 	});
 	function renderExpandedCommandPanel(): JSXElement | undefined {
-		if (layoutRoute().layout !== 'overlay' || centerPanelMode() !== 'command-flow-editor') {
-			return undefined;
-		}
-		const flow = currentCommandFlow();
-		const step = currentCommandFlowStep();
-		if (!flow || !step || step.kind !== 'text' || step.inputMode !== 'expanded') {
-			return undefined;
-		}
-		return (
-			<ExpandedCommandComposer
-				title={buildFlowStepTitle(flow.definition.targetLabel, step.label, flow.definition.actionLabel)}
-				stepLabel={step.label}
-				helperText={step.helperText}
-				initialValue={commandFlowTextValue()}
-				placeholder={step.placeholder}
-				focused={focusArea() === 'flow'}
-				format={step.format}
-				activeTab={expandedComposerTab()}
-				onTabChange={setExpandedComposerTab}
-				onValueChange={setCommandFlowTextValue}
-				onSubmit={(value) => {
-					void submitCommandFlowTextStep(value);
-				}}
-			/>
-		);
+		return undefined;
 	}
 	createEffect(() => {
 		const tab = selectedConsoleTab();
@@ -1212,7 +1322,7 @@ function MissionCockpitApp({
 	});
 
 	useKeyboard((key) => {
-		if (key.ctrl && key.name === 'c') {
+		if (key.ctrl && key.name === 'q') {
 			renderer.destroy();
 			return;
 		}
@@ -1220,13 +1330,9 @@ function MissionCockpitApp({
 			toggleConsoleFullscreen();
 			return;
 		}
-		if (key.name === 'escape' && layoutRoute().centerPanelMode === 'console-fullscreen' && activePicker() === undefined) {
+		if (key.name === 'escape' && shellOverlay().kind === 'console-fullscreen' && activePicker() === undefined) {
 			setIsConsoleFullscreen(false);
 			setFocusArea('command');
-			return;
-		}
-		if (key.ctrl && key.name === 'p' && canToggleExpandedPreview()) {
-			setExpandedComposerTab((current) => (current === 'write' ? 'preview' : 'write'));
 			return;
 		}
 		if (key.name === 'tab') {
@@ -1234,8 +1340,7 @@ function MissionCockpitApp({
 			return;
 		}
 		if (
-			!isCompactCommandFlowTextStep() &&
-			!isExpandedCommandFlowTextStep() &&
+			!isMissionFlowTextStep() &&
 			focusArea() !== 'flow' &&
 			key.sequence === '/' &&
 			(focusArea() !== 'command' ||
@@ -1249,13 +1354,44 @@ function MissionCockpitApp({
 			return;
 		}
 		if (focusArea() === 'flow') {
+			if (cockpitMode() === 'repository') {
+				if (key.ctrl && key.name === 'right') {
+					void commitCurrentFlowStep();
+					return;
+				}
+				if (key.ctrl && key.name === 'left') {
+					retreatCommandFlow();
+					return;
+				}
+				if (key.name === 'up') {
+					moveFlowSelection(-1);
+					return;
+				}
+				if (key.name === 'down') {
+					moveFlowSelection(1);
+					return;
+				}
+				if (key.sequence === ' ' && isCurrentCommandFlowStepMultiSelect()) {
+					toggleCurrentCommandFlowSelection();
+					return;
+				}
+				if (key.name === 'enter' || key.name === 'return') {
+					void commitCurrentFlowStep();
+					return;
+				}
+				if (key.name === 'escape' && activePicker() === 'command-select') {
+					closeCommandPicker({ clearCommandInput: commandQuery() === '/' });
+					return;
+				}
+				return;
+			}
 			if (activePicker() === 'command-select') {
 				if (key.name === 'backspace') {
 					const nextValue = inputValue().slice(0, -1);
 					setInputValue(nextValue);
 					updateCommandPicker(nextValue);
 					if (!parseCommandQuery(nextValue)) {
-						closePicker({ clearCommandInput: true });
+						closeCommandPicker({ clearCommandInput: true });
 					}
 					return;
 				}
@@ -1266,18 +1402,21 @@ function MissionCockpitApp({
 					return;
 				}
 			}
-			if (showCommandFlow() && key.sequence === ' ' && isCurrentCommandFlowStepMultiSelect()) {
+			if (showCommandFlowOverlay() && key.sequence === ' ' && isCurrentCommandFlowStepMultiSelect()) {
 				toggleCurrentCommandFlowSelection();
 				return;
 			}
-			if (isExpandedCommandFlowTextStep() && (key.name === 'enter' || key.name === 'return')) {
-				if (expandedComposerTab() === 'preview' || !key.shift) {
-					void submitCommandFlowTextStep(commandFlowTextValue());
-					return;
-				}
+			if (showCommandFlowOverlay() && (key.name === 'enter' || key.name === 'return')) {
+				void commitCurrentFlowStep();
+				return;
 			}
 			if (key.name === 'escape') {
-				closePicker({ clearCommandInput: activePicker() === 'command-select' && commandQuery() === '/' });
+				if (activePicker() === 'command-select') {
+					closeCommandPicker({ clearCommandInput: commandQuery() === '/' });
+					return;
+				}
+				resetCommandFlow();
+				setFocusArea('command');
 				return;
 			}
 			return;
@@ -1323,11 +1462,11 @@ function MissionCockpitApp({
 				return;
 			}
 			if (activePicker() === 'command-select') {
-				closePicker({ clearCommandInput: commandQuery() === '/' });
+				closeCommandPicker({ clearCommandInput: commandQuery() === '/' });
 				return;
 			}
-			if (activePicker() === 'command-flow' && isCompactCommandFlowTextStep()) {
-				closePicker({ clearCommandInput: true });
+			if (isMissionFlowTextStep()) {
+				resetCommandFlow({ clearCommandInput: true });
 				setFocusArea('command');
 				return;
 			}
@@ -1392,6 +1531,18 @@ function MissionCockpitApp({
 		setFocusArea(order[nextIndex] ?? 'command');
 	}
 
+	function moveFlowSelection(delta: number): void {
+		const draft = activeFlowDraft();
+		if (draft?.kind !== 'selection') {
+			return;
+		}
+		const nextId = movePickerSelection(commandFlowItems(), draft.highlightedItemId, delta);
+		if (!nextId) {
+			return;
+		}
+		setFlowSelectionHighlight(nextId);
+	}
+
 	function moveSelection(delta: number): boolean {
 		switch (focusArea()) {
 			case 'header': {
@@ -1404,12 +1555,12 @@ function MissionCockpitApp({
 					return true;
 				}
 				return false;
-			case 'sessions':
-				if (cockpitMode() !== 'mission' || centerPanelMode() === 'console-fullscreen') {
-					selectConsoleTab(moveConsoleTabSelection(consoleTabs(), selectedConsoleTabId(), delta));
-					return true;
+			case 'console':
+				if (cockpitMode() !== 'mission' || shellOverlay().kind === 'console-fullscreen') {
+					return false;
 				}
-				return false;
+				selectConsoleTab(moveConsoleTabSelection(consoleTabs(), selectedConsoleTabId(), delta));
+				return true;
 			default:
 				return false;
 		}
@@ -1427,10 +1578,13 @@ function MissionCockpitApp({
 		if (!nextTabId) {
 			return;
 		}
-		setSelectedHeaderTabId(nextTabId);
+		void activateHeaderTab(nextTabId, { preserveFocus: true });
 	}
 
-	async function activateHeaderTab(tabId: string | undefined): Promise<void> {
+	async function activateHeaderTab(
+		tabId: string | undefined,
+		options?: { preserveFocus?: boolean }
+	): Promise<void> {
 		if (!tabId) {
 			return;
 		}
@@ -1438,14 +1592,20 @@ function MissionCockpitApp({
 		if (!selectedTab) {
 			return;
 		}
-		if (selectedTab.target.kind === 'control') {
+		setSelectedHeaderTabId(tabId);
+		if (selectedTab.target.kind === 'repository') {
 			if (!currentMissionId()) {
-				setSelectedHeaderTabId('control');
+				setSelectedHeaderTabId(repositoryTabId);
+				if (!options?.preserveFocus) {
+					setFocusArea('flow');
+				}
 				return;
 			}
 			await connectClient({});
-			setSelectedHeaderTabId('control');
-			setFocusArea('command');
+			setSelectedHeaderTabId(repositoryTabId);
+			if (!options?.preserveFocus) {
+				setFocusArea('flow');
+			}
 			return;
 		}
 
@@ -1456,7 +1616,9 @@ function MissionCockpitApp({
 
 		await connectClient({ missionId: selectedTab.target.missionId });
 		setSelectedHeaderTabId(tabId);
-		setFocusArea('command');
+		if (!options?.preserveFocus) {
+			setFocusArea('command');
+		}
 	}
 
 	async function ensureMarkdownLoaded(sourcePath: string, forceReload = false): Promise<void> {
@@ -1613,25 +1775,6 @@ function MissionCockpitApp({
 		}
 	}
 
-	async function refreshDaemonOutput(): Promise<void> {
-		try {
-			const content = await readFile(getDaemonLogPath(), 'utf8');
-			const nextLines = normalizeDaemonOutputLines(content);
-			setDaemonOutputLines((current) =>
-				areStringArraysEqual(current, nextLines) ? current : nextLines
-			);
-		} catch (error) {
-			if (isMissingFileError(error)) {
-				setDaemonOutputLines((current) => (current.length === 0 ? current : []));
-				return;
-			}
-			const fallbackLine = `Unable to read daemon stdout: ${toErrorMessage(error)}`;
-			setDaemonOutputLines((current) =>
-				current.length === 1 && current[0] === fallbackLine ? current : [fallbackLine]
-			);
-		}
-	}
-
 	function openIssuePicker(): void {
 		if (openIssues().length === 0) {
 			appendLog('No open GitHub issues are available.');
@@ -1645,15 +1788,12 @@ function MissionCockpitApp({
 	}
 
 	function updateCommandPicker(value: string): void {
-		if (activePicker() === 'command-flow') {
-			return;
-		}
 		const query = parseCommandQuery(value);
 		setCommandPickerQuery(query);
 
 		if (!query) {
 			if (activePicker() === 'command-select') {
-				closePicker();
+				closeCommandPicker();
 			}
 			return;
 		}
@@ -1662,13 +1802,9 @@ function MissionCockpitApp({
 		setSelectedPickerItemId((current) => pickSelectItemId(items, current));
 	}
 
-	function closePicker(options?: { clearCommandInput?: boolean }): void {
+	function closeCommandPicker(options?: { clearCommandInput?: boolean }): void {
 		setActivePicker(undefined);
 		setCommandPickerQuery('');
-		setCommandFlow(undefined);
-		setCommandFlowSelectionDraft([]);
-		setCommandFlowTextValue('');
-		setExpandedComposerTab('write');
 		if (options?.clearCommandInput) {
 			setInputValue('');
 		}
@@ -1677,11 +1813,16 @@ function MissionCockpitApp({
 		}
 	}
 
-	function cycleCommandInput(delta: number): void {
-		if (isCompactCommandFlowTextStep() || isExpandedCommandFlowTextStep()) {
-			return;
+	function resetCommandFlow(options?: { clearCommandInput?: boolean }): void {
+		setCommandFlow(undefined);
+		setActiveFlowDraft(undefined);
+		if (options?.clearCommandInput) {
+			setInputValue('');
 		}
-		if (activePicker() === 'command-flow') {
+	}
+
+	function cycleCommandInput(delta: number): void {
+		if (isMissionFlowTextStep()) {
 			return;
 		}
 		const items = commandCycleItems();
@@ -1725,15 +1866,16 @@ function MissionCockpitApp({
 		setSelectedPickerItemId(commandId);
 		if (options?.execute) {
 			setInputValue('');
-			closePicker({ clearCommandInput: true });
+			closeCommandPicker({ clearCommandInput: true });
 			void executeCommand(nextCommand.command);
 			return;
 		}
 		setInputValue(nextCommand.command);
-		closePicker();
+		closeCommandPicker();
 	}
 
 	function startCommandFlow(definition: CommandFlowDefinition, options?: { selectedItemId?: string }): void {
+		void options;
 		const firstStep = definition.steps[0];
 		if (!firstStep) {
 			return;
@@ -1744,51 +1886,59 @@ function MissionCockpitApp({
 			stepIndex: 0,
 			steps: []
 		});
-		setActivePicker('command-flow');
-		setSelectedPickerItemId(
-			firstStep.kind === 'selection'
-				? pickSelectItemId(
-					firstStep.items([]),
-					options?.selectedItemId ?? resolveCommandFlowSelectionInitialItemId(
-						firstStep,
-						[],
-						() => status().control?.settings as ConfiguredControlAgentSettings | undefined
-					)
-				)
-				: undefined
-		);
+		setActivePicker(undefined);
+		setActiveFlowDraft(undefined);
 		setInputValue('');
-		setFocusArea(firstStep.kind === 'selection' || firstStep.inputMode === 'expanded' ? 'flow' : 'command');
+		if (cockpitMode() === 'repository') {
+			setFocusArea('flow');
+			return;
+		}
+		setFocusArea(firstStep.kind === 'selection' ? 'flow' : 'command');
 	}
 
-	async function selectCommandFlowItem(itemId: string): Promise<void> {
+	function setFlowSelectionHighlight(itemId: string): void {
+		const draft = activeFlowDraft();
+		if (draft?.kind !== 'selection') {
+			return;
+		}
+		setActiveFlowDraft({
+			kind: 'selection',
+			highlightedItemId: itemId,
+			selectedItemIds: [...draft.selectedItemIds]
+		});
+	}
+
+	async function commitCurrentFlowStep(): Promise<void> {
 		const flow = commandFlow();
 		const step = currentCommandFlowStep();
-		if (!flow || !step || step.kind !== 'selection') {
+		const draft = activeFlowDraft();
+		if (!flow || !step || !draft) {
 			return;
 		}
-		const item = commandFlowItems().find((candidate) => candidate.id === itemId);
-		if (!item) {
-			return;
-		}
-		const optionIds = step.selectionMode === 'multiple' ? commandFlowSelectionDraft() : [item.id];
-		if (optionIds.length === 0) {
-			appendLog(`Select at least one ${step.label.toLowerCase()}.`);
-			return;
-		}
-		const optionLabels = step.items(flow.steps)
-			.filter((candidate) => optionIds.includes(candidate.id))
-			.map((candidate) => candidate.label);
-		await advanceCommandFlow([
-			...flow.steps,
-			{
+		if (step.kind === 'selection' && draft.kind === 'selection') {
+			const highlightedId = draft.highlightedItemId;
+			const optionIds = step.selectionMode === 'multiple'
+				? draft.selectedItemIds
+				: highlightedId ? [highlightedId] : [];
+			if (optionIds.length === 0) {
+				appendLog(`Select at least one ${step.label.toLowerCase()}.`);
+				return;
+			}
+			const optionLabels = step.items(flow.steps.slice(0, flow.stepIndex))
+				.filter((candidate) => optionIds.includes(candidate.id))
+				.map((candidate) => candidate.label);
+			await advanceCommandFlow({
 				kind: 'selection',
 				stepId: step.id,
 				label: step.label,
 				optionIds,
 				optionLabels
-			}
-		]);
+			});
+			return;
+		}
+		if (step.kind === 'text' && draft.kind === 'text') {
+			await submitCommandFlowTextStep(draft.value);
+		}
 	}
 
 	async function submitCommandFlowTextStep(rawValue: string): Promise<void> {
@@ -1797,23 +1947,24 @@ function MissionCockpitApp({
 		if (!flow || !step || step.kind !== 'text') {
 			return;
 		}
-		setCommandFlowTextValue(rawValue);
-		await advanceCommandFlow([
-			...flow.steps,
-			{
-				kind: 'text',
-				stepId: step.id,
-				label: step.label,
-				value: rawValue
-			}
-		]);
+		if (rawValue.trim().length === 0) {
+			appendLog(`Enter ${step.label.toLowerCase()} before continuing.`);
+			return;
+		}
+		await advanceCommandFlow({
+			kind: 'text',
+			stepId: step.id,
+			label: step.label,
+			value: rawValue
+		});
 	}
 
-	async function advanceCommandFlow(nextSteps: CommandFlowStepValue[]): Promise<void> {
+	async function advanceCommandFlow(nextStepValue: CommandFlowStepValue): Promise<void> {
 		const flow = commandFlow();
 		if (!flow) {
 			return;
 		}
+		const nextSteps = [...flow.steps.slice(0, flow.stepIndex), nextStepValue];
 		const nextStep = flow.definition.steps[flow.stepIndex + 1];
 		if (nextStep) {
 			setCommandFlow({
@@ -1821,18 +1972,6 @@ function MissionCockpitApp({
 				stepIndex: flow.stepIndex + 1,
 				steps: nextSteps
 			});
-			setSelectedPickerItemId(
-				nextStep.kind === 'selection'
-					? pickSelectItemId(
-						nextStep.items(nextSteps),
-						resolveCommandFlowSelectionInitialItemId(
-							nextStep,
-							nextSteps,
-							() => status().control?.settings as ConfiguredControlAgentSettings | undefined
-						)
-					)
-					: undefined
-			);
 			return;
 		}
 		await completeCommandFlow({
@@ -1856,7 +1995,7 @@ function MissionCockpitApp({
 				setFocusArea('flow');
 				return;
 			}
-			closePicker({ clearCommandInput: true });
+			resetCommandFlow({ clearCommandInput: true });
 			setFocusArea('command');
 		} catch (error) {
 			appendLog(toErrorMessage(error));
@@ -1865,17 +2004,35 @@ function MissionCockpitApp({
 		}
 	}
 
-	function toggleCurrentCommandFlowSelection(): void {
-		const step = currentCommandFlowStep();
-		const itemId = selectedPickerItemId();
-		if (!step || step.kind !== 'selection' || step.selectionMode !== 'multiple' || !itemId) {
+	function retreatCommandFlow(): void {
+		const flow = commandFlow();
+		if (!flow || flow.stepIndex === 0) {
 			return;
 		}
-		setCommandFlowSelectionDraft((current) =>
-			current.includes(itemId)
-				? current.filter((candidate) => candidate !== itemId)
-				: [...current, itemId]
-		);
+		setCommandFlow({
+			definition: flow.definition,
+			stepIndex: flow.stepIndex - 1,
+			steps: flow.steps
+		});
+	}
+
+	function toggleCurrentCommandFlowSelection(): void {
+		const step = currentCommandFlowStep();
+		const draft = activeFlowDraft();
+		if (!step || step.kind !== 'selection' || step.selectionMode !== 'multiple' || draft?.kind !== 'selection') {
+			return;
+		}
+		const itemId = draft.highlightedItemId;
+		if (!itemId) {
+			return;
+		}
+		setActiveFlowDraft({
+			kind: 'selection',
+			highlightedItemId: itemId,
+			selectedItemIds: draft.selectedItemIds.includes(itemId)
+				? draft.selectedItemIds.filter((candidate) => candidate !== itemId)
+				: [...draft.selectedItemIds, itemId]
+		});
 	}
 
 	function isCurrentCommandFlowStepMultiSelect(): boolean {
@@ -2026,7 +2183,7 @@ function MissionCockpitApp({
 		setSelectedThemeName(themeId);
 		setSelectedPickerItemId(themeId);
 		appendLog(`Theme set to ${themeId}.`);
-		closePicker();
+		resetCommandFlow();
 		setFocusArea('command');
 	}
 
@@ -2036,7 +2193,7 @@ function MissionCockpitApp({
 			return;
 		}
 		setSelectedPickerItemId(String(issueNumber));
-		closePicker();
+		resetCommandFlow();
 	}
 
 	async function connectClient(nextSelector: MissionSelector = selector()): Promise<DaemonClient | undefined> {
@@ -2069,8 +2226,8 @@ function MissionCockpitApp({
 			appendLog(describeIssueIntakeStatus(controlStatus()));
 			return;
 		}
-		if (status().found) {
-			appendLog('Issue intake is only available in Mission control. Use /root first.');
+		if (selectedMissionMatchesLoaded()) {
+			appendLog('Issue intake is only available in repository mode. Use /root first.');
 			return;
 		}
 		const currentClient = client() ?? (await connectClient(selector()));
@@ -2136,6 +2293,9 @@ function MissionCockpitApp({
 	}
 
 	function currentMissionSelector(): MissionSelector | undefined {
+		if (!selectedMissionMatchesLoaded()) {
+			return undefined;
+		}
 		const missionId = selector().missionId ?? status().missionId;
 		return missionId ? { missionId } : undefined;
 	}
@@ -2360,7 +2520,7 @@ function MissionCockpitApp({
 						'/issue <number>',
 						'/start',
 						'/select',
-						...(status().found ? ['/launch', '/task <active|done|blocked>'] : []),
+						...(selectedMissionMatchesLoaded() ? ['/launch', '/task <active|done|blocked>'] : []),
 						'/gate [implement|verify|audit|deliver]',
 						'/transition <stage>',
 						'/cancel',
@@ -2401,8 +2561,8 @@ function MissionCockpitApp({
 						return;
 					}
 					await connectClient({});
-					closePicker();
-					appendLog('Returned to Mission control.');
+					closeCommandPicker();
+					appendLog('Returned to repository mode.');
 					return;
 				}
 				case '/issues':
@@ -2427,15 +2587,15 @@ function MissionCockpitApp({
 						appendLog('Usage: /issue <number>');
 						return;
 					}
-					if (status().found) {
-						appendLog('Issue intake is only available in Mission control. Use /root first.');
+					if (selectedMissionMatchesLoaded()) {
+						appendLog('Issue intake is only available in repository mode. Use /root first.');
 						return;
 					}
 					await selectIssueByNumber(Number(issueNumber));
 					return;
 				}
 				case '/sessions':
-					if (!status().found) {
+					if (!selectedMissionMatchesLoaded()) {
 						appendLog('No mission is selected.');
 						return;
 					}
@@ -2453,7 +2613,7 @@ function MissionCockpitApp({
 				case '/gate': {
 					const missionSelector = currentMissionSelector();
 					const currentClient = client() ?? (await connectClient(missionSelector ?? selector()));
-					if (!status().found || !currentClient || !missionSelector) {
+					if (!selectedMissionMatchesLoaded() || !currentClient || !missionSelector) {
 						appendLog(noMissionSelectedMessage(status()));
 						return;
 					}
@@ -2478,8 +2638,8 @@ function MissionCockpitApp({
 
 	function toggleConsoleFullscreen(): void {
 		setIsConsoleFullscreen((current) => !current);
-		if (layoutRoute().centerPanelMode !== 'console-fullscreen' && focusArea() !== 'command') {
-			setFocusArea('sessions');
+		if (shellOverlay().kind !== 'console-fullscreen' && focusArea() !== 'command') {
+			setFocusArea('console');
 		}
 	}
 
@@ -2488,7 +2648,7 @@ function MissionCockpitApp({
 			<Show when={!showIntroSplash()} fallback={<IntroSplash onComplete={() => setShowIntroSplash(false)} />}>
 				<CockpitScreen
 					headerPanelTitle={headerPanelTitle()}
-					showHeader={centerPanelMode() !== 'console-fullscreen'}
+					showHeader={shellOverlay().kind !== 'console-fullscreen'}
 					title={screenTitle()}
 					headerTabs={headerTabs().map((tab) => ({ id: tab.id, label: tab.label }))}
 					headerSelectedTabId={selectedHeaderTabId()}
@@ -2498,14 +2658,9 @@ function MissionCockpitApp({
 					expandedCommandPanel={renderExpandedCommandPanel()}
 					stageItems={stageItems()}
 					focusArea={focusArea()}
-					consoleTabs={renderedConsoleTabs()}
-					selectedConsoleTabId={selectedConsoleTab()?.id}
-					consoleContent={consoleContent()}
-					rightPanelTitle={rightPanelTitle()}
-					onConsoleTabSelect={selectConsoleTab}
-					missionTreePanel={renderMissionTreePanel()}
-					hideMissionTreePanel={centerPanelMode() === 'console-fullscreen'}
-					mainPanel={renderSplitPanel()}
+					centerContent={centerContent()}
+					overlayContent={overlayContent()}
+					showCommandDock={shellOverlay().kind !== 'console-fullscreen'}
 					commandDockTitle={commandDockDescriptor().title}
 					commandDockPlaceholder={commandDockDescriptor().placeholder}
 					commandDockMode={commandDockMode()}
@@ -2518,12 +2673,11 @@ function MissionCockpitApp({
 					commandHelp={commandHelp()}
 					keyHintsText={keyHintsText()}
 					onInputChange={(value) => {
-						const nextValue = isCompactCommandFlowTextStep()
+						const nextValue = isMissionFlowTextStep()
 							? value
 							: normalizeCommandInputValue(value);
 						setInputValue(nextValue);
-						if (isCompactCommandFlowTextStep()) {
-							setCommandFlowTextValue(nextValue);
+						if (isMissionFlowTextStep()) {
 							return;
 						}
 						updateCommandPicker(nextValue);
@@ -2533,7 +2687,7 @@ function MissionCockpitApp({
 					}}
 					onInputSubmit={(submittedValue?: string) => {
 						const value = typeof submittedValue === 'string' ? submittedValue : inputValue();
-						if (isCompactCommandFlowTextStep()) {
+						if (isMissionFlowTextStep()) {
 							void submitCommandFlowTextStep(value);
 							return;
 						}
@@ -2581,11 +2735,11 @@ function MissionCockpitApp({
 						event.preventDefault();
 						event.stopPropagation();
 						if (activePicker() === 'command-select') {
-							closePicker({ clearCommandInput: commandQuery() === '/' });
+							closeCommandPicker({ clearCommandInput: commandQuery() === '/' });
 							return;
 						}
-						if (activePicker() === 'command-flow' && isCompactCommandFlowTextStep()) {
-							closePicker({ clearCommandInput: true });
+						if (isMissionFlowTextStep()) {
+							resetCommandFlow({ clearCommandInput: true });
 							setFocusArea('command');
 							return;
 						}
@@ -2742,17 +2896,21 @@ function resolveConfiguredAgentRunner(
 }
 
 function buildAgentModeItems(agentRunner: string | undefined): SelectItem[] {
-	if (agentRunner === 'copilot') {
+	if (agentRunner === 'copilot' || agentRunner === 'tmux') {
 		return [
 			{
 				id: 'interactive',
 				label: 'Interactive',
-				description: 'Operator-guided Copilot session'
+				description: agentRunner === 'tmux'
+					? 'Operator-guided terminal session'
+					: 'Operator-guided Copilot session'
 			},
 			{
 				id: 'autonomous',
 				label: 'Autonomous',
-				description: 'Copilot runs with autopilot continuation'
+				description: agentRunner === 'tmux'
+					? 'Terminal runner continues until interrupted or complete'
+					: 'Copilot runs with autopilot continuation'
 			}
 		];
 	}
@@ -2936,7 +3094,7 @@ function normalizeCommandInputValue(value: string): string {
 	return value;
 }
 
-const controlTabId = 'control';
+const repositoryTabId = 'repository';
 
 function stageArtifactProductKey(stage: MissionStageId): MissionProductKey | undefined {
 	if (stage === 'implementation') {
@@ -3246,9 +3404,6 @@ function inferConsoleTabKindFromId(tabId: string | undefined): ConsoleTabDescrip
 	if (tabId.startsWith('session:')) {
 		return 'session';
 	}
-	if (tabId === controlTabId) {
-		return 'control';
-	}
 	return undefined;
 }
 
@@ -3330,13 +3485,7 @@ function buildHeaderTabs(
 	status: MissionStatus,
 	fallbackMissions: MissionStatus['availableMissions'] = []
 ): HeaderTab[] {
-	const tabs: HeaderTab[] = [
-		{
-			id: 'control',
-			label: 'CONTROL',
-			target: { kind: 'control' }
-		}
-	];
+	const tabs: HeaderTab[] = [];
 	const missionCandidates = status.availableMissions ?? fallbackMissions ?? [];
 	const seenMissionIds = new Set<string>();
 	const activeMissionId = status.missionId?.trim();
@@ -3346,35 +3495,35 @@ function buildHeaderTabs(
 		)?.title;
 		tabs.push({
 			id: `mission:${activeMissionId}`,
-			label: formatHeaderMissionLabel(activeMissionId, activeMissionTitle),
+			label: formatHeaderMissionLabel(activeMissionId, status.issueId, activeMissionTitle),
 			target: { kind: 'mission', missionId: activeMissionId }
 		});
 		seenMissionIds.add(activeMissionId);
 	}
 	for (const candidate of missionCandidates) {
-		if (activeMissionId) {
-			break;
-		}
 		if (!candidate.missionId || seenMissionIds.has(candidate.missionId)) {
 			continue;
 		}
 		tabs.push({
 			id: `mission:${candidate.missionId}`,
-			label: formatHeaderMissionLabel(candidate.missionId, candidate.title),
+			label: formatHeaderMissionLabel(candidate.missionId, candidate.issueId, candidate.title),
 			target: { kind: 'mission', missionId: candidate.missionId }
 		});
 		seenMissionIds.add(candidate.missionId);
 	}
+	tabs.push(
+		{
+			id: repositoryTabId,
+			label: 'REPOSITORY',
+			target: { kind: 'repository' }
+		}
+	);
 	return tabs;
 }
 
-function formatHeaderMissionLabel(missionId: string, title?: string): string {
-	const trimmedTitle = title?.trim();
-	if (!trimmedTitle) {
-		return missionId;
-	}
-	const normalized = trimmedTitle.replace(/\s+/gu, ' ').trim();
-	return normalized.length <= 40 ? normalized : `${normalized.slice(0, 37)}...`;
+function formatHeaderMissionLabel(missionId: string, issueId?: number, title?: string): string {
+	const summary = buildHeaderMissionSummary(missionId, issueId, title);
+	return `${summary.typeLabel} ${summary.numberLabel}`;
 }
 
 function pickPreferredHeaderTabId(
@@ -3590,26 +3739,27 @@ function buildKeyHintsText(input: {
 	activePicker: PickerMode | undefined;
 	commandItems: CommandItem[];
 	inputValue: string;
+	selectedConsoleTabKind: ConsoleTabDescriptor['kind'] | undefined;
+	selectedHeaderTabKind: HeaderTab['target']['kind'] | undefined;
+	currentFlowStep: CommandFlowStep | undefined;
+	cockpitMode: CockpitMode;
 }): string {
 	if (input.focusArea === 'command') {
-		if (input.activePicker === 'command-flow') {
-			return 'Tab/Shift+Tab focus | Ctrl+Space console | Enter continue | Esc close flow | q quit';
+		if (input.currentFlowStep && input.cockpitMode !== 'repository') {
+			return 'Tab/Shift+Tab focus | Enter continue | Ctrl+Q quit';
 		}
-		const commandHint = buildCommandCycleHint(input.commandItems, input.inputValue);
-		return `Tab/Shift+Tab focus | Ctrl+Space console | Esc collapse console | ${commandHint} | Enter submit | q quit`;
+		return 'Tab/Shift+Tab focus | ←/→ command | Enter submit | Ctrl+Q quit';
 	}
-	return 'Tab/Shift+Tab focus | Ctrl+Space console | Esc collapse console | ↑↓ navigate | Enter select | / commands | q quit';
-}
-
-function buildCommandCycleHint(commands: CommandItem[], inputValue: string): string {
-	if (commands.length === 0) {
-		return '←→ command (none available)';
+	if (input.focusArea === 'console') {
+		return 'Tab/Shift+Tab focus | ↑/↓ navigate | ←/→ select | Enter select | Ctrl+Q quit';
 	}
-	const trimmed = inputValue.trim();
-	const currentIndex = commands.findIndex((command) => command.command === trimmed);
-	const activeIndex = currentIndex >= 0 ? currentIndex : 0;
-	const activeCommand = commands[activeIndex]?.command ?? commands[0]?.command ?? '/';
-	return `←→ command ${String(activeIndex + 1)}/${String(commands.length)} ${activeCommand}`;
+	if (input.focusArea === 'flow' && input.cockpitMode === 'repository') {
+		if (input.currentFlowStep?.kind === 'text') {
+			return 'Tab/Shift+Tab focus | Ctrl+←/→ step | Enter continue | Ctrl+Q quit';
+		}
+		return 'Tab/Shift+Tab focus | ↑/↓ navigate | Space toggle | Ctrl+←/→ step | Enter continue | Ctrl+Q quit';
+	}
+	return 'Tab/Shift+Tab focus | ↑/↓ navigate | ←/→ select | Enter select | Ctrl+Q quit';
 }
 
 function canUseIssueIntake(control: MissionStatus['control']): boolean {
@@ -3618,7 +3768,7 @@ function canUseIssueIntake(control: MissionStatus['control']): boolean {
 
 function describeIssueIntakeStatus(control: MissionStatus['control']): string {
 	if (!control) {
-		return 'Mission control status is still loading.';
+		return 'Repository status is still loading.';
 	}
 	if (!control.issuesConfigured) {
 		return 'Mission could not resolve a GitHub repository from the current workspace.';
@@ -3632,11 +3782,11 @@ function describeIssueIntakeStatus(control: MissionStatus['control']): string {
 function describeControlConnection(status: MissionStatus): string {
 	const control = status.control;
 	if (!control) {
-		return 'Connected to Mission control.';
+		return 'Connected to Mission repository.';
 	}
 	return control.problems.length > 0
 		? 'Connected to Mission setup. Run /setup to finish configuration.'
-		: 'Connected to Mission control.';
+		: 'Connected to Mission repository.';
 }
 
 function noMissionSelectedMessage(status: MissionStatus): string {
@@ -3644,29 +3794,6 @@ function noMissionSelectedMessage(status: MissionStatus): string {
 		return 'Mission setup is incomplete. Run /setup first.';
 	}
 	return 'No mission is selected. Use /start to create one or /select to open an existing mission.';
-}
-
-function normalizeDaemonOutputLines(content: string): string[] {
-	return content
-		.split(/\r?\n/u)
-		.filter((line, index, lines) => line.length > 0 || index < lines.length - 1)
-		.slice(-400);
-}
-
-function areStringArraysEqual(left: string[], right: string[]): boolean {
-	if (left.length !== right.length) {
-		return false;
-	}
-	for (let index = 0; index < left.length; index += 1) {
-		if (left[index] !== right[index]) {
-			return false;
-		}
-	}
-	return true;
-}
-
-function isMissingFileError(error: unknown): boolean {
-	return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT');
 }
 
 function buildCommandDockDescriptor(input: {
@@ -3745,7 +3872,7 @@ function buildCommandDockDescriptor(input: {
 			title: `${scope} > ACTION`,
 			placeholder: scope === 'MISSION'
 				? 'Enter a mission action or agent reply'
-				: 'Enter a Mission control action'
+				: 'Enter a repository action'
 		};
 	}
 	if (!trimmed.startsWith('/')) {
@@ -3868,7 +3995,7 @@ function describeCommandDockIntent(
 		case '/root':
 			return {
 				title: 'MISSION > SWITCH',
-				placeholder: 'Press Enter to return to Mission control.'
+				placeholder: 'Press Enter to return to repository mode.'
 			};
 			case '/start':
 				return {
@@ -3878,7 +4005,7 @@ function describeCommandDockIntent(
 			case '/select':
 				return {
 					title: 'MISSION > MISSION > SWITCH',
-					placeholder: 'Press Enter to choose a mission from Mission control.'
+					placeholder: 'Press Enter to choose a mission from repository mode.'
 				};
 		case '/issues':
 			return {
@@ -3951,7 +4078,7 @@ function describeCommandDockIntent(
 			};
 		case '/clear':
 			return {
-				title: 'LOG > CLEAR',
+				title: 'ACTIVITY > CLEAR',
 				placeholder: 'Press Enter to clear the activity log.'
 			};
 		case '/quit':
@@ -3967,11 +4094,11 @@ function describeCommandDockIntent(
 	}
 }
 
-function commandScopeLabel(status: MissionStatus): 'SETUP' | 'CONTROL' | 'MISSION' {
+function commandScopeLabel(status: MissionStatus): 'SETUP' | 'REPOSITORY' | 'MISSION' {
 	if (status.found) {
 		return 'MISSION';
 	}
-	return status.operationalMode === 'setup' ? 'SETUP' : 'CONTROL';
+	return status.operationalMode === 'setup' ? 'SETUP' : 'REPOSITORY';
 }
 
 function formatDockStageLabel(stage: MissionStageId | undefined): string {
@@ -3996,21 +4123,97 @@ function dockTargetLabel(kind: TreeTargetKind | undefined): string {
 
 function buildHeaderStatusLines(
 	status: MissionStatus,
-	workspaceRoot: string
+	workspaceRoot: string,
+	selectedTab: HeaderTab | undefined,
+	fallbackMissions: MissionStatus['availableMissions'] = []
 ): Array<{ segments: Array<{ text: string; fg: string }> }> {
 	const workspaceBaseName = path.basename(workspaceRoot.trim());
 	const repository = resolvedControlGitHubRepository(status.control)
 		?? (workspaceBaseName.length > 0 ? workspaceBaseName : 'workspace');
 	const normalizedWorkspaceRoot = workspaceRoot.trim() || 'workspace';
-	return [
-		{
-			segments: [
-				{ text: ` ${repository}`, fg: cockpitTheme.accent },
-				{ text: ' | ', fg: cockpitTheme.metaText },
-				{ text: normalizedWorkspaceRoot, fg: cockpitTheme.metaText }
-			]
-		}
-	];
+	const repositoryLine = {
+		segments: [
+			{ text: ` ${repository}`, fg: cockpitTheme.accent },
+			{ text: ' | ', fg: cockpitTheme.metaText },
+			{ text: normalizedWorkspaceRoot, fg: cockpitTheme.metaText }
+		]
+	};
+	const missionSummary = resolveHeaderMissionSummary(status, selectedTab, fallbackMissions);
+	if (missionSummary) {
+		return [
+			{
+				segments: [
+					{ text: ` ${missionSummary.typeLabel} ${missionSummary.numberLabel}`, fg: cockpitTheme.accent },
+					{ text: ' | ', fg: cockpitTheme.metaText },
+					{ text: missionSummary.title, fg: cockpitTheme.primaryText }
+				]
+			},
+			repositoryLine
+		];
+	}
+	return [repositoryLine];
+}
+
+function resolveHeaderMissionSummary(
+	status: MissionStatus,
+	selectedTab: HeaderTab | undefined,
+	fallbackMissions: MissionStatus['availableMissions'] = []
+): HeaderMissionSummary | undefined {
+	if (selectedTab?.target.kind === 'repository') {
+		return undefined;
+	}
+	const selectedMissionId = selectedTab?.target.kind === 'mission'
+		? selectedTab.target.missionId
+		: status.missionId;
+	if (!selectedMissionId) {
+		return undefined;
+	}
+	const missionCandidate = [
+		...(status.availableMissions ?? []),
+		...fallbackMissions
+	].find((candidate) => candidate.missionId === selectedMissionId);
+	return buildHeaderMissionSummary(
+		selectedMissionId,
+		status.missionId === selectedMissionId ? status.issueId : missionCandidate?.issueId,
+		status.missionId === selectedMissionId ? status.title : missionCandidate?.title
+	);
+}
+
+function buildHeaderMissionSummary(
+	missionId: string,
+	issueId?: number,
+	title?: string
+): HeaderMissionSummary {
+	const normalizedTitle = normalizeHeaderMissionTitle(title, missionId);
+	if (issueId !== undefined) {
+		return {
+			typeLabel: 'ISSUE',
+			numberLabel: String(issueId),
+			title: normalizedTitle
+		};
+	}
+	return {
+		typeLabel: 'MISSION',
+		numberLabel: extractHeaderMissionNumber(missionId),
+		title: normalizedTitle
+	};
+}
+
+function normalizeHeaderMissionTitle(title: string | undefined, missionId: string): string {
+	const normalizedTitle = title?.replace(/\s+/gu, ' ').trim();
+	return normalizedTitle && normalizedTitle.length > 0 ? normalizedTitle : missionId;
+}
+
+function extractHeaderMissionNumber(missionId: string): string {
+	const leadingNumber = missionId.match(/^([0-9]+)/u)?.[1];
+	if (leadingNumber) {
+		return leadingNumber;
+	}
+	const branchNumber = missionId.match(/(?:^|\/)([0-9]+)(?:-|$)/u)?.[1];
+	if (branchNumber) {
+		return branchNumber;
+	}
+	return missionId;
 }
 
 function resolvedControlGitHubRepository(control: MissionStatus['control']): string | undefined {

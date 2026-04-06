@@ -8,7 +8,6 @@ import { DaemonClient } from '../client/DaemonClient.js';
 import { getMissionDaemonSettingsPath } from '../lib/daemonConfig.js';
 import { initializeMissionRepository } from '../initializeMissionRepository.js';
 import { startDaemon } from './Daemon.js';
-import type { Notification } from './contracts.js';
 import { getDaemonManifestPath, getDaemonRuntimePath } from './daemonPaths.js';
 
 describe('Daemon', () => {
@@ -599,38 +598,6 @@ function runGit(workspaceRoot: string, args: string[]): void {
 	if (result.status !== 0) {
 		throw new Error(result.stderr.trim() || `git ${args.join(' ')} failed.`);
 	}
-}
-
-function readGitOutput(workspaceRoot: string, args: string[]): string {
-	const result = spawnSync('git', args, {
-		cwd: workspaceRoot,
-		encoding: 'utf8'
-	});
-	if (result.status !== 0) {
-		throw new Error(result.stderr.trim() || `git ${args.join(' ')} failed.`);
-	}
-	return result.stdout.trim();
-}
-
-function waitForDaemonEvent(
-	client: DaemonClient,
-	predicate: (event: Notification) => boolean,
-	timeoutMs = 3000
-): Promise<Notification> {
-	return new Promise<Notification>((resolve, reject) => {
-		const timeout = setTimeout(() => {
-			subscription.dispose();
-			reject(new Error('Timed out waiting for daemon event.'));
-		}, timeoutMs);
-		const subscription = client.onDidEvent((event) => {
-			if (!predicate(event)) {
-				return;
-			}
-			clearTimeout(timeout);
-			subscription.dispose();
-			resolve(event);
-		});
-	});
 }
 
 async function withFakeGitHubCli(

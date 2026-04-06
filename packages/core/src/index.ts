@@ -7,6 +7,8 @@ export * from './runtime/AgentRunner.js';
 export * from './runtime/AgentSession.js';
 export * from './runtime/AgentSessionOrchestrator.js';
 export * from './runtime/AgentRunnerRegistry.js';
+export * from './adapters/CopilotAgentRunner.js';
+export * from './adapters/TmuxAgentRunner.js';
 export * from './initializeMissionRepository.js';
 export * from './lib/daemonConfig.js';
 export * from './lib/frontmatter.js';

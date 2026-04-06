@@ -144,16 +144,24 @@ Required capabilities:
 7. capability reporting
 8. telemetry export or telemetry bridging when available
 
+The first implementation path should prefer a tmux-backed process adapter when it provides the simplest portable control surface for interactive coding CLIs.
+
+Tmux is a transport and terminal-control substrate, not the Mission runtime contract.
+
+Mission still owns lifecycle, governance, event normalization, and session identity above tmux.
+
 The first adapter may be either:
 
 1. `CopilotAcpRuntimeAdapter`
-2. `CopilotCliProcessRuntimeAdapter`
+2. `GenericProcessTmuxRuntimeAdapter`
+3. `CopilotCliProcessRuntimeAdapter`
 
 Likely future adapters:
 
 1. `CodexRuntimeAdapter`
 2. `ClaudeRuntimeAdapter`
 3. `GenericProcessRuntimeAdapter`
+4. `DaemonMcpRuntimeAdapter`
 
 ### 4. Presentation Surfaces
 
@@ -255,6 +263,8 @@ Responsibilities:
 4. stream normalized events back to Mission
 5. shut down cleanly
 
+For tmux-backed runtimes, `MissionAgentRuntime` should treat the tmux session, window, and pane identifiers as provider-side transport details hidden behind the adapter.
+
 ### `MissionAgentSession`
 
 The active flight execution handle.
@@ -266,6 +276,10 @@ Responsibilities:
 3. record current lifecycle state
 4. accept flight-controller input
 5. expose suspend, resume, cancel, and terminate operations
+
+When the runtime is terminal-backed, flight-controller input includes governed terminal input injection.
+
+That input may be implemented as prompt submission, control-key signaling, or keystroke delivery, but Mission should route it through explicit operator actions and normalized audit events rather than treating the tmux pane as an untracked side channel.
 
 ### `MissionAgentTurnRequest`
 
@@ -315,6 +329,9 @@ Examples:
 8. MCP support
 9. subagent support
 10. telemetry export support
+11. terminal session attachment
+12. governed terminal input injection
+13. semantic daemon messaging
 
 The cockpit should consume capabilities to decide what to show, rather than assuming every provider behaves like Copilot.
 
@@ -343,7 +360,8 @@ Mission should support whichever Copilot adapter best satisfies the runtime cont
 Candidate modes:
 
 1. Copilot CLI via ACP
-2. Copilot CLI via subprocess-backed process control
+2. Copilot CLI via tmux-backed process control
+3. Copilot CLI via subprocess-backed process control
 
 Selection criteria:
 
@@ -365,6 +383,22 @@ Process control is acceptable when:
 2. the adapter still emits the same normalized Mission event model
 3. provider-specific heuristics remain contained inside the adapter boundary
 
+Tmux-backed process control is preferred for the initial implementation when:
+
+1. the agent CLI expects a real PTY
+2. the operator must be able to inspect and intervene in a live session visually
+3. Mission needs a portable way to host multiple provider CLIs without provider SDK coupling
+
+Mission should treat tmux as the session substrate for CLI runtimes, not as a replacement for Mission policy or runtime normalization.
+
+The adapter should be responsible for:
+
+1. creating and naming the tmux session, window, or pane deterministically
+2. mapping Mission session references to tmux targets
+3. capturing transcript output through tmux mechanisms or equivalent teeing
+4. detecting pane exit, process exit, and operator attachment state
+5. translating Mission prompts and commands into safe terminal operations
+
 The chosen Copilot adapter is an implementation detail, not a public architectural boundary.
 
 ### Copilot Telemetry
@@ -380,6 +414,14 @@ This should power:
 5. checkpoint and interruption audit
 6. long-running session visibility
 
+When structured telemetry is not available, terminal-backed adapters should still emit lifecycle, transcript, and intervention events.
+
+Reduced telemetry does not relax Mission governance requirements.
+
+Future richer telemetry or status messages may also arrive through a Mission-owned daemon MCP server exposed to the running agent.
+
+That MCP path should complement terminal control, not replace the normalized runtime contract.
+
 ## Flight Lifecycle
 
 The intended runtime lifecycle is:
@@ -394,6 +436,8 @@ The intended runtime lifecycle is:
 8. Permission requests flow through Mission policy and then to the flight controller when human input is required.
 9. Governance gates may pause or stop the flight even if the provider would otherwise continue autonomously.
 10. Completion or failure is written back as Mission session state, not inferred only from transcript text.
+11. Operator interventions into a live terminal session are recorded as Mission events.
+12. Future agent-to-Mission semantic messages may flow through daemon MCP tools or resources without changing the session contract.
 
 ## Policy And Approval Boundary
 
@@ -412,6 +456,24 @@ Mission should therefore evaluate approvals in two steps:
 2. mission-level governance semantics
 
 The second step always wins.
+
+For terminal-backed runtimes, Mission may also exercise governance through controlled input injection.
+
+Examples include:
+
+1. sending `Ctrl+C` to interrupt an autonomous run
+2. delivering an operator reply into the running terminal session
+3. issuing an engine-owned checkpoint prompt through the terminal transport
+
+These operations must be mediated by the adapter and recorded as governed intervention events.
+
+Raw untracked operator typing into the pane is operationally possible, but not the target Mission governance model.
+
+The long-term preferred path is:
+
+1. terminal control for transport and compatibility
+2. daemon MCP for semantic agent-to-Mission messaging
+3. normalized Mission events for audit and UI binding
 
 ## Presentation Rules
 
@@ -462,7 +524,48 @@ These may remain temporarily for briefing or read-only advisory support, but the
 2. `AgentSession`
 3. `MissionPolicyBridge`
 4. `MissionTelemetryNormalizer`
-5. `CopilotAcpRuntimeAdapter`
+5. `GenericProcessTmuxRuntimeAdapter`
+6. `CopilotAcpRuntimeAdapter`
+
+## Terminal-Backed Runtime Notes
+
+The tmux-backed adapter is the preferred first concrete runtime because it solves the portability and operator-visibility problem for CLI-native coding agents.
+
+Design expectations:
+
+1. each Mission session maps to one deterministic tmux target
+2. Mission persists that target as part of the session reference or recoverable metadata
+3. attach, detach, interrupt, and prompt operations are adapter APIs, not ad hoc shell calls from UI code
+4. pane liveness alone is not sufficient to declare success
+5. terminal completion must be reduced into normalized `completed`, `failed`, `cancelled`, or `terminated` states
+
+The tmux adapter should capture at least these facts:
+
+1. process exit status
+2. last known tmux target
+3. whether Mission or the operator last injected input
+4. whether the session is awaiting operator input
+5. transcript tail for recovery and diagnostics
+
+This keeps tmux as an implementation detail while still acknowledging the realities of terminal-native agents.
+
+## Daemon MCP Direction
+
+Mission should plan for the daemon to become an MCP server that running agents can call when richer semantics are needed.
+
+That future path should support messages such as:
+
+1. explicit completion notifications
+2. checkpoint explanations
+3. structured clarification requests
+4. artifact handoff summaries
+5. progress and rationale updates
+
+This path is strategically important because it allows a terminal-native runtime to gain structured semantic messaging without requiring Mission to embed provider SDKs.
+
+However, daemon MCP is an additive capability.
+
+Mission must not block the tmux-backed runtime rollout on MCP server availability.
 
 ## Explicit Boundary Rules
 
@@ -514,7 +617,7 @@ Introduce the provider-neutral runtime interfaces and event model without changi
 
 ### Phase 2
 
-Implement `CopilotAcpRuntimeAdapter` and wire Mission execution through the new session orchestrator.
+Implement `GenericProcessTmuxRuntimeAdapter` and wire Mission execution through the new session orchestrator.
 
 ### Phase 3
 
@@ -522,11 +625,11 @@ Reduce `MissionChatParticipant` to an optional briefing surface or remove it ent
 
 ### Phase 4
 
-Add telemetry normalization for context, token, and cost reporting.
+Add telemetry normalization for context, token, and cost reporting, plus governed intervention audit for terminal-backed sessions.
 
 ### Phase 5
 
-Add a second provider runtime adapter to prove that the contract is genuinely provider-neutral.
+Add daemon MCP semantic messaging and a second provider runtime adapter to prove that the contract is genuinely provider-neutral.
 
 ## Immediate Implementation Consequences
 

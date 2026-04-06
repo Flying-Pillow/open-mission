@@ -17,6 +17,7 @@ import type {
 	MissionGitHubIssue,
 	MissionGateIntent
 } from './MissionModels.js';
+import type { MissionLogWriter } from './MissionLogChannel.js';
 import { MissionWorkspaceResolver } from './MissionWorkspaceResolver.js';
 
 export class MissionOperatorClient implements vscode.Disposable {
@@ -29,7 +30,7 @@ export class MissionOperatorClient implements vscode.Disposable {
 	private connectedWorkspaceRoot?: string;
 	private selectorState: MissionSelector = {};
 
-	public constructor(private readonly outputChannel: vscode.OutputChannel) { }
+	public constructor(private readonly outputChannel: MissionLogWriter) { }
 
 	public readonly onDidMissionStatusChange = this.missionStatusEmitter.event;
 	public readonly onDidNotification = this.notificationEmitter.event;

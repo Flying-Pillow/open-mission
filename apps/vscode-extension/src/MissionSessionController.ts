@@ -14,6 +14,7 @@ import type {
 	MissionGateIntent,
 	MissionTaskExecutionAction
 } from './MissionModels.js';
+import type { MissionLogWriter } from './MissionLogChannel.js';
 import { MissionOperatorClient } from './MissionOperatorClient.js';
 
 export class MissionSessionController implements vscode.Disposable {
@@ -26,7 +27,7 @@ export class MissionSessionController implements vscode.Disposable {
 	public constructor(
 		private readonly operatorClient: MissionOperatorClient,
 		private readonly statusBarItem: vscode.StatusBarItem,
-		private readonly outputChannel: vscode.OutputChannel
+		private readonly outputChannel: MissionLogWriter
 	) {
 		this.disposables.push(
 			this.operatorClient.onDidMissionStatusChange((status) => {

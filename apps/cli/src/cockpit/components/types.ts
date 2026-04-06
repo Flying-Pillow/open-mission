@@ -1,4 +1,4 @@
-export type FocusArea = 'header' | 'flow' | 'tree' | 'sessions' | 'command';
+export type FocusArea = 'header' | 'flow' | 'tree' | 'console' | 'command';
 
 export type SelectItem = {
 	id: string;

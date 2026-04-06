@@ -24,6 +24,7 @@ type CommandDockProps = {
 	mode: 'input' | 'toolbar';
 	inputValue: string;
 	placeholder: string;
+	toolbarHint: string;
 	toolbarItems: CommandToolbarItem[];
 	selectedToolbarItemId: string | undefined;
 	confirmingToolbarItemId: string | undefined;
@@ -40,7 +41,7 @@ type CommandDockProps = {
 
 export function CommandDock(props: CommandDockProps) {
 	let inputRef: InputRenderable | undefined;
-	const mode = props.mode;
+	const commandFocused = () => props.focusArea === 'command';
 	const selectedToolbarItem = () =>
 		props.toolbarItems.find((item) => item.id === props.selectedToolbarItemId);
 	const confirmingToolbarItem = () =>
@@ -58,6 +59,9 @@ export function CommandDock(props: CommandDockProps) {
 		if (props.confirmingToolbarItemId) {
 			return 'Left/Right to choose, Enter/Space to confirm, Esc to cancel.';
 		}
+		if (props.toolbarHint.trim().length > 0) {
+			return props.toolbarHint;
+		}
 		if (props.toolbarItems.length === 0) {
 			return 'No commands available for the selected target.';
 		}
@@ -68,17 +72,34 @@ export function CommandDock(props: CommandDockProps) {
 		return 'Left/Right to choose command. Enter/Space opens confirmation.';
 	};
 
+	const selectedToolbarBackground = (selected: boolean, enabled: boolean): string => {
+		if (!selected || !enabled) {
+			return cockpitTheme.panelBackground;
+		}
+		return commandFocused() ? cockpitTheme.accent : cockpitTheme.accentSoft;
+	};
+
+	const selectedToolbarForeground = (selected: boolean, enabled: boolean): string => {
+		if (!enabled) {
+			return cockpitTheme.mutedText;
+		}
+		if (!selected) {
+			return cockpitTheme.primaryText;
+		}
+		return commandFocused() ? cockpitTheme.background : cockpitTheme.primaryText;
+	};
+
 	const showIdleBadge = () => !props.isRunningCommand;
 
 	return (
 		<Panel
 			title={props.title}
-			borderColor={props.focusArea === 'command' ? cockpitTheme.accent : cockpitTheme.border}
+			borderColor={commandFocused() ? cockpitTheme.accent : cockpitTheme.border}
 			style={{ height: 4, ...(props.style ?? {}) }}
 			{...(showIdleBadge() ? { footerBadges: [{ text: 'idle', tone: 'neutral' as const }] } : {})}
 		>
 			<Show
-				when={mode === 'input'}
+				when={props.mode === 'input'}
 				fallback={
 					<box style={{ flexDirection: 'column', gap: 1 }}>
 						<Show
@@ -91,12 +112,8 @@ export function CommandDock(props: CommandDockProps) {
 									>
 										{props.toolbarItems.map((item) => {
 											const isSelected = item.id === props.selectedToolbarItemId;
-											const fg = item.enabled
-												? isSelected
-													? cockpitTheme.background
-													: cockpitTheme.primaryText
-												: cockpitTheme.mutedText;
-											const bg = isSelected && item.enabled ? cockpitTheme.accent : cockpitTheme.panelBackground;
+												const fg = selectedToolbarForeground(isSelected, item.enabled);
+												const bg = selectedToolbarBackground(isSelected, item.enabled);
 											return <text style={{ fg, bg }}>{` ${item.label} `}</text>;
 										})}
 									</Show>
@@ -107,10 +124,10 @@ export function CommandDock(props: CommandDockProps) {
 							<box style={{ flexDirection: 'row' }}>
 								{(() => {
 									const confirmSelected = props.confirmationChoice !== 'cancel';
-									const confirmFg = confirmSelected ? cockpitTheme.background : cockpitTheme.primaryText;
-									const confirmBg = confirmSelected ? cockpitTheme.accent : cockpitTheme.panelBackground;
-									const cancelFg = !confirmSelected ? cockpitTheme.background : cockpitTheme.primaryText;
-									const cancelBg = !confirmSelected ? cockpitTheme.accent : cockpitTheme.panelBackground;
+									const confirmFg = selectedToolbarForeground(confirmSelected, true);
+									const confirmBg = selectedToolbarBackground(confirmSelected, true);
+									const cancelFg = selectedToolbarForeground(!confirmSelected, true);
+									const cancelBg = selectedToolbarBackground(!confirmSelected, true);
 									return (
 										<>
 											<text style={{ fg: confirmFg, bg: confirmBg }}> YES, CONFIRM </text>
@@ -129,7 +146,7 @@ export function CommandDock(props: CommandDockProps) {
 						ref={(value) => {
 							inputRef = value;
 						}}
-						focused={props.focusArea === 'command'}
+						focused={commandFocused()}
 						width="100%"
 						placeholder={props.isRunningCommand ? 'Running...' : props.placeholder}
 						value={props.inputValue}

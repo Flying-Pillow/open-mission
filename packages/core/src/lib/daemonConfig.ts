@@ -11,7 +11,7 @@ import { normalizeWorkflowSettings } from '../settings/validation.js';
 
 export const MISSION_DAEMON_SETTINGS_FILE = 'settings.json';
 
-export const MISSION_AGENT_RUNNERS = ['copilot'] as const;
+export const MISSION_AGENT_RUNNERS = ['copilot', 'tmux'] as const;
 
 export type MissionAgentRunner = (typeof MISSION_AGENT_RUNNERS)[number];
 export type MissionDefaultAgentMode = 'interactive' | 'autonomous';
@@ -125,7 +125,7 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
 }
 
 function normalizeOptionalAgentRunner(value: MissionAgentRunner | undefined): MissionAgentRunner | undefined {
-    return value === 'copilot' ? value : undefined;
+    return value === 'copilot' || value === 'tmux' ? value : undefined;
 }
 
 function normalizeOptionalAgentMode(

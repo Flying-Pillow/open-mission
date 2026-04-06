@@ -78,7 +78,7 @@ export function MissionTreePanel(props: MissionTreePanelProps) {
 			bodyLines={bodyLines()}
 			bodyRows={bodyLines().length > 0 ? bodyLines().length : 1}
 			contentWidth={treeContentWidth()}
-			style={{ flexGrow: 1 }}
+			style={{ flexGrow: 1, width: '100%', minWidth: '100%', maxWidth: '100%' }}
 			{...(bodyLines().length === 0
 				? {
 					bodyLines: [{ text: props.emptyLabel, fg: cockpitTheme.secondaryText }],

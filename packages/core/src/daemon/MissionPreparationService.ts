@@ -38,7 +38,6 @@ export class MissionPreparationService {
 
 			const proposalStore = new FilesystemAdapter(proposalWorktreePath);
 			const missionRootDir = proposalStore.getTrackedMissionDir(missionId);
-			const flightDeckDir = proposalStore.getMissionFlightDeckPath(missionRootDir);
 			const existingDossier = await fs.lstat(missionRootDir).then(
 				(stats) => stats.isDirectory(),
 				() => false

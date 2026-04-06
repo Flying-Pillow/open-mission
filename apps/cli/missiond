@@ -6,9 +6,17 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 launch_mode=${MISSION_DAEMON_LAUNCH_MODE:-auto}
 source_entry="$script_dir/src/daemon.ts"
 build_entry="$script_dir/build/daemon.js"
+node_options=${NODE_OPTIONS:-}
+typescript_node_option="--conditions=typescript"
+
+if [ -n "$node_options" ]; then
+	node_options="$node_options $typescript_node_option"
+else
+	node_options="$typescript_node_option"
+fi
 
 if [ "$launch_mode" = "source" ] && [ -f "$source_entry" ]; then
-	exec pnpm --dir "$script_dir" exec tsx "$source_entry" "$@"
+	exec env NODE_OPTIONS="$node_options" pnpm --dir "$script_dir" exec tsx "$source_entry" "$@"
 fi
 
 if [ -f "$build_entry" ]; then
@@ -16,7 +24,7 @@ if [ -f "$build_entry" ]; then
 fi
 
 if [ -f "$source_entry" ]; then
-	exec pnpm --dir "$script_dir" exec tsx "$source_entry" "$@"
+	exec env NODE_OPTIONS="$node_options" pnpm --dir "$script_dir" exec tsx "$source_entry" "$@"
 fi
 
 printf '%s\n' "missiond: no daemon entrypoint found. Build the CLI package first." >&2

@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import { MissionCockpitViewProvider } from './MissionCockpitViewProvider.js';
+import { MissionLogChannel } from './MissionLogChannel.js';
+import { MissionLogViewProvider } from './MissionLogViewProvider.js';
 import { MissionOperatorClient } from './MissionOperatorClient.js';
 import { MissionSessionController } from './MissionSessionController.js';
 import { MissionTreeDataProvider } from './MissionTreeView.js';
@@ -17,7 +19,7 @@ const ACTIVATION_STATE_KEY = '__missionActivationState';
 async function registerCommandSafely(
 	commandId: string,
 	handler: (...args: unknown[]) => unknown,
-	outputChannel: vscode.OutputChannel
+	outputChannel: { appendLine(value: string): void }
 ): Promise<vscode.Disposable | undefined> {
 	const existingCommands = await vscode.commands.getCommands(true);
 	if (existingCommands.includes(commandId)) {
@@ -39,7 +41,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	}
 	activationState[ACTIVATION_STATE_KEY] = { active: true };
 
-	const outputChannel = vscode.window.createOutputChannel('Mission');
+	const outputChannel = new MissionLogChannel('Mission');
 	context.subscriptions.push(
 		new vscode.Disposable(() => {
 			delete activationState[ACTIVATION_STATE_KEY];
@@ -56,9 +58,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	);
 	const cockpitViewProvider = new MissionCockpitViewProvider(
 		context.extensionUri,
-		sessionController,
-		outputChannel
+		sessionController
 	);
+	const logViewProvider = new MissionLogViewProvider(outputChannel);
 	const treeDataProvider = new MissionTreeDataProvider(sessionController);
 	const overviewTree = vscode.window.createTreeView('mission.overview', {
 		treeDataProvider,
@@ -67,6 +69,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const cockpitProviderRegistration = vscode.window.registerWebviewViewProvider(
 		'mission.cockpit',
 		cockpitViewProvider
+	);
+	const logProviderRegistration = vscode.window.registerWebviewViewProvider(
+		'mission.log',
+		logViewProvider
 	);
 
 	outputChannel.appendLine(
@@ -78,9 +84,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		statusBarItem,
 		sessionController,
 		cockpitViewProvider,
+		logViewProvider,
 		treeDataProvider,
 		overviewTree,
-		cockpitProviderRegistration
+		cockpitProviderRegistration,
+		logProviderRegistration
 	);
 	context.subscriptions.push(
 		vscode.window.onDidChangeActiveTextEditor(() => {

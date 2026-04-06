@@ -9,7 +9,7 @@ type ConsoleContentPanelProps = {
 	focused: boolean;
 	title: string;
 	content: ConsolePanelContent;
-	bodyRows: number;
+	bodyRows?: number;
 	contentWidth: number;
 };
 
@@ -41,8 +41,22 @@ export function ConsoleContentPanel(props: ConsoleContentPanelProps) {
 			titleColor={cockpitTheme.title}
 			borderColor={props.focused ? cockpitTheme.accent : cockpitTheme.border}
 			contentWidth={props.contentWidth}
-			style={{ flexGrow: 1 }}
-			contentStyle={{ flexGrow: 1 }}
+			style={{ flexGrow: 1, flexShrink: 1, minHeight: 0 }}
+			contentStyle={
+				typeof props.bodyRows === 'number'
+					? {
+						flexGrow: 1,
+						flexShrink: 1,
+						minHeight: props.bodyRows,
+						maxHeight: props.bodyRows,
+						height: props.bodyRows
+					}
+					: {
+						flexGrow: 1,
+						flexShrink: 1,
+						minHeight: 0
+					}
+			}
 		>
 			<scrollbox
 				focused={props.focused}
@@ -50,6 +64,8 @@ export function ConsoleContentPanel(props: ConsoleContentPanelProps) {
 				{...(stickyToBottom() ? { stickyStart: 'bottom' as const } : {})}
 				style={{
 					flexGrow: 1,
+					flexShrink: 1,
+					minHeight: 0,
 					scrollbarOptions: {
 						trackOptions: {
 							foregroundColor: props.focused ? cockpitTheme.accent : cockpitTheme.border,

@@ -45,6 +45,11 @@
           "name": "Flight Controller Cockpit"
         },
         {
+          "type": "webview",
+          "id": "mission.log",
+          "name": "Log"
+        },
+        {
           "id": "mission.overview",
           "name": "Mission Explorer",
           "icon": "media/mission-icon.svg"
@@ -154,6 +159,11 @@
         {
           "command": "mission.openSettings",
           "when": "view == mission.cockpit",
+          "group": "navigation@2"
+        },
+        {
+          "command": "mission.openSettings",
+          "when": "view == mission.log",
           "group": "navigation@2"
         },
         {

@@ -64,6 +64,9 @@ export function Panel(props: PanelProps) {
 			{...(props.border === false || !props.title ? {} : { title: props.title, titleAlignment: 'left' as const })}
 			style={{
 				flexDirection: 'column',
+				flexShrink: 1,
+				minHeight: 0,
+				minWidth: 0,
 				paddingTop: props.border === false ? 0 : 1,
 				paddingBottom: 0,
 				paddingLeft: 1,
@@ -77,6 +80,9 @@ export function Panel(props: PanelProps) {
 			<box
 				style={{
 					flexDirection: 'column',
+					flexShrink: 1,
+					minHeight: 0,
+					minWidth: 0,
 					paddingTop: 0,
 					paddingBottom: props.footerBadges?.length ? 0 : props.border === false ? 0 : 1,
 					...(props.contentStyle ?? {})

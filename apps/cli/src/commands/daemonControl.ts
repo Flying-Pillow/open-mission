@@ -1,9 +1,11 @@
 import { spawn } from 'node:child_process';
+import * as fsSync from 'node:fs';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
 	DaemonClient,
+	getDaemonLogPath,
 	getDaemonManifestPath,
 	getDaemonRuntimePath,
 	readDaemonManifest,
@@ -92,7 +94,7 @@ export async function startMissionDaemon(options: {
 		};
 	}
 
-	const child = spawnMissionDaemonRunner(options);
+	const child = await spawnMissionDaemonRunner(options);
 	child.unref();
 	const timeoutAt = Date.now() + 15_000;
 	let latestStatus = currentStatus;
@@ -153,7 +155,7 @@ export async function stopMissionDaemon(): Promise<DaemonStopResult> {
 	};
 }
 
-function spawnMissionDaemonRunner(options: {
+async function spawnMissionDaemonRunner(options: {
 	socketPath?: string;
 	surfacePath?: string;
 	launchMode?: MissionDaemonLaunchMode;
@@ -169,35 +171,57 @@ function spawnMissionDaemonRunner(options: {
 		...process.env,
 		...(options.surfacePath ? { MISSION_SURFACE_PATH: options.surfacePath } : {}),
 		MISSION_DAEMON_LAUNCH_MODE: launchMode,
+		...(launchMode === 'source'
+			? { NODE_OPTIONS: appendNodeCondition(process.env['NODE_OPTIONS'], 'typescript') }
+			: {}),
 		...(options.runtimeFactoryModulePath
 			? { MISSION_RUNTIME_FACTORY_MODULE: options.runtimeFactoryModulePath }
 			: {})
 	};
+	await fs.mkdir(getDaemonRuntimePath(), { recursive: true });
+	const daemonLogPath = getDaemonLogPath();
+	const daemonLogFd = fsSync.openSync(daemonLogPath, 'a');
+	const stdio: [number | 'ignore', number, number] = ['ignore', daemonLogFd, daemonLogFd];
 
 	if (launchMode === 'source') {
-		return spawn(
+		const child = spawn(
 			'pnpm',
 			['--dir', cliRoot, 'exec', 'tsx', sourceEntry, 'run', ...socketArgs],
 			{
 				cwd: cliRoot,
 				env,
-				stdio: ['ignore', 'inherit', 'inherit'],
+				stdio,
 				detached: true,
 				windowsHide: true
 			}
 		);
+		fsSync.closeSync(daemonLogFd);
+		return child;
 	}
 
-	return spawn(process.execPath, [buildEntry, 'run', ...socketArgs], {
+	const child = spawn(process.execPath, [buildEntry, 'run', ...socketArgs], {
 		cwd: cliRoot,
 		env,
-		stdio: ['ignore', 'inherit', 'inherit'],
+		stdio,
 		detached: true,
 		windowsHide: true
 	});
+	fsSync.closeSync(daemonLogFd);
+	return child;
 }
 
 function resolveCliPackageRoot(): string {
 	const currentFilePath = fileURLToPath(import.meta.url);
 	return path.resolve(path.dirname(currentFilePath), '..', '..');
+}
+
+function appendNodeCondition(existingOptions: string | undefined, condition: string): string {
+	const nextFlag = `--conditions=${condition}`;
+	if (!existingOptions || existingOptions.trim().length === 0) {
+		return nextFlag;
+	}
+	if (existingOptions.includes(nextFlag)) {
+		return existingOptions;
+	}
+	return `${existingOptions} ${nextFlag}`;
 }
