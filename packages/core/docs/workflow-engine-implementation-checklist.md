@@ -41,7 +41,7 @@ Use it to sequence delivery without expanding the spec.
 
 ## 4. Task Generation
 
-- Implement `tasks.request-generation` effect emission when the current eligible stage has no task runtime records.
+- Implement `tasks.request-generation` request emission when the current eligible stage has no task runtime records.
 - Implement deterministic task generation from the workflow snapshot plus `stageId`.
 - Copy rendered task title and instruction content into runtime task records at generation time.
 - Make repeated `tasks.generated` idempotent.
@@ -55,13 +55,15 @@ Use it to sequence delivery without expanding the spec.
 - Implement deterministic auto-queue ordering: stage order first, then lexical `taskId` order.
 - Allow manual queueing for manual-launch tasks while preventing automatic queueing for them.
 
-## 6. Effect Runner
+## 6. Request Executor
 
-- Implement effect execution outside the reducer.
-- Support `tasks.request-generation`, `session.launch`, `session.terminate`, `session.cancel`, `mission.pause`, and `mission.mark-completed`.
-- Emit normal workflow events back into the engine as effect outcomes.
+- Implement request execution outside the reducer.
+- Support `tasks.request-generation`, `session.launch`, `session.prompt`, `session.command`, `session.terminate`, `session.cancel`, `mission.pause`, and `mission.mark-completed`.
+- Emit normal workflow events back into the engine as request outcomes.
 - Treat `mission.mark-completed` as notification only, not state mutation.
 - Emit `session.launch-failed` when launch fails before any session is created.
+- Route `session.prompt` to the shared runtime session prompt path rather than a workflow-only adapter side channel.
+- Route `session.command` to the shared runtime session command path while keeping `session.cancel` and `session.terminate` as explicit lifecycle requests.
 
 ## 7. Reconciliation
 
@@ -77,6 +79,7 @@ Use it to sequence delivery without expanding the spec.
 - Expose task done, blocked, reopen, autostart toggle, and manual start actions.
 - Remove or rewrite commands centered on stage runtime control.
 - Drive command availability from the same workflow rules used by reducer validation.
+- Ensure any daemon-exposed MCP tools translate agent intents into normal workflow events rather than direct workflow state mutation.
 
 ## 9. Tests
 

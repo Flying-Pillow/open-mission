@@ -19,9 +19,10 @@ The authoritative workflow model lives under `daemon/mission` and is surfaced th
 ```text
 packages/core/src/
   client/
+    DaemonApi.ts
+    DaemonControlApi.ts
     DaemonClient.ts
-    DaemonProcess.ts
-    operations.ts
+    DaemonMissionApi.ts
   adapters/
     CopilotAgentRuntime.ts
   daemon/
@@ -186,18 +187,36 @@ The domain model does not parse frontmatter directly.
 
 ## Creation Flow
 
-Mission creation is intentionally lazy.
+Mission authorization now has three phases.
 
-1. A `MissionBrief` enters `Factory.create(...)`.
-2. The factory resolves an existing mission or binds a new mission id and branch.
-3. The factory hydrates a `Mission` and calls `Mission.initialize()`.
-4. `Mission.initialize()` creates the mission folder and persists `BRIEF.md`.
-5. `Mission.initialize()` enters the first stage, `prd`.
-6. `Stage.enter()` for `prd` materializes `PRD.md`.
-7. `Stage.enter()` for `prd` materializes the default task `01-prd-from-brief.md`.
-8. The `tasks/PRD/` directory now exists because the PRD stage owns that task artifact.
+### Phase 0: Repository Bootstrap
 
-This means a new mission does not pre-create all later-stage artifacts.
+1. If the repository is not yet Mission-ready, the daemon prepares a repository bootstrap branch.
+2. That branch adds the tracked `.missions/` control scaffolding and workflow settings.
+3. The daemon opens a repository bootstrap pull request.
+4. The repository is Mission-ready only after that pull request is merged and the default branch is pulled locally.
+
+This phase authorizes repository-level Mission control state before any mission may be prepared.
+
+### Phase 1: Issue And Mission Preparation
+
+1. A `MissionBrief` enters the daemon through `mission.from-brief` or an existing GitHub issue is selected through `mission.from-issue`.
+2. For `mission.from-brief`, the daemon first creates the GitHub issue so mission identity is anchored to a canonical issue number.
+3. The daemon resolves mission identity and the target mission branch from that issue.
+4. The daemon prepares a tracked mission dossier under `.missions/missions/<mission-id>/` on a proposal branch.
+5. The daemon opens the mission-start pull request.
+6. The mission is authorized only after that pull request is merged.
+
+An issue is not enough to start work. The mission-start pull request is the authorization boundary.
+
+### Phase 2: Local Materialization
+
+1. A developer syncs the repository after the mission-start change exists on the canonical branch.
+2. The daemon materializes a local mission workspace for that mission branch.
+3. The local workspace is a linked worktree used for execution, editing, and agent runtime.
+4. The tracked `flight-deck/` content is already present because it comes from the repository branch.
+
+This means repository control state is authorized first, mission history is authorized second, and only then may a local execution worktree exist.
 
 ## Stage Ownership
 
@@ -216,7 +235,7 @@ This means a new mission does not pre-create all later-stage artifacts.
 
 Only `Mission` may advance the workflow.
 
-When `Mission.transition(stage)` is called:
+When workflow events complete the current stage and unlock the next eligible stage:
 
 1. `Mission` validates delivery state, adjacency, and prior-stage completion.
 2. `Mission` asks the target `Stage` to enter.
@@ -234,9 +253,11 @@ Mission status is derived from the filesystem at runtime, but mutable workflow t
 
 - stages that have not been entered yet have zero tasks and usually no product artifacts
 - the current stage is the first populated stage with incomplete tasks, or the last populated stage if all tasks are complete
-- product artifacts only appear in `MissionStatus.productFiles` after their owning mission or stage has materialized them
+- product artifacts only appear in `MissionStatus.productFiles` after their owning mission or stage has materialized them in the tracked mission dossier
 - task definition metadata such as `dependsOn` stays in the task markdown file
 - runtime status exposes `activeTasks` and `readyTasks`, so independent tasks can proceed in parallel inside one stage
+
+The daemon may also expose preparation state before a local mission workspace exists. That preparation state is control-plane information about the mission-start proposal, not proof that a local workspace has been materialized.
 
 ## Current Non-Goal
 

@@ -10,12 +10,12 @@ import './app.css';
 
 declare global {
 	interface Window {
-		__MISSION_CONTROL_COCKPIT_MODEL__?: MissionCockpitModel;
+		__MISSION_COCKPIT_MODEL__?: MissionCockpitModel;
 	}
 }
 
 const target = document.getElementById('app');
-const initialModel = window.__MISSION_CONTROL_COCKPIT_MODEL__;
+const initialModel = window.__MISSION_COCKPIT_MODEL__;
 
 if (!target || !initialModel) {
 	throw new Error('Mission cockpit bootstrap failed.');

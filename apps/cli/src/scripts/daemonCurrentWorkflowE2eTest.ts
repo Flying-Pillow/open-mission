@@ -1,23 +1,21 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import {
+	DaemonApi,
     MISSION_ARTIFACTS,
     MISSION_GATE_INTENTS,
     MISSION_TASK_STAGE_DIRECTORIES,
-    connectDaemonClient,
-    evaluateMissionGate,
-    getControlStatus,
-    getMissionStatus,
     isMissionStageId,
-    isMissionStageProgress,
-    resolveDaemonLaunchModeFromModule,
     resolveMissionWorkspaceContext,
     type GateIntent,
     type MissionArtifactKey,
     type MissionStageId,
-    type MissionStageProgress,
-    type MissionTaskStatus
+    type MissionStageProgress
 } from '@flying-pillow/mission-core';
+import {
+    connectSurfaceDaemon,
+    resolveSurfaceDaemonLaunchMode
+} from '../daemon/connectSurfaceDaemon.js';
 
 const MISSION_ARTIFACT_KEY_LIST = Object.keys(MISSION_ARTIFACTS) as MissionArtifactKey[];
 
@@ -33,31 +31,37 @@ type CurrentWorkflowE2eOptions = {
     json: boolean;
 };
 
-type MissionControlTask = {
-    id: string;
-    status: MissionTaskStatus;
-    agent: string;
-    retries: number;
-    updatedAt: string;
+type MissionRuntimeTask = {
+    taskId: string;
+    stageId: MissionStageId;
+    lifecycle: string;
 };
 
-type MissionControlStage = {
-    id: MissionStageId;
-    folder: string;
-    status: MissionStageProgress;
-    tasks: MissionControlTask[];
+type MissionRuntimeStage = {
+    stageId: MissionStageId;
+    lifecycle: string;
+    taskIds: string[];
+    readyTaskIds: string[];
+    queuedTaskIds: string[];
+    runningTaskIds: string[];
+    blockedTaskIds: string[];
+    completedTaskIds: string[];
 };
 
-type MissionControlFile = {
+type MissionRuntimeFile = {
     schemaVersion: number;
-    updatedAt: string;
-    stages: MissionControlStage[];
+    runtime: {
+        lifecycle: string;
+        updatedAt: string;
+        stages: MissionRuntimeStage[];
+        tasks: MissionRuntimeTask[];
+    };
 };
 
 type CurrentWorkflowE2eReport = {
     missionId: string;
     stage: MissionStageId;
-    controlRoot: string;
+    workspaceRoot: string;
     missionDir: string;
     flightDeckDir: string;
     activeTaskIds: string[];
@@ -78,25 +82,24 @@ async function main(): Promise<void> {
         );
     }
 
-    const missionControl = await readMissionControlState(
+    const runtimeDocument = await readMissionRuntimeDocument(
         path.join(workspaceContext.flightDeckDir, 'mission.json')
     );
 
-    const taskFileIdsByStage = await readTaskFileIdsByStage(workspaceContext.flightDeckDir);
-
-    const client = await connectDaemonClient({
+    const client = await connectSurfaceDaemon({
         surfacePath: workspaceContext.missionDir,
-        preferredLaunchMode: resolveDaemonLaunchModeFromModule(import.meta.url)
+        launchMode: resolveSurfaceDaemonLaunchMode(import.meta.url)
     });
 
     try {
         const ping = await client.request<{ protocolVersion: number; pid: number }>('ping');
+        const api = new DaemonApi(client);
         assertCondition(ping.protocolVersion > 0, 'Daemon ping returned invalid protocol version.');
         assertCondition(ping.pid > 0, 'Daemon ping returned invalid process id.');
 
-        const controlStatus = await getControlStatus(client);
+        const controlStatus = await api.control.getStatus();
         const missionId = resolveMissionId(controlStatus, workspaceContext.missionId);
-        const missionStatus = await getMissionStatus(client, { missionId });
+        const missionStatus = await api.mission.getStatus({ missionId });
 
         assertCondition(missionStatus.found, 'Daemon mission.status returned found=false for active mission.');
         assertCondition(
@@ -120,7 +123,7 @@ async function main(): Promise<void> {
             ].join(' ')
         );
 
-        const expectedActiveStage = missionControl.stages.find((stage) => stage.status === 'active')?.id;
+        const expectedActiveStage = runtimeDocument.runtime.stages.find((stage) => stage.lifecycle !== 'completed')?.stageId;
         assertCondition(
             expectedActiveStage !== undefined,
             'mission.json does not declare an active stage.'
@@ -132,67 +135,65 @@ async function main(): Promise<void> {
 
         const stageStatusMap = new Map((missionStatus.stages ?? []).map((stage) => [stage.stage, stage]));
 
-        for (const stageState of missionControl.stages) {
-            const daemonStage = stageStatusMap.get(stageState.id);
-            assertCondition(Boolean(daemonStage), `Daemon mission status is missing stage '${stageState.id}'.`);
-
-            const expectedStageFolder = MISSION_TASK_STAGE_DIRECTORIES[stageState.id];
-            assertCondition(
-                stageState.folder === expectedStageFolder,
-                `mission.json folder mismatch for stage '${stageState.id}'. expected='${expectedStageFolder}' actual='${stageState.folder}'`
-            );
+        for (const stageState of runtimeDocument.runtime.stages) {
+            const daemonStage = stageStatusMap.get(stageState.stageId);
+            assertCondition(Boolean(daemonStage), `Daemon mission status is missing stage '${stageState.stageId}'.`);
 
             assertCondition(
-                daemonStage?.status === stageState.status,
-                `Stage progress mismatch for '${stageState.id}'. expected='${stageState.status}' actual='${daemonStage?.status ?? 'undefined'}'`
+                daemonStage?.status === mapRuntimeStageProgress(stageState, runtimeDocument.runtime.lifecycle),
+                `Stage progress mismatch for '${stageState.stageId}'. expected='${mapRuntimeStageProgress(stageState, runtimeDocument.runtime.lifecycle)}' actual='${daemonStage?.status ?? 'undefined'}'`
             );
 
-            const expectedTaskIds = taskFileIdsByStage.get(stageState.id) ?? [];
+            const expectedTaskIds = runtimeDocument.runtime.tasks
+                .filter((task) => task.stageId === stageState.stageId)
+                .map((task) => task.taskId);
             assertCondition(
                 daemonStage?.taskCount === expectedTaskIds.length,
-                `Task count mismatch for '${stageState.id}'. expected=${String(expectedTaskIds.length)} actual=${String(daemonStage?.taskCount ?? -1)}`
+                `Task count mismatch for '${stageState.stageId}'. expected=${String(expectedTaskIds.length)} actual=${String(daemonStage?.taskCount ?? -1)}`
             );
 
-            const expectedCompletedCount = stageState.tasks.filter((task) => task.status === 'done').length;
+            const expectedCompletedCount = stageState.completedTaskIds.length;
             assertCondition(
                 daemonStage?.completedTaskCount === expectedCompletedCount,
-                `Completed task count mismatch for '${stageState.id}'. expected=${String(expectedCompletedCount)} actual=${String(daemonStage?.completedTaskCount ?? -1)}`
+                `Completed task count mismatch for '${stageState.stageId}'. expected=${String(expectedCompletedCount)} actual=${String(daemonStage?.completedTaskCount ?? -1)}`
             );
 
-            const expectedActiveTaskIds = stageState.tasks
-                .filter((task) => task.status === 'active')
-                .map((task) => qualifyTaskId(stageState.id, task.id));
+            const expectedActiveTaskIds = runtimeDocument.runtime.tasks
+                .filter(
+                    (task) =>
+                        task.stageId === stageState.stageId &&
+                        (task.lifecycle === 'queued' || task.lifecycle === 'running')
+                )
+                .map((task) => task.taskId);
 
             assertStringSetEquals(
                 daemonStage?.activeTaskIds ?? [],
                 expectedActiveTaskIds,
-                `Active task mismatch for stage '${stageState.id}'.`
+                `Active task mismatch for stage '${stageState.stageId}'.`
             );
 
             for (const taskId of daemonStage?.activeTaskIds ?? []) {
                 assertCondition(
                     expectedTaskIds.includes(taskId),
-                    `Daemon stage '${stageState.id}' reported active task '${taskId}' that has no task file.`
+                    `Daemon stage '${stageState.stageId}' reported active task '${taskId}' that has no task file.`
                 );
             }
 
             for (const taskId of daemonStage?.readyTaskIds ?? []) {
                 assertCondition(
                     expectedTaskIds.includes(taskId),
-                    `Daemon stage '${stageState.id}' reported ready task '${taskId}' that has no task file.`
+                    `Daemon stage '${stageState.stageId}' reported ready task '${taskId}' that has no task file.`
                 );
                 assertCondition(
                     !(daemonStage?.activeTaskIds ?? []).includes(taskId),
-                    `Daemon stage '${stageState.id}' reported task '${taskId}' as both ready and active.`
+                    `Daemon stage '${stageState.stageId}' reported task '${taskId}' as both ready and active.`
                 );
             }
         }
 
-        const expectedGlobalActiveTaskIds = missionControl.stages.flatMap((stageState) =>
-            stageState.tasks
-                .filter((task) => task.status === 'active')
-                .map((task) => qualifyTaskId(stageState.id, task.id))
-        );
+        const expectedGlobalActiveTaskIds = runtimeDocument.runtime.tasks
+            .filter((task) => task.lifecycle === 'queued' || task.lifecycle === 'running')
+            .map((task) => task.taskId);
 
         const actualGlobalActiveTaskIds = (missionStatus.activeTasks ?? []).map((task) => task.taskId);
         assertStringSetEquals(
@@ -242,7 +243,7 @@ async function main(): Promise<void> {
 
         const gateSummary: CurrentWorkflowE2eReport['gateSummary'] = [];
         for (const intent of MISSION_GATE_INTENTS) {
-            const gateResult = await evaluateMissionGate(client, { missionId }, intent);
+            const gateResult = await api.mission.evaluateGate({ missionId }, intent);
             assertCondition(gateResult.intent === intent, `Gate intent echo mismatch for '${intent}'.`);
             assertCondition(Array.isArray(gateResult.errors), `Gate '${intent}' returned invalid errors payload.`);
             assertCondition(Array.isArray(gateResult.warnings), `Gate '${intent}' returned invalid warnings payload.`);
@@ -257,7 +258,7 @@ async function main(): Promise<void> {
         const report: CurrentWorkflowE2eReport = {
             missionId,
             stage: missionStatus.stage ?? expectedActiveStage,
-            controlRoot: workspaceContext.workspaceRoot,
+            workspaceRoot: workspaceContext.workspaceRoot,
             missionDir: workspaceContext.missionDir,
             flightDeckDir: workspaceContext.flightDeckDir,
             activeTaskIds: actualGlobalActiveTaskIds.slice().sort(),
@@ -276,7 +277,7 @@ async function main(): Promise<void> {
                 'Mission current workflow e2e test passed.',
                 `missionId: ${report.missionId}`,
                 `stage: ${report.stage}`,
-                `controlRoot: ${report.controlRoot}`,
+                `workspaceRoot: ${report.workspaceRoot}`,
                 `missionDir: ${report.missionDir}`,
                 `flightDeckDir: ${report.flightDeckDir}`,
                 `activeTasks: ${report.activeTaskIds.join(', ') || 'none'}`,
@@ -309,69 +310,106 @@ function parseArgs(argv: string[]): CurrentWorkflowE2eOptions {
     return options;
 }
 
-async function readMissionControlState(filePath: string): Promise<MissionControlFile> {
+async function readMissionRuntimeDocument(filePath: string): Promise<MissionRuntimeFile> {
     const raw = await fs.readFile(filePath, 'utf8');
-    const parsed = JSON.parse(raw) as Partial<MissionControlFile>;
+    const parsed = JSON.parse(raw) as Partial<MissionRuntimeFile>;
 
-    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.stages)) {
+    if (!parsed || typeof parsed !== 'object' || !parsed.runtime || !Array.isArray(parsed.runtime.stages) || !Array.isArray(parsed.runtime.tasks)) {
         throw new Error(`Invalid mission.json structure at '${filePath}'.`);
     }
 
-    const stages: MissionControlStage[] = parsed.stages.map((stage, index) => {
+    const stages: MissionRuntimeStage[] = parsed.runtime.stages.map((stage, index) => {
         if (!stage || typeof stage !== 'object') {
             throw new Error(`mission.json stage entry ${String(index)} is invalid.`);
         }
 
-        const stageId = (stage as Partial<MissionControlStage>).id;
-        const folder = (stage as Partial<MissionControlStage>).folder;
-        const status = (stage as Partial<MissionControlStage>).status;
-        const tasks = Array.isArray((stage as Partial<MissionControlStage>).tasks)
-            ? ((stage as Partial<MissionControlStage>).tasks as MissionControlTask[])
-            : [];
+        const candidate = stage as Partial<MissionRuntimeStage>;
+        const stageId = candidate.stageId;
 
         if (!isMissionStageId(stageId)) {
             throw new Error(`mission.json stage entry ${String(index)} has invalid id '${String(stageId)}'.`);
         }
-        if (typeof folder !== 'string' || folder.trim().length === 0) {
-            throw new Error(`mission.json stage '${stageId}' has invalid folder value.`);
-        }
-        if (!isMissionStageProgress(status)) {
-            throw new Error(`mission.json stage '${stageId}' has invalid status '${String(status)}'.`);
+        if (!isRuntimeStageLifecycle(candidate.lifecycle)) {
+            throw new Error(`mission.json stage '${stageId}' has invalid lifecycle '${String(candidate.lifecycle)}'.`);
         }
 
         return {
-            id: stageId,
-            folder,
-            status,
-            tasks
+            stageId,
+            lifecycle: candidate.lifecycle,
+            taskIds: Array.isArray(candidate.taskIds) ? candidate.taskIds : [],
+            readyTaskIds: Array.isArray(candidate.readyTaskIds) ? candidate.readyTaskIds : [],
+            queuedTaskIds: Array.isArray(candidate.queuedTaskIds) ? candidate.queuedTaskIds : [],
+            runningTaskIds: Array.isArray(candidate.runningTaskIds) ? candidate.runningTaskIds : [],
+            blockedTaskIds: Array.isArray(candidate.blockedTaskIds) ? candidate.blockedTaskIds : [],
+            completedTaskIds: Array.isArray(candidate.completedTaskIds) ? candidate.completedTaskIds : []
+        };
+    });
+
+    const tasks: MissionRuntimeTask[] = parsed.runtime.tasks.map((task, index) => {
+        if (!task || typeof task !== 'object') {
+            throw new Error(`mission.json task entry ${String(index)} is invalid.`);
+        }
+        const candidate = task as Partial<MissionRuntimeTask>;
+        if (typeof candidate.taskId !== 'string' || candidate.taskId.trim().length === 0) {
+            throw new Error(`mission.json task entry ${String(index)} has invalid taskId.`);
+        }
+        if (!isMissionStageId(candidate.stageId)) {
+            throw new Error(`mission.json task '${candidate.taskId}' has invalid stageId '${String(candidate.stageId)}'.`);
+        }
+        if (!isRuntimeTaskLifecycle(candidate.lifecycle)) {
+            throw new Error(`mission.json task '${candidate.taskId}' has invalid lifecycle '${String(candidate.lifecycle)}'.`);
+        }
+        return {
+            taskId: candidate.taskId,
+            stageId: candidate.stageId,
+            lifecycle: candidate.lifecycle
         };
     });
 
     return {
         schemaVersion: Number(parsed.schemaVersion ?? 0),
-        updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : '',
-        stages
+        runtime: {
+            lifecycle: typeof parsed.runtime.lifecycle === 'string' ? parsed.runtime.lifecycle : 'draft',
+            updatedAt: typeof parsed.runtime.updatedAt === 'string' ? parsed.runtime.updatedAt : '',
+            stages,
+            tasks
+        }
     };
 }
 
-async function readTaskFileIdsByStage(flightDeckDir: string): Promise<Map<MissionStageId, string[]>> {
-    const result = new Map<MissionStageId, string[]>();
-
-    for (const stageId of Object.keys(MISSION_TASK_STAGE_DIRECTORIES) as MissionStageId[]) {
-        const tasksDir = path.join(flightDeckDir, MISSION_TASK_STAGE_DIRECTORIES[stageId], 'tasks');
-        const taskIds = await listTaskIdsFromDirectory(tasksDir, stageId);
-        result.set(stageId, taskIds);
+function mapRuntimeStageProgress(
+    stage: MissionRuntimeStage,
+    missionLifecycle: string
+): MissionStageProgress {
+    if (missionLifecycle === 'delivered' && stage.stageId === 'delivery') {
+        return 'done';
     }
-
-    return result;
+    switch (stage.lifecycle) {
+        case 'completed':
+            return 'done';
+        case 'active':
+        case 'blocked':
+            return 'active';
+        case 'ready':
+        case 'pending':
+        default:
+            return 'pending';
+    }
 }
 
-async function listTaskIdsFromDirectory(tasksDir: string, stageId: MissionStageId): Promise<string[]> {
-    const entries = await fs.readdir(tasksDir, { withFileTypes: true }).catch(() => []);
-    return entries
-        .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.md'))
-        .map((entry) => qualifyTaskId(stageId, entry.name.replace(/\.md$/iu, '')))
-        .sort();
+function isRuntimeStageLifecycle(value: unknown): value is MissionRuntimeStage['lifecycle'] {
+    return value === 'pending' || value === 'ready' || value === 'active' || value === 'blocked' || value === 'completed';
+}
+
+function isRuntimeTaskLifecycle(value: unknown): value is MissionRuntimeTask['lifecycle'] {
+    return value === 'pending'
+        || value === 'ready'
+        || value === 'queued'
+        || value === 'running'
+        || value === 'blocked'
+        || value === 'completed'
+        || value === 'failed'
+        || value === 'cancelled';
 }
 
 async function resolveExpectedArtifactFiles(
@@ -419,11 +457,6 @@ function resolveMissionId(
 
     throw new Error('Daemon control.status did not provide a missionId or available mission candidates.');
 }
-
-function qualifyTaskId(stageId: MissionStageId, taskFileStem: string): string {
-    return `${stageId}/${taskFileStem}`;
-}
-
 function assertStringSetEquals(actual: string[], expected: string[], message: string): void {
     const actualSorted = [...actual].sort();
     const expectedSorted = [...expected].sort();

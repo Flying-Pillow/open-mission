@@ -6,34 +6,29 @@ import {
 	renderFrontmatterDocument,
 	type FrontmatterValue
 } from './frontmatter.js';
-import { getMissionWorktreesPath } from './repoConfig.js';
+import { getMissionCatalogPath, getMissionWorktreesPath } from './repoConfig.js';
 import {
-	MISSION_CONTROL_FILE_NAME,
-	MISSION_CONTROL_SCHEMA_VERSION,
-	MISSION_STAGES,
-	isMissionTaskAgent,
-	isMissionTaskStatus,
+	MISSION_RUNTIME_FILE_NAME,
 	type MissionBrief,
-	type MissionStageControlState,
-	type MissionControlState,
 	type MissionDescriptor,
 	type MissionArtifactKey,
 	type MissionSelector,
 	type MissionStageId,
-	type MissionTaskControlState,
 	type MissionTaskAgent,
 	type MissionTaskState,
-	type MissionTaskStatus,
 	type MissionType
 } from '../types.js';
 import { renderMissionBriefBody } from '../templates/mission/index.js';
 import {
-	getInitialMissionStageProgress,
 	getMissionArtifactDefinition,
-	getMissionStageDefinition,
-	isMissionStageId,
-	isMissionStageProgress
+	getMissionStageDefinition
 } from '../workflow/manifest.js';
+import {
+	createMissionRuntimeRecord,
+	type MissionWorkflowConfigurationSnapshot,
+	type MissionRuntimeRecord,
+	MISSION_WORKFLOW_RUNTIME_SCHEMA_VERSION
+} from '../workflow/engine/index.js';
 
 export class ArtifactFormatError extends Error {
 	public constructor(message: string) {
@@ -68,8 +63,6 @@ export type TaskArtifactWrite = {
 	instruction: string;
 	dependsOn?: string[];
 	agent: MissionTaskAgent;
-	status?: MissionTaskStatus;
-	retries?: number;
 };
 
 export type ResolvedMission = {
@@ -86,6 +79,14 @@ export class FilesystemAdapter {
 
 	public getMissionsPath(): string {
 		return getMissionWorktreesPath(this.workspaceRoot);
+	}
+
+	public getTrackedMissionsPath(): string {
+		return getMissionCatalogPath(this.workspaceRoot);
+	}
+
+	public getTrackedMissionDir(missionId: string): string {
+		return path.join(this.getTrackedMissionsPath(), missionId);
 	}
 
 	public getMissionDir(missionId: string): string {
@@ -116,6 +117,19 @@ export class FilesystemAdapter {
 		return this.runGit(['rev-parse', '--abbrev-ref', 'HEAD'], startPath);
 	}
 
+	public getDefaultBranch(startPath = this.workspaceRoot): string {
+		const remoteHead = this.runGit(['symbolic-ref', 'refs/remotes/origin/HEAD'], startPath);
+		if (remoteHead) {
+			const branch = remoteHead.split('/').filter(Boolean).pop();
+			if (branch) {
+				return branch;
+			}
+		}
+
+		const currentBranch = this.getCurrentBranch(startPath);
+		return currentBranch && currentBranch !== 'HEAD' ? currentBranch : 'main';
+	}
+
 	public isGitRepository(): boolean {
 		return this.runGit(['rev-parse', '--is-inside-work-tree']) === 'true';
 	}
@@ -131,6 +145,15 @@ export class FilesystemAdapter {
 		return slug.length > 0
 			? `mission/draft-${timestamp}-${slug}`
 			: `mission/draft-${timestamp}`;
+	}
+
+	public deriveRepositoryBootstrapBranchName(): string {
+		const repositoryName = path.basename(this.workspaceRoot);
+		const slug = this.slugify(repositoryName, 32);
+		const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+		return slug.length > 0
+			? `mission/bootstrap-${timestamp}-${slug}`
+			: `mission/bootstrap-${timestamp}`;
 	}
 
 	public async materializeMissionWorktree(missionDir: string, branchRef: string): Promise<string> {
@@ -173,6 +196,81 @@ export class FilesystemAdapter {
 		}
 
 		return normalizedBranch;
+	}
+
+	public async materializeLinkedWorktree(
+		worktreePath: string,
+		branchRef: string,
+		baseRef = this.getDefaultBranch()
+	): Promise<string> {
+		const normalizedBranch = branchRef.trim();
+		const normalizedBaseRef = baseRef.trim();
+		if (!normalizedBranch) {
+			throw new Error('Mission branch cannot be empty.');
+		}
+		if (!normalizedBaseRef) {
+			throw new Error('Mission base branch cannot be empty.');
+		}
+
+		const existingWorktree = await fs.lstat(worktreePath).then(
+			(stats) => stats.isDirectory(),
+			() => false
+		);
+		if (existingWorktree) {
+			throw new Error(`Linked worktree path '${worktreePath}' already exists.`);
+		}
+
+		await fs.mkdir(path.dirname(worktreePath), { recursive: true });
+		const branchExists = this.runGit(['rev-parse', '--verify', `refs/heads/${normalizedBranch}`]);
+		try {
+			if (branchExists) {
+				this.assertGit(['worktree', 'add', worktreePath, normalizedBranch]);
+			} else {
+				this.assertGit(['worktree', 'add', '-b', normalizedBranch, worktreePath, normalizedBaseRef]);
+			}
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			if (message.includes('already checked out')) {
+				throw new Error(
+					`Mission branch '${normalizedBranch}' is already checked out in another worktree. Switch that worktree away before using it again.`
+				);
+			}
+			throw error;
+		}
+
+		const nextBranch = this.getCurrentBranch(worktreePath);
+		if (nextBranch !== normalizedBranch) {
+			throw new Error(`Failed to materialize linked worktree for branch '${normalizedBranch}'.`);
+		}
+
+		return normalizedBranch;
+	}
+
+	public async removeLinkedWorktree(worktreePath: string): Promise<void> {
+		const exists = await fs.lstat(worktreePath).then(
+			(stats) => stats.isDirectory() || stats.isSymbolicLink(),
+			() => false
+		);
+		if (!exists) {
+			return;
+		}
+
+		this.assertGit(['worktree', 'remove', '--force', worktreePath]);
+	}
+
+	public stagePaths(pathsToStage: string[], cwd = this.workspaceRoot): void {
+		if (pathsToStage.length === 0) {
+			return;
+		}
+		this.assertGit(['add', '--', ...pathsToStage], cwd);
+	}
+
+	public commit(message: string, cwd = this.workspaceRoot): void {
+		this.assertGit(['commit', '-m', message], cwd);
+	}
+
+	public pushBranch(branchRef: string, cwd = this.workspaceRoot): void {
+		this.assertGit(['push', '--set-upstream', 'origin', branchRef], cwd);
 	}
 
 	public createMissionId(brief: MissionBrief): string {
@@ -300,114 +398,52 @@ export class FilesystemAdapter {
 		});
 	}
 
-	public getMissionControlStatePath(missionDir: string): string {
-		return path.join(this.getMissionFlightDeckPath(missionDir), MISSION_CONTROL_FILE_NAME);
+	public getMissionRuntimeRecordPath(missionDir: string): string {
+		return path.join(this.getMissionFlightDeckPath(missionDir), MISSION_RUNTIME_FILE_NAME);
 	}
 
-	public async readMissionControlState(missionDir: string): Promise<MissionControlState | undefined> {
-		const filePath = this.getMissionControlStatePath(missionDir);
+	public async readMissionRuntimeRecord(
+		missionDir: string
+	): Promise<MissionRuntimeRecord | undefined> {
+		const filePath = this.getMissionRuntimeRecordPath(missionDir);
 		try {
 			const content = await fs.readFile(filePath, 'utf8');
-			return this.parseMissionControlState(JSON.parse(content) as unknown, filePath);
+			return this.parseMissionRuntimeRecord(JSON.parse(content) as unknown, filePath);
 		} catch (error) {
 			if (this.isMissingFileError(error)) {
 				return undefined;
 			}
 			if (error instanceof SyntaxError) {
-				throw new ArtifactFormatError(`Mission control state '${filePath}' is not valid JSON.`);
+				throw new ArtifactFormatError(`Mission runtime record '${filePath}' is not valid JSON.`);
 			}
 			throw error;
 		}
 	}
 
-	public async reconcileMissionControlState(missionDir: string): Promise<MissionControlState> {
-		const existing = await this.readMissionControlState(missionDir);
-		const nextStages = await Promise.all(
-			MISSION_STAGES.map(async (stageId) => {
-				const existingStage = existing?.stages.find((stage) => stage.id === stageId);
-				const fileNames = await this.listTaskFileNames(missionDir, stageId);
-				const tasks = fileNames.map((fileName) => {
-					const taskKey = path.basename(fileName, '.md');
-					const existingTaskState = existingStage?.tasks.find((task) => task.id === taskKey);
-					return existingTaskState
-						? { ...existingTaskState }
-						: this.createTaskControlState({ id: taskKey });
-				});
-
-				return {
-					id: stageId,
-					folder: getMissionStageDefinition(stageId).folder,
-					status: existingStage?.status ?? getInitialMissionStageProgress(stageId),
-					tasks
-				} satisfies MissionStageControlState;
-			})
-		);
-
-		const candidateState: MissionControlState = {
-			schemaVersion: MISSION_CONTROL_SCHEMA_VERSION,
-			updatedAt: existing?.updatedAt ?? new Date().toISOString(),
-			stages: nextStages
-		};
-
-		if (existing && this.isMissionControlStateEqual(existing, candidateState)) {
-			return candidateState;
-		}
-
-		const nextState: MissionControlState = {
-			...candidateState,
-			updatedAt: new Date().toISOString()
-		};
-		await this.writeMissionControlState(missionDir, nextState);
-		return nextState;
+	public async writeMissionRuntimeRecord(
+		missionDir: string,
+		record: MissionRuntimeRecord
+	): Promise<void> {
+		const filePath = this.getMissionRuntimeRecordPath(missionDir);
+		await fs.mkdir(path.dirname(filePath), { recursive: true });
+		const temporaryPath = `${filePath}.${process.pid.toString(36)}.${Date.now().toString(36)}.tmp`;
+		await fs.writeFile(temporaryPath, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+		await fs.rename(temporaryPath, filePath);
 	}
 
-	public async setMissionDeliveredAt(
-		missionDir: string,
-		deliveredAt: string
-	): Promise<MissionControlState> {
-		void deliveredAt;
-		const controlState = await this.reconcileMissionControlState(missionDir);
-		const nextState: MissionControlState = {
-			...controlState,
-			updatedAt: new Date().toISOString(),
-			stages: controlState.stages.map((stage) => ({
-				...stage,
-				status: stage.id === 'delivery' ? 'done' : stage.status
-			}))
-		};
-		await this.writeMissionControlState(missionDir, nextState);
-		return nextState;
-	}
-
-	public async activateMissionStage(
-		missionDir: string,
-		stageId: MissionStageId
-	): Promise<MissionControlState> {
-		const controlState = await this.reconcileMissionControlState(missionDir);
-		const targetIndex = MISSION_STAGES.indexOf(stageId);
-		if (targetIndex < 0) {
-			throw new Error(`Unknown mission stage '${stageId}'.`);
-		}
-
-		const nextState: MissionControlState = {
-			...controlState,
-			updatedAt: new Date().toISOString(),
-			stages: controlState.stages.map((stage) => {
-				const stageIndex = MISSION_STAGES.indexOf(stage.id);
-				return {
-					...stage,
-					status:
-						stageIndex < targetIndex
-							? 'done'
-							: stage.id === stageId
-								? 'active'
-								: 'pending'
-				};
-			})
-		};
-
-		await this.writeMissionControlState(missionDir, nextState);
-		return nextState;
+	public async initializeMissionRuntimeRecord(input: {
+		missionDir: string;
+		missionId: string;
+		configuration: MissionWorkflowConfigurationSnapshot;
+		createdAt?: string;
+	}): Promise<MissionRuntimeRecord> {
+		const record = createMissionRuntimeRecord({
+			missionId: input.missionId,
+			configuration: input.configuration,
+			...(input.createdAt ? { createdAt: input.createdAt } : {})
+		});
+		await this.writeMissionRuntimeRecord(input.missionDir, record);
+		return record;
 	}
 
 	public async artifactExists(missionDir: string, artifact: MissionArtifactKey): Promise<boolean> {
@@ -465,11 +501,10 @@ export class FilesystemAdapter {
 	public async readTaskState(
 		missionDir: string,
 		stage: MissionStageId,
-		fileName: string,
-		controlState?: MissionControlState
+		fileName: string
 	): Promise<MissionTaskState | undefined> {
 		try {
-			const tasks = await this.listTaskStates(missionDir, stage, controlState);
+			const tasks = await this.listTaskStates(missionDir, stage);
 			return tasks.find((task) => task.fileName === fileName);
 		} catch (error) {
 			if (this.isMissingFileError(error)) {
@@ -481,12 +516,10 @@ export class FilesystemAdapter {
 
 	public async listTaskStates(
 		missionDir: string,
-		stage: MissionStageId,
-		controlState?: MissionControlState
+		stage: MissionStageId
 	): Promise<MissionTaskState[]> {
 		const stagePath = this.getStageTasksPath(missionDir, stage);
 		const fileNames = await this.listTaskFileNames(missionDir, stage);
-		const resolvedControlState = controlState ?? (await this.reconcileMissionControlState(missionDir));
 
 		const tasks = await Promise.all(
 			fileNames.map((fileName, index) =>
@@ -495,8 +528,7 @@ export class FilesystemAdapter {
 					stage,
 					path.join(stagePath, fileName),
 					fileName,
-					index + 1,
-					resolvedControlState
+					index + 1
 				)
 			)
 		);
@@ -514,69 +546,12 @@ export class FilesystemAdapter {
 		const filePath = this.getTaskPath(missionDir, stage, fileName);
 		await fs.writeFile(
 			filePath,
-			this.renderTaskDocument(record.subject, record.instruction, record.dependsOn),
+			this.renderTaskDocument(record.subject, record.instruction, {
+				...(record.dependsOn ? { dependsOn: record.dependsOn } : {}),
+				agent: record.agent
+			}),
 			'utf8'
 		);
-
-		const controlState = await this.reconcileMissionControlState(missionDir);
-		const taskId = this.createTaskId(stage, fileName);
-		const nextState: MissionControlState = {
-			...controlState,
-			updatedAt: new Date().toISOString(),
-			stages: controlState.stages.map((stageState) =>
-				stageState.id !== stage
-					? stageState
-					: {
-						...stageState,
-						tasks: [
-							...stageState.tasks.filter((taskState) => taskState.id !== path.basename(taskId, '.md')),
-							this.createTaskControlState({
-								id: path.basename(taskId, '.md'),
-								status: record.status ?? 'todo',
-								agent: record.agent,
-								retries: record.retries ?? 0
-							})
-						]
-					}
-			)
-		};
-		await this.writeMissionControlState(missionDir, nextState);
-	}
-
-	public async updateTaskState(
-		task: MissionTaskState,
-		changes: Partial<{ status: MissionTaskStatus; agent: MissionTaskAgent; retries: number }>
-	): Promise<void> {
-		const missionDir = this.resolveMissionDirFromTask(task);
-		const controlState = await this.reconcileMissionControlState(missionDir);
-		const taskState = this.getTaskControlState(controlState, task.stage, task.fileName);
-		if (!taskState) {
-			throw new ArtifactFormatError(`Mission control state is missing task '${task.taskId}'.`);
-		}
-
-		const nextState: MissionControlState = {
-			...controlState,
-			updatedAt: new Date().toISOString(),
-			stages: controlState.stages.map((stageState) =>
-				stageState.id !== task.stage
-					? stageState
-					: {
-						...stageState,
-						tasks: stageState.tasks.map((candidateTaskState) =>
-							candidateTaskState.id !== path.basename(task.fileName, '.md')
-								? candidateTaskState
-								: {
-									...candidateTaskState,
-									...(changes.status ? { status: changes.status } : {}),
-									...(changes.agent ? { agent: changes.agent } : {}),
-									...(changes.retries !== undefined ? { retries: changes.retries } : {}),
-									updatedAt: new Date().toISOString()
-								}
-						)
-					}
-			)
-		};
-		await this.writeMissionControlState(missionDir, nextState);
 	}
 
 	private getArtifactPath(missionDir: string, artifact: MissionArtifactKey): string {
@@ -590,149 +565,41 @@ export class FilesystemAdapter {
 		return path.join(this.getStageTasksPath(missionDir, stage), fileName);
 	}
 
-	private async writeMissionControlState(
-		missionDir: string,
-		state: MissionControlState
-	): Promise<void> {
-		const filePath = this.getMissionControlStatePath(missionDir);
-		await fs.mkdir(path.dirname(filePath), { recursive: true });
-		await fs.writeFile(filePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
-	}
-
-	private parseMissionControlState(rawState: unknown, filePath: string): MissionControlState {
-		if (!rawState || typeof rawState !== 'object' || Array.isArray(rawState)) {
-			throw new ArtifactFormatError(`Mission control state '${filePath}' must be a JSON object.`);
+	private parseMissionRuntimeRecord(
+		rawDocument: unknown,
+		filePath: string
+	): MissionRuntimeRecord {
+		if (!rawDocument || typeof rawDocument !== 'object' || Array.isArray(rawDocument)) {
+			throw new ArtifactFormatError(`Mission runtime record '${filePath}' must be a JSON object.`);
 		}
 
-		const candidateState = rawState as {
+		const candidateDocument = rawDocument as {
 			schemaVersion?: unknown;
-			updatedAt?: unknown;
-			stages?: unknown;
+			missionId?: unknown;
+			configuration?: unknown;
+			runtime?: unknown;
+			eventLog?: unknown;
 		};
-		if (candidateState.schemaVersion !== MISSION_CONTROL_SCHEMA_VERSION) {
+
+		if (candidateDocument.schemaVersion !== MISSION_WORKFLOW_RUNTIME_SCHEMA_VERSION) {
 			throw new ArtifactTypeError(
-				`Mission control state '${filePath}' has unsupported schema version '${String(candidateState.schemaVersion)}'.`
+				`Mission runtime record '${filePath}' has unsupported schema version '${String(candidateDocument.schemaVersion)}'.`
 			);
 		}
-		if (typeof candidateState.updatedAt !== 'string' || candidateState.updatedAt.trim().length === 0) {
-			throw new ArtifactTypeError(`Mission control state '${filePath}' is missing updatedAt.`);
+		if (typeof candidateDocument.missionId !== 'string' || candidateDocument.missionId.trim().length === 0) {
+			throw new ArtifactTypeError(`Mission runtime record '${filePath}' is missing missionId.`);
 		}
-		if (
-			!Array.isArray(candidateState.stages)
-		) {
-			throw new ArtifactTypeError(`Mission control state '${filePath}' must contain a stages array.`);
+		if (!candidateDocument.configuration || typeof candidateDocument.configuration !== 'object' || Array.isArray(candidateDocument.configuration)) {
+			throw new ArtifactTypeError(`Mission runtime record '${filePath}' is missing configuration.`);
+		}
+		if (!candidateDocument.runtime || typeof candidateDocument.runtime !== 'object' || Array.isArray(candidateDocument.runtime)) {
+			throw new ArtifactTypeError(`Mission runtime record '${filePath}' is missing runtime.`);
+		}
+		if (!Array.isArray(candidateDocument.eventLog)) {
+			throw new ArtifactTypeError(`Mission runtime record '${filePath}' must contain an eventLog array.`);
 		}
 
-		const stages = candidateState.stages.map((rawStageState, stageIndex) => {
-			if (!rawStageState || typeof rawStageState !== 'object' || Array.isArray(rawStageState)) {
-				throw new ArtifactTypeError(
-					`Mission control state '${filePath}' stage at index '${String(stageIndex)}' must be an object.`
-				);
-			}
-
-			const candidateStageState = rawStageState as {
-				id?: unknown;
-				folder?: unknown;
-				status?: unknown;
-				tasks?: unknown;
-			};
-			if (!isMissionStageId(candidateStageState.id)) {
-				throw new ArtifactTypeError(
-					`Mission control state '${filePath}' has invalid stage id '${String(candidateStageState.id)}'.`
-				);
-			}
-			const stageId = candidateStageState.id;
-			if (candidateStageState.folder !== getMissionStageDefinition(stageId).folder) {
-				throw new ArtifactTypeError(
-					`Mission control state '${filePath}' stage '${stageId}' has invalid folder '${String(candidateStageState.folder)}'.`
-				);
-			}
-			if (!isMissionStageProgress(candidateStageState.status)) {
-				throw new ArtifactTypeError(
-					`Mission control state '${filePath}' stage '${stageId}' has invalid status '${String(candidateStageState.status)}'.`
-				);
-			}
-			if (!Array.isArray(candidateStageState.tasks)) {
-				throw new ArtifactTypeError(
-					`Mission control state '${filePath}' stage '${stageId}' must contain a tasks array.`
-				);
-			}
-
-			const tasks = candidateStageState.tasks.map((rawTaskState, taskIndex) => {
-				if (!rawTaskState || typeof rawTaskState !== 'object' || Array.isArray(rawTaskState)) {
-					throw new ArtifactTypeError(
-						`Mission control state '${filePath}' stage '${stageId}' task at index '${String(taskIndex)}' must be an object.`
-					);
-				}
-
-				const candidateTaskState = rawTaskState as {
-					id?: unknown;
-					status?: unknown;
-					agent?: unknown;
-					retries?: unknown;
-					updatedAt?: unknown;
-				};
-				if (typeof candidateTaskState.id !== 'string' || candidateTaskState.id.trim().length === 0) {
-					throw new ArtifactTypeError(
-						`Mission control state '${filePath}' stage '${stageId}' has a task with invalid id '${String(candidateTaskState.id)}'.`
-					);
-				}
-				if (!isMissionTaskStatus(candidateTaskState.status)) {
-					throw new ArtifactTypeError(
-						`Mission control state '${filePath}' task '${candidateTaskState.id}' has invalid status '${String(candidateTaskState.status)}'.`
-					);
-				}
-				if (!isMissionTaskAgent(candidateTaskState.agent)) {
-					throw new ArtifactTypeError(
-						`Mission control state '${filePath}' task '${candidateTaskState.id}' has invalid agent '${String(candidateTaskState.agent)}'.`
-					);
-				}
-				if (
-					typeof candidateTaskState.retries !== 'number' ||
-					!Number.isFinite(candidateTaskState.retries)
-				) {
-					throw new ArtifactTypeError(
-						`Mission control state '${filePath}' task '${candidateTaskState.id}' has invalid retries '${String(candidateTaskState.retries)}'.`
-					);
-				}
-				if (
-					typeof candidateTaskState.updatedAt !== 'string' ||
-					candidateTaskState.updatedAt.trim().length === 0
-				) {
-					throw new ArtifactTypeError(
-						`Mission control state '${filePath}' task '${candidateTaskState.id}' is missing updatedAt.`
-					);
-				}
-
-				return {
-					id: candidateTaskState.id.trim(),
-					status: candidateTaskState.status,
-					agent: candidateTaskState.agent,
-					retries: candidateTaskState.retries,
-					updatedAt: candidateTaskState.updatedAt
-				} satisfies MissionTaskControlState;
-			});
-
-			return {
-				id: stageId,
-				folder: candidateStageState.folder,
-				status: candidateStageState.status,
-				tasks
-			} satisfies MissionStageControlState;
-		});
-
-		return {
-			schemaVersion: MISSION_CONTROL_SCHEMA_VERSION,
-			updatedAt: candidateState.updatedAt,
-			stages
-		};
-	}
-
-	private isMissionControlStateEqual(
-		left: MissionControlState,
-		right: MissionControlState
-	): boolean {
-		return JSON.stringify(left) === JSON.stringify(right);
+		return candidateDocument as MissionRuntimeRecord;
 	}
 
 	private async listTaskFileNames(missionDir: string, stage: MissionStageId): Promise<string[]> {
@@ -748,23 +615,14 @@ export class FilesystemAdapter {
 		return `${stage}/${path.basename(fileName, '.md')}`;
 	}
 
-	private createTaskControlState(
-		overrides: Partial<Pick<MissionTaskControlState, 'id' | 'status' | 'agent' | 'retries'>> = {}
-	): MissionTaskControlState {
-		if (!overrides.id) {
-			throw new Error('Mission task control state requires an id.');
-		}
-
-		return {
-			id: overrides.id,
-			status: overrides.status ?? 'todo',
-			agent: overrides.agent ?? 'default',
-			retries: overrides.retries ?? 0,
-			updatedAt: new Date().toISOString()
-		};
-	}
-
-	private renderTaskDocument(subject: string, instruction: string, dependsOn: string[] = []): string {
+	private renderTaskDocument(
+		subject: string,
+		instruction: string,
+		options: {
+			dependsOn?: string[];
+			agent?: MissionTaskAgent;
+		} = {}
+	): string {
 		const body = [
 			`# ${subject}`,
 			'',
@@ -773,16 +631,19 @@ export class FilesystemAdapter {
 			'Use the product artifacts in this mission folder as the canonical context boundary.',
 			''
 		].join('\n');
+		const attributes: Record<string, FrontmatterValue> = {};
+		if (options.dependsOn && options.dependsOn.length > 0) {
+			attributes['dependsOn'] = options.dependsOn;
+		}
+		if (options.agent) {
+			attributes['agent'] = options.agent;
+		}
 
-		if (dependsOn.length > 0) {
-			return this.renderDocument({ dependsOn }, body);
+		if (Object.keys(attributes).length > 0) {
+			return this.renderDocument(attributes, body);
 		}
 
 		return body;
-	}
-
-	private resolveMissionDirFromTask(task: MissionTaskState): string {
-		return path.resolve(task.filePath, ...task.relativePath.split('/').map(() => '..'));
 	}
 
 	private async readTaskStateInternal(
@@ -790,8 +651,7 @@ export class FilesystemAdapter {
 		stage: MissionStageId,
 		filePath: string,
 		fileName: string,
-		sequenceFallback: number,
-		controlState: MissionControlState
+		sequenceFallback: number
 	): Promise<MissionTaskState> {
 		const content = await fs.readFile(filePath, 'utf8');
 		const document = parseFrontmatterDocument(content);
@@ -799,10 +659,7 @@ export class FilesystemAdapter {
 		const sequence = this.parseTaskSequence(fileName, sequenceFallback);
 		const parsedTaskBody = this.parseTaskBody(body, fileName);
 		const taskId = this.createTaskId(stage, fileName);
-		const taskControlState = this.getTaskControlState(controlState, stage, fileName);
-		if (!taskControlState) {
-			throw new ArtifactFormatError(`Mission control state is missing task '${taskId}'.`);
-		}
+		const agent = this.readOptionalStringAttribute(document.attributes, 'agent', filePath) ?? 'copilot';
 
 		return {
 			taskId,
@@ -813,23 +670,13 @@ export class FilesystemAdapter {
 			body,
 			dependsOn: this.readTaskDependsOn(document.attributes, filePath),
 			blockedBy: [],
-			status: taskControlState.status,
-			agent: taskControlState.agent,
-			retries: taskControlState.retries,
+			status: 'todo',
+			agent,
+			retries: 0,
 			fileName,
 			filePath,
 			relativePath: path.relative(missionDir, filePath).split(path.sep).join('/')
 		};
-	}
-
-	private getTaskControlState(
-		controlState: MissionControlState,
-		stage: MissionStageId,
-		fileName: string
-	): MissionTaskControlState | undefined {
-		const stageState = controlState.stages.find((candidateStage) => candidateStage.id === stage);
-		const taskId = path.basename(fileName, '.md');
-		return stageState?.tasks.find((candidateTask) => candidateTask.id === taskId);
 	}
 
 	private readTaskDependsOn(
@@ -869,6 +716,7 @@ export class FilesystemAdapter {
 		}
 		return value.trim().length > 0 ? value.trim() : undefined;
 	}
+
 
 	private readOptionalNumberAttribute(
 		attributes: Record<string, FrontmatterValue>,
@@ -1100,7 +948,9 @@ export class FilesystemAdapter {
 
 		if (result.status !== 0) {
 			const stderr = result.stderr.trim();
-			throw new Error(stderr || `git ${args.join(' ')} failed.`);
+			const stdout = result.stdout.trim();
+			const detail = [stdout, stderr].filter(Boolean).join('\n');
+			throw new Error(detail || `git ${args.join(' ')} failed.`);
 		}
 
 		return result.stdout.trim();

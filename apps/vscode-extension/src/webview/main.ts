@@ -11,12 +11,12 @@ import './app.css';
 
 declare global {
 	interface Window {
-		__MISSION_CONTROL_MODEL__?: MissionTimelineModel;
+		__MISSION_TIMELINE_MODEL__?: MissionTimelineModel;
 	}
 }
 
 const target = document.getElementById('app');
-const initialModel = window.__MISSION_CONTROL_MODEL__;
+const initialModel = window.__MISSION_TIMELINE_MODEL__;
 
 if (!target || !initialModel) {
 	throw new Error('Mission webview bootstrap failed.');

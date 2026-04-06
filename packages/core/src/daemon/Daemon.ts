@@ -12,25 +12,25 @@ import {
 	type Ping,
 	type Request,
 	type Response
-} from './protocol.js';
+} from './contracts.js';
 import {
 	getDaemonManifestPath,
 	isNamedPipePath,
 	resolveDaemonSocketPath
 } from './daemonPaths.js';
-import type { MissionAgentRuntime } from './MissionAgentRuntime.js';
 import { WorkspaceManager } from './WorkspaceManager.js';
+import type { AgentRunner } from '../runtime/AgentRunner.js';
 
 export type DaemonOptions = {
 	logLine?: (line: string) => void;
 	socketPath?: string;
-	runtimes?: MissionAgentRuntime[];
+	runners?: AgentRunner[];
 };
 
 export class Daemon {
 	private readonly server = net.createServer();
 	private readonly clients = new Set<Socket>();
-	private readonly runtimes = new Map<string, MissionAgentRuntime>();
+	private readonly runners = new Map<string, AgentRunner>();
 	private readonly workspaceManager: WorkspaceManager;
 	private readonly shutdownPromise: Promise<void>;
 	private readonly socketPath: string;
@@ -42,10 +42,10 @@ export class Daemon {
 	public constructor(options: DaemonOptions = {}) {
 		this.socketPath = resolveDaemonSocketPath(options.socketPath);
 		this.logLine = options.logLine;
-		for (const runtime of options.runtimes ?? []) {
-			this.runtimes.set(runtime.id, runtime);
+		for (const runner of options.runners ?? []) {
+			this.runners.set(runner.id, runner);
 		}
-		this.workspaceManager = new WorkspaceManager(this.runtimes, (event) => this.broadcastEvent(event));
+		this.workspaceManager = new WorkspaceManager(this.runners, (event) => this.broadcastEvent(event));
 		this.shutdownPromise = new Promise<void>((resolve) => {
 			this.resolveShutdown = resolve;
 		});
@@ -232,13 +232,18 @@ export class Daemon {
 
 	private toErrorResponse(id: string, error: unknown): ErrorResponse {
 		const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined;
+		const validationErrors =
+			error && typeof error === 'object' && 'validationErrors' in error && Array.isArray(error.validationErrors)
+				? error.validationErrors
+				: undefined;
 		return {
 			type: 'response',
 			id,
 			ok: false,
 			error: {
 				message: error instanceof Error ? error.message : String(error),
-				...(code ? { code } : {})
+				...(code ? { code } : {}),
+				...(validationErrors ? { validationErrors } : {})
 			}
 		};
 	}

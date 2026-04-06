@@ -92,16 +92,6 @@
         }
       },
       {
-        "command": "mission.transitionMissionStage",
-        "title": "Transition Mission Stage",
-        "category": "Mission"
-      },
-      {
-        "command": "mission.revertMissionStage",
-        "title": "Revert Mission Stage",
-        "category": "Mission"
-      },
-      {
         "command": "mission.openMissionChat",
         "title": "Launch Mission Agent",
         "category": "Mission"
@@ -180,11 +170,6 @@
           "command": "mission.showStatus",
           "when": "view == mission.overview",
           "group": "mission@3"
-        },
-        {
-          "command": "mission.transitionMissionStage",
-          "when": "view == mission.overview",
-          "group": "mission@4"
         },
         {
           "command": "mission.openSettings",

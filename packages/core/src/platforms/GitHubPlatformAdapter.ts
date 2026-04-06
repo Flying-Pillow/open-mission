@@ -54,19 +54,7 @@ export class GitHubPlatformAdapter {
 			...(this.repository ? ['--repo', this.repository] : [])
 		]);
 
-		const labels = (payload.labels ?? [])
-			.map((label) => String(label.name ?? '').trim())
-			.filter(Boolean);
-		const type = mapLabelsToMissionType(labels) ?? 'task';
-
-		return {
-			issueId: payload.number,
-			title: payload.title,
-			body: payload.body?.trim() || 'Issue body not captured yet.',
-			type,
-			...(payload.url ? { url: payload.url } : {}),
-			...(labels.length > 0 ? { labels } : {})
-		} satisfies MissionBrief;
+		return this.mapIssuePayloadToBrief(payload);
 	}
 
 	public async listOpenIssues(limit = 50): Promise<TrackedIssueSummary[]> {
@@ -94,6 +82,68 @@ export class GitHubPlatformAdapter {
 				.map((assignee) => String(assignee.login ?? '').trim())
 				.filter(Boolean)
 		}));
+	}
+
+	public async createIssue(input: {
+		title: string;
+		body: string;
+	}): Promise<MissionBrief> {
+		if (!this.repository) {
+			throw new Error('GitHub issue creation requires a resolved repository.');
+		}
+
+		const payload = await this.runJsonProcess<GitHubIssuePayload>([
+			'api',
+			`repos/${this.repository}/issues`,
+			'-f',
+			`title=${input.title}`,
+			'-f',
+			`body=${input.body}`
+		]);
+
+		return this.mapIssuePayloadToBrief(payload);
+	}
+
+	public async createPullRequest(input: {
+		title: string;
+		body: string;
+		headBranch: string;
+		baseBranch?: string;
+	}): Promise<string> {
+		const output = await this.runTextProcess([
+			'pr',
+			'create',
+			'--title',
+			input.title,
+			'--body',
+			input.body,
+			'--head',
+			input.headBranch,
+			...(input.baseBranch ? ['--base', input.baseBranch] : []),
+			...(this.repository ? ['--repo', this.repository] : [])
+		]);
+
+		const url = output
+			.split(/\r?\n/u)
+			.map((line) => line.trim())
+			.find((line) => /^https:\/\//u.test(line));
+		return url ?? output.trim();
+	}
+
+	private mapIssuePayloadToBrief(payload: GitHubIssuePayload): MissionBrief {
+		const labels = (payload.labels ?? [])
+			.map((label) => String(label.name ?? '').trim())
+			.filter(Boolean);
+		const type = mapLabelsToMissionType(labels) ?? 'task';
+
+		return {
+			issueId: payload.number,
+			title: payload.title,
+			body: payload.body?.trim() || 'Issue body not captured yet.',
+			type,
+			...(payload.url ? { url: payload.url } : {}),
+			...(labels.length > 0 ? { labels } : {})
+		} satisfies MissionBrief;
 	}
 
 	private async runJsonProcess<T>(args: string[]): Promise<T> {
@@ -134,6 +184,40 @@ export class GitHubPlatformAdapter {
 						)
 					);
 				}
+			});
+		});
+	}
+
+	private async runTextProcess(args: string[]): Promise<string> {
+		return new Promise<string>((resolve, reject) => {
+			const child = spawn('gh', args, {
+				cwd: this.workspaceRoot,
+				env: process.env,
+				stdio: ['ignore', 'pipe', 'pipe']
+			});
+
+			let stdout = '';
+			let stderr = '';
+
+			child.stdout.on('data', (chunk: Buffer) => {
+				stdout += chunk.toString();
+			});
+
+			child.stderr.on('data', (chunk: Buffer) => {
+				stderr += chunk.toString();
+			});
+
+			child.once('error', (error) => {
+				reject(error);
+			});
+
+			child.once('close', (code) => {
+				if (code !== 0) {
+					reject(new Error(stderr.trim() || `gh exited with code ${String(code ?? 'unknown')}.`));
+					return;
+				}
+
+				resolve(stdout.trim());
 			});
 		});
 	}

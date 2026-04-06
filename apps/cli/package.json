@@ -9,7 +9,7 @@
     "missiond": "./build/daemon.js"
   },
   "scripts": {
-    "build": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && rm -rf build && rm -f tsconfig.tsbuildinfo && tsc -p tsconfig.json",
+    "build": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && rm -rf build && rm -f tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./scripts/copy-static-assets.mjs",
     "check": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && tsc --noEmit -p tsconfig.json",
     "dev": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && tsx src/index.ts",
     "lint": "eslint src --ext .ts,.tsx",
@@ -19,13 +19,18 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.1.0",
+    "@dimforge/rapier2d-simd-compat": "^0.17.3",
     "@flying-pillow/mission-core": "workspace:*",
     "@opentui/core": "^0.1.96",
     "@opentui/solid": "^0.1.96",
-    "solid-js": "^1.9.12"
+    "bun-webgpu": "0.1.5",
+    "planck": "^1.4.3",
+    "solid-js": "^1.9.12",
+    "three": "^0.177.0"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
+    "@types/three": "0.177.0",
     "tsx": "^4.1.10",
     "typescript": "^6.0.2"
   },

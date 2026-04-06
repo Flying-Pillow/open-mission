@@ -11,6 +11,10 @@ export function getMissionDirectoryPath(controlRoot: string): string {
 	return path.join(controlRoot, MISSION_DIRECTORY);
 }
 
+export function getMissionCatalogPath(controlRoot: string): string {
+	return path.join(getMissionDirectoryPath(controlRoot), 'missions');
+}
+
 export function getMissionWorktreesPath(controlRoot: string): string {
 	return getMissionActivePath(controlRoot);
 }

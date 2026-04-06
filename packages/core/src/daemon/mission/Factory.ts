@@ -1,7 +1,8 @@
 import { Mission } from './Mission.js';
 import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
-import type { AgentContext } from '../../agents/agentContext.js';
 import type { MissionBrief, MissionDescriptor, MissionSelector } from '../../types.js';
+import type { MissionWorkflowBindings } from './Mission.js';
+import { createDefaultWorkflowSettings } from '../../workflow/engine/defaultWorkflow.js';
 
 export class Factory {
 	public static async create(
@@ -9,15 +10,15 @@ export class Factory {
 		input: {
 			brief: MissionBrief;
 			branchRef: string;
-			agentContext: AgentContext;
-		}
+		},
+		workflowBindings: MissionWorkflowBindings = createDefaultMissionWorkflowBindings()
 	): Promise<Mission> {
 		const existing = await adapter.resolveMission({
 			...(input.brief.issueId !== undefined ? { issueId: input.brief.issueId } : {}),
 			branchRef: input.branchRef
 		});
 		if (existing) {
-			const mission = Mission.hydrate(adapter, existing.missionDir, existing.descriptor);
+			const mission = Mission.hydrate(adapter, existing.missionDir, existing.descriptor, workflowBindings);
 			await mission.refresh();
 			return mission;
 		}
@@ -34,21 +35,50 @@ export class Factory {
 			createdAt
 		};
 
-		const mission = Mission.hydrate(adapter, missionDir, descriptor);
+		const mission = Mission.hydrate(adapter, missionDir, descriptor, workflowBindings);
 		return mission.initialize();
 	}
 
 	public static async load(
 		adapter: FilesystemAdapter,
-		selector: MissionSelector = {}
+		selector: MissionSelector = {},
+		workflowBindings: MissionWorkflowBindings = createDefaultMissionWorkflowBindings()
 	): Promise<Mission | undefined> {
 		const resolved = await adapter.resolveMission(selector);
 		if (!resolved) {
 			return undefined;
 		}
 
-		const mission = Mission.hydrate(adapter, resolved.missionDir, resolved.descriptor);
+		const mission = Mission.hydrate(adapter, resolved.missionDir, resolved.descriptor, workflowBindings);
 		await mission.refresh();
 		return mission;
 	}
+}
+
+function createDefaultMissionWorkflowBindings(): MissionWorkflowBindings {
+	const workflow = disableWorkflowAutostart(createDefaultWorkflowSettings());
+	return {
+		workflow,
+		resolveWorkflow: () => workflow,
+		taskRunners: new Map()
+	};
+}
+
+function disableWorkflowAutostart(workflow: ReturnType<typeof createDefaultWorkflowSettings>) {
+	return {
+		...workflow,
+		stages: Object.fromEntries(
+			Object.entries(workflow.stages).map(([stageId, stage]) => [
+				stageId,
+				{
+					...stage,
+					taskLaunchPolicy: {
+						...stage.taskLaunchPolicy,
+						defaultAutostart: false,
+						launchMode: 'manual' as const
+					}
+				}
+			])
+		)
+	};
 }

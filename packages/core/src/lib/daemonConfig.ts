@@ -3,6 +3,11 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { getMissionDirectoryPath } from './repoConfig.js';
 import { resolveGitWorkspaceRoot } from './workspacePaths.js';
+import {
+    createDefaultWorkflowSettings,
+    type WorkflowGlobalSettings
+} from '../workflow/engine/index.js';
+import { normalizeWorkflowSettings } from '../settings/validation.js';
 
 export const MISSION_DAEMON_SETTINGS_FILE = 'settings.json';
 
@@ -19,14 +24,28 @@ export type MissionDaemonSettings = {
     trackingProvider?: 'github';
     instructionsPath?: string;
     skillsPath?: string;
+    workflow?: WorkflowGlobalSettings;
 };
 
-export function getMissionDaemonRoot(controlRoot = process.cwd()): string {
-    return getMissionDirectoryPath(resolveMissionControlRoot(controlRoot));
+type MissionDaemonPathOptions = {
+    resolveWorkspaceRoot?: boolean;
+};
+
+export function getMissionDaemonRoot(
+    controlRoot = process.cwd(),
+    options: MissionDaemonPathOptions = {}
+): string {
+    const resolvedControlRoot = options.resolveWorkspaceRoot === false
+        ? path.resolve(controlRoot.trim())
+        : resolveMissionControlRoot(controlRoot);
+    return getMissionDirectoryPath(resolvedControlRoot);
 }
 
-export function getMissionDaemonSettingsPath(controlRoot = process.cwd()): string {
-    return path.join(getMissionDaemonRoot(controlRoot), MISSION_DAEMON_SETTINGS_FILE);
+export function getMissionDaemonSettingsPath(
+    controlRoot = process.cwd(),
+    options: MissionDaemonPathOptions = {}
+): string {
+    return path.join(getMissionDaemonRoot(controlRoot, options), MISSION_DAEMON_SETTINGS_FILE);
 }
 
 export function getDefaultMissionDaemonSettings(): MissionDaemonSettings {
@@ -46,6 +65,7 @@ export function getDefaultMissionDaemonSettingsWithOverrides(
         trackingProvider: 'github',
         instructionsPath: '.agents',
         skillsPath: '.agents/skills',
+        workflow: normalizeWorkflowSettings(overrides.workflow ?? createDefaultWorkflowSettings()),
         ...(agentRunner ? { agentRunner } : {}),
         ...(defaultAgentMode ? { defaultAgentMode } : {}),
         ...(defaultModel ? { defaultModel } : {}),
@@ -81,12 +101,15 @@ export async function ensureMissionDaemonSettings(controlRoot = process.cwd()): 
 
 export async function writeMissionDaemonSettings(
     settings: MissionDaemonSettings,
-    controlRoot = process.cwd()
+    controlRoot = process.cwd(),
+    options: MissionDaemonPathOptions = {}
 ): Promise<MissionDaemonSettings> {
-    const settingsPath = getMissionDaemonSettingsPath(controlRoot);
+    const settingsPath = getMissionDaemonSettingsPath(controlRoot, options);
     const nextSettings = getDefaultMissionDaemonSettingsWithOverrides(settings);
+    const temporarySettingsPath = `${settingsPath}.${process.pid.toString(36)}.${Date.now().toString(36)}.tmp`;
     await fsp.mkdir(path.dirname(settingsPath), { recursive: true });
-    await fsp.writeFile(settingsPath, `${JSON.stringify(nextSettings, null, 2)}\n`, 'utf8');
+    await fsp.writeFile(temporarySettingsPath, `${JSON.stringify(nextSettings, null, 2)}\n`, 'utf8');
+    await fsp.rename(temporarySettingsPath, settingsPath);
     return nextSettings;
 }
 

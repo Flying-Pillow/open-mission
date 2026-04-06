@@ -1,5 +1,5 @@
 import { cockpitTheme } from './cockpitTheme.js';
-import type { ProgressRailItemState } from './ProgressRail.js';
+import type { ProgressRailItemState } from './progressModels.js';
 
 type ProgressStateTone = ProgressRailItemState | 'todo';
 

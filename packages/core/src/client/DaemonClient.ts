@@ -2,13 +2,14 @@ import * as net from 'node:net';
 import {
 	MissionAgentEventEmitter,
 	type MissionAgentDisposable
-} from '../daemon/MissionAgentRuntime.js';
+	} from '../daemon/events.js';
 import type {
 	Message,
 	Method,
 	Notification,
+	Response,
 	Request
-} from '../daemon/protocol.js';
+} from '../daemon/contracts.js';
 import {
 	readDaemonManifest,
 	resolveDaemonSocketPath
@@ -61,7 +62,7 @@ export class DaemonClient implements MissionAgentDisposable {
 		}
 
 		const id = `request-${String(++this.nextRequestId)}`;
-		const includeSurfacePath = shouldIncludeSurfacePath(method, params);
+		const includeSurfacePath = shouldIncludeSurfacePath(method);
 		const request: Request = {
 			type: 'request',
 			id,
@@ -134,7 +135,7 @@ export class DaemonClient implements MissionAgentDisposable {
 			return;
 		}
 
-		pendingRequest.reject(new Error(message.error.message));
+		pendingRequest.reject(createDaemonClientError(message));
 	}
 
 	private rejectPendingRequests(error: Error): void {
@@ -150,25 +151,34 @@ export class DaemonClient implements MissionAgentDisposable {
 	}
 }
 
-function shouldIncludeSurfacePath(method: Method, params: unknown): boolean {
+function createDaemonClientError(message: Extract<Response, { type: 'response'; ok: false }>): Error {
+	const error = new Error(message.error.message) as Error & {
+		code?: string;
+		validationErrors?: unknown;
+	};
+	if (message.error.code) {
+		error.code = message.error.code;
+	}
+	if (message.error.validationErrors) {
+		error.validationErrors = message.error.validationErrors;
+	}
+	return error;
+}
+
+function shouldIncludeSurfacePath(method: Method): boolean {
 	if (
 		method === 'control.status'
 		|| method === 'control.settings.update'
-		|| method === 'control.mission.bootstrap'
-		|| method === 'control.mission.start'
+		|| method === 'control.action.execute'
+		|| method === 'control.workflow.settings.get'
+		|| method === 'control.workflow.settings.initialize'
+		|| method === 'control.workflow.settings.update'
 		|| method === 'control.issues.list'
+		|| method === 'mission.from-brief'
+		|| method === 'mission.from-issue'
 	) {
 		return true;
 	}
 
-	if (method !== 'command.execute') {
-		return false;
-	}
-
-	if (!params || typeof params !== 'object' || !('selector' in params)) {
-		return true;
-	}
-
-	const selector = (params as { selector?: { missionId?: string } }).selector;
-	return !selector?.missionId;
+	return false;
 }

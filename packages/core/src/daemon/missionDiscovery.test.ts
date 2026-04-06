@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
-import { discoverSurface } from './missionDiscovery.js';
+import { WorkspaceManager } from './WorkspaceManager.js';
 
 describe('missionDiscovery', () => {
     it('binds a surface to the git repository root instead of scanning descendants', async () => {
@@ -15,7 +15,7 @@ describe('missionDiscovery', () => {
             await fs.mkdir(nestedSurfacePath, { recursive: true });
             await fs.mkdir(path.join(descendantMissionRoot, '.missions'), { recursive: true });
 
-            const discovery = await discoverSurface(nestedSurfacePath);
+            const discovery = await createWorkspaceManagerTestHarness().discoverSurface(nestedSurfacePath);
 
             expect(discovery).toEqual({
                 surfacePath: nestedSurfacePath,
@@ -38,7 +38,7 @@ describe('missionDiscovery', () => {
             runGit(workspaceRoot, ['worktree', 'add', missionWorkspacePath, '-b', 'mission/architecture-refactor']);
             await fs.mkdir(nestedMissionPath, { recursive: true });
 
-            const discovery = await discoverSurface(nestedMissionPath);
+            const discovery = await createWorkspaceManagerTestHarness().discoverSurface(nestedMissionPath);
 
             expect(discovery).toEqual({
                 surfacePath: nestedMissionPath,
@@ -71,4 +71,20 @@ function runGit(workspaceRoot: string, args: string[]): void {
     if (result.status !== 0) {
         throw new Error(result.stderr.trim() || `git ${args.join(' ')} failed.`);
     }
+}
+
+function createWorkspaceManagerTestHarness(): {
+    discoverSurface: (surfacePath: string) => Promise<{
+        surfacePath: string;
+        primaryControlRoot: string;
+        controlRoots: string[];
+    }>;
+} {
+    return new WorkspaceManager(new Map(), () => undefined) as unknown as {
+        discoverSurface: (surfacePath: string) => Promise<{
+            surfacePath: string;
+            primaryControlRoot: string;
+            controlRoots: string[];
+        }>;
+    };
 }

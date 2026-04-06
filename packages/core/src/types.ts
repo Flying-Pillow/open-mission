@@ -1,40 +1,42 @@
-import type { AgentContext, AgentEnvironment, AgentMode } from './agents/agentContext.js';
-import type { MissionAgentSessionRecord } from './daemon/MissionAgentRuntime.js';
+import type { MissionAgentSessionRecord } from './daemon/contracts.js';
 import type { MissionDaemonSettings } from './lib/daemonConfig.js';
+import type {
+	MissionGateProjection,
+	MissionLifecycleState,
+	MissionPanicState,
+	MissionPauseState,
+	MissionStageRuntimeProjection,
+	MissionTaskLaunchMode,
+	MissionTaskRuntimeState,
+	MissionWorkflowConfigurationSnapshot
+} from './workflow/engine/types.js';
 import {
 	MISSION_ARTIFACT_KEYS,
 	MISSION_ARTIFACT_LABELS,
 	MISSION_ARTIFACTS,
 	MISSION_STAGES,
 	MISSION_TASK_STAGE_DIRECTORIES,
-	evaluateMissionStageStatusIntent,
 	evaluateMissionTaskLaunchEligibility,
 	evaluateMissionTaskStatusIntent,
-	getPrimaryMissionStageStatusIntent,
 	getMissionTaskPairingDefinition,
 	isMissionArtifactKey,
 	isMissionStageId,
 	isMissionStageProgress,
 	type MissionArtifactKey,
 	type MissionStageId,
-	type MissionStageStatusIntent,
 	type MissionTaskPairingDefinition,
 	type MissionStageProgress,
 	type MissionTaskStatusIntent,
 	type MissionWorkflowTaskStatus
 } from './workflow/manifest.js';
 
-export type { AgentContext, AgentEnvironment, AgentMode };
-
 export {
 	MISSION_ARTIFACT_LABELS,
 	MISSION_ARTIFACTS,
 	MISSION_STAGES,
 	MISSION_TASK_STAGE_DIRECTORIES,
-	evaluateMissionStageStatusIntent,
 	evaluateMissionTaskLaunchEligibility,
 	evaluateMissionTaskStatusIntent,
-	getPrimaryMissionStageStatusIntent,
 	getMissionTaskPairingDefinition,
 	isMissionArtifactKey,
 	isMissionStageId,
@@ -45,7 +47,6 @@ export type {
 	MissionArtifactKey,
 	MissionStageId,
 	MissionStageProgress,
-	MissionStageStatusIntent,
 	MissionTaskPairingDefinition,
 	MissionTaskStatusIntent,
 	MissionWorkflowTaskStatus
@@ -53,8 +54,7 @@ export type {
 
 export type MissionProductKey = MissionArtifactKey;
 
-export const MISSION_CONTROL_FILE_NAME = 'mission.json';
-export const MISSION_CONTROL_SCHEMA_VERSION = 3;
+export const MISSION_RUNTIME_FILE_NAME = 'mission.json';
 
 export const MISSION_ARTIFACT_FILE_NAMES: string[] = MISSION_ARTIFACT_KEYS.map(
 	(artifactKey) => MISSION_ARTIFACTS[artifactKey]
@@ -74,6 +74,100 @@ export const MISSION_GATE_INTENTS: GateIntent[] = [
 export type MissionType = 'feature' | 'fix' | 'docs' | 'refactor' | 'task';
 export type MissionTaskStatus = MissionWorkflowTaskStatus;
 export type MissionTaskAgent = string;
+
+export type MissionActionScope = 'mission' | 'task' | 'session' | 'generation';
+export type MissionActionFlowSelectionMode = 'single' | 'multiple';
+export type MissionActionFlowTextMode = 'compact' | 'expanded';
+export type MissionActionFlowTextFormat = 'plain' | 'markdown';
+
+export type MissionActionFlowOption = {
+	id: string;
+	label: string;
+	description: string;
+};
+
+export type MissionActionFlowSelectionStep = {
+	kind: 'selection';
+	id: string;
+	label: string;
+	title: string;
+	emptyLabel: string;
+	helperText: string;
+	selectionMode: MissionActionFlowSelectionMode;
+	options: MissionActionFlowOption[];
+};
+
+export type MissionActionFlowTextStep = {
+	kind: 'text';
+	id: string;
+	label: string;
+	title: string;
+	helperText: string;
+	placeholder: string;
+	initialValue?: string;
+	inputMode: MissionActionFlowTextMode;
+	format: MissionActionFlowTextFormat;
+};
+
+export type MissionActionFlowStep = MissionActionFlowSelectionStep | MissionActionFlowTextStep;
+
+export type MissionActionFlowDescriptor = {
+	targetLabel: string;
+	actionLabel: string;
+	steps: MissionActionFlowStep[];
+};
+
+export type MissionActionUiMetadata = {
+	toolbarLabel?: string;
+	requiresConfirmation?: boolean;
+	confirmationPrompt?: string;
+};
+
+export type MissionActionPresentationScope = 'mission' | 'stage' | 'task' | 'session';
+
+export type MissionActionPresentationTarget = {
+	scope: MissionActionPresentationScope;
+	targetId?: string;
+};
+
+export type MissionActionExecutionMetadata = {
+	stageId?: MissionStageId;
+	launchMode?: MissionTaskLaunchMode;
+	autostart?: boolean;
+	batchTargetIds?: string[];
+};
+
+export type MissionActionDescriptor = {
+	id: string;
+	label: string;
+	action: string;
+	scope: MissionActionScope;
+	targetId?: string;
+	disabled: boolean;
+	disabledReason: string;
+	enabled: boolean;
+	reason?: string;
+	flow?: MissionActionFlowDescriptor;
+	ui?: MissionActionUiMetadata;
+	presentationTargets?: MissionActionPresentationTarget[];
+	metadata?: MissionActionExecutionMetadata;
+};
+
+export type MissionActionExecutionSelectionStep = {
+	kind: 'selection';
+	stepId: string;
+	optionIds: string[];
+};
+
+export type MissionActionExecutionTextStep = {
+	kind: 'text';
+	stepId: string;
+	value: string;
+};
+
+export type MissionActionExecutionStep =
+	| MissionActionExecutionSelectionStep
+	| MissionActionExecutionTextStep;
 
 export type MissionBrief = {
 	issueId?: number;
@@ -108,27 +202,6 @@ export type MissionDescriptor = {
 	createdAt: string;
 };
 
-export type MissionTaskControlState = {
-	id: string;
-	status: MissionTaskStatus;
-	agent: MissionTaskAgent;
-	retries: number;
-	updatedAt: string;
-};
-
-export type MissionStageControlState = {
-	id: MissionStageId;
-	folder: string;
-	status: MissionStageProgress;
-	tasks: MissionTaskControlState[];
-};
-
-export type MissionControlState = {
-	schemaVersion: typeof MISSION_CONTROL_SCHEMA_VERSION;
-	updatedAt: string;
-	stages: MissionStageControlState[];
-};
-
 export type MissionRecord = {
 	id: string;
 	brief: MissionBrief;
@@ -138,7 +211,6 @@ export type MissionRecord = {
 	branchRef: string;
 	createdAt: string;
 	stage: MissionStageId;
-	agentContext?: AgentContext;
 	agentSessions: MissionAgentSessionRecord[];
 };
 
@@ -182,67 +254,6 @@ export type MissionStageStatus = {
 	tasks: MissionTaskState[];
 };
 
-export type MissionCommandScope = 'mission' | 'stage' | 'task' | 'session';
-
-export type MissionCommandFlowSelectionMode = 'single' | 'multiple';
-export type MissionCommandFlowTextMode = 'compact' | 'expanded';
-export type MissionCommandFlowTextFormat = 'plain' | 'markdown';
-
-export type MissionCommandFlowOption = {
-	id: string;
-	label: string;
-	description: string;
-};
-
-export type MissionCommandFlowSelectionStep = {
-	kind: 'selection';
-	id: string;
-	label: string;
-	title: string;
-	emptyLabel: string;
-	helperText: string;
-	selectionMode: MissionCommandFlowSelectionMode;
-	options: MissionCommandFlowOption[];
-};
-
-export type MissionCommandFlowTextStep = {
-	kind: 'text';
-	id: string;
-	label: string;
-	title: string;
-	helperText: string;
-	placeholder: string;
-	initialValue?: string;
-	inputMode: MissionCommandFlowTextMode;
-	format: MissionCommandFlowTextFormat;
-};
-
-export type MissionCommandFlowStep = MissionCommandFlowSelectionStep | MissionCommandFlowTextStep;
-
-export type MissionCommandFlowDescriptor = {
-	targetLabel: string;
-	actionLabel: string;
-	steps: MissionCommandFlowStep[];
-};
-
-export type MissionCommandUiMetadata = {
-	toolbarLabel?: string;
-	requiresConfirmation?: boolean;
-	confirmationPrompt?: string;
-};
-
-export type MissionCommandDescriptor = {
-	id: string;
-	label: string;
-	command: string;
-	scope: MissionCommandScope;
-	targetId?: string;
-	enabled: boolean;
-	reason?: string;
-	flow?: MissionCommandFlowDescriptor;
-	ui?: MissionCommandUiMetadata;
-};
-
 export type MissionSelectionCandidate = {
 	missionId: string;
 	title: string;
@@ -250,6 +261,31 @@ export type MissionSelectionCandidate = {
 	createdAt: string;
 	issueId?: number;
 };
+
+export type MissionPreparationStatus =
+	| {
+		kind: 'repository-bootstrap';
+		state: 'pull-request-opened';
+		branchRef: string;
+		baseBranch: string;
+		pullRequestUrl: string;
+		controlDirectoryPath: string;
+		settingsPath: string;
+		worktreesPath: string;
+		missionsPath: string;
+	}
+	| {
+		kind: 'mission';
+		state: 'pull-request-opened';
+		missionId: string;
+		branchRef: string;
+		baseBranch: string;
+		pullRequestUrl: string;
+		missionRootDir: string;
+		flightDeckDir: string;
+		issueId?: number;
+		issueUrl?: string;
+	};
 
 export type MissionOperationalMode = 'setup' | 'root' | 'mission';
 
@@ -295,9 +331,21 @@ export type MissionStatus = {
 	readyTasks?: MissionTaskState[];
 	stages?: MissionStageStatus[];
 	agentSessions?: MissionAgentSessionRecord[];
-	recommendedCommand?: string;
-	availableCommands?: MissionCommandDescriptor[];
+	workflow?: {
+		lifecycle: MissionLifecycleState;
+		pause: MissionPauseState;
+		panic: MissionPanicState;
+		currentStageId?: MissionStageId;
+		configuration: MissionWorkflowConfigurationSnapshot;
+		stages: MissionStageRuntimeProjection[];
+		tasks: MissionTaskRuntimeState[];
+		gates: MissionGateProjection[];
+		updatedAt: string;
+	};
+	recommendedAction?: string;
+	availableActions?: MissionActionDescriptor[];
 	availableMissions?: MissionSelectionCandidate[];
+	preparation?: MissionPreparationStatus;
 };
 
 export type MissionData = MissionStatus;

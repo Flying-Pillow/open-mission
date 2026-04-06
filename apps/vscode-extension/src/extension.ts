@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
+import { MissionCockpitViewProvider } from './MissionCockpitViewProvider.js';
 import { MissionOperatorClient } from './MissionOperatorClient.js';
 import { MissionSessionController } from './MissionSessionController.js';
 import { MissionTreeDataProvider } from './MissionTreeView.js';
 import {
 	isMissionArtifactKey,
 	isMissionGateIntent,
-	isMissionStageId,
 	type MissionArtifactDispositionAction,
 	type MissionArtifactPreparationAction,
 	type MissionArtifactReference,
@@ -54,17 +54,34 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		statusBarItem,
 		outputChannel
 	);
+	const cockpitViewProvider = new MissionCockpitViewProvider(
+		context.extensionUri,
+		sessionController,
+		outputChannel
+	);
 	const treeDataProvider = new MissionTreeDataProvider(sessionController);
 	const overviewTree = vscode.window.createTreeView('mission.overview', {
 		treeDataProvider,
 		showCollapseAll: true
 	});
+	const cockpitProviderRegistration = vscode.window.registerWebviewViewProvider(
+		'mission.cockpit',
+		cockpitViewProvider
+	);
 
 	outputChannel.appendLine(
 		`Mission activated. Version=${extensionVersion}. Filesystem mission model enabled.`
 	);
 	statusBarItem.show();
-	context.subscriptions.push(outputChannel, statusBarItem, sessionController, treeDataProvider, overviewTree);
+	context.subscriptions.push(
+		outputChannel,
+		statusBarItem,
+		sessionController,
+		cockpitViewProvider,
+		treeDataProvider,
+		overviewTree,
+		cockpitProviderRegistration
+	);
 	context.subscriptions.push(
 		vscode.window.onDidChangeActiveTextEditor(() => {
 			void sessionController.refresh();
@@ -129,15 +146,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				'The timeline webview was removed from the reduced extension host.'
 			);
 		}, outputChannel),
-		registerCommandSafely('mission.transitionMissionStage', async (toStage?: unknown) => {
-			if (toStage !== undefined && !isMissionStageId(toStage)) {
-				throw new Error('mission.transitionMissionStage received an invalid mission stage payload.');
-			}
-			await sessionController.transitionMissionStage(isMissionStageId(toStage) ? toStage : undefined);
-		}, outputChannel),
-		registerCommandSafely('mission.revertMissionStage', async () => {
-			await sessionController.revertMissionStage();
-		}, outputChannel),
 		registerCommandSafely('mission.refreshStatus', async () => {
 			await sessionController.refresh();
 		}, outputChannel),
@@ -160,7 +168,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	await sessionController.refresh();
 }
 
-export function deactivate(): void {}
+export function deactivate(): void { }
 
 function parseArtifactReference(input: unknown): MissionArtifactReference | undefined {
 	if (!input || typeof input !== 'object') {

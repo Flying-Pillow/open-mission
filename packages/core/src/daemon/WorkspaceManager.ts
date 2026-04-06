@@ -1,16 +1,16 @@
 import * as path from 'node:path';
-import { discoverSurface } from './missionDiscovery.js';
 import type { MissionSelectionCandidate } from '../types.js';
-import type { Notification, Request } from './protocol.js';
-import type { MissionAgentRuntime } from './MissionAgentRuntime.js';
+import type { Notification, Request } from './contracts.js';
 import { MissionWorkspace } from './Workspace.js';
+import type { AgentRunner } from '../runtime/AgentRunner.js';
+import { resolveGitWorkspaceRoot } from '../lib/workspacePaths.js';
 
 export class WorkspaceManager {
     private readonly workspaces = new Map<string, MissionWorkspace>();
     private readonly missionWorkspaceRoots = new Map<string, string>();
 
     public constructor(
-        private readonly runtimes: Map<string, MissionAgentRuntime>,
+        private readonly runners: Map<string, AgentRunner>,
         private readonly emitEvent: (event: Notification) => void
     ) { }
 
@@ -20,7 +20,7 @@ export class WorkspaceManager {
         if (!workspace) {
             workspace = new MissionWorkspace(
                 normalizedWorkspaceRoot,
-                this.runtimes,
+                this.runners,
                 this.emitEvent
             );
             this.workspaces.set(normalizedWorkspaceRoot, workspace);
@@ -30,14 +30,6 @@ export class WorkspaceManager {
     }
 
     public async executeMethod(request: Request): Promise<unknown> {
-        if (request.method === 'command.execute') {
-            const selector = readMissionSelector(request.params);
-            if (selector?.missionId) {
-                return this.executeMissionMethod(selector.missionId, request);
-            }
-            return this.executeControlMethod(request);
-        }
-
         if (isControlMethod(request.method)) {
             return this.executeControlMethod(request);
         }
@@ -55,7 +47,7 @@ export class WorkspaceManager {
             throw new Error(`Control method '${request.method}' requires a surfacePath.`);
         }
 
-        const discovery = await discoverSurface(surfacePath);
+        const discovery = await this.discoverSurface(surfacePath);
         const primaryWorkspace = this.getWorkspace(discovery.primaryControlRoot);
         const availableMissions = await this.collectAvailableMissions(discovery.controlRoots);
 
@@ -98,15 +90,52 @@ export class WorkspaceManager {
         }
         this.missionWorkspaceRoots.set(missionId, controlRoot);
     }
+
+    private async discoverSurface(surfacePath: string): Promise<{
+        surfacePath: string;
+        primaryControlRoot: string;
+        controlRoots: string[];
+    }> {
+        const normalizedSurfacePath = path.resolve(surfacePath);
+        const primaryControlRoot =
+            this.resolveControlRootFromMissionPath(normalizedSurfacePath)
+            ?? resolveGitWorkspaceRoot(normalizedSurfacePath)
+            ?? normalizedSurfacePath;
+        return {
+            surfacePath: normalizedSurfacePath,
+            primaryControlRoot,
+            controlRoots: [primaryControlRoot]
+        };
+    }
+
+    private resolveControlRootFromMissionPath(surfacePath: string): string | undefined {
+        const parts = path.resolve(surfacePath).split(path.sep).filter(Boolean);
+        const missionsIndex = parts.lastIndexOf('.missions');
+        if (missionsIndex < 0) {
+            return undefined;
+        }
+        if (parts[missionsIndex + 1] !== 'active') {
+            return undefined;
+        }
+        if (!parts[missionsIndex + 2]) {
+            return undefined;
+        }
+        const prefix = parts.slice(0, missionsIndex);
+        return path.resolve(path.sep, ...prefix);
+    }
 }
 
 function isControlMethod(method: Request['method']): boolean {
     return (
         method === 'control.status'
         || method === 'control.settings.update'
-        || method === 'control.mission.bootstrap'
-        || method === 'control.mission.start'
+        || method === 'control.action.execute'
+        || method === 'control.workflow.settings.get'
+        || method === 'control.workflow.settings.initialize'
+        || method === 'control.workflow.settings.update'
         || method === 'control.issues.list'
+        || method === 'mission.from-brief'
+        || method === 'mission.from-issue'
     );
 }
 

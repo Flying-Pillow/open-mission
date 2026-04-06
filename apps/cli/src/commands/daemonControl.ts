@@ -12,6 +12,8 @@ import {
 
 export type MissiondCommand = 'start' | 'stop' | 'restart' | 'status' | 'run';
 
+export type MissionDaemonLaunchMode = 'build' | 'source';
+
 export type DaemonStatusResult = {
 	manifestPath: string;
 	running: boolean;
@@ -77,6 +79,9 @@ export async function getMissionDaemonStatus(): Promise<DaemonStatusResult> {
 
 export async function startMissionDaemon(options: {
 	socketPath?: string;
+	surfacePath?: string;
+	launchMode?: MissionDaemonLaunchMode;
+	runtimeFactoryModulePath?: string;
 }): Promise<DaemonStartResult> {
 	const currentStatus = await getMissionDaemonStatus();
 	if (currentStatus.running) {
@@ -148,13 +153,26 @@ export async function stopMissionDaemon(): Promise<DaemonStopResult> {
 	};
 }
 
-function spawnMissionDaemonRunner(options: { socketPath?: string }) {
+function spawnMissionDaemonRunner(options: {
+	socketPath?: string;
+	surfacePath?: string;
+	launchMode?: MissionDaemonLaunchMode;
+	runtimeFactoryModulePath?: string;
+}) {
 	const cliRoot = resolveCliPackageRoot();
-	const launchMode = process.env['MISSION_DAEMON_LAUNCH_MODE']?.trim() || 'build';
+	const launchMode =
+		options.launchMode ?? (process.env['MISSION_DAEMON_LAUNCH_MODE']?.trim() || 'build');
 	const socketArgs = options.socketPath ? ['--socket', options.socketPath] : [];
 	const sourceEntry = path.join(cliRoot, 'src', 'daemon.ts');
 	const buildEntry = path.join(cliRoot, 'build', 'daemon.js');
-	const env = { ...process.env };
+	const env = {
+		...process.env,
+		...(options.surfacePath ? { MISSION_SURFACE_PATH: options.surfacePath } : {}),
+		MISSION_DAEMON_LAUNCH_MODE: launchMode,
+		...(options.runtimeFactoryModulePath
+			? { MISSION_RUNTIME_FACTORY_MODULE: options.runtimeFactoryModulePath }
+			: {})
+	};
 
 	if (launchMode === 'source') {
 		return spawn(

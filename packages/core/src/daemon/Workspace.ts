@@ -1,10 +1,13 @@
 import * as fs from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
+import * as path from 'node:path';
+import { MissionPreparationService } from './MissionPreparationService.js';
+import { RepositoryPreparationService } from './RepositoryPreparationService.js';
 import { Mission } from './mission/Mission.js';
 import { Factory } from './mission/Factory.js';
+import type { MissionWorkflowBindings } from './mission/Mission.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import {
-	ensureMissionDaemonSettings,
 	getDefaultMissionDaemonSettingsWithOverrides,
 	getMissionDaemonSettingsPath,
 	readMissionDaemonSettings,
@@ -15,53 +18,63 @@ import {
 	GitHubPlatformAdapter,
 	resolveGitHubRepositoryFromWorkspace
 } from '../platforms/GitHubPlatformAdapter.js';
-import { MissionAgentContext } from '../agents/agentContext.js';
-import { initializeMissionRepository } from '../initializeMissionRepository.js';
 import {
-	type MissionAgentConsoleState,
-	type MissionAgentDisposable,
-	type MissionAgentEvent,
-	type MissionAgentRuntime,
-	type MissionAgentSessionLaunchRequest,
-	type MissionAgentSessionRecord
-} from './MissionAgentRuntime.js';
+	type MissionAgentDisposable
+	} from './events.js';
 import {
 	getMissionDirectoryPath,
 	getMissionWorktreesPath,
 } from '../lib/repoConfig.js';
 import type {
-	MissionCommandDescriptor,
-	MissionCommandFlowDescriptor,
-	MissionCommandFlowOption,
+	MissionActionExecutionStep,
+	MissionActionExecutionSelectionStep,
+	MissionActionExecutionTextStep,
+	MissionActionDescriptor,
+	MissionActionFlowDescriptor,
+	MissionActionFlowOption,
 	MissionControlPlaneStatus,
 	MissionOperationalMode,
 	MissionSelectionCandidate,
-	MissionType,
 	MissionTaskState,
 	MissionSelector,
 	MissionStatus,
 	TrackedIssueSummary
 } from '../types.js';
-import { MISSION_STAGES } from '../types.js';
 import {
-	type CommandExecute,
+	type ControlActionExecute,
 	type ControlIssuesList,
-	type ControlMissionBootstrap,
-	type ControlMissionStart,
+	type MissionFromBriefRequest,
+	type MissionFromIssueRequest,
 	type ControlSettingsUpdate,
+	type ControlWorkflowSettingsInitialize,
+	type ControlWorkflowSettingsInitializeResponse,
+	type ControlWorkflowSettingsUpdate,
+	type ControlWorkflowSettingsUpdateResponse,
+	type MissionActionExecute,
 	type MissionGateEvaluate,
+	type MissionAgentConsoleState,
+	type MissionAgentEvent,
+	type MissionAgentSessionLaunchRequest,
+	type MissionAgentSessionRecord,
 	type MissionSelect,
 	type Notification,
 	type Request,
+	type SessionCommand,
 	type SessionConsoleState,
 	type SessionControl,
-	type SessionInput,
-	type SessionResize,
-	type SessionTurnSubmit,
-	type StageTransition,
-	type TaskLaunch,
-	type TaskSelect
-} from './protocol.js';
+	type SessionPrompt,
+	type TaskLaunch
+} from './contracts.js';
+import type {
+	AgentCommand,
+	AgentPrompt
+} from '../runtime/AgentRuntimeTypes.js';
+import type { AgentRunner } from '../runtime/AgentRunner.js';
+import { createDefaultWorkflowSettings } from '../workflow/engine/defaultWorkflow.js';
+import {
+	WorkflowSettingsStore,
+	type WorkflowSettingsGetResult
+} from '../settings/index.js';
 
 type LoadedMission = {
 	missionId: string;
@@ -74,7 +87,8 @@ type LoadedMission = {
 };
 export class MissionWorkspace {
 	private readonly store: FilesystemAdapter;
-	private readonly runtimes = new Map<string, MissionAgentRuntime>();
+	private readonly workflowSettingsStore: WorkflowSettingsStore;
+	private readonly agentRunners = new Map<string, AgentRunner>();
 	private readonly loadedMissions = new Map<string, LoadedMission>();
 
 	private githubAuthCache?: {
@@ -86,12 +100,13 @@ export class MissionWorkspace {
 
 	public constructor(
 		private readonly workspaceRoot: string,
-		runtimes: Map<string, MissionAgentRuntime>,
+		agentRunners: Map<string, AgentRunner>,
 		private readonly emitEvent: (event: Notification) => void
 	) {
 		this.store = new FilesystemAdapter(workspaceRoot);
-		for (const [runtimeId, runtime] of runtimes) {
-			this.runtimes.set(runtimeId, runtime);
+		this.workflowSettingsStore = new WorkflowSettingsStore(workspaceRoot);
+		for (const [runnerId, runner] of agentRunners) {
+			this.agentRunners.set(runnerId, runner);
 		}
 	}
 
@@ -101,40 +116,36 @@ export class MissionWorkspace {
 				return this.buildIdleMissionStatus();
 			case 'control.settings.update':
 				return this.updateControlSettings((request.params ?? {}) as ControlSettingsUpdate);
-			case 'control.mission.bootstrap':
-				return this.bootstrapMissionFromIssue((request.params ?? {}) as ControlMissionBootstrap);
-			case 'control.mission.start':
-				return this.startMission((request.params ?? {}) as ControlMissionStart);
+			case 'control.workflow.settings.get':
+				return this.getWorkflowSettings();
+			case 'control.workflow.settings.initialize':
+				return this.initializeWorkflowSettings((request.params ?? {}) as ControlWorkflowSettingsInitialize);
+			case 'control.workflow.settings.update':
+				return this.updateWorkflowSettings((request.params ?? {}) as ControlWorkflowSettingsUpdate);
+			case 'mission.from-issue':
+				return this.createMissionFromIssue((request.params ?? {}) as MissionFromIssueRequest);
+			case 'mission.from-brief':
+				return this.createMissionFromBrief((request.params ?? {}) as MissionFromBriefRequest);
 			case 'control.issues.list':
 				return this.listOpenGitHubIssues((request.params ?? {}) as ControlIssuesList);
-			case 'command.execute':
-				return this.executeCommand((request.params ?? {}) as CommandExecute);
+			case 'control.action.execute':
+				return this.executeControlAction((request.params ?? {}) as ControlActionExecute);
 			case 'mission.status':
 				return this.getMissionStatus(this.toMissionParams(request.params));
+			case 'mission.action.execute':
+				return this.executeMissionAction((request.params ?? {}) as MissionActionExecute);
 			case 'mission.gate.evaluate':
 				return this.evaluateGate((request.params ?? {}) as MissionGateEvaluate);
-			case 'mission.deliver':
-				return this.deliverMission((request.params ?? {}) as MissionSelect);
-			case 'stage.transition':
-				return this.transitionMissionStage((request.params ?? {}) as StageTransition);
-			case 'task.activate':
-				return this.activateTask((request.params ?? {}) as TaskSelect);
-			case 'task.block':
-				return this.blockTask((request.params ?? {}) as TaskSelect);
-			case 'task.complete':
-				return this.completeTask((request.params ?? {}) as TaskSelect);
 			case 'task.launch':
 				return this.launchTaskSession((request.params ?? {}) as TaskLaunch);
 			case 'session.list':
 				return this.listAgentSessions((request.params ?? {}) as MissionSelect);
 			case 'session.console.state':
 				return this.getAgentConsoleState((request.params ?? {}) as SessionConsoleState);
-			case 'session.send':
-				return this.sendAgentInput((request.params ?? {}) as SessionInput);
-			case 'session.turn.submit':
-				return this.submitAgentTurn((request.params ?? {}) as SessionTurnSubmit);
-			case 'session.resize':
-				return this.resizeAgentSession((request.params ?? {}) as SessionResize);
+			case 'session.prompt':
+				return this.promptAgentSession((request.params ?? {}) as SessionPrompt);
+			case 'session.command':
+				return this.commandAgentSession((request.params ?? {}) as SessionCommand);
 			case 'session.cancel':
 				return this.cancelAgentSession((request.params ?? {}) as SessionControl);
 			case 'session.terminate':
@@ -160,12 +171,14 @@ export class MissionWorkspace {
 		const control = await this.buildControlPlaneStatus(availableMissions.length);
 		const issuesReady = control.issuesConfigured && control.githubAuthenticated === true;
 
-		const availableCommands: MissionCommandDescriptor[] = [
+		const availableActions: MissionActionDescriptor[] = [
 			{
 				id: 'control.setup.edit',
 				label: 'Configure repository setup',
-				command: '/setup',
+				action: '/setup',
 				scope: 'mission',
+				disabled: false,
+				disabledReason: '',
 				enabled: true,
 				ui: {
 					toolbarLabel: 'SETTINGS',
@@ -175,12 +188,14 @@ export class MissionWorkspace {
 			},
 			{
 				id: 'control.mission.start',
-				label: 'Start a new mission brief',
-				command: '/start',
+				label: 'Prepare a new mission brief',
+				action: '/start',
 				scope: 'mission',
+				disabled: false,
+				disabledReason: '',
 				enabled: true,
 				ui: {
-					toolbarLabel: 'START MISSION',
+					toolbarLabel: 'PREPARE MISSION',
 					requiresConfirmation: false
 				},
 				flow: this.buildMissionStartFlow()
@@ -188,8 +203,11 @@ export class MissionWorkspace {
 			{
 				id: 'control.mission.select',
 				label: 'Select an active mission',
-				command: '/select',
+				action: '/select',
 				scope: 'mission',
+				disabled: availableMissions.length === 0,
+				disabledReason:
+					availableMissions.length > 0 ? '' : 'No active missions are available.',
 				enabled: availableMissions.length > 0,
 				ui: {
 					toolbarLabel: 'OPEN MISSION',
@@ -201,8 +219,10 @@ export class MissionWorkspace {
 			{
 				id: 'control.issues.list',
 				label: 'Browse open GitHub issues',
-				command: '/issues',
+				action: '/issues',
 				scope: 'mission',
+				disabled: !issuesReady,
+				disabledReason: issuesReady ? '' : this.describeIssueIntakeUnavailable(control),
 				enabled: issuesReady,
 				ui: {
 					toolbarLabel: 'OPEN ISSUES',
@@ -216,201 +236,107 @@ export class MissionWorkspace {
 			found: false,
 			operationalMode: this.resolveOperationalMode(control),
 			control,
-			availableCommands,
+			availableActions,
 			...(availableMissions.length > 0 ? { availableMissions } : {})
 		};
 	}
 
-	private async startMission(params: ControlMissionStart): Promise<MissionStatus> {
-		await this.ensureRepositoryInitialized();
-		const agentContext = params.agentContext ?? this.buildConfiguredAgentContext();
-		const missionIssueId = this.resolveMissionIssueId(params);
-		const branchRef =
-			params.branchRef ??
-			(missionIssueId !== undefined
-				? this.store.deriveMissionBranchName(missionIssueId, params.brief.title)
-				: this.store.deriveDraftMissionBranchName(params.brief.title));
-		const mission = await Factory.create(this.store, {
-			brief: params.brief,
-			branchRef,
-			agentContext
-		});
-		const loadedMission = this.registerLoadedMission(mission, {
-			autopilotEnabled: MissionAgentContext.getAutopilotMode(agentContext) === 'enabled'
-		});
-		const status = await loadedMission.mission.status();
+	private async executeControlAction(params: ControlActionExecute): Promise<MissionStatus> {
+		if (params.actionId === 'control.setup.edit') {
+			const fieldSelection = requireSingleSelectionActionStep(params.steps ?? [], 'field');
+			const field = asControlSettingField(fieldSelection.optionIds[0]);
+			if (!field) {
+				throw new Error('Mission setup requires a valid settings field selection.');
+			}
+			const value = requireSingleValueActionStep(params.steps ?? [], 'value');
+			await this.writeControlSetting(field, value);
+			return this.buildIdleMissionStatus();
+		}
+
+		if (params.actionId === 'control.mission.start') {
+			const typeSelection = requireSingleSelectionActionStep(params.steps ?? [], 'type');
+			const missionType = asMissionType(typeSelection.optionIds[0]);
+			if (!missionType) {
+				throw new Error('Mission start requires a valid mission type selection.');
+			}
+			const title = requireTextActionStep(params.steps ?? [], 'title').value.trim();
+			const body = requireTextActionStep(params.steps ?? [], 'body').value.trim();
+			if (!title || !body) {
+				throw new Error('Mission start requires both a title and body.');
+			}
+			return this.createMissionFromBrief({ brief: { title, body, type: missionType } });
+		}
+
+		if (params.actionId === 'control.mission.select') {
+			const missionSelection = requireSingleSelectionActionStep(params.steps ?? [], 'mission');
+			const missionId = missionSelection.optionIds[0]?.trim();
+			if (!missionId) {
+				throw new Error('Mission selection requires a mission id.');
+			}
+			return this.getMissionStatus({ selector: { missionId } });
+		}
+
+		throw new Error(`Unsupported control action '${params.actionId}'.`);
+	}
+
+	private async executeMissionAction(params: MissionActionExecute): Promise<MissionStatus> {
+		const loadedMission = await this.requireMissionContext(params.selector);
+		const status = await loadedMission.mission.executeAction(params.actionId, params.steps ?? []);
 		await this.broadcastMissionStatus(loadedMission.missionId, status);
 		return this.decorateMissionStatus(status, 'mission');
 	}
 
-	private async executeCommand(params: CommandExecute) {
-		if (params.commandId === 'control.setup.edit') {
-			const fieldSelection = requireSingleSelectionCommandStep(params.steps, 'field');
-			const field = asControlSettingField(fieldSelection.optionIds[0]);
-			if (!field) {
-				throw new Error('Mission setup execution requires a valid settings field selection.');
-			}
-			const value = requireSingleValueCommandStep(params.steps, 'value');
-			await this.writeControlSetting(field, value);
-			return { status: await this.buildIdleMissionStatus() };
-		}
+	private async createMissionFromBrief(params: MissionFromBriefRequest): Promise<MissionStatus> {
+		const githubRepository = this.requireGitHubRepository();
+		this.requireGitHubAuthentication();
 
-		if (params.commandId === 'control.mission.start') {
-			const typeSelection = requireSingleSelectionCommandStep(params.steps, 'type');
-			const missionType = asMissionType(typeSelection.optionIds[0]);
-			if (!missionType) {
-				throw new Error('Mission start execution requires a valid mission type selection.');
-			}
-			const titleStep = requireTextCommandStep(params.steps, 'title');
-			const bodyStep = requireTextCommandStep(params.steps, 'body');
-			const title = titleStep.value.trim();
-			const body = bodyStep.value.trim();
-			if (!title) {
-				throw new Error('Mission start execution requires a title.');
-			}
-			if (!body) {
-				throw new Error('Mission start execution requires a body.');
-			}
+		const bootstrapPreparation = await this.prepareRepositoryBootstrapIfNeeded(githubRepository);
+		if (bootstrapPreparation) {
 			return {
-				status: await this.startMission({
-					brief: {
-						title,
-						body,
-						type: missionType
-					}
-				})
+				...(await this.buildIdleMissionStatus()),
+				preparation: bootstrapPreparation,
+				recommendedAction: 'Merge the repository bootstrap PR and pull the default branch before preparing a mission.'
 			};
 		}
 
-		if (params.commandId === 'control.mission.select') {
-			const missionSelection = requireSingleSelectionCommandStep(params.steps, 'mission');
-			const missionId = missionSelection.optionIds[0]?.trim();
-			if (!missionId) {
-				throw new Error('Mission switch execution requires a mission selection.');
-			}
-			return {
-				status: await this.getMissionStatus({ selector: { missionId } })
-			};
+		const github = new GitHubPlatformAdapter(this.workspaceRoot, githubRepository);
+		const reconciledBrief = params.brief.issueId !== undefined
+			? params.brief
+			: await github.createIssue({
+				title: params.brief.title,
+				body: params.brief.body
+			}).then((createdIssue) => ({
+				...params.brief,
+				issueId: createdIssue.issueId,
+				...(createdIssue.url ? { url: createdIssue.url } : {}),
+				...(createdIssue.labels ? { labels: createdIssue.labels } : {})
+			}));
+		if (reconciledBrief.issueId === undefined) {
+			throw new Error('Mission preparation requires a reconciled GitHub issue number.');
 		}
-
-		if (params.commandId === 'mission.deliver') {
-			const selector = requireCommandMissionSelector(params);
-			return {
-				status: await this.deliverMission({ selector })
-			};
-		}
-
-		if (params.commandId.startsWith('stage.start.')) {
-			const selector = requireCommandMissionSelector(params);
-			const stageId = params.commandId.slice('stage.start.'.length) as StageTransition['toStage'];
-			return {
-				status: await this.updateMissionStageState({
-					selector,
-					stageId,
-					intent: 'start'
-				})
-			};
-		}
-
-		if (params.commandId.startsWith('stage.restart.')) {
-			const selector = requireCommandMissionSelector(params);
-			const stageId = params.commandId.slice('stage.restart.'.length) as StageTransition['toStage'];
-			return {
-				status: await this.updateMissionStageState({
-					selector,
-					stageId,
-					intent: 'restart'
-				})
-			};
-		}
-
-		if (params.commandId.startsWith('stage.transition.')) {
-			const selector = requireCommandMissionSelector(params);
-			const toStage = params.commandId.slice('stage.transition.'.length) as StageTransition['toStage'];
-			return {
-				status: await this.transitionMissionStage({
-					selector,
-					toStage
-				})
-			};
-		}
-
-		if (params.commandId.startsWith('task.launch.')) {
-			const selector = requireCommandMissionSelector(params);
-			const taskId = params.commandId.slice('task.launch.'.length);
-			const loadedMission = await this.requireMissionContext(selector);
-			const request = await this.buildTaskLaunchRequest(loadedMission, taskId);
-			const session = await this.launchTaskSession({
-				selector,
-				taskId,
-				request
-			});
-			return {
-				status: await this.getMissionStatus({ selector }),
-				session
-			};
-		}
-
-		if (params.commandId.startsWith('task.activate.')) {
-			const selector = requireCommandMissionSelector(params);
-			const taskId = params.commandId.slice('task.activate.'.length);
-			return {
-				status: await this.activateTask({
-					selector,
-					taskId
-				})
-			};
-		}
-
-		if (params.commandId.startsWith('task.complete.')) {
-			const selector = requireCommandMissionSelector(params);
-			const taskId = params.commandId.slice('task.complete.'.length);
-			return {
-				status: await this.completeTask({
-					selector,
-					taskId
-				})
-			};
-		}
-
-		if (params.commandId.startsWith('task.block.')) {
-			const selector = requireCommandMissionSelector(params);
-			const taskId = params.commandId.slice('task.block.'.length);
-			return {
-				status: await this.blockTask({
-					selector,
-					taskId
-				})
-			};
-		}
-
-		if (params.commandId.startsWith('session.cancel.')) {
-			const selector = requireCommandMissionSelector(params);
-			const sessionId = params.commandId.slice('session.cancel.'.length);
-			await this.cancelAgentSession({
-				selector,
-				sessionId,
-				reason: 'Cancelled from Mission cockpit'
-			});
-			return {
-				status: await this.getMissionStatus({ selector })
-			};
-		}
-
-		if (params.commandId.startsWith('session.terminate.')) {
-			const selector = requireCommandMissionSelector(params);
-			const sessionId = params.commandId.slice('session.terminate.'.length);
-			await this.terminateAgentSession({
-				selector,
-				sessionId,
-				reason: 'Terminated from Mission cockpit'
-			});
-			return {
-				status: await this.getMissionStatus({ selector })
-			};
-		}
-
-		throw new Error(`Mission command '${params.commandId}' is not executable through the flow interface.`);
+		const branchRef =
+			params.branchRef ??
+			this.store.deriveMissionBranchName(reconciledBrief.issueId, reconciledBrief.title);
+		const preparation = await new MissionPreparationService(
+			this.store,
+			this.buildWorkflowBindings(),
+			githubRepository
+		).prepareFromBrief({
+			brief: reconciledBrief,
+			...(params.branchRef ? { branchRef: params.branchRef } : { branchRef })
+		});
+		return {
+			...(await this.buildIdleMissionStatus()),
+			missionId: preparation.missionId,
+			title: reconciledBrief.title,
+			...(reconciledBrief.issueId !== undefined ? { issueId: reconciledBrief.issueId } : {}),
+			type: reconciledBrief.type,
+			branchRef: preparation.branchRef,
+			missionRootDir: preparation.missionRootDir,
+			flightDeckDir: preparation.flightDeckDir,
+			preparation,
+			recommendedAction: 'Merge the mission preparation PR and pull the default branch before materializing a local mission workspace.'
+		};
 	}
 
 	private async updateControlSettings(params: ControlSettingsUpdate): Promise<MissionStatus> {
@@ -418,22 +344,55 @@ export class MissionWorkspace {
 		return this.buildIdleMissionStatus();
 	}
 
-	private async bootstrapMissionFromIssue(
-		params: ControlMissionBootstrap
+	private async getWorkflowSettings(): Promise<WorkflowSettingsGetResult> {
+		return this.workflowSettingsStore.get();
+	}
+
+	private async initializeWorkflowSettings(
+		params: ControlWorkflowSettingsInitialize
+	): Promise<ControlWorkflowSettingsInitializeResponse> {
+		const result = await this.workflowSettingsStore.initialize(params);
+		return {
+			...result,
+			status: await this.buildIdleMissionStatus()
+		};
+	}
+
+	private async updateWorkflowSettings(
+		params: ControlWorkflowSettingsUpdate
+	): Promise<ControlWorkflowSettingsUpdateResponse> {
+		const result = await this.workflowSettingsStore.update(params);
+		this.emitEvent({
+			type: 'control.workflow.settings.updated',
+			revision: result.revision,
+			changedPaths: result.changedPaths,
+			context: result.context
+		});
+		return {
+			...result,
+			status: await this.buildIdleMissionStatus()
+		};
+	}
+
+	private async createMissionFromIssue(
+		params: MissionFromIssueRequest
 	): Promise<MissionStatus> {
-		await this.ensureRepositoryInitialized();
-		const settings = readMissionDaemonSettings(this.workspaceRoot);
-		if (settings?.trackingProvider !== 'github') {
-			throw new Error(
-				'Mission issue intake requires daemon settings to use the GitHub tracking provider.'
-			);
+		const githubRepository = this.requireGitHubRepository();
+		this.requireGitHubAuthentication();
+
+		const bootstrapPreparation = await this.prepareRepositoryBootstrapIfNeeded(githubRepository);
+		if (bootstrapPreparation) {
+			return {
+				...(await this.buildIdleMissionStatus()),
+				preparation: bootstrapPreparation,
+				recommendedAction: 'Merge the repository bootstrap PR and pull the default branch before preparing a mission from an issue.'
+			};
 		}
 
-		const adapter = new GitHubPlatformAdapter(this.workspaceRoot);
+		const adapter = new GitHubPlatformAdapter(this.workspaceRoot, githubRepository);
 		const brief = await adapter.fetchIssue(String(params.issueNumber));
-		return this.startMission({
-			brief,
-			agentContext: params.agentContext ?? this.buildConfiguredAgentContext()
+		return this.createMissionFromBrief({
+			brief
 		});
 	}
 
@@ -442,7 +401,6 @@ export class MissionWorkspace {
 	private async getMissionStatus(
 		params: MissionSelect = {}
 	): Promise<MissionStatus> {
-		await this.initializeRepositoryIfNeeded();
 		const loadedMission = await this.requireMissionContext(params.selector);
 		return this.decorateMissionStatus(await loadedMission.mission.status(), 'mission');
 	}
@@ -454,55 +412,6 @@ export class MissionWorkspace {
 	private async evaluateGate(params: MissionGateEvaluate) {
 		const loadedMission = await this.requireMissionContext(params.selector);
 		return loadedMission.mission.evaluateGate(params.intent);
-	}
-
-	private async transitionMissionStage(params: StageTransition) {
-		const loadedMission = await this.requireMissionContext(params.selector);
-		await loadedMission.mission.transition(params.toStage);
-		const status = await loadedMission.mission.status();
-		await this.broadcastMissionStatus(loadedMission.missionId, status);
-		return this.decorateMissionStatus(status, 'mission');
-	}
-
-	private async updateMissionStageState(
-		params: MissionSelect & { intent: 'start' | 'restart'; stageId: StageTransition['toStage'] }
-	) {
-		const loadedMission = await this.requireMissionContext(params.selector);
-		await loadedMission.mission.updateStageState(params.stageId, params.intent);
-		const status = await loadedMission.mission.status();
-		await this.broadcastMissionStatus(loadedMission.missionId, status);
-		return this.decorateMissionStatus(status, 'mission');
-	}
-
-	private async deliverMission(params: MissionSelect = {}) {
-		const loadedMission = await this.requireMissionContext(params.selector);
-		await loadedMission.mission.deliver();
-		const status = await loadedMission.mission.status();
-		await this.broadcastMissionStatus(loadedMission.missionId, status);
-		return this.decorateMissionStatus(status, 'mission');
-	}
-
-	private async activateTask(params: TaskSelect) {
-		return this.updateTaskState(params, 'active');
-	}
-
-	private async blockTask(params: TaskSelect) {
-		return this.updateTaskState(params, 'blocked');
-	}
-
-	private async completeTask(params: TaskSelect) {
-		return this.updateTaskState(params, 'done');
-	}
-
-	private async updateTaskState(
-		params: TaskSelect,
-		nextTaskStatus: MissionTaskState['status']
-	) {
-		const loadedMission = await this.requireMissionContext(params.selector);
-		await loadedMission.mission.updateTaskState(params.taskId, { status: nextTaskStatus });
-		const missionStatus = await loadedMission.mission.status();
-		await this.broadcastMissionStatus(loadedMission.missionId, missionStatus);
-		return this.decorateMissionStatus(missionStatus, 'mission');
 	}
 
 	private async listAgentSessions(
@@ -568,27 +477,19 @@ export class MissionWorkspace {
 		return loadedMission.mission.getAgentConsoleState(params.sessionId) ?? null;
 	}
 
-	private async submitAgentTurn(params: SessionTurnSubmit) {
-		const loadedMission = await this.requireMissionSession(params);
-		return loadedMission.mission.submitAgentTurn(params.sessionId, params.request);
-	}
-
-	private async sendAgentInput(params: SessionInput) {
-		const loadedMission = await this.requireMissionSession(params);
-		return loadedMission.mission.sendAgentInput(params.sessionId, params.text);
-	}
-
-	private async resizeAgentSession(params: SessionResize) {
-		const loadedMission = await this.requireMissionSession(params);
-		return loadedMission.mission.resizeAgentSession(params.sessionId, {
-			cols: params.cols,
-			rows: params.rows
-		});
-	}
-
 	private async cancelAgentSession(params: SessionControl) {
 		const loadedMission = await this.requireMissionSession(params);
 		return loadedMission.mission.cancelAgentSession(params.sessionId, params.reason);
+	}
+
+	private async promptAgentSession(params: SessionPrompt) {
+		const loadedMission = await this.requireMissionSession(params);
+		return loadedMission.mission.sendAgentSessionPrompt(params.sessionId, params.prompt as AgentPrompt);
+	}
+
+	private async commandAgentSession(params: SessionCommand) {
+		const loadedMission = await this.requireMissionSession(params);
+		return loadedMission.mission.sendAgentSessionCommand(params.sessionId, params.command as AgentCommand);
 	}
 
 	private async terminateAgentSession(params: SessionControl) {
@@ -634,11 +535,68 @@ export class MissionWorkspace {
 		};
 	}
 
+	private buildWorkflowBindings(): MissionWorkflowBindings {
+		const settings = getDefaultMissionDaemonSettingsWithOverrides(
+			readMissionDaemonSettings(this.workspaceRoot) ?? {}
+		);
+		const resolveWorkflow = () => {
+			const liveSettings = getDefaultMissionDaemonSettingsWithOverrides(
+				readMissionDaemonSettings(this.workspaceRoot) ?? {}
+			);
+			const configuredWorkflow = liveSettings.workflow ?? createDefaultWorkflowSettings();
+			return this.agentRunners.size > 0
+				? configuredWorkflow
+				: this.disableWorkflowAutostart(configuredWorkflow);
+		};
+		const workflow = resolveWorkflow();
+		return {
+			workflow,
+			resolveWorkflow,
+			taskRunners: new Map(this.agentRunners),
+			...(settings.instructionsPath
+				? {
+					instructionsPath: path.isAbsolute(settings.instructionsPath)
+						? settings.instructionsPath
+						: path.join(this.workspaceRoot, settings.instructionsPath)
+				}
+				: {}),
+			...(settings.skillsPath
+				? {
+					skillsPath: path.isAbsolute(settings.skillsPath)
+						? settings.skillsPath
+						: path.join(this.workspaceRoot, settings.skillsPath)
+				}
+				: {}),
+			...(settings.defaultModel ? { defaultModel: settings.defaultModel } : {}),
+			...(settings.defaultAgentMode ? { defaultMode: settings.defaultAgentMode } : {})
+		};
+	}
+
+	private disableWorkflowAutostart(workflow: MissionWorkflowBindings['workflow']): MissionWorkflowBindings['workflow'] {
+		return {
+			...workflow,
+			stages: Object.fromEntries(
+				Object.entries(workflow.stages).map(([stageId, stage]) => [
+					stageId,
+					{
+						...stage,
+						taskLaunchPolicy: {
+							...stage.taskLaunchPolicy,
+							defaultAutostart: false,
+							launchMode: 'manual'
+						}
+					}
+				])
+			) as MissionWorkflowBindings['workflow']['stages']
+		};
+	}
+
 	private async isRepositoryInitialized(): Promise<boolean> {
 		try {
 			await Promise.all([
 				fs.access(getMissionDirectoryPath(this.workspaceRoot)),
-				fs.access(getMissionWorktreesPath(this.workspaceRoot))
+				fs.access(getMissionWorktreesPath(this.workspaceRoot)),
+				fs.access(getMissionDaemonSettingsPath(this.workspaceRoot))
 			]);
 			return true;
 		} catch {
@@ -649,13 +607,12 @@ export class MissionWorkspace {
 	private async buildControlPlaneStatus(
 		availableMissionCount?: number
 	): Promise<MissionControlPlaneStatus> {
-		await ensureMissionDaemonSettings(this.workspaceRoot);
 		const settings = readMissionDaemonSettings(this.workspaceRoot);
 		const effectiveSettings = getDefaultMissionDaemonSettingsWithOverrides(settings ?? {});
-		const githubRepository = settings?.trackingProvider === 'github'
+		const githubRepository = effectiveSettings.trackingProvider === 'github'
 			? resolveGitHubRepositoryFromWorkspace(this.workspaceRoot)
 			: undefined;
-		const issuesConfigured = settings?.trackingProvider === 'github' && Boolean(githubRepository);
+		const issuesConfigured = effectiveSettings.trackingProvider === 'github' && Boolean(githubRepository);
 		const problems: string[] = [];
 		const warnings: string[] = [];
 		const isGitRepository = this.store.isGitRepository();
@@ -678,14 +635,14 @@ export class MissionWorkspace {
 		if (!effectiveSettings.defaultModel) {
 			problems.push('Mission control default model is not configured.');
 		}
-		if (settings?.trackingProvider === 'github' && !githubRepository) {
+		if (effectiveSettings.trackingProvider === 'github' && !githubRepository) {
 			warnings.push('Mission could not resolve a GitHub repository from the current workspace.');
 		}
 
 		let githubAuthenticated: boolean | undefined;
 		let githubUser: string | undefined;
 		let githubAuthMessage: string | undefined;
-		if (settings?.trackingProvider === 'github') {
+		if (effectiveSettings.trackingProvider === 'github') {
 			const auth = this.getGitHubAuthStatus();
 			githubAuthenticated = auth.authenticated;
 			githubUser = auth.user;
@@ -706,7 +663,7 @@ export class MissionWorkspace {
 			initialized,
 			settingsPresent: settings !== undefined,
 			settingsComplete: problems.length === 0,
-			...(settings?.trackingProvider ? { trackingProvider: settings.trackingProvider } : {}),
+			...(effectiveSettings.trackingProvider ? { trackingProvider: effectiveSettings.trackingProvider } : {}),
 			...(githubRepository ? { githubRepository } : {}),
 			issuesConfigured,
 			...(githubAuthenticated !== undefined ? { githubAuthenticated } : {}),
@@ -725,7 +682,7 @@ export class MissionWorkspace {
 
 	private buildSetupCommandFlow(
 		control: MissionControlPlaneStatus
-	): MissionCommandFlowDescriptor {
+	): MissionActionFlowDescriptor {
 		return {
 			targetLabel: 'SETUP',
 			actionLabel: 'SAVE',
@@ -756,7 +713,7 @@ export class MissionWorkspace {
 
 	private buildSetupCommandFlowOptions(
 		control: MissionControlPlaneStatus
-	): MissionCommandFlowOption[] {
+	): MissionActionFlowOption[] {
 		return [
 			{
 				id: 'agentRunner',
@@ -791,10 +748,10 @@ export class MissionWorkspace {
 		];
 	}
 
-	private buildMissionStartFlow(): MissionCommandFlowDescriptor {
+	private buildMissionStartFlow(): MissionActionFlowDescriptor {
 		return {
 			targetLabel: 'MISSION',
-			actionLabel: 'START',
+			actionLabel: 'PREPARE',
 			steps: [
 				{
 					kind: 'selection',
@@ -811,8 +768,8 @@ export class MissionWorkspace {
 					id: 'title',
 					label: 'TITLE',
 					title: 'MISSION TITLE',
-					helperText: 'Enter a short mission title.',
-					placeholder: 'Summarize the mission',
+					helperText: 'Enter a short mission title. Mission will create the GitHub issue first and then open the preparation pull request.',
+					placeholder: 'Summarize the mission to prepare',
 					inputMode: 'compact',
 					format: 'plain'
 				},
@@ -821,8 +778,8 @@ export class MissionWorkspace {
 					id: 'body',
 					label: 'BODY',
 					title: 'MISSION BODY',
-					helperText: 'Describe the mission in Markdown. Enter submits, Shift+Enter adds a newline, and Ctrl+P or Tab toggles preview.',
-					placeholder: 'Describe the mission scope, constraints, and expected outcome.',
+					helperText: 'Describe the mission in Markdown. This content seeds the GitHub issue first, then the mission-start pull request and tracked brief. Enter submits, Shift+Enter adds a newline, and Ctrl+P or Tab toggles preview.',
+					placeholder: 'Describe the mission scope, constraints, and expected outcome for the prepared mission.',
 					inputMode: 'expanded',
 					format: 'markdown'
 				}
@@ -830,7 +787,7 @@ export class MissionWorkspace {
 		};
 	}
 
-	private buildMissionTypeOptions(): MissionCommandFlowOption[] {
+	private buildMissionTypeOptions(): MissionActionFlowOption[] {
 		return [
 			{
 				id: 'feature',
@@ -862,7 +819,7 @@ export class MissionWorkspace {
 
 	private buildMissionSwitchFlow(
 		availableMissions: MissionSelectionCandidate[]
-	): MissionCommandFlowDescriptor {
+	): MissionActionFlowDescriptor {
 		return {
 			targetLabel: 'MISSION',
 			actionLabel: 'SWITCH',
@@ -889,6 +846,12 @@ export class MissionWorkspace {
 		field: ControlSettingsUpdate['field'],
 		rawValue: string
 	): Promise<void> {
+		if (!(await this.isRepositoryInitialized())) {
+			throw new Error(
+				'Repository settings cannot be edited locally until the repository bootstrap PR is merged and pulled.'
+			);
+		}
+
 		const nextSettings: MissionDaemonSettings = getDefaultMissionDaemonSettingsWithOverrides(
 			readMissionDaemonSettings(this.workspaceRoot) ?? {}
 		);
@@ -950,11 +913,9 @@ export class MissionWorkspace {
 		await writeMissionDaemonSettings(nextSettings, this.workspaceRoot);
 	}
 
-	private buildConfiguredAgentContext() {
+	private isAutopilotConfigured(): boolean {
 		const settings = getDefaultMissionDaemonSettingsWithOverrides(readMissionDaemonSettings(this.workspaceRoot) ?? {});
-		return MissionAgentContext.build(
-			settings.defaultAgentMode ? { mode: settings.defaultAgentMode } : undefined
-		);
+		return settings.defaultAgentMode === 'autonomous';
 	}
 
 	private describeIssueIntakeUnavailable(control: MissionControlPlaneStatus): string {
@@ -1018,20 +979,37 @@ export class MissionWorkspace {
 		};
 	}
 
-	private async ensureRepositoryInitialized(): Promise<void> {
-		if (await this.isRepositoryInitialized()) {
-			return;
+	private requireGitHubRepository(): string {
+		const settings = getDefaultMissionDaemonSettingsWithOverrides(
+			readMissionDaemonSettings(this.workspaceRoot) ?? {}
+		);
+		if (settings.trackingProvider !== 'github') {
+			throw new Error('Mission authorization requires the GitHub tracking provider.');
 		}
 
-		await this.initializeRepositoryIfNeeded();
+		const githubRepository = resolveGitHubRepositoryFromWorkspace(this.workspaceRoot);
+		if (!githubRepository) {
+			throw new Error('Mission could not resolve a GitHub repository from the current workspace.');
+		}
+
+		return githubRepository;
 	}
 
-	private async initializeRepositoryIfNeeded(): Promise<void> {
+	private requireGitHubAuthentication(): void {
+		const auth = this.getGitHubAuthStatus();
+		if (!auth.authenticated) {
+			throw new Error(auth.detail ?? 'GitHub CLI authentication is required.');
+		}
+	}
+
+	private async prepareRepositoryBootstrapIfNeeded(
+		githubRepository: string
+	) {
 		if (await this.isRepositoryInitialized()) {
-			return;
+			return undefined;
 		}
 
-		await initializeMissionRepository(this.workspaceRoot);
+		return new RepositoryPreparationService(this.store, githubRepository).prepareRepository();
 	}
 
 	private toMissionParams(params: unknown): MissionSelect {
@@ -1046,7 +1024,6 @@ export class MissionWorkspace {
 		selector: MissionSelector = {},
 		options: { allowMissing?: boolean; requireMissionId?: boolean } = {}
 	): Promise<LoadedMission | undefined> {
-		await this.initializeRepositoryIfNeeded();
 		const normalizedSelector = normalizeMissionSelector(selector);
 
 		if (options.requireMissionId && !normalizedSelector.missionId) {
@@ -1082,12 +1059,14 @@ export class MissionWorkspace {
 
 		const mission = await Factory.load(this.store, {
 			missionId: resolvedMission.descriptor.missionId,
-		});
+		}, this.buildWorkflowBindings());
 		if (!mission) {
 			throw new Error(`Mission '${resolvedMission.descriptor.missionId}' could not be loaded.`);
 		}
 
-		const loadedMission = this.registerLoadedMission(mission);
+		const loadedMission = this.registerLoadedMission(mission, {
+			autopilotEnabled: this.isAutopilotConfigured()
+		});
 		this.assertSelectorMatchesLoadedMission(normalizedSelector, loadedMission);
 		return loadedMission;
 	}
@@ -1138,10 +1117,6 @@ export class MissionWorkspace {
 		mission: Mission,
 		options: { autopilotEnabled?: boolean } = {}
 	): LoadedMission {
-		for (const runtime of this.runtimes.values()) {
-			mission.registerAgentRuntime(runtime);
-		}
-
 		const record = mission.getRecord();
 		const existing = this.loadedMissions.get(record.id);
 		if (existing) {
@@ -1308,12 +1283,6 @@ export class MissionWorkspace {
 				return;
 			}
 
-			const nextStage = MISSION_STAGES[MISSION_STAGES.indexOf(currentStageId) + 1];
-			if (nextStage) {
-				await loadedMission.mission.transition(nextStage);
-				continue;
-			}
-
 			const deliveryGate = await loadedMission.mission.evaluateGate('deliver');
 			if (deliveryGate.allowed) {
 				await loadedMission.mission.deliver();
@@ -1414,18 +1383,18 @@ export class MissionWorkspace {
 			return this.requireRuntime(runtimeId).id;
 		}
 
-		const defaultRuntimeId = this.runtimes.keys().next().value;
+		const defaultRuntimeId = this.agentRunners.keys().next().value;
 		if (!defaultRuntimeId) {
-			throw new Error('No mission agent runtimes are configured in the server.');
+			throw new Error('No mission agent runners are configured in the server.');
 		}
 
 		return defaultRuntimeId;
 	}
 
-	private requireRuntime(runtimeId: string): MissionAgentRuntime {
-		const runtime = this.runtimes.get(runtimeId);
+	private requireRuntime(runtimeId: string): AgentRunner {
+		const runtime = this.agentRunners.get(runtimeId);
 		if (!runtime) {
-			throw new Error(`Mission agent runtime '${runtimeId}' is not registered in the server.`);
+			throw new Error(`Mission agent runner '${runtimeId}' is not registered in the server.`);
 		}
 		return runtime;
 	}
@@ -1473,9 +1442,6 @@ export class MissionWorkspace {
 		}
 	}
 
-	private resolveMissionIssueId(params: ControlMissionStart): number | undefined {
-		return typeof params.brief.issueId === 'number' ? params.brief.issueId : undefined;
-	}
 }
 
 function parseGitHubAuthUser(output: string): string | undefined {
@@ -1499,81 +1465,6 @@ function parseGitHubAuthUser(output: string): string | undefined {
 	return undefined;
 }
 
-function requireSingleSelectionCommandStep(
-	steps: CommandExecute['steps'],
-	stepId: string
-): Extract<CommandExecute['steps'][number], { kind: 'selection' }> {
-	const step = steps.find((candidate) => candidate.stepId === stepId);
-	if (!step || step.kind !== 'selection' || step.optionIds.length !== 1) {
-		throw new Error(`Mission command execution requires exactly one selection for step '${stepId}'.`);
-	}
-	return step;
-}
-
-function requireTextCommandStep(
-	steps: CommandExecute['steps'],
-	stepId: string
-): Extract<CommandExecute['steps'][number], { kind: 'text' }> {
-	const step = steps.find((candidate) => candidate.stepId === stepId);
-	if (!step || step.kind !== 'text') {
-		throw new Error(`Mission command execution requires a text value for step '${stepId}'.`);
-	}
-	return step;
-}
-
-function requireSingleValueCommandStep(
-	steps: CommandExecute['steps'],
-	stepId: string
-): string {
-	const step = steps.find((candidate) => candidate.stepId === stepId);
-	if (!step) {
-		throw new Error(`Mission command execution requires a value for step '${stepId}'.`);
-	}
-	if (step.kind === 'text') {
-		return step.value;
-	}
-	if (step.optionIds.length !== 1) {
-		throw new Error(`Mission command execution requires exactly one value for step '${stepId}'.`);
-	}
-	return step.optionIds[0] ?? '';
-}
-
-function asControlSettingField(
-	value: string | undefined
-): ControlSettingsUpdate['field'] | undefined {
-	if (
-		value === 'agentRunner'
-		|| value === 'defaultAgentMode'
-		|| value === 'defaultModel'
-		|| value === 'instructionsPath'
-		|| value === 'skillsPath'
-	) {
-		return value;
-	}
-	return undefined;
-}
-
-function asMissionType(value: string | undefined): MissionType | undefined {
-	if (
-		value === 'feature'
-		|| value === 'fix'
-		|| value === 'docs'
-		|| value === 'refactor'
-		|| value === 'task'
-	) {
-		return value;
-	}
-	return undefined;
-}
-
-function requireCommandMissionSelector(params: CommandExecute): MissionSelector {
-	const missionId = params.selector?.missionId?.trim();
-	if (!missionId) {
-		throw new Error(`Mission command '${params.commandId}' requires an explicit missionId selector.`);
-	}
-	return { missionId };
-}
-
 function normalizeMissionSelector(selector: MissionSelector = {}): MissionSelector {
 	const missionId = selector.missionId?.trim();
 	const branchRef = selector.branchRef?.trim();
@@ -1586,4 +1477,81 @@ function normalizeMissionSelector(selector: MissionSelector = {}): MissionSelect
 
 function hasMissionSelector(selector: MissionSelector): boolean {
 	return Boolean(selector.missionId?.trim() || selector.issueId !== undefined || selector.branchRef?.trim());
+}
+
+function requireSingleSelectionActionStep(
+	steps: MissionActionExecutionStep[],
+	stepId: string
+): MissionActionExecutionSelectionStep {
+	const step = steps.find(
+		(candidate): candidate is MissionActionExecutionSelectionStep =>
+			candidate.kind === 'selection' && candidate.stepId === stepId
+	);
+	if (!step) {
+		throw new Error(`Mission action requires selection step '${stepId}'.`);
+	}
+	if (step.optionIds.length !== 1 || !step.optionIds[0]?.trim()) {
+		throw new Error(`Mission action requires a single selection for step '${stepId}'.`);
+	}
+	return step;
+}
+
+function requireTextActionStep(
+	steps: MissionActionExecutionStep[],
+	stepId: string
+): MissionActionExecutionTextStep {
+	const step = steps.find(
+		(candidate): candidate is MissionActionExecutionTextStep =>
+			candidate.kind === 'text' && candidate.stepId === stepId
+	);
+	if (!step) {
+		throw new Error(`Mission action requires text step '${stepId}'.`);
+	}
+	return step;
+}
+
+function requireSingleValueActionStep(
+	steps: MissionActionExecutionStep[],
+	stepId: string
+): string {
+	const step = steps.find((candidate) => candidate.stepId === stepId);
+	if (!step) {
+		throw new Error(`Mission action requires value step '${stepId}'.`);
+	}
+	if (step.kind === 'text') {
+		return step.value;
+	}
+	if (step.optionIds.length !== 1 || !step.optionIds[0]?.trim()) {
+		throw new Error(`Mission action requires a single value for step '${stepId}'.`);
+	}
+	return step.optionIds[0];
+}
+
+function asControlSettingField(
+	value: string | undefined
+): ControlSettingsUpdate['field'] | undefined {
+	if (
+		value === 'agentRunner'
+		|| value === 'defaultAgentMode'
+		|| value === 'defaultModel'
+		|| value === 'cockpitTheme'
+		|| value === 'instructionsPath'
+		|| value === 'skillsPath'
+	) {
+		return value;
+	}
+	return undefined;
+}
+
+function asMissionType(value: string | undefined): MissionFromBriefRequest['brief']['type'] | undefined {
+	if (
+		value === 'feature'
+		|| value === 'fix'
+		|| value === 'docs'
+		|| value === 'refactor'
+		|| value === 'task'
+	) {
+		return value;
+	}
+	return undefined;
 }

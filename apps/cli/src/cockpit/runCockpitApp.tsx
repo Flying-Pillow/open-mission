@@ -5,14 +5,14 @@ import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type {
-	CommandExecuteStep,
 	DaemonClient,
 	GateIntent,
 	MissionAgentConsoleEvent,
 	MissionAgentConsoleState,
-	MissionCommandDescriptor,
-	MissionCommandFlowDescriptor,
-	MissionCommandFlowStep,
+	MissionActionDescriptor,
+	MissionActionExecutionStep,
+	MissionActionFlowDescriptor,
+	MissionActionFlowStep,
 	MissionAgentSessionRecord,
 	MissionProductKey,
 	MissionSelector,
@@ -24,14 +24,9 @@ import type {
 	MissionWorkspaceContext
 } from '@flying-pillow/mission-core';
 import {
-	bootstrapMissionFromIssue,
-	executeCommand as executeDaemonOperation,
-	evaluateMissionGate,
-	getSessionConsoleState,
-	listOpenGitHubIssues,
-	sendSessionInput,
-	selectorFromStatus,
-	updateControlSetting,
+	DaemonApi,
+	DaemonMissionApi,
+	getDaemonLogPath,
 } from '@flying-pillow/mission-core';
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from '@opentui/solid';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSXElement, untrack } from 'solid-js';
@@ -45,7 +40,7 @@ import {
 } from './components/cockpitTheme.js';
 import { type ConsolePanelContent, type ConsolePanelTab } from './components/ConsolePanel.js';
 import { cockpitTheme } from './components/cockpitTheme.js';
-import type { ProgressRailItem, ProgressRailItemState } from './components/ProgressRail.js';
+import type { ProgressRailItem, ProgressRailItemState } from './components/progressModels.js';
 import { ExpandedCommandComposer, type ComposerTab } from './components/ExpandedCommandComposer.js';
 import { FlowSummaryPanel } from './components/FlowSummaryPanel.js';
 import { SelectPanel } from './components/SelectPanel.js';
@@ -55,6 +50,7 @@ import {
 	type MissionTreeTaskNode,
 	type MissionTreeSessionNode
 } from './components/MissionTreePanel.js';
+import { IntroSplash } from './components/IntroSplash.js';
 import type { CommandItem, FocusArea, SelectItem } from './components/types.js';
 
 type CockpitConnection = {
@@ -273,6 +269,7 @@ function MissionCockpitApp({
 	const [activityLog, setActivityLog] = createSignal<string[]>([
 		createInitialStatusMessage(initialConnectionError)
 	]);
+	const [daemonOutputLines, setDaemonOutputLines] = createSignal<string[]>([]);
 	const [markdownDocumentByPath, setMarkdownDocumentByPath] = createSignal<Record<string, MarkdownDocumentState>>({});
 	const [consoleStateBySessionId, setConsoleStateBySessionId] = createSignal<
 		Record<string, MissionAgentConsoleState>
@@ -306,6 +303,7 @@ function MissionCockpitApp({
 	const [knownAvailableMissions, setKnownAvailableMissions] = createSignal<MissionStatus['availableMissions']>([]);
 	const [selectedHeaderTabId, setSelectedHeaderTabId] = createSignal<string | undefined>();
 	const [isConsoleFullscreen, setIsConsoleFullscreen] = createSignal<boolean>(false);
+	const [showIntroSplash, setShowIntroSplash] = createSignal<boolean>(true);
 	const [selectedToolbarCommandId, setSelectedToolbarCommandId] = createSignal<string | undefined>();
 	const [confirmingToolbarCommandId, setConfirmingToolbarCommandId] = createSignal<string | undefined>();
 	const [toolbarConfirmationChoice, setToolbarConfirmationChoice] = createSignal<'confirm' | 'cancel'>('confirm');
@@ -348,15 +346,6 @@ function MissionCockpitApp({
 			state: mapStageState(stage.status),
 			selected: stage.stage === selectedStageId(),
 			subtitle: `${String(stage.completedTaskCount)}/${String(stage.taskCount)}`
-		}))
-	);
-	const taskItems = createMemo<ProgressRailItem[]>(() =>
-		stageTasks().map((task) => ({
-			id: task.taskId,
-			label: `${String(task.sequence)} ${task.subject}`,
-			state: mapTaskState(task.status),
-			selected: task.taskId === selectedTaskId(),
-			subtitle: task.relativePath
 		}))
 	);
 	const cockpitMode = createMemo<CockpitMode>(() =>
@@ -455,18 +444,18 @@ function MissionCockpitApp({
 			sessionId: selectedSessionId()
 		};
 	});
-	const availableCommands = createMemo<MissionCommandDescriptor[]>(() =>
-		resolveAvailableCommandsForContext(status().availableCommands ?? [], commandTargetContext())
+	const availableActions = createMemo<MissionActionDescriptor[]>(() =>
+		resolveAvailableCommandsForContext(status().availableActions ?? [], commandTargetContext())
 	);
 	const availableCommandById = createMemo(() => {
-		const entries = new Map<string, MissionCommandDescriptor>();
-		for (const command of availableCommands()) {
+		const entries = new Map<string, MissionActionDescriptor>();
+		for (const command of availableActions()) {
 			entries.set(command.id, command);
 		}
 		return entries;
 	});
-	const toolbarCommandDescriptors = createMemo<MissionCommandDescriptor[]>(() =>
-		resolveToolbarCommandsForContext(availableCommands(), commandTargetContext())
+	const toolbarCommandDescriptors = createMemo<MissionActionDescriptor[]>(() =>
+		resolveToolbarCommandsForContext(availableActions(), commandTargetContext())
 	);
 	const toolbarCommands = createMemo<CommandToolbarItem[]>(() =>
 		toolbarCommandDescriptors().map((command) => ({
@@ -486,10 +475,10 @@ function MissionCockpitApp({
 		availableCommandById().get(selectedToolbarCommandId() ?? '')
 	);
 	const commandPickerItems = createMemo<CommandItem[]>(() =>
-		buildCommandPickerItems(availableCommands(), commandQuery())
+		buildCommandPickerItems(availableActions(), commandQuery())
 	);
 	const commandCycleItems = createMemo<CommandItem[]>(() =>
-		buildCommandPickerItems(availableCommands(), '')
+		buildCommandPickerItems(availableActions(), '')
 	);
 	const showCommandPicker = createMemo(
 		() => activePicker() === 'command-select' && commandQuery().length > 0
@@ -524,9 +513,9 @@ function MissionCockpitApp({
 		if (step) {
 			return step.helperText;
 		}
-		const enabledCommands = availableCommands()
+		const enabledCommands = availableActions()
 			.filter((command) => command.enabled)
-			.map((command) => command.command);
+			.map((command) => command.action);
 		const uniqueCommands = [...new Set(enabledCommands)];
 		if (uniqueCommands.length === 0) {
 			return 'No commands available for the current selection.';
@@ -632,7 +621,7 @@ function MissionCockpitApp({
 			currentCommandFlowStep: currentCommandFlowStep(),
 			showCommandPicker: showCommandPicker(),
 			selectedCommandId: showCommandPicker() ? selectedCommandPickerItemId() : undefined,
-			availableCommands: availableCommands(),
+			availableActions: availableActions(),
 			inputValue: inputValue(),
 			status: status(),
 			selectedConsoleTabKind: inferConsoleTabKindFromId(selectedConsoleTabId()),
@@ -704,8 +693,8 @@ function MissionCockpitApp({
 		if (selectedTab.kind === 'control') {
 			return {
 				kind: 'output',
-				lines: buildControlStatusLines(status(), workspaceContext),
-				emptyLabel: 'Control status is unavailable.'
+				lines: daemonOutputLines().slice(-availableConsoleHeight()),
+				emptyLabel: 'Daemon stdout will appear here when the Mission daemon writes output.'
 			};
 		}
 		const documentState = markdownDocumentByPath()[selectedTab.sourcePath];
@@ -740,7 +729,7 @@ function MissionCockpitApp({
 			selectedTreeTargetId: selectedTreeTarget()?.id
 		})
 	);
-	const missionTreePanel = createMemo<JSXElement | undefined>(() => {
+	function renderMissionTreePanel(): JSXElement | undefined {
 		if (cockpitMode() !== 'mission') {
 			return undefined;
 		}
@@ -751,9 +740,9 @@ function MissionCockpitApp({
 				emptyLabel="No mission structure is available yet."
 			/>
 		);
-	});
+	}
 	const rightPanelTitle = createMemo(() => selectedTreeTarget()?.title ?? 'TARGET');
-	const splitPanel = createMemo<JSXElement | undefined>(() => {
+	function renderSplitPanel(): JSXElement | undefined {
 		switch (centerPanelMode()) {
 			case 'command-flow': {
 				const step = currentCommandFlowStep();
@@ -817,7 +806,7 @@ function MissionCockpitApp({
 				}
 				return undefined;
 		}
-	});
+	}
 	createEffect(() => {
 		setMarkdownDocumentByPath((current) => (Object.keys(current).length === 0 ? current : {}));
 		setConsoleStateBySessionId((current) => (Object.keys(current).length === 0 ? current : {}));
@@ -1085,13 +1074,23 @@ function MissionCockpitApp({
 		}
 	});
 
+	onMount(() => {
+		void refreshDaemonOutput();
+		const intervalHandle = setInterval(() => {
+			void refreshDaemonOutput();
+		}, 750);
+		onCleanup(() => {
+			clearInterval(intervalHandle);
+		});
+	});
+
 	createEffect(() => {
 		const currentClient = client();
 		if (!currentClient) {
 			return;
 		}
 		const subscription = currentClient.onDidEvent((event) => {
-			if (event.missionId !== currentMissionId()) {
+			if ('missionId' in event && event.missionId !== currentMissionId()) {
 				return;
 			}
 			const missionStatusEvent = asMissionStatusNotification(event);
@@ -1140,7 +1139,7 @@ function MissionCockpitApp({
 			if (consoleStateBySessionId()[session.sessionId]) {
 				continue;
 			}
-			void getSessionConsoleState(currentClient, sessionSelector, session.sessionId)
+			void new DaemonApi(currentClient).mission.getSessionConsoleState(sessionSelector, session.sessionId)
 				.then((nextConsole: MissionAgentConsoleState | null) => {
 					const nextSessionId = nextConsole?.sessionId;
 					if (nextSessionId) {
@@ -1161,7 +1160,7 @@ function MissionCockpitApp({
 			}
 		}
 	});
-	const expandedCommandPanel = createMemo<JSXElement | undefined>(() => {
+	function renderExpandedCommandPanel(): JSXElement | undefined {
 		if (layoutRoute().layout !== 'overlay' || centerPanelMode() !== 'command-flow-editor') {
 			return undefined;
 		}
@@ -1187,7 +1186,7 @@ function MissionCockpitApp({
 				}}
 			/>
 		);
-	});
+	}
 	createEffect(() => {
 		const tab = selectedConsoleTab();
 		if (!tab) {
@@ -1399,16 +1398,6 @@ function MissionCockpitApp({
 				previewHeaderTabSelection(delta);
 				return true;
 			}
-			case 'stages': {
-				const nextStageId = moveStageSelection(stages(), selectedStageId(), delta);
-				selectStage(nextStageId);
-				return true;
-			}
-			case 'tasks': {
-				const nextTaskId = moveTaskSelection(stageTasks(), selectedTaskId(), delta);
-				selectTask(nextTaskId);
-				return true;
-			}
 			case 'tree':
 				if (cockpitMode() === 'mission') {
 					selectTreeTarget(moveTreeTargetSelection(visibleTreeTargets(), selectedTreeTargetId(), delta));
@@ -1508,7 +1497,7 @@ function MissionCockpitApp({
 			return;
 		}
 		try {
-			const nextConsole = await getSessionConsoleState(currentClient, missionSelector, tab.sessionId);
+			const nextConsole = await new DaemonApi(currentClient).mission.getSessionConsoleState(missionSelector, tab.sessionId);
 			const nextSessionId = nextConsole?.sessionId;
 			if (!nextSessionId) {
 				return;
@@ -1593,25 +1582,6 @@ function MissionCockpitApp({
 		selectTreeTarget(targetId);
 	}
 
-	function selectStage(stageId: MissionStageId | undefined): void {
-		if (!stageId) {
-			return;
-		}
-		setSelectedStageId(stageId);
-		const nextStage = stages().find((stage) => stage.stage === stageId);
-		const hasTaskFollowUp = (nextStage?.tasks.length ?? 0) > 1;
-		setFocusArea(hasTaskFollowUp ? 'tasks' : 'command');
-	}
-
-	function selectTask(taskId: string): void {
-		if (!taskId) {
-			return;
-		}
-		setSelectedTaskId(taskId);
-		const hasSessionFollowUp = sessions().filter((session) => session.taskId === taskId).length > 1;
-		setFocusArea(hasSessionFollowUp ? 'sessions' : 'command');
-	}
-
 	function previewCommandPickerSelection(delta: number): void {
 		const nextId = movePickerSelection(commandPickerItems(), selectedPickerItemId(), delta);
 		if (!nextId) {
@@ -1643,8 +1613,23 @@ function MissionCockpitApp({
 		}
 	}
 
-	function resolveInputTargetSessionId(): string | undefined {
-		return selectedSessionId();
+	async function refreshDaemonOutput(): Promise<void> {
+		try {
+			const content = await readFile(getDaemonLogPath(), 'utf8');
+			const nextLines = normalizeDaemonOutputLines(content);
+			setDaemonOutputLines((current) =>
+				areStringArraysEqual(current, nextLines) ? current : nextLines
+			);
+		} catch (error) {
+			if (isMissingFileError(error)) {
+				setDaemonOutputLines((current) => (current.length === 0 ? current : []));
+				return;
+			}
+			const fallbackLine = `Unable to read daemon stdout: ${toErrorMessage(error)}`;
+			setDaemonOutputLines((current) =>
+				current.length === 1 && current[0] === fallbackLine ? current : [fallbackLine]
+			);
+		}
 	}
 
 	function openIssuePicker(): void {
@@ -1672,7 +1657,7 @@ function MissionCockpitApp({
 			}
 			return;
 		}
-		const items = buildCommandPickerItems(availableCommands(), query);
+		const items = buildCommandPickerItems(availableActions(), query);
 		setActivePicker('command-select');
 		setSelectedPickerItemId((current) => pickSelectItemId(items, current));
 	}
@@ -1728,8 +1713,8 @@ function MissionCockpitApp({
 				return command
 					? {
 						id: command.id,
-						command: command.command,
-						label: command.command,
+						command: command.action,
+						label: command.action,
 						description: command.label
 					}
 					: undefined;
@@ -1959,16 +1944,16 @@ function MissionCockpitApp({
 	}
 
 	function buildCommandFlowFromCommand(
-		command: MissionCommandDescriptor | undefined,
+		command: MissionActionDescriptor | undefined,
 		executeSelector: MissionSelector,
 		onCompleteLog?: (result: Awaited<ReturnType<typeof executeDaemonCommandById>>, flowResult: CommandFlowResult) => string | undefined
 	): CommandFlowDefinition | undefined {
 		if (!command?.flow) {
 			return undefined;
 		}
-		const flow = command.flow as MissionCommandFlowDescriptor & {
+		const flow = command.flow as MissionActionFlowDescriptor & {
 			actionLabel: string;
-			steps: MissionCommandFlowStep[];
+			steps: MissionActionFlowStep[];
 		};
 		return {
 			id: command.id,
@@ -2016,17 +2001,10 @@ function MissionCockpitApp({
 		nextStatus: MissionStatus,
 		fallbackSelector: MissionSelector = selector()
 	): MissionSelector {
-		const nextSelector = selectorFromStatus(nextStatus, fallbackSelector);
+		const nextSelector = DaemonMissionApi.selectorFromStatus(nextStatus, fallbackSelector);
 		setStatus(nextStatus);
 		setSelector(nextSelector);
 		return nextSelector;
-	}
-
-	function updateMissionSessionRecord(record: MissionAgentSessionRecord): void {
-		setStatus((currentStatus) => ({
-			...currentStatus,
-			agentSessions: upsertSessionRecord(currentStatus.agentSessions, record)
-		}));
 	}
 
 	async function selectThemeById(themeId: string): Promise<void> {
@@ -2037,7 +2015,7 @@ function MissionCockpitApp({
 		const currentClient = client() ?? (await connectClient({}));
 		if (currentClient) {
 			try {
-				const nextStatus = await updateControlSetting(currentClient, 'cockpitTheme', themeId);
+				const nextStatus = await new DaemonApi(currentClient).control.updateSetting('cockpitTheme', themeId);
 				applyMissionStatus(nextStatus, selector());
 			} catch (error) {
 				appendLog(`Unable to persist theme '${themeId}': ${toErrorMessage(error)}`);
@@ -2100,7 +2078,7 @@ function MissionCockpitApp({
 			appendLog('Unable to connect to list GitHub issues.');
 			return;
 		}
-		const nextIssues = await listOpenGitHubIssues(currentClient, 20);
+		const nextIssues = await new DaemonApi(currentClient).control.listOpenIssues(20);
 		setOpenIssues(nextIssues);
 		appendLog(`Loaded ${String(nextIssues.length)} open GitHub issue(s).`);
 		if (nextIssues.length === 0) {
@@ -2117,11 +2095,21 @@ function MissionCockpitApp({
 			return false;
 		}
 		try {
-			const next = await bootstrapMissionFromIssue(currentClient, issueNumber);
+			const next = await new DaemonApi(currentClient).mission.fromIssue(issueNumber);
 			applyMissionStatus(next);
-			appendLog(
-				`Mission ${next.missionId ?? 'unknown'} bootstrapped from issue ${String(issueNumber)}.`
-			);
+			if (next.preparation?.kind === 'repository-bootstrap') {
+				appendLog(
+					`Repository bootstrap prepared on ${next.preparation.branchRef}. PR: ${next.preparation.pullRequestUrl}`
+				);
+			} else if (next.preparation?.kind === 'mission') {
+				appendLog(
+					`Mission ${next.preparation.missionId} prepared from issue ${String(issueNumber)} on ${next.preparation.branchRef}. PR: ${next.preparation.pullRequestUrl}`
+				);
+			} else {
+				appendLog(
+					`Mission ${next.missionId ?? 'unknown'} selected from issue ${String(issueNumber)}.`
+				);
+			}
 			return true;
 		} catch (error) {
 			appendLog(toErrorMessage(error));
@@ -2131,27 +2119,20 @@ function MissionCockpitApp({
 
 	async function executeDaemonCommandById(
 		commandId: string,
-		steps: CommandExecuteStep[],
+		steps: MissionActionExecutionStep[],
 		nextSelector: MissionSelector = currentMissionSelector() ?? {}
 	) {
 		const currentClient = client() ?? (await connectClient(nextSelector));
 		if (!currentClient) {
 			throw new Error('Unable to connect to execute the Mission command.');
 		}
-		const result = await executeDaemonOperation(currentClient, {
-			commandId,
-			...(Object.keys(nextSelector).length > 0 ? { selector: nextSelector } : {}),
-			steps
-		});
-		if (result.status) {
-			applyMissionStatus(result.status, nextSelector);
-			setDaemonState('connected');
-		}
-		if (result.session) {
-			setSelectedSessionId(result.session.sessionId);
-			setSelectedConsoleTabId(createSessionTabId(result.session.sessionId));
-		}
-		return result;
+		const api = new DaemonApi(currentClient);
+		const status = Object.keys(nextSelector).length > 0
+			? await api.mission.executeAction(nextSelector, commandId, steps)
+			: await api.control.executeAction(commandId, steps);
+		applyMissionStatus(status, nextSelector);
+		setDaemonState('connected');
+		return { status };
 	}
 
 	function currentMissionSelector(): MissionSelector | undefined {
@@ -2159,29 +2140,29 @@ function MissionCockpitApp({
 		return missionId ? { missionId } : undefined;
 	}
 
-	function resolveCommandExecutionSelector(command: MissionCommandDescriptor): MissionSelector {
+	function resolveCommandExecutionSelector(command: MissionActionDescriptor): MissionSelector {
 		if (command.id.startsWith('control.')) {
 			return {};
 		}
 		return currentMissionSelector() ?? {};
 	}
 
-	async function executeAvailableCommandByText(commandText: string): Promise<boolean> {
-		const command = findAvailableCommandByText(availableCommands(), commandText);
+	async function executeActionByText(commandText: string): Promise<boolean> {
+		const command = findAvailableCommandByText(availableActions(), commandText);
 		if (!command) {
 			return false;
 		}
-		return executeAvailableCommandById(command.id);
+		return executeActionById(command.id);
 	}
 
-	async function executeAvailableCommandById(commandId: string): Promise<boolean> {
+	async function executeActionById(commandId: string): Promise<boolean> {
 		const command = availableCommandById().get(commandId);
 		if (!command) {
 			return false;
 		}
 
 		if (!command.enabled) {
-			appendLog(command.reason ?? `Command ${command.command} is not available for the selected target.`);
+			appendLog(command.reason ?? `Action ${command.action} is not available for the selected target.`);
 			return true;
 		}
 
@@ -2204,9 +2185,15 @@ function MissionCockpitApp({
 					if (command.id === 'control.mission.start') {
 						const nextStatus = result.status;
 						if (!nextStatus) {
-							return 'Mission started.';
+							return 'Mission prepared.';
 						}
-						return `Mission ${nextStatus.missionId ?? 'unknown'} started on ${nextStatus.branchRef ?? 'its mission branch'}.`;
+						if (nextStatus.preparation?.kind === 'repository-bootstrap') {
+							return `Repository bootstrap prepared on ${nextStatus.preparation.branchRef}. PR: ${nextStatus.preparation.pullRequestUrl}`;
+						}
+						if (nextStatus.preparation?.kind === 'mission') {
+							return `Mission ${nextStatus.preparation.missionId} prepared on ${nextStatus.preparation.branchRef}. PR: ${nextStatus.preparation.pullRequestUrl}`;
+						}
+						return `Mission ${nextStatus.missionId ?? 'unknown'} selected on ${nextStatus.branchRef ?? 'its mission branch'}.`;
 					}
 					if (command.id === 'control.mission.select') {
 						const missionId = result.status?.missionId;
@@ -2219,7 +2206,7 @@ function MissionCockpitApp({
 				}
 			);
 			if (!definition) {
-				appendLog(`Mission command ${command.command} is not available right now.`);
+				appendLog(`Mission action ${command.action} is not available right now.`);
 				return true;
 			}
 			startCommandFlow(definition);
@@ -2237,28 +2224,13 @@ function MissionCockpitApp({
 			return true;
 		}
 
-		if (command.id.startsWith('stage.transition.')) {
-			appendLog(`Transitioned mission to ${result.status?.stage ?? command.targetId ?? 'next stage'}.`);
-			return true;
-		}
-
-		if (command.id.startsWith('task.activate.') || command.id.startsWith('task.complete.') || command.id.startsWith('task.block.')) {
-			const action = command.id.startsWith('task.activate.')
-				? 'active'
-				: command.id.startsWith('task.complete.')
-					? 'done'
-					: 'blocked';
-			appendLog(`Task ${command.targetId ?? 'unknown'} set to ${action}.`);
+		if (command.id.startsWith('task.start.') || command.id.startsWith('task.done.') || command.id.startsWith('task.block.') || command.id.startsWith('task.reopen.')) {
+			appendLog(`${command.label}${command.targetId ? `: ${command.targetId}` : '.'}`);
 			return true;
 		}
 
 		if (command.id.startsWith('task.launch.')) {
-			const session = result.session;
-			if (session) {
-				appendLog(`Launched ${session.runtimeId} for ${session.assignmentLabel ?? command.targetId ?? 'task'}.`);
-			} else {
-				appendLog(`Launch requested for ${command.targetId ?? 'task'}.`);
-			}
+			appendLog(`Launch requested for ${command.targetId ?? 'task'}.`);
 			return true;
 		}
 
@@ -2272,7 +2244,7 @@ function MissionCockpitApp({
 			return true;
 		}
 
-		appendLog(`Executed ${command.command}.`);
+		appendLog(`Executed ${command.action}.`);
 		return true;
 	}
 
@@ -2302,7 +2274,7 @@ function MissionCockpitApp({
 			return;
 		}
 		if (!command.enabled) {
-			appendLog(command.reason ?? `Command ${command.command} is not available for the selected target.`);
+			appendLog(command.reason ?? `Action ${command.action} is not available for the selected target.`);
 			return;
 		}
 		setConfirmingToolbarCommandId(command.id);
@@ -2318,17 +2290,17 @@ function MissionCockpitApp({
 				return;
 			}
 			if (!selected.enabled) {
-				appendLog(selected.reason ?? `Command ${selected.command} is not available for the selected target.`);
+				appendLog(selected.reason ?? `Action ${selected.action} is not available for the selected target.`);
 				return;
 			}
 			if (selected.ui?.requiresConfirmation === true) {
 				openToolbarConfirmation();
 				return;
 			}
-			appendLog(`Executing ${selected.command}.`);
+			appendLog(`Executing ${selected.action}.`);
 			setIsRunningCommand(true);
 			try {
-				await executeAvailableCommandById(selected.id);
+				await executeActionById(selected.id);
 			} catch (error) {
 				appendLog(toErrorMessage(error));
 			} finally {
@@ -2348,10 +2320,10 @@ function MissionCockpitApp({
 			appendLog('Selected command is no longer available.');
 			return;
 		}
-		appendLog(`Executing ${command.command}.`);
+		appendLog(`Executing ${command.action}.`);
 		setIsRunningCommand(true);
 		try {
-			await executeAvailableCommandById(command.id);
+			await executeActionById(command.id);
 		} catch (error) {
 			appendLog(toErrorMessage(error));
 		} finally {
@@ -2367,16 +2339,7 @@ function MissionCockpitApp({
 		setIsRunningCommand(true);
 		try {
 			if (!trimmed.startsWith('/')) {
-				const sessionId = resolveInputTargetSessionId();
-				const missionSelector = currentMissionSelector();
-				const currentClient = client() ?? (await connectClient(missionSelector ?? selector()));
-				if (!sessionId || !currentClient) {
-					appendLog('No selected session is available. Select a session target first.');
-					return;
-				}
-				const updatedSession = await sendSessionInput(currentClient, missionSelector, sessionId, trimmed);
-				updateMissionSessionRecord(updatedSession);
-				appendLog(`Sent input to ${sessionId}.`);
+				appendLog('Direct session input is no longer supported in autonomous runtime mode. Use slash commands to launch or control sessions.');
 				return;
 			}
 
@@ -2427,7 +2390,7 @@ function MissionCockpitApp({
 				case '/cancel':
 				case '/terminate':
 				case '/deliver':
-					if (await executeAvailableCommandByText(trimmed)) {
+					if (await executeActionByText(trimmed)) {
 						return;
 					}
 					appendLog(`Command ${trimmed} is not available for the selected target.`);
@@ -2495,12 +2458,12 @@ function MissionCockpitApp({
 						return;
 					}
 					const intent = (args[0] as GateIntent | undefined) ?? gateIntentForStage(status().stage);
-					const gate = await evaluateMissionGate(currentClient, missionSelector, intent);
+					const gate = await new DaemonApi(currentClient).mission.evaluateGate(missionSelector, intent);
 					appendLog(gate.allowed ? `Gate ${intent} passed.` : `Gate ${intent} blocked: ${gate.errors.join(' | ')}`);
 					return;
 				}
 				default:
-					if (await executeAvailableCommandByText(trimmed)) {
+					if (await executeActionByText(trimmed)) {
 						return;
 					}
 					appendLog(`Unknown command '${trimmed}'. Type /help.`);
@@ -2522,95 +2485,94 @@ function MissionCockpitApp({
 
 	return (
 		<Show when={selectedThemeName()} keyed>
-			<CockpitScreen
-				headerPanelTitle={headerPanelTitle()}
-				showHeader={centerPanelMode() !== 'console-fullscreen'}
-				title={screenTitle()}
-				headerTabs={headerTabs().map((tab) => ({ id: tab.id, label: tab.label }))}
-				headerSelectedTabId={selectedHeaderTabId()}
-				headerTabsFocusable={headerTabsFocusable()}
-				headerStatusLines={headerStatusLines()}
-				headerFooterBadges={headerFooterBadges()}
-				expandedCommandPanel={expandedCommandPanel()}
-				showProgressRails={false}
-				stageItems={stageItems()}
-				taskItems={taskItems()}
-				focusArea={focusArea()}
-				consoleTabs={renderedConsoleTabs()}
-				selectedConsoleTabId={selectedConsoleTab()?.id}
-				consoleContent={consoleContent()}
-				rightPanelTitle={rightPanelTitle()}
-				onConsoleTabSelect={selectConsoleTab}
-				missionTreePanel={missionTreePanel()}
-				hideMissionTreePanel={centerPanelMode() === 'console-fullscreen'}
-				mainPanel={splitPanel()}
-				commandDockTitle={commandDockDescriptor().title}
-				commandDockPlaceholder={commandDockDescriptor().placeholder}
-				commandDockMode={commandDockMode()}
-				toolbarItems={toolbarCommands()}
-				selectedToolbarItemId={selectedToolbarCommandId()}
-				confirmingToolbarItemId={confirmingToolbarCommandId()}
-				confirmationChoice={toolbarConfirmationChoice()}
-				isRunningCommand={isRunningCommand()}
-				inputValue={inputValue()}
-				commandHelp={commandHelp()}
-				keyHintsText={keyHintsText()}
-				onInputChange={(value) => {
-					const nextValue = isCompactCommandFlowTextStep()
-						? value
-						: normalizeCommandInputValue(value);
-					setInputValue(nextValue);
-					if (isCompactCommandFlowTextStep()) {
-						setCommandFlowTextValue(nextValue);
-						return;
-					}
-					updateCommandPicker(nextValue);
-					if (parseCommandQuery(nextValue) === '/') {
-						setFocusArea('command');
-					}
-				}}
-				onInputSubmit={(submittedValue?: string) => {
-					const value = typeof submittedValue === 'string' ? submittedValue : inputValue();
-					if (isCompactCommandFlowTextStep()) {
-						void submitCommandFlowTextStep(value);
-						return;
-					}
-					const trimmedValue = value.trim();
-					const submittedQuery = parseCommandQuery(value);
-					const submittedCommandItems = submittedQuery
-						? buildCommandPickerItems(availableCommands(), submittedQuery)
-						: [];
-					const exactCommand = findAvailableCommandByText(availableCommands(), trimmedValue);
-					if (exactCommand) {
+			<Show when={!showIntroSplash()} fallback={<IntroSplash onComplete={() => setShowIntroSplash(false)} />}>
+				<CockpitScreen
+					headerPanelTitle={headerPanelTitle()}
+					showHeader={centerPanelMode() !== 'console-fullscreen'}
+					title={screenTitle()}
+					headerTabs={headerTabs().map((tab) => ({ id: tab.id, label: tab.label }))}
+					headerSelectedTabId={selectedHeaderTabId()}
+					headerTabsFocusable={headerTabsFocusable()}
+					headerStatusLines={headerStatusLines()}
+					headerFooterBadges={headerFooterBadges()}
+					expandedCommandPanel={renderExpandedCommandPanel()}
+					stageItems={stageItems()}
+					focusArea={focusArea()}
+					consoleTabs={renderedConsoleTabs()}
+					selectedConsoleTabId={selectedConsoleTab()?.id}
+					consoleContent={consoleContent()}
+					rightPanelTitle={rightPanelTitle()}
+					onConsoleTabSelect={selectConsoleTab}
+					missionTreePanel={renderMissionTreePanel()}
+					hideMissionTreePanel={centerPanelMode() === 'console-fullscreen'}
+					mainPanel={renderSplitPanel()}
+					commandDockTitle={commandDockDescriptor().title}
+					commandDockPlaceholder={commandDockDescriptor().placeholder}
+					commandDockMode={commandDockMode()}
+					toolbarItems={toolbarCommands()}
+					selectedToolbarItemId={selectedToolbarCommandId()}
+					confirmingToolbarItemId={confirmingToolbarCommandId()}
+					confirmationChoice={toolbarConfirmationChoice()}
+					isRunningCommand={isRunningCommand()}
+					inputValue={inputValue()}
+					commandHelp={commandHelp()}
+					keyHintsText={keyHintsText()}
+					onInputChange={(value) => {
+						const nextValue = isCompactCommandFlowTextStep()
+							? value
+							: normalizeCommandInputValue(value);
+						setInputValue(nextValue);
+						if (isCompactCommandFlowTextStep()) {
+							setCommandFlowTextValue(nextValue);
+							return;
+						}
+						updateCommandPicker(nextValue);
+						if (parseCommandQuery(nextValue) === '/') {
+							setFocusArea('command');
+						}
+					}}
+					onInputSubmit={(submittedValue?: string) => {
+						const value = typeof submittedValue === 'string' ? submittedValue : inputValue();
+						if (isCompactCommandFlowTextStep()) {
+							void submitCommandFlowTextStep(value);
+							return;
+						}
+						const trimmedValue = value.trim();
+						const submittedQuery = parseCommandQuery(value);
+						const submittedCommandItems = submittedQuery
+							? buildCommandPickerItems(availableActions(), submittedQuery)
+							: [];
+						const exactCommand = findAvailableCommandByText(availableActions(), trimmedValue);
+						if (exactCommand) {
+							setInputValue('');
+							void executeCommand(trimmedValue);
+							return;
+						}
+						if (submittedQuery && submittedCommandItems.length > 0) {
+							const selectedCommandId = pickSelectItemId(
+								submittedCommandItems,
+								selectedCommandPickerItemId()
+							) ?? submittedCommandItems[0]?.id;
+							if (selectedCommandId) {
+								selectCommandById(selectedCommandId, {
+									execute: true,
+									items: submittedCommandItems
+								});
+							}
+							return;
+						}
+						if (value.trim() === '/') {
+							updateCommandPicker(value);
+							if (commandPickerItems().length > 0) {
+								setFocusArea('command');
+							} else {
+								appendLog('No commands are available for the current selection.');
+							}
+							return;
+						}
 						setInputValue('');
 						void executeCommand(trimmedValue);
-						return;
-					}
-					if (submittedQuery && submittedCommandItems.length > 0) {
-						const selectedCommandId = pickSelectItemId(
-							submittedCommandItems,
-							selectedCommandPickerItemId()
-						) ?? submittedCommandItems[0]?.id;
-						if (selectedCommandId) {
-							selectCommandById(selectedCommandId, {
-								execute: true,
-								items: submittedCommandItems
-							});
-						}
-						return;
-					}
-					if (value.trim() === '/') {
-						updateCommandPicker(value);
-						if (commandPickerItems().length > 0) {
-							setFocusArea('command');
-						} else {
-							appendLog('No commands are available for the current selection.');
-						}
-						return;
-					}
-					setInputValue('');
-					void executeCommand(trimmedValue);
-				}}
+					}}
 				onInputKeyDown={(event) => {
 					if (event.name === 'escape') {
 						if (focusArea() !== 'command') {
@@ -2647,12 +2609,13 @@ function MissionCockpitApp({
 				}}
 			/>
 		</Show>
+		</Show>
 	);
 
 }
 
 function buildAdaptiveSetupCommandFlowSteps(
-	steps: MissionCommandFlowStep[],
+	steps: MissionActionFlowStep[],
 	getSettings: () => ConfiguredControlAgentSettings | undefined
 ): CommandFlowStep[] {
 	return steps.map((step) => {
@@ -2887,28 +2850,6 @@ function pickPreferredConsoleTabId(
 	return tabs[0]?.id;
 }
 
-function moveStageSelection(
-	stages: MissionStageStatus[],
-	current: MissionStageId | undefined,
-	delta: number
-): MissionStageId | undefined {
-	if (stages.length === 0) {
-		return undefined;
-	}
-	const currentIndex = Math.max(0, stages.findIndex((stage) => stage.stage === current));
-	const nextIndex = clampIndex(currentIndex + delta, stages.length);
-	return stages[nextIndex]?.stage;
-}
-
-function moveTaskSelection(tasks: MissionTaskState[], current: string, delta: number): string {
-	if (tasks.length === 0) {
-		return '';
-	}
-	const currentIndex = Math.max(0, tasks.findIndex((task) => task.taskId === current));
-	const nextIndex = clampIndex(currentIndex + delta, tasks.length);
-	return tasks[nextIndex]?.taskId ?? '';
-}
-
 function moveConsoleTabSelection(
 	tabs: ConsoleTabDescriptor[],
 	current: string | undefined,
@@ -2942,19 +2883,6 @@ function clampIndex(index: number, length: number): number {
 }
 
 function mapStageState(state: string): ProgressRailItemState {
-	if (state === 'done') {
-		return 'done';
-	}
-	if (state === 'active') {
-		return 'active';
-	}
-	if (state === 'blocked') {
-		return 'blocked';
-	}
-	return 'pending';
-}
-
-function mapTaskState(state: MissionTaskState['status']): ProgressRailItemState {
 	if (state === 'done') {
 		return 'done';
 	}
@@ -3345,7 +3273,7 @@ function isConsoleFullscreenToggleKey(key: {
 }
 
 function buildCommandPickerItems(
-	commands: MissionCommandDescriptor[],
+	commands: MissionActionDescriptor[],
 	query: string
 ): CommandItem[] {
 	const normalizedQuery = query.toLowerCase();
@@ -3353,8 +3281,8 @@ function buildCommandPickerItems(
 		.filter((command) => command.enabled)
 		.map((command) => ({
 			id: command.id,
-			command: command.command,
-			label: command.command,
+			command: command.action,
+			label: command.action,
 			description: command.targetId ? `${command.label} [${command.targetId}]` : command.label
 		}))
 		.filter((command) => {
@@ -3373,24 +3301,10 @@ function buildCommandPickerItems(
 }
 
 function resolveAvailableCommandsForContext(
-	commands: MissionCommandDescriptor[],
+	commands: MissionActionDescriptor[],
 	context: CommandTargetContext
-): MissionCommandDescriptor[] {
-	return commands.filter((command) => {
-		if (command.scope === 'mission') {
-			return true;
-		}
-		if (command.scope === 'stage') {
-			return Boolean(context.stageId) && command.targetId === context.stageId;
-		}
-		if (command.scope === 'task') {
-			return Boolean(context.taskId) && command.targetId === context.taskId;
-		}
-		if (command.scope === 'session') {
-			return Boolean(context.sessionId) && command.targetId === context.sessionId;
-		}
-		return false;
-	});
+): MissionActionDescriptor[] {
+	return commands.filter((command) => matchesCommandTargetContext(command, context));
 }
 
 function buildThemePickerItems(selectedTheme: CockpitThemeName): SelectItem[] {
@@ -3599,33 +3513,61 @@ function pickPreferredToolbarCommandId(
 	return enabledItems[0]?.id;
 }
 
-function formatToolbarCommandLabel(command: MissionCommandDescriptor): string {
+function formatToolbarCommandLabel(command: MissionActionDescriptor): string {
 	if (command.ui?.toolbarLabel) {
 		return command.ui.toolbarLabel.trim().toUpperCase();
 	}
-	const normalized = command.command.trim().replace(/^\/+/u, '').replace(/\s+/gu, ' ');
+	const normalized = command.action.trim().replace(/^\/+/u, '').replace(/\s+/gu, ' ');
 	return normalized.toUpperCase();
 }
 
 function resolveToolbarCommandsForContext(
-	commands: MissionCommandDescriptor[],
+	commands: MissionActionDescriptor[],
 	context: CommandTargetContext
-): MissionCommandDescriptor[] {
-	const enabled = commands.filter((command) => command.enabled);
+): MissionActionDescriptor[] {
+	return commands.filter((command) => matchesCommandTargetContext(command, context));
+}
+
+function matchesCommandTargetContext(
+	command: MissionActionDescriptor,
+	context: CommandTargetContext
+): boolean {
+	const presentationTargets = command.presentationTargets ?? [];
+	if (presentationTargets.length > 0) {
+		if (context.sessionId) {
+			return presentationTargets.some(
+				(target) => target.scope === 'session' && target.targetId === context.sessionId
+			);
+		}
+
+		if (context.taskId) {
+			return presentationTargets.some(
+				(target) => target.scope === 'task' && target.targetId === context.taskId
+			);
+		}
+
+		if (context.stageId) {
+			return presentationTargets.some(
+				(target) => target.scope === 'stage' && target.targetId === context.stageId
+			);
+		}
+
+		return presentationTargets.some((target) => target.scope === 'mission');
+	}
 
 	if (context.sessionId) {
-		return enabled.filter((command) => command.scope === 'session' && command.targetId === context.sessionId);
+		return command.scope === 'session' && command.targetId === context.sessionId;
 	}
 
 	if (context.taskId) {
-		return enabled.filter((command) => command.scope === 'task' && command.targetId === context.taskId);
+		return command.scope === 'task' && command.targetId === context.taskId;
 	}
 
 	if (context.stageId) {
-		return enabled.filter((command) => command.scope === 'stage' && command.targetId === context.stageId);
+		return command.scope === 'generation' && command.targetId === context.stageId;
 	}
 
-	return enabled.filter((command) => command.scope === 'mission');
+	return command.scope === 'mission';
 }
 
 function movePickerSelection(items: SelectItem[], current: string | undefined, delta: number): string | undefined {
@@ -3704,73 +3646,27 @@ function noMissionSelectedMessage(status: MissionStatus): string {
 	return 'No mission is selected. Use /start to create one or /select to open an existing mission.';
 }
 
-function describeWorkspaceContext(workspaceContext: MissionWorkspaceContext): string {
-	return workspaceContext.kind === 'mission-worktree'
-		? `mission worktree ${workspaceContext.missionId}`
-		: 'the repository root';
+function normalizeDaemonOutputLines(content: string): string[] {
+	return content
+		.split(/\r?\n/u)
+		.filter((line, index, lines) => line.length > 0 || index < lines.length - 1)
+		.slice(-400);
 }
 
-function buildControlStatusLines(
-	status: MissionStatus,
-	workspaceContext: MissionWorkspaceContext
-): string[] {
-	const control = status.control;
-	if (!control) {
-		return ['Waiting for daemon control status...'];
+function areStringArraysEqual(left: string[], right: string[]): boolean {
+	if (left.length !== right.length) {
+		return false;
 	}
-	const lines = [
-		status.operationalMode === 'setup'
-			? 'Finish setup before starting your first mission.'
-			: 'Mission control is ready.',
-		`Opened from ${describeWorkspaceContext(workspaceContext)}.`,
-		'',
-		`Files: ${control.initialized ? 'ready' : 'missing'} | Settings: ${control.settingsComplete ? 'ready' : 'needs attention'} | Issue intake: ${controlIssueStatusLabel(control)}`,
-		`GitHub auth: ${controlGithubStatusLabel(control)} | Active missions: ${String(control.availableMissionCount)}`
-	];
-	if (control.githubRepository) {
-		lines.push(`GitHub repository: ${control.githubRepository}`);
+	for (let index = 0; index < left.length; index += 1) {
+		if (left[index] !== right[index]) {
+			return false;
+		}
 	}
-	for (const notice of [...control.problems, ...control.warnings].slice(0, 4)) {
-		lines.push(`* ${notice}`);
-	}
-	const missions = status.availableMissions ?? [];
-	if (missions.length === 0) {
-		lines.push(
-			status.operationalMode === 'setup'
-				? 'No active missions yet. Finish setup, then create your first mission with /start.'
-				: 'No active missions yet. Use /start from the repository root to create your first mission.'
-		);
-		return lines;
-	}
-	lines.push('Missions:');
-	for (const mission of missions.slice(0, 10)) {
-		const issueLabel = mission.issueId !== undefined ? `#${String(mission.issueId)} ` : '';
-		lines.push(`${issueLabel}${mission.missionId} | ${mission.branchRef}`);
-	}
-	return lines;
+	return true;
 }
 
-function controlIssueStatusLabel(control: MissionStatus['control']): string {
-	if (!control?.issuesConfigured) {
-		return 'not ready';
-	}
-	if (control.githubAuthenticated === false) {
-		return 'waiting for GitHub auth';
-	}
-	if (control.githubAuthenticated === true) {
-		return 'ready';
-	}
-	return 'preparing';
-}
-
-function controlGithubStatusLabel(control: MissionStatus['control']): string {
-	if (control?.githubAuthenticated === true) {
-		return 'ok';
-	}
-	if (control?.githubAuthenticated === false) {
-		return 'required';
-	}
-	return 'n/a';
+function isMissingFileError(error: unknown): boolean {
+	return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT');
 }
 
 function buildCommandDockDescriptor(input: {
@@ -3778,7 +3674,7 @@ function buildCommandDockDescriptor(input: {
 	currentCommandFlowStep: CommandFlowStep | undefined;
 	showCommandPicker: boolean;
 	selectedCommandId: string | undefined;
-	availableCommands: MissionCommandDescriptor[];
+	availableActions: MissionActionDescriptor[];
 	inputValue: string;
 	status: MissionStatus;
 	selectedConsoleTabKind: ConsoleTabDescriptor['kind'] | undefined;
@@ -3809,7 +3705,7 @@ function buildCommandDockDescriptor(input: {
 				: 'Use arrows to choose and Enter to continue.'
 		};
 	}
-	const exactCommand = findAvailableCommandByText(input.availableCommands, input.selectedCommandId ?? input.inputValue.trim());
+	const exactCommand = findAvailableCommandByText(input.availableActions, input.selectedCommandId ?? input.inputValue.trim());
 	if (exactCommand?.flow) {
 		const firstStep = exactCommand.flow.steps[0];
 		return {
@@ -3839,17 +3735,17 @@ function buildCommandDockDescriptor(input: {
 				title: buildFlowStepTitle(
 					dockTargetLabel(input.selectedTreeTargetKind),
 					input.selectedTreeTargetTitle,
-					'COMMAND'
+					'ACTION'
 				),
-				placeholder: 'Enter a command for the selected target or use left/right to browse available commands.'
+				placeholder: 'Enter an action for the selected target or use left/right to browse available actions.'
 			};
 		}
 		const scope = commandScopeLabel(input.status);
 		return {
-			title: `${scope} > COMMAND`,
+			title: `${scope} > ACTION`,
 			placeholder: scope === 'MISSION'
-				? 'Enter a mission command or agent reply'
-				: 'Enter a Mission control command'
+				? 'Enter a mission action or agent reply'
+				: 'Enter a Mission control action'
 		};
 	}
 	if (!trimmed.startsWith('/')) {
@@ -3862,17 +3758,17 @@ function buildCommandDockDescriptor(input: {
 }
 
 function findAvailableCommandByText(
-	commands: MissionCommandDescriptor[],
+	commands: MissionActionDescriptor[],
 	commandText: string | undefined
-): MissionCommandDescriptor | undefined {
+): MissionActionDescriptor | undefined {
 	const trimmed = commandText?.trim();
 	if (!trimmed) {
 		return undefined;
 	}
-	return commands.find((command) => command.command === trimmed);
+	return commands.find((command) => command.action === trimmed);
 }
 
-function buildCommandFlowStep(step: MissionCommandFlowDescriptor['steps'][number]): CommandFlowStep {
+function buildCommandFlowStep(step: MissionActionFlowDescriptor['steps'][number]): CommandFlowStep {
 	if (step.kind === 'selection') {
 		return {
 			kind: 'selection',
@@ -3902,19 +3798,19 @@ function buildCommandFlowStep(step: MissionCommandFlowDescriptor['steps'][number
 	};
 }
 
-function buildExecuteCommandSteps(steps: CommandFlowStepValue[]): CommandExecuteStep[] {
+function buildExecuteCommandSteps(steps: CommandFlowStepValue[]): MissionActionExecutionStep[] {
 	return steps.map((step) =>
 		step.kind === 'selection'
 			? {
 				kind: 'selection',
 				stepId: step.stepId,
 				optionIds: [...step.optionIds]
-			} as unknown as CommandExecuteStep
+			}
 			: {
 				kind: 'text',
 				stepId: step.stepId,
 				value: step.value
-			} as unknown as CommandExecuteStep
+			}
 	);
 }
 
@@ -3976,8 +3872,8 @@ function describeCommandDockIntent(
 			};
 			case '/start':
 				return {
-					title: 'MISSION > TYPE > START',
-					placeholder: 'Press Enter to open the guided mission start flow.'
+						title: 'MISSION > TYPE > PREPARE',
+						placeholder: 'Press Enter to open the guided mission preparation flow.'
 				};
 			case '/select':
 				return {
@@ -4183,23 +4079,6 @@ function resolveHeaderGitHubUser(
 			|| parseGitHubUserFromAuthDetail(control?.githubAuthMessage)?.trim()
 			|| fallbackGitHubUser?.trim();
 	return githubUser && githubUser.length > 0 ? githubUser : undefined;
-}
-
-function upsertSessionRecord(
-	sessions: MissionAgentSessionRecord[] | undefined,
-	record: MissionAgentSessionRecord
-): MissionAgentSessionRecord[] {
-	if (!sessions || sessions.length === 0) {
-		return [record];
-	}
-	const next = sessions.slice();
-	const existingIndex = next.findIndex((session) => session.sessionId === record.sessionId);
-	if (existingIndex >= 0) {
-		next[existingIndex] = record;
-		return next;
-	}
-	next.push(record);
-	return next;
 }
 
 function parseGitHubUserFromAuthDetail(detail: string | undefined): string | undefined {

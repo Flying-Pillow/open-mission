@@ -12,7 +12,7 @@ import { ConsolePanel, type ConsolePanelContent, type ConsolePanelTab } from './
 import { ConsoleContentPanel } from './ConsoleContentPanel.js';
 import type { FocusArea } from './types.js';
 import { KeyHintsRow } from './KeyHintsRow.js';
-import { ProgressRail, type ProgressRailItem } from './ProgressRail.js';
+import type { ProgressRailItem } from './progressModels.js';
 import { cockpitTheme } from './cockpitTheme.js';
 
 const cockpitLayout = {
@@ -31,9 +31,7 @@ type CockpitScreenProps = {
 	headerStatusLines: TabPanelLine[];
 	headerFooterBadges: PanelBadge[];
 	expandedCommandPanel?: JSXElement;
-	showProgressRails: boolean;
 	stageItems: ProgressRailItem[];
-	taskItems: ProgressRailItem[];
 	focusArea: FocusArea;
 	consoleTabs: ConsolePanelTab[];
 	selectedConsoleTabId: string | undefined;
@@ -77,14 +75,10 @@ export function CockpitScreen(props: CockpitScreenProps) {
 		terminal().height - (2 + visibleHeaderHeight + cockpitLayout.commandHelpHeight),
 		8
 	);
-
-	const progressRailsHeight = props.showProgressRails
-		? estimateProgressRailHeight(props.stageItems) + estimateProgressRailHeight(props.taskItems)
-		: 0;
-	const childCount = props.showProgressRails ? 6 : 4;
+	const childCount = 4;
 	const gapRows = (childCount - 1) * stackGap;
 	const mainPanelHeight = Math.max(
-		terminal().height - (2 + visibleHeaderHeight + progressRailsHeight + commandDockHeight + cockpitLayout.commandHelpHeight + gapRows),
+		terminal().height - (2 + visibleHeaderHeight + commandDockHeight + cockpitLayout.commandHelpHeight + gapRows),
 		8
 	);
 	const consoleBodyRows = Math.max(mainPanelHeight - 4, 3);
@@ -113,24 +107,6 @@ export function CockpitScreen(props: CockpitScreenProps) {
 							style={{ height: headerHeight, flexShrink: 0 }}
 						/>
 					</Show>
-
-					{props.showProgressRails ? (
-						<>
-							<ProgressRail
-								title="STAGES"
-								items={props.stageItems}
-								focused={props.focusArea === 'stages'}
-								emptyLabel="No mission stage is available yet."
-							/>
-
-							<ProgressRail
-								title="TASKS"
-								items={props.taskItems}
-								focused={props.focusArea === 'tasks'}
-								emptyLabel="No tasks exist for the selected stage."
-							/>
-						</>
-					) : null}
 
 					<box style={{ flexGrow: 1, height: mainPanelHeight }}>
 						<box style={{ flexDirection: 'row', flexGrow: 1, gap: showMissionTreePanel ? 1 : 0 }}>
@@ -248,12 +224,4 @@ export function CockpitScreen(props: CockpitScreenProps) {
 			}}
 		</Show>
 	);
-}
-
-function estimateProgressRailHeight(items: ProgressRailItem[]): number {
-	if (items.length === 0) {
-		return 5;
-	}
-	const contentHeight = items.some((item) => Boolean(item.subtitle)) ? 3 : 2;
-	return contentHeight + 4;
 }

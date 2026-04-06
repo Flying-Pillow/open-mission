@@ -1,12 +1,12 @@
-import type { MissionAgentRuntime } from './MissionAgentRuntime.js';
 import { startDaemon } from './Daemon.js';
 import { resolveGitWorkspaceRoot } from '../lib/workspacePaths.js';
+import type { AgentRunner } from '../runtime/AgentRunner.js';
 
 type RuntimeFactoryModule = {
-	createConfiguredMissionRuntimes?: (options: {
+	createConfiguredAgentRunners?: (options: {
 		controlRoot: string;
 		logLine?: (line: string) => void;
-	}) => Promise<MissionAgentRuntime[]> | MissionAgentRuntime[];
+	}) => Promise<AgentRunner[]> | AgentRunner[];
 };
 
 function writeDaemonLogLine(line: string): void {
@@ -22,7 +22,7 @@ function readSocketPathFromArgv(argv: string[]): string | undefined {
 	return argv[socketFlagIndex + 1];
 }
 
-async function loadConfiguredRuntimes(logLine?: (line: string) => void): Promise<MissionAgentRuntime[]> {
+async function loadConfiguredAgentRunners(logLine?: (line: string) => void): Promise<AgentRunner[]> {
 	const modulePath = process.env['MISSION_RUNTIME_FACTORY_MODULE']?.trim();
 	if (!modulePath) {
 		return [];
@@ -31,13 +31,13 @@ async function loadConfiguredRuntimes(logLine?: (line: string) => void): Promise
 	const controlRoot = resolveGitWorkspaceRoot(surfacePath) ?? surfacePath;
 
 	const loadedModule = (await import(modulePath)) as RuntimeFactoryModule;
-	if (typeof loadedModule.createConfiguredMissionRuntimes !== 'function') {
+	if (typeof loadedModule.createConfiguredAgentRunners !== 'function') {
 		throw new Error(
-			`Mission runtime factory module '${modulePath}' does not export createConfiguredMissionRuntimes(...).`
+			`Mission runtime factory module '${modulePath}' does not export createConfiguredAgentRunners(...).`
 		);
 	}
 
-	return await loadedModule.createConfiguredMissionRuntimes({
+	return await loadedModule.createConfiguredAgentRunners({
 		controlRoot,
 		...(logLine ? { logLine } : {})
 	});
@@ -46,10 +46,10 @@ async function loadConfiguredRuntimes(logLine?: (line: string) => void): Promise
 export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): Promise<void> {
 	const socketPath = readSocketPathFromArgv(argv);
 	const logLine = writeDaemonLogLine;
-	const runtimes = await loadConfiguredRuntimes(logLine);
+	const runners = await loadConfiguredAgentRunners(logLine);
 	const daemon = await startDaemon({
 		logLine,
-		runtimes,
+		runners,
 		...(socketPath ? { socketPath } : {})
 	});
 

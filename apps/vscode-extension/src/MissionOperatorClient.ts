@@ -1,20 +1,18 @@
 import * as vscode from 'vscode';
 import {
-	bootstrapMissionFromIssue,
-	connectDaemonClient,
-	executeCommand,
-	evaluateMissionGate,
-	getControlStatus,
-	getMissionStatus,
-	listOpenGitHubIssues,
-	resolveDaemonLaunchModeFromModule,
-	selectorFromStatus,
+	DaemonApi,
+	DaemonMissionApi,
+	type MissionActionExecutionStep,
+	type MissionActionDescriptor,
 	type MissionSelector,
 	type MissionStatus,
-	type MissionStageId,
 	type DaemonClient,
 	type Notification
 } from '@flying-pillow/mission-core';
+import {
+	connectMissionDaemon,
+	resolveMissionDaemonLaunchMode
+} from './daemonLifecycle.js';
 import type {
 	MissionGitHubIssue,
 	MissionGateIntent
@@ -22,6 +20,7 @@ import type {
 import { MissionWorkspaceResolver } from './MissionWorkspaceResolver.js';
 
 export class MissionOperatorClient implements vscode.Disposable {
+	private daemonApi?: DaemonApi;
 	private daemonClient?: DaemonClient;
 	private daemonClientSubscription?: { dispose(): void };
 	private readonly missionStatusEmitter = new vscode.EventEmitter<MissionStatus>();
@@ -39,6 +38,7 @@ export class MissionOperatorClient implements vscode.Disposable {
 		this.daemonClientSubscription?.dispose();
 		this.daemonClientSubscription = undefined;
 		this.daemonClient?.dispose();
+		this.daemonApi = undefined;
 		this.daemonClient = undefined;
 		this.connectedWorkspaceRoot = undefined;
 		this.selectorState = {};
@@ -52,77 +52,74 @@ export class MissionOperatorClient implements vscode.Disposable {
 
 	public async refreshMissionStatus(): Promise<MissionStatus> {
 		const workspaceResolution = await MissionWorkspaceResolver.resolveWorkspaceContext();
-		const client = await this.getClient();
+		const api = await this.getApi();
 		const workspaceMissionId =
 			workspaceResolution?.workspaceContext.kind === 'mission-worktree'
 				? workspaceResolution.workspaceContext.missionId
 				: undefined;
 		const missionId = workspaceMissionId ?? this.selectorState.missionId ?? this.lastStatus?.missionId;
-		const discoveryStatus = await getControlStatus(client);
+		const discoveryStatus = await api.control.getStatus();
 		const status = missionId
-			? await getMissionStatus(client, { missionId })
+			? await api.mission.getStatus({ missionId })
 			: discoveryStatus;
 		this.updateStatus(status);
 		return status;
 	}
 
-	public async bootstrapMissionFromIssue(issueNumber: number): Promise<MissionStatus> {
-		const status = await bootstrapMissionFromIssue(await this.getClient(), issueNumber);
+	public async requestMissionFromIssue(issueNumber: number): Promise<MissionStatus> {
+		const status = await (await this.getApi()).mission.fromIssue(issueNumber);
 		this.updateStatus(status);
 		return status;
 	}
 
 	public async evaluateGate(intent: MissionGateIntent) {
-		return evaluateMissionGate(await this.getClient(), this.requireMissionSelector(), intent);
+		return (await this.getApi()).mission.evaluateGate(this.requireMissionSelector(), intent);
 	}
 
-	public async transitionMissionStage(toStage: MissionStageId): Promise<MissionStatus> {
-		const result = await executeCommand(await this.getClient(), {
-			commandId: `stage.transition.${toStage}`,
-			selector: this.requireMissionSelector(),
-			steps: []
-		});
-		const status = result.status;
-		if (!status) {
-			throw new Error(`Mission stage '${toStage}' did not return an updated mission status.`);
-		}
-		this.updateStatus(status);
-		return status;
+	public async listAvailableActions(
+		selector?: MissionSelector
+	): Promise<MissionActionDescriptor[]> {
+		const api = await this.getApi();
+		const missionSelector = selector ?? this.requireMissionSelectorIfPresent();
+		return missionSelector
+			? api.mission.listAvailableActions(missionSelector)
+			: api.control.listAvailableActions();
 	}
 
-	public async deliverMission(): Promise<MissionStatus> {
-		const result = await executeCommand(await this.getClient(), {
-			commandId: 'mission.deliver',
-			selector: this.requireMissionSelector(),
-			steps: []
-		});
-		const status = result.status;
-		if (!status) {
-			throw new Error('Mission delivery did not return an updated mission status.');
-		}
+	public async executeAction(
+		commandId: string,
+		steps: MissionActionExecutionStep[] = [],
+		selector?: MissionSelector
+	): Promise<MissionStatus> {
+		const api = await this.getApi();
+		const missionSelector = selector ?? this.requireMissionSelectorIfPresent();
+		const status = missionSelector
+			? await api.mission.executeAction(missionSelector, commandId, steps)
+			: await api.control.executeAction(commandId, steps);
 		this.updateStatus(status);
 		return status;
 	}
 
 	public async listOpenGitHubIssues(limit = 50): Promise<MissionGitHubIssue[]> {
-		return listOpenGitHubIssues(await this.getClient(), limit);
+		return (await this.getApi()).control.listOpenIssues(limit);
 	}
 
-	private async getClient(): Promise<DaemonClient> {
+	private async getApi(): Promise<DaemonApi> {
 		const workspaceResolution = await MissionWorkspaceResolver.resolveWorkspaceContext();
 		const workspaceRoot = workspaceResolution?.workspaceRoot;
 		if (!workspaceRoot) {
 			throw new Error('Mission could not resolve an operational workspace root.');
 		}
 
-		if (this.daemonClient && this.connectedWorkspaceRoot === workspaceRoot) {
-			return this.daemonClient;
+		if (this.daemonApi && this.daemonClient && this.connectedWorkspaceRoot === workspaceRoot) {
+			return this.daemonApi;
 		}
 
 		if (this.daemonClient) {
 			this.daemonClientSubscription?.dispose();
 			this.daemonClientSubscription = undefined;
 			this.daemonClient.dispose();
+			this.daemonApi = undefined;
 			this.daemonClient = undefined;
 			this.connectedWorkspaceRoot = undefined;
 			this.selectorState = {};
@@ -132,9 +129,12 @@ export class MissionOperatorClient implements vscode.Disposable {
 		this.outputChannel.appendLine(
 			`Mission connecting daemon client for ${workspaceRoot} (${workspaceResolution.workspaceContext.kind === 'mission-worktree' ? `worktree ${workspaceResolution.workspaceContext.missionId}` : 'control-root'}).`
 		);
-		const daemonClient = await connectDaemonClient({
+		const daemonClient = await connectMissionDaemon({
 			surfacePath: workspaceResolution.resolvedPath,
-			preferredLaunchMode: resolveDaemonLaunchModeFromModule(import.meta.url)
+			launchMode: resolveMissionDaemonLaunchMode(import.meta.url),
+			logLine: (line) => {
+				this.outputChannel.appendLine(line);
+			}
 		});
 		this.daemonClientSubscription = daemonClient.onDidEvent((event) => {
 			this.notificationEmitter.fire(event);
@@ -161,9 +161,10 @@ export class MissionOperatorClient implements vscode.Disposable {
 				});
 			}
 		});
+		this.daemonApi = new DaemonApi(daemonClient);
 		this.daemonClient = daemonClient;
 		this.connectedWorkspaceRoot = workspaceRoot;
-		return daemonClient;
+		return this.daemonApi;
 	}
 
 	private requireMissionSelector(): MissionSelector {
@@ -174,8 +175,13 @@ export class MissionOperatorClient implements vscode.Disposable {
 		return { missionId };
 	}
 
+	private requireMissionSelectorIfPresent(): MissionSelector | undefined {
+		const missionId = this.selectorState.missionId ?? this.lastStatus?.missionId;
+		return missionId ? { missionId } : undefined;
+	}
+
 	private updateStatus(status: MissionStatus): void {
-		this.selectorState = selectorFromStatus(status);
+		this.selectorState = DaemonMissionApi.selectorFromStatus(status);
 		this.lastStatus = status;
 		this.missionStatusEmitter.fire(status);
 	}

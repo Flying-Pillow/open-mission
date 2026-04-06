@@ -1,6 +1,10 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { MISSION_STAGES, type MissionStageId } from '@flying-pillow/mission-core';
+import type {
+	MissionActionExecutionStep,
+	MissionActionDescriptor,
+	MissionStageId
+} from '@flying-pillow/mission-core';
 import type {
 	MissionChatRequest,
 	MissionMissionSnapshot,
@@ -117,7 +121,7 @@ export class MissionSessionController implements vscode.Disposable {
 			throw new Error(`Invalid issue number '${issueNumber}'.`);
 		}
 
-		const status = await this.operatorClient.bootstrapMissionFromIssue(Number(issueNumber.trim()));
+		const status = await this.operatorClient.requestMissionFromIssue(Number(issueNumber.trim()));
 		this.currentSnapshot = { status };
 		this.updateStatusBar();
 		this.missionChangedEmitter.fire(this.currentSnapshot);
@@ -153,25 +157,15 @@ export class MissionSessionController implements vscode.Disposable {
 		);
 	}
 
-	public async transitionMissionStage(toStage?: MissionStageId): Promise<void> {
-		const status = await this.requireStatus();
-		const targetStage = toStage ?? this.getAdjacentStage(status.stage, 1);
-		if (!targetStage) {
-			throw new Error('No next mission stage is available.');
-		}
-		const nextStatus = await this.operatorClient.transitionMissionStage(targetStage);
-		this.currentSnapshot = { status: nextStatus };
-		this.updateStatusBar();
-		this.missionChangedEmitter.fire(this.currentSnapshot);
+	public getAvailableActions(): MissionActionDescriptor[] {
+		return this.currentSnapshot.status.availableActions ?? [];
 	}
 
-	public async revertMissionStage(): Promise<void> {
-		const status = await this.requireStatus();
-		const targetStage = this.getAdjacentStage(status.stage, -1);
-		if (!targetStage) {
-			throw new Error('No previous mission stage is available.');
-		}
-		const nextStatus = await this.operatorClient.transitionMissionStage(targetStage);
+	public async executeAction(
+		commandId: string,
+		steps: MissionActionExecutionStep[] = []
+	): Promise<void> {
+		const nextStatus = await this.operatorClient.executeAction(commandId, steps);
 		this.currentSnapshot = { status: nextStatus };
 		this.updateStatusBar();
 		this.missionChangedEmitter.fire(this.currentSnapshot);
@@ -232,14 +226,6 @@ export class MissionSessionController implements vscode.Disposable {
 		].join('\n');
 		this.statusBarItem.command = 'mission.showStatus';
 		this.statusBarItem.show();
-	}
-
-	private getAdjacentStage(stage: MissionStageId | undefined, delta: number): MissionStageId | undefined {
-		const index = stage ? MISSION_STAGES.indexOf(stage) : -1;
-		if (index < 0) {
-			return delta > 0 ? MISSION_STAGES[0] : undefined;
-		}
-		return MISSION_STAGES[index + delta];
 	}
 
 	private async switchToMissionWorkspace(status: { missionDir?: string }): Promise<void> {

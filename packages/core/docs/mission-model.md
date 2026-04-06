@@ -1,6 +1,6 @@
 # Mission Model
 
-This document defines the current Mission object model and its filesystem representation.
+This document defines the Mission object model and its repository, control-plane, and workspace representation.
 
 ## Architectural Summary
 
@@ -23,59 +23,67 @@ All first-party mission markdown templates now live under [packages/core/src/tem
 
 ## Repository Layout
 
-Mission stores repo-controlled state under `.mission/`.
+Mission now uses three distinct storage scopes:
 
-A newly created mission starts small.
+1. tracked repository mission dossiers under `.missions/missions/<mission-id>/`
+2. repo-scoped control settings under `.missions/`
+3. machine-local daemon runtime state outside the repository
 
-### Initial Mission State
+The important architectural rule is that the mission dossier is repository history, while daemon runtime state is not.
 
-Immediately after `Factory.create(...)` returns, only the mission environment and first stage are materialized:
+### Repository Bootstrap State
+
+Before a repository may host missions, Mission prepares a bootstrap proposal branch that adds the tracked `.missions/` control structure. That proposal is expected to be reviewed and merged before any mission dossier is prepared.
 
 ```text
-.mission/
+.missions/
   settings.json
+  missions/
   worktrees/
-    <mission-id>/
-      BRIEF.md
-      PRD.md
-      tasks/
-        PRD/
-          01-prd-from-brief.md
+  pending/
+  active/
+  completed/
 ```
 
-### After Entering Later Stages
+### Mission Preparation State
 
-As the workflow advances, more stage-owned artifacts and task artifacts appear:
+Preparing a mission then creates a tracked mission dossier on a proposal branch anchored to a canonical GitHub issue. That proposal is expected to be reviewed and merged before a developer materializes a local mission workspace.
 
 ```text
-.mission/
+.missions/
   settings.json
-  worktrees/
+  missions/
     <mission-id>/
       BRIEF.md
-      mission.json
-      PRD.md
-      SPEC.md              # created when spec stage is entered
-      PLAN.md              # created when plan stage is entered
-      VERIFICATION.md      # created when verification stage is entered
-      AUDIT.md             # created when audit stage is entered
-      tasks/
-        PRD/
-          01-prd-from-brief.md
-        SPEC/
-          01-spec-from-prd.md
-        PLAN/
-          01-plan-from-spec.md
-        IMPLEMENTATION/
-        VERIFICATION/
-        AUDIT/
-          01-debrief.md
-          02-touchdown.md
+      flight-deck/
+        mission.json
+        01-PRD/
+          PRD.md
+          tasks/
+            01-prd-from-brief.md
+```
+
+### Mission Materialization State
+
+After the mission dossier exists on the repository branch, a developer may materialize a local mission workspace. The workspace is linked local execution infrastructure, not the canonical mission record.
+
+```text
+.missions/
+  settings.json
+  missions/
+    <mission-id>/
+      BRIEF.md
+      flight-deck/
+        mission.json
+        ...
+  active/
+    <mission-id>/
+      workspace/
 ```
 
 Machine-local daemon runtime state lives outside the repository under the hashed runtime directory for the control repo, for example `$XDG_RUNTIME_DIR/mission/<repo-hash>/daemon.json` and `sessions/<mission-id>.json` on Unix systems, with the OS temp directory as the fallback when `XDG_RUNTIME_DIR` is unavailable.
 
-The important rule is that stage entry materializes stage-owned files. They are not all created up front.
+The other important rule is that stage entry materializes stage-owned files inside the tracked mission dossier. They are not all created up front.
 
 ## Domain Entities
 
@@ -99,7 +107,7 @@ Fields:
 
 Defined in [packages/core/src/types.ts](/home/ronald/mission/packages/core/src/types.ts).
 
-Represents the canonical persisted mission identity loaded from `BRIEF.md`.
+Represents the canonical persisted mission identity loaded from the tracked mission dossier.
 
 Fields:
 
@@ -257,7 +265,7 @@ url: "https://..."         # optional
 
 `FilesystemAdapter.readMissionDescriptor(...)` validates and rehydrates this file back into structured descriptor state.
 
-### mission.json Control State
+### flight-deck/mission.json Runtime State
 
 Mutable workflow state now lives in `mission.json` inside each mission folder.
 
@@ -343,7 +351,7 @@ Key rules:
 
 - `FilesystemAdapter.listMissions()` discovers missions from `.mission/worktrees/*`
 - `FilesystemAdapter.readMissionDescriptor()` derives the descriptor from `BRIEF.md`
-- `FilesystemAdapter.reconcileMissionControlState()` keeps `mission.json` aligned with the current task files
+- `mission.json` is the workflow runtime document and is updated only through workflow event ingestion
 - `FilesystemAdapter.listTaskStates()` derives task content and `dependsOn` metadata from task files, then joins mutable workflow state from `mission.json`
 - `Mission` computes the current stage by looking for the first populated stage with incomplete work
 - within the current stage, `Mission` exposes `activeTasks` and `readyTasks` rather than a single next task

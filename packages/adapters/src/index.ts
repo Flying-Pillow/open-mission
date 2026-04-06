@@ -1,22 +1,41 @@
-import {
-	type MissionAgentRuntime
-} from '../../core/build/daemon/MissionAgentRuntime.js';
-import { CopilotAgentRuntime } from '../../core/build/adapters/CopilotAgentRuntime.js';
+import type { AgentRunner } from '../../core/build/runtime/AgentRunner.js';
+import { CopilotAgentRunner } from '../../core/build/adapters/CopilotAgentRunner.js';
 import { readMissionDaemonSettings } from '../../core/build/lib/daemonConfig.js';
 import path from 'node:path';
 
-export { CopilotAgentRuntime };
+export { CopilotAgentRunner };
 
 type ConfiguredAgentSettings = {
 	agentRunner?: string;
+	defaultAgentMode?: 'interactive' | 'autonomous';
 	defaultModel?: string;
 	skillsPath?: string;
 };
 
-export async function createConfiguredMissionRuntimes(options: {
+function getCopilotRunnerOptions(
+	daemonSettings: ConfiguredAgentSettings | undefined,
+	controlRoot: string,
+	logLine?: (line: string) => void
+) {
+	return {
+		...(daemonSettings?.defaultModel ? { defaultModel: daemonSettings.defaultModel } : {}),
+		...(daemonSettings?.skillsPath
+			? {
+				skillDirectories: [
+					path.isAbsolute(daemonSettings.skillsPath)
+						? daemonSettings.skillsPath
+						: path.join(controlRoot, daemonSettings.skillsPath)
+				]
+			}
+			: {}),
+		...(logLine ? { logLine } : {})
+	};
+}
+
+export async function createConfiguredAgentRunners(options: {
 	controlRoot: string;
 	logLine?: (line: string) => void;
-}): Promise<MissionAgentRuntime[]> {
+}): Promise<AgentRunner[]> {
 	const daemonSettings = readMissionDaemonSettings(options.controlRoot) as ConfiguredAgentSettings | undefined;
 	const agentRunner = daemonSettings?.agentRunner?.trim();
 
@@ -29,18 +48,8 @@ export async function createConfiguredMissionRuntimes(options: {
 	}
 
 	return [
-		new CopilotAgentRuntime({
-			...(daemonSettings?.defaultModel ? { defaultModel: daemonSettings.defaultModel } : {}),
-			...(daemonSettings?.skillsPath
-				? {
-					skillDirectories: [
-						path.isAbsolute(daemonSettings.skillsPath)
-							? daemonSettings.skillsPath
-							: path.join(options.controlRoot, daemonSettings.skillsPath)
-					]
-				}
-				: {}),
-			...(options.logLine ? { logLine: options.logLine } : {})
-		})
+		new CopilotAgentRunner(
+			getCopilotRunnerOptions(daemonSettings, options.controlRoot, options.logLine)
+		)
 	];
 }

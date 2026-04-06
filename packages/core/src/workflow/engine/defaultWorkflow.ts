@@ -1,0 +1,123 @@
+import type { WorkflowGlobalSettings } from './types.js';
+
+export const DEFAULT_WORKFLOW_VERSION = 'mission-workflow-v1';
+
+export function createDefaultWorkflowSettings(): WorkflowGlobalSettings {
+    return {
+        autostart: {
+            mission: true
+        },
+        humanInLoop: {
+            enabled: true,
+            pauseOnMissionStart: false,
+            pauseOnTaskFailure: true,
+            pauseOnTaskCompletion: false
+        },
+        panic: {
+            terminateSessions: true,
+            clearLaunchQueue: true,
+            haltMission: true
+        },
+        execution: {
+            maxParallelTasks: 1,
+            maxParallelSessions: 1
+        },
+        stageOrder: ['prd', 'spec', 'implementation', 'audit', 'delivery'],
+        stages: {
+            prd: {
+                stageId: 'prd',
+                displayName: 'PRD',
+                taskLaunchPolicy: {
+                    defaultAutostart: true,
+                    launchMode: 'automatic'
+                },
+                completionPolicy: {
+                    requireAllTasksCompleted: true
+                }
+            },
+            spec: {
+                stageId: 'spec',
+                displayName: 'Spec',
+                taskLaunchPolicy: {
+                    defaultAutostart: true,
+                    launchMode: 'automatic'
+                },
+                completionPolicy: {
+                    requireAllTasksCompleted: true
+                }
+            },
+            implementation: {
+                stageId: 'implementation',
+                displayName: 'Implementation',
+                taskLaunchPolicy: {
+                    defaultAutostart: false,
+                    launchMode: 'manual'
+                },
+                completionPolicy: {
+                    requireAllTasksCompleted: true
+                }
+            },
+            audit: {
+                stageId: 'audit',
+                displayName: 'Audit',
+                taskLaunchPolicy: {
+                    defaultAutostart: true,
+                    launchMode: 'automatic'
+                },
+                completionPolicy: {
+                    requireAllTasksCompleted: true
+                }
+            },
+            delivery: {
+                stageId: 'delivery',
+                displayName: 'Delivery',
+                taskLaunchPolicy: {
+                    defaultAutostart: false,
+                    launchMode: 'manual'
+                },
+                completionPolicy: {
+                    requireAllTasksCompleted: true
+                }
+            }
+        },
+        taskGeneration: [
+            {
+                stageId: 'prd',
+                templateSources: [{ templateId: 'prd-from-brief', path: 'tasks/PRD/01-prd-from-brief.md' }],
+                tasks: []
+            },
+            {
+                stageId: 'spec',
+                templateSources: [
+                    { templateId: 'draft-spec', path: 'tasks/SPEC/01-spec-from-prd.md' },
+                    { templateId: 'plan-implementation', path: 'tasks/SPEC/02-plan.md' }
+                ],
+                tasks: []
+            },
+            {
+                stageId: 'implementation',
+                templateSources: [],
+                tasks: []
+            },
+            {
+                stageId: 'audit',
+                templateSources: [
+                    { templateId: 'debrief', path: 'tasks/AUDIT/01-debrief.md' },
+                    { templateId: 'touchdown', path: 'tasks/AUDIT/02-touchdown.md' }
+                ],
+                tasks: []
+            },
+            {
+                stageId: 'delivery',
+                templateSources: [],
+                tasks: []
+            }
+        ],
+        gates: [
+            { gateId: 'implement', intent: 'implement', stageId: 'implementation' },
+            { gateId: 'verify', intent: 'verify', stageId: 'implementation' },
+            { gateId: 'audit', intent: 'audit', stageId: 'audit' },
+            { gateId: 'deliver', intent: 'deliver', stageId: 'delivery' }
+        ]
+    };
+}

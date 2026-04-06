@@ -26,9 +26,6 @@
                 "--socket",
                 "${workspaceFolder}/.vscode/mission-debug.sock"
             ],
-            "env": {
-                "MISSION_REPO_ROOT": "${workspaceFolder}"
-            },
             "skipFiles": [
                 "<node_internals>/**"
             ],

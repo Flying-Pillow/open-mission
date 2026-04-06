@@ -3,6 +3,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FilesystemAdapter } from './FilesystemAdapter.js';
+import { createDefaultWorkflowSettings, DEFAULT_WORKFLOW_VERSION } from '../workflow/engine/defaultWorkflow.js';
+import { createMissionWorkflowConfigurationSnapshot } from '../workflow/engine/document.js';
 
 describe('FilesystemAdapter', () => {
 	it('derives mission branch names with a normalized title slug', () => {
@@ -92,54 +94,37 @@ describe('FilesystemAdapter', () => {
 		}
 	});
 
-	it('stores mutable task workflow state in mission.json instead of task markdown', async () => {
+	it('writes task definitions without runtime fallback metadata', async () => {
 		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-'));
 		try {
 			const adapter = new FilesystemAdapter('/tmp/repo');
+			await adapter.initializeMissionRuntimeRecord({
+				missionDir,
+				missionId: 'mission-109-runtime-document',
+				configuration: createMissionWorkflowConfigurationSnapshot({
+					workflowVersion: DEFAULT_WORKFLOW_VERSION,
+					workflow: createDefaultWorkflowSettings()
+				}),
+				createdAt: '2026-04-01T00:00:00.000Z'
+			});
 			await adapter.writeTaskRecord(missionDir, 'spec', '01-control-plane.md', {
 				subject: 'Control Plane',
 				instruction: 'Persist workflow state in mission.json.',
-				agent: 'planner',
-				status: 'blocked',
-				retries: 2
+				agent: 'planner'
 			});
 
 			const taskPath = path.join(adapter.getStageTasksPath(missionDir, 'spec'), '01-control-plane.md');
-			const originalTaskContent = await fs.readFile(taskPath, 'utf8');
-			expect(originalTaskContent.startsWith('---\n')).toBe(false);
-
-			const controlState = await adapter.readMissionControlState(missionDir);
-			expect(controlState?.stages.find((stage) => stage.id === 'spec')?.tasks).toContainEqual(
-				expect.objectContaining({
-					id: '01-control-plane',
-					status: 'blocked',
-					agent: 'planner',
-					retries: 2
-				})
-			);
+			const taskContent = await fs.readFile(taskPath, 'utf8');
+			expect(taskContent).toContain('agent: "planner"');
+			expect(taskContent).not.toContain('status:');
+			expect(taskContent).not.toContain('retries:');
 
 			const [task] = await adapter.listTaskStates(missionDir, 'spec');
-			expect(task?.status).toBe('blocked');
+			expect(task?.status).toBe('todo');
 			expect(task?.agent).toBe('planner');
 
-			if (!task) {
-				throw new Error('Expected Mission to rehydrate the task control state.');
-			}
-
-			await adapter.updateTaskState(task, { status: 'done', retries: 3 });
-
-			const updatedTaskContent = await fs.readFile(taskPath, 'utf8');
-			expect(updatedTaskContent).toBe(originalTaskContent);
-
-			const updatedControlState = await adapter.readMissionControlState(missionDir);
-			expect(updatedControlState?.stages.find((stage) => stage.id === 'spec')?.tasks).toContainEqual(
-				expect.objectContaining({
-					id: '01-control-plane',
-					status: 'done',
-					agent: 'planner',
-					retries: 3
-				})
-			);
+			const workflowDocument = await adapter.readMissionRuntimeRecord(missionDir);
+			expect(workflowDocument?.runtime.tasks).toEqual([]);
 		} finally {
 			await fs.rm(missionDir, { recursive: true, force: true });
 		}

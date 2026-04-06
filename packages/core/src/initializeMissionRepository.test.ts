@@ -17,6 +17,7 @@ describe('initializeMissionRepository', () => {
 			expect(settings['trackingProvider']).toBe('github');
 			expect(settings['instructionsPath']).toBe('.agents');
 			expect(settings['skillsPath']).toBe('.agents/skills');
+			expect(settings['workflow']).toBeDefined();
 		} finally {
 			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}

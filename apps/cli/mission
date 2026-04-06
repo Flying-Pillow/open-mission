@@ -26,15 +26,15 @@ fi
 
 if [ "$hmr_mode" -eq 1 ] && [ "$cockpit_mode" -eq 1 ]; then
 	if [ "${MISSION_BUN_WATCH:-0}" = "1" ]; then
-		exec env MISSION_REPO_ROOT="$repo_root" MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun --preload "$preload_file" --watch "$script_dir/src/index.ts" "$@"
+		exec env MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun --preload "$preload_file" --watch "$script_dir/src/index.ts" "$@"
 	fi
 	printf '%s\n' "mission: cockpit HMR watch is disabled by default because Bun can crash with ProcessFdQuotaExceeded."
 	printf '%s\n' "mission: set MISSION_BUN_WATCH=1 to force Bun watch mode."
-	exec env MISSION_REPO_ROOT="$repo_root" MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun --preload "$preload_file" "$script_dir/src/index.ts" "$@"
+	exec env MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun --preload "$preload_file" "$script_dir/src/index.ts" "$@"
 elif [ "$hmr_mode" -eq 1 ]; then
 	runner="tsx watch"
 elif [ "$cockpit_mode" -eq 1 ]; then
-	exec env MISSION_REPO_ROOT="$repo_root" MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun --preload "$preload_file" "$script_dir/src/index.ts" "$@"
+	exec env MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun --preload "$preload_file" "$script_dir/src/index.ts" "$@"
 fi
 
-exec env MISSION_REPO_ROOT="$repo_root" MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$script_dir" exec $runner src/index.ts "$@"
+exec env MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$script_dir" exec $runner src/index.ts "$@"
