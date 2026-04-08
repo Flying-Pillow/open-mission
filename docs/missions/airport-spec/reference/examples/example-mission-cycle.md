@@ -1,9 +1,7 @@
 ---
 layout: default
 title: Example Mission Cycle
-parent: Airport Spec Mission
-grand_parent: Missions
-nav_order: 8
+nav_exclude: true
 ---
 
 # Example Mission Cycle

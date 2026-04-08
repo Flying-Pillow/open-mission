@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Plans
+nav_exclude: true
 ---
 
 # Plans

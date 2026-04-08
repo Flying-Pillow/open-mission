@@ -1,9 +1,7 @@
 ---
 layout: default
 title: Core Object Model
-parent: Airport Spec Mission
-grand_parent: Missions
-nav_order: 2
+nav_exclude: true
 ---
 
 # Core Object Model

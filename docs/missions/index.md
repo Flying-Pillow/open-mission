@@ -1,15 +1,14 @@
 ---
 layout: default
-title: Missions
+title: Current Mission
 nav_order: 7
-has_children: true
 ---
 
-# Missions
+# Current Mission
 
-This section contains temporary in-flight documentation dossiers.
+This section contains the temporary in-flight dossier for the work currently shaping the system.
 
-These are the design, planning, and verification artifacts needed to build the system while the delivered product documentation is still emerging.
+These are design, planning, and verification artifacts needed to build Mission while the delivered product documentation is still emerging.
 
 Current mission:
 

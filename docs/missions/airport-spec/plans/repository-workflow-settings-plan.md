@@ -1,9 +1,7 @@
 ---
 layout: default
 title: Repository Workflow Settings Plan
-parent: Airport Spec Mission
-grand_parent: Missions
-nav_order: 11
+nav_exclude: true
 ---
 
 # Repository Workflow Settings Plan

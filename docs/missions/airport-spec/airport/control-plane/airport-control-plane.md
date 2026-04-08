@@ -1,9 +1,7 @@
 ---
 layout: default
 title: Airport Control Plane
-parent: Airport Spec Mission
-grand_parent: Missions
-nav_order: 1
+nav_exclude: true
 ---
 
 # Airport Control Plane

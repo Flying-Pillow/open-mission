@@ -1,9 +1,7 @@
 ---
 layout: default
 title: Workflow Engine
-parent: Airport Spec Mission
-grand_parent: Missions
-nav_order: 4
+nav_exclude: true
 ---
 
 # Workflow Engine

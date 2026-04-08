@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Workflow
+nav_exclude: true
 ---
 
 # Workflow

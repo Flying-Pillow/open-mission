@@ -1,9 +1,7 @@
 ---
 layout: default
 title: Mission Model
-parent: Airport Spec Mission
-grand_parent: Missions
-nav_order: 3
+nav_exclude: true
 ---
 
 # Mission Model

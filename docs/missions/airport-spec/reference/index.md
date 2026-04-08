@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Reference
+nav_exclude: true
 ---
 
 # Reference

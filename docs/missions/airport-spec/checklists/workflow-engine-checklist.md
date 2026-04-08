@@ -1,9 +1,7 @@
 ---
 layout: default
 title: Workflow Engine Checklist
-parent: Airport Spec Mission
-grand_parent: Missions
-nav_order: 9
+nav_exclude: true
 ---
 
 # Workflow Engine Checklist

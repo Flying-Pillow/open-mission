@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Model
+nav_exclude: true
 ---
 
 # Model

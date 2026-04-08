@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Control Plane
+nav_exclude: true
 ---
 
 # Control Plane

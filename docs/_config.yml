@@ -6,3 +6,6 @@ plugins:
 search_enabled: true
 heading_anchors: true
 color_scheme: light
+mermaid:
+  version: "10.7.0"
+

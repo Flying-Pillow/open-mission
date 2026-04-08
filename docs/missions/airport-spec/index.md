@@ -1,8 +1,7 @@
 ---
 layout: default
 title: Airport Spec Mission
-parent: Missions
-nav_order: 1
+nav_exclude: true
 ---
 
 # Airport Spec Mission

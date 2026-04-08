@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Mission
+nav_title: Overview
 nav_order: 1
 ---
 

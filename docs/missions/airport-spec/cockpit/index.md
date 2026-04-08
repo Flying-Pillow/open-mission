@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Cockpit Workstream
+nav_exclude: true
 ---
 
 # Cockpit Workstream

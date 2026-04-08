@@ -1,9 +1,7 @@
 ---
 layout: default
 title: Agent Runtime
-parent: Airport Spec Mission
-grand_parent: Missions
-nav_order: 5
+nav_exclude: true
 ---
 
 # Agent Runtime

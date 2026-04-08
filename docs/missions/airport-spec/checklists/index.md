@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Checklists
+nav_exclude: true
 ---
 
 # Checklists

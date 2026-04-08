@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Examples
+nav_exclude: true
 ---
 
 # Examples

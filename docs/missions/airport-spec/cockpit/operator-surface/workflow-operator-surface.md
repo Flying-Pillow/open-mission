@@ -1,9 +1,7 @@
 ---
 layout: default
 title: Workflow Operator Surface
-parent: Airport Spec Mission
-grand_parent: Missions
-nav_order: 7
+nav_exclude: true
 ---
 
 # Workflow Operator Surface
