@@ -1,12 +1,12 @@
 ---
-title: Core Object Model Specification
-type: spec
-status: canonical
-order: 2
-group: 02-semantic-core/01-model
+layout: default
+title: Core Object Model
+parent: Semantic Core
+grand_parent: Explanation
+nav_order: 1
 ---
 
-# Core Object Model Specification
+# Core Object Model
 
 This document defines the canonical first-class object model for `packages/core`.
 

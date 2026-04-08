@@ -1,13 +1,12 @@
 ---
-title: Airport Control Plane Specification
-type: spec
-status: canonical
-order: 1
-group: 01-system/01-control-plane
-tags: [authoritative, cli-cockpit]
+layout: default
+title: Airport Control Plane
+parent: System
+grand_parent: Explanation
+nav_order: 1
 ---
 
-# Airport Control Plane Specification
+# Airport Control Plane
 
 This document defines the from-scratch architecture for Mission's top-level application controller.
 

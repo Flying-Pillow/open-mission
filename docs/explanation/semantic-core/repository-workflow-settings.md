@@ -1,13 +1,12 @@
 ---
-title: Repository Workflow Settings Definition Specification
-type: spec
-status: canonical
-order: 7
-group: 02-semantic-core/04-configuration
-tags: [cli-cockpit, thin-surface]
+layout: default
+title: Repository Workflow Settings
+parent: Semantic Core
+grand_parent: Explanation
+nav_order: 5
 ---
 
-# Repository Workflow Settings Definition Specification
+# Repository Workflow Settings
 
 This document defines the missing repository-level workflow settings functionality.
 

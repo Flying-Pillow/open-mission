@@ -1,12 +1,12 @@
 ---
-title: Workflow Engine Implementation Checklist
-type: checklist
-status: implementation
-order: 10
-group: 05-implementation/02-checklists
+layout: default
+title: Workflow Engine Checklist
+parent: Checklists
+grand_parent: Implementation
+nav_order: 1
 ---
 
-# Workflow Engine Implementation Checklist
+# Workflow Engine Checklist
 
 This checklist translates the workflow engine specification into implementation work.
 

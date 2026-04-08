@@ -1,12 +1,12 @@
 ---
-title: Agent Runtime Definition Specification
-type: spec
-status: canonical
-order: 5
-group: 02-semantic-core/03-execution
+layout: default
+title: Agent Runtime
+parent: Semantic Core
+grand_parent: Explanation
+nav_order: 4
 ---
 
-# Agent Runtime Definition Specification
+# Agent Runtime
 
 This document defines the target provider-neutral runtime contract for Mission.
 

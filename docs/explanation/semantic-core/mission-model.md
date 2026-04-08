@@ -1,9 +1,9 @@
 ---
+layout: default
 title: Mission Model
-type: spec
-status: canonical
-order: 3
-group: 02-semantic-core/01-model
+parent: Semantic Core
+grand_parent: Explanation
+nav_order: 2
 ---
 
 # Mission Model
@@ -44,7 +44,7 @@ Current code path references in this document are implementation references only
 
 They are not normative architecture.
 
-All first-party mission markdown templates now live under [packages/core/src/templates/mission/index.ts](/home/ronald/mission/packages/core/src/templates/mission/index.ts).
+All first-party mission markdown templates now live under `packages/core/src/templates/mission/index.ts`.
 
 ## Repository Layout
 
@@ -124,7 +124,7 @@ They do not define daemon process ownership or airport control-plane authority.
 
 ### MissionBrief
 
-Defined in [packages/core/src/types.ts](/home/ronald/mission/packages/core/src/types.ts).
+Defined in `packages/core/src/types.ts`.
 
 Represents the intake trigger for a mission.
 
@@ -140,7 +140,7 @@ Fields:
 
 ### MissionDescriptor
 
-Defined in [packages/core/src/types.ts](/home/ronald/mission/packages/core/src/types.ts).
+Defined in `packages/core/src/types.ts`.
 
 Represents the canonical persisted mission identity loaded from the tracked mission dossier.
 
@@ -155,7 +155,7 @@ Fields:
 
 ### MissionRecord
 
-Defined in [packages/core/src/types.ts](/home/ronald/mission/packages/core/src/types.ts).
+Defined in `packages/core/src/types.ts`.
 
 Represents the aggregate snapshot returned by mission operations.
 
@@ -172,7 +172,7 @@ Fields:
 
 ### MissionTaskState
 
-Defined in [packages/core/src/types.ts](/home/ronald/mission/packages/core/src/types.ts).
+Defined in `packages/core/src/types.ts`.
 
 Represents one task artifact after the filesystem adapter parses it.
 
@@ -195,7 +195,7 @@ Fields:
 
 ### MissionStageStatus
 
-Defined in [packages/core/src/types.ts](/home/ronald/mission/packages/core/src/types.ts).
+Defined in `packages/core/src/types.ts`.
 
 Represents the derived state of one stage directory.
 
@@ -212,7 +212,7 @@ Fields:
 
 ### MissionStatus
 
-Defined in [packages/core/src/types.ts](/home/ronald/mission/packages/core/src/types.ts).
+Defined in `packages/core/src/types.ts`.
 
 Represents the mission status returned to clients.
 
@@ -276,7 +276,7 @@ Each `MissionAgentSessionRecord` may carry:
 
 ## Frontmatter Model
 
-Mission uses a deliberately small frontmatter format implemented in [packages/core/src/lib/frontmatter.ts](/home/ronald/mission/packages/core/src/lib/frontmatter.ts).
+Mission uses a deliberately small frontmatter format implemented in `packages/core/src/lib/frontmatter.ts`.
 
 Rules:
 
@@ -357,17 +357,17 @@ Rules:
 
 The source templates for these files are mirrored in the codebase under:
 
-- [packages/core/src/templates/mission/BRIEF.md.ts](/home/ronald/mission/packages/core/src/templates/mission/BRIEF.md.ts)
-- [packages/core/src/templates/mission/products/PRD.md.ts](/home/ronald/mission/packages/core/src/templates/mission/products/PRD.md.ts)
-- [packages/core/src/templates/mission/products/SPEC.md.ts](/home/ronald/mission/packages/core/src/templates/mission/products/SPEC.md.ts)
-- [packages/core/src/templates/mission/products/PLAN.md.ts](/home/ronald/mission/packages/core/src/templates/mission/products/PLAN.md.ts)
-- [packages/core/src/templates/mission/products/VERIFICATION.md.ts](/home/ronald/mission/packages/core/src/templates/mission/products/VERIFICATION.md.ts)
-- [packages/core/src/templates/mission/products/AUDIT.md.ts](/home/ronald/mission/packages/core/src/templates/mission/products/AUDIT.md.ts)
-- [packages/core/src/templates/mission/tasks/PRD/01-prd-from-brief.md.ts](/home/ronald/mission/packages/core/src/templates/mission/tasks/PRD/01-prd-from-brief.md.ts)
-- [packages/core/src/templates/mission/tasks/SPEC/01-spec-from-prd.md.ts](/home/ronald/mission/packages/core/src/templates/mission/tasks/SPEC/01-spec-from-prd.md.ts)
-- [packages/core/src/templates/mission/tasks/PLAN/01-plan-from-spec.md.ts](/home/ronald/mission/packages/core/src/templates/mission/tasks/PLAN/01-plan-from-spec.md.ts)
-- [packages/core/src/templates/mission/tasks/AUDIT/01-debrief.md.ts](/home/ronald/mission/packages/core/src/templates/mission/tasks/AUDIT/01-debrief.md.ts)
-- [packages/core/src/templates/mission/tasks/AUDIT/02-touchdown.md.ts](/home/ronald/mission/packages/core/src/templates/mission/tasks/AUDIT/02-touchdown.md.ts)
+- `packages/core/src/templates/mission/BRIEF.md.ts`
+- `packages/core/src/templates/mission/products/PRD.md.ts`
+- `packages/core/src/templates/mission/products/SPEC.md.ts`
+- `packages/core/src/templates/mission/products/PLAN.md.ts`
+- `packages/core/src/templates/mission/products/VERIFICATION.md.ts`
+- `packages/core/src/templates/mission/products/AUDIT.md.ts`
+- `packages/core/src/templates/mission/tasks/PRD/01-prd-from-brief.md.ts`
+- `packages/core/src/templates/mission/tasks/SPEC/01-spec-from-prd.md.ts`
+- `packages/core/src/templates/mission/tasks/PLAN/01-plan-from-spec.md.ts`
+- `packages/core/src/templates/mission/tasks/AUDIT/01-debrief.md.ts`
+- `packages/core/src/templates/mission/tasks/AUDIT/02-touchdown.md.ts`
 
 ### Product Artifacts Without Required Frontmatter
 

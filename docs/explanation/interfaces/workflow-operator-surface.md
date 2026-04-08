@@ -1,13 +1,12 @@
 ---
-title: Workflow Operator Surface Definition Specification
-type: spec
-status: canonical
-order: 6
-group: 03-interfaces/01-cli-cockpit
-tags: [cli-cockpit, thin-surface]
+layout: default
+title: Workflow Operator Surface
+parent: Interfaces
+grand_parent: Explanation
+nav_order: 1
 ---
 
-# Workflow Operator Surface Definition Specification
+# Workflow Operator Surface
 
 This document defines the operator-facing command and status contract for Mission workflow surfaces.
 

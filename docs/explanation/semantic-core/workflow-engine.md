@@ -1,13 +1,12 @@
 ---
-title: Workflow Engine Definition Specification
-type: spec
-status: canonical
-order: 4
-group: 02-semantic-core/02-workflow
-tags: [authoritative]
+layout: default
+title: Workflow Engine
+parent: Semantic Core
+grand_parent: Explanation
+nav_order: 3
 ---
 
-# Workflow Engine Definition Specification
+# Workflow Engine
 
 This document defines the target design for the next-generation Mission workflow engine.
 

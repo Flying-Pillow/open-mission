@@ -1,9 +1,9 @@
 ---
+layout: default
 title: Example Mission Cycle
-type: example
-status: reference
-order: 9
-group: 04-reference/01-examples
+parent: Examples
+grand_parent: Reference
+nav_order: 1
 ---
 
 # Example Mission Cycle

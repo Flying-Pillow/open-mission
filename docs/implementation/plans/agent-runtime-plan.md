@@ -1,12 +1,12 @@
 ---
-title: Agent Runtime Implementation Plan
-type: plan
-status: implementation
-order: 11
-group: 05-implementation/01-plans
+layout: default
+title: Agent Runtime Plan
+parent: Plans
+grand_parent: Implementation
+nav_order: 1
 ---
 
-# Agent Runtime Implementation Plan
+# Agent Runtime Plan
 
 This document translates the agent runtime definition spec into implementation work.
 
@@ -124,7 +124,7 @@ This section is the practical map.
 
 These files encode the old runtime split or expose it publicly.
 
-#### Replace [packages/core/src/daemon/MissionAgentRuntime.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/daemon/MissionAgentRuntime.ts)
+#### Replace `packages/core/src/daemon/MissionAgentRuntime.ts`
 
 Reason:
 
@@ -137,7 +137,7 @@ Target action:
 - replace with new runtime contract files under a dedicated runtime namespace
 - move prompt rendering and persistence helpers out unless they remain genuinely normalized and reusable
 
-#### Delete or replace [packages/core/src/workflow/engine/runner.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/workflow/engine/runner.ts)
+#### Delete or replace `packages/core/src/workflow/engine/runner.ts`
 
 Reason:
 
@@ -149,7 +149,7 @@ Target action:
 - remove this contract entirely
 - update workflow engine code to depend on the new shared runtime boundary
 
-#### Replace [packages/core/src/adapters/CopilotAgentRuntime.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/adapters/CopilotAgentRuntime.ts)
+#### Replace `packages/core/src/adapters/CopilotAgentRuntime.ts`
 
 Reason:
 
@@ -160,7 +160,7 @@ Target action:
 
 - rewrite later as a concrete `AgentRunner` adapter
 
-#### Delete or replace [packages/core/src/adapters/CopilotWorkflowTaskRunner.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/adapters/CopilotWorkflowTaskRunner.ts)
+#### Delete or replace `packages/core/src/adapters/CopilotWorkflowTaskRunner.ts`
 
 Reason:
 
@@ -172,7 +172,7 @@ Target action:
 - remove entirely after the new adapter exists
 - do not preserve as a side path
 
-#### Replace [packages/adapters/src/index.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/adapters/src/index.ts)
+#### Replace `packages/adapters/src/index.ts`
 
 Reason:
 
@@ -184,7 +184,7 @@ Target action:
 - expose one configured runner factory only
 - register providers as `AgentRunner` implementations only
 
-#### Replace [packages/core/src/daemon/runDaemonMain.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/daemon/runDaemonMain.ts)
+#### Replace `packages/core/src/daemon/runDaemonMain.ts`
 
 Reason:
 
@@ -195,7 +195,7 @@ Target action:
 - load one configured runner registry
 - remove dual factory loading
 
-#### Replace [packages/core/src/index.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/index.ts)
+#### Replace `packages/core/src/index.ts`
 
 Reason:
 
@@ -210,7 +210,7 @@ Target action:
 
 These files are not the root problem, but they will need significant rewiring.
 
-#### Refactor [packages/core/src/workflow/engine/effectRunner.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/workflow/engine/effectRunner.ts)
+#### Refactor `packages/core/src/workflow/engine/effectRunner.ts`
 
 Reason:
 
@@ -222,7 +222,7 @@ Target action:
 - route `session.launch`, `session.prompt`, `session.command`, `session.cancel`, and `session.terminate` through the new orchestrator-facing API
 - support future engine command effects without adding another parallel path
 
-#### Refactor [packages/core/src/workflow/engine/controller.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/workflow/engine/controller.ts)
+#### Refactor `packages/core/src/workflow/engine/controller.ts`
 
 Reason:
 
@@ -233,7 +233,7 @@ Target action:
 - keep reducer and event ingestion logic
 - swap runtime coordination dependency to the new orchestrator
 
-#### Refactor [packages/core/src/daemon/Workspace.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/daemon/Workspace.ts)
+#### Refactor `packages/core/src/daemon/Workspace.ts`
 
 Reason:
 
@@ -246,7 +246,7 @@ Target action:
 - delegate all live session behavior to the new orchestrator
 - stop storing separate interactive runtime and workflow runner maps
 
-#### Refactor [packages/core/src/daemon/protocol.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/daemon/protocol.ts)
+#### Refactor `packages/core/src/daemon/protocol.ts`
 
 Reason:
 
@@ -258,7 +258,7 @@ Target action:
 - keep transport semantics neutral
 - add command submission payloads when the engine begins using structured session commands
 
-#### Refactor [packages/core/src/daemon/mission/AgentSession.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/daemon/mission/AgentSession.ts)
+#### Refactor `packages/core/src/daemon/mission/AgentSession.ts`
 
 Reason:
 
@@ -269,7 +269,7 @@ Target action:
 - either rewrite it as the new orchestrator-managed session wrapper or replace it with a new runtime session aggregate
 - preserve object ownership, not the old type dependency
 
-#### Refactor [packages/core/src/daemon/mission/Mission.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/daemon/mission/Mission.ts)
+#### Refactor `packages/core/src/daemon/mission/Mission.ts`
 
 Reason:
 
@@ -284,7 +284,7 @@ Target action:
 
 These files may survive if they are kept free of runtime semantics.
 
-#### Preserve [packages/core/src/workflow/engine/types.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/workflow/engine/types.ts)
+#### Preserve `packages/core/src/workflow/engine/types.ts`
 
 Reason:
 
@@ -295,7 +295,7 @@ Required adjustment:
 - update session state structures to consume the new normalized session snapshot model where needed
 - do not let provider-specific shapes leak in
 
-#### Preserve [packages/core/src/workflow/engine/service.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/workflow/engine/service.ts)
+#### Preserve `packages/core/src/workflow/engine/service.ts`
 
 Reason:
 
@@ -305,7 +305,7 @@ Required adjustment:
 
 - none beyond changed runtime event shapes if needed
 
-#### Preserve [packages/core/src/workflow/engine/reducer.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/workflow/engine/reducer.ts)
+#### Preserve `packages/core/src/workflow/engine/reducer.ts`
 
 Reason:
 
@@ -315,7 +315,7 @@ Required adjustment:
 
 - only update session event handling if the normalized event vocabulary changes
 
-#### Preserve [packages/core/src/lib/FilesystemAdapter.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/lib/FilesystemAdapter.ts)
+#### Preserve `packages/core/src/lib/FilesystemAdapter.ts`
 
 Reason:
 
@@ -325,7 +325,7 @@ Required adjustment:
 
 - none unless session persistence schema changes require new read/write helpers
 
-#### Preserve [packages/core/src/client/DaemonClient.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/client/DaemonClient.ts)
+#### Preserve `packages/core/src/client/DaemonClient.ts`
 
 Reason:
 
@@ -423,8 +423,8 @@ Rewrite any tests that prove the split architecture instead of the target contra
 
 Likely impacted files include:
 
-- [packages/core/src/daemon/mission/AgentSession.test.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/daemon/mission/AgentSession.test.ts)
-- [packages/core/src/daemon/mission/Mission.test.ts](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/src/daemon/mission/Mission.test.ts)
+- `packages/core/src/daemon/mission/AgentSession.test.ts`
+- `packages/core/src/daemon/mission/Mission.test.ts`
 
 ### Add New Contract Tests
 

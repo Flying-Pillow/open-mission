@@ -1,12 +1,12 @@
 ---
-title: Repository Workflow Settings Implementation Plan
-type: plan
-status: implementation
-order: 12
-group: 05-implementation/01-plans
+layout: default
+title: Repository Workflow Settings Plan
+parent: Plans
+grand_parent: Implementation
+nav_order: 2
 ---
 
-# Repository Workflow Settings Implementation Plan
+# Repository Workflow Settings Plan
 
 This document translates the repository workflow settings definition spec into implementation work.
 
