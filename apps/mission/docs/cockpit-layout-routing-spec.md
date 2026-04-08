@@ -1,10 +1,10 @@
-# CLI Cockpit Layout And Routing Spec
+# Mission Cockpit Layout And Routing Spec
 
 ## Status
 
 Current implementation reference.
 
-This document defines the routing and layout model for the Mission CLI cockpit after removing the separate daemon-log mode.
+This document defines the routing and layout model for the Mission cockpit after removing the separate daemon-log mode.
 
 ## Design Goals
 
@@ -191,7 +191,7 @@ Updated CLI implementation:
 type FocusArea = 'header' | 'tree' | 'flow' | 'command'
 ```
 
-The external terminal right pane owns artifact and session output. The CLI cockpit no longer mounts or focuses an internal console surface.
+The external terminal right pane owns artifact and session output. The Mission cockpit no longer mounts or focuses an internal console surface.
 
 ## Panel Ownership
 

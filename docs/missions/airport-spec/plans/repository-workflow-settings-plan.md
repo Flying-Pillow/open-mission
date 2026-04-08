@@ -370,7 +370,7 @@ Target action:
 - preserve mission aggregate behavior while aligning initialization with the new draft-to-ready snapshot boundary
 - ensure mission status reflects the correct repository-backed workflow settings prior to snapshot capture
 
-#### Refactor `apps/cli/src/cockpit/runCockpitApp.tsx`
+#### Refactor `apps/mission/src/cockpit/runCockpitApp.tsx`
 
 Reason:
 
@@ -383,7 +383,7 @@ Target action:
 - add workflow-specific flows that emit structured patch requests
 - remove any assumption that `/setup` maps all repository settings to one text box
 
-#### Refactor `apps/cli/src/cockpit/components/ControlStatusPanel.tsx`
+#### Refactor `apps/mission/src/cockpit/components/ControlStatusPanel.tsx`
 
 Reason:
 
@@ -475,7 +475,7 @@ Target action:
 
 - split command definitions so workflow settings use their own flow or command family
 
-#### Delete or isolate workflow settings assumptions in `apps/cli/src/cockpit/runCockpitApp.tsx`
+#### Delete or isolate workflow settings assumptions in `apps/mission/src/cockpit/runCockpitApp.tsx`
 
 Reason:
 
@@ -582,7 +582,7 @@ Required coverage:
 
 Recommended files:
 
-- CLI cockpit tests adjacent to `apps/cli/src/cockpit/runCockpitApp.tsx`
+- CLI cockpit tests adjacent to `apps/mission/src/cockpit/runCockpitApp.tsx`
 - extension tests adjacent to `apps/vscode-extension/src/MissionOperatorClient.ts`
 - webview tests adjacent to `apps/vscode-extension/src/webview/CockpitApp.svelte`
 

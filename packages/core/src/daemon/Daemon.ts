@@ -4,6 +4,9 @@ import * as path from 'node:path';
 import type { Socket } from 'node:net';
 import {
 	PROTOCOL_VERSION,
+	type AirportClientConnect,
+	type AirportClientObserve,
+	type AirportGateBind,
 	type ErrorResponse,
 	type EventMessage,
 	type Manifest,
@@ -18,6 +21,7 @@ import {
 	isNamedPipePath,
 	resolveDaemonSocketPath
 } from './daemonPaths.js';
+import { MissionSystemController } from './MissionSystemController.js';
 import { WorkspaceManager } from './WorkspaceManager.js';
 import type { AgentRunner } from '../runtime/AgentRunner.js';
 
@@ -31,6 +35,7 @@ export class Daemon {
 	private readonly server = net.createServer();
 	private readonly clients = new Set<Socket>();
 	private readonly runners = new Map<string, AgentRunner>();
+	private readonly systemController = new MissionSystemController();
 	private readonly workspaceManager: WorkspaceManager;
 	private readonly shutdownPromise: Promise<void>;
 	private readonly socketPath: string;
@@ -38,6 +43,7 @@ export class Daemon {
 	private resolveShutdown!: () => void;
 	private manifest?: Manifest;
 	private closed = false;
+	private nextClientId = 0;
 
 	public constructor(options: DaemonOptions = {}) {
 		this.socketPath = resolveDaemonSocketPath(options.socketPath);
@@ -126,6 +132,7 @@ export class Daemon {
 	}
 
 	private handleConnection(socket: Socket): void {
+		const clientId = `client-${String(++this.nextClientId)}`;
 		this.clients.add(socket);
 		this.logLine?.(`Client connected (${String(this.clients.size)} total).`);
 		socket.setEncoding('utf8');
@@ -139,29 +146,35 @@ export class Daemon {
 
 				const line = buffer.slice(0, newlineIndex).trim();
 				buffer = buffer.slice(newlineIndex + 1);
-				if (line) void this.handleLine(socket, line);
+				if (line) void this.handleLine(socket, line, clientId);
 			}
 		});
 
 		socket.on('close', () => {
 			this.clients.delete(socket);
+			void this.handleClientDisconnected(clientId);
 			this.logLine?.(`Client disconnected (${String(this.clients.size)} remaining).`);
 		});
 		socket.on('error', (error) => {
 			this.clients.delete(socket);
+			void this.handleClientDisconnected(clientId);
 			this.logLine?.(`Client socket error: ${error instanceof Error ? error.message : String(error)}`);
 		});
 	}
 
-	private async handleLine(socket: Socket, line: string): Promise<void> {
+	private async handleLine(socket: Socket, line: string, clientId: string): Promise<void> {
 		try {
 			const message = JSON.parse(line) as Message;
 			if (message.type !== 'request') return;
+			const request: Request = {
+				...message,
+				clientId
+			};
 
 			this.logLine?.(
-				`Incoming ${message.method} request (${message.id})${message.surfacePath ? ` surface=${message.surfacePath}` : ''}`
+				`Incoming ${request.method} request (${request.id})${request.surfacePath ? ` surface=${request.surfacePath}` : ''}`
 			);
-			const response = await this.handleRequest(message);
+			const response = await this.handleRequest(request);
 			if (this.clients.has(socket)) {
 				socket.write(JSON.stringify(response) + '\n');
 			}
@@ -190,14 +203,133 @@ export class Daemon {
 			return pingResult;
 		}
 
-		return this.workspaceManager.executeMethod(request);
+		if (request.method === 'airport.status') {
+			await this.systemController.scopeAirportToSurfacePath(request.surfacePath);
+			return this.systemController.getSnapshot();
+		}
+		if (request.method === 'airport.client.connect') {
+			return this.executeAirportClientConnect(request);
+		}
+		if (request.method === 'airport.client.observe') {
+			return this.executeAirportClientObserve(request);
+		}
+		if (request.method === 'airport.gate.bind') {
+			return this.executeAirportGateBind(request);
+		}
+
+		const result = await this.workspaceManager.executeMethod(request);
+		return this.decorateResultWithSystemState(result);
 	}
 
 	private broadcastEvent(event: Notification): void {
+		void this.decorateEvent(event).then((resolvedEvent) => {
+			this.logLine?.(
+				`Broadcasting ${resolvedEvent.type}${'missionId' in resolvedEvent ? ` mission=${resolvedEvent.missionId}` : ''}`
+			);
+			const message: EventMessage = { type: 'event', event: resolvedEvent };
+			const wire = JSON.stringify(message) + '\n';
+			for (const client of this.clients) {
+				client.write(wire, (error) => {
+					if (error) {
+						this.clients.delete(client);
+						client.destroy();
+					}
+				});
+			}
+		});
+	}
+
+	private async executeAirportClientConnect(request: Request): Promise<any> {
+		if (!request.clientId) {
+			throw new Error('Airport client registration requires a connected client id.');
+		}
+		await this.systemController.scopeAirportToSurfacePath(request.surfacePath);
+		const params = (request.params ?? {}) as AirportClientConnect;
+		const snapshot = await this.systemController.connectAirportClient({
+			clientId: request.clientId,
+			...(params.label?.trim() ? { label: params.label.trim() } : {}),
+			...(request.surfacePath?.trim() ? { surfacePath: request.surfacePath.trim() } : {}),
+			...(params.gateId ? { gateId: params.gateId } : {}),
+			...(params.panelProcessId?.trim() ? { panelProcessId: params.panelProcessId.trim() } : {})
+		});
+		this.broadcastAirportState(snapshot);
+		return snapshot;
+	}
+
+	private async executeAirportClientObserve(request: Request): Promise<any> {
+		if (!request.clientId) {
+			throw new Error('Airport client observation requires a connected client id.');
+		}
+		await this.systemController.scopeAirportToSurfacePath(request.surfacePath);
+		const params = (request.params ?? {}) as AirportClientObserve;
+		const snapshot = await this.systemController.observeAirportClient({
+			clientId: request.clientId,
+			...(params.focusedGateId ? { focusedGateId: params.focusedGateId } : {}),
+			...(params.intentGateId ? { intentGateId: params.intentGateId } : {}),
+			...(request.surfacePath?.trim() ? { surfacePath: request.surfacePath.trim() } : {})
+		});
+		this.broadcastAirportState(snapshot);
+		return snapshot;
+	}
+
+	private async executeAirportGateBind(request: Request): Promise<any> {
+		await this.systemController.scopeAirportToSurfacePath(request.surfacePath);
+		const params = (request.params ?? {}) as AirportGateBind;
+		const snapshot = await this.systemController.bindAirportGate(params);
+		this.broadcastAirportState(snapshot);
+		return snapshot;
+	}
+
+	private async decorateResultWithSystemState(result: unknown): Promise<unknown> {
+		if (!result || typeof result !== 'object') {
+			return result;
+		}
+
+		if ('found' in result && typeof result.found === 'boolean') {
+			const snapshot = await this.systemController.applyStatus(result as Request extends never ? never : any);
+			(result as { system?: unknown }).system = snapshot;
+			return result;
+		}
+
+		if ('status' in result && result.status && typeof result.status === 'object' && 'found' in result.status) {
+			const status = result.status as { found: boolean; system?: unknown } & Record<string, unknown>;
+			const snapshot = await this.systemController.applyStatus(status as any);
+			status.system = snapshot;
+		}
+
+		return result;
+	}
+
+	private async decorateEvent(event: Notification): Promise<Notification> {
+		if (event.type !== 'mission.status') {
+			return event;
+		}
+		const snapshot = await this.systemController.applyStatus(event.status);
+		return {
+			...event,
+			status: {
+				...event.status,
+				system: snapshot
+			}
+		};
+	}
+
+	private async handleClientDisconnected(clientId: string): Promise<void> {
+		const snapshot = await this.systemController.disconnectAirportClient(clientId);
+		this.broadcastAirportState(snapshot);
+	}
+
+	private broadcastAirportState(snapshot: import('../types.js').MissionSystemSnapshot): void {
 		this.logLine?.(
-			`Broadcasting ${event.type}${'missionId' in event ? ` mission=${event.missionId}` : ''}`
+			`Broadcasting airport.state version=${String(snapshot.state.version)}`
 		);
-		const message: EventMessage = { type: 'event', event };
+		const message: EventMessage = {
+			type: 'event',
+			event: {
+				type: 'airport.state',
+				snapshot
+			}
+		};
 		const wire = JSON.stringify(message) + '\n';
 		for (const client of this.clients) {
 			client.write(wire, (error) => {

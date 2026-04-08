@@ -1,3 +1,3 @@
 @echo off
 setlocal
-call "%~dp0apps\cli\mission.cmd" %*
+call "%~dp0apps\mission\mission.cmd" %*

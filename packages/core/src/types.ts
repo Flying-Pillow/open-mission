@@ -1,3 +1,4 @@
+import type { AirportProjectionSet, AirportState, PersistedAirportIntent } from '../../airport/build/index.js';
 import type { MissionAgentSessionRecord } from './daemon/contracts.js';
 import type { MissionDaemonSettings } from './lib/daemonConfig.js';
 import type {
@@ -293,6 +294,97 @@ export type MissionPreparationStatus =
 
 export type MissionOperationalMode = 'setup' | 'root' | 'mission';
 
+export type ContextSelection = {
+	repositoryId?: string;
+	missionId?: string;
+	taskId?: string;
+	artifactId?: string;
+	agentSessionId?: string;
+};
+
+export type RepositoryContext = {
+	repositoryId: string;
+	rootPath: string;
+	displayLabel: string;
+	missionIds: string[];
+	workflowSettingsId?: string;
+};
+
+export type MissionContext = {
+	missionId: string;
+	repositoryId: string;
+	briefSummary: string;
+	workspacePath: string;
+	currentStage?: MissionStageId;
+	lifecycleState?: MissionLifecycleState;
+	taskIds: string[];
+	artifactIds: string[];
+	sessionIds: string[];
+};
+
+export type TaskContext = {
+	taskId: string;
+	missionId?: string;
+	stageId: MissionStageId;
+	subject: string;
+	instructionSummary: string;
+	lifecycleState: MissionTaskStatus;
+	dependencyIds: string[];
+	primaryArtifactId?: string;
+	agentSessionIds?: string[];
+};
+
+export type ArtifactContext = {
+	artifactId: string;
+	missionId?: string;
+	repositoryId?: string;
+	ownerTaskId?: string;
+	filePath: string;
+	logicalKind: string;
+	displayLabel: string;
+};
+
+export type AgentSessionContext = {
+	sessionId: string;
+	missionId?: string;
+	taskId?: string;
+	workingDirectory?: string;
+	runtimeId: string;
+	lifecycleState: string;
+	promptTitle?: string;
+	transportId?: string;
+};
+
+export type ContextGraph = {
+	selection: ContextSelection;
+	repositories: Record<string, RepositoryContext>;
+	missions: Record<string, MissionContext>;
+	tasks: Record<string, TaskContext>;
+	artifacts: Record<string, ArtifactContext>;
+	agentSessions: Record<string, AgentSessionContext>;
+};
+
+export type MissionSystemState = {
+	version: number;
+	domain: ContextGraph;
+	airport: AirportState;
+	airports: {
+		activeRepositoryId?: string;
+		repositories: Record<string, {
+			repositoryId: string;
+			repositoryRootPath: string;
+			airport: AirportState;
+			persistedIntent: PersistedAirportIntent;
+		}>;
+	};
+};
+
+export type MissionSystemSnapshot = {
+	state: MissionSystemState;
+	airportProjections: AirportProjectionSet;
+	airportRegistryProjections: Record<string, AirportProjectionSet>;
+};
+
 export type MissionControlPlaneStatus = {
 	controlRoot: string;
 	missionDirectory: string;
@@ -350,6 +442,7 @@ export type MissionStatus = {
 	found: boolean;
 	operationalMode?: MissionOperationalMode;
 	control?: MissionControlPlaneStatus;
+	system?: MissionSystemSnapshot;
 	missionId?: string;
 	title?: string;
 	issueId?: number;

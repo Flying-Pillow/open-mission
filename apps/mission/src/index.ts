@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { runCli } from './cli.js';
+import { runMission } from './mission.js';
 
-void runCli().catch((error: unknown) => {
+void runMission().catch((error: unknown) => {
 	const message = error instanceof Error ? error.message : String(error);
 	process.stderr.write(`${message}\n`);
 	process.exitCode = 1;

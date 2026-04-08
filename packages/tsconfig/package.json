@@ -1,11 +1,12 @@
 {
-	"name": "@flying-pillow/mission-tsconfig",
-	"version": "0.1.0-beta.0",
-	"description": "Shared TypeScript configuration for the Mission monorepo",
-	"private": true,
-	"files": [
-		"base.json",
-		"node.json"
-	],
-	"packageManager": "pnpm@10.30.3"
+  "name": "@flying-pillow/mission-tsconfig",
+  "version": "0.1.0-beta.0",
+  "description": "Shared TypeScript configuration for the Mission monorepo",
+  "type": "module",
+  "private": true,
+  "files": [
+    "base.json",
+    "node.json"
+  ],
+  "packageManager": "pnpm@10.30.3"
 }

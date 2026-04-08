@@ -1,4 +1,5 @@
 import type {
+	MissionSystemSnapshot,
 	GateIntent,
 	MissionActionExecutionStep,
 	MissionBrief,
@@ -279,6 +280,10 @@ export const PROTOCOL_VERSION = 13;
 
 export type Method =
 	| 'ping'
+	| 'airport.status'
+	| 'airport.client.connect'
+	| 'airport.client.observe'
+	| 'airport.gate.bind'
 	| 'control.status'
 	| 'control.settings.update'
 	| 'control.document.read'
@@ -424,7 +429,31 @@ export type ControlIssuesList = {
 	limit?: number;
 };
 
+export type AirportClientConnect = {
+	label?: string;
+	gateId?: 'dashboard' | 'editor' | 'pilot';
+	panelProcessId?: string;
+};
+
+export type AirportClientObserve = {
+	focusedGateId?: 'dashboard' | 'editor' | 'pilot';
+	intentGateId?: 'dashboard' | 'editor' | 'pilot';
+};
+
+export type AirportGateBind = {
+	gateId: 'dashboard' | 'editor' | 'pilot';
+	binding: {
+		targetKind: 'empty' | 'repository' | 'mission' | 'task' | 'artifact' | 'agentSession';
+		targetId?: string;
+		mode?: 'view' | 'control';
+	};
+};
+
 export type Notification =
+	| {
+		type: 'airport.state';
+		snapshot: MissionSystemSnapshot;
+	}
 	| {
 		type: 'mission.status';
 		missionId: string;
@@ -461,6 +490,7 @@ export type Request = {
 	id: string;
 	method: Method;
 	surfacePath?: string;
+	clientId?: string;
 	params?: unknown;
 };
 
@@ -470,6 +500,7 @@ export type SuccessResponse = {
 	ok: true;
 	result:
 	| Ping
+	| MissionSystemSnapshot
 	| MissionStatus
 	| ControlDocumentResponse
 	| MissionGateResult

@@ -70,17 +70,29 @@ run_target() {
 			show_pane_without_stealing_focus "$pilot_host_pane_id" || true
 			print_header "MISSION PILOT PANE [missing session $session_id]"
 			printf '%s\n' 'The selected agent pane is not available in this Mission session.'
-			while :; do
-				sleep 60
-			done
+			wait_for_target_change "$target"
 			;;
 		*)
-			log_line 'run_target idle-shell'
+			log_line 'run_target idle-placeholder'
 			show_pane_without_stealing_focus "$pilot_host_pane_id" || true
-			print_header 'MISSION PILOT PANE [shell]'
-			exec "${SHELL:-sh}"
+			print_header 'MISSION PILOT PANE [idle]'
+			printf '%s\n' 'Pilot gate is idle.'
+			printf '%s\n' 'Airport routing is still using the legacy sidepane shim here.'
+			printf '%s\n' 'A live agent session will take over this pane when one is bound.'
+			wait_for_target_change "$target"
 			;;
 	esac
+}
+
+wait_for_target_change() {
+	expected_target=$1
+	while :; do
+		next_target=$(read_target)
+		if [ "$next_target" != "$expected_target" ]; then
+			return 0
+		fi
+		sleep 1
+	done
 }
 
 list_panes_json() {

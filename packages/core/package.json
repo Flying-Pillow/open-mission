@@ -5,8 +5,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./scripts/copy-template-files.mjs",
-    "check": "tsc --noEmit -p tsconfig.json",
+    "build": "pnpm --filter @flying-pillow/mission-airport build && rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./scripts/copy-template-files.mjs",
+    "check": "pnpm --filter @flying-pillow/mission-airport build && tsc --noEmit -p tsconfig.json",
     "daemon:dev": "nodemon --watch src --ext ts --signal SIGTERM --exec \"tsx src/daemon/main.ts\"",
     "lint": "eslint src --ext .ts",
     "test": "pnpm --dir ../.. exec vitest run --config vitest.config.ts --project core"
@@ -29,6 +29,7 @@
     "build"
   ],
   "dependencies": {
+    "@flying-pillow/mission-airport": "workspace:*",
     "@github/copilot-sdk": "^0.2.1",
     "gray-matter": "^4.0.3"
   },

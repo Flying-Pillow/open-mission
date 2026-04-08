@@ -20,5 +20,5 @@ if exist "%SOURCE_ENTRY%" (
 	exit /b %ERRORLEVEL%
 )
 
-echo missiond: no daemon entrypoint found. Build the CLI package first. 1>&2
+echo missiond: no daemon entrypoint found. Build the Mission package first. 1>&2
 exit /b 1

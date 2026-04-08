@@ -27,5 +27,5 @@ if [ -f "$source_entry" ]; then
 	exec env NODE_OPTIONS="$node_options" pnpm --dir "$script_dir" exec tsx "$source_entry" "$@"
 fi
 
-printf '%s\n' "missiond: no daemon entrypoint found. Build the CLI package first." >&2
+printf '%s\n' "missiond: no daemon entrypoint found. Build the Mission package first." >&2
 exit 1

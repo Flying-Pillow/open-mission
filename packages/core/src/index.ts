@@ -1,7 +1,9 @@
 export * from './client/DaemonClient.js';
 export * from './client/DaemonApi.js';
+export * from './client/DaemonAirportApi.js';
 export * from './client/DaemonControlApi.js';
 export * from './client/DaemonMissionApi.js';
+export * from '../../airport/build/index.js';
 export * from './runtime/AgentRuntimeTypes.js';
 export * from './runtime/AgentRunner.js';
 export * from './runtime/AgentSession.js';
@@ -21,5 +23,6 @@ export * from './daemon/runDaemonMain.js';
 export * from './daemon/contracts.js';
 export * from './daemon/events.js';
 export * from './daemon/daemonPaths.js';
+export * from './daemon/MissionSystemController.js';
 export * from './settings/index.js';
 export * from './types.js';

@@ -40,7 +40,7 @@ The monorepo is intentionally product-shaped and must remain explicit about owne
 
 1. `packages/core` owns mission manifests, artifact law, stage law, gate evaluation, status projection, repository config, and platform-neutral domain contracts.
 2. `packages/core` also owns provider-neutral coding-agent runtime contracts and orchestration.
-3. `apps/cli` owns the operator CLI and sidecar-oriented repository workflow entrypoint.
+3. `apps/mission` owns the Mission terminal surface and sidecar-oriented repository workflow entrypoint.
 4. `packages/tsconfig` owns shared TypeScript policy.
 
 No workspace may absorb another workspace's responsibility out of convenience.

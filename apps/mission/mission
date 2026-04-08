@@ -6,7 +6,7 @@ repo_root=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || {
 	CDPATH= cd -- "$script_dir/../.."
 	pwd
 })
-preload_file="$script_dir/bun-preload.ts"
+preload_file="$script_dir/node_modules/@opentui/solid/scripts/preload.ts"
 daemon_command="$script_dir/missiond"
 typescript_conditions="--conditions=typescript"
 zellij_binary=${MISSION_ZELLIJ_BINARY:-zellij}
@@ -288,7 +288,7 @@ if [ "$zellij_mode" != "off" ] && should_launch_zellij; then
 fi
 
 if [ "$hmr_mode" -eq 1 ] && [ "$cockpit_mode" -eq 1 ]; then
-	exec env MISSION_COCKPIT_HMR=1 MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun --watch --preload "$preload_file" "$script_dir/src/index.ts" "$@"
+	exec env MISSION_COCKPIT_HMR=1 MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun "$typescript_conditions" --watch --preload "$preload_file" "$script_dir/src/index.ts" "$@"
 elif [ "$hmr_mode" -eq 1 ]; then
 	runner="tsx watch"
 elif [ "$cockpit_mode" -eq 1 ]; then

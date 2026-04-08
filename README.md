@@ -76,7 +76,7 @@ mission
 
 Run `mission help` for the complete command reference. Because Mission relies on a persistent sidecar daemon, state transitions, agent execution, and delivery are now handled via Cockpit-driven RPC actions rather than standalone top-level commands.
 
-Currently implemented CLI entry points:
+Currently implemented Mission entry points:
 
 *   `mission [--hmr] [--banner] [--no-banner]` — Launches the interactive cockpit (auto-starts the daemon if not running). On POSIX shells, Mission uses a zellij layout with the Mission cockpit on the left, a pilot pane on the upper-right, and `micro` on the lower-right. Mission resets the named zellij session on startup so every launch begins from the initial layout state. Starting from a mission worktree auto-selects that mission; starting from the control checkout opens Mission control mode.
 *   `mission daemon:stop [--json]` — Gracefully terminates the background orchestration daemon.

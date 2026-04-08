@@ -167,7 +167,11 @@ function createDaemonClientError(message: Extract<Response, { type: 'response'; 
 
 function shouldIncludeSurfacePath(method: Method): boolean {
 	if (
-		method === 'control.status'
+		method === 'airport.status'
+		|| method === 'airport.client.connect'
+		|| method === 'airport.client.observe'
+		|| method === 'airport.gate.bind'
+		|| method === 'control.status'
 		|| method === 'control.settings.update'
 		|| method === 'control.document.read'
 		|| method === 'control.document.write'

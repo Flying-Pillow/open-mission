@@ -61,6 +61,10 @@ export async function launchCockpit(context: CommandContext): Promise<void> {
 			launchMode
 		});
 		const api = new DaemonApi(client);
+		await api.airport.connectPanel({
+			gateId: 'dashboard',
+			label: 'mission-cockpit'
+		});
 		const discoveryStatus = await api.control.getStatus();
 		const status = nextSelector.missionId
 			? await api.mission.getStatus(nextSelector)

@@ -1,7 +1,7 @@
 {
-  "name": "@flying-pillow/mission-cli",
+  "name": "@flying-pillow/mission",
   "version": "0.1.0-beta.0",
-  "description": "Mission terminal interface where developers run the workflow",
+  "description": "Mission terminal control surface where developers run the workflow",
   "type": "module",
   "private": true,
   "bin": {
@@ -9,6 +9,7 @@
     "missiond": "./build/daemon.js"
   },
   "scripts": {
+    "airport:status": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && tsx src/index.ts airport:status",
     "build": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && rm -rf build && rm -f tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./scripts/copy-static-assets.mjs",
     "check": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && tsc --noEmit -p tsconfig.json",
     "dev": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && tsx src/index.ts",

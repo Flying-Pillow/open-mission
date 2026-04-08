@@ -213,7 +213,7 @@ The architectural code shape is:
 
 - `packages/core`
 - `packages/airport`
-- `apps/cli` and other surfaces as thin runtime clients or bootstraps
+- `apps/mission` and other surfaces as thin runtime clients or bootstraps
 - `missiond` as the single daemon host process
 
 ### packages/core
@@ -266,7 +266,7 @@ It is a bounded-context application controller, not a competing business-logic r
 
 `missiond` is the only authority process.
 
-### apps/cli and other surfaces
+### apps/mission and other surfaces
 
 Surfaces own:
 
@@ -289,12 +289,20 @@ export interface MissionSystemState {
   version: number;
   domain: ContextGraph;
   airport: AirportState;
+  airports: AirportRegistryState;
+}
+
+export interface AirportRegistryState {
+  activeRepositoryId?: string;
+  repositories: Record<string, AirportState>;
 }
 ```
 
 Rules:
 
 - `version` increments on every authoritative mutation
+- `airport` is the currently active repository-scoped airport projection root
+- `airports` is the daemon-owned repository-keyed airport registry
 - the daemon always reduces and broadcasts whole-state version changes
 - projections are derived from this state root only
 - no panel is allowed to keep authoritative state outside this root
@@ -457,6 +465,8 @@ export type GateId = 'dashboard' | 'editor' | 'pilot';
 
 export interface AirportState {
   airportId: string;
+  repositoryId?: string;
+  repositoryRootPath?: string;
   sessionId?: string;
   gates: Record<GateId, GateBinding>;
   focus: AirportFocusState;
@@ -464,6 +474,26 @@ export interface AirportState {
   substrate: AirportSubstrateState;
 }
 ```
+
+`airportId` is not a process-global singleton name.
+
+The airport is repository-scoped.
+
+This means:
+
+- one repository selection maps to one canonical airport identity
+- mission switching happens inside that airport
+- changing repositories changes airport identity and substrate session naming
+
+The daemon may keep multiple repository-scoped airports resident in memory at once.
+
+Exactly one airport is active for panel projections at a time.
+
+The rest remain inactive but retained in the repository-keyed airport registry.
+
+`repositoryId` is the canonical repository identity used by the semantic domain graph.
+
+`repositoryRootPath` is the resolved filesystem root used to derive substrate-facing names when needed.
 
 ### GateBinding
 
@@ -983,6 +1013,14 @@ For `v1`, airport persistence is intentionally split into:
 - durable airport intent
 - ephemeral airport observations
 
+Durable airport intent is persisted in the repository's existing daemon settings document.
+
+There is no separate cross-repository airport persistence file.
+
+Each repository persists only its own airport intent.
+
+The daemon reconstructs the multi-airport registry by lazily loading repository-scoped airport intent from each repository as that repository becomes active.
+
 Durable airport intent includes:
 
 - gate bindings
@@ -1002,11 +1040,13 @@ Ephemeral airport observations may be reconstructed after daemon start and must 
 On daemon startup:
 
 1. load persisted domain state if configured
-2. load persisted airport intent if configured
-3. discover substrate reality
-4. reconcile airport state against current substrate observations
-5. start IPC server
-6. accept panel connections and broadcast current projections
+2. initialize an empty repository-keyed airport registry
+3. load persisted airport intent for the first repository that becomes active
+4. derive or restore that repository-scoped airport identity
+5. discover substrate reality for the active airport
+6. reconcile airport state against current substrate observations
+7. start IPC server
+8. accept panel connections and broadcast current projections
 
 On panel startup:
 
@@ -1017,6 +1057,14 @@ On panel startup:
 
 Panels must not rely on startup ordering between themselves.
 
+If the active repository changes, the daemon must re-scope the active airport before publishing subsequent projections.
+
+For `v1`, this does not require full multi-airport orchestration.
+
+It does require that the active airport identity, gate intent, and substrate session naming stop assuming a single global airport.
+
+It also requires that the daemon retain repository-keyed airport state so switching back to a previously active repository restores that repository's last durable airport intent instead of rebuilding from scratch.
+
 ## Repository And Mission Switching
 
 The architecture must support future repository switching without redesign.
@@ -1024,11 +1072,21 @@ The architecture must support future repository switching without redesign.
 This means:
 
 - repository selection is part of domain selection state
+- airport identity is scoped to repository selection state
 - mission selection is scoped under repository selection
 - mission workspace path is explicit in MissionContext
 - gate bindings may target contexts from the currently selected mission only unless explicitly designed otherwise
 
 The airport must route panel content based on canonical selection and binding policy, not based on whichever process happened to start first.
+
+The recommended implementation model is:
+
+- one repository-keyed airport registry owned by the daemon
+- one airport controller instance per known repository in that registry
+- exactly one active airport projection set at a time
+- zellij session naming derived from repository-scoped airport identity rather than a single hardcoded global session name
+
+This preserves repository isolation while allowing the daemon to keep multiple airports warm and resumable.
 
 ## Object-Oriented Design Principles
 

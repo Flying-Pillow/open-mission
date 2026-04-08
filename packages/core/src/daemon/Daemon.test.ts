@@ -232,6 +232,286 @@ describe('Daemon', () => {
 		});
 	});
 
+	it('attaches a daemon-owned system snapshot to control status responses', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			await initializeMissionRepository(workspaceRoot);
+
+			try {
+				const daemon = await startDaemon();
+				const client = new DaemonClient();
+
+				try {
+					await client.connect({ surfacePath: workspaceRoot });
+					const api = new DaemonApi(client);
+					const status = await api.control.getStatus();
+
+					expect(status.system).toMatchObject({
+						state: {
+							version: expect.any(Number),
+							domain: {
+								selection: {
+									repositoryId: workspaceRoot
+								}
+							},
+							airport: {
+								airportId: expect.stringMatching(/^airport:/),
+								repositoryId: workspaceRoot,
+								repositoryRootPath: workspaceRoot,
+								gates: {
+									dashboard: {
+										targetKind: 'repository',
+										targetId: workspaceRoot,
+										mode: 'control'
+									},
+									editor: {
+										targetKind: 'repository',
+										targetId: workspaceRoot,
+										mode: 'view'
+									}
+								},
+								substrate: {
+									sessionName: expect.stringContaining('mission-control-')
+								}
+								},
+								airports: {
+									activeRepositoryId: workspaceRoot,
+									repositories: {
+										[workspaceRoot]: {
+											repositoryId: workspaceRoot
+										}
+									}
+							}
+						},
+						airportProjections: {
+							dashboard: {
+								title: 'Dashboard'
+							}
+							},
+							airportRegistryProjections: {
+								[workspaceRoot]: {
+									dashboard: {
+										title: 'Dashboard'
+									}
+								}
+						}
+					});
+				} finally {
+					client.dispose();
+					await daemon.close();
+				}
+			} finally {
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('registers airport clients and allows gate observation through the daemon API', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			await initializeMissionRepository(workspaceRoot);
+
+			try {
+				const daemon = await startDaemon();
+				const client = new DaemonClient();
+
+				try {
+					await client.connect({ surfacePath: workspaceRoot });
+					const api = new DaemonApi(client);
+					const initial = await api.airport.getStatus();
+					const connected = await api.airport.connectPanel({
+						gateId: 'dashboard',
+						label: 'test-cockpit'
+					});
+					const observed = await api.airport.observeClient({
+						focusedGateId: 'pilot',
+						intentGateId: 'pilot'
+					});
+					const rebound = await api.airport.bindGate({
+						gateId: 'pilot',
+						binding: {
+							targetKind: 'task',
+							targetId: 'implementation/01-airport',
+							mode: 'control'
+						}
+					});
+
+					expect(initial.state.airport.repositoryRootPath).toBe(workspaceRoot);
+					expect(initial.state.airport.airportId).toMatch(/^airport:/);
+					expect(initial.state.airport.substrate.sessionName).toContain('mission-control-');
+					expect(Object.values(connected.state.airport.clients)).toEqual(
+						expect.arrayContaining([
+							expect.objectContaining({
+								label: 'test-cockpit',
+								connected: true,
+								claimedGateId: 'dashboard',
+								surfacePath: workspaceRoot
+							})
+						])
+					);
+					expect(observed.state.airport.focus).toMatchObject({
+						intentGateId: 'pilot',
+						observedGateId: 'pilot'
+					});
+					expect(rebound.state.airport.gates.pilot).toMatchObject({
+						targetKind: 'task',
+						targetId: 'implementation/01-airport',
+						mode: 'control'
+					});
+					expect(rebound.state.airports.repositories[workspaceRoot]?.persistedIntent).toMatchObject({
+						gates: {
+							pilot: {
+								targetKind: 'task',
+								targetId: 'implementation/01-airport',
+								mode: 'control'
+							}
+						}
+					});
+					expect(rebound.airportProjections.pilot.subtitle).toContain('task:implementation/01-airport');
+				} finally {
+					client.dispose();
+					await daemon.close();
+				}
+			} finally {
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('persists airport intent per repository across daemon restarts', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			await initializeMissionRepository(workspaceRoot);
+
+			try {
+				{
+					const daemon = await startDaemon();
+					const client = new DaemonClient();
+
+					try {
+						await client.connect({ surfacePath: workspaceRoot });
+						const api = new DaemonApi(client);
+						await api.airport.bindGate({
+							gateId: 'pilot',
+							binding: {
+								targetKind: 'task',
+								targetId: 'persisted/task',
+								mode: 'control'
+							}
+						});
+					} finally {
+						client.dispose();
+						await daemon.close();
+					}
+				}
+
+				{
+					const daemon = await startDaemon();
+					const client = new DaemonClient();
+
+					try {
+						await client.connect({ surfacePath: workspaceRoot });
+						const api = new DaemonApi(client);
+						const snapshot = await api.airport.getStatus();
+
+						expect(snapshot.state.airport.gates.pilot).toMatchObject({
+							targetKind: 'task',
+							targetId: 'persisted/task',
+							mode: 'control'
+						});
+						expect(snapshot.state.airports.repositories[workspaceRoot]?.persistedIntent).toMatchObject({
+							gates: {
+								pilot: {
+									targetKind: 'task',
+									targetId: 'persisted/task',
+									mode: 'control'
+								}
+							}
+						});
+					} finally {
+						client.dispose();
+						await daemon.close();
+					}
+				}
+			} finally {
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('keeps a repository-keyed airport registry for multiple repositories', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const leftWorkspaceRoot = await createTempRepo();
+			const rightWorkspaceRoot = await createTempRepo();
+			await initializeMissionRepository(leftWorkspaceRoot);
+			await initializeMissionRepository(rightWorkspaceRoot);
+
+			try {
+				const daemon = await startDaemon();
+				const leftClient = new DaemonClient();
+				const rightClient = new DaemonClient();
+
+				try {
+					await leftClient.connect({ surfacePath: leftWorkspaceRoot });
+					await rightClient.connect({ surfacePath: rightWorkspaceRoot });
+					const leftApi = new DaemonApi(leftClient);
+					const rightApi = new DaemonApi(rightClient);
+
+					await leftApi.airport.bindGate({
+						gateId: 'pilot',
+						binding: {
+							targetKind: 'task',
+							targetId: 'left/task',
+							mode: 'control'
+						}
+					});
+					const rightSnapshot = await rightApi.airport.bindGate({
+						gateId: 'pilot',
+						binding: {
+							targetKind: 'task',
+							targetId: 'right/task',
+							mode: 'control'
+						}
+					});
+					const leftSnapshot = await leftApi.airport.getStatus();
+
+					expect(Object.keys(rightSnapshot.state.airports.repositories).sort()).toEqual([
+						leftWorkspaceRoot,
+						rightWorkspaceRoot
+					].sort());
+					expect(rightSnapshot.state.airports.activeRepositoryId).toBe(rightWorkspaceRoot);
+					expect(rightSnapshot.state.airports.repositories[leftWorkspaceRoot]?.airport.gates.pilot).toMatchObject({
+						targetKind: 'task',
+						targetId: 'left/task',
+						mode: 'control'
+					});
+					expect(rightSnapshot.state.airports.repositories[rightWorkspaceRoot]?.airport.gates.pilot).toMatchObject({
+						targetKind: 'task',
+						targetId: 'right/task',
+						mode: 'control'
+					});
+					expect(leftSnapshot.state.airport.repositoryRootPath).toBe(leftWorkspaceRoot);
+					expect(leftSnapshot.state.airport.gates.pilot).toMatchObject({
+						targetKind: 'task',
+						targetId: 'left/task',
+						mode: 'control'
+					});
+				} finally {
+					leftClient.dispose();
+					rightClient.dispose();
+					await daemon.close();
+				}
+			} finally {
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(leftWorkspaceRoot, { recursive: true, force: true });
+				await fs.rm(rightWorkspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
 	it('derives the GitHub repository from workspace remotes instead of setup settings', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();

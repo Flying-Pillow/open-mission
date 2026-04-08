@@ -6,4 +6,4 @@ nav_exclude: true
 
 # Airport Workstream
 
-- [Control Plane](control-plane/index.md)
+- [Control Plane](airport/index.md)
