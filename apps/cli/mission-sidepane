@@ -1,17 +1,170 @@
 #!/usr/bin/env sh
 set -eu
 
-resolve_runtime_root() {
-	runtime_root=${XDG_RUNTIME_DIR:-}
-	if [ -z "$runtime_root" ]; then
-		runtime_root=${TMPDIR:-/tmp}
+resolve_terminal_session_name() {
+	if [ -z "${MISSION_TERMINAL_SESSION_NAME:-}" ]; then
+		printf '%s\n' 'mission-sidepane: MISSION_TERMINAL_SESSION_NAME is required.' >&2
+		exit 1
 	fi
-	printf '%s/mission' "$runtime_root"
+	printf '%s' "$MISSION_TERMINAL_SESSION_NAME"
 }
 
-daemon_log_path="$(resolve_runtime_root)/daemon.stdout.log"
-printf '\033[H\033[2J\033[3J'
-printf 'MISSION SIDE PANE [daemon log]\n\n'
-mkdir -p "$(dirname "$daemon_log_path")"
-touch "$daemon_log_path"
-exec tail -n 200 -F "$daemon_log_path"
+resolve_pilot_target_file() {
+	if [ -z "${MISSION_PILOT_TARGET_FILE:-}" ]; then
+		printf '%s\n' 'mission-sidepane: MISSION_PILOT_TARGET_FILE is required.' >&2
+		exit 1
+	fi
+	printf '%s' "$MISSION_PILOT_TARGET_FILE"
+}
+
+resolve_pilot_log_file() {
+	if [ -n "${MISSION_PILOT_LOG_FILE:-}" ]; then
+		printf '%s' "$MISSION_PILOT_LOG_FILE"
+		return
+	fi
+	target_file=$(resolve_pilot_target_file)
+	printf '%s' "${target_file%.target}.log"
+}
+
+log_line() {
+	message=$1
+	if [ -n "${pilot_log_file:-}" ]; then
+		printf '%s %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$message" >> "$pilot_log_file"
+	fi
+}
+
+print_header() {
+	printf '\033[H\033[2J\033[3J'
+	printf '%s\n\n' "$1"
+}
+
+read_target() {
+	if [ -f "$pilot_target_file" ]; then
+		target=$(sed -n '1p' "$pilot_target_file" 2>/dev/null || true)
+	else
+		target=
+	fi
+	if [ -z "$target" ]; then
+		target=idle
+	fi
+	printf '%s' "$target"
+}
+
+run_target() {
+	target=$1
+	log_line "run_target target=$target"
+	case "$target" in
+		session:*)
+			session_id=${target#session:}
+			if command -v zellij >/dev/null 2>&1; then
+				pane_id=$(resolve_pane_id_by_title "$session_id")
+				if [ -n "$pane_id" ]; then
+					log_line "show_attempt session=$session_id pane=$pane_id"
+					show_pane_without_stealing_focus "$pane_id"
+					while :; do
+						sleep 60
+					done
+				fi
+			fi
+			log_line "target_unavailable session=$session_id"
+			show_pane_without_stealing_focus "$pilot_host_pane_id" || true
+			print_header "MISSION PILOT PANE [missing session $session_id]"
+			printf '%s\n' 'The selected agent pane is not available in this Mission session.'
+			while :; do
+				sleep 60
+			done
+			;;
+		*)
+			log_line 'run_target idle-shell'
+			show_pane_without_stealing_focus "$pilot_host_pane_id" || true
+			print_header 'MISSION PILOT PANE [shell]'
+			exec "${SHELL:-sh}"
+			;;
+	esac
+}
+
+list_panes_json() {
+	env -u ZELLIJ zellij --session "$terminal_session_name" action list-panes --json --all 2>/dev/null || printf '[]'
+}
+
+resolve_pane_id_by_title() {
+	pane_title=$1
+	list_panes_json | node -e "const fs=require('node:fs'); const panes=JSON.parse(fs.readFileSync(0,'utf8')); const paneTitle=process.argv[1]; const pane=panes.find((candidate)=>!candidate.is_plugin && candidate.title===paneTitle); if (pane) { process.stdout.write('terminal_' + String(pane.id)); }" "$pane_title"
+}
+
+focus_pane_id() {
+	pane_id=$1
+	if [ -z "$pane_id" ]; then
+		return 1
+	fi
+	env -u ZELLIJ zellij --session "$terminal_session_name" action focus-pane-id "$pane_id" >/dev/null 2>&1
+}
+
+resolve_focused_pane_id() {
+	list_panes_json | node -e "const fs=require('node:fs'); const panes=JSON.parse(fs.readFileSync(0,'utf8')); const pane=panes.find((candidate)=>!candidate.is_plugin && candidate.is_focused); if (pane) { process.stdout.write('terminal_' + String(pane.id)); }"
+}
+
+show_pane_without_stealing_focus() {
+	pane_id=$1
+	if [ -z "$pane_id" ]; then
+		return 1
+	fi
+	previous_focus=$(resolve_focused_pane_id)
+	if [ "$previous_focus" != "$pane_id" ]; then
+		focus_pane_id "$pane_id" || return 1
+	fi
+	if [ -n "$previous_focus" ] && [ "$previous_focus" != "$pane_id" ]; then
+		focus_pane_id "$previous_focus" || true
+	fi
+}
+
+cleanup_child() {
+	if [ -n "${child_pid:-}" ] && kill -0 "$child_pid" 2>/dev/null; then
+		kill "$child_pid" 2>/dev/null || true
+		wait "$child_pid" 2>/dev/null || true
+	fi
+	child_pid=
+}
+
+pilot_target_file=$(resolve_pilot_target_file)
+terminal_session_name=$(resolve_terminal_session_name)
+pilot_log_file=$(resolve_pilot_log_file)
+mkdir -p "$(dirname "$pilot_target_file")"
+mkdir -p "$(dirname "$pilot_log_file")"
+if [ ! -f "$pilot_target_file" ]; then
+	printf 'idle\n' > "$pilot_target_file"
+fi
+touch "$pilot_log_file"
+pilot_host_pane_id=$(resolve_pane_id_by_title 'PILOT')
+if [ -z "$pilot_host_pane_id" ]; then
+	printf '%s\n' 'mission-sidepane: unable to locate PILOT pane in zellij session.' >&2
+	exit 1
+fi
+
+child_pid=
+current_target=
+trap 'cleanup_child; exit 0' INT TERM HUP EXIT
+
+while :; do
+	next_target=$(read_target)
+	log_line "loop target=$next_target current=${current_target:-<none>}"
+	needs_restart=0
+	if [ -z "$current_target" ] || [ "$next_target" != "$current_target" ]; then
+		needs_restart=1
+	elif [ -z "$child_pid" ] || ! kill -0 "$child_pid" 2>/dev/null; then
+		needs_restart=1
+	fi
+	if [ "$needs_restart" -eq 1 ]; then
+		cleanup_child
+		(
+			if ! run_target "$next_target"; then
+				print_header 'MISSION PILOT PANE [target unavailable]'
+				printf 'Unable to open target: %s\n' "$next_target"
+				sleep 2
+			fi
+		) &
+		child_pid=$!
+		current_target=$next_target
+	fi
+	sleep 1
+done

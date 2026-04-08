@@ -4,6 +4,5 @@ build/
 dist/
 out/
 coverage/
-apps/vscode-extension/media/webview/
 *.vsix
 pnpm-lock.yaml

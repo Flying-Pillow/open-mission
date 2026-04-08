@@ -14,8 +14,8 @@ export function normalizeLegacyAgentRuntimeId(runtimeId: string | undefined): st
 	return normalized;
 }
 
-export function getDefaultTransportForRuntime(runtimeId: string): 'direct' | 'tmux' {
-	return runtimeId === COPILOT_SDK_AGENT_RUNTIME_ID ? 'direct' : 'tmux';
+export function getDefaultTransportForRuntime(runtimeId: string): 'direct' | 'terminal' {
+	return runtimeId === COPILOT_SDK_AGENT_RUNTIME_ID ? 'direct' : 'terminal';
 }
 
 export function isSupportedAgentRuntime(runtimeId: string | undefined): runtimeId is string {
@@ -24,7 +24,7 @@ export function isSupportedAgentRuntime(runtimeId: string | undefined): runtimeI
 
 export function isSupportedRuntimeTransportPair(runtimeId: string, transportId: string): boolean {
 	if (runtimeId === COPILOT_CLI_AGENT_RUNTIME_ID) {
-		return transportId === 'tmux';
+		return transportId === 'terminal';
 	}
 	if (runtimeId === COPILOT_SDK_AGENT_RUNTIME_ID) {
 		return transportId === 'direct';

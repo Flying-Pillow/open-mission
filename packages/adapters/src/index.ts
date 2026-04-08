@@ -6,14 +6,14 @@ import {
 } from '../../core/build/lib/agentRuntimes.js';
 import { CopilotSdkAgentRunner } from '../../core/build/adapters/CopilotSdkAgentRunner.js';
 import { CopilotCliAgentRunner } from '../../core/build/adapters/CopilotCliAgentRunner.js';
-import { TmuxAgentTransport } from '../../core/build/adapters/TmuxAgentTransport.js';
+import { TerminalAgentTransport } from '../../core/build/adapters/TerminalAgentTransport.js';
 import { readMissionDaemonSettings } from '../../core/build/lib/daemonConfig.js';
 import path from 'node:path';
 import os from 'node:os';
 
 export { CopilotSdkAgentRunner };
 export { CopilotCliAgentRunner };
-export { TmuxAgentTransport };
+export { TerminalAgentTransport };
 
 type ConfiguredAgentSettings = {
 	agentRuntime?: string;
@@ -59,21 +59,23 @@ function resolveDefaultCopilotCliPath(): string {
 	);
 }
 
-function getTmuxTransportOptions(
+function getTerminalTransportOptions(
 	_controlRoot: string,
 	runtimeId: string,
 	displayName: string,
 	logLine?: (line: string) => void
 ) {
-	const overriddenCommand = process.env['MISSION_TMUX_AGENT_COMMAND']?.trim();
-	const tmuxBinary = process.env['MISSION_TMUX_BINARY']?.trim() || undefined;
+	const overriddenCommand = process.env['MISSION_TERMINAL_AGENT_COMMAND']?.trim();
+	const terminalBinary = process.env['MISSION_TERMINAL_BINARY']?.trim()
+		|| process.env['MISSION_ZELLIJ_BINARY']?.trim()
+		|| undefined;
 	if (overriddenCommand) {
 		return {
 			runtimeId,
 			displayName,
 			command: 'sh',
 			args: ['-lc', overriddenCommand],
-			...(tmuxBinary ? { tmuxBinary } : {}),
+			...(terminalBinary ? { terminalBinary } : {}),
 			...(logLine ? { logLine } : {})
 		};
 	}
@@ -82,7 +84,7 @@ function getTmuxTransportOptions(
 		displayName,
 		command: resolveDefaultCopilotCliPath(),
 		args: ['--experimental'],
-		...(tmuxBinary ? { tmuxBinary } : {}),
+		...(terminalBinary ? { terminalBinary } : {}),
 		...(logLine ? { logLine } : {})
 	};
 }
@@ -97,7 +99,7 @@ export async function createConfiguredAgentRunners(options: {
 		getCopilotRunnerOptions(daemonSettings, options.controlRoot, options.logLine)
 	);
 	const cliRunner = new CopilotCliAgentRunner(
-		getTmuxTransportOptions(options.controlRoot, COPILOT_CLI_AGENT_RUNTIME_ID, 'Copilot CLI', options.logLine)
+		getTerminalTransportOptions(options.controlRoot, COPILOT_CLI_AGENT_RUNTIME_ID, 'Copilot CLI', options.logLine)
 	);
 	const runnersById = new Map<string, AgentRunner>([
 		[sdkRunner.id, sdkRunner],

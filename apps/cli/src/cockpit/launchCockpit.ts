@@ -20,7 +20,8 @@ export async function launchCockpit(context: CommandContext): Promise<void> {
 		context.args.includes('-h') ||
 		context.args.includes('help')
 	) {
-		process.stdout.write('mission [--tmux|--no-tmux] [--hmr] [--banner] [--no-banner]\n');
+		process.stdout.write('mission [--hmr] [--banner] [--no-banner]\n');
+		process.stdout.write('zellij layout: Mission cockpit | pilot pane | micro\n');
 		return;
 	}
 

@@ -33,8 +33,6 @@ type CockpitScreenProps = {
 	focusArea: FocusArea;
 	centerContent: JSXElement;
 	overlayContent?: JSXElement;
-	showDetailPane?: boolean;
-	detailContent?: JSXElement;
 	showCommandPanel: boolean;
 	commandPanelTitle: string;
 	commandPanelPlaceholder: string;
@@ -87,7 +85,7 @@ export function CockpitScreen(props: CockpitScreenProps) {
 				/>
 			</Show>
 
-			<box style={{ flexDirection: 'row', flexGrow: 1, flexShrink: 1, minHeight: 0, minWidth: 0, gap: props.showDetailPane ? 1 : 0 }}>
+			<box style={{ flexDirection: 'row', flexGrow: 1, flexShrink: 1, minHeight: 0, minWidth: 0 }}>
 				<box style={{ flexGrow: 1, flexShrink: 1, minHeight: 0, minWidth: 0, gap: props.overlayContent ? 1 : 0 }}>
 					<box style={{ flexGrow: 1, flexShrink: 1, minHeight: 0, minWidth: 0 }}>
 						{props.centerContent}
@@ -98,11 +96,6 @@ export function CockpitScreen(props: CockpitScreenProps) {
 						</box>
 					</Show>
 				</box>
-				<Show when={props.showDetailPane && props.detailContent}>
-					<box style={{ flexGrow: 1, flexShrink: 1, minHeight: 0, minWidth: 0 }}>
-						{props.detailContent}
-					</box>
-				</Show>
 			</box>
 
 			<Show when={props.showCommandPanel}>

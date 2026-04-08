@@ -93,19 +93,22 @@ export class MissionWorkflowRequestExecutor {
 	public normalizePersistedSessionIdentity(
 		session: MissionAgentSessionRuntimeState
 	): MissionAgentSessionRuntimeState {
-		if (session.transportId || session.runtimeId !== 'tmux') {
+		if (session.transportId) {
+			return session;
+		}
+		if (session.runtimeId !== 'copilot-cli') {
 			return session;
 		}
 
-		const tmuxRuntime = [...this.runners.values()].find((runner) => runner.transportId === 'tmux');
-		if (!tmuxRuntime) {
+		const terminalRuntime = [...this.runners.values()].find((runner) => runner.transportId === 'terminal');
+		if (!terminalRuntime) {
 			return session;
 		}
 
 		return {
 			...session,
-			runtimeId: tmuxRuntime.id,
-			transportId: 'tmux'
+			runtimeId: terminalRuntime.id,
+			transportId: 'terminal'
 		};
 	}
 

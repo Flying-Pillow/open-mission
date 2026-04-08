@@ -47,16 +47,21 @@ export function pickPreferredSessionId(
 	sessions: MissionAgentSessionRecord[],
 	current: string | undefined
 ): string | undefined {
-	if (sessions.length === 0) {
+	const liveSessions = sessions.filter((session) =>
+		session.lifecycleState === 'awaiting-input'
+		|| session.lifecycleState === 'running'
+		|| session.lifecycleState === 'starting'
+	);
+	if (liveSessions.length === 0) {
 		return undefined;
 	}
-	if (current && sessions.some((session) => session.sessionId === current)) {
+	if (current && liveSessions.some((session) => session.sessionId === current)) {
 		return current;
 	}
 	const preferred =
-		sessions.find((session) => session.lifecycleState === 'awaiting-input') ??
-		sessions.find((session) => session.lifecycleState === 'running' || session.lifecycleState === 'starting') ??
-		sessions[0];
+		liveSessions.find((session) => session.lifecycleState === 'awaiting-input') ??
+		liveSessions.find((session) => session.lifecycleState === 'running' || session.lifecycleState === 'starting') ??
+		liveSessions[0];
 	return preferred?.sessionId;
 }
 

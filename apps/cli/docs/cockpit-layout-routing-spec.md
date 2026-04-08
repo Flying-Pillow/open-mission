@@ -191,7 +191,7 @@ Updated CLI implementation:
 type FocusArea = 'header' | 'tree' | 'flow' | 'command'
 ```
 
-The external tmux right pane owns artifact and session output. The CLI cockpit no longer mounts or focuses an internal console surface.
+The external terminal right pane owns artifact and session output. The CLI cockpit no longer mounts or focuses an internal console surface.
 
 ## Panel Ownership
 

@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 
+import { mkdir, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import type {
@@ -20,9 +21,8 @@ import {
 	DaemonApi,
 	DaemonMissionApi,
 } from '@flying-pillow/mission-core';
-import { useKeyboard, useRenderer, useTerminalDimensions } from '@opentui/solid';
+import { useKeyboard, useRenderer } from '@opentui/solid';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSXElement } from 'solid-js';
-import { CockpitDetailPanel } from './components/CockpitDetailPanel.js';
 import { CockpitScreen } from './components/CockpitScreen.js';
 import { IntroSplash } from './components/IntroSplash.js';
 import { applyCockpitTheme, cockpitTheme, type CockpitThemeName, isCockpitThemeName } from './components/cockpitTheme.js';
@@ -35,7 +35,6 @@ import {
 	buildVisibleTreeTargets,
 	createSessionNodeId,
 	moveTreeTargetSelection,
-	pickPreferredSessionId,
 	pickPreferredStageId,
 	pickPreferredTreeTargetId,
 	type TreeTargetDescriptor,
@@ -109,7 +108,7 @@ type HeaderMissionSummary = {
 	numberLabel: string;
 	title: string;
 };
-type TmuxSidePaneTarget =
+type OperatorPaneTarget =
 	| { kind: 'idle' }
 	| { kind: 'session'; sessionId: string };
 
@@ -126,7 +125,6 @@ export function MissionCockpitApp({
 	connect
 }: CockpitShellProps) {
 	const renderer = useRenderer();
-	const terminal = useTerminalDimensions();
 	const [selector, setSelector] = createSignal<MissionSelector>(initialSelector);
 	const [connection, setConnection] = createSignal<CockpitConnection | undefined>(initialConnection);
 	const [status, setStatus] = createSignal<MissionStatus>(initialConnection?.status ?? { found: false });
@@ -146,9 +144,7 @@ export function MissionCockpitApp({
 	const [openIssues, setOpenIssues] = createSignal<TrackedIssueSummary[]>([]);
 	const [selectedStageId, setSelectedStageId] = createSignal<MissionStageId | undefined>(initialConnection?.status.stage);
 	const [selectedTaskId, setSelectedTaskId] = createSignal<string>('');
-	const [selectedSessionId, setSelectedSessionId] = createSignal<string | undefined>(
-		pickPreferredSessionId(initialConnection?.status.agentSessions ?? [], undefined)
-	);
+	const [selectedSessionId, setSelectedSessionId] = createSignal<string | undefined>();
 	const [selectedTreeTargetId, setSelectedTreeTargetId] = createSignal<string | undefined>();
 	const [collapsedTreeNodeIds, setCollapsedTreeNodeIds] = createSignal<Set<string>>(new Set<string>());
 	const [treePageScrollRequest, setTreePageScrollRequest] = createSignal<{ delta: number } | undefined>();
@@ -164,10 +160,6 @@ export function MissionCockpitApp({
 	const [selectedToolbarCommandId, setSelectedToolbarCommandId] = createSignal<string | undefined>();
 	const [confirmingToolbarCommandId, setConfirmingToolbarCommandId] = createSignal<string | undefined>();
 	const [toolbarConfirmationChoice, setToolbarConfirmationChoice] = createSignal<'confirm' | 'cancel'>('confirm');
-	const [detailContent, setDetailContent] = createSignal<string>('');
-	const [, setDetailUpdatedAt] = createSignal<string | undefined>();
-	const [detailErrorMessage, setDetailErrorMessage] = createSignal<string | undefined>();
-	const [isDetailLoading, setIsDetailLoading] = createSignal<boolean>(false);
 	const flowController = createCommandFlowController({
 		onNotify: appendLog,
 		onFlowClosed: () => {
@@ -410,44 +402,6 @@ export function MissionCockpitApp({
 		});
 		return visibleTreeTargets().find((target) => target.id === preferredId);
 	});
-	const embeddedDetailTarget = createMemo(() => {
-		if (cockpitMode() !== 'mission') {
-			return undefined;
-		}
-		const target = selectedTreeTarget();
-		if (!target?.sourcePath) {
-			return undefined;
-		}
-		return {
-			title: target.label,
-			sourcePath: target.sourcePath
-		};
-	});
-	const embeddedPaneContentWidth = createMemo(() => {
-		if (!embeddedDetailTarget()) {
-			return undefined;
-		}
-		return Math.max(16, Math.floor((terminal().width - 3) / 2) - 8);
-	});
-	const showEmbeddedDetailPane = createMemo(() => embeddedDetailTarget() !== undefined);
-	const renderedDetailContent = createMemo<JSXElement | undefined>(() => {
-		const target = embeddedDetailTarget();
-		if (!target) {
-			return undefined;
-		}
-		return (
-			<CockpitDetailPanel
-				title={target.title}
-				subtitle={target.sourcePath}
-				content={detailContent()}
-				isLoading={isDetailLoading()}
-				{...(embeddedPaneContentWidth() !== undefined
-					? { contentWidth: embeddedPaneContentWidth() }
-					: {})}
-				{...(detailErrorMessage() ? { errorMessage: detailErrorMessage() } : {})}
-			/>
-		);
-	});
 	const selectedSessionRecord = createMemo(() => {
 		const sessionId = selectedSessionId();
 		if (!sessionId) {
@@ -529,9 +483,6 @@ export function MissionCockpitApp({
 				rows={visibleTreeTargets()}
 				selectedRowId={selectedTreeTarget()?.id}
 				treePageScrollRequest={treePageScrollRequest()}
-				{...(showEmbeddedDetailPane() && embeddedPaneContentWidth() !== undefined
-					? { contentWidth: embeddedPaneContentWidth() }
-					: {})}
 				emptyLabel="No mission structure is available yet."
 				onMoveSelection={() => undefined}
 				onPageScroll={() => undefined}
@@ -645,15 +596,23 @@ export function MissionCockpitApp({
 	});
 
 	createEffect(() => {
+		const sessionId = selectedSessionId();
+		if (!sessionId) {
+			return;
+		}
+		if (sessions().some((session) => session.sessionId === sessionId)) {
+			return;
+		}
+		setSelectedSessionId(undefined);
+	});
+
+	createEffect(() => {
 		const target = cockpitMode() === 'mission' ? selectedTreeTarget() : undefined;
 		if (!target || target.taskId) {
 			return;
 		}
 		if (selectedTaskId() !== '') {
 			setSelectedTaskId('');
-		}
-		if (selectedSessionId() !== undefined) {
-			setSelectedSessionId(undefined);
 		}
 	});
 
@@ -838,58 +797,13 @@ export function MissionCockpitApp({
 	});
 
 	createEffect(() => {
-		const target = embeddedDetailTarget();
-		const currentClient = client();
-		if (!target) {
-			setDetailContent('');
-			setDetailUpdatedAt(undefined);
-			setDetailErrorMessage(undefined);
-			setIsDetailLoading(false);
-			return;
-		}
-		if (!currentClient) {
-			setDetailContent('');
-			setDetailUpdatedAt(undefined);
-			setDetailErrorMessage('Mission daemon is not connected.');
-			setIsDetailLoading(false);
-			return;
-		}
-
-		const requestId = ++detailRequestCounter;
-		setIsDetailLoading(true);
-		setDetailErrorMessage(undefined);
-		void new DaemonApi(currentClient).control.readDocument(target.sourcePath)
-			.then((document) => {
-				if (detailRequestCounter !== requestId) {
-					return;
-				}
-				setDetailContent(document.content);
-				setDetailUpdatedAt(document.updatedAt);
-				setDetailErrorMessage(undefined);
-			})
-			.catch((error) => {
-				if (detailRequestCounter !== requestId) {
-					return;
-				}
-				setDetailContent('');
-				setDetailUpdatedAt(undefined);
-				setDetailErrorMessage(toErrorMessage(error));
-			})
-			.finally(() => {
-				if (detailRequestCounter === requestId) {
-					setIsDetailLoading(false);
-				}
-			});
-	});
-
-	createEffect(() => {
 		const selectedTarget = cockpitMode() === 'mission' ? selectedTreeTarget() : undefined;
-		const target: TmuxSidePaneTarget = selectedTarget?.kind === 'session' && selectedTarget.sessionId
+		const target: OperatorPaneTarget = selectedTarget?.kind === 'session' && selectedTarget.sessionId
 			? { kind: 'session', sessionId: selectedTarget.sessionId }
 			: { kind: 'idle' };
-		void syncTmuxSidePaneTarget(target, workspaceContext.workspaceRoot)
+		void syncOperatorPaneTarget(target)
 			.catch((error) => {
-				appendLog(`Unable to retarget tmux side pane: ${toErrorMessage(error)}`);
+						appendLog(`Unable to retarget pilot pane: ${toErrorMessage(error)}`);
 			});
 	});
 
@@ -2074,8 +1988,6 @@ export function MissionCockpitApp({
 					focusArea={focusArea()}
 					centerContent={centerContent()}
 					overlayContent={overlayContent()}
-					showDetailPane={showEmbeddedDetailPane()}
-					{...(renderedDetailContent() ? { detailContent: renderedDetailContent() } : {})}
 					showCommandPanel={true}
 					commandPanelTitle={commandPanelDescriptor().title}
 					commandPanelPlaceholder={commandPanelDescriptor().placeholder}
@@ -2229,9 +2141,6 @@ export function MissionCockpitApp({
 	);
 
 }
-
-let detailRequestCounter = 0;
-
 function asMissionStatusNotification(
 	event: unknown
 ): { type: 'mission.status'; missionId: string; status: MissionStatus } | undefined {
@@ -2501,235 +2410,35 @@ async function resolveGitBranchName(cwd: string): Promise<string | undefined> {
 	});
 }
 
-let cachedParentTmuxSessionName: Promise<string | undefined> | undefined;
-let lastSyncedTmuxSidePaneSelection: string | undefined;
+let lastSyncedOperatorPaneSelection: string | undefined;
 
-async function syncTmuxSidePaneTarget(
-	target: TmuxSidePaneTarget,
-	workspaceRoot: string
-): Promise<void> {
-	const parentSessionName = await resolveParentTmuxSessionName();
-	if (!parentSessionName) {
+async function syncOperatorPaneTarget(target: OperatorPaneTarget): Promise<void> {
+	const stateFile = resolveOperatorPaneStateFile();
+	if (!stateFile) {
 		return;
 	}
-	const nextSelection = serializeTmuxSidePaneTarget(target);
-	if (lastSyncedTmuxSidePaneSelection === nextSelection) {
+	const nextSelection = serializeOperatorPaneTarget(target);
+	if (lastSyncedOperatorPaneSelection === nextSelection) {
 		return;
 	}
-	if (target.kind === 'idle') {
-		await hideTmuxSidePane(parentSessionName);
-		lastSyncedTmuxSidePaneSelection = nextSelection;
-		return;
-	}
-	const command = buildAttachedSessionPaneCommand(target.sessionId);
-	await showTmuxSidePane(parentSessionName, workspaceRoot, command);
-	lastSyncedTmuxSidePaneSelection = nextSelection;
+	await mkdir(path.dirname(stateFile), { recursive: true });
+	await writeFile(stateFile, `${nextSelection}\n`, 'utf8');
+	lastSyncedOperatorPaneSelection = nextSelection;
 }
 
-function serializeTmuxSidePaneTarget(target: TmuxSidePaneTarget): string {
+function serializeOperatorPaneTarget(target: OperatorPaneTarget): string {
 	if (target.kind === 'session') {
 		return `session:${target.sessionId}`;
 	}
 	return 'idle';
 }
 
-function resolveParentTmuxSessionName(): Promise<string | undefined> {
-	if (cachedParentTmuxSessionName) {
-		return cachedParentTmuxSessionName;
+function resolveOperatorPaneStateFile(): string | undefined {
+	const explicitPath = process.env['MISSION_PILOT_TARGET_FILE']?.trim();
+	if (explicitPath) {
+		return explicitPath;
 	}
-	const explicitSessionName = process.env['MISSION_TMUX_SESSION_NAME']?.trim();
-	if (explicitSessionName) {
-		cachedParentTmuxSessionName = Promise.resolve(explicitSessionName);
-		return cachedParentTmuxSessionName;
-	}
-	if (!process.env['TMUX'] && process.env['MISSION_TMUX_ACTIVE'] !== '1') {
-		cachedParentTmuxSessionName = Promise.resolve(undefined);
-		return cachedParentTmuxSessionName;
-	}
-	cachedParentTmuxSessionName = resolveCurrentTmuxSessionName();
-	return cachedParentTmuxSessionName;
-}
-
-function buildAttachedSessionPaneCommand(sessionId: string): string {
-	const tmuxBinary = process.env['MISSION_TMUX_BINARY']?.trim() || 'tmux';
-	return `exec env -u TMUX ${shellEscape(tmuxBinary)} attach-session -t ${shellEscape(sessionId)}`;
-}
-
-async function showTmuxSidePane(sessionName: string, cwd: string, command: string): Promise<void> {
-	const { targetPane, created } = await ensureTmuxSidePane(sessionName, cwd, command);
-	if (created) {
-		return;
-	}
-	await respawnTmuxPane(targetPane, cwd, command);
-}
-
-async function hideTmuxSidePane(sessionName: string): Promise<void> {
-	const targetPane = `${sessionName}:0.1`;
-	if (!(await hasTmuxPane(targetPane))) {
-		return;
-	}
-	await killTmuxPane(targetPane);
-}
-
-async function ensureTmuxSidePane(sessionName: string, cwd: string, command: string): Promise<{ targetPane: string; created: boolean }> {
-	const targetPane = `${sessionName}:0.1`;
-	if (await hasTmuxPane(targetPane)) {
-		return { targetPane, created: false };
-	}
-	await splitTmuxSidePane(`${sessionName}:0.0`, cwd, command);
-	return { targetPane, created: true };
-}
-
-async function hasTmuxPane(targetPane: string): Promise<boolean> {
-	const tmuxBinary = process.env['MISSION_TMUX_BINARY']?.trim() || 'tmux';
-	return new Promise<boolean>((resolve) => {
-		const child = spawn(tmuxBinary, ['list-panes', '-t', targetPane, '-F', '#{pane_id}'], {
-			cwd: process.cwd(),
-			env: {
-				...process.env,
-				NO_COLOR: '1',
-				TERM: process.env['TERM'] || 'screen-256color'
-			},
-			stdio: ['ignore', 'pipe', 'ignore']
-		});
-
-		let stdout = '';
-		child.stdout.setEncoding('utf8');
-		child.stdout.on('data', (chunk: string) => {
-			stdout += chunk;
-		});
-		child.once('error', () => {
-			resolve(false);
-		});
-		child.once('close', (code) => {
-			resolve(code === 0 && stdout.trim().length > 0);
-		});
-	});
-}
-
-async function splitTmuxSidePane(targetPane: string, cwd: string, command: string): Promise<void> {
-	const tmuxBinary = process.env['MISSION_TMUX_BINARY']?.trim() || 'tmux';
-	const splitSize = process.env['MISSION_TMUX_SIDE_PANE_SIZE']?.trim()
-		|| process.env['MISSION_TMUX_AGENT_PANE_SIZE']?.trim()
-		|| '40%';
-	await new Promise<void>((resolve, reject) => {
-		const child = spawn(tmuxBinary, ['split-window', '-h', '-l', splitSize, '-t', targetPane, '-c', cwd, command], {
-			cwd,
-			env: {
-				...process.env,
-				NO_COLOR: '1',
-				TERM: process.env['TERM'] || 'screen-256color'
-			},
-			stdio: ['ignore', 'ignore', 'pipe']
-		});
-
-		let stderr = '';
-		child.stderr.setEncoding('utf8');
-		child.stderr.on('data', (chunk: string) => {
-			stderr += chunk;
-		});
-		child.once('error', reject);
-		child.once('close', (code) => {
-			if (code === 0) {
-				resolve();
-				return;
-			}
-			reject(new Error(stderr.trim() || `tmux split-window exited with code ${String(code)}.`));
-		});
-	});
-}
-
-async function killTmuxPane(targetPane: string): Promise<void> {
-	const tmuxBinary = process.env['MISSION_TMUX_BINARY']?.trim() || 'tmux';
-	await new Promise<void>((resolve, reject) => {
-		const child = spawn(tmuxBinary, ['kill-pane', '-t', targetPane], {
-			cwd: process.cwd(),
-			env: {
-				...process.env,
-				NO_COLOR: '1',
-				TERM: process.env['TERM'] || 'screen-256color'
-			},
-			stdio: ['ignore', 'ignore', 'pipe']
-		});
-
-		let stderr = '';
-		child.stderr.setEncoding('utf8');
-		child.stderr.on('data', (chunk: string) => {
-			stderr += chunk;
-		});
-		child.once('error', reject);
-		child.once('close', (code) => {
-			if (code === 0) {
-				resolve();
-				return;
-			}
-			reject(new Error(stderr.trim() || `tmux kill-pane exited with code ${String(code)}.`));
-		});
-	});
-}
-
-async function respawnTmuxPane(targetPane: string, cwd: string, command: string): Promise<void> {
-	const tmuxBinary = process.env['MISSION_TMUX_BINARY']?.trim() || 'tmux';
-	await new Promise<void>((resolve, reject) => {
-		const child = spawn(tmuxBinary, ['respawn-pane', '-k', '-t', targetPane, '-c', cwd, command], {
-			cwd,
-			env: {
-				...process.env,
-				NO_COLOR: '1',
-				TERM: process.env['TERM'] || 'screen-256color'
-			},
-			stdio: ['ignore', 'ignore', 'pipe']
-		});
-
-		let stderr = '';
-		child.stderr.setEncoding('utf8');
-		child.stderr.on('data', (chunk: string) => {
-			stderr += chunk;
-		});
-		child.once('error', reject);
-		child.once('close', (code) => {
-			if (code === 0) {
-				resolve();
-				return;
-			}
-			reject(new Error(stderr.trim() || `tmux respawn-pane exited with code ${String(code)}.`));
-		});
-	});
-}
-
-async function resolveCurrentTmuxSessionName(): Promise<string | undefined> {
-	return new Promise<string | undefined>((resolve) => {
-		const child = spawn('tmux', ['display-message', '-p', '#S'], {
-			cwd: process.cwd(),
-			env: {
-				...process.env,
-				NO_COLOR: '1',
-				TERM: 'dumb'
-			},
-			stdio: ['ignore', 'pipe', 'ignore']
-		});
-
-		let stdout = '';
-		child.stdout.setEncoding('utf8');
-		child.stdout.on('data', (chunk: string) => {
-			stdout += chunk;
-		});
-		child.once('error', () => {
-			resolve(undefined);
-		});
-		child.once('close', (code) => {
-			if (code !== 0) {
-				resolve(undefined);
-				return;
-			}
-			const sessionName = stdout.trim();
-			resolve(sessionName.length > 0 ? sessionName : undefined);
-		});
-	});
-}
-
-function shellEscape(value: string): string {
-	return `'${value.replace(/'/g, `'\\''`)}'`;
+	return undefined;
 }
 
 function pickSelectItemId(items: SelectItem[], current: string | undefined): string | undefined {

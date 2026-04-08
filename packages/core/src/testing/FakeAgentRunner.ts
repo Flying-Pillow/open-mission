@@ -151,6 +151,7 @@ class FakeAgentSession implements AgentSession {
 
 export class FakeAgentRunner implements AgentRunner {
 	private readonly sessions = new Map<string, FakeAgentSession>();
+	private readonly startRequests: AgentSessionStartRequest[] = [];
 	private nextSessionId = 0;
 
 	public readonly capabilities = {
@@ -174,6 +175,7 @@ export class FakeAgentRunner implements AgentRunner {
 	}
 
 	public async startSession(request: AgentSessionStartRequest): Promise<AgentSession> {
+		this.startRequests.push(cloneStartRequest(request));
 		const sessionId = `${this.id}-session-${String(++this.nextSessionId)}`;
 		const session = new FakeAgentSession({
 			runtimeId: this.id,
@@ -207,4 +209,35 @@ export class FakeAgentRunner implements AgentRunner {
 	public getSession(sessionId: string): FakeAgentSession | undefined {
 		return this.sessions.get(sessionId);
 	}
+
+	public getLastStartRequest(): AgentSessionStartRequest | undefined {
+		const request = this.startRequests.at(-1);
+		return request ? cloneStartRequest(request) : undefined;
+	}
+}
+
+function cloneStartRequest(request: AgentSessionStartRequest): AgentSessionStartRequest {
+	return {
+		...request,
+		...(request.initialPrompt
+			? {
+				initialPrompt: {
+					...request.initialPrompt,
+					...(request.initialPrompt.metadata
+						? { metadata: { ...request.initialPrompt.metadata } }
+						: {})
+				}
+			}
+			: {}),
+		...(request.mcpServers
+			? {
+				mcpServers: request.mcpServers.map((server) => ({
+					...server,
+					...(server.args ? { args: [...server.args] } : {}),
+					...(server.env ? { env: { ...server.env } } : {})
+				}))
+			}
+			: {}),
+		...(request.metadata ? { metadata: { ...request.metadata } } : {})
+	};
 }

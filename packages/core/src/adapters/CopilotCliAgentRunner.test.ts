@@ -2,9 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentSessionEvent, AgentSessionStartRequest } from '../runtime/AgentRuntimeTypes.js';
 import { CopilotCliAgentRunner, type CopilotCliAgentRunnerOptions } from './CopilotCliAgentRunner.js';
 
-type MockTmuxState = {
+type MockTerminalState = {
 	exists: boolean;
-	paneId: string;
 	capture: string;
 	dead: boolean;
 	exitCode: number;
@@ -31,53 +30,58 @@ function createStartRequestWithoutInitialPrompt(): AgentSessionStartRequest {
 }
 
 describe('CopilotCliAgentRunner', () => {
-	let state: MockTmuxState;
+	let state: MockTerminalState;
 	let executor: NonNullable<CopilotCliAgentRunnerOptions['executor']>;
+	let activeSessionName: string | undefined;
 
 	beforeEach(() => {
 		vi.useFakeTimers();
 		state = {
 			exists: true,
-			paneId: '%1',
 			capture: '',
 			dead: false,
 			exitCode: 0,
 			sentKeys: []
 		};
+		activeSessionName = undefined;
 		executor = async (args) => {
-			if (args[0] === '-V') {
-				return { stdout: 'tmux 3.4\n', stderr: '' };
+			if (args[0] === '--version') {
+				return { stdout: 'zellij 0.40.1\n', stderr: '' };
 			}
-			if (args[0] === 'new-session') {
-				return { stdout: 'mission-agent-test %1\n', stderr: '' };
+			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
+				return {
+					stdout: JSON.stringify([
+						{ id: 1, title: 'PILOT', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false },
+						{ id: 2, title: 'MISSION', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: true },
+						...(state.exists && activeSessionName
+							? [{ id: 4, title: activeSessionName, tab_id: 0, exited: state.dead, exitStatus: state.dead ? state.exitCode : null, is_plugin: false, is_focused: false }]
+							: [])
+					]),
+					stderr: ''
+				};
 			}
-			if (args[0] === 'set-option') {
+			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'new-pane') {
+				activeSessionName = args[8];
+				return { stdout: 'terminal_4\n', stderr: '' };
+			}
+			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'stack-panes') {
 				return { stdout: '', stderr: '' };
 			}
-			if (args[0] === 'send-keys') {
+			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'focus-pane-id') {
+				return { stdout: '', stderr: '' };
+			}
+			if (args[0] === '--session' && args[2] === 'action' && (args[3] === 'write-chars' || args[3] === 'write')) {
 				state.sentKeys.push(args);
 				return { stdout: '', stderr: '' };
 			}
-			if (args[0] === 'has-session') {
-				if (!state.exists) {
-					throw new Error('missing session');
-				}
-				return { stdout: '', stderr: '' };
-			}
-			if (args[0] === 'display-message' && args[4] === '#{pane_id}') {
-				return { stdout: `${state.paneId}\n`, stderr: '' };
-			}
-			if (args[0] === 'display-message' && args[4] === '#{pane_dead} #{pane_dead_status}') {
-				return { stdout: `${state.dead ? '1' : '0'} ${String(state.exitCode)}\n`, stderr: '' };
-			}
-			if (args[0] === 'capture-pane') {
+			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'dump-screen') {
 				return { stdout: state.capture, stderr: '' };
 			}
-			if (args[0] === 'kill-session') {
+			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'close-pane') {
 				state.exists = false;
 				return { stdout: '', stderr: '' };
 			}
-			throw new Error(`Unexpected tmux command: ${args.join(' ')}`);
+			throw new Error(`Unexpected terminal command: ${args.join(' ')}`);
 		};
 	});
 
@@ -85,11 +89,12 @@ describe('CopilotCliAgentRunner', () => {
 		vi.useRealTimers();
 	});
 
-	it('starts a tmux-backed session and injects the initial prompt', async () => {
+	it('starts a terminal-backed session and injects the initial prompt', async () => {
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
 			args: ['--add-dir', '/tmp/work'],
 			executor,
+			sharedSessionName: 'mission-mission',
 			pollIntervalMs: 500
 		});
 
@@ -97,16 +102,17 @@ describe('CopilotCliAgentRunner', () => {
 		const snapshot = session.getSnapshot();
 
 		expect(snapshot.runtimeId).toBe('copilot-cli');
-		expect(snapshot.transportId).toBe('tmux');
-		expect(snapshot.sessionId).toBe('mission-agent-test');
+		expect(snapshot.transportId).toBe('terminal');
+		expect(snapshot.sessionId).toMatch(/^mission-agent-/u);
 		expect(snapshot.phase).toBe('running');
-		expect(state.sentKeys.some((args) => args.includes('-l') && args.includes('Implement the task.'))).toBe(true);
+		expect(state.sentKeys.some((args) => args.includes('write-chars') && args.includes('Implement the task.'))).toBe(true);
 	});
 
-	it('accepts prompt submission by sending literal keys into tmux', async () => {
+	it('accepts prompt submission by sending literal keys into terminal transport', async () => {
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
 			executor,
+			sharedSessionName: 'mission-mission',
 			pollIntervalMs: 500
 		});
 		const session = await runner.startSession(createStartRequestWithoutInitialPrompt());
@@ -117,7 +123,7 @@ describe('CopilotCliAgentRunner', () => {
 
 		await session.submitPrompt({ source: 'operator', text: 'Explain the current failure.' });
 
-		expect(state.sentKeys.some((args) => args.includes('-l') && args.includes('Explain the current failure.'))).toBe(true);
+		expect(state.sentKeys.some((args) => args.includes('write-chars') && args.includes('Explain the current failure.'))).toBe(true);
 		expect(events.find((event) => event.type === 'prompt.accepted')).toBeDefined();
 	});
 
@@ -125,6 +131,7 @@ describe('CopilotCliAgentRunner', () => {
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
 			executor,
+			sharedSessionName: 'mission-mission',
 			pollIntervalMs: 500
 		});
 		const session = await runner.startSession(createStartRequestWithoutInitialPrompt());
@@ -135,16 +142,17 @@ describe('CopilotCliAgentRunner', () => {
 
 		const snapshot = await session.submitCommand({ kind: 'interrupt' });
 
-		expect(state.sentKeys.some((args) => args.includes('C-c'))).toBe(true);
+		expect(state.sentKeys.some((args) => args.includes('write') && args.includes('3'))).toBe(true);
 		expect(snapshot.awaitingInput).toBe(true);
 		expect(events.find((event) => event.type === 'command.accepted')).toBeDefined();
 		expect(events.find((event) => event.type === 'session.awaiting-input')).toBeDefined();
 	});
 
-	it('detects terminal completion from tmux pane state', async () => {
+	it('terminates a session through the runner API', async () => {
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
 			executor,
+			sharedSessionName: 'mission-mission',
 			pollIntervalMs: 500
 		});
 		const session = await runner.startSession(createStartRequestWithoutInitialPrompt());
@@ -152,15 +160,10 @@ describe('CopilotCliAgentRunner', () => {
 		session.onDidEvent((event) => {
 			events.push(event);
 		});
+		await session.terminate('operator requested stop');
 
-		state.capture = 'Working...\nDone.\n';
-		state.dead = true;
-		state.exitCode = 0;
-
-		await vi.advanceTimersByTimeAsync(600);
-
-		expect(events.some((event) => event.type === 'session.message' && event.text === 'Working...')).toBe(true);
-		expect(events.some((event) => event.type === 'session.completed')).toBe(true);
-		expect(session.getSnapshot().phase).toBe('completed');
+		expect(events.some((event) => event.type === 'session.terminated')).toBe(true);
+		expect(session.getSnapshot().phase).toBe('terminated');
+		expect(state.exists).toBe(false);
 	});
 });

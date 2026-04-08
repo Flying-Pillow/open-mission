@@ -9,7 +9,7 @@ export * from './runtime/AgentSessionOrchestrator.js';
 export * from './runtime/AgentRunnerRegistry.js';
 export * from './adapters/CopilotSdkAgentRunner.js';
 export * from './adapters/CopilotCliAgentRunner.js';
-export * from './adapters/TmuxAgentTransport.js';
+export * from './adapters/TerminalAgentTransport.js';
 export * from './initializeMissionRepository.js';
 export * from './lib/agentRuntimes.js';
 export * from './lib/daemonConfig.js';

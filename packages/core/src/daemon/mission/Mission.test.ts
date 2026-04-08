@@ -169,8 +169,9 @@ describe('Mission', () => {
 
             try {
                 const startedStatus = await mission.startWorkflow();
-                const taskId = startedStatus.readyTasks?.[0]?.taskId;
-                if (!taskId) {
+                const task = startedStatus.readyTasks?.[0];
+                const taskId = task?.taskId;
+                if (!taskId || !startedStatus.missionDir || !task?.filePath) {
                     throw new Error('Expected a ready task after workflow start.');
                 }
 
@@ -185,6 +186,13 @@ describe('Mission', () => {
 
                 const nextStatus = await mission.executeAction(`task.launch.${taskId}`);
                 expect(await runner.listSessions()).toHaveLength(1);
+                expect(runner.getLastStartRequest()?.workingDirectory).toBe(startedStatus.missionDir);
+                expect(runner.getLastStartRequest()?.initialPrompt?.text).toContain(
+                    `Stay strictly within this mission workspace: ${startedStatus.missionDir}`
+                );
+                expect(runner.getLastStartRequest()?.initialPrompt?.text).toContain(
+                    `Here are your instructions: @${task.filePath}`
+                );
                 expect(nextStatus.agentSessions?.length ?? 0).toBe(1);
                 expect(nextStatus.agentSessions?.[0]).toMatchObject({
                     taskId,
@@ -236,15 +244,15 @@ describe('Mission', () => {
         }
     });
 
-    it('migrates legacy tmux runtime session records to runtime plus transport identity', async () => {
+    it('fills missing transport identity for persisted copilot-cli runtime sessions', async () => {
         const workspaceRoot = await createTempRepo();
-        const runner = new FakeAgentRunner('copilot-cli', 'Copilot CLI', 'tmux');
+        const runner = new FakeAgentRunner('copilot-cli', 'Copilot CLI', 'terminal');
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
             const mission = await Factory.create(adapter, {
-                brief: createBrief(206, 'Mission tmux identity migration'),
-                branchRef: adapter.deriveMissionBranchName(206, 'Mission tmux identity migration')
+                brief: createBrief(206, 'Mission transport identity migration'),
+                branchRef: adapter.deriveMissionBranchName(206, 'Mission transport identity migration')
             }, createWorkflowBindings(runner));
 
             const missionId = mission.getRecord().id;
@@ -259,7 +267,7 @@ describe('Mission', () => {
 
                 const launched = await mission.launchAgentSession({
                     runtimeId: runner.id,
-                    transportId: 'tmux',
+                    transportId: 'terminal',
                     taskId,
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'Migrate me.'
@@ -274,7 +282,7 @@ describe('Mission', () => {
                     session.sessionId === launched.sessionId
                         ? {
                             ...session,
-                            runtimeId: 'tmux'
+                            runtimeId: 'copilot-cli'
                         }
                         : session
                 );
@@ -293,13 +301,13 @@ describe('Mission', () => {
                     const migratedSession = status.agentSessions?.find((session) => session.sessionId === launched.sessionId);
                     expect(migratedSession).toMatchObject({
                         runtimeId: 'copilot-cli',
-                        transportId: 'tmux'
+                        transportId: 'terminal'
                     });
 
                     const migratedDocument = await adapter.readMissionRuntimeRecord(missionDir);
                     expect(migratedDocument?.runtime.sessions.find((session) => session.sessionId === launched.sessionId)).toMatchObject({
                         runtimeId: 'copilot-cli',
-                        transportId: 'tmux'
+                        transportId: 'terminal'
                     });
                 } finally {
                     reloaded.dispose();

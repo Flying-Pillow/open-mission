@@ -12,13 +12,13 @@ import {
 import { AgentSessionEventEmitter } from '../runtime/AgentSessionEventEmitter.js';
 import { COPILOT_CLI_AGENT_RUNTIME_ID } from '../lib/agentRuntimes.js';
 import {
-	TmuxAgentTransport,
-	type TmuxAgentTransportOptions,
-	type TmuxSessionHandle
-} from './TmuxAgentTransport.js';
+	TerminalAgentTransport,
+	type TerminalAgentTransportOptions,
+	type TerminalSessionHandle
+} from './TerminalAgentTransport.js';
 
-type TmuxRunnerSessionHandle = {
-	transportHandle: TmuxSessionHandle;
+type TerminalRunnerSessionHandle = {
+	transportHandle: TerminalSessionHandle;
 	snapshot: AgentSessionSnapshot;
 	eventEmitter: AgentSessionEventEmitter<AgentSessionEvent>;
 	lastCapture: string;
@@ -30,7 +30,7 @@ type SnapshotOverrides = Omit<Partial<AgentSessionSnapshot>, 'failureMessage'> &
 	failureMessage?: string | undefined;
 };
 
-export type CopilotCliAgentRunnerOptions = TmuxAgentTransportOptions & {
+export type CopilotCliAgentRunnerOptions = TerminalAgentTransportOptions & {
 	runtimeId?: string;
 	displayName?: string;
 	command: string;
@@ -42,7 +42,7 @@ export type CopilotCliAgentRunnerOptions = TmuxAgentTransportOptions & {
 
 export class CopilotCliAgentRunner implements AgentRunner {
 	public readonly id: string;
-	public readonly transportId = 'tmux';
+	public readonly transportId = 'terminal';
 	public readonly displayName: string;
 	public readonly capabilities: AgentRunnerCapabilities = {
 		attachableSessions: true,
@@ -54,18 +54,18 @@ export class CopilotCliAgentRunner implements AgentRunner {
 		mcpClient: false
 	};
 
-	private readonly transport: TmuxAgentTransport;
+	private readonly transport: TerminalAgentTransport;
 	private readonly command: string;
 	private readonly args: string[];
 	private readonly env: NodeJS.ProcessEnv | undefined;
 	private readonly sessionPrefix: string;
 	private readonly pollIntervalMs: number;
 	private readonly logLine: ((line: string) => void) | undefined;
-	private readonly sessions = new Map<string, TmuxRunnerSessionHandle>();
+	private readonly sessions = new Map<string, TerminalRunnerSessionHandle>();
 
 	public constructor(options: CopilotCliAgentRunnerOptions) {
 		this.id = options.runtimeId?.trim() || COPILOT_CLI_AGENT_RUNTIME_ID;
-		this.displayName = options.displayName?.trim() || `${this.id} via tmux`;
+		this.displayName = options.displayName?.trim() || `${this.id} via zellij`;
 		this.command = options.command.trim();
 		if (!this.command) {
 			throw new Error('CopilotCliAgentRunner requires a command.');
@@ -75,8 +75,10 @@ export class CopilotCliAgentRunner implements AgentRunner {
 		this.sessionPrefix = options.sessionPrefix?.trim() || 'mission-agent';
 		this.pollIntervalMs = Math.max(100, options.pollIntervalMs ?? 1000);
 		this.logLine = options.logLine;
-		this.transport = new TmuxAgentTransport({
-			...(options.tmuxBinary ? { tmuxBinary: options.tmuxBinary } : {}),
+		this.transport = new TerminalAgentTransport({
+			...(options.terminalBinary ? { terminalBinary: options.terminalBinary } : {}),
+			...(options.sharedSessionName ? { sharedSessionName: options.sharedSessionName } : {}),
+			...(options.pilotPaneTitle ? { pilotPaneTitle: options.pilotPaneTitle } : {}),
 			...(options.executor ? { executor: options.executor } : {}),
 			...(options.logLine ? { logLine: options.logLine } : {})
 		});
@@ -153,8 +155,8 @@ export class CopilotCliAgentRunner implements AgentRunner {
 		return [...this.sessions.values()].map((handle) => cloneSnapshot(handle.snapshot));
 	}
 
-	private registerHandle(transportHandle: TmuxSessionHandle, snapshot: AgentSessionSnapshot): void {
-		const handle: TmuxRunnerSessionHandle = {
+	private registerHandle(transportHandle: TerminalSessionHandle, snapshot: AgentSessionSnapshot): void {
+		const handle: TerminalRunnerSessionHandle = {
 			transportHandle,
 			snapshot,
 			eventEmitter: new AgentSessionEventEmitter<AgentSessionEvent>(),
@@ -287,7 +289,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 		void this.pollSession(sessionId);
 	}
 
-	private stopPolling(handle: TmuxRunnerSessionHandle): void {
+	private stopPolling(handle: TerminalRunnerSessionHandle): void {
 		if (!handle.pollTimer) {
 			return;
 		}
@@ -309,11 +311,11 @@ export class CopilotCliAgentRunner implements AgentRunner {
 					phase: 'terminated',
 					acceptsPrompts: false,
 					awaitingInput: false,
-					failureMessage: 'tmux session no longer exists.'
+					failureMessage: 'terminal session no longer exists.'
 				});
 				handle.eventEmitter.fire({
 					type: 'session.terminated',
-					reason: 'tmux session no longer exists.',
+					reason: 'terminal session no longer exists.',
 					snapshot: cloneSnapshot(snapshot)
 				});
 				return;
@@ -341,7 +343,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 					awaitingInput: false,
 					...(paneState.exitCode === 0
 						? {}
-						: { failureMessage: `tmux command exited with status ${String(paneState.exitCode)}.` })
+						: { failureMessage: `terminal command exited with status ${String(paneState.exitCode)}.` })
 				});
 				if (nextPhase === 'completed') {
 					handle.eventEmitter.fire({
@@ -351,7 +353,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 				} else {
 					handle.eventEmitter.fire({
 						type: 'session.failed',
-						reason: snapshot.failureMessage ?? 'tmux command failed.',
+						reason: snapshot.failureMessage ?? 'terminal command failed.',
 						snapshot: cloneSnapshot(snapshot)
 					});
 				}
@@ -363,7 +365,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 		}
 	}
 
-	private requireHandle(sessionId: string): TmuxRunnerSessionHandle {
+	private requireHandle(sessionId: string): TerminalRunnerSessionHandle {
 		const handle = this.sessions.get(sessionId);
 		if (!handle) {
 			throw new Error(`Agent session '${sessionId}' is not attached.`);
@@ -371,7 +373,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 		return handle;
 	}
 
-	private requireActiveHandle(sessionId: string, action: string): TmuxRunnerSessionHandle {
+	private requireActiveHandle(sessionId: string, action: string): TerminalRunnerSessionHandle {
 		const handle = this.requireHandle(sessionId);
 		if (isTerminalPhase(handle.snapshot.phase)) {
 			throw new Error(`Cannot ${action} for session '${sessionId}' because it is ${handle.snapshot.phase}.`);
@@ -411,7 +413,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 		return handle.snapshot;
 	}
 
-	private async preparePaneForPrompt(handle: TmuxRunnerSessionHandle): Promise<void> {
+	private async preparePaneForPrompt(handle: TerminalRunnerSessionHandle): Promise<void> {
 		const paneState = await this.transport.readPaneState(handle.transportHandle);
 		if (paneState.dead) {
 			const nextPhase = paneState.exitCode === 0 ? 'completed' : 'failed';
@@ -420,7 +422,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 				acceptsPrompts: false,
 				awaitingInput: false,
 				...(nextPhase === 'failed'
-					? { failureMessage: `tmux command exited with status ${String(paneState.exitCode)}.` }
+					? { failureMessage: `terminal command exited with status ${String(paneState.exitCode)}.` }
 					: {})
 			});
 			handle.eventEmitter.fire(
@@ -431,13 +433,13 @@ export class CopilotCliAgentRunner implements AgentRunner {
 					}
 					: {
 						type: 'session.failed',
-						reason: snapshot.failureMessage ?? 'tmux command failed.',
+						reason: snapshot.failureMessage ?? 'terminal command failed.',
 						snapshot: cloneSnapshot(snapshot)
 					}
 			);
 			throw new Error(
 				nextPhase === 'completed'
-					? `Cannot submit a prompt for session '${handle.transportHandle.sessionName}' because the tmux pane has exited.`
+					? `Cannot submit a prompt for session '${handle.transportHandle.sessionName}' because the terminal pane has exited.`
 					: snapshot.failureMessage ?? `Cannot submit a prompt for session '${handle.transportHandle.sessionName}'.`
 			);
 		}
@@ -462,7 +464,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 			acceptsPrompts: false,
 			acceptedCommands: [],
 			awaitingInput: false,
-			failureMessage: 'Session no longer exists in tmux.',
+			failureMessage: 'Session no longer exists in terminal transport.',
 			updatedAt: new Date().toISOString()
 		};
 		const eventEmitter = new AgentSessionEventEmitter<AgentSessionEvent>();
@@ -476,7 +478,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 				queueMicrotask(() => {
 					listener({
 						type: 'session.terminated',
-						reason: 'Session no longer exists in tmux.',
+						reason: 'Session no longer exists in terminal transport.',
 						snapshot: cloneSnapshot(snapshot)
 					});
 				});
@@ -493,7 +495,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 	}
 }
 
-async function sendText(transport: TmuxAgentTransport, handle: TmuxSessionHandle, text: string): Promise<void> {
+async function sendText(transport: TerminalAgentTransport, handle: TerminalSessionHandle, text: string): Promise<void> {
 	const normalized = text.replace(/\r\n/g, '\n');
 	const lines = normalized.split('\n');
 	for (let index = 0; index < lines.length; index += 1) {

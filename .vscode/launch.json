@@ -4,8 +4,7 @@
         {
             "name": "Mission Full Stack",
             "configurations": [
-                "Mission Daemon",
-                "Mission Extension Host"
+                "Mission Daemon"
             ],
             "stopAll": true
         }
@@ -31,20 +30,6 @@
             ],
             "console": "integratedTerminal",
             "internalConsoleOptions": "neverOpen"
-        },
-        {
-            "name": "Mission Extension Host",
-            "type": "extensionHost",
-            "request": "launch",
-            "args": [
-                "--disable-extension=mission.mission",
-                "--extensionDevelopmentPath=${workspaceFolder}/apps/vscode-extension",
-                "${workspaceFolder}/mission.code-workspace"
-            ],
-            "outFiles": [
-                "${workspaceFolder}/apps/vscode-extension/out/**/*.js"
-            ],
-            "preLaunchTask": "mission: build"
         }
     ]
 }

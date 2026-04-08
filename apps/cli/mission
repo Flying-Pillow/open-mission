@@ -9,8 +9,8 @@ repo_root=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || {
 preload_file="$script_dir/bun-preload.ts"
 daemon_command="$script_dir/missiond"
 typescript_conditions="--conditions=typescript"
-tmux_binary=${MISSION_TMUX_BINARY:-tmux}
-tmux_mode=${MISSION_TMUX_MODE:-auto}
+zellij_binary=${MISSION_ZELLIJ_BINARY:-zellij}
+zellij_mode=${MISSION_ZELLIJ_MODE:-auto}
 
 shell_quote() {
 	printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\''/g")"
@@ -29,100 +29,222 @@ build_command_string() {
 	printf '%s' "$command_string"
 }
 
-resolve_tmux_session_name() {
-	printf '%s' "${MISSION_TMUX_SESSION_NAME:-mission-$(basename "$repo_root")}"
+resolve_zellij_session_name() {
+	printf '%s' "${MISSION_TERMINAL_SESSION_NAME:-mission-$(basename "$repo_root")}"
 }
 
-resolve_daemon_log_path() {
+resolve_runtime_root() {
 	runtime_root=${XDG_RUNTIME_DIR:-}
 	if [ -z "$runtime_root" ]; then
 		runtime_root=${TMPDIR:-/tmp}
 	fi
-	printf '%s/mission/daemon.stdout.log' "$runtime_root"
+	printf '%s' "$runtime_root"
 }
 
-resolve_tmux_side_pane_command() {
-	if [ -n "${MISSION_TMUX_SIDE_PANE_COMMAND:-}" ]; then
-		printf '%s' "$MISSION_TMUX_SIDE_PANE_COMMAND"
+resolve_runtime_config_root() {
+	session_name=$(resolve_zellij_session_name)
+	session_slug=$(printf '%s' "$session_name" | tr -c '[:alnum:]._-' '_')
+	printf '%s/mission/runtime-%s' "$(resolve_runtime_root)" "$session_slug"
+}
+
+ensure_zellij_runtime_config() {
+	runtime_config_root=$1
+	zellij_config_dir="$runtime_config_root/zellij"
+	mkdir -p "$zellij_config_dir"
+	cat > "$zellij_config_dir/config.kdl" <<EOF
+themes {
+    flightdeck {
+        bg "#0F1419" // Terminal background
+        
+        // --- YOUR BORDER COLORS ---
+        fg "#555555"    // UNSELECTED PANES: Muted Grey
+        green "#1E40AF" // SELECTED PANE: Dark Blue
+        
+        // (These are just fallback colors for text inside Zellij UI)
+        black "#000000"
+        red "#FF3333"
+        yellow "#E5C07B"
+        blue "#61AFEF"
+        magenta "#C678DD"
+        cyan "#56B6C2"
+        white "#FFFFFF"
+        orange "#D19A66"
+    }
+}
+
+// Tell Zellij to use the theme
+theme "flightdeck"
+
+// Disable startup tips so no welcome/help text is injected.
+show_startup_tips false
+
+// Keep the nice rounded corners
+ui {
+    pane_frames {
+        rounded_corners true
+    }
+}
+EOF
+}
+
+resolve_pilot_target_file() {
+	session_name=$(resolve_zellij_session_name)
+	session_slug=$(printf '%s' "$session_name" | tr -c '[:alnum:]._-' '_')
+	printf '%s/mission/operator-pane-%s.target' "$(resolve_runtime_root)" "$session_slug"
+}
+
+resolve_pilot_log_file() {
+	session_name=$(resolve_zellij_session_name)
+	session_slug=$(printf '%s' "$session_name" | tr -c '[:alnum:]._-' '_')
+	printf '%s/mission/operator-pane-%s.log' "$(resolve_runtime_root)" "$session_slug"
+}
+
+kdl_escape() {
+	printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+resolve_editor_target() {
+	for candidate in \
+		"$repo_root/mission.json" \
+		"$repo_root/README.md" \
+		"$repo_root/BRANCH_HANDOFF.md" \
+		"$repo_root/CHANGELOG.md"
+	do
+		if [ -f "$candidate" ]; then
+			printf '%s' "$candidate"
+			return
+		fi
+	done
+	printf '%s' ''
+}
+
+resolve_editor_command() {
+	if [ -n "${MISSION_ZELLIJ_EDITOR_COMMAND:-}" ]; then
+		printf '%s' "$MISSION_ZELLIJ_EDITOR_COMMAND"
 		return
 	fi
-
-	if [ -n "${MISSION_TMUX_AGENT_COMMAND:-}" ]; then
-		printf '%s' "$MISSION_TMUX_AGENT_COMMAND"
+	if [ -n "${MISSION_EDITOR_COMMAND:-}" ]; then
+		printf '%s' "$MISSION_EDITOR_COMMAND"
 		return
 	fi
-	printf '%s' "$(build_command_string "$script_dir/mission-sidepane")"
-}
-
-tmux_session_has_live_layout() {
-	session_name=$1
-	pane_state=$("$tmux_binary" list-panes -t "$session_name":0 -F '#{pane_index}:#{pane_dead}' 2>/dev/null || true)
-	if [ -z "$pane_state" ]; then
-		return 1
+	editor_target=$(resolve_editor_target)
+	if [ -n "$editor_target" ]; then
+		printf '%s' "$(build_command_string micro "$editor_target")"
+		return
 	fi
-	printf '%s\n' "$pane_state" | grep -q '^0:0$' || return 1
-	if printf '%s\n' "$pane_state" | grep -q '^1:'; then
-		printf '%s\n' "$pane_state" | grep -q '^1:0$' || return 1
-	fi
-	return 0
+	printf '%s' "$(build_command_string micro)"
 }
 
-tmux_session_has_side_pane() {
+resolve_zellij_layout_file() {
+	session_name=$(resolve_zellij_session_name)
+	session_slug=$(printf '%s' "$session_name" | tr -c '[:alnum:]._-' '_')
+	printf '%s/mission/flightdeck-%s.kdl' "$(resolve_runtime_root)" "$session_slug"
+}
+
+build_zellij_cockpit_command() {
 	session_name=$1
-	"$tmux_binary" list-panes -t "$session_name":0 -F '#{pane_index}' 2>/dev/null | grep -q '^1$'
-}
-
-launch_tmux_session() {
-	session_name=$(resolve_tmux_session_name)
-	split_size=${MISSION_TMUX_SIDE_PANE_SIZE:-${MISSION_TMUX_AGENT_PANE_SIZE:-40%}}
+	pilot_target_file=$2
+	shift 2
 	if [ "$hmr_mode" -eq 1 ]; then
-		left_command=$(build_command_string env MISSION_TMUX_ACTIVE=1 MISSION_TMUX_SESSION_NAME="$session_name" MISSION_COCKPIT_SCRIPT_DIR="$script_dir" "$script_dir/mission" --hmr "$@")
-	else
-		left_command=$(build_command_string env MISSION_TMUX_ACTIVE=1 MISSION_TMUX_SESSION_NAME="$session_name" MISSION_COCKPIT_SCRIPT_DIR="$script_dir" "$script_dir/mission" "$@")
+		build_command_string env MISSION_ZELLIJ_ACTIVE=1 MISSION_TERMINAL_SESSION_NAME="$session_name" MISSION_PILOT_TARGET_FILE="$pilot_target_file" MISSION_COCKPIT_SCRIPT_DIR="$script_dir" "$script_dir/mission" --hmr "$@"
+		return
 	fi
-	right_command=$(resolve_tmux_side_pane_command)
-
-	if "$tmux_binary" has-session -t "$session_name" 2>/dev/null; then
-		if ! tmux_session_has_live_layout "$session_name"; then
-			"$tmux_binary" kill-session -t "$session_name" >/dev/null 2>&1 || true
-		else
-		"$tmux_binary" respawn-pane -k -t "$session_name":0.0 -c "$repo_root" sh -lc "$left_command"
-		if tmux_session_has_side_pane "$session_name"; then
-			"$tmux_binary" kill-pane -t "$session_name":0.1 >/dev/null 2>&1 || true
-		fi
-		"$tmux_binary" set-option -t "$session_name" -g mouse on >/dev/null
-		"$tmux_binary" select-pane -t "$session_name":0.0 >/dev/null
-		exec "$tmux_binary" attach-session -t "$session_name"
-		fi
-	fi
-
-	"$tmux_binary" new-session -d -s "$session_name" -c "$repo_root" sh -lc "$left_command"
-	"$tmux_binary" set-option -t "$session_name" -g mouse on >/dev/null
-	"$tmux_binary" setw -t "$session_name":0 remain-on-exit on >/dev/null
-	"$tmux_binary" select-pane -t "$session_name":0.0 >/dev/null
-
-	exec "$tmux_binary" attach-session -t "$session_name"
+	build_command_string env MISSION_ZELLIJ_ACTIVE=1 MISSION_TERMINAL_SESSION_NAME="$session_name" MISSION_PILOT_TARGET_FILE="$pilot_target_file" MISSION_COCKPIT_SCRIPT_DIR="$script_dir" "$script_dir/mission" "$@"
 }
 
-should_launch_tmux() {
+build_zellij_pilot_command() {
+	session_name=$1
+	pilot_target_file=$2
+	pilot_log_file=$3
+	build_command_string env MISSION_TERMINAL_SESSION_NAME="$session_name" MISSION_PILOT_TARGET_FILE="$pilot_target_file" MISSION_PILOT_LOG_FILE="$pilot_log_file" "$script_dir/mission-sidepane"
+}
+
+write_zellij_layout_file() {
+	layout_file=$1
+	cockpit_command=$2
+	pilot_command=$3
+	editor_command=$4
+	right_width=$5
+	editor_height=$6
+	mkdir -p "$(dirname "$layout_file")"
+	cat > "$layout_file" <<EOF
+layout {
+	// Override the implicit default tab template with a bare template so
+	// zellij does not inject tab/status bar plugins.
+	default_tab_template {
+		children
+	}
+	tab name="FLIGHT-DECK" {
+		pane split_direction="vertical" {
+			pane name="MISSION" focus=true command="sh" cwd="$(kdl_escape "$repo_root")" {
+				args "-lc" "$(kdl_escape "exec $cockpit_command")"
+			}
+			pane size="$(kdl_escape "$right_width")" split_direction="horizontal" {
+				pane name="PILOT" command="sh" cwd="$(kdl_escape "$repo_root")" {
+					args "-lc" "$(kdl_escape "exec $pilot_command")"
+				}
+				pane size="$(kdl_escape "$editor_height")" name="EDITOR" command="sh" cwd="$(kdl_escape "$repo_root")" {
+					args "-lc" "$(kdl_escape "exec $editor_command")"
+				}
+			}
+		}
+	}
+}
+EOF
+}
+
+reset_zellij_session() {
+	session_name=$1
+	"$zellij_binary" delete-session --force "$session_name" >/dev/null 2>&1 || true
+}
+
+launch_zellij_session() {
+	session_name=$(resolve_zellij_session_name)
+	right_width=${MISSION_ZELLIJ_RIGHT_COLUMN_WIDTH:-${MISSION_ZELLIJ_OPERATOR_PANE_SIZE:-30%}}
+	editor_height=${MISSION_ZELLIJ_EDITOR_HEIGHT:-35%}
+	runtime_config_root=$(resolve_runtime_config_root)
+	ensure_zellij_runtime_config "$runtime_config_root"
+	zellij_config_dir="$runtime_config_root/zellij"
+	editor_command=$(resolve_editor_command)
+	pilot_target_file=$(resolve_pilot_target_file)
+	pilot_log_file=$(resolve_pilot_log_file)
+	pilot_command=$(build_zellij_pilot_command "$session_name" "$pilot_target_file" "$pilot_log_file")
+	layout_file=$(resolve_zellij_layout_file)
+	mkdir -p "$(dirname "$pilot_target_file")"
+	if [ ! -f "$pilot_target_file" ]; then
+		printf 'idle\n' > "$pilot_target_file"
+	fi
+	reset_zellij_session "$session_name"
+	cockpit_command=$(build_zellij_cockpit_command "$session_name" "$pilot_target_file" "$@")
+	write_zellij_layout_file "$layout_file" "$cockpit_command" "$pilot_command" "$editor_command" "$right_width" "$editor_height"
+	if "$zellij_binary" --config-dir "$zellij_config_dir" --session "$session_name" --new-session-with-layout "$layout_file"; then
+		return 0
+	fi
+	if attach_or_resurrect_zellij_session "$session_name" "$zellij_config_dir"; then
+		return 0
+	fi
+	exit 1
+}
+
+should_launch_zellij() {
 	if [ "$cockpit_mode" -ne 1 ]; then
 		return 1
 	fi
-	if [ "${MISSION_TMUX_ACTIVE:-0}" = "1" ] || [ -n "${TMUX:-}" ]; then
+	if [ "${MISSION_ZELLIJ_ACTIVE:-0}" = "1" ] || [ -n "${ZELLIJ:-}" ]; then
 		return 1
 	fi
 	if [ ! -t 0 ] || [ ! -t 1 ]; then
-		if [ "$tmux_mode" = "force" ]; then
-			printf '%s\n' 'mission: tmux mode requires an interactive terminal.' >&2
+		if [ "$zellij_mode" = "force" ]; then
+			printf '%s\n' 'mission: zellij mode requires an interactive terminal.' >&2
 			exit 1
 		fi
 		return 1
 	fi
-	if command -v "$tmux_binary" >/dev/null 2>&1; then
+	if command -v "$zellij_binary" >/dev/null 2>&1; then
 		return 0
 	fi
-	if [ "$tmux_mode" = "force" ]; then
-		printf '%s\n' "mission: tmux was requested but '$tmux_binary' was not found in PATH." >&2
+	if [ "$zellij_mode" = "force" ]; then
+		printf '%s\n' "mission: zellij was requested but '$zellij_binary' was not found in PATH." >&2
 		exit 1
 	fi
 	return 1
@@ -135,12 +257,8 @@ while [ "$#" -gt 0 ]; do
 			hmr_mode=1
 			shift
 			;;
-		--tmux)
-			tmux_mode=force
-			shift
-			;;
-		--no-tmux)
-			tmux_mode=off
+		--no-zellij)
+			zellij_mode=off
 			shift
 			;;
 		*)
@@ -162,11 +280,11 @@ elif [ "$first_arg" = "artifact" ]; then
 fi
 
 if [ "$first_arg" = "--help" ] || [ "$first_arg" = "-h" ]; then
-	tmux_mode=off
+	zellij_mode=off
 fi
 
-if [ "$tmux_mode" != "off" ] && should_launch_tmux; then
-	launch_tmux_session "$@"
+if [ "$zellij_mode" != "off" ] && should_launch_zellij; then
+	launch_zellij_session "$@"
 fi
 
 if [ "$hmr_mode" -eq 1 ] && [ "$cockpit_mode" -eq 1 ]; then

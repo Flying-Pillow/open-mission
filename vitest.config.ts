@@ -16,15 +16,6 @@ export default defineConfig({
 			{
 				extends: true,
 				test: {
-					name: 'vscode-extension',
-					root: './apps/vscode-extension',
-					environment: 'node',
-					include: ['src/**/*.{test,spec}.{ts,tsx}']
-				}
-			},
-			{
-				extends: true,
-				test: {
 					name: 'adapters',
 					root: './packages/adapters',
 					environment: 'node',

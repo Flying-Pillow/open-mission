@@ -5,6 +5,7 @@ import { MissionPreparationService } from './MissionPreparationService.js';
 import { RepositoryPreparationService } from './RepositoryPreparationService.js';
 import { Mission } from './mission/Mission.js';
 import { Factory } from './mission/Factory.js';
+import { buildMissionTaskLaunchPrompt } from './mission/taskLaunchPrompt.js';
 import type { MissionWorkflowBindings } from './mission/Mission.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import {
@@ -485,7 +486,11 @@ export class MissionWorkspace {
 			...(overrides.runtimeId ? { runtimeId: overrides.runtimeId } : {}),
 			...(overrides.transportId ? { transportId: overrides.transportId } : {}),
 			workingDirectory: overrides['workingDirectory'] ?? status.missionDir ?? this.workspaceRoot,
-			prompt: overrides['prompt'] ?? task.instruction,
+			prompt: overrides['prompt']
+				?? buildMissionTaskLaunchPrompt(
+					task,
+					status.missionDir ?? overrides['workingDirectory'] ?? this.workspaceRoot
+				),
 			title: overrides['title'] ?? task.subject,
 			assignmentLabel: overrides['assignmentLabel'] ?? task.relativePath,
 			scope: overrides['scope'] ?? {
@@ -795,7 +800,7 @@ export class MissionWorkspace {
 					{
 						id: 'copilot-cli',
 						label: 'Copilot CLI',
-						description: 'Interactive Copilot CLI session in tmux'
+						description: 'Interactive Copilot CLI session in zellij terminal transport'
 					},
 					{
 						id: 'copilot-sdk',
@@ -807,7 +812,7 @@ export class MissionWorkspace {
 		}
 		if (selectedField === 'defaultAgentMode') {
 			const runtimeId = control.settings.agentRuntime?.trim();
-			const usesTmuxTransport = runtimeId === 'copilot-cli';
+			const usesTerminalTransport = runtimeId === 'copilot-cli';
 			return {
 				kind: 'selection',
 				id: 'value',
@@ -820,14 +825,14 @@ export class MissionWorkspace {
 					{
 						id: 'interactive',
 						label: 'Interactive',
-						description: usesTmuxTransport
+						description: usesTerminalTransport
 							? 'Operator-guided terminal session'
 							: 'Operator-guided runtime session'
 					},
 					{
 						id: 'autonomous',
 						label: 'Autonomous',
-						description: usesTmuxTransport
+						description: usesTerminalTransport
 							? 'Terminal transport continues until interrupted or complete'
 							: 'Runtime continues with autonomous execution'
 					}
@@ -1486,7 +1491,7 @@ export class MissionWorkspace {
 			runtimeId: this.resolveRuntimeId(),
 			taskId,
 			workingDirectory: this.resolveAutopilotWorkingDirectory(status),
-			prompt: task.instruction,
+			prompt: buildMissionTaskLaunchPrompt(task, this.resolveAutopilotWorkingDirectory(status)),
 			title: task.subject,
 			operatorIntent: 'Complete this mission task autonomously and stop when the task is finished.'
 		});

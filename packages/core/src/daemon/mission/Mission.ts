@@ -18,6 +18,7 @@ import type {
 import type { MissionDefaultAgentMode } from '../../lib/daemonConfig.js';
 import { MissionSession } from './MissionSession.js';
 import { MissionTask } from './MissionTask.js';
+import { buildMissionTaskLaunchPrompt } from './taskLaunchPrompt.js';
 import {
 	MISSION_ARTIFACTS,
 	MISSION_STAGES,
@@ -1060,8 +1061,9 @@ export class Mission {
 	}
 
 	private async recordTaskSessionLaunchFailure(taskId: string, error: unknown): Promise<void> {
+		const failureEventNonce = Date.now().toString(36);
 		await this.workflowController.applyEvent({
-			eventId: `${this.descriptor.missionId}:session-launch-failed:${taskId}`,
+			eventId: `${this.descriptor.missionId}:session-launch-failed:${taskId}:${failureEventNonce}`,
 			type: 'session.launch-failed',
 			occurredAt: new Date().toISOString(),
 			source: 'daemon',
@@ -1075,11 +1077,12 @@ export class Mission {
 		const task = await this.requireTask(taskId);
 		const taskState = task.toState();
 		const status = await this.status();
+		const missionDir = status.missionDir ?? this.adapter.getMissionWorkspacePath(this.missionDir);
 		const session = await task.launchSession({
 			runtimeId: this.resolveDefaultRuntimeId(),
 			transportId: this.requireAgentRunner(this.resolveDefaultRuntimeId()).transportId,
-			workingDirectory: status.missionDir ?? this.adapter.getMissionWorkspacePath(this.missionDir),
-			prompt: taskState.instruction,
+			workingDirectory: missionDir,
+			prompt: buildMissionTaskLaunchPrompt(taskState, missionDir),
 			title: taskState.subject,
 			assignmentLabel: taskState.relativePath,
 			scope: {

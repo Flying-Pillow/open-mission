@@ -216,7 +216,7 @@ Mission must be able to:
 - cancel a session
 - terminate a session
 
-For terminal-backed runtimes, session lifecycle control may be implemented through tmux target management plus process-state inspection, as long as the adapter exposes only normalized Mission session state.
+For terminal-backed runtimes, session lifecycle control may be implemented through terminal target management plus process-state inspection, as long as the adapter exposes only normalized Mission session state.
 
 ### Prompt Submission
 
@@ -299,7 +299,7 @@ At minimum a runner must support one of these patterns:
 - list active sessions
 - return a terminal not-found result for dead sessions
 
-For tmux-backed runtimes, a session reference may be backed by persisted tmux identifiers plus Mission-owned metadata that can be reattached or reconciled after daemon restart.
+For terminal-backed runtimes, a session reference may be backed by persisted terminal identifiers plus Mission-owned metadata that can be reattached or reconciled after daemon restart.
 
 If `attachSession()` is called for a session that no longer exists, it must resolve to an `AgentSession` instance whose initial snapshot phase is `terminated` and which emits `session.terminated` immediately after subscription.
 
@@ -348,7 +348,7 @@ export interface AgentSessionReference {
   runnerId: AgentRunnerId;
   sessionId: AgentSessionId;
   transport?: {
-    kind: 'tmux';
+    kind: 'terminal';
     sessionName: string;
     windowName?: string;
     paneId?: string;
@@ -385,7 +385,7 @@ export interface AgentSessionSnapshot {
   acceptsPrompts: boolean;
   acceptedCommands: AgentCommandKind[];
   awaitingInput: boolean;
-  transportKind?: 'tmux';
+  transportKind?: 'terminal';
   failureMessage?: string;
   updatedAt: string;
 }
@@ -430,7 +430,7 @@ The core contract does not require every runner to expose transport metadata.
 
 When transport metadata exists, it is diagnostic and reconciliation data only.
 
-Callers must not couple workflow logic to tmux naming details.
+Callers must not couple workflow logic to terminal naming details.
 
 ## Event Model
 
@@ -656,9 +656,9 @@ It must not embed provider-specific protocol logic.
 
 Each concrete adapter must own only its provider translation.
 
-For tmux-backed runtimes, provider translation includes:
+For terminal-backed runtimes, provider translation includes:
 
-- tmux target allocation and reconciliation
+- terminal target allocation and reconciliation
 - safe input injection
 - transcript capture
 - process exit detection
@@ -700,7 +700,7 @@ The first implementation pass should deliver:
 4. workflow engine integration that uses the new contract directly
 5. prompt submission into running sessions
 6. engine command submission into running sessions
-7. one tmux-backed process adapter suitable for CLI-native coding agents
+7. one terminal-backed process adapter suitable for CLI-native coding agents
 
 The first pass does not need:
 
