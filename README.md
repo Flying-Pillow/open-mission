@@ -1,3 +1,8 @@
+==================== WARNING!!! ===================================
+This repo is in its very early stages. DO NOT USE IT.
+We are on a mission and this repo will become ready soon, but have a little more patience. Drop a comment or an issue if you want to communicate.
+==================================================================
+
 
 # 🌍 Mission
 
@@ -86,4 +91,4 @@ You no longer have to review every line of code as it is being typed. You define
 
 ## License
 
-...
+Will be very permissive, but we need to figure it out!!

@@ -1,12 +1,14 @@
 ---
 layout: default
 title: Reference
-nav_order: 4
-has_children: true
+nav_order: 6
 ---
 
 # Reference
 
-Reference material supplements the core specifications with examples and supporting documents.
+Reference is the long-term home for stable supporting material, examples, and lookup documentation.
 
-- [Examples](examples/index.md)
+Because Mission is still in flight, the current example material remains attached to the active mission dossier:
+
+- [Example Mission Cycle](../missions/airport-spec/reference/examples/example-mission-cycle.md)
+
