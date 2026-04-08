@@ -1,3 +1,11 @@
+---
+title: Example Mission Cycle
+type: example
+status: reference
+order: 9
+group: 04-reference/01-examples
+---
+
 # Example Mission Cycle
 
 This document describes a target end-to-end Mission cycle as an executable object model example.

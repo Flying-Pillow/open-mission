@@ -1,3 +1,11 @@
+---
+title: Repository Workflow Settings Implementation Plan
+type: plan
+status: implementation
+order: 12
+group: 05-implementation/01-plans
+---
+
 # Repository Workflow Settings Implementation Plan
 
 This document translates the repository workflow settings definition spec into implementation work.
@@ -11,7 +19,7 @@ It defines:
 - what current scalar setup code must be isolated from repository workflow policy editing
 - what tests must prove the daemon-owned settings contract before any surface work ships
 
-This plan assumes the rules from [repository-workflow-settings-definition-spec.md](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/docs/repository-workflow-settings-definition-spec.md).
+This plan assumes the rules defined by the repository workflow settings specification.
 
 ## Implementation Law
 

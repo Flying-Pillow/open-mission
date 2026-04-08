@@ -1,23 +1,48 @@
+---
+title: Mission Model
+type: spec
+status: canonical
+order: 3
+group: 02-semantic-core/01-model
+---
+
 # Mission Model
 
-This document defines the Mission object model and its repository, control-plane, and workspace representation.
+This document defines the semantic Mission repository model and its repository-resident records.
+
+It is subordinate to the workflow engine specification for semantic workflow runtime truth, the agent runtime specification for provider-neutral session execution, and the airport control plane specification for daemon-wide application state, panel projections, airport gates, and terminal substrate ownership.
+
+If this document conflicts with those specifications, those specifications win.
+
+This document does not define the top-level application controller.
+
+It does not assign layout, focus, panel, client, or zellij ownership.
 
 ## Architectural Summary
 
-Mission is modeled as a set of first-class domain objects:
+Mission's semantic model is expressed through first-class domain contexts and workflow projections:
 
-- daemon `Mission`: aggregate root and workflow engine
-- `Stage`: lifecycle slice that owns stage-level artifacts and default tasks
-- `Task`: executable workflow unit that owns a task artifact
-- `AgentSession`: runtime-backed execution object owned by a task
-- `Artifact`: persisted markdown record owned by a mission, stage, or task
+- `RepositoryContext`: repository identity and settings scope
+- `MissionContext`: mission identity, workspace path, lifecycle summary, and semantic relationships
+- `TaskContext`: executable workflow unit
+- `ArtifactContext`: persisted semantic document record
+- `AgentSessionContext`: runtime-backed semantic session record
+- `Stage`: structural workflow grouping and derived projection only
 
-The authoritative workflow model lives under `packages/core/src/daemon/mission` and is surfaced through daemon and client APIs.
+The authoritative top-level application state is not a daemon `Mission` aggregate.
+
+The daemon-wide authority is the composite `MissionSystemState` described by the airport control plane specification.
+
+This document describes the repository-resident mission dossier and semantic records that feed that broader state.
 
 Persistence and markdown handling live outside the domain:
 
 - `Factory` composes or rehydrates the aggregate
 - `FilesystemAdapter` maps domain objects to files, paths, frontmatter, and Git-bound repository state
+
+Current code path references in this document are implementation references only.
+
+They are not normative architecture.
 
 All first-party mission markdown templates now live under [packages/core/src/templates/mission/index.ts](/home/ronald/mission/packages/core/src/templates/mission/index.ts).
 
@@ -30,6 +55,10 @@ Mission now uses three distinct storage scopes:
 3. machine-local daemon runtime state outside the repository
 
 The important architectural rule is that the mission dossier is repository history, while daemon runtime state is not.
+
+The mission workspace path is semantic mission data.
+
+It is not airport layout truth, pane routing truth, or focus truth.
 
 ### Repository Bootstrap State
 
@@ -83,9 +112,15 @@ After the mission dossier exists on the repository branch, a developer may mater
 
 Machine-local daemon runtime state lives outside the repository under the hashed runtime directory for the control repo, for example `$XDG_RUNTIME_DIR/mission/<repo-hash>/daemon.json` and `sessions/<mission-id>.json` on Unix systems, with the OS temp directory as the fallback when `XDG_RUNTIME_DIR` is unavailable.
 
-The other important rule is that stage entry materializes stage-owned files inside the tracked mission dossier. They are not all created up front.
+The other important rule is that workflow progression may materialize additional mission and task artifacts over time. They are not all created up front.
+
+Stage progression may trigger materialization, but stage is not an owning runtime authority.
 
 ## Domain Entities
+
+These names describe semantic records and projections.
+
+They do not define daemon process ownership or airport control-plane authority.
 
 ### MissionBrief
 
@@ -191,7 +226,7 @@ Fields include:
 - agent sessions
 - recommended next operator command
 
-## Ownership Model
+## Artifact Ownership Model
 
 ### Mission-Owned Artifact
 
@@ -199,27 +234,33 @@ Fields include:
 | --- | --- | --- |
 | `BRIEF.md` | `Mission` | during `Mission.initialize()` |
 
-### Stage-Owned Artifacts
+### Stage-Triggered Artifact Materialization
 
-| Stage | Artifacts | Created when |
-| --- | --- | --- |
-| `prd` | `PRD.md` | when PRD stage is entered |
-| `spec` | `SPEC.md` | when SPEC stage is entered |
-| `plan` | `PLAN.md` | when PLAN stage is entered |
-| `implementation` | none by default | n/a |
-| `verification` | `VERIFICATION.md` | when VERIFICATION stage is entered |
-| `audit` | `AUDIT.md` | when AUDIT stage is entered |
+The following artifacts may be materialized when a stage becomes eligible or is entered.
+
+That trigger does not make stage the semantic owner.
+
+Stage is structural and derived.
+
+| Stage | Artifacts | Semantic owner | Created when |
+| --- | --- | --- | --- |
+| `prd` | `PRD.md` | `MissionContext` | when PRD stage is entered |
+| `spec` | `SPEC.md` | `MissionContext` | when SPEC stage is entered |
+| `plan` | `PLAN.md` | `MissionContext` | when PLAN stage is entered |
+| `implementation` | none by default | n/a | n/a |
+| `verification` | `VERIFICATION.md` | `MissionContext` | when VERIFICATION stage is entered |
+| `audit` | `AUDIT.md` | `MissionContext` | when AUDIT stage is entered |
 
 ### Task-Owned Artifacts
 
-| Stage | Default task artifacts | Created when |
-| --- | --- | --- |
-| `prd` | `tasks/PRD/01-prd-from-brief.md` | when PRD stage is entered |
-| `spec` | `tasks/SPEC/01-spec-from-prd.md` | when SPEC stage is entered |
-| `plan` | `tasks/PLAN/01-plan-from-spec.md` | when PLAN stage is entered |
-| `implementation` | none by default | n/a |
-| `verification` | none by default | n/a |
-| `audit` | `tasks/AUDIT/01-debrief.md`, `tasks/AUDIT/02-touchdown.md` | when AUDIT stage is entered |
+| Stage | Default task artifacts | Semantic owner | Created when |
+| --- | --- | --- | --- |
+| `prd` | `tasks/PRD/01-prd-from-brief.md` | `TaskContext` | when PRD stage is entered |
+| `spec` | `tasks/SPEC/01-spec-from-prd.md` | `TaskContext` | when SPEC stage is entered |
+| `plan` | `tasks/PLAN/01-plan-from-spec.md` | `TaskContext` | when PLAN stage is entered |
+| `implementation` | none by default | n/a | n/a |
+| `verification` | none by default | n/a | n/a |
+| `audit` | `tasks/AUDIT/01-debrief.md`, `tasks/AUDIT/02-touchdown.md` | `TaskContext` | when AUDIT stage is entered |
 
 Tasks added later by planning or implementation work are also task-owned artifacts.
 
@@ -267,32 +308,27 @@ url: "https://..."         # optional
 
 ### flight-deck/mission.json Runtime State
 
-Mutable workflow state now lives in `mission.json` inside each mission folder.
+Mutable semantic workflow state lives in `mission.json` inside each mission folder.
 
-```json
-{
-  "schemaVersion": 1,
-  "updatedAt": "2026-04-01T12:34:56.000Z",
-  "deliveredAt": "2026-04-02T09:41:00.000Z",
-  "tasks": {
-    "spec/01-spec-from-prd": {
-      "status": "active",
-      "agent": "copilot",
-      "retries": 0,
-      "updatedAt": "2026-04-01T12:35:12.000Z"
-    }
-  }
-}
-```
+The authoritative document shape is defined by the workflow engine specification as `MissionWorkflowRuntimeDocument`.
 
-`FilesystemAdapter.listTaskStates(...)` and `FilesystemAdapter.readTaskState(...)` join task markdown content with authoritative control state from `mission.json`.
+This document does not redefine that schema.
+
+Alignment rules:
+
+- `mission.json` stores semantic workflow runtime state only
+- `mission.json` is not the full daemon application state root
+- `mission.json` must not store airport gate bindings, focus state, panel registrations, client registrations, or zellij substrate observations
+- daemon-wide composition of semantic state with airport state belongs to `MissionSystemState`, not to this repository document
+
+`FilesystemAdapter.listTaskStates(...)` and `FilesystemAdapter.readTaskState(...)` may join task markdown content with authoritative semantic workflow state from `mission.json`.
 
 Behavior:
 
-- new task files default to `status: todo`, `agent: copilot`, and `retries: 0`
-- legacy task frontmatter is only used once to seed `mission.json` when the control file does not yet exist
-- after `mission.json` exists, later frontmatter edits are ignored for workflow truth
-- invalid legacy `status`, `agent`, or `retries` values still raise adapter type errors during migration
+- task files may carry immutable definition metadata such as dependency information
+- mutable task lifecycle and session truth are reduced into `mission.json` through workflow events
+- once `mission.json` exists, later task-file edits do not override authoritative workflow truth unless explicitly defined as immutable task-definition metadata
+- provider session transport details, panel bindings, and airport routing state are not mission-dossier truth
 
 ### Task Definition Metadata
 
@@ -345,7 +381,7 @@ These stage-owned product artifacts are plain markdown by default:
 
 ## Derived State Rules
 
-Mission status is derived from the materialized filesystem state.
+Mission status is derived from the materialized filesystem state plus the authoritative semantic workflow runtime.
 
 Key rules:
 
@@ -353,7 +389,7 @@ Key rules:
 - `FilesystemAdapter.readMissionDescriptor()` derives the descriptor from `BRIEF.md`
 - `mission.json` is the workflow runtime document and is updated only through workflow event ingestion
 - `FilesystemAdapter.listTaskStates()` derives task content and `dependsOn` metadata from task files, then joins mutable workflow state from `mission.json`
-- `Mission` computes the current stage by looking for the first populated stage with incomplete work
+- derived stage state is computed from task runtime truth rather than stored as an independently controlled actor
 - within the current stage, `Mission` exposes `activeTasks` and `readyTasks` rather than a single next task
 - stages that have not been entered yet remain pending with zero tasks
 - product artifacts only appear in `MissionStatus.productFiles` after their owning mission or stage has materialized them
@@ -364,7 +400,7 @@ The important readability improvement is temporal:
 
 - the factory does not pre-create the whole workflow
 - the mission creates the mission environment
-- a stage creates its own stage artifacts and default tasks when the mission enters that stage
-- a task creates its own task artifact
+- workflow progression may materialize mission and task artifacts when a stage becomes eligible or entered
+- a task materializes its own task artifact when that artifact is part of task definition or output
 
 That is the current model the code is moving toward and now enforces for mission creation and stage entry.

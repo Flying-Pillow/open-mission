@@ -1,3 +1,11 @@
+---
+title: Agent Runtime Implementation Plan
+type: plan
+status: implementation
+order: 11
+group: 05-implementation/01-plans
+---
+
 # Agent Runtime Implementation Plan
 
 This document translates the agent runtime definition spec into implementation work.
@@ -11,7 +19,7 @@ It defines:
 - what infrastructure may be preserved
 - what new ownership boundaries should be introduced
 
-This plan assumes the clean-break rules from [agent-runtime-definition-spec.md](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/docs/agent-runtime-definition-spec.md).
+This plan assumes the clean-break rules defined by the agent runtime specification.
 
 ## Implementation Law
 

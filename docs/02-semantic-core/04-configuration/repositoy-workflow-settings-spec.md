@@ -1,3 +1,12 @@
+---
+title: Repository Workflow Settings Definition Specification
+type: spec
+status: canonical
+order: 7
+group: 02-semantic-core/04-configuration
+tags: [cli-cockpit, thin-surface]
+---
+
 # Repository Workflow Settings Definition Specification
 
 This document defines the missing repository-level workflow settings functionality.

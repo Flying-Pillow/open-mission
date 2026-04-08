@@ -1,3 +1,12 @@
+---
+title: Airport Control Plane Specification
+type: spec
+status: canonical
+order: 1
+group: 01-system/01-control-plane
+tags: [authoritative, cli-cockpit]
+---
+
 # Airport Control Plane Specification
 
 This document defines the from-scratch architecture for Mission's top-level application controller.
@@ -30,13 +39,7 @@ That is expected.
 
 ## Relationship To Other Specifications
 
-This document must be read alongside:
-
-- `workflow-engine-definiton-spec.md`
-- `core-object-model-spec.md`
-- `mission-model.md`
-- `agent-runtime-spec.md`
-- `workflow-operator-surface-spec.md`
+This document must be read alongside the workflow engine specification, the core object model specification, the mission model, the agent runtime specification, and the workflow operator surface specification.
 
 Priority rule:
 

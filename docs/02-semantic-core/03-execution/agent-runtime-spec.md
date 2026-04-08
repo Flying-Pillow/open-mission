@@ -1,3 +1,11 @@
+---
+title: Agent Runtime Definition Specification
+type: spec
+status: canonical
+order: 5
+group: 02-semantic-core/03-execution
+---
+
 # Agent Runtime Definition Specification
 
 This document defines the target provider-neutral runtime contract for Mission.
@@ -7,6 +15,18 @@ This is a from-scratch specification.
 It does not preserve compatibility with the current `MissionAgentRuntime` shape, the current `WorkflowTaskRunner` shape, the current `CopilotAgentRuntime`, or the current `CopilotWorkflowTaskRunner` split.
 
 The purpose of this document is to define the exact runtime boundary that the workflow engine may steer before any adapter rewrites begin.
+
+## Relationship To Other Specifications
+
+This document must be read alongside the workflow engine specification, the airport control plane specification, and the workflow operator surface specification.
+
+Priority rule:
+
+1. the workflow engine specification defines semantic mission runtime truth and reducer-emitted runtime requests
+2. the airport control plane specification defines daemon-wide composite state, gate bindings, focus semantics, panel identity, and substrate reconciliation
+3. this runtime specification defines the provider-neutral execution boundary used to satisfy semantic session requests
+
+If this document is interpreted to give runtime adapters ownership of panel routing, airport gates, focus policy, or zellij layout authority, that interpretation is wrong.
 
 ## Goals
 
@@ -106,6 +126,8 @@ The orchestrator owns coordination.
 
 The orchestrator does not own provider-specific SDK logic.
 
+The orchestrator also does not own airport gate binding, panel registration, focus policy, or substrate layout truth.
+
 ### 3. Agent Runner Adapter
 
 The adapter is the provider-specific implementation of the Mission runtime contract.
@@ -160,6 +182,10 @@ Commands are normalized Mission intents that an adapter must map, reject, or par
 ### Snapshot
 
 The latest normalized state Mission knows about a session.
+
+Snapshot truth is semantic runtime truth.
+
+It is not airport binding truth, panel-process truth, or substrate focus truth.
 
 ### Event
 
@@ -432,6 +458,8 @@ When transport metadata exists, it is diagnostic and reconciliation data only.
 
 Callers must not couple workflow logic to terminal naming details.
 
+Callers must also not treat transport metadata as airport gate identity, focus state, panel identity, or authoritative layout routing truth.
+
 ## Event Model
 
 The event model must be normalized and minimal.
@@ -640,6 +668,10 @@ It must not own:
 - provider SDK event parsing
 - provider-specific prompt formatting
 - provider-specific command naming
+- airport gate binding
+- airport focus intent or observed focus
+- panel registration
+- zellij pane lifecycle as application truth
 
 ## Adapter Rules
 
@@ -664,6 +696,12 @@ For terminal-backed runtimes, provider translation includes:
 - process exit detection
 - mapping raw terminal realities into normalized session phases
 
+Those responsibilities still do not make the adapter the owner of airport layout truth.
+
+If the daemon uses zellij or another terminal substrate, runtime adapters must remain execution-oriented and cooperate with the airport control plane rather than replacing it.
+
+Terminal identifiers may be observed or carried as runtime transport metadata, but gate binding, focus, panel identity, and substrate reconciliation policy remain outside the runtime contract.
+
 ## Package Ownership
 
 The core package owns:
@@ -673,6 +711,14 @@ The core package owns:
 - normalized events
 - normalized snapshots
 - orchestrator interfaces and coordination logic
+
+The airport package, not the runtime contract, owns:
+
+- airport gate identities such as `dashboard`, `editor`, and `pilot`
+- panel projection contracts
+- client registration
+- focus intent and observed focus
+- substrate reconciliation
 
 Provider-specific implementations belong in adapter packages, not in core contract design.
 

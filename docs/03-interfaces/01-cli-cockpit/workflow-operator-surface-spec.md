@@ -1,3 +1,12 @@
+---
+title: Workflow Operator Surface Definition Specification
+type: spec
+status: canonical
+order: 6
+group: 03-interfaces/01-cli-cockpit
+tags: [cli-cockpit, thin-surface]
+---
+
 # Workflow Operator Surface Definition Specification
 
 This document defines the operator-facing command and status contract for Mission workflow surfaces.
@@ -14,19 +23,18 @@ It does not preserve compatibility with the current `stage.transition.*` command
 
 ## Relationship To Other Specifications
 
-This document depends on, and must not override:
-
-- [workflow-engine-definition-spec.md](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/docs/workflow-engine-definition-spec.md)
-- [agent-runtime-definition-spec.md](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/docs/agent-runtime-definition-spec.md)
-- [repository-workflow-settings-definition-spec.md](/home/ronald/mission/.missions/active/4-audit-issue-1-architecture-refactor-on-merged-ma/workspace/packages/core/docs/repository-workflow-settings-definition-spec.md)
+This document depends on, and must not override, the workflow engine specification, the agent runtime specification, and the airport control plane specification.
 
 Priority rule:
 
 1. workflow engine specification defines runtime truth and valid events
 2. agent runtime specification defines runtime execution boundary
-3. this operator surface specification defines how surfaces expose those capabilities to humans
+3. airport control plane specification defines daemon-wide layout truth, gate bindings, focus semantics, panel identity, and panel-facing projection boundaries
+4. this operator surface specification defines how surfaces expose those capabilities to humans
 
 If a surface behavior conflicts with the workflow engine definition, the surface behavior is wrong and must change.
+
+If a surface behavior conflicts with airport gate binding, focus, or panel-identity rules, the surface behavior is wrong and must change.
 
 ## Problem
 
@@ -45,8 +53,9 @@ That drift creates multiple failures:
 The correct architecture is:
 
 - workflow engine owns runtime behavior
+- airport control plane owns gate binding, focus, client registration, and panel projection boundaries
 - daemon owns authoritative command projection and validation
-- surfaces present user-friendly language, but only as a projection over mission, task, and session actions
+- surfaces present user-friendly language, but only as a projection over mission, task, artifact, agent-session, gate, and generation actions
 
 ## Goals
 
@@ -102,20 +111,47 @@ But surfaces must not require daemon actions such as:
 - transition to next stage
 - revert to previous stage
 
-unless the surface is only using those phrases as descriptive shorthand for mission or task actions and the daemon contract remains expressed in mission, task, or session terms.
+unless the surface is only using those phrases as descriptive shorthand for mission or task actions and the daemon contract remains expressed in mission, task, artifact, agent-session, gate, or generation terms.
+
+## Terminology Split
+
+This document must distinguish two unrelated uses of the word `gate`.
+
+### Workflow Gates
+
+Workflow gates are semantic projections such as implementation, verification, audit, or delivery readiness.
+
+They are derived from workflow state.
+
+They are not layout slots.
+
+### Airport Gates
+
+Airport gates are stable layout slots such as `dashboard`, `editor`, and `pilot`.
+
+They are owned by the airport control plane.
+
+They are not workflow checkpoints.
+
+Surfaces must not collapse these concepts into one generic `gate` model.
+
+If both appear in the same UI, they must be presented as distinct concepts.
 
 ## Source Of Truth
 
 The daemon is the only authority for:
 
+- current domain selection state
 - which operator actions are currently available
 - which action targets they apply to
 - why an action is disabled
 - what follow-up input, if any, is required to execute an action
+- which airport gate is bound to which target
+- which gate focus intent is active and which focus state is observed
 
 Surfaces must not synthesize workflow action availability from local heuristics.
 
-Surfaces may derive presentation state locally, but executable action state must come from daemon-owned command projection.
+Surfaces may derive presentation state locally, but executable action state, selection state, and airport gate state must come from daemon-owned projection.
 
 ## Operator Intent Model
 
@@ -150,7 +186,17 @@ The daemon must never interpret these intents as stage runtime mutation.
 
 The operator surface contract must expose actions only from the following families.
 
-### 1. Mission Actions
+### 1. Selection Actions
+
+- select repository
+- select mission
+- select task
+- select artifact
+- select agent session
+
+These actions map to daemon-owned domain selection state.
+
+### 2. Mission Actions
 
 - pause mission
 - resume mission
@@ -160,7 +206,7 @@ The operator surface contract must expose actions only from the following famili
 
 These actions map to mission lifecycle or mission orchestration events.
 
-### 2. Task Actions
+### 3. Task Actions
 
 - start ready task manually
 - mark task done
@@ -172,7 +218,7 @@ These actions map to mission lifecycle or mission orchestration events.
 
 These actions map to task events and task runtime policy changes.
 
-### 3. Session Actions
+### 4. Session Actions
 
 - cancel session
 - terminate session
@@ -181,7 +227,14 @@ These actions map to task events and task runtime policy changes.
 
 These actions map to session lifecycle or runtime interaction semantics.
 
-### 4. Generation Actions
+### 5. Artifact And Gate Actions
+
+- open artifact in editor gate
+- focus gate
+
+These actions map to airport binding or focus intents derived from semantic selection and airport policy.
+
+### 6. Generation Actions
 
 - generate tasks for the current eligible stage when no tasks exist yet
 
@@ -201,7 +254,7 @@ The following action families are forbidden in the daemon contract:
 The following surface-local behaviors are also forbidden:
 
 - inferring executable stage actions by looking only at stage projection state
-- exposing stage-only buttons whose execution cannot be expressed as mission, task, session, or generation actions
+- exposing stage-only buttons whose execution cannot be expressed as mission, task, artifact, agent-session, gate, or generation actions
 - constructing fallback command lists in UI code when daemon does not provide one
 
 ## Command Descriptor Contract
@@ -222,14 +275,17 @@ Each descriptor must include at least:
 
 The scope model must be:
 
+- `repository`
 - `mission`
 - `task`
-- `session`
+- `artifact`
+- `agentSession`
 - `generation`
+- `gate`
 
 `stage` scope is forbidden as an executable authority scope.
 
-If a stage card or tree item is selected, the surface may still display mission, task, session, or generation commands that are relevant to that stage projection, but the commands themselves must remain expressed in the allowed scopes above.
+If a stage card or tree item is selected, the surface may still display mission, task, artifact, agent-session, gate, or generation commands that are relevant to that stage projection, but the commands themselves must remain expressed in the allowed scopes above.
 
 ## Targeting Rules
 
@@ -242,23 +298,26 @@ This is what the operator is currently looking at:
 - mission overview
 - stage card
 - task row
-- session console
+- agent-session console
 
 ### Execution Target
 
 This is what the daemon command actually mutates:
 
+- domain selection state
 - mission lifecycle
 - task runtime state
-- session lifecycle
+- agent session lifecycle
 - task generation request for the eligible stage
+- airport gate binding or focus intent
 
 A stage presentation target may resolve to:
 
 - one generation action
 - zero or more task actions over tasks in that stage
 - one mission pause or resume action if stage semantics imply a mission-level checkpoint state
-- zero or more session actions for sessions owned by tasks in that stage
+- zero or more agent-session actions for sessions owned by tasks in that stage
+- zero or more artifact actions for artifacts relevant to that stage
 
 The surface must not require stage identifiers as executable target ids unless the command is a generation request for the eligible stage.
 
@@ -301,7 +360,7 @@ The following labels must not be used as authoritative action labels:
 - Advance Stage
 - Revert Stage
 
-If a surface uses stage phrasing in helper text, it must immediately clarify the actual effect on mission, task, or session state.
+If a surface uses stage phrasing in helper text, it must immediately clarify the actual effect on mission, task, artifact, agent-session, gate, or generation state.
 
 ## Stage Card Behavior
 
@@ -312,11 +371,12 @@ Selecting a stage grouping should expose:
 1. generation action if the stage is the eligible stage and has no tasks
 2. mission checkpoint actions when relevant
 3. task actions for tasks in that stage
-4. session actions for sessions owned by tasks in that stage
+4. agent-session actions for sessions owned by tasks in that stage
+5. artifact actions for artifacts relevant to that stage when those artifacts are semantically targetable
 
 Selecting a stage grouping must never result in an empty command panel solely because commands were published only for task targets while the surface filtered them out by stage scope.
 
-If stage selection is used in the UI, daemon command projection or surface grouping logic must map stage selection onto the correct underlying mission, task, session, or generation commands.
+If stage selection is used in the UI, daemon command projection or surface grouping logic must map stage selection onto the correct underlying mission, task, artifact, agent-session, gate, or generation commands.
 
 ## Mission Pause And Checkpoint Behavior
 
@@ -372,10 +432,10 @@ The daemon protocol must provide enough information for surfaces to stay thin.
 
 Required capabilities:
 
-1. fetch authoritative mission status with derived stage and gate projections
+1. fetch authoritative system projections, including derived workflow stage and workflow gate projections plus airport gate binding and focus projections
 2. fetch authoritative available command descriptors for the current mission context
 3. execute a command descriptor by id plus structured steps
-4. broadcast updated mission status after accepted workflow events
+4. broadcast updated projections after accepted commands or observations change authoritative state
 5. return disabled reasons for unavailable actions whenever possible
 
 The daemon protocol must not require surfaces to:
@@ -384,6 +444,8 @@ The daemon protocol must not require surfaces to:
 - infer reopen legality locally
 - infer task manual-start eligibility locally
 - infer panic semantics locally
+- infer airport gate bindings or focus locally
+- inspect zellij directly
 
 ## Surface Architecture Rules
 
@@ -394,6 +456,8 @@ That means:
 - command grouping may vary by surface
 - command wording may vary slightly by surface
 - execution semantics must not vary by surface
+- a gate-bound panel must receive its airport gate identity from the daemon-owned control plane rather than infer it locally
+- panels must communicate only with the daemon, not with each other or with zellij as authorities
 
 Surface differences are allowed only in presentation.
 
@@ -470,7 +534,7 @@ This specification is satisfied only if all of the following are true:
 
 Any implementation plan derived from this specification should:
 
-1. rewrite daemon command projection around mission, task, session, and generation actions
+1. rewrite daemon command projection around repository, mission, task, artifact, agent-session, gate, and generation actions
 2. remove stage-transition execution paths entirely
 3. update CLI and VS Code surfaces to consume the same daemon-owned command model
 4. ensure stage-oriented UX is implemented as grouping and translation only

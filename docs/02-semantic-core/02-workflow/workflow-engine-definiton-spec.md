@@ -1,3 +1,12 @@
+---
+title: Workflow Engine Definition Specification
+type: spec
+status: canonical
+order: 4
+group: 02-semantic-core/02-workflow
+tags: [authoritative]
+---
+
 # Workflow Engine Definition Specification
 
 This document defines the target design for the next-generation Mission workflow engine.
@@ -7,6 +16,19 @@ This is a from-scratch specification.
 It does not preserve compatibility with the current workflow engine, current `mission.json` schema, current stage runtime model, or current imperative gate-check APIs.
 
 The purpose of this document is to establish the exact engine contract before implementation.
+
+## Relationship To Other Specifications
+
+This document must be read alongside the airport control plane specification, the core object model specification, the mission model, the agent runtime specification, and the workflow operator surface specification.
+
+Priority rule:
+
+1. this workflow engine specification defines semantic mission runtime truth and valid workflow events
+2. the airport control plane specification defines daemon-wide composite state, layout truth, panel projections, and substrate reconciliation
+3. the agent runtime specification defines the provider-neutral agent execution boundary used by workflow requests
+4. the operator surface specification defines how surfaces project workflow and airport state without becoming authorities
+
+If a document assigns layout, focus, panel, client, or substrate ownership to the workflow engine, that document is wrong and must change.
 
 ## Goals
 
@@ -78,6 +100,14 @@ It contains:
 - mission pause state
 - panic state
 - recent event log
+
+It does not contain:
+
+- airport gate bindings
+- airport focus intent or observed focus
+- panel registrations or client registrations
+- zellij pane ids as application routing truth
+- substrate attachment observations
 
 ### 3. Workflow Engine
 
@@ -388,6 +418,23 @@ export interface MissionWorkflowRuntimeState {
 }
 ```
 
+This mission-local runtime document is the semantic workflow slice only.
+
+The daemon-wide authoritative state described by the airport control plane specification is a larger composite state rooted at `MissionSystemState`.
+
+`mission.json` must not be treated as the full application state root.
+
+## Workflow And Airport Boundary
+
+The workflow engine owns only semantic mission runtime truth.
+
+That means:
+
+- task lifecycle, session lifecycle, pause state, panic state, stage projections, and workflow gate projections belong here
+- airport gate bindings, panel identity, focus intent, observed focus, client state, and substrate observations do not belong here
+- workflow reduction must not inspect zellij, panel processes, or client focus directly
+- any substrate or panel fact that matters to application behavior must be reduced elsewhere in the daemon-owned airport loop
+
 ## Stage Runtime Projection
 
 The stage view in `mission.json` is a projection, not an independently controlled object.
@@ -435,6 +482,12 @@ export interface MissionAgentSessionRuntimeState {
 ## Gate Projections
 
 Gates are projections, not imperative commands.
+
+These are workflow gates, not airport layout gates.
+
+They represent semantic workflow checkpoints such as implementation, verification, audit, or delivery readiness.
+
+They are not `dashboard`, `editor`, or `pilot`, and they must not be used as terminal layout slots, focus targets, or panel identities.
 
 ```ts
 export type MissionGateState = 'blocked' | 'passed';

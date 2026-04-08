@@ -1,3 +1,11 @@
+---
+title: Workflow Engine Implementation Checklist
+type: checklist
+status: implementation
+order: 10
+group: 05-implementation/02-checklists
+---
+
 # Workflow Engine Implementation Checklist
 
 This checklist translates the workflow engine specification into implementation work.
