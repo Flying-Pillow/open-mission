@@ -7,6 +7,7 @@ import {
 	type MissionAgentConsoleEvent,
 	type MissionAgentConsoleState,
 	type MissionAgentEvent,
+	type MissionAgentLifecycleState,
 	type MissionAgentSessionLaunchRequest,
 	type MissionAgentSessionRecord
 } from '../contracts.js';
@@ -216,7 +217,27 @@ export class Mission {
 			throw new Error('Mission task sessions require an explicit taskId.');
 		}
 
-		const task = await this.requireTask(request.taskId);
+		await this.status();
+		let replacedStaleSession = false;
+
+		const existingSession = this.agentSessions.find(
+			(candidate) => candidate.taskId === request.taskId && isActiveMissionAgentSession(candidate.lifecycleState)
+		);
+		if (existingSession) {
+			if (!(await this.isSessionCompatibleForLaunch(existingSession, request))) {
+				await this.terminateAgentSession(existingSession.sessionId, 'replaced stale task session before relaunch');
+				await this.status();
+				replacedStaleSession = true;
+			} else {
+			return MissionSession.cloneRecord(existingSession);
+			}
+		}
+
+		let task = await this.requireTask(request.taskId);
+		if (replacedStaleSession && task.toState().status === 'blocked') {
+			await this.reopenTaskExecution(request.taskId);
+			task = await this.requireTask(request.taskId);
+		}
 		const session = await task.launchSession(request);
 		return session.toRecord();
 	}
@@ -259,6 +280,32 @@ export class Mission {
 		this.workflowRequestExecutor.dispose();
 		this.agentConsoleEventEmitter.dispose();
 		this.agentEventEmitter.dispose();
+	}
+
+	private async isSessionCompatibleForLaunch(
+		session: MissionAgentSessionRecord,
+		request: MissionAgentSessionLaunchRequest
+	): Promise<boolean> {
+		const runner = this.agentRunners.get(session.runtimeId);
+		if (!runner?.listSessions) {
+			return true;
+		}
+
+		try {
+			const liveSession = (await runner.listSessions()).find((candidate) => candidate.sessionId === session.sessionId);
+			if (!liveSession || isTerminalPhase(liveSession.phase)) {
+				return false;
+			}
+			if (liveSession.taskId !== request.taskId) {
+				return false;
+			}
+			if (liveSession.workingDirectory && liveSession.workingDirectory !== request.workingDirectory) {
+				return false;
+			}
+			return true;
+		} catch {
+			return true;
+		}
 	}
 
 	public async evaluateGate(intent: GateIntent): Promise<MissionGateResult> {
@@ -1987,6 +2034,19 @@ function describeTaskLaunchUnavailable(input: MissionAvailableActionsInput, task
 		return 'Reopen the task before launching it again.';
 	}
 	return 'Task is not available for launch.';
+}
+
+function isActiveMissionAgentSession(lifecycleState: MissionAgentLifecycleState): boolean {
+	return lifecycleState === 'starting'
+		|| lifecycleState === 'running'
+		|| lifecycleState === 'awaiting-input';
+}
+
+function isTerminalPhase(phase: AgentSessionSnapshot['phase']): boolean {
+	return phase === 'completed'
+		|| phase === 'failed'
+		|| phase === 'cancelled'
+		|| phase === 'terminated';
 }
 
 function getValidationErrors(

@@ -502,14 +502,25 @@ export class MissionWorkspace {
 		if (!task) {
 			throw new Error(`Mission task '${taskId}' could not be resolved.`);
 		}
+		const workingDirectory = overrides['workingDirectory'] ?? status.missionDir ?? this.workspaceRoot;
+		const workingDirectoryExists = await fs.access(workingDirectory).then(
+			() => true,
+			() => false
+		);
+		if (!workingDirectoryExists) {
+			throw new Error(
+				`Mission task '${taskId}' cannot launch because working directory '${workingDirectory}' does not exist.`
+			);
+		}
 		return {
 			...(overrides.runtimeId ? { runtimeId: overrides.runtimeId } : {}),
+			...(overrides.terminalSessionName ? { terminalSessionName: overrides.terminalSessionName } : {}),
 			...(overrides.transportId ? { transportId: overrides.transportId } : {}),
-			workingDirectory: overrides['workingDirectory'] ?? status.missionDir ?? this.workspaceRoot,
+			workingDirectory,
 			prompt: overrides['prompt']
 				?? buildMissionTaskLaunchPrompt(
 					task,
-					status.missionDir ?? overrides['workingDirectory'] ?? this.workspaceRoot
+					workingDirectory
 				),
 			title: overrides['title'] ?? task.subject,
 			assignmentLabel: overrides['assignmentLabel'] ?? task.relativePath,
@@ -1586,6 +1597,13 @@ export class MissionWorkspace {
 	private resolveRuntimeId(runtimeId?: string): string {
 		if (runtimeId) {
 			return this.requireRuntime(runtimeId).id;
+		}
+
+		const configuredRuntimeId = getDefaultMissionDaemonSettingsWithOverrides(
+			readMissionDaemonSettings(this.workspaceRoot) ?? {}
+		).agentRuntime;
+		if (configuredRuntimeId) {
+			return this.requireRuntime(configuredRuntimeId).id;
 		}
 
 		const defaultRuntimeId = this.agentRunners.keys().next().value;

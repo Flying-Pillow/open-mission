@@ -119,6 +119,94 @@ describe('Mission', () => {
         }
     });
 
+    it('reconciles stale task sessions before relaunching the same task', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner');
+
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const mission = await Factory.create(adapter, {
+                brief: createBrief(203, 'Mission stale session relaunch'),
+                branchRef: adapter.deriveMissionBranchName(203, 'Mission stale session relaunch')
+            }, createWorkflowBindings(runner));
+
+            try {
+                const startedStatus = await mission.startWorkflow();
+                const taskId = startedStatus.readyTasks?.[0]?.taskId;
+                if (!taskId || !startedStatus.missionDir) {
+                    throw new Error('Expected a ready task and mission working directory after workflow start.');
+                }
+
+                const firstSession = await mission.launchAgentSession({
+                    runtimeId: runner.id,
+                    taskId,
+                    workingDirectory: startedStatus.missionDir,
+                    prompt: 'First attempt.'
+                });
+                runner.deleteSession(firstSession.sessionId);
+
+                const relaunchedSession = await mission.launchAgentSession({
+                    runtimeId: runner.id,
+                    taskId,
+                    workingDirectory: startedStatus.missionDir,
+                    prompt: 'Second attempt.'
+                });
+
+                expect(relaunchedSession.sessionId).not.toBe(firstSession.sessionId);
+                expect(mission.getAgentSession(firstSession.sessionId)?.lifecycleState).toBe('terminated');
+                expect(mission.getAgentSession(relaunchedSession.sessionId)?.lifecycleState).toBe('running');
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('replaces a live task session when its working directory no longer matches the launch request', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner');
+
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const mission = await Factory.create(adapter, {
+                brief: createBrief(204, 'Mission mismatched session workspace'),
+                branchRef: adapter.deriveMissionBranchName(204, 'Mission mismatched session workspace')
+            }, createWorkflowBindings(runner));
+
+            try {
+                const startedStatus = await mission.startWorkflow();
+                const taskId = startedStatus.readyTasks?.[0]?.taskId;
+                if (!taskId || !startedStatus.missionDir) {
+                    throw new Error('Expected a ready task and mission working directory after workflow start.');
+                }
+
+                const firstSession = await mission.launchAgentSession({
+                    runtimeId: runner.id,
+                    taskId,
+                    workingDirectory: startedStatus.missionDir,
+                    prompt: 'First attempt.'
+                });
+                runner.overrideSessionWorkingDirectory(firstSession.sessionId, path.join(workspaceRoot, 'wrong-workspace'));
+
+                const relaunchedSession = await mission.launchAgentSession({
+                    runtimeId: runner.id,
+                    taskId,
+                    workingDirectory: startedStatus.missionDir,
+                    prompt: 'Second attempt.'
+                });
+
+                expect(relaunchedSession.sessionId).not.toBe(firstSession.sessionId);
+                expect(mission.getAgentSession(firstSession.sessionId)?.lifecycleState).toBe('terminated');
+                expect(mission.getAgentSession(relaunchedSession.sessionId)?.lifecycleState).toBe('running');
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
     it('terminates sessions through orchestrator-backed mission controls', async () => {
         const workspaceRoot = await createTempRepo();
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');

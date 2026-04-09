@@ -5,6 +5,7 @@ import type { AgentRunner } from '../runtime/AgentRunner.js';
 type RuntimeFactoryModule = {
 	createConfiguredAgentRunners?: (options: {
 		controlRoot: string;
+		terminalSessionName?: string;
 		logLine?: (line: string) => void;
 	}) => Promise<AgentRunner[]> | AgentRunner[];
 };
@@ -40,6 +41,11 @@ async function loadConfiguredAgentRunners(logLine?: (line: string) => void): Pro
 
 	return await loadedModule.createConfiguredAgentRunners({
 		controlRoot,
+		...(process.env['MISSION_TERMINAL_SESSION']?.trim()
+			? { terminalSessionName: process.env['MISSION_TERMINAL_SESSION'].trim() }
+			: process.env['MISSION_TERMINAL_SESSION_NAME']?.trim()
+				? { terminalSessionName: process.env['MISSION_TERMINAL_SESSION_NAME'].trim() }
+				: {}),
 		...(logLine ? { logLine } : {})
 	});
 }

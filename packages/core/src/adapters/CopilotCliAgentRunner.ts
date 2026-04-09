@@ -99,7 +99,8 @@ export class CopilotCliAgentRunner implements AgentRunner {
 			command: this.command,
 			args: this.args,
 			...(this.env ? { env: this.env } : {}),
-			sessionPrefix: this.sessionPrefix
+			sessionPrefix: this.sessionPrefix,
+			...(request.terminalSessionName?.trim() ? { sharedSessionName: request.terminalSessionName.trim() } : {})
 		});
 
 		const snapshot: AgentSessionSnapshot = {
@@ -135,19 +136,25 @@ export class CopilotCliAgentRunner implements AgentRunner {
 			return this.createTerminatedAttachedSession(reference);
 		}
 
+		const paneState = await this.transport.readPaneState(transportHandle);
+		const initialCapture = paneState.dead ? '' : await this.transport.capturePane(transportHandle).catch(() => '');
+
 		const snapshot: AgentSessionSnapshot = {
 			runtimeId: this.id,
 			transportId: this.transportId,
 			sessionId: reference.sessionId,
-			phase: 'running',
+			phase: paneState.dead ? (paneState.exitCode === 0 ? 'completed' : 'failed') : 'running',
 			missionId: 'unknown',
 			taskId: 'unknown',
-			acceptsPrompts: true,
+			acceptsPrompts: !paneState.dead,
 			acceptedCommands: ['interrupt'],
 			awaitingInput: false,
-			updatedAt: new Date().toISOString()
+			updatedAt: new Date().toISOString(),
+			...(paneState.dead && paneState.exitCode !== 0
+				? { failureMessage: `terminal command exited with status ${String(paneState.exitCode)}.` }
+				: {})
 		};
-		this.registerHandle(transportHandle, snapshot);
+		this.registerHandle(transportHandle, snapshot, initialCapture);
 		return this.createAgentSession(reference.sessionId);
 	}
 
@@ -155,17 +162,19 @@ export class CopilotCliAgentRunner implements AgentRunner {
 		return [...this.sessions.values()].map((handle) => cloneSnapshot(handle.snapshot));
 	}
 
-	private registerHandle(transportHandle: TerminalSessionHandle, snapshot: AgentSessionSnapshot): void {
+	private registerHandle(transportHandle: TerminalSessionHandle, snapshot: AgentSessionSnapshot, lastCapture = ''): void {
 		const handle: TerminalRunnerSessionHandle = {
 			transportHandle,
 			snapshot,
 			eventEmitter: new AgentSessionEventEmitter<AgentSessionEvent>(),
-			lastCapture: '',
+			lastCapture,
 			pollTimer: undefined,
 			polling: false
 		};
 		this.sessions.set(transportHandle.sessionName, handle);
-		this.startPolling(transportHandle.sessionName);
+		if (!isTerminalPhase(snapshot.phase)) {
+			this.startPolling(transportHandle.sessionName);
+		}
 	}
 
 	private createAgentSession(sessionId: string): AgentSession {

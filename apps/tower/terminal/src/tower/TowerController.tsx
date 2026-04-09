@@ -1627,16 +1627,30 @@ export function TowerController({
 			return true;
 		}
 
+		const sessionsBeforeLaunch = await withDaemonClientRetry(missionSelector, (currentClient) =>
+			new DaemonApi(currentClient).mission.listSessions(missionSelector)
+		);
+
 		const session = await withDaemonClientRetry(missionSelector, (currentClient) =>
 			new DaemonApi(currentClient).mission.launchTaskSession(
 				missionSelector,
-				resolvedTaskId
+				resolvedTaskId,
+				process.env['MISSION_TERMINAL_SESSION']?.trim()
+					? { terminalSessionName: process.env['MISSION_TERMINAL_SESSION'].trim() }
+					: undefined
 			)
 		);
 		setSelectedSessionId(session.sessionId);
 		setSelectedTreeTargetId(createSessionNodeId(session.sessionId));
 		setFocusArea('command');
-		appendLog(`Launch requested for ${resolvedTaskId}. Session ${session.sessionId} created.`);
+		const reusedExistingSession = sessionsBeforeLaunch.some(
+			(candidate) => candidate.sessionId === session.sessionId
+		);
+		appendLog(
+			reusedExistingSession
+				? `Launch requested for ${resolvedTaskId}. Reusing active session ${session.sessionId}.`
+				: `Launch requested for ${resolvedTaskId}. Session ${session.sessionId} created.`
+		);
 		return true;
 	}
 

@@ -50,6 +50,7 @@ export interface AgentSessionStartRequest {
     missionId: string;
     taskId: string;
     workingDirectory: string;
+    terminalSessionName?: string;
     transportId?: AgentTransportId;
     initialPrompt?: AgentPrompt;
     mcpServers?: McpServerReference[];

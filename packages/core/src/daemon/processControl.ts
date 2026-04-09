@@ -158,9 +158,8 @@ export function resolveDefaultRuntimeFactoryModulePath(
 ): string | undefined {
 	const currentFilePath = fileURLToPath(import.meta.url);
 	const packageRoot = path.resolve(path.dirname(currentFilePath), '..', '..');
-	const workspaceRoot = path.resolve(packageRoot, '..', '..');
-	const sourcePath = path.join(workspaceRoot, 'packages', 'adapters', 'src', 'index.ts');
-	const buildPath = path.join(workspaceRoot, 'packages', 'adapters', 'build', 'index.js');
+	const sourcePath = path.join(packageRoot, 'src', 'daemon', 'defaultRuntimeFactory.ts');
+	const buildPath = path.join(packageRoot, 'build', 'daemon', 'defaultRuntimeFactory.js');
 
 	if (launchMode === 'source' && fsSync.existsSync(sourcePath)) {
 		return sourcePath;

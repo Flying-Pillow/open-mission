@@ -10,6 +10,10 @@ import type { CommandContext } from './types.js';
 
 const execFileAsync = promisify(execFile);
 
+type AirportLayoutSnapshot = Awaited<ReturnType<DaemonApi['airport']['getStatus']>>;
+type AirportLayoutSessionRecord = Awaited<ReturnType<DaemonApi['mission']['listSessions']>>[number];
+type AirportLayoutConsoleState = Awaited<ReturnType<DaemonApi['mission']['getSessionConsoleState']>>;
+
 export async function runAirportLayoutLaunch(context: CommandContext): Promise<void> {
 	const sessionName = resolveTerminalManagerSessionName(context.controlRoot);
 	const terminalManagerBinary = resolveTerminalManagerBinary();
@@ -92,25 +96,7 @@ export async function runAirportLayoutAgentSessionPane(_context: CommandContext)
 		launchMode: resolveSurfaceDaemonLaunchMode(import.meta.url)
 	});
 	const api = new DaemonApi(client);
-	const render = (snapshot: Awaited<ReturnType<typeof api.airport.getStatus>>) => {
-		printAgentSessionHeader('MISSION AGENT SESSION PANE');
-		const binding = snapshot.state.airport.gates.agentSession;
-		process.stdout.write(`airport: ${snapshot.state.airport.airportId}\n`);
-		process.stdout.write(`session: ${snapshot.state.airport.substrate.sessionName}\n`);
-		process.stdout.write(`binding: ${binding.targetKind}${binding.targetId ? `:${binding.targetId}` : ''}${binding.mode ? ` (${binding.mode})` : ''}\n`);
-		process.stdout.write(`focus intent: ${snapshot.state.airport.focus.intentGateId ?? 'none'}\n`);
-		process.stdout.write(`focus observed: ${snapshot.state.airport.focus.observedGateId ?? 'none'}\n`);
-		process.stdout.write('\n');
-		if (binding.targetKind === 'agentSession' && binding.targetId) {
-			process.stdout.write(`Agent session gate is bound to agent session ${binding.targetId}.\n`);
-			process.stdout.write('Airport will surface the session in this gate when the substrate observes it.\n');
-			return;
-		}
-		process.stdout.write('Agent session gate is idle.\n');
-		process.stdout.write('Airport owns the agent session gate binding and terminal-manager reconciliation.\n');
-	};
-
-	const initialSnapshot = await api.airport.connectPanel({
+	let currentSnapshot = await api.airport.connectPanel({
 		gateId: 'agentSession',
 		label: 'mission-agent-session',
 		panelProcessId: String(process.pid),
@@ -118,11 +104,90 @@ export async function runAirportLayoutAgentSessionPane(_context: CommandContext)
 			? { terminalSessionName: process.env['MISSION_TERMINAL_SESSION'].trim() }
 			: {})
 	});
-	render(initialSnapshot);
+	let currentSession: AirportLayoutSessionRecord | undefined;
+	let currentConsoleState: AirportLayoutConsoleState = null;
+	let refreshNonce = 0;
+
+	const render = () => {
+		renderAgentSessionPane({
+			snapshot: currentSnapshot,
+			session: currentSession,
+			consoleState: currentConsoleState
+		});
+	};
+
+	const refreshSessionSurface = async (snapshot: AirportLayoutSnapshot): Promise<void> => {
+		const refreshId = ++refreshNonce;
+		const target = resolveAgentSessionTarget(snapshot);
+		if (!target.sessionId || !target.missionId) {
+			currentSession = undefined;
+			currentConsoleState = null;
+			render();
+			return;
+		}
+
+		const selector = { missionId: target.missionId };
+		const sessions = await api.mission.listSessions(selector);
+		const nextSession = sessions.find((candidate) => candidate.sessionId === target.sessionId);
+		const nextConsoleState = nextSession
+			? await api.mission.getSessionConsoleState(selector, target.sessionId)
+			: null;
+
+		if (refreshId !== refreshNonce) {
+			return;
+		}
+
+		currentSession = nextSession;
+		currentConsoleState = nextConsoleState;
+		render();
+	};
+
+	await refreshSessionSurface(currentSnapshot);
 
 	const subscription = client.onDidEvent((event) => {
 		if (event.type === 'airport.state') {
-			render(event.snapshot);
+			currentSnapshot = event.snapshot;
+			void refreshSessionSurface(currentSnapshot).catch((error: unknown) => {
+				process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+				process.exitCode = 1;
+			});
+			return;
+		}
+
+		if (event.type === 'mission.status') {
+			const target = resolveAgentSessionTarget(currentSnapshot);
+			if (!target.sessionId || event.missionId !== target.missionId) {
+				return;
+			}
+			currentSession = event.status.agentSessions?.find((candidate) => candidate.sessionId === target.sessionId);
+			if (!currentSession) {
+				currentConsoleState = null;
+			}
+			render();
+			return;
+		}
+
+		if (event.type === 'session.console' && event.sessionId === currentSession?.sessionId) {
+			currentConsoleState = event.event.state;
+			render();
+			return;
+		}
+
+		if (event.type === 'session.event' && event.sessionId === currentSession?.sessionId) {
+			currentSession = {
+				...currentSession,
+				...pickSessionRecordUpdates(event.event.state)
+			};
+			render();
+			return;
+		}
+
+		if (event.type === 'session.lifecycle' && event.sessionId === currentSession?.sessionId) {
+			currentSession = {
+				...currentSession,
+				lifecycleState: event.lifecycleState
+			};
+			render();
 		}
 	});
 
@@ -450,6 +515,103 @@ function stripAnsi(value: string): string {
 		}
 	}
 	return output;
+}
+
+function resolveAgentSessionTarget(snapshot: AirportLayoutSnapshot): {
+	missionId?: string;
+	sessionId?: string;
+} {
+	const projection = snapshot.airportProjections.agentSession;
+	const missionId = projection.missionId ?? snapshot.state.domain.selection.missionId;
+	const sessionId = projection.sessionId;
+	return {
+		...(missionId ? { missionId } : {}),
+		...(sessionId ? { sessionId } : {})
+	};
+}
+
+function renderAgentSessionPane(input: {
+	snapshot: AirportLayoutSnapshot;
+	session: AirportLayoutSessionRecord | undefined;
+	consoleState: AirportLayoutConsoleState;
+}): void {
+	printAgentSessionHeader('MISSION AGENT SESSION PANE');
+	const binding = input.snapshot.state.airport.gates.agentSession;
+	const projection = input.snapshot.airportProjections.agentSession;
+	process.stdout.write(`airport: ${input.snapshot.state.airport.airportId}\n`);
+	process.stdout.write(`session: ${input.snapshot.state.airport.substrate.sessionName}\n`);
+	process.stdout.write(`binding: ${binding.targetKind}${binding.targetId ? `:${binding.targetId}` : ''}${binding.mode ? ` (${binding.mode})` : ''}\n`);
+	process.stdout.write(`focus intent: ${input.snapshot.state.airport.focus.intentGateId ?? 'none'}\n`);
+	process.stdout.write(`focus observed: ${input.snapshot.state.airport.focus.observedGateId ?? 'none'}\n`);
+	process.stdout.write('\n');
+
+	if (!projection.sessionId) {
+		process.stdout.write('Agent session gate is idle.\n');
+		process.stdout.write('Select or launch a task session from Tower to bind this pane.\n');
+		return;
+	}
+
+	process.stdout.write(`agent session: ${projection.sessionId}\n`);
+	process.stdout.write(`mission: ${projection.missionId ?? input.snapshot.state.domain.selection.missionId ?? 'unknown'}\n`);
+	process.stdout.write(`status: ${input.session?.lifecycleState ?? projection.statusLabel}\n`);
+	if (input.session?.runtimeLabel) {
+		process.stdout.write(`runtime: ${input.session.runtimeLabel}\n`);
+	}
+	if (input.session?.taskId) {
+		process.stdout.write(`task: ${input.session.taskId}\n`);
+	}
+	if (input.session?.workingDirectory) {
+		process.stdout.write(`cwd: ${input.session.workingDirectory}\n`);
+	}
+	process.stdout.write('\n');
+
+	const consoleLines = input.consoleState?.lines ?? [];
+	const visibleLineCount = Math.max((process.stdout.rows ?? 24) - 14, 8);
+	const visibleLines = consoleLines.slice(-visibleLineCount);
+	if (visibleLines.length === 0) {
+		if (input.session?.transportId === 'terminal') {
+			process.stdout.write('Terminal-backed session is bound. The live Copilot pane should replace this slot.\n');
+		} else {
+			process.stdout.write('Waiting for session output.\n');
+		}
+	} else {
+		for (const line of visibleLines) {
+			process.stdout.write(`${line}\n`);
+		}
+	}
+
+	if (input.consoleState?.awaitingInput) {
+		process.stdout.write('\nAwaiting input in the bound agent session. Use Tower session controls to continue.\n');
+	}
+	if (input.consoleState?.promptOptions && input.consoleState.promptOptions.length > 0) {
+		process.stdout.write(`Prompt options: ${input.consoleState.promptOptions.join(', ')}\n`);
+	}
+	if (!input.session && !input.consoleState) {
+		process.stdout.write('\nWaiting for mission runtime to surface the bound session.\n');
+	}
+}
+
+function pickSessionRecordUpdates(state: {
+	runtimeId: string;
+	transportId?: string;
+	runtimeLabel: string;
+	sessionId: string;
+	lifecycleState: string;
+	workingDirectory?: string;
+	currentTurnTitle?: string;
+	failureMessage?: string;
+	lastUpdatedAt: string;
+}): Partial<AirportLayoutSessionRecord> {
+	return {
+		runtimeId: state.runtimeId,
+		...(state.transportId ? { transportId: state.transportId } : {}),
+		runtimeLabel: state.runtimeLabel,
+		lifecycleState: state.lifecycleState as AirportLayoutSessionRecord['lifecycleState'],
+		...(state.workingDirectory ? { workingDirectory: state.workingDirectory } : {}),
+		...(state.currentTurnTitle ? { currentTurnTitle: state.currentTurnTitle } : {}),
+		...(state.failureMessage ? { failureMessage: state.failureMessage } : {}),
+		lastUpdatedAt: state.lastUpdatedAt
+	};
 }
 
 function printAgentSessionHeader(title: string): void {

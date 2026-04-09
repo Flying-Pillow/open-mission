@@ -36,10 +36,12 @@ function deriveDashboardProjection(domain: ContextGraph, airportState: AirportSt
 	const base = createGateProjectionBase(airportState, 'dashboard');
 	const repositoryId = airportState.repositoryId ?? domain.selection.repositoryId;
 	const repositoryContext = repositoryId ? domain.repositories[repositoryId] : undefined;
-	const missionId = base.binding.targetKind === 'mission'
+	const requestedMissionId = base.binding.targetKind === 'mission'
 		? base.binding.targetId
 		: domain.selection.missionId;
-	const missionContext = missionId ? domain.missions[missionId] : undefined;
+	const requestedMissionContext = requestedMissionId ? domain.missions[requestedMissionId] : undefined;
+	const missionId = requestedMissionContext?.tower ? requestedMissionId : undefined;
+	const missionContext = missionId ? requestedMissionContext : undefined;
 	const commandContext = deriveDashboardCommandContext(domain, repositoryContext, missionContext);
 	return {
 		...base,
@@ -63,7 +65,7 @@ function deriveDashboardProjection(domain: ContextGraph, airportState: AirportSt
 			|| airportState.repositoryRootPath
 			|| 'Repository overview',
 		emptyLabel: missionId
-			? 'Mission mode is active but no mission-control projection is available yet.'
+			? 'Mission control is ready.'
 			: 'Repository mode is ready.'
 	};
 }

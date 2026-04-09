@@ -11,6 +11,7 @@ import {
 import type {
 	ContextGraph,
 	ContextSelection,
+	MissionStageId,
 	MissionSystemSnapshot,
 	MissionSystemState
 } from '../types.js';
@@ -175,10 +176,13 @@ export class MissionSystemController {
 	private async reduceWorkspaceSynchronization(
 		command: Extract<MissionSystemCommand, { kind: 'workspace.synchronized' }>
 	): Promise<string[]> {
+		const currentSelection = this.missionControl.getState().selection;
+		const selectedMissionId = command.selectionHint?.missionId?.trim()
+			|| currentSelection.missionId?.trim();
 		const source = await this.workspaceManager.readMissionControlSource({
 			...(command.surfacePath?.trim() ? { surfacePath: command.surfacePath.trim() } : {}),
 			...(command.workspaceRoot?.trim() ? { workspaceRoot: command.workspaceRoot.trim() } : {}),
-			...(command.selectionHint?.missionId ? { selectedMissionId: command.selectionHint.missionId } : {})
+			...(selectedMissionId ? { selectedMissionId } : {})
 		});
 		await this.airportRegistry.activateRepository(source.repositoryId, source.repositoryRootPath);
 		const airportRecord = this.airportRegistry.getActiveAirport();
@@ -208,15 +212,28 @@ export class MissionSystemController {
 		params: Extract<MissionSystemCommand, { kind: 'airport.client.observed' }>['params']
 	): Promise<string[]> {
 		const repositoryId = await this.resolveRepositoryId(params.clientId, params.surfacePath);
-		const domain = this.missionControl.observeSelection({
+		const stageId = params.stageId?.trim();
+		const selectionHint = {
 			...(params.repositoryId ? { repositoryId: params.repositoryId } : {}),
 			...(params.missionId ? { missionId: params.missionId } : {}),
-			...(params.stageId ? { stageId: params.stageId } : {}),
+			...(stageId ? { stageId: stageId as MissionStageId } : {}),
 			...(params.taskId ? { taskId: params.taskId } : {}),
 			...(params.artifactId ? { artifactId: params.artifactId } : {}),
-			...(params.agentSessionId ? { agentSessionId: params.agentSessionId } : {}),
+			...(params.agentSessionId ? { agentSessionId: params.agentSessionId } : {})
+		};
+		const observationSelection = {
+			...selectionHint,
 			fallbackRepositoryId: repositoryId
-		});
+		};
+		const domain = params.missionId?.trim()
+			? this.missionControl.synchronize(
+				await this.workspaceManager.readMissionControlSource({
+					workspaceRoot: repositoryId,
+					selectedMissionId: params.missionId.trim()
+				}),
+				selectionHint
+			)
+			: this.missionControl.observeSelection(observationSelection);
 		this.airportRegistry.observeClient(repositoryId, {
 			clientId: params.clientId,
 			...(params.focusedGateId ? { focusedGateId: params.focusedGateId } : {}),

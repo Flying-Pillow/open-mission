@@ -191,6 +191,7 @@ export type MissionAgentSessionRecord = {
 
 export type MissionAgentSessionLaunchRequest = MissionAgentTurnRequest & {
 	runtimeId: string;
+	terminalSessionName?: string;
 	transportId?: string;
 	sessionId?: string;
 	taskId?: string;

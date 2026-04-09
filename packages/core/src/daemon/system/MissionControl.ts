@@ -225,11 +225,18 @@ function resolveSelectedMissionId(
 	missions: Record<string, MissionContext>
 ): string | undefined {
 	const previousMissionId = previousSelection.missionId;
-	if (previousMissionId && previousMissionId in missions) {
+	if (previousMissionId && isMissionSelectionValid(previousMissionId, missions)) {
 		return previousMissionId;
 	}
 	const statusMissionId = missionStatus?.missionId?.trim();
-	return statusMissionId && statusMissionId in missions ? statusMissionId : statusMissionId;
+	return statusMissionId && isMissionSelectionValid(statusMissionId, missions) ? statusMissionId : undefined;
+}
+
+function isMissionSelectionValid(
+	missionId: string,
+	missions: Record<string, MissionContext>
+): boolean {
+	return Boolean(missions[missionId]?.tower);
 }
 
 function resolveSelectedTaskId(
@@ -430,7 +437,7 @@ function applyObservedSelection(input: ContextGraph, observed: {
 	const taskId = observed.taskId?.trim();
 	const artifactId = observed.artifactId?.trim();
 	const agentSessionId = observed.agentSessionId?.trim();
-	const selectedMissionId = missionId && missionId in input.missions
+	const selectedMissionId = missionId && isMissionSelectionValid(missionId, input.missions)
 		? missionId
 		: taskId && input.tasks[taskId]?.missionId
 			? input.tasks[taskId]?.missionId

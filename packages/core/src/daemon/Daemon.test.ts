@@ -6,7 +6,9 @@ import { describe, expect, it } from 'vitest';
 import { DaemonApi } from '../client/DaemonApi.js';
 import { DaemonClient } from '../client/DaemonClient.js';
 import { getMissionDaemonSettingsPath } from '../lib/daemonConfig.js';
+import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import { initializeMissionRepository } from '../initializeMissionRepository.js';
+import { Factory } from './mission/Factory.js';
 import { startDaemon } from './Daemon.js';
 import { getDaemonManifestPath, getDaemonRuntimePath } from './daemonPaths.js';
 
@@ -423,6 +425,66 @@ describe('Daemon', () => {
 					await daemon.close();
 				}
 			} finally {
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('keeps the selected mission hydrated across airport workspace resynchronization', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			await initializeMissionRepository(workspaceRoot);
+			const adapter = new FilesystemAdapter(workspaceRoot);
+			const branchRef = adapter.deriveMissionBranchName(4, 'Hydrated mission projection');
+			const seededMission = await Factory.create(adapter, {
+				brief: createBrief(4, 'Hydrated mission projection'),
+				branchRef
+			});
+
+			try {
+				const daemon = await startDaemon();
+				const firstClient = new DaemonClient();
+				const secondClient = new DaemonClient();
+
+				try {
+					await firstClient.connect({ surfacePath: workspaceRoot });
+					const firstApi = new DaemonApi(firstClient);
+					await firstApi.airport.connectPanel({ gateId: 'dashboard', label: 'test-dashboard-1' });
+					const selected = await firstApi.airport.observeClient({
+						missionId: seededMission.getRecord().id,
+						focusedGateId: 'dashboard',
+						intentGateId: 'dashboard'
+					});
+
+					expect(selected.state.domain.selection).toMatchObject({
+						repositoryId: workspaceRoot,
+						missionId: seededMission.getRecord().id
+					});
+					expect(selected.state.domain.missions[seededMission.getRecord().id]?.tower).toBeDefined();
+					expect(selected.state.domain.missions[seededMission.getRecord().id]?.taskIds.length).toBeGreaterThan(0);
+					expect(selected.airportProjections.dashboard.emptyLabel).toBe('Mission control is ready.');
+
+					await secondClient.connect({ surfacePath: workspaceRoot });
+					const secondApi = new DaemonApi(secondClient);
+					const reconnected = await secondApi.airport.connectPanel({ gateId: 'dashboard', label: 'test-dashboard-2' });
+
+					expect(reconnected.state.domain.selection).toMatchObject({
+						repositoryId: workspaceRoot,
+						missionId: seededMission.getRecord().id
+					});
+					expect(reconnected.state.domain.missions[seededMission.getRecord().id]?.tower).toBeDefined();
+					expect(reconnected.state.domain.missions[seededMission.getRecord().id]?.taskIds.length).toBeGreaterThan(0);
+					expect(reconnected.airportProjections.dashboard.stageRail.length).toBeGreaterThan(0);
+					expect(reconnected.airportProjections.dashboard.treeNodes.length).toBeGreaterThan(0);
+					expect(reconnected.airportProjections.dashboard.emptyLabel).toBe('Mission control is ready.');
+				} finally {
+					firstClient.dispose();
+					secondClient.dispose();
+					await daemon.close();
+				}
+			} finally {
+				seededMission.dispose();
 				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
 				await fs.rm(workspaceRoot, { recursive: true, force: true });
 			}

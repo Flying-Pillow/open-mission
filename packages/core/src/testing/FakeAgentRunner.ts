@@ -125,6 +125,17 @@ class FakeAgentSession implements AgentSession {
 		});
 	}
 
+	public overrideWorkingDirectory(workingDirectory: string): void {
+		this.emit({
+			type: 'session.state-changed',
+			snapshot: this.nextSnapshot({
+				phase: 'running',
+				workingDirectory,
+				awaitingInput: false
+			})
+		});
+	}
+
 	private emit(event: AgentSessionEvent): void {
 		this.snapshot = {
 			...event.snapshot,
@@ -208,6 +219,14 @@ export class FakeAgentRunner implements AgentRunner {
 
 	public getSession(sessionId: string): FakeAgentSession | undefined {
 		return this.sessions.get(sessionId);
+	}
+
+	public deleteSession(sessionId: string): void {
+		this.sessions.delete(sessionId);
+	}
+
+	public overrideSessionWorkingDirectory(sessionId: string, workingDirectory: string): void {
+		this.sessions.get(sessionId)?.overrideWorkingDirectory(workingDirectory);
 	}
 
 	public getLastStartRequest(): AgentSessionStartRequest | undefined {
