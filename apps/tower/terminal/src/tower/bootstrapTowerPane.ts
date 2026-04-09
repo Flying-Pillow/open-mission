@@ -1,6 +1,7 @@
 import {
 	DaemonApi,
 	DaemonMissionApi,
+	type MissionSystemSnapshot,
 	readMissionDaemonSettings,
 	type MissionSelector
 } from '@flying-pillow/mission-core';
@@ -69,21 +70,22 @@ export async function bootstrapTowerPane(context: CommandContext): Promise<void>
 			launchMode
 		});
 		const api = new DaemonApi(client);
-		await api.airport.connectPanel({
+		const snapshot = await api.airport.connectPanel({
 			gateId: resolveInjectedGateId(),
-			label: 'mission-tower',
+			label: `mission-${resolveInjectedGateId()}`,
 			panelProcessId: String(process.pid),
 			...(process.env['MISSION_TERMINAL_SESSION']?.trim()
 				? { terminalSessionName: process.env['MISSION_TERMINAL_SESSION']?.trim() }
 				: {})
 		});
 		const discoveryStatus = await api.control.getStatus();
-		const resolvedSelector = DaemonMissionApi.selectorFromStatus(discoveryStatus, nextSelector);
+		const resolvedSelector = selectorFromConnection(discoveryStatus, snapshot, nextSelector);
 		const status = resolvedSelector.missionId
 			? await api.mission.getStatus(resolvedSelector)
 			: discoveryStatus;
 		return {
 			client,
+			snapshot,
 			status,
 			dispose: () => {
 				client.dispose();
@@ -96,7 +98,7 @@ export async function bootstrapTowerPane(context: CommandContext): Promise<void>
 	let initialSelector = selector;
 	try {
 		initialConnection = await connect(selector);
-		initialSelector = DaemonMissionApi.selectorFromStatus(initialConnection.status, selector);
+		initialSelector = selectorFromConnection(initialConnection.status, initialConnection.snapshot, selector);
 	} catch (error) {
 		initialConnectionError = error instanceof Error ? error.message : String(error);
 	}
@@ -126,4 +128,17 @@ export async function bootstrapTowerPane(context: CommandContext): Promise<void>
 	} finally {
 		initialConnection?.dispose();
 	}
+}
+
+function selectorFromConnection(
+	status: Awaited<ReturnType<DaemonApi['control']['getStatus']>>,
+	snapshot: MissionSystemSnapshot,
+	fallback: MissionSelector
+): MissionSelector {
+	const projectedMissionId = snapshot.airportProjections.dashboard.missionId
+		?? snapshot.state.domain.selection.missionId;
+	if (projectedMissionId) {
+		return { missionId: projectedMissionId };
+	}
+	return DaemonMissionApi.selectorFromStatus(status, fallback);
 }

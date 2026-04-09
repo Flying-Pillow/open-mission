@@ -3,7 +3,7 @@ import type { AirportState } from './types.js';
 import { TerminalManagerSubstrateController } from './terminal-manager.js';
 
 describe('TerminalManagerSubstrateController', () => {
-	it('does not refocus the agent session target again when the binding is unchanged', async () => {
+	it('observes terminal-manager panes without applying focus effects', async () => {
 		const calls: string[][] = [];
 		const executor = (args: string[]) => {
 			calls.push(args);
@@ -28,27 +28,24 @@ describe('TerminalManagerSubstrateController', () => {
 			agentSession: { targetKind: 'agentSession', targetId: 'session-1', mode: 'control' }
 		});
 
-		await controller.reconcile(airportState);
-		await controller.reconcile(airportState);
+		const observed = await controller.observe(airportState);
 
-		expect(calls.filter((args) => args.includes('focus-pane-id'))).toEqual([
-			['--session', 'mission-mission', 'action', 'focus-pane-id', 'terminal_3'],
-			['--session', 'mission-mission', 'action', 'focus-pane-id', 'terminal_1']
-		]);
+		expect(observed.attached).toBe(true);
+		expect(observed.panesByGate.agentSession).toMatchObject({
+			paneId: 2,
+			exists: true,
+			expected: true,
+			title: 'AGENT SESSION'
+		});
+		expect(calls.filter((args) => args.includes('focus-pane-id'))).toEqual([]);
 	});
 
-	it('does not focus the agent session host pane while the agent session gate is idle', async () => {
+	it('reports a detached substrate when pane listing fails', async () => {
 		const calls: string[][] = [];
 		const executor = (args: string[]) => {
 			calls.push(args);
 			if (args.includes('list-panes')) {
-				return Promise.resolve({
-					stdout: JSON.stringify([
-						{ id: 1, title: 'MISSION', is_plugin: false, is_focused: true },
-						{ id: 2, title: 'AGENT SESSION', is_plugin: false, is_focused: false }
-					]),
-					stderr: ''
-				});
+				return Promise.reject(new Error('terminal-manager unavailable'));
 			}
 			return Promise.resolve({ stdout: '', stderr: '' });
 		};
@@ -58,9 +55,10 @@ describe('TerminalManagerSubstrateController', () => {
 			executor
 		});
 
-		await controller.reconcile(createAirportState());
+		const observed = await controller.observe(createAirportState());
 
-		expect(calls.filter((args) => args.includes('focus-pane-id'))).toEqual([]);
+		expect(observed.attached).toBe(false);
+		expect(observed.panesByGate.dashboard).toMatchObject({ exists: false, expected: true, title: 'MISSION' });
 	});
 });
 

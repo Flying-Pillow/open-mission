@@ -29,15 +29,12 @@ type TerminalManagerExecutor = (args: string[]) => Promise<TerminalManagerExecut
 
 export interface AirportSubstrateController {
 	getState(): AirportSubstrateState;
-	reconcile(state: AirportState): Promise<AirportSubstrateState>;
-	setSessionName(sessionName: string): AirportSubstrateState;
-	observePane(gateId: GateId, pane: AirportPaneState | undefined): AirportSubstrateState;
+	observe(state: AirportState): Promise<AirportSubstrateState>;
 }
 
 export class TerminalManagerSubstrateController implements AirportSubstrateController {
 	private state: AirportSubstrateState;
 	private readonly executor: TerminalManagerExecutor;
-	private lastAppliedAgentSessionTargetKey: string | undefined;
 
 	public constructor(options: { sessionName?: string; executor?: TerminalManagerExecutor; terminalBinary?: string } = {}) {
 		this.state = createDefaultTerminalManagerSubstrateState(options);
@@ -58,39 +55,12 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 		return structuredClone(this.state);
 	}
 
-	public async reconcile(state: AirportState): Promise<AirportSubstrateState> {
+	public async observe(_state: AirportState): Promise<AirportSubstrateState> {
 		const now = new Date().toISOString();
 		const panes = await this.listPanes().catch(() => undefined);
-		const nextState = panes
+		this.state = panes
 			? buildObservedState(this.state, panes, now)
 			: buildDetachedState(this.state, now);
-
-		this.state = nextState;
-		await this.applyAgentSessionBindingEffect(state, panes);
-		return this.getState();
-	}
-
-	public setSessionName(sessionName: string): AirportSubstrateState {
-		const normalizedSessionName = sessionName.trim() || 'mission-control';
-		if (normalizedSessionName === this.state.sessionName) {
-			return this.getState();
-		}
-
-		this.lastAppliedAgentSessionTargetKey = undefined;
-		this.state = {
-			...createDefaultTerminalManagerSubstrateState({ sessionName: normalizedSessionName }),
-			layoutIntent: this.state.layoutIntent
-		};
-		return this.getState();
-	}
-
-	public observePane(gateId: GateId, pane: AirportPaneState | undefined): AirportSubstrateState {
-		const panesByGate = mergeObservedPane(this.state.panesByGate, gateId, pane);
-		this.state = {
-			...this.state,
-			panesByGate,
-			lastObservedAt: new Date().toISOString()
-		};
 		return this.getState();
 	}
 
@@ -105,52 +75,6 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 		]);
 		return (JSON.parse(result.stdout) as TerminalManagerPaneMetadata[]).filter((pane) => !pane.is_plugin);
 	}
-
-	private async applyAgentSessionBindingEffect(state: AirportState, panes: TerminalManagerPaneMetadata[] | undefined): Promise<void> {
-		if (!panes || panes.length === 0) {
-			return;
-		}
-
-		const agentSessionBinding = state.gates.agentSession;
-		const boundSessionId = agentSessionBinding.targetKind === 'agentSession' ? agentSessionBinding.targetId?.trim() : undefined;
-		if (!boundSessionId) {
-			this.lastAppliedAgentSessionTargetKey = undefined;
-			return;
-		}
-
-		const targetPane = panes.find((pane) => pane.title === boundSessionId);
-		if (!targetPane) {
-			this.lastAppliedAgentSessionTargetKey = undefined;
-			return;
-		}
-
-		const desiredTargetKey = `${boundSessionId}:${String(targetPane.id)}`;
-		if (this.lastAppliedAgentSessionTargetKey === desiredTargetKey) {
-			return;
-		}
-
-		const previouslyFocusedPaneId = panes.find((pane) => pane.is_focused)?.id;
-		if (previouslyFocusedPaneId === targetPane.id) {
-			this.lastAppliedAgentSessionTargetKey = desiredTargetKey;
-			return;
-		}
-
-		await this.focusPane(targetPane.id);
-		this.lastAppliedAgentSessionTargetKey = desiredTargetKey;
-		if (previouslyFocusedPaneId && previouslyFocusedPaneId !== targetPane.id) {
-			await this.focusPane(previouslyFocusedPaneId).catch(() => undefined);
-		}
-	}
-
-	private async focusPane(paneId: number): Promise<void> {
-		await this.executor([
-			'--session',
-			this.state.sessionName,
-			'action',
-			'focus-pane-id',
-			`terminal_${String(paneId)}`
-		]);
-	}
 }
 
 export class InMemoryTerminalManagerSubstrateController implements AirportSubstrateController {
@@ -164,7 +88,7 @@ export class InMemoryTerminalManagerSubstrateController implements AirportSubstr
 		return structuredClone(this.state);
 	}
 
-	public reconcile(_state: AirportState): Promise<AirportSubstrateState> {
+	public observe(_state: AirportState): Promise<AirportSubstrateState> {
 		const now = new Date().toISOString();
 		this.state = {
 			...this.state,
@@ -173,29 +97,6 @@ export class InMemoryTerminalManagerSubstrateController implements AirportSubstr
 			lastObservedAt: now
 		};
 		return Promise.resolve(this.getState());
-	}
-
-	public setSessionName(sessionName: string): AirportSubstrateState {
-		const normalizedSessionName = sessionName.trim() || 'mission-control';
-		if (normalizedSessionName === this.state.sessionName) {
-			return this.getState();
-		}
-
-		this.state = {
-			...createDefaultTerminalManagerSubstrateState({ sessionName: normalizedSessionName }),
-			layoutIntent: this.state.layoutIntent
-		};
-		return this.getState();
-	}
-
-	public observePane(gateId: GateId, pane: AirportPaneState | undefined): AirportSubstrateState {
-		const panesByGate = mergeObservedPane(this.state.panesByGate, gateId, pane);
-		this.state = {
-			...this.state,
-			panesByGate,
-			lastObservedAt: new Date().toISOString()
-		};
-		return this.getState();
 	}
 }
 
@@ -270,21 +171,4 @@ function buildDetachedState(currentState: AirportSubstrateState, now: string): A
 		...(currentState.lastAppliedAt ? { lastAppliedAt: currentState.lastAppliedAt } : {}),
 		lastObservedAt: now
 	};
-}
-
-function mergeObservedPane(
-	panesByGate: Partial<Record<GateId, AirportPaneState>>,
-	gateId: GateId,
-	pane: AirportPaneState | undefined
-): Partial<Record<GateId, AirportPaneState>> {
-	if (pane) {
-		return {
-			...panesByGate,
-			[gateId]: { ...pane }
-		};
-	}
-
-	return Object.fromEntries(
-		Object.entries(panesByGate).filter(([candidateGateId]) => candidateGateId !== gateId)
-	) as Partial<Record<GateId, AirportPaneState>>;
 }

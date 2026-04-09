@@ -24,7 +24,6 @@ import type {
 } from '@flying-pillow/mission-core';
 import {
 	DaemonApi,
-	DaemonMissionApi,
 } from '@flying-pillow/mission-core';
 import { useKeyboard, useRenderer } from '@opentui/solid';
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSXElement } from 'solid-js';
@@ -64,6 +63,7 @@ import {
 
 export type TowerConnection = {
 	client: DaemonClient;
+	snapshot: MissionSystemSnapshot;
 	status: OperatorStatus;
 	dispose: () => void;
 };
@@ -124,6 +124,7 @@ export function TowerController({
 	const [selector, setSelector] = createSignal<MissionSelector>(initialSelector);
 	const [connection, setConnection] = createSignal<TowerConnection | undefined>(initialConnection);
 	const [status, setStatus] = createSignal<OperatorStatus>(initialConnection?.status ?? { found: false });
+	const [systemSnapshot, setSystemSnapshot] = createSignal<MissionSystemSnapshot | undefined>(initialConnection?.snapshot);
 	const [daemonState, setDaemonState] = createSignal<DaemonState>(
 		initialConnection ? 'connected' : initialConnectionError ? 'degraded' : 'booting'
 	);
@@ -169,14 +170,13 @@ export function TowerController({
 		}
 	});
 	const client = createMemo(() => connection()?.client);
-	const systemSnapshot = createMemo(() => status().system);
 	const systemDomain = createMemo(() => systemSnapshot()?.state.domain);
 	const projectedAvailableMissions = createMemo<MissionSelectionCandidate[]>(() =>
 		buildProjectedMissionCandidates(systemDomain())
 	);
 	const currentMissionId = createMemo(() =>
 		selector().missionId
-			?? status().system?.state.domain.selection.missionId
+			?? systemSnapshot()?.state.domain.selection.missionId
 			?? status().missionId
 	);
 	const headerTabs = createMemo<HeaderTab[]>(() =>
@@ -1459,22 +1459,19 @@ export function TowerController({
 		nextStatus: OperatorStatus,
 		fallbackSelector: MissionSelector = selector()
 	): MissionSelector {
-		const nextSelector = DaemonMissionApi.selectorFromStatus(nextStatus, fallbackSelector);
+		const nextSelector = selectorFromTowerState(nextStatus, systemSnapshot(), fallbackSelector);
 		setStatus(nextStatus);
 		setSelector(nextSelector);
 		return nextSelector;
 	}
 
 	function applySystemSnapshot(nextSystem: MissionSystemSnapshot): void {
-		setStatus((current) => {
-			const currentVersion = current.system?.state.version ?? -1;
+		setSystemSnapshot((current) => {
+			const currentVersion = current?.state.version ?? -1;
 			if (nextSystem.state.version < currentVersion) {
 				return current;
 			}
-			return {
-				...current,
-				system: nextSystem
-			};
+			return nextSystem;
 		});
 	}
 
@@ -1524,11 +1521,12 @@ export function TowerController({
 		try {
 			const nextConnection = await connect(nextSelector);
 			await replaceConnection(nextConnection);
+			applySystemSnapshot(nextConnection.snapshot);
 			applyMissionStatus(nextConnection.status, nextSelector);
 			setDaemonState('connected');
 			appendLog(
 				nextConnection.status.found
-					? `Connected to ${nextConnection.status.system?.state.domain.selection.missionId ?? nextConnection.status.missionId ?? 'the selected mission'}.`
+					? `Connected to ${nextConnection.snapshot.state.domain.selection.missionId ?? nextConnection.status.missionId ?? 'the selected mission'}.`
 					: describeControlConnection(nextConnection.status)
 			);
 			return nextConnection.client;
@@ -2222,12 +2220,15 @@ export function TowerController({
 }
 function asMissionStatusNotification(
 	event: unknown
-): { type: 'mission.status'; missionId: string; status: OperatorStatus } | undefined {
+): { type: 'mission.status'; workspaceRoot: string; missionId: string; status: OperatorStatus } | undefined {
 	if (!event || typeof event !== 'object') {
 		return undefined;
 	}
-	const candidate = event as { type?: unknown; missionId?: unknown; status?: unknown };
+	const candidate = event as { type?: unknown; workspaceRoot?: unknown; missionId?: unknown; status?: unknown };
 	if (candidate.type !== 'mission.status') {
+		return undefined;
+	}
+	if (typeof candidate.workspaceRoot !== 'string' || candidate.workspaceRoot.length === 0) {
 		return undefined;
 	}
 	if (typeof candidate.missionId !== 'string' || candidate.missionId.length === 0) {
@@ -2236,7 +2237,26 @@ function asMissionStatusNotification(
 	if (!candidate.status || typeof candidate.status !== 'object') {
 		return undefined;
 	}
-	return candidate as { type: 'mission.status'; missionId: string; status: OperatorStatus };
+	return candidate as { type: 'mission.status'; workspaceRoot: string; missionId: string; status: OperatorStatus };
+}
+
+function selectorFromTowerState(
+	status: OperatorStatus,
+	snapshot: MissionSystemSnapshot | undefined,
+	fallback: MissionSelector = {}
+): MissionSelector {
+	if (status.missionId) {
+		return { missionId: status.missionId };
+	}
+	const projectedMissionId = snapshot?.airportProjections.dashboard.missionId
+		?? snapshot?.state.domain.selection.missionId;
+	if (projectedMissionId) {
+		return { missionId: projectedMissionId };
+	}
+	if (fallback.missionId) {
+		return { missionId: fallback.missionId };
+	}
+	return {};
 }
 
 function clampIndex(index: number, length: number): number {

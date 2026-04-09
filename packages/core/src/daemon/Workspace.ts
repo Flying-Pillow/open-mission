@@ -41,6 +41,7 @@ import type {
 	OperatorStatus,
 	TrackedIssueSummary
 } from '../types.js';
+import type { MissionControlSource } from './system/types.js';
 import {
 	type ControlActionDescribe,
 	type ControlActionExecute,
@@ -249,6 +250,25 @@ export class MissionWorkspace {
 			control,
 			availableActions,
 			...(availableMissions.length > 0 ? { availableMissions } : {})
+		};
+	}
+
+	public async readMissionControlSource(input: {
+		selectedMissionId?: string;
+	} = {}): Promise<MissionControlSource> {
+		const availableMissions = await this.listMissionSelectionCandidates();
+		const discoveryStatus = await this.buildDiscoveryStatus(availableMissions);
+		const selectedMissionId = input.selectedMissionId?.trim();
+		const missionStatus = selectedMissionId
+			? await this.getMissionStatus({ selector: { missionId: selectedMissionId } }).catch(() => undefined)
+			: undefined;
+		return {
+			repositoryId: this.workspaceRoot,
+			repositoryRootPath: this.workspaceRoot,
+			control: discoveryStatus.control!,
+			availableMissions,
+			availableActions: discoveryStatus.availableActions ?? [],
+			...(missionStatus ? { missionStatus } : {})
 		};
 	}
 
@@ -554,6 +574,7 @@ export class MissionWorkspace {
 	private async broadcastMissionStatus(missionId: string, status: OperatorStatus): Promise<void> {
 		this.emitEvent({
 			type: 'mission.status',
+			workspaceRoot: this.workspaceRoot,
 			missionId,
 			status: await this.decorateMissionStatus(status, 'mission')
 		});

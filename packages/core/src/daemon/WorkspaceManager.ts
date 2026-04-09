@@ -4,6 +4,7 @@ import type { Notification, Request } from './contracts.js';
 import { MissionWorkspace } from './Workspace.js';
 import type { AgentRunner } from '../runtime/AgentRunner.js';
 import { resolveGitWorkspaceRoot } from '../lib/workspacePaths.js';
+import type { MissionControlSource } from './system/types.js';
 
 export class WorkspaceManager {
     private readonly workspaces = new Map<string, MissionWorkspace>();
@@ -27,6 +28,42 @@ export class WorkspaceManager {
         }
 
         return workspace;
+    }
+
+    public resolveWorkspaceRootForSurfacePath(surfacePath: string): string {
+        return path.resolve(this.discoverSurfaceRoot(surfacePath));
+    }
+
+    public resolveWorkspaceRootForMissionId(missionId: string): string | undefined {
+        return this.missionWorkspaceRoots.get(missionId);
+    }
+
+    public async readMissionControlSource(input: {
+        surfacePath?: string;
+        workspaceRoot?: string;
+        selectedMissionId?: string;
+    }): Promise<MissionControlSource> {
+        const workspaceRoot = input.workspaceRoot
+            ? path.resolve(input.workspaceRoot)
+            : input.surfacePath
+                ? this.resolveWorkspaceRootForSurfacePath(input.surfacePath)
+                : undefined;
+        if (!workspaceRoot) {
+            throw new Error('Mission control source requires a surfacePath or workspaceRoot.');
+        }
+        const workspace = this.getWorkspace(workspaceRoot);
+        return workspace.readMissionControlSource({
+            ...(input.selectedMissionId?.trim() ? { selectedMissionId: input.selectedMissionId.trim() } : {})
+        });
+    }
+
+    public resolveWorkspaceRootForRequest(request: Request, result: unknown): string | undefined {
+        const surfacePath = request.surfacePath?.trim();
+        if (surfacePath) {
+            return this.resolveWorkspaceRootForSurfacePath(surfacePath);
+        }
+        const missionId = readMissionSelector(request.params)?.missionId ?? readMissionIdFromResult(result);
+        return missionId ? this.resolveWorkspaceRootForMissionId(missionId) : undefined;
     }
 
     public async executeMethod(request: Request): Promise<unknown> {
@@ -106,6 +143,13 @@ export class WorkspaceManager {
             primaryControlRoot,
             controlRoots: [primaryControlRoot]
         };
+    }
+
+    private discoverSurfaceRoot(surfacePath: string): string {
+        const normalizedSurfacePath = path.resolve(surfacePath);
+        return this.resolveControlRootFromMissionPath(normalizedSurfacePath)
+            ?? resolveGitWorkspaceRoot(normalizedSurfacePath)
+            ?? normalizedSurfacePath;
     }
 
     private resolveControlRootFromMissionPath(surfacePath: string): string | undefined {

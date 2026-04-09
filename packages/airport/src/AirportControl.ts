@@ -4,6 +4,7 @@ import {
 	type AirportProjectionSet,
 	type AirportState,
 	type AirportStatus,
+	type AirportSubstrateState,
 	type BindAirportGateParams,
 	type ConnectAirportClientParams,
 	type GateBinding,
@@ -14,23 +15,19 @@ import {
 	normalizePersistedAirportIntent,
 	type ObserveAirportClientParams
 } from './types.js';
-import {
-	createDefaultTerminalManagerSubstrateState,
-	InMemoryTerminalManagerSubstrateController,
-	type AirportSubstrateController
-	} from './terminal-manager.js';
+import { createDefaultTerminalManagerSubstrateState } from './terminal-manager.js';
 
 export class AirportControl {
 	private state: AirportState;
 
 	public constructor(
-		private readonly substrate: AirportSubstrateController = new InMemoryTerminalManagerSubstrateController(),
 		options: {
 			airportId?: string;
 			repositoryId?: string;
 			repositoryRootPath?: string;
 			sessionId?: string;
 			persistedIntent?: PersistedAirportIntent;
+			initialSubstrateState?: AirportSubstrateState;
 		} = {}
 	) {
 		const persistedIntent = normalizePersistedAirportIntent(options.persistedIntent);
@@ -46,16 +43,18 @@ export class AirportControl {
 			},
 			focus: persistedIntent?.focus?.intentGateId ? { intentGateId: persistedIntent.focus.intentGateId } : {},
 			clients: {},
-			substrate: this.substrate.getState?.() ?? createDefaultTerminalManagerSubstrateState()
+			substrate: options.initialSubstrateState
+				? structuredClone(options.initialSubstrateState)
+				: createDefaultTerminalManagerSubstrateState()
 		};
 	}
 
-	public async scopeToRepository(options: {
+	public scopeToRepository(options: {
 		repositoryId: string;
 		repositoryRootPath?: string;
 		airportId: string;
 		sessionName: string;
-	}): Promise<AirportStatus> {
+	}): AirportStatus {
 		const repositoryId = options.repositoryId.trim();
 		const repositoryRootPath = options.repositoryRootPath?.trim();
 		const airportId = options.airportId.trim();
@@ -74,9 +73,11 @@ export class AirportControl {
 			repositoryId,
 			...(repositoryRootPath ? { repositoryRootPath } : {}),
 			gates: createDefaultGateBindings(repositoryId),
-			substrate: this.substrate.setSessionName(sessionName)
+			substrate: {
+				...createDefaultTerminalManagerSubstrateState({ sessionName }),
+				layoutIntent: this.state.substrate.layoutIntent
+			}
 		};
-		await this.reconcileSubstrate();
 		return this.getStatus();
 	}
 
@@ -99,7 +100,7 @@ export class AirportControl {
 		return derivePersistedAirportIntent(this.state);
 	}
 
-	public async setTerminalManagerSessionName(sessionName: string): Promise<AirportStatus> {
+	public setTerminalManagerSessionName(sessionName: string): AirportStatus {
 		const normalizedSessionName = sessionName.trim();
 		if (!normalizedSessionName || normalizedSessionName === this.state.substrate.sessionName) {
 			return this.getStatus();
@@ -107,15 +108,17 @@ export class AirportControl {
 
 		this.state = {
 			...this.state,
-			substrate: this.substrate.setSessionName(normalizedSessionName)
+			substrate: {
+				...createDefaultTerminalManagerSubstrateState({ sessionName: normalizedSessionName }),
+				layoutIntent: this.state.substrate.layoutIntent
+			}
 		};
-		await this.reconcileSubstrate();
 		return this.getStatus();
 	}
 
-	public async connectClient(params: ConnectAirportClientParams): Promise<AirportStatus> {
+	public connectClient(params: ConnectAirportClientParams): AirportStatus {
 		if (params.terminalSessionName?.trim()) {
-			await this.setTerminalManagerSessionName(params.terminalSessionName);
+			this.setTerminalManagerSessionName(params.terminalSessionName);
 		}
 		const now = new Date().toISOString();
 		const existing = this.state.clients[params.clientId];
@@ -146,11 +149,10 @@ export class AirportControl {
 				}
 			}
 		};
-		await this.reconcileSubstrate();
 		return this.getStatus();
 	}
 
-	public async disconnectClient(clientId: string): Promise<AirportStatus> {
+	public disconnectClient(clientId: string): AirportStatus {
 		const existing = this.state.clients[clientId];
 		if (!existing) {
 			return this.getStatus();
@@ -172,11 +174,10 @@ export class AirportControl {
 				...clients
 			}
 		};
-		await this.reconcileSubstrate();
 		return this.getStatus();
 	}
 
-	public async observeClient(params: ObserveAirportClientParams): Promise<AirportStatus> {
+	public observeClient(params: ObserveAirportClientParams): AirportStatus {
 		const existing = this.state.clients[params.clientId];
 		if (!existing) {
 			throw new Error(`Airport client '${params.clientId}' is not registered.`);
@@ -196,11 +197,10 @@ export class AirportControl {
 			focus: deriveFocusState(clients, params.intentGateId ?? this.state.focus.intentGateId),
 			clients
 		};
-		await this.reconcileSubstrate();
 		return this.getStatus();
 	}
 
-	public async bindGate(params: BindAirportGateParams): Promise<AirportStatus> {
+	public bindGate(params: BindAirportGateParams): AirportStatus {
 		this.state = {
 			...this.state,
 			gates: {
@@ -208,14 +208,13 @@ export class AirportControl {
 				[params.gateId]: normalizeGateBinding(params.binding)
 			}
 		};
-		await this.reconcileSubstrate();
 		return this.getStatus();
 	}
 
-	public async applyDefaultBindings(
+	public applyDefaultBindings(
 		bindings: Partial<Record<GateId, GateBinding>>,
 		options: { focusIntent?: GateId } = {}
-	): Promise<AirportStatus> {
+	): AirportStatus {
 		this.state = {
 			...this.state,
 			gates: {
@@ -230,15 +229,15 @@ export class AirportControl {
 				...(this.state.focus.observedGateIdByClientId ? { observedGateIdByClientId: { ...this.state.focus.observedGateIdByClientId } } : {})
 			}
 		};
-		await this.reconcileSubstrate();
 		return this.getStatus();
 	}
 
-	private async reconcileSubstrate(): Promise<void> {
+	public observeSubstrate(substrate: AirportSubstrateState): AirportStatus {
 		this.state = {
 			...this.state,
-			substrate: await this.substrate.reconcile(this.state)
+			substrate: structuredClone(substrate)
 		};
+		return this.getStatus();
 	}
 }
 

@@ -463,6 +463,7 @@ export type Notification =
 	}
 	| {
 		type: 'mission.status';
+		workspaceRoot: string;
 		missionId: string;
 		status: OperatorStatus;
 	}

@@ -24,7 +24,6 @@ export async function runAirportLayoutLaunch(context: CommandContext): Promise<v
 	const editorHeight = process.env['MISSION_TERMINAL_EDITOR_HEIGHT']?.trim() || '35%';
 	const repoRoot = context.controlRoot;
 	const missionEntry = path.join(repoRoot, 'mission');
-	const editorCommand = buildEditorCommand(repoRoot);
 	const towerCommand = buildShellCommand([
 		'env',
 		'MISSION_TERMINAL_ACTIVE=1',
@@ -39,6 +38,13 @@ export async function runAirportLayoutLaunch(context: CommandContext): Promise<v
 		`MISSION_TERMINAL_SESSION=${sessionName}`,
 		missionEntry,
 		'__airport-layout-agent-session-pane'
+	]);
+	const editorCommand = buildShellCommand([
+		'env',
+		'MISSION_GATE_ID=editor',
+		`MISSION_TERMINAL_SESSION=${sessionName}`,
+		missionEntry,
+		'__airport-layout-editor-pane'
 	]);
 
 	await mkdir(terminalManagerConfigDir, { recursive: true });
@@ -132,30 +138,98 @@ export async function runAirportLayoutAgentSessionPane(_context: CommandContext)
 }
 
 export async function runAirportLayoutEditorPane(_context: CommandContext): Promise<void> {
-	const editorCommand = buildEditorCommand(process.cwd());
-	const child = spawn('sh', ['-lc', `exec ${editorCommand}`], {
-		cwd: process.cwd(),
-		stdio: 'inherit',
-		env: process.env
+	const client = await connectSurfaceDaemon({
+		surfacePath: process.cwd(),
+		launchMode: resolveSurfaceDaemonLaunchMode(import.meta.url)
 	});
+	const api = new DaemonApi(client);
+	let activeChild: ReturnType<typeof spawn> | undefined;
+	let activeLaunchPath: string | undefined;
+	let shuttingDown = false;
+	let restartingChild = false;
 
-	await new Promise<void>((resolve, reject) => {
-		child.once('error', reject);
-		child.once('exit', (code, signal) => {
-			if (signal === 'SIGTERM') {
-				resolve();
+	const launchEditor = async (snapshot: Awaited<ReturnType<typeof api.airport.getStatus>>): Promise<void> => {
+		const nextLaunchPath = resolveEditorLaunchPath(snapshot, process.cwd());
+		if (activeChild && activeLaunchPath === nextLaunchPath) {
+			return;
+		}
+		if (activeChild) {
+			restartingChild = true;
+			activeChild.kill('SIGTERM');
+			return;
+		}
+		activeLaunchPath = nextLaunchPath;
+		const editorCommand = buildEditorCommand(process.cwd(), nextLaunchPath);
+		activeChild = spawn('sh', ['-lc', `exec ${editorCommand}`], {
+			cwd: process.cwd(),
+			stdio: 'inherit',
+			env: process.env
+		});
+		activeChild.once('error', (error) => {
+			if (!shuttingDown) {
+				throw error;
+			}
+		});
+		activeChild.once('exit', (code, signal) => {
+			activeChild = undefined;
+			if (restartingChild) {
+				restartingChild = false;
+				void launchEditor(snapshotFromCurrentState).catch((error: unknown) => {
+					process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+					process.exitCode = 1;
+				});
+				return;
+			}
+			if (shuttingDown || signal === 'SIGTERM') {
 				return;
 			}
 			if (signal) {
-				reject(new Error(`editor exited from signal ${signal}.`));
+				process.stderr.write(`editor exited from signal ${signal}.\n`);
+				process.exitCode = 1;
 				return;
 			}
 			if ((code ?? 0) !== 0) {
-				reject(new Error(`editor exited with code ${String(code ?? 1)}.`));
+				process.stderr.write(`editor exited with code ${String(code ?? 1)}.\n`);
+				process.exitCode = code ?? 1;
+			}
+		});
+	};
+
+	let snapshotFromCurrentState = await api.airport.connectPanel({
+		gateId: 'editor',
+		label: 'mission-editor',
+		panelProcessId: String(process.pid),
+		...(process.env['MISSION_TERMINAL_SESSION']?.trim()
+			? { terminalSessionName: process.env['MISSION_TERMINAL_SESSION'].trim() }
+			: {})
+	});
+	await launchEditor(snapshotFromCurrentState);
+
+	const subscription = client.onDidEvent((event) => {
+		if (event.type !== 'airport.state') {
+			return;
+		}
+		snapshotFromCurrentState = event.snapshot;
+		void launchEditor(snapshotFromCurrentState).catch((error: unknown) => {
+			process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+			process.exitCode = 1;
+		});
+	});
+
+	await new Promise<void>((resolve) => {
+		const dispose = () => {
+			shuttingDown = true;
+			subscription.dispose();
+			client.dispose();
+			if (activeChild) {
+				activeChild.once('exit', () => resolve());
+				activeChild.kill('SIGTERM');
 				return;
 			}
 			resolve();
-		});
+		};
+		process.once('SIGINT', dispose);
+		process.once('SIGTERM', dispose);
 	});
 }
 
@@ -212,21 +286,29 @@ async function waitForSessionToDisappear(
 		.find((session) => session.name === sessionName);
 }
 
-function buildEditorCommand(repoRoot: string): string {
+function buildEditorCommand(repoRoot: string, launchPath?: string): string {
 	const explicitEditorCommand = process.env['MISSION_TERMINAL_EDITOR_COMMAND']?.trim()
 		|| process.env['MISSION_EDITOR_COMMAND']?.trim();
 	if (explicitEditorCommand) {
 		return explicitEditorCommand;
 	}
 
-	const editorTarget = [
-		path.join(repoRoot, 'mission.json'),
-		path.join(repoRoot, 'README.md'),
-		path.join(repoRoot, 'BRANCH_HANDOFF.md'),
-		path.join(repoRoot, 'CHANGELOG.md')
-	].find((candidate) => existsSync(candidate));
+	const editorTarget = launchPath?.trim()
+		|| [
+			path.join(repoRoot, 'mission.json'),
+			path.join(repoRoot, 'README.md'),
+			path.join(repoRoot, 'BRANCH_HANDOFF.md'),
+			path.join(repoRoot, 'CHANGELOG.md')
+		].find((candidate) => existsSync(candidate));
 
 	return editorTarget ? buildShellCommand(['micro', editorTarget]) : buildShellCommand(['micro']);
+}
+
+function resolveEditorLaunchPath(
+	snapshot: Awaited<ReturnType<DaemonApi['airport']['getStatus']>>,
+	fallbackPath: string
+): string {
+	return snapshot.airportProjections.editor.launchPath?.trim() || fallbackPath;
 }
 
 function buildShellCommand(args: string[]): string {

@@ -35,7 +35,7 @@ export class Daemon {
 	private readonly server = net.createServer();
 	private readonly clients = new Set<Socket>();
 	private readonly runners = new Map<string, AgentRunner>();
-	private readonly systemController = new MissionSystemController();
+	private readonly systemController: MissionSystemController;
 	private readonly workspaceManager: WorkspaceManager;
 	private readonly shutdownPromise: Promise<void>;
 	private readonly socketPath: string;
@@ -52,6 +52,7 @@ export class Daemon {
 			this.runners.set(runner.id, runner);
 		}
 		this.workspaceManager = new WorkspaceManager(this.runners, (event) => this.broadcastEvent(event));
+		this.systemController = new MissionSystemController(this.workspaceManager);
 		this.shutdownPromise = new Promise<void>((resolve) => {
 			this.resolveShutdown = resolve;
 		});
@@ -218,7 +219,7 @@ export class Daemon {
 		}
 
 		const result = await this.workspaceManager.executeMethod(request);
-		return this.decorateResultWithSystemState(result);
+		return this.decorateRequestResultWithSystemState(request, result);
 	}
 
 	private broadcastEvent(event: Notification): void {
@@ -264,7 +265,6 @@ export class Daemon {
 		if (!request.clientId) {
 			throw new Error('Airport client observation requires a connected client id.');
 		}
-		await this.systemController.scopeAirportToSurfacePath(request.surfacePath);
 		const params = (request.params ?? {}) as AirportClientObserve;
 		const snapshot = await this.systemController.observeAirportClient({
 			clientId: request.clientId,
@@ -290,21 +290,29 @@ export class Daemon {
 		return snapshot;
 	}
 
-	private async decorateResultWithSystemState(result: unknown): Promise<unknown> {
+	private async decorateRequestResultWithSystemState(request: Request, result: unknown): Promise<unknown> {
 		if (!result || typeof result !== 'object') {
 			return result;
 		}
 
+		const workspaceRoot = this.workspaceManager.resolveWorkspaceRootForRequest(request, result);
+		if (!workspaceRoot) {
+			return result;
+		}
+
+		const selectionHint = readSelectionHintFromResult(result);
+		const snapshot = await this.systemController.synchronizeWorkspace({
+			workspaceRoot,
+			...(selectionHint ? { selectionHint } : {})
+		});
+
 		if (isOperatorStatus(result)) {
-			const snapshot = await this.systemController.observeOperatorStatus(result);
 			result.system = snapshot;
 			return result;
 		}
 
 		if (hasEmbeddedOperatorStatus(result)) {
-			const status = result.status;
-			const snapshot = await this.systemController.observeOperatorStatus(status);
-			status.system = snapshot;
+			result.status.system = snapshot;
 		}
 
 		return result;
@@ -314,7 +322,13 @@ export class Daemon {
 		if (event.type !== 'mission.status') {
 			return event;
 		}
-		const snapshot = await this.systemController.observeOperatorStatus(event.status);
+		const snapshot = await this.systemController.synchronizeWorkspace({
+			workspaceRoot: event.workspaceRoot,
+			selectionHint: {
+				repositoryId: event.workspaceRoot,
+				missionId: event.missionId
+			}
+		});
 		return {
 			...event,
 			status: {
@@ -403,6 +417,31 @@ function hasEmbeddedOperatorStatus(value: unknown): value is { status: import('.
 	}
 	const status = (value as { status?: unknown }).status;
 	return isOperatorStatus(status);
+}
+
+function readSelectionHintFromResult(value: unknown): Partial<import('../types.js').ContextSelection> | undefined {
+	if (!value || typeof value !== 'object') {
+		return undefined;
+	}
+
+	const missionId = readMissionIdFromResult(value);
+	return missionId ? { missionId } : undefined;
+}
+
+function readMissionIdFromResult(value: unknown): string | undefined {
+	if (!value || typeof value !== 'object') {
+		return undefined;
+	}
+	if ('missionId' in value && typeof value.missionId === 'string' && value.missionId.trim()) {
+		return value.missionId;
+	}
+	if ('status' in value && value.status && typeof value.status === 'object') {
+		const status = value.status as { missionId?: string };
+		if (typeof status.missionId === 'string' && status.missionId.trim()) {
+			return status.missionId;
+		}
+	}
+	return undefined;
 }
 
 export async function startDaemon(options: DaemonOptions = {}): Promise<Daemon> {
