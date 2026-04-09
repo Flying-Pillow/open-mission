@@ -5,6 +5,7 @@ import {
 	AirportControl,
 	TerminalManagerSubstrateController,
 	createDefaultGateBindings,
+	type AirportSubstrateEffect,
 	type AirportSubstrateState,
 	type BindAirportGateParams,
 	type ConnectAirportClientParams,
@@ -136,6 +137,11 @@ export class RepositoryAirportRegistry {
 	public async sampleSubstrate(repositoryId: string): Promise<AirportSubstrateState> {
 		const airport = this.requireAirport(repositoryId);
 		return airport.substrateController.observe(airport.control.getState());
+	}
+
+	public async applyEffects(repositoryId: string, effects: AirportSubstrateEffect[]): Promise<AirportSubstrateState> {
+		const airport = this.requireAirport(repositoryId);
+		return airport.substrateController.applyEffects(effects);
 	}
 
 	public async persistTouchedAirportIntents(repositoryIds: string[]): Promise<void> {

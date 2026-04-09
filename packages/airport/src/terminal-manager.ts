@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import type { AirportSubstrateEffect } from './effects.js';
 import type { AirportPaneState, AirportState, AirportSubstrateState, GateId } from './types.js';
 
 const execFileAsync = promisify(execFile);
@@ -30,6 +31,7 @@ type TerminalManagerExecutor = (args: string[]) => Promise<TerminalManagerExecut
 export interface AirportSubstrateController {
 	getState(): AirportSubstrateState;
 	observe(state: AirportState): Promise<AirportSubstrateState>;
+	applyEffects(effects: AirportSubstrateEffect[]): Promise<AirportSubstrateState>;
 }
 
 export class TerminalManagerSubstrateController implements AirportSubstrateController {
@@ -64,6 +66,26 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 		return this.getState();
 	}
 
+	public async applyEffects(effects: AirportSubstrateEffect[]): Promise<AirportSubstrateState> {
+		for (const effect of effects) {
+			if (effect.kind !== 'focus-gate') {
+				continue;
+			}
+			await this.executor([
+				'--session',
+				this.state.sessionName,
+				'action',
+				'focus-pane-id',
+				toTerminalPaneReference(effect.paneId)
+			]);
+		}
+		this.state = {
+			...this.state,
+			lastAppliedAt: new Date().toISOString()
+		};
+		return this.getState();
+	}
+
 	private async listPanes(): Promise<TerminalManagerPaneMetadata[]> {
 		const result = await this.executor([
 			'--session',
@@ -95,6 +117,16 @@ export class InMemoryTerminalManagerSubstrateController implements AirportSubstr
 			attached: true,
 			lastAppliedAt: now,
 			lastObservedAt: now
+		};
+		return Promise.resolve(this.getState());
+	}
+
+	public applyEffects(effects: AirportSubstrateEffect[]): Promise<AirportSubstrateState> {
+		const focusEffect = effects.find((effect) => effect.kind === 'focus-gate');
+		this.state = {
+			...this.state,
+			...(focusEffect ? { observedFocusedPaneId: focusEffect.paneId } : {}),
+			lastAppliedAt: new Date().toISOString()
 		};
 		return Promise.resolve(this.getState());
 	}
@@ -171,4 +203,8 @@ function buildDetachedState(currentState: AirportSubstrateState, now: string): A
 		...(currentState.lastAppliedAt ? { lastAppliedAt: currentState.lastAppliedAt } : {}),
 		lastObservedAt: now
 	};
+}
+
+function toTerminalPaneReference(paneId: number): string {
+	return `terminal_${String(paneId)}`;
 }

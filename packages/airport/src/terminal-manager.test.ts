@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { planAirportSubstrateEffects } from './effects.js';
 import type { AirportState } from './types.js';
 import { TerminalManagerSubstrateController } from './terminal-manager.js';
 
@@ -38,6 +39,43 @@ describe('TerminalManagerSubstrateController', () => {
 			title: 'AGENT SESSION'
 		});
 		expect(calls.filter((args) => args.includes('focus-pane-id'))).toEqual([]);
+	});
+
+	it('applies planned focus effects through terminal-manager', async () => {
+		const calls: string[][] = [];
+		const executor = (args: string[]) => {
+			calls.push(args);
+			if (args.includes('list-panes')) {
+				return Promise.resolve({
+					stdout: JSON.stringify([
+						{ id: 1, title: 'MISSION', is_plugin: false, is_focused: true },
+						{ id: 2, title: 'EDITOR', is_plugin: false, is_focused: false },
+						{ id: 3, title: 'AGENT SESSION', is_plugin: false, is_focused: false }
+					]),
+					stderr: ''
+				});
+			}
+			return Promise.resolve({ stdout: '', stderr: '' });
+		};
+
+		const controller = new TerminalManagerSubstrateController({
+			sessionName: 'mission-mission',
+			executor
+		});
+		const observed = await controller.observe(createAirportState());
+		const airportState = createAirportState();
+		airportState.focus.intentGateId = 'editor';
+		airportState.substrate = observed;
+
+		await controller.applyEffects(planAirportSubstrateEffects(airportState));
+
+		expect(calls).toContainEqual([
+			'--session',
+			'mission-mission',
+			'action',
+			'focus-pane-id',
+			'terminal_2'
+		]);
 	});
 
 	it('reports a detached substrate when pane listing fails', async () => {

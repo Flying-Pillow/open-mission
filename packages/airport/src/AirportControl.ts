@@ -1,6 +1,7 @@
 import {
 	createDefaultGateBindings,
 	deriveAirportProjections,
+	type AirportFocusState,
 	type AirportProjectionSet,
 	type AirportState,
 	type AirportStatus,
@@ -15,6 +16,7 @@ import {
 	normalizePersistedAirportIntent,
 	type ObserveAirportClientParams
 } from './types.js';
+import { resolveObservedGateIdFromSubstrate } from './effects.js';
 import { createDefaultTerminalManagerSubstrateState } from './terminal-manager.js';
 
 export class AirportControl {
@@ -125,7 +127,7 @@ export class AirportControl {
 		const clients = releaseClaimedGate(this.state.clients, params.clientId, params.gateId);
 		this.state = {
 			...this.state,
-			focus: deriveFocusState(clients, this.state.focus.intentGateId),
+			focus: deriveFocusState(clients, this.state.focus.intentGateId, this.state.substrate),
 			clients: {
 				...clients,
 				[params.clientId]: {
@@ -169,7 +171,7 @@ export class AirportControl {
 		};
 		this.state = {
 			...this.state,
-			focus: deriveFocusState(clients, this.state.focus.intentGateId),
+			focus: deriveFocusState(clients, this.state.focus.intentGateId, this.state.substrate),
 			clients: {
 				...clients
 			}
@@ -194,7 +196,7 @@ export class AirportControl {
 
 		this.state = {
 			...this.state,
-			focus: deriveFocusState(clients, params.intentGateId ?? this.state.focus.intentGateId),
+			focus: deriveFocusState(clients, params.intentGateId ?? this.state.focus.intentGateId, this.state.substrate),
 			clients
 		};
 		return this.getStatus();
@@ -223,11 +225,7 @@ export class AirportControl {
 				...(bindings.editor ? { editor: normalizeGateBinding(bindings.editor) } : {}),
 				...(bindings.agentSession ? { agentSession: normalizeGateBinding(bindings.agentSession) } : {})
 			},
-			focus: {
-				...(options.focusIntent ? { intentGateId: options.focusIntent } : this.state.focus.intentGateId ? { intentGateId: this.state.focus.intentGateId } : {}),
-				...(this.state.focus.observedGateId ? { observedGateId: this.state.focus.observedGateId } : {}),
-				...(this.state.focus.observedGateIdByClientId ? { observedGateIdByClientId: { ...this.state.focus.observedGateIdByClientId } } : {})
-			}
+			focus: deriveFocusState(this.state.clients, options.focusIntent ?? this.state.focus.intentGateId, this.state.substrate)
 		};
 		return this.getStatus();
 	}
@@ -235,7 +233,8 @@ export class AirportControl {
 	public observeSubstrate(substrate: AirportSubstrateState): AirportStatus {
 		this.state = {
 			...this.state,
-			substrate: structuredClone(substrate)
+			substrate: structuredClone(substrate),
+			focus: deriveFocusState(this.state.clients, this.state.focus.intentGateId, substrate)
 		};
 		return this.getStatus();
 	}
@@ -259,15 +258,16 @@ function releaseClaimedGate(
 
 function deriveFocusState(
 	clients: AirportState['clients'],
-	intentGateId: GateId | undefined
-) {
+	intentGateId: GateId | undefined,
+	substrate: AirportSubstrateState
+): AirportFocusState {
 	const observedClients = Object.values(clients)
 		.filter((client) => client.connected && client.focusedGateId)
 		.sort((left, right) => right.lastSeenAt.localeCompare(left.lastSeenAt) || left.clientId.localeCompare(right.clientId));
 	const observedGateIdByClientId = Object.fromEntries(
 		observedClients.map((client) => [client.clientId, client.focusedGateId as GateId])
 	);
-	const observedGateId = observedClients[0]?.focusedGateId;
+	const observedGateId = resolveObservedGateIdFromSubstrate(substrate) ?? observedClients[0]?.focusedGateId;
 	return {
 		...(intentGateId ? { intentGateId } : {}),
 		...(observedGateId ? { observedGateId } : {}),

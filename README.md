@@ -1,7 +1,5 @@
-==================== WARNING!!! ===================================
-This repo is in its very early stages. DO NOT USE IT.
-We are on a mission and this repo will become ready soon, but have a little more patience. Drop a comment or an issue if you want to communicate.
-==================================================================
+🚧 Mission is currently in Public Alpha (Developer Preview).
+We (a 2-person team) are using this daily to build our own software, but the API and state machine are still evolving. You might encounter bugs. If you want to help us build the ultimate AI orchestration engine, drop a comment, open an issue, or try it out in a safe repository!
 
 # 🌍 Mission
 

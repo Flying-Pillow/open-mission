@@ -1,10 +1,12 @@
-import type {
-	AirportProjectionSet,
-	AirportSubstrateState,
-	BindAirportGateParams,
-	ConnectAirportClientParams,
-	GateBinding,
-	GateId
+import {
+	planAirportSubstrateEffects,
+	type AirportProjectionSet,
+	type AirportSubstrateEffect,
+	type AirportSubstrateState,
+	type BindAirportGateParams,
+	type ConnectAirportClientParams,
+	type GateBinding,
+	type GateId
 } from '../../../airport/build/index.js';
 import type {
 	ContextGraph,
@@ -136,13 +138,15 @@ export class MissionSystemController {
 		options: { applyEffects?: boolean } = {}
 	): Promise<MissionSystemSnapshot> {
 		const touchedRepositoryIds = await this.reduceCommand(command);
+		const plannedEffects = this.planEffects(touchedRepositoryIds);
 		await this.commit(touchedRepositoryIds);
 
 		if (options.applyEffects === false || command.kind === 'airport.substrate.observed') {
 			return this.buildSnapshot();
 		}
 
-		const followUpCommands = await this.applyEffects(touchedRepositoryIds);
+		await this.applyEffects(plannedEffects);
+		const followUpCommands = await this.collectSubstrateObservations(touchedRepositoryIds);
 		for (const followUpCommand of followUpCommands) {
 			await this.dispatch(followUpCommand, { applyEffects: false });
 		}
@@ -234,7 +238,26 @@ export class MissionSystemController {
 		return [repositoryId];
 	}
 
-	private async applyEffects(touchedRepositoryIds: string[]): Promise<MissionSystemCommand[]> {
+	private planEffects(touchedRepositoryIds: string[]): Array<{ repositoryId: string; effects: AirportSubstrateEffect[] }> {
+		return [...new Set(touchedRepositoryIds)].map((repositoryId) => {
+			const record = this.airportRegistry.listAirportRecords().find(([candidateRepositoryId]) => candidateRepositoryId === repositoryId)?.[1];
+			return {
+				repositoryId,
+				effects: record ? planAirportSubstrateEffects(record.control.getState()) : []
+			};
+		});
+	}
+
+	private async applyEffects(plannedEffects: Array<{ repositoryId: string; effects: AirportSubstrateEffect[] }>): Promise<void> {
+		for (const plan of plannedEffects) {
+			if (plan.effects.length === 0) {
+				continue;
+			}
+			await this.airportRegistry.applyEffects(plan.repositoryId, plan.effects);
+		}
+	}
+
+	private async collectSubstrateObservations(touchedRepositoryIds: string[]): Promise<MissionSystemCommand[]> {
 		const followUpCommands: MissionSystemCommand[] = [];
 		for (const repositoryId of new Set(touchedRepositoryIds)) {
 			const substrate = await this.airportRegistry.sampleSubstrate(repositoryId);

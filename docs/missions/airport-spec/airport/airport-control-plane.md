@@ -164,7 +164,7 @@ Reading guide:
 - `Entry` is the operator action that opens Airport.
 - `Bootstrap` only owns entry routing and initial session setup.
 - Authority moves to `Control` after the Tower and Agent Session panes connect.
-- The editor belongs to the outer layout but does not call `connectPanel` in the current implementation.
+- Dashboard, editor, and agent-session panes connect as gate-scoped panel clients after bootstrap.
 - `Control` owns gate bindings, focus intent, and substrate reconciliation after handoff.
 
 ### Reconciliation Loop
