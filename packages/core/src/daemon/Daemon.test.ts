@@ -330,10 +330,10 @@ describe('Daemon', () => {
 								launchPath: workspaceRoot,
 								emptyLabel: 'Editor gate is waiting for an artifact binding.'
 							},
-							pilot: {
-								title: 'Pilot',
+							agentSession: {
+								title: 'Agent Session',
 								statusLabel: 'idle',
-								emptyLabel: 'Pilot gate is idle.'
+								emptyLabel: 'Agent session gate is idle.'
 							}
 						},
 						airportRegistryProjections: {
@@ -724,11 +724,11 @@ describe('Daemon', () => {
 						label: 'test-tower'
 					});
 					const observed = await api.airport.observeClient({
-						focusedGateId: 'pilot',
-						intentGateId: 'pilot'
+						focusedGateId: 'agentSession',
+						intentGateId: 'agentSession'
 					});
 					const rebound = await api.airport.bindGate({
-						gateId: 'pilot',
+						gateId: 'agentSession',
 						binding: {
 							targetKind: 'task',
 							targetId: 'implementation/01-airport',
@@ -750,24 +750,24 @@ describe('Daemon', () => {
 						])
 					);
 					expect(observed.state.airport.focus).toMatchObject({
-						intentGateId: 'pilot',
-						observedGateId: 'pilot'
+						intentGateId: 'agentSession',
+						observedGateId: 'agentSession'
 					});
-					expect(rebound.state.airport.gates.pilot).toMatchObject({
+					expect(rebound.state.airport.gates.agentSession).toMatchObject({
 						targetKind: 'task',
 						targetId: 'implementation/01-airport',
 						mode: 'control'
 					});
 					expect(rebound.state.airports.repositories[workspaceRoot]?.persistedIntent).toMatchObject({
 						gates: {
-							pilot: {
+							agentSession: {
 								targetKind: 'task',
 								targetId: 'implementation/01-airport',
 								mode: 'control'
 							}
 						}
 					});
-					expect(rebound.airportProjections.pilot.subtitle).toContain('task:implementation/01-airport');
+					expect(rebound.airportProjections.agentSession.subtitle).toContain('task:implementation/01-airport');
 				} finally {
 					client.dispose();
 					await daemon.close();
@@ -813,15 +813,15 @@ describe('Daemon', () => {
 
 					await firstApi.airport.observeClient({ focusedGateId: 'editor' });
 					const observed = await secondApi.airport.observeClient({
-						focusedGateId: 'pilot',
-						intentGateId: 'pilot'
+						focusedGateId: 'agentSession',
+						intentGateId: 'agentSession'
 					});
 
-					expect(observed.state.airport.focus.intentGateId).toBe('pilot');
-					expect(observed.state.airport.focus.observedGateId).toBe('pilot');
+					expect(observed.state.airport.focus.intentGateId).toBe('agentSession');
+					expect(observed.state.airport.focus.observedGateId).toBe('agentSession');
 					expect(Object.values(observed.state.airport.focus.observedGateIdByClientId ?? {}).sort()).toEqual([
 						'editor',
-						'pilot'
+						'agentSession'
 					]);
 				} finally {
 					firstClient.dispose();
@@ -849,7 +849,7 @@ describe('Daemon', () => {
 						await client.connect({ surfacePath: workspaceRoot });
 						const api = new DaemonApi(client);
 						await api.airport.bindGate({
-							gateId: 'pilot',
+							gateId: 'agentSession',
 							binding: {
 								targetKind: 'task',
 								targetId: 'persisted/task',
@@ -871,14 +871,14 @@ describe('Daemon', () => {
 						const api = new DaemonApi(client);
 						const snapshot = await api.airport.getStatus();
 
-						expect(snapshot.state.airport.gates.pilot).toMatchObject({
+						expect(snapshot.state.airport.gates.agentSession).toMatchObject({
 							targetKind: 'task',
 							targetId: 'persisted/task',
 							mode: 'control'
 						});
 						expect(snapshot.state.airports.repositories[workspaceRoot]?.persistedIntent).toMatchObject({
 							gates: {
-								pilot: {
+								agentSession: {
 									targetKind: 'task',
 									targetId: 'persisted/task',
 									mode: 'control'
@@ -916,7 +916,7 @@ describe('Daemon', () => {
 					const rightApi = new DaemonApi(rightClient);
 
 					await leftApi.airport.bindGate({
-						gateId: 'pilot',
+						gateId: 'agentSession',
 						binding: {
 							targetKind: 'task',
 							targetId: 'left/task',
@@ -924,7 +924,7 @@ describe('Daemon', () => {
 						}
 					});
 					const rightSnapshot = await rightApi.airport.bindGate({
-						gateId: 'pilot',
+						gateId: 'agentSession',
 						binding: {
 							targetKind: 'task',
 							targetId: 'right/task',
@@ -938,18 +938,18 @@ describe('Daemon', () => {
 						rightWorkspaceRoot
 					].sort());
 					expect(rightSnapshot.state.airports.activeRepositoryId).toBe(rightWorkspaceRoot);
-					expect(rightSnapshot.state.airports.repositories[leftWorkspaceRoot]?.airport.gates.pilot).toMatchObject({
+					expect(rightSnapshot.state.airports.repositories[leftWorkspaceRoot]?.airport.gates.agentSession).toMatchObject({
 						targetKind: 'task',
 						targetId: 'left/task',
 						mode: 'control'
 					});
-					expect(rightSnapshot.state.airports.repositories[rightWorkspaceRoot]?.airport.gates.pilot).toMatchObject({
+					expect(rightSnapshot.state.airports.repositories[rightWorkspaceRoot]?.airport.gates.agentSession).toMatchObject({
 						targetKind: 'task',
 						targetId: 'right/task',
 						mode: 'control'
 					});
 					expect(leftSnapshot.state.airport.repositoryRootPath).toBe(leftWorkspaceRoot);
-					expect(leftSnapshot.state.airport.gates.pilot).toMatchObject({
+					expect(leftSnapshot.state.airport.gates.agentSession).toMatchObject({
 						targetKind: 'task',
 						targetId: 'left/task',
 						mode: 'control'

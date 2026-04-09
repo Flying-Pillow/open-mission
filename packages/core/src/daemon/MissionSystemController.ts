@@ -94,7 +94,7 @@ export class MissionSystemController {
 		const repositoryRootPath = nextDomain.repositories[repositoryId]?.rootPath || repositoryId;
 		const airport = await this.ensureAirportForRepository(repositoryId, repositoryRootPath);
 		this.activeRepositoryId = repositoryId;
-		await airport.control.applyDefaultBindings(deriveGateBindings(nextDomain, airport.control.getState().gates.pilot, nextDomain.agentSessions), {
+		await airport.control.applyDefaultBindings(deriveGateBindings(nextDomain, airport.control.getState().gates.agentSession, nextDomain.agentSessions), {
 			focusIntent: deriveFocusIntent(nextDomain)
 		});
 		this.domain = nextDomain;
@@ -788,7 +788,7 @@ function pickSelectedSessionId(status: OperatorStatus): string | undefined {
 
 function deriveGateBindings(
 	graph: ContextGraph,
-	currentPilotBinding: GateBinding,
+	currentAgentSessionBinding: GateBinding,
 	agentSessions: ContextGraph['agentSessions']
 ): Partial<Record<GateId, GateBinding>> {
 	const { repositoryId, missionId, artifactId, agentSessionId } = graph.selection;
@@ -808,7 +808,7 @@ function deriveGateBindings(
 	};
 
 	if (agentSessionId && agentSessionId in agentSessions) {
-		nextBindings.pilot = {
+		nextBindings.agentSession = {
 			targetKind: 'agentSession',
 			targetId: agentSessionId,
 			mode: 'control'
@@ -817,18 +817,18 @@ function deriveGateBindings(
 	}
 
 	if (
-		currentPilotBinding.targetKind === 'agentSession'
-		&& currentPilotBinding.targetId
-		&& !(currentPilotBinding.targetId in agentSessions)
+		currentAgentSessionBinding.targetKind === 'agentSession'
+		&& currentAgentSessionBinding.targetId
+		&& !(currentAgentSessionBinding.targetId in agentSessions)
 	) {
-		nextBindings.pilot = { targetKind: 'empty' };
+		nextBindings.agentSession = { targetKind: 'empty' };
 	}
 
 	return nextBindings;
 }
 
 function deriveFocusIntent(graph: ContextGraph): GateId {
-	return graph.selection.agentSessionId ? 'pilot' : 'dashboard';
+	return graph.selection.agentSessionId ? 'agentSession' : 'dashboard';
 }
 
 function deriveSystemAirportProjections(
@@ -838,7 +838,7 @@ function deriveSystemAirportProjections(
 	return {
 		dashboard: deriveDashboardProjection(domain, airportState),
 		editor: deriveEditorProjection(domain, airportState),
-		pilot: derivePilotProjection(domain, airportState)
+		agentSession: deriveAgentSessionProjection(domain, airportState)
 	};
 }
 
@@ -918,8 +918,8 @@ function deriveEditorProjection(domain: ContextGraph, airportState: AirportState
 	};
 }
 
-function derivePilotProjection(domain: ContextGraph, airportState: AirportState): AirportProjectionSet['pilot'] {
-	const base = createGateProjectionBase(airportState, 'pilot');
+function deriveAgentSessionProjection(domain: ContextGraph, airportState: AirportState): AirportProjectionSet['agentSession'] {
+	const base = createGateProjectionBase(airportState, 'agentSession');
 	const sessionId = base.binding.targetKind === 'agentSession'
 		? base.binding.targetId
 		: domain.selection.agentSessionId;
@@ -936,8 +936,8 @@ function derivePilotProjection(domain: ContextGraph, airportState: AirportState)
 		...(sessionContext?.workingDirectory ? { workingDirectory: sessionContext.workingDirectory } : {}),
 		statusLabel: sessionContext?.lifecycleState || (sessionId ? 'bound' : 'idle'),
 		emptyLabel: sessionId
-			? 'Pilot gate is bound and waiting for the session surface.'
-			: 'Pilot gate is idle.'
+			? 'Agent session gate is bound and waiting for the session surface.'
+			: 'Agent session gate is idle.'
 	};
 }
 
@@ -1048,8 +1048,8 @@ function formatGateTitle(gateId: GateId): string {
 			return 'Dashboard';
 		case 'editor':
 			return 'Editor';
-		case 'pilot':
-			return 'Pilot';
+		case 'agentSession':
+			return 'Agent Session';
 	}
 	return gateId;
 }

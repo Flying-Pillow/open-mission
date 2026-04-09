@@ -24,7 +24,7 @@ export type TerminalAgentTransportOptions = {
 	logLine?: (line: string) => void;
 	executor?: TerminalExecutor;
 	sharedSessionName?: string;
-	pilotPaneTitle?: string;
+	agentSessionPaneTitle?: string;
 };
 
 export type TerminalOpenSessionRequest = {
@@ -39,7 +39,7 @@ export class TerminalAgentTransport {
 	private readonly logLine: ((line: string) => void) | undefined;
 	private readonly executor: TerminalExecutor;
 	private readonly sharedSessionName: string | undefined;
-	private readonly pilotPaneTitle: string;
+	private readonly agentSessionPaneTitle: string;
 
 	public constructor(options: TerminalAgentTransportOptions = {}) {
 		this.logLine = options.logLine;
@@ -47,7 +47,7 @@ export class TerminalAgentTransport {
 			|| process.env['MISSION_TERMINAL_SESSION']?.trim()
 			|| process.env['MISSION_TERMINAL_SESSION_NAME']?.trim()
 			|| undefined;
-		this.pilotPaneTitle = options.pilotPaneTitle?.trim() || 'PILOT';
+		this.agentSessionPaneTitle = options.agentSessionPaneTitle?.trim() || 'AGENT SESSION';
 		const terminalBinary = options.terminalBinary?.trim() || 'zellij';
 		this.executor = options.executor ?? (async (args) => {
 			const result = await execFileAsync(terminalBinary, args, {
@@ -207,14 +207,14 @@ export class TerminalAgentTransport {
 		const sessionPrefix = request.sessionPrefix?.trim() || 'mission-agent';
 		const sessionName = `${sessionPrefix}-${randomUUID()}`;
 		const launchCommand = buildLaunchCommand(request);
-		const pilotPane = await this.resolvePilotPane();
+		const agentSessionPane = await this.resolveAgentSessionPane();
 		const createPaneResult = await this.runTerminal([
 			'--session',
 			this.sharedSessionName as string,
 			'action',
 			'new-pane',
 			'--tab-id',
-			String(pilotPane.tabId),
+			String(agentSessionPane.tabId),
 			'--name',
 			sessionName,
 			'--cwd',
@@ -234,7 +234,7 @@ export class TerminalAgentTransport {
 			'action',
 			'stack-panes',
 			'--',
-			toPaneReference(pilotPane.id),
+			toPaneReference(agentSessionPane.id),
 			paneId
 		]);
 
@@ -294,10 +294,10 @@ export class TerminalAgentTransport {
 		return parsed.filter((pane) => !pane.is_plugin);
 	}
 
-	private async resolvePilotPane(): Promise<TerminalPaneMetadata> {
-		const pane = await this.findPaneByTitle(this.pilotPaneTitle);
+	private async resolveAgentSessionPane(): Promise<TerminalPaneMetadata> {
+		const pane = await this.findPaneByTitle(this.agentSessionPaneTitle);
 		if (!pane) {
-			throw new Error(`Unable to locate terminal-manager pane '${this.pilotPaneTitle}' in session '${this.sharedSessionName ?? 'unknown'}'.`);
+			throw new Error(`Unable to locate terminal-manager pane '${this.agentSessionPaneTitle}' in session '${this.sharedSessionName ?? 'unknown'}'.`);
 		}
 		return pane;
 	}

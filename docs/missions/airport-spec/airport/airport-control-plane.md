@@ -64,7 +64,7 @@ It is now a first-class application runtime with:
 - terminal pane lifecycle
 - multi-panel layout behavior
 - user focus behavior
-- editor/pilot/dashboard synchronization
+- editor/agent-session/dashboard synchronization
 
 The existing approach of letting panels, shell scripts, or adapters directly coordinate layout and runtime behavior is architecturally invalid for this level of complexity.
 
@@ -140,8 +140,8 @@ sequenceDiagram
     Bootstrap->>Session: create session and restore layout
     deactivate Bootstrap
 
-    Session-->>Panes: start Tower, Pilot, and Editor panes
-    Panes->>Control: connect dashboard and pilot panels
+    Session-->>Panes: start Tower, Agent Session, and Editor panes
+    Panes->>Control: connect dashboard and agent session panels
     activate Control
     Control->>Session: observe panes and apply focus or layout effects
     Session-->>Control: current pane and focus state
@@ -156,14 +156,14 @@ Diagram key:
 - `Entry`: the operator-facing Tower entry concept. In the current terminal implementation this entry path resolves through the `mission` shell command plus `apps/tower/terminal/src/index.ts` and `apps/tower/terminal/src/routeTowerEntry.ts`.
 - `Bootstrap`: `apps/tower/terminal/src/commands/airport-layout.ts`
 - `Session`: terminal-manager or zellij session that hosts the outer airport layout
-- `Panes`: Tower pane from `apps/tower/terminal/src/tower/bootstrapTowerPane.ts`, pilot pane from `apps/tower/terminal/src/commands/airport-layout.ts`, plus the editor pane program
+- `Panes`: Tower pane from `apps/tower/terminal/src/tower/bootstrapTowerPane.ts`, agent session pane from `apps/tower/terminal/src/commands/airport-layout.ts`, plus the editor pane program
 - `Control`: the mission daemon RPC surface plus `packages/airport/src/AirportControl.ts` and `packages/airport/src/terminal-manager.ts`
 
 Reading guide:
 
 - `Entry` is the operator action that opens Airport.
 - `Bootstrap` only owns entry routing and initial session setup.
-- Authority moves to `Control` after the Tower and Pilot panes connect.
+- Authority moves to `Control` after the Tower and Agent Session panes connect.
 - The editor belongs to the outer layout but does not call `connectPanel` in the current implementation.
 - `Control` owns gate bindings, focus intent, and substrate reconciliation after handoff.
 
@@ -554,7 +554,7 @@ AirportControl owns:
 ### Airport State Shape
 
 ```ts
-export type GateId = 'dashboard' | 'editor' | 'pilot';
+export type GateId = 'dashboard' | 'editor' | 'agentSession';
 
 export interface AirportState {
   airportId: string;
@@ -697,7 +697,7 @@ The initial mandatory gates are:
 
 - `dashboard`
 - `editor`
-- `pilot`
+- `agentSession`
 
 The stable rule is:
 
@@ -715,7 +715,7 @@ Panels may be:
 
 - CLI tower/dashboard
 - editor wrapper process
-- pilot wrapper process
+- agent session wrapper process
 - future VS Code or webview surfaces
 
 Each panel process:
@@ -738,7 +738,7 @@ Examples:
 
 - `MISSION_GATE_ID=dashboard`
 - `MISSION_GATE_ID=editor`
-- `MISSION_GATE_ID=pilot`
+- `MISSION_GATE_ID=agentSession`
 
 The panel must present that injected identity during daemon connection handshake.
 
@@ -871,7 +871,7 @@ The initial projection set must be intentionally small.
 
 - `DashboardProjection`
 - `EditorProjection`
-- `PilotProjection`
+- `AgentSessionProjection`
 - optional `StatusProjection` if status is not folded into dashboard
 
 ### Projection Design Rules
@@ -902,7 +902,7 @@ Must include enough information to render or launch:
 - whether the editor gate is focused
 - optional display title or label
 
-### PilotProjection
+### AgentSessionProjection
 
 Must include enough information to render or control:
 
@@ -910,7 +910,7 @@ Must include enough information to render or control:
 - working directory
 - task context summary
 - context prompt if precomputed
-- whether the pilot gate is focused
+- whether the agent session gate is focused
 
 ## Reconciliation Loop
 
@@ -1063,7 +1063,7 @@ Showing a target in a gate is not equivalent to focusing that gate.
 
 This rule is foundational.
 
-It exists specifically to prevent the class of bugs where the pilot view steals focus simply because the system needed to update the visible session.
+It exists specifically to prevent the class of bugs where the agent session view steals focus simply because the system needed to update the visible session.
 
 ### Native Substrate Focus Rule
 
@@ -1298,7 +1298,7 @@ The smallest valid first implementation is:
 - one mission selected at a time
 - one task selected at a time
 - one editor gate
-- one pilot gate
+- one agent session gate
 - one dashboard gate
 - one daemon connection model
 - one terminal-manager substrate adapter

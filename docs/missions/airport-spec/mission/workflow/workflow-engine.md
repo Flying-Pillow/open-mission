@@ -484,7 +484,7 @@ These are workflow gates, not airport layout gates.
 
 They represent semantic workflow checkpoints such as implementation, verification, audit, or delivery readiness.
 
-They are not `dashboard`, `editor`, or `pilot`, and they must not be used as terminal layout slots, focus targets, or panel identities.
+They are not `dashboard`, `editor`, or `agentSession`, and they must not be used as terminal layout slots, focus targets, or panel identities.
 
 ```ts
 export type MissionGateState = 'blocked' | 'passed';

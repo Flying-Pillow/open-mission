@@ -124,7 +124,7 @@ They are not layout slots.
 
 ### Airport Gates
 
-Airport gates are stable layout slots such as `dashboard`, `editor`, and `pilot`.
+Airport gates are stable layout slots such as `dashboard`, `editor`, and `agentSession`.
 
 They are owned by the airport control plane.
 

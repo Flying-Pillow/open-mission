@@ -430,15 +430,15 @@ export type ControlIssuesList = {
 };
 
 export type AirportClientConnect = {
-	gateId: 'dashboard' | 'editor' | 'pilot';
+	gateId: 'dashboard' | 'editor' | 'agentSession';
 	label?: string;
 	panelProcessId?: string;
 	terminalSessionName?: string;
 };
 
 export type AirportClientObserve = {
-	focusedGateId?: 'dashboard' | 'editor' | 'pilot';
-	intentGateId?: 'dashboard' | 'editor' | 'pilot';
+	focusedGateId?: 'dashboard' | 'editor' | 'agentSession';
+	intentGateId?: 'dashboard' | 'editor' | 'agentSession';
 	repositoryId?: string;
 	missionId?: string;
 	stageId?: string;
@@ -448,7 +448,7 @@ export type AirportClientObserve = {
 };
 
 export type AirportGateBind = {
-	gateId: 'dashboard' | 'editor' | 'pilot';
+	gateId: 'dashboard' | 'editor' | 'agentSession';
 	binding: {
 		targetKind: 'empty' | 'repository' | 'mission' | 'task' | 'artifact' | 'agentSession';
 		targetId?: string;

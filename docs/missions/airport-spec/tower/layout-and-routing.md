@@ -46,7 +46,7 @@ The terminal Tower can be launched from either the repository checkout or a miss
 
 The terminal Tower may run inside a larger airport layout bootstrapped through the terminal manager, but that outer layout is not the same thing as the Tower shell.
 
-The airport layout bootstrap is responsible for creating or attaching the outer session, restoring the initial pane arrangement, and starting the Tower, pilot, and editor panes.
+The airport layout bootstrap is responsible for creating or attaching the outer session, restoring the initial pane arrangement, and starting the Tower, agent session, and editor panes.
 
 In this document, `mission` refers only to the domain work model: missions contain stages, stages contain tasks, and tasks may spawn agents.
 
@@ -138,7 +138,7 @@ The sequence is:
 
   - `bootstrapTowerPane` for the dashboard pane
   - `runAirportLayoutLaunch` for outer airport bootstrap
-  - `runAirportLayoutPilotPane` for the pilot pane
+  - `runAirportLayoutAgentSessionPane` for the agent session pane
   - `runAirportLayoutEditorPane` for the editor pane
   - utility commands such as airport status or daemon stop
 
@@ -150,7 +150,7 @@ The sequence is:
 
   This file owns the outer terminal session setup.
 
-  It writes layout files, resets or creates the terminal-manager session, and starts the Tower, Pilot, and Editor panes inside that session.
+  It writes layout files, resets or creates the terminal-manager session, and starts the Tower, Agent Session, and Editor panes inside that session.
 
   It does not own ongoing layout authority after panes connect.
 

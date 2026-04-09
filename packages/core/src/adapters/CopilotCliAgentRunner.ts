@@ -78,7 +78,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 		this.transport = new TerminalAgentTransport({
 			...(options.terminalBinary ? { terminalBinary: options.terminalBinary } : {}),
 			...(options.sharedSessionName ? { sharedSessionName: options.sharedSessionName } : {}),
-			...(options.pilotPaneTitle ? { pilotPaneTitle: options.pilotPaneTitle } : {}),
+			...(options.agentSessionPaneTitle ? { agentSessionPaneTitle: options.agentSessionPaneTitle } : {}),
 			...(options.executor ? { executor: options.executor } : {}),
 			...(options.logLine ? { logLine: options.logLine } : {})
 		});

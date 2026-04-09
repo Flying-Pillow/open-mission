@@ -33,12 +33,12 @@ export async function runAirportLayoutLaunch(context: CommandContext): Promise<v
 		missionEntry,
 		...context.args
 	]);
-	const pilotCommand = buildShellCommand([
+	const agentSessionCommand = buildShellCommand([
 		'env',
-		'MISSION_GATE_ID=pilot',
+		'MISSION_GATE_ID=agentSession',
 		`MISSION_TERMINAL_SESSION=${sessionName}`,
 		missionEntry,
-		'__airport-layout-pilot-pane'
+		'__airport-layout-agent-session-pane'
 	]);
 
 	await mkdir(terminalManagerConfigDir, { recursive: true });
@@ -47,7 +47,7 @@ export async function runAirportLayoutLaunch(context: CommandContext): Promise<v
 	await writeFile(layoutFile, buildAirportLayout({
 		repoRoot,
 		towerCommand,
-		pilotCommand,
+		agentSessionCommand,
 		editorCommand,
 		rightWidth,
 		editorHeight
@@ -80,15 +80,15 @@ export async function runAirportLayoutLaunch(context: CommandContext): Promise<v
 	});
 }
 
-export async function runAirportLayoutPilotPane(_context: CommandContext): Promise<void> {
+export async function runAirportLayoutAgentSessionPane(_context: CommandContext): Promise<void> {
 	const client = await connectSurfaceDaemon({
 		surfacePath: process.cwd(),
 		launchMode: resolveSurfaceDaemonLaunchMode(import.meta.url)
 	});
 	const api = new DaemonApi(client);
 	const render = (snapshot: Awaited<ReturnType<typeof api.airport.getStatus>>) => {
-		printPilotHeader('MISSION PILOT PANE');
-		const binding = snapshot.state.airport.gates.pilot;
+		printAgentSessionHeader('MISSION AGENT SESSION PANE');
+		const binding = snapshot.state.airport.gates.agentSession;
 		process.stdout.write(`airport: ${snapshot.state.airport.airportId}\n`);
 		process.stdout.write(`session: ${snapshot.state.airport.substrate.sessionName}\n`);
 		process.stdout.write(`binding: ${binding.targetKind}${binding.targetId ? `:${binding.targetId}` : ''}${binding.mode ? ` (${binding.mode})` : ''}\n`);
@@ -96,17 +96,17 @@ export async function runAirportLayoutPilotPane(_context: CommandContext): Promi
 		process.stdout.write(`focus observed: ${snapshot.state.airport.focus.observedGateId ?? 'none'}\n`);
 		process.stdout.write('\n');
 		if (binding.targetKind === 'agentSession' && binding.targetId) {
-			process.stdout.write(`Pilot is bound to agent session ${binding.targetId}.\n`);
+			process.stdout.write(`Agent session gate is bound to agent session ${binding.targetId}.\n`);
 			process.stdout.write('Airport will surface the session in this gate when the substrate observes it.\n');
 			return;
 		}
-		process.stdout.write('Pilot gate is idle.\n');
-		process.stdout.write('Airport owns the pilot gate binding and terminal-manager reconciliation.\n');
+		process.stdout.write('Agent session gate is idle.\n');
+		process.stdout.write('Airport owns the agent session gate binding and terminal-manager reconciliation.\n');
 	};
 
 	const initialSnapshot = await api.airport.connectPanel({
-		gateId: 'pilot',
-		label: 'mission-pilot',
+		gateId: 'agentSession',
+		label: 'mission-agent-session',
 		panelProcessId: String(process.pid),
 		...(process.env['MISSION_TERMINAL_SESSION']?.trim()
 			? { terminalSessionName: process.env['MISSION_TERMINAL_SESSION'].trim() }
@@ -268,7 +268,7 @@ ui {
 function buildAirportLayout(input: {
 	repoRoot: string;
 	towerCommand: string;
-	pilotCommand: string;
+	agentSessionCommand: string;
 	editorCommand: string;
 	rightWidth: string;
 	editorHeight: string;
@@ -283,8 +283,8 @@ function buildAirportLayout(input: {
 				args "-lc" "${kdlEscape(`exec ${input.towerCommand}`)}"
 			}
 			pane size="${kdlEscape(input.rightWidth)}" split_direction="horizontal" {
-				pane name="PILOT" command="sh" cwd="${kdlEscape(input.repoRoot)}" {
-					args "-lc" "${kdlEscape(`exec ${input.pilotCommand}`)}"
+				pane name="AGENT SESSION" command="sh" cwd="${kdlEscape(input.repoRoot)}" {
+					args "-lc" "${kdlEscape(`exec ${input.agentSessionCommand}`)}"
 				}
 				pane size="${kdlEscape(input.editorHeight)}" name="EDITOR" command="sh" cwd="${kdlEscape(input.repoRoot)}" {
 					args "-lc" "${kdlEscape(`exec ${input.editorCommand}`)}"
@@ -370,7 +370,7 @@ function stripAnsi(value: string): string {
 	return output;
 }
 
-function printPilotHeader(title: string): void {
+function printAgentSessionHeader(title: string): void {
 	process.stdout.write('\u001b[H\u001b[2J\u001b[3J');
 	process.stdout.write(`${title}\n\n`);
 }

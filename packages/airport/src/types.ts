@@ -1,4 +1,4 @@
-export type GateId = 'dashboard' | 'editor' | 'pilot';
+export type GateId = 'dashboard' | 'editor' | 'agentSession';
 
 export type GateTargetKind =
 	| 'empty'
@@ -10,7 +10,7 @@ export type GateTargetKind =
 
 export type GateMode = 'view' | 'control';
 
-const GATE_IDS = ['dashboard', 'editor', 'pilot'] as const;
+const GATE_IDS = ['dashboard', 'editor', 'agentSession'] as const;
 const GATE_TARGET_KINDS = ['empty', 'repository', 'mission', 'task', 'artifact', 'agentSession'] as const;
 const GATE_MODES = ['view', 'control'] as const;
 
@@ -143,7 +143,7 @@ export interface EditorProjection extends AirportGateProjectionBase {
 	emptyLabel: string;
 }
 
-export interface PilotProjection extends AirportGateProjectionBase {
+export interface AgentSessionProjection extends AirportGateProjectionBase {
 	sessionId?: string;
 	taskId?: string;
 	missionId?: string;
@@ -156,7 +156,7 @@ export interface PilotProjection extends AirportGateProjectionBase {
 export interface AirportProjectionSet {
 	dashboard: DashboardProjection;
 	editor: EditorProjection;
-	pilot: PilotProjection;
+	agentSession: AgentSessionProjection;
 }
 
 export interface AirportStatus {
@@ -190,7 +190,7 @@ export function derivePersistedAirportIntent(state: AirportState): PersistedAirp
 		gates: {
 			dashboard: normalizeGateBinding(state.gates.dashboard),
 			editor: normalizeGateBinding(state.gates.editor),
-			pilot: normalizeGateBinding(state.gates.pilot)
+			agentSession: normalizeGateBinding(state.gates.agentSession)
 		},
 		...(state.focus.intentGateId
 			? {
@@ -231,7 +231,7 @@ export function createDefaultGateBindings(repositoryId?: string): Record<GateId,
 		editor: repositoryId
 			? { targetKind: 'repository', targetId: repositoryId, mode: 'view' }
 			: createEmptyGateBinding(),
-		pilot: createEmptyGateBinding()
+		agentSession: createEmptyGateBinding()
 	};
 }
 
@@ -239,7 +239,7 @@ export function deriveAirportProjections(state: AirportState): AirportProjection
 	return {
 		dashboard: createDashboardProjection(state),
 		editor: createEditorProjection(state),
-		pilot: createPilotProjection(state)
+		agentSession: createAgentSessionProjection(state)
 	};
 }
 
@@ -297,8 +297,8 @@ function createEditorProjection(state: AirportState): EditorProjection {
 	};
 }
 
-function createPilotProjection(state: AirportState): PilotProjection {
-	const base = createGateProjectionBase(state, 'pilot');
+function createAgentSessionProjection(state: AirportState): AgentSessionProjection {
+	const base = createGateProjectionBase(state, 'agentSession');
 	const binding = base.binding;
 	const sessionId = binding.targetKind === 'agentSession' ? binding.targetId : undefined;
 	return {
@@ -306,8 +306,8 @@ function createPilotProjection(state: AirportState): PilotProjection {
 		...(sessionId ? { sessionId, sessionLabel: sessionId } : {}),
 		statusLabel: sessionId ? 'bound' : 'idle',
 		emptyLabel: sessionId
-			? 'Pilot session details are resolving.'
-			: 'Pilot gate is idle.'
+			? 'Agent session details are resolving.'
+			: 'Agent session gate is idle.'
 	};
 }
 
@@ -325,8 +325,8 @@ function formatGateTitle(gateId: GateId): string {
 			return 'Dashboard';
 		case 'editor':
 			return 'Editor';
-		case 'pilot':
-			return 'Pilot';
+			case 'agentSession':
+				return 'Agent Session';
 	}
 	return gateId;
 }

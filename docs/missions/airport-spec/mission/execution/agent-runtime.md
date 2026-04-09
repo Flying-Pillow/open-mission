@@ -36,7 +36,7 @@ sequenceDiagram
     participant Transport
     participant Terminal
     participant Airport
-    participant Pilot
+    participant AgentSessionSurface as Agent Session Surface
 
     Operator->>Tower: invoke task.launch
     Tower->>Daemon: task.launch(taskId)
@@ -46,10 +46,10 @@ sequenceDiagram
     Terminal-->>Transport: pane or session metadata
     Transport-->>Runtime: transport handle
     Runtime-->>Daemon: session record and lifecycle updates
-    Daemon->>Airport: derive pilot binding for agent session
+    Daemon->>Airport: derive agent session binding for agent session
     Airport->>Terminal: reconcile focus or pane effects
-    Airport-->>Pilot: publish pilot projection
-    Pilot-->>Operator: show running session
+    Airport-->>AgentSessionSurface: publish agent session projection
+    AgentSessionSurface-->>Operator: show running session
 ```
 
 ## Goals
@@ -746,7 +746,7 @@ sequenceDiagram
     Terminal-->>Transport: target identifiers
     Transport-->>Runtime: normalized transport metadata
     Runtime-->>Airport: session exists in daemon state
-    Airport->>Airport: bind pilot gate to session
+    Airport->>Airport: bind agent session gate to session
     Airport->>Terminal: reconcile visibility or focus
     Airport-->>Surface: updated projection with bound session
 ```
@@ -763,7 +763,7 @@ The core package owns:
 
 The airport package, not the runtime contract, owns:
 
-- airport gate identities such as `dashboard`, `editor`, and `pilot`
+- airport gate identities such as `dashboard`, `editor`, and `agentSession`
 - panel projection contracts
 - client registration
 - focus intent and observed focus

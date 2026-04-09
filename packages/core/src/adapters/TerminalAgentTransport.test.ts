@@ -9,7 +9,7 @@ describe('TerminalAgentTransport', () => {
 			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
 				return {
 					stdout: JSON.stringify([
-						{ id: 1, title: 'PILOT', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false },
+						{ id: 1, title: 'AGENT SESSION', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false },
 						...(activePaneTitle && activePaneId
 							? [{ id: 4, title: activePaneTitle, tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false }]
 							: [])
@@ -44,7 +44,7 @@ describe('TerminalAgentTransport', () => {
 			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
 				return {
 					stdout: JSON.stringify([
-						{ id: 1, title: 'PILOT', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false },
+						{ id: 1, title: 'AGENT SESSION', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false },
 						{ id: 5, title: 'existing-session', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false }
 					]),
 					stderr: ''
@@ -68,7 +68,7 @@ describe('TerminalAgentTransport', () => {
 			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
 				return {
 					stdout: JSON.stringify([
-						{ id: 1, title: 'PILOT', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false },
+						{ id: 1, title: 'AGENT SESSION', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false },
 						{ id: 2, title: 'MISSION', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: true },
 						{ id: 5, title: 'existing-session', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false }
 					]),

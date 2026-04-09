@@ -3,7 +3,7 @@ import type { AirportState } from './types.js';
 import { TerminalManagerSubstrateController } from './terminal-manager.js';
 
 describe('TerminalManagerSubstrateController', () => {
-	it('does not refocus the pilot target again when the binding is unchanged', async () => {
+	it('does not refocus the agent session target again when the binding is unchanged', async () => {
 		const calls: string[][] = [];
 		const executor = (args: string[]) => {
 			calls.push(args);
@@ -11,7 +11,7 @@ describe('TerminalManagerSubstrateController', () => {
 				return Promise.resolve({
 					stdout: JSON.stringify([
 						{ id: 1, title: 'MISSION', is_plugin: false, is_focused: true },
-						{ id: 2, title: 'PILOT', is_plugin: false, is_focused: false },
+						{ id: 2, title: 'AGENT SESSION', is_plugin: false, is_focused: false },
 						{ id: 3, title: 'session-1', is_plugin: false, is_focused: false }
 					]),
 					stderr: ''
@@ -25,7 +25,7 @@ describe('TerminalManagerSubstrateController', () => {
 			executor
 		});
 		const airportState = createAirportState({
-			pilot: { targetKind: 'agentSession', targetId: 'session-1', mode: 'control' }
+			agentSession: { targetKind: 'agentSession', targetId: 'session-1', mode: 'control' }
 		});
 
 		await controller.reconcile(airportState);
@@ -37,7 +37,7 @@ describe('TerminalManagerSubstrateController', () => {
 		]);
 	});
 
-	it('does not focus the pilot host pane while the pilot gate is idle', async () => {
+	it('does not focus the agent session host pane while the agent session gate is idle', async () => {
 		const calls: string[][] = [];
 		const executor = (args: string[]) => {
 			calls.push(args);
@@ -45,7 +45,7 @@ describe('TerminalManagerSubstrateController', () => {
 				return Promise.resolve({
 					stdout: JSON.stringify([
 						{ id: 1, title: 'MISSION', is_plugin: false, is_focused: true },
-						{ id: 2, title: 'PILOT', is_plugin: false, is_focused: false }
+						{ id: 2, title: 'AGENT SESSION', is_plugin: false, is_focused: false }
 					]),
 					stderr: ''
 				});
@@ -72,7 +72,7 @@ function createAirportState(overrides: Partial<AirportState['gates']> = {}): Air
 		gates: {
 			dashboard: { targetKind: 'repository', targetId: 'repo', mode: 'control' },
 			editor: { targetKind: 'repository', targetId: 'repo', mode: 'view' },
-			pilot: { targetKind: 'empty' },
+			agentSession: { targetKind: 'empty' },
 			...overrides
 		},
 		focus: {},

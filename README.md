@@ -3,49 +3,54 @@ This repo is in its very early stages. DO NOT USE IT.
 We are on a mission and this repo will become ready soon, but have a little more patience. Drop a comment or an issue if you want to communicate.
 ==================================================================
 
-
 # 🌍 Mission
 
 **The orchestration engine for AI-driven software development.**
 
-Mission is a local state machine and governance layer that sits between your issue tracker and your AI coding agents. It brings predictability, architectural strictness, and deterministic verification to AI-assisted development.
+Mission is a local state machine, terminal UI, and governance layer that sits between your issue tracker and your AI coding agents. It brings predictability, architectural strictness, and deterministic verification to AI-assisted development.
 
-If you have ever spent hours untangling AI-generated "spaghetti code" or fighting context rot in a long chat session, Mission provides the structural guardrails to make AI development safe, scalable, and maintainable.
-
----
-
-## The Problem
-
-AI coding agents (like GitHub Copilot CLI, Claude Code, or Cursor) excel at generating code quickly. However, they lack architectural awareness. Left unmanaged, AI agents tend to:
-*   Bypass established design patterns and object-oriented boundaries.
-*   Modify out-of-scope files, creating unintended blast radiuses.
-*   Lose context over long sessions, leading to hallucinated logic.
-*   Require constant human micromanagement to stay on task.
-
-The result is a fast-growing accumulation of silent technical debt.
-
-## The Solution
-
-Mission acts as Air Traffic Control for your repository. It does not replace your AI agents; it manages them.
-
-By shifting the workflow from **prompt-driven** to **spec-driven**, Mission locks the AI into a strict execution loop. It pulls your issues, compiles them into explicit Implementation Blueprints, and forces the AI to execute one bounded task at a time. Most importantly, it intercepts the AI's actions to ensure they comply with your repository's unique architectural rules before any code is permanently saved.
+If you have ever spent hours untangling AI-generated "spaghetti code," fighting context rot in a long chat session, or fixing an active branch that an AI just trashed, Mission provides the structural guardrails to make AI development safe, scalable, and crash-proof.
 
 ---
 
-## Core Capabilities
+## The AI Coding Landscape: Why Mission?
 
+The AI coding space has evolved rapidly, but existing tools suffer from severe architectural limitations. Here is how Mission compares to the current ecosystem:
+
+| Feature / System | SpecKit | BMAD | GSD | 🌍 Mission |
+| :--- | :--- | :--- | :--- | :--- |
+| **Primary Paradigm** | Spec formatting | Agile team simulation | CLI prompt orchestrator | **State Machine / Daemon** |
+| **Context Management** | None | Agent memory (rots) | Fresh context per task | **Stateless Sessions + `mission.json`** |
+| **Execution Safety** | None | None | Modifies active branch | **Isolated Git Worktrees** |
+| **State Resilience** | None | None | CLI script (brittle if crashed) | **Reducer-based (Crash-proof)** |
+| **User Interface** | CLI | CLI / Chat | Scrolling Terminal Text | **Interactive TUI (Tower/Pilot)** |
+| **Human-in-the-Loop** | Upfront only | Chat-based | Yes | **Native (Pause, Panic, Manual Tasks)** |
+
+*   **SpecKit** helps you write a prompt, but abandons you during execution.
+*   **BMAD** forces AI to roleplay as PMs and Architects, leading to massive overhead and hallucinated agreements in giant context windows.
+*   **GSD (Get Shit Done)** proved that developers want spec-driven, vertically-sliced tasks in fresh context windows. But because it relies on brittle CLI scripts executing directly on your active branch, it lacks safety and state recovery.
+*   **Mission** takes the best theoretical concepts of spec-driven execution and implements them with **architectural strictness and enterprise-grade resilience**.
+
+## The Solution: Air Traffic Control for your Repo
+
+Mission does not replace your AI agents (Copilot, Claude, Cursor, Aider); it manages them. 
+
+By shifting the workflow from **prompt-driven** to **spec-driven**, Mission locks the AI into a strict execution loop. It pulls your issues, compiles them into explicit Implementation Blueprints, and forces the AI to execute one bounded task at a time.
+
+### Core Capabilities
+
+*   📦 **Isolated Git Worktrees (The Ultimate Sandbox)** 
+    Never let an AI hallucination corrupt your local workspace again. Mission automatically provisions a dedicated, isolated Git worktree for every active mission. The AI is physically jailed to this directory, leaving your primary branch completely pristine until the mission is verified and delivered.
+*   🧠 **Zero-Garbage Execution (Fresh Context Windows)** 
+    AI agents suffer from "context rot" after 10-12 turns. Mission's workflow engine solves this by provisioning a completely fresh, stateless session for every single atomic task. Task 12 gets the exact same high-quality execution environment as Task 1.
 *   📜 **Architectural Governance** 
-    Define your repository's specific engineering standards in a single `.agents/constitution.md` file. Mission injects these laws into every session, ensuring the AI respects your tech stack, formatting, and structural boundaries.
-*   📦 **Isolated Git Worktrees** 
-    Never let an AI hallucination corrupt your local workspace again. Mission automatically provisions a dedicated, isolated Git worktree for every active mission. The AI is physically jailed to this directory, leaving your primary branch pristine.
-*   🗺️ **Spec-Driven Execution** 
-    Stop chatting and start building. Mission translates your GitHub or Jira issues into strict `SPEC.md` blueprints and bounded task ledgers. The AI is mathematically constrained to the approved file-impact matrix.
-*   🛑 **Deterministic CI Gating** 
-    Mission disables AI self-praise. An agent cannot simply claim a task is "done." Mission gates all progress behind your actual CI pipeline (linters, unit tests). If the AI's code fails, Mission blocks the transition and forces the agent to fix it.
-*   🤖 **Agent-Agnostic** 
-    Avoid vendor lock-in. Mission manages the state machine, allowing you to seamlessly swap the underlying compute engine (Copilot, Claude, Aider, etc.) as the AI landscape evolves.
-*   🎛️ **The Interactive Tower** 
-    Steer missions through a powerful Terminal User Interface (TUI). Because Mission runs as a persistent background daemon, you can safely detach from the tower, close your terminal, and reconnect later without interrupting the AI's flight.
+    Define your repository's specific engineering standards in a `.agents/constitution.md` file. Mission injects these laws into every task session, ensuring the AI respects your tech stack, formatting, and structural boundaries.
+*   🎛️ **The Interactive Tower & Persistent Daemon** 
+    Steer missions through a powerful Terminal User Interface (TUI). Because Mission runs as a persistent background daemon, you can safely detach from the tower, close your terminal, or reboot your machine. Mission's pure reducer-based state machine (`mission.json`) ensures you can reconnect later and resume exactly where you left off.
+*   🛑 **Deterministic CI Gating & Human Checklists** 
+    Mission disables AI self-praise. An agent cannot simply claim a task is "done." Mission gates progress behind your actual CI pipeline, and allows you to inject `manual` verification tasks where the human Principal Architect must explicitly check off deliverables before the workflow proceeds.
+*   🚨 **First-Class Panic & Governance Controls**
+    Mission treats Human-in-the-Loop as a fundamental state. Hit the "Panic" command to instantly sever the AI's terminal transport, halt the queue, and prevent any further automated work until a human reviews the situation.
 
 ---
 
@@ -56,39 +61,3 @@ Mission is designed to be lightweight and frictionless to install in any existin
 **1. Install globally:**
 ```bash
 npm install -g @flying-pillow/mission
-```
-
-**2. Initialize your repository:**
-This command safely scaffolds the `.mission/` state directory and the default Mission settings file.
-```bash
-mission init
-```
-
-**3. Launch the Tower:**
-Open the interactive terminal surface. Mission will automatically start the background daemon, allowing you to bootstrap a new mission from your issue tracker directly inside the UI.
-```bash
-mission
-```
-
----
-
-## Command Surface
-
-Run `mission help` for the complete command reference. Because Mission relies on a persistent sidecar daemon, state transitions, agent execution, and delivery are now handled via Tower-driven RPC actions rather than standalone top-level commands.
-
-Currently implemented Mission entry points:
-
-*   `mission [--hmr] [--banner] [--no-banner]` — Launches the interactive tower (auto-starts the daemon if not running). On POSIX shells, Mission bootstraps the airport layout through the terminal manager, with the Mission tower on the left, a pilot pane on the upper-right, and `micro` on the lower-right. Mission resets the named terminal-manager session on startup so every airport-layout launch begins from the initial layout state. Starting from a mission worktree auto-selects that mission; starting from the control checkout opens Mission control mode.
-*   `mission daemon:stop [--json]` — Gracefully terminates the background orchestration daemon.
-
----
-
-## How It Changes the Developer Experience (DX)
-
-Mission restores the traditional balance of software engineering: **The Human acts as the Principal Architect, and the AI acts as the Developer.**
-
-You no longer have to review every line of code as it is being typed. You define the rules, you approve the blueprint, and you review the final, CI-verified Pull Request. Mission handles the chaotic execution in the middle.
-
-## License
-
-Will be very permissive, but we need to figure it out!!

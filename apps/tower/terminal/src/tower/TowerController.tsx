@@ -214,7 +214,7 @@ export function TowerController({
 	const airportProjections = createMemo(() => systemSnapshot()?.airportProjections);
 	const dashboardProjection = createMemo(() => airportProjections()?.dashboard);
 	const editorProjection = createMemo(() => airportProjections()?.editor);
-	const pilotProjection = createMemo(() => airportProjections()?.pilot);
+	const agentSessionProjection = createMemo(() => airportProjections()?.agentSession);
 	const selectedMissionMatchesLoaded = createMemo(() => {
 		const target = selectedShellTarget();
 		const snapshotMissionId = dashboardProjection()?.missionId ?? systemSnapshot()?.state.domain.selection.missionId;
@@ -307,7 +307,7 @@ export function TowerController({
 	const commandTargetContext = createMemo<OperatorActionTargetContext>(() => {
 		const stageId = selectedStageId() ?? (projectedCommandContext()?.stageId as MissionStageId | undefined);
 		const taskId = selectedTaskId() || projectedCommandContext()?.taskId || dashboardProjection()?.selectedTaskId || undefined;
-		const sessionId = selectedSessionId() ?? projectedCommandContext()?.sessionId ?? pilotProjection()?.sessionId ?? dashboardProjection()?.selectedSessionId;
+		const sessionId = selectedSessionId() ?? projectedCommandContext()?.sessionId ?? agentSessionProjection()?.sessionId ?? dashboardProjection()?.selectedSessionId;
 		return {
 			...(stageId ? { stageId } : {}),
 			...(taskId ? { taskId } : {}),
@@ -441,7 +441,7 @@ export function TowerController({
 	const selectedSessionRecord = createMemo(() => {
 		const sessionId = selectedSessionId()
 			?? projectedCommandContext()?.sessionId
-			?? pilotProjection()?.sessionId
+			?? agentSessionProjection()?.sessionId
 			?? dashboardProjection()?.selectedSessionId;
 		if (!sessionId) {
 			return undefined;
@@ -480,12 +480,12 @@ export function TowerController({
 			canSendSessionText: canSendSessionText(),
 			selectedSessionId: selectedSessionId()
 				?? projectedCommandContext()?.sessionId
-				?? pilotProjection()?.sessionId
+				?? agentSessionProjection()?.sessionId
 				?? dashboardProjection()?.selectedSessionId,
 			selectedStageId: selectedStageId() ?? (projectedCommandContext()?.stageId as MissionStageId | undefined),
 			selectedTreeTargetTitle: selectedTreeTarget()?.label
 				?? projectedCommandContext()?.targetLabel
-				?? pilotProjection()?.sessionLabel
+				?? agentSessionProjection()?.sessionLabel
 				?? editorProjection()?.resourceLabel,
 			selectedTreeTargetKind: selectedTreeTarget()?.kind ?? (projectedCommandContext()?.targetKind as TreeTargetKind | undefined)
 		})

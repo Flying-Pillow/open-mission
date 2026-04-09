@@ -222,7 +222,7 @@ export class AirportControl {
 				...this.state.gates,
 				...(bindings.dashboard ? { dashboard: normalizeGateBinding(bindings.dashboard) } : {}),
 				...(bindings.editor ? { editor: normalizeGateBinding(bindings.editor) } : {}),
-				...(bindings.pilot ? { pilot: normalizeGateBinding(bindings.pilot) } : {})
+				...(bindings.agentSession ? { agentSession: normalizeGateBinding(bindings.agentSession) } : {})
 			},
 			focus: {
 				...(options.focusIntent ? { intentGateId: options.focusIntent } : this.state.focus.intentGateId ? { intentGateId: this.state.focus.intentGateId } : {}),

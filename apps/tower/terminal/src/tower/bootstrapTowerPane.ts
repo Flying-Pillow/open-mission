@@ -13,12 +13,12 @@ import {
 import { applyTowerTheme, type TowerThemeName } from './components/towerTheme.js';
 import { playMissionStartupBanner } from './components/MissionStartupBanner.js';
 
-function resolveInjectedGateId(): 'dashboard' | 'editor' | 'pilot' {
+function resolveInjectedGateId(): 'dashboard' | 'editor' | 'agentSession' {
 	const gateId = process.env['MISSION_GATE_ID']?.trim();
-	if (gateId === 'dashboard' || gateId === 'editor' || gateId === 'pilot') {
+	if (gateId === 'dashboard' || gateId === 'editor' || gateId === 'agentSession') {
 		return gateId;
 	}
-	throw new Error('MISSION_GATE_ID must be set to dashboard, editor, or pilot before launching a tower panel.');
+	throw new Error('MISSION_GATE_ID must be set to dashboard, editor, or agentSession before launching a tower panel.');
 }
 
 export async function bootstrapTowerPane(context: CommandContext): Promise<void> {
@@ -29,7 +29,7 @@ export async function bootstrapTowerPane(context: CommandContext): Promise<void>
 		context.args.includes('help')
 	) {
 		process.stdout.write('mission [--hmr] [--banner] [--no-banner]\n');
-		process.stdout.write('airport layout: Mission tower | pilot pane | micro\n');
+		process.stdout.write('airport layout: Mission tower | agent session pane | micro\n');
 		return;
 	}
 

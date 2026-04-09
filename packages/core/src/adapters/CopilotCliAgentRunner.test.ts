@@ -51,7 +51,7 @@ describe('CopilotCliAgentRunner', () => {
 			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
 				return {
 					stdout: JSON.stringify([
-						{ id: 1, title: 'PILOT', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false },
+						{ id: 1, title: 'AGENT SESSION', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false },
 						{ id: 2, title: 'MISSION', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: true },
 						...(state.exists && activeSessionName
 							? [{ id: 4, title: activeSessionName, tab_id: 0, exited: state.dead, exitStatus: state.dead ? state.exitCode : null, is_plugin: false, is_focused: false }]

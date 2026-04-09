@@ -7,7 +7,7 @@ const execFileAsync = promisify(execFile);
 const GATE_PANE_TITLES: Record<GateId, string> = {
 	dashboard: 'MISSION',
 	editor: 'EDITOR',
-	pilot: 'PILOT'
+	agentSession: 'AGENT SESSION'
 };
 
 type TerminalManagerPaneMetadata = {
@@ -37,7 +37,7 @@ export interface AirportSubstrateController {
 export class TerminalManagerSubstrateController implements AirportSubstrateController {
 	private state: AirportSubstrateState;
 	private readonly executor: TerminalManagerExecutor;
-	private lastAppliedPilotTargetKey: string | undefined;
+	private lastAppliedAgentSessionTargetKey: string | undefined;
 
 	public constructor(options: { sessionName?: string; executor?: TerminalManagerExecutor; terminalBinary?: string } = {}) {
 		this.state = createDefaultTerminalManagerSubstrateState(options);
@@ -66,7 +66,7 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 			: buildDetachedState(this.state, now);
 
 		this.state = nextState;
-		await this.applyPilotBindingEffect(state, panes);
+		await this.applyAgentSessionBindingEffect(state, panes);
 		return this.getState();
 	}
 
@@ -76,7 +76,7 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 			return this.getState();
 		}
 
-		this.lastAppliedPilotTargetKey = undefined;
+		this.lastAppliedAgentSessionTargetKey = undefined;
 		this.state = {
 			...createDefaultTerminalManagerSubstrateState({ sessionName: normalizedSessionName }),
 			layoutIntent: this.state.layoutIntent
@@ -106,37 +106,37 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 		return (JSON.parse(result.stdout) as TerminalManagerPaneMetadata[]).filter((pane) => !pane.is_plugin);
 	}
 
-	private async applyPilotBindingEffect(state: AirportState, panes: TerminalManagerPaneMetadata[] | undefined): Promise<void> {
+	private async applyAgentSessionBindingEffect(state: AirportState, panes: TerminalManagerPaneMetadata[] | undefined): Promise<void> {
 		if (!panes || panes.length === 0) {
 			return;
 		}
 
-		const pilotBinding = state.gates.pilot;
-		const boundSessionId = pilotBinding.targetKind === 'agentSession' ? pilotBinding.targetId?.trim() : undefined;
+		const agentSessionBinding = state.gates.agentSession;
+		const boundSessionId = agentSessionBinding.targetKind === 'agentSession' ? agentSessionBinding.targetId?.trim() : undefined;
 		if (!boundSessionId) {
-			this.lastAppliedPilotTargetKey = undefined;
+			this.lastAppliedAgentSessionTargetKey = undefined;
 			return;
 		}
 
 		const targetPane = panes.find((pane) => pane.title === boundSessionId);
 		if (!targetPane) {
-			this.lastAppliedPilotTargetKey = undefined;
+			this.lastAppliedAgentSessionTargetKey = undefined;
 			return;
 		}
 
 		const desiredTargetKey = `${boundSessionId}:${String(targetPane.id)}`;
-		if (this.lastAppliedPilotTargetKey === desiredTargetKey) {
+		if (this.lastAppliedAgentSessionTargetKey === desiredTargetKey) {
 			return;
 		}
 
 		const previouslyFocusedPaneId = panes.find((pane) => pane.is_focused)?.id;
 		if (previouslyFocusedPaneId === targetPane.id) {
-			this.lastAppliedPilotTargetKey = desiredTargetKey;
+			this.lastAppliedAgentSessionTargetKey = desiredTargetKey;
 			return;
 		}
 
 		await this.focusPane(targetPane.id);
-		this.lastAppliedPilotTargetKey = desiredTargetKey;
+		this.lastAppliedAgentSessionTargetKey = desiredTargetKey;
 		if (previouslyFocusedPaneId && previouslyFocusedPaneId !== targetPane.id) {
 			await this.focusPane(previouslyFocusedPaneId).catch(() => undefined);
 		}
