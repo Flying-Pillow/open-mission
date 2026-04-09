@@ -103,7 +103,7 @@ It does not contain:
 - airport gate bindings
 - airport focus intent or observed focus
 - panel registrations or client registrations
-- zellij pane ids as application routing truth
+- terminal-manager pane ids as application routing truth
 - substrate attachment observations
 
 ### 3. Workflow Engine
@@ -429,7 +429,7 @@ That means:
 
 - task lifecycle, session lifecycle, pause state, panic state, stage projections, and workflow gate projections belong here
 - airport gate bindings, panel identity, focus intent, observed focus, client state, and substrate observations do not belong here
-- workflow reduction must not inspect zellij, panel processes, or client focus directly
+- workflow reduction must not inspect terminal-manager, panel processes, or client focus directly
 - any substrate or panel fact that matters to application behavior must be reduced elsewhere in the daemon-owned airport loop
 
 ## Stage Runtime Projection

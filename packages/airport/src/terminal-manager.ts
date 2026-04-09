@@ -10,7 +10,7 @@ const GATE_PANE_TITLES: Record<GateId, string> = {
 	pilot: 'PILOT'
 };
 
-type ZellijPaneMetadata = {
+type TerminalManagerPaneMetadata = {
 	id: number;
 	title: string;
 	tabId?: number;
@@ -20,12 +20,12 @@ type ZellijPaneMetadata = {
 	is_suppressed?: boolean;
 };
 
-export type ZellijExecutorResult = {
+type TerminalManagerExecutorResult = {
 	stdout: string;
 	stderr: string;
 };
 
-export type ZellijExecutor = (args: string[]) => Promise<ZellijExecutorResult>;
+type TerminalManagerExecutor = (args: string[]) => Promise<TerminalManagerExecutorResult>;
 
 export interface AirportSubstrateController {
 	getState(): AirportSubstrateState;
@@ -34,13 +34,13 @@ export interface AirportSubstrateController {
 	observePane(gateId: GateId, pane: AirportPaneState | undefined): AirportSubstrateState;
 }
 
-export class ZellijSubstrateController implements AirportSubstrateController {
+export class TerminalManagerSubstrateController implements AirportSubstrateController {
 	private state: AirportSubstrateState;
-	private readonly executor: ZellijExecutor;
+	private readonly executor: TerminalManagerExecutor;
 	private lastAppliedPilotTargetKey: string | undefined;
 
-	public constructor(options: { sessionName?: string; executor?: ZellijExecutor; terminalBinary?: string } = {}) {
-		this.state = createDefaultZellijSubstrateState(options);
+	public constructor(options: { sessionName?: string; executor?: TerminalManagerExecutor; terminalBinary?: string } = {}) {
+		this.state = createDefaultTerminalManagerSubstrateState(options);
 		const terminalBinary = options.terminalBinary?.trim() || process.env['MISSION_TERMINAL_BINARY']?.trim() || 'zellij';
 		this.executor = options.executor ?? (async (args) => {
 			const result = await execFileAsync(terminalBinary, args, {
@@ -78,19 +78,14 @@ export class ZellijSubstrateController implements AirportSubstrateController {
 
 		this.lastAppliedPilotTargetKey = undefined;
 		this.state = {
-			...createDefaultZellijSubstrateState({ sessionName: normalizedSessionName }),
+			...createDefaultTerminalManagerSubstrateState({ sessionName: normalizedSessionName }),
 			layoutIntent: this.state.layoutIntent
 		};
 		return this.getState();
 	}
 
 	public observePane(gateId: GateId, pane: AirportPaneState | undefined): AirportSubstrateState {
-		const panesByGate = { ...this.state.panesByGate };
-		if (pane) {
-			panesByGate[gateId] = { ...pane };
-		} else {
-			delete panesByGate[gateId];
-		}
+		const panesByGate = mergeObservedPane(this.state.panesByGate, gateId, pane);
 		this.state = {
 			...this.state,
 			panesByGate,
@@ -99,7 +94,7 @@ export class ZellijSubstrateController implements AirportSubstrateController {
 		return this.getState();
 	}
 
-	private async listPanes(): Promise<ZellijPaneMetadata[]> {
+	private async listPanes(): Promise<TerminalManagerPaneMetadata[]> {
 		const result = await this.executor([
 			'--session',
 			this.state.sessionName,
@@ -108,10 +103,10 @@ export class ZellijSubstrateController implements AirportSubstrateController {
 			'--json',
 			'--all'
 		]);
-		return (JSON.parse(result.stdout) as ZellijPaneMetadata[]).filter((pane) => !pane.is_plugin);
+		return (JSON.parse(result.stdout) as TerminalManagerPaneMetadata[]).filter((pane) => !pane.is_plugin);
 	}
 
-	private async applyPilotBindingEffect(state: AirportState, panes: ZellijPaneMetadata[] | undefined): Promise<void> {
+	private async applyPilotBindingEffect(state: AirportState, panes: TerminalManagerPaneMetadata[] | undefined): Promise<void> {
 		if (!panes || panes.length === 0) {
 			return;
 		}
@@ -123,29 +118,26 @@ export class ZellijSubstrateController implements AirportSubstrateController {
 			return;
 		}
 
-		const targetPane = boundSessionId
-			? panes.find((pane) => pane.title === boundSessionId)
-			: undefined;
+		const targetPane = panes.find((pane) => pane.title === boundSessionId);
 		if (!targetPane) {
 			this.lastAppliedPilotTargetKey = undefined;
 			return;
 		}
 
-		const desiredPane = targetPane;
-		const desiredTargetKey = `${boundSessionId}:${String(desiredPane.id)}`;
+		const desiredTargetKey = `${boundSessionId}:${String(targetPane.id)}`;
 		if (this.lastAppliedPilotTargetKey === desiredTargetKey) {
 			return;
 		}
 
 		const previouslyFocusedPaneId = panes.find((pane) => pane.is_focused)?.id;
-		if (previouslyFocusedPaneId === desiredPane.id) {
+		if (previouslyFocusedPaneId === targetPane.id) {
 			this.lastAppliedPilotTargetKey = desiredTargetKey;
 			return;
 		}
 
-		await this.focusPane(desiredPane.id);
+		await this.focusPane(targetPane.id);
 		this.lastAppliedPilotTargetKey = desiredTargetKey;
-		if (previouslyFocusedPaneId && previouslyFocusedPaneId !== desiredPane.id) {
+		if (previouslyFocusedPaneId && previouslyFocusedPaneId !== targetPane.id) {
 			await this.focusPane(previouslyFocusedPaneId).catch(() => undefined);
 		}
 	}
@@ -161,18 +153,18 @@ export class ZellijSubstrateController implements AirportSubstrateController {
 	}
 }
 
-export class InMemoryZellijSubstrateController implements AirportSubstrateController {
+export class InMemoryTerminalManagerSubstrateController implements AirportSubstrateController {
 	private state: AirportSubstrateState;
 
 	public constructor(options: { sessionName?: string } = {}) {
-		this.state = createDefaultZellijSubstrateState(options);
+		this.state = createDefaultTerminalManagerSubstrateState(options);
 	}
 
 	public getState(): AirportSubstrateState {
 		return structuredClone(this.state);
 	}
 
-	public async reconcile(_state: AirportState): Promise<AirportSubstrateState> {
+	public reconcile(_state: AirportState): Promise<AirportSubstrateState> {
 		const now = new Date().toISOString();
 		this.state = {
 			...this.state,
@@ -180,7 +172,7 @@ export class InMemoryZellijSubstrateController implements AirportSubstrateContro
 			lastAppliedAt: now,
 			lastObservedAt: now
 		};
-		return this.getState();
+		return Promise.resolve(this.getState());
 	}
 
 	public setSessionName(sessionName: string): AirportSubstrateState {
@@ -189,29 +181,15 @@ export class InMemoryZellijSubstrateController implements AirportSubstrateContro
 			return this.getState();
 		}
 
-		const {
-			lastAppliedAt: _lastAppliedAt,
-			lastObservedAt: _lastObservedAt,
-			observedFocusedPaneId: _observedFocusedPaneId,
-			...persistentState
-		} = this.state;
-
 		this.state = {
-			...persistentState,
-			sessionName: normalizedSessionName,
-			attached: false,
-			panesByGate: {}
+			...createDefaultTerminalManagerSubstrateState({ sessionName: normalizedSessionName }),
+			layoutIntent: this.state.layoutIntent
 		};
 		return this.getState();
 	}
 
 	public observePane(gateId: GateId, pane: AirportPaneState | undefined): AirportSubstrateState {
-		const panesByGate = { ...this.state.panesByGate };
-		if (pane) {
-			panesByGate[gateId] = { ...pane };
-		} else {
-			delete panesByGate[gateId];
-		}
+		const panesByGate = mergeObservedPane(this.state.panesByGate, gateId, pane);
 		this.state = {
 			...this.state,
 			panesByGate,
@@ -221,9 +199,9 @@ export class InMemoryZellijSubstrateController implements AirportSubstrateContro
 	}
 }
 
-export function createDefaultZellijSubstrateState(options: { sessionName?: string } = {}): AirportSubstrateState {
+export function createDefaultTerminalManagerSubstrateState(options: { sessionName?: string } = {}): AirportSubstrateState {
 	return {
-		kind: 'zellij',
+		kind: 'terminal-manager',
 		sessionName: options.sessionName?.trim() || 'mission-control',
 		layoutIntent: 'mission-control-v1',
 		attached: false,
@@ -233,7 +211,7 @@ export function createDefaultZellijSubstrateState(options: { sessionName?: strin
 
 function buildObservedState(
 	currentState: AirportSubstrateState,
-	panes: ZellijPaneMetadata[],
+	panes: TerminalManagerPaneMetadata[],
 	now: string
 ): AirportSubstrateState {
 	const focusedPaneId = panes.find((pane) => pane.is_focused)?.id;
@@ -273,9 +251,10 @@ function buildObservedState(
 }
 
 function buildDetachedState(currentState: AirportSubstrateState, now: string): AirportSubstrateState {
-	const { observedFocusedPaneId: _observedFocusedPaneId, ...nextState } = currentState;
 	return {
-		...nextState,
+		kind: currentState.kind,
+		sessionName: currentState.sessionName,
+		layoutIntent: currentState.layoutIntent,
 		attached: false,
 		panesByGate: Object.fromEntries(
 			(Object.keys(GATE_PANE_TITLES) as GateId[]).map((gateId) => [
@@ -288,6 +267,24 @@ function buildDetachedState(currentState: AirportSubstrateState, now: string): A
 				}
 			])
 		) as Partial<Record<GateId, AirportPaneState>>,
+		...(currentState.lastAppliedAt ? { lastAppliedAt: currentState.lastAppliedAt } : {}),
 		lastObservedAt: now
 	};
+}
+
+function mergeObservedPane(
+	panesByGate: Partial<Record<GateId, AirportPaneState>>,
+	gateId: GateId,
+	pane: AirportPaneState | undefined
+): Partial<Record<GateId, AirportPaneState>> {
+	if (pane) {
+		return {
+			...panesByGate,
+			[gateId]: { ...pane }
+		};
+	}
+
+	return Object.fromEntries(
+		Object.entries(panesByGate).filter(([candidateGateId]) => candidateGateId !== gateId)
+	) as Partial<Record<GateId, AirportPaneState>>;
 }

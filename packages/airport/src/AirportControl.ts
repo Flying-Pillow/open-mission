@@ -15,16 +15,16 @@ import {
 	type ObserveAirportClientParams
 } from './types.js';
 import {
-	createDefaultZellijSubstrateState,
-	InMemoryZellijSubstrateController,
+	createDefaultTerminalManagerSubstrateState,
+	InMemoryTerminalManagerSubstrateController,
 	type AirportSubstrateController
-} from './zellij.js';
+	} from './terminal-manager.js';
 
 export class AirportControl {
 	private state: AirportState;
 
 	public constructor(
-		private readonly substrate: AirportSubstrateController = new InMemoryZellijSubstrateController(),
+		private readonly substrate: AirportSubstrateController = new InMemoryTerminalManagerSubstrateController(),
 		options: {
 			airportId?: string;
 			repositoryId?: string;
@@ -46,7 +46,7 @@ export class AirportControl {
 			},
 			focus: persistedIntent?.focus?.intentGateId ? { intentGateId: persistedIntent.focus.intentGateId } : {},
 			clients: {},
-			substrate: this.substrate.getState?.() ?? createDefaultZellijSubstrateState()
+			substrate: this.substrate.getState?.() ?? createDefaultTerminalManagerSubstrateState()
 		};
 	}
 
@@ -99,7 +99,7 @@ export class AirportControl {
 		return derivePersistedAirportIntent(this.state);
 	}
 
-	public async setTerminalSessionName(sessionName: string): Promise<AirportStatus> {
+	public async setTerminalManagerSessionName(sessionName: string): Promise<AirportStatus> {
 		const normalizedSessionName = sessionName.trim();
 		if (!normalizedSessionName || normalizedSessionName === this.state.substrate.sessionName) {
 			return this.getStatus();
@@ -115,7 +115,7 @@ export class AirportControl {
 
 	public async connectClient(params: ConnectAirportClientParams): Promise<AirportStatus> {
 		if (params.terminalSessionName?.trim()) {
-			await this.setTerminalSessionName(params.terminalSessionName);
+			await this.setTerminalManagerSessionName(params.terminalSessionName);
 		}
 		const now = new Date().toISOString();
 		const existing = this.state.clients[params.clientId];

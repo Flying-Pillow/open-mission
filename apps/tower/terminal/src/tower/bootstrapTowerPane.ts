@@ -21,7 +21,7 @@ function resolveInjectedGateId(): 'dashboard' | 'editor' | 'pilot' {
 	throw new Error('MISSION_GATE_ID must be set to dashboard, editor, or pilot before launching a tower panel.');
 }
 
-export async function launchTower(context: CommandContext): Promise<void> {
+export async function bootstrapTowerPane(context: CommandContext): Promise<void> {
 	const hmrMode = context.args.includes('--hmr') || process.env['MISSION_TOWER_HMR'] === '1';
 	if (
 		context.args.includes('--help') ||
@@ -29,7 +29,7 @@ export async function launchTower(context: CommandContext): Promise<void> {
 		context.args.includes('help')
 	) {
 		process.stdout.write('mission [--hmr] [--banner] [--no-banner]\n');
-		process.stdout.write('zellij layout: Mission tower | pilot pane | micro\n');
+		process.stdout.write('airport layout: Mission tower | pilot pane | micro\n');
 		return;
 	}
 
@@ -111,10 +111,10 @@ export async function launchTower(context: CommandContext): Promise<void> {
 		await playMissionStartupBanner();
 	}
 
-	const { runTowerApp } = await import('./runTowerApp.js');
+	const { mountTowerUi } = await import('./mountTowerUi.js');
 
 	try {
-		await runTowerApp({
+		await mountTowerUi({
 			initialSelector,
 			initialTheme,
 			initialShowIntroSplash: !hmrMode,

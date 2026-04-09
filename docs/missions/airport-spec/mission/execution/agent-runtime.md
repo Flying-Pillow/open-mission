@@ -24,7 +24,33 @@ Priority rule:
 2. the airport control plane specification defines daemon-wide composite state, gate bindings, focus semantics, panel identity, and substrate reconciliation
 3. this runtime specification defines the provider-neutral execution boundary used to satisfy semantic session requests
 
-If this document is interpreted to give runtime adapters ownership of panel routing, airport gates, focus policy, or zellij layout authority, that interpretation is wrong.
+If this document is interpreted to give runtime adapters ownership of panel routing, airport gates, focus policy, airport-layout bootstrap authority, or terminal-manager substrate authority, that interpretation is wrong.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operator
+    participant Tower
+    participant Daemon
+    participant Runtime
+    participant Transport
+    participant Terminal
+    participant Airport
+    participant Pilot
+
+    Operator->>Tower: invoke task.launch
+    Tower->>Daemon: task.launch(taskId)
+    Daemon->>Runtime: launchAgentSession(request)
+    Runtime->>Transport: open session or pane
+    Transport->>Terminal: create terminal target
+    Terminal-->>Transport: pane or session metadata
+    Transport-->>Runtime: transport handle
+    Runtime-->>Daemon: session record and lifecycle updates
+    Daemon->>Airport: derive pilot binding for agent session
+    Airport->>Terminal: reconcile focus or pane effects
+    Airport-->>Pilot: publish pilot projection
+    Pilot-->>Operator: show running session
+```
 
 ## Goals
 
@@ -669,7 +695,7 @@ It must not own:
 - airport gate binding
 - airport focus intent or observed focus
 - panel registration
-- zellij pane lifecycle as application truth
+- terminal-manager pane lifecycle as application truth
 
 ## Adapter Rules
 
@@ -696,9 +722,34 @@ For terminal-backed runtimes, provider translation includes:
 
 Those responsibilities still do not make the adapter the owner of airport layout truth.
 
-If the daemon uses zellij or another terminal substrate, runtime adapters must remain execution-oriented and cooperate with the airport control plane rather than replacing it.
+If the daemon uses terminal-manager or another terminal substrate, runtime adapters must remain execution-oriented and cooperate with the airport control plane rather than replacing it.
 
 Terminal identifiers may be observed or carried as runtime transport metadata, but gate binding, focus, panel identity, and substrate reconciliation policy remain outside the runtime contract.
+
+### Runtime And Airport Handoff
+
+The runtime owns execution startup and terminal target allocation.
+
+Airport owns where that running session is surfaced in the operator environment.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Runtime
+    participant Transport
+    participant Terminal
+    participant Airport
+    participant Surface
+
+    Runtime->>Transport: request terminal-backed session
+    Transport->>Terminal: allocate pane or session
+    Terminal-->>Transport: target identifiers
+    Transport-->>Runtime: normalized transport metadata
+    Runtime-->>Airport: session exists in daemon state
+    Airport->>Airport: bind pilot gate to session
+    Airport->>Terminal: reconcile visibility or focus
+    Airport-->>Surface: updated projection with bound session
+```
 
 ## Package Ownership
 

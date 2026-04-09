@@ -66,7 +66,7 @@ export class TerminalAgentTransport {
 			const result = await this.runTerminal(['--version']);
 			return {
 				available: true,
-				detail: result.stdout.trim() || 'zellij is available.'
+				detail: result.stdout.trim() || 'terminal manager is available.'
 			};
 		} catch (error) {
 			return {
@@ -226,7 +226,7 @@ export class TerminalAgentTransport {
 		]);
 		const paneId = parsePaneReference(createPaneResult.stdout);
 		if (!paneId) {
-			throw new Error(`Unable to resolve created zellij pane for '${sessionName}'.`);
+			throw new Error(`Unable to resolve created terminal-manager pane for '${sessionName}'.`);
 		}
 		await this.runTerminal([
 			'--session',
@@ -249,7 +249,7 @@ export class TerminalAgentTransport {
 		const sessionName = `${sessionPrefix}-${randomUUID()}`;
 		const launchCommand = buildLaunchCommand(request);
 
-		const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mission-zellij-'));
+		const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mission-terminal-manager-'));
 		const layoutFile = path.join(tempDir, `${sessionName}.kdl`);
 		try {
 			await writeFile(layoutFile, buildSinglePaneLayout(request.workingDirectory, launchCommand), 'utf8');
@@ -269,7 +269,7 @@ export class TerminalAgentTransport {
 				await delay(150);
 			}
 			if (!sessionVisible) {
-				throw new Error(`zellij session '${sessionName}' did not become visible after launch.`);
+				throw new Error(`terminal-manager session '${sessionName}' did not become visible after launch.`);
 			}
 		} finally {
 			await rm(tempDir, { recursive: true, force: true });
@@ -281,7 +281,7 @@ export class TerminalAgentTransport {
 		};
 	}
 
-	private async listSessionPanes(): Promise<ZellijPaneMetadata[]> {
+	private async listSessionPanes(): Promise<TerminalPaneMetadata[]> {
 		const result = await this.runTerminal([
 			'--session',
 			this.sharedSessionName as string,
@@ -290,24 +290,24 @@ export class TerminalAgentTransport {
 			'--json',
 			'--all'
 		]);
-		const parsed = JSON.parse(result.stdout) as ZellijPaneMetadata[];
+		const parsed = JSON.parse(result.stdout) as TerminalPaneMetadata[];
 		return parsed.filter((pane) => !pane.is_plugin);
 	}
 
-	private async resolvePilotPane(): Promise<ZellijPaneMetadata> {
+	private async resolvePilotPane(): Promise<TerminalPaneMetadata> {
 		const pane = await this.findPaneByTitle(this.pilotPaneTitle);
 		if (!pane) {
-			throw new Error(`Unable to locate zellij pane '${this.pilotPaneTitle}' in session '${this.sharedSessionName ?? 'unknown'}'.`);
+			throw new Error(`Unable to locate terminal-manager pane '${this.pilotPaneTitle}' in session '${this.sharedSessionName ?? 'unknown'}'.`);
 		}
 		return pane;
 	}
 
-	private async findPaneByTitle(title: string): Promise<ZellijPaneMetadata | undefined> {
+	private async findPaneByTitle(title: string): Promise<TerminalPaneMetadata | undefined> {
 		const panes = await this.listSessionPanes();
 		return panes.find((pane) => pane.title === title && !pane.is_suppressed);
 	}
 
-	private async findPaneById(paneId: string): Promise<ZellijPaneMetadata | undefined> {
+	private async findPaneById(paneId: string): Promise<TerminalPaneMetadata | undefined> {
 		const panes = await this.listSessionPanes();
 		const numericId = parsePaneNumericId(paneId);
 		return panes.find((pane) => pane.id === numericId);
@@ -344,12 +344,12 @@ export class TerminalAgentTransport {
 	}
 
 	private async runTerminal(args: string[]): Promise<TerminalExecutorResult> {
-		this.logLine?.(`zellij ${args.join(' ')}`);
+		this.logLine?.(`terminal-manager ${args.join(' ')}`);
 		return this.executor(args);
 	}
 }
 
-type ZellijPaneMetadata = {
+type TerminalPaneMetadata = {
 	id: number;
 	title: string;
 	tabId: number;
@@ -414,7 +414,7 @@ function parsePaneReference(stdout: string): string | undefined {
 function parsePaneNumericId(paneId: string): number {
 	const match = paneId.match(/(?:terminal|plugin)_?(\d+)/u);
 	if (!match) {
-		throw new Error(`Invalid zellij pane id '${paneId}'.`);
+		throw new Error(`Invalid terminal-manager pane id '${paneId}'.`);
 	}
 	return Number.parseInt(match[1] ?? '', 10);
 }

@@ -65,7 +65,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 
 	public constructor(options: CopilotCliAgentRunnerOptions) {
 		this.id = options.runtimeId?.trim() || COPILOT_CLI_AGENT_RUNTIME_ID;
-		this.displayName = options.displayName?.trim() || `${this.id} via zellij`;
+		this.displayName = options.displayName?.trim() || `${this.id} via terminal-manager`;
 		this.command = options.command.trim();
 		if (!this.command) {
 			throw new Error('CopilotCliAgentRunner requires a command.');

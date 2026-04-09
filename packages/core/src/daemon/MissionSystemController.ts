@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import {
 	AirportControl,
-	ZellijSubstrateController,
+	TerminalManagerSubstrateController,
 	createDefaultGateBindings,
 	type AirportProjectionSet,
 	type AirportState,
@@ -274,7 +274,7 @@ export class MissionSystemController {
 		const identity = deriveRepositoryAirportIdentity(repositoryId, repositoryRootPath);
 		const persistedIntent = this.readPersistedAirportIntent(repositoryRootPath);
 		const control = new AirportControl(
-			new ZellijSubstrateController({
+			new TerminalManagerSubstrateController({
 				sessionName: identity.sessionName
 			}),
 			{

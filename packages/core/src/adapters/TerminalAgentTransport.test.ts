@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TerminalAgentTransport, type TerminalAgentTransportOptions } from './TerminalAgentTransport.js';
 
 describe('TerminalAgentTransport', () => {
-	it('opens a shared-session zellij pane and returns a transport handle', async () => {
+	it('opens a shared-session terminal-manager pane and returns a transport handle', async () => {
 		let activePaneTitle: string | undefined;
 		let activePaneId: string | undefined;
 		const executor: NonNullable<TerminalAgentTransportOptions['executor']> = async (args) => {

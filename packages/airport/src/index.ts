@@ -1,3 +1,3 @@
 export * from './types.js';
-export * from './zellij.js';
+export * from './terminal-manager.js';
 export * from './AirportControl.js';

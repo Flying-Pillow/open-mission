@@ -20,7 +20,7 @@ Its job is to reconcile the workflow-engine terminology with the rest of the cor
 
 This document defines the semantic object model owned by `packages/core`.
 
-It does not define the daemon-wide application controller, airport layout state, panel registration, focus semantics, client state, or zellij reconciliation.
+It does not define the daemon-wide application controller, airport layout state, panel registration, focus semantics, client state, or terminal-manager reconciliation.
 
 Those concerns are defined by the airport control plane specification and belong outside the core semantic model.
 

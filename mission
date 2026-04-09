@@ -7,8 +7,8 @@ app_dir="$repo_root/apps/tower/terminal"
 preload_file="$app_dir/node_modules/@opentui/solid/scripts/preload.ts"
 daemon_command="$repo_root/missiond"
 typescript_conditions="--conditions=typescript"
-zellij_binary=${MISSION_TERMINAL_BINARY:-zellij}
-zellij_mode=${MISSION_TERMINAL_MODE:-auto}
+terminal_manager_binary=${MISSION_TERMINAL_BINARY:-zellij}
+terminal_manager_mode=${MISSION_TERMINAL_MODE:-auto}
 
 shell_quote() {
 	printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\''/g")"
@@ -27,7 +27,7 @@ build_command_string() {
 	printf '%s' "$command_string"
 }
 
-resolve_zellij_session_name() {
+resolve_terminal_manager_session_name() {
 	printf '%s' "${MISSION_TERMINAL_SESSION:-${MISSION_TERMINAL_SESSION_NAME:-mission-$(basename "$repo_root")}}"
 }
 
@@ -39,7 +39,7 @@ resolve_runtime_root() {
 	printf '%s' "$runtime_root"
 }
 
-should_launch_zellij() {
+should_launch_terminal_manager() {
 	if [ "$tower_mode" -ne 1 ]; then
 		return 1
 	fi
@@ -47,17 +47,17 @@ should_launch_zellij() {
 		return 1
 	fi
 	if [ ! -t 0 ] || [ ! -t 1 ]; then
-		if [ "$zellij_mode" = "force" ]; then
-			printf '%s\n' 'mission: zellij mode requires an interactive terminal.' >&2
+		if [ "$terminal_manager_mode" = "force" ]; then
+			printf '%s\n' 'mission: terminal-manager mode requires an interactive terminal.' >&2
 			exit 1
 		fi
 		return 1
 	fi
-	if command -v "$zellij_binary" >/dev/null 2>&1; then
+	if command -v "$terminal_manager_binary" >/dev/null 2>&1; then
 		return 0
 	fi
-	if [ "$zellij_mode" = "force" ]; then
-		printf '%s\n' "mission: zellij was requested but '$zellij_binary' was not found in PATH." >&2
+	if [ "$terminal_manager_mode" = "force" ]; then
+		printf '%s\n' "mission: terminal manager was requested but '$terminal_manager_binary' was not found in PATH." >&2
 		exit 1
 	fi
 	return 1
@@ -70,8 +70,8 @@ while [ "$#" -gt 0 ]; do
 			hmr_mode=1
 			shift
 			;;
-		--no-zellij)
-			zellij_mode=off
+		--no-terminal-manager|--no-zellij)
+			terminal_manager_mode=off
 			shift
 			;;
 		*)
@@ -93,14 +93,14 @@ elif [ "$first_arg" = "artifact" ]; then
 fi
 
 if [ "$first_arg" = "--help" ] || [ "$first_arg" = "-h" ]; then
-	zellij_mode=off
+	terminal_manager_mode=off
 fi
 
-if [ "$zellij_mode" != "off" ] && should_launch_zellij; then
+if [ "$terminal_manager_mode" != "off" ] && should_launch_terminal_manager; then
 	if [ "$hmr_mode" -eq 1 ]; then
-		exec env MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun "$typescript_conditions" --preload "$preload_file" "$app_dir/src/index.ts" __zellij-launch__ --hmr "$@"
+		exec env MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun "$typescript_conditions" --preload "$preload_file" "$app_dir/src/index.ts" __airport-layout-launch__ --hmr "$@"
 	fi
-	exec env MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun "$typescript_conditions" --preload "$preload_file" "$app_dir/src/index.ts" __zellij-launch__ "$@"
+	exec env MISSION_DAEMON_COMMAND="$daemon_command" pnpm --dir "$repo_root" exec bun "$typescript_conditions" --preload "$preload_file" "$app_dir/src/index.ts" __airport-layout-launch__ "$@"
 fi
 
 if [ "$hmr_mode" -eq 1 ] && [ "$tower_mode" -eq 1 ]; then

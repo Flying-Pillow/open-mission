@@ -10,14 +10,14 @@ import type { CommandContext } from './types.js';
 
 const execFileAsync = promisify(execFile);
 
-export async function runZellijLaunch(context: CommandContext): Promise<void> {
-	const sessionName = resolveZellijSessionName(context.controlRoot);
-	const zellijBinary = resolveZellijBinary();
+export async function runAirportLayoutLaunch(context: CommandContext): Promise<void> {
+	const sessionName = resolveTerminalManagerSessionName(context.controlRoot);
+	const terminalManagerBinary = resolveTerminalManagerBinary();
 	const runtimeRoot = resolveRuntimeRoot();
 	const sessionSlug = slugifySessionName(sessionName);
 	const runtimeConfigRoot = path.join(runtimeRoot, 'mission', `runtime-${sessionSlug}`);
-	const zellijConfigDir = path.join(runtimeConfigRoot, 'zellij');
-	const layoutFile = path.join(runtimeRoot, 'mission', `tower-${sessionSlug}.kdl`);
+	const terminalManagerConfigDir = path.join(runtimeConfigRoot, 'terminal-manager');
+	const layoutFile = path.join(runtimeRoot, 'mission', `airport-layout-${sessionSlug}.kdl`);
 	const rightWidth = process.env['MISSION_TERMINAL_RIGHT_COLUMN_WIDTH']?.trim()
 		|| process.env['MISSION_TERMINAL_OPERATOR_PANE_SIZE']?.trim()
 		|| '50%';
@@ -38,13 +38,13 @@ export async function runZellijLaunch(context: CommandContext): Promise<void> {
 		'MISSION_GATE_ID=pilot',
 		`MISSION_TERMINAL_SESSION=${sessionName}`,
 		missionEntry,
-		'__pilot-pane'
+		'__airport-layout-pilot-pane'
 	]);
 
-	await mkdir(zellijConfigDir, { recursive: true });
+	await mkdir(terminalManagerConfigDir, { recursive: true });
 	await mkdir(path.dirname(layoutFile), { recursive: true });
-	await writeFile(path.join(zellijConfigDir, 'config.kdl'), buildZellijConfig(), 'utf8');
-	await writeFile(layoutFile, buildZellijLayout({
+	await writeFile(path.join(terminalManagerConfigDir, 'config.kdl'), buildTerminalManagerConfig(), 'utf8');
+	await writeFile(layoutFile, buildAirportLayout({
 		repoRoot,
 		towerCommand,
 		pilotCommand,
@@ -53,11 +53,11 @@ export async function runZellijLaunch(context: CommandContext): Promise<void> {
 		editorHeight
 	}), 'utf8');
 
-	await resetZellijSession(zellijBinary, sessionName);
+	await resetTerminalManagerSession(terminalManagerBinary, sessionName);
 
 	const child = spawn(
-		zellijBinary,
-		['--config-dir', zellijConfigDir, '--session', sessionName, '--new-session-with-layout', layoutFile],
+		terminalManagerBinary,
+		['--config-dir', terminalManagerConfigDir, '--session', sessionName, '--new-session-with-layout', layoutFile],
 		{
 			stdio: 'inherit',
 			env: process.env
@@ -68,11 +68,11 @@ export async function runZellijLaunch(context: CommandContext): Promise<void> {
 		child.once('error', reject);
 		child.once('exit', (code, signal) => {
 			if (signal) {
-				reject(new Error(`zellij exited from signal ${signal}.`));
+				reject(new Error(`terminal manager exited from signal ${signal}.`));
 				return;
 			}
 			if ((code ?? 0) !== 0) {
-				reject(new Error(`zellij exited with code ${String(code ?? 1)}.`));
+				reject(new Error(`terminal manager exited with code ${String(code ?? 1)}.`));
 				return;
 			}
 			resolve();
@@ -80,7 +80,7 @@ export async function runZellijLaunch(context: CommandContext): Promise<void> {
 	});
 }
 
-export async function runZellijPilotPane(_context: CommandContext): Promise<void> {
+export async function runAirportLayoutPilotPane(_context: CommandContext): Promise<void> {
 	const client = await connectSurfaceDaemon({
 		surfacePath: process.cwd(),
 		launchMode: resolveSurfaceDaemonLaunchMode(import.meta.url)
@@ -101,7 +101,7 @@ export async function runZellijPilotPane(_context: CommandContext): Promise<void
 			return;
 		}
 		process.stdout.write('Pilot gate is idle.\n');
-		process.stdout.write('Airport owns the pilot gate binding and zellij reconciliation.\n');
+		process.stdout.write('Airport owns the pilot gate binding and terminal-manager reconciliation.\n');
 	};
 
 	const initialSnapshot = await api.airport.connectPanel({
@@ -131,7 +131,7 @@ export async function runZellijPilotPane(_context: CommandContext): Promise<void
 	});
 }
 
-export async function runZellijEditorPane(_context: CommandContext): Promise<void> {
+export async function runAirportLayoutEditorPane(_context: CommandContext): Promise<void> {
 	const editorCommand = buildEditorCommand(process.cwd());
 	const child = spawn('sh', ['-lc', `exec ${editorCommand}`], {
 		cwd: process.cwd(),
@@ -159,7 +159,7 @@ export async function runZellijEditorPane(_context: CommandContext): Promise<voi
 	});
 }
 
-function resolveZellijSessionName(controlRoot: string): string {
+function resolveTerminalManagerSessionName(controlRoot: string): string {
 	return process.env['MISSION_TERMINAL_SESSION']?.trim()
 		|| process.env['MISSION_TERMINAL_SESSION_NAME']?.trim()
 		|| `mission-${path.basename(controlRoot)}`;
@@ -173,34 +173,34 @@ function resolveRuntimeRoot(): string {
 	return process.env['XDG_RUNTIME_DIR']?.trim() || process.env['TMPDIR']?.trim() || os.tmpdir();
 }
 
-async function resetZellijSession(zellijBinary: string, sessionName: string): Promise<void> {
+async function resetTerminalManagerSession(terminalManagerBinary: string, sessionName: string): Promise<void> {
 	const normalizedSessionName = sessionName.trim();
 	if (!normalizedSessionName) {
-		throw new Error('Zellij session name is required.');
+		throw new Error('Terminal-manager session name is required.');
 	}
 
-	const existingSession = (await listZellijSessions(zellijBinary))
+	const existingSession = (await listTerminalManagerSessions(terminalManagerBinary))
 		.find((session) => session.name === normalizedSessionName);
 	if (!existingSession) {
 		return;
 	}
 
-	await execZellij(zellijBinary, ['delete-session', '--force', normalizedSessionName]);
+	await execTerminalManager(terminalManagerBinary, ['delete-session', '--force', normalizedSessionName]);
 
-	const lingeringSession = await waitForSessionToDisappear(zellijBinary, normalizedSessionName);
+	const lingeringSession = await waitForSessionToDisappear(terminalManagerBinary, normalizedSessionName);
 	if (lingeringSession) {
 		throw new Error(
-			`Unable to reset zellij session '${normalizedSessionName}' before launch (${lingeringSession.state}).`
+			`Unable to reset terminal-manager session '${normalizedSessionName}' before launch (${lingeringSession.state}).`
 		);
 	}
 }
 
 async function waitForSessionToDisappear(
-	zellijBinary: string,
+	terminalManagerBinary: string,
 	sessionName: string
-): Promise<ZellijSessionSummary | undefined> {
+): Promise<TerminalManagerSessionSummary | undefined> {
 	for (let attempt = 0; attempt < 10; attempt += 1) {
-		const lingeringSession = (await listZellijSessions(zellijBinary))
+		const lingeringSession = (await listTerminalManagerSessions(terminalManagerBinary))
 			.find((session) => session.name === sessionName);
 		if (!lingeringSession) {
 			return undefined;
@@ -208,7 +208,7 @@ async function waitForSessionToDisappear(
 		await delay(100);
 	}
 
-	return (await listZellijSessions(zellijBinary))
+	return (await listTerminalManagerSessions(terminalManagerBinary))
 		.find((session) => session.name === sessionName);
 }
 
@@ -237,7 +237,7 @@ function shellEscape(value: string): string {
 	return `'${value.replace(/'/gu, `'\\''`)}'`;
 }
 
-function buildZellijConfig(): string {
+function buildTerminalManagerConfig(): string {
 	return `themes {
     tower {
         bg "#0F1419"
@@ -265,7 +265,7 @@ ui {
 `;
 }
 
-function buildZellijLayout(input: {
+function buildAirportLayout(input: {
 	repoRoot: string;
 	towerCommand: string;
 	pilotCommand: string;
@@ -300,28 +300,28 @@ function kdlEscape(value: string): string {
 	return value.replace(/\\/gu, '\\\\').replace(/"/gu, '\\"');
 }
 
-function resolveZellijBinary(): string {
+function resolveTerminalManagerBinary(): string {
 	return process.env['MISSION_TERMINAL_BINARY']?.trim() || 'zellij';
 }
 
-type ZellijSessionState = 'live' | 'exited';
+type TerminalManagerSessionState = 'live' | 'exited';
 
-type ZellijSessionSummary = {
+type TerminalManagerSessionSummary = {
 	name: string;
-	state: ZellijSessionState;
+	state: TerminalManagerSessionState;
 };
 
-async function listZellijSessions(zellijBinary: string): Promise<ZellijSessionSummary[]> {
-	const result = await execZellij(zellijBinary, ['list-sessions']);
+async function listTerminalManagerSessions(terminalManagerBinary: string): Promise<TerminalManagerSessionSummary[]> {
+	const result = await execTerminalManager(terminalManagerBinary, ['list-sessions']);
 	return result.stdout
 		.split(/\r?\n/gu)
 		.map((line) => stripAnsi(line).trim())
 		.filter((line) => line.length > 0)
-		.map(parseZellijSessionSummary)
-		.filter((session): session is ZellijSessionSummary => session !== undefined);
+		.map(parseTerminalManagerSessionSummary)
+		.filter((session): session is TerminalManagerSessionSummary => session !== undefined);
 }
 
-function parseZellijSessionSummary(line: string): ZellijSessionSummary | undefined {
+function parseTerminalManagerSessionSummary(line: string): TerminalManagerSessionSummary | undefined {
 	const name = line.match(/^(\S+)/u)?.[1];
 	if (!name) {
 		return undefined;
@@ -332,8 +332,8 @@ function parseZellijSessionSummary(line: string): ZellijSessionSummary | undefin
 	};
 }
 
-async function execZellij(zellijBinary: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
-	const result = await execFileAsync(zellijBinary, args, {
+async function execTerminalManager(terminalManagerBinary: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
+	const result = await execFileAsync(terminalManagerBinary, args, {
 		encoding: 'utf8',
 		env: { ...process.env, ZELLIJ: undefined }
 	});

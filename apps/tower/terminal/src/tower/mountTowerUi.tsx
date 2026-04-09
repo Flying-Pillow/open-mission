@@ -4,10 +4,10 @@ import { createCliRenderer } from '@opentui/core';
 import { render } from '@opentui/solid';
 import {
 	TowerController,
-	type RunTowerAppOptions
+	type TowerUiOptions
 } from './TowerController.js';
 
-export async function runTowerApp(options: RunTowerAppOptions): Promise<void> {
+export async function mountTowerUi(options: TowerUiOptions): Promise<void> {
 	const renderer = await createCliRenderer({
 		exitOnCtrlC: false,
 		targetFps: 30

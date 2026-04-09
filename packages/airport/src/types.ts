@@ -46,7 +46,7 @@ export interface AirportPaneState {
 }
 
 export interface AirportSubstrateState {
-	kind: 'zellij';
+	kind: 'terminal-manager';
 	sessionName: string;
 	layoutIntent: 'mission-control-v1';
 	attached: boolean;

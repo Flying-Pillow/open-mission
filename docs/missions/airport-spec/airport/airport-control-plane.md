@@ -20,7 +20,7 @@ This document defines the authoritative design for:
 - one canonical shared state root
 - one airport layout control plane
 - panel projection and IPC boundaries
-- zellij reconciliation as terminal substrate control
+- terminal-manager reconciliation as terminal substrate control
 
 It also defines implementation principles for object ownership, module boundaries, DRY usage, and helper-function discipline so the rewritten system stays coherent rather than becoming a larger distributed control problem.
 
@@ -84,7 +84,7 @@ The correct architecture is:
 - one canonical state root
 - one explicit airport control plane
 - dumb panels that subscribe to projections
-- one zellij reconciliation layer that applies airport intent to the real terminal substrate
+- one terminal-manager reconciliation layer that applies airport intent to the real terminal substrate
 
 ## Goals
 
@@ -103,15 +103,108 @@ The control plane must be:
 - free of legacy fallbacks, wrappers, aliases, or compatibility shims
 - suitable for future repository switching without redesigning the runtime model
 
+## Bootstrap Boundary
+
+The airport control plane owns authoritative layout truth after the application is running.
+
+The control plane does not require Airport itself to be the Tower entry path.
+
+The Tower entry may open Airport by creating or attaching the terminal-manager session and starting the initial panes.
+
+That bootstrap is not authoritative layout logic.
+
+It is an entry-path responsibility that hands off to Airport once panels connect and substrate state can be reconciled.
+
+After handoff:
+
+- Airport owns gate bindings
+- Airport owns focus intent and observed focus reconciliation
+- Airport owns substrate effect application
+- surfaces remain projections or bootstrap clients, not layout authorities
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operator
+    participant Entry as Tower entry
+    participant Bootstrap as Airport bootstrap
+    participant Session as Terminal session
+    participant Panes as Airport panes
+    participant Control as Airport control plane
+
+    Operator->>Entry: choose Open Airport
+    Entry->>Bootstrap: request airport bootstrap
+    activate Bootstrap
+    Bootstrap->>Session: write layout config
+    Bootstrap->>Session: reset existing session if needed
+    Bootstrap->>Session: create session and restore layout
+    deactivate Bootstrap
+
+    Session-->>Panes: start Tower, Pilot, and Editor panes
+    Panes->>Control: connect dashboard and pilot panels
+    activate Control
+    Control->>Session: observe panes and apply focus or layout effects
+    Session-->>Control: current pane and focus state
+    Control-->>Panes: publish airport.state projections
+    deactivate Control
+```
+
+At that point, the bootstrap is finished and Airport becomes the layout authority.
+
+Diagram key:
+
+- `Entry`: the operator-facing Tower entry concept. In the current terminal implementation this entry path resolves through the `mission` shell command plus `apps/tower/terminal/src/index.ts` and `apps/tower/terminal/src/routeTowerEntry.ts`.
+- `Bootstrap`: `apps/tower/terminal/src/commands/airport-layout.ts`
+- `Session`: terminal-manager or zellij session that hosts the outer airport layout
+- `Panes`: Tower pane from `apps/tower/terminal/src/tower/bootstrapTowerPane.ts`, pilot pane from `apps/tower/terminal/src/commands/airport-layout.ts`, plus the editor pane program
+- `Control`: the mission daemon RPC surface plus `packages/airport/src/AirportControl.ts` and `packages/airport/src/terminal-manager.ts`
+
+Reading guide:
+
+- `Entry` is the operator action that opens Airport.
+- `Bootstrap` only owns entry routing and initial session setup.
+- Authority moves to `Control` after the Tower and Pilot panes connect.
+- The editor belongs to the outer layout but does not call `connectPanel` in the current implementation.
+- `Control` owns gate bindings, focus intent, and substrate reconciliation after handoff.
+
+### Reconciliation Loop
+
+Once the bootstrap handoff is complete, Airport operates as a reconciliation loop between daemon truth and the observed substrate.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Domain as Domain state
+    participant Airport as Airport control
+    participant Session as Terminal session
+    participant Client as Panel client
+
+    Domain->>Airport: semantic state changes
+    activate Airport
+    Airport->>Airport: derive bindings and projections
+    Airport->>Session: apply focus or layout effects if needed
+    Session-->>Airport: pane and focus observations
+    Airport->>Airport: reconcile intended and observed state
+    Airport-->>Client: publish airport projection
+    deactivate Airport
+```
+
+Diagram key:
+
+- `Domain`: mission daemon state changes that drive airport intent
+- `Airport`: `packages/airport/src/AirportControl.ts`
+- `Session`: terminal-manager substrate observed through `packages/airport/src/terminal-manager.ts`
+- `Client`: any connected panel client that receives projections
+
 ## Non-Goals
 
 This specification does not define:
 
-- the exact zellij layout file syntax
+- the exact terminal-manager layout file syntax used by airport-layout bootstrap
 - the exact WebSocket or socket transport framing
 - visual design of panels
 - editor-specific automation details for `micro`, `neovim`, or future editors
-- long-term plugin-specific zellij implementation details
+- long-term plugin-specific terminal-manager implementation details
 - migration of existing daemon state or mission history
 
 This specification explicitly forbids:
@@ -130,7 +223,7 @@ Implementation must assume:
 - no backwards compatibility with current control-plane behavior
 - no preservation of current terminal-routing APIs is required
 - no preservation of current daemon message schema is required
-- no preservation of current zellij sidepane control loop is required
+- no preservation of current terminal-manager sidepane control loop is required
 - no preservation of current mission runtime persistence schema is required
 - no existing mission or runtime history is required as a design constraint
 
@@ -230,7 +323,7 @@ The architectural code shape is:
 
 - gate bindings
 - panel routing
-- zellij reconciliation
+- terminal-manager reconciliation
 - editor gate behavior
 
 ### packages/airport
@@ -244,7 +337,7 @@ The architectural code shape is:
 - airport reconciliation logic
 - projection derivation rules that depend on layout and routing
 - terminal substrate controller interfaces
-- zellij substrate implementation under airport ownership
+- terminal-manager substrate implementation under airport ownership
 
 `packages/airport` depends on the stable semantic model exposed by `packages/core`.
 
@@ -388,7 +481,7 @@ Minimum required fields:
 - artifact ids
 - session ids
 
-MissionContext must be sufficient for airport routing without asking zellij anything.
+MissionContext must be sufficient for airport routing without asking terminal-manager anything.
 
 ### TaskContext
 
@@ -553,7 +646,7 @@ Gates may exist without a currently connected client.
 
 ### Substrate State
 
-The terminal substrate state must be explicit enough to reconcile real zellij state.
+The terminal substrate state must be explicit enough to reconcile real terminal-manager state.
 
 This means the airport may not track only a bag of pane ids.
 
@@ -598,7 +691,7 @@ Gates are stable layout slots.
 
 They are Airport-owned application concepts.
 
-They are not zellij pane ids.
+They are not terminal-manager pane ids.
 
 The initial mandatory gates are:
 
@@ -752,8 +845,8 @@ Initial mandatory user intents include:
 
 Initial mandatory substrate/runtime observations include:
 
-- zellij attached
-- zellij detached
+- terminal-manager attached
+- terminal-manager detached
 - pane created
 - pane closed
 - focused pane changed
@@ -786,7 +879,7 @@ The initial projection set must be intentionally small.
 1. projections are derived entirely from `MissionSystemState`
 2. projections are panel-facing contracts, not domain entities
 3. projections may include panel-convenient computed fields
-4. projections must not require the panel to understand zellij internals
+4. projections must not require the panel to understand terminal-manager internals
 5. projections must not require the panel to reconstruct airport policy locally
 
 ### DashboardProjection
@@ -900,15 +993,15 @@ This rule is the reason `AirportPaneState` distinguishes `expected` from `exists
 
 Effects may be retried or revised during reconciliation, but intended state and observed state must never be collapsed into the same fact.
 
-## Zellij Substrate Model
+## Terminal-Manager Substrate Model
 
-Zellij is the terminal substrate.
+Terminal-manager is the terminal substrate.
 
 It is not the source of truth.
 
 It is also not a dumb string-only renderer.
 
-Zellij has its own active behavior around:
+Terminal-manager has its own active behavior around:
 
 - pane existence
 - focus
@@ -917,29 +1010,29 @@ Zellij has its own active behavior around:
 - stack behavior
 - command application
 
-Therefore the daemon must treat zellij as a reconciled substrate.
+Therefore the daemon must treat terminal-manager as a reconciled substrate.
 
-### Zellij Rules
+### Terminal-Manager Rules
 
-1. zellij pane ids are implementation details
-2. zellij pane titles are display aids, not canonical ids
+1. terminal-manager pane ids are implementation details
+2. terminal-manager pane titles are display aids, not canonical ids
 3. the daemon maps stable gate ids to observed pane ids
-4. direct panel-to-zellij control is forbidden
-5. all zellij actions must flow through airport-controlled effect application
+4. direct panel-to-terminal-manager control is forbidden
+5. all terminal-manager actions must flow through airport-controlled effect application
 
-### Forbidden Zellij Patterns
+### Forbidden Terminal-Manager Patterns
 
 The following are forbidden as long-term architecture:
 
 - shell loops as the authoritative router
 - file-based target signaling as the authoritative router
-- direct panel commands to zellij
+- direct panel commands to terminal-manager
 - using focus as the canonical application state
 - treating pane titles as stable identities
 
-### Allowed Zellij Role
+### Allowed Terminal-Manager Role
 
-Zellij may be used to:
+Terminal-manager may be used to:
 
 - create panes
 - close panes
@@ -979,7 +1072,7 @@ Users may change focus directly through substrate-native controls.
 Examples include:
 
 - mouse interaction
-- zellij keybindings
+- terminal-manager keybindings
 - direct substrate commands outside daemon IPC
 
 When the substrate reports a focus change observation, AirportControl must treat that observation as authoritative for observed focus.
@@ -1084,7 +1177,7 @@ The recommended implementation model is:
 - one repository-keyed airport registry owned by the daemon
 - one airport controller instance per known repository in that registry
 - exactly one active airport projection set at a time
-- zellij session naming derived from repository-scoped airport identity rather than a single hardcoded global session name
+- terminal-manager session naming derived from repository-scoped airport identity rather than a single hardcoded global session name
 
 This preserves repository isolation while allowing the daemon to keep multiple airports warm and resumable.
 
@@ -1184,7 +1277,7 @@ The first implementation pass must deliver at least:
 1. one daemon-owned composite state root
 2. one command-processing loop
 3. one airport bounded context
-4. one zellij substrate controller under airport ownership
+4. one terminal-manager substrate controller under airport ownership
 5. one fixed set of panel projections
 6. one panel connection model
 7. one restart-safe projection model for panels
@@ -1208,7 +1301,7 @@ The smallest valid first implementation is:
 - one pilot gate
 - one dashboard gate
 - one daemon connection model
-- one zellij substrate adapter
+- one terminal-manager substrate adapter
 
 That is enough to prove the architecture.
 
@@ -1222,9 +1315,9 @@ The design is satisfied only if all of the following become true:
 
 1. panels can crash and reconnect without losing authoritative state
 2. no panel needs to know pane ids of any other panel
-3. no panel talks directly to zellij
+3. no panel talks directly to terminal-manager
 4. airport state can be reasoned about without reading panel code
-5. domain state can be reasoned about without reading zellij code
+5. domain state can be reasoned about without reading terminal-manager code
 6. focus bugs cannot be explained by conflating selection, binding, and observed focus
 7. switching repositories or missions is a state transition, not a shell choreography problem
 8. side effects are planned from state and observations, not used as hidden state storage
@@ -1235,7 +1328,7 @@ Mission is the semantic control plane.
 
 Airport is the application layout control plane.
 
-Zellij is the terminal substrate.
+Terminal-manager is the terminal substrate.
 
 Panels are clients.
 

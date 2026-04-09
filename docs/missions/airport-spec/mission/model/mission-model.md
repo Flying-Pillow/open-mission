@@ -14,7 +14,7 @@ If this document conflicts with those specifications, those specifications win.
 
 This document does not define the top-level application controller.
 
-It does not assign layout, focus, panel, client, or zellij ownership.
+It does not assign layout, focus, panel, client, or terminal-manager ownership.
 
 ## Architectural Summary
 
@@ -316,7 +316,7 @@ Alignment rules:
 
 - `mission.json` stores semantic workflow runtime state only
 - `mission.json` is not the full daemon application state root
-- `mission.json` must not store airport gate bindings, focus state, panel registrations, client registrations, or zellij substrate observations
+- `mission.json` must not store airport gate bindings, focus state, panel registrations, client registrations, or terminal-manager substrate observations
 - daemon-wide composition of semantic state with airport state belongs to `MissionSystemState`, not to this repository document
 
 `FilesystemAdapter.listTaskStates(...)` and `FilesystemAdapter.readTaskState(...)` may join task markdown content with authoritative semantic workflow state from `mission.json`.

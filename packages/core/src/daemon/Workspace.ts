@@ -800,7 +800,7 @@ export class MissionWorkspace {
 					{
 						id: 'copilot-cli',
 						label: 'Copilot CLI',
-						description: 'Interactive Copilot CLI session in zellij terminal transport'
+						description: 'Interactive Copilot CLI session in terminal-manager transport'
 					},
 					{
 						id: 'copilot-sdk',
@@ -833,7 +833,7 @@ export class MissionWorkspace {
 						id: 'autonomous',
 						label: 'Autonomous',
 						description: usesTerminalTransport
-							? 'Terminal transport continues until interrupted or complete'
+							? 'Terminal-manager transport continues until interrupted or complete'
 							: 'Runtime continues with autonomous execution'
 					}
 				], control.settings.defaultAgentMode)

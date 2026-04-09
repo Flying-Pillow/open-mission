@@ -7,6 +7,7 @@ import type {
 	GateIntent,
 	MissionSystemSnapshot,
 	OperatorActionDescriptor,
+	OperatorActionTargetContext,
 	OperatorActionExecutionStep,
 	OperatorActionFlowDescriptor,
 	OperatorActionFlowStep,
@@ -60,10 +61,6 @@ import {
 	type CommandFlowStep,
 	type CommandFlowStepValue,
 } from './components/flow/flowEngine.js';
-import {
-	resolveToolbarCommandsForContext,
-	type CommandTargetContext
-} from './commandTargeting.js';
 
 export type TowerConnection = {
 	client: DaemonClient;
@@ -71,7 +68,7 @@ export type TowerConnection = {
 	dispose: () => void;
 };
 
-export type RunTowerAppOptions = {
+export type TowerUiOptions = {
 	workspaceContext: MissionWorkspaceContext;
 	initialSelector: MissionSelector;
 	initialTheme: TowerThemeName;
@@ -81,7 +78,7 @@ export type RunTowerAppOptions = {
 	connect: (selector: MissionSelector) => Promise<TowerConnection>;
 };
 
-type TowerShellProps = RunTowerAppOptions;
+type TowerShellProps = TowerUiOptions;
 
 type DaemonState = 'connected' | 'degraded' | 'booting';
 type TowerContext =
@@ -307,7 +304,7 @@ export function TowerController({
 			?? projectedAvailableMissions().find((candidate) => candidate.missionId === missionId)?.title
 			?? missionId;
 	});
-	const commandTargetContext = createMemo<CommandTargetContext>(() => {
+	const commandTargetContext = createMemo<OperatorActionTargetContext>(() => {
 		const stageId = selectedStageId() ?? (projectedCommandContext()?.stageId as MissionStageId | undefined);
 		const taskId = selectedTaskId() || projectedCommandContext()?.taskId || dashboardProjection()?.selectedTaskId || undefined;
 		const sessionId = selectedSessionId() ?? projectedCommandContext()?.sessionId ?? pilotProjection()?.sessionId ?? dashboardProjection()?.selectedSessionId;
@@ -331,7 +328,7 @@ export function TowerController({
 		return entries;
 	});
 	const toolbarCommandDescriptors = createMemo<OperatorActionDescriptor[]>(() =>
-		resolveToolbarCommandsForContext(availableActions(), commandTargetContext())
+		availableActions()
 	);
 	const toolbarCommands = createMemo<CommandToolbarItem[]>(() =>
 		toolbarCommandDescriptors().map((command) => ({

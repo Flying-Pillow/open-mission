@@ -370,7 +370,7 @@ Target action:
 - preserve mission aggregate behavior while aligning initialization with the new draft-to-ready snapshot boundary
 - ensure mission status reflects the correct repository-backed workflow settings prior to snapshot capture
 
-#### Refactor `apps/tower/terminal/src/tower/runTowerApp.tsx`
+#### Refactor `apps/tower/terminal/src/tower/mountTowerUi.tsx`
 
 Reason:
 
@@ -475,7 +475,7 @@ Target action:
 
 - split command definitions so workflow settings use their own flow or command family
 
-#### Delete or isolate workflow settings assumptions in `apps/tower/terminal/src/tower/runTowerApp.tsx`
+#### Delete or isolate workflow settings assumptions in `apps/tower/terminal/src/tower/mountTowerUi.tsx`
 
 Reason:
 
@@ -582,7 +582,7 @@ Required coverage:
 
 Recommended files:
 
-- CLI tower tests adjacent to `apps/tower/terminal/src/tower/runTowerApp.tsx`
+- CLI tower tests adjacent to `apps/tower/terminal/src/tower/mountTowerUi.tsx`
 - extension tests adjacent to `apps/vscode-extension/src/MissionOperatorClient.ts`
 - webview tests adjacent to `apps/vscode-extension/src/webview/TowerApp.svelte`
 
