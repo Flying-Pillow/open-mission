@@ -158,7 +158,7 @@ export class WorkspaceManager {
         if (missionsIndex < 0) {
             return undefined;
         }
-        if (parts[missionsIndex + 1] !== 'active') {
+        if (parts[missionsIndex + 1] !== 'worktrees') {
             return undefined;
         }
         if (!parts[missionsIndex + 2]) {
@@ -175,6 +175,7 @@ function isControlMethod(method: Request['method']): boolean {
         || method === 'control.settings.update'
         || method === 'control.document.read'
         || method === 'control.document.write'
+        || method === 'control.action.list'
         || method === 'control.action.describe'
         || method === 'control.action.execute'
         || method === 'control.workflow.settings.get'

@@ -283,6 +283,14 @@ export class FilesystemAdapter {
 		this.assertGit(['push', '--set-upstream', 'origin', branchRef], cwd);
 	}
 
+	public isWorktreeClean(cwd = this.workspaceRoot): boolean {
+		return this.runGit(['status', '--porcelain'], cwd) === '';
+	}
+
+	public pullDefaultBranch(branchRef = this.getDefaultBranch(), cwd = this.workspaceRoot): void {
+		this.assertGit(['pull', '--ff-only', 'origin', branchRef], cwd);
+	}
+
 	public createMissionId(brief: MissionBrief): string {
 		const slug = this.slugify(brief.title, 48);
 		if (brief.issueId !== undefined) {
@@ -308,14 +316,39 @@ export class FilesystemAdapter {
 
 	public async listMissions(): Promise<ResolvedMission[]> {
 		const missionEntries = await fs.readdir(this.getMissionsPath(), { withFileTypes: true }).catch(() => []);
+		return this.listMissionDirectories(
+			missionEntries
+				.filter((entry) => entry.isDirectory())
+				.map((entry) => path.join(this.getMissionsPath(), entry.name))
+		);
+	}
+
+	public async listTrackedMissions(): Promise<ResolvedMission[]> {
+		const missionEntries = await fs.readdir(this.getTrackedMissionsPath(), { withFileTypes: true }).catch(() => []);
+		return this.listMissionDirectories(
+			missionEntries
+				.filter((entry) => entry.isDirectory())
+				.map((entry) => path.join(this.getTrackedMissionsPath(), entry.name))
+		);
+	}
+
+	public async resolveTrackedMission(selector: MissionSelector = {}): Promise<ResolvedMission | undefined> {
+		const missions = await this.listTrackedMissions();
+		return this.resolveMissionFromCandidates(missions, selector);
+	}
+
+	public async resolveKnownMission(selector: MissionSelector = {}): Promise<ResolvedMission | undefined> {
+		const localMission = await this.resolveMission(selector);
+		if (localMission) {
+			return localMission;
+		}
+		return this.resolveTrackedMission(selector);
+	}
+
+	private async listMissionDirectories(missionDirs: string[]): Promise<ResolvedMission[]> {
 		const missions: ResolvedMission[] = [];
 
-		for (const entry of missionEntries) {
-			if (!entry.isDirectory()) {
-				continue;
-			}
-
-			const missionDir = path.join(this.getMissionsPath(), entry.name);
+		for (const missionDir of missionDirs) {
 			const descriptor = await this.readMissionDescriptor(missionDir);
 			if (!descriptor) {
 				continue;
@@ -329,6 +362,13 @@ export class FilesystemAdapter {
 
 	public async resolveMission(selector: MissionSelector = {}): Promise<ResolvedMission | undefined> {
 		const missions = await this.listMissions();
+		return this.resolveMissionFromCandidates(missions, selector);
+	}
+
+	private resolveMissionFromCandidates(
+		missions: ResolvedMission[],
+		selector: MissionSelector = {}
+	): ResolvedMission | undefined {
 		const currentBranch = selector.branchRef ?? this.getCurrentBranch();
 		const issueId = selector.issueId;
 		const missionId = selector.missionId?.trim();

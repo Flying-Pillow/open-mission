@@ -50,8 +50,7 @@ function createEmptyContextGraph(): ContextGraph {
 		missions: {},
 		tasks: {},
 		artifacts: {},
-		agentSessions: {},
-		availableActions: []
+		agentSessions: {}
 	};
 }
 
@@ -187,8 +186,7 @@ function deriveContextGraph(
 		missions,
 		tasks: taskContexts,
 		artifacts,
-		agentSessions,
-		availableActions: (missionStatus?.availableActions ?? source.availableActions).map((action) => structuredClone(action))
+		agentSessions
 	};
 }
 
@@ -437,6 +435,14 @@ function applyObservedSelection(input: ContextGraph, observed: {
 	const taskId = observed.taskId?.trim();
 	const artifactId = observed.artifactId?.trim();
 	const agentSessionId = observed.agentSessionId?.trim();
+	const hasExplicitRepositoryReset = Boolean(
+		observed.repositoryId?.trim()
+		&& !missionId
+		&& !taskId
+		&& !artifactId
+		&& !agentSessionId
+		&& !observed.stageId?.trim()
+	);
 	const selectedMissionId = missionId && isMissionSelectionValid(missionId, input.missions)
 		? missionId
 		: taskId && input.tasks[taskId]?.missionId
@@ -445,7 +451,9 @@ function applyObservedSelection(input: ContextGraph, observed: {
 				? input.artifacts[artifactId]?.missionId
 				: agentSessionId && input.agentSessions[agentSessionId]?.missionId
 					? input.agentSessions[agentSessionId]?.missionId
-					: input.selection.missionId;
+					: hasExplicitRepositoryReset
+						? undefined
+						: input.selection.missionId;
 	const selectedTaskId = taskId && isTaskSelectionValid(taskId, selectedMissionId, input.tasks) ? taskId : undefined;
 	const selectedArtifactId = artifactId && isArtifactSelectionValid(artifactId, selectedMissionId, input.artifacts) ? artifactId : undefined;
 	const selectedSessionId = agentSessionId && isSessionSelectionValid(agentSessionId, selectedMissionId, input.agentSessions)

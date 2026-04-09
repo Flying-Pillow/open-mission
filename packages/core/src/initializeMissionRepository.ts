@@ -3,11 +3,8 @@ import {
 	getMissionDaemonSettingsPath,
 } from './lib/daemonConfig.js';
 import {
-	getMissionActivePath,
 	getMissionCatalogPath,
-	getMissionCompletedPath,
 	getMissionDirectoryPath,
-	getMissionPendingPath,
 	getMissionWorktreesPath
 } from './lib/repoConfig.js';
 import { WorkflowSettingsStore } from './settings/index.js';
@@ -34,9 +31,6 @@ export async function initializeMissionRepository(
 	});
 	const worktreesRoot = getMissionWorktreesPath(workspaceRoot);
 	const missionsRoot = getMissionCatalogPath(workspaceRoot);
-	const pendingRoot = getMissionPendingPath(workspaceRoot);
-	const activeRoot = getMissionActivePath(workspaceRoot);
-	const completedRoot = getMissionCompletedPath(workspaceRoot);
  	const includeRuntimeDirectories = options.includeRuntimeDirectories !== false;
 
 	const directoriesToCreate = [
@@ -45,10 +39,7 @@ export async function initializeMissionRepository(
 	];
 	if (includeRuntimeDirectories) {
 		directoriesToCreate.push(
-			fs.mkdir(worktreesRoot, { recursive: true }),
-			fs.mkdir(pendingRoot, { recursive: true }),
-			fs.mkdir(activeRoot, { recursive: true }),
-			fs.mkdir(completedRoot, { recursive: true })
+			fs.mkdir(worktreesRoot, { recursive: true })
 		);
 	}
 

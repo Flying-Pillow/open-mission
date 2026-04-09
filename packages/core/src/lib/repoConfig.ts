@@ -16,17 +16,5 @@ export function getMissionCatalogPath(controlRoot: string): string {
 }
 
 export function getMissionWorktreesPath(controlRoot: string): string {
-	return getMissionActivePath(controlRoot);
-}
-
-export function getMissionPendingPath(controlRoot: string): string {
-	return path.join(getMissionDirectoryPath(controlRoot), 'pending');
-}
-
-export function getMissionActivePath(controlRoot: string): string {
-	return path.join(getMissionDirectoryPath(controlRoot), 'active');
-}
-
-export function getMissionCompletedPath(controlRoot: string): string {
-	return path.join(getMissionDirectoryPath(controlRoot), 'completed');
+	return path.join(getMissionDirectoryPath(controlRoot), 'worktrees');
 }

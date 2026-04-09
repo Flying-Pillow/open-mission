@@ -9,8 +9,10 @@ import { getMissionDaemonSettingsPath } from '../lib/daemonConfig.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import { initializeMissionRepository } from '../initializeMissionRepository.js';
 import { Factory } from './mission/Factory.js';
+import { Mission } from './mission/Mission.js';
 import { startDaemon } from './Daemon.js';
 import { getDaemonManifestPath, getDaemonRuntimePath } from './daemonPaths.js';
+import { createDefaultWorkflowSettings } from '../workflow/engine/defaultWorkflow.js';
 
 describe('Daemon', () => {
 	it('does not initialize daemon settings when a workspace first connects', async () => {
@@ -229,8 +231,9 @@ describe('Daemon', () => {
 					await client.connect({ surfacePath: workspaceRoot });
 					const api = new DaemonApi(client);
 					const status = await api.control.getStatus();
-					const issuesCommand = status.availableActions?.find((action) => action.action === '/issues');
-					const setupCommand = status.availableActions?.find((action) => action.action === '/setup');
+					const availableActions = await api.control.listAvailableActions();
+					const issuesCommand = availableActions.find((action) => action.action === '/issues');
+					const setupCommand = availableActions.find((action) => action.action === '/setup');
 
 					expect(status.found).toBe(false);
 					expect(status.operationalMode).toBe('setup');
@@ -317,10 +320,7 @@ describe('Daemon', () => {
 								surfaceMode: 'repository',
 								centerRoute: 'repository-flow',
 								repositoryLabel: path.basename(workspaceRoot),
-								commandContext: {
-									targetLabel: path.basename(workspaceRoot),
-									targetKind: 'repository'
-								},
+								commandContext: {},
 								stageRail: [],
 								treeNodes: [],
 								emptyLabel: 'Repository mode is ready.'
@@ -431,16 +431,56 @@ describe('Daemon', () => {
 		});
 	});
 
-	it('keeps the selected mission hydrated across airport workspace resynchronization', async () => {
+	it('lists available actions through explicit daemon APIs instead of ambient selection', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
 			await initializeMissionRepository(workspaceRoot);
-			const adapter = new FilesystemAdapter(workspaceRoot);
-			const branchRef = adapter.deriveMissionBranchName(4, 'Hydrated mission projection');
-			const seededMission = await Factory.create(adapter, {
-				brief: createBrief(4, 'Hydrated mission projection'),
-				branchRef
-			});
+			const seededMission = await seedTrackedMission(workspaceRoot, 6, 'Explicit action listing');
+
+			try {
+				const daemon = await startDaemon();
+				const client = new DaemonClient();
+
+				try {
+					await client.connect({ surfacePath: workspaceRoot });
+					const api = new DaemonApi(client);
+					const controlActions = await api.control.listAvailableActions();
+					await api.control.getStatus();
+					const missionActions = await api.mission.listAvailableActions({ missionId: seededMission.getRecord().id });
+
+					expect(controlActions.some((action) => action.id === 'control.setup.edit')).toBe(true);
+					expect(missionActions.length).toBeGreaterThan(0);
+					const taskAction = missionActions.find((action) => action.scope === 'task' && typeof action.targetId === 'string');
+					expect(taskAction).toBeDefined();
+					const taskId = taskAction?.targetId;
+					if (!taskId) {
+						throw new Error('Expected at least one task-scoped action.');
+					}
+					const scopedTaskActions = await api.mission.listAvailableActions(
+						{ missionId: seededMission.getRecord().id },
+						{ taskId }
+					);
+					expect(scopedTaskActions.some((action) => action.id === taskAction.id)).toBe(true);
+					expect(
+						scopedTaskActions.every((action) => action.scope !== 'task' || action.targetId === taskId)
+					).toBe(true);
+				} finally {
+					client.dispose();
+					await daemon.close();
+				}
+			} finally {
+				seededMission.dispose();
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('keeps mission data available across airport workspace resynchronization without using client observation as semantic selection', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			await initializeMissionRepository(workspaceRoot);
+			const seededMission = await seedTrackedMission(workspaceRoot, 4, 'Hydrated mission projection');
 
 			try {
 				const daemon = await startDaemon();
@@ -451,33 +491,24 @@ describe('Daemon', () => {
 					await firstClient.connect({ surfacePath: workspaceRoot });
 					const firstApi = new DaemonApi(firstClient);
 					await firstApi.airport.connectPanel({ gateId: 'dashboard', label: 'test-dashboard-1' });
-					const selected = await firstApi.airport.observeClient({
-						missionId: seededMission.getRecord().id,
-						focusedGateId: 'dashboard',
-						intentGateId: 'dashboard'
-					});
+					await firstApi.control.getStatus();
+					const selected = await firstApi.mission.getStatus({ missionId: seededMission.getRecord().id });
+					const selectedSystem = selected.system;
 
-					expect(selected.state.domain.selection).toMatchObject({
+					expect(selectedSystem?.state.domain.selection).toMatchObject({
 						repositoryId: workspaceRoot,
 						missionId: seededMission.getRecord().id
 					});
-					expect(selected.state.domain.missions[seededMission.getRecord().id]?.tower).toBeDefined();
-					expect(selected.state.domain.missions[seededMission.getRecord().id]?.taskIds.length).toBeGreaterThan(0);
-					expect(selected.airportProjections.dashboard.emptyLabel).toBe('Mission control is ready.');
+					expect(selectedSystem?.state.domain.missions[seededMission.getRecord().id]?.tower).toBeDefined();
+					expect(selectedSystem?.state.domain.missions[seededMission.getRecord().id]?.taskIds.length).toBeGreaterThan(0);
 
 					await secondClient.connect({ surfacePath: workspaceRoot });
 					const secondApi = new DaemonApi(secondClient);
 					const reconnected = await secondApi.airport.connectPanel({ gateId: 'dashboard', label: 'test-dashboard-2' });
 
-					expect(reconnected.state.domain.selection).toMatchObject({
-						repositoryId: workspaceRoot,
-						missionId: seededMission.getRecord().id
-					});
 					expect(reconnected.state.domain.missions[seededMission.getRecord().id]?.tower).toBeDefined();
 					expect(reconnected.state.domain.missions[seededMission.getRecord().id]?.taskIds.length).toBeGreaterThan(0);
-					expect(reconnected.airportProjections.dashboard.stageRail.length).toBeGreaterThan(0);
-					expect(reconnected.airportProjections.dashboard.treeNodes.length).toBeGreaterThan(0);
-					expect(reconnected.airportProjections.dashboard.emptyLabel).toBe('Mission control is ready.');
+					expect(reconnected.airportProjections.dashboard.commandContext).toEqual({});
 				} finally {
 					firstClient.dispose();
 					secondClient.dispose();
@@ -485,6 +516,40 @@ describe('Daemon', () => {
 				}
 			} finally {
 				seededMission.dispose();
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('keeps airport observation transport-scoped when the dashboard reobserves the repository', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			await initializeMissionRepository(workspaceRoot);
+
+			try {
+				const daemon = await startDaemon();
+				const client = new DaemonClient();
+
+				try {
+					await client.connect({ surfacePath: workspaceRoot });
+					const api = new DaemonApi(client);
+					await api.airport.connectPanel({ gateId: 'dashboard', label: 'test-dashboard' });
+					const reset = await api.airport.observeClient({
+						repositoryId: workspaceRoot,
+						focusedGateId: 'dashboard',
+						intentGateId: 'dashboard'
+					});
+
+					expect(reset.state.domain.selection.repositoryId).toBe(workspaceRoot);
+					expect(reset.state.domain.selection.missionId).toBeUndefined();
+					expect(reset.airportProjections.dashboard.surfaceMode).toBe('repository');
+					expect(reset.airportProjections.dashboard.centerRoute).toBe('repository-flow');
+				} finally {
+					client.dispose();
+					await daemon.close();
+				}
+			} finally {
 				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
 				await fs.rm(workspaceRoot, { recursive: true, force: true });
 			}
@@ -785,7 +850,8 @@ describe('Daemon', () => {
 					await client.connect({ surfacePath: workspaceRoot });
 					const api = new DaemonApi(client);
 					const status = await api.control.getStatus();
-					const setupCommand = status.availableActions?.find((action) => action.action === '/setup');
+					const availableActions = await api.control.listAvailableActions();
+					const setupCommand = availableActions.find((action) => action.action === '/setup');
 					const setupFields = setupCommand?.flow?.steps[0];
 
 					expect(status.control).toMatchObject({
@@ -998,16 +1064,19 @@ describe('Daemon', () => {
 						});
 						const calls = await readFakeGitHubCalls(callsPath);
 
-						expect(status.preparation).toMatchObject({
-							kind: 'repository-bootstrap',
-							state: 'pull-request-opened',
-							baseBranch: 'master'
+						expect(status).toMatchObject({
+							found: true,
+							issueId: 900,
+							type: 'refactor'
 						});
-						expect(status.missionId).toBeUndefined();
-						expect(status.recommendedAction).toContain('bootstrap PR');
+						expect(status.preparation).toBeUndefined();
 						expect(calls.map((call) => call.args.slice(0, 2))).toEqual([
 							['auth', 'status'],
-							['pr', 'create']
+							['pr', 'create'],
+							['pr', 'merge'],
+							['api', 'repos/Flying-Pillow/mission/issues'],
+							['pr', 'create'],
+							['pr', 'merge']
 						]);
 					} finally {
 						client.dispose();
@@ -1030,6 +1099,7 @@ describe('Daemon', () => {
 				runGit(workspaceRoot, ['push', '--set-upstream', 'origin', 'master']);
 				runGit(workspaceRoot, ['remote', 'add', 'github', 'https://github.com/Flying-Pillow/mission.git']);
 				await initializeMissionRepository(workspaceRoot);
+				await commitMissionRepositoryBootstrap(workspaceRoot);
 
 				try {
 					const daemon = await startDaemon();
@@ -1044,19 +1114,17 @@ describe('Daemon', () => {
 						const calls = await readFakeGitHubCalls(callsPath);
 
 						expect(status).toMatchObject({
+							found: true,
 							issueId: 900,
-							type: 'refactor',
-							preparation: expect.objectContaining({
-								kind: 'mission',
-								state: 'pull-request-opened',
-								issueId: 900
-							})
+							type: 'refactor'
 						});
+						expect(status.preparation).toBeUndefined();
 						expect(status.missionRootDir).toContain(path.join('.missions', 'missions'));
 						expect(calls.map((call) => call.args.slice(0, 2))).toEqual([
 							['auth', 'status'],
 							['api', 'repos/Flying-Pillow/mission/issues'],
-							['pr', 'create']
+							['pr', 'create'],
+							['pr', 'merge']
 						]);
 					} finally {
 						client.dispose();
@@ -1079,6 +1147,7 @@ describe('Daemon', () => {
 				runGit(workspaceRoot, ['push', '--set-upstream', 'origin', 'master']);
 				runGit(workspaceRoot, ['remote', 'add', 'github', 'https://github.com/Flying-Pillow/mission.git']);
 				await initializeMissionRepository(workspaceRoot);
+				await commitMissionRepositoryBootstrap(workspaceRoot);
 
 				try {
 					const daemon = await startDaemon();
@@ -1091,17 +1160,87 @@ describe('Daemon', () => {
 						const calls = await readFakeGitHubCalls(callsPath);
 
 						expect(status).toMatchObject({
+							found: true,
 							issueId: 42,
-							preparation: expect.objectContaining({
-								kind: 'mission',
-								state: 'pull-request-opened',
-								issueId: 42
-							})
+							missionId: expect.any(String)
 						});
-						expect(calls.map((call) => call.args.slice(0, 3))).toEqual([
+						expect(status.preparation).toBeUndefined();
+						expect(calls.map((call) => call.args.slice(0, 2))).toEqual([
 							['auth', 'status'],
-							['issue', 'view', '42'],
-							['pr', 'create', '--title']
+							['issue', 'view'],
+							['pr', 'create'],
+							['pr', 'merge']
+						]);
+					} finally {
+						client.dispose();
+						await daemon.close();
+					}
+				} finally {
+					await fs.rm(originPath, { recursive: true, force: true });
+					await fs.rm(workspaceRoot, { recursive: true, force: true });
+				}
+			});
+		});
+	});
+
+	it('returns the existing tracked mission when an issue already has a mission dossier', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			await withFakeGitHubCli(async ({ callsPath }) => {
+				const workspaceRoot = await createTempRepo();
+				const originPath = await createTempBareRemote();
+				runGit(workspaceRoot, ['remote', 'add', 'origin', originPath]);
+				runGit(workspaceRoot, ['push', '--set-upstream', 'origin', 'master']);
+				runGit(workspaceRoot, ['remote', 'add', 'github', 'https://github.com/Flying-Pillow/mission.git']);
+				await initializeMissionRepository(workspaceRoot);
+				await commitMissionRepositoryBootstrap(workspaceRoot);
+				const adapter = new FilesystemAdapter(workspaceRoot);
+				const missionId = '42-existing-issue';
+				const missionRootDir = adapter.getTrackedMissionDir(missionId);
+				const workflow = createDefaultWorkflowSettings();
+				const preparedMission = Mission.hydrate(
+					adapter,
+					missionRootDir,
+					{
+						missionId,
+						missionDir: missionRootDir,
+						brief: {
+							issueId: 42,
+							title: 'Existing issue 42',
+							body: 'Existing issue 42 body',
+							type: 'task',
+							url: 'https://github.com/Flying-Pillow/mission/issues/42'
+						},
+						branchRef: 'mission/42-existing-issue',
+						createdAt: new Date().toISOString()
+					},
+					{
+						workflow,
+						resolveWorkflow: () => workflow,
+						taskRunners: new Map()
+					}
+				);
+				await preparedMission.initialize();
+				preparedMission.dispose();
+
+				try {
+					const daemon = await startDaemon();
+					const client = new DaemonClient();
+
+					try {
+						await client.connect({ surfacePath: workspaceRoot });
+						const api = new DaemonApi(client);
+						const status = await api.mission.fromIssue(42);
+						const calls = await readFakeGitHubCalls(callsPath);
+
+						expect(status).toMatchObject({
+							missionId,
+							issueId: 42,
+							missionRootDir,
+							recommendedAction: expect.stringContaining('already has mission')
+						});
+						expect(calls.map((call) => call.args.slice(0, 2))).toEqual([
+							['auth', 'status'],
+							['issue', 'view']
 						]);
 					} finally {
 						client.dispose();
@@ -1123,6 +1262,37 @@ function createBrief(issueId: number | undefined, title: string) {
 		body: `${title} body`,
 		type: 'refactor' as const
 	};
+}
+
+async function seedTrackedMission(workspaceRoot: string, issueId: number, title: string): Promise<Mission> {
+	const adapter = new FilesystemAdapter(workspaceRoot);
+	const missionId = adapter.createMissionId(createBrief(issueId, title));
+	const missionRootDir = adapter.getTrackedMissionDir(missionId);
+	const workflow = createDefaultWorkflowSettings();
+	const mission = Mission.hydrate(
+		adapter,
+		missionRootDir,
+		{
+			missionId,
+			missionDir: missionRootDir,
+			brief: createBrief(issueId, title),
+			branchRef: adapter.deriveMissionBranchName(issueId, title),
+			createdAt: new Date().toISOString()
+		},
+		{
+			workflow,
+			resolveWorkflow: () => workflow,
+			taskRunners: new Map()
+		}
+	);
+	await mission.initialize();
+	return mission;
+}
+
+async function commitMissionRepositoryBootstrap(workspaceRoot: string): Promise<void> {
+	runGit(workspaceRoot, ['add', '.missions']);
+	runGit(workspaceRoot, ['commit', '-m', 'chore: bootstrap mission repository']);
+	runGit(workspaceRoot, ['push', 'origin', 'master']);
 }
 
 async function createTempRepo(): Promise<string> {
@@ -1165,6 +1335,7 @@ async function withFakeGitHubCli(
 	const previousCommitterEmail = process.env['GIT_COMMITTER_EMAIL'];
 	const script = String.raw`#!/usr/bin/env node
 const fs = require('node:fs');
+const { execFileSync } = require('node:child_process');
 const callsPath = ${JSON.stringify(callsPath)};
 const statePath = ${JSON.stringify(statePath)};
 const args = process.argv.slice(2);
@@ -1175,7 +1346,7 @@ function readState() {
 	try {
 		return JSON.parse(fs.readFileSync(statePath, 'utf8'));
 	} catch {
-		return { nextIssueNumber: 900, issues: {} };
+		return { nextIssueNumber: 900, issues: {}, pullRequests: {} };
 	}
 }
 function writeState(state) {
@@ -1236,8 +1407,25 @@ if (args[0] === 'issue' && args[1] === 'list') {
 	process.exit(0);
 }
 if (args[0] === 'pr' && args[1] === 'create') {
+	const state = readState();
 	const head = findArg('--head') || 'proposal';
+	const base = findArg('--base') || 'master';
+	state.pullRequests[head] = { base };
+	writeState(state);
 	process.stdout.write('https://github.com/Flying-Pillow/mission/pull/' + encodeURIComponent(head) + '\n');
+	process.exit(0);
+}
+if (args[0] === 'pr' && args[1] === 'merge') {
+	const prRef = String(args[2] || '');
+	const head = decodeURIComponent(prRef.split('/').pop() || 'proposal');
+	const state = readState();
+	const base = state.pullRequests?.[head]?.base || 'master';
+	if (!base) {
+		process.stderr.write('Could not resolve fake PR base branch.\n');
+		process.exit(1);
+	}
+	execFileSync('git', ['fetch', 'origin'], { cwd: process.cwd(), stdio: 'ignore' });
+	execFileSync('git', ['push', 'origin', head + ':refs/heads/' + base], { cwd: process.cwd(), stdio: 'ignore' });
 	process.exit(0);
 }
 process.stderr.write('Unsupported fake gh invocation: ' + args.join(' ') + '\n');

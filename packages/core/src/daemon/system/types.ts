@@ -8,7 +8,6 @@ import type {
 	MissionSelectionCandidate,
 	MissionTaskState,
 	MissionTowerProjection,
-	OperatorActionDescriptor,
 	OperatorStatus
 } from '../../types.js';
 
@@ -17,7 +16,6 @@ export type MissionControlSource = {
 	repositoryRootPath: string;
 	control: MissionControlPlaneStatus;
 	availableMissions: MissionSelectionCandidate[];
-	availableActions: OperatorActionDescriptor[];
 	missionStatus?: OperatorStatus;
 };
 
@@ -41,7 +39,6 @@ export type MissionControlMissionStatusSource = Pick<
 	| 'agentSessions'
 	| 'tower'
 	| 'workflow'
-	| 'availableActions'
 >;
 
 export type MissionControlWorkspaceSource = {
@@ -49,7 +46,6 @@ export type MissionControlWorkspaceSource = {
 	repositoryRootPath: string;
 	control: MissionControlPlaneStatus;
 	availableMissions: MissionSelectionCandidate[];
-	availableActions: OperatorActionDescriptor[];
 	missionStatus?: MissionControlMissionStatusSource;
 };
 

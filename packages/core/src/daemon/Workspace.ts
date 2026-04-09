@@ -8,6 +8,7 @@ import { Factory } from './mission/Factory.js';
 import { buildMissionTaskLaunchPrompt } from './mission/taskLaunchPrompt.js';
 import type { MissionWorkflowBindings } from './mission/Mission.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
+import { resolveAvailableActionsForTargetContext } from '../lib/operatorActionTargeting.js';
 import {
 	getDefaultMissionDaemonSettingsWithOverrides,
 	getMissionDaemonSettingsPath,
@@ -27,12 +28,14 @@ import {
 	getMissionWorktreesPath,
 } from '../lib/repoConfig.js';
 import type {
+	MissionBrief,
 	OperatorActionExecutionStep,
 	OperatorActionExecutionSelectionStep,
 	OperatorActionExecutionTextStep,
 	OperatorActionDescriptor,
 	OperatorActionFlowDescriptor,
 	OperatorActionFlowOption,
+	OperatorActionQueryContext,
 	MissionControlPlaneStatus,
 	MissionOperationalMode,
 	MissionSelectionCandidate,
@@ -43,6 +46,7 @@ import type {
 } from '../types.js';
 import type { MissionControlSource } from './system/types.js';
 import {
+	type ControlActionList,
 	type ControlActionDescribe,
 	type ControlActionExecute,
 	type ControlDocumentRead,
@@ -57,6 +61,7 @@ import {
 	type ControlWorkflowSettingsUpdate,
 	type ControlWorkflowSettingsUpdateResponse,
 	type MissionActionExecute,
+	type MissionActionList,
 	type MissionGateEvaluate,
 	type MissionAgentConsoleState,
 	type MissionAgentEvent,
@@ -138,12 +143,16 @@ export class MissionWorkspace {
 				return this.createMissionFromBrief((request.params ?? {}) as MissionFromBriefRequest);
 			case 'control.issues.list':
 				return this.listOpenGitHubIssues((request.params ?? {}) as ControlIssuesList);
+			case 'control.action.list':
+				return this.listControlActions((request.params ?? {}) as ControlActionList);
 			case 'control.action.describe':
 				return this.describeControlAction((request.params ?? {}) as ControlActionDescribe);
 			case 'control.action.execute':
 				return this.executeControlAction((request.params ?? {}) as ControlActionExecute);
 			case 'mission.status':
 				return this.getMissionStatus(this.toMissionParams(request.params));
+			case 'mission.action.list':
+				return this.listMissionActions((request.params ?? {}) as MissionActionList);
 			case 'mission.action.execute':
 				return this.executeMissionAction((request.params ?? {}) as MissionActionExecute);
 			case 'mission.gate.evaluate':
@@ -168,7 +177,7 @@ export class MissionWorkspace {
 	}
 
 	public async listMissionSelectionCandidates(): Promise<MissionSelectionCandidate[]> {
-		return (await this.store.listMissions()).map(({ descriptor }) => ({
+		return (await this.store.listTrackedMissions()).map(({ descriptor }) => ({
 			missionId: descriptor.missionId,
 			title: descriptor.brief.title,
 			branchRef: descriptor.branchRef,
@@ -181,9 +190,40 @@ export class MissionWorkspace {
 		availableMissions: MissionSelectionCandidate[]
 	): Promise<OperatorStatus> {
 		const control = await this.buildControlPlaneStatus(availableMissions.length);
+
+		return {
+			found: false,
+			operationalMode: this.resolveOperationalMode(control),
+			control,
+			...(availableMissions.length > 0 ? { availableMissions } : {})
+		};
+	}
+
+	public async readMissionControlSource(input: {
+		selectedMissionId?: string;
+	} = {}): Promise<MissionControlSource> {
+		const availableMissions = await this.listMissionSelectionCandidates();
+		const discoveryStatus = await this.buildDiscoveryStatus(availableMissions);
+		const selectedMissionId = input.selectedMissionId?.trim();
+		const missionStatus = selectedMissionId
+			? await this.getMissionStatus({ selector: { missionId: selectedMissionId } }).catch(() => undefined)
+			: undefined;
+		return {
+			repositoryId: this.workspaceRoot,
+			repositoryRootPath: this.workspaceRoot,
+			control: discoveryStatus.control!,
+			availableMissions,
+			...(missionStatus ? { missionStatus } : {})
+		};
+	}
+
+	private buildDiscoveryAvailableActions(
+		control: MissionControlPlaneStatus,
+		availableMissions: MissionSelectionCandidate[]
+	): OperatorActionDescriptor[] {
 		const issuesReady = control.issuesConfigured && control.githubAuthenticated === true;
 
-		const availableActions: OperatorActionDescriptor[] = [
+		return [
 			{
 				id: 'control.setup.edit',
 				label: 'Configure repository setup',
@@ -214,19 +254,18 @@ export class MissionWorkspace {
 			},
 			{
 				id: 'control.mission.select',
-				label: 'Select an active mission',
+				label: 'Select a tracked mission',
 				action: '/select',
 				scope: 'mission',
 				disabled: availableMissions.length === 0,
-				disabledReason:
-					availableMissions.length > 0 ? '' : 'No active missions are available.',
+				disabledReason: availableMissions.length > 0 ? '' : 'No tracked missions are available.',
 				enabled: availableMissions.length > 0,
 				ui: {
 					toolbarLabel: 'OPEN MISSION',
 					requiresConfirmation: false
 				},
 				flow: this.buildMissionSwitchFlow(availableMissions),
-				...(availableMissions.length > 0 ? {} : { reason: 'No active missions are available.' })
+				...(availableMissions.length > 0 ? {} : { reason: 'No tracked missions are available.' })
 			},
 			{
 				id: 'control.issues.list',
@@ -243,33 +282,6 @@ export class MissionWorkspace {
 				...(issuesReady ? {} : { reason: this.describeIssueIntakeUnavailable(control) })
 			}
 		];
-
-		return {
-			found: false,
-			operationalMode: this.resolveOperationalMode(control),
-			control,
-			availableActions,
-			...(availableMissions.length > 0 ? { availableMissions } : {})
-		};
-	}
-
-	public async readMissionControlSource(input: {
-		selectedMissionId?: string;
-	} = {}): Promise<MissionControlSource> {
-		const availableMissions = await this.listMissionSelectionCandidates();
-		const discoveryStatus = await this.buildDiscoveryStatus(availableMissions);
-		const selectedMissionId = input.selectedMissionId?.trim();
-		const missionStatus = selectedMissionId
-			? await this.getMissionStatus({ selector: { missionId: selectedMissionId } }).catch(() => undefined)
-			: undefined;
-		return {
-			repositoryId: this.workspaceRoot,
-			repositoryRootPath: this.workspaceRoot,
-			control: discoveryStatus.control!,
-			availableMissions,
-			availableActions: discoveryStatus.availableActions ?? [],
-			...(missionStatus ? { missionStatus } : {})
-		};
 	}
 
 	private async executeControlAction(params: ControlActionExecute): Promise<OperatorStatus> {
@@ -310,11 +322,22 @@ export class MissionWorkspace {
 		throw new Error(`Unsupported control action '${params.actionId}'.`);
 	}
 
+	private async listControlActions(params: ControlActionList = {}): Promise<OperatorActionDescriptor[]> {
+		const availableMissions = await this.listMissionSelectionCandidates();
+		const control = await this.buildControlPlaneStatus(availableMissions.length);
+		return this.resolveAvailableActions(this.buildDiscoveryAvailableActions(control, availableMissions), params.context);
+	}
+
 	private async executeMissionAction(params: MissionActionExecute): Promise<OperatorStatus> {
 		const loadedMission = await this.requireMissionContext(params.selector);
 		const status = await loadedMission.mission.executeAction(params.actionId, params.steps ?? []);
 		await this.broadcastMissionStatus(loadedMission.missionId, status);
 		return this.decorateMissionStatus(status, 'mission');
+	}
+
+	private async listMissionActions(params: MissionActionList): Promise<OperatorActionDescriptor[]> {
+		const loadedMission = await this.requireMissionContext(params.selector);
+		return this.resolveAvailableActions(await loadedMission.mission.listAvailableActions(), params.context);
 	}
 
 	private async createMissionFromBrief(params: MissionFromBriefRequest): Promise<OperatorStatus> {
@@ -323,11 +346,17 @@ export class MissionWorkspace {
 
 		const bootstrapPreparation = await this.prepareRepositoryBootstrapIfNeeded(githubRepository);
 		if (bootstrapPreparation) {
-			return {
-				...(await this.buildIdleMissionStatus()),
-				preparation: bootstrapPreparation,
-				recommendedAction: 'Merge the repository bootstrap PR and pull the default branch before preparing a mission.'
-			};
+			const bootstrapFailure = await this.tryFinalizePreparationPullRequest(
+				bootstrapPreparation,
+				githubRepository
+			);
+			if (bootstrapFailure) {
+				return {
+					...(await this.buildIdleMissionStatus()),
+					preparation: bootstrapPreparation,
+					recommendedAction: `${bootstrapFailure} Merge the repository bootstrap PR and pull the default branch before preparing a mission.`
+				};
+			}
 		}
 
 		const github = new GitHubPlatformAdapter(this.workspaceRoot, githubRepository);
@@ -345,32 +374,110 @@ export class MissionWorkspace {
 		if (reconciledBrief.issueId === undefined) {
 			throw new Error('Mission preparation requires a reconciled GitHub issue number.');
 		}
+
+		return this.prepareMissionFromResolvedBrief(reconciledBrief, githubRepository, params.branchRef);
+	}
+
+	private async prepareMissionFromResolvedBrief(
+		reconciledBrief: MissionBrief,
+		githubRepository: string,
+		branchRefOverride?: string
+	): Promise<OperatorStatus> {
+		const existingMission = await this.store.resolveTrackedMission({
+			...(reconciledBrief.issueId !== undefined ? { issueId: reconciledBrief.issueId } : {}),
+			...(branchRefOverride ? { branchRef: branchRefOverride } : {})
+		});
+		if (existingMission) {
+			const status = await this.getMissionStatus({
+				selector: { missionId: existingMission.descriptor.missionId }
+			});
+			return {
+				...status,
+				missionId: existingMission.descriptor.missionId,
+				title: existingMission.descriptor.brief.title,
+				...(existingMission.descriptor.brief.issueId !== undefined
+					? { issueId: existingMission.descriptor.brief.issueId }
+					: {}),
+				branchRef: existingMission.descriptor.branchRef,
+				missionRootDir: existingMission.missionDir,
+				missionControlDir: this.store.getMissionControlPath(existingMission.missionDir),
+				recommendedAction: reconciledBrief.issueId !== undefined
+					? `Issue #${String(reconciledBrief.issueId)} already has mission '${existingMission.descriptor.missionId}'. Pull the default branch if needed and select the existing mission instead of creating another work-on-issue mission.`
+					: `Mission '${existingMission.descriptor.missionId}' already exists. Select the existing mission instead of creating another one.`
+			};
+		}
+
 		const branchRef =
-			params.branchRef ??
-			this.store.deriveMissionBranchName(reconciledBrief.issueId, reconciledBrief.title);
+			branchRefOverride
+			?? (reconciledBrief.issueId !== undefined
+				? this.store.deriveMissionBranchName(reconciledBrief.issueId, reconciledBrief.title)
+				: this.store.deriveDraftMissionBranchName(reconciledBrief.title));
 		const preparation = await new MissionPreparationService(
 			this.store,
 			this.buildWorkflowBindings(),
 			githubRepository
 		).prepareFromBrief({
 			brief: reconciledBrief,
-			...(params.branchRef ? { branchRef: params.branchRef } : { branchRef })
+			branchRef: branchRefOverride ?? branchRef
 		});
 		if (preparation.kind !== 'mission') {
 			throw new Error('Mission preparation returned a repository bootstrap result unexpectedly.');
 		}
+		const finalizeFailure = await this.tryFinalizePreparationPullRequest(preparation, githubRepository);
+		if (finalizeFailure) {
+			return {
+				...(await this.buildIdleMissionStatus()),
+				missionId: preparation.missionId,
+				title: reconciledBrief.title,
+				...(reconciledBrief.issueId !== undefined ? { issueId: reconciledBrief.issueId } : {}),
+				type: reconciledBrief.type,
+				branchRef: preparation.branchRef,
+				missionRootDir: preparation.missionRootDir,
+				missionControlDir: preparation.missionControlDir,
+				preparation,
+				recommendedAction: `${finalizeFailure} Merge the mission preparation PR manually, pull the default branch, and then select the tracked mission from Tower.`
+			};
+		}
+
+		const selectedStatus = await this.getMissionStatus({
+			selector: { missionId: preparation.missionId }
+		});
 		return {
-			...(await this.buildIdleMissionStatus()),
+			...selectedStatus,
 			missionId: preparation.missionId,
 			title: reconciledBrief.title,
 			...(reconciledBrief.issueId !== undefined ? { issueId: reconciledBrief.issueId } : {}),
 			type: reconciledBrief.type,
 			branchRef: preparation.branchRef,
 			missionRootDir: preparation.missionRootDir,
-			missionControlDir: preparation.missionControlDir,
-			preparation,
-			recommendedAction: 'Merge the mission preparation PR and pull the default branch before materializing a local mission workspace.'
+			missionControlDir: preparation.missionControlDir
 		};
+	}
+
+	private async tryFinalizePreparationPullRequest(
+		preparation: import('../types.js').MissionPreparationStatus,
+		githubRepository: string
+	): Promise<string | undefined> {
+		const currentBranch = this.store.getCurrentBranch();
+		const defaultBranch = this.store.getDefaultBranch();
+		if (currentBranch !== preparation.baseBranch || currentBranch !== defaultBranch) {
+			return `Automatic merge/pull requires the control repository to be on '${preparation.baseBranch}', found '${currentBranch}'. `;
+		}
+		if (!this.store.isWorktreeClean()) {
+			return 'Automatic merge/pull requires the control repository to have no local changes. ';
+		}
+		try {
+			const github = new GitHubPlatformAdapter(this.workspaceRoot, githubRepository);
+			await github.mergePullRequest({
+				pullRequest: preparation.pullRequestUrl,
+				method: 'merge',
+				deleteBranch: true
+			});
+			this.store.pullDefaultBranch(preparation.baseBranch);
+			return undefined;
+		} catch (error) {
+			return `${error instanceof Error ? error.message : String(error)} `;
+		}
 	}
 
 	private async updateControlSettings(params: ControlSettingsUpdate): Promise<OperatorStatus> {
@@ -438,18 +545,22 @@ export class MissionWorkspace {
 
 		const bootstrapPreparation = await this.prepareRepositoryBootstrapIfNeeded(githubRepository);
 		if (bootstrapPreparation) {
-			return {
-				...(await this.buildIdleMissionStatus()),
-				preparation: bootstrapPreparation,
-				recommendedAction: 'Merge the repository bootstrap PR and pull the default branch before preparing a mission from an issue.'
-			};
+			const bootstrapFailure = await this.tryFinalizePreparationPullRequest(
+				bootstrapPreparation,
+				githubRepository
+			);
+			if (bootstrapFailure) {
+				return {
+					...(await this.buildIdleMissionStatus()),
+					preparation: bootstrapPreparation,
+					recommendedAction: `${bootstrapFailure} Merge the repository bootstrap PR and pull the default branch before preparing a mission from an issue.`
+				};
+			}
 		}
 
 		const adapter = new GitHubPlatformAdapter(this.workspaceRoot, githubRepository);
 		const brief = await adapter.fetchIssue(String(params.issueNumber));
-		return this.createMissionFromBrief({
-			brief
-		});
+		return this.prepareMissionFromResolvedBrief(brief, githubRepository);
 	}
 
 
@@ -580,6 +691,17 @@ export class MissionWorkspace {
 
 		const adapter = new GitHubPlatformAdapter(this.workspaceRoot);
 		return adapter.listOpenIssues(params.limit ?? 50);
+	}
+
+	private resolveAvailableActions(
+		actions: OperatorActionDescriptor[],
+		context?: OperatorActionQueryContext
+	): OperatorActionDescriptor[] {
+		if (!context) {
+			return actions.map((action) => structuredClone(action));
+		}
+		return resolveAvailableActionsForTargetContext(actions, context)
+			.map((action) => structuredClone(action));
 	}
 
 	private async broadcastMissionStatus(missionId: string, status: OperatorStatus): Promise<void> {
@@ -1013,8 +1135,8 @@ export class MissionWorkspace {
 					id: 'mission',
 					label: 'MISSION',
 					title: 'SELECT MISSION',
-					emptyLabel: 'No missions are available under .mission/worktrees.',
-					helperText: 'Choose the mission you want to open.',
+					emptyLabel: 'No tracked missions are available under .missions/missions.',
+					helperText: 'Choose the tracked mission you want to open.',
 					selectionMode: 'single',
 					options: availableMissions.map((candidate) => ({
 						id: candidate.missionId,
@@ -1260,13 +1382,13 @@ export class MissionWorkspace {
 			return existing;
 		}
 
-		const resolvedMission = await this.store.resolveMission(normalizedSelector);
+		const resolvedMission = await this.store.resolveKnownMission(normalizedSelector);
 		if (!resolvedMission) {
 			if (options.allowMissing) {
 				return undefined;
 			}
 
-			throw new Error('No active mission could be resolved for this workspace.');
+			throw new Error('No tracked mission could be resolved for this workspace.');
 		}
 
 		const mission = await Factory.load(this.store, {

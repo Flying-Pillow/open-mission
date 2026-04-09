@@ -1,4 +1,5 @@
 import type {
+	MissionActionList,
 	MissionAgentConsoleState,
 	MissionAgentSessionLaunchRequest,
 	MissionAgentSessionRecord,
@@ -15,6 +16,7 @@ import type {
 	GateIntent,
 	OperatorActionDescriptor,
 	OperatorActionExecutionStep,
+	OperatorActionQueryContext,
 	MissionGateResult,
 	MissionSelector,
 	OperatorStatus
@@ -44,8 +46,16 @@ export class DaemonMissionApi {
 		});
 	}
 
-	public async listAvailableActions(selector: MissionSelector): Promise<OperatorActionDescriptor[]> {
-		return (await this.getStatus(selector)).availableActions ?? [];
+	public async listAvailableActions(
+		selector: MissionSelector,
+		context?: OperatorActionQueryContext
+	): Promise<OperatorActionDescriptor[]> {
+		const resolvedSelector = DaemonMissionApi.requireSelector(selector, 'Mission action listing');
+		const params: MissionActionList = {
+			selector: resolvedSelector,
+			...(context ? { context } : {})
+		};
+		return this.client.request<OperatorActionDescriptor[]>('mission.action.list', params);
 	}
 
 	public async executeAction(

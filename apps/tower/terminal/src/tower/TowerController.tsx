@@ -7,6 +7,7 @@ import type {
 	GateIntent,
 	MissionSystemSnapshot,
 	OperatorActionDescriptor,
+	OperatorActionQueryContext,
 	OperatorActionTargetContext,
 	OperatorActionExecutionStep,
 	OperatorActionFlowDescriptor,
@@ -81,9 +82,6 @@ export type TowerUiOptions = {
 type TowerShellProps = TowerUiOptions;
 
 type DaemonState = 'connected' | 'degraded' | 'booting';
-type TowerContext =
-	| { kind: 'repository' }
-	| { kind: 'mission'; missionId: string };
 type TowerMode = 'repository' | 'mission';
 type PickerMode = 'command-select';
 type CenterRoute =
@@ -157,6 +155,8 @@ export function TowerController({
 	const [selectedToolbarCommandId, setSelectedToolbarCommandId] = createSignal<string | undefined>();
 	const [confirmingToolbarCommandId, setConfirmingToolbarCommandId] = createSignal<string | undefined>();
 	const [toolbarConfirmationChoice, setToolbarConfirmationChoice] = createSignal<'confirm' | 'cancel'>('confirm');
+	const [availableActions, setAvailableActions] = createSignal<OperatorActionDescriptor[]>([]);
+	let availableActionsQueryVersion = 0;
 	const flowController = createCommandFlowController({
 		onNotify: appendLog,
 		onFlowClosed: () => {
@@ -176,7 +176,6 @@ export function TowerController({
 	);
 	const currentMissionId = createMemo(() =>
 		selector().missionId
-			?? systemSnapshot()?.state.domain.selection.missionId
 			?? status().missionId
 	);
 	const headerTabs = createMemo<HeaderTab[]>(() =>
@@ -198,12 +197,6 @@ export function TowerController({
 		}
 		return { kind: 'repository' };
 	});
-	const towerContext = createMemo<TowerContext>(() => {
-		const target = selectedShellTarget();
-		return target.kind === 'mission'
-			? { kind: 'mission', missionId: target.missionId }
-			: { kind: 'repository' };
-	});
 	const towerMode = createMemo<TowerMode>(() => {
 		const target = selectedShellTarget();
 		if (target.kind === 'mission') {
@@ -215,14 +208,22 @@ export function TowerController({
 	const dashboardProjection = createMemo(() => airportProjections()?.dashboard);
 	const editorProjection = createMemo(() => airportProjections()?.editor);
 	const agentSessionProjection = createMemo(() => airportProjections()?.agentSession);
+	const selectedMissionContext = createMemo(() => {
+		const target = selectedShellTarget();
+		return target.kind === 'mission'
+			? systemDomain()?.missions[target.missionId]
+			: undefined;
+	});
 	const selectedMissionMatchesLoaded = createMemo(() => {
 		const target = selectedShellTarget();
-		const snapshotMissionId = dashboardProjection()?.missionId ?? systemSnapshot()?.state.domain.selection.missionId;
 		return target.kind === 'mission'
 			&& status().found
-			&& target.missionId === (snapshotMissionId ?? currentMissionId());
+			&& target.missionId === currentMissionId();
 	});
 	const centerRoute = createMemo<CenterRoute>(() => {
+		if (towerMode() === 'repository') {
+			return { kind: 'repository-flow' };
+		}
 		const projectedRoute = dashboardProjection()?.centerRoute;
 		if (projectedRoute === 'mission-control') {
 			return { kind: 'mission-control' };
@@ -230,10 +231,7 @@ export function TowerController({
 		if (projectedRoute === 'repository-flow') {
 			return { kind: 'repository-flow' };
 		}
-		if (towerMode() === 'mission') {
-			return { kind: 'mission-control' };
-		}
-		return { kind: 'repository-flow' };
+		return { kind: 'mission-control' };
 	});
 	const commandFlowOwner = flowController.owner;
 	const shellOverlay = createMemo<ShellOverlay>(() => {
@@ -246,10 +244,10 @@ export function TowerController({
 		return { kind: 'none' };
 	});
 	const controlStatus = createMemo(() => status().control);
-	const stages = createMemo(() => (centerRoute().kind === 'mission-control' ? buildProjectedStageStatuses(systemDomain(), dashboardProjection()?.stageRail) : []));
+	const stages = createMemo(() => (centerRoute().kind === 'mission-control' ? buildProjectedStageStatuses(systemDomain(), selectedMissionContext()?.tower?.stageRail) : []));
 	const sessions = createMemo(() => (centerRoute().kind === 'mission-control' ? buildProjectedSessionRecords(systemDomain()) : []));
 	const stageItems = createMemo<ProgressRailItem[]>(() =>
-		(dashboardProjection()?.stageRail ?? []).map((item) => ({
+		(selectedMissionContext()?.tower?.stageRail ?? []).map((item) => ({
 			id: item.id,
 			label: item.label,
 			state: item.state,
@@ -292,33 +290,76 @@ export function TowerController({
 			fallbackGitHubUser: fallbackGitHubUser()
 		})
 	);
-	const projectedCommandContext = createMemo(() => dashboardProjection()?.commandContext);
-	const projectedAvailableActions = createMemo(() => systemSnapshot()?.actionProjections.dashboard.availableActions ?? []);
 	const currentMissionTitle = createMemo(() => {
 		const missionId = currentMissionId();
 		if (!missionId) {
 			return undefined;
 		}
-		return dashboardProjection()?.missionLabel
+		return selectedMissionContext()?.briefSummary
 			?? systemDomain()?.missions[missionId]?.briefSummary
 			?? projectedAvailableMissions().find((candidate) => candidate.missionId === missionId)?.title
 			?? missionId;
 	});
 	const commandTargetContext = createMemo<OperatorActionTargetContext>(() => {
-		const stageId = selectedStageId() ?? (projectedCommandContext()?.stageId as MissionStageId | undefined);
-		const taskId = selectedTaskId() || projectedCommandContext()?.taskId || dashboardProjection()?.selectedTaskId || undefined;
-		const sessionId = selectedSessionId() ?? projectedCommandContext()?.sessionId ?? agentSessionProjection()?.sessionId ?? dashboardProjection()?.selectedSessionId;
+		if (towerMode() !== 'mission') {
+			return {};
+		}
+		const stageId = selectedStageId();
+		const explicitTaskId = selectedTaskId();
+		const explicitSessionId = selectedSessionId();
+		const taskId = explicitTaskId || undefined;
+		const sessionId = explicitSessionId
+			?? (explicitTaskId || selectedStageId() ? undefined : undefined);
 		return {
 			...(stageId ? { stageId } : {}),
 			...(taskId ? { taskId } : {}),
 			...(sessionId ? { sessionId } : {})
 		};
 	});
-	const availableActions = createMemo<OperatorActionDescriptor[]>(() => {
-		if (towerContext().kind === 'mission' && !selectedMissionMatchesLoaded()) {
-			return [];
+	const selectedCommandTargetDescriptor = createMemo<{
+		sessionId?: string;
+		stageId?: MissionStageId;
+		targetLabel?: string;
+		targetKind?: TreeTargetKind;
+	}>(() => {
+		if (towerMode() !== 'mission') {
+			return {
+				targetLabel: dashboardProjection()?.repositoryLabel ?? resolveHeaderWorkspaceLabel(status().control, workspaceContext.workspaceRoot)
+			};
 		}
-		return projectedAvailableActions();
+		const sessionId = selectedSessionId();
+		if (sessionId) {
+			const session = sessions().find((candidate) => candidate.sessionId === sessionId);
+			const sessionStageId = session?.taskId ? systemDomain()?.tasks[session.taskId]?.stageId : undefined;
+			return {
+				sessionId,
+				...(sessionStageId ? { stageId: sessionStageId } : {}),
+				targetLabel: session?.currentTurnTitle ?? session?.assignmentLabel ?? sessionId,
+				targetKind: 'session'
+			};
+		}
+		const taskId = selectedTaskId().trim();
+		if (taskId) {
+			const task = systemDomain()?.tasks[taskId];
+			return {
+				...(task?.stageId ? { stageId: task.stageId } : {}),
+				targetLabel: task?.subject ?? taskId,
+				targetKind: 'task'
+			};
+		}
+		const stageId = selectedStageId();
+		if (stageId) {
+			const label = selectedMissionContext()?.tower?.stageRail.find((item) => item.id === stageId)?.label ?? stageId;
+			return {
+				stageId,
+				targetLabel: label,
+				targetKind: 'stage'
+			};
+		}
+		const missionLabel = currentMissionTitle();
+		return {
+			...(missionLabel ? { targetLabel: missionLabel } : {})
+		};
 	});
 	const availableCommandById = createMemo(() => {
 		const entries = new Map<string, OperatorActionDescriptor>();
@@ -413,7 +454,7 @@ export function TowerController({
 			|| (selectedMissionMatchesLoaded() ? currentMissionId() ?? 'Mission' : 'Mission');
 	});
 	const treeTargets = createMemo<TreeTargetDescriptor[]>(() =>
-		(dashboardProjection()?.treeNodes ?? []).map((node) => ({
+		(selectedMissionContext()?.tower?.treeNodes ?? []).map((node) => ({
 			id: node.id,
 			label: node.label,
 			kind: node.kind as TreeTargetKind,
@@ -439,10 +480,7 @@ export function TowerController({
 		return visibleTreeTargets().find((target) => target.id === preferredId);
 	});
 	const selectedSessionRecord = createMemo(() => {
-		const sessionId = selectedSessionId()
-			?? projectedCommandContext()?.sessionId
-			?? agentSessionProjection()?.sessionId
-			?? dashboardProjection()?.selectedSessionId;
+		const sessionId = selectedSessionId();
 		if (!sessionId) {
 			return undefined;
 		}
@@ -478,16 +516,13 @@ export function TowerController({
 			inputValue: inputValue(),
 			status: status(),
 			canSendSessionText: canSendSessionText(),
-			selectedSessionId: selectedSessionId()
-				?? projectedCommandContext()?.sessionId
-				?? agentSessionProjection()?.sessionId
-				?? dashboardProjection()?.selectedSessionId,
-			selectedStageId: selectedStageId() ?? (projectedCommandContext()?.stageId as MissionStageId | undefined),
+			selectedSessionId: selectedCommandTargetDescriptor().sessionId,
+			selectedStageId: selectedCommandTargetDescriptor().stageId,
 			selectedTreeTargetTitle: selectedTreeTarget()?.label
-				?? projectedCommandContext()?.targetLabel
+				?? selectedCommandTargetDescriptor().targetLabel
 				?? agentSessionProjection()?.sessionLabel
 				?? editorProjection()?.resourceLabel,
-			selectedTreeTargetKind: selectedTreeTarget()?.kind ?? (projectedCommandContext()?.targetKind as TreeTargetKind | undefined)
+			selectedTreeTargetKind: selectedTreeTarget()?.kind ?? selectedCommandTargetDescriptor().targetKind
 		})
 	);
 	const commandPanelMode = createMemo<'input' | 'toolbar'>(() => {
@@ -647,8 +682,7 @@ export function TowerController({
 		setSelectedStageId((current) => pickPreferredStageId(
 			stages(),
 			current,
-			(dashboardProjection()?.selectedStageId as MissionStageId | undefined)
-				?? (projectedCommandContext()?.stageId as MissionStageId | undefined)
+				selectedMissionContext()?.currentStage
 		));
 	});
 
@@ -708,14 +742,8 @@ export function TowerController({
 		if (!currentClient) {
 			return;
 		}
-		const missionId = currentMissionId();
-		const targetContext = commandTargetContext();
 		const observation = {
-			...(workspaceContext.workspaceRoot ? { repositoryId: workspaceContext.workspaceRoot } : {}),
-			...(missionId ? { missionId } : {}),
-			...(targetContext.stageId ? { stageId: targetContext.stageId } : {}),
-			...(targetContext.taskId ? { taskId: targetContext.taskId } : {}),
-			...(targetContext.sessionId ? { agentSessionId: targetContext.sessionId } : {})
+			...(workspaceContext.workspaceRoot ? { repositoryId: workspaceContext.workspaceRoot } : {})
 		};
 		const observationKey = JSON.stringify(observation);
 		if (observationKey === lastObservedSelectionKey) {
@@ -723,6 +751,39 @@ export function TowerController({
 		}
 		lastObservedSelectionKey = observationKey;
 		void new DaemonApi(currentClient).airport.observeClient(observation).catch(() => undefined);
+	});
+
+	createEffect(() => {
+		const currentClient = client();
+		const mode = towerMode();
+		const missionId = currentMissionId();
+		const context = commandTargetContext();
+		systemSnapshot()?.state.version;
+		if (!currentClient) {
+			setAvailableActions([]);
+			return;
+		}
+		if (mode === 'mission' && (!missionId || !selectedMissionMatchesLoaded())) {
+			setAvailableActions([]);
+			return;
+		}
+		const requestVersion = ++availableActionsQueryVersion;
+		const nextContext: OperatorActionQueryContext | undefined = mode === 'mission' ? context : undefined;
+		void (async () => {
+			try {
+				const api = new DaemonApi(currentClient);
+				const nextActions = mode === 'mission'
+					? await api.mission.listAvailableActions({ missionId: missionId! }, nextContext)
+					: await api.control.listAvailableActions();
+				if (requestVersion === availableActionsQueryVersion) {
+					setAvailableActions(nextActions);
+				}
+			} catch {
+				if (requestVersion === availableActionsQueryVersion) {
+					setAvailableActions([]);
+				}
+			}
+		})();
 	});
 
 	createEffect(() => {
@@ -1073,6 +1134,7 @@ export function TowerController({
 		}
 		setSelectedHeaderTabId(tabId);
 		if (selectedTab.target.kind === 'repository') {
+			resetMissionContextSelection();
 			if (!currentMissionId()) {
 				setSelectedHeaderTabId(repositoryTabId);
 				if (!options?.preserveFocus) {
@@ -1098,6 +1160,19 @@ export function TowerController({
 		if (!options?.preserveFocus) {
 			setFocusArea('command');
 		}
+	}
+
+	function resetMissionContextSelection(): void {
+		setSelectedTreeTargetId(undefined);
+		setSelectedSessionId(undefined);
+		setSelectedTaskId('');
+		setSelectedStageId(undefined);
+		setCollapsedTreeNodeIds(new Set<string>());
+		setTreePageScrollRequest(undefined);
+		setCollapseDefaultsMissionId(undefined);
+		resetCommandFlow({ clearCommandInput: true });
+		closeCommandPicker({ clearCommandInput: true });
+		setSelectedCommandId(undefined);
 	}
 
 	function selectTreeTarget(targetId: string | undefined): void {
@@ -1337,6 +1412,7 @@ export function TowerController({
 	function buildIssueBootstrapFlow(): CommandFlowDefinition {
 		return {
 			id: 'issue-bootstrap',
+			owner: 'repository',
 			targetLabel: 'ISSUE',
 			actionLabel: 'START',
 			steps: [
@@ -1367,6 +1443,7 @@ export function TowerController({
 	function buildThemeFlow(): CommandFlowDefinition {
 		return {
 			id: 'theme-select',
+			owner: towerMode() === 'repository' ? 'repository' : 'mission',
 			targetLabel: 'THEME',
 			actionLabel: 'APPLY',
 			steps: [
@@ -1425,6 +1502,7 @@ export function TowerController({
 
 		const buildDefinition = (descriptor: OperatorActionFlowDescriptor): CommandFlowDefinition => ({
 			id: command.id,
+			owner: command.id.startsWith('control.') ? 'repository' : 'mission',
 			targetLabel: descriptor.targetLabel,
 			actionLabel: descriptor.actionLabel,
 			steps: descriptor.steps.map((step) => buildCommandFlowStep(step)),
@@ -1526,7 +1604,7 @@ export function TowerController({
 			setDaemonState('connected');
 			appendLog(
 				nextConnection.status.found
-					? `Connected to ${nextConnection.snapshot.state.domain.selection.missionId ?? nextConnection.status.missionId ?? 'the selected mission'}.`
+					? `Connected to ${nextConnection.status.missionId ?? nextSelector.missionId ?? 'the selected mission'}.`
 					: describeControlConnection(nextConnection.status)
 			);
 			return nextConnection.client;
@@ -2034,7 +2112,7 @@ export function TowerController({
 						return;
 					}
 					const intent = (args[0] as GateIntent | undefined) ?? gateIntentForStage(
-						(selectedStageId() ?? (projectedCommandContext()?.stageId as MissionStageId | undefined))
+						selectedStageId()
 					);
 					const gate = await new DaemonApi(currentClient).mission.evaluateGate(missionSelector, intent);
 					appendLog(gate.allowed ? `Gate ${intent} passed.` : `Gate ${intent} blocked: ${gate.errors.join(' | ')}`);
@@ -2262,8 +2340,7 @@ function selectorFromTowerState(
 	if (status.missionId) {
 		return { missionId: status.missionId };
 	}
-	const projectedMissionId = snapshot?.airportProjections.dashboard.missionId
-		?? snapshot?.state.domain.selection.missionId;
+	const projectedMissionId = snapshot?.airportProjections.dashboard.missionId;
 	if (projectedMissionId) {
 		return { missionId: projectedMissionId };
 	}

@@ -11,12 +11,11 @@ import {
 import type {
 	ContextGraph,
 	ContextSelection,
-	MissionStageId,
 	MissionSystemSnapshot,
 	MissionSystemState
 } from '../types.js';
 import { MissionControl } from './system/MissionControl.js';
-import { deriveSystemActionProjections, deriveSystemAirportProjections } from './system/ProjectionService.js';
+import { deriveSystemAirportProjections } from './system/ProjectionService.js';
 import { RepositoryAirportRegistry } from './system/RepositoryAirportRegistry.js';
 import { WorkspaceManager } from './WorkspaceManager.js';
 
@@ -42,11 +41,6 @@ type MissionSystemCommand =
 			focusedGateId?: GateId;
 			intentGateId?: GateId;
 			repositoryId?: string;
-			missionId?: string;
-			stageId?: string;
-			taskId?: string;
-			artifactId?: string;
-			agentSessionId?: string;
 			surfacePath?: string;
 		};
 	}
@@ -117,11 +111,6 @@ export class MissionSystemController {
 		focusedGateId?: GateId;
 		intentGateId?: GateId;
 		repositoryId?: string;
-		missionId?: string;
-		stageId?: string;
-		taskId?: string;
-		artifactId?: string;
-		agentSessionId?: string;
 		surfacePath?: string;
 	}): Promise<MissionSystemSnapshot> {
 		return this.dispatch({ kind: 'airport.client.observed', params });
@@ -212,28 +201,6 @@ export class MissionSystemController {
 		params: Extract<MissionSystemCommand, { kind: 'airport.client.observed' }>['params']
 	): Promise<string[]> {
 		const repositoryId = await this.resolveRepositoryId(params.clientId, params.surfacePath);
-		const stageId = params.stageId?.trim();
-		const selectionHint = {
-			...(params.repositoryId ? { repositoryId: params.repositoryId } : {}),
-			...(params.missionId ? { missionId: params.missionId } : {}),
-			...(stageId ? { stageId: stageId as MissionStageId } : {}),
-			...(params.taskId ? { taskId: params.taskId } : {}),
-			...(params.artifactId ? { artifactId: params.artifactId } : {}),
-			...(params.agentSessionId ? { agentSessionId: params.agentSessionId } : {})
-		};
-		const observationSelection = {
-			...selectionHint,
-			fallbackRepositoryId: repositoryId
-		};
-		const domain = params.missionId?.trim()
-			? this.missionControl.synchronize(
-				await this.workspaceManager.readMissionControlSource({
-					workspaceRoot: repositoryId,
-					selectedMissionId: params.missionId.trim()
-				}),
-				selectionHint
-			)
-			: this.missionControl.observeSelection(observationSelection);
 		this.airportRegistry.observeClient(repositoryId, {
 			clientId: params.clientId,
 			...(params.focusedGateId ? { focusedGateId: params.focusedGateId } : {}),
@@ -241,6 +208,7 @@ export class MissionSystemController {
 			...(params.surfacePath ? { surfacePath: params.surfacePath } : {})
 		});
 		const airportRecord = this.airportRegistry.getActiveAirport();
+		const domain = this.missionControl.getState();
 		this.airportRegistry.applyDefaultBindings(
 			repositoryId,
 			deriveGateBindings(domain, airportRecord.control.getState().gates.agentSession, domain.agentSessions),
@@ -327,8 +295,7 @@ export class MissionSystemController {
 				deriveSystemAirportProjections(domain, record.control.getState())
 			])
 		);
-		const actionProjections = deriveSystemActionProjections(domain, airportProjections);
-		return { state, airportProjections, airportRegistryProjections, actionProjections };
+		return { state, airportProjections, airportRegistryProjections };
 	}
 
 	private serializeSystemState(): string {

@@ -44,7 +44,7 @@ export class Factory {
 		selector: MissionSelector = {},
 		workflowBindings: MissionWorkflowBindings = createDefaultMissionWorkflowBindings()
 	): Promise<Mission | undefined> {
-		const resolved = await adapter.resolveMission(selector);
+		const resolved = await adapter.resolveKnownMission(selector);
 		if (!resolved) {
 			return undefined;
 		}

@@ -1,4 +1,5 @@
 import type {
+	ControlActionList,
 	ControlActionDescribe,
 	ControlDocumentRead,
 	ControlDocumentResponse,
@@ -16,6 +17,7 @@ import type {
 	OperatorActionDescriptor,
 	OperatorActionExecutionStep,
 	OperatorActionFlowDescriptor,
+	OperatorActionQueryContext,
 	OperatorStatus,
 	TrackedIssueSummary
 } from '../types.js';
@@ -28,8 +30,9 @@ export class DaemonControlApi {
 		return this.client.request<OperatorStatus>('control.status');
 	}
 
-	public async listAvailableActions(): Promise<OperatorActionDescriptor[]> {
-		return (await this.getStatus()).availableActions ?? [];
+	public async listAvailableActions(context?: OperatorActionQueryContext): Promise<OperatorActionDescriptor[]> {
+		const params: ControlActionList = context ? { context } : {};
+		return this.client.request<OperatorActionDescriptor[]>('control.action.list', params);
 	}
 
 	public async executeAction(

@@ -187,18 +187,20 @@ async function driveMissionToCompletion(
 
         const nextTask = pickNextTask(status);
         if (nextTask) {
+            const taskActions = await api.mission.listAvailableActions(selector, { taskId: nextTask.taskId });
             if (nextTask.status !== 'active') {
-                const startCommand = requireTaskCommand(status, nextTask.taskId, 'task.start.');
+                const startCommand = requireTaskCommand(taskActions, nextTask.taskId, 'task.start.');
                 await api.mission.executeAction(selector, startCommand.id);
             }
             await executeTask(api, selector, nextTask, status, controlRoot);
-            const refreshedStatus = await api.mission.getStatus(selector);
-            const doneCommand = requireTaskCommand(refreshedStatus, nextTask.taskId, 'task.done.');
+            await api.mission.getStatus(selector);
+            const doneActions = await api.mission.listAvailableActions(selector, { taskId: nextTask.taskId });
+            const doneCommand = requireTaskCommand(doneActions, nextTask.taskId, 'task.done.');
             await api.mission.executeAction(selector, doneCommand.id);
             continue;
         }
 
-        const generationCommand = status.availableActions?.find(
+        const generationCommand = (await api.mission.listAvailableActions(selector)).find(
             (command) => command.scope === 'generation' && command.enabled
         );
         if (generationCommand) {
@@ -231,11 +233,11 @@ function pickNextTask(status: OperatorStatus): MissionTaskState | undefined {
 }
 
 function requireTaskCommand(
-    status: OperatorStatus,
+    availableActions: OperatorActionDescriptor[],
     taskId: string,
     prefix: string
 ): OperatorActionDescriptor {
-    const command = status.availableActions?.find(
+    const command = availableActions.find(
         (candidate) => candidate.id === `${prefix}${taskId}`
     );
     if (!command) {

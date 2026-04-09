@@ -263,7 +263,7 @@ describe('Mission', () => {
                     throw new Error('Expected a ready task after workflow start.');
                 }
 
-                const launchAction = startedStatus.availableActions?.find(
+                const launchAction = (await mission.listAvailableActions()).find(
                     (action) => action.id === `task.launch.${taskId}`
                 );
                 expect(launchAction).toMatchObject({

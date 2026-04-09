@@ -2,6 +2,7 @@ import type {
 	MissionSystemSnapshot,
 	GateIntent,
 	OperatorActionExecutionStep,
+	OperatorActionQueryContext,
 	MissionBrief,
 	MissionGateResult,
 	MissionSelector,
@@ -277,7 +278,7 @@ export type MissionAgentEvent =
 		state: MissionAgentSessionState;
 	};
 
-export const PROTOCOL_VERSION = 13;
+export const PROTOCOL_VERSION = 15;
 
 export type Method =
 	| 'ping'
@@ -293,11 +294,13 @@ export type Method =
 	| 'control.workflow.settings.initialize'
 	| 'control.workflow.settings.update'
 	| 'control.issues.list'
+	| 'control.action.list'
 	| 'control.action.describe'
 	| 'control.action.execute'
 	| 'mission.from-brief'
 	| 'mission.from-issue'
 	| 'mission.status'
+	| 'mission.action.list'
 	| 'mission.action.execute'
 	| 'mission.gate.evaluate'
 	| 'task.launch'
@@ -378,6 +381,10 @@ export type MissionGateEvaluate = MissionSelect & {
 	intent: GateIntent;
 };
 
+export type ControlActionList = {
+	context?: OperatorActionQueryContext;
+};
+
 export type ControlActionExecute = {
 	actionId: string;
 	steps?: OperatorActionExecutionStep[];
@@ -386,6 +393,10 @@ export type ControlActionExecute = {
 export type ControlActionDescribe = {
 	actionId: string;
 	steps?: OperatorActionExecutionStep[];
+};
+
+export type MissionActionList = MissionSelect & {
+	context?: OperatorActionQueryContext;
 };
 
 export type MissionActionExecute = MissionSelect & {
@@ -441,11 +452,6 @@ export type AirportClientObserve = {
 	focusedGateId?: 'dashboard' | 'editor' | 'agentSession';
 	intentGateId?: 'dashboard' | 'editor' | 'agentSession';
 	repositoryId?: string;
-	missionId?: string;
-	stageId?: string;
-	taskId?: string;
-	artifactId?: string;
-	agentSessionId?: string;
 };
 
 export type AirportGateBind = {

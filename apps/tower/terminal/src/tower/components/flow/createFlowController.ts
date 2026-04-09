@@ -34,7 +34,8 @@ export function createFlowController(options: CreateFlowControllerOptions) {
 		if (!activeFlow) {
 			return undefined;
 		}
-		return activeFlow.definition.id.startsWith('control.') ? 'repository' : 'mission';
+		return activeFlow.definition.owner
+			?? (activeFlow.definition.id.startsWith('control.') ? 'repository' : 'mission');
 	});
 	const currentDraft = createMemo<ActiveFlowDraft | undefined>(() => {
 		const explicitDraft = activeDraft();

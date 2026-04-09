@@ -185,6 +185,25 @@ export class Mission {
 		return this.lastKnownStatus;
 	}
 
+	public async listAvailableActions(): Promise<OperatorActionDescriptor[]> {
+		const nextDescriptor = await this.adapter.readMissionDescriptor(this.missionDir);
+		if (nextDescriptor) {
+			this.descriptor = nextDescriptor;
+		}
+
+		const refreshedDocument = await this.workflowController.refresh();
+		let document = refreshedDocument;
+		if (refreshedDocument) {
+			try {
+				document = await this.workflowController.reconcileSessions();
+			} catch {
+				document = refreshedDocument;
+			}
+		}
+		this.syncAgentSessions(document);
+		return this.buildActionList(document);
+	}
+
 	public async startWorkflow(): Promise<OperatorStatus> {
 		const document = await this.workflowController.startFromDraft({
 			occurredAt: new Date().toISOString(),
@@ -574,12 +593,7 @@ export class Mission {
 				})),
 				updatedAt: persistedDocument.runtime.updatedAt
 			},
-			recommendedAction: this.buildRecommendedAction(currentStageId, activeTasks, readyTasks),
-			availableActions: this.buildAvailableActions(
-				persistedDocument.configuration,
-				persistedDocument.runtime,
-				sessions
-			)
+			recommendedAction: this.buildRecommendedAction(currentStageId, activeTasks, readyTasks)
 		};
 	}
 
@@ -642,9 +656,27 @@ export class Mission {
 				})),
 				updatedAt: runtime.updatedAt
 			},
-			recommendedAction: 'Mission is still draft. Start the workflow to capture repository settings and initialize tasks.',
-			availableActions: this.buildAvailableActions(configuration, runtime, [])
+			recommendedAction: 'Mission is still draft. Start the workflow to capture repository settings and initialize tasks.'
 		};
+	}
+
+	private buildActionList(document?: MissionRuntimeRecord): OperatorActionDescriptor[] {
+		if (!document) {
+			const workflow = this.workflowResolver();
+			const configuration = createMissionWorkflowConfigurationSnapshot({
+				createdAt: this.descriptor.createdAt,
+				workflowVersion: DEFAULT_WORKFLOW_VERSION,
+				workflow
+			});
+			const runtime = createDraftMissionWorkflowRuntimeState(configuration, this.descriptor.createdAt);
+			return this.buildAvailableActions(configuration, runtime, []);
+		}
+
+		return this.buildAvailableActions(
+			document.configuration,
+			document.runtime,
+			this.getAgentSessions()
+		);
 	}
 
 	private async buildWorkflowStageStatuses(

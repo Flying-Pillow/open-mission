@@ -130,6 +130,22 @@ export class GitHubPlatformAdapter {
 		return url ?? output.trim();
 	}
 
+	public async mergePullRequest(input: {
+		pullRequest: string;
+		method?: 'merge' | 'squash' | 'rebase';
+		deleteBranch?: boolean;
+	}): Promise<void> {
+		const strategy = input.method ?? 'merge';
+		await this.runTextProcess([
+			'pr',
+			'merge',
+			input.pullRequest,
+			`--${strategy}`,
+			...(input.deleteBranch === false ? [] : ['--delete-branch']),
+			...(this.repository ? ['--repo', this.repository] : [])
+		]);
+	}
+
 	private mapIssuePayloadToBrief(payload: GitHubIssuePayload): MissionBrief {
 		const labels = (payload.labels ?? [])
 			.map((label) => String(label.name ?? '').trim())

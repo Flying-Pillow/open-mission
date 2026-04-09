@@ -141,6 +141,8 @@ export type OperatorActionTargetContext = {
 	sessionId?: string;
 };
 
+export type OperatorActionQueryContext = OperatorActionTargetContext;
+
 export type OperatorActionExecutionMetadata = {
 	stageId?: MissionStageId;
 	launchMode?: MissionTaskLaunchMode;
@@ -373,16 +375,6 @@ export type ContextGraph = {
 	tasks: Record<string, TaskContext>;
 	artifacts: Record<string, ArtifactContext>;
 	agentSessions: Record<string, AgentSessionContext>;
-	availableActions: OperatorActionDescriptor[];
-};
-
-export type MissionSystemActionProjection = {
-	targetContext: OperatorActionTargetContext;
-	availableActions: OperatorActionDescriptor[];
-};
-
-export type MissionSystemActionProjections = {
-	dashboard: MissionSystemActionProjection;
 };
 
 export type MissionSystemState = {
@@ -404,7 +396,6 @@ export type MissionSystemSnapshot = {
 	state: MissionSystemState;
 	airportProjections: AirportProjectionSet;
 	airportRegistryProjections: Record<string, AirportProjectionSet>;
-	actionProjections: MissionSystemActionProjections;
 };
 
 export type MissionControlPlaneStatus = {
@@ -492,7 +483,6 @@ export type OperatorStatus = {
 		updatedAt: string;
 	};
 	recommendedAction?: string;
-	availableActions?: OperatorActionDescriptor[];
 	availableMissions?: MissionSelectionCandidate[];
 	preparation?: MissionPreparationStatus;
 };

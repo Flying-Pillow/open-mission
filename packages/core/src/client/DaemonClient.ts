@@ -175,6 +175,7 @@ function shouldIncludeSurfacePath(method: Method): boolean {
 		|| method === 'control.settings.update'
 		|| method === 'control.document.read'
 		|| method === 'control.document.write'
+		|| method === 'control.action.list'
 		|| method === 'control.action.describe'
 		|| method === 'control.action.execute'
 		|| method === 'control.workflow.settings.get'

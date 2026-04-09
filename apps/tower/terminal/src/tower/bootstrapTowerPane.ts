@@ -135,8 +135,7 @@ function selectorFromConnection(
 	snapshot: MissionSystemSnapshot,
 	fallback: MissionSelector
 ): MissionSelector {
-	const projectedMissionId = snapshot.airportProjections.dashboard.missionId
-		?? snapshot.state.domain.selection.missionId;
+	const projectedMissionId = snapshot.airportProjections.dashboard.missionId;
 	if (projectedMissionId) {
 		return { missionId: projectedMissionId };
 	}

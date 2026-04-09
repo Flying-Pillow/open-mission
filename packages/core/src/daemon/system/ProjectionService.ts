@@ -1,12 +1,6 @@
 import path from 'node:path';
 import type { AirportProjectionSet, AirportState, GateBinding, GateId } from '../../../../airport/build/index.js';
-import type {
-	ContextGraph,
-	MissionStageId,
-	MissionSystemActionProjections,
-	OperatorActionTargetContext
-} from '../../types.js';
-import { resolveAvailableActionsForTargetContext } from '../../lib/operatorActionTargeting.js';
+import type { ContextGraph } from '../../types.js';
 
 export function deriveSystemAirportProjections(
 	domain: ContextGraph,
@@ -19,30 +13,16 @@ export function deriveSystemAirportProjections(
 	};
 }
 
-export function deriveSystemActionProjections(
-	domain: ContextGraph,
-	airportProjections: AirportProjectionSet
-): MissionSystemActionProjections {
-	const targetContext = deriveActionTargetContext(airportProjections.dashboard.commandContext);
-	return {
-		dashboard: {
-			targetContext,
-			availableActions: resolveAvailableActionsForTargetContext(domain.availableActions, targetContext)
-		}
-	};
-}
-
 function deriveDashboardProjection(domain: ContextGraph, airportState: AirportState): AirportProjectionSet['dashboard'] {
 	const base = createGateProjectionBase(airportState, 'dashboard');
 	const repositoryId = airportState.repositoryId ?? domain.selection.repositoryId;
 	const repositoryContext = repositoryId ? domain.repositories[repositoryId] : undefined;
 	const requestedMissionId = base.binding.targetKind === 'mission'
 		? base.binding.targetId
-		: domain.selection.missionId;
+		: undefined;
 	const requestedMissionContext = requestedMissionId ? domain.missions[requestedMissionId] : undefined;
 	const missionId = requestedMissionContext?.tower ? requestedMissionId : undefined;
 	const missionContext = missionId ? requestedMissionContext : undefined;
-	const commandContext = deriveDashboardCommandContext(domain, repositoryContext, missionContext);
 	return {
 		...base,
 		surfaceMode: missionId ? 'mission' : 'repository',
@@ -53,10 +33,7 @@ function deriveDashboardProjection(domain: ContextGraph, airportState: AirportSt
 			|| 'Repository',
 		...(missionId ? { missionId } : {}),
 		...(missionContext?.briefSummary ? { missionLabel: missionContext.briefSummary } : missionId ? { missionLabel: missionId } : {}),
-		...(commandContext.stageId ? { selectedStageId: commandContext.stageId } : {}),
-		...(domain.selection.taskId ? { selectedTaskId: domain.selection.taskId } : {}),
-		...(domain.selection.agentSessionId ? { selectedSessionId: domain.selection.agentSessionId } : {}),
-		commandContext,
+		commandContext: {},
 		stageRail: missionContext?.tower?.stageRail.map((item) => ({ ...item })) ?? [],
 		treeNodes: missionContext?.tower?.treeNodes.map((node) => ({ ...node })) ?? [],
 		subtitle: missionContext?.briefSummary
@@ -74,7 +51,7 @@ function deriveEditorProjection(domain: ContextGraph, airportState: AirportState
 	const base = createGateProjectionBase(airportState, 'editor');
 	const artifactId = base.binding.targetKind === 'artifact'
 		? base.binding.targetId
-		: domain.selection.artifactId;
+		: undefined;
 	const artifactContext = artifactId ? domain.artifacts[artifactId] : undefined;
 	const missionContext = artifactContext?.missionId ? domain.missions[artifactContext.missionId] : undefined;
 	const repositoryContext = airportState.repositoryId ? domain.repositories[airportState.repositoryId] : undefined;
@@ -101,7 +78,7 @@ function deriveAgentSessionProjection(domain: ContextGraph, airportState: Airpor
 	const base = createGateProjectionBase(airportState, 'agentSession');
 	const sessionId = base.binding.targetKind === 'agentSession'
 		? base.binding.targetId
-		: domain.selection.agentSessionId;
+		: undefined;
 	const sessionContext = sessionId ? domain.agentSessions[sessionId] : undefined;
 	const taskId = sessionContext?.taskId || (base.binding.targetKind === 'task' ? base.binding.targetId : undefined);
 	return {
@@ -117,85 +94,6 @@ function deriveAgentSessionProjection(domain: ContextGraph, airportState: Airpor
 		emptyLabel: sessionId
 			? 'Agent session gate is bound and waiting for the session surface.'
 			: 'Agent session gate is idle.'
-	};
-}
-
-function deriveDashboardCommandContext(
-	domain: ContextGraph,
-	repositoryContext: ContextGraph['repositories'][string] | undefined,
-	missionContext: ContextGraph['missions'][string] | undefined
-): AirportProjectionSet['dashboard']['commandContext'] {
-	const sessionId = domain.selection.agentSessionId;
-	if (sessionId) {
-		const sessionContext = domain.agentSessions[sessionId];
-		const sessionTask = sessionContext?.taskId ? domain.tasks[sessionContext.taskId] : undefined;
-		return {
-			...(sessionTask?.stageId ? { stageId: sessionTask.stageId } : {}),
-			...(sessionContext?.taskId ? { taskId: sessionContext.taskId } : {}),
-			sessionId,
-			targetLabel: sessionContext?.promptTitle || sessionId,
-			targetKind: 'session'
-		};
-	}
-
-	const taskId = domain.selection.taskId;
-	if (taskId) {
-		const taskContext = domain.tasks[taskId];
-		return {
-			...(taskContext?.stageId ? { stageId: taskContext.stageId } : {}),
-			taskId,
-			targetLabel: taskContext?.subject || taskId,
-			targetKind: 'task'
-		};
-	}
-
-	const artifactId = domain.selection.artifactId;
-	if (artifactId) {
-		const artifactContext = domain.artifacts[artifactId];
-		const artifactTask = artifactContext?.ownerTaskId ? domain.tasks[artifactContext.ownerTaskId] : undefined;
-		return {
-			...(artifactContext?.ownerTaskId ? { taskId: artifactContext.ownerTaskId } : {}),
-			...(artifactTask?.stageId ? { stageId: artifactTask.stageId } : {}),
-			targetLabel: artifactContext?.displayLabel || artifactId,
-			targetKind: 'task-artifact'
-		};
-	}
-
-	const stageId = domain.selection.stageId;
-	if (stageId) {
-		const stageLabel = missionContext?.tower?.stageRail.find((item) => item.id === stageId)?.label || stageId;
-		return {
-			stageId,
-			targetLabel: stageLabel,
-			targetKind: 'stage'
-		};
-	}
-
-	if (missionContext) {
-		return {
-			...(missionContext.currentStage ? { stageId: missionContext.currentStage } : {}),
-			targetLabel: missionContext.briefSummary,
-			targetKind: 'mission'
-		};
-	}
-
-	if (repositoryContext) {
-		return {
-			targetLabel: repositoryContext.displayLabel,
-			targetKind: 'repository'
-		};
-	}
-
-	return {};
-}
-
-function deriveActionTargetContext(
-	commandContext: AirportProjectionSet['dashboard']['commandContext']
-): OperatorActionTargetContext {
-	return {
-		...(commandContext.stageId ? { stageId: commandContext.stageId as MissionStageId } : {}),
-		...(commandContext.taskId ? { taskId: commandContext.taskId } : {}),
-		...(commandContext.sessionId ? { sessionId: commandContext.sessionId } : {})
 	};
 }
 

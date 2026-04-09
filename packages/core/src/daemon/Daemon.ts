@@ -271,11 +271,6 @@ export class Daemon {
 			...(params.focusedGateId ? { focusedGateId: params.focusedGateId } : {}),
 			...(params.intentGateId ? { intentGateId: params.intentGateId } : {}),
 			...(params.repositoryId?.trim() ? { repositoryId: params.repositoryId.trim() } : {}),
-			...(params.missionId?.trim() ? { missionId: params.missionId.trim() } : {}),
-			...(params.stageId?.trim() ? { stageId: params.stageId.trim() } : {}),
-			...(params.taskId?.trim() ? { taskId: params.taskId.trim() } : {}),
-			...(params.artifactId?.trim() ? { artifactId: params.artifactId.trim() } : {}),
-			...(params.agentSessionId?.trim() ? { agentSessionId: params.agentSessionId.trim() } : {}),
 			...(request.surfacePath?.trim() ? { surfacePath: request.surfacePath.trim() } : {})
 		});
 		this.broadcastAirportState(snapshot);

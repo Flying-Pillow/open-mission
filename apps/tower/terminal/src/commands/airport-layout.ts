@@ -522,7 +522,7 @@ function resolveAgentSessionTarget(snapshot: AirportLayoutSnapshot): {
 	sessionId?: string;
 } {
 	const projection = snapshot.airportProjections.agentSession;
-	const missionId = projection.missionId ?? snapshot.state.domain.selection.missionId;
+	const missionId = projection.missionId;
 	const sessionId = projection.sessionId;
 	return {
 		...(missionId ? { missionId } : {}),
@@ -552,7 +552,7 @@ function renderAgentSessionPane(input: {
 	}
 
 	process.stdout.write(`agent session: ${projection.sessionId}\n`);
-	process.stdout.write(`mission: ${projection.missionId ?? input.snapshot.state.domain.selection.missionId ?? 'unknown'}\n`);
+	process.stdout.write(`mission: ${projection.missionId ?? 'unknown'}\n`);
 	process.stdout.write(`status: ${input.session?.lifecycleState ?? projection.statusLabel}\n`);
 	if (input.session?.runtimeLabel) {
 		process.stdout.write(`runtime: ${input.session.runtimeLabel}\n`);

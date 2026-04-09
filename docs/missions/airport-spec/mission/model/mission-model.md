@@ -67,9 +67,6 @@ Before a repository may host missions, Mission prepares a bootstrap proposal bra
   settings.json
   missions/
   worktrees/
-  pending/
-  active/
-  completed/
 ```
 
 ### Mission Preparation State
@@ -103,10 +100,20 @@ After the mission dossier exists on the repository branch, a developer may mater
       mission-control/
         mission.json
         ...
-  active/
+  worktrees/
     <mission-id>/
       workspace/
 ```
+
+`worktrees/` is local materialization state.
+
+It is not semantic mission status.
+
+Mission lifecycle must not be derived from folder placement.
+
+There is no authoritative `pending/active/completed` folder taxonomy for missions.
+
+Pending review, active execution, and completion are semantic states carried in mission records, workflow state, and repository history rather than implied by filesystem buckets.
 
 Machine-local daemon runtime state lives outside the repository under the hashed runtime directory for the control repo, for example `$XDG_RUNTIME_DIR/mission/<repo-hash>/daemon.json` and `sessions/<mission-id>.json` on Unix systems, with the OS temp directory as the fallback when `XDG_RUNTIME_DIR` is unavailable.
 

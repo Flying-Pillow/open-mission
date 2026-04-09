@@ -54,6 +54,7 @@ export type FlowStep = FlowSelectionStep | FlowTextStep;
 
 export type FlowDefinition = {
 	id: string;
+	owner?: 'repository' | 'mission';
 	targetLabel: string;
 	actionLabel: string;
 	steps: FlowStep[];

@@ -32,9 +32,7 @@ describe('initializeMissionRepository', () => {
 			});
 
 			await expect(fs.access(initialization.daemonSettingsPath)).resolves.toBeUndefined();
-			await expect(fs.access(path.join(workspaceRoot, '.missions', 'pending'))).rejects.toThrow();
-			await expect(fs.access(path.join(workspaceRoot, '.missions', 'active'))).rejects.toThrow();
-			await expect(fs.access(path.join(workspaceRoot, '.missions', 'completed'))).rejects.toThrow();
+			await expect(fs.access(path.join(workspaceRoot, '.missions', 'worktrees'))).rejects.toThrow();
 		} finally {
 			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}

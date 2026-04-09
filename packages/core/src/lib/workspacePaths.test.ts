@@ -26,10 +26,10 @@ describe('workspacePaths', () => {
         }
     });
 
-    it('detects mission workspaces under .missions/active and derives mission selectors automatically', async () => {
+    it('detects mission workspaces under .missions/worktrees and derives mission selectors automatically', async () => {
         const workspaceRoot = await createTempRepo();
         const missionId = '123-auto-select';
-        const missionRootPath = path.join(workspaceRoot, '.missions', 'active', missionId);
+        const missionRootPath = path.join(workspaceRoot, '.missions', 'worktrees', missionId);
         const missionWorktreePath = path.join(missionRootPath, 'workspace');
         const nestedPath = path.join(missionWorktreePath, 'src');
 
