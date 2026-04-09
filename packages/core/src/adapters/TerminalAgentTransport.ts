@@ -43,13 +43,16 @@ export class TerminalAgentTransport {
 
 	public constructor(options: TerminalAgentTransportOptions = {}) {
 		this.logLine = options.logLine;
-		this.sharedSessionName = options.sharedSessionName?.trim() || process.env['MISSION_TERMINAL_SESSION_NAME']?.trim() || undefined;
+		this.sharedSessionName = options.sharedSessionName?.trim()
+			|| process.env['MISSION_TERMINAL_SESSION']?.trim()
+			|| process.env['MISSION_TERMINAL_SESSION_NAME']?.trim()
+			|| undefined;
 		this.pilotPaneTitle = options.pilotPaneTitle?.trim() || 'PILOT';
 		const terminalBinary = options.terminalBinary?.trim() || 'zellij';
 		this.executor = options.executor ?? (async (args) => {
 			const result = await execFileAsync(terminalBinary, args, {
 				encoding: 'utf8',
-				env: process.env
+				env: { ...process.env, ZELLIJ: undefined }
 			});
 			return {
 				stdout: result.stdout,

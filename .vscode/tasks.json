@@ -6,13 +6,11 @@
 			"type": "shell",
 			"command": "pnpm",
 			"args": [
-				"install",
-				"--lockfile-only",
-				"&&",
-				"pnpm",
-				"--filter",
-				"@flying-pillow/tower-terminal",
-				"build"
+				"exec",
+				"turbo",
+				"run",
+				"build",
+				"--filter=@flying-pillow/tower-terminal"
 			],
 			"isBackground": false,
 			"problemMatcher": [],
@@ -34,9 +32,11 @@
 			"type": "shell",
 			"command": "pnpm",
 			"args": [
-				"--filter",
-				"@flying-pillow/tower-terminal",
-				"build"
+				"exec",
+				"turbo",
+				"run",
+				"build",
+				"--filter=@flying-pillow/tower-terminal"
 			],
 			"isBackground": false,
 			"problemMatcher": [],
@@ -47,9 +47,11 @@
 			"type": "shell",
 			"command": "pnpm",
 			"args": [
-				"--filter",
-				"@flying-pillow/tower-terminal",
-				"build"
+				"exec",
+				"turbo",
+				"run",
+				"build",
+				"--filter=@flying-pillow/tower-terminal"
 			],
 			"isBackground": false,
 			"problemMatcher": [],
@@ -72,9 +74,11 @@
 			"type": "shell",
 			"command": "pnpm",
 			"args": [
-				"--filter",
-				"@flying-pillow/tower-terminal",
-				"build"
+				"exec",
+				"turbo",
+				"run",
+				"build",
+				"--filter=@flying-pillow/tower-terminal"
 			],
 			"isBackground": false,
 			"problemMatcher": [],
@@ -85,9 +89,11 @@
 			"type": "shell",
 			"command": "pnpm",
 			"args": [
-				"--filter",
-				"@flying-pillow/tower-terminal",
-				"test"
+				"exec",
+				"turbo",
+				"run",
+				"test",
+				"--filter=@flying-pillow/tower-terminal"
 			],
 			"isBackground": false,
 			"problemMatcher": [],
@@ -98,9 +104,11 @@
 			"type": "shell",
 			"command": "pnpm",
 			"args": [
-				"--filter",
-				"@flying-pillow/tower-terminal",
-				"build"
+				"exec",
+				"turbo",
+				"run",
+				"build",
+				"--filter=@flying-pillow/tower-terminal"
 			],
 			"isBackground": false,
 			"problemMatcher": [],

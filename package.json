@@ -6,12 +6,12 @@
   "private": true,
   "packageManager": "pnpm@10.30.3",
   "scripts": {
-    "airport:status": "pnpm --filter @flying-pillow/tower-terminal build && pnpm --dir apps/tower/terminal exec node build/index.js airport:status",
+    "airport:status": "pnpm exec turbo run build --filter=@flying-pillow/tower-terminal && node apps/tower/terminal/build/index.js airport:status",
     "build": "turbo run build",
     "check": "turbo run check",
     "dev": "turbo run dev --parallel",
     "clean": "turbo run clean --continue --only",
-    "mission": "pnpm --filter @flying-pillow/tower-terminal exec mission",
+    "mission": "pnpm exec turbo run build --filter=@flying-pillow/tower-terminal && MISSION_GATE_ID=dashboard node apps/tower/terminal/build/index.js",
     "graph": "turbo run build --graph",
     "lint": "turbo run lint //#lint:root",
     "lint:fix": "eslint . --fix",
@@ -19,8 +19,8 @@
     "format:check": "prettier . --check",
     "test": "turbo run test --affected",
     "test:all": "turbo run test",
-    "test:daemon-mission": "pnpm --filter @flying-pillow/tower-terminal run test:daemon-mission",
-    "test:workflow-e2e": "pnpm --filter @flying-pillow/tower-terminal run test:workflow-e2e",
+    "test:daemon-mission": "pnpm exec turbo run build --filter=@flying-pillow/tower-terminal && pnpm exec tsx apps/tower/terminal/src/scripts/daemonMissionSmokeTest.ts",
+    "test:workflow-e2e": "pnpm exec turbo run build --filter=@flying-pillow/tower-terminal && pnpm exec tsx apps/tower/terminal/src/scripts/daemonCurrentWorkflowE2eTest.ts",
     "test:watch": "vitest"
   },
   "pnpm": {

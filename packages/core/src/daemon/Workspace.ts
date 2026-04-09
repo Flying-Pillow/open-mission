@@ -347,7 +347,7 @@ export class MissionWorkspace {
 			type: reconciledBrief.type,
 			branchRef: preparation.branchRef,
 			missionRootDir: preparation.missionRootDir,
-			flightDeckDir: preparation.flightDeckDir,
+			missionControlDir: preparation.missionControlDir,
 			preparation,
 			recommendedAction: 'Merge the mission preparation PR and pull the default branch before materializing a local mission workspace.'
 		};
@@ -1723,7 +1723,7 @@ function requireSingleSelectionActionStep(
 function requireTextActionStep(
 	steps: OperatorActionExecutionStep[],
 	stepId: string
-	): OperatorActionExecutionTextStep {
+): OperatorActionExecutionTextStep {
 	const step = steps.find(
 		(candidate): candidate is OperatorActionExecutionTextStep =>
 			candidate.kind === 'text' && candidate.stepId === stepId

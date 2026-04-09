@@ -44,7 +44,7 @@ describe('workspacePaths', () => {
                 missionId,
                 missionDir: missionWorktreePath,
                 missionRootDir: missionRootPath,
-                flightDeckDir: path.join(missionRootPath, 'flight-deck'),
+                missionControlDir: path.join(missionRootPath, 'mission-control'),
                 selector: { missionId }
             });
             expect(resolveMissionWorkspaceContext(nestedPath, workspaceRoot)).toMatchObject({
@@ -53,7 +53,7 @@ describe('workspacePaths', () => {
                 missionId,
                 missionDir: missionWorktreePath,
                 missionRootDir: missionRootPath,
-                flightDeckDir: path.join(missionRootPath, 'flight-deck'),
+                missionControlDir: path.join(missionRootPath, 'mission-control'),
                 selector: { missionId }
             });
         } finally {

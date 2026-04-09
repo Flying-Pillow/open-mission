@@ -8,14 +8,14 @@
     "mission": "./build/index.js"
   },
   "scripts": {
-    "airport:status": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && tsx src/index.ts airport:status",
-    "build": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && rm -rf build && rm -f tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./scripts/copy-static-assets.mjs",
-    "check": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && tsc --noEmit -p tsconfig.json",
-    "dev": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && tsx src/index.ts",
+    "airport:status": "pnpm exec turbo run build --filter=@flying-pillow/tower-terminal && tsx src/index.ts airport:status",
+    "build": "rm -rf build && rm -f tsconfig.tsbuildinfo && tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "dev": "pnpm exec turbo run build --filter=@flying-pillow/tower-terminal && MISSION_GATE_ID=dashboard tsx src/index.ts",
     "lint": "eslint src --ext .ts,.tsx",
     "test": "vitest run --passWithNoTests",
-    "test:daemon-mission": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && tsx src/scripts/daemonMissionSmokeTest.ts",
-    "test:workflow-e2e": "pnpm --filter @flying-pillow/mission-core build && pnpm --filter @flying-pillow/mission-adapters build && tsx src/scripts/daemonCurrentWorkflowE2eTest.ts"
+    "test:daemon-mission": "pnpm exec turbo run build --filter=@flying-pillow/tower-terminal && tsx src/scripts/daemonMissionSmokeTest.ts",
+    "test:workflow-e2e": "pnpm exec turbo run build --filter=@flying-pillow/tower-terminal && tsx src/scripts/daemonCurrentWorkflowE2eTest.ts"
   },
   "dependencies": {
     "@clack/prompts": "^1.1.0",

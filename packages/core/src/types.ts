@@ -135,6 +135,12 @@ export type OperatorActionPresentationTarget = {
 	targetId?: string;
 };
 
+export type OperatorActionTargetContext = {
+	stageId?: MissionStageId;
+	taskId?: string;
+	sessionId?: string;
+};
+
 export type OperatorActionExecutionMetadata = {
 	stageId?: MissionStageId;
 	launchMode?: MissionTaskLaunchMode;
@@ -212,7 +218,7 @@ export type MissionRecord = {
 	brief: MissionBrief;
 	missionDir: string;
 	missionRootDir?: string;
-	flightDeckDir?: string;
+	missionControlDir?: string;
 	branchRef: string;
 	createdAt: string;
 	stage: MissionStageId;
@@ -287,7 +293,7 @@ export type MissionPreparationStatus =
 		baseBranch: string;
 		pullRequestUrl: string;
 		missionRootDir: string;
-		flightDeckDir: string;
+		missionControlDir: string;
 		issueId?: number;
 		issueUrl?: string;
 	};
@@ -297,6 +303,7 @@ export type MissionOperationalMode = 'setup' | 'root' | 'mission';
 export type ContextSelection = {
 	repositoryId?: string;
 	missionId?: string;
+	stageId?: MissionStageId;
 	taskId?: string;
 	artifactId?: string;
 	agentSessionId?: string;
@@ -314,12 +321,16 @@ export type MissionContext = {
 	missionId: string;
 	repositoryId: string;
 	briefSummary: string;
+	issueId?: number;
+	branchRef?: string;
+	createdAt?: string;
 	workspacePath: string;
 	currentStage?: MissionStageId;
 	lifecycleState?: MissionLifecycleState;
 	taskIds: string[];
 	artifactIds: string[];
 	sessionIds: string[];
+	tower?: MissionTowerProjection;
 };
 
 export type TaskContext = {
@@ -362,6 +373,16 @@ export type ContextGraph = {
 	tasks: Record<string, TaskContext>;
 	artifacts: Record<string, ArtifactContext>;
 	agentSessions: Record<string, AgentSessionContext>;
+	availableActions: OperatorActionDescriptor[];
+};
+
+export type MissionSystemActionProjection = {
+	targetContext: OperatorActionTargetContext;
+	availableActions: OperatorActionDescriptor[];
+};
+
+export type MissionSystemActionProjections = {
+	dashboard: MissionSystemActionProjection;
 };
 
 export type MissionSystemState = {
@@ -383,6 +404,7 @@ export type MissionSystemSnapshot = {
 	state: MissionSystemState;
 	airportProjections: AirportProjectionSet;
 	airportRegistryProjections: Record<string, AirportProjectionSet>;
+	actionProjections: MissionSystemActionProjections;
 };
 
 export type MissionControlPlaneStatus = {
@@ -451,7 +473,7 @@ export type OperatorStatus = {
 	branchRef?: string;
 	missionDir?: string;
 	missionRootDir?: string;
-	flightDeckDir?: string;
+	missionControlDir?: string;
 	productFiles?: Partial<Record<MissionArtifactKey, string>>;
 	activeTasks?: MissionTaskState[];
 	readyTasks?: MissionTaskState[];

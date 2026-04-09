@@ -94,8 +94,8 @@ export class FilesystemAdapter {
 		return path.join(this.getMissionsPath(), missionId);
 	}
 
-	public getMissionFlightDeckPath(missionDir: string): string {
-		return path.join(missionDir, 'flight-deck');
+	public getMissionControlPath(missionDir: string): string {
+		return path.join(missionDir, 'mission-control');
 	}
 
 	public getMissionWorkspacePath(missionDir: string): string {
@@ -103,11 +103,11 @@ export class FilesystemAdapter {
 	}
 
 	public getMissionStagePath(missionDir: string, stage: MissionStageId): string {
-		return path.join(this.getMissionFlightDeckPath(missionDir), getMissionStageDefinition(stage).folder);
+		return path.join(this.getMissionControlPath(missionDir), getMissionStageDefinition(stage).folder);
 	}
 
 	public getTasksPath(missionDir: string): string {
-		return this.getMissionFlightDeckPath(missionDir);
+		return this.getMissionControlPath(missionDir);
 	}
 
 	public getStageTasksPath(missionDir: string, stage: MissionStageId): string {
@@ -296,7 +296,7 @@ export class FilesystemAdapter {
 	public async initializeMissionEnvironment(missionDir: string): Promise<void> {
 		await Promise.all([
 			fs.mkdir(missionDir, { recursive: true }),
-			fs.mkdir(this.getMissionFlightDeckPath(missionDir), { recursive: true })
+			fs.mkdir(this.getMissionControlPath(missionDir), { recursive: true })
 		]);
 	}
 
@@ -409,7 +409,7 @@ export class FilesystemAdapter {
 	}
 
 	public getMissionRuntimeRecordPath(missionDir: string): string {
-		return path.join(this.getMissionFlightDeckPath(missionDir), MISSION_RUNTIME_FILE_NAME);
+		return path.join(this.getMissionControlPath(missionDir), MISSION_RUNTIME_FILE_NAME);
 	}
 
 	public async readMissionRuntimeRecord(
@@ -568,7 +568,7 @@ export class FilesystemAdapter {
 		const definition = getMissionArtifactDefinition(artifact);
 		return definition.stageId
 			? path.join(this.getMissionStagePath(missionDir, definition.stageId), definition.fileName)
-			: path.join(this.getMissionFlightDeckPath(missionDir), definition.fileName);
+			: path.join(this.getMissionControlPath(missionDir), definition.fileName);
 	}
 
 	private getTaskPath(missionDir: string, stage: MissionStageId, fileName: string): string {

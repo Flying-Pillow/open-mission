@@ -5,10 +5,12 @@ import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import { DaemonApi } from '../client/DaemonApi.js';
 import { DaemonClient } from '../client/DaemonClient.js';
+import type { OperatorStatus } from '../types.js';
 import { getMissionDaemonSettingsPath } from '../lib/daemonConfig.js';
 import { initializeMissionRepository } from '../initializeMissionRepository.js';
 import { startDaemon } from './Daemon.js';
 import { getDaemonManifestPath, getDaemonRuntimePath } from './daemonPaths.js';
+import { MissionSystemController } from './MissionSystemController.js';
 
 describe('Daemon', () => {
 	it('does not initialize daemon settings when a workspace first connects', async () => {
@@ -44,6 +46,32 @@ describe('Daemon', () => {
 					client.dispose();
 					await daemon.close();
 				}
+			} finally {
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('does not crash when a ping-only client disconnects before scoping airport state', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			const socketPath = path.join(workspaceRoot, '.mission-daemon-test.sock');
+
+			try {
+				const daemon = await startDaemon({ socketPath });
+				const client = new DaemonClient();
+
+				try {
+					await client.connect({ surfacePath: workspaceRoot, socketPath });
+					const ping = await client.request<{ ok: boolean; protocolVersion: number }>('ping');
+					expect(ping.ok).toBe(true);
+				} finally {
+					client.dispose();
+				}
+
+				const manifest = daemon.getManifest();
+				expect(manifest?.pid).toBe(process.pid);
+				await daemon.close();
 			} finally {
 				await fs.rm(workspaceRoot, { recursive: true, force: true });
 			}
@@ -273,27 +301,49 @@ describe('Daemon', () => {
 								substrate: {
 									sessionName: expect.stringContaining('mission-control-')
 								}
-								},
-								airports: {
-									activeRepositoryId: workspaceRoot,
-									repositories: {
-										[workspaceRoot]: {
-											repositoryId: workspaceRoot
-										}
+							},
+							airports: {
+								activeRepositoryId: workspaceRoot,
+								repositories: {
+									[workspaceRoot]: {
+										repositoryId: workspaceRoot
 									}
+								}
 							}
 						},
 						airportProjections: {
 							dashboard: {
-								title: 'Dashboard'
-							}
+								title: 'Dashboard',
+								surfaceMode: 'repository',
+								centerRoute: 'repository-flow',
+								repositoryLabel: path.basename(workspaceRoot),
+								commandContext: {
+									targetLabel: path.basename(workspaceRoot),
+									targetKind: 'repository'
+								},
+								stageRail: [],
+								treeNodes: [],
+								emptyLabel: 'Repository mode is ready.'
 							},
-							airportRegistryProjections: {
-								[workspaceRoot]: {
-									dashboard: {
-										title: 'Dashboard'
-									}
+							editor: {
+								title: 'Editor',
+								launchPath: workspaceRoot,
+								emptyLabel: 'Editor gate is waiting for an artifact binding.'
+							},
+							pilot: {
+								title: 'Pilot',
+								statusLabel: 'idle',
+								emptyLabel: 'Pilot gate is idle.'
+							}
+						},
+						airportRegistryProjections: {
+							[workspaceRoot]: {
+								dashboard: {
+									title: 'Dashboard',
+									surfaceMode: 'repository',
+									centerRoute: 'repository-flow'
 								}
+							}
 						}
 					});
 				} finally {
@@ -305,6 +355,355 @@ describe('Daemon', () => {
 				await fs.rm(workspaceRoot, { recursive: true, force: true });
 			}
 		});
+	});
+
+	it('projects mission-control data through the dashboard projection', async () => {
+		const workspaceRoot = await createTempRepo();
+		const controller = new MissionSystemController();
+		const status = {
+			found: true,
+			control: {
+				controlRoot: workspaceRoot,
+				missionDirectory: path.join(workspaceRoot, '.missions'),
+				settingsPath: path.join(workspaceRoot, 'mission.settings.json'),
+				worktreesPath: path.join(workspaceRoot, '.missions', 'missions'),
+				settings: {},
+				isGitRepository: true,
+				initialized: true,
+				settingsPresent: true,
+				settingsComplete: true,
+				availableMissionCount: 1,
+				problems: [],
+				warnings: []
+			},
+			missionId: 'mission/airport-projection',
+			title: 'Projection-backed mission control',
+			stage: 'implementation',
+			missionDir: path.join(workspaceRoot, '.missions', 'missions', 'mission-airport-projection'),
+			workflow: {
+				lifecycle: 'running',
+				pause: { active: false },
+				panic: { active: false },
+				currentStageId: 'implementation',
+				configuration: {
+					stages: {},
+					taskGeneration: []
+				},
+				stages: [],
+				tasks: [],
+				gates: [],
+				updatedAt: new Date().toISOString()
+			},
+			stages: [
+				{
+					stage: 'implementation',
+					label: 'Implement',
+					status: 'active',
+					taskCount: 1,
+					completedTaskCount: 0,
+					activeTaskIds: ['task-1'],
+					readyTaskIds: [],
+					tasks: [
+						{
+							taskId: 'task-1',
+							stage: 'implementation',
+							sequence: 1,
+							subject: 'Implement airport projection',
+							instruction: 'Project mission control through airport state.',
+							body: 'Implement the projection rewrite.',
+							dependsOn: [],
+							blockedBy: [],
+							status: 'active',
+							agent: 'copilot',
+							retries: 0,
+							fileName: 'airport-projection.md',
+							filePath: path.join(workspaceRoot, 'docs', 'airport-projection.md'),
+							relativePath: 'docs/airport-projection.md'
+						}
+					]
+				}
+			],
+			agentSessions: [
+				{
+					sessionId: 'session-1',
+					taskId: 'task-1',
+					runtimeId: 'copilot',
+					lifecycleState: 'running',
+					createdAt: new Date().toISOString(),
+					workingDirectory: workspaceRoot
+				}
+			],
+			tower: {
+				stageRail: [
+					{ id: 'implementation', label: 'IMPLEMENTATION', state: 'active', subtitle: '0/1' }
+				],
+				treeNodes: [
+					{ id: 'tree:stage:implementation', label: 'IMPLEMENTATION', kind: 'stage', depth: 0, color: '#ffffff', collapsible: true, stageId: 'implementation' },
+					{ id: 'tree:task:task-1', label: '1 Implement airport projection', kind: 'task', depth: 1, color: '#ffffff', collapsible: true, stageId: 'implementation', taskId: 'task-1' },
+					{ id: 'tree:session:session-1', label: 'copilot ion-1', kind: 'session', depth: 2, color: '#ffffff', collapsible: false, stageId: 'implementation', taskId: 'task-1', sessionId: 'session-1' }
+				]
+			}
+		} as unknown as OperatorStatus;
+
+		try {
+			const snapshot = await controller.observeOperatorStatus(status);
+			expect(snapshot.airportProjections.dashboard).toMatchObject({
+				surfaceMode: 'mission',
+				centerRoute: 'mission-control',
+				missionId: 'mission/airport-projection',
+				commandContext: {
+					stageId: 'implementation',
+					taskId: 'task-1',
+					sessionId: 'session-1',
+					targetKind: 'session',
+					targetLabel: 'session-1'
+				},
+				stageRail: expect.any(Array),
+				treeNodes: expect.any(Array)
+			});
+			expect(snapshot.airportProjections.dashboard.stageRail.length).toBeGreaterThan(0);
+			expect(snapshot.airportProjections.dashboard.treeNodes.length).toBeGreaterThan(0);
+			expect(snapshot.airportProjections.dashboard.treeNodes[0]).toMatchObject({
+				kind: 'stage',
+				stageId: 'implementation'
+			});
+		} finally {
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		}
+	});
+
+	it('filters dashboard available actions by target ancestry without leaking stage task actions', async () => {
+		const workspaceRoot = await createTempRepo();
+		const controller = new MissionSystemController();
+		const status = {
+			found: true,
+			control: {
+				controlRoot: workspaceRoot,
+				missionDirectory: path.join(workspaceRoot, '.missions'),
+				settingsPath: path.join(workspaceRoot, 'mission.settings.json'),
+				worktreesPath: path.join(workspaceRoot, '.missions', 'missions'),
+				settings: {},
+				isGitRepository: true,
+				initialized: true,
+				settingsPresent: true,
+				settingsComplete: true,
+				availableMissionCount: 1,
+				problems: [],
+				warnings: []
+			},
+			missionId: 'mission/airport-projection',
+			title: 'Projection-backed mission control',
+			stage: 'implementation',
+			workflow: {
+				lifecycle: 'running',
+				pause: { active: false },
+				panic: { active: false },
+				currentStageId: 'implementation',
+				configuration: {
+					stages: {},
+					taskGeneration: []
+				},
+				stages: [],
+				tasks: [],
+				gates: [],
+				updatedAt: new Date().toISOString()
+			},
+			tower: {
+				stageRail: [
+					{ id: 'implementation', label: 'IMPLEMENTATION', state: 'active', subtitle: '0/1' }
+				],
+				treeNodes: [
+					{ id: 'tree:stage:implementation', label: 'IMPLEMENTATION', kind: 'stage', depth: 0, color: '#ffffff', collapsible: true, stageId: 'implementation' }
+				]
+			},
+			availableActions: [
+				{
+					id: 'mission.pause',
+					label: 'Pause Mission',
+					action: '/mission pause',
+					scope: 'mission',
+					disabled: false,
+					disabledReason: '',
+					enabled: true,
+					presentationTargets: [{ scope: 'mission' }, { scope: 'stage', targetId: 'implementation' }]
+				},
+				{
+					id: 'generation.tasks.implementation',
+					label: 'Generate Implementation Tasks',
+					action: '/generate',
+					scope: 'generation',
+					targetId: 'implementation',
+					disabled: false,
+					disabledReason: '',
+					enabled: true,
+					presentationTargets: [{ scope: 'stage', targetId: 'implementation' }]
+				},
+				{
+					id: 'task.launch.implementation/02-workflow-engine',
+					label: 'Launch Agent Session',
+					action: '/launch',
+					scope: 'task',
+					targetId: 'implementation/02-workflow-engine',
+					disabled: false,
+					disabledReason: '',
+					enabled: true,
+					presentationTargets: [
+						{ scope: 'task', targetId: 'implementation/02-workflow-engine' },
+						{ scope: 'stage', targetId: 'implementation' }
+					]
+				}
+			]
+		} as unknown as OperatorStatus;
+
+		try {
+			const snapshot = await controller.observeOperatorStatus(status);
+			expect(snapshot.actionProjections.dashboard.targetContext).toEqual({
+				stageId: 'implementation'
+			});
+			expect(snapshot.actionProjections.dashboard.availableActions.map((action) => action.id)).toEqual([
+				'mission.pause',
+				'generation.tasks.implementation'
+			]);
+		} finally {
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		}
+	});
+
+	it('preserves observed stage selection across status updates and projects selection-scoped actions', async () => {
+		const workspaceRoot = await createTempRepo();
+		const controller = new MissionSystemController();
+		const status = {
+			found: true,
+			control: {
+				controlRoot: workspaceRoot,
+				missionDirectory: path.join(workspaceRoot, '.missions'),
+				settingsPath: path.join(workspaceRoot, 'mission.settings.json'),
+				worktreesPath: path.join(workspaceRoot, '.missions', 'missions'),
+				settings: {},
+				isGitRepository: true,
+				initialized: true,
+				settingsPresent: true,
+				settingsComplete: true,
+				availableMissionCount: 1,
+				problems: [],
+				warnings: []
+			},
+			missionId: 'mission/airport-projection',
+			title: 'Projection-backed mission control',
+			stage: 'implementation',
+			stages: [
+				{
+					stage: 'implementation',
+					label: 'Implement',
+					status: 'active',
+					taskCount: 1,
+					completedTaskCount: 0,
+					activeTaskIds: [],
+					readyTaskIds: ['task-1'],
+					tasks: [
+						{
+							taskId: 'task-1',
+							stage: 'implementation',
+							sequence: 1,
+							subject: 'Implement airport projection',
+							instruction: 'Project mission control through airport state.',
+							body: 'Implement the projection rewrite.',
+							dependsOn: [],
+							blockedBy: [],
+							status: 'todo',
+							agent: 'copilot',
+							retries: 0,
+							fileName: 'airport-projection.md',
+							filePath: path.join(workspaceRoot, 'docs', 'airport-projection.md'),
+							relativePath: 'docs/airport-projection.md'
+						}
+					]
+				}
+			],
+			tower: {
+				stageRail: [
+					{ id: 'prd', label: 'PRD', state: 'done' },
+					{ id: 'implementation', label: 'IMPLEMENTATION', state: 'active', subtitle: '0/1' }
+				],
+				treeNodes: [
+					{ id: 'tree:stage:implementation', label: 'IMPLEMENTATION', kind: 'stage', depth: 0, color: '#ffffff', collapsible: true, stageId: 'implementation' }
+				]
+			},
+			availableActions: [
+				{
+					id: 'mission.pause',
+					label: 'Pause Mission',
+					action: '/mission pause',
+					scope: 'mission',
+					disabled: false,
+					disabledReason: '',
+					enabled: true,
+					presentationTargets: [{ scope: 'mission' }, { scope: 'stage', targetId: 'implementation' }]
+				},
+				{
+					id: 'generation.tasks.implementation',
+					label: 'Generate Implementation Tasks',
+					action: '/generate',
+					scope: 'generation',
+					targetId: 'implementation',
+					disabled: false,
+					disabledReason: '',
+					enabled: true,
+					presentationTargets: [{ scope: 'stage', targetId: 'implementation' }]
+				},
+				{
+					id: 'task.launch.task-1',
+					label: 'Launch Agent Session',
+					action: '/launch',
+					scope: 'task',
+					targetId: 'task-1',
+					disabled: false,
+					disabledReason: '',
+					enabled: true,
+					presentationTargets: [
+						{ scope: 'task', targetId: 'task-1' },
+						{ scope: 'stage', targetId: 'implementation' }
+					]
+				}
+			]
+		} as unknown as OperatorStatus;
+
+		try {
+			await controller.observeOperatorStatus(status);
+			await controller.scopeAirportToSurfacePath(workspaceRoot);
+			await controller.connectAirportClient({
+				clientId: 'dashboard-client',
+				surfacePath: workspaceRoot,
+				gateId: 'dashboard',
+				label: 'tower'
+			});
+
+			const observed = await controller.observeAirportClient({
+				clientId: 'dashboard-client',
+				surfacePath: workspaceRoot,
+				missionId: 'mission/airport-projection',
+				stageId: 'implementation'
+			});
+			expect(observed.state.domain.selection).toMatchObject({
+				missionId: 'mission/airport-projection',
+				stageId: 'implementation'
+			});
+			expect(observed.actionProjections.dashboard.availableActions.map((action) => action.id)).toEqual([
+				'mission.pause',
+				'generation.tasks.implementation'
+			]);
+
+			const refreshed = await controller.observeOperatorStatus(status);
+			expect(refreshed.state.domain.selection).toMatchObject({
+				missionId: 'mission/airport-projection',
+				stageId: 'implementation'
+			});
+			expect(refreshed.actionProjections.dashboard.targetContext).toEqual({
+				stageId: 'implementation'
+			});
+		} finally {
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		}
 	});
 
 	it('registers airport clients and allows gate observation through the daemon API', async () => {
@@ -371,6 +770,62 @@ describe('Daemon', () => {
 					expect(rebound.airportProjections.pilot.subtitle).toContain('task:implementation/01-airport');
 				} finally {
 					client.dispose();
+					await daemon.close();
+				}
+			} finally {
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('replaces prior gate claimants and tracks client-specific observed focus', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			await initializeMissionRepository(workspaceRoot);
+
+			try {
+				const daemon = await startDaemon();
+				const firstClient = new DaemonClient();
+				const secondClient = new DaemonClient();
+
+				try {
+					await firstClient.connect({ surfacePath: workspaceRoot });
+					await secondClient.connect({ surfacePath: workspaceRoot });
+					const firstApi = new DaemonApi(firstClient);
+					const secondApi = new DaemonApi(secondClient);
+
+					await firstApi.airport.connectPanel({
+						gateId: 'dashboard',
+						label: 'tower-a',
+						panelProcessId: '111'
+					});
+					const replaced = await secondApi.airport.connectPanel({
+						gateId: 'dashboard',
+						label: 'tower-b',
+						panelProcessId: '222'
+					});
+					const firstRegistration = Object.values(replaced.state.airport.clients).find((client) => client.label === 'tower-a');
+					const secondRegistration = Object.values(replaced.state.airport.clients).find((client) => client.label === 'tower-b');
+
+					expect(firstRegistration?.claimedGateId).toBeUndefined();
+					expect(secondRegistration?.claimedGateId).toBe('dashboard');
+
+					await firstApi.airport.observeClient({ focusedGateId: 'editor' });
+					const observed = await secondApi.airport.observeClient({
+						focusedGateId: 'pilot',
+						intentGateId: 'pilot'
+					});
+
+					expect(observed.state.airport.focus.intentGateId).toBe('pilot');
+					expect(observed.state.airport.focus.observedGateId).toBe('pilot');
+					expect(Object.values(observed.state.airport.focus.observedGateIdByClientId ?? {}).sort()).toEqual([
+						'editor',
+						'pilot'
+					]);
+				} finally {
+					firstClient.dispose();
+					secondClient.dispose();
 					await daemon.close();
 				}
 			} finally {
@@ -606,18 +1061,18 @@ describe('Daemon', () => {
 			try {
 				await client.connect({ surfacePath: workspaceRoot });
 				const api = new DaemonApi(client);
-					const resolvedFlow = await api.control.describeActionFlow('control.setup.edit', [
-						{
-							kind: 'selection',
-							stepId: 'field',
-							optionIds: ['agentRuntime']
-						}
-					]);
+				const resolvedFlow = await api.control.describeActionFlow('control.setup.edit', [
+					{
+						kind: 'selection',
+						stepId: 'field',
+						optionIds: ['agentRuntime']
+					}
+				]);
 				const result = await api.control.executeAction('control.setup.edit', [
 					{
 						kind: 'selection',
 						stepId: 'field',
-							optionIds: ['agentRuntime']
+						optionIds: ['agentRuntime']
 					},
 					{
 						kind: 'selection',
@@ -627,21 +1082,21 @@ describe('Daemon', () => {
 				]);
 				const settingsContent = await fs.readFile(getMissionDaemonSettingsPath(workspaceRoot), 'utf8');
 
-					expect(resolvedFlow.steps[1]).toMatchObject({
-						kind: 'selection',
-						id: 'value',
-						title: 'RUNTIME'
-					});
+				expect(resolvedFlow.steps[1]).toMatchObject({
+					kind: 'selection',
+					id: 'value',
+					title: 'RUNTIME'
+				});
 
 				expect(result).toMatchObject({
 					control: expect.objectContaining({
 						settings: expect.objectContaining({
-								agentRuntime: 'copilot-sdk'
+							agentRuntime: 'copilot-sdk'
 						})
 					})
 				});
 				expect(JSON.parse(settingsContent)).toMatchObject({
-						agentRuntime: 'copilot-sdk'
+					agentRuntime: 'copilot-sdk'
 				});
 			} finally {
 				client.dispose();

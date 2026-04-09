@@ -137,13 +137,13 @@ export class Mission {
 
 	public getRecord(): MissionRecord {
 		const workspaceDir = this.adapter.getMissionWorkspacePath(this.missionDir);
-		const flightDeckDir = this.adapter.getMissionFlightDeckPath(this.missionDir);
+		const missionControlDir = this.adapter.getMissionControlPath(this.missionDir);
 		return {
 			id: this.descriptor.missionId,
 			brief: { ...this.descriptor.brief },
 			missionDir: workspaceDir,
 			missionRootDir: this.missionDir,
-			flightDeckDir,
+			missionControlDir,
 			branchRef: this.descriptor.branchRef,
 			createdAt: this.descriptor.createdAt,
 			stage: this.lastKnownStatus?.stage ?? 'prd',
@@ -493,7 +493,7 @@ export class Mission {
 			branchRef: this.descriptor.branchRef,
 			missionDir: this.adapter.getMissionWorkspacePath(this.missionDir),
 			missionRootDir: this.missionDir,
-			flightDeckDir: this.adapter.getMissionFlightDeckPath(this.missionDir),
+			missionControlDir: this.adapter.getMissionControlPath(this.missionDir),
 			productFiles,
 			...(activeTasks.length > 0 ? { activeTasks } : {}),
 			...(readyTasks.length > 0 ? { readyTasks } : {}),
@@ -568,7 +568,7 @@ export class Mission {
 			branchRef: this.descriptor.branchRef,
 			missionDir: this.adapter.getMissionWorkspacePath(this.missionDir),
 			missionRootDir: this.missionDir,
-			flightDeckDir: this.adapter.getMissionFlightDeckPath(this.missionDir),
+			missionControlDir: this.adapter.getMissionControlPath(this.missionDir),
 			productFiles,
 			stages,
 			agentSessions: [],
@@ -802,7 +802,7 @@ export class Mission {
 		const fileName = `${task.taskId.split('/').pop() ?? task.taskId}.md`;
 		const relativePath =
 			[
-				'flight-deck',
+				'mission-control',
 				MISSION_TASK_STAGE_DIRECTORIES[task.stageId as MissionStageId],
 				'tasks',
 				fileName

@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import {
-	DaemonApi,
+    DaemonApi,
     MISSION_ARTIFACTS,
     MISSION_GATE_INTENTS,
     MISSION_TASK_STAGE_DIRECTORIES,
@@ -63,7 +63,7 @@ type CurrentWorkflowE2eReport = {
     stage: MissionStageId;
     workspaceRoot: string;
     missionDir: string;
-    flightDeckDir: string;
+    missionControlDir: string;
     activeTaskIds: string[];
     readyTaskIds: string[];
     gateSummary: Array<{ intent: GateIntent; allowed: boolean; errorCount: number; warningCount: number }>;
@@ -83,7 +83,7 @@ async function main(): Promise<void> {
     }
 
     const runtimeDocument = await readMissionRuntimeDocument(
-        path.join(workspaceContext.flightDeckDir, 'mission.json')
+        path.join(workspaceContext.missionControlDir, 'mission.json')
     );
 
     const client = await connectSurfaceDaemon({
@@ -115,11 +115,11 @@ async function main(): Promise<void> {
             ].join(' ')
         );
         assertCondition(
-            path.resolve(missionStatus.flightDeckDir ?? '') === path.resolve(workspaceContext.flightDeckDir),
+            path.resolve(missionStatus.missionControlDir ?? '') === path.resolve(workspaceContext.missionControlDir),
             [
-                'Flight-deck directory mismatch between daemon status and workspace context.',
-                `expected='${workspaceContext.flightDeckDir}'`,
-                `actual='${missionStatus.flightDeckDir ?? 'undefined'}'`
+                'Mission-control directory mismatch between daemon status and workspace context.',
+                `expected='${workspaceContext.missionControlDir}'`,
+                `actual='${missionStatus.missionControlDir ?? 'undefined'}'`
             ].join(' ')
         );
 
@@ -209,7 +209,7 @@ async function main(): Promise<void> {
             await ensureFileExists(task.filePath, `Ready task file is missing on disk: ${task.filePath}`);
         }
 
-        const expectedArtifactMap = await resolveExpectedArtifactFiles(workspaceContext.flightDeckDir);
+        const expectedArtifactMap = await resolveExpectedArtifactFiles(workspaceContext.missionControlDir);
         const actualArtifactMap = missionStatus.productFiles ?? {};
 
         for (const [artifactKey, artifactPath] of Object.entries(actualArtifactMap)) {
@@ -223,7 +223,7 @@ async function main(): Promise<void> {
             const expectedPath = expectedArtifactMap[key];
             assertCondition(
                 expectedPath !== undefined,
-                `Daemon reported artifact '${key}' but no matching file was found in flight-deck.`
+                `Daemon reported artifact '${key}' but no matching file was found in mission-control.`
             );
             assertCondition(
                 path.resolve(artifactPath) === path.resolve(expectedPath),
@@ -238,7 +238,7 @@ async function main(): Promise<void> {
         assertStringSetEquals(
             Object.keys(actualArtifactMap),
             Object.keys(expectedArtifactMap),
-            'Artifact key mismatch between mission.status and on-disk flight-deck artifacts.'
+            'Artifact key mismatch between mission.status and on-disk mission-control artifacts.'
         );
 
         const gateSummary: CurrentWorkflowE2eReport['gateSummary'] = [];
@@ -260,7 +260,7 @@ async function main(): Promise<void> {
             stage: missionStatus.stage ?? expectedActiveStage,
             workspaceRoot: workspaceContext.workspaceRoot,
             missionDir: workspaceContext.missionDir,
-            flightDeckDir: workspaceContext.flightDeckDir,
+            missionControlDir: workspaceContext.missionControlDir,
             activeTaskIds: actualGlobalActiveTaskIds.slice().sort(),
             readyTaskIds: (missionStatus.readyTasks ?? []).map((task) => task.taskId).sort(),
             gateSummary,
@@ -279,7 +279,7 @@ async function main(): Promise<void> {
                 `stage: ${report.stage}`,
                 `workspaceRoot: ${report.workspaceRoot}`,
                 `missionDir: ${report.missionDir}`,
-                `flightDeckDir: ${report.flightDeckDir}`,
+                `missionControlDir: ${report.missionControlDir}`,
                 `activeTasks: ${report.activeTaskIds.join(', ') || 'none'}`,
                 `readyTasks: ${report.readyTaskIds.join(', ') || 'none'}`,
                 `artifacts: ${report.artifactKeys.join(', ') || 'none'}`,
@@ -413,7 +413,7 @@ function isRuntimeTaskLifecycle(value: unknown): value is MissionRuntimeTask['li
 }
 
 async function resolveExpectedArtifactFiles(
-    flightDeckDir: string
+    missionControlDir: string
 ): Promise<Partial<Record<MissionArtifactKey, string>>> {
     const result: Partial<Record<MissionArtifactKey, string>> = {};
 
@@ -421,11 +421,11 @@ async function resolveExpectedArtifactFiles(
         const stageId = ARTIFACT_STAGE[artifactKey];
         const artifactPath = stageId
             ? path.join(
-                flightDeckDir,
+                missionControlDir,
                 MISSION_TASK_STAGE_DIRECTORIES[stageId],
                 MISSION_ARTIFACTS[artifactKey]
             )
-            : path.join(flightDeckDir, MISSION_ARTIFACTS[artifactKey]);
+            : path.join(missionControlDir, MISSION_ARTIFACTS[artifactKey]);
 
         if (await fileExists(artifactPath)) {
             result[artifactKey] = artifactPath;

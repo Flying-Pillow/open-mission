@@ -23,7 +23,7 @@ export type MissionWorkspaceContext =
         missionId: string;
         missionRootDir: string;
         missionDir: string;
-        flightDeckDir: string;
+        missionControlDir: string;
         selector: MissionSelector;
     };
 
@@ -52,7 +52,7 @@ export function resolveMissionWorkspaceContext(
                 missionId,
                 missionRootDir,
                 missionDir: path.join(missionRootDir, 'workspace'),
-                flightDeckDir: path.join(missionRootDir, 'flight-deck'),
+                missionControlDir: path.join(missionRootDir, 'mission-control'),
                 selector: { missionId }
             };
         }

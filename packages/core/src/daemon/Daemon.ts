@@ -245,12 +245,16 @@ export class Daemon {
 		}
 		await this.systemController.scopeAirportToSurfacePath(request.surfacePath);
 		const params = (request.params ?? {}) as AirportClientConnect;
+		if (!params.gateId) {
+			throw new Error('Airport client registration requires a gate id.');
+		}
 		const snapshot = await this.systemController.connectAirportClient({
 			clientId: request.clientId,
 			...(params.label?.trim() ? { label: params.label.trim() } : {}),
 			...(request.surfacePath?.trim() ? { surfacePath: request.surfacePath.trim() } : {}),
-			...(params.gateId ? { gateId: params.gateId } : {}),
-			...(params.panelProcessId?.trim() ? { panelProcessId: params.panelProcessId.trim() } : {})
+			gateId: params.gateId,
+			...(params.panelProcessId?.trim() ? { panelProcessId: params.panelProcessId.trim() } : {}),
+			...(params.terminalSessionName?.trim() ? { terminalSessionName: params.terminalSessionName.trim() } : {})
 		});
 		this.broadcastAirportState(snapshot);
 		return snapshot;
@@ -266,6 +270,12 @@ export class Daemon {
 			clientId: request.clientId,
 			...(params.focusedGateId ? { focusedGateId: params.focusedGateId } : {}),
 			...(params.intentGateId ? { intentGateId: params.intentGateId } : {}),
+			...(params.repositoryId?.trim() ? { repositoryId: params.repositoryId.trim() } : {}),
+			...(params.missionId?.trim() ? { missionId: params.missionId.trim() } : {}),
+			...(params.stageId?.trim() ? { stageId: params.stageId.trim() } : {}),
+			...(params.taskId?.trim() ? { taskId: params.taskId.trim() } : {}),
+			...(params.artifactId?.trim() ? { artifactId: params.artifactId.trim() } : {}),
+			...(params.agentSessionId?.trim() ? { agentSessionId: params.agentSessionId.trim() } : {}),
 			...(request.surfacePath?.trim() ? { surfacePath: request.surfacePath.trim() } : {})
 		});
 		this.broadcastAirportState(snapshot);
@@ -285,15 +295,15 @@ export class Daemon {
 			return result;
 		}
 
-		if ('found' in result && typeof result.found === 'boolean') {
-			const snapshot = await this.systemController.applyStatus(result as Request extends never ? never : any);
-			(result as { system?: unknown }).system = snapshot;
+		if (isOperatorStatus(result)) {
+			const snapshot = await this.systemController.observeOperatorStatus(result);
+			result.system = snapshot;
 			return result;
 		}
 
-		if ('status' in result && result.status && typeof result.status === 'object' && 'found' in result.status) {
-			const status = result.status as { found: boolean; system?: unknown } & Record<string, unknown>;
-			const snapshot = await this.systemController.applyStatus(status as any);
+		if (hasEmbeddedOperatorStatus(result)) {
+			const status = result.status;
+			const snapshot = await this.systemController.observeOperatorStatus(status);
 			status.system = snapshot;
 		}
 
@@ -304,7 +314,7 @@ export class Daemon {
 		if (event.type !== 'mission.status') {
 			return event;
 		}
-		const snapshot = await this.systemController.applyStatus(event.status);
+		const snapshot = await this.systemController.observeOperatorStatus(event.status);
 		return {
 			...event,
 			status: {
@@ -316,7 +326,9 @@ export class Daemon {
 
 	private async handleClientDisconnected(clientId: string): Promise<void> {
 		const snapshot = await this.systemController.disconnectAirportClient(clientId);
-		this.broadcastAirportState(snapshot);
+		if (snapshot) {
+			this.broadcastAirportState(snapshot);
+		}
 	}
 
 	private broadcastAirportState(snapshot: import('../types.js').MissionSystemSnapshot): void {
@@ -379,6 +391,18 @@ export class Daemon {
 			}
 		};
 	}
+}
+
+function isOperatorStatus(value: unknown): value is import('../types.js').OperatorStatus & { system?: import('../types.js').MissionSystemSnapshot } {
+	return Boolean(value && typeof value === 'object' && 'found' in value && typeof (value as { found?: unknown }).found === 'boolean');
+}
+
+function hasEmbeddedOperatorStatus(value: unknown): value is { status: import('../types.js').OperatorStatus & { system?: import('../types.js').MissionSystemSnapshot } } {
+	if (!value || typeof value !== 'object' || !('status' in value)) {
+		return false;
+	}
+	const status = (value as { status?: unknown }).status;
+	return isOperatorStatus(status);
 }
 
 export async function startDaemon(options: DaemonOptions = {}): Promise<Daemon> {

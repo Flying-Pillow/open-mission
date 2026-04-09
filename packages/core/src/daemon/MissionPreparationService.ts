@@ -20,7 +20,7 @@ export class MissionPreparationService {
 	}): Promise<MissionPreparationStatus> {
 		const missionId = this.store.createMissionId(input.brief);
 		const canonicalMissionRootDir = this.store.getTrackedMissionDir(missionId);
-		const canonicalFlightDeckDir = this.store.getMissionFlightDeckPath(canonicalMissionRootDir);
+		const canonicalMissionControlDir = this.store.getMissionControlPath(canonicalMissionRootDir);
 		const branchRef =
 			input.branchRef ??
 			(input.brief.issueId !== undefined
@@ -86,7 +86,7 @@ export class MissionPreparationService {
 				baseBranch,
 				pullRequestUrl,
 				missionRootDir: canonicalMissionRootDir,
-				flightDeckDir: canonicalFlightDeckDir,
+				missionControlDir: canonicalMissionControlDir,
 				...(input.brief.issueId !== undefined ? { issueId: input.brief.issueId } : {}),
 				...(input.brief.url ? { issueUrl: input.brief.url } : {})
 			};
@@ -118,7 +118,7 @@ export class MissionPreparationService {
 			'',
 			`- ${issueLine}`,
 			`- Branch: \`${branchRef}\``,
-			'- Creates the initial tracked `flight-deck/` scaffold and brief descriptor.',
+			'- Creates the initial tracked `mission-control/` scaffold and brief descriptor.',
 			'- Reserves the mission branch before local execution worktrees are materialized.',
 			'',
 			'## Brief',

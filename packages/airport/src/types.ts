@@ -23,6 +23,7 @@ export interface GateBinding {
 export interface AirportFocusState {
 	intentGateId?: GateId;
 	observedGateId?: GateId;
+	observedGateIdByClientId?: Record<string, GateId>;
 }
 
 export interface AirportClientState {
@@ -37,13 +38,20 @@ export interface AirportClientState {
 	panelProcessId?: string;
 }
 
+export interface AirportPaneState {
+	paneId: number;
+	expected: boolean;
+	exists: boolean;
+	title?: string;
+}
+
 export interface AirportSubstrateState {
 	kind: 'zellij';
 	sessionName: string;
 	layoutIntent: 'mission-control-v1';
-	connected: boolean;
-	observedSessionName?: string;
-	observedPaneIds: Partial<Record<GateId, string>>;
+	attached: boolean;
+	panesByGate: Partial<Record<GateId, AirportPaneState>>;
+	observedFocusedPaneId?: number;
 	lastAppliedAt?: string;
 	lastObservedAt?: string;
 }
@@ -66,7 +74,7 @@ export interface PersistedAirportIntent {
 	};
 }
 
-export interface GateProjection {
+export interface AirportGateProjectionBase {
 	gateId: GateId;
 	binding: GateBinding;
 	connectedClientIds: string[];
@@ -74,12 +82,81 @@ export interface GateProjection {
 	subtitle: string;
 	intentFocused: boolean;
 	observedFocused: boolean;
+	pane?: AirportPaneState;
+}
+
+export type DashboardStageRailItemState = 'done' | 'active' | 'blocked' | 'pending';
+
+export interface DashboardStageRailItem {
+	id: string;
+	label: string;
+	state: DashboardStageRailItemState;
+	subtitle?: string;
+}
+
+export type DashboardTreeNodeKind = 'stage' | 'stage-artifact' | 'task' | 'task-artifact' | 'session';
+
+export interface DashboardTreeNode {
+	id: string;
+	label: string;
+	kind: DashboardTreeNodeKind;
+	depth: number;
+	color: string;
+	collapsible: boolean;
+	sourcePath?: string;
+	stageId?: string;
+	taskId?: string;
+	sessionId?: string;
+}
+
+export type DashboardCommandTargetKind = DashboardTreeNodeKind | 'repository' | 'mission';
+
+export interface DashboardCommandContext {
+	stageId?: string;
+	taskId?: string;
+	sessionId?: string;
+	targetLabel?: string;
+	targetKind?: DashboardCommandTargetKind;
+}
+
+export interface DashboardProjection extends AirportGateProjectionBase {
+	surfaceMode: 'repository' | 'mission';
+	centerRoute: 'repository-flow' | 'mission-control';
+	repositoryId?: string;
+	repositoryLabel: string;
+	missionId?: string;
+	missionLabel?: string;
+	selectedStageId?: string;
+	selectedTaskId?: string;
+	selectedSessionId?: string;
+	commandContext: DashboardCommandContext;
+	stageRail: DashboardStageRailItem[];
+	treeNodes: DashboardTreeNode[];
+	emptyLabel: string;
+}
+
+export interface EditorProjection extends AirportGateProjectionBase {
+	artifactId?: string;
+	artifactPath?: string;
+	resourceLabel?: string;
+	launchPath?: string;
+	emptyLabel: string;
+}
+
+export interface PilotProjection extends AirportGateProjectionBase {
+	sessionId?: string;
+	taskId?: string;
+	missionId?: string;
+	workingDirectory?: string;
+	sessionLabel?: string;
+	statusLabel: string;
+	emptyLabel: string;
 }
 
 export interface AirportProjectionSet {
-	dashboard: GateProjection;
-	editor: GateProjection;
-	pilot: GateProjection;
+	dashboard: DashboardProjection;
+	editor: EditorProjection;
+	pilot: PilotProjection;
 }
 
 export interface AirportStatus {
@@ -91,8 +168,9 @@ export interface ConnectAirportClientParams {
 	clientId: string;
 	label?: string;
 	surfacePath?: string;
-	gateId?: GateId;
+	gateId: GateId;
 	panelProcessId?: string;
+	terminalSessionName?: string;
 }
 
 export interface ObserveAirportClientParams {
@@ -159,14 +237,15 @@ export function createDefaultGateBindings(repositoryId?: string): Record<GateId,
 
 export function deriveAirportProjections(state: AirportState): AirportProjectionSet {
 	return {
-		dashboard: createGateProjection(state, 'dashboard'),
-		editor: createGateProjection(state, 'editor'),
-		pilot: createGateProjection(state, 'pilot')
+		dashboard: createDashboardProjection(state),
+		editor: createEditorProjection(state),
+		pilot: createPilotProjection(state)
 	};
 }
 
-function createGateProjection(state: AirportState, gateId: GateId): GateProjection {
+function createGateProjectionBase(state: AirportState, gateId: GateId): AirportGateProjectionBase {
 	const binding = state.gates[gateId];
+	const pane = state.substrate.panesByGate[gateId];
 	return {
 		gateId,
 		binding: structuredClone(binding),
@@ -176,7 +255,59 @@ function createGateProjection(state: AirportState, gateId: GateId): GateProjecti
 		title: formatGateTitle(gateId),
 		subtitle: formatGateSubtitle(binding),
 		intentFocused: state.focus.intentGateId === gateId,
-		observedFocused: state.focus.observedGateId === gateId
+		observedFocused: state.focus.observedGateId === gateId,
+		...(pane ? { pane: { ...pane } } : {})
+	};
+}
+
+function createDashboardProjection(state: AirportState): DashboardProjection {
+	const base = createGateProjectionBase(state, 'dashboard');
+	const binding = base.binding;
+	const missionId = binding.targetKind === 'mission' ? binding.targetId : undefined;
+	const repositoryId = state.repositoryId ?? (binding.targetKind === 'repository' ? binding.targetId : undefined);
+	const repositoryLabel = state.repositoryRootPath?.trim() || repositoryId || 'Repository';
+	return {
+		...base,
+		surfaceMode: missionId ? 'mission' : 'repository',
+		centerRoute: missionId ? 'mission-control' : 'repository-flow',
+		...(repositoryId ? { repositoryId } : {}),
+		repositoryLabel,
+		...(missionId ? { missionId, missionLabel: missionId } : {}),
+		commandContext: {},
+		stageRail: [],
+		treeNodes: [],
+		emptyLabel: missionId
+			? 'No mission-control projection is available yet.'
+			: 'Repository mode is ready.'
+	};
+}
+
+function createEditorProjection(state: AirportState): EditorProjection {
+	const base = createGateProjectionBase(state, 'editor');
+	const binding = base.binding;
+	const artifactId = binding.targetKind === 'artifact' ? binding.targetId : undefined;
+	const launchPath = state.repositoryRootPath?.trim() || state.repositoryId?.trim();
+	return {
+		...base,
+		...(artifactId ? { artifactId, resourceLabel: artifactId } : {}),
+		...(launchPath ? { launchPath } : {}),
+		emptyLabel: artifactId
+			? 'Artifact path is resolving for the editor gate.'
+			: 'Editor gate is waiting for an artifact binding.'
+	};
+}
+
+function createPilotProjection(state: AirportState): PilotProjection {
+	const base = createGateProjectionBase(state, 'pilot');
+	const binding = base.binding;
+	const sessionId = binding.targetKind === 'agentSession' ? binding.targetId : undefined;
+	return {
+		...base,
+		...(sessionId ? { sessionId, sessionLabel: sessionId } : {}),
+		statusLabel: sessionId ? 'bound' : 'idle',
+		emptyLabel: sessionId
+			? 'Pilot session details are resolving.'
+			: 'Pilot gate is idle.'
 	};
 }
 

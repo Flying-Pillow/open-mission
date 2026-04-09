@@ -51,8 +51,12 @@ export async function runAirportStatus(context: CommandContext): Promise<void> {
 				entry.airport.airportId,
 				entry.repositoryRootPath,
 				`session=${entry.airport.substrate.sessionName}`,
+				`attached=${entry.airport.substrate.attached ? 'yes' : 'no'}`,
 				activeMarker
 			].join(' | ');
+		});
+		const substrateLines = Object.entries(snapshot.state.airport.substrate.panesByGate).map(([gateId, pane]) => {
+			return `${gateId}: ${pane.exists ? `pane=${String(pane.paneId)}` : 'missing'}${pane.title ? ` title=${pane.title}` : ''}`;
 		});
 
 		note(
@@ -63,7 +67,8 @@ export async function runAirportStatus(context: CommandContext): Promise<void> {
 				`session: ${snapshot.state.airport.substrate.sessionName}`,
 				`focus intent: ${snapshot.state.airport.focus.intentGateId ?? 'none'}`,
 				`focus observed: ${snapshot.state.airport.focus.observedGateId ?? 'none'}`,
-				`substrate: ${snapshot.state.airport.substrate.kind} (${snapshot.state.airport.substrate.connected ? 'connected' : 'disconnected'})`,
+				`substrate: ${snapshot.state.airport.substrate.kind} (${snapshot.state.airport.substrate.attached ? 'attached' : 'detached'})`,
+				`focused pane: ${snapshot.state.airport.substrate.observedFocusedPaneId ?? 'none'}`,
 				`known airports: ${String(Object.keys(snapshot.state.airports.repositories).length)}`,
 				`active repository: ${snapshot.state.airports.activeRepositoryId ?? 'unscoped'}`,
 				'',
@@ -72,6 +77,9 @@ export async function runAirportStatus(context: CommandContext): Promise<void> {
 				'',
 				'Gates:',
 				...gateLines,
+				'',
+				'Substrate:',
+				...(substrateLines.length > 0 ? substrateLines : ['none']),
 				'',
 				'Clients:',
 				...(clientLines.length > 0 ? clientLines : ['none'])

@@ -13,6 +13,14 @@ import {
 import { applyTowerTheme, type TowerThemeName } from './components/towerTheme.js';
 import { playMissionStartupBanner } from './components/MissionStartupBanner.js';
 
+function resolveInjectedGateId(): 'dashboard' | 'editor' | 'pilot' {
+	const gateId = process.env['MISSION_GATE_ID']?.trim();
+	if (gateId === 'dashboard' || gateId === 'editor' || gateId === 'pilot') {
+		return gateId;
+	}
+	throw new Error('MISSION_GATE_ID must be set to dashboard, editor, or pilot before launching a tower panel.');
+}
+
 export async function launchTower(context: CommandContext): Promise<void> {
 	const hmrMode = context.args.includes('--hmr') || process.env['MISSION_TOWER_HMR'] === '1';
 	if (
@@ -62,12 +70,17 @@ export async function launchTower(context: CommandContext): Promise<void> {
 		});
 		const api = new DaemonApi(client);
 		await api.airport.connectPanel({
-			gateId: 'dashboard',
-			label: 'mission-tower'
+			gateId: resolveInjectedGateId(),
+			label: 'mission-tower',
+			panelProcessId: String(process.pid),
+			...(process.env['MISSION_TERMINAL_SESSION']?.trim()
+				? { terminalSessionName: process.env['MISSION_TERMINAL_SESSION']?.trim() }
+				: {})
 		});
 		const discoveryStatus = await api.control.getStatus();
-		const status = nextSelector.missionId
-			? await api.mission.getStatus(nextSelector)
+		const resolvedSelector = DaemonMissionApi.selectorFromStatus(discoveryStatus, nextSelector);
+		const status = resolvedSelector.missionId
+			? await api.mission.getStatus(resolvedSelector)
 			: discoveryStatus;
 		return {
 			client,

@@ -10,8 +10,7 @@ describe('command targeting', () => {
 	it('does not leak other task actions from the same stage into a selected task context', () => {
 		const context: CommandTargetContext = {
 			stageId: 'implementation',
-			taskId: 'implementation/02-workflow-engine',
-			sessionId: undefined
+			taskId: 'implementation/02-workflow-engine'
 		};
 		const commands = [
 			createCommand({
@@ -88,8 +87,7 @@ describe('command targeting', () => {
 	it('keeps stage and mission actions available alongside the selected task actions', () => {
 		const context: CommandTargetContext = {
 			stageId: 'implementation',
-			taskId: 'implementation/02-workflow-engine',
-			sessionId: undefined
+			taskId: 'implementation/02-workflow-engine'
 		};
 		const commands = [
 			createCommand({
@@ -120,6 +118,68 @@ describe('command targeting', () => {
 		expect(resolveAvailableCommandsForContext(commands, context).map((command) => command.id)).toEqual([
 			'generation.tasks.implementation',
 			'task.launch.implementation/02-workflow-engine',
+			'mission.pause'
+		]);
+	});
+
+	it('does not leak task actions into a stage-only selection', () => {
+		const context: CommandTargetContext = {
+			stageId: 'implementation'
+		};
+		const commands = [
+			createCommand({
+				id: 'generation.tasks.implementation',
+				scope: 'generation',
+				targetId: 'implementation',
+				presentationTargets: [{ scope: 'stage', targetId: 'implementation' }]
+			}),
+			createCommand({
+				id: 'task.done.implementation/02-workflow-engine',
+				scope: 'task',
+				targetId: 'implementation/02-workflow-engine',
+				presentationTargets: [
+					{ scope: 'task', targetId: 'implementation/02-workflow-engine' },
+					{ scope: 'stage', targetId: 'implementation' }
+				]
+			}),
+			createCommand({
+				id: 'mission.pause',
+				scope: 'mission',
+				presentationTargets: [
+					{ scope: 'mission' },
+					{ scope: 'stage', targetId: 'implementation' }
+				]
+			})
+		];
+
+		expect(resolveAvailableCommandsForContext(commands, context).map((command) => command.id)).toEqual([
+			'generation.tasks.implementation',
+			'mission.pause'
+		]);
+	});
+
+	it('keeps mission actions visible when the selected stage is not the current stage target', () => {
+		const context: CommandTargetContext = {
+			stageId: 'prd'
+		};
+		const commands = [
+			createCommand({
+				id: 'mission.pause',
+				scope: 'mission',
+				presentationTargets: [
+					{ scope: 'mission' },
+					{ scope: 'stage', targetId: 'implementation' }
+				]
+			}),
+			createCommand({
+				id: 'generation.tasks.implementation',
+				scope: 'generation',
+				targetId: 'implementation',
+				presentationTargets: [{ scope: 'stage', targetId: 'implementation' }]
+			})
+		];
+
+		expect(resolveAvailableCommandsForContext(commands, context).map((command) => command.id)).toEqual([
 			'mission.pause'
 		]);
 	});

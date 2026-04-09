@@ -28,7 +28,7 @@ This document defines:
 - the shell regions that remain stable while the Tower is running
 - the top-level routing model for repository and mission work
 - focus order expectations for the terminal Tower surface
-- invariants that keep repository flows and mission flight-deck content separate
+- invariants that keep repository flows and mission-control content separate
 
 This document does not define:
 
@@ -151,7 +151,7 @@ The center route model is:
 ```ts
 type CenterRoute =
   | { kind: 'repository-flow' }
-  | { kind: 'mission-flight-deck' }
+  | { kind: 'mission-control' }
 ```
 
 ### Repository Mode
@@ -176,7 +176,7 @@ Repository text entry for an active flow belongs in the center flow surface, not
 
 Mission mode routes the center panel to the mission flight deck.
 
-The center region is owned entirely by the flight-deck tree while mission mode is active.
+The center region is owned entirely by the mission-control tree while mission mode is active.
 
 Mission selection must never fall back to repository flow content.
 
@@ -227,7 +227,7 @@ The following rules must remain true:
 
 1. The command panel stays visible in both repository and mission mode.
 2. Repository flow content only appears while the shell is in repository mode.
-3. Mission flight-deck content only appears while the shell is in mission mode.
+3. Mission-control content only appears while the shell is in mission mode.
 4. Switching header tabs changes shell context first and center-panel content second.
 5. Overlay activation never creates a new top-level Tower mode.
 6. Repository flow input does not displace the command panel.

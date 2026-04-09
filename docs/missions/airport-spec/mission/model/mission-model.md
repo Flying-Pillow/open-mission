@@ -82,7 +82,7 @@ Preparing a mission then creates a tracked mission dossier on a proposal branch 
   missions/
     <mission-id>/
       BRIEF.md
-      flight-deck/
+      mission-control/
         mission.json
         01-PRD/
           PRD.md
@@ -100,7 +100,7 @@ After the mission dossier exists on the repository branch, a developer may mater
   missions/
     <mission-id>/
       BRIEF.md
-      flight-deck/
+      mission-control/
         mission.json
         ...
   active/
@@ -304,7 +304,7 @@ url: "https://..."         # optional
 
 `FilesystemAdapter.readMissionDescriptor(...)` validates and rehydrates this file back into structured descriptor state.
 
-### flight-deck/mission.json Runtime State
+### mission-control/mission.json Runtime State
 
 Mutable semantic workflow state lives in `mission.json` inside each mission folder.
 

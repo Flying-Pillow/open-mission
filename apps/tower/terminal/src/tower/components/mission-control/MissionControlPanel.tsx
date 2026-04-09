@@ -6,7 +6,7 @@ import { For, Show, createEffect, createMemo } from 'solid-js';
 import { Panel } from '../Panel.js';
 import { towerTheme } from '../towerTheme.js';
 
-export type MissionFlightDeckRow = {
+export type MissionControlRow = {
 	id: string;
 	label: string;
 	depth: number;
@@ -15,9 +15,9 @@ export type MissionFlightDeckRow = {
 	color: string;
 };
 
-type MissionFlightDeckPanelProps = {
+type MissionControlPanelProps = {
 	focused: boolean;
-	rows: MissionFlightDeckRow[];
+	rows: MissionControlRow[];
 	selectedRowId: string | undefined;
 	treePageScrollRequest: { delta: number } | undefined;
 	contentWidth?: number | undefined;
@@ -35,7 +35,7 @@ type TreeLine = {
 	backgroundColor: string;
 };
 
-export function MissionFlightDeckPanel(props: MissionFlightDeckPanelProps) {
+export function MissionControlPanel(props: MissionControlPanelProps) {
 	const terminal = useTerminalDimensions();
 	let scrollboxRef: ScrollBoxRenderable | undefined;
 	const lines = createMemo<TreeLine[]>(() => buildTreeLines(props.rows, props.selectedRowId));
@@ -78,7 +78,7 @@ export function MissionFlightDeckPanel(props: MissionFlightDeckPanelProps) {
 
 	return (
 		<Panel
-			title="FLIGHT-DECK"
+			title="MISSION-CONTROL"
 			titleColor={towerTheme.title}
 			borderColor={props.focused ? towerTheme.accent : towerTheme.border}
 			contentWidth={treeContentWidth()}
@@ -160,7 +160,7 @@ export function MissionFlightDeckPanel(props: MissionFlightDeckPanelProps) {
 	);
 }
 
-function buildTreeLines(rows: MissionFlightDeckRow[], selectedRowId: string | undefined): TreeLine[] {
+function buildTreeLines(rows: MissionControlRow[], selectedRowId: string | undefined): TreeLine[] {
 	return rows.map((row) => {
 		const indent = '  '.repeat(Math.max(0, row.depth));
 		const disclosure = row.collapsible ? `${row.collapsed ? '▸' : '▾'} ` : '  ';

@@ -5,6 +5,9 @@
         "outDir": "build",
         "module": "NodeNext",
         "moduleResolution": "NodeNext",
+        "types": [
+            "node"
+        ],
         "ignoreDeprecations": "6.0",
         "baseUrl": "."
     },

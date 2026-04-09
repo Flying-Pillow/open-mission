@@ -161,6 +161,11 @@ export class DaemonMissionApi {
 		if (status.missionId) {
 			return { missionId: status.missionId };
 		}
+		const projectedMissionId = status.system?.state.domain.selection.missionId
+			?? status.system?.airportProjections.dashboard.missionId;
+		if (projectedMissionId) {
+			return { missionId: projectedMissionId };
+		}
 		if (fallback.missionId) {
 			return { missionId: fallback.missionId };
 		}

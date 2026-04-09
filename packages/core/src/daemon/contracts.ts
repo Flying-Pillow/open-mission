@@ -12,7 +12,7 @@ import type {
 	AgentCommand,
 	AgentCommandKind,
 	AgentPrompt
-	} from '../runtime/AgentRuntimeTypes.js';
+} from '../runtime/AgentRuntimeTypes.js';
 import type {
 	WorkflowSettingsGetResult,
 	WorkflowSettingsInitializeRequest,
@@ -430,14 +430,21 @@ export type ControlIssuesList = {
 };
 
 export type AirportClientConnect = {
+	gateId: 'dashboard' | 'editor' | 'pilot';
 	label?: string;
-	gateId?: 'dashboard' | 'editor' | 'pilot';
 	panelProcessId?: string;
+	terminalSessionName?: string;
 };
 
 export type AirportClientObserve = {
 	focusedGateId?: 'dashboard' | 'editor' | 'pilot';
 	intentGateId?: 'dashboard' | 'editor' | 'pilot';
+	repositoryId?: string;
+	missionId?: string;
+	stageId?: string;
+	taskId?: string;
+	artifactId?: string;
+	agentSessionId?: string;
 };
 
 export type AirportGateBind = {

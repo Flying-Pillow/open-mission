@@ -45,11 +45,11 @@ export class Artifact {
 		if (this.definition.kind === 'product') {
 			const definition = getMissionArtifactDefinition(this.definition.key);
 			return definition.stageId
-				? `flight-deck/${MISSION_TASK_STAGE_DIRECTORIES[definition.stageId]}/${MISSION_ARTIFACTS[this.definition.key]}`
-				: `flight-deck/${MISSION_ARTIFACTS[this.definition.key]}`;
+				? `mission-control/${MISSION_TASK_STAGE_DIRECTORIES[definition.stageId]}/${MISSION_ARTIFACTS[this.definition.key]}`
+				: `mission-control/${MISSION_ARTIFACTS[this.definition.key]}`;
 		}
 
-		return `flight-deck/${MISSION_TASK_STAGE_DIRECTORIES[this.definition.stageId]}/tasks/${this.definition.fileName}`;
+		return `mission-control/${MISSION_TASK_STAGE_DIRECTORIES[this.definition.stageId]}/tasks/${this.definition.fileName}`;
 	}
 
 	public async exists(adapter: FilesystemAdapter): Promise<boolean> {

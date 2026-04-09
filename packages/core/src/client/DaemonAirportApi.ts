@@ -13,7 +13,7 @@ export class DaemonAirportApi {
 		return this.client.request<MissionSystemSnapshot>('airport.status');
 	}
 
-	public async connectPanel(params: AirportClientConnect = {}): Promise<MissionSystemSnapshot> {
+	public async connectPanel(params: AirportClientConnect): Promise<MissionSystemSnapshot> {
 		return this.client.request<MissionSystemSnapshot>('airport.client.connect', params);
 	}
 
