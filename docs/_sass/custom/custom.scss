@@ -93,6 +93,9 @@
   border-radius: 999px;
   background: #17081a;
   color: transparent; /* hide text */
+  font-size: 0;
+  white-space: nowrap;
+  text-indent: -9999px;
   padding: 0;
   overflow: hidden;
   text-decoration: none;
@@ -107,6 +110,8 @@
   flex-wrap: wrap;
   gap: 0.85rem;
   align-items: center;
+  margin: 0;
+  padding: 0;
 }
 
 .aux-nav .aux-nav-list-item {
@@ -601,38 +606,33 @@
 
 @media (max-width: 74rem) {
   .main-header {
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "search aux"
-      "badge badge";
+    display: flex !important;
+    flex-wrap: nowrap;
     align-items: center;
-    row-gap: 0.75rem;
-    column-gap: 0.75rem;
-    padding-top: 0.8rem;
-    padding-bottom: 0.8rem;
-    height: auto;
+    gap: 0.75rem;
+    padding: 0.8rem 1rem;
+    height: 4.5rem;
+    box-sizing: border-box;
   }
 
   .search {
-    grid-area: search;
+    flex: 1 1 auto;
     min-width: 0;
   }
 
   .search-input {
-    min-width: 0;
     width: 100%;
+    min-width: 0;
     font-size: 0.95rem;
   }
 
-  .aux-nav {
-    grid-area: aux;
-    justify-self: end;
+  .mission-header-badge {
+    flex: 0 0 auto;
   }
 
-  .mission-header-badge {
-    grid-area: badge;
-    justify-self: start;
+  .aux-nav {
+    flex: 0 0 auto;
+    margin: 0;
   }
 
   .mission-home-grid {
@@ -648,9 +648,13 @@
 
 @media (max-width: 50rem) {
   .main-header {
-    display: block !important;
-    padding-top: 0.7rem;
-    padding-bottom: 0.7rem;
+    display: flex !important;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.75rem;
+    height: 4.5rem;
+    padding: 0.7rem 1rem;
+    box-sizing: border-box;
   }
 
   .mission-header-badge {
