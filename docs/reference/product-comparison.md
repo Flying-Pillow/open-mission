@@ -59,6 +59,7 @@ Flying Pillow Mission is the orchestration layer that controls the proper flow o
 | **Authority** | Agent decides next steps | Agent decides via rules | Agent decides via plans | Hard-coded software gates |
 | **State** | Chat history & specs | Chat history & modules | Active chat & `.planning` | External daemon database |
 | **Isolation** | User's active checkout | User's active checkout | Fresh contexts, active checkout | Sandboxed mission worktrees |
+| **Workspace** | Single active repo | Single active repo | Single active repo | Multi-repo Control Tower |
 | **Recovery** | Re-read spec & prompt | Re-enter role workflow | Re-read `.planning` logs | Instant hot-reload via API |
 | **Steering UI** | Text prompt / chat | Text prompt / chat | Chat / CLI commands | Visual Control Tower UI |
 
@@ -79,10 +80,10 @@ Mission operates *outside* the agent. It leverages a strict, code-driven state m
 - **Spec Kit, BMAD & GSD:** If your IDE crashes or you close your terminal, the state of the "workflow" is lost. To recover, you must open a new chat, point the agent at the generated markdown logs (`.planning/` or spec files), and prompt it to figure out where it left off.
 - **Mission:** The daemon persistently stores every action, artifact, and stage status in a local database (`.mission/`). If you close your laptop, the Mission Control Tower UI hot-reloads instantly exactly where you left off. The workflow state is native data, not a chat history.
 
-**3. Execution Isolation**
-- **Spec Kit & BMAD:** Work directly in your active development branch, rewriting your current files.
-- **GSD:** Optional worktree capabilities, but highly dependent on the host agent's internal configuration.
-- **Mission:** Enforces execution strictly inside bounded, invisible Git worktrees. The agent manipulates a separate clone, so long-running implementations or failed experiments never pollute the human operator's active checkout until a formal `git merge` occurs.
+**3. Execution Isolation and Multi-Repo Workspace Hub**
+- **Spec Kit & BMAD:** Function strictly within the boundary of your single currently active development branch. They rewrite your actual, current checkout.
+- **GSD:** Offers some optional worktree capabilities, but highly depends on the host agent's internal configuration and is still scoped to a single active repository.
+- **Mission:** Fundamentally reimagines the workspace. It enforces execution strictly inside bounded, invisible Git worktrees (the sandbox) tied deeply to native GitHub integrations (such as importing directly from GitHub issues). Furthermore, the Mission Control Tower serves as a centralized hub allowing a single operator to spawn, monitor, and merge parallel missions simultaneously across **multiple different repositories** without ever needing to jump between IDE instances or pollute their local branches.
 
 ## Why Mission Exists If These Tools Already Exist
 
