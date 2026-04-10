@@ -15,7 +15,7 @@ nav_order: 3
 
 <div class="mission-compare-callout">
 	<strong>Scope of this comparison</strong>
-	<p>This comparison is based on Mission's current codebase plus the public documentation and READMEs for Spec Kit, BMAD Method, and GSD/Get Shit Done. It focuses on workflow shape, control model, context handling, and recovery behavior rather than community size or branding.</p>
+	<p>This comparison is based on Mission's current codebase plus the public documentation and READMEs for Spec Kit, BMAD Method, and GSD. It focuses on workflow shape, control model, context handling, and recovery behavior rather than community size or branding.</p>
 </div>
 
 We are standing on the shoulders of giants, and we want to earnestly thank the creators of these systems for their constantly evolving insights on coding and AI. The reality of "AI slop" generation is currently so prevalent and frustrating for developers and project managers alike that explicitly harnessing and controlling the software development process is more important than ever.
