@@ -1,0 +1,45 @@
+$white: #fff8ff;
+$grey-dk-300: #140717;
+$grey-dk-250: #1d0b22;
+$grey-dk-200: #26102d;
+$grey-dk-100: #43204d;
+$grey-lt-000: #fff8ff;
+$grey-lt-100: #f6eefe;
+$grey-lt-200: #ecd8fb;
+$grey-lt-300: #d8b4f1;
+
+$purple-000: #d10ef0;
+$purple-100: #b10fcf;
+$purple-200: #8b12a0;
+$purple-300: #64146f;
+
+$blue-000: #1fb6ff;
+$blue-100: #1084d0;
+$green-100: #0f9d73;
+$yellow-100: #c97c14;
+$red-100: #c53c61;
+
+$body-background-color: #fff8ff;
+$sidebar-color: #17081a;
+$search-background-color: rgba(255, 248, 255, 0.1);
+$table-background-color: #ffffff;
+$code-background-color: #fff3ff;
+$feedback-color: #fbf0ff;
+$body-text-color: #2a1731;
+$body-heading-color: #17081a;
+$nav-child-link-color: #f6d9ff;
+$link-color: #9a0fc2;
+$btn-primary-color: #c80de7;
+$base-button-color: #f4e4ff;
+$border-color: #eed8fb;
+
+$callouts: (
+  note: (
+    title: Note,
+    color: purple
+  ),
+  highlight: (
+    title: Why It Matters,
+    color: blue
+  )
+);

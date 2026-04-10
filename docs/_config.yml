@@ -1,10 +1,20 @@
 title: Mission Documentation
-description: Architecture, workflows, operator guides, and reference material for Mission.
+description: Mission is the operator-first control tower for AI-driven software delivery.
 remote_theme: just-the-docs/just-the-docs
 plugins:
   - jekyll-remote-theme
+logo: "/logo.png"
 search_enabled: true
+search:
+  heading_level: 2
+  previews: 4
+  preview_words_before: 6
+  preview_words_after: 12
 heading_anchors: true
-color_scheme: light
+color_scheme: mission
+aux_links:
+  "GitHub":
+    - "https://github.com/Flying-Pillow/mission"
+aux_links_new_tab: true
 mermaid:
   version: "10.7.0"

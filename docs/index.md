@@ -7,6 +7,31 @@ nav_order: 1
 
 # Flying Pillow Mission
 
+<section class="mission-home-hero">
+	<span class="mission-home-kicker">Operator-first AI Delivery</span>
+	<div class="mission-home-title">Flying Pillow Mission</div>
+	<p class="mission-home-tagline">Mission turns AI coding from a fragile chat habit into a controlled delivery system with bounded workspaces, staged artifacts, live supervision, and runtime freedom.</p>
+	<div class="mission-home-actions">
+		<a class="btn btn-primary" href="{{ '/getting-started/installation/' | relative_url }}">Start Here</a>
+		<a class="btn" href="{{ '/getting-started/start-your-first-mission/' | relative_url }}">Prepare a Mission</a>
+		<a class="btn" href="{{ '/user-manual/workflow-control/' | relative_url }}">Open the Tower Guide</a>
+	</div>
+	<div class="mission-home-grid">
+		<div class="mission-home-card">
+			<strong>Safe By Design</strong>
+			<span>Keep agent work in isolated mission workspaces instead of your active branch.</span>
+		</div>
+		<div class="mission-home-card">
+			<strong>Structured Delivery</strong>
+			<span>Move from brief to PRD, SPEC, implementation, audit, and delivery with named artifacts.</span>
+		</div>
+		<div class="mission-home-card">
+			<strong>Runtime Freedom</strong>
+			<span>Keep the workflow stable while the runtime layer stays open to different agents and models.</span>
+		</div>
+	</div>
+</section>
+
 Mission is for teams that want the speed of AI coding agents without giving up architectural discipline, repository safety, or human control.
 
 Instead of one long chat session working directly on your active branch, Mission turns software delivery into a governed operational flow:
