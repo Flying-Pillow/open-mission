@@ -374,7 +374,7 @@ export type AgentSessionContext = {
 	missionId?: string;
 	taskId?: string;
 	workingDirectory?: string;
-	runtimeId: string;
+	runnerId: string;
 	lifecycleState: string;
 	promptTitle?: string;
 	transportId?: string;

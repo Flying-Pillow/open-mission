@@ -15,7 +15,7 @@ import type {
 type Listener = (event: AgentSessionEvent) => void;
 
 class FakeSession implements AgentSession {
-    public readonly runtimeId: string;
+    public readonly runnerId: string;
     public readonly transportId: string | undefined;
     public readonly sessionId: string;
     public disposeCalls = 0;
@@ -23,7 +23,7 @@ class FakeSession implements AgentSession {
     private readonly listeners = new Set<Listener>();
 
     public constructor(snapshot: AgentSessionSnapshot) {
-        this.runtimeId = snapshot.runtimeId;
+        this.runnerId = snapshot.runnerId;
         this.transportId = snapshot.transportId;
         this.sessionId = snapshot.sessionId;
         this.snapshot = { ...snapshot };
@@ -136,7 +136,7 @@ describe('AgentSessionOrchestrator', () => {
             isAvailable: async () => ({ available: true }),
             startSession: async () => {
                 fakeSession = new FakeSession({
-                    runtimeId: 'fake-runner',
+                    runnerId: 'fake-runner',
                     transportId: 'direct',
                     sessionId: 'session-1',
                     missionId: 'mission-1',
@@ -164,7 +164,7 @@ describe('AgentSessionOrchestrator', () => {
         fakeSession?.emit({
             type: 'session.state-changed',
             snapshot: {
-                runtimeId: 'fake-runner',
+                runnerId: 'fake-runner',
                 transportId: 'direct',
                 sessionId: 'session-1',
                 missionId: '',
@@ -223,7 +223,7 @@ describe('AgentSessionOrchestrator', () => {
         });
 
         const attached = await orchestrator.attachSession({
-            runtimeId: 'fake-runner',
+            runnerId: 'fake-runner',
             transportId: 'direct',
             sessionId: 'session-missing'
         });
@@ -262,7 +262,7 @@ describe('AgentSessionOrchestrator', () => {
             isAvailable: async () => ({ available: true }),
             startSession: async () => {
                 fakeSession = new FakeSession({
-                    runtimeId: 'fake-runner',
+                    runnerId: 'fake-runner',
                     transportId: 'direct',
                     sessionId: 'session-1',
                     missionId: 'mission-1',
@@ -286,7 +286,7 @@ describe('AgentSessionOrchestrator', () => {
         fakeSession?.emit({
             type: 'session.completed',
             snapshot: {
-                runtimeId: 'fake-runner',
+                runnerId: 'fake-runner',
                 transportId: 'direct',
                 sessionId: 'session-1',
                 missionId: 'mission-1',
@@ -324,7 +324,7 @@ describe('AgentSessionOrchestrator', () => {
             isAvailable: async () => ({ available: true }),
             startSession: async () => {
                 fakeSession = new FakeSession({
-                    runtimeId: 'fake-runner',
+                    runnerId: 'fake-runner',
                     transportId: 'direct',
                     sessionId: 'session-1',
                     missionId: 'mission-1',

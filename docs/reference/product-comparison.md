@@ -163,9 +163,8 @@ Those are architectural advantages, not just prompt-writing differences.
 
 Mission is also younger and more opinionated than the tools above, and the current alpha has real limits:
 
-- the first shipped agent path is Copilot, with `copilot-cli` and `copilot-sdk` in the codebase today
+- the first shipped agent path is Copilot, with `copilot-cli` and `copilot-sdk` in the codebase today, others coming soon
 - the implemented issue intake path is GitHub-based
-- Tower currently requires Bun at runtime
 - the public routed CLI is still narrower than the internal system capabilities
 
 So the right claim is not that Mission already has the widest ecosystem. It does not. The right claim is that Mission already has one of the strongest control-plane architectures for teams that care about reliability, supervision, and recoverability.

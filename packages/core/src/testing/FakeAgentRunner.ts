@@ -19,8 +19,8 @@ class FakeAgentSession implements AgentSession {
 		this.snapshot = { ...snapshot, acceptedCommands: [...snapshot.acceptedCommands] };
 	}
 
-	public get runtimeId(): string {
-		return this.snapshot.runtimeId;
+	public get runnerId(): string {
+		return this.snapshot.runnerId;
 	}
 
 	public get transportId(): string | undefined {
@@ -189,7 +189,7 @@ export class FakeAgentRunner implements AgentRunner {
 		this.startRequests.push(cloneStartRequest(request));
 		const sessionId = `${this.id}-session-${String(++this.nextSessionId)}`;
 		const session = new FakeAgentSession({
-			runtimeId: this.id,
+			runnerId: this.id,
 			transportId: this.transportId,
 			sessionId,
 			phase: 'running',

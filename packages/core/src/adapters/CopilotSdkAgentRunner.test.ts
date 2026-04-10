@@ -129,7 +129,7 @@ describe('CopilotSdkAgentRunner', () => {
         const runner = new CopilotSdkAgentRunner();
 
         await runner.attachSession({
-            runtimeId: 'copilot-sdk',
+            runnerId: 'copilot-sdk',
             transportId: 'direct',
             sessionId: 'resumed-session'
         });
@@ -149,7 +149,7 @@ describe('CopilotSdkAgentRunner', () => {
         mockResumeSession.mockReset().mockRejectedValue(new Error('missing session'));
         const runner = new CopilotSdkAgentRunner();
         const attached = await runner.attachSession({
-            runtimeId: 'copilot-sdk',
+            runnerId: 'copilot-sdk',
             transportId: 'direct',
             sessionId: 'missing-session'
         });

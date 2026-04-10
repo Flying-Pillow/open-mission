@@ -44,7 +44,7 @@ describe('Mission', () => {
                 }
 
                 const sessionRecord = await mission.launchAgentSession({
-                    runtimeId: runner.id,
+                    runnerId: runner.id,
                     taskId,
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'Complete the assigned task.'
@@ -62,7 +62,7 @@ describe('Mission', () => {
                 const consoleState = mission.getAgentConsoleState(sessionRecord.sessionId);
                 expect(sessionRecord).toMatchObject({
                     taskId,
-                    runtimeId: runner.id,
+                    runnerId: runner.id,
                     assignmentLabel: expect.stringContaining('01-PRD/tasks/')
                 });
                 expect(events).toEqual(
@@ -101,7 +101,7 @@ describe('Mission', () => {
                 }
 
                 const launched = await mission.launchAgentSession({
-                    runtimeId: runner.id,
+                    runnerId: runner.id,
                     taskId,
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'Cancel me.'
@@ -138,7 +138,7 @@ describe('Mission', () => {
                 }
 
                 const firstSession = await mission.launchAgentSession({
-                    runtimeId: runner.id,
+                    runnerId: runner.id,
                     taskId,
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'First attempt.'
@@ -146,7 +146,7 @@ describe('Mission', () => {
                 runner.deleteSession(firstSession.sessionId);
 
                 const relaunchedSession = await mission.launchAgentSession({
-                    runtimeId: runner.id,
+                    runnerId: runner.id,
                     taskId,
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'Second attempt.'
@@ -182,7 +182,7 @@ describe('Mission', () => {
                 }
 
                 const firstSession = await mission.launchAgentSession({
-                    runtimeId: runner.id,
+                    runnerId: runner.id,
                     taskId,
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'First attempt.'
@@ -190,7 +190,7 @@ describe('Mission', () => {
                 runner.overrideSessionWorkingDirectory(firstSession.sessionId, path.join(workspaceRoot, 'wrong-workspace'));
 
                 const relaunchedSession = await mission.launchAgentSession({
-                    runtimeId: runner.id,
+                    runnerId: runner.id,
                     taskId,
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'Second attempt.'
@@ -226,7 +226,7 @@ describe('Mission', () => {
                 }
 
                 const launched = await mission.launchAgentSession({
-                    runtimeId: runner.id,
+                    runnerId: runner.id,
                     taskId,
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'Terminate me.'
@@ -284,7 +284,7 @@ describe('Mission', () => {
                 expect(nextStatus.agentSessions?.length ?? 0).toBe(1);
                 expect(nextStatus.agentSessions?.[0]).toMatchObject({
                     taskId,
-                    runtimeId: runner.id,
+                    runnerId: runner.id,
                     assignmentLabel: expect.stringContaining('01-PRD/tasks/')
                 });
             } finally {
@@ -321,7 +321,7 @@ describe('Mission', () => {
                 expect(launchedStatus.agentSessions?.length ?? 0).toBe(1);
                 expect(launchedStatus.agentSessions?.[0]).toMatchObject({
                     taskId,
-                    runtimeId: runner.id,
+                    runnerId: runner.id,
                     lifecycleState: 'running'
                 });
             } finally {
@@ -354,7 +354,7 @@ describe('Mission', () => {
                 }
 
                 const launched = await mission.launchAgentSession({
-                    runtimeId: runner.id,
+                    runnerId: runner.id,
                     transportId: 'terminal',
                     taskId,
                     workingDirectory: startedStatus.missionDir,
@@ -370,7 +370,7 @@ describe('Mission', () => {
                     session.sessionId === launched.sessionId
                         ? {
                             ...session,
-                            runtimeId: 'copilot-cli'
+                            runnerId: 'copilot-cli'
                         }
                         : session
                 );
@@ -388,13 +388,13 @@ describe('Mission', () => {
                     const status = await reloaded.status();
                     const migratedSession = status.agentSessions?.find((session) => session.sessionId === launched.sessionId);
                     expect(migratedSession).toMatchObject({
-                        runtimeId: 'copilot-cli',
+                        runnerId: 'copilot-cli',
                         transportId: 'terminal'
                     });
 
                     const migratedDocument = await adapter.readMissionRuntimeRecord(missionDir);
                     expect(migratedDocument?.runtime.sessions.find((session) => session.sessionId === launched.sessionId)).toMatchObject({
-                        runtimeId: 'copilot-cli',
+                        runnerId: 'copilot-cli',
                         transportId: 'terminal'
                     });
                 } finally {
@@ -428,7 +428,7 @@ describe('Mission', () => {
                 }
 
                 const launched = await mission.launchAgentSession({
-                    runtimeId: runner.id,
+                    runnerId: runner.id,
                     taskId,
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'Stay visible.'
@@ -444,7 +444,7 @@ describe('Mission', () => {
                 const status = await mission.status();
                 expect(status.agentSessions?.find((session) => session.sessionId === launched.sessionId)).toMatchObject({
                     sessionId: launched.sessionId,
-                    runtimeId: runner.id,
+                    runnerId: runner.id,
                     lifecycleState: 'running'
                 });
             } finally {

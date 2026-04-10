@@ -121,7 +121,7 @@ function deriveContextGraph(
 				sessionId: session.sessionId,
 				...(missionStatus?.missionId ? { missionId: missionStatus.missionId } : {}),
 				...(session.taskId ? { taskId: session.taskId } : {}),
-				runtimeId: session.runtimeId,
+				runnerId: session.runnerId,
 				lifecycleState: session.lifecycleState,
 				...(session.workingDirectory ? { workingDirectory: session.workingDirectory } : {}),
 				...(session.currentTurnTitle ? { promptTitle: session.currentTurnTitle } : {}),

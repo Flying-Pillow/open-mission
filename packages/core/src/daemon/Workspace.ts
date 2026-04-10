@@ -574,11 +574,11 @@ export class MissionWorkspace {
 	private async launchTaskSession(params: TaskLaunch) {
 		const loadedMission = await this.requireMissionContext(params.selector);
 		const request = await this.buildTaskLaunchRequest(loadedMission, params.taskId, params.request);
-		const runtime = this.requireRuntime(this.resolveRuntimeId(request.runtimeId));
+		const runtime = this.requireRunner(this.resolveRunnerId(request.runnerId));
 		const session = await loadedMission.mission.launchAgentSession({
 			...request,
 			taskId: params.taskId,
-			runtimeId: runtime.id,
+			runnerId: runtime.id,
 			transportId: runtime.transportId
 		});
 		void this.broadcastMissionStatusSnapshot(loadedMission);
@@ -589,7 +589,7 @@ export class MissionWorkspace {
 		loadedMission: LoadedMission,
 		taskId: string,
 		overrides: TaskLaunch['request'] = {}
-	): Promise<Omit<MissionAgentSessionLaunchRequest, 'taskId' | 'runtimeId'> & { runtimeId?: string }> {
+	): Promise<Omit<MissionAgentSessionLaunchRequest, 'taskId' | 'runnerId'> & { runnerId?: string }> {
 		const status = await loadedMission.mission.status();
 		const task = [...(status.activeTasks ?? []), ...(status.readyTasks ?? []), ...(status.stages ?? []).flatMap((stage) => stage.tasks)]
 			.find((candidate) => candidate.taskId === taskId);
@@ -607,7 +607,7 @@ export class MissionWorkspace {
 			);
 		}
 		return {
-			...(overrides.runtimeId ? { runtimeId: overrides.runtimeId } : {}),
+			...(overrides.runnerId ? { runnerId: overrides.runnerId } : {}),
 			...(overrides.terminalSessionName ? { terminalSessionName: overrides.terminalSessionName } : {}),
 			...(overrides.transportId ? { transportId: overrides.transportId } : {}),
 			workingDirectory,
@@ -954,8 +954,8 @@ export class MissionWorkspace {
 			};
 		}
 		if (selectedField === 'defaultAgentMode') {
-			const runtimeId = control.settings.agentRuntime?.trim();
-			const usesTerminalTransport = runtimeId === 'copilot-cli';
+			const configuredRunnerId = control.settings.agentRuntime?.trim();
+			const usesTerminalTransport = configuredRunnerId === 'copilot-cli';
 			return {
 				kind: 'selection',
 				id: 'value',
@@ -1681,7 +1681,7 @@ export class MissionWorkspace {
 		}
 
 		await loadedMission.mission.launchAgentSession({
-			runtimeId: this.resolveRuntimeId(),
+			runnerId: this.resolveRunnerId(),
 			taskId,
 			workingDirectory: this.resolveAutopilotWorkingDirectory(status),
 			prompt: buildMissionTaskLaunchPrompt(task, this.resolveAutopilotWorkingDirectory(status)),
@@ -1755,32 +1755,32 @@ export class MissionWorkspace {
 		return this.loadedMissions.get(loadedMission.missionId) === loadedMission;
 	}
 
-	private resolveRuntimeId(runtimeId?: string): string {
-		if (runtimeId) {
-			return this.requireRuntime(runtimeId).id;
+	private resolveRunnerId(runnerId?: string): string {
+		if (runnerId) {
+			return this.requireRunner(runnerId).id;
 		}
 
-		const configuredRuntimeId = getDefaultMissionDaemonSettingsWithOverrides(
+		const configuredRunnerId = getDefaultMissionDaemonSettingsWithOverrides(
 			readMissionDaemonSettings(this.workspaceRoot) ?? {}
 		).agentRuntime;
-		if (configuredRuntimeId) {
-			return this.requireRuntime(configuredRuntimeId).id;
+		if (configuredRunnerId) {
+			return this.requireRunner(configuredRunnerId).id;
 		}
 
-		const defaultRuntimeId = this.agentRunners.keys().next().value;
-		if (!defaultRuntimeId) {
+		const defaultRunnerId = this.agentRunners.keys().next().value;
+		if (!defaultRunnerId) {
 			throw new Error('No mission agent runners are configured in the server.');
 		}
 
-		return defaultRuntimeId;
+		return defaultRunnerId;
 	}
 
-	private requireRuntime(runtimeId: string): AgentRunner {
-		const runtime = this.agentRunners.get(runtimeId);
-		if (!runtime) {
-			throw new Error(`Mission agent runner '${runtimeId}' is not registered in the server.`);
+	private requireRunner(runnerId: string): AgentRunner {
+		const runner = this.agentRunners.get(runnerId);
+		if (!runner) {
+			throw new Error(`Mission agent runner '${runnerId}' is not registered in the server.`);
 		}
-		return runtime;
+		return runner;
 	}
 
 	private toSessionPhaseNotification(

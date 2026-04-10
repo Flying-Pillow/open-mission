@@ -10,7 +10,7 @@ import {
 	type AgentPrompt
 } from '../runtime/AgentRuntimeTypes.js';
 import { AgentSessionEventEmitter } from '../runtime/AgentSessionEventEmitter.js';
-import { COPILOT_CLI_AGENT_RUNTIME_ID } from '../lib/agentRuntimes.js';
+import { COPILOT_CLI_AGENT_RUNNER_ID } from '../lib/agentRuntimes.js';
 import {
 	TerminalAgentTransport,
 	type TerminalAgentTransportOptions,
@@ -31,7 +31,7 @@ type SnapshotOverrides = Omit<Partial<AgentSessionSnapshot>, 'failureMessage'> &
 };
 
 export type CopilotCliAgentRunnerOptions = TerminalAgentTransportOptions & {
-	runtimeId?: string;
+	runnerId?: string;
 	displayName?: string;
 	command: string;
 	args?: string[];
@@ -64,7 +64,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 	private readonly sessions = new Map<string, TerminalRunnerSessionHandle>();
 
 	public constructor(options: CopilotCliAgentRunnerOptions) {
-		this.id = options.runtimeId?.trim() || COPILOT_CLI_AGENT_RUNTIME_ID;
+		this.id = options.runnerId?.trim() || COPILOT_CLI_AGENT_RUNNER_ID;
 		this.displayName = options.displayName?.trim() || `${this.id} via terminal-manager`;
 		this.command = options.command.trim();
 		if (!this.command) {
@@ -104,7 +104,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 		});
 
 		const snapshot: AgentSessionSnapshot = {
-			runtimeId: this.id,
+			runnerId: this.id,
 			transportId: this.transportId,
 			sessionId: transportHandle.sessionName,
 			phase: 'running',
@@ -140,7 +140,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 		const initialCapture = paneState.dead ? '' : await this.transport.capturePane(transportHandle).catch(() => '');
 
 		const snapshot: AgentSessionSnapshot = {
-			runtimeId: this.id,
+			runnerId: this.id,
 			transportId: this.transportId,
 			sessionId: reference.sessionId,
 			phase: paneState.dead ? (paneState.exitCode === 0 ? 'completed' : 'failed') : 'running',
@@ -179,7 +179,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 
 	private createAgentSession(sessionId: string): AgentSession {
 		return {
-			runtimeId: this.id,
+			runnerId: this.id,
 			transportId: this.transportId,
 			sessionId,
 			getSnapshot: () => cloneSnapshot(this.requireSnapshot(sessionId)),
@@ -464,7 +464,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 
 	private createTerminatedAttachedSession(reference: AgentSessionReference): AgentSession {
 		const snapshot: AgentSessionSnapshot = {
-			runtimeId: this.id,
+			runnerId: this.id,
 			transportId: this.transportId,
 			sessionId: reference.sessionId,
 			phase: 'terminated',
@@ -478,7 +478,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 		};
 		const eventEmitter = new AgentSessionEventEmitter<AgentSessionEvent>();
 		return {
-			runtimeId: this.id,
+			runnerId: this.id,
 			transportId: this.transportId,
 			sessionId: reference.sessionId,
 			getSnapshot: () => cloneSnapshot(snapshot),

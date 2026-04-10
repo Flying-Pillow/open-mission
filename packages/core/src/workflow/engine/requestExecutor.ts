@@ -1,6 +1,6 @@
 import type { MissionDescriptor, MissionStageId } from '../../types.js';
 import type { MissionDefaultAgentMode } from '../../lib/daemonConfig.js';
-import { DEFAULT_AGENT_RUNTIME_ID, normalizeLegacyAgentRuntimeId } from '../../lib/agentRuntimes.js';
+import { DEFAULT_AGENT_RUNNER_ID, normalizeLegacyAgentRunnerId } from '../../lib/agentRuntimes.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import {
 	MISSION_STAGE_TEMPLATE_DEFINITIONS,
@@ -96,7 +96,7 @@ export class MissionWorkflowRequestExecutor {
 		if (session.transportId) {
 			return session;
 		}
-		if (session.runtimeId !== 'copilot-cli') {
+		if (session.runnerId !== 'copilot-cli') {
 			return session;
 		}
 
@@ -107,7 +107,7 @@ export class MissionWorkflowRequestExecutor {
 
 		return {
 			...session,
-			runtimeId: terminalRuntime.id,
+			runnerId: terminalRuntime.id,
 			transportId: 'terminal'
 		};
 	}
@@ -151,10 +151,10 @@ export class MissionWorkflowRequestExecutor {
 						break;
 					}
 
-					const runtimeId =
-						normalizeLegacyAgentRuntimeId(task.agentRunner) ??
-						(typeof request.payload['runtimeId'] === 'string' ? request.payload['runtimeId'] : undefined);
-					if (!runtimeId) {
+					const runnerId =
+						normalizeLegacyAgentRunnerId(task.agentRunner) ??
+						(typeof request.payload['runnerId'] === 'string' ? request.payload['runnerId'] : undefined);
+					if (!runnerId) {
 						events.push({
 							eventId: `${request.requestId}:launch-failed`,
 							type: 'session.launch-failed',
@@ -168,8 +168,8 @@ export class MissionWorkflowRequestExecutor {
 					}
 
 					try {
-						const transportId = this.runners.get(runtimeId)?.transportId;
-						const session = await this.orchestrator.startSession(runtimeId, {
+						const transportId = this.runners.get(runnerId)?.transportId;
+						const session = await this.orchestrator.startSession(runnerId, {
 							missionId: input.missionId,
 							taskId: task.taskId,
 							workingDirectory: this.workingDirectoryResolver(task, input.descriptor),
@@ -196,7 +196,7 @@ export class MissionWorkflowRequestExecutor {
 							causedByRequestId: request.requestId,
 							sessionId: snapshot.sessionId,
 							taskId: task.taskId,
-							runtimeId: snapshot.runtimeId,
+							runnerId: snapshot.runnerId,
 							...(snapshot.transportId ? { transportId: snapshot.transportId } : {})
 						});
 					} catch (error) {
@@ -346,10 +346,10 @@ export class MissionWorkflowRequestExecutor {
 	}
 
 	public async startSession(input: {
-		runtimeId: string;
+		runnerId: string;
 		request: AgentSessionStartRequest;
 	}): Promise<AgentSessionSnapshot> {
-		const session = await this.orchestrator.startSession(input.runtimeId, input.request);
+		const session = await this.orchestrator.startSession(input.runnerId, input.request);
 		return session.getSnapshot();
 	}
 
@@ -490,7 +490,7 @@ export class MissionWorkflowRequestExecutor {
 				subject: task.title,
 				instruction: task.instruction,
 				...(task.dependsOn.length > 0 ? { dependsOn: task.dependsOn } : {}),
-				agent: normalizeLegacyAgentRuntimeId(task.agentRunner) ?? DEFAULT_AGENT_RUNTIME_ID
+				agent: normalizeLegacyAgentRunnerId(task.agentRunner) ?? DEFAULT_AGENT_RUNNER_ID
 			});
 		}
 	}

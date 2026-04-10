@@ -20,7 +20,7 @@ import type {
 import type { AgentRunner } from '../runtime/AgentRunner.js';
 import type { AgentSession } from '../runtime/AgentSession.js';
 import { AgentSessionEventEmitter } from '../runtime/AgentSessionEventEmitter.js';
-import { COPILOT_SDK_AGENT_RUNTIME_ID } from '../lib/agentRuntimes.js';
+import { COPILOT_SDK_AGENT_RUNNER_ID } from '../lib/agentRuntimes.js';
 
 export type CopilotSdkAgentRunnerOptions = {
     command?: string;
@@ -39,7 +39,7 @@ type WorkflowSessionHandle = {
 };
 
 export class CopilotSdkAgentRunner implements AgentRunner {
-    public readonly id = COPILOT_SDK_AGENT_RUNTIME_ID;
+    public readonly id = COPILOT_SDK_AGENT_RUNNER_ID;
     public readonly transportId = 'direct';
     public readonly displayName = 'Copilot SDK';
     public readonly capabilities: AgentRunnerCapabilities = {
@@ -100,7 +100,7 @@ export class CopilotSdkAgentRunner implements AgentRunner {
         const launchedAt = new Date().toISOString();
         const sessionId = `${this.id}-${randomUUID()}`;
         const snapshot: AgentSessionSnapshot = {
-            runtimeId: this.id,
+            runnerId: this.id,
             transportId: this.transportId,
             sessionId,
             taskId: request.taskId,
@@ -177,7 +177,7 @@ export class CopilotSdkAgentRunner implements AgentRunner {
             };
             const sdkSession = await client.resumeSession(reference.sessionId, resumeConfig);
             const snapshot: AgentSessionSnapshot = {
-                runtimeId: this.id,
+                runnerId: this.id,
                 transportId: this.transportId,
                 sessionId: reference.sessionId,
                 taskId: 'unknown',
@@ -202,7 +202,7 @@ export class CopilotSdkAgentRunner implements AgentRunner {
 
     private createTerminatedAttachedSession(reference: AgentSessionReference): AgentSession {
         const snapshot: AgentSessionSnapshot = {
-            runtimeId: this.id,
+            runnerId: this.id,
             transportId: this.transportId,
             sessionId: reference.sessionId,
             taskId: 'unknown',
@@ -220,7 +220,7 @@ export class CopilotSdkAgentRunner implements AgentRunner {
             eventEmitter
         });
         return {
-            runtimeId: this.id,
+            runnerId: this.id,
             transportId: this.transportId,
             sessionId: reference.sessionId,
             getSnapshot: () => cloneAgentSessionSnapshot(snapshot),
@@ -504,7 +504,7 @@ export class CopilotSdkAgentRunner implements AgentRunner {
     private createAgentSession(sessionId: string): AgentSession {
         const handle = this.requireSessionHandle(sessionId);
         return {
-            runtimeId: this.id,
+            runnerId: this.id,
             transportId: this.transportId,
             sessionId,
             getSnapshot: () => cloneAgentSessionSnapshot(handle.snapshot),
@@ -590,7 +590,7 @@ function cloneAgentSessionSnapshot(
     snapshot: AgentSessionSnapshot
 ): AgentSessionSnapshot {
     return {
-        runtimeId: snapshot.runtimeId,
+        runnerId: snapshot.runnerId,
         ...(snapshot.transportId ? { transportId: snapshot.transportId } : {}),
         sessionId: snapshot.sessionId,
         missionId: snapshot.missionId,

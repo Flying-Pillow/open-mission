@@ -1,32 +1,32 @@
-export const COPILOT_CLI_AGENT_RUNTIME_ID = 'copilot-cli';
-export const COPILOT_SDK_AGENT_RUNTIME_ID = 'copilot-sdk';
+export const COPILOT_CLI_AGENT_RUNNER_ID = 'copilot-cli';
+export const COPILOT_SDK_AGENT_RUNNER_ID = 'copilot-sdk';
 
-export const DEFAULT_AGENT_RUNTIME_ID = COPILOT_CLI_AGENT_RUNTIME_ID;
+export const DEFAULT_AGENT_RUNNER_ID = COPILOT_CLI_AGENT_RUNNER_ID;
 
-export function normalizeLegacyAgentRuntimeId(runtimeId: string | undefined): string | undefined {
-	const normalized = runtimeId?.trim();
+export function normalizeLegacyAgentRunnerId(runnerId: string | undefined): string | undefined {
+	const normalized = runnerId?.trim();
 	if (!normalized) {
 		return undefined;
 	}
 	if (normalized === 'copilot') {
-		return COPILOT_CLI_AGENT_RUNTIME_ID;
+		return COPILOT_CLI_AGENT_RUNNER_ID;
 	}
 	return normalized;
 }
 
-export function getDefaultTransportForRuntime(runtimeId: string): 'direct' | 'terminal' {
-	return runtimeId === COPILOT_SDK_AGENT_RUNTIME_ID ? 'direct' : 'terminal';
+export function getDefaultTransportForRunner(runnerId: string): 'direct' | 'terminal' {
+	return runnerId === COPILOT_SDK_AGENT_RUNNER_ID ? 'direct' : 'terminal';
 }
 
-export function isSupportedAgentRuntime(runtimeId: string | undefined): runtimeId is string {
-	return runtimeId === COPILOT_CLI_AGENT_RUNTIME_ID || runtimeId === COPILOT_SDK_AGENT_RUNTIME_ID;
+export function isSupportedAgentRunner(runnerId: string | undefined): runnerId is string {
+	return runnerId === COPILOT_CLI_AGENT_RUNNER_ID || runnerId === COPILOT_SDK_AGENT_RUNNER_ID;
 }
 
-export function isSupportedRuntimeTransportPair(runtimeId: string, transportId: string): boolean {
-	if (runtimeId === COPILOT_CLI_AGENT_RUNTIME_ID) {
+export function isSupportedRunnerTransportPair(runnerId: string, transportId: string): boolean {
+	if (runnerId === COPILOT_CLI_AGENT_RUNNER_ID) {
 		return transportId === 'terminal';
 	}
-	if (runtimeId === COPILOT_SDK_AGENT_RUNTIME_ID) {
+	if (runnerId === COPILOT_SDK_AGENT_RUNNER_ID) {
 		return transportId === 'direct';
 	}
 	return false;

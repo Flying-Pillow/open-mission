@@ -60,7 +60,7 @@ function applyEventMutation(
     switch (event.type) {
         case 'mission.created':
             state.lifecycle = 'ready';
-            state.activeStageId = configuration.workflow.stageOrder[0];
+            assignActiveStageId(state, configuration.workflow.stageOrder[0]);
             state.pause = { paused: false };
             state.panic = {
                 active: false,
@@ -258,7 +258,7 @@ function applyEventMutation(
             state.sessions = upsertSession(state.sessions, {
                 sessionId: event.sessionId,
                 taskId: event.taskId,
-                runtimeId: event.runtimeId,
+                runnerId: event.runnerId,
                 ...(event.transportId ? { transportId: event.transportId } : {}),
                 lifecycle: 'running',
                 launchedAt: event.occurredAt,
@@ -335,7 +335,7 @@ function normalizeState(
     const requests: MissionWorkflowRequest[] = [];
     const tasksById = new Map(nextState.tasks.map((task) => [task.taskId, task]));
     const eligibleStageId = resolveEligibleStageId(nextState, configuration);
-    nextState.activeStageId = eligibleStageId;
+    assignActiveStageId(nextState, eligibleStageId);
 
     nextState.tasks = nextState.tasks.map((task) => {
         const blockedByTaskIds = task.dependsOn.filter((dependencyTaskId) => tasksById.get(dependencyTaskId)?.lifecycle !== 'completed');
@@ -414,7 +414,7 @@ function normalizeState(
                 requests.push(createRequest('session.terminate', event.occurredAt, {
                     sessionId: session.sessionId,
                     taskId: session.taskId,
-                    runtimeId: session.runtimeId
+                    runnerId: session.runnerId
                 }));
             }
         }
@@ -713,6 +713,17 @@ function cloneRuntimeState(state: MissionWorkflowRuntimeState): MissionWorkflowR
         launchQueue: state.launchQueue.map((request) => ({ ...request })),
         updatedAt: state.updatedAt
     };
+}
+
+function assignActiveStageId(
+    state: MissionWorkflowRuntimeState,
+    activeStageId: string | undefined
+): void {
+    if (activeStageId) {
+        state.activeStageId = activeStageId;
+        return;
+    }
+    delete state.activeStageId;
 }
 
 function createSignal(

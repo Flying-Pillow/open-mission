@@ -101,7 +101,7 @@ describe('CopilotCliAgentRunner', () => {
 		const session = await runner.startSession(createStartRequest());
 		const snapshot = session.getSnapshot();
 
-		expect(snapshot.runtimeId).toBe('copilot-cli');
+		expect(snapshot.runnerId).toBe('copilot-cli');
 		expect(snapshot.transportId).toBe('terminal');
 		expect(snapshot.sessionId).toMatch(/^mission-agent-/u);
 		expect(snapshot.phase).toBe('running');

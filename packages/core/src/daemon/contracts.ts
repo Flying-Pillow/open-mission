@@ -31,8 +31,8 @@ export type MissionAgentConsoleState = {
 	lines: string[];
 	promptOptions: string[] | null;
 	awaitingInput: boolean;
-	runtimeId?: string;
-	runtimeLabel?: string;
+	runnerId?: string;
+	runnerLabel?: string;
 	sessionId?: string;
 };
 
@@ -160,9 +160,9 @@ export type MissionAgentTurnRequest = {
 };
 
 export type MissionAgentSessionState = {
-	runtimeId: string;
+	runnerId: string;
 	transportId?: string;
-	runtimeLabel: string;
+	runnerLabel: string;
 	sessionId: string;
 	lifecycleState: MissionAgentLifecycleState;
 	workingDirectory?: string;
@@ -176,9 +176,9 @@ export type MissionAgentSessionState = {
 
 export type MissionAgentSessionRecord = {
 	sessionId: string;
-	runtimeId: string;
+	runnerId: string;
 	transportId?: string;
-	runtimeLabel: string;
+	runnerLabel: string;
 	lifecycleState: MissionAgentLifecycleState;
 	taskId?: string;
 	assignmentLabel?: string;
@@ -192,7 +192,7 @@ export type MissionAgentSessionRecord = {
 };
 
 export type MissionAgentSessionLaunchRequest = MissionAgentTurnRequest & {
-	runtimeId: string;
+	runnerId: string;
 	terminalSessionName?: string;
 	transportId?: string;
 	sessionId?: string;
@@ -412,8 +412,8 @@ export type TaskSelect = MissionSelect & {
 };
 
 export type TaskLaunch = TaskSelect & {
-	request?: Partial<Omit<MissionAgentSessionLaunchRequest, 'runtimeId' | 'taskId'>> & {
-		runtimeId?: string;
+	request?: Partial<Omit<MissionAgentSessionLaunchRequest, 'runnerId' | 'taskId'>> & {
+		runnerId?: string;
 	};
 };
 

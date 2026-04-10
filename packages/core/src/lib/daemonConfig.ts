@@ -9,9 +9,9 @@ import {
     type WorkflowGlobalSettings
 } from '../workflow/engine/index.js';
 import {
-    COPILOT_CLI_AGENT_RUNTIME_ID,
-    COPILOT_SDK_AGENT_RUNTIME_ID,
-    isSupportedAgentRuntime
+    COPILOT_CLI_AGENT_RUNNER_ID,
+    COPILOT_SDK_AGENT_RUNNER_ID,
+    isSupportedAgentRunner
 } from './agentRuntimes.js';
 import {
     normalizePersistedAirportIntent,
@@ -21,7 +21,7 @@ import { normalizeWorkflowSettings } from '../settings/validation.js';
 
 export const MISSION_DAEMON_SETTINGS_FILE = 'settings.json';
 
-export const MISSION_AGENT_RUNTIMES = [COPILOT_CLI_AGENT_RUNTIME_ID, COPILOT_SDK_AGENT_RUNTIME_ID] as const;
+export const MISSION_AGENT_RUNTIMES = [COPILOT_CLI_AGENT_RUNNER_ID, COPILOT_SDK_AGENT_RUNNER_ID] as const;
 
 export type MissionAgentRuntime = (typeof MISSION_AGENT_RUNTIMES)[number];
 export type MissionDefaultAgentMode = 'interactive' | 'autonomous';
@@ -68,7 +68,7 @@ export function getDefaultMissionDaemonSettingsWithOverrides(
     overrides: MissionDaemonSettings = {}
 ): MissionDaemonSettings {
     const userConfig = readMissionUserConfig();
-    const agentRuntime = normalizeOptionalAgentRuntime(overrides.agentRuntime) ?? COPILOT_CLI_AGENT_RUNTIME_ID;
+    const agentRuntime = normalizeOptionalAgentRuntime(overrides.agentRuntime) ?? COPILOT_CLI_AGENT_RUNNER_ID;
     const defaultAgentMode = normalizeOptionalAgentMode(overrides.defaultAgentMode);
     const defaultModel = normalizeOptionalString(overrides.defaultModel);
     const towerTheme = normalizeOptionalString(overrides.towerTheme);
@@ -144,7 +144,7 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
 }
 
 function normalizeOptionalAgentRuntime(value: MissionAgentRuntime | undefined): MissionAgentRuntime | undefined {
-	return isSupportedAgentRuntime(value) ? value : undefined;
+    return isSupportedAgentRunner(value) ? value : undefined;
 }
 
 function normalizeOptionalAgentMode(

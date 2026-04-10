@@ -85,8 +85,8 @@ export class DaemonMissionApi {
 	public async launchTaskSession(
 		selector: MissionSelector,
 		taskId: string,
-		request?: Partial<Omit<MissionAgentSessionLaunchRequest, 'runtimeId' | 'taskId'>> & {
-			runtimeId?: string;
+		request?: Partial<Omit<MissionAgentSessionLaunchRequest, 'runnerId' | 'taskId'>> & {
+			runnerId?: string;
 		}
 	): Promise<MissionAgentSessionRecord> {
 		return this.client.request<MissionAgentSessionRecord>('task.launch', {

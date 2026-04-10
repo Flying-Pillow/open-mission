@@ -24,7 +24,7 @@ export type MissionTaskOwner = {
 	blockTask(taskId: string, reason?: string): Promise<void>;
 	reopenTask(taskId: string): Promise<void>;
 	updateTaskLaunchPolicy(taskId: string, launchPolicy: MissionTaskLaunchPolicy): Promise<void>;
-	requireAgentRunner(runtimeId: string): AgentRunner;
+	requireAgentRunner(runnerId: string): AgentRunner;
 	startTaskRuntimeSession(
 		task: MissionTaskState,
 		runner: AgentRunner,
@@ -106,7 +106,7 @@ export class MissionTask {
 		request: MissionAgentSessionLaunchRequest
 	): Promise<MissionSession> {
 		await this.prepareForSessionLaunch();
-		const runner = this.owner.requireAgentRunner(request.runtimeId);
+		const runner = this.owner.requireAgentRunner(request.runnerId);
 		const availability = await runner.isAvailable();
 		if (!availability.available) {
 			throw new Error(availability.detail ?? `${runner.displayName} is unavailable.`);

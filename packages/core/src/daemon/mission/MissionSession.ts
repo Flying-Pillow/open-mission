@@ -21,7 +21,7 @@ export type MissionSessionOwner = {
 
 type MissionRuntimeSessionRecord = {
 	sessionId: string;
-	runtimeId: string;
+	runnerId: string;
 	transportId?: string;
 	taskId: string;
 	lifecycle: MissionAgentSessionRecord['lifecycleState'] | AgentSessionSnapshot['phase'];
@@ -53,7 +53,7 @@ export class MissionSession {
 
 	public static createRecordFromRuntime(input: {
 		runtime: MissionRuntimeSessionRecord;
-		runtimeLabel: string;
+		runnerLabel: string;
 		snapshot?: AgentSessionSnapshot;
 		task?: MissionTaskState;
 		missionId?: string;
@@ -65,9 +65,9 @@ export class MissionSession {
 
 		return MissionSession.cloneRecord({
 			sessionId: input.runtime.sessionId,
-			runtimeId: input.runtime.runtimeId,
+			runnerId: input.runtime.runnerId,
 			...(input.runtime.transportId ? { transportId: input.runtime.transportId } : {}),
-			runtimeLabel: input.runtimeLabel,
+			runnerLabel: input.runnerLabel,
 			lifecycleState: MissionSession.toLifecycleState(
 				input.snapshot?.phase ?? input.runtime.lifecycle
 			),
@@ -84,14 +84,14 @@ export class MissionSession {
 
 	public static createStateFromSnapshot(input: {
 		snapshot: AgentSessionSnapshot;
-		runtimeLabel: string;
+		runnerLabel: string;
 		record?: MissionAgentSessionRecord;
 	}): MissionAgentSessionState {
-		const { snapshot, runtimeLabel, record } = input;
+		const { snapshot, runnerLabel, record } = input;
 		return MissionSession.cloneState({
-			runtimeId: snapshot.runtimeId,
+			runnerId: snapshot.runnerId,
 			...(snapshot.transportId ? { transportId: snapshot.transportId } : {}),
-			runtimeLabel,
+			runnerLabel,
 			sessionId: snapshot.sessionId,
 			lifecycleState: MissionSession.toLifecycleState(snapshot.phase),
 			lastUpdatedAt: snapshot.updatedAt,
@@ -114,9 +114,9 @@ export class MissionSession {
 		const telemetry = MissionSession.cloneTelemetry(record.telemetry);
 		return {
 			sessionId: record.sessionId,
-			runtimeId: record.runtimeId,
+			runnerId: record.runnerId,
 			...(record.transportId ? { transportId: record.transportId } : {}),
-			runtimeLabel: record.runtimeLabel,
+			runnerLabel: record.runnerLabel,
 			lifecycleState: record.lifecycleState,
 			createdAt: record.createdAt,
 			lastUpdatedAt: record.lastUpdatedAt,
@@ -133,9 +133,9 @@ export class MissionSession {
 	public static cloneState(state: MissionAgentSessionState): MissionAgentSessionState {
 		const telemetry = MissionSession.cloneTelemetry(state.telemetry);
 		return {
-			runtimeId: state.runtimeId,
+			runnerId: state.runnerId,
 			...(state.transportId ? { transportId: state.transportId } : {}),
-			runtimeLabel: state.runtimeLabel,
+			runnerLabel: state.runnerLabel,
 			sessionId: state.sessionId,
 			lifecycleState: state.lifecycleState,
 			lastUpdatedAt: state.lastUpdatedAt,
@@ -195,9 +195,9 @@ export class MissionSession {
 	public toState(snapshot?: AgentSessionSnapshot): MissionAgentSessionState {
 		if (!snapshot) {
 			return MissionSession.cloneState({
-				runtimeId: this.record.runtimeId,
+				runnerId: this.record.runnerId,
 				...(this.record.transportId ? { transportId: this.record.transportId } : {}),
-				runtimeLabel: this.record.runtimeLabel,
+				runnerLabel: this.record.runnerLabel,
 				sessionId: this.record.sessionId,
 				lifecycleState: this.record.lifecycleState,
 				lastUpdatedAt: this.record.lastUpdatedAt,
@@ -210,7 +210,7 @@ export class MissionSession {
 
 		return MissionSession.createStateFromSnapshot({
 			snapshot,
-			runtimeLabel: this.record.runtimeLabel,
+			runnerLabel: this.record.runnerLabel,
 			record: this.record
 		});
 	}

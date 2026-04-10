@@ -304,7 +304,7 @@ export class Mission {
 		session: MissionAgentSessionRecord,
 		request: MissionAgentSessionLaunchRequest
 	): Promise<boolean> {
-		const runner = this.agentRunners.get(session.runtimeId);
+		const runner = this.agentRunners.get(session.runnerId);
 		if (!runner?.listSessions) {
 			return true;
 		}
@@ -776,7 +776,7 @@ export class Mission {
 				for (const session of taskSessions) {
 					nodes.push({
 						id: `tree:session:${session.sessionId}`,
-						label: `${session.runtimeId} ${session.sessionId.slice(-4)}`,
+						label: `${session.runnerId} ${session.sessionId.slice(-4)}`,
 						kind: 'session',
 						depth: 2,
 						color: this.sessionTone(session.lifecycleState, taskColor),
@@ -1083,20 +1083,20 @@ export class Mission {
 		return this.createTask(task);
 	}
 
-	private requireAgentRunner(runtimeId: string): AgentRunner {
-		const runner = this.agentRunners.get(runtimeId);
+	private requireAgentRunner(runnerId: string): AgentRunner {
+		const runner = this.agentRunners.get(runnerId);
 		if (!runner) {
-			throw new Error(`Mission agent runner '${runtimeId}' is not registered.`);
+			throw new Error(`Mission agent runner '${runnerId}' is not registered.`);
 		}
 		return runner;
 	}
 
-	private resolveDefaultRuntimeId(): string {
-		const runtimeId = this.agentRunners.keys().next().value;
-		if (!runtimeId) {
+	private resolveDefaultRunnerId(): string {
+		const runnerId = this.agentRunners.keys().next().value;
+		if (!runnerId) {
 			throw new Error('No mission agent runners are configured for this mission.');
 		}
-		return runtimeId;
+		return runnerId;
 	}
 
 	private async startTaskRuntimeSession(
@@ -1105,7 +1105,7 @@ export class Mission {
 		request: MissionAgentSessionLaunchRequest
 	): Promise<AgentSessionSnapshot> {
 		return this.workflowController.startRuntimeSession({
-			runtimeId: runner.id,
+			runnerId: runner.id,
 			request: {
 				missionId: this.descriptor.missionId,
 				taskId: task.taskId,
@@ -1128,7 +1128,7 @@ export class Mission {
 			source: 'daemon',
 			sessionId: snapshot.sessionId,
 			taskId: snapshot.taskId,
-			runtimeId: snapshot.runtimeId,
+			runnerId: snapshot.runnerId,
 			...(snapshot.transportId ? { transportId: snapshot.transportId } : {})
 		});
 		await this.refresh();
@@ -1155,8 +1155,8 @@ export class Mission {
 		const status = await this.status();
 		const missionDir = status.missionDir ?? this.adapter.getMissionWorkspacePath(this.missionDir);
 		const session = await task.launchSession({
-			runtimeId: this.resolveDefaultRuntimeId(),
-			transportId: this.requireAgentRunner(this.resolveDefaultRuntimeId()).transportId,
+			runnerId: this.resolveDefaultRunnerId(),
+			transportId: this.requireAgentRunner(this.resolveDefaultRunnerId()).transportId,
 			workingDirectory: missionDir,
 			prompt: buildMissionTaskLaunchPrompt(taskState, missionDir),
 			title: taskState.subject,
@@ -1250,7 +1250,7 @@ export class Mission {
 			reopenTask: (taskId) => this.reopenTaskExecution(taskId),
 			updateTaskLaunchPolicy: (taskId, launchPolicy) =>
 				this.updateTaskLaunchPolicy(taskId, launchPolicy),
-			requireAgentRunner: (runtimeId) => this.requireAgentRunner(runtimeId),
+			requireAgentRunner: (runnerId) => this.requireAgentRunner(runnerId),
 			startTaskRuntimeSession: (taskState, runner, request) =>
 				this.startTaskRuntimeSession(taskState, runner, request),
 			recordStartedTaskSession: (snapshot) => this.recordStartedTaskSession(snapshot),
@@ -1274,7 +1274,7 @@ export class Mission {
 		}
 		const record = this.requireAgentSessionRecord(sessionId);
 		await this.workflowController.attachRuntimeSession({
-			runtimeId: record.runtimeId,
+			runnerId: record.runnerId,
 			...(record.transportId ? { transportId: record.transportId } : {}),
 			sessionId: record.sessionId
 		});
@@ -1301,7 +1301,7 @@ export class Mission {
 			const task = tasksById.get(session.taskId);
 			return MissionSession.createRecordFromRuntime({
 				runtime: session,
-				runtimeLabel: this.agentRunners.get(session.runtimeId)?.displayName ?? session.runtimeId,
+				runnerLabel: this.agentRunners.get(session.runnerId)?.displayName ?? session.runnerId,
 				...(runtimeSnapshot ? { snapshot: runtimeSnapshot } : {}),
 				...(task ? { task } : {}),
 				missionId: this.descriptor.missionId,
@@ -1314,8 +1314,8 @@ export class Mission {
 			if (!this.consoleStates.has(record.sessionId)) {
 				this.consoleStates.set(record.sessionId, createEmptyMissionAgentConsoleState({
 					awaitingInput: record.lifecycleState === 'awaiting-input',
-					runtimeId: record.runtimeId,
-					runtimeLabel: record.runtimeLabel,
+					runnerId: record.runnerId,
+					runnerLabel: record.runnerLabel,
 					sessionId: record.sessionId,
 					...(record.currentTurnTitle ? { title: record.currentTurnTitle } : {})
 				}));
@@ -1334,7 +1334,7 @@ export class Mission {
 			? this.createSession(session).toState(snapshot)
 			: MissionSession.createStateFromSnapshot({
 				snapshot,
-				runtimeLabel: this.agentRunners.get(snapshot.runtimeId)?.displayName ?? snapshot.runtimeId
+				runnerLabel: this.agentRunners.get(snapshot.runnerId)?.displayName ?? snapshot.runnerId
 			});
 		this.agentEventEmitter.fire({
 			type: 'session-started',
@@ -1348,13 +1348,13 @@ export class Mission {
 			? this.createSession(session).toState(event.snapshot)
 			: MissionSession.createStateFromSnapshot({
 				snapshot: event.snapshot,
-				runtimeLabel:
-					this.agentRunners.get(event.snapshot.runtimeId)?.displayName ?? event.snapshot.runtimeId
+				runnerLabel:
+					this.agentRunners.get(event.snapshot.runnerId)?.displayName ?? event.snapshot.runnerId
 			});
 		const currentConsole = this.consoleStates.get(event.snapshot.sessionId) ?? createEmptyMissionAgentConsoleState({
 			awaitingInput: state.lifecycleState === 'awaiting-input',
-			runtimeId: state.runtimeId,
-			runtimeLabel: state.runtimeLabel,
+			runnerId: state.runnerId,
+			runnerLabel: state.runnerLabel,
 			sessionId: state.sessionId,
 			...(state.currentTurnTitle ? { title: state.currentTurnTitle } : {})
 		});
@@ -1920,8 +1920,8 @@ function cloneMissionAgentConsoleState(
 		lines: [...state.lines],
 		promptOptions: state.promptOptions ? [...state.promptOptions] : null,
 		awaitingInput: state.awaitingInput,
-		...(state.runtimeId ? { runtimeId: state.runtimeId } : {}),
-		...(state.runtimeLabel ? { runtimeLabel: state.runtimeLabel } : {}),
+		...(state.runnerId ? { runnerId: state.runnerId } : {}),
+		...(state.runnerLabel ? { runnerLabel: state.runnerLabel } : {}),
 		...(state.sessionId ? { sessionId: state.sessionId } : {})
 	};
 }
@@ -1935,8 +1935,8 @@ function createEmptyMissionAgentConsoleState(
 			promptOptions: overrides.promptOptions ?? null,
 			awaitingInput: overrides.awaitingInput ?? false,
 			...(overrides.title ? { title: overrides.title } : {}),
-			...(overrides.runtimeId ? { runtimeId: overrides.runtimeId } : {}),
-			...(overrides.runtimeLabel ? { runtimeLabel: overrides.runtimeLabel } : {}),
+			...(overrides.runnerId ? { runnerId: overrides.runnerId } : {}),
+			...(overrides.runnerLabel ? { runnerLabel: overrides.runnerLabel } : {}),
 			...(overrides.sessionId ? { sessionId: overrides.sessionId } : {})
 		})
 	};

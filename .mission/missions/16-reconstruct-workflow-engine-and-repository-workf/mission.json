@@ -1,0 +1,849 @@
+{
+  "schemaVersion": 1,
+  "missionId": "16-reconstruct-workflow-engine-and-repository-workf",
+  "configuration": {
+    "createdAt": "2026-04-10T20:37:14.000Z",
+    "source": "global-settings",
+    "workflowVersion": "mission-workflow-v1",
+    "workflow": {
+      "autostart": {
+        "mission": true
+      },
+      "humanInLoop": {
+        "enabled": true,
+        "pauseOnMissionStart": false,
+        "pauseOnTaskFailure": true,
+        "pauseOnTaskCompletion": false
+      },
+      "panic": {
+        "terminateSessions": true,
+        "clearLaunchQueue": true,
+        "haltMission": true
+      },
+      "execution": {
+        "maxParallelTasks": 1,
+        "maxParallelSessions": 1
+      },
+      "stageOrder": [
+        "prd",
+        "spec",
+        "implementation",
+        "audit",
+        "delivery"
+      ],
+      "stages": {
+        "prd": {
+          "stageId": "prd",
+          "displayName": "PRD",
+          "taskLaunchPolicy": {
+            "defaultAutostart": true,
+            "launchMode": "automatic"
+          },
+          "completionPolicy": {
+            "requireAllTasksCompleted": true
+          }
+        },
+        "spec": {
+          "stageId": "spec",
+          "displayName": "Spec",
+          "taskLaunchPolicy": {
+            "defaultAutostart": true,
+            "launchMode": "automatic"
+          },
+          "completionPolicy": {
+            "requireAllTasksCompleted": true
+          }
+        },
+        "implementation": {
+          "stageId": "implementation",
+          "displayName": "Implement",
+          "taskLaunchPolicy": {
+            "defaultAutostart": false,
+            "launchMode": "manual"
+          },
+          "completionPolicy": {
+            "requireAllTasksCompleted": true
+          }
+        },
+        "audit": {
+          "stageId": "audit",
+          "displayName": "Audit",
+          "taskLaunchPolicy": {
+            "defaultAutostart": true,
+            "launchMode": "automatic"
+          },
+          "completionPolicy": {
+            "requireAllTasksCompleted": true
+          }
+        },
+        "delivery": {
+          "stageId": "delivery",
+          "displayName": "Delivery",
+          "taskLaunchPolicy": {
+            "defaultAutostart": false,
+            "launchMode": "manual"
+          },
+          "completionPolicy": {
+            "requireAllTasksCompleted": true
+          }
+        }
+      },
+      "taskGeneration": [
+        {
+          "stageId": "prd",
+          "templateSources": [
+            {
+              "templateId": "prd-from-brief",
+              "path": "tasks/PRD/01-prd-from-brief.md"
+            }
+          ],
+          "tasks": []
+        },
+        {
+          "stageId": "spec",
+          "templateSources": [
+            {
+              "templateId": "draft-spec",
+              "path": "tasks/SPEC/01-spec-from-prd.md"
+            },
+            {
+              "templateId": "plan-implementation",
+              "path": "tasks/SPEC/02-plan.md"
+            }
+          ],
+          "tasks": []
+        },
+        {
+          "stageId": "implementation",
+          "templateSources": [],
+          "tasks": []
+        },
+        {
+          "stageId": "audit",
+          "templateSources": [
+            {
+              "templateId": "debrief",
+              "path": "tasks/AUDIT/01-debrief.md"
+            },
+            {
+              "templateId": "touchdown",
+              "path": "tasks/AUDIT/02-touchdown.md"
+            }
+          ],
+          "tasks": []
+        },
+        {
+          "stageId": "delivery",
+          "templateSources": [],
+          "tasks": []
+        }
+      ],
+      "gates": [
+        {
+          "gateId": "implement",
+          "intent": "implement",
+          "stageId": "implementation"
+        },
+        {
+          "gateId": "verify",
+          "intent": "verify",
+          "stageId": "implementation"
+        },
+        {
+          "gateId": "audit",
+          "intent": "audit",
+          "stageId": "audit"
+        },
+        {
+          "gateId": "deliver",
+          "intent": "deliver",
+          "stageId": "delivery"
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "lifecycle": "delivered",
+    "activeStageId": "delivery",
+    "pause": {
+      "paused": false
+    },
+    "panic": {
+      "active": false,
+      "terminateSessions": true,
+      "clearLaunchQueue": true,
+      "haltMission": true
+    },
+    "stages": [
+      {
+        "stageId": "prd",
+        "lifecycle": "completed",
+        "taskIds": [
+          "prd/01-prd-from-brief"
+        ],
+        "readyTaskIds": [],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
+        "blockedTaskIds": [],
+        "completedTaskIds": [
+          "prd/01-prd-from-brief"
+        ]
+      },
+      {
+        "stageId": "spec",
+        "lifecycle": "completed",
+        "taskIds": [
+          "spec/01-draft-spec",
+          "spec/02-plan"
+        ],
+        "readyTaskIds": [],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
+        "blockedTaskIds": [],
+        "completedTaskIds": [
+          "spec/01-draft-spec",
+          "spec/02-plan"
+        ]
+      },
+      {
+        "stageId": "implementation",
+        "lifecycle": "completed",
+        "taskIds": [
+          "implementation/01-establish-workflow-runtime-document-and-reducer-boundary",
+          "implementation/verify-01-establish-workflow-runtime-document-and-reducer-boundary",
+          "implementation/02-align-deterministic-task-generation-and-scheduling",
+          "implementation/verify-02-align-deterministic-task-generation-and-scheduling",
+          "implementation/03-align-daemon-owned-workflow-settings-and-snapshot-timing",
+          "implementation/verify-03-align-daemon-owned-workflow-settings-and-snapshot-timing",
+          "implementation/04-update-workflow-specs-control-consumers-and-focused-tests",
+          "implementation/verify-04-update-workflow-specs-control-consumers-and-focused-tests"
+        ],
+        "readyTaskIds": [],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
+        "blockedTaskIds": [],
+        "completedTaskIds": [
+          "implementation/01-establish-workflow-runtime-document-and-reducer-boundary",
+          "implementation/verify-01-establish-workflow-runtime-document-and-reducer-boundary",
+          "implementation/02-align-deterministic-task-generation-and-scheduling",
+          "implementation/verify-02-align-deterministic-task-generation-and-scheduling",
+          "implementation/03-align-daemon-owned-workflow-settings-and-snapshot-timing",
+          "implementation/verify-03-align-daemon-owned-workflow-settings-and-snapshot-timing",
+          "implementation/04-update-workflow-specs-control-consumers-and-focused-tests",
+          "implementation/verify-04-update-workflow-specs-control-consumers-and-focused-tests"
+        ]
+      },
+      {
+        "stageId": "audit",
+        "lifecycle": "completed",
+        "taskIds": [
+          "audit/01-debrief",
+          "audit/02-touchdown"
+        ],
+        "readyTaskIds": [],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
+        "blockedTaskIds": [],
+        "completedTaskIds": [
+          "audit/01-debrief",
+          "audit/02-touchdown"
+        ]
+      },
+      {
+        "stageId": "delivery",
+        "lifecycle": "completed",
+        "taskIds": [],
+        "readyTaskIds": [],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
+        "blockedTaskIds": [],
+        "completedTaskIds": []
+      }
+    ],
+    "tasks": [
+      {
+        "taskId": "prd/01-prd-from-brief",
+        "stageId": "prd",
+        "title": "PRD From Brief",
+        "instruction": "Use BRIEF.md as the canonical intake context. Rewrite or enrich PRD.md so it clearly states the problem, the target outcome, the constraints, and the success criteria for this mission. Only modify PRD.md in this task. Do not create or edit SPEC.md, implementation files, verification files, or delivery artifacts. Do not create application code in this task.",
+        "dependsOn": [],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": true,
+          "launchMode": "automatic"
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-10T20:40:10.000Z",
+        "updatedAt": "2026-04-10T20:43:00.000Z",
+        "completedAt": "2026-04-10T20:43:00.000Z"
+      },
+      {
+        "taskId": "spec/01-draft-spec",
+        "stageId": "spec",
+        "title": "Draft Spec",
+        "instruction": "Read PRD.md and define the technical target in SPEC.md. The specification must describe the intended design, the key boundaries, and the concrete files that will change. Only modify SPEC.md in this task. Do not create implementation code or verification evidence in this task.",
+        "dependsOn": [],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": true,
+          "launchMode": "automatic"
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-10T20:43:05.000Z",
+        "updatedAt": "2026-04-10T20:47:00.000Z",
+        "completedAt": "2026-04-10T20:47:00.000Z"
+      },
+      {
+        "taskId": "spec/02-plan",
+        "stageId": "spec",
+        "title": "Plan Implementation And Verification",
+        "instruction": "Read SPEC.md and turn it into an execution ledger. Create paired markdown task files under 03-IMPLEMENTATION/tasks for each implementation slice: one task for building the slice and a second verification task for testing or validating that same slice. Name the verification task with the verify- prefix, keep both tasks in 03-IMPLEMENTATION/tasks, and make the verification task depend on its implementation task. The verification task must focus on tests and validation rather than feature creation. Do not create application code in this planning task. Do not modify delivery artifacts.",
+        "dependsOn": [],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": true,
+          "launchMode": "automatic"
+        },
+        "agentRunner": "planner",
+        "retries": 0,
+        "createdAt": "2026-04-10T20:43:05.000Z",
+        "updatedAt": "2026-04-10T20:50:00.000Z",
+        "completedAt": "2026-04-10T20:50:00.000Z"
+      },
+      {
+        "taskId": "implementation/01-establish-workflow-runtime-document-and-reducer-boundary",
+        "stageId": "implementation",
+        "title": "Establish Workflow Runtime Document And Reducer Boundary",
+        "instruction": "Align the workflow engine around one canonical mission-local runtime document and reducer-owned state transitions. This slice should preserve mission lifecycle, stage projections, task runtime, gate projections, panic, pause target metadata, and reducer-owned `activeStageId` semantics across `packages/core/src/workflow/engine/types.ts`, `document.ts`, `reducer.ts`, `validation.ts`, and the mission-facing runtime surfaces that consume them.",
+        "dependsOn": [],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": false,
+          "launchMode": "manual"
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-10T20:50:05.000Z",
+        "updatedAt": "2026-04-10T20:54:00.000Z",
+        "completedAt": "2026-04-10T20:54:00.000Z"
+      },
+      {
+        "taskId": "implementation/verify-01-establish-workflow-runtime-document-and-reducer-boundary",
+        "stageId": "implementation",
+        "title": "Verify Workflow Runtime Document And Reducer Boundary",
+        "instruction": "Verify that mutable workflow truth remains mission-local and reducer-owned after this slice. Confirm the relevant workflow reducer and runtime tests cover `activeStageId`, pause target metadata, derived stage behavior, and mission completion or delivery transitions. Record any remaining gaps in VERIFY.md.",
+        "dependsOn": [
+          "implementation/01-establish-workflow-runtime-document-and-reducer-boundary"
+        ],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": false,
+          "launchMode": "manual"
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-10T20:50:05.000Z",
+        "updatedAt": "2026-04-10T20:55:00.000Z",
+        "completedAt": "2026-04-10T20:55:00.000Z"
+      },
+      {
+        "taskId": "implementation/02-align-deterministic-task-generation-and-scheduling",
+        "stageId": "implementation",
+        "title": "Align Deterministic Task Generation And Scheduling",
+        "instruction": "Align the workflow engine's task-generation and scheduling behavior with the preserved contract. This slice should keep `tasks.request-generation`, `tasks.generated`, idempotent generated payloads, queue normalization, stage eligibility, and delivery-stage completion behavior deterministic across `packages/core/src/workflow/engine/generator.ts`, `requestExecutor.ts`, `controller.ts`, `reducer.ts`, and related validation surfaces.",
+        "dependsOn": [
+          "implementation/01-establish-workflow-runtime-document-and-reducer-boundary"
+        ],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": false,
+          "launchMode": "manual"
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-10T20:50:05.000Z",
+        "updatedAt": "2026-04-10T20:58:00.000Z",
+        "completedAt": "2026-04-10T20:58:00.000Z"
+      },
+      {
+        "taskId": "implementation/verify-02-align-deterministic-task-generation-and-scheduling",
+        "stageId": "implementation",
+        "title": "Verify Deterministic Task Generation And Scheduling",
+        "instruction": "Verify that task generation, queueing, and stage advancement remain deterministic after this slice. Confirm the relevant workflow reducer or generation tests cover generated task payloads, stage advancement, delivery completion behavior, and rejection of malformed generation or scheduling flows. Record any remaining gaps in VERIFY.md.",
+        "dependsOn": [
+          "implementation/02-align-deterministic-task-generation-and-scheduling"
+        ],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": false,
+          "launchMode": "manual"
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-10T20:50:05.000Z",
+        "updatedAt": "2026-04-10T20:59:00.000Z",
+        "completedAt": "2026-04-10T20:59:00.000Z"
+      },
+      {
+        "taskId": "implementation/03-align-daemon-owned-workflow-settings-and-snapshot-timing",
+        "stageId": "implementation",
+        "title": "Align Daemon-Owned Workflow Settings And Snapshot Timing",
+        "instruction": "Align repository workflow policy with the preserved daemon-owned settings contract without collapsing repository policy into workflow surfaces. This slice should keep workflow settings initialization, RFC 6902 patching, revision conflict checks, atomic persistence, daemon API routing, and `draft` to `ready` workflow snapshot timing coherent across `packages/core/src/settings/*`, `packages/core/src/lib/daemonConfig.ts`, `packages/core/src/daemon/Workspace.ts`, `packages/core/src/daemon/mission/Factory.ts`, and the client control surfaces that consume those daemon methods.",
+        "dependsOn": [
+          "implementation/01-establish-workflow-runtime-document-and-reducer-boundary",
+          "implementation/02-align-deterministic-task-generation-and-scheduling"
+        ],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": false,
+          "launchMode": "manual"
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-10T20:50:05.000Z",
+        "updatedAt": "2026-04-10T21:03:00.000Z",
+        "completedAt": "2026-04-10T21:03:00.000Z"
+      },
+      {
+        "taskId": "implementation/verify-03-align-daemon-owned-workflow-settings-and-snapshot-timing",
+        "stageId": "implementation",
+        "title": "Verify Daemon-Owned Workflow Settings And Snapshot Timing",
+        "instruction": "Verify that repository workflow settings remain daemon-owned and that mission workflow snapshots capture repository policy only at the `draft` to `ready` boundary. Confirm the relevant settings-store, patch, validation, revision, and snapshot-timing tests cover initialization, conflict handling, and isolation after mission start. Record any remaining gaps in VERIFY.md.",
+        "dependsOn": [
+          "implementation/03-align-daemon-owned-workflow-settings-and-snapshot-timing"
+        ],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": false,
+          "launchMode": "manual"
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-10T20:50:05.000Z",
+        "updatedAt": "2026-04-10T21:04:00.000Z",
+        "completedAt": "2026-04-10T21:04:00.000Z"
+      },
+      {
+        "taskId": "implementation/04-update-workflow-specs-control-consumers-and-focused-tests",
+        "stageId": "implementation",
+        "title": "Update Workflow Specs, Control Consumers, And Focused Tests",
+        "instruction": "Complete the workflow replay mission by aligning the preserved source specifications, replay records, control-facing consumers, and focused tests with the workflow-runtime and repository-policy boundary. This slice should keep mission `16` primary on the workflow-engine and repository-workflow-settings corpus, keep secondary references to semantic model, agent runtime, and airport control plane narrow, and update the focused tests or docs that must assert the workflow contract coherently.",
+        "dependsOn": [
+          "implementation/01-establish-workflow-runtime-document-and-reducer-boundary",
+          "implementation/02-align-deterministic-task-generation-and-scheduling",
+          "implementation/03-align-daemon-owned-workflow-settings-and-snapshot-timing"
+        ],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": false,
+          "launchMode": "manual"
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-10T20:50:05.000Z",
+        "updatedAt": "2026-04-10T21:08:00.000Z",
+        "completedAt": "2026-04-10T21:08:00.000Z"
+      },
+      {
+        "taskId": "implementation/verify-04-update-workflow-specs-control-consumers-and-focused-tests",
+        "stageId": "implementation",
+        "title": "Verify Workflow Specs, Control Consumers, And Focused Tests",
+        "instruction": "Verify that the preserved workflow-engine and repository-workflow-settings sources, control-surface contracts, and focused tests all describe the same ownership boundary after this slice. Confirm the replay artifacts stay aligned with the retrospective coverage map and record any remaining gaps in VERIFY.md.",
+        "dependsOn": [
+          "implementation/04-update-workflow-specs-control-consumers-and-focused-tests"
+        ],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": false,
+          "launchMode": "manual"
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-10T20:50:05.000Z",
+        "updatedAt": "2026-04-10T21:10:00.000Z",
+        "completedAt": "2026-04-10T21:10:00.000Z"
+      },
+      {
+        "taskId": "audit/01-debrief",
+        "stageId": "audit",
+        "title": "Debrief",
+        "instruction": "Run the focused end-to-end validation required for the mission. Record the workflow-runtime replay results, residual risks, and release readiness in AUDIT.md.",
+        "dependsOn": [],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": true,
+          "launchMode": "automatic"
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-10T21:11:00.000Z",
+        "updatedAt": "2026-04-10T21:14:00.000Z",
+        "completedAt": "2026-04-10T21:14:00.000Z"
+      },
+      {
+        "taskId": "audit/02-touchdown",
+        "stageId": "audit",
+        "title": "Touchdown",
+        "instruction": "Prepare the final delivery motion. Confirm AUDIT.md is complete, summarize the final workflow-runtime replay status, and write DELIVERY.md as the final delivery artifact for the mission.",
+        "dependsOn": [],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": true,
+          "launchMode": "automatic"
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-10T21:11:00.000Z",
+        "updatedAt": "2026-04-10T21:16:00.000Z",
+        "completedAt": "2026-04-10T21:16:00.000Z"
+      }
+    ],
+    "sessions": [],
+    "gates": [
+      {
+        "gateId": "implement",
+        "intent": "implement",
+        "state": "passed",
+        "stageId": "implementation",
+        "reasons": [],
+        "updatedAt": "2026-04-10T21:10:00.000Z"
+      },
+      {
+        "gateId": "verify",
+        "intent": "verify",
+        "state": "passed",
+        "stageId": "implementation",
+        "reasons": [],
+        "updatedAt": "2026-04-10T21:10:00.000Z"
+      },
+      {
+        "gateId": "audit",
+        "intent": "audit",
+        "state": "passed",
+        "stageId": "audit",
+        "reasons": [],
+        "updatedAt": "2026-04-10T21:16:00.000Z"
+      },
+      {
+        "gateId": "deliver",
+        "intent": "deliver",
+        "state": "passed",
+        "stageId": "delivery",
+        "reasons": [],
+        "updatedAt": "2026-04-10T21:17:00.000Z"
+      }
+    ],
+    "launchQueue": [],
+    "updatedAt": "2026-04-10T21:17:00.000Z"
+  },
+  "eventLog": [
+    {
+      "eventId": "16-reconstruct-workflow-engine-and-repository-workf:mission-created",
+      "type": "mission.created",
+      "occurredAt": "2026-04-10T20:37:14.000Z",
+      "source": "human",
+      "payload": {}
+    },
+    {
+      "eventId": "16-reconstruct-workflow-engine-and-repository-workf:mission-started",
+      "type": "mission.started",
+      "occurredAt": "2026-04-10T20:40:00.000Z",
+      "source": "human",
+      "payload": {}
+    },
+    {
+      "eventId": "tasks.request-generation:2026-04-10T20:40:00.000Z:{\"stageId\":\"prd\"}:tasks-generated",
+      "type": "tasks.generated",
+      "occurredAt": "2026-04-10T20:40:10.000Z",
+      "source": "daemon",
+      "causedByRequestId": "tasks.request-generation:2026-04-10T20:40:00.000Z:{\"stageId\":\"prd\"}",
+      "payload": {
+        "stageId": "prd",
+        "tasks": [
+          {
+            "taskId": "prd/01-prd-from-brief",
+            "title": "PRD From Brief",
+            "instruction": "Use BRIEF.md as the canonical intake context. Rewrite or enrich PRD.md so it clearly states the problem, the target outcome, the constraints, and the success criteria for this mission. Only modify PRD.md in this task. Do not create or edit SPEC.md, implementation files, verification files, or delivery artifacts. Do not create application code in this task.",
+            "dependsOn": [],
+            "agentRunner": "copilot-cli"
+          }
+        ]
+      }
+    },
+    {
+      "eventId": "16-reconstruct-workflow-engine-and-repository-workf:task-completed:prd-01-prd-from-brief",
+      "type": "task.completed",
+      "occurredAt": "2026-04-10T20:43:00.000Z",
+      "source": "human",
+      "payload": {
+        "taskId": "prd/01-prd-from-brief"
+      }
+    },
+    {
+      "eventId": "tasks.request-generation:2026-04-10T20:43:00.000Z:{\"stageId\":\"spec\"}:tasks-generated",
+      "type": "tasks.generated",
+      "occurredAt": "2026-04-10T20:43:05.000Z",
+      "source": "daemon",
+      "causedByRequestId": "tasks.request-generation:2026-04-10T20:43:00.000Z:{\"stageId\":\"spec\"}",
+      "payload": {
+        "stageId": "spec",
+        "tasks": [
+          {
+            "taskId": "spec/01-draft-spec",
+            "title": "Draft Spec",
+            "instruction": "Read PRD.md and define the technical target in SPEC.md. The specification must describe the intended design, the key boundaries, and the concrete files that will change. Only modify SPEC.md in this task. Do not create implementation code or verification evidence in this task.",
+            "dependsOn": [],
+            "agentRunner": "copilot-cli"
+          },
+          {
+            "taskId": "spec/02-plan",
+            "title": "Plan Implementation And Verification",
+            "instruction": "Read SPEC.md and turn it into an execution ledger. Create paired markdown task files under 03-IMPLEMENTATION/tasks for each implementation slice: one task for building the slice and a second verification task for testing or validating that same slice. Name the verification task with the verify- prefix, keep both tasks in 03-IMPLEMENTATION/tasks, and make the verification task depend on its implementation task. The verification task must focus on tests and validation rather than feature creation. Do not create application code in this planning task. Do not modify delivery artifacts.",
+            "dependsOn": [],
+            "agentRunner": "planner"
+          }
+        ]
+      }
+    },
+    {
+      "eventId": "16-reconstruct-workflow-engine-and-repository-workf:task-completed:spec-01-draft-spec",
+      "type": "task.completed",
+      "occurredAt": "2026-04-10T20:47:00.000Z",
+      "source": "human",
+      "payload": {
+        "taskId": "spec/01-draft-spec"
+      }
+    },
+    {
+      "eventId": "16-reconstruct-workflow-engine-and-repository-workf:task-completed:spec-02-plan",
+      "type": "task.completed",
+      "occurredAt": "2026-04-10T20:50:00.000Z",
+      "source": "human",
+      "payload": {
+        "taskId": "spec/02-plan"
+      }
+    },
+    {
+      "eventId": "16-reconstruct-workflow-engine-and-repository-workf:emulated-tasks-generated:implementation",
+      "type": "tasks.generated",
+      "occurredAt": "2026-04-10T20:50:05.000Z",
+      "source": "human",
+      "payload": {
+        "stageId": "implementation",
+        "tasks": [
+          {
+            "taskId": "implementation/01-establish-workflow-runtime-document-and-reducer-boundary",
+            "title": "Establish Workflow Runtime Document And Reducer Boundary",
+            "instruction": "Align the workflow engine around one canonical mission-local runtime document and reducer-owned state transitions. This slice should preserve mission lifecycle, stage projections, task runtime, gate projections, panic, pause target metadata, and reducer-owned `activeStageId` semantics across `packages/core/src/workflow/engine/types.ts`, `document.ts`, `reducer.ts`, `validation.ts`, and the mission-facing runtime surfaces that consume them.",
+            "dependsOn": [],
+            "agentRunner": "copilot-cli"
+          },
+          {
+            "taskId": "implementation/verify-01-establish-workflow-runtime-document-and-reducer-boundary",
+            "title": "Verify Workflow Runtime Document And Reducer Boundary",
+            "instruction": "Verify that mutable workflow truth remains mission-local and reducer-owned after this slice. Confirm the relevant workflow reducer and runtime tests cover `activeStageId`, pause target metadata, derived stage behavior, and mission completion or delivery transitions. Record any remaining gaps in VERIFY.md.",
+            "dependsOn": [
+              "implementation/01-establish-workflow-runtime-document-and-reducer-boundary"
+            ],
+            "agentRunner": "copilot-cli"
+          },
+          {
+            "taskId": "implementation/02-align-deterministic-task-generation-and-scheduling",
+            "title": "Align Deterministic Task Generation And Scheduling",
+            "instruction": "Align the workflow engine's task-generation and scheduling behavior with the preserved contract. This slice should keep `tasks.request-generation`, `tasks.generated`, idempotent generated payloads, queue normalization, stage eligibility, and delivery-stage completion behavior deterministic across `packages/core/src/workflow/engine/generator.ts`, `requestExecutor.ts`, `controller.ts`, `reducer.ts`, and related validation surfaces.",
+            "dependsOn": [
+              "implementation/01-establish-workflow-runtime-document-and-reducer-boundary"
+            ],
+            "agentRunner": "copilot-cli"
+          },
+          {
+            "taskId": "implementation/verify-02-align-deterministic-task-generation-and-scheduling",
+            "title": "Verify Deterministic Task Generation And Scheduling",
+            "instruction": "Verify that task generation, queueing, and stage advancement remain deterministic after this slice. Confirm the relevant workflow reducer or generation tests cover generated task payloads, stage advancement, delivery completion behavior, and rejection of malformed generation or scheduling flows. Record any remaining gaps in VERIFY.md.",
+            "dependsOn": [
+              "implementation/02-align-deterministic-task-generation-and-scheduling"
+            ],
+            "agentRunner": "copilot-cli"
+          },
+          {
+            "taskId": "implementation/03-align-daemon-owned-workflow-settings-and-snapshot-timing",
+            "title": "Align Daemon-Owned Workflow Settings And Snapshot Timing",
+            "instruction": "Align repository workflow policy with the preserved daemon-owned settings contract without collapsing repository policy into workflow surfaces. This slice should keep workflow settings initialization, RFC 6902 patching, revision conflict checks, atomic persistence, daemon API routing, and `draft` to `ready` workflow snapshot timing coherent across `packages/core/src/settings/*`, `packages/core/src/lib/daemonConfig.ts`, `packages/core/src/daemon/Workspace.ts`, `packages/core/src/daemon/mission/Factory.ts`, and the client control surfaces that consume those daemon methods.",
+            "dependsOn": [
+              "implementation/01-establish-workflow-runtime-document-and-reducer-boundary",
+              "implementation/02-align-deterministic-task-generation-and-scheduling"
+            ],
+            "agentRunner": "copilot-cli"
+          },
+          {
+            "taskId": "implementation/verify-03-align-daemon-owned-workflow-settings-and-snapshot-timing",
+            "title": "Verify Daemon-Owned Workflow Settings And Snapshot Timing",
+            "instruction": "Verify that repository workflow settings remain daemon-owned and that mission workflow snapshots capture repository policy only at the `draft` to `ready` boundary. Confirm the relevant settings-store, patch, validation, revision, and snapshot-timing tests cover initialization, conflict handling, and isolation after mission start. Record any remaining gaps in VERIFY.md.",
+            "dependsOn": [
+              "implementation/03-align-daemon-owned-workflow-settings-and-snapshot-timing"
+            ],
+            "agentRunner": "copilot-cli"
+          },
+          {
+            "taskId": "implementation/04-update-workflow-specs-control-consumers-and-focused-tests",
+            "title": "Update Workflow Specs, Control Consumers, And Focused Tests",
+            "instruction": "Complete the workflow replay mission by aligning the preserved source specifications, replay records, control-facing consumers, and focused tests with the workflow-runtime and repository-policy boundary. This slice should keep mission `16` primary on the workflow-engine and repository-workflow-settings corpus, keep secondary references to semantic model, agent runtime, and airport control plane narrow, and update the focused tests or docs that must assert the workflow contract coherently.",
+            "dependsOn": [
+              "implementation/01-establish-workflow-runtime-document-and-reducer-boundary",
+              "implementation/02-align-deterministic-task-generation-and-scheduling",
+              "implementation/03-align-daemon-owned-workflow-settings-and-snapshot-timing"
+            ],
+            "agentRunner": "copilot-cli"
+          },
+          {
+            "taskId": "implementation/verify-04-update-workflow-specs-control-consumers-and-focused-tests",
+            "title": "Verify Workflow Specs, Control Consumers, And Focused Tests",
+            "instruction": "Verify that the preserved workflow-engine and repository-workflow-settings sources, control-surface contracts, and focused tests all describe the same ownership boundary after this slice. Confirm the replay artifacts stay aligned with the retrospective coverage map and record any remaining gaps in VERIFY.md.",
+            "dependsOn": [
+              "implementation/04-update-workflow-specs-control-consumers-and-focused-tests"
+            ],
+            "agentRunner": "copilot-cli"
+          }
+        ]
+      }
+    },
+    {
+      "eventId": "16-reconstruct-workflow-engine-and-repository-workf:task-completed:implementation-01-establish-workflow-runtime-document-and-reducer-boundary",
+      "type": "task.completed",
+      "occurredAt": "2026-04-10T20:54:00.000Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/01-establish-workflow-runtime-document-and-reducer-boundary"
+      }
+    },
+    {
+      "eventId": "16-reconstruct-workflow-engine-and-repository-workf:task-completed:implementation-verify-01-establish-workflow-runtime-document-and-reducer-boundary",
+      "type": "task.completed",
+      "occurredAt": "2026-04-10T20:55:00.000Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/verify-01-establish-workflow-runtime-document-and-reducer-boundary"
+      }
+    },
+    {
+      "eventId": "16-reconstruct-workflow-engine-and-repository-workf:task-completed:implementation-02-align-deterministic-task-generation-and-scheduling",
+      "type": "task.completed",
+      "occurredAt": "2026-04-10T20:58:00.000Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/02-align-deterministic-task-generation-and-scheduling"
+      }
+    },
+    {
+      "eventId": "16-reconstruct-workflow-engine-and-repository-workf:task-completed:implementation-verify-02-align-deterministic-task-generation-and-scheduling",
+      "type": "task.completed",
+      "occurredAt": "2026-04-10T20:59:00.000Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/verify-02-align-deterministic-task-generation-and-scheduling"
+      }
+    },
+    {
+      "eventId": "16-reconstruct-workflow-engine-and-repository-workf:task-completed:implementation-03-align-daemon-owned-workflow-settings-and-snapshot-timing",
+      "type": "task.completed",
+      "occurredAt": "2026-04-10T21:03:00.000Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/03-align-daemon-owned-workflow-settings-and-snapshot-timing"
+      }
+    },
+    {
+      "eventId": "16-reconstruct-workflow-engine-and-repository-workf:task-completed:implementation-verify-03-align-daemon-owned-workflow-settings-and-snapshot-timing",
+      "type": "task.completed",
+      "occurredAt": "2026-04-10T21:04:00.000Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/verify-03-align-daemon-owned-workflow-settings-and-snapshot-timing"
+      }
+    },
+    {
+      "eventId": "16-reconstruct-workflow-engine-and-repository-workf:task-completed:implementation-04-update-workflow-specs-control-consumers-and-focused-tests",
+      "type": "task.completed",
+      "occurredAt": "2026-04-10T21:08:00.000Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/04-update-workflow-specs-control-consumers-and-focused-tests"
+      }
+    },
+    {
+      "eventId": "16-reconstruct-workflow-engine-and-repository-workf:task-completed:implementation-verify-04-update-workflow-specs-control-consumers-and-focused-tests",
+      "type": "task.completed",
+      "occurredAt": "2026-04-10T21:10:00.000Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/verify-04-update-workflow-specs-control-consumers-and-focused-tests"
+      }
+    },
+    {
+      "eventId": "tasks.request-generation:2026-04-10T21:10:00.000Z:{\"stageId\":\"audit\"}:tasks-generated",
+      "type": "tasks.generated",
+      "occurredAt": "2026-04-10T21:11:00.000Z",
+      "source": "daemon",
+      "causedByRequestId": "tasks.request-generation:2026-04-10T21:10:00.000Z:{\"stageId\":\"audit\"}",
+      "payload": {
+        "stageId": "audit",
+        "tasks": [
+          {
+            "taskId": "audit/01-debrief",
+            "title": "Debrief",
+            "instruction": "Run the focused end-to-end validation required for the mission. Record the workflow-runtime replay results, residual risks, and release readiness in AUDIT.md.",
+            "dependsOn": [],
+            "agentRunner": "copilot-cli"
+          },
+          {
+            "taskId": "audit/02-touchdown",
+            "title": "Touchdown",
+            "instruction": "Prepare the final delivery motion. Confirm AUDIT.md is complete, summarize the final workflow-runtime replay status, and write DELIVERY.md as the final delivery artifact for the mission.",
+            "dependsOn": [],
+            "agentRunner": "copilot-cli"
+          }
+        ]
+      }
+    },
+    {
+      "eventId": "16-reconstruct-workflow-engine-and-repository-workf:task-completed:audit-01-debrief",
+      "type": "task.completed",
+      "occurredAt": "2026-04-10T21:14:00.000Z",
+      "source": "human",
+      "payload": {
+        "taskId": "audit/01-debrief"
+      }
+    },
+    {
+      "eventId": "16-reconstruct-workflow-engine-and-repository-workf:task-completed:audit-02-touchdown",
+      "type": "task.completed",
+      "occurredAt": "2026-04-10T21:16:00.000Z",
+      "source": "human",
+      "payload": {
+        "taskId": "audit/02-touchdown"
+      }
+    },
+    {
+      "eventId": "16-reconstruct-workflow-engine-and-repository-workf:mission-delivered",
+      "type": "mission.delivered",
+      "occurredAt": "2026-04-10T21:17:00.000Z",
+      "source": "human",
+      "payload": {}
+    }
+  ]
+}

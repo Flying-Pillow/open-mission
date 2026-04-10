@@ -5,7 +5,7 @@ import type { PersistedAgentSessionStore } from './PersistedAgentSessionStore.js
 import type {
     AgentCommand,
     AgentPrompt,
-    AgentRuntimeId,
+    AgentRunnerId,
     AgentSessionEvent,
     AgentSessionId,
     AgentSessionReference,
@@ -22,7 +22,7 @@ type OrchestratorSessionRecord = {
 };
 
 export class AgentSessionOrchestrator {
-    private readonly runners = new Map<AgentRuntimeId, AgentRunner>();
+    private readonly runners = new Map<AgentRunnerId, AgentRunner>();
     private readonly sessions = new Map<AgentSessionId, OrchestratorSessionRecord>();
     private readonly mcpServerProvider: (() => Promise<McpServerReference[]>) | undefined;
     private readonly store: PersistedAgentSessionStore | undefined;
@@ -55,10 +55,10 @@ export class AgentSessionOrchestrator {
     }
 
     public async startSession(
-        runtimeId: AgentRuntimeId,
+        runnerId: AgentRunnerId,
         request: AgentSessionStartRequest
     ): Promise<AgentSession> {
-        const runner = this.requireRunner(runtimeId);
+        const runner = this.requireRunner(runnerId);
         const mcpServers = await this.resolveMcpServers(runner, request);
         const session = await runner.startSession({
             ...request,
@@ -75,13 +75,13 @@ export class AgentSessionOrchestrator {
         const inMemory = this.sessions.get(reference.sessionId);
         if (
             inMemory
-            && inMemory.reference.runtimeId === reference.runtimeId
+            && inMemory.reference.runnerId === reference.runnerId
             && inMemory.reference.transportId === reference.transportId
         ) {
             return inMemory.session;
         }
 
-        const runner = this.requireRunner(reference.runtimeId);
+        const runner = this.requireRunner(reference.runnerId);
         if (!runner.attachSession) {
             return this.createTerminatedAttachedSession(reference);
         }
@@ -139,10 +139,10 @@ export class AgentSessionOrchestrator {
         return snapshot;
     }
 
-    private requireRunner(runtimeId: AgentRuntimeId): AgentRunner {
-        const runner = this.runners.get(runtimeId);
+    private requireRunner(runnerId: AgentRunnerId): AgentRunner {
+        const runner = this.runners.get(runnerId);
         if (!runner) {
-            throw new Error(`Agent runtime '${runtimeId}' is not registered.`);
+            throw new Error(`Agent runner '${runnerId}' is not registered.`);
         }
         return runner;
     }
@@ -167,7 +167,7 @@ export class AgentSessionOrchestrator {
 
         this.sessions.set(session.sessionId, {
             reference: {
-                runtimeId: session.runtimeId,
+                runnerId: session.runnerId,
                 ...(session.transportId ? { transportId: session.transportId } : {}),
                 sessionId: session.sessionId
             },
@@ -241,7 +241,7 @@ export class AgentSessionOrchestrator {
 
     private createTerminatedAttachedSession(reference: AgentSessionReference): AgentSession {
         const terminatedSnapshot: AgentSessionSnapshot = {
-            runtimeId: reference.runtimeId,
+            runnerId: reference.runnerId,
             ...(reference.transportId ? { transportId: reference.transportId } : {}),
             sessionId: reference.sessionId,
             phase: 'terminated',
@@ -255,7 +255,7 @@ export class AgentSessionOrchestrator {
         };
 
         const session: AgentSession = {
-            runtimeId: reference.runtimeId,
+            runnerId: reference.runnerId,
             transportId: reference.transportId,
             sessionId: reference.sessionId,
             getSnapshot: () => ({ ...terminatedSnapshot }),

@@ -122,7 +122,7 @@ export class MissionWorkflowController {
 	}
 
     public async startRuntimeSession(input: {
-        runtimeId: string;
+        runnerId: string;
         request: AgentSessionStartRequest;
     }): Promise<AgentSessionSnapshot> {
         return this.requestExecutor.startSession(input);

@@ -110,7 +110,7 @@ export interface MissionStageRuntimeProjection {
 export interface MissionAgentSessionRuntimeState {
     sessionId: string;
     taskId: string;
-    runtimeId: string;
+    runnerId: string;
     transportId?: string;
     lifecycle: MissionAgentSessionLifecycleState;
     launchedAt: string;
@@ -312,7 +312,7 @@ export interface AgentSessionStartedEvent extends MissionWorkflowEventBase {
     type: 'session.started';
     sessionId: string;
     taskId: string;
-    runtimeId: string;
+    runnerId: string;
     transportId?: string;
 }
 

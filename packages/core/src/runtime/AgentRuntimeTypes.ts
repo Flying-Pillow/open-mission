@@ -1,4 +1,4 @@
-export type AgentRuntimeId = string;
+export type AgentRunnerId = string;
 export type AgentTransportId = string;
 export type AgentSessionId = string;
 
@@ -41,7 +41,7 @@ export interface McpServerReference {
 }
 
 export interface AgentSessionReference {
-    runtimeId: AgentRuntimeId;
+    runnerId: AgentRunnerId;
     transportId?: AgentTransportId;
     sessionId: AgentSessionId;
 }
@@ -70,7 +70,7 @@ export interface AgentCommand {
 }
 
 export interface AgentSessionSnapshot {
-    runtimeId: AgentRuntimeId;
+    runnerId: AgentRunnerId;
     transportId?: AgentTransportId;
     sessionId: AgentSessionId;
     phase: AgentSessionPhase;
