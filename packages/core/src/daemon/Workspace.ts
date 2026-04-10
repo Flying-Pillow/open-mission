@@ -2,7 +2,6 @@ import * as fs from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import * as path from 'node:path';
 import { MissionPreparationService } from './MissionPreparationService.js';
-import { RepositoryPreparationService } from './RepositoryPreparationService.js';
 import { Mission } from './mission/Mission.js';
 import { Factory } from './mission/Factory.js';
 import { buildMissionTaskLaunchPrompt } from './mission/taskLaunchPrompt.js';
@@ -27,8 +26,10 @@ import {
 	getMissionDirectoryPath,
 	getMissionWorktreesPath,
 } from '../lib/repoConfig.js';
+import { listRegisteredMissionUserRepos, registerMissionUserRepo } from '../lib/userConfig.js';
 import type {
 	MissionBrief,
+	MissionRepositoryCandidate,
 	OperatorActionExecutionStep,
 	OperatorActionExecutionSelectionStep,
 	OperatorActionExecutionTextStep,
@@ -177,7 +178,7 @@ export class MissionWorkspace {
 	}
 
 	public async listMissionSelectionCandidates(): Promise<MissionSelectionCandidate[]> {
-		return (await this.store.listTrackedMissions()).map(({ descriptor }) => ({
+		return (await this.store.listMissions()).map(({ descriptor }) => ({
 			missionId: descriptor.missionId,
 			title: descriptor.brief.title,
 			branchRef: descriptor.branchRef,
@@ -187,7 +188,8 @@ export class MissionWorkspace {
 	}
 
 	public async buildDiscoveryStatus(
-		availableMissions: MissionSelectionCandidate[]
+		availableMissions: MissionSelectionCandidate[],
+		availableRepositories: MissionControlSource['availableRepositories'] = []
 	): Promise<OperatorStatus> {
 		const control = await this.buildControlPlaneStatus(availableMissions.length);
 
@@ -195,15 +197,17 @@ export class MissionWorkspace {
 			found: false,
 			operationalMode: this.resolveOperationalMode(control),
 			control,
+			...(availableRepositories.length > 0 ? { availableRepositories } : {}),
 			...(availableMissions.length > 0 ? { availableMissions } : {})
 		};
 	}
 
 	public async readMissionControlSource(input: {
+		availableRepositories?: MissionControlSource['availableRepositories'];
 		selectedMissionId?: string;
 	} = {}): Promise<MissionControlSource> {
 		const availableMissions = await this.listMissionSelectionCandidates();
-		const discoveryStatus = await this.buildDiscoveryStatus(availableMissions);
+		const discoveryStatus = await this.buildDiscoveryStatus(availableMissions, input.availableRepositories ?? []);
 		const selectedMissionId = input.selectedMissionId?.trim();
 		const missionStatus = selectedMissionId
 			? await this.getMissionStatus({ selector: { missionId: selectedMissionId } }).catch(() => undefined)
@@ -212,6 +216,7 @@ export class MissionWorkspace {
 			repositoryId: this.workspaceRoot,
 			repositoryRootPath: this.workspaceRoot,
 			control: discoveryStatus.control!,
+			availableRepositories: input.availableRepositories ?? [],
 			availableMissions,
 			...(missionStatus ? { missionStatus } : {})
 		};
@@ -219,7 +224,8 @@ export class MissionWorkspace {
 
 	private buildDiscoveryAvailableActions(
 		control: MissionControlPlaneStatus,
-		availableMissions: MissionSelectionCandidate[]
+		availableMissions: MissionSelectionCandidate[],
+		availableRepositories: MissionRepositoryCandidate[]
 	): OperatorActionDescriptor[] {
 		const issuesReady = control.issuesConfigured && control.githubAuthenticated === true;
 
@@ -254,18 +260,47 @@ export class MissionWorkspace {
 			},
 			{
 				id: 'control.mission.select',
-				label: 'Select a tracked mission',
+				label: 'Select a local mission',
 				action: '/select',
 				scope: 'mission',
 				disabled: availableMissions.length === 0,
-				disabledReason: availableMissions.length > 0 ? '' : 'No tracked missions are available.',
+				disabledReason: availableMissions.length > 0 ? '' : 'No local missions are available.',
 				enabled: availableMissions.length > 0,
 				ui: {
 					toolbarLabel: 'OPEN MISSION',
 					requiresConfirmation: false
 				},
 				flow: this.buildMissionSwitchFlow(availableMissions),
-				...(availableMissions.length > 0 ? {} : { reason: 'No tracked missions are available.' })
+				...(availableMissions.length > 0 ? {} : { reason: 'No local missions are available.' })
+			},
+			{
+				id: 'control.repository.switch',
+				label: 'Switch repository',
+				action: '/repo',
+				scope: 'mission',
+				disabled: availableRepositories.length === 0,
+				disabledReason: availableRepositories.length > 0 ? '' : 'No registered repositories are available.',
+				enabled: availableRepositories.length > 0,
+				ui: {
+					toolbarLabel: 'SWITCH REPO',
+					requiresConfirmation: false
+				},
+				flow: this.buildRepositorySwitchFlow(availableRepositories),
+				...(availableRepositories.length > 0 ? {} : { reason: 'No registered repositories are available.' })
+			},
+			{
+				id: 'control.repository.add',
+				label: 'Register repository',
+				action: '/add-repo',
+				scope: 'mission',
+				disabled: false,
+				disabledReason: '',
+				enabled: true,
+				ui: {
+					toolbarLabel: 'ADD REPO',
+					requiresConfirmation: false
+				},
+				flow: this.buildRepositoryAddFlow()
 			},
 			{
 				id: 'control.issues.list',
@@ -319,13 +354,36 @@ export class MissionWorkspace {
 			return this.getMissionStatus({ selector: { missionId } });
 		}
 
+		if (params.actionId === 'control.repository.switch') {
+			const repositorySelection = requireSingleSelectionActionStep(params.steps ?? [], 'repository');
+			const repositoryRootPath = repositorySelection.optionIds[0]?.trim();
+			if (!repositoryRootPath) {
+				throw new Error('Repository switch requires a repository root path.');
+			}
+			const registeredRepositories = await listRegisteredMissionUserRepos();
+			if (!registeredRepositories.some((candidate) => candidate.repositoryRootPath === repositoryRootPath)) {
+				throw new Error('Repository switch requires a registered repository.');
+			}
+			return this.buildIdleMissionStatus();
+		}
+
+		if (params.actionId === 'control.repository.add') {
+			const repositoryPath = requireTextActionStep(params.steps ?? [], 'path').value.trim();
+			if (!repositoryPath) {
+				throw new Error('Repository registration requires a filesystem path.');
+			}
+			await registerMissionUserRepo(repositoryPath);
+			return this.buildIdleMissionStatus();
+		}
+
 		throw new Error(`Unsupported control action '${params.actionId}'.`);
 	}
 
 	private async listControlActions(params: ControlActionList = {}): Promise<OperatorActionDescriptor[]> {
 		const availableMissions = await this.listMissionSelectionCandidates();
+		const availableRepositories = await listRegisteredMissionUserRepos();
 		const control = await this.buildControlPlaneStatus(availableMissions.length);
-		return this.resolveAvailableActions(this.buildDiscoveryAvailableActions(control, availableMissions), params.context);
+		return this.resolveAvailableActions(this.buildDiscoveryAvailableActions(control, availableMissions, availableRepositories), params.context);
 	}
 
 	private async executeMissionAction(params: MissionActionExecute): Promise<OperatorStatus> {
@@ -344,21 +402,6 @@ export class MissionWorkspace {
 		const githubRepository = this.requireGitHubRepository();
 		this.requireGitHubAuthentication();
 
-		const bootstrapPreparation = await this.prepareRepositoryBootstrapIfNeeded(githubRepository);
-		if (bootstrapPreparation) {
-			const bootstrapFailure = await this.tryFinalizePreparationPullRequest(
-				bootstrapPreparation,
-				githubRepository
-			);
-			if (bootstrapFailure) {
-				return {
-					...(await this.buildIdleMissionStatus()),
-					preparation: bootstrapPreparation,
-					recommendedAction: `${bootstrapFailure} Merge the repository bootstrap PR and pull the default branch before preparing a mission.`
-				};
-			}
-		}
-
 		const github = new GitHubPlatformAdapter(this.workspaceRoot, githubRepository);
 		const reconciledBrief = params.brief.issueId !== undefined
 			? params.brief
@@ -375,15 +418,14 @@ export class MissionWorkspace {
 			throw new Error('Mission preparation requires a reconciled GitHub issue number.');
 		}
 
-		return this.prepareMissionFromResolvedBrief(reconciledBrief, githubRepository, params.branchRef);
+		return this.prepareMissionFromResolvedBrief(reconciledBrief, params.branchRef);
 	}
 
 	private async prepareMissionFromResolvedBrief(
 		reconciledBrief: MissionBrief,
-		githubRepository: string,
 		branchRefOverride?: string
 	): Promise<OperatorStatus> {
-		const existingMission = await this.store.resolveTrackedMission({
+		const existingMission = await this.store.resolveKnownMission({
 			...(reconciledBrief.issueId !== undefined ? { issueId: reconciledBrief.issueId } : {}),
 			...(branchRefOverride ? { branchRef: branchRefOverride } : {})
 		});
@@ -414,29 +456,13 @@ export class MissionWorkspace {
 				: this.store.deriveDraftMissionBranchName(reconciledBrief.title));
 		const preparation = await new MissionPreparationService(
 			this.store,
-			this.buildWorkflowBindings(),
-			githubRepository
+			this.buildWorkflowBindings()
 		).prepareFromBrief({
 			brief: reconciledBrief,
 			branchRef: branchRefOverride ?? branchRef
 		});
 		if (preparation.kind !== 'mission') {
 			throw new Error('Mission preparation returned a repository bootstrap result unexpectedly.');
-		}
-		const finalizeFailure = await this.tryFinalizePreparationPullRequest(preparation, githubRepository);
-		if (finalizeFailure) {
-			return {
-				...(await this.buildIdleMissionStatus()),
-				missionId: preparation.missionId,
-				title: reconciledBrief.title,
-				...(reconciledBrief.issueId !== undefined ? { issueId: reconciledBrief.issueId } : {}),
-				type: reconciledBrief.type,
-				branchRef: preparation.branchRef,
-				missionRootDir: preparation.missionRootDir,
-				missionControlDir: preparation.missionControlDir,
-				preparation,
-				recommendedAction: `${finalizeFailure} Merge the mission preparation PR manually, pull the default branch, and then select the tracked mission from Tower.`
-			};
 		}
 
 		const selectedStatus = await this.getMissionStatus({
@@ -452,32 +478,6 @@ export class MissionWorkspace {
 			missionRootDir: preparation.missionRootDir,
 			missionControlDir: preparation.missionControlDir
 		};
-	}
-
-	private async tryFinalizePreparationPullRequest(
-		preparation: import('../types.js').MissionPreparationStatus,
-		githubRepository: string
-	): Promise<string | undefined> {
-		const currentBranch = this.store.getCurrentBranch();
-		const defaultBranch = this.store.getDefaultBranch();
-		if (currentBranch !== preparation.baseBranch || currentBranch !== defaultBranch) {
-			return `Automatic merge/pull requires the control repository to be on '${preparation.baseBranch}', found '${currentBranch}'. `;
-		}
-		if (!this.store.isWorktreeClean()) {
-			return 'Automatic merge/pull requires the control repository to have no local changes. ';
-		}
-		try {
-			const github = new GitHubPlatformAdapter(this.workspaceRoot, githubRepository);
-			await github.mergePullRequest({
-				pullRequest: preparation.pullRequestUrl,
-				method: 'merge',
-				deleteBranch: true
-			});
-			this.store.pullDefaultBranch(preparation.baseBranch);
-			return undefined;
-		} catch (error) {
-			return `${error instanceof Error ? error.message : String(error)} `;
-		}
 	}
 
 	private async updateControlSettings(params: ControlSettingsUpdate): Promise<OperatorStatus> {
@@ -543,24 +543,9 @@ export class MissionWorkspace {
 		const githubRepository = this.requireGitHubRepository();
 		this.requireGitHubAuthentication();
 
-		const bootstrapPreparation = await this.prepareRepositoryBootstrapIfNeeded(githubRepository);
-		if (bootstrapPreparation) {
-			const bootstrapFailure = await this.tryFinalizePreparationPullRequest(
-				bootstrapPreparation,
-				githubRepository
-			);
-			if (bootstrapFailure) {
-				return {
-					...(await this.buildIdleMissionStatus()),
-					preparation: bootstrapPreparation,
-					recommendedAction: `${bootstrapFailure} Merge the repository bootstrap PR and pull the default branch before preparing a mission from an issue.`
-				};
-			}
-		}
-
 		const adapter = new GitHubPlatformAdapter(this.workspaceRoot, githubRepository);
 		const brief = await adapter.fetchIssue(String(params.issueNumber));
-		return this.prepareMissionFromResolvedBrief(brief, githubRepository);
+		return this.prepareMissionFromResolvedBrief(brief);
 	}
 
 
@@ -791,7 +776,6 @@ export class MissionWorkspace {
 		try {
 			await Promise.all([
 				fs.access(getMissionDirectoryPath(this.workspaceRoot)),
-				fs.access(getMissionWorktreesPath(this.workspaceRoot)),
 				fs.access(getMissionDaemonSettingsPath(this.workspaceRoot))
 			]);
 			return true;
@@ -816,11 +800,8 @@ export class MissionWorkspace {
 		if (!isGitRepository) {
 			problems.push('Mission requires a Git repository.');
 		}
-		if (!initialized) {
-			problems.push('Mission control scaffolding is missing.');
-		}
-		if (!settings) {
-			problems.push('Mission settings are missing.');
+		if (!initialized || !settings) {
+			warnings.push('Mission control will be created in the first mission worktree if it is not already present on this checkout.');
 		}
 		if (!effectiveSettings.agentRuntime) {
 			problems.push('Mission control agent runtime is not configured.');
@@ -852,7 +833,12 @@ export class MissionWorkspace {
 			controlRoot: this.workspaceRoot,
 			missionDirectory: getMissionDirectoryPath(this.workspaceRoot),
 			settingsPath: getMissionDaemonSettingsPath(this.workspaceRoot),
-			worktreesPath: getMissionWorktreesPath(this.workspaceRoot),
+			worktreesPath: getMissionWorktreesPath(
+				this.workspaceRoot,
+				effectiveSettings.missionWorkspaceRoot
+					? { missionWorkspaceRoot: effectiveSettings.missionWorkspaceRoot }
+					: {}
+			),
 			...(isGitRepository ? { currentBranch: this.store.getCurrentBranch() } : {}),
 			settings: effectiveSettings,
 			isGitRepository,
@@ -923,6 +909,11 @@ export class MissionWorkspace {
 				id: 'towerTheme',
 				label: 'Tower Theme',
 				description: control.settings.towerTheme?.trim() || 'ocean'
+			},
+			{
+				id: 'missionWorkspaceRoot',
+				label: 'Mission Workspace Root',
+				description: control.settings.missionWorkspaceRoot?.trim() || 'missions'
 			},
 			{
 				id: 'instructionsPath',
@@ -1037,6 +1028,9 @@ export class MissionWorkspace {
 		if (selectedField === 'defaultModel') {
 			return control.settings.defaultModel ?? '';
 		}
+		if (selectedField === 'missionWorkspaceRoot') {
+			return control.settings.missionWorkspaceRoot ?? '';
+		}
 		return '';
 	}
 
@@ -1074,7 +1068,7 @@ export class MissionWorkspace {
 					id: 'title',
 					label: 'TITLE',
 					title: 'MISSION TITLE',
-					helperText: 'Enter a short mission title. Mission will create the GitHub issue first and then open the preparation pull request.',
+					helperText: 'Enter a short mission title. Mission will create the GitHub issue first, then materialize the mission branch and local worktree.',
 					placeholder: 'Summarize the mission to prepare',
 					inputMode: 'compact',
 					format: 'plain'
@@ -1084,8 +1078,8 @@ export class MissionWorkspace {
 					id: 'body',
 					label: 'BODY',
 					title: 'MISSION BODY',
-					helperText: 'Describe the mission in Markdown. This content seeds the GitHub issue first, then the mission-start pull request and tracked brief. Enter submits, Shift+Enter adds a newline, and Ctrl+P or Tab toggles preview.',
-					placeholder: 'Describe the mission scope, constraints, and expected outcome for the prepared mission.',
+					helperText: 'Describe the mission in Markdown. This content seeds the GitHub issue first, then the mission branch and tracked brief inside the local mission worktree. Enter submits, Shift+Enter adds a newline, and Ctrl+P or Tab toggles preview.',
+					placeholder: 'Describe the mission scope, constraints, and expected outcome for the mission branch.',
 					inputMode: 'expanded',
 					format: 'markdown'
 				}
@@ -1135,14 +1129,58 @@ export class MissionWorkspace {
 					id: 'mission',
 					label: 'MISSION',
 					title: 'SELECT MISSION',
-					emptyLabel: 'No tracked missions are available under .missions/missions.',
-					helperText: 'Choose the tracked mission you want to open.',
+					emptyLabel: `No local missions are available under ${this.store.getMissionsPath()}.`,
+					helperText: 'Choose the local mission worktree you want to open.',
 					selectionMode: 'single',
 					options: availableMissions.map((candidate) => ({
 						id: candidate.missionId,
 						label: candidate.title,
 						description: `${candidate.missionId} | ${candidate.branchRef}`
 					}))
+				}
+			]
+		};
+	}
+
+	private buildRepositorySwitchFlow(
+		availableRepositories: MissionRepositoryCandidate[]
+	): OperatorActionFlowDescriptor {
+		return {
+			targetLabel: 'REPO',
+			actionLabel: 'SWITCH',
+			steps: [
+				{
+					kind: 'selection',
+					id: 'repository',
+					label: 'REPO',
+					title: 'REGISTERED REPOSITORIES',
+					emptyLabel: 'No registered repositories are available.',
+					helperText: 'Choose the repository you want to open.',
+					selectionMode: 'single',
+					options: availableRepositories.map((candidate) => ({
+						id: candidate.repositoryRootPath,
+						label: candidate.label,
+						description: candidate.description
+					}))
+				}
+			]
+		};
+	}
+
+	private buildRepositoryAddFlow(): OperatorActionFlowDescriptor {
+		return {
+			targetLabel: 'REPO',
+			actionLabel: 'ADD',
+			steps: [
+				{
+					kind: 'text',
+					id: 'path',
+					label: 'PATH',
+					title: 'REPOSITORY PATH',
+					helperText: 'Enter a filesystem path to a Git checkout to register.',
+					placeholder: 'Enter an absolute or relative repository path.',
+					inputMode: 'compact',
+					format: 'plain'
 				}
 			]
 		};
@@ -1160,6 +1198,12 @@ export class MissionWorkspace {
 		}
 		if (params.actionId === 'control.mission.select') {
 			return this.buildMissionSwitchFlow(await this.listMissionSelectionCandidates());
+		}
+		if (params.actionId === 'control.repository.switch') {
+			return this.buildRepositorySwitchFlow(await listRegisteredMissionUserRepos());
+		}
+		if (params.actionId === 'control.repository.add') {
+			return this.buildRepositoryAddFlow();
 		}
 		throw new Error(`Unsupported control action '${params.actionId}'.`);
 	}
@@ -1213,6 +1257,13 @@ export class MissionWorkspace {
 					break;
 				}
 				nextSettings.towerTheme = value;
+				break;
+			case 'missionWorkspaceRoot':
+				if (value.length === 0) {
+					delete nextSettings.missionWorkspaceRoot;
+					break;
+				}
+				nextSettings.missionWorkspaceRoot = value;
 				break;
 			case 'instructionsPath':
 				if (value.length === 0) {
@@ -1321,16 +1372,6 @@ export class MissionWorkspace {
 		if (!auth.authenticated) {
 			throw new Error(auth.detail ?? 'GitHub CLI authentication is required.');
 		}
-	}
-
-	private async prepareRepositoryBootstrapIfNeeded(
-		githubRepository: string
-	) {
-		if (await this.isRepositoryInitialized()) {
-			return undefined;
-		}
-
-		return new RepositoryPreparationService(this.store, githubRepository).prepareRepository();
 	}
 
 	private toMissionParams(params: unknown): MissionSelect {
@@ -1920,6 +1961,7 @@ function asControlSettingField(
 		|| value === 'defaultAgentMode'
 		|| value === 'defaultModel'
 		|| value === 'towerTheme'
+		|| value === 'missionWorkspaceRoot'
 		|| value === 'instructionsPath'
 		|| value === 'skillsPath'
 	) {

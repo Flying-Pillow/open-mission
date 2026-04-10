@@ -1,17 +1,15 @@
-import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { Mission } from './mission/Mission.js';
 import type { MissionWorkflowBindings } from './mission/Mission.js';
+import { initializeMissionRepository } from '../initializeMissionRepository.js';
+import { readMissionDaemonSettings } from '../lib/daemonConfig.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
-import { GitHubPlatformAdapter } from '../platforms/GitHubPlatformAdapter.js';
 import type { MissionBrief, MissionDescriptor, MissionPreparationStatus } from '../types.js';
 
 export class MissionPreparationService {
 	public constructor(
 		private readonly store: FilesystemAdapter,
-		private readonly workflowBindings: MissionWorkflowBindings,
-		private readonly githubRepository: string
+		private readonly workflowBindings: MissionWorkflowBindings
 	) { }
 
 	public async prepareFromBrief(input: {
@@ -28,22 +26,33 @@ export class MissionPreparationService {
 				: this.store.deriveDraftMissionBranchName(input.brief.title));
 		const baseBranch = this.store.getDefaultBranch();
 		const createdAt = new Date().toISOString();
-
-		const temporaryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-prepare-'));
-		const proposalWorktreePath = path.join(temporaryRoot, missionId);
+		const proposalWorktreePath = this.store.getMissionWorktreePath(missionId);
 		let preparedMission: Mission | undefined;
 
 		try {
-			await this.store.materializeLinkedWorktree(proposalWorktreePath, branchRef, baseBranch);
+			await this.store.materializeMissionWorktree(proposalWorktreePath, branchRef, baseBranch);
 
 			const proposalStore = new FilesystemAdapter(proposalWorktreePath);
-			const missionRootDir = proposalStore.getTrackedMissionDir(missionId);
-			const existingDossier = await fs.lstat(missionRootDir).then(
-				(stats) => stats.isDirectory(),
-				() => false
-			);
-			if (existingDossier) {
-				throw new Error(`Mission dossier '${missionId}' already exists in the repository.`);
+			const initialization = readMissionDaemonSettings(proposalWorktreePath)
+				? undefined
+				: await initializeMissionRepository(proposalWorktreePath, {
+					includeRuntimeDirectories: false
+				});
+			const missionRootDir = proposalStore.getTrackedMissionDir(missionId, proposalWorktreePath);
+			const existingDescriptor = await proposalStore.readMissionDescriptor(missionRootDir);
+			if (existingDescriptor) {
+				return {
+					kind: 'mission',
+					state: 'branch-prepared',
+					missionId,
+					branchRef: existingDescriptor.branchRef,
+					baseBranch,
+					worktreePath: proposalWorktreePath,
+					missionRootDir,
+					missionControlDir: proposalStore.getMissionControlPath(missionRootDir),
+					...(input.brief.issueId !== undefined ? { issueId: input.brief.issueId } : {}),
+					...(input.brief.url ? { issueUrl: input.brief.url } : {})
+				};
 			}
 
 			const descriptor: MissionDescriptor = {
@@ -64,27 +73,26 @@ export class MissionPreparationService {
 			preparedMission.dispose();
 			preparedMission = undefined;
 
-			proposalStore.stagePaths([
-				path.relative(proposalWorktreePath, missionRootDir)
-			], proposalWorktreePath, { force: true });
+			proposalStore.stagePaths(
+				[
+					...(initialization
+						? [path.relative(proposalWorktreePath, initialization.daemonSettingsPath)]
+						: []),
+					path.relative(proposalWorktreePath, missionRootDir)
+				],
+				proposalWorktreePath,
+				{ force: true }
+			);
 			proposalStore.commit(this.buildCommitMessage(missionId, input.brief), proposalWorktreePath);
 			proposalStore.pushBranch(branchRef, proposalWorktreePath);
 
-			const github = new GitHubPlatformAdapter(proposalWorktreePath, this.githubRepository);
-			const pullRequestUrl = await github.createPullRequest({
-				title: this.buildPullRequestTitle(missionId, input.brief),
-				body: this.buildPullRequestBody(missionId, branchRef, input.brief),
-				headBranch: branchRef,
-				baseBranch
-			});
-
 			return {
 				kind: 'mission',
-				state: 'pull-request-opened',
+				state: 'branch-prepared',
 				missionId,
 				branchRef,
 				baseBranch,
-				pullRequestUrl,
+				worktreePath: proposalWorktreePath,
 				missionRootDir: canonicalMissionRootDir,
 				missionControlDir: canonicalMissionControlDir,
 				...(input.brief.issueId !== undefined ? { issueId: input.brief.issueId } : {}),
@@ -92,8 +100,6 @@ export class MissionPreparationService {
 			};
 		} finally {
 			preparedMission?.dispose();
-			await this.store.removeLinkedWorktree(proposalWorktreePath).catch(() => undefined);
-			await fs.rm(temporaryRoot, { recursive: true, force: true });
 		}
 	}
 
@@ -101,29 +107,4 @@ export class MissionPreparationService {
 		return `chore(mission): prepare ${missionId}${brief.issueId !== undefined ? ` for #${String(brief.issueId)}` : ''}`;
 	}
 
-	private buildPullRequestTitle(missionId: string, brief: MissionBrief): string {
-		return brief.issueId !== undefined
-			? `Prepare mission #${String(brief.issueId)}: ${brief.title}`
-			: `Prepare mission ${missionId}: ${brief.title}`;
-	}
-
-	private buildPullRequestBody(missionId: string, branchRef: string, brief: MissionBrief): string {
-		const issueLine = brief.issueId !== undefined
-			? `Issue: #${String(brief.issueId)}`
-			: 'Issue: Unattached';
-		return [
-			'## Mission Preparation',
-			'',
-			`This PR prepares the tracked mission dossier for \`${missionId}\`.`,
-			'',
-			`- ${issueLine}`,
-			`- Branch: \`${branchRef}\``,
-			'- Creates the initial tracked `mission-control/` scaffold and brief descriptor.',
-			'- Reserves the mission branch before local execution worktrees are materialized.',
-			'',
-			'## Brief',
-			'',
-			brief.body.trim()
-		].join('\n');
-	}
 }

@@ -4,7 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { DaemonApi } from '@flying-pillow/mission-core';
+import { DaemonApi, readMissionUserConfig } from '@flying-pillow/mission-core';
 import { connectSurfaceDaemon, resolveSurfaceDaemonLaunchMode } from '../daemon/connectSurfaceDaemon.js';
 import type { CommandContext } from './types.js';
 
@@ -357,6 +357,7 @@ function buildEditorCommand(repoRoot: string, launchPath?: string): string {
 	if (explicitEditorCommand) {
 		return explicitEditorCommand;
 	}
+	const configuredEditorBinary = readMissionUserConfig()?.editorBinary?.trim();
 
 	const editorTarget = launchPath?.trim()
 		|| [
@@ -366,7 +367,8 @@ function buildEditorCommand(repoRoot: string, launchPath?: string): string {
 			path.join(repoRoot, 'CHANGELOG.md')
 		].find((candidate) => existsSync(candidate));
 
-	return editorTarget ? buildShellCommand(['micro', editorTarget]) : buildShellCommand(['micro']);
+	const editorBinary = configuredEditorBinary || 'micro';
+	return editorTarget ? buildShellCommand([editorBinary, editorTarget]) : buildShellCommand([editorBinary]);
 }
 
 function resolveEditorLaunchPath(
@@ -448,7 +450,9 @@ function kdlEscape(value: string): string {
 }
 
 function resolveTerminalManagerBinary(): string {
-	return process.env['MISSION_TERMINAL_BINARY']?.trim() || 'zellij';
+	return process.env['MISSION_TERMINAL_BINARY']?.trim()
+		|| readMissionUserConfig()?.terminalBinary?.trim()
+		|| 'zellij';
 }
 
 type TerminalManagerSessionState = 'live' | 'exited';

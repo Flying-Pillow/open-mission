@@ -8,3 +8,4 @@ nav_exclude: true
 
 - [Core Object Model](core-object-model.md)
 - [Mission Model](mission-model.md)
+- [Repository Layout And Adoption](repository-layout-and-adoption.md)

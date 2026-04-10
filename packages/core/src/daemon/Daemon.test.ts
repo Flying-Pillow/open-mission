@@ -8,7 +8,6 @@ import { DaemonClient } from '../client/DaemonClient.js';
 import { getMissionDaemonSettingsPath } from '../lib/daemonConfig.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import { initializeMissionRepository } from '../initializeMissionRepository.js';
-import { Factory } from './mission/Factory.js';
 import { Mission } from './mission/Mission.js';
 import { startDaemon } from './Daemon.js';
 import { getDaemonManifestPath, getDaemonRuntimePath } from './daemonPaths.js';
@@ -38,11 +37,14 @@ describe('Daemon', () => {
 						settingsPresent: false,
 						settingsComplete: false
 					});
-					expect(status.control?.problems).toEqual(
+					expect(status.control?.problems).not.toEqual(
 						expect.arrayContaining([
 							'Mission control scaffolding is missing.',
 							'Mission settings are missing.'
 						])
+					);
+					expect(status.control?.warnings).toContain(
+						'Mission control will be created in the first mission worktree if it is not already present on this checkout.'
 					);
 				} finally {
 					client.dispose();
@@ -190,7 +192,7 @@ describe('Daemon', () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
 			const manifestPath = getDaemonManifestPath();
-			const workspaceDaemonPath = path.join(workspaceRoot, '.missions', 'daemon');
+			const workspaceDaemonPath = path.join(workspaceRoot, '.mission', 'daemon');
 
 			try {
 				const daemon = await startDaemon();
@@ -863,6 +865,7 @@ describe('Daemon', () => {
 						'defaultAgentMode',
 						'defaultModel',
 						'towerTheme',
+						'missionWorkspaceRoot',
 						'instructionsPath',
 						'skillsPath'
 					]);
@@ -1043,7 +1046,7 @@ describe('Daemon', () => {
 		}
 	});
 
-	it('prepares a repository bootstrap pull request before mission authorization when scaffolding is missing', async () => {
+	it('bootstraps repo control inside the mission worktree when scaffolding is missing', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			await withFakeGitHubCli(async ({ callsPath }) => {
 				const workspaceRoot = await createTempRepo();
@@ -1062,6 +1065,8 @@ describe('Daemon', () => {
 						const status = await api.mission.fromBrief({
 							brief: createBrief(undefined, 'Bootstrap authorization')
 						});
+						const missionWorkspacePath = status.missionDir ?? workspaceRoot;
+						const worktreeSettingsPath = path.join(missionWorkspacePath, '.mission', 'settings.json');
 						const calls = await readFakeGitHubCalls(callsPath);
 
 						expect(status).toMatchObject({
@@ -1070,13 +1075,11 @@ describe('Daemon', () => {
 							type: 'refactor'
 						});
 						expect(status.preparation).toBeUndefined();
+						await expect(fs.access(getMissionDaemonSettingsPath(workspaceRoot))).rejects.toThrow();
+						await expect(fs.access(worktreeSettingsPath)).resolves.toBeUndefined();
 						expect(calls.map((call) => call.args.slice(0, 2))).toEqual([
 							['auth', 'status'],
-							['pr', 'create'],
-							['pr', 'merge'],
-							['api', 'repos/Flying-Pillow/mission/issues'],
-							['pr', 'create'],
-							['pr', 'merge']
+							['api', 'repos/Flying-Pillow/mission/issues']
 						]);
 					} finally {
 						client.dispose();
@@ -1090,7 +1093,7 @@ describe('Daemon', () => {
 		});
 	});
 
-	it('creates a GitHub issue and then prepares a mission pull request from a brief', async () => {
+	it('creates a GitHub issue and then prepares a mission from a brief', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			await withFakeGitHubCli(async ({ callsPath }) => {
 				const workspaceRoot = await createTempRepo();
@@ -1119,12 +1122,10 @@ describe('Daemon', () => {
 							type: 'refactor'
 						});
 						expect(status.preparation).toBeUndefined();
-						expect(status.missionRootDir).toContain(path.join('.missions', 'missions'));
+						expect(status.missionRootDir).toContain(path.join('.mission', 'missions', status.missionId ?? ''));
 						expect(calls.map((call) => call.args.slice(0, 2))).toEqual([
 							['auth', 'status'],
-							['api', 'repos/Flying-Pillow/mission/issues'],
-							['pr', 'create'],
-							['pr', 'merge']
+							['api', 'repos/Flying-Pillow/mission/issues']
 						]);
 					} finally {
 						client.dispose();
@@ -1138,7 +1139,7 @@ describe('Daemon', () => {
 		});
 	});
 
-	it('prepares a mission pull request from an existing issue without creating a new issue', async () => {
+	it('prepares a mission from an existing issue without creating a new issue', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			await withFakeGitHubCli(async ({ callsPath }) => {
 				const workspaceRoot = await createTempRepo();
@@ -1167,9 +1168,7 @@ describe('Daemon', () => {
 						expect(status.preparation).toBeUndefined();
 						expect(calls.map((call) => call.args.slice(0, 2))).toEqual([
 							['auth', 'status'],
-							['issue', 'view'],
-							['pr', 'create'],
-							['pr', 'merge']
+							['issue', 'view']
 						]);
 					} finally {
 						client.dispose();
@@ -1195,10 +1194,13 @@ describe('Daemon', () => {
 				await commitMissionRepositoryBootstrap(workspaceRoot);
 				const adapter = new FilesystemAdapter(workspaceRoot);
 				const missionId = '42-existing-issue';
-				const missionRootDir = adapter.getTrackedMissionDir(missionId);
+				const missionWorktreePath = adapter.getMissionWorktreePath(missionId);
+				const missionRootDir = adapter.getTrackedMissionDir(missionId, missionWorktreePath);
 				const workflow = createDefaultWorkflowSettings();
+				await adapter.materializeMissionWorktree(missionWorktreePath, 'mission/42-existing-issue');
+				const worktreeAdapter = new FilesystemAdapter(missionWorktreePath);
 				const preparedMission = Mission.hydrate(
-					adapter,
+					worktreeAdapter,
 					missionRootDir,
 					{
 						missionId,
@@ -1267,10 +1269,13 @@ function createBrief(issueId: number | undefined, title: string) {
 async function seedTrackedMission(workspaceRoot: string, issueId: number, title: string): Promise<Mission> {
 	const adapter = new FilesystemAdapter(workspaceRoot);
 	const missionId = adapter.createMissionId(createBrief(issueId, title));
-	const missionRootDir = adapter.getTrackedMissionDir(missionId);
+	const missionWorktreePath = adapter.getMissionWorktreePath(missionId);
+	const missionRootDir = adapter.getTrackedMissionDir(missionId, missionWorktreePath);
 	const workflow = createDefaultWorkflowSettings();
+	await adapter.materializeMissionWorktree(missionWorktreePath, adapter.deriveMissionBranchName(issueId, title));
+	const worktreeAdapter = new FilesystemAdapter(missionWorktreePath);
 	const mission = Mission.hydrate(
-		adapter,
+		worktreeAdapter,
 		missionRootDir,
 		{
 			missionId,
@@ -1290,7 +1295,11 @@ async function seedTrackedMission(workspaceRoot: string, issueId: number, title:
 }
 
 async function commitMissionRepositoryBootstrap(workspaceRoot: string): Promise<void> {
-	runGit(workspaceRoot, ['add', '.missions']);
+	const settingsPath = getMissionDaemonSettingsPath(workspaceRoot);
+	const settings = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as Record<string, unknown>;
+	settings['missionWorkspaceRoot'] = path.join(os.tmpdir(), 'mission-test-worktrees');
+	await fs.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+	runGit(workspaceRoot, ['add', '.mission']);
 	runGit(workspaceRoot, ['commit', '-m', 'chore: bootstrap mission repository']);
 	runGit(workspaceRoot, ['push', 'origin', 'master']);
 }

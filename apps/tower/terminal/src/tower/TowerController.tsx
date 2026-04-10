@@ -17,6 +17,7 @@ import type {
 	MissionStageStatus,
 	MissionTaskState,
 	MissionSelectionCandidate,
+	MissionRepositoryCandidate,
 	OperatorStatus,
 	MissionAgentSessionRecord,
 	ContextGraph,
@@ -61,6 +62,7 @@ import {
 	type CommandFlowStep,
 	type CommandFlowStepValue,
 } from './components/flow/flowEngine.js';
+import type { TowerConnectRequest } from './bootstrapTowerPane.js';
 
 export type TowerConnection = {
 	client: DaemonClient;
@@ -76,7 +78,7 @@ export type TowerUiOptions = {
 	initialShowIntroSplash?: boolean;
 	initialConnection?: TowerConnection;
 	initialConnectionError?: string;
-	connect: (selector: MissionSelector) => Promise<TowerConnection>;
+	connect: (request?: TowerConnectRequest) => Promise<TowerConnection>;
 };
 
 type TowerShellProps = TowerUiOptions;
@@ -138,6 +140,7 @@ export function TowerController({
 	const [selectedCommandId, setSelectedCommandId] = createSignal<string | undefined>();
 	const [openIssues, setOpenIssues] = createSignal<TrackedIssueSummary[]>([]);
 	const [selectedStageId, setSelectedStageId] = createSignal<MissionStageId | undefined>(initialConnection?.status.stage);
+	const currentControlRoot = createMemo(() => status().control?.controlRoot?.trim() || workspaceContext.workspaceRoot);
 	const [selectedTaskId, setSelectedTaskId] = createSignal<string>('');
 	const [selectedSessionId, setSelectedSessionId] = createSignal<string | undefined>();
 	const [selectedTreeTargetId, setSelectedTreeTargetId] = createSignal<string | undefined>();
@@ -267,7 +270,7 @@ export function TowerController({
 	const showCommandFlowOverlay = flowController.isMissionSelectionOverlay;
 	const isMissionFlowTextStep = flowController.isMissionTextStep;
 	const headerPanelTitle = createMemo(() => {
-		const workspaceLabel = resolveHeaderWorkspaceLabel(status().control, workspaceContext.workspaceRoot);
+			const workspaceLabel = resolveHeaderWorkspaceLabel(status().control, currentControlRoot());
 		if (status().operationalMode === 'setup') {
 			return `SETUP ${workspaceLabel}`;
 		}
@@ -277,7 +280,7 @@ export function TowerController({
 	const headerStatusLines = createMemo(() =>
 		buildHeaderStatusLines(
 			status(),
-			workspaceContext.workspaceRoot,
+					currentControlRoot(),
 			selectedHeaderTab(),
 			projectedAvailableMissions()
 		)
@@ -324,7 +327,7 @@ export function TowerController({
 	}>(() => {
 		if (towerMode() !== 'mission') {
 			return {
-				targetLabel: dashboardProjection()?.repositoryLabel ?? resolveHeaderWorkspaceLabel(status().control, workspaceContext.workspaceRoot)
+						targetLabel: dashboardProjection()?.repositoryLabel ?? resolveHeaderWorkspaceLabel(status().control, currentControlRoot())
 			};
 		}
 		const sessionId = selectedSessionId();
@@ -448,7 +451,7 @@ export function TowerController({
 	);
 	const screenTitle = createMemo(() => {
 		if (towerMode() !== 'mission') {
-			return dashboardProjection()?.repositoryLabel || resolveHeaderWorkspaceLabel(status().control, workspaceContext.workspaceRoot);
+					return dashboardProjection()?.repositoryLabel || resolveHeaderWorkspaceLabel(status().control, currentControlRoot());
 		}
 		return currentMissionTitle()
 			|| (selectedMissionMatchesLoaded() ? currentMissionId() ?? 'Mission' : 'Mission');
@@ -743,7 +746,7 @@ export function TowerController({
 			return;
 		}
 		const observation = {
-			...(workspaceContext.workspaceRoot ? { repositoryId: workspaceContext.workspaceRoot } : {})
+			...(currentControlRoot() ? { repositoryId: currentControlRoot() } : {})
 		};
 		const observationKey = JSON.stringify(observation);
 		if (observationKey === lastObservedSelectionKey) {
@@ -829,7 +832,7 @@ export function TowerController({
 			return;
 		}
 		setIsGitHubUserProbeInFlight(true);
-		void resolveGitHubCliUser(workspaceContext.workspaceRoot)
+		void resolveGitHubCliUser(currentControlRoot())
 			.then((user) => {
 				if (user) {
 					setFallbackGitHubUser(user);
@@ -856,7 +859,7 @@ export function TowerController({
 			return;
 		}
 		setIsControlBranchProbeInFlight(true);
-		void resolveGitBranchName(workspaceContext.workspaceRoot)
+		void resolveGitBranchName(currentControlRoot())
 			.then((branch) => {
 				if (branch && branch !== 'HEAD') {
 					setFallbackControlBranch(branch);
@@ -1349,7 +1352,7 @@ export function TowerController({
 		const descriptor = availableCommandById().get(commandId);
 		setSelectedPickerItemId(commandId);
 		if (options?.execute) {
-			void runCommandById(commandId);
+			void runCommandById(commandId, nextCommand.command);
 			return;
 		}
 		resetCommandFlow();
@@ -1365,7 +1368,7 @@ export function TowerController({
 			}
 		}
 		if (options?.fromPicker) {
-			void runCommandById(commandId);
+			void runCommandById(commandId, nextCommand.command);
 			return;
 		}
 		setSelectedCommandId(commandId);
@@ -1373,12 +1376,16 @@ export function TowerController({
 		closeCommandPicker();
 	}
 
-	function runCommandById(commandId: string): void {
+	function runCommandById(commandId: string, commandTextOverride?: string): void {
 		setInputValue('');
 		setSelectedCommandId(commandId);
 		closeCommandPicker({ clearCommandInput: true });
 		setIsRunningCommand(true);
-		void executeActionById(commandId)
+		const descriptor = availableCommandById().get(commandId);
+		const execution = descriptor
+			? executeActionById(commandId)
+			: executeCommand(commandTextOverride ?? commandId.replace(/^custom:/u, ''));
+		void execution
 			.catch((error) => {
 				appendLog(toErrorMessage(error));
 			})
@@ -1485,6 +1492,33 @@ export function TowerController({
 		};
 
 		const completeFlow = async (result: CommandFlowResult) => {
+			if (command.id === 'control.repository.switch') {
+				const repositoryStep = result.steps.find(
+					(step): step is CommandFlowSelectionValue => step.kind === 'selection' && step.stepId === 'repository'
+				);
+				const repositoryRootPath = repositoryStep?.optionIds[0]?.trim();
+				if (!repositoryRootPath) {
+					throw new Error('Repository switch requires a repository selection.');
+				}
+				const repositories = await loadRegisteredRepositories();
+				const repository = repositories.find((candidate) => candidate.repositoryRootPath === repositoryRootPath);
+				if (!repository) {
+					throw new Error('Repository switch requires a registered repository.');
+				}
+				await switchRepository(repository);
+				return { kind: 'close' } satisfies CommandFlowCompletion;
+			}
+
+			if (command.id === 'control.repository.add') {
+				const pathStep = result.steps.find((step) => step.kind === 'text' && step.stepId === 'path');
+				const repositoryPath = pathStep?.kind === 'text' ? pathStep.value.trim() : '';
+				if (!repositoryPath) {
+					throw new Error('Repository path is required.');
+				}
+				await addRepositoryAndSwitch(repositoryPath);
+				return { kind: 'close' } satisfies CommandFlowCompletion;
+			}
+
 			const executionResult = await executeDaemonCommandById(
 				command.id,
 				buildExecuteCommandSteps(result.steps),
@@ -1594,10 +1628,10 @@ export function TowerController({
 		resetCommandFlow();
 	}
 
-	async function connectClient(nextSelector: MissionSelector = selector()): Promise<DaemonClient | undefined> {
+	async function connectClient(nextSelector: MissionSelector = selector(), surfacePath?: string): Promise<DaemonClient | undefined> {
 		setDaemonState('booting');
 		try {
-			const nextConnection = await connect(nextSelector);
+			const nextConnection = await connect({ selector: nextSelector, ...(surfacePath ? { surfacePath } : {}) });
 			await replaceConnection(nextConnection);
 			applySystemSnapshot(nextConnection.snapshot);
 			applyMissionStatus(nextConnection.status, nextSelector);
@@ -1614,6 +1648,77 @@ export function TowerController({
 			appendLog(toErrorMessage(error));
 			return undefined;
 		}
+	}
+
+	async function loadRegisteredRepositories(): Promise<MissionRepositoryCandidate[]> {
+		const currentClient = client() ?? (await connectClient(selector()));
+		if (!currentClient) {
+			appendLog('Unable to connect to list registered repositories.');
+			return [];
+		}
+		const repositories = await new DaemonApi(currentClient).control.listRegisteredRepositories();
+		if (repositories.length === 0) {
+			appendLog('No registered repositories are available. Use /add-repo to register one.');
+		}
+		return repositories;
+	}
+
+	async function switchRepository(repository: MissionRepositoryCandidate): Promise<void> {
+		await connectClient({}, repository.repositoryRootPath);
+		setSelectedHeaderTabId(repositoryTabId);
+		closeCommandPicker();
+		resetCommandFlow();
+		appendLog(`Switched to repository ${repository.label}.`);
+	}
+
+	async function switchRepositoryByQuery(query: string): Promise<void> {
+		const trimmedQuery = query.trim().toLowerCase();
+		if (!trimmedQuery) {
+			if (await executeActionByText('/repo')) {
+				return;
+			}
+			appendLog('Repository switch is not available right now.');
+			return;
+		}
+		const repositories = await loadRegisteredRepositories();
+		if (repositories.length === 0) {
+			return;
+		}
+		const exact = repositories.find((repository) => {
+			const githubRepository = repository.githubRepository?.toLowerCase();
+			return repository.label.toLowerCase() === trimmedQuery
+				|| repository.repositoryRootPath.toLowerCase() === trimmedQuery
+				|| githubRepository === trimmedQuery;
+		});
+		if (exact) {
+			await switchRepository(exact);
+			return;
+		}
+		const partialMatches = repositories.filter((repository) => {
+			const haystacks = [repository.label, repository.repositoryRootPath, repository.githubRepository]
+				.filter((value): value is string => typeof value === 'string');
+			return haystacks.some((value) => value.toLowerCase().includes(trimmedQuery));
+		});
+		if (partialMatches.length === 1) {
+			await switchRepository(partialMatches[0]!);
+			return;
+		}
+		if (partialMatches.length > 1) {
+			appendLog(`Repository query '${query}' matched multiple repositories. Use /repo and pick one.`);
+			return;
+		}
+		appendLog(`No registered repository matched '${query}'.`);
+	}
+
+	async function addRepositoryAndSwitch(repositoryPath: string): Promise<void> {
+		const currentClient = client() ?? (await connectClient(selector()));
+		if (!currentClient) {
+			appendLog('Unable to connect to register a repository.');
+			return;
+		}
+		const repository = await new DaemonApi(currentClient).control.addRepository(repositoryPath);
+		appendLog(`Registered repository ${repository.label}.`);
+		await switchRepository(repository);
 	}
 
 	async function loadIssues(): Promise<void> {
@@ -1660,7 +1765,7 @@ export function TowerController({
 				);
 			} else if (next.preparation?.kind === 'mission') {
 				appendLog(
-					`Mission ${next.preparation.missionId} prepared from issue ${String(issueNumber)} on ${next.preparation.branchRef}. PR: ${next.preparation.pullRequestUrl}`
+					`Mission ${next.preparation.missionId} prepared from issue ${String(issueNumber)} on ${next.preparation.branchRef}. Worktree: ${next.preparation.worktreePath}`
 				);
 			} else {
 				appendLog(
@@ -1847,7 +1952,7 @@ export function TowerController({
 							return `Repository bootstrap prepared on ${nextStatus.preparation.branchRef}. PR: ${nextStatus.preparation.pullRequestUrl}`;
 						}
 						if (nextStatus.preparation?.kind === 'mission') {
-							return `Mission ${nextStatus.preparation.missionId} prepared on ${nextStatus.preparation.branchRef}. PR: ${nextStatus.preparation.pullRequestUrl}`;
+							return `Mission ${nextStatus.preparation.missionId} prepared on ${nextStatus.preparation.branchRef}. Worktree: ${nextStatus.preparation.worktreePath}`;
 						}
 						return `Mission ${nextStatus.missionId ?? 'unknown'} selected on ${nextStatus.branchRef ?? 'its mission branch'}.`;
 					}
@@ -2008,6 +2113,8 @@ export function TowerController({
 				case '/help':
 					appendLogLines([
 						'/setup',
+						'/repo [query]',
+						'/add-repo [path]',
 						'/theme [ocean|sand]',
 						...(workspaceContext.kind === 'control-root' ? ['/root'] : []),
 						'/issues',
@@ -2053,6 +2160,28 @@ export function TowerController({
 					await connectClient({});
 					closeCommandPicker();
 					appendLog('Returned to repository mode.');
+					return;
+				}
+				case '/repo': {
+					if (args.length === 0) {
+						if (await executeActionByText(trimmed)) {
+							return;
+						}
+						appendLog('Repository switch is not available right now.');
+						return;
+					}
+					await switchRepositoryByQuery(args.join(' '));
+					return;
+				}
+				case '/add-repo': {
+					if (args.length === 0) {
+						if (await executeActionByText(trimmed)) {
+							return;
+						}
+						appendLog('Repository registration is not available right now.');
+						return;
+					}
+					await addRepositoryAndSwitch(args.join(' '));
 					return;
 				}
 				case '/launch': {
@@ -2940,6 +3069,16 @@ function describeCommandPanelIntent(
 					title: 'SETUP > SETTING > SAVE',
 					placeholder: 'Press Enter to open the guided setup flow.'
 			};
+			case '/repo':
+				return {
+					title: 'REPO > SWITCH',
+					placeholder: 'Enter a repo name or press Enter to open the repo picker.'
+				};
+			case '/add-repo':
+				return {
+					title: 'REPO > ADD',
+					placeholder: 'Enter a repository path or press Enter for a guided prompt.'
+				};
 		case '/root':
 			return {
 				title: 'MISSION > SWITCH',

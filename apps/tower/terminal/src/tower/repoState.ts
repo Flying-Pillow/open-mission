@@ -28,8 +28,8 @@ export async function detectTowerRepoState(workspaceRoot: string): Promise<Tower
 	const settings = readMissionDaemonSettings(workspaceRoot);
 	const isMissionInitialized = await Promise.all([
 		pathExists(missionDirectoryPath),
-		pathExists(missionsRoot)
-	]).then(([hasMissionDirectory, hasMissionsRoot]) => hasMissionDirectory && hasMissionsRoot);
+		pathExists(settingsPath)
+	]).then(([hasMissionDirectory, hasSettings]) => hasMissionDirectory && hasSettings);
 	const isGitRepository = runGit(workspaceRoot, ['rev-parse', '--is-inside-work-tree']) === 'true';
 	const rawBranch = isGitRepository ? runGit(workspaceRoot, ['rev-parse', '--abbrev-ref', 'HEAD']) : undefined;
 	const currentBranch = rawBranch && rawBranch.length > 0 ? rawBranch : undefined;

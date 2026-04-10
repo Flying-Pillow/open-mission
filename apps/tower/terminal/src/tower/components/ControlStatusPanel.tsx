@@ -106,14 +106,14 @@ function buildControlLines(props: ControlStatusPanelProps): TabPanelLine[] {
 	const lines: TabPanelLine[] = [
 		{
 			text: props.mode === 'setup'
-				? 'Finish setup before starting your first mission.'
+				? 'Finish runtime setup before starting your first mission.'
 				: 'Mission control is ready.',
 			fg: towerTheme.brightText
 		},
 		{ text: `Opened from ${props.workspaceContextLabel}.`, fg: towerTheme.metaText },
 		{ text: '', fg: towerTheme.metaText },
 		{
-			text: `Files: ${control.initialized ? 'ready' : 'missing'} | Settings: ${control.settingsComplete ? 'ready' : 'needs attention'} | Issue intake: ${issueStatusLabel(control)}`,
+			text: `Repo control here: ${control.initialized ? 'present' : 'deferred'} | Settings: ${control.settingsComplete ? 'ready' : 'needs attention'} | Issue intake: ${issueStatusLabel(control)}`,
 			fg: towerTheme.metaText
 		},
 		{
@@ -134,7 +134,7 @@ function buildControlLines(props: ControlStatusPanelProps): TabPanelLine[] {
 	if (props.availableMissions.length === 0) {
 		lines.push({
 			text: props.mode === 'setup'
-				? 'No active missions yet. Finish setup, then create your first mission with /start.'
+				? 'No active missions yet. Finish runtime setup, then create your first mission with /start.'
 				: 'No active missions yet. Use /start from the repository root to create your first mission.',
 			fg: towerTheme.mutedText
 		});
@@ -186,11 +186,8 @@ function humanizeControlNotice(entry: string): string {
 	if (entry === 'Mission could not resolve a GitHub repository from the current workspace.') {
 		return 'Mission could not detect a GitHub repository from the current workspace.';
 	}
-	if (entry === 'Mission control scaffolding is missing.') {
-		return 'Mission control files are missing.';
-	}
-	if (entry === 'Mission settings are missing.') {
-		return 'Mission settings are missing.';
+	if (entry === 'Mission control will be created in the first mission worktree if it is not already present on this checkout.') {
+		return 'Local repo-control files are optional until the first mission worktree is created.';
 	}
 	return entry;
 }

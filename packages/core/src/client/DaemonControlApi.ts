@@ -18,10 +18,12 @@ import type {
 	OperatorActionExecutionStep,
 	OperatorActionFlowDescriptor,
 	OperatorActionQueryContext,
+	MissionRepositoryCandidate,
 	OperatorStatus,
 	TrackedIssueSummary
 } from '../types.js';
 import { DaemonClient } from './DaemonClient.js';
+import type { ControlRepositoriesAdd } from '../daemon/contracts.js';
 
 export class DaemonControlApi {
 	public constructor(private readonly client: DaemonClient) { }
@@ -101,5 +103,14 @@ export class DaemonControlApi {
 	): Promise<TrackedIssueSummary[]> {
 		const params: ControlIssuesList = { limit };
 		return this.client.request<TrackedIssueSummary[]>('control.issues.list', params);
+	}
+
+	public async listRegisteredRepositories(): Promise<MissionRepositoryCandidate[]> {
+		return this.client.request<MissionRepositoryCandidate[]>('control.repositories.list');
+	}
+
+	public async addRepository(repositoryPath: string): Promise<MissionRepositoryCandidate> {
+		const params: ControlRepositoriesAdd = { repositoryPath };
+		return this.client.request<MissionRepositoryCandidate>('control.repositories.add', params);
 	}
 }

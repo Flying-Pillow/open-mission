@@ -12,6 +12,10 @@ It establishes one authoritative settings boundary in core, with daemon-owned in
 
 ## Problem
 
+The file may first be created inside a newly prepared mission worktree during first-mission bootstrap.
+
+The original local checkout does not need to contain `.mission/settings.json` before a first mission can begin.
+
 Current control settings support is focused on scalar daemon preferences such as runner, mode, model, and paths.
 
 Repository workflow settings exist in core types and defaults, but there is no complete repository-level surface contract for:
@@ -35,7 +39,7 @@ This creates drift risk between surfaces and weakens clean architectural boundar
 
 - Defining mission runtime reducer internals.
 - Allowing mission-level runtime setting edits for already started missions.
-- Allowing surfaces to write `.missions/settings.json` directly.
+- Allowing surfaces to write `.mission/settings.json` directly.
 - Defining provider-specific UI design.
 
 ## Terminology
@@ -48,7 +52,7 @@ This creates drift risk between surfaces and weakens clean architectural boundar
 
 Repository settings are persisted at:
 
-- `.missions/settings.json`
+- `.mission/settings.json`
 
 The workflow policy section under this file is the only repository-level source of truth for workflow defaults.
 
@@ -208,7 +212,7 @@ To prevent lost updates across surfaces:
 
 Revision token requirements:
 
-- the token must be derived from the current `.missions/settings.json` file contents or an equally strict file-state fingerprint
+- the token must be derived from the current `.mission/settings.json` file contents or an equally strict file-state fingerprint
 - an in-memory monotonic counter alone is not sufficient
 - daemon must recompute or revalidate the token against disk state before applying an update
 
@@ -303,7 +307,7 @@ Add coverage at three levels.
 
 ## Acceptance Criteria
 
-1. A repository can initialize workflow settings through daemon API even when `.missions/settings.json` is missing.
+1. A repository can initialize workflow settings through daemon API even when `.mission/settings.json` is missing.
 2. CLI and Tower can both read and update repository workflow settings in control mode.
 3. All updates are daemon-validated and atomically persisted.
 4. Concurrent updates are protected by revision checks.

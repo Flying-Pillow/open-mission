@@ -22,6 +22,11 @@ function resolveInjectedGateId(): 'dashboard' | 'editor' | 'agentSession' {
 	throw new Error('MISSION_GATE_ID must be set to dashboard, editor, or agentSession before launching a tower panel.');
 }
 
+export type TowerConnectRequest = {
+	selector?: MissionSelector;
+	surfacePath?: string;
+};
+
 export async function bootstrapTowerPane(context: CommandContext): Promise<void> {
 	const hmrMode = context.args.includes('--hmr') || process.env['MISSION_TOWER_HMR'] === '1';
 	if (
@@ -64,9 +69,9 @@ export async function bootstrapTowerPane(context: CommandContext): Promise<void>
 		? configuredTheme
 		: 'ocean';
 	applyTowerTheme(initialTheme);
-	const connect = async (nextSelector: MissionSelector = selector) => {
+	const connect = async ({ selector: nextSelector = selector, surfacePath = context.launchCwd }: TowerConnectRequest = {}) => {
 		const client = await connectSurfaceDaemon({
-			surfacePath: context.launchCwd,
+			surfacePath,
 			launchMode
 		});
 		const api = new DaemonApi(client);
@@ -97,7 +102,7 @@ export async function bootstrapTowerPane(context: CommandContext): Promise<void>
 	let initialConnectionError: string | undefined;
 	let initialSelector = selector;
 	try {
-		initialConnection = await connect(selector);
+		initialConnection = await connect({ selector });
 		initialSelector = selectorFromConnection(initialConnection.status, initialConnection.snapshot, selector);
 	} catch (error) {
 		initialConnectionError = error instanceof Error ? error.message : String(error);

@@ -13,7 +13,8 @@ describe('initializeMissionRepository', () => {
 			const content = await fs.readFile(initialization.daemonSettingsPath, 'utf8');
 			const settings = JSON.parse(content) as Record<string, unknown>;
 
-			expect(initialization.daemonSettingsPath).toBe(path.join(workspaceRoot, '.missions', 'settings.json'));
+			expect(initialization.daemonSettingsPath).toBe(path.join(workspaceRoot, '.mission', 'settings.json'));
+			expect(settings['missionWorkspaceRoot']).toBe('missions');
 			expect(settings['trackingProvider']).toBe('github');
 			expect(settings['instructionsPath']).toBe('.agents');
 			expect(settings['skillsPath']).toBe('.agents/skills');
@@ -32,7 +33,7 @@ describe('initializeMissionRepository', () => {
 			});
 
 			await expect(fs.access(initialization.daemonSettingsPath)).resolves.toBeUndefined();
-			await expect(fs.access(path.join(workspaceRoot, '.missions', 'worktrees'))).rejects.toThrow();
+			await expect(fs.access(path.join(workspaceRoot, '.mission', 'worktrees'))).rejects.toThrow();
 		} finally {
 			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}

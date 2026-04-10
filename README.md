@@ -59,3 +59,4 @@ Mission is designed to be lightweight and frictionless to install in any existin
 **1. Install globally:**
 ```bash
 npm install -g @flying-pillow/mission
+mission

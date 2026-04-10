@@ -275,6 +275,13 @@ export type MissionSelectionCandidate = {
 	issueId?: number;
 };
 
+export type MissionRepositoryCandidate = {
+	repositoryRootPath: string;
+	label: string;
+	description: string;
+	githubRepository?: string;
+};
+
 export type MissionPreparationStatus =
 	| {
 		kind: 'repository-bootstrap';
@@ -289,11 +296,11 @@ export type MissionPreparationStatus =
 	}
 	| {
 		kind: 'mission';
-		state: 'pull-request-opened';
+		state: 'branch-prepared';
 		missionId: string;
 		branchRef: string;
 		baseBranch: string;
-		pullRequestUrl: string;
+		worktreePath: string;
 		missionRootDir: string;
 		missionControlDir: string;
 		issueId?: number;
@@ -484,6 +491,7 @@ export type OperatorStatus = {
 	};
 	recommendedAction?: string;
 	availableMissions?: MissionSelectionCandidate[];
+	availableRepositories?: MissionRepositoryCandidate[];
 	preparation?: MissionPreparationStatus;
 };
 

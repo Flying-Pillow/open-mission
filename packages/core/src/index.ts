@@ -18,6 +18,7 @@ export * from './lib/daemonConfig.js';
 export * from './lib/frontmatter.js';
 export * from './lib/operatorActionTargeting.js';
 export * from './lib/repoConfig.js';
+export * from './lib/userConfig.js';
 export * from './lib/workspacePaths.js';
 export * from './daemon/Daemon.js';
 export * from './daemon/runDaemonMain.js';

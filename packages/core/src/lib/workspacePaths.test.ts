@@ -26,16 +26,16 @@ describe('workspacePaths', () => {
         }
     });
 
-    it('detects mission workspaces under .missions/worktrees and derives mission selectors automatically', async () => {
+    it('detects external mission worktrees and derives mission selectors automatically', async () => {
         const workspaceRoot = await createTempRepo();
         const missionId = '123-auto-select';
-        const missionRootPath = path.join(workspaceRoot, '.missions', 'worktrees', missionId);
-        const missionWorktreePath = path.join(missionRootPath, 'workspace');
+        const missionWorktreePath = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-worktree-'));
+        const missionRootPath = path.join(missionWorktreePath, '.mission', 'missions', missionId);
         const nestedPath = path.join(missionWorktreePath, 'src');
 
         try {
-            await fs.mkdir(path.dirname(missionWorktreePath), { recursive: true });
             runGit(workspaceRoot, ['worktree', 'add', missionWorktreePath, '-b', 'mission/test-auto-select']);
+            await fs.mkdir(path.join(missionRootPath, 'mission-control'), { recursive: true });
             await fs.mkdir(nestedPath, { recursive: true });
 
             expect(resolveMissionWorkspaceContext(missionWorktreePath, workspaceRoot)).toMatchObject({
@@ -58,6 +58,7 @@ describe('workspacePaths', () => {
             });
         } finally {
             runGit(workspaceRoot, ['worktree', 'remove', '--force', missionWorktreePath]);
+            await fs.rm(missionWorktreePath, { recursive: true, force: true });
             await fs.rm(workspaceRoot, { recursive: true, force: true });
         }
     });

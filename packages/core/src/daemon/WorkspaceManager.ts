@@ -1,14 +1,16 @@
 import * as path from 'node:path';
-import type { MissionSelectionCandidate } from '../types.js';
-import type { Notification, Request } from './contracts.js';
+import type { MissionRepositoryCandidate, MissionSelectionCandidate } from '../types.js';
+import type { ControlRepositoriesAdd, Notification, Request } from './contracts.js';
 import { MissionWorkspace } from './Workspace.js';
 import type { AgentRunner } from '../runtime/AgentRunner.js';
+import { listRegisteredMissionUserRepos, readMissionUserConfig, registerMissionUserRepo } from '../lib/userConfig.js';
 import { resolveGitWorkspaceRoot } from '../lib/workspacePaths.js';
 import type { MissionControlSource } from './system/types.js';
 
 export class WorkspaceManager {
     private readonly workspaces = new Map<string, MissionWorkspace>();
     private readonly missionWorkspaceRoots = new Map<string, string>();
+    private readonly registeredControlRoots = new Set<string>();
 
     public constructor(
         private readonly runners: Map<string, AgentRunner>,
@@ -51,8 +53,11 @@ export class WorkspaceManager {
         if (!workspaceRoot) {
             throw new Error('Mission control source requires a surfacePath or workspaceRoot.');
         }
+        await this.ensureRegisteredRepoRoot(workspaceRoot);
         const workspace = this.getWorkspace(workspaceRoot);
+        const availableRepositories = await this.listRegisteredRepositories(workspaceRoot);
         return workspace.readMissionControlSource({
+            availableRepositories,
             ...(input.selectedMissionId?.trim() ? { selectedMissionId: input.selectedMissionId.trim() } : {})
         });
     }
@@ -87,14 +92,52 @@ export class WorkspaceManager {
         const discovery = await this.discoverSurface(surfacePath);
         const primaryWorkspace = this.getWorkspace(discovery.primaryControlRoot);
         const availableMissions = await this.collectAvailableMissions(discovery.controlRoots);
+        const availableRepositories = await this.listRegisteredRepositories(discovery.primaryControlRoot);
 
         if (request.method === 'control.status') {
-            return primaryWorkspace.buildDiscoveryStatus(availableMissions);
+            const status = await primaryWorkspace.buildDiscoveryStatus(availableMissions);
+            return {
+                ...status,
+                availableRepositories
+            };
+        }
+
+        if (request.method === 'control.repositories.list') {
+            return availableRepositories;
+        }
+
+        if (request.method === 'control.repositories.add') {
+            const params = (request.params ?? {}) as ControlRepositoriesAdd;
+            const candidate = await this.addKnownRepository(params.repositoryPath);
+            return candidate;
         }
 
         const result = await primaryWorkspace.executeMethod(request);
         this.registerMissionResult(discovery.primaryControlRoot, result);
         return result;
+    }
+
+    private async listRegisteredRepositories(workspaceRoot: string): Promise<MissionRepositoryCandidate[]> {
+        void workspaceRoot;
+        return listRegisteredMissionUserRepos();
+    }
+
+    private async addKnownRepository(repositoryPath: string): Promise<MissionRepositoryCandidate> {
+        const trimmedPath = repositoryPath.trim();
+        if (!trimmedPath) {
+            throw new Error('Repository path is required.');
+        }
+        const controlRoot = resolveGitWorkspaceRoot(trimmedPath) ?? path.resolve(trimmedPath);
+        if (!resolveGitWorkspaceRoot(controlRoot) && !resolveGitWorkspaceRoot(trimmedPath)) {
+            throw new Error(`Mission could not resolve a Git repository from '${repositoryPath}'.`);
+        }
+        await this.ensureRegisteredRepoRoot(controlRoot);
+        const repos = await this.listRegisteredRepositories(controlRoot);
+        const registered = repos.find((candidate) => candidate.repositoryRootPath === controlRoot);
+        if (!registered) {
+            throw new Error(`Mission could not register repository '${repositoryPath}'.`);
+        }
+        return registered;
     }
 
     private async executeMissionMethod(missionId: string, request: Request): Promise<unknown> {
@@ -138,11 +181,29 @@ export class WorkspaceManager {
             this.resolveControlRootFromMissionPath(normalizedSurfacePath)
             ?? resolveGitWorkspaceRoot(normalizedSurfacePath)
             ?? normalizedSurfacePath;
+        await this.ensureRegisteredRepoRoot(primaryControlRoot);
         return {
             surfacePath: normalizedSurfacePath,
             primaryControlRoot,
             controlRoots: [primaryControlRoot]
         };
+    }
+
+    private async ensureRegisteredRepoRoot(controlRoot: string): Promise<void> {
+        const normalizedControlRoot = path.resolve(controlRoot);
+		if (!resolveGitWorkspaceRoot(normalizedControlRoot)) {
+			return;
+		}
+        if (this.registeredControlRoots.has(normalizedControlRoot) && this.isRegisteredRepoPersisted(normalizedControlRoot)) {
+            return;
+        }
+        await registerMissionUserRepo(normalizedControlRoot);
+        this.registeredControlRoots.add(normalizedControlRoot);
+    }
+
+    private isRegisteredRepoPersisted(controlRoot: string): boolean {
+        const config = readMissionUserConfig();
+        return (config?.registeredRepositories ?? []).some((entry) => entry.checkoutPath === controlRoot);
     }
 
     private discoverSurfaceRoot(surfacePath: string): string {
@@ -153,19 +214,8 @@ export class WorkspaceManager {
     }
 
     private resolveControlRootFromMissionPath(surfacePath: string): string | undefined {
-        const parts = path.resolve(surfacePath).split(path.sep).filter(Boolean);
-        const missionsIndex = parts.lastIndexOf('.missions');
-        if (missionsIndex < 0) {
-            return undefined;
-        }
-        if (parts[missionsIndex + 1] !== 'worktrees') {
-            return undefined;
-        }
-        if (!parts[missionsIndex + 2]) {
-            return undefined;
-        }
-        const prefix = parts.slice(0, missionsIndex);
-        return path.resolve(path.sep, ...prefix);
+        void surfacePath;
+        return undefined;
     }
 }
 
@@ -175,6 +225,8 @@ function isControlMethod(method: Request['method']): boolean {
         || method === 'control.settings.update'
         || method === 'control.document.read'
         || method === 'control.document.write'
+        || method === 'control.repositories.list'
+        || method === 'control.repositories.add'
         || method === 'control.action.list'
         || method === 'control.action.describe'
         || method === 'control.action.execute'

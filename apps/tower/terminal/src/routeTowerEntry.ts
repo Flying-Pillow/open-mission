@@ -2,6 +2,7 @@ import { intro } from '@clack/prompts';
 import { getWorkspaceRoot } from '@flying-pillow/mission-core';
 import { bootstrapTowerPane } from './tower/bootstrapTowerPane.js';
 import { runAirportStatus } from './commands/airportStatus.js';
+import { ensureMissionInstallation, runMissionInstall } from './commands/install.js';
 import { runDaemonStop } from './commands/daemonStop.js';
 import {
 	runAirportLayoutEditorPane,
@@ -38,6 +39,7 @@ export async function routeTowerEntry(argv: string[] = process.argv.slice(2)): P
 		'__airport-layout-launch__': runAirportLayoutLaunch,
 		'__airport-layout-editor-pane': runAirportLayoutEditorPane,
 		'__airport-layout-agent-session-pane': runAirportLayoutAgentSessionPane,
+		install: runMissionInstall,
 		'airport:status': runAirportStatus,
 		'daemon:stop': runDaemonStop
 	};
@@ -47,11 +49,18 @@ export async function routeTowerEntry(argv: string[] = process.argv.slice(2)): P
 		throw new Error(`Unknown command '${command}'. Run 'mission help' for the supported surface.`);
 	}
 
+	if (command === '__tower__' || command === 'install') {
+		await ensureMissionInstallation({
+			interactive: !json && process.stdout.isTTY,
+			verbose: false
+		});
+	}
+
 	await handler(context);
 }
 
 export function printHelp(): void {
 	process.stdout.write(
-		`Mission\n\nCommands:\n  mission [--hmr] [--banner] [--no-banner]\n  mission airport:status [--json]\n  mission daemon:stop [--json]\n\nRelated commands:\n  missiond [--socket <path>]\n\nNotes:\n  Bare 'mission' launches the terminal Tower surface.\n  On POSIX shells, Mission bootstraps the airport layout through the terminal manager when available.\n  The airport layout places Mission Tower on the left, an agent session pane on the upper right, and the editor gate on the lower right.\n  Mission resets the repository-scoped terminal-manager session at startup so each airport-layout launch begins from the initial layout state for that repository.\n  Launching from a mission worktree auto-selects that mission.\n  Launching from the repository checkout opens repository mode.\n  The OpenTUI Tower currently requires Bun at runtime.\n  Use '--hmr' to run the terminal Tower with automatic restart on Mission surface changes; package source changes use built exports in HMR mode.\n  The Tower will auto-start the daemon with 'missiond' if it is not already running.\n  Starting Mission will scaffold control-repo state automatically if it is missing.\n  mission.cmd does not create terminal-manager sessions; use WSL on native Windows.\n`
+		`Mission\n\nCommands:\n  mission [--hmr] [--banner] [--no-banner]\n  mission install [--json]\n  mission airport:status [--json]\n  mission daemon:stop [--json]\n\nRelated commands:\n  missiond [--socket <path>]\n\nNotes:\n  Bare 'mission' launches the terminal Tower surface.\n  On POSIX shells, Mission bootstraps the airport layout through the terminal manager when available.\n  The airport layout places Mission Tower on the left, an agent session pane on the upper right, and the editor gate on the lower right.\n  Mission resets the repository-scoped terminal-manager session at startup so each airport-layout launch begins from the initial layout state for that repository.\n  Launching from a mission worktree auto-selects that mission.\n  Launching from the repository checkout opens repository mode.\n  The OpenTUI Tower currently requires Bun at runtime.\n  Use '--hmr' to run the terminal Tower with automatic restart on Mission surface changes; package source changes use built exports in HMR mode.\n  The Tower will auto-start the daemon with 'missiond' if it is not already running.\n  Starting Mission scaffolds user config automatically and prompts only when setup cannot be inferred safely.\n  Starting Mission will scaffold control-repo state automatically if it is missing.\n  mission.cmd does not create terminal-manager sessions; use WSL on native Windows.\n`
 	);
 }

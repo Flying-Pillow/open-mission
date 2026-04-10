@@ -48,11 +48,13 @@ All first-party mission markdown templates now live under `packages/core/src/tem
 
 Mission now uses three distinct storage scopes:
 
-1. tracked repository mission dossiers under `.missions/missions/<mission-id>/`
-2. repo-scoped control settings under `.missions/`
+1. repo-scoped Mission control settings under `.mission/`
+2. branch-scoped tracked mission dossiers under `.mission/missions/<mission-id>/`
 3. machine-local daemon runtime state outside the repository
 
 The important architectural rule is that the mission dossier is repository history, while daemon runtime state is not.
+
+The normative repository layout and adoption model is defined in [Repository Layout And Adoption](repository-layout-and-adoption.md).
 
 The mission workspace path is semantic mission data.
 
@@ -60,52 +62,53 @@ It is not airport layout truth, pane routing truth, or focus truth.
 
 ### Repository Bootstrap State
 
-Before a repository may host missions, Mission prepares a bootstrap proposal branch that adds the tracked `.missions/` control structure. That proposal is expected to be reviewed and merged before any mission dossier is prepared.
+Mission control remains repository-bound, but first-mission bootstrap may happen inside the newly created mission worktree rather than in the original local checkout.
 
 ```text
-.missions/
+.mission/
   settings.json
-  missions/
-  worktrees/
 ```
 
 ### Mission Preparation State
 
-Preparing a mission then creates a tracked mission dossier on a proposal branch anchored to a canonical GitHub issue. That proposal is expected to be reviewed and merged before a developer materializes a local mission workspace.
+Preparing a mission creates or reuses a mission branch, materializes a linked worktree outside the control checkout, and writes the tracked mission dossier inside that branch-owned checkout.
 
 ```text
-.missions/
-  settings.json
-  missions/
-    <mission-id>/
-      BRIEF.md
-      mission-control/
-        mission.json
-        01-PRD/
-          PRD.md
-          tasks/
-            01-prd-from-brief.md
+<mission-worktree>/
+  .mission/
+    settings.json
+    missions/
+      <mission-id>/
+        BRIEF.md
+        mission-control/
+          mission.json
+          01-PRD/
+            PRD.md
+            tasks/
+              01-prd-from-brief.md
 ```
 
 ### Mission Materialization State
 
-After the mission dossier exists on the repository branch, a developer may materialize a local mission workspace. The workspace is linked local execution infrastructure, not the canonical mission record.
+Mission worktrees are machine-local materializations, but the mission dossier inside the worktree is canonical branch history.
 
 ```text
-.missions/
-  settings.json
-  missions/
-    <mission-id>/
-      BRIEF.md
-      mission-control/
-        mission.json
-        ...
-  worktrees/
-    <mission-id>/
-      workspace/
+<control-repo>/
+  .mission/
+    settings.json
+
+~/missions/<repo-name>/<mission-id>/
+  .mission/
+    settings.json
+    missions/
+      <mission-id>/
+        BRIEF.md
+        mission-control/
+          mission.json
+          ...
 ```
 
-`worktrees/` is local materialization state.
+The external worktree root is local materialization state.
 
 It is not semantic mission status.
 

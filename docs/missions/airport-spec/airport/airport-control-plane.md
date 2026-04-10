@@ -1175,7 +1175,7 @@ The airport must route panel content based on canonical selection and binding po
 The recommended implementation model is:
 
 - one repository-keyed airport registry owned by the daemon
-- one airport controller instance per known repository in that registry
+- one airport controller instance per registered repository in that list
 - exactly one active airport projection set at a time
 - terminal-manager session naming derived from repository-scoped airport identity rather than a single hardcoded global session name
 

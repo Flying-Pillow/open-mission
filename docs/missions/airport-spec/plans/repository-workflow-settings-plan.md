@@ -24,7 +24,7 @@ This plan assumes the rules defined by the repository workflow settings specific
 The rewrite must follow these rules.
 
 1. The daemon is the only authority allowed to initialize, validate, patch, and persist repository workflow settings.
-2. No UI, CLI flow, extension view model, or webview may write `.missions/settings.json` directly.
+2. No UI, CLI flow, extension view model, or webview may write `.mission/settings.json` directly.
 3. Repository workflow settings updates must use RFC 6902 JSON Patch only.
 4. No deep-partial merge API may exist for repository workflow settings.
 5. The daemon revision token must be derived from on-disk file state, not from an in-memory counter.
@@ -42,7 +42,7 @@ The rewrite must follow these rules.
 At the end of this work, the system should have:
 
 1. one repository workflow settings service in core
-2. one daemon-owned persistence and revision path for `.missions/settings.json`
+2. one daemon-owned persistence and revision path for `.mission/settings.json`
 3. one daemon API for get, initialize, and update
 4. one snapshot boundary at `draft` to `ready`
 5. one client contract used by CLI and Tower or web surfaces
@@ -95,7 +95,7 @@ After this phase, all repository workflow settings mutation must flow through th
 
 Implementation tasks:
 
-1. Add a dedicated workflow settings store in core that reads `.missions/settings.json`, normalizes defaults, computes revision, and writes atomically.
+1. Add a dedicated workflow settings store in core that reads `.mission/settings.json`, normalizes defaults, computes revision, and writes atomically.
 2. Refactor `daemonConfig.ts` so the file-format helpers remain neutral, while workflow settings mutation moves into the new store.
 3. Extend daemon protocol types with the new workflow settings methods and payloads.
 4. Update `Workspace.ts` to route the new methods into the workflow settings store.
@@ -539,7 +539,7 @@ Add daemon and repository persistence tests.
 
 Required coverage:
 
-1. `initialize` creates `.missions/settings.json` with a complete workflow object and a valid revision token.
+1. `initialize` creates `.mission/settings.json` with a complete workflow object and a valid revision token.
 2. `get` returns effective workflow settings, revision, and initialization metadata.
 3. `update` applies RFC 6902 JSON Patch and persists atomically.
 4. `update` returns `SETTINGS_CONFLICT` when the settings file was modified out of band after the client fetched its revision.
@@ -575,7 +575,7 @@ Add tests that prove surfaces are only daemon clients.
 
 Required coverage:
 
-1. CLI setup or control flow emits daemon workflow settings requests and never writes `.missions/settings.json` directly.
+1. CLI setup or control flow emits daemon workflow settings requests and never writes `.mission/settings.json` directly.
 2. CLI renders daemon validation errors and `SETTINGS_CONFLICT` without local merge fallback.
 3. Extension or tower client refreshes workflow settings state on `control.workflow.settings.updated`.
 4. Tower or web UI never derives its own patch semantics differently from the daemon contract.

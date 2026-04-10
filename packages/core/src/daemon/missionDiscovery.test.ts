@@ -2,10 +2,22 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WorkspaceManager } from './WorkspaceManager.js';
 
 describe('missionDiscovery', () => {
+    beforeEach(async () => {
+        process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-discovery-config-'));
+    });
+
+    afterEach(async () => {
+        const configHome = process.env['XDG_CONFIG_HOME'];
+        if (configHome) {
+            await fs.rm(configHome, { recursive: true, force: true });
+            delete process.env['XDG_CONFIG_HOME'];
+        }
+    });
+
     it('binds a surface to the git repository root instead of scanning descendants', async () => {
         const workspaceRoot = await createTempRepo();
         const nestedSurfacePath = path.join(workspaceRoot, 'src', 'features');
@@ -13,7 +25,7 @@ describe('missionDiscovery', () => {
 
         try {
             await fs.mkdir(nestedSurfacePath, { recursive: true });
-            await fs.mkdir(path.join(descendantMissionRoot, '.missions'), { recursive: true });
+            await fs.mkdir(path.join(descendantMissionRoot, '.mission'), { recursive: true });
 
             const discovery = await createWorkspaceManagerTestHarness().discoverSurface(nestedSurfacePath);
 
@@ -29,13 +41,14 @@ describe('missionDiscovery', () => {
 
     it('maps a mission worktree surface back to its control repository root', async () => {
         const workspaceRoot = await createTempRepo();
-        const missionRoot = path.join(workspaceRoot, '.missions', 'active', 'architecture-refactor');
-        const missionWorkspacePath = path.join(missionRoot, 'workspace');
+        const missionWorkspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-discovery-worktree-'));
+        const missionWorkspacePath = path.join(missionWorkspaceRoot, 'architecture-refactor');
+        const missionRoot = path.join(missionWorkspacePath, '.mission', 'missions', 'architecture-refactor');
         const nestedMissionPath = path.join(missionWorkspacePath, 'packages', 'core');
 
         try {
-            await fs.mkdir(missionRoot, { recursive: true });
             runGit(workspaceRoot, ['worktree', 'add', missionWorkspacePath, '-b', 'mission/architecture-refactor']);
+            await fs.mkdir(path.join(missionRoot, 'mission-control'), { recursive: true });
             await fs.mkdir(nestedMissionPath, { recursive: true });
 
             const discovery = await createWorkspaceManagerTestHarness().discoverSurface(nestedMissionPath);
@@ -47,6 +60,7 @@ describe('missionDiscovery', () => {
             });
         } finally {
             runGit(workspaceRoot, ['worktree', 'remove', '--force', missionWorkspacePath]);
+            await fs.rm(missionWorkspaceRoot, { recursive: true, force: true });
             await fs.rm(workspaceRoot, { recursive: true, force: true });
         }
     });

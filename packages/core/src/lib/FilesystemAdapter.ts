@@ -7,6 +7,7 @@ import {
 	type FrontmatterValue
 } from './frontmatter.js';
 import { getMissionCatalogPath, getMissionWorktreesPath } from './repoConfig.js';
+import { readMissionDaemonSettings } from './daemonConfig.js';
 import {
 	MISSION_RUNTIME_FILE_NAME,
 	type MissionBrief,
@@ -79,19 +80,27 @@ export class FilesystemAdapter {
 	}
 
 	public getMissionsPath(): string {
-		return getMissionWorktreesPath(this.workspaceRoot);
+		const missionWorkspaceRoot = readMissionDaemonSettings(this.workspaceRoot)?.missionWorkspaceRoot;
+		return getMissionWorktreesPath(
+			this.workspaceRoot,
+			missionWorkspaceRoot ? { missionWorkspaceRoot } : {}
+		);
 	}
 
-	public getTrackedMissionsPath(): string {
-		return getMissionCatalogPath(this.workspaceRoot);
+	public getTrackedMissionsPath(checkoutRoot = this.workspaceRoot): string {
+		return getMissionCatalogPath(checkoutRoot);
 	}
 
-	public getTrackedMissionDir(missionId: string): string {
-		return path.join(this.getTrackedMissionsPath(), missionId);
+	public getTrackedMissionDir(missionId: string, checkoutRoot = this.workspaceRoot): string {
+		return path.join(this.getTrackedMissionsPath(checkoutRoot), missionId);
+	}
+
+	public getMissionWorktreePath(missionId: string): string {
+		return path.join(this.getMissionsPath(), missionId);
 	}
 
 	public getMissionDir(missionId: string): string {
-		return path.join(this.getMissionsPath(), missionId);
+		return this.getTrackedMissionDir(missionId, this.getMissionWorktreePath(missionId));
 	}
 
 	public getMissionControlPath(missionDir: string): string {
@@ -99,7 +108,7 @@ export class FilesystemAdapter {
 	}
 
 	public getMissionWorkspacePath(missionDir: string): string {
-		return path.join(missionDir, 'workspace');
+		return path.resolve(missionDir, '..', '..', '..');
 	}
 
 	public getMissionStagePath(missionDir: string, stage: MissionStageId): string {
@@ -157,29 +166,39 @@ export class FilesystemAdapter {
 			: `mission/bootstrap-${timestamp}`;
 	}
 
-	public async materializeMissionWorktree(missionDir: string, branchRef: string): Promise<string> {
+	public async materializeMissionWorktree(
+		worktreePath: string,
+		branchRef: string,
+		baseRef = this.getDefaultBranch()
+	): Promise<string> {
 		const normalizedBranch = branchRef.trim();
-		const workspacePath = this.getMissionWorkspacePath(missionDir);
+		const normalizedBaseRef = baseRef.trim();
 		if (!normalizedBranch) {
 			throw new Error('Mission branch cannot be empty.');
 		}
+		if (!normalizedBaseRef) {
+			throw new Error('Mission base branch cannot be empty.');
+		}
 
-		const existingMissionPath = await fs.lstat(missionDir).then(
+		const existingMissionPath = await fs.lstat(worktreePath).then(
 			(stats) => stats.isDirectory(),
 			() => false
 		);
 		if (existingMissionPath) {
-			throw new Error(`Mission worktree path '${missionDir}' already exists.`);
+			throw new Error(`Mission worktree path '${worktreePath}' already exists.`);
 		}
 
-		await fs.mkdir(missionDir, { recursive: true });
+		await fs.mkdir(path.dirname(worktreePath), { recursive: true });
 
 		const branchExists = this.runGit(['rev-parse', '--verify', `refs/heads/${normalizedBranch}`]);
+		const remoteBranchExists = this.runGit(['rev-parse', '--verify', `refs/remotes/origin/${normalizedBranch}`]);
 		try {
 			if (branchExists) {
-				this.assertGit(['worktree', 'add', workspacePath, normalizedBranch]);
+				this.assertGit(['worktree', 'add', worktreePath, normalizedBranch]);
+			} else if (remoteBranchExists) {
+				this.assertGit(['worktree', 'add', '-b', normalizedBranch, worktreePath, `origin/${normalizedBranch}`]);
 			} else {
-				this.assertGit(['worktree', 'add', '-b', normalizedBranch, workspacePath]);
+				this.assertGit(['worktree', 'add', '-b', normalizedBranch, worktreePath, normalizedBaseRef]);
 			}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
@@ -191,7 +210,7 @@ export class FilesystemAdapter {
 			throw error;
 		}
 
-		const nextBranch = this.getCurrentBranch(workspacePath);
+		const nextBranch = this.getCurrentBranch(worktreePath);
 		if (nextBranch !== normalizedBranch) {
 			throw new Error(`Failed to materialize mission worktree for branch '${normalizedBranch}'.`);
 		}
@@ -319,16 +338,16 @@ export class FilesystemAdapter {
 		return this.listMissionDirectories(
 			missionEntries
 				.filter((entry) => entry.isDirectory())
-				.map((entry) => path.join(this.getMissionsPath(), entry.name))
+				.map((entry) => this.getTrackedMissionDir(entry.name, path.join(this.getMissionsPath(), entry.name)))
 		);
 	}
 
-	public async listTrackedMissions(): Promise<ResolvedMission[]> {
-		const missionEntries = await fs.readdir(this.getTrackedMissionsPath(), { withFileTypes: true }).catch(() => []);
+	public async listTrackedMissions(checkoutRoot = this.workspaceRoot): Promise<ResolvedMission[]> {
+		const missionEntries = await fs.readdir(this.getTrackedMissionsPath(checkoutRoot), { withFileTypes: true }).catch(() => []);
 		return this.listMissionDirectories(
 			missionEntries
 				.filter((entry) => entry.isDirectory())
-				.map((entry) => path.join(this.getTrackedMissionsPath(), entry.name))
+				.map((entry) => path.join(this.getTrackedMissionsPath(checkoutRoot), entry.name))
 		);
 	}
 
@@ -338,11 +357,11 @@ export class FilesystemAdapter {
 	}
 
 	public async resolveKnownMission(selector: MissionSelector = {}): Promise<ResolvedMission | undefined> {
-		const localMission = await this.resolveMission(selector);
-		if (localMission) {
-			return localMission;
+		const trackedMission = await this.resolveTrackedMission(selector);
+		if (trackedMission) {
+			return trackedMission;
 		}
-		return this.resolveTrackedMission(selector);
+		return this.resolveMission(selector);
 	}
 
 	private async listMissionDirectories(missionDirs: string[]): Promise<ResolvedMission[]> {

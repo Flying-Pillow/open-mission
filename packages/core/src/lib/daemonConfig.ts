@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { getMissionDirectoryPath } from './repoConfig.js';
+import { readMissionUserConfig } from './userConfig.js';
 import { resolveGitWorkspaceRoot } from './workspacePaths.js';
 import {
     createDefaultWorkflowSettings,
@@ -30,6 +31,7 @@ export type MissionDaemonSettings = {
     defaultAgentMode?: MissionDefaultAgentMode;
     defaultModel?: string;
     towerTheme?: string;
+    missionWorkspaceRoot?: string;
     trackingProvider?: 'github';
     instructionsPath?: string;
     skillsPath?: string;
@@ -65,14 +67,18 @@ export function getDefaultMissionDaemonSettings(): MissionDaemonSettings {
 export function getDefaultMissionDaemonSettingsWithOverrides(
     overrides: MissionDaemonSettings = {}
 ): MissionDaemonSettings {
+    const userConfig = readMissionUserConfig();
     const agentRuntime = normalizeOptionalAgentRuntime(overrides.agentRuntime) ?? COPILOT_CLI_AGENT_RUNTIME_ID;
     const defaultAgentMode = normalizeOptionalAgentMode(overrides.defaultAgentMode);
     const defaultModel = normalizeOptionalString(overrides.defaultModel);
     const towerTheme = normalizeOptionalString(overrides.towerTheme);
+    const missionWorkspaceRoot = normalizeOptionalString(overrides.missionWorkspaceRoot)
+        ?? normalizeOptionalString(userConfig?.missionWorkspaceRoot);
     const instructionsPath = normalizeOptionalString(overrides.instructionsPath);
     const skillsPath = normalizeOptionalString(overrides.skillsPath);
     const airport = normalizePersistedAirportIntent(overrides.airport);
     return {
+        missionWorkspaceRoot: 'missions',
         trackingProvider: 'github',
         instructionsPath: '.agents',
         skillsPath: '.agents/skills',
@@ -81,6 +87,7 @@ export function getDefaultMissionDaemonSettingsWithOverrides(
         ...(defaultAgentMode ? { defaultAgentMode } : {}),
         ...(defaultModel ? { defaultModel } : {}),
         ...(towerTheme ? { towerTheme } : {}),
+        ...(missionWorkspaceRoot ? { missionWorkspaceRoot } : {}),
         ...(overrides.trackingProvider ? { trackingProvider: overrides.trackingProvider } : {}),
         ...(instructionsPath ? { instructionsPath } : {}),
         ...(skillsPath ? { skillsPath } : {}),

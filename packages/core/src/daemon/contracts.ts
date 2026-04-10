@@ -1,6 +1,7 @@
 import type {
 	MissionSystemSnapshot,
 	GateIntent,
+	MissionRepositoryCandidate,
 	OperatorActionExecutionStep,
 	OperatorActionQueryContext,
 	MissionBrief,
@@ -293,6 +294,8 @@ export type Method =
 	| 'control.workflow.settings.get'
 	| 'control.workflow.settings.initialize'
 	| 'control.workflow.settings.update'
+	| 'control.repositories.list'
+	| 'control.repositories.add'
 	| 'control.issues.list'
 	| 'control.action.list'
 	| 'control.action.describe'
@@ -344,7 +347,7 @@ export type MissionFromIssueRequest = {
 };
 
 export type ControlSettingsUpdate = {
-	field: 'agentRuntime' | 'defaultAgentMode' | 'defaultModel' | 'towerTheme' | 'instructionsPath' | 'skillsPath';
+	field: 'agentRuntime' | 'defaultAgentMode' | 'defaultModel' | 'towerTheme' | 'missionWorkspaceRoot' | 'instructionsPath' | 'skillsPath';
 	value: string;
 };
 
@@ -441,6 +444,12 @@ export type ControlIssuesList = {
 	limit?: number;
 };
 
+export type ControlRepositoriesList = Record<string, never>;
+
+export type ControlRepositoriesAdd = {
+	repositoryPath: string;
+};
+
 export type AirportClientConnect = {
 	gateId: 'dashboard' | 'editor' | 'agentSession';
 	label?: string;
@@ -518,6 +527,8 @@ export type SuccessResponse = {
 	| MissionSystemSnapshot
 	| OperatorStatus
 	| ControlDocumentResponse
+		| MissionRepositoryCandidate
+		| MissionRepositoryCandidate[]
 	| MissionGateResult
 	| WorkflowSettingsGetResult
 	| ControlWorkflowSettingsInitializeResponse

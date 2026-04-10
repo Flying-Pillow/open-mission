@@ -25,8 +25,9 @@ export class Factory {
 
 		const missionId = adapter.createMissionId(input.brief);
 		const missionDir = adapter.getMissionDir(missionId);
+		const missionWorktreePath = adapter.getMissionWorktreePath(missionId);
 		const createdAt = new Date().toISOString();
-		const branchRef = await adapter.materializeMissionWorktree(missionDir, input.branchRef);
+		const branchRef = await adapter.materializeMissionWorktree(missionWorktreePath, input.branchRef);
 		const descriptor: MissionDescriptor = {
 			missionId,
 			missionDir,

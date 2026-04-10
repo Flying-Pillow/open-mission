@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { readMissionUserConfig } from '../lib/userConfig.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -50,7 +51,9 @@ export class TerminalAgentTransport {
 			|| process.env['MISSION_TERMINAL_SESSION_NAME']?.trim()
 			|| undefined;
 		this.agentSessionPaneTitle = options.agentSessionPaneTitle?.trim() || 'AGENT SESSION';
-		const terminalBinary = options.terminalBinary?.trim() || 'zellij';
+		const terminalBinary = options.terminalBinary?.trim()
+			|| readMissionUserConfig()?.terminalBinary?.trim()
+			|| 'zellij';
 		this.executor = options.executor ?? (async (args) => {
 			const result = await execFileAsync(terminalBinary, args, {
 				encoding: 'utf8',

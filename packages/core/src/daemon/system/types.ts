@@ -5,6 +5,7 @@ import type {
 import type {
 	ContextSelection,
 	MissionControlPlaneStatus,
+	MissionRepositoryCandidate,
 	MissionSelectionCandidate,
 	MissionTaskState,
 	MissionTowerProjection,
@@ -15,6 +16,7 @@ export type MissionControlSource = {
 	repositoryId: string;
 	repositoryRootPath: string;
 	control: MissionControlPlaneStatus;
+	availableRepositories: MissionRepositoryCandidate[];
 	availableMissions: MissionSelectionCandidate[];
 	missionStatus?: OperatorStatus;
 };
@@ -45,6 +47,7 @@ export type MissionControlWorkspaceSource = {
 	repositoryId: string;
 	repositoryRootPath: string;
 	control: MissionControlPlaneStatus;
+	availableRepositories: MissionRepositoryCandidate[];
 	availableMissions: MissionSelectionCandidate[];
 	missionStatus?: MissionControlMissionStatusSource;
 };

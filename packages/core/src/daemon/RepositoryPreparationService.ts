@@ -18,7 +18,7 @@ export class RepositoryPreparationService {
 		private readonly githubRepository: string
 	) { }
 
-	public async prepareRepository(): Promise<MissionPreparationStatus> {
+	public async prepareRepository(): Promise<Extract<MissionPreparationStatus, { kind: 'repository-bootstrap' }>> {
 		const branchRef = this.store.deriveRepositoryBootstrapBranchName();
 		const baseBranch = this.store.getDefaultBranch();
 		const temporaryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-bootstrap-'));
@@ -73,9 +73,9 @@ export class RepositoryPreparationService {
 			'This PR initializes the tracked Mission repository scaffolding.',
 			'',
 			`- Branch: \`${branchRef}\``,
-			'- Creates `.missions/` control directories.',
-			'- Seeds `.missions/settings.json` with repository workflow defaults.',
-			'- Prepares the repository for later mission authorization pull requests.',
+			'- Creates `.mission/settings.json` with repository workflow defaults.',
+			'- Establishes repo-scoped Mission control settings.',
+			'- Leaves branch-owned `.mission/missions/<mission-id>` content to mission branches.',
 			'',
 			'After merge, pull the default branch before preparing a mission.'
 		].join('\n');

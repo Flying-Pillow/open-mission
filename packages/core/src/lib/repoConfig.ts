@@ -1,20 +1,44 @@
 /**
  * @file packages/core/src/lib/repoConfig.ts
- * @description Defines workspace control-state path helpers under the local .missions directory.
+ * @description Defines repo-scoped Mission control paths and local mission worktree roots.
  */
 
+import * as os from 'node:os';
 import * as path from 'node:path';
 
-export const MISSION_DIRECTORY = '.missions';
+export const MISSION_DIRECTORY = '.mission';
+export const DEFAULT_MISSION_WORKSPACE_ROOT = 'missions';
 
 export function getMissionDirectoryPath(controlRoot: string): string {
 	return path.join(controlRoot, MISSION_DIRECTORY);
 }
 
-export function getMissionCatalogPath(controlRoot: string): string {
-	return path.join(getMissionDirectoryPath(controlRoot), 'missions');
+export function getMissionCatalogPath(checkoutRoot: string): string {
+	return path.join(getMissionDirectoryPath(checkoutRoot), 'missions');
 }
 
-export function getMissionWorktreesPath(controlRoot: string): string {
-	return path.join(getMissionDirectoryPath(controlRoot), 'worktrees');
+export function resolveMissionWorkspaceRoot(
+	configuredRoot = DEFAULT_MISSION_WORKSPACE_ROOT
+): string {
+	const normalizedRoot = configuredRoot.trim() || DEFAULT_MISSION_WORKSPACE_ROOT;
+	if (path.isAbsolute(normalizedRoot)) {
+		return path.resolve(normalizedRoot);
+	}
+	if (normalizedRoot === '~') {
+		return os.homedir();
+	}
+	if (normalizedRoot.startsWith(`~${path.sep}`)) {
+		return path.join(os.homedir(), normalizedRoot.slice(2));
+	}
+	return path.resolve(os.homedir(), normalizedRoot);
+}
+
+export function getMissionWorktreesPath(
+	controlRoot: string,
+	options: { missionWorkspaceRoot?: string } = {}
+): string {
+	return path.join(
+		resolveMissionWorkspaceRoot(options.missionWorkspaceRoot),
+		path.basename(path.resolve(controlRoot))
+	);
 }
