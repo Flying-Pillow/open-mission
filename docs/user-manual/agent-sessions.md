@@ -7,9 +7,13 @@ nav_order: 3
 
 # Agents, Runtimes, and Models
 
+Mission is not the model and it is not the coding agent. Mission is the orchestration layer above the agent.
+
 Mission is designed so your workflow is not trapped inside one vendor's chat model.
 
 The core idea is simple: a mission, a task, and a delivery flow should outlive any one agent runtime. That is why Mission treats the live agent as a replaceable execution layer rather than as the definition of the product.
+
+Mission controls the mission lifecycle, state transitions, artifacts, and operator control surface. The agent runtime is what Mission calls when a specific task needs to be executed.
 
 ## Task Versus Session
 
@@ -29,7 +33,9 @@ In the current codebase, the built-in runtimes are:
 - `copilot-cli`
 - `copilot-sdk`
 
-Those are the concrete adapters Mission ships today. They are not the long-term ceiling of the product. They are the currently implemented runtime set.
+Those are the concrete adapters Mission ships today. For the current product story, Copilot CLI is the first real agent integration to emphasize. The broader point is architectural: these are execution adapters under Mission, not the definition of Mission itself.
+
+Claude Code, Gemini CLI, Codex, Pi, and similar runtimes are the natural next wave. Mission is already shaped so those agents can plug into the same mission lifecycle instead of forcing teams to adopt a new workflow every time they change runtime.
 
 ## Why This Still Matters For Agent Freedom
 
@@ -44,7 +50,7 @@ Even in alpha, Mission already separates:
 
 That means the workflow is not welded to one provider's assumptions. Mission can keep the same mission lifecycle, the same Tower, and the same artifact model even as the runtime layer broadens.
 
-This is the architectural reason Mission can realistically grow toward runners for tools such as Claude Code, Gemini CLI, Codex, Pi, and others without turning the rest of the product upside down.
+This is the architectural reason Mission can realistically grow toward runners for tools such as Claude Code, Gemini CLI, Codex, Pi, and others without turning the rest of the product upside down. The orchestration layer stays stable while the execution layer broadens.
 
 ## Models And Modes
 

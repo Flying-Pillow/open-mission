@@ -11,7 +11,7 @@ nav_enabled: false
 <section class="mission-home-hero">
 	<span class="mission-home-kicker">Operator-first AI Delivery</span>
 	<div class="mission-home-title">Flying Pillow Mission</div>
-	<p class="mission-home-tagline">Mission turns AI coding from a fragile chat habit into a controlled delivery system with bounded workspaces, staged artifacts, live supervision, and runtime freedom.</p>
+	<p class="mission-home-tagline">Mission is an orchestration layer for software delivery: it controls the workflow, stages the evidence, and dispatches well-defined tasks to coding agents instead of pretending to be the agent itself.</p>
 	<div class="mission-home-actions">
 		<a class="btn btn-primary" href="{{ '/getting-started/installation/' | relative_url }}">Start Here</a>
 		<a class="btn" href="{{ '/getting-started/start-your-first-mission/' | relative_url }}">Prepare a Mission</a>
@@ -35,6 +35,8 @@ nav_enabled: false
 
 Mission is for teams that want the speed of AI coding agents without giving up architectural discipline, repository safety, or human control.
 
+Mission is not a model and it is not a coding agent. It is the orchestration layer that governs how software moves from intake to delivery. Agents are the execution workers underneath that layer, launched to perform bounded, well-defined tasks inside a controlled mission flow.
+
 Instead of one long chat session working directly on your active branch, Mission turns software delivery into a governed operational flow:
 
 - adopt a repository once
@@ -44,6 +46,18 @@ Instead of one long chat session working directly on your active branch, Mission
 - monitor and steer everything from the Mission Control Tower
 
 The result is a workflow that feels closer to running a flight operation than babysitting a chatbot.
+
+## What Mission Actually Is
+
+Mission sits above the agent runtime.
+
+- Mission controls the flow of work.
+- Mission decides which stage comes next.
+- Mission persists the mission state and artifacts.
+- Mission gives the operator a Tower and daemon control surface.
+- The coding agent is used to execute the current task inside that structure.
+
+That distinction is the whole point of the product. The value is not just "AI that can code." The value is a governed operating layer that keeps coding work bounded, inspectable, recoverable, and steerable.
 
 ## What Mission Is For
 
@@ -95,7 +109,7 @@ The workflow engine, runtime contract, and Tower all treat the agent layer as a 
 - the default model
 - task-level runner assignment in workflow settings and task templates
 
-That matters because it keeps Mission's workflow model independent from any one provider. The current alpha is not yet shipping first-class runners for Claude Code, Gemini CLI, Codex, Pi, and similar tools, but the system is clearly built so those runtimes can be added without redesigning how missions, stages, artifacts, and Tower control work.
+That matters because it keeps Mission's workflow model independent from any one provider. In practical terms: Mission orchestrates, the selected agent executes. Today the first shipped agent path is Copilot, with `copilot-cli` as the first concrete CLI runtime and `copilot-sdk` also present in the codebase. Claude Code, Gemini CLI, Codex, and other runtimes are intended follow-on integrations rather than a redesign of the product.
 
 ## The Mission Flow In One View
 
