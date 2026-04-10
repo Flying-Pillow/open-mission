@@ -49,7 +49,7 @@ Flying Pillow Mission is the orchestration layer that controls the proper flow o
 
 ## Extended Comparison
 
-<div class="mission-table-scroll">
+<div class="mission-table-scroll" markdown="1">
 
 | Dimension | Spec Kit | BMAD | GSD | Mission |
 | --- | --- | --- | --- | --- |
