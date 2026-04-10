@@ -381,6 +381,63 @@
   color: #583062;
 }
 
+.mission-table-scroll {
+  overflow-x: auto;
+  margin: 1.5rem 0 2rem;
+}
+
+.mission-table-scroll table {
+  min-width: 68rem;
+  margin-bottom: 0;
+}
+
+.mission-compare-callout {
+  margin: 1.5rem 0 2rem;
+  padding: 1rem 1.1rem;
+  border-radius: 1rem;
+  background: linear-gradient(180deg, rgba(255, 240, 255, 0.92), rgba(255, 248, 255, 0.96));
+  border: 1px solid rgba(138, 18, 160, 0.12);
+  box-shadow: 0 16px 40px rgba(62, 17, 74, 0.06);
+}
+
+.mission-compare-callout strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #17081a;
+}
+
+.mission-compare-callout p {
+  margin: 0;
+  color: #583062;
+}
+
+.mission-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 2rem;
+}
+
+.mission-comparison-card {
+  padding: 1.2rem 1.15rem;
+  border-radius: 1.2rem;
+  background: #ffffff;
+  border: 1px solid rgba(138, 18, 160, 0.1);
+  box-shadow: 0 18px 44px rgba(62, 17, 74, 0.08);
+}
+
+.mission-comparison-card strong {
+  display: block;
+  margin-bottom: 0.55rem;
+  color: #17081a;
+  font-size: 1.02rem;
+}
+
+.mission-comparison-card p {
+  margin: 0;
+  color: #583062;
+}
+
 .mission-home-card {
   position: relative;
   padding: 1.1rem 1rem;
@@ -496,7 +553,8 @@
   }
 
   .mission-section-grid,
-  .mission-section-grid--three {
+  .mission-section-grid--three,
+  .mission-comparison-grid {
     grid-template-columns: 1fr;
   }
 }

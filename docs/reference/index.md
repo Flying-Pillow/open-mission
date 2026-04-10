@@ -19,6 +19,11 @@ has_children: true
 		<span class="mission-section-card__title">CLI Commands</span>
 		<span class="mission-section-card__text">See the supported public commands, what they do today, and which helpers are still internal.</span>
 	</a>
+	<a class="mission-section-card" href="{{ '/reference/product-comparison/' | relative_url }}">
+		<span class="mission-section-card__eyebrow">Landscape</span>
+		<span class="mission-section-card__title">Product Comparison</span>
+		<span class="mission-section-card__text">Compare Mission with Spec Kit, BMAD, and GSD across workflow shape, control model, context handling, and recovery.</span>
+	</a>
 	<a class="mission-section-card" href="{{ '/reference/state-schema/' | relative_url }}">
 		<span class="mission-section-card__eyebrow">Runtime Model</span>
 		<span class="mission-section-card__title">State Schema</span>
