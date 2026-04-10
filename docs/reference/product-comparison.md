@@ -55,38 +55,34 @@ Flying Pillow Mission is the orchestration layer that controls the proper flow o
 
 | Dimension | Spec Kit | BMAD | GSD | Mission |
 | --- | --- | --- | --- | --- |
-| **Model** | Spec-driven toolkit | Agile framework with roles | Context-engineering system | Orchestration layer with daemon |
-| **Work Unit** | Spec artifacts & tasks | Agent workflows & modules | Plans & phases in `.planning` | Missions, stages & bounded state |
-| **Planning** | Spec-first & artifacts | Adaptive depth via modules | Roadmap to atomic plans | PRD → SPEC → Impl. → Audit |
-| **Control** | Commands inside agent | Steers workflows & agents | Approves phases & tasks | Supervises via UI & daemon APIs |
-| **Context** | Specs & org principles | Guided by role & modules | High-churn context defenses | Bounded artifacts & reducer state |
-| **Persistence** | Specs & commands | Docs & workflow outputs | File-based `.planning` state | Strong `.mission/` runtime state |
-| **Isolation** | Relies on host agent | Relies on host agent | Fresh contexts & worktrees | Strict mission-local workspaces |
-| **Verification**| Extensions & commands | Guided by module selection | Built-in checks & verifiers | Explicit gates & `VERIFY.md` |
-| **Recovery** | Read specs & resume | Re-enter guided workflows | Resume from phase handoffs | Hot reload from live projection |
-| **Runtimes** | Broad & bring-your-own | Assistants supporting context | Any model via GSD prompts | Engine-agnostic (Copilot etc) |
-| **Brownfield**| Supported natively | Scales up from bug fixes | Strong codebase mapping | Natively from GitHub issues |
-| **Surface** | Commands & presets | Commands & modules | Commands & settings | CLI, APIs & Control Tower |
-| **Best fit** | Inside existing tools | Guided role specialization | Fast prompt-driven execution | Auditable, repo-backed delivery |
+| **Engine** | Prompt-driven | Prompt-driven | Meta-prompt loops | Deterministic state machine |
+| **Authority** | Agent decides next steps | Agent decides via rules | Agent decides via plans | Hard-coded software gates |
+| **State** | Chat history & specs | Chat history & modules | Active chat & `.planning` | External daemon database |
+| **Isolation** | User's active checkout | User's active checkout | Fresh contexts, active checkout | Sandboxed mission worktrees |
+| **Recovery** | Re-read spec & prompt | Re-enter role workflow | Re-read `.planning` logs | Instant hot-reload via API |
+| **Steering UI** | Text prompt / chat | Text prompt / chat | Chat / CLI commands | Visual Control Tower UI |
 
 </div>
 
-### Detailed Differences
+### Detailed Differences: Prompting vs. Deterministic Harnessing
 
-**Primary Operating Model**
-- **Spec Kit** is a spec-driven development toolkit relying on a core command flow (constitution, specify, plan, tasks, implement).
-- **BMAD** is an AI-driven agile framework structured around specialized roles and guided workflow modules.
-- **GSD** acts as a lightweight meta-prompting and context-engineering system leveraging explicit discuss, plan, execute, and verify loops.
-- **Mission** serves as a continuous orchestration layer. It runs a daemon-backed harness that separates workflow state from active operator supervision.
+The fundamental difference between these tools lies in **who controls the workflow loop**. Spec Kit, BMAD, and GSD operate *inside* the AI agent. They use sophisticated prompting, personas, and structured markdown files to politely ask the LLM to follow a process. Progression is probabilistic—the agent ultimately decides when a step is "done" and what to do next based on interpreting text instructions.
 
-**Context Strategy & Isolation**
-- **Spec Kit & BMAD** largely shape context by relying on rich artifacts, custom commands, and role instructions embedded directly into the active host agent.
-- **GSD** introduces aggressive context-rot defenses by ensuring fresh sub-agent execution windows and explicit worktree isolation.
-- **Mission** keeps execution tightly constrained within bounded stage artifacts, isolated task workspaces, and persisted daemon states—meaning long-running jobs do not pollute the operator's checkout or rely on chat history.
+Mission operates *outside* the agent. It leverages a strict, code-driven state machine to orchestrate the software delivery lifecycle. Mission invokes the AI strictly to do bounded work, but the engine and the human operator retain ultimate control over progression, state, and verification. Because the workflow is not a prompt, it cannot be ignored, hallucinated, or skipped by the LLM.
 
-**Human Control Model & Recovery**
-- **Spec Kit, BMAD, and GSD** heavily rely on chat-based interactions where the human steers or approves progress directly from inside the agent session. Interrupted tasks are recovered by re-entering the prompt flow.
-- **Mission** places the human in the "Control Tower". You supervise the lifecycle via out-of-band daemon APIs with explicit pause, resume, interrupt, and panic controls. An interrupted process hot-reloads instantly from its persisted `.mission` state.
+**1. Engine & Authority (The Core USP)**
+- **Spec Kit & BMAD:** Feed markdown rules into the system prompt. The host agent parses these rules and decides locally how to execute the workflow.
+- **GSD:** Heavily engineers the context loop. It forces the creation of atomic `.planning/` files and executes in fresh contexts to avoid rot, but the agent itself is still reading a meta-prompt to figure out its next action.
+- **Mission:** Uses a background daemon to track the mission phase (PRD → SPEC → Impl → Audit). The progression logic is strict code. The agent cannot skip a security audit or merge a PR just because its context window got confused.
+
+**2. State & Recovery**
+- **Spec Kit, BMAD & GSD:** If your IDE crashes or you close your terminal, the state of the "workflow" is lost. To recover, you must open a new chat, point the agent at the generated markdown logs (`.planning/` or spec files), and prompt it to figure out where it left off.
+- **Mission:** The daemon persistently stores every action, artifact, and stage status in a local database (`.mission/`). If you close your laptop, the Mission Control Tower UI hot-reloads instantly exactly where you left off. The workflow state is native data, not a chat history.
+
+**3. Execution Isolation**
+- **Spec Kit & BMAD:** Work directly in your active development branch, rewriting your current files.
+- **GSD:** Optional worktree capabilities, but highly dependent on the host agent's internal configuration.
+- **Mission:** Enforces execution strictly inside bounded, invisible Git worktrees. The agent manipulates a separate clone, so long-running implementations or failed experiments never pollute the human operator's active checkout until a formal `git merge` occurs.
 
 ## Why Mission Exists If These Tools Already Exist
 
