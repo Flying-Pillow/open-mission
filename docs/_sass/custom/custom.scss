@@ -498,8 +498,9 @@
   margin-top: 1.25rem;
   padding: 0.9rem 0.95rem;
   border-radius: 1rem;
-  background: rgba(255, 248, 255, 0.06);
-  border: 1px solid rgba(255, 248, 255, 0.08);
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(138, 18, 160, 0.12);
+  box-shadow: 0 12px 32px rgba(62, 17, 74, 0.05);
 }
 
 .mission-nav-footer__logo {
@@ -512,12 +513,12 @@
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  color: rgba(255, 248, 255, 0.82);
+  color: #6b4a74;
   font-size: 0.82rem;
 }
 
 .mission-nav-footer__text strong {
-  color: #fff8ff;
+  color: #17081a;
   font-size: 0.92rem;
 }
 
@@ -583,6 +584,41 @@
 }
 
 @media (max-width: 74rem) {
+  .main-header {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "search aux"
+      "badge badge";
+    align-items: center;
+    row-gap: 0.75rem;
+    column-gap: 0.75rem;
+    padding-top: 0.8rem;
+    padding-bottom: 0.8rem;
+    height: auto;
+  }
+
+  .search {
+    grid-area: search;
+    min-width: 0;
+  }
+
+  .search-input {
+    min-width: 0;
+    width: 100%;
+    font-size: 0.95rem;
+  }
+
+  .aux-nav {
+    grid-area: aux;
+    justify-self: end;
+  }
+
+  .mission-header-badge {
+    grid-area: badge;
+    justify-self: start;
+  }
+
   .mission-home-grid {
     grid-template-columns: 1fr;
   }
@@ -595,6 +631,12 @@
 }
 
 @media (max-width: 50rem) {
+  .main-header {
+    display: block !important;
+    padding-top: 0.7rem;
+    padding-bottom: 0.7rem;
+  }
+
   .mission-header-badge {
     display: none;
   }
