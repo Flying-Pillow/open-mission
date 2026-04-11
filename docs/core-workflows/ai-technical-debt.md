@@ -13,6 +13,17 @@ Traditional debt tends to show up as tangled code, weak tests, or deferred clean
 
 In his presentation [The Elephant in the Room: AI Technical Debt](https://www.youtube.com/watch?v=04p9X_XpX-Y), IBM Distinguished Engineer Jeff Crume describes the pattern as "Ready, Fire, Aim." Teams ship AI-assisted workflows for immediate speed, then pay later through instability, leakage, and loss of control.
 
+<div class="mission-video-embed">
+	<iframe
+		src="https://www.youtube-nocookie.com/embed/04p9X_XpX-Y"
+		title="The Elephant in the Room: AI Technical Debt"
+		loading="lazy"
+		referrerpolicy="strict-origin-when-cross-origin"
+		allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+		allowfullscreen>
+	</iframe>
+</div>
+
 Mission is built to invert that pattern. It treats coding agents as probabilistic workers inside a deterministic operating system. The model stays non-deterministic. The delivery harness does not.
 
 ## 1. The Ready, Fire, Aim Problem
