@@ -41,7 +41,6 @@ import {
 	buildVisibleTreeTargets,
 	createSessionNodeId,
 	moveTreeTargetSelection,
-	pickPreferredStageId,
 	pickPreferredTreeTargetId,
 	type TreeTargetDescriptor,
 	type TreeTargetKind
@@ -139,10 +138,7 @@ export function TowerController({
 	const [selectedPickerItemId, setSelectedPickerItemId] = createSignal<string | undefined>();
 	const [selectedCommandId, setSelectedCommandId] = createSignal<string | undefined>();
 	const [openIssues, setOpenIssues] = createSignal<TrackedIssueSummary[]>([]);
-	const [selectedStageId, setSelectedStageId] = createSignal<MissionStageId | undefined>(initialConnection?.status.stage);
 	const currentControlRoot = createMemo(() => status().control?.controlRoot?.trim() || workspaceContext.workspaceRoot);
-	const [selectedTaskId, setSelectedTaskId] = createSignal<string>('');
-	const [selectedSessionId, setSelectedSessionId] = createSignal<string | undefined>();
 	const [selectedTreeTargetId, setSelectedTreeTargetId] = createSignal<string | undefined>();
 	const [collapsedTreeNodeIds, setCollapsedTreeNodeIds] = createSignal<Set<string>>(new Set<string>());
 	const [treePageScrollRequest, setTreePageScrollRequest] = createSignal<{ delta: number } | undefined>();
@@ -209,8 +205,6 @@ export function TowerController({
 	});
 	const airportProjections = createMemo(() => systemSnapshot()?.airportProjections);
 	const dashboardProjection = createMemo(() => airportProjections()?.dashboard);
-	const editorProjection = createMemo(() => airportProjections()?.editor);
-	const agentSessionProjection = createMemo(() => airportProjections()?.agentSession);
 	const selectedMissionContext = createMemo(() => {
 		const target = selectedShellTarget();
 		return target.kind === 'mission'
@@ -223,9 +217,6 @@ export function TowerController({
 			&& status().found
 			&& target.missionId === currentMissionId();
 	});
-	const selectedTowerProjection = createMemo(() =>
-		selectedMissionMatchesLoaded() ? status().tower : undefined
-	);
 	const centerRoute = createMemo<CenterRoute>(() => {
 		if (towerMode() === 'repository') {
 			return { kind: 'repository-flow' };
@@ -250,14 +241,23 @@ export function TowerController({
 		return { kind: 'none' };
 	});
 	const controlStatus = createMemo(() => status().control);
-	const stages = createMemo(() => (centerRoute().kind === 'mission-control' ? buildProjectedStageStatuses(systemDomain(), selectedTowerProjection()?.stageRail) : []));
+	const projectedSelectedStageId = createMemo<MissionStageId | undefined>(() =>
+		towerMode() === 'mission' ? dashboardProjection()?.selectedStageId as MissionStageId | undefined : undefined
+	);
+	const projectedSelectedTaskId = createMemo<string | undefined>(() =>
+		towerMode() === 'mission' ? dashboardProjection()?.selectedTaskId : undefined
+	);
+	const projectedSelectedSessionId = createMemo<string | undefined>(() =>
+		towerMode() === 'mission' ? dashboardProjection()?.selectedSessionId : undefined
+	);
+	const stages = createMemo(() => (centerRoute().kind === 'mission-control' ? buildProjectedStageStatuses(systemDomain(), dashboardProjection()?.stageRail) : []));
 	const sessions = createMemo(() => (centerRoute().kind === 'mission-control' ? buildProjectedSessionRecords(systemDomain()) : []));
 	const stageItems = createMemo<ProgressRailItem[]>(() =>
-		(selectedTowerProjection()?.stageRail ?? []).map((item) => ({
+		(dashboardProjection()?.stageRail ?? []).map((item) => ({
 			id: item.id,
 			label: item.label,
 			state: item.state,
-			selected: item.id === selectedStageId(),
+			selected: item.id === projectedSelectedStageId(),
 			...(item.subtitle ? { subtitle: item.subtitle } : {})
 		}))
 	);
@@ -310,12 +310,10 @@ export function TowerController({
 		if (towerMode() !== 'mission') {
 			return {};
 		}
-		const stageId = selectedStageId();
-		const explicitTaskId = selectedTaskId();
-		const explicitSessionId = selectedSessionId();
-		const taskId = explicitTaskId || undefined;
-		const sessionId = explicitSessionId
-			?? (explicitTaskId || selectedStageId() ? undefined : undefined);
+		const commandContext = dashboardProjection()?.commandContext;
+		const stageId = commandContext?.stageId as MissionStageId | undefined;
+		const taskId = commandContext?.taskId;
+		const sessionId = commandContext?.sessionId;
 		return {
 			...(stageId ? { stageId } : {}),
 			...(taskId ? { taskId } : {}),
@@ -328,43 +326,13 @@ export function TowerController({
 		targetLabel?: string;
 		targetKind?: TreeTargetKind;
 	}>(() => {
-		if (towerMode() !== 'mission') {
-			return {
-						targetLabel: dashboardProjection()?.repositoryLabel ?? resolveHeaderWorkspaceLabel(status().control, currentControlRoot())
-			};
-		}
-		const sessionId = selectedSessionId();
-		if (sessionId) {
-			const session = sessions().find((candidate) => candidate.sessionId === sessionId);
-			const sessionStageId = session?.taskId ? systemDomain()?.tasks[session.taskId]?.stageId : undefined;
-			return {
-				sessionId,
-				...(sessionStageId ? { stageId: sessionStageId } : {}),
-				targetLabel: session?.currentTurnTitle ?? session?.assignmentLabel ?? sessionId,
-				targetKind: 'session'
-			};
-		}
-		const taskId = selectedTaskId().trim();
-		if (taskId) {
-			const task = systemDomain()?.tasks[taskId];
-			return {
-				...(task?.stageId ? { stageId: task.stageId } : {}),
-				targetLabel: task?.subject ?? taskId,
-				targetKind: 'task'
-			};
-		}
-		const stageId = selectedStageId();
-		if (stageId) {
-			const label = selectedTowerProjection()?.stageRail.find((item) => item.id === stageId)?.label ?? stageId;
-			return {
-				stageId,
-				targetLabel: label,
-				targetKind: 'stage'
-			};
-		}
-		const missionLabel = currentMissionTitle();
+		const commandContext = dashboardProjection()?.commandContext;
+		const missionLabel = commandContext?.targetLabel ?? currentMissionTitle();
 		return {
-			...(missionLabel ? { targetLabel: missionLabel } : {})
+			...(commandContext?.sessionId ? { sessionId: commandContext.sessionId } : {}),
+			...(commandContext?.stageId ? { stageId: commandContext.stageId as MissionStageId } : {}),
+			...(missionLabel ? { targetLabel: missionLabel } : {}),
+			...(commandContext?.targetKind ? { targetKind: commandContext.targetKind as TreeTargetKind } : {})
 		};
 	});
 	const availableCommandById = createMemo(() => {
@@ -400,9 +368,6 @@ export function TowerController({
 	const commandInputQuery = createMemo(() => commandPickerQuery());
 	const commandPickerItems = createMemo<CommandItem[]>(() =>
 		buildCommandPickerItems(availableActions(), commandInputQuery(), { includeDisabled: true })
-	);
-	const commandCycleItems = createMemo<CommandItem[]>(() =>
-		buildCommandPickerItems(availableActions(), '')
 	);
 	const showCommandPicker = createMemo(
 		() => commandInputQuery().length > 0
@@ -441,17 +406,6 @@ export function TowerController({
 		}
 		return `Available: ${uniqueCommands.join(', ')}`;
 	});
-	const keyHintsText = createMemo(() =>
-		buildKeyHintsText({
-			focusArea: focusArea(),
-			activePicker: activePicker(),
-			commandItems: commandCycleItems(),
-			inputValue: inputValue(),
-			selectedHeaderTabKind: selectedHeaderTab()?.target.kind,
-			currentFlowStep: currentCommandFlowStep(),
-			towerMode: towerMode()
-		})
-	);
 	const screenTitle = createMemo(() => {
 		if (towerMode() !== 'mission') {
 					return dashboardProjection()?.repositoryLabel || resolveHeaderWorkspaceLabel(status().control, currentControlRoot());
@@ -460,7 +414,7 @@ export function TowerController({
 			|| (selectedMissionMatchesLoaded() ? currentMissionId() ?? 'Mission' : 'Mission');
 	});
 	const treeTargets = createMemo<TreeTargetDescriptor[]>(() =>
-		(selectedTowerProjection()?.treeNodes ?? []).map((node) => ({
+		(dashboardProjection()?.treeNodes ?? []).map((node) => ({
 			id: node.id,
 			label: node.label,
 			kind: node.kind as TreeTargetKind,
@@ -479,24 +433,20 @@ export function TowerController({
 	);
 	const selectedTreeTarget = createMemo(() => {
 		const preferredId = pickPreferredTreeTargetId(visibleTreeTargets(), selectedTreeTargetId(), {
-			selectedStageId: selectedStageId(),
-			selectedTaskId: selectedTaskId(),
-			selectedSessionId: selectedSessionId()
+			selectedStageId: projectedSelectedStageId(),
+			selectedTaskId: projectedSelectedTaskId() ?? '',
+			selectedSessionId: projectedSelectedSessionId()
 		});
 		return visibleTreeTargets().find((target) => target.id === preferredId);
 	});
 	const selectedSessionRecord = createMemo(() => {
-		const sessionId = selectedSessionId();
+		const sessionId = projectedSelectedSessionId();
 		if (!sessionId) {
 			return undefined;
 		}
 		return sessions().find((session) => session.sessionId === sessionId);
 	});
 	function resolvePromptableSessionRecord() {
-		const target = selectedTreeTarget();
-		if (target?.kind !== 'session' || target.sessionId !== selectedSessionId()) {
-			return undefined;
-		}
 		const session = selectedSessionRecord();
 		if (!session) {
 			return undefined;
@@ -524,11 +474,8 @@ export function TowerController({
 			canSendSessionText: canSendSessionText(),
 			selectedSessionId: selectedCommandTargetDescriptor().sessionId,
 			selectedStageId: selectedCommandTargetDescriptor().stageId,
-			selectedTreeTargetTitle: selectedTreeTarget()?.label
-				?? selectedCommandTargetDescriptor().targetLabel
-				?? agentSessionProjection()?.sessionLabel
-				?? editorProjection()?.resourceLabel,
-			selectedTreeTargetKind: selectedTreeTarget()?.kind ?? selectedCommandTargetDescriptor().targetKind
+			selectedTreeTargetTitle: selectedCommandTargetDescriptor().targetLabel,
+			selectedTreeTargetKind: selectedCommandTargetDescriptor().targetKind
 		})
 	);
 	const commandPanelMode = createMemo<'input' | 'toolbar'>(() => {
@@ -540,6 +487,16 @@ export function TowerController({
 		}
 		return 'toolbar';
 	});
+	const keyHintsText = createMemo(() =>
+		buildKeyHintsText({
+			focusArea: focusArea(),
+			activePicker: activePicker(),
+			currentFlowStep: currentCommandFlowStep(),
+			towerMode: towerMode(),
+			commandPanelMode: commandPanelMode(),
+			confirmingToolbarCommand: Boolean(confirmingToolbarCommandId())
+		})
+	);
 	const commandPanelInputValue = createMemo(() =>
 		isMissionFlowTextStep() ? flowController.textValue() : inputValue()
 	);
@@ -670,9 +627,6 @@ export function TowerController({
 		setSelectedTreeTargetId(undefined);
 		setCollapsedTreeNodeIds(new Set<string>());
 		setCollapseDefaultsMissionId(undefined);
-		setSelectedSessionId(undefined);
-		setSelectedTaskId('');
-		setSelectedStageId(undefined);
 	});
 
 	createEffect(() => {
@@ -691,62 +645,13 @@ export function TowerController({
 	});
 
 	createEffect(() => {
-		setSelectedStageId((current) => pickPreferredStageId(
-			stages(),
-			current,
-				selectedMissionContext()?.currentStage
-		));
-	});
-
-	createEffect(() => {
-		const sessionId = selectedSessionId();
-		if (!sessionId) {
-			return;
-		}
-		if (sessions().some((session) => session.sessionId === sessionId)) {
-			return;
-		}
-		setSelectedSessionId(undefined);
-	});
-
-	createEffect(() => {
-		const target = towerMode() === 'mission' ? selectedTreeTarget() : undefined;
-		if (!target || target.taskId) {
-			return;
-		}
-		if (selectedTaskId() !== '') {
-			setSelectedTaskId('');
-		}
-	});
-
-	createEffect(() => {
 		setSelectedTreeTargetId((current) =>
 			pickPreferredTreeTargetId(visibleTreeTargets(), current, {
-				selectedStageId: selectedStageId(),
-				selectedTaskId: selectedTaskId(),
-				selectedSessionId: selectedSessionId()
+				selectedStageId: projectedSelectedStageId(),
+				selectedTaskId: projectedSelectedTaskId() ?? '',
+				selectedSessionId: projectedSelectedSessionId()
 			})
 		);
-	});
-
-	createEffect(() => {
-		if (towerMode() === 'mission') {
-			const target = selectedTreeTarget();
-			if (!target) {
-				return;
-			}
-			if (target.stageId && target.stageId !== selectedStageId()) {
-				setSelectedStageId(target.stageId);
-			}
-			const nextTaskId = target.taskId ?? '';
-			if (nextTaskId !== selectedTaskId()) {
-				setSelectedTaskId(nextTaskId);
-			}
-			if (target.sessionId !== selectedSessionId()) {
-				setSelectedSessionId(target.sessionId);
-			}
-			return;
-		}
 	});
 
 	createEffect(() => {
@@ -930,7 +835,6 @@ export function TowerController({
 			if (event.type === 'session.console') {
 				const sessionId = event.event.state.sessionId;
 				if (event.event.state.awaitingInput && sessionId) {
-					setSelectedSessionId(sessionId);
 					setSelectedTreeTargetId(createSessionNodeId(sessionId));
 					setFocusArea('command');
 				}
@@ -1069,9 +973,6 @@ export function TowerController({
 
 	function resetMissionContextSelection(): void {
 		setSelectedTreeTargetId(undefined);
-		setSelectedSessionId(undefined);
-		setSelectedTaskId('');
-		setSelectedStageId(undefined);
 		setCollapsedTreeNodeIds(new Set<string>());
 		setTreePageScrollRequest(undefined);
 		setCollapseDefaultsMissionId(undefined);
@@ -1085,16 +986,6 @@ export function TowerController({
 			return;
 		}
 		setSelectedTreeTargetId(targetId);
-		const target = visibleTreeTargets().find((candidate) => candidate.id === targetId)
-			?? treeTargets().find((candidate) => candidate.id === targetId);
-		if (!target) {
-			return;
-		}
-		if (target.stageId) {
-			setSelectedStageId(target.stageId);
-		}
-		setSelectedTaskId(target.taskId ?? '');
-		setSelectedSessionId(target.sessionId);
 	}
 
 	function activateTreeTarget(targetId: string | undefined): void {
@@ -1206,29 +1097,6 @@ export function TowerController({
 		if (options?.clearCommandInput) {
 			setInputValue('');
 		}
-	}
-
-	function cycleCommandInput(delta: number): void {
-		if (isMissionFlowTextStep()) {
-			return;
-		}
-		const items = commandCycleItems();
-		if (items.length === 0) {
-			return;
-		}
-		const currentId = selectedCommandId();
-		const currentIndex = items.findIndex((item) => item.id === currentId);
-		const seedIndex = currentIndex >= 0 ? currentIndex : 0;
-		const nextIndex = (seedIndex + delta + items.length) % items.length;
-		const nextCommand = items[nextIndex];
-		if (!nextCommand) {
-			return;
-		}
-		setSelectedCommandId(nextCommand.id);
-		setInputValue('');
-		closeCommandPicker();
-		setSelectedPickerItemId(nextCommand.id);
-		setFocusArea('command');
 	}
 
 	function selectCommandById(
@@ -1474,6 +1342,9 @@ export function TowerController({
 		fallbackSelector: MissionSelector = selector()
 	): MissionSelector {
 		const nextSelector = selectorFromTowerState(nextStatus, systemSnapshot(), fallbackSelector);
+		if (nextStatus.system) {
+			applySystemSnapshot(nextStatus.system);
+		}
 		setStatus(nextStatus);
 		setSelector(nextSelector);
 		return nextSelector;
@@ -1706,7 +1577,7 @@ export function TowerController({
 
 		const resolvedTaskId = taskIdOverride?.trim()
 			|| selectedTreeTarget()?.taskId
-			|| selectedTaskId().trim();
+			|| projectedSelectedTaskId()?.trim();
 		if (!resolvedTaskId) {
 					appendLog('No task is selected. Select a task in mission control before using /launch.');
 			return true;
@@ -1725,7 +1596,6 @@ export function TowerController({
 					: undefined
 			)
 		);
-		setSelectedSessionId(session.sessionId);
 		setSelectedTreeTargetId(createSessionNodeId(session.sessionId));
 		setFocusArea('command');
 		const reusedExistingSession = sessionsBeforeLaunch.some(
@@ -2143,7 +2013,7 @@ export function TowerController({
 						return;
 					}
 					const intent = (args[0] as GateIntent | undefined) ?? gateIntentForStage(
-						selectedStageId()
+						projectedSelectedStageId()
 					);
 					const gate = await new DaemonApi(currentClient).mission.evaluateGate(missionSelector, intent);
 					appendLog(gate.allowed ? `Gate ${intent} passed.` : `Gate ${intent} blocked: ${gate.errors.join(' | ')}`);
@@ -2356,28 +2226,6 @@ export function TowerController({
 							setFocusArea('command');
 							return;
 						}
-						if (event.name !== 'left' && event.name !== 'right') {
-							return;
-						}
-						if (isMissionFlowTextStep()) {
-							return;
-						}
-						if (selectedCommandId() && inputValue().trim().length > 0) {
-							return;
-						}
-						if (focusArea() !== 'command') {
-							return;
-						}
-						const trimmed = commandPanelInputValue().trim();
-						if (!selectedCommandId() && trimmed.length > 0 && trimmed.startsWith('/')) {
-							return;
-						}
-						if (selectedCommandId() && trimmed.length > 0) {
-							return;
-						}
-						event.preventDefault();
-						event.stopPropagation();
-						cycleCommandInput(event.name === 'left' ? -1 : 1);
 				}}
 			/>
 		</Show>
@@ -2827,20 +2675,31 @@ function formatIssueDescription(issue: TrackedIssueSummary): string {
 function buildKeyHintsText(input: {
 	focusArea: FocusArea;
 	activePicker: PickerMode | undefined;
-	commandItems: CommandItem[];
-	inputValue: string;
-	selectedHeaderTabKind: HeaderTab['target']['kind'] | undefined;
 	currentFlowStep: CommandFlowStep | undefined;
 	towerMode: TowerMode;
+	commandPanelMode: 'input' | 'toolbar';
+	confirmingToolbarCommand: boolean;
 }): string {
 	if (input.activePicker === 'command-select') {
-		return 'Tab/Shift+Tab focus | ↑/↓ navigate | Enter insert | Backspace filter | Esc close | Ctrl+Q quit';
+		return 'Tab/Shift+Tab focus | ↑/↓ navigate | Enter choose | Backspace filter | Esc close | Ctrl+Q quit';
+	}
+	if (input.focusArea === 'header') {
+		return 'Tab/Shift+Tab focus | ←/→ tabs | Enter open | ↑/↓ move focus | Ctrl+Q quit';
 	}
 	if (input.focusArea === 'command') {
-		if (input.currentFlowStep && input.towerMode !== 'repository') {
+		if (input.commandPanelMode === 'toolbar') {
+			if (input.confirmingToolbarCommand) {
+				return 'Tab/Shift+Tab focus | ←/→ choose confirm/cancel | Enter apply | Esc cancel | Ctrl+Q quit';
+			}
+			return 'Tab/Shift+Tab focus | ←/→ command | Enter run | Ctrl+Q quit';
+		}
+		if (input.currentFlowStep?.kind === 'text') {
+			return 'Tab/Shift+Tab focus | Enter continue | Esc cancel | Ctrl+Q quit';
+		}
+		if (input.currentFlowStep) {
 			return 'Tab/Shift+Tab focus | Enter continue | Ctrl+Q quit';
 		}
-		return 'Tab/Shift+Tab focus | ←/→ command | Enter submit | Ctrl+Q quit';
+		return 'Tab/Shift+Tab focus | Enter submit | Esc clear | Ctrl+Q quit';
 	}
 	if (input.focusArea === 'flow' && input.currentFlowStep?.kind === 'selection') {
 		if (input.currentFlowStep.selectionMode === 'multiple') {
@@ -2855,9 +2714,9 @@ function buildKeyHintsText(input: {
 		return 'Tab/Shift+Tab focus | ↑/↓ navigate | ←/→ step | Enter continue | Ctrl+Q quit';
 	}
 	if (input.focusArea === 'tree') {
-		return 'Tab/Shift+Tab focus | ↑/↓ navigate | ←/→ select | PgUp/PgDn scroll | Enter select | Ctrl+Q quit';
+		return 'Tab/Shift+Tab focus | ↑/↓ navigate | ←/→ move | PgUp/PgDn scroll | Enter select | Ctrl+Q quit';
 	}
-	return 'Tab/Shift+Tab focus | ↑/↓ navigate | ←/→ select | Enter select | Ctrl+Q quit';
+	return 'Tab/Shift+Tab focus | Ctrl+Q quit';
 }
 
 function canUseIssueIntake(control: OperatorStatus['control']): boolean {
