@@ -55,6 +55,13 @@ export function RepositoryFlowPanel(props: RepositoryFlowPanelProps) {
 	const idleBody = createMemo(() => (props.body.kind === 'idle' ? props.body : undefined));
 	const selectionBody = createMemo(() => (props.body.kind === 'selection' ? props.body : undefined));
 	const textBody = createMemo(() => (props.body.kind === 'text' ? props.body : undefined));
+	const selectedIndex = createMemo(() => {
+		const body = selectionBody();
+		if (!body) {
+			return 0;
+		}
+		return resolveSelectedIndex(body.items, body.selectedItemId);
+	});
 	const footerBadges = createMemo<PanelBadge[]>(() => [
 		{ text: `${String(props.stepIndex + 1)}/${String(Math.max(props.stepCount, 1))}` },
 		{ text: props.stepLabel },
@@ -118,6 +125,7 @@ export function RepositoryFlowPanel(props: RepositoryFlowPanelProps) {
 							height="100%"
 							width="100%"
 							options={selectOptions()}
+							selectedIndex={selectedIndex()}
 							backgroundColor={towerTheme.panelBackground}
 							textColor={towerTheme.bodyText}
 							focusedBackgroundColor={towerTheme.panelBackground}
@@ -167,4 +175,15 @@ export function RepositoryFlowPanel(props: RepositoryFlowPanelProps) {
 			</box>
 		</Panel>
 	);
+}
+
+function resolveSelectedIndex(items: SelectItem[], selectedItemId: string | undefined): number {
+	if (items.length === 0) {
+		return 0;
+	}
+	if (!selectedItemId) {
+		return 0;
+	}
+	const index = items.findIndex((item) => item.id === selectedItemId);
+	return index >= 0 ? index : 0;
 }

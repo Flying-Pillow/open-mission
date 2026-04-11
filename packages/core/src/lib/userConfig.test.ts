@@ -130,6 +130,70 @@ describe('userConfig', () => {
 			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}
 	});
+
+	it('canonicalizes linked worktree registrations to the shared control root', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-registered-repo-'));
+		const worktreeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-registered-worktree-'));
+		const worktreePath = path.join(worktreeRoot, 'linked');
+
+		try {
+			runGit(workspaceRoot, ['init']);
+			runGit(workspaceRoot, ['config', 'user.email', 'mission@example.com']);
+			runGit(workspaceRoot, ['config', 'user.name', 'Mission Test']);
+			await fs.writeFile(path.join(workspaceRoot, 'README.md'), '# Mission Test\n', 'utf8');
+			runGit(workspaceRoot, ['add', 'README.md']);
+			runGit(workspaceRoot, ['commit', '-m', 'init']);
+			runGit(workspaceRoot, ['worktree', 'add', worktreePath, '-b', 'mission/test-canonicalize']);
+
+			await writeMissionUserConfig({
+				registeredRepositories: [{ checkoutPath: worktreePath }]
+			});
+
+			expect(readMissionUserConfig()).toMatchObject({
+				registeredRepositories: [
+					{
+						checkoutPath: workspaceRoot
+					}
+				]
+			});
+		} finally {
+			runGit(workspaceRoot, ['worktree', 'remove', '--force', worktreePath]);
+			await fs.rm(worktreeRoot, { recursive: true, force: true });
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		}
+	});
+
+	it('rewrites stale registered repositories out of user config', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+		await fs.mkdir(path.dirname(getMissionUserConfigPath()), { recursive: true });
+		await fs.writeFile(
+			getMissionUserConfigPath(),
+			JSON.stringify({
+				version: 1,
+				missionWorkspaceRoot: 'missions',
+				terminalBinary: 'zellij',
+				editorBinary: 'micro',
+				registeredRepositories: [
+					{
+						checkoutPath: '/tmp/mission-stale-repository'
+					}
+				]
+			}, null, 2),
+			'utf8'
+		);
+
+		const config = await ensureMissionUserConfig();
+
+		expect(config).toEqual({
+			version: 1,
+			missionWorkspaceRoot: 'missions',
+			terminalBinary: 'zellij',
+			editorBinary: 'micro'
+		});
+		expect(readMissionUserConfig()).toEqual(config);
+		expect(await fs.readFile(getMissionUserConfigPath(), 'utf8')).not.toContain('mission-stale-repository');
+	});
 });
 
 function runGit(workspaceRoot: string, args: string[]): void {

@@ -29,6 +29,9 @@ export function SelectPanel(props: SelectPanelProps) {
 	const availableOptionWidth = createMemo(() =>
 		computeOptionWidth(terminal().width, props.style?.['width'])
 	);
+	const selectedIndex = createMemo(() =>
+		resolveSelectedIndex(props.items, props.selectedItemId)
+	);
 	const options = createMemo<SelectOption[]>(() =>
 		props.items.map((item) => {
 			const [leftWidth, rightWidth] = splitOptionColumns(availableOptionWidth());
@@ -87,6 +90,7 @@ export function SelectPanel(props: SelectPanelProps) {
 						height="100%"
 						width="100%"
 						options={options()}
+						selectedIndex={selectedIndex()}
 						backgroundColor={towerTheme.panelBackground}
 						textColor={towerTheme.bodyText}
 						focusedBackgroundColor={towerTheme.panelBackground}
@@ -110,6 +114,17 @@ export function SelectPanel(props: SelectPanelProps) {
 			</Show>
 		</Panel>
 	);
+}
+
+function resolveSelectedIndex(items: SelectItem[], selectedItemId: string | undefined): number {
+	if (items.length === 0) {
+		return 0;
+	}
+	if (!selectedItemId) {
+		return 0;
+	}
+	const index = items.findIndex((item) => item.id === selectedItemId);
+	return index >= 0 ? index : 0;
 }
 
 function computeOptionWidth(terminalWidth: number, styleWidth: string | number | undefined): number {

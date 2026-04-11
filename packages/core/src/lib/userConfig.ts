@@ -47,22 +47,16 @@ export function getDefaultMissionUserConfig(overrides: Partial<MissionUserConfig
 }
 
 export function readMissionUserConfig(): MissionUserConfig | undefined {
-	const configPath = getMissionUserConfigPath();
-	try {
-		const content = fs.readFileSync(configPath, 'utf8').trim();
-		if (!content) {
-			return undefined;
-		}
-		return normalizeResolvedConfig(JSON.parse(content) as unknown);
-	} catch {
-		return undefined;
-	}
+	return loadMissionUserConfig().config;
 }
 
 export async function ensureMissionUserConfig(): Promise<MissionUserConfig> {
-	const currentConfig = readMissionUserConfig();
-	if (currentConfig) {
-		return currentConfig;
+	const currentConfig = loadMissionUserConfig();
+	if (currentConfig.config) {
+		if (currentConfig.needsRewrite) {
+			return writeMissionUserConfig(currentConfig.config);
+		}
+		return currentConfig.config;
 	}
 	return writeMissionUserConfig(getDefaultMissionUserConfig());
 }
@@ -104,6 +98,30 @@ export async function listRegisteredMissionUserRepos(): Promise<MissionRepositor
 		.sort((left, right) => left.label.localeCompare(right.label));
 }
 
+function loadMissionUserConfig(): {
+	config: MissionUserConfig | undefined;
+	needsRewrite: boolean;
+} {
+	const configPath = getMissionUserConfigPath();
+	try {
+		const content = fs.readFileSync(configPath, 'utf8').trim();
+		if (!content) {
+			return { config: undefined, needsRewrite: false };
+		}
+		const rawConfig = JSON.parse(content) as unknown;
+		const config = normalizeResolvedConfig(rawConfig);
+		if (!config) {
+			return { config: undefined, needsRewrite: false };
+		}
+		return {
+			config,
+			needsRewrite: JSON.stringify(rawConfig) !== JSON.stringify(config)
+		};
+	} catch {
+		return { config: undefined, needsRewrite: false };
+	}
+}
+
 function normalizeResolvedConfig(rawConfig: unknown): MissionUserConfig | undefined {
 	if (!rawConfig || typeof rawConfig !== 'object' || Array.isArray(rawConfig)) {
 		return undefined;
@@ -137,7 +155,15 @@ function normalizeRegisteredRepositories(
 			if (!checkoutPath) {
 				return undefined;
 			}
-			return { checkoutPath: path.resolve(checkoutPath) };
+			const resolvedCheckoutPath = path.resolve(checkoutPath);
+			if (!fs.existsSync(resolvedCheckoutPath)) {
+				return undefined;
+			}
+			const controlRoot = resolveGitWorkspaceRoot(resolvedCheckoutPath);
+			if (!controlRoot) {
+				return undefined;
+			}
+			return { checkoutPath: path.resolve(controlRoot) };
 		})
 		.filter((entry): entry is MissionUserRegisteredRepository => entry !== undefined);
 	const deduplicated = normalizedEntries.filter(

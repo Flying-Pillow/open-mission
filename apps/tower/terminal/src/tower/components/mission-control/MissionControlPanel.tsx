@@ -107,6 +107,18 @@ export function MissionControlPanel(props: MissionControlPanelProps) {
 							props.onMoveSelection(1);
 							return;
 						}
+						if (event.name === 'left') {
+							event.preventDefault();
+							event.stopPropagation();
+							props.onMoveSelection(-1);
+							return;
+						}
+						if (event.name === 'right') {
+							event.preventDefault();
+							event.stopPropagation();
+							props.onMoveSelection(1);
+							return;
+						}
 						if (event.name === 'pageup') {
 							event.preventDefault();
 							event.stopPropagation();

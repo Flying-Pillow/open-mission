@@ -77,6 +77,18 @@ export function RepositoryFlowSurface(props: RepositoryFlowSurfaceProps): JSXEle
 						emptyLabel: step.emptyLabel,
 						selectionMode: step.selectionMode,
 						onKeyDown: (event) => {
+							if (event.name === 'up') {
+								event.preventDefault();
+								event.stopPropagation();
+								props.controller.moveSelection(-1);
+								return;
+							}
+							if (event.name === 'down') {
+								event.preventDefault();
+								event.stopPropagation();
+								props.controller.moveSelection(1);
+								return;
+							}
 							if (event.name === 'escape') {
 								event.preventDefault();
 								event.stopPropagation();
@@ -196,6 +208,18 @@ export function MissionFlowOverlay(props: MissionFlowOverlayProps): JSXElement |
 					emptyLabel={step.emptyLabel}
 					helperText={step.helperText}
 					onKeyDown={(event) => {
+						if (event.name === 'up') {
+							event.preventDefault();
+							event.stopPropagation();
+							props.controller.moveSelection(-1);
+							return;
+						}
+						if (event.name === 'down') {
+							event.preventDefault();
+							event.stopPropagation();
+							props.controller.moveSelection(1);
+							return;
+						}
 						if (event.name === 'right') {
 							event.preventDefault();
 							event.stopPropagation();

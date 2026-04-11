@@ -570,9 +570,15 @@ export function TowerController({
 				selectedRowId={selectedTreeTarget()?.id}
 				treePageScrollRequest={treePageScrollRequest()}
 				emptyLabel={dashboardProjection()?.emptyLabel ?? 'No mission structure is available yet.'}
-				onMoveSelection={() => undefined}
-				onPageScroll={() => undefined}
-				onActivateSelection={() => undefined}
+				onMoveSelection={(delta) => {
+					moveTreeSelection(delta);
+				}}
+				onPageScroll={(delta) => {
+					requestTreePageScroll(delta);
+				}}
+				onActivateSelection={() => {
+					activateSelectedTreeTarget();
+				}}
 			/>
 		);
 	}
@@ -966,125 +972,17 @@ export function TowerController({
 		}
 		if (
 			!isMissionFlowTextStep() &&
+			focusArea() !== 'command' &&
 			focusArea() !== 'flow' &&
 			key.sequence === '/' &&
-			(focusArea() !== 'command' ||
-				inputValue().length === 0 ||
-				(activePicker() === 'command-select' && commandQuery() === '/'))
+			(activePicker() !== 'command-select' || commandQuery() === '/')
 		) {
 			openCommandPickerShortcut();
-			return;
-		}
-		if (focusArea() === 'header') {
-			if (key.name === 'left') {
-				previewHeaderTabSelection(-1);
-				return;
-			}
-			if (key.name === 'right') {
-				previewHeaderTabSelection(1);
-				return;
-			}
-			if (key.name === 'enter' || key.name === 'return') {
-				void activateHeaderTab(selectedHeaderTabId());
-				return;
-			}
-		}
-		if (key.name === 'up') {
-			if (focusArea() === 'header') {
-				moveFocus(-1);
-				return;
-			}
-			if (moveSelection(-1)) {
-				return;
-			}
-		}
-		if (key.name === 'down') {
-			if (focusArea() === 'header') {
-				moveFocus(1);
-				return;
-			}
-			if (moveSelection(1)) {
-				return;
-			}
-		}
-		if (focusArea() === 'tree' && towerMode() === 'mission') {
-			if (key.name === 'pageup') {
-				requestTreePageScroll(-1);
-				return;
-			}
-			if (key.name === 'pagedown') {
-				requestTreePageScroll(1);
-				return;
-			}
-		}
-		if (key.name === 'escape' && focusArea() === 'command') {
-			if (commandPanelMode() === 'toolbar') {
-				if (confirmingToolbarCommandId()) {
-					setConfirmingToolbarCommandId(undefined);
-					setToolbarConfirmationChoice('confirm');
-				}
-				return;
-			}
-			if (activePicker() === 'command-select') {
-				closeCommandPicker({ clearCommandInput: commandQuery() === '/' });
-				return;
-			}
-			if (isMissionFlowTextStep()) {
-				resetCommandFlow({ clearCommandInput: true });
-				setFocusArea('command');
-				return;
-			}
-			setInputValue('');
-			setFocusArea('command');
 			return;
 		}
 		if ((key.name === 'q' || key.sequence === 'q') && focusArea() !== 'command' && !activePicker()) {
 			renderer.destroy();
 			return;
-		}
-		if (focusArea() === 'command') {
-			if (commandPanelMode() === 'toolbar') {
-				if (key.name === 'left') {
-					if (confirmingToolbarCommandId()) {
-						moveToolbarConfirmationSelection(-1);
-					} else {
-						moveToolbarCommandSelection(-1);
-					}
-					return;
-				}
-				if (key.name === 'right') {
-					if (confirmingToolbarCommandId()) {
-						moveToolbarConfirmationSelection(1);
-					} else {
-						moveToolbarCommandSelection(1);
-					}
-					return;
-				}
-				if (key.name === 'space' || key.name === 'enter' || key.name === 'return') {
-					void submitToolbarConfirmation();
-					return;
-				}
-				if (key.name === 'escape' && confirmingToolbarCommandId()) {
-					setConfirmingToolbarCommandId(undefined);
-					setToolbarConfirmationChoice('confirm');
-					return;
-				}
-			}
-			return;
-		}
-		if ((key.name === 'enter' || key.name === 'return') && focusArea() === 'tree' && towerMode() === 'mission') {
-			activateTreeTarget(selectedTreeTarget()?.id);
-			return;
-		}
-		if (key.name === 'left') {
-			if (moveSelection(-1)) {
-				return;
-			}
-		}
-		if (key.name === 'right') {
-			if (moveSelection(1)) {
-				return;
-			}
 		}
 	});
 
@@ -1095,17 +993,18 @@ export function TowerController({
 		setFocusArea(order[nextIndex] ?? 'command');
 	}
 
-	function moveSelection(delta: number): boolean {
-		switch (focusArea()) {
-			case 'tree':
-				if (towerMode() === 'mission') {
-					selectTreeTarget(moveTreeTargetSelection(visibleTreeTargets(), selectedTreeTarget()?.id, delta));
-					return true;
-				}
-				return false;
-			default:
-				return false;
+	function moveTreeSelection(delta: number): void {
+		if (towerMode() !== 'mission') {
+			return;
 		}
+		selectTreeTarget(moveTreeTargetSelection(visibleTreeTargets(), selectedTreeTarget()?.id, delta));
+	}
+
+	function activateSelectedTreeTarget(): void {
+		if (towerMode() !== 'mission') {
+			return;
+		}
+		activateTreeTarget(selectedTreeTarget()?.id);
 	}
 
 	function requestTreePageScroll(delta: number): void {
@@ -2287,6 +2186,15 @@ export function TowerController({
 					headerFooterBadges={headerFooterBadges()}
 					stageItems={stageItems()}
 					focusArea={focusArea()}
+					onHeaderMoveSelection={(delta) => {
+						previewHeaderTabSelection(delta);
+					}}
+					onHeaderMoveFocus={(delta) => {
+						moveFocus(delta);
+					}}
+					onHeaderSelect={() => {
+						void activateHeaderTab(selectedHeaderTabId());
+					}}
 					centerContent={centerContent()}
 					overlayContent={overlayContent()}
 					showCommandPanel={true}
@@ -2388,10 +2296,45 @@ export function TowerController({
 							openCommandPickerShortcut();
 							return;
 						}
-						if (event.name === 'escape') {
-							if (focusArea() !== 'command') {
+						if (focusArea() !== 'command') {
+							return;
+						}
+						if (commandPanelMode() === 'toolbar') {
+							if (event.name === 'left') {
+								event.preventDefault();
+								event.stopPropagation();
+								if (confirmingToolbarCommandId()) {
+									moveToolbarConfirmationSelection(-1);
+								} else {
+									moveToolbarCommandSelection(-1);
+								}
 								return;
 							}
+							if (event.name === 'right') {
+								event.preventDefault();
+								event.stopPropagation();
+								if (confirmingToolbarCommandId()) {
+									moveToolbarConfirmationSelection(1);
+								} else {
+									moveToolbarCommandSelection(1);
+								}
+								return;
+							}
+							if (event.name === 'space' || event.name === 'enter' || event.name === 'return') {
+								event.preventDefault();
+								event.stopPropagation();
+								void submitToolbarConfirmation();
+								return;
+							}
+							if (event.name === 'escape' && confirmingToolbarCommandId()) {
+								event.preventDefault();
+								event.stopPropagation();
+								setConfirmingToolbarCommandId(undefined);
+								setToolbarConfirmationChoice('confirm');
+							}
+							return;
+						}
+						if (event.name === 'escape') {
 							event.preventDefault();
 							event.stopPropagation();
 							if (activePicker() === 'command-select') {
