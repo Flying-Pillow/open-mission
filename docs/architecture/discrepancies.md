@@ -1,22 +1,48 @@
 ---
 layout: default
-title: Architectural Discrepancies
+title: Discrepancies And Ambiguities
 parent: Architecture
 nav_order: 99
 ---
 
-# Architectural Discrepancies
+# Discrepancies And Ambiguities
 
-This document catalogs known gaps between current implementation, architectural specifications, and historical artifacts during the rewrite towards an architecture-first repository.
+This page records current mismatches between specifications, replay material, older documentation, and the implementation currently in the repository.
 
-### Gap: Task Generation & Ingestion
-*   **Specifications:** Assumes tasks are manually planned/written by an agent in `03-IMPLEMENTATION/tasks` and transparently picked up by the workflow engine as newly verified dependencies (per the "Retrospective Experience" spec).
-*   **Implementation:** Currently, the code strongly expects a structured `tasks.request-generation` message mapping from exact templates to runtime objects. Engine lacks a verified ingestion path that takes spontaneous `TaskRuntimeState` objects from agent-authored markdown paths dynamically. (Product Gap / Issue #12).
+## 1. Spec Documents Often Describe A Clean-Break Future Architecture More Radical Than The Current Code
 
-### Gap: Stage vs Gate Naming
-*   **Documentation:** Various `specifications/` entries use "Gate" to imply a "Stage Transition Boundary" (e.g., the transition from PRD to SPEC).
-*   **Implementation:** `packages/airport` has established "Gate" as a UI layout slot (a panel) inside the Tower `AirportControl` plane. The semantic boundary should be strictly referred to as `WorkflowGateProjection`, distinct from `AirportGate`.
+Several specification files under `specifications/mission/` and `specifications/airport/` are written as from-scratch replacement documents. The current implementation realizes much of that architecture, but not always with the exact naming or decomposition those specs prescribe.
 
-### Gap: Task / Session Hierarchy
-*   **Historical Docs:** Describe "Session" as fully encapsulated *inside* a Task.
-*   **Current Runtime:** The `AgentRunner` logic (in `packages/core/src/runtime/AgentRunner.ts`) treats sessions as runtime context objects invoked *for* a task, persisting `session_id`s onto tasks. While logically the child of a task, they physically map across the separate `AgentRuntime` subsystem orchestration layers rather than simple class instantiation chains.
+Practical rule: use the current code as the authority for what exists, and use the specs as intent documents.
+
+## 2. There Are Two Distinct Gate Vocabularies
+
+- Workflow gates in `mission.json` use gate ids such as `implement`, `verify`, `audit`, and `deliver`.
+- Airport gates in `packages/airport/src/types.ts` use `dashboard`, `editor`, and `agentSession`.
+
+They are both first-class, but they mean different things. One is workflow progression projection. The other is UI layout topology.
+
+## 3. There Are Two Task State Models On Purpose
+
+- `MissionTaskRuntimeState` uses workflow lifecycle values such as `pending`, `ready`, `queued`, `running`, `blocked`, and `completed`.
+- `MissionTaskState` uses simplified operator-facing values such as `todo`, `active`, `blocked`, and `done`.
+
+This is not merely duplication. It is an intentional split between execution truth and operator summary, but it is easy to misread as inconsistency.
+
+## 4. Session Persistence Is A Hook, Not Yet A Universal Hard Requirement
+
+The runtime architecture exposes `PersistedAgentSessionStore`, and `AgentSessionOrchestrator` can save and reload snapshots through it. But the core mission path constructs `MissionWorkflowRequestExecutor` without always supplying a concrete store. The workflow architecture should therefore be described as supporting runtime session persistence hooks rather than requiring a single always-on persisted session store.
+
+## 5. Repository Control State, Daemon Snapshot State, And Mission Execution State Are Sometimes Blurred In Older Docs
+
+The current implementation separates them clearly:
+
+- `.mission/settings.json` is repository control state
+- `MissionSystemSnapshot` is live daemon-wide state
+- `mission.json` is mission execution state
+
+Any document that compresses those into one "Mission state" concept is underspecified.
+
+## 6. Replay Material Preserves Historical Intent, Not Always Exact Current Runtime Wiring
+
+The replayed dossiers under `.mission/missions/11-*` through `.mission/missions/18-*` preserve the five architecture anchors well, but some replay language still describes architectural outcomes at a coarser level than the current code's module boundaries. This is expected. The replay set is an architectural preservation artifact, not a module-by-module code map.

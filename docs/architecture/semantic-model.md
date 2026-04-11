@@ -2,34 +2,93 @@
 layout: default
 title: Semantic Model
 parent: Architecture
-nav_order: 2
+nav_order: 3
 ---
 
 # Semantic Model
 
-The Semantic Model defines the core set of primitives that represent operator intent. It relies strictly on a deterministic hierarchy of operations. It separates specification intent from runtime consequences.
+Mission uses two related but different semantic layers:
 
-## The Hierarchy
+1. Domain identities and persisted mission records.
+2. Daemon projection contexts used for selection, routing, and UI composition.
 
-Mission executes across this exact tree: `Repository` -> `Mission` -> `Stage` -> `Task` -> `Session`.
+The architecture stays coherent only if those layers are not collapsed.
 
-### 1. Repository
-The container boundaries. The operator works in exactly one active repository workspace at a time. The repository guarantees context.
+## First-Class Entities
 
-### 2. Mission
-The overarching objective (e.g., "Refactor to React 19"). Missions transition across: `draft`, `ready`, `running`, `paused`, `panicked`, `completed`, `delivered`.
+| Entity | Primary representation | Purpose | Runtime authority |
+| --- | --- | --- | --- |
+| Repository | `RepositoryContext`, repository root path, `.mission/settings.json` | Repository-scoped control plane root | `WorkspaceManager`, `MissionWorkspace` |
+| Mission | `MissionDescriptor`, `MissionRuntimeRecord`, `MissionContext` | Long-lived unit of work and its persisted execution state | `Mission` aggregate + workflow controller |
+| Stage | `MissionStageId`, `MissionStageRuntimeProjection` | Structural phase boundary derived from task state | Workflow runtime |
+| Task | `MissionTaskRuntimeState`, `MissionTaskState`, `TaskContext` | Atomic unit of executable work | Workflow runtime |
+| Artifact | `MissionArtifactKey`, `ArtifactContext` | Mission output and operator-readable state | Workflow artifact materialization |
+| Agent session | `MissionAgentSessionRuntimeState`, `MissionAgentSessionRecord`, `AgentSessionContext` | Live or historical execution of a task through a runner | Agent runtime + mission aggregate |
 
-### 3. Stage
-A projection grouping Tasks around a phase of work. Stages exist structurally (e.g. `prd`, `spec`, `implementation`) but are bounded logically by task dependencies and gates.
+## Mission Records Versus Projection Records
 
-### 4. Task
-The atomic unit of orchestrated work. Tasks contain defined inputs, capability allowances, and strict outputs. A task transitions through `.mission/` boundaries from `ready` to `completed`.
+| Record | Scope | Why it exists |
+| --- | --- | --- |
+| `MissionDescriptor` | Mission identity | Stable mission metadata such as `missionId`, brief, branch, and creation time |
+| `MissionRuntimeRecord` | Mission persistence | Snapshot of workflow configuration, runtime state, and event log |
+| `MissionRecord` | Operator-facing aggregate summary | Mission identity plus current stage and session records |
+| `ContextGraph` | Daemon projection state | Repository, mission, task, artifact, and session selection graph |
+| `OperatorStatus` | Surface-facing response | Aggregated mission status returned by daemon APIs |
 
-### 5. Session
-An ephemeral agent/LLM-driven process meant to satisfy a task. A task can spawn many sessions over its lifetime, resolving them to the main record if they succeed.
+## Stage And Artifact Taxonomy
 
-## Invariants & Design Principles
+The current workflow manifest defines a fixed mission taxonomy.
 
-*   **State Separation**: Static documents (ex: `.md` tasks) define intent, while `mission.json` defines *execution context*.
-*   **Dependency DAG**: The workflow moves linearly or asynchronously depending purely on the completed edges of tasks in the active Stage.
-*   **Projections, Not Objects**: Things like "Gate Progression" natively exist as queries on the `WorkflowState`, derived over event logs, rather than mutable classes storing `.isComplete` flags individually.
+| Stage id | Folder | Primary artifacts | Notes |
+| --- | --- | --- | --- |
+| `prd` | `01-PRD` | `PRD.md` | First requirements stage |
+| `spec` | `02-SPEC` | `SPEC.md` | Technical design stage |
+| `implementation` | `03-IMPLEMENTATION` | `VERIFY.md` | Supports execution and paired verification tasks |
+| `audit` | `04-AUDIT` | `AUDIT.md` | Post-implementation audit stage |
+| `delivery` | `05-DELIVERY` | `DELIVERY.md` | Final delivery stage |
+
+## Task Model Boundaries
+
+Mission exposes two different task shapes for different reasons.
+
+| Shape | Current fields emphasize | Used by |
+| --- | --- | --- |
+| `MissionTaskRuntimeState` | Runtime lifecycle, launch policy, retries, dependency blocking | Workflow engine |
+| `MissionTaskState` | Task file identity, subject, instruction body, simplified status for operator surfaces | Mission aggregate and control surfaces |
+| `TaskContext` | Selection graph fields and session links | Daemon context graph |
+
+This is intentional. The workflow engine needs detailed lifecycle semantics such as `queued` and `running`. The operator surface model uses a simpler task status vocabulary for mission control and selection.
+
+## Session Model Boundaries
+
+Sessions also exist in more than one form.
+
+| Shape | Scope | Owned by |
+| --- | --- | --- |
+| `AgentSession` | Live runtime object | Runner implementation |
+| `AgentSessionSnapshot` | Provider-neutral runtime snapshot | Agent runtime orchestrator |
+| `MissionAgentSessionRuntimeState` | Workflow-tracked session state | Workflow runtime |
+| `MissionAgentSessionRecord` | Mission aggregate record for surfaces | `Mission` aggregate |
+| `AgentSessionContext` | Daemon selection/projection context | `MissionControl` |
+
+## Context Graph
+
+`ContextGraph` is the daemon's semantic routing graph. It is not stored in `mission.json`.
+
+It exists to answer questions such as:
+
+- which repository is currently selected
+- which mission should the dashboard center on
+- which artifact the editor gate should show
+- which task or session the operator is targeting
+
+## Invariants
+
+1. Stage state is derived from task state, not independently edited by the UI.
+2. Artifact contexts are routing records, not the artifacts themselves.
+3. The daemon may project a mission through `ContextGraph` without changing mission execution state.
+4. Sessions are tied to tasks semantically, but they remain runtime objects with their own lifecycle and transport boundary.
+
+## Relationship To Replay Anchors
+
+This page is the architecture home for the replayed mission "Mission Semantic Model" and aligns with `specifications/mission/model/core-object-model.md` and `specifications/mission/model/mission-model.md`.

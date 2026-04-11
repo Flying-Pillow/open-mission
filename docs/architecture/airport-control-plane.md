@@ -2,44 +2,95 @@
 layout: default
 title: Airport Control Plane
 parent: Architecture
-nav_order: 5
+nav_order: 7
 ---
 
 # Airport Control Plane
 
-The Airport Control Plane is a central layout and visibility authority that manages the Tower terminal UI representation. By moving interaction intent to the Daemon, Tower acts purely as a "dumb terminal"—it draws projections and notifies the daemon of user clicks, rather than tracking its own routing state.
+Airport is the repository-scoped layout authority for Mission surfaces. It decides what each gate means, which client is attached to which gate, and how focus intent should be reconciled against the observed terminal substrate.
 
-## Core Concepts
+## Primary Components
 
-The system uses standard layout "Gates" to define the panels the operator occupies.
+| Component | Responsibility | Owned state |
+| --- | --- | --- |
+| `AirportControl` | Pure repository-scoped layout controller | `AirportState` |
+| `RepositoryAirportRegistry` | Multi-repository registry of airport controllers and substrate controllers | active repository id, airport records, client-to-repository index |
+| `TerminalManagerSubstrateController` | Observe and drive the terminal substrate | observed zellij pane state |
+| Projection helpers | Derive dashboard, editor, and agent session projections | pure projection output |
 
-1. **Gates**: Known UI placement regions (`dashboard`, `editor`, `agentSession`).
-2. **Bindings**: The connection defining what domain entity occupies a Gate and in what mode (Control vs. View).
+## Gate Model
 
-| Component | Responsibility | Source of truth |
-| :--- | :--- | :--- |
-| **AirportControl** | State manager for the layout and terminal bindings | Daemon runtime |
-| **Tower application** | Drawing UI via `ink`, receiving layout projections | Daemon / stdout |
+The current airport implementation has three fixed gates:
 
-## The Operator Loop
+| Gate id | Purpose |
+| --- | --- |
+| `dashboard` | Repository or mission control surface |
+| `editor` | Artifact or mission view surface |
+| `agentSession` | Live agent-session surface |
+
+Each gate has a `GateBinding`:
+
+| Binding field | Meaning |
+| --- | --- |
+| `targetKind` | `empty`, `repository`, `mission`, `task`, `artifact`, or `agentSession` |
+| `targetId` | Selected semantic target |
+| `mode` | `view` or `control` |
+
+## Airport State
+
+`AirportState` carries:
+
+- repository-scoped gate bindings
+- focus intent and observed focus
+- connected client registrations
+- substrate observations and pane mapping
+
+It does not carry workflow execution truth.
+
+## Focus And Substrate Reconciliation
 
 ```mermaid
-sequenceDiagram
-    participant Operator
-    participant Tower as Tower UI
-    participant Airport as AirportControl
-    participant Daemon as Daemon (Intent Store)
-
-    Operator->>Tower: Select 'Mission Dossier' panel limit
-    Tower->>Airport: handleIntent(FocusGate: editor)
-    Airport->>Daemon: PersistIntent
-    Daemon-->>Airport: updated(AirportState)
-    Airport-->>Tower: renderProjection()
+flowchart TD
+    Intent[Focus intent] --> Airport
+    Clients[Panel observations] --> Airport
+    Substrate[Observed zellij panes] --> Airport
+    Airport --> Effects[Planned substrate effects]
+    Effects --> Zellij[zellij focus action]
+    Zellij --> Substrate
+    Airport --> Projections[Gate projections for surfaces]
 ```
 
-By owning layout state, the daemon ensures that terminal crashes, disconnects, or headless tasks do not lose their operator context.
+`planAirportSubstrateEffects(...)` only emits a focus effect when:
 
-## Invariants
+1. a gate is the intended focus target
+2. the observed focus does not already match
+3. the bound pane exists in the current substrate observation
 
-1. **Dumb Tower**: The `apps/tower/terminal` package must not retain mission logic or complex UI routing loops. 
-2. **Deterministic Focus/Blur**: Gates have an explicit active focus, giving exact contextual mapping when the user presses keyboard shortcuts.
+## Persistence Boundary
+
+Airport intent is persisted inside repository daemon settings, not inside `mission.json`.
+
+| Persisted field | Location |
+| --- | --- |
+| `airport.gates` | `.mission/settings.json` |
+| `airport.focus.intentGateId` | `.mission/settings.json` |
+
+If the current airport intent matches the default bindings, the registry omits it rather than persisting redundant state.
+
+## Terminal Substrate Boundary
+
+The current substrate controller targets `zellij` by default, using `list-panes --json --all` for observation and `focus-pane-id` for effect application. This makes the substrate boundary explicit:
+
+- Airport owns intent.
+- The substrate controller owns terminal-manager translation.
+- zellij owns real pane existence and focus.
+
+## Non-Responsibilities
+
+Airport does not own mission execution. It does not own task generation. It does not decide whether a session should start. It only projects and reconciles layout state.
+
+## Relationship To Other Pages
+
+- See [daemon.md](./daemon.html) for the multi-repository registry and daemon integration.
+- See [tower.md](./tower.html) for how Tower attaches to airport gates.
+- See [semantic-model.md](./semantic-model.html) for the semantic targets referenced by gate bindings.

@@ -2,52 +2,119 @@
 layout: default
 title: Workflow Engine
 parent: Architecture
-nav_order: 3
+nav_order: 5
 ---
 
 # Workflow Engine
 
-The Workflow Engine is the deterministic heart of Mission. It owns state transitions, validates execution boundaries, and ensures the operator can safely pause, panic, or recover missions. The engine enforces the semantic model strictly, never directly executing side effects.
+The workflow engine is the mission-local execution authority. Its job is to reduce workflow events into a durable runtime record, emit side-effect requests, and reconcile runtime session facts back into mission state.
 
-## Responsibility Map
+## Primary Components
 
-| Component | Responsibility | Persisted State Source of truth |
-| :--- | :--- | :--- |
-| **WorkflowReducer** | Pure function mapping Events + State to new State + Requests | None (pure) |
-| **WorkflowController** | Persists state, invokes reducer, routes effects | `mission.json` |
-| **RequestExecutor** | Dispatches requests to filesystem, runtime, or other effects | None |
+| Component | Responsibility | Owned state | Persisted state |
+| --- | --- | --- | --- |
+| `MissionWorkflowController` | Loads, initializes, normalizes, updates, and persists the mission runtime record | cached `MissionRuntimeRecord` | `mission.json` |
+| reducer ingestion logic | Applies one event to the current runtime record and yields requests | none, pure transformation | none |
+| `MissionWorkflowRequestExecutor` | Executes request side effects such as task generation and session launch | orchestrator, runner map, buffered runtime events | none directly |
+| Task generation helpers | Turn workflow config and templates into task records | generation result in memory | task files + artifact files |
 
-## Core Architecture
+## Runtime Record Structure
 
-The engine is built around an event-sourcing/reducer pattern. Rather than loosely coupled classes modifying state out-of-band, the engine centralizes all state changes into a strict timeline of `WorkflowEvent` objects.
+The authoritative mission execution document is:
 
-### 1. The Reducer Pattern
-When an operator issues a command (e.g., `START`), or moving a task to `completed`, the system translates this into a discrete `WorkflowEvent`. The `WorkflowReducer` receives the current `WorkflowState` and the event, yielding:
-1.  **Next State**: The updated `WorkflowState` snapshot.
-2.  **WorkflowRequests**: An array of side-effect requirements (e.g., "Launch Session", "Write File").
-3.  **WorkflowSignals**: Temporary signals that trigger synchronous daemon UI refreshes or operator notifications.
+```text
+.mission/missions/<mission-id>/mission.json
+```
+
+Its top-level shape is:
+
+| Field | Meaning |
+| --- | --- |
+| `schemaVersion` | Runtime record schema version |
+| `missionId` | Mission identity |
+| `configuration` | Snapshotted workflow configuration |
+| `runtime` | Current workflow runtime state |
+| `eventLog` | Append-only workflow event history |
+
+## Runtime State Contents
+
+| Runtime field | Purpose |
+| --- | --- |
+| `lifecycle` | Mission lifecycle such as `draft`, `running`, `paused`, or `delivered` |
+| `activeStageId` | Current active stage when one is relevant |
+| `pause` | Human or system pause state |
+| `panic` | Panic-stop configuration and active panic state |
+| `stages` | Derived stage projections |
+| `tasks` | Authoritative task runtime records |
+| `sessions` | Workflow-tracked session runtime records |
+| `gates` | Workflow gate projections such as implement, verify, audit, deliver |
+| `launchQueue` | Pending task launch requests |
+| `updatedAt` | Last workflow update timestamp |
+
+## Event Families
+
+| Event family | Examples | Effect |
+| --- | --- | --- |
+| Mission lifecycle | `mission.created`, `mission.started`, `mission.paused`, `mission.delivered` | Advances mission-level lifecycle |
+| Task generation | `tasks.generated` | Creates runtime task records for a stage |
+| Task lifecycle | `task.queued`, `task.started`, `task.completed`, `task.blocked`, `task.reopened` | Drives task execution state |
+| Session lifecycle | `session.started`, `session.launch-failed`, `session.completed`, `session.failed`, `session.cancelled`, `session.terminated` | Keeps workflow state aligned with agent runtime |
+| Policy changes | `task.launch-policy.changed` | Changes per-task runtime launch settings |
+
+## Request Execution Boundary
+
+The reducer never opens files, launches zellij, or talks to a model provider. It emits requests. The current request executor handles these request categories:
+
+| Request type | Current executor behavior |
+| --- | --- |
+| `tasks.request-generation` | Materializes stage artifacts and generated task files, then emits `tasks.generated` |
+| `session.launch` | Starts an `AgentSession` through the orchestrator, then emits `session.started` or `session.launch-failed` |
+| `session.prompt` | Sends a prompt to a running session |
+| `session.command` | Sends a normalized command to a running session |
+| `session.cancel` | Cancels a running session |
+| `session.terminate` | Terminates a running session |
+
+## Execution Loop
 
 ```mermaid
 sequenceDiagram
-    participant Operator
-    participant Controller as WorkflowController
-    participant Reducer as WorkflowReducer
-    participant Runtime as AgentRuntime
-    participant Dossier as mission.json
+	autonumber
+	participant Mission
+	participant Controller as MissionWorkflowController
+	participant Reducer as reducer ingestion
+	participant Executor as RequestExecutor
+	participant Runtime as Agent runtime
+	participant Disk as mission.json
 
-    Operator->>Controller: Resume Task
-    Controller->>Reducer: reduce(State, Event: TaskResumed)
-    Reducer-->>Controller: [NewState, Requests: LaunchSession]
-    Controller->>Dossier: persist(NewState)
-    Controller->>Runtime: execute(LaunchSession)
-    Runtime-->>Controller: emit(Event: SessionStarted)
+	Mission->>Controller: apply event
+	Controller->>Reducer: ingest current document + event
+	Reducer-->>Controller: next document + requests
+	Controller->>Disk: write mission.json
+	Controller->>Executor: execute requests
+	Executor->>Runtime: start or control sessions
+	Runtime-->>Executor: runtime events
+	Executor-->>Controller: emitted workflow events
+	Controller->>Controller: recursively apply emitted events
 ```
 
-## State Ownership & Boundaries
+## Task Generation Rules
 
-The Workflow Engine strictly owns the **Runtime State** block of the Mission Dossier. It is the only component allowed to mark a task as `completed`, update a stage progression, or persist an event.
+The engine currently auto-generates tasks for eligible stages when all of these are true:
 
-### Safety Invariants
-1.  **Immutability Base**: Events in the log are never mutated or deleted.
-2.  **Side Effect Isolation**: The reducer cannot read from the filesystem, query git, or run an LLM directly. 
-3.  **Halt on Panic**: When an exception escapes an executor, the Controller inserts a `PanicEvent`, pausing execution globally until the operator resolves the crisis.
+1. the mission is not already delivered
+2. the stage is the next incomplete stage in workflow order
+3. no tasks for that stage already exist in runtime state
+4. the workflow configuration includes generation templates for that stage
+
+This means stage progression and task generation are tightly coupled to the persisted configuration snapshot in `mission.json`.
+
+## Invariants
+
+1. `mission.json` is the mission execution authority after initialization.
+2. The controller persists after every applied event before running follow-up requests.
+3. Stage state is derived from tasks, not manually edited by Tower.
+4. Session events must be translated back into workflow events before they become mission truth.
+
+## Relationship To Replay Anchors
+
+This page is the architecture home for the replayed mission "Workflow Engine And Repository Workflow Settings" and should be read together with `specifications/mission/workflow/workflow-engine.md` and `docs/reference/state-schema.md`.

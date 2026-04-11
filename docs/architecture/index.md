@@ -5,89 +5,84 @@ nav_order: 5
 has_children: true
 ---
 
-# Mission Architecture
+# Architecture
 
-<section class="mission-section-hero">
-<span class="mission-section-kicker">System Design</span>
-<div class="mission-section-title">The structural foundation of the Mission operator experience.</div>
-<p class="mission-section-lead">This comprehensive reference maps the components, contracts, boundaries, and persistence models that allow Mission to safely orchestrate complex, agentic engineering workflows.</p>
-</section>
+This section is the implementation-grounded architecture reference for Mission.
 
-Mission's architecture is strictly partitioned into domain authorities. The codebase has made a clean break from scattered, legacy task-runners into a formalized, daemon-owned control plane, a reducer-driven workflow engine, and a runtime layer that evolves independently from the mission model.
+It documents the system as it exists in the repository today across:
 
-## Subsystems
+- the repository-owned control state under `.mission/`
+- the daemon-owned control plane and system snapshot
+- the mission-local workflow engine and runtime record
+- the provider-neutral agent runtime contract
+- the repository-scoped airport layout authority
+- the Tower terminal surface and its client relationship to the daemon
+- the public IPC and package export surfaces
 
-<div class="mission-section-grid mission-section-grid--three">
-<a class="mission-section-card" href="{{ '/architecture/repository-and-dossier.html' | relative_url }}">
-<span class="mission-section-card__eyebrow">Storage & Structure</span>
-<span class="mission-section-card__title">Repository & Dossier</span>
-<span class="mission-section-card__text">The physical layout of the system: how state is persisted safely on disk within the `.mission/` boundary.</span>
-</a>
-<a class="mission-section-card" href="{{ '/architecture/semantic-model.html' | relative_url }}">
-<span class="mission-section-card__eyebrow">Domain Entities</span>
-<span class="mission-section-card__title">Semantic Model</span>
-<span class="mission-section-card__text">The core entities—Missions, Stages, Tasks, and Sessions—and their lifecycle properties.</span>
-</a>
-<a class="mission-section-card" href="{{ '/architecture/workflow-engine.html' | relative_url }}">
-<span class="mission-section-card__eyebrow">Execution State</span>
-<span class="mission-section-card__title">Workflow Engine</span>
-<span class="mission-section-card__text">The reducer-driven orchestrator that ensures deterministic transitions, pauses, and panics.</span>
-</a>
-<a class="mission-section-card" href="{{ '/architecture/agent-runtime.html' | relative_url }}">
-<span class="mission-section-card__eyebrow">Execution Contracts</span>
-<span class="mission-section-card__title">Agent Runtime</span>
-<span class="mission-section-card__text">The provider-neutral boundary that translates workflow intent into live agent sessions.</span>
-</a>
-<a class="mission-section-card" href="{{ '/architecture/airport-control-plane.html' | relative_url }}">
-<span class="mission-section-card__eyebrow">UI & Layout Authority</span>
-<span class="mission-section-card__title">Airport Control Plane</span>
-<span class="mission-section-card__text">The daemon-owned system that manages layout, focus, and bounds for the Tower terminal.</span>
-</a>
-</div>
+This is not a speculative redesign document. When older specs, older notes, and current code differ, this section resolves against the current implementation while calling out meaningful drift in [discrepancies.md](./discrepancies.html).
 
-## System Context Map
+## How To Read This Section
+
+1. Start with [system-context.md](./system-context.html) for the end-to-end topology.
+2. Read [repository-and-dossier.md](./repository-and-dossier.html) and [semantic-model.md](./semantic-model.html) for the repository, mission, stage, task, artifact, and session model.
+3. Read [daemon.md](./daemon.html), [workflow-engine.md](./workflow-engine.html), [agent-runtime.md](./agent-runtime.html), and [airport-control-plane.md](./airport-control-plane.html) for the main authorities.
+4. Read [tower.md](./tower.html) and [contracts.md](./contracts.html) for surface and protocol boundaries.
+5. Use [recovery-and-reconciliation.md](./recovery-and-reconciliation.html), [package-map.md](./package-map.html), and [integrity-checklist.md](./integrity-checklist.html) as operational reference pages.
+
+## System Context
 
 ```mermaid
-graph TD
-    classDef External fill:#2a2f3a,stroke:#3b404d,stroke-width:1px,color:#a5aebf;
-    classDef Boundary fill:#1c2028,stroke:#007acc,stroke-width:2px,color:#e4e8f0;
-    classDef Store fill:#1f242d,stroke:#a5aebf,stroke-width:1px,stroke-dasharray: 5 5,color:#e4e8f0;
-
-    Operator[Operator] --> Tower[Tower Terminal UI]
-    Tower -->|Observed State & Intent| Daemon[Mission Daemon]
-    Daemon -->|Projections & Layout| Tower
-
-    Daemon --> Airport[Airport Control Plane\n(Layout Engine)]
-    Daemon --> Workflow[Workflow Engine\n(Reducer & Controller)]
-    Daemon --> Runtime[Agent Runtime\n(Orchestrator)]
-
-    Workflow <-->|Events & State| Storage[(.mission/ Storage)]
-    Storage -.->|workflow.json| RepoSettings[Repository Settings]
-    Storage -.->|mission.json| Dossier[Mission Dossier]
-
-    Runtime --> Provider[LLM Provider / Model]
-
-    class Operator,Provider External;
-    class Tower,Daemon Boundary;
-    class Storage,RepoSettings,Dossier Store;
+flowchart LR
+	Operator[Operator] --> Tower[Tower terminal surface]
+	Tower -->|IPC requests and subscriptions| Daemon[Mission daemon]
+	Daemon --> System[MissionSystemController]
+	System --> Airport[Repository airport registry\nAirportControl]
+	System --> Domain[MissionControl\nContextGraph]
+	Daemon --> Workspace[WorkspaceManager\nMissionWorkspace]
+	Workspace --> Mission[Mission aggregate]
+	Mission --> Workflow[MissionWorkflowController\nReducer + request executor]
+	Workflow --> Runtime[AgentSessionOrchestrator\nAgentRunner adapters]
+	Workflow --> Dossier[(.mission/missions/<mission-id>/mission.json)]
+	Workspace --> Settings[(.mission/settings.json)]
+	Workspace --> Briefs[(.mission/missions/<mission-id>/*)]
+	Airport --> Zellij[zellij substrate]
+	Runtime --> Providers[Copilot CLI / Copilot SDK / transport]
+	Workspace --> UserConfig[(~/.config/mission/config.json)]
+	Runtime --> DaemonRuntime[(XDG runtime or tmp daemon state)]
 ```
 
-## Architectural Boundaries & Contracts
+## Authority Matrix
 
-The architecture is defined by several strict boundaries and contracts, ensuring no component bypasses the system's intended topologies:
+| Concern | Authority | Non-authorities |
+| --- | --- | --- |
+| Repository adoption and settings | `initializeMissionRepository(...)`, `WorkflowSettingsStore`, `.mission/settings.json` | Tower, Airport, task markdown |
+| Mission execution truth | `MissionWorkflowController` + `mission.json` | Tower local state, airport state |
+| Semantic selection graph | `MissionControl` inside `MissionSystemController` | `mission.json`, zellij |
+| Layout bindings and focus intent | `AirportControl` and `RepositoryAirportRegistry` | Tower routing, workflow engine |
+| Live terminal panes | `TerminalManagerSubstrateController` observing and driving zellij | Workflow reducer |
+| Agent execution | `AgentSessionOrchestrator` + `AgentRunner` implementations | Tower, Airport |
+| Client protocol | `DaemonClient` / `DaemonApi` + daemon request handlers | Direct file editing from Tower |
 
-1.  **UI is a Client of the Daemon**: The Tower terminal makes no decisions about workflow state, task progression, or layout structure. It renders panels (Gates) based on Airport Control projections and emits observed intents back to the Daemon.
-2.  **Deterministic State Transitions**: All workflow state changes happen via a pure reducer function. Side effects only happen in response to \`WorkflowRequest\` objects yielded by the reducer.
-3.  **Local-First Persistence**: No remote databases store the source of truth for a mission. The source of truth is strictly the \`.mission/missions/<id>/mission.json\` file inside the host Git repository.
-4.  **Agnostic Execution**: The workflow engine is entirely insulated from which capabilities or LLM constraints are in play at the Agent Runtime layer. It issues a requirement for a task to be executed and waits for standardized status updates.
+## Replay Anchors
 
-## Component Overview
+The architecture coverage in this section reflects the five replayed architectural missions captured under `.mission/missions/` and mapped in `specifications/replay/retrospective-specification-coverage-map.md`.
 
-| Subsystem | Primary Responsibility | Persisted State Source of Truth |
-| :--- | :--- | :--- |
-| **Repository settings** | Grounding the daemon in a workspace | \`.mission/workflow.json\` |
-| **Mission Dossier** | Complete history and state of one mission | \`.mission/missions/<id>/mission.json\` |
-| **Workflow Engine** | State transition validation | \`mission.json\` (runtime block) |
-| **Agent Runtime** | Running LLMs/processes for a task | \`mission.json\` (session event log) |
-| **Airport Control** | Deciding what the operator sees | Daemon config (Persisted intent) |
-| **Tower Terminal** | Drawing pixels in the terminal | *None (Ephemeral)* |
+| Replay anchor | Primary architecture home in these docs |
+| --- | --- |
+| Repository Adoption And Mission Dossier Layout | [repository-and-dossier.md](./repository-and-dossier.html) |
+| Mission Semantic Model | [semantic-model.md](./semantic-model.html) |
+| Workflow Engine And Repository Workflow Settings | [workflow-engine.md](./workflow-engine.html) and [contracts.md](./contracts.html) |
+| Agent Runtime Unification | [agent-runtime.md](./agent-runtime.html) |
+| Airport Control Plane | [airport-control-plane.md](./airport-control-plane.html) and [tower.md](./tower.html) |
+
+## Source-Of-Truth Ladder
+
+Use this order when reconciling architectural questions:
+
+1. Current implementation in `packages/core`, `packages/airport`, and `apps/tower/terminal`
+2. Persisted runtime surfaces: `.mission/settings.json`, `.mission/missions/<mission-id>/mission.json`, user config, daemon runtime files
+3. Current reference docs such as `docs/reference/state-schema.md`
+4. Source specifications under `specifications/`
+5. Replayed mission dossiers under `.mission/missions/`
+
+If two layers disagree, prefer the higher layer and record the mismatch in [discrepancies.md](./discrepancies.html).

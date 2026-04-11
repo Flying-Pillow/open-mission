@@ -2,39 +2,64 @@
 layout: default
 title: Agent Runtime
 parent: Architecture
-nav_order: 4
+nav_order: 6
 ---
 
 # Agent Runtime
 
-The Agent Runtime acts as an orchestration, transport, and execution layer that sits exactly on the boundary between deterministic orchestration (the Workflow Engine) and non-deterministic text generation (the LLM capabilities/runners). It ensures the daemon does not become tightly coupled to specific providers.
+The agent runtime is the provider-neutral execution layer that satisfies workflow session requests. It is deliberately separate from workflow semantics and from airport/layout semantics.
 
-## Component Overview
+## Primary Components
 
-| Component | Responsibility | Boundary Context |
-| :--- | :--- | :--- |
-| **AgentSessionOrchestrator** | Coordinates all parallel/long-running session lifetimes | Daemon |
-| **AgentSession** | Provides state, standard metrics, and capability mapping | Process / Runtime |
-| **AgentRunner** | Interface implemented to plug in an execution model | Implementation / Provider |
+| Component | Responsibility | Owned state | Runtime boundary |
+| --- | --- | --- | --- |
+| `AgentRunner` | Contract implemented by each provider adapter | none at interface level | Provider-specific |
+| `AgentSession` | Live session object with prompt, command, cancel, and terminate operations | provider-backed session state | Provider-specific |
+| `AgentSessionOrchestrator` | Registers runners, starts or attaches sessions, listens for normalized session events | runner registry, attached sessions, optional store coordination | Daemon/runtime |
+| `PersistedAgentSessionStore` | Optional persistence hook for session references and snapshots | implementation-defined | Daemon runtime |
+| `TerminalAgentTransport` | Terminal-oriented transport bridge for runtime adapters | transport-specific session handles | Runtime transport |
+| `CopilotCliAgentRunner` / `CopilotSdkAgentRunner` | Current concrete adapters | adapter-local state | Copilot provider APIs |
 
-## The Runtime Contract
+## Lifecycle Contract
 
-The core architectural boundary of the runtime module is its isolation from domain-specific rules. The **Workflow Engine** evaluates what needs to happen and requests `AgentSession` invocations via `WorkflowRequest`.
+The orchestrator normalizes provider runtime into a consistent session snapshot lifecycle.
 
-```mermaid
-graph LR
-    Workflow(Workflow Controller) -->|WorkflowRequest.LaunchSession| Orchestrator[Agent Session Orchestrator]
-    Orchestrator -->|Init| Session[Agent Session Context]
-    Session -->|Bind| Runner[Agent Runner Adapter]
-    Runner -.->|Network Request| Model((LLM Model Endpoint))
-    
-    Runner -->|Emission: Step, Log, Delta| Session
-    Session -->|WorkflowEvent.SessionProgress| Workflow
-    Workflow -->|Record Event| Persistence[(mission.json)]
-```
+| Runtime phase | Meaning |
+| --- | --- |
+| `starting` | Session was requested and is booting |
+| `running` | Session accepts work or is actively executing |
+| `completed` | Session reached a successful terminal state |
+| `failed` | Session ended unsuccessfully |
+| `cancelled` | Session was cancelled intentionally |
+| `terminated` | Session was force-terminated or could not be reattached |
 
-## Isolation Invariants
+## Session Start Boundary
 
-1. **Pluggable Execution**: The `AgentRunner` implementation is never hard-coded into the workflow rules. A workflow shouldn't need logic specific to OpenAI or an external tool provider.
-2. **Session Transients**: `AgentSession` IDs are transient. If the daemon restarts, active sessions drop; they are rebuilt based on the workflow state upon recovery.
-3. **Capability Mapping**: Operations that rely on capabilities (e.g., File Write, Shell Execution) are mediated by the session context rather than arbitrary process access.
+The workflow engine provides a structured `AgentSessionStartRequest` including mission id, task id, working directory, transport id, and initial prompt. The runtime chooses the correct runner, injects any MCP server references the runner supports, and returns a live `AgentSession`.
+
+## Runtime Event Boundary
+
+Runtime adapters emit normalized `AgentSessionEvent` values. The request executor translates those events into workflow events so that the workflow engine remains the authority for mission state.
+
+That means:
+
+- provider events are never written straight into `mission.json`
+- provider event streams are not UI truth by themselves
+- provider snapshots become mission truth only after workflow ingestion
+
+## Optional Persistence Hook
+
+`AgentSessionOrchestrator` supports an optional `PersistedAgentSessionStore`. The hook exists to persist session references and snapshots outside `mission.json`, but the core interface is optional and implementation-specific. The workflow architecture therefore treats provider session persistence as a runtime concern, not as the canonical mission history.
+
+## Invariants
+
+1. The workflow engine chooses when sessions should start or stop.
+2. Runners translate provider protocol; they do not define workflow policy.
+3. Session control uses normalized Mission prompts and commands, not provider-native slash commands as the core contract.
+4. Runtime session state must be reconciled back through workflow events before it becomes mission truth.
+
+## Adjacent Components
+
+- See [workflow-engine.md](./workflow-engine.html) for how runtime events are ingested into mission state.
+- See [contracts.md](./contracts.html) for session-related IPC methods.
+- See [airport-control-plane.md](./airport-control-plane.html) for how agent sessions are projected into the `agentSession` gate.
