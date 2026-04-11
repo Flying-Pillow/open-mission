@@ -234,8 +234,8 @@ describe('Daemon', () => {
 					const api = new DaemonApi(client);
 					const status = await api.control.getStatus();
 					const availableActions = await api.control.listAvailableActions();
-					const issuesCommand = availableActions.find((action) => action.action === '/issues');
 					const setupCommand = availableActions.find((action) => action.action === '/setup');
+					const firstEnabledAction = availableActions.find((action) => action.enabled);
 
 					expect(status.found).toBe(false);
 					expect(status.operationalMode).toBe('setup');
@@ -246,13 +246,16 @@ describe('Daemon', () => {
 						settingsComplete: false,
 						issuesConfigured: false
 					});
-					expect(issuesCommand).toMatchObject({ enabled: false });
 					expect(setupCommand).toMatchObject({
 						enabled: true,
 						flow: expect.objectContaining({
 							targetLabel: 'SETUP',
 							actionLabel: 'SAVE'
 						})
+					});
+					expect(firstEnabledAction).toMatchObject({
+						id: 'control.setup.edit',
+						action: '/setup'
 					});
 				} finally {
 					client.dispose();
@@ -440,6 +443,11 @@ describe('Daemon', () => {
 			const seededMission = await seedTrackedMission(workspaceRoot, 6, 'Explicit action listing');
 
 			try {
+				const startedStatus = await seededMission.startWorkflow();
+				const readyTaskId = startedStatus.readyTasks?.[0]?.taskId;
+				if (!readyTaskId) {
+					throw new Error('Expected a ready task after workflow start.');
+				}
 				const daemon = await startDaemon();
 				const client = new DaemonClient();
 
@@ -454,7 +462,7 @@ describe('Daemon', () => {
 					expect(missionActions.length).toBeGreaterThan(0);
 					const taskAction = missionActions.find((action) => action.scope === 'task' && typeof action.targetId === 'string');
 					expect(taskAction).toBeDefined();
-					const taskId = taskAction?.targetId;
+					const taskId = readyTaskId;
 					if (!taskId) {
 						throw new Error('Expected at least one task-scoped action.');
 					}
@@ -462,10 +470,58 @@ describe('Daemon', () => {
 						{ missionId: seededMission.getRecord().id },
 						{ taskId }
 					);
-					expect(scopedTaskActions.some((action) => action.id === taskAction.id)).toBe(true);
+					expect(scopedTaskActions.some((action) => action.targetId === taskId)).toBe(true);
+					const firstEnabledAction = scopedTaskActions.find((action) => action.enabled);
+					expect(firstEnabledAction).toMatchObject({
+						scope: 'task',
+						targetId: taskId
+					});
 					expect(
 						scopedTaskActions.every((action) => action.scope !== 'task' || action.targetId === taskId)
 					).toBe(true);
+				} finally {
+					client.dispose();
+					await daemon.close();
+				}
+			} finally {
+				seededMission.dispose();
+				await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('prioritizes mission recovery actions ahead of local target actions when the mission is paused', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			await initializeMissionRepository(workspaceRoot);
+			const seededMission = await seedTrackedMission(workspaceRoot, 7, 'Paused action ordering');
+
+			try {
+				const startedStatus = await seededMission.startWorkflow();
+				const taskId = startedStatus.readyTasks?.[0]?.taskId;
+				if (!taskId) {
+					throw new Error('Expected a ready task after workflow start.');
+				}
+				await seededMission.pauseMission();
+
+				const daemon = await startDaemon();
+				const client = new DaemonClient();
+
+				try {
+					await client.connect({ surfacePath: workspaceRoot });
+					const api = new DaemonApi(client);
+					await api.control.getStatus();
+					const scopedTaskActions = await api.mission.listAvailableActions(
+						{ missionId: seededMission.getRecord().id },
+						{ taskId }
+					);
+					const firstEnabledAction = scopedTaskActions.find((action) => action.enabled);
+
+					expect(firstEnabledAction).toMatchObject({
+						id: 'mission.resume',
+						action: '/mission resume'
+					});
 				} finally {
 					client.dispose();
 					await daemon.close();

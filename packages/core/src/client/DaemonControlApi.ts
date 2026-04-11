@@ -4,7 +4,6 @@ import type {
 	ControlDocumentRead,
 	ControlDocumentResponse,
 	ControlDocumentWrite,
-	ControlIssuesList,
 	ControlSettingsUpdate,
 	ControlWorkflowSettingsInitialize,
 	ControlWorkflowSettingsInitializeResponse,
@@ -19,8 +18,7 @@ import type {
 	OperatorActionFlowDescriptor,
 	OperatorActionQueryContext,
 	MissionRepositoryCandidate,
-	OperatorStatus,
-	TrackedIssueSummary
+	OperatorStatus
 } from '../types.js';
 import { DaemonClient } from './DaemonClient.js';
 import type { ControlRepositoriesAdd } from '../daemon/contracts.js';
@@ -96,13 +94,6 @@ export class DaemonControlApi {
 			'control.workflow.settings.update',
 			params
 		);
-	}
-
-	public async listOpenIssues(
-		limit = 50
-	): Promise<TrackedIssueSummary[]> {
-		const params: ControlIssuesList = { limit };
-		return this.client.request<TrackedIssueSummary[]>('control.issues.list', params);
 	}
 
 	public async listRegisteredRepositories(): Promise<MissionRepositoryCandidate[]> {

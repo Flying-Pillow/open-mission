@@ -163,13 +163,13 @@
   "airport": {
     "gates": {
       "dashboard": {
-        "targetKind": "mission",
-        "targetId": "13-stop-empty-stage-generation-from-recursively-re-",
+        "targetKind": "repository",
+        "targetId": "/home/ronald/mission",
         "mode": "control"
       },
       "editor": {
-        "targetKind": "artifact",
-        "targetId": "13-stop-empty-stage-generation-from-recursively-re-:brief",
+        "targetKind": "repository",
+        "targetId": "/home/ronald/mission",
         "mode": "view"
       },
       "agentSession": {

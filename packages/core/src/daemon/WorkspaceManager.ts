@@ -213,7 +213,6 @@ function isControlMethod(method: Request['method']): boolean {
         || method === 'control.workflow.settings.get'
         || method === 'control.workflow.settings.initialize'
         || method === 'control.workflow.settings.update'
-        || method === 'control.issues.list'
         || method === 'mission.from-brief'
         || method === 'mission.from-issue'
     );

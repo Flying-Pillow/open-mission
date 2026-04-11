@@ -150,9 +150,21 @@ export type OperatorActionExecutionMetadata = {
 	batchTargetIds?: string[];
 };
 
+export type OperatorActionOrderingMetadata = {
+	group?: 'default' | 'recovery';
+};
+
+// A daemon action is the canonical operator operation exposed by Mission.
+// It is source-owned data produced by the daemon after applying runtime rules,
+// target context, workflow policy, and action ordering policy. Tower should
+// render and invoke these descriptors, not invent new business operations,
+// filtering rules, or ranking logic locally.
 export type OperatorActionDescriptor = {
 	id: string;
 	label: string;
+	// Human-entered slash text that maps to this action when typed in Tower,
+	// for example `/mission resume` or `/launch`.
+	// This is a presentation string, not the canonical identity.
 	action: string;
 	scope: OperatorActionScope;
 	targetId?: string;
@@ -164,6 +176,7 @@ export type OperatorActionDescriptor = {
 	ui?: OperatorActionUiMetadata;
 	presentationTargets?: OperatorActionPresentationTarget[];
 	metadata?: OperatorActionExecutionMetadata;
+	ordering?: OperatorActionOrderingMetadata;
 };
 
 export type OperatorActionExecutionSelectionStep = {
@@ -181,6 +194,18 @@ export type OperatorActionExecutionTextStep = {
 export type OperatorActionExecutionStep =
 	| OperatorActionExecutionSelectionStep
 	| OperatorActionExecutionTextStep;
+
+// Terminology:
+// - action: daemon-defined operator operation identified by OperatorActionDescriptor.id
+// - action text: the slash-text alias in OperatorActionDescriptor.action used for typing/search
+// - command: UI term for typed operator input or picker rows derived from actions
+// - session command: normalized provider command sent through `session.command`; not the same as an operator action
+//
+// Ownership:
+// - daemon: constructs actions, applies availability rules, filters by target context,
+//   and orders actions for presentation
+// - Tower: renders the daemon-provided list, preserves daemon order, and may only
+//   narrow the visible set through local query text matching
 
 export type MissionBrief = {
 	issueId?: number;

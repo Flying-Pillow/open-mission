@@ -183,7 +183,6 @@ function shouldIncludeSurfacePath(method: Method): boolean {
 		|| method === 'control.workflow.settings.update'
 		|| method === 'control.repositories.list'
 		|| method === 'control.repositories.add'
-		|| method === 'control.issues.list'
 		|| method === 'mission.from-brief'
 		|| method === 'mission.from-issue'
 	) {

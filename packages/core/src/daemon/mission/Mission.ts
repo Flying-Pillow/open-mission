@@ -1634,7 +1634,8 @@ function buildResumeMissionAction(
 		...buildAvailability(enabled, describeResumeUnavailable(input, errors)),
 		ui: { toolbarLabel: 'RESUME', requiresConfirmation: false },
 		flow: { targetLabel: 'MISSION', actionLabel: 'RESUME', steps: [] },
-		presentationTargets: buildMissionPresentationTargets(currentStageId)
+		presentationTargets: buildMissionPresentationTargets(currentStageId),
+		ordering: { group: 'recovery' }
 	};
 }
 
@@ -1682,7 +1683,8 @@ function buildClearPanicAction(
 			confirmationPrompt: 'Clear the mission panic state?'
 		},
 		flow: { targetLabel: 'MISSION', actionLabel: 'CLEAR PANIC', steps: [] },
-		presentationTargets: buildMissionPresentationTargets(currentStageId)
+		presentationTargets: buildMissionPresentationTargets(currentStageId),
+		ordering: { group: 'recovery' }
 	};
 }
 

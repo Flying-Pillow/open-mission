@@ -4,7 +4,6 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import type {
 	DaemonClient,
-	GateIntent,
 	MissionSystemSnapshot,
 	OperatorActionDescriptor,
 	OperatorActionQueryContext,
@@ -17,11 +16,9 @@ import type {
 	MissionStageStatus,
 	MissionTaskState,
 	MissionSelectionCandidate,
-	MissionRepositoryCandidate,
 	OperatorStatus,
 	MissionAgentSessionRecord,
 	ContextGraph,
-	TrackedIssueSummary,
 	MissionWorkspaceContext
 } from '@flying-pillow/mission-core';
 import {
@@ -33,9 +30,16 @@ import { TowerScreen } from './components/TowerScreen.js';
 import { IntroSplash } from './components/IntroSplash.js';
 import { applyTowerTheme, towerTheme, type TowerThemeName, isTowerThemeName } from './components/towerTheme.js';
 import type { ProgressRailItem } from './components/progressModels.js';
-import type { CommandItem, FocusArea, SelectItem } from './components/types.js';
+import type { CommandItem, FocusArea } from './components/types.js';
 import { CommandPickerPanel } from './components/command/CommandPickerPanel.js';
-import type { CommandToolbarItem } from './components/command/commandDomain.js';
+import {
+	buildToolbarCommandItems,
+	buildCommandPickerItems,
+	findAvailableCommandByText,
+	pickPreferredToolbarCommandId,
+	pickSelectItemId,
+	type CommandToolbarItem
+} from './components/command/commandDomain.js';
 import {
 	buildDefaultCollapsedTreeNodeIds,
 	buildVisibleTreeTargets,
@@ -52,11 +56,9 @@ import {
 	buildCommandFlowStep,
 	buildExecuteCommandSteps,
 	buildFlowStepTitle,
-	buildThemePickerItems,
 	type CommandFlowCompletion,
 	type CommandFlowDefinition,
 	type CommandFlowResult,
-	type CommandFlowSelectionValue,
 	type CommandFlowState,
 	type CommandFlowStep,
 	type CommandFlowStepValue,
@@ -137,7 +139,6 @@ export function TowerController({
 	const [commandPickerQuery, setCommandPickerQuery] = createSignal<string>('');
 	const [selectedPickerItemId, setSelectedPickerItemId] = createSignal<string | undefined>();
 	const [selectedCommandId, setSelectedCommandId] = createSignal<string | undefined>();
-	const [openIssues, setOpenIssues] = createSignal<TrackedIssueSummary[]>([]);
 	const currentControlRoot = createMemo(() => status().control?.controlRoot?.trim() || workspaceContext.workspaceRoot);
 	const [selectedTreeTargetId, setSelectedTreeTargetId] = createSignal<string | undefined>();
 	const [collapsedTreeNodeIds, setCollapsedTreeNodeIds] = createSignal<Set<string>>(new Set<string>());
@@ -240,7 +241,6 @@ export function TowerController({
 		}
 		return { kind: 'none' };
 	});
-	const controlStatus = createMemo(() => status().control);
 	const projectedSelectedStageId = createMemo<MissionStageId | undefined>(() =>
 		towerMode() === 'mission' ? dashboardProjection()?.selectedStageId as MissionStageId | undefined : undefined
 	);
@@ -260,12 +260,6 @@ export function TowerController({
 			selected: item.id === projectedSelectedStageId(),
 			...(item.subtitle ? { subtitle: item.subtitle } : {})
 		}))
-	);
-	const themePickerItems = createMemo<SelectItem[]>(() =>
-		buildThemePickerItems(selectedThemeName())
-	);
-	const issuePickerItems = createMemo<SelectItem[]>(() =>
-		buildIssuePickerItems(openIssues())
 	);
 	const commandQuery = createMemo(() => commandPickerQuery());
 	const currentCommandFlow = flowController.flow;
@@ -342,22 +336,8 @@ export function TowerController({
 		}
 		return entries;
 	});
-	const toolbarCommandDescriptors = createMemo<OperatorActionDescriptor[]>(() =>
-		availableActions()
-	);
 	const toolbarCommands = createMemo<CommandToolbarItem[]>(() =>
-		toolbarCommandDescriptors().map((command) => ({
-			id: command.id,
-			label: formatToolbarCommandLabel(command),
-			enabled: command.enabled,
-			...(command.ui?.requiresConfirmation !== undefined
-				? { requiresConfirmation: command.ui.requiresConfirmation }
-				: {}),
-			...(command.ui?.confirmationPrompt
-				? { confirmationPrompt: command.ui.confirmationPrompt }
-				: {}),
-			...(command.reason ? { reason: command.reason } : {})
-		}))
+		buildToolbarCommandItems(availableActions())
 	);
 	const selectedToolbarCommand = createMemo(() =>
 		availableCommandById().get(selectedToolbarCommandId() ?? '')
@@ -367,7 +347,7 @@ export function TowerController({
 	);
 	const commandInputQuery = createMemo(() => commandPickerQuery());
 	const commandPickerItems = createMemo<CommandItem[]>(() =>
-		buildCommandPickerItems(availableActions(), commandInputQuery(), { includeDisabled: true })
+		buildCommandPickerItems(availableActions(), commandInputQuery())
 	);
 	const showCommandPicker = createMemo(
 		() => commandInputQuery().length > 0
@@ -857,6 +837,18 @@ export function TowerController({
 	});
 
 	createEffect(() => {
+		const configuredTheme = status().control?.settings?.towerTheme;
+		const nextTheme: TowerThemeName = isTowerThemeName(configuredTheme ?? '')
+			? configuredTheme as TowerThemeName
+			: initialTheme;
+		if (selectedThemeName() === nextTheme) {
+			return;
+		}
+		applyTowerTheme(nextTheme);
+		setSelectedThemeName(nextTheme);
+	});
+
+	createEffect(() => {
 		selectedThemeName();
 		renderer.setBackgroundColor(towerTheme.background);
 	});
@@ -1030,18 +1022,6 @@ export function TowerController({
 		}
 	}
 
-	function openIssuePicker(): void {
-		if (openIssues().length === 0) {
-			appendLog('No open GitHub issues are available.');
-			return;
-		}
-		startCommandFlow(buildIssueBootstrapFlow());
-	}
-
-	function openThemePicker(): void {
-		startCommandFlow(buildThemeFlow());
-	}
-
 	function openCommandPickerShortcut(): void {
 		setSelectedCommandId(undefined);
 		setInputValue('');
@@ -1075,7 +1055,7 @@ export function TowerController({
 			}
 			return;
 		}
-		const items = buildCommandPickerItems(availableActions(), query, { includeDisabled: true });
+		const items = buildCommandPickerItems(availableActions(), query);
 		setActivePicker('command-select');
 		setSelectedPickerItemId((current) => pickSelectItemId(items, current));
 		setFocusArea('flow');
@@ -1122,7 +1102,7 @@ export function TowerController({
 		const descriptor = availableCommandById().get(commandId);
 		setSelectedPickerItemId(commandId);
 		if (options?.execute) {
-			void runCommandById(commandId, nextCommand.command);
+			void invokeSelectedActionById(commandId, nextCommand.command);
 			return;
 		}
 		resetCommandFlow();
@@ -1138,7 +1118,7 @@ export function TowerController({
 			}
 		}
 		if (options?.fromPicker) {
-			void runCommandById(commandId, nextCommand.command);
+			void invokeSelectedActionById(commandId, nextCommand.command);
 			return;
 		}
 		setSelectedCommandId(commandId);
@@ -1146,15 +1126,15 @@ export function TowerController({
 		closeCommandPicker();
 	}
 
-	function runCommandById(commandId: string, commandTextOverride?: string): void {
+	function invokeSelectedActionById(actionId: string, commandTextOverride?: string): void {
 		setInputValue('');
-		setSelectedCommandId(commandId);
+		setSelectedCommandId(actionId);
 		closeCommandPicker({ clearCommandInput: true });
 		setIsRunningCommand(true);
-		const descriptor = availableCommandById().get(commandId);
+		const descriptor = availableCommandById().get(actionId);
 		const execution = descriptor
-			? executeActionById(commandId)
-			: executeCommand(commandTextOverride ?? commandId.replace(/^custom:/u, ''));
+			? executeAvailableActionById(actionId)
+			: executeOperatorInput(commandTextOverride ?? actionId.replace(/^custom:/u, ''));
 		void execution
 			.catch((error) => {
 				appendLog(toErrorMessage(error));
@@ -1186,72 +1166,10 @@ export function TowerController({
 		await flowController.commitCurrentStep();
 	}
 
-	function buildIssueBootstrapFlow(): CommandFlowDefinition {
-		return {
-			id: 'issue-bootstrap',
-			owner: 'repository',
-			targetLabel: 'ISSUE',
-			actionLabel: 'START',
-			steps: [
-				{
-					kind: 'selection',
-					id: 'issue',
-					label: 'ISSUE',
-					title: 'OPEN ISSUES',
-					emptyLabel: 'No open GitHub issues are available.',
-					helperText: 'Choose an issue. The selection runs immediately.',
-					selectionMode: 'single',
-					items: issuePickerItems
-				}
-			],
-			onComplete: async (result) => {
-				const issueStep = result.steps.find(
-					(step): step is CommandFlowSelectionValue => step.kind === 'selection' && step.stepId === 'issue'
-				);
-				const issueNumber = issueStep?.optionIds[0];
-				if (!issueNumber || !/^\d+$/u.test(issueNumber)) {
-					throw new Error('No GitHub issue was selected.');
-				}
-				await selectIssueByNumber(Number(issueNumber));
-			}
-		};
-	}
-
-	function buildThemeFlow(): CommandFlowDefinition {
-		return {
-			id: 'theme-select',
-			owner: towerMode() === 'repository' ? 'repository' : 'mission',
-			targetLabel: 'THEME',
-			actionLabel: 'APPLY',
-			steps: [
-				{
-					kind: 'selection',
-					id: 'theme',
-					label: 'THEME',
-					title: 'THEMES',
-					emptyLabel: 'No themes are available.',
-					helperText: 'Choose a theme. The selection runs immediately.',
-					selectionMode: 'single',
-					items: themePickerItems
-				}
-			],
-			onComplete: async (result) => {
-				const themeStep = result.steps.find(
-					(step): step is CommandFlowSelectionValue => step.kind === 'selection' && step.stepId === 'theme'
-				);
-				const themeId = themeStep?.optionIds[0];
-				if (!themeId) {
-					throw new Error('No theme was selected.');
-				}
-				await selectThemeById(themeId);
-			}
-		};
-	}
-
 	function buildCommandFlowFromCommand(
 		command: OperatorActionDescriptor | undefined,
 		executeSelector: MissionSelector,
-		onCompleteLog?: (result: Awaited<ReturnType<typeof executeDaemonCommandById>>, flowResult: CommandFlowResult) => string | undefined
+		onCompleteLog?: (result: Awaited<ReturnType<typeof executeDaemonActionById>>, flowResult: CommandFlowResult) => string | undefined
 	): CommandFlowDefinition | undefined {
 		if (!command?.flow) {
 			return undefined;
@@ -1262,34 +1180,7 @@ export function TowerController({
 		};
 
 		const completeFlow = async (result: CommandFlowResult) => {
-			if (command.id === 'control.repository.switch') {
-				const repositoryStep = result.steps.find(
-					(step): step is CommandFlowSelectionValue => step.kind === 'selection' && step.stepId === 'repository'
-				);
-				const repositoryRootPath = repositoryStep?.optionIds[0]?.trim();
-				if (!repositoryRootPath) {
-					throw new Error('Repository switch requires a repository selection.');
-				}
-				const repositories = await loadRegisteredRepositories();
-				const repository = repositories.find((candidate) => candidate.repositoryRootPath === repositoryRootPath);
-				if (!repository) {
-					throw new Error('Repository switch requires a registered repository.');
-				}
-				await switchRepository(repository);
-				return { kind: 'close' } satisfies CommandFlowCompletion;
-			}
-
-			if (command.id === 'control.repository.add') {
-				const pathStep = result.steps.find((step) => step.kind === 'text' && step.stepId === 'path');
-				const repositoryPath = pathStep?.kind === 'text' ? pathStep.value.trim() : '';
-				if (!repositoryPath) {
-					throw new Error('Repository path is required.');
-				}
-				await addRepositoryAndSwitch(repositoryPath);
-				return { kind: 'close' } satisfies CommandFlowCompletion;
-			}
-
-			const executionResult = await executeDaemonCommandById(
+			const executionResult = await executeDaemonActionById(
 				command.id,
 				buildExecuteCommandSteps(result.steps),
 				executeSelector
@@ -1369,38 +1260,6 @@ export function TowerController({
 		setFocusArea('tree');
 	}
 
-	async function selectThemeById(themeId: string): Promise<void> {
-		if (!isTowerThemeName(themeId)) {
-			appendLog(`Unknown theme '${themeId}'.`);
-			return;
-		}
-		const currentClient = client() ?? (await connectClient({}));
-		if (currentClient) {
-			try {
-				const nextStatus = await new DaemonApi(currentClient).control.updateSetting('towerTheme', themeId);
-				applyMissionStatus(nextStatus, selector());
-			} catch (error) {
-				appendLog(`Unable to persist theme '${themeId}': ${toErrorMessage(error)}`);
-				return;
-			}
-		}
-		applyTowerTheme(themeId);
-		setSelectedThemeName(themeId);
-		setSelectedPickerItemId(themeId);
-		appendLog(`Theme set to ${themeId}.`);
-		resetCommandFlow();
-		setFocusArea('command');
-	}
-
-	async function selectIssueByNumber(issueNumber: number): Promise<void> {
-		const started = await startIssueMission(issueNumber);
-		if (!started) {
-			return;
-		}
-		setSelectedPickerItemId(String(issueNumber));
-		resetCommandFlow();
-	}
-
 	async function connectClient(nextSelector: MissionSelector = selector(), surfacePath?: string): Promise<DaemonClient | undefined> {
 		setDaemonState('booting');
 		try {
@@ -1423,190 +1282,20 @@ export function TowerController({
 		}
 	}
 
-	async function loadRegisteredRepositories(): Promise<MissionRepositoryCandidate[]> {
-		const currentClient = client() ?? (await connectClient(selector()));
-		if (!currentClient) {
-			appendLog('Unable to connect to list registered repositories.');
-			return [];
-		}
-		const repositories = await new DaemonApi(currentClient).control.listRegisteredRepositories();
-		if (repositories.length === 0) {
-			appendLog('No registered repositories are available. Use /add-repo to register one.');
-		}
-		return repositories;
-	}
-
-	async function switchRepository(repository: MissionRepositoryCandidate): Promise<void> {
-		await connectClient({}, repository.repositoryRootPath);
-		setSelectedHeaderTabId(repositoryTabId);
-		closeCommandPicker();
-		resetCommandFlow();
-		appendLog(`Switched to repository ${repository.label}.`);
-	}
-
-	async function switchRepositoryByQuery(query: string): Promise<void> {
-		const trimmedQuery = query.trim().toLowerCase();
-		if (!trimmedQuery) {
-			if (await executeActionByText('/repo')) {
-				return;
-			}
-			appendLog('Repository switch is not available right now.');
-			return;
-		}
-		const repositories = await loadRegisteredRepositories();
-		if (repositories.length === 0) {
-			return;
-		}
-		const exact = repositories.find((repository) => {
-			const githubRepository = repository.githubRepository?.toLowerCase();
-			return repository.label.toLowerCase() === trimmedQuery
-				|| repository.repositoryRootPath.toLowerCase() === trimmedQuery
-				|| githubRepository === trimmedQuery;
-		});
-		if (exact) {
-			await switchRepository(exact);
-			return;
-		}
-		const partialMatches = repositories.filter((repository) => {
-			const haystacks = [repository.label, repository.repositoryRootPath, repository.githubRepository]
-				.filter((value): value is string => typeof value === 'string');
-			return haystacks.some((value) => value.toLowerCase().includes(trimmedQuery));
-		});
-		if (partialMatches.length === 1) {
-			await switchRepository(partialMatches[0]!);
-			return;
-		}
-		if (partialMatches.length > 1) {
-			appendLog(`Repository query '${query}' matched multiple repositories. Use /repo and pick one.`);
-			return;
-		}
-		appendLog(`No registered repository matched '${query}'.`);
-	}
-
-	async function addRepositoryAndSwitch(repositoryPath: string): Promise<void> {
-		const currentClient = client() ?? (await connectClient(selector()));
-		if (!currentClient) {
-			appendLog('Unable to connect to register a repository.');
-			return;
-		}
-		const repository = await new DaemonApi(currentClient).control.addRepository(repositoryPath);
-		appendLog(`Registered repository ${repository.label}.`);
-		await switchRepository(repository);
-	}
-
-	async function loadIssues(): Promise<void> {
-		if (workspaceContext.kind !== 'control-root') {
-			appendLog('Issue intake is only available from the repository root.');
-			return;
-		}
-		if (!canUseIssueIntake(controlStatus())) {
-			appendLog(describeIssueIntakeStatus(controlStatus()));
-			return;
-		}
-		if (selectedMissionMatchesLoaded()) {
-			appendLog('Issue intake is only available in repository mode. Use /root first.');
-			return;
-		}
-		const currentClient = client() ?? (await connectClient(selector()));
-		if (!currentClient) {
-			appendLog('Unable to connect to list GitHub issues.');
-			return;
-		}
-		const nextIssues = await new DaemonApi(currentClient).control.listOpenIssues(20);
-		setOpenIssues(nextIssues);
-		appendLog(`Loaded ${String(nextIssues.length)} open GitHub issue(s).`);
-		if (nextIssues.length === 0) {
-			appendLog('No open GitHub issues are available.');
-			return;
-		}
-		openIssuePicker();
-		}
-
-	async function startIssueMission(issueNumber: number): Promise<boolean> {
-		const currentClient = client() ?? (await connectClient(selector()));
-		if (!currentClient) {
-			appendLog('Unable to connect to bootstrap an issue mission.');
-			return false;
-		}
-		try {
-			const next = await new DaemonApi(currentClient).mission.fromIssue(issueNumber);
-			const nextSelector = applyMissionStatus(next);
-			activateLoadedMissionShell(next, nextSelector);
-			if (next.preparation?.kind === 'repository-bootstrap') {
-				appendLog(
-					`Repository bootstrap prepared on ${next.preparation.branchRef}. PR: ${next.preparation.pullRequestUrl}`
-				);
-			} else if (next.preparation?.kind === 'mission') {
-				appendLog(
-					`Mission ${next.preparation.missionId} prepared from issue ${String(issueNumber)} on ${next.preparation.branchRef}. Worktree: ${next.preparation.worktreePath}`
-				);
-			} else {
-				appendLog(
-					`Mission ${next.missionId ?? 'unknown'} selected from issue ${String(issueNumber)}.`
-				);
-			}
-			return true;
-		} catch (error) {
-			appendLog(toErrorMessage(error));
-			return false;
-		}
-	}
-
-	async function executeDaemonCommandById(
-		commandId: string,
+	async function executeDaemonActionById(
+		actionId: string,
 		steps: OperatorActionExecutionStep[],
 		nextSelector: MissionSelector = currentMissionSelector() ?? {}
 	) {
 		const status = await withDaemonClientRetry(nextSelector, async (currentClient) => {
 			const api = new DaemonApi(currentClient);
 			return Object.keys(nextSelector).length > 0
-				? await api.mission.executeAction(nextSelector, commandId, steps)
-				: await api.control.executeAction(commandId, steps);
+				? await api.mission.executeAction(nextSelector, actionId, steps)
+				: await api.control.executeAction(actionId, steps);
 		});
 		applyMissionStatus(status, nextSelector);
 		setDaemonState('connected');
 		return { status };
-	}
-
-	async function launchSelectedTaskSession(taskIdOverride?: string): Promise<boolean> {
-		const missionSelector = currentMissionSelector();
-		if (!missionSelector) {
-			appendLog(noMissionSelectedMessage(status()));
-			return true;
-		}
-
-		const resolvedTaskId = taskIdOverride?.trim()
-			|| selectedTreeTarget()?.taskId
-			|| projectedSelectedTaskId()?.trim();
-		if (!resolvedTaskId) {
-					appendLog('No task is selected. Select a task in mission control before using /launch.');
-			return true;
-		}
-
-		const sessionsBeforeLaunch = await withDaemonClientRetry(missionSelector, (currentClient) =>
-			new DaemonApi(currentClient).mission.listSessions(missionSelector)
-		);
-
-		const session = await withDaemonClientRetry(missionSelector, (currentClient) =>
-			new DaemonApi(currentClient).mission.launchTaskSession(
-				missionSelector,
-				resolvedTaskId,
-				process.env['MISSION_TERMINAL_SESSION']?.trim()
-					? { terminalSessionName: process.env['MISSION_TERMINAL_SESSION'].trim() }
-					: undefined
-			)
-		);
-		setSelectedTreeTargetId(createSessionNodeId(session.sessionId));
-		setFocusArea('command');
-		const reusedExistingSession = sessionsBeforeLaunch.some(
-			(candidate) => candidate.sessionId === session.sessionId
-		);
-		appendLog(
-			reusedExistingSession
-				? `Launch requested for ${resolvedTaskId}. Reusing active session ${session.sessionId}.`
-				: `Launch requested for ${resolvedTaskId}. Session ${session.sessionId} created.`
-		);
-		return true;
 	}
 
 	async function withDaemonClientRetry<TResult>(
@@ -1680,42 +1369,37 @@ export function TowerController({
 		return true;
 	}
 
-	async function executeActionByText(commandText: string): Promise<boolean> {
-		const command = findAvailableCommandByText(availableActions(), commandText);
-		if (!command) {
+	async function executeAvailableActionByCommandText(commandText: string): Promise<boolean> {
+		const actionDescriptor = findAvailableCommandByText(availableActions(), commandText);
+		if (!actionDescriptor) {
 			return false;
 		}
-		return executeActionById(command.id);
+		return executeAvailableActionById(actionDescriptor.id);
 	}
 
-	async function executeActionById(commandId: string): Promise<boolean> {
-		const command = availableCommandById().get(commandId);
-		if (!command) {
+	async function executeAvailableActionById(actionId: string): Promise<boolean> {
+		const actionDescriptor = availableCommandById().get(actionId);
+		if (!actionDescriptor) {
 			return false;
 		}
 
-		if (!command.enabled) {
-			appendLog(command.reason ?? `Action ${command.action} is not available for the selected target.`);
+		if (!actionDescriptor.enabled) {
+			appendLog(actionDescriptor.reason ?? `Action ${actionDescriptor.action} is not available for the selected target.`);
 			return true;
 		}
 
-		if (!command.id.startsWith('control.') && !currentMissionSelector()) {
+		if (!actionDescriptor.id.startsWith('control.') && !currentMissionSelector()) {
 			appendLog(noMissionSelectedMessage(status()));
 			return true;
 		}
 
-		if (command.id === 'control.issues.list') {
-			await loadIssues();
-			return true;
-		}
-
-		const flowSteps = command.flow?.steps ?? [];
+		const flowSteps = actionDescriptor.flow?.steps ?? [];
 		if (flowSteps.length > 0) {
 			const definition = buildCommandFlowFromCommand(
-				command,
-				resolveCommandExecutionSelector(command),
+				actionDescriptor,
+				resolveCommandExecutionSelector(actionDescriptor),
 				(result) => {
-					if (command.id === 'control.mission.start') {
+					if (actionDescriptor.id === 'control.mission.start') {
 						const nextStatus = result.status;
 						if (!nextStatus) {
 							return 'Mission prepared.';
@@ -1728,55 +1412,56 @@ export function TowerController({
 						}
 						return `Mission ${nextStatus.missionId ?? 'unknown'} selected on ${nextStatus.branchRef ?? 'its mission branch'}.`;
 					}
-					if (command.id === 'control.mission.select') {
+					if (actionDescriptor.id === 'control.mission.select') {
 						const missionId = result.status?.missionId;
 						return missionId ? `Selected mission ${missionId}.` : 'Selected mission.';
 					}
-					if (command.id === 'control.setup.edit') {
+					if (actionDescriptor.id === 'control.setup.edit') {
 						return 'Setting saved.';
 					}
 					return undefined;
 				}
 			);
 			if (!definition) {
-				appendLog(`Mission action ${command.action} is not available right now.`);
+				appendLog(`Mission action ${actionDescriptor.action} is not available right now.`);
 				return true;
 			}
 			startCommandFlow(definition);
 			return true;
 		}
 
-		if (command.id.startsWith('task.launch.')) {
-			return launchSelectedTaskSession(command.targetId);
-		}
-
-		const result = await executeDaemonCommandById(
-			command.id,
+		const result = await executeDaemonActionById(
+			actionDescriptor.id,
 			[],
-			resolveCommandExecutionSelector(command)
+			resolveCommandExecutionSelector(actionDescriptor)
 		);
 
-		if (command.id === 'mission.deliver') {
+		if (actionDescriptor.id === 'mission.deliver') {
 			appendLog(result.status && isMissionDelivered(result.status) ? 'Mission delivered.' : 'Mission delivery completed.');
 			return true;
 		}
 
-		if (command.id.startsWith('task.start.') || command.id.startsWith('task.done.') || command.id.startsWith('task.block.') || command.id.startsWith('task.reopen.')) {
-			appendLog(`${command.label}${command.targetId ? `: ${command.targetId}` : '.'}`);
+		if (actionDescriptor.id.startsWith('task.start.') || actionDescriptor.id.startsWith('task.done.') || actionDescriptor.id.startsWith('task.block.') || actionDescriptor.id.startsWith('task.reopen.')) {
+			appendLog(`${actionDescriptor.label}${actionDescriptor.targetId ? `: ${actionDescriptor.targetId}` : '.'}`);
 			return true;
 		}
 
-		if (command.id.startsWith('session.cancel.')) {
-			appendLog(`Cancellation requested for ${command.targetId ?? 'session'}.`);
+		if (actionDescriptor.id.startsWith('task.launch.')) {
+			appendLog(`${actionDescriptor.label}${actionDescriptor.targetId ? `: ${actionDescriptor.targetId}` : '.'}`);
 			return true;
 		}
 
-		if (command.id.startsWith('session.terminate.')) {
-			appendLog(`Termination requested for ${command.targetId ?? 'session'}.`);
+		if (actionDescriptor.id.startsWith('session.cancel.')) {
+			appendLog(`Cancellation requested for ${actionDescriptor.targetId ?? 'session'}.`);
 			return true;
 		}
 
-		appendLog(`Executed ${command.action}.`);
+		if (actionDescriptor.id.startsWith('session.terminate.')) {
+			appendLog(`Termination requested for ${actionDescriptor.targetId ?? 'session'}.`);
+			return true;
+		}
+
+		appendLog(`Executed ${actionDescriptor.action}.`);
 		return true;
 	}
 
@@ -1832,7 +1517,7 @@ export function TowerController({
 			appendLog(`Executing ${selected.action}.`);
 			setIsRunningCommand(true);
 			try {
-				await executeActionById(selected.id);
+				await executeAvailableActionById(selected.id);
 			} catch (error) {
 				appendLog(toErrorMessage(error));
 			} finally {
@@ -1855,7 +1540,7 @@ export function TowerController({
 		appendLog(`Executing ${command.action}.`);
 		setIsRunningCommand(true);
 		try {
-			await executeActionById(command.id);
+			await executeAvailableActionById(command.id);
 		} catch (error) {
 			appendLog(toErrorMessage(error));
 		} finally {
@@ -1863,7 +1548,7 @@ export function TowerController({
 		}
 	}
 
-	async function executeCommand(rawCommand: string): Promise<void> {
+	async function executeOperatorInput(rawCommand: string): Promise<void> {
 		const trimmed = rawCommand.trim();
 		if (!trimmed) {
 			return;
@@ -1884,24 +1569,12 @@ export function TowerController({
 			switch (instruction.toLowerCase()) {
 				case '/help':
 					appendLogLines([
-						'/setup',
-						'/repo [query]',
-						'/add-repo [path]',
-						'/theme [ocean|sand]',
+						...new Set([
+							...availableActions().filter((command) => command.enabled).map((command) => command.action),
 						...(workspaceContext.kind === 'control-root' ? ['/root'] : []),
-						'/issues',
-						'/issue <number>',
-						'/start',
-						'/select',
-						...(selectedMissionMatchesLoaded() ? ['/launch', '/task <active|done|blocked>'] : []),
-						'/gate [implement|verify|audit|deliver]',
-						'/transition <stage>',
-						'/cancel',
-						'/terminate',
-						'/deliver',
-						'/sessions',
 						'/clear',
 						'/quit'
+						])
 					]);
 					return;
 				case '/clear':
@@ -1919,7 +1592,7 @@ export function TowerController({
 				case '/cancel':
 				case '/terminate':
 				case '/deliver':
-					if (await executeActionByText(trimmed)) {
+					if (await executeAvailableActionByCommandText(trimmed)) {
 						return;
 					}
 					appendLog(`Command ${trimmed} is not available for the selected target.`);
@@ -1934,93 +1607,12 @@ export function TowerController({
 					appendLog('Returned to repository mode.');
 					return;
 				}
-				case '/repo': {
-					if (args.length === 0) {
-						if (await executeActionByText(trimmed)) {
-							return;
-						}
-						appendLog('Repository switch is not available right now.');
-						return;
-					}
-					await switchRepositoryByQuery(args.join(' '));
-					return;
-				}
-				case '/add-repo': {
-					if (args.length === 0) {
-						if (await executeActionByText(trimmed)) {
-							return;
-						}
-						appendLog('Repository registration is not available right now.');
-						return;
-					}
-					await addRepositoryAndSwitch(args.join(' '));
-					return;
-				}
-				case '/launch': {
-					await launchSelectedTaskSession(args[0]);
-					return;
-				}
-				case '/issues':
-					await loadIssues();
-					return;
-				case '/theme': {
-					const requestedTheme = args[0];
-					if (!requestedTheme) {
-						openThemePicker();
-						return;
-					}
-					await selectThemeById(requestedTheme.toLowerCase());
-					return;
-				}
-				case '/issue': {
-					const issueNumber = args[0];
-					if (!issueNumber) {
-						await loadIssues();
-						return;
-					}
-					if (!/^\d+$/u.test(issueNumber)) {
-						appendLog('Usage: /issue <number>');
-						return;
-					}
-					if (selectedMissionMatchesLoaded()) {
-						appendLog('Issue intake is only available in repository mode. Use /root first.');
-						return;
-					}
-					await selectIssueByNumber(Number(issueNumber));
-					return;
-				}
-				case '/sessions':
-					if (!selectedMissionMatchesLoaded()) {
-						appendLog('No mission is selected.');
-						return;
-					}
-					if (sessions().length === 0) {
-						appendLog('No agent sessions are currently attached to this mission.');
-						return;
-					}
-					appendLogLines(
-						sessions().map(
-							(session) =>
-								`${session.sessionId} | ${session.runnerId} | ${session.lifecycleState}${session.assignmentLabel ? ` | ${session.assignmentLabel}` : ''}`
-						)
-					);
-					return;
-				case '/gate': {
-					const missionSelector = currentMissionSelector();
-					const currentClient = client() ?? (await connectClient(missionSelector ?? selector()));
-					if (!selectedMissionMatchesLoaded() || !currentClient || !missionSelector) {
-						appendLog(noMissionSelectedMessage(status()));
-						return;
-					}
-					const intent = (args[0] as GateIntent | undefined) ?? gateIntentForStage(
-						projectedSelectedStageId()
-					);
-					const gate = await new DaemonApi(currentClient).mission.evaluateGate(missionSelector, intent);
-					appendLog(gate.allowed ? `Gate ${intent} passed.` : `Gate ${intent} blocked: ${gate.errors.join(' | ')}`);
-					return;
-				}
 				default:
-					if (await executeActionByText(trimmed)) {
+					if (args.length > 0) {
+						appendLog(`Command ${trimmed} is not available for the selected target.`);
+						return;
+					}
+					if (await executeAvailableActionByCommandText(trimmed)) {
 						return;
 					}
 					appendLog(`Unknown command '${trimmed}'. Type /help.`);
@@ -2033,7 +1625,7 @@ export function TowerController({
 		}
 	}
 
-	function buildCommandLine(argumentValue: string): string {
+	function buildSelectedActionInput(argumentValue: string): string {
 		const commandText = selectedCommand()?.action?.trim();
 		const argsText = argumentValue.trim();
 		if (!commandText) {
@@ -2104,7 +1696,7 @@ export function TowerController({
 							if (exactCommand) {
 								setInputValue('');
 								closeCommandPicker({ clearCommandInput: true });
-								void executeCommand(exactCommand.action);
+								void executeOperatorInput(exactCommand.action);
 								return;
 							}
 							const submittedCommandItems = commandPickerItems();
@@ -2119,7 +1711,7 @@ export function TowerController({
 							} else {
 								setInputValue('');
 								closeCommandPicker({ clearCommandInput: true });
-								void executeCommand(commandInputQuery());
+								void executeOperatorInput(commandInputQuery());
 							}
 							return;
 						}
@@ -2128,11 +1720,11 @@ export function TowerController({
 							const exactCommand = findAvailableCommandByText(availableActions(), submittedQuery);
 							if (exactCommand) {
 								setInputValue('');
-								void executeCommand(exactCommand.action);
+								void executeOperatorInput(exactCommand.action);
 								return;
 							}
 							const submittedCommandItems = submittedQuery
-								? buildCommandPickerItems(availableActions(), submittedQuery, { includeDisabled: true })
+								? buildCommandPickerItems(availableActions(), submittedQuery)
 								: [];
 							if (submittedCommandItems.length > 0) {
 								const nextSelectedCommandId = pickSelectItemId(
@@ -2149,15 +1741,15 @@ export function TowerController({
 							appendLog('No commands are available for the current selection.');
 							return;
 						}
-						const commandLine = buildCommandLine(trimmedValue);
+						const commandLine = buildSelectedActionInput(trimmedValue);
 						const exactCommand = findAvailableCommandByText(availableActions(), commandLine);
 						if (exactCommand) {
 							setInputValue('');
-							void executeCommand(commandLine);
+							void executeOperatorInput(commandLine);
 							return;
 						}
 						setInputValue('');
-						void executeCommand(commandLine);
+						void executeOperatorInput(commandLine);
 					}}
 					onInputKeyDown={(event) => {
 						if (event.sequence === '/' && !isMissionFlowTextStep()) {
@@ -2319,53 +1911,6 @@ function normalizeCommandInputValue(value: string): string {
 
 const repositoryTabId = 'repository';
 
-function buildCommandPickerItems(
-	commands: OperatorActionDescriptor[],
-	query: string,
-	options?: { includeDisabled?: boolean }
-): CommandItem[] {
-	const normalizedQuery = query.toLowerCase();
-	const includeDisabled = options?.includeDisabled ?? false;
-	return commands
-		.map((command) => ({
-			id: command.id,
-			command: command.action,
-			label: command.action,
-			description: formatCommandDescription(command),
-			disabled: !command.enabled
-		}))
-		.filter((command) => includeDisabled || !command.disabled)
-		.filter((command) => {
-			if (!normalizedQuery) {
-				return true;
-			}
-			const commandText = command.command.toLowerCase();
-			const labelText = command.label.toLowerCase();
-			const descriptionText = command.description.toLowerCase();
-			return (
-				commandText.includes(normalizedQuery) ||
-				labelText.includes(normalizedQuery) ||
-				descriptionText.includes(normalizedQuery)
-			);
-		});
-}
-
-function formatCommandDescription(command: OperatorActionDescriptor): string {
-	const baseDescription = command.targetId ? `${command.label} [${command.targetId}]` : command.label;
-	if (command.enabled || !command.reason) {
-		return baseDescription;
-	}
-	return `${baseDescription} - Unavailable: ${command.reason}`;
-}
-
-function buildIssuePickerItems(issues: TrackedIssueSummary[]): SelectItem[] {
-	return issues.map((issue) => ({
-		id: String(issue.number),
-		label: `#${String(issue.number)} ${issue.title}`,
-		description: formatIssueDescription(issue)
-	}));
-}
-
 function buildHeaderTabs(
 	status: OperatorStatus,
 	missionCandidates: MissionSelectionCandidate[] = []
@@ -2526,16 +2071,6 @@ async function resolveGitBranchName(cwd: string): Promise<string | undefined> {
 	});
 }
 
-function pickSelectItemId(items: SelectItem[], current: string | undefined): string | undefined {
-	if (items.length === 0) {
-		return undefined;
-	}
-	if (current && items.some((item) => item.id === current)) {
-		return current;
-	}
-	return items[0]?.id;
-}
-
 function buildProjectedStageStatuses(
 	domain: ContextGraph | undefined,
 	stageRail: Array<{ id: string; label: string; state: string }> | undefined
@@ -2645,33 +2180,6 @@ function buildProjectedMissionCandidates(
 		.sort((left, right) => left.missionId.localeCompare(right.missionId));
 }
 
-function pickPreferredToolbarCommandId(
-	items: CommandToolbarItem[],
-	current: string | undefined
-): string | undefined {
-	const enabledItems = items.filter((item) => item.enabled);
-	if (enabledItems.length === 0) {
-		return undefined;
-	}
-	if (current && enabledItems.some((item) => item.id === current)) {
-		return current;
-	}
-	return enabledItems[0]?.id;
-}
-
-function formatToolbarCommandLabel(command: OperatorActionDescriptor): string {
-	if (command.ui?.toolbarLabel) {
-		return command.ui.toolbarLabel.trim().toUpperCase();
-	}
-	const normalized = command.action.trim().replace(/^\/+/u, '').replace(/\s+/gu, ' ');
-	return normalized.toUpperCase();
-}
-
-function formatIssueDescription(issue: TrackedIssueSummary): string {
-	const labelText = issue.labels.length > 0 ? issue.labels.join(', ') : 'no labels';
-	return `${issue.url} | ${labelText}`;
-}
-
 function buildKeyHintsText(input: {
 	focusArea: FocusArea;
 	activePicker: PickerMode | undefined;
@@ -2717,23 +2225,6 @@ function buildKeyHintsText(input: {
 		return 'Tab/Shift+Tab focus | ↑/↓ navigate | ←/→ move | PgUp/PgDn scroll | Enter select | Ctrl+Q quit';
 	}
 	return 'Tab/Shift+Tab focus | Ctrl+Q quit';
-}
-
-function canUseIssueIntake(control: OperatorStatus['control']): boolean {
-	return Boolean(control?.issuesConfigured && control.githubAuthenticated === true);
-}
-
-function describeIssueIntakeStatus(control: OperatorStatus['control']): string {
-	if (!control) {
-		return 'Repository status is still loading.';
-	}
-	if (!control.issuesConfigured) {
-		return 'Mission could not resolve a GitHub repository from the current workspace.';
-	}
-	if (control.githubAuthenticated === false) {
-		return control.githubAuthMessage ?? 'GitHub CLI authentication is required for issue intake.';
-	}
-	return 'GitHub issue intake is not ready yet.';
 }
 
 function describeControlConnection(status: OperatorStatus): string {
@@ -2844,17 +2335,6 @@ function buildCommandPanelDescriptor(input: {
 	return describeCommandPanelIntent(trimmed, input.status, input.selectedStageId);
 }
 
-function findAvailableCommandByText(
-	commands: OperatorActionDescriptor[],
-	commandText: string | undefined
-): OperatorActionDescriptor | undefined {
-	const trimmed = commandText?.trim();
-	if (!trimmed) {
-		return undefined;
-	}
-	return commands.find((command) => command.action === trimmed);
-}
-
 function describeCommandPanelIntent(
 	commandLine: string,
 	status: OperatorStatus,
@@ -2868,105 +2348,10 @@ function describeCommandPanelIntent(
 		};
 	}
 	switch (instruction.toLowerCase()) {
-		case '/setup':
-		case '/init':
-			return {
-					title: 'SETUP > SETTING > SAVE',
-					placeholder: 'Press Enter to open the guided setup flow.'
-			};
-			case '/repo':
-				return {
-					title: 'REPO > SWITCH',
-					placeholder: 'Enter a repo name or press Enter to open the repo picker.'
-				};
-			case '/add-repo':
-				return {
-					title: 'REPO > ADD',
-					placeholder: 'Enter a repository path or press Enter for a guided prompt.'
-				};
 		case '/root':
 			return {
 				title: 'MISSION > SWITCH',
 				placeholder: 'Press Enter to return to repository mode.'
-			};
-			case '/start':
-				return {
-						title: 'MISSION > TYPE > PREPARE',
-						placeholder: 'Press Enter to open the guided mission preparation flow.'
-				};
-			case '/select':
-				return {
-					title: 'MISSION > MISSION > SWITCH',
-					placeholder: 'Press Enter to choose a mission from repository mode.'
-				};
-		case '/issues':
-			return {
-				title: 'ISSUES > BROWSE',
-				placeholder: 'Press Enter to browse open GitHub issues.'
-			};
-		case '/issue':
-			return {
-				title: 'ISSUE > START',
-				placeholder: 'Enter an issue number or open the issue selector.'
-			};
-		case '/theme':
-			return {
-				title: 'THEME > APPLY',
-				placeholder: 'Enter a theme name or open the theme selector.'
-			};
-		case '/launch':
-			return {
-				title: 'TASK > SESSION > LAUNCH',
-				placeholder: 'Launch an agent session for the selected task target.'
-			};
-		case '/task': {
-			const action = (args[0] ?? 'state').toUpperCase();
-			return {
-				title: `TASK > ${action}`,
-				placeholder: 'Set selected task state using active, done, or blocked.'
-			};
-		}
-		case '/start':
-			return {
-				title: 'MISSION > START',
-				placeholder: 'Enter <title> | <body> | [type].'
-			};
-		case '/select':
-			return {
-				title: 'MISSION > SWITCH',
-				placeholder: 'Enter a mission id or open the mission selector.'
-			};
-		case '/sessions':
-			return {
-				title: 'AGENT > LIST',
-				placeholder: 'Press Enter to list agent sessions.'
-			};
-		case '/gate': {
-			const intent = (args[0] ?? gateIntentForStage(status.stage)).toUpperCase();
-			return {
-				title: `${formatDockStageLabel(status.stage ?? selectedStageId)} > ${intent}`,
-				placeholder: 'Press Enter to evaluate the current gate.'
-			};
-		}
-		case '/transition':
-			return {
-				title: `${formatDockStageLabel(status.stage ?? selectedStageId)} > APPROVE`,
-				placeholder: 'Enter the next stage or press Enter to approve the selected stage.'
-			};
-		case '/cancel':
-			return {
-				title: 'AGENT > CANCEL',
-				placeholder: 'Enter a session id or use the selected session.'
-			};
-		case '/terminate':
-			return {
-				title: 'AGENT > TERMINATE',
-				placeholder: 'Enter a session id or use the selected session.'
-			};
-		case '/deliver':
-			return {
-				title: 'MISSION > DELIVER',
-				placeholder: 'Press Enter to deliver the mission.'
 			};
 		case '/clear':
 			return {
@@ -2981,7 +2366,9 @@ function describeCommandPanelIntent(
 		default:
 			return {
 				title: 'COMMAND > RUN',
-				placeholder: 'Press Enter to run the current command.'
+				placeholder: args.length > 0
+					? 'This command is not available with inline arguments.'
+					: `Press Enter to run the current command${status.stage ?? selectedStageId ? ` for ${formatDockStageLabel(status.stage ?? selectedStageId)}` : ''}.`
 			};
 	}
 }
@@ -3193,19 +2580,6 @@ function parseGitHubUserFromAuthDetail(detail: string | undefined): string | und
 		}
 	}
 	return undefined;
-}
-
-function gateIntentForStage(stage: MissionStageId | undefined): GateIntent {
-	if (stage === 'prd' || stage === 'spec') {
-		return 'implement';
-	}
-	if (stage === 'implementation') {
-		return 'verify';
-	}
-	if (stage === 'audit') {
-		return 'audit';
-	}
-	return 'deliver';
 }
 
 function isMissionDelivered(status: OperatorStatus): boolean {

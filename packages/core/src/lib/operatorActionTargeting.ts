@@ -4,7 +4,45 @@ export function resolveAvailableActionsForTargetContext(
 	commands: OperatorActionDescriptor[],
 	context: OperatorActionTargetContext
 ): OperatorActionDescriptor[] {
-	return commands.filter((command) => matchesOperatorActionTargetContext(command, context));
+	return orderAvailableActions(
+		commands.filter((command) => matchesOperatorActionTargetContext(command, context)),
+		context
+	);
+}
+
+export function orderAvailableActions(
+	commands: OperatorActionDescriptor[],
+	context?: OperatorActionTargetContext
+): OperatorActionDescriptor[] {
+	return commands
+		.map((command, index) => ({ command, index }))
+		.sort((left, right) => {
+			const recoveryOrder = compareNumber(getRecoveryRank(left.command), getRecoveryRank(right.command));
+			if (recoveryOrder !== 0) {
+				return recoveryOrder;
+			}
+
+			const enabledOrder = compareNumber(getEnabledRank(left.command), getEnabledRank(right.command));
+			if (enabledOrder !== 0) {
+				return enabledOrder;
+			}
+
+			const affinityOrder = compareNumber(
+				getContextAffinityRank(left.command, context),
+				getContextAffinityRank(right.command, context)
+			);
+			if (affinityOrder !== 0) {
+				return affinityOrder;
+			}
+
+			const scopeOrder = compareNumber(getScopeRank(left.command.scope), getScopeRank(right.command.scope));
+			if (scopeOrder !== 0) {
+				return scopeOrder;
+			}
+
+			return compareNumber(left.index, right.index);
+		})
+		.map(({ command }) => command);
 }
 
 export function matchesOperatorActionTargetContext(
@@ -104,6 +142,75 @@ function getTargetIdsForScope(
 	}
 
 	return [];
+}
+
+function getRecoveryRank(command: OperatorActionDescriptor): number {
+	return command.ordering?.group === 'recovery' ? 0 : 1;
+}
+
+function getEnabledRank(command: OperatorActionDescriptor): number {
+	return command.enabled ? 0 : 1;
+}
+
+function getContextAffinityRank(
+	command: OperatorActionDescriptor,
+	context?: OperatorActionTargetContext
+): number {
+	if (!context) {
+		return 0;
+	}
+
+	const affinityChain: Array<[OperatorActionPresentationScope, string | undefined]> = [];
+	if (context.sessionId) {
+		affinityChain.push(['session', context.sessionId]);
+	}
+	if (context.taskId) {
+		affinityChain.push(['task', context.taskId]);
+	}
+	if (context.stageId) {
+		affinityChain.push(['stage', context.stageId]);
+	}
+	affinityChain.push(['mission', undefined]);
+
+	for (let index = 0; index < affinityChain.length; index += 1) {
+		const [scope, targetId] = affinityChain[index] ?? [];
+		if (scope && matchesAffinityScope(command, scope, targetId)) {
+			return index;
+		}
+	}
+
+	return affinityChain.length;
+}
+
+function matchesAffinityScope(
+	command: OperatorActionDescriptor,
+	scope: OperatorActionPresentationScope,
+	targetId: string | undefined
+): boolean {
+	if (scope === 'mission') {
+		return command.scope === 'mission'
+			|| command.presentationTargets?.some((target) => target.scope === 'mission') === true;
+	}
+
+	if (!targetId) {
+		return false;
+	}
+
+	return getTargetIdsForScope(command, scope).includes(targetId);
+}
+
+function getScopeRank(scope: OperatorActionDescriptor['scope']): number {
+	switch (scope) {
+		case 'session': return 0;
+		case 'task': return 1;
+		case 'generation': return 2;
+		case 'mission': return 3;
+	}
+	return 4;
+}
+
+function compareNumber(left: number, right: number): number {
+	return left - right;
 }
 
 function getContextTargetId(

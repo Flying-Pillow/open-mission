@@ -296,7 +296,6 @@ export type Method =
 	| 'control.workflow.settings.update'
 	| 'control.repositories.list'
 	| 'control.repositories.add'
-	| 'control.issues.list'
 	| 'control.action.list'
 	| 'control.action.describe'
 	| 'control.action.execute'
@@ -438,10 +437,6 @@ export type SessionControl = SessionSelect & {
 export type MissionAgentSessionCommandRequest = {
 	kind: AgentCommandKind;
 	metadata?: Record<string, MissionAgentPrimitiveValue>;
-};
-
-export type ControlIssuesList = {
-	limit?: number;
 };
 
 export type ControlRepositoriesList = Record<string, never>;

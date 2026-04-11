@@ -18,6 +18,7 @@ describe('TerminalAgentTransport', () => {
 				};
 			}
 			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'new-pane') {
+				expect(args[5]).toBe('0');
 				activePaneTitle = args[8];
 				activePaneId = 'terminal_4';
 				return { stdout: `${activePaneId}\n`, stderr: '' };
@@ -37,6 +38,37 @@ describe('TerminalAgentTransport', () => {
 
 		expect(handle.sessionName).toMatch(/^mission-agent-/u);
 		expect(handle.paneId).toBe('terminal_4');
+	});
+
+	it('uses snake_case tab_id metadata when opening a shared-session pane', async () => {
+		const observed: string[][] = [];
+		const executor: NonNullable<TerminalAgentTransportOptions['executor']> = async (args) => {
+			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
+				return {
+					stdout: JSON.stringify([
+						{ id: 1, title: 'AGENT SESSION', tab_id: 7, exited: false, exitStatus: null, is_plugin: false, is_focused: false }
+					]),
+					stderr: ''
+				};
+			}
+			observed.push(args);
+			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'new-pane') {
+				return { stdout: 'terminal_4\n', stderr: '' };
+			}
+			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'stack-panes') {
+				return { stdout: '', stderr: '' };
+			}
+			throw new Error(`Unexpected terminal command: ${args.join(' ')}`);
+		};
+
+		const transport = new TerminalAgentTransport({ executor, sharedSessionName: 'mission-mission' });
+		await transport.openSession({
+			workingDirectory: '/tmp/work',
+			command: 'copilot'
+		});
+
+		const newPaneCommand = observed.find((args) => args[3] === 'new-pane');
+		expect(newPaneCommand?.[5]).toBe('7');
 	});
 
 	it('attaches to an existing shared-session pane', async () => {

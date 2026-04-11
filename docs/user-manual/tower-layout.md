@@ -63,6 +63,13 @@ In repository mode, it is where Mission can drive repository and intake flows. I
 
 The command panel is the stable operator control surface. This is where Mission exposes available actions and confirmation flows instead of forcing you to remember fragile shell commands.
 
+In Tower, the panel name is historical UI language. The important distinction is:
+
+- an **action** is the daemon-owned operation Mission says is available right now
+- a **command** is the way Tower lets you pick or type that action
+
+If you type `/mission resume`, you are not creating a new business operation in the terminal. You are selecting the daemon action whose action text is `/mission resume`.
+
 ### Key Hints Row
 
 The bottom hint row keeps interaction discoverable. That matters in a terminal product because the UI has to stay fast without becoming obscure.

@@ -218,13 +218,14 @@ export class TerminalAgentTransport {
 		const sessionName = `${sessionPrefix}-${randomUUID()}`;
 		const launchCommand = buildLaunchCommand(request);
 		const agentSessionPane = await this.resolveAgentSessionPane(sharedSessionName);
+		const agentSessionTabId = resolvePaneTabId(agentSessionPane);
 		const createPaneResult = await this.runTerminal([
 			'--session',
 			sharedSessionName,
 			'action',
 			'new-pane',
 			'--tab-id',
-			String(agentSessionPane.tabId),
+			String(agentSessionTabId),
 			'--name',
 			sessionName,
 			'--cwd',
@@ -438,4 +439,14 @@ function parsePaneNumericId(paneId: string): number {
 
 function toPaneReference(paneId: number): string {
 	return `terminal_${String(paneId)}`;
+}
+
+function resolvePaneTabId(pane: TerminalPaneMetadata): number {
+	if (Number.isInteger(pane.tabId)) {
+		return pane.tabId;
+	}
+	if (Number.isInteger(pane.tab_id)) {
+		return pane.tab_id;
+	}
+	throw new Error(`Unable to resolve tab id for terminal-manager pane '${pane.title}'.`);
 }

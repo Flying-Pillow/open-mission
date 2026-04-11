@@ -7,7 +7,7 @@ import { Factory } from './mission/Factory.js';
 import { buildMissionTaskLaunchPrompt } from './mission/taskLaunchPrompt.js';
 import type { MissionWorkflowBindings } from './mission/Mission.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
-import { resolveAvailableActionsForTargetContext } from '../lib/operatorActionTargeting.js';
+import { orderAvailableActions, resolveAvailableActionsForTargetContext } from '../lib/operatorActionTargeting.js';
 import {
 	getDefaultMissionDaemonSettingsWithOverrides,
 	getMissionDaemonSettingsPath,
@@ -26,10 +26,8 @@ import {
 	getMissionDirectoryPath,
 	getMissionWorktreesPath,
 } from '../lib/repoConfig.js';
-import { listRegisteredMissionUserRepos, registerMissionUserRepo } from '../lib/userConfig.js';
 import type {
 	MissionBrief,
-	MissionRepositoryCandidate,
 	OperatorActionExecutionStep,
 	OperatorActionExecutionSelectionStep,
 	OperatorActionExecutionTextStep,
@@ -42,8 +40,7 @@ import type {
 	MissionSelectionCandidate,
 	MissionTaskState,
 	MissionSelector,
-	OperatorStatus,
-	TrackedIssueSummary
+	OperatorStatus
 } from '../types.js';
 import type { MissionControlSource } from './system/types.js';
 import {
@@ -53,7 +50,6 @@ import {
 	type ControlDocumentRead,
 	type ControlDocumentResponse,
 	type ControlDocumentWrite,
-	type ControlIssuesList,
 	type MissionFromBriefRequest,
 	type MissionFromIssueRequest,
 	type ControlSettingsUpdate,
@@ -142,8 +138,6 @@ export class MissionWorkspace {
 				return this.createMissionFromIssue((request.params ?? {}) as MissionFromIssueRequest);
 			case 'mission.from-brief':
 				return this.createMissionFromBrief((request.params ?? {}) as MissionFromBriefRequest);
-			case 'control.issues.list':
-				return this.listOpenGitHubIssues((request.params ?? {}) as ControlIssuesList);
 			case 'control.action.list':
 				return this.listControlActions((request.params ?? {}) as ControlActionList);
 			case 'control.action.describe':
@@ -224,11 +218,8 @@ export class MissionWorkspace {
 
 	private buildDiscoveryAvailableActions(
 		control: MissionControlPlaneStatus,
-		availableMissions: MissionSelectionCandidate[],
-		availableRepositories: MissionRepositoryCandidate[]
+		availableMissions: MissionSelectionCandidate[]
 	): OperatorActionDescriptor[] {
-		const issuesReady = control.issuesConfigured && control.githubAuthenticated === true;
-
 		return [
 			{
 				id: 'control.setup.edit',
@@ -238,6 +229,7 @@ export class MissionWorkspace {
 				disabled: false,
 				disabledReason: '',
 				enabled: true,
+				...(!control.settingsComplete ? { ordering: { group: 'recovery' as const } } : {}),
 				ui: {
 					toolbarLabel: 'SETTINGS',
 					requiresConfirmation: false
@@ -272,49 +264,6 @@ export class MissionWorkspace {
 				},
 				flow: this.buildMissionSwitchFlow(availableMissions),
 				...(availableMissions.length > 0 ? {} : { reason: 'No local missions are available.' })
-			},
-			{
-				id: 'control.repository.switch',
-				label: 'Switch repository',
-				action: '/repo',
-				scope: 'mission',
-				disabled: availableRepositories.length === 0,
-				disabledReason: availableRepositories.length > 0 ? '' : 'No registered repositories are available.',
-				enabled: availableRepositories.length > 0,
-				ui: {
-					toolbarLabel: 'SWITCH REPO',
-					requiresConfirmation: false
-				},
-				flow: this.buildRepositorySwitchFlow(availableRepositories),
-				...(availableRepositories.length > 0 ? {} : { reason: 'No registered repositories are available.' })
-			},
-			{
-				id: 'control.repository.add',
-				label: 'Register repository',
-				action: '/add-repo',
-				scope: 'mission',
-				disabled: false,
-				disabledReason: '',
-				enabled: true,
-				ui: {
-					toolbarLabel: 'ADD REPO',
-					requiresConfirmation: false
-				},
-				flow: this.buildRepositoryAddFlow()
-			},
-			{
-				id: 'control.issues.list',
-				label: 'Browse open GitHub issues',
-				action: '/issues',
-				scope: 'mission',
-				disabled: !issuesReady,
-				disabledReason: issuesReady ? '' : this.describeIssueIntakeUnavailable(control),
-				enabled: issuesReady,
-				ui: {
-					toolbarLabel: 'OPEN ISSUES',
-					requiresConfirmation: false
-				},
-				...(issuesReady ? {} : { reason: this.describeIssueIntakeUnavailable(control) })
 			}
 		];
 	}
@@ -354,36 +303,13 @@ export class MissionWorkspace {
 			return this.getMissionStatus({ selector: { missionId } });
 		}
 
-		if (params.actionId === 'control.repository.switch') {
-			const repositorySelection = requireSingleSelectionActionStep(params.steps ?? [], 'repository');
-			const repositoryRootPath = repositorySelection.optionIds[0]?.trim();
-			if (!repositoryRootPath) {
-				throw new Error('Repository switch requires a repository root path.');
-			}
-			const registeredRepositories = await listRegisteredMissionUserRepos();
-			if (!registeredRepositories.some((candidate) => candidate.repositoryRootPath === repositoryRootPath)) {
-				throw new Error('Repository switch requires a registered repository.');
-			}
-			return this.buildIdleMissionStatus();
-		}
-
-		if (params.actionId === 'control.repository.add') {
-			const repositoryPath = requireTextActionStep(params.steps ?? [], 'path').value.trim();
-			if (!repositoryPath) {
-				throw new Error('Repository registration requires a filesystem path.');
-			}
-			await registerMissionUserRepo(repositoryPath);
-			return this.buildIdleMissionStatus();
-		}
-
 		throw new Error(`Unsupported control action '${params.actionId}'.`);
 	}
 
 	private async listControlActions(params: ControlActionList = {}): Promise<OperatorActionDescriptor[]> {
 		const availableMissions = await this.listMissionSelectionCandidates();
-		const availableRepositories = await listRegisteredMissionUserRepos();
 		const control = await this.buildControlPlaneStatus(availableMissions.length);
-		return this.resolveAvailableActions(this.buildDiscoveryAvailableActions(control, availableMissions, availableRepositories), params.context);
+		return this.resolveAvailableActions(this.buildDiscoveryAvailableActions(control, availableMissions), params.context);
 	}
 
 	private async executeMissionAction(params: MissionActionExecute): Promise<OperatorStatus> {
@@ -664,24 +590,13 @@ export class MissionWorkspace {
 		return loadedMission.mission.terminateAgentSession(params.sessionId, params.reason);
 	}
 
-	private async listOpenGitHubIssues(
-		params: ControlIssuesList = {}
-	): Promise<TrackedIssueSummary[]> {
-		const settings = readMissionDaemonSettings(this.workspaceRoot);
-		if (settings?.trackingProvider !== 'github') {
-			return [];
-		}
-
-		const adapter = new GitHubPlatformAdapter(this.workspaceRoot);
-		return adapter.listOpenIssues(params.limit ?? 50);
-	}
-
 	private resolveAvailableActions(
 		actions: OperatorActionDescriptor[],
 		context?: OperatorActionQueryContext
 	): OperatorActionDescriptor[] {
 		if (!context) {
-			return actions.map((action) => structuredClone(action));
+			return orderAvailableActions(actions)
+				.map((action) => structuredClone(action));
 		}
 		return resolveAvailableActionsForTargetContext(actions, context)
 			.map((action) => structuredClone(action));
@@ -1140,50 +1055,6 @@ export class MissionWorkspace {
 		};
 	}
 
-	private buildRepositorySwitchFlow(
-		availableRepositories: MissionRepositoryCandidate[]
-	): OperatorActionFlowDescriptor {
-		return {
-			targetLabel: 'REPO',
-			actionLabel: 'SWITCH',
-			steps: [
-				{
-					kind: 'selection',
-					id: 'repository',
-					label: 'REPO',
-					title: 'REGISTERED REPOSITORIES',
-					emptyLabel: 'No registered repositories are available.',
-					helperText: 'Choose the repository you want to open.',
-					selectionMode: 'single',
-					options: availableRepositories.map((candidate) => ({
-						id: candidate.repositoryRootPath,
-						label: candidate.label,
-						description: candidate.description
-					}))
-				}
-			]
-		};
-	}
-
-	private buildRepositoryAddFlow(): OperatorActionFlowDescriptor {
-		return {
-			targetLabel: 'REPO',
-			actionLabel: 'ADD',
-			steps: [
-				{
-					kind: 'text',
-					id: 'path',
-					label: 'PATH',
-					title: 'REPOSITORY PATH',
-					helperText: 'Enter a filesystem path to a Git checkout to register.',
-					placeholder: 'Enter an absolute or relative repository path.',
-					inputMode: 'compact',
-					format: 'plain'
-				}
-			]
-		};
-	}
-
 	private async describeControlAction(
 		params: ControlActionDescribe
 	): Promise<OperatorActionFlowDescriptor> {
@@ -1196,12 +1067,6 @@ export class MissionWorkspace {
 		}
 		if (params.actionId === 'control.mission.select') {
 			return this.buildMissionSwitchFlow(await this.listMissionSelectionCandidates());
-		}
-		if (params.actionId === 'control.repository.switch') {
-			return this.buildRepositorySwitchFlow(await listRegisteredMissionUserRepos());
-		}
-		if (params.actionId === 'control.repository.add') {
-			return this.buildRepositoryAddFlow();
 		}
 		throw new Error(`Unsupported control action '${params.actionId}'.`);
 	}
@@ -1286,16 +1151,6 @@ export class MissionWorkspace {
 
 	private isAutopilotConfigured(): boolean {
 		return false;
-	}
-
-	private describeIssueIntakeUnavailable(control: MissionControlPlaneStatus): string {
-		if (!control.issuesConfigured) {
-			return 'Mission could not resolve a GitHub repository from the current workspace.';
-		}
-		if (control.githubAuthenticated === false) {
-			return control.githubAuthMessage ?? 'GitHub CLI authentication is required.';
-		}
-		return 'GitHub issue intake is not ready.';
 	}
 
 	private getGitHubAuthStatus(): { authenticated: boolean; user?: string; detail?: string } {

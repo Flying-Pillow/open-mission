@@ -21,7 +21,7 @@ export function createCommandController(options: CreateCommandControllerOptions)
 	const [selectedPickerItemId, setSelectedPickerItemId] = createSignal<string | undefined>();
 
 	const pickerItems = createMemo<CommandItem[]>(() =>
-		buildCommandPickerItems(options.availableActions(), pickerQuery(), { includeDisabled: true })
+		buildCommandPickerItems(options.availableActions(), pickerQuery())
 	);
 	const selectedCommand = createMemo(() =>
 		options.availableActions().find((command) => command.id === selectedCommandId())
@@ -55,7 +55,7 @@ export function createCommandController(options: CreateCommandControllerOptions)
 	function setPickerFilter(value: string): string {
 		setPickerOpen(true);
 		setPickerQuery(value);
-		setSelectedPickerItemId((current) => pickSelectItemId(buildCommandPickerItems(options.availableActions(), value, { includeDisabled: true }), current));
+		setSelectedPickerItemId((current) => pickSelectItemId(buildCommandPickerItems(options.availableActions(), value), current));
 		return value;
 	}
 
@@ -66,7 +66,7 @@ export function createCommandController(options: CreateCommandControllerOptions)
 	function popPickerFilter(): string {
 		const nextValue = pickerQuery().slice(0, -1);
 		setPickerQuery(nextValue);
-		setSelectedPickerItemId((current) => pickSelectItemId(buildCommandPickerItems(options.availableActions(), nextValue, { includeDisabled: true }), current));
+		setSelectedPickerItemId((current) => pickSelectItemId(buildCommandPickerItems(options.availableActions(), nextValue), current));
 		return nextValue;
 	}
 
@@ -77,7 +77,7 @@ export function createCommandController(options: CreateCommandControllerOptions)
 	function seedSlashCommand(): void {
 		setPickerOpen(true);
 		setPickerQuery('');
-		setSelectedPickerItemId((current) => pickSelectItemId(buildCommandPickerItems(options.availableActions(), '', { includeDisabled: true }), current));
+		setSelectedPickerItemId((current) => pickSelectItemId(buildCommandPickerItems(options.availableActions(), ''), current));
 	}
 
 	function clearInput(): void {

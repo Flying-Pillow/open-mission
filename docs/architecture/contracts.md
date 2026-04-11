@@ -79,3 +79,40 @@ Mission uses operator action descriptors rather than hard-coding all surface flo
 - UI metadata for confirmation or presentation targeting
 
 These descriptors are the contract between daemon-side action availability and Tower-side command flow UX.
+
+### Action Ordering And Filtering Ownership
+
+`OperatorActionDescriptor[]` is not just a bag of invokable operations. It is an ordered daemon response.
+
+The action model is:
+
+- the daemon constructs the full action set for the current mission or control scope
+- the daemon applies lifecycle and policy rules to determine whether each action is enabled
+- the daemon filters actions by the current target context such as session, task, stage, or mission
+- the daemon orders the remaining actions according to workflow semantics, for example blocker resolution first and then closest target affinity
+- Tower renders that ordered list as command rows, toolbar items, and typed slash resolution
+
+This means ownership is intentionally split as follows:
+
+- **Daemon responsibilities:** action construction, enablement, disabled reasons, context filtering, and presentation ordering
+- **Tower responsibilities:** projecting daemon actions into UI controls, preserving daemon order, local focus state, and optional text-query narrowing of the already ordered list
+
+Tower must not introduce its own business ranking such as command-specific sorting or local "most likely next action" heuristics. If Mission needs smarter next-action ordering, that policy belongs in the daemon action builder.
+
+### Action Versus Command
+
+Mission uses the terms `action` and `command` in different layers. They should not be treated as synonyms.
+
+- **Action** means a daemon-defined operator operation. It is canonical, rule-checked, context-scoped, and identified by `OperatorActionDescriptor.id`.
+- **Action text** means the slash-text alias attached to an action in `OperatorActionDescriptor.action`, for example `/mission resume` or `/launch`.
+- **Command** in Tower means an operator-facing interaction form: typed slash input, a picker row, or a toolbar entry derived from an action.
+- **Session command** means the payload sent to a live agent through `session.command`. That is runtime session control, not an operator action descriptor.
+
+The intended architecture is:
+
+- the daemon constructs actions
+- Tower renders actions as commands
+- operator input resolves back to an action by matching action text
+- session commands remain a separate runtime contract
+
+If a behavior only exists as Tower-side command handling and not as a daemon action, that is a layering bug.

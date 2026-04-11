@@ -47,6 +47,10 @@ Tower keeps local state for interaction only:
 - selected header tab
 - picker text, overlays, and command flow steps
 
+Tower may use `command` language for its picker, command panel, and typed slash input, but those are UI interaction forms. The underlying business object should still be a daemon-provided operator action.
+
+Tower must preserve daemon action order. It may narrow a visible list by local text query, but it must not re-rank actions, apply local availability policy, or invent a separate next-action heuristic.
+
 Tower does not own:
 
 - repository registration
@@ -77,3 +81,5 @@ The current Tower implementation requires Bun at runtime because `@opentui/core`
 ## Non-Responsibilities
 
 Tower must not become the source of truth for mission routing, task lifecycle, or gate ownership. If Tower and the daemon disagree, the daemon wins.
+
+That rule also applies to available actions: ordering, filtering, and enablement are daemon-owned semantics, not UI policy.
