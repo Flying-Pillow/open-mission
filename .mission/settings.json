@@ -159,7 +159,7 @@
       }
     ]
   },
-  "agentRuntime": "copilot-cli",
+  "agentRunner": "copilot-cli",
   "airport": {
     "gates": {
       "dashboard": {

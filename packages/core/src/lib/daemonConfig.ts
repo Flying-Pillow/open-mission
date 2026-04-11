@@ -21,13 +21,13 @@ import { normalizeWorkflowSettings } from '../settings/validation.js';
 
 export const MISSION_DAEMON_SETTINGS_FILE = 'settings.json';
 
-export const MISSION_AGENT_RUNTIMES = [COPILOT_CLI_AGENT_RUNNER_ID, COPILOT_SDK_AGENT_RUNNER_ID] as const;
+export const MISSION_AGENT_RUNNERS = [COPILOT_CLI_AGENT_RUNNER_ID, COPILOT_SDK_AGENT_RUNNER_ID] as const;
 
-export type MissionAgentRuntime = (typeof MISSION_AGENT_RUNTIMES)[number];
+export type MissionAgentRunner = (typeof MISSION_AGENT_RUNNERS)[number];
 export type MissionDefaultAgentMode = 'interactive' | 'autonomous';
 
 export type MissionDaemonSettings = {
-    agentRuntime?: MissionAgentRuntime;
+    agentRunner?: MissionAgentRunner;
     defaultAgentMode?: MissionDefaultAgentMode;
     defaultModel?: string;
     towerTheme?: string;
@@ -68,7 +68,7 @@ export function getDefaultMissionDaemonSettingsWithOverrides(
     overrides: MissionDaemonSettings = {}
 ): MissionDaemonSettings {
     const userConfig = readMissionUserConfig();
-    const agentRuntime = normalizeOptionalAgentRuntime(overrides.agentRuntime) ?? COPILOT_CLI_AGENT_RUNNER_ID;
+    const agentRunner = normalizeOptionalAgentRunner(overrides.agentRunner) ?? COPILOT_CLI_AGENT_RUNNER_ID;
     const defaultAgentMode = normalizeOptionalAgentMode(overrides.defaultAgentMode);
     const defaultModel = normalizeOptionalString(overrides.defaultModel);
     const towerTheme = normalizeOptionalString(overrides.towerTheme);
@@ -83,7 +83,7 @@ export function getDefaultMissionDaemonSettingsWithOverrides(
         instructionsPath: '.agents',
         skillsPath: '.agents/skills',
         workflow: normalizeWorkflowSettings(overrides.workflow ?? createDefaultWorkflowSettings()),
-		agentRuntime,
+        agentRunner,
         ...(defaultAgentMode ? { defaultAgentMode } : {}),
         ...(defaultModel ? { defaultModel } : {}),
         ...(towerTheme ? { towerTheme } : {}),
@@ -143,7 +143,7 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
     return trimmed && trimmed.length > 0 ? trimmed : undefined;
 }
 
-function normalizeOptionalAgentRuntime(value: MissionAgentRuntime | undefined): MissionAgentRuntime | undefined {
+function normalizeOptionalAgentRunner(value: MissionAgentRunner | undefined): MissionAgentRunner | undefined {
     return isSupportedAgentRunner(value) ? value : undefined;
 }
 

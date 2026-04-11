@@ -217,6 +217,9 @@ export function TowerController({
 			? systemDomain()?.missions[target.missionId]
 			: undefined;
 	});
+	const selectedTowerProjection = createMemo(() =>
+		selectedMissionMatchesLoaded() ? status().tower : undefined
+	);
 	const selectedMissionMatchesLoaded = createMemo(() => {
 		const target = selectedShellTarget();
 		return target.kind === 'mission'
@@ -247,10 +250,10 @@ export function TowerController({
 		return { kind: 'none' };
 	});
 	const controlStatus = createMemo(() => status().control);
-	const stages = createMemo(() => (centerRoute().kind === 'mission-control' ? buildProjectedStageStatuses(systemDomain(), selectedMissionContext()?.tower?.stageRail) : []));
+	const stages = createMemo(() => (centerRoute().kind === 'mission-control' ? buildProjectedStageStatuses(systemDomain(), selectedTowerProjection()?.stageRail) : []));
 	const sessions = createMemo(() => (centerRoute().kind === 'mission-control' ? buildProjectedSessionRecords(systemDomain()) : []));
 	const stageItems = createMemo<ProgressRailItem[]>(() =>
-		(selectedMissionContext()?.tower?.stageRail ?? []).map((item) => ({
+		(selectedTowerProjection()?.stageRail ?? []).map((item) => ({
 			id: item.id,
 			label: item.label,
 			state: item.state,
@@ -352,7 +355,7 @@ export function TowerController({
 		}
 		const stageId = selectedStageId();
 		if (stageId) {
-			const label = selectedMissionContext()?.tower?.stageRail.find((item) => item.id === stageId)?.label ?? stageId;
+			const label = selectedTowerProjection()?.stageRail.find((item) => item.id === stageId)?.label ?? stageId;
 			return {
 				stageId,
 				targetLabel: label,
@@ -457,7 +460,7 @@ export function TowerController({
 			|| (selectedMissionMatchesLoaded() ? currentMissionId() ?? 'Mission' : 'Mission');
 	});
 	const treeTargets = createMemo<TreeTargetDescriptor[]>(() =>
-		(selectedMissionContext()?.tower?.treeNodes ?? []).map((node) => ({
+		(selectedTowerProjection()?.treeNodes ?? []).map((node) => ({
 			id: node.id,
 			label: node.label,
 			kind: node.kind as TreeTargetKind,
@@ -2229,7 +2232,7 @@ export function TowerController({
 					appendLogLines(
 						sessions().map(
 							(session) =>
-								`${session.sessionId} | ${session.runtimeId} | ${session.lifecycleState}${session.assignmentLabel ? ` | ${session.assignmentLabel}` : ''}`
+								`${session.sessionId} | ${session.runnerId} | ${session.lifecycleState}${session.assignmentLabel ? ` | ${session.assignmentLabel}` : ''}`
 						)
 					);
 					return;
@@ -2821,8 +2824,8 @@ function buildProjectedSessionRecords(
 	return Object.values(domain.agentSessions)
 		.map((session) => ({
 			sessionId: session.sessionId,
-			runtimeId: session.runtimeId,
-			runtimeLabel: session.runtimeId,
+			runnerId: session.runnerId,
+			runnerLabel: session.runnerId,
 			lifecycleState: session.lifecycleState as MissionAgentSessionRecord['lifecycleState'],
 			...(session.taskId ? { taskId: session.taskId } : {}),
 			...(session.taskId ? { assignmentLabel: domain.tasks[session.taskId]?.subject ?? session.taskId } : {}),

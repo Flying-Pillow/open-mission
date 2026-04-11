@@ -10,7 +10,7 @@ export async function runInit(context: CommandContext): Promise<void> {
 
 	progress.stop('Mission root ready');
 	note(
-		`control: ${path.relative(context.controlRoot, initialization.controlDirectoryPath)}\ndaemon settings: ${initialization.daemonSettingsPath}\nactive: ${path.relative(context.controlRoot, initialization.worktreesRoot)}\nruntime: no default agent runtime configured`,
+		`control: ${path.relative(context.controlRoot, initialization.controlDirectoryPath)}\ndaemon settings: ${initialization.daemonSettingsPath}\nactive: ${path.relative(context.controlRoot, initialization.worktreesRoot)}\nrunner: no default agent runner configured`,
 		'Workspace state'
 	);
 	outro('Mission repo scaffolding is ready.');

@@ -347,7 +347,7 @@ export type MissionFromIssueRequest = {
 };
 
 export type ControlSettingsUpdate = {
-	field: 'agentRuntime' | 'defaultAgentMode' | 'defaultModel' | 'towerTheme' | 'missionWorkspaceRoot' | 'instructionsPath' | 'skillsPath';
+	field: 'agentRunner' | 'defaultAgentMode' | 'defaultModel' | 'towerTheme' | 'missionWorkspaceRoot' | 'instructionsPath' | 'skillsPath';
 	value: string;
 };
 

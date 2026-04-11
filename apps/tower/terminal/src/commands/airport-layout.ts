@@ -4,7 +4,11 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { DaemonApi, readMissionUserConfig } from '@flying-pillow/mission-core';
+import {
+	DaemonApi,
+	readMissionUserConfig,
+	type MissionAgentSessionState
+} from '@flying-pillow/mission-core';
 import { createAirportPanelConnectParams } from '../airport/createAirportPanelConnectParams.js';
 import { connectSurfaceDaemon, resolveSurfaceDaemonLaunchMode } from '../daemon/connectSurfaceDaemon.js';
 import type { CommandContext } from './types.js';
@@ -549,8 +553,8 @@ function renderAgentSessionPane(input: {
 	process.stdout.write(`agent session: ${projection.sessionId}\n`);
 	process.stdout.write(`mission: ${projection.missionId ?? 'unknown'}\n`);
 	process.stdout.write(`status: ${input.session?.lifecycleState ?? projection.statusLabel}\n`);
-	if (input.session?.runtimeLabel) {
-		process.stdout.write(`runtime: ${input.session.runtimeLabel}\n`);
+	if (input.session?.runnerLabel) {
+		process.stdout.write(`runner: ${input.session.runnerLabel}\n`);
 	}
 	if (input.session?.taskId) {
 		process.stdout.write(`task: ${input.session.taskId}\n`);
@@ -586,21 +590,11 @@ function renderAgentSessionPane(input: {
 	}
 }
 
-function pickSessionRecordUpdates(state: {
-	runtimeId: string;
-	transportId?: string;
-	runtimeLabel: string;
-	sessionId: string;
-	lifecycleState: string;
-	workingDirectory?: string;
-	currentTurnTitle?: string;
-	failureMessage?: string;
-	lastUpdatedAt: string;
-}): Partial<AirportLayoutSessionRecord> {
+function pickSessionRecordUpdates(state: MissionAgentSessionState): Partial<AirportLayoutSessionRecord> {
 	return {
-		runtimeId: state.runtimeId,
+		runnerId: state.runnerId,
 		...(state.transportId ? { transportId: state.transportId } : {}),
-		runtimeLabel: state.runtimeLabel,
+		runnerLabel: state.runnerLabel,
 		lifecycleState: state.lifecycleState as AirportLayoutSessionRecord['lifecycleState'],
 		...(state.workingDirectory ? { workingDirectory: state.workingDirectory } : {}),
 		...(state.currentTurnTitle ? { currentTurnTitle: state.currentTurnTitle } : {}),

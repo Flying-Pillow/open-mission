@@ -801,8 +801,8 @@ export class MissionWorkspace {
 		if (!initialized || !settings) {
 			warnings.push('Mission control will be created in the first mission worktree if it is not already present on this checkout.');
 		}
-		if (!effectiveSettings.agentRuntime) {
-			problems.push('Mission control agent runtime is not configured.');
+		if (!effectiveSettings.agentRunner) {
+			problems.push('Mission control agent runner is not configured.');
 		}
 		if (!effectiveSettings.defaultAgentMode) {
 			problems.push('Mission control default agent mode is not configured.');
@@ -889,9 +889,9 @@ export class MissionWorkspace {
 	): OperatorActionFlowOption[] {
 		return [
 			{
-				id: 'agentRuntime',
-				label: 'Agent Runtime',
-				description: control.settings.agentRuntime?.trim() || 'Required'
+				id: 'agentRunner',
+				label: 'Agent Runner',
+				description: control.settings.agentRunner?.trim() || 'Required'
 			},
 			{
 				id: 'defaultAgentMode',
@@ -930,14 +930,14 @@ export class MissionWorkspace {
 		control: MissionControlPlaneStatus,
 		selectedField: ControlSettingsUpdate['field'] | undefined
 	): OperatorActionFlowDescriptor['steps'][number] {
-		if (selectedField === 'agentRuntime') {
+		if (selectedField === 'agentRunner') {
 			return {
 				kind: 'selection',
 				id: 'value',
 				label: 'VALUE',
-				title: 'RUNTIME',
-				emptyLabel: 'No runtimes are available.',
-				helperText: 'Choose the runtime Mission should use.',
+				title: 'RUNNER',
+				emptyLabel: 'No runners are available.',
+				helperText: 'Choose the runner Mission should use.',
 				selectionMode: 'single',
 				options: this.orderSelectedOptionFirst([
 					{
@@ -950,11 +950,11 @@ export class MissionWorkspace {
 						label: 'Copilot SDK',
 						description: 'Headless Copilot SDK process with no UI'
 					}
-				], control.settings.agentRuntime)
+				], control.settings.agentRunner)
 			};
 		}
 		if (selectedField === 'defaultAgentMode') {
-			const configuredRunnerId = control.settings.agentRuntime?.trim();
+			const configuredRunnerId = control.settings.agentRunner?.trim();
 			const usesTerminalTransport = configuredRunnerId === 'copilot-cli';
 			return {
 				kind: 'selection',
@@ -962,7 +962,7 @@ export class MissionWorkspace {
 				label: 'VALUE',
 				title: 'DEFAULT MODE',
 				emptyLabel: 'No agent modes are available.',
-				helperText: 'Choose how the configured runtime should run by default.',
+				helperText: 'Choose how the configured runner should run by default.',
 				selectionMode: 'single',
 				options: this.orderSelectedOptionFirst([
 					{
@@ -1004,7 +1004,7 @@ export class MissionWorkspace {
 			label: 'VALUE',
 			title: selectedField === 'defaultModel' ? 'MODEL' : 'SETTING VALUE',
 			helperText: selectedField === 'defaultModel'
-				? 'Enter the default model id for the selected runtime.'
+				? 'Enter the default model id for the selected runner.'
 				: 'Enter the new value for the selected setting.',
 			placeholder: selectedField === 'defaultModel' ? 'Enter the model id' : 'Enter the updated value',
 			initialValue: this.resolveSetupTextInitialValue(control, selectedField),
@@ -1222,15 +1222,15 @@ export class MissionWorkspace {
 		const value = rawValue.trim();
 
 		switch (field) {
-			case 'agentRuntime':
+			case 'agentRunner':
 				if (value.length === 0) {
-					delete nextSettings.agentRuntime;
+					delete nextSettings.agentRunner;
 					break;
 				}
 				if (value !== 'copilot-cli' && value !== 'copilot-sdk') {
-					throw new Error(`Unsupported Mission agent runtime '${value}'.`);
+					throw new Error(`Unsupported Mission agent runner '${value}'.`);
 				}
-				nextSettings.agentRuntime = value;
+				nextSettings.agentRunner = value;
 				break;
 			case 'defaultAgentMode':
 				if (value.length === 0) {
@@ -1762,7 +1762,7 @@ export class MissionWorkspace {
 
 		const configuredRunnerId = getDefaultMissionDaemonSettingsWithOverrides(
 			readMissionDaemonSettings(this.workspaceRoot) ?? {}
-		).agentRuntime;
+		).agentRunner;
 		if (configuredRunnerId) {
 			return this.requireRunner(configuredRunnerId).id;
 		}
@@ -1955,7 +1955,7 @@ function asControlSettingField(
 	value: string | undefined
 ): ControlSettingsUpdate['field'] | undefined {
 	if (
-		value === 'agentRuntime'
+		value === 'agentRunner'
 		|| value === 'defaultAgentMode'
 		|| value === 'defaultModel'
 		|| value === 'towerTheme'

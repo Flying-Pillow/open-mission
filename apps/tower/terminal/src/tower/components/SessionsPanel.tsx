@@ -17,7 +17,7 @@ export function SessionsPanel(props: SessionsPanelProps) {
 				<For each={props.sessions.slice(0, 5)}>
 					{(session) => (
 						<text style={{ fg: session.sessionId === props.activeSessionId ? towerTheme.accent : towerTheme.bodyText }}>
-							{session.sessionId} | {session.runtimeId} | {session.lifecycleState}
+							{session.sessionId} | {session.runnerLabel} | {session.lifecycleState}
 						</text>
 					)}
 				</For>

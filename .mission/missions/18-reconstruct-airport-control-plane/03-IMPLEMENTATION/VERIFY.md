@@ -2,7 +2,7 @@
 title: "VERIFY: #18 - Reconstruct airport control plane"
 artifact: "verify"
 createdAt: "2026-04-10T21:32:50.000Z"
-updatedAt: "2026-04-10T22:03:06.000Z"
+updatedAt: "2026-04-10T22:18:04.000Z"
 stage: "implementation"
 ---
 
@@ -31,10 +31,11 @@ Branch: mission/18-reconstruct-airport-control-plane
 	- The daemon test suite verified that airport registration, focus observation, reconnect behavior, and repository-scoped registry behavior still hold after the pane-id contract and substrate reconciliation changes.
 - Slice 4, airport contracts and focused test alignment:
 	- `pnpm exec turbo run build --filter=@flying-pillow/tower-terminal`
-	- The build remained clean after aligning the tower surface connect paths, airport-facing daemon contracts, and airport control types around panel-reported pane ids.
+	- The build is clean after aligning the tower surface connect paths, airport-facing daemon contracts, airport control types around panel-reported pane ids, and the tower runner/projection surfaces to the current mission-core session model.
 	- `pnpm --filter @flying-pillow/mission-airport exec vitest run src/AirportControl.test.ts src/terminal-manager.test.ts`
 	- `pnpm exec vitest run packages/core/src/daemon/Daemon.test.ts`
 	- The focused tests now cover the contract-aligned airport boundary without relying on pane-title identity. No additional source-spec edit was required because `specifications/airport/airport-control-plane.md` already described the clean-break boundary that the code now matches.
+	- The daemon regression suite still passes after the final tower cleanup, confirming that airport registration, panel projections, and repository-scoped airport intent remain coherent through the real control-plane path.
 
 ## Gaps
 

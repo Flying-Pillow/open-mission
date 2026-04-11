@@ -24,8 +24,8 @@ type ControlStatusPanelProps = {
 
 export function ControlStatusPanel(props: ControlStatusPanelProps) {
 	const runnerLabel = createMemo(() => {
-		const runtimeId = props.controlSession?.runtimeId?.trim() || props.control?.settings?.agentRuntime?.trim() || 'runtime';
-		return runtimeId.toUpperCase();
+		const runnerId = props.controlSession?.runnerId?.trim() || props.control?.settings?.agentRunner?.trim() || 'runner';
+		return runnerId.toUpperCase();
 	});
 	const selectedTabId = createMemo<'runtime' | 'control'>(() => {
 		if (props.selectedTabId) {
@@ -60,21 +60,21 @@ function buildRuntimeLines(props: ControlStatusPanelProps): TabPanelLine[] {
 	const control = props.control;
 	const session = props.controlSession;
 	const lines: TabPanelLine[] = [
-		{ text: 'Agent runtime connection for repository root.', fg: towerTheme.brightText },
+		{ text: 'Agent runner connection for repository root.', fg: towerTheme.brightText },
 		{ text: `Opened from ${props.workspaceContextLabel}.`, fg: towerTheme.metaText },
 		{ text: '', fg: towerTheme.metaText }
 	];
 
 	if (!session) {
-		lines.push({ text: 'No active runtime session.', fg: towerTheme.warning });
-		lines.push({ text: 'Use /launch to start the configured runtime.', fg: towerTheme.metaText });
+		lines.push({ text: 'No active runner session.', fg: towerTheme.warning });
+		lines.push({ text: 'Use /launch to start the configured runner.', fg: towerTheme.metaText });
 		if (!control?.settingsComplete) {
 			lines.push({ text: 'Setup incomplete. Use /setup first.', fg: towerTheme.warning });
 		}
 		return lines;
 	}
 
-	lines.push({ text: `Runtime: ${session.runtimeId}`, fg: towerTheme.metaText });
+	lines.push({ text: `Runner: ${session.runnerLabel}`, fg: towerTheme.metaText });
 	lines.push({ text: `State: ${session.lifecycleState}`, fg: sessionStateColor(session.lifecycleState) });
 	lines.push({ text: '', fg: towerTheme.metaText });
 	lines.push({ text: 'Live output:', fg: towerTheme.labelText });
@@ -88,8 +88,8 @@ function buildRuntimeLines(props: ControlStatusPanelProps): TabPanelLine[] {
 	if (control?.settings?.defaultModel?.trim()) {
 		lines.push({ text: `Model: ${control.settings.defaultModel}`, fg: towerTheme.metaText });
 	}
-	if (control?.settings?.agentRuntime?.trim()) {
-		lines.push({ text: `Configured runtime: ${control.settings.agentRuntime}`, fg: towerTheme.metaText });
+	if (control?.settings?.agentRunner?.trim()) {
+		lines.push({ text: `Configured runner: ${control.settings.agentRunner}`, fg: towerTheme.metaText });
 	}
 
 	return lines;
@@ -106,7 +106,7 @@ function buildControlLines(props: ControlStatusPanelProps): TabPanelLine[] {
 	const lines: TabPanelLine[] = [
 		{
 			text: props.mode === 'setup'
-				? 'Finish runtime setup before starting your first mission.'
+				? 'Finish runner setup before starting your first mission.'
 				: 'Mission control is ready.',
 			fg: towerTheme.brightText
 		},
@@ -134,7 +134,7 @@ function buildControlLines(props: ControlStatusPanelProps): TabPanelLine[] {
 	if (props.availableMissions.length === 0) {
 		lines.push({
 			text: props.mode === 'setup'
-				? 'No active missions yet. Finish runtime setup, then create your first mission with /start.'
+				? 'No active missions yet. Finish runner setup, then create your first mission with /start.'
 				: 'No active missions yet. Use /start from the repository root to create your first mission.',
 			fg: towerTheme.mutedText
 		});

@@ -871,7 +871,7 @@ describe('Daemon', () => {
 						issuesConfigured: true
 					});
 					expect(setupFields && 'options' in setupFields ? setupFields.options.map((option) => option.id) : []).toEqual([
-						'agentRuntime',
+						'agentRunner',
 						'defaultAgentMode',
 						'defaultModel',
 						'towerTheme',
@@ -890,7 +890,7 @@ describe('Daemon', () => {
 		});
 	});
 
-	it('persists control runtime defaults and marks setup complete once configured', async () => {
+	it('persists control runner defaults and marks setup complete once configured', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
 			await initializeMissionRepository(workspaceRoot);
@@ -902,7 +902,7 @@ describe('Daemon', () => {
 				try {
 					await client.connect({ surfacePath: workspaceRoot });
 					const api = new DaemonApi(client);
-					await api.control.updateSetting('agentRuntime', 'copilot-sdk');
+					await api.control.updateSetting('agentRunner', 'copilot-sdk');
 					await api.control.updateSetting('defaultAgentMode', 'interactive');
 					const status = await api.control.updateSetting('defaultModel', 'gpt-5.4');
 					const settingsContent = await fs.readFile(getMissionDaemonSettingsPath(workspaceRoot), 'utf8');
@@ -912,13 +912,13 @@ describe('Daemon', () => {
 					expect(status.control).toMatchObject({
 						settingsComplete: true,
 						settings: expect.objectContaining({
-							agentRuntime: 'copilot-sdk',
+							agentRunner: 'copilot-sdk',
 							defaultAgentMode: 'interactive',
 							defaultModel: 'gpt-5.4'
 						})
 					});
 					expect(JSON.parse(settingsContent)).toMatchObject({
-						agentRuntime: 'copilot-sdk',
+						agentRunner: 'copilot-sdk',
 						defaultAgentMode: 'interactive',
 						defaultModel: 'gpt-5.4'
 					});
@@ -933,7 +933,7 @@ describe('Daemon', () => {
 		});
 	});
 
-	it('persists selection-backed runtime values through command execution flow', async () => {
+	it('persists selection-backed runner values through command execution flow', async () => {
 		const workspaceRoot = await createTempRepo();
 
 		try {
@@ -948,14 +948,14 @@ describe('Daemon', () => {
 					{
 						kind: 'selection',
 						stepId: 'field',
-						optionIds: ['agentRuntime']
+						optionIds: ['agentRunner']
 					}
 				]);
 				const result = await api.control.executeAction('control.setup.edit', [
 					{
 						kind: 'selection',
 						stepId: 'field',
-						optionIds: ['agentRuntime']
+						optionIds: ['agentRunner']
 					},
 					{
 						kind: 'selection',
@@ -968,18 +968,18 @@ describe('Daemon', () => {
 				expect(resolvedFlow.steps[1]).toMatchObject({
 					kind: 'selection',
 					id: 'value',
-					title: 'RUNTIME'
+					title: 'RUNNER'
 				});
 
 				expect(result).toMatchObject({
 					control: expect.objectContaining({
 						settings: expect.objectContaining({
-							agentRuntime: 'copilot-sdk'
+							agentRunner: 'copilot-sdk'
 						})
 					})
 				});
 				expect(JSON.parse(settingsContent)).toMatchObject({
-					agentRuntime: 'copilot-sdk'
+					agentRunner: 'copilot-sdk'
 				});
 			} finally {
 				client.dispose();

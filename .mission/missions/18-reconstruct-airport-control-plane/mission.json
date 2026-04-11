@@ -163,8 +163,8 @@
     }
   },
   "runtime": {
-    "lifecycle": "running",
-    "activeStageId": "audit",
+    "lifecycle": "delivered",
+    "activeStageId": "delivery",
     "pause": {
       "paused": false
     },
@@ -235,17 +235,23 @@
       },
       {
         "stageId": "audit",
-        "lifecycle": "pending",
-        "taskIds": [],
+        "lifecycle": "completed",
+        "taskIds": [
+          "audit/01-debrief",
+          "audit/02-touchdown"
+        ],
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
         "blockedTaskIds": [],
-        "completedTaskIds": []
+        "completedTaskIds": [
+          "audit/01-debrief",
+          "audit/02-touchdown"
+        ]
       },
       {
         "stageId": "delivery",
-        "lifecycle": "pending",
+        "lifecycle": "completed",
         "taskIds": [],
         "readyTaskIds": [],
         "queuedTaskIds": [],
@@ -468,6 +474,42 @@
         "createdAt": "2026-04-10T21:52:10.000Z",
         "updatedAt": "2026-04-10T22:03:06.000Z",
         "completedAt": "2026-04-10T22:03:06.000Z"
+      },
+      {
+        "taskId": "audit/01-debrief",
+        "stageId": "audit",
+        "title": "Debrief",
+        "instruction": "Run the focused end-to-end validation required for the mission. Record the airport-control-plane replay results, residual risks, and release readiness in AUDIT.md.",
+        "dependsOn": [],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": true,
+          "launchMode": "automatic"
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-10T22:18:04.000Z",
+        "updatedAt": "2026-04-10T22:18:04.000Z",
+        "completedAt": "2026-04-10T22:18:04.000Z"
+      },
+      {
+        "taskId": "audit/02-touchdown",
+        "stageId": "audit",
+        "title": "Touchdown",
+        "instruction": "Prepare the final delivery motion. Confirm AUDIT.md is complete, summarize the final airport-control-plane replay status, and write DELIVERY.md as the final delivery artifact for the mission.",
+        "dependsOn": [],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": true,
+          "launchMode": "automatic"
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-10T22:18:04.000Z",
+        "updatedAt": "2026-04-10T22:18:04.000Z",
+        "completedAt": "2026-04-10T22:18:04.000Z"
       }
     ],
     "sessions": [],
@@ -491,26 +533,22 @@
       {
         "gateId": "audit",
         "intent": "audit",
-        "state": "blocked",
+        "state": "passed",
         "stageId": "audit",
-        "reasons": [
-          "Stage 'audit' is not completed."
-        ],
-        "updatedAt": "2026-04-10T22:03:06.000Z"
+        "reasons": [],
+        "updatedAt": "2026-04-10T22:18:04.000Z"
       },
       {
         "gateId": "deliver",
         "intent": "deliver",
-        "state": "blocked",
+        "state": "passed",
         "stageId": "delivery",
-        "reasons": [
-          "Stage 'delivery' is not completed."
-        ],
-        "updatedAt": "2026-04-10T22:03:06.000Z"
+        "reasons": [],
+        "updatedAt": "2026-04-10T22:18:04.000Z"
       }
     ],
     "launchQueue": [],
-    "updatedAt": "2026-04-10T22:03:06.000Z"
+    "updatedAt": "2026-04-10T22:18:04.000Z"
   },
   "eventLog": [
     {
@@ -753,6 +791,57 @@
       "payload": {
         "taskId": "implementation/verify-04-align-airport-specs-contracts-and-focused-tests"
       }
+    },
+    {
+      "eventId": "tasks.request-generation:2026-04-10T22:03:06.000Z:{\"stageId\":\"audit\"}:tasks-generated",
+      "type": "tasks.generated",
+      "occurredAt": "2026-04-10T22:18:04.000Z",
+      "source": "daemon",
+      "causedByRequestId": "tasks.request-generation:2026-04-10T22:03:06.000Z:{\"stageId\":\"audit\"}",
+      "payload": {
+        "stageId": "audit",
+        "tasks": [
+          {
+            "taskId": "audit/01-debrief",
+            "title": "Debrief",
+            "instruction": "Run the focused end-to-end validation required for the mission. Record the airport-control-plane replay results, residual risks, and release readiness in AUDIT.md.",
+            "dependsOn": [],
+            "agentRunner": "copilot-cli"
+          },
+          {
+            "taskId": "audit/02-touchdown",
+            "title": "Touchdown",
+            "instruction": "Prepare the final delivery motion. Confirm AUDIT.md is complete, summarize the final airport-control-plane replay status, and write DELIVERY.md as the final delivery artifact for the mission.",
+            "dependsOn": [],
+            "agentRunner": "copilot-cli"
+          }
+        ]
+      }
+    },
+    {
+      "eventId": "18-reconstruct-airport-control-plane:task-completed:audit-01-debrief",
+      "type": "task.completed",
+      "occurredAt": "2026-04-10T22:18:04.000Z",
+      "source": "human",
+      "payload": {
+        "taskId": "audit/01-debrief"
+      }
+    },
+    {
+      "eventId": "18-reconstruct-airport-control-plane:task-completed:audit-02-touchdown",
+      "type": "task.completed",
+      "occurredAt": "2026-04-10T22:18:04.000Z",
+      "source": "human",
+      "payload": {
+        "taskId": "audit/02-touchdown"
+      }
+    },
+    {
+      "eventId": "18-reconstruct-airport-control-plane:mission-delivered",
+      "type": "mission.delivered",
+      "occurredAt": "2026-04-10T22:18:04.000Z",
+      "source": "human",
+      "payload": {}
     }
   ]
 }
