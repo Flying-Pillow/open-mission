@@ -238,13 +238,6 @@ export function AirportShell({
 			projectedAvailableMissions()
 		)
 	);
-	const headerFooterBadges = createMemo(() =>
-		buildHeaderFooterBadges({
-			status: status(),
-			daemonState: daemonState(),
-			fallbackGitHubUser: fallbackGitHubUser()
-		})
-	);
 	const currentMissionTitle = createMemo(() => {
 		const missionId = currentMissionId();
 		if (!missionId) {
@@ -255,6 +248,13 @@ export function AirportShell({
 			?? projectedAvailableMissions().find((candidate) => candidate.missionId === missionId)?.title
 			?? missionId;
 	});
+	const headerFooterBadges = createMemo(() =>
+		buildHeaderFooterBadges({
+			status: status(),
+			daemonState: daemonState(),
+			fallbackGitHubUser: fallbackGitHubUser()
+		})
+	);
 	const commandFlowOwner = flowController.owner;
 	const commandTargetContext = createMemo<OperatorActionTargetContext>(() => {
 		if (towerMode() !== 'mission') {
@@ -277,7 +277,8 @@ export function AirportShell({
 		targetKind?: TreeTargetKind;
 	}>(() => {
 		const treeContext = selectedTreeContext();
-		const missionLabel = treeContext?.targetLabel ?? currentMissionTitle();
+		const currentMissionLabel = currentMissionTitle();
+		const missionLabel = treeContext?.targetLabel ?? currentMissionLabel;
 		return {
 			...(treeContext?.sessionId ? { sessionId: treeContext.sessionId } : {}),
 			...(treeContext?.stageId ? { stageId: treeContext.stageId } : {}),
@@ -348,7 +349,7 @@ export function AirportShell({
 				: repositoryFocusOrder,
 			headerTabsFocusable: headerTabsFocusable(),
 			showCommandFlow: showCommandFlowOverlay(),
-			showCommandPicker: false,
+			showCommandPicker: commandController.showCommandPicker(),
 			expandedComposer: false
 		})
 	);
@@ -374,7 +375,7 @@ export function AirportShell({
 	});
 	const screenTitle = createMemo(() => {
 		if (towerMode() !== 'mission') {
-					return towerProjection()?.repositoryLabel || resolveHeaderWorkspaceLabel(status().control, currentControlRoot());
+			return towerProjection()?.repositoryLabel || resolveHeaderWorkspaceLabel(status().control, currentControlRoot());
 		}
 		return currentMissionTitle()
 			|| (selectedMissionMatchesLoaded() ? currentMissionId() ?? 'Mission' : 'Mission');
@@ -726,12 +727,6 @@ export function AirportShell({
 		setActivityLog((current) => [...current, `[${timestamp}] ${message}`].slice(-240));
 	}
 
-	function appendLogLines(lines: string[]): void {
-		for (const line of lines) {
-			appendLog(line);
-		}
-	}
-
 
 	async function submitCommandFlowTextStep(rawValue: string): Promise<void> {
 		flowController.setTextValue(rawValue);
@@ -885,60 +880,15 @@ export function AirportShell({
 
 			appendLog(`Executing ${trimmed}.`);
 
-			const [instruction, ...args] = trimmed.split(/\s+/u);
-			if (!instruction) {
-				return;
-			}
-			switch (instruction.toLowerCase()) {
-				case '/help':
-					appendLogLines([
-						...new Set([
-								...commandController.availableActions().filter((command) => command.enabled).map((command) => command.action),
-						...(workspaceContext.kind === 'control-root' ? ['/root'] : []),
-						'/clear',
-						'/quit'
-						])
-					]);
-					return;
-				case '/clear':
-					setActivityLog([]);
-					return;
+			switch (trimmed.toLowerCase()) {
 				case '/quit':
 					renderer.destroy();
 					return;
-				case '/setup':
-				case '/init':
-				case '/start':
-				case '/select':
-				case '/task':
-				case '/transition':
-				case '/cancel':
-				case '/terminate':
-				case '/deliver':
-					if (await executeAvailableActionByCommandText(trimmed)) {
-						return;
-					}
-					appendLog(`Command ${trimmed} is not available for the selected target.`);
-					return;
-				case '/root': {
-					if (workspaceContext.kind !== 'control-root') {
-						appendLog('This tower is locked to the current mission worktree. Relaunch from the repository root to browse missions.');
-						return;
-					}
-					await connectClient({});
-						commandController.closeCommandPicker();
-					appendLog('Returned to repository mode.');
-					return;
-				}
 				default:
-					if (args.length > 0) {
-						appendLog(`Command ${trimmed} is not available for the selected target.`);
-						return;
-					}
 					if (await executeAvailableActionByCommandText(trimmed)) {
 						return;
 					}
-					appendLog(`Unknown command '${trimmed}'. Type /help.`);
+					appendLog(`Unknown command '${trimmed}'.`);
 					return;
 			}
 		} catch (error) {
@@ -992,6 +942,15 @@ export function AirportShell({
 					}}
 					onInputKeyDown={(event) => {
 						commandController.handlePanelKeyDown(event);
+					}}
+					onCommandPickerHighlight={(itemId) => {
+						commandController.highlightCommandPickerItem(itemId);
+					}}
+					onCommandPickerSelect={(itemId) => {
+						commandController.selectCommandById(itemId, { fromPicker: true });
+					}}
+					onCommandPickerKeyDown={(event) => {
+						commandController.handleCommandPickerKeyDown(event);
 					}}
 				/>
 		</Show>

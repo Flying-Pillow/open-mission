@@ -16,6 +16,7 @@ export * from './initializeMissionRepository.js';
 export * from './lib/agentRuntimes.js';
 export * from './lib/daemonConfig.js';
 export * from './lib/frontmatter.js';
+export * from './lib/connectAirportControl.js';
 export * from './lib/operatorActionTargeting.js';
 export * from './lib/repoConfig.js';
 export * from './lib/userConfig.js';

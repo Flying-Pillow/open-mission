@@ -129,6 +129,8 @@ describe('TerminalManagerSubstrateController', () => {
 	it('creates the runway pane when a session binding appears', async () => {
 		const calls: string[][] = [];
 		let includeAgentPane = false;
+		const previousEntryPath = process.env['AIRPORT_TERMINAL_ENTRY_PATH'];
+		process.env['AIRPORT_TERMINAL_ENTRY_PATH'] = '/tmp/airport-terminal/index.js';
 		const executor = (args: string[]) => {
 			calls.push(args);
 			if (args.includes('list-panes')) {
@@ -156,8 +158,16 @@ describe('TerminalManagerSubstrateController', () => {
 			runway: { targetKind: 'agentSession', targetId: 'session-1', mode: 'control' }
 		});
 
-		await controller.observe(state);
-		await controller.applyEffects(planAirportSubstrateEffects(state));
+		try {
+			await controller.observe(state);
+			await controller.applyEffects(planAirportSubstrateEffects(state));
+		} finally {
+			if (previousEntryPath === undefined) {
+				delete process.env['AIRPORT_TERMINAL_ENTRY_PATH'];
+			} else {
+				process.env['AIRPORT_TERMINAL_ENTRY_PATH'] = previousEntryPath;
+			}
+		}
 
 		expect(calls.some((args) => args.includes('new-pane') && args.includes('--in-place'))).toBe(true);
 	});

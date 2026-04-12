@@ -51,6 +51,9 @@ type TowerPanelProps = {
 	onInputChange: (value: string) => void;
 	onInputSubmit: (value?: string) => void;
 	onInputKeyDown?: (event: TowerKeyEvent) => void;
+	onCommandPickerHighlight?: (itemId: string) => void;
+	onCommandPickerSelect?: (itemId: string) => void;
+	onCommandPickerKeyDown?: (event: TowerKeyEvent) => void;
 };
 
 export function TowerPanel(props: TowerPanelProps) {
@@ -111,6 +114,9 @@ export function TowerPanel(props: TowerPanelProps) {
 					onInputChange={props.onInputChange}
 					onInputSubmit={props.onInputSubmit}
 					{...(props.onInputKeyDown ? { onInputKeyDown: props.onInputKeyDown } : {})}
+					{...(props.onCommandPickerHighlight ? { onCommandPickerHighlight: props.onCommandPickerHighlight } : {})}
+					{...(props.onCommandPickerSelect ? { onCommandPickerSelect: props.onCommandPickerSelect } : {})}
+					{...(props.onCommandPickerKeyDown ? { onCommandPickerKeyDown: props.onCommandPickerKeyDown } : {})}
 					style={{ flexShrink: 0 }}
 				/>
 			</Show>

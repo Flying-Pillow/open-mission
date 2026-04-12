@@ -283,7 +283,30 @@ export class Daemon {
 	private async executeAirportPaneBind(request: Request): Promise<any> {
 		await this.systemController.scopeAirportToSurfacePath(request.surfacePath);
 		const params = (request.params ?? {}) as AirportPaneBind;
+		this.logLine?.(
+			[
+				`Airport pane bind`,
+				params.paneId ? `pane=${params.paneId}` : undefined,
+				params.binding?.targetKind ? `targetKind=${params.binding.targetKind}` : undefined,
+				params.binding?.targetId ? `targetId=${params.binding.targetId}` : undefined,
+				params.binding?.mode ? `mode=${params.binding.mode}` : undefined,
+				request.surfacePath ? `surface=${request.surfacePath}` : undefined
+			].filter(Boolean).join(' ')
+		);
 		const snapshot = await this.systemController.bindAirportPane(params);
+		if (params.paneId === 'briefingRoom') {
+			this.logLine?.(
+				[
+					`Resolved Briefing Room projection`,
+					snapshot.airportProjections.briefingRoom.artifactPath
+						? `artifactPath=${snapshot.airportProjections.briefingRoom.artifactPath}`
+						: undefined,
+					snapshot.airportProjections.briefingRoom.launchPath
+						? `launchPath=${snapshot.airportProjections.briefingRoom.launchPath}`
+						: undefined
+				].filter(Boolean).join(' ')
+			);
+		}
 		this.broadcastAirportState(snapshot);
 		return snapshot;
 	}

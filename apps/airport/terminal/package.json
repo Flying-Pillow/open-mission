@@ -3,24 +3,24 @@
   "version": "0.1.0-beta.0",
   "description": "Airport terminal surface package for Mission repositories and missions; the OpenTUI runtime currently requires Bun",
   "type": "module",
-  "main": "build/node-main.js",
-  "types": "build/node-main.d.ts",
+  "main": "build/main.js",
+  "types": "build/main.d.ts",
   "exports": {
     ".": {
-      "typescript": "./src/node-main.ts",
-      "types": "./build/node-main.d.ts",
-      "import": "./build/node-main.js",
-      "default": "./build/node-main.js"
+      "typescript": "./src/main.ts",
+      "types": "./build/main.d.ts",
+      "import": "./build/main.js",
+      "default": "./build/main.js"
     }
   },
   "files": [
     "build"
   ],
   "scripts": {
-    "build": "rm -rf build && rm -f tsconfig.tsbuildinfo tsconfig.runtime.tsbuildinfo && tsc -p tsconfig.runtime.json && tsc -p tsconfig.json --emitDeclarationOnly && bun run ./scripts/build-terminal.mjs",
+    "build": "rm -rf build && rm -f tsconfig.tsbuildinfo && tsc -p tsconfig.json --emitDeclarationOnly && bun run ./scripts/build-terminal.mjs",
     "check": "tsc --noEmit -p tsconfig.json",
-    "layout": "tsx src/index.ts __airport-layout-open__",
-    "dev": "AIRPORT_PANE_ID=tower tsx src/index.ts",
+    "layout": "bun run ./src/index.ts __airport-layout-open__",
+    "dev": "AIRPORT_PANE_ID=tower bun run ./src/index.ts",
     "lint": "eslint src --ext .ts,.tsx",
     "test": "vitest run --passWithNoTests",
     "test:daemon-mission": "tsx src/scripts/daemonMissionSmokeTest.ts",

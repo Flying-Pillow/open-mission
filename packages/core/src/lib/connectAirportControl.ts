@@ -1,15 +1,14 @@
 import * as path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
+import { DaemonClient } from '../client/DaemonClient.js';
+import { PROTOCOL_VERSION, type Ping } from '../daemon/contracts.js';
 import {
-	DaemonClient,
-	PROTOCOL_VERSION,
+	type DaemonRuntimeMode,
 	resolveDefaultRuntimeFactoryModulePath,
 	startMissionDaemonProcess,
-	stopMissionDaemonProcess,
-	type DaemonRuntimeMode,
-	type Ping
-} from '@flying-pillow/mission-core';
+	stopMissionDaemonProcess
+} from '../daemon/processControl.js';
 
 export type ConnectAirportControlOptions = {
 	surfacePath: string;
@@ -31,9 +30,7 @@ class IncompatibleDaemonError extends Error {
 	}
 }
 
-export function resolveAirportControlRuntimeMode(
-	moduleUrl: string | URL
-): DaemonRuntimeMode {
+export function resolveAirportControlRuntimeMode(moduleUrl: string | URL): DaemonRuntimeMode {
 	const environmentRuntimeMode = readConfiguredRuntimeMode();
 	if (environmentRuntimeMode) {
 		return environmentRuntimeMode;

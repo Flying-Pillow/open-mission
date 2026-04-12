@@ -5,17 +5,15 @@ import {
     MISSION_ARTIFACTS,
     MISSION_GATE_INTENTS,
     MISSION_STAGE_FOLDERS,
+    connectAirportControl,
     isMissionStageId,
+    resolveAirportControlRuntimeMode,
     resolveMissionWorkspaceContext,
     type GateIntent,
     type MissionArtifactKey,
     type MissionStageId,
     type MissionStageProgress
 } from '@flying-pillow/mission-core';
-import {
-    connectAirportControl,
-    resolveAirportControlRuntimeMode
-} from '../airport/connectAirportControl.js';
 
 const MISSION_ARTIFACT_KEY_LIST = Object.keys(MISSION_ARTIFACTS) as MissionArtifactKey[];
 

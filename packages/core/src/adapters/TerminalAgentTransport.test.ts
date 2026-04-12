@@ -113,7 +113,7 @@ describe('TerminalAgentTransport', () => {
 			observed.push(args);
 			if (args[0] === 'list-sessions') {
 				return {
-					stdout: 'mission-mission [Created 5m ago]\n',
+					stdout: 'flying-pillow-mission | AIRPORT [Created 5m ago]\n',
 					stderr: ''
 				};
 			}
@@ -143,9 +143,9 @@ describe('TerminalAgentTransport', () => {
 			command: 'copilot'
 		});
 
-		expect(handle.sharedSessionName).toBe('mission-mission');
+		expect(handle.sharedSessionName).toBe('flying-pillow-mission | AIRPORT');
 		expect(observed.some((args) => args[0] === 'list-sessions')).toBe(true);
-		expect(observed.some((args) => args[0] === '--session' && args[1] === 'mission-mission' && args[3] === 'new-pane')).toBe(true);
+		expect(observed.some((args) => args[0] === '--session' && args[1] === 'flying-pillow-mission | AIRPORT' && args[3] === 'new-pane')).toBe(true);
 	});
 
 	it('sends literal text to the shared-session pane process', async () => {

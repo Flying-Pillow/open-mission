@@ -7,9 +7,10 @@ import { readMissionUserConfig } from '@flying-pillow/mission-core';
 import type { AirportTerminalContext } from '../airportTerminalContext.js';
 
 const execFileAsync = promisify(execFile);
+const defaultAirportTerminalSessionName = 'flying-pillow-mission | AIRPORT';
 
 export async function bootstrapAirportLayout(context: AirportTerminalContext): Promise<void> {
-	const sessionName = resolveTerminalManagerSessionName(context.controlRoot);
+	const sessionName = resolveTerminalManagerSessionName();
 	const terminalManagerBinary = resolveTerminalManagerBinary();
 	const runtimeRoot = resolveRuntimeRoot();
 	const sessionSlug = slugifySessionName(sessionName);
@@ -21,11 +22,13 @@ export async function bootstrapAirportLayout(context: AirportTerminalContext): P
 		|| '50%';
 	const repoRoot = context.controlRoot;
 	const missionEntryCommand = resolveMissionEntryCommand();
+	const airportTerminalEntryPath = missionEntryCommand[missionEntryCommand.length - 1] ?? '';
 	const towerCommand = buildShellCommand([
 		'env',
 		'AIRPORT_TERMINAL_ACTIVE=1',
 		'AIRPORT_PANE_ID=tower',
 		`AIRPORT_TERMINAL_SESSION=${sessionName}`,
+		`AIRPORT_TERMINAL_ENTRY_PATH=${airportTerminalEntryPath}`,
 		...missionEntryCommand,
 		...context.args
 	]);
@@ -33,6 +36,7 @@ export async function bootstrapAirportLayout(context: AirportTerminalContext): P
 		'env',
 		'AIRPORT_PANE_ID=briefingRoom',
 		`AIRPORT_TERMINAL_SESSION=${sessionName}`,
+		`AIRPORT_TERMINAL_ENTRY_PATH=${airportTerminalEntryPath}`,
 		...missionEntryCommand,
 		'__airport-layout-briefing-room-pane'
 	]);
@@ -74,10 +78,10 @@ export async function bootstrapAirportLayout(context: AirportTerminalContext): P
 	});
 }
 
-function resolveTerminalManagerSessionName(controlRoot: string): string {
+function resolveTerminalManagerSessionName(): string {
 	return process.env['AIRPORT_TERMINAL_SESSION']?.trim()
 		|| process.env['AIRPORT_TERMINAL_SESSION_NAME']?.trim()
-		|| `mission-${path.basename(controlRoot)}`;
+		|| defaultAirportTerminalSessionName;
 }
 
 function slugifySessionName(sessionName: string): string {
@@ -91,7 +95,7 @@ function resolveRuntimeRoot(): string {
 function resolveMissionEntryCommand(): string[] {
 	const entryScriptPath = process.argv[1]?.trim();
 	if (!entryScriptPath) {
-		throw new Error('Mission CLI entry path is unavailable for airport layout bootstrap.');
+		throw new Error('Airport terminal entry path is unavailable for airport layout bootstrap.');
 	}
 	if (process.versions['bun']) {
 		return [process.execPath, entryScriptPath];
@@ -226,7 +230,7 @@ async function listTerminalManagerSessions(terminalManagerBinary: string): Promi
 }
 
 function parseTerminalManagerSessionSummary(line: string): TerminalManagerSessionSummary | undefined {
-	const name = line.match(/^(\S+)/u)?.[1];
+	const name = parseTerminalManagerSessionName(line);
 	if (!name) {
 		return undefined;
 	}
@@ -234,6 +238,16 @@ function parseTerminalManagerSessionSummary(line: string): TerminalManagerSessio
 		name,
 		state: line.includes('(EXITED') ? 'exited' : 'live'
 	};
+}
+
+function parseTerminalManagerSessionName(line: string): string | undefined {
+	const normalizedLine = line.trim();
+	if (!normalizedLine) {
+		return undefined;
+	}
+	const withoutCreatedSuffix = normalizedLine.replace(/\s+\[[^\]]*\]\s*$/u, '');
+	const withoutExitedSuffix = withoutCreatedSuffix.replace(/\s+\(EXITED[^)]*\)\s*$/u, '');
+	return withoutExitedSuffix.trim() || undefined;
 }
 
 async function execTerminalManager(terminalManagerBinary: string, args: string[]): Promise<{ stdout: string; stderr: string }> {

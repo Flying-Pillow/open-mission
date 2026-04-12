@@ -3,9 +3,10 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import {
 	DaemonApi,
+	connectAirportControl,
 	readMissionUserConfig,
+	resolveAirportControlRuntimeMode,
 } from '@flying-pillow/mission-core';
-import { connectAirportControl, resolveAirportControlRuntimeMode } from '../airport/connectAirportControl.js';
 import { createPaneConnectParams } from '../airport/createPaneConnectParams.js';
 import type { AirportTerminalContext } from '../airportTerminalContext.js';
 

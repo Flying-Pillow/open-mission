@@ -1,15 +1,14 @@
 import {
 	DaemonApi,
 	DaemonMissionApi,
+	connectAirportControl,
 	type MissionSystemSnapshot,
 	readMissionDaemonSettings,
+	resolveAirportControlRuntimeMode,
 	type MissionSelector
 } from '@flying-pillow/mission-core';
-import { connectAirportControl, resolveAirportControlRuntimeMode } from '../airport/connectAirportControl.js';
 import { createPaneConnectParams } from '../airport/createPaneConnectParams.js';
 import type { AirportTerminalContext } from '../airportTerminalContext.js';
-import {
-} from '../airport/connectAirportControl.js';
 import { applyTowerTheme, type TowerThemeName } from './components/towerTheme.js';
 import { resolveTowerWorkspaceContext } from './resolveTowerWorkspaceContext.js';
 

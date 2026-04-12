@@ -1,8 +1,9 @@
 import {
 	DaemonApi,
+	connectAirportControl,
+	resolveAirportControlRuntimeMode,
 	type MissionAgentSessionState
 } from '@flying-pillow/mission-core';
-import { connectAirportControl, resolveAirportControlRuntimeMode } from '../airport/connectAirportControl.js';
 import { createPaneConnectParams } from '../airport/createPaneConnectParams.js';
 import type { AirportTerminalContext } from '../airportTerminalContext.js';
 

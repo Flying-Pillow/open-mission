@@ -1,7 +1,5 @@
 import { execFile } from 'node:child_process';
-import path from 'node:path';
 import { promisify } from 'node:util';
-import { fileURLToPath } from 'node:url';
 import type { AirportSubstrateEffect } from './effects.js';
 import type { AirportPaneId, AirportPaneState, AirportState, AirportSubstrateState } from './types.js';
 
@@ -128,12 +126,13 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 		const controlRoot = process.env['MISSION_CONTROL_ROOT']?.trim()
 			|| process.env['MISSION_SURFACE_PATH']?.trim()
 			|| process.cwd();
-		const missionEntry = resolveMissionCliEntryPath();
+		const airportTerminalEntryPath = resolveAirportTerminalEntryPath();
 		const launchCommand = [
 			'env',
 			'\'AIRPORT_PANE_ID=runway\'',
 			shellEscape(`AIRPORT_TERMINAL_SESSION=${this.state.sessionName}`),
-			...resolveAirportPaneRuntimeCommand(missionEntry).map(shellEscape),
+			shellEscape(`AIRPORT_TERMINAL_ENTRY_PATH=${airportTerminalEntryPath}`),
+			...resolveAirportPaneRuntimeCommand(airportTerminalEntryPath).map(shellEscape),
 			'\'__airport-layout-runway-pane\''
 		].join(' ');
 
@@ -328,9 +327,12 @@ function toTerminalPaneReference(paneId: number): string {
 	return `terminal_${String(paneId)}`;
 }
 
-function resolveMissionCliEntryPath(): string {
-	const currentFilePath = fileURLToPath(import.meta.url);
-	return path.resolve(path.dirname(currentFilePath), '..', '..', 'mission', 'build', 'mission.js');
+function resolveAirportTerminalEntryPath(): string {
+	const airportTerminalEntryPath = process.env['AIRPORT_TERMINAL_ENTRY_PATH']?.trim();
+	if (!airportTerminalEntryPath) {
+		throw new Error('AIRPORT_TERMINAL_ENTRY_PATH must be set before opening Airport runway panes.');
+	}
+	return airportTerminalEntryPath;
 }
 
 function resolveAirportPaneRuntimeCommand(entryScriptPath: string): string[] {

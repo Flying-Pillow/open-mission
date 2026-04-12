@@ -5,12 +5,14 @@ import { isPrintableCommandFilterKey } from './commandDomain.js';
 import type { CommandItem } from '../types.js';
 
 type CommandPickerPanelProps = {
+	title: string;
 	items: CommandItem[];
 	selectedItemId: string | undefined;
 	focused: boolean;
 	query: string;
 	emptyLabel: string;
 	helperText: string;
+	style?: Record<string, string | number | undefined>;
 	onHighlight: (itemId: string) => void;
 	onSelect: (itemId: string) => void;
 	onClose: () => void;
@@ -21,10 +23,11 @@ type CommandPickerPanelProps = {
 export function CommandPickerPanel(props: CommandPickerPanelProps) {
 	return (
 		<SelectPanel
-			title="COMMANDS"
+			title={props.title}
 			items={props.items}
 			selectedItemId={props.selectedItemId}
 			focused={props.focused}
+			{...(props.style ? { style: props.style } : {})}
 			showFooterBadges={false}
 			emptyLabel={props.emptyLabel}
 			helperText={props.helperText}

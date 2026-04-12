@@ -16,6 +16,7 @@ import {
 	buildCommandPickerItems,
 	buildToolbarCommandItems,
 	findAvailableCommandByText,
+	isPrintableCommandFilterKey,
 	normalizeCommandInputValue,
 	parseCommandQuery,
 	pickPreferredToolbarCommandId,
@@ -361,6 +362,10 @@ export function useCommandController(options: CommandControllerOptions) {
 		closeCommandPicker();
 	}
 
+	function highlightCommandPickerItem(commandId: string): void {
+		setSelectedPickerItemId(commandId);
+	}
+
 	function moveToolbarCommandSelection(delta: number): void {
 		const items = toolbarCommands().filter((item) => item.enabled);
 		if (items.length === 0) {
@@ -606,6 +611,40 @@ export function useCommandController(options: CommandControllerOptions) {
 		}
 	}
 
+	function handleCommandPickerKeyDown(event: TowerKeyEvent): void {
+		if (event.name === 'enter' || event.name === 'return') {
+			event.preventDefault();
+			event.stopPropagation();
+			const selectedItemId = selectedCommandPickerItemId() ?? commandPickerItems()[0]?.id;
+			if (selectedItemId) {
+				selectCommandById(selectedItemId, { fromPicker: true });
+			}
+			return;
+		}
+		if (event.name === 'escape') {
+			event.preventDefault();
+			event.stopPropagation();
+			closeCommandPicker({ clearCommandInput: commandInputQuery() === '/' });
+			return;
+		}
+		if (event.name === 'backspace') {
+			event.preventDefault();
+			event.stopPropagation();
+			popCommandPickerFilter();
+			return;
+		}
+		if (event.sequence === '/') {
+			event.preventDefault();
+			event.stopPropagation();
+			return;
+		}
+		if (typeof event.sequence === 'string' && isPrintableCommandFilterKey(event.sequence)) {
+			event.preventDefault();
+			event.stopPropagation();
+			appendCommandPickerFilter(event.sequence);
+		}
+	}
+
 	return {
 		inputValue,
 		setInputValue,
@@ -639,6 +678,7 @@ export function useCommandController(options: CommandControllerOptions) {
 		resetCommandFlow,
 		startCommandFlow,
 		selectCommandById,
+		highlightCommandPickerItem,
 		moveCommandPickerSelection,
 		moveToolbarCommandSelection,
 		moveToolbarConfirmationSelection,
@@ -648,5 +688,6 @@ export function useCommandController(options: CommandControllerOptions) {
 		handlePanelInputChange,
 		handlePanelInputSubmit,
 		handlePanelKeyDown,
+		handleCommandPickerKeyDown,
 	};
 }

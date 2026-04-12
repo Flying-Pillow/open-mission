@@ -14,6 +14,11 @@ has_children: true
 </section>
 
 <div class="mission-section-grid">
+	<a class="mission-section-card" href="{{ '/reference/operator-command-model.html' | relative_url }}">
+		<span class="mission-section-card__eyebrow">Control Model</span>
+		<span class="mission-section-card__title">Operator Command Model</span>
+		<span class="mission-section-card__text">Read the decision tables for mission, stage, task, artifact, and agentrunner commands, including rules, context, and expected results.</span>
+	</a>
 	<a class="mission-section-card" href="{{ '/reference/cli-commands.html' | relative_url }}">
 		<span class="mission-section-card__eyebrow">CLI Surface</span>
 		<span class="mission-section-card__title">CLI Commands</span>

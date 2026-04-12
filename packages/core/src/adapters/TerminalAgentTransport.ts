@@ -425,7 +425,7 @@ export class TerminalAgentTransport {
 			.map((line) => stripAnsi(line).trim())
 			.filter((line) => line.length > 0);
 		return lines
-			.map((line) => line.split(/\s+/u)[0] ?? '')
+			.map((line) => parseTerminalManagerSessionName(line) ?? '')
 			.filter((sessionName) => sessionName.length > 0);
 	}
 
@@ -511,6 +511,16 @@ function delay(ms: number): Promise<void> {
 
 function stripAnsi(value: string): string {
 	return value.replace(/\u001b\[[0-9;]*m/gu, '');
+}
+
+function parseTerminalManagerSessionName(line: string): string | undefined {
+	const normalizedLine = line.trim();
+	if (!normalizedLine) {
+		return undefined;
+	}
+	const withoutCreatedSuffix = normalizedLine.replace(/\s+\[[^\]]*\]\s*$/u, '');
+	const withoutExitedSuffix = withoutCreatedSuffix.replace(/\s+\(EXITED[^)]*\)\s*$/u, '');
+	return withoutExitedSuffix.trim() || undefined;
 }
 
 function parsePaneReference(stdout: string): string | undefined {

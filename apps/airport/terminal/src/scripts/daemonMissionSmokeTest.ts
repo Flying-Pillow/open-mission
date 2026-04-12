@@ -6,10 +6,12 @@ import { fileURLToPath } from 'node:url';
 import {
     DaemonApi,
     DaemonClient,
+    connectAirportControl,
     getDaemonManifestPath,
     getDaemonRuntimePath,
     initializeMissionRepository,
     readDaemonManifest,
+    resolveAirportControlRuntimeMode,
     type OperatorActionDescriptor,
     type MissionAgentTurnRequest,
     type MissionBrief,
@@ -17,10 +19,6 @@ import {
     type OperatorStatus,
     type MissionTaskState
 } from '@flying-pillow/mission-core';
-import {
-    connectAirportControl,
-    resolveAirportControlRuntimeMode
-} from '../airport/connectAirportControl.js';
 
 type SmokeTestOptions = {
     json: boolean;
