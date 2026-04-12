@@ -4,11 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { readMissionUserConfig } from '@flying-pillow/mission-core';
-import type { EntryContext } from '../entry/entryContext.js';
+import type { AirportTerminalContext } from '../airportTerminalContext.js';
 
 const execFileAsync = promisify(execFile);
 
-export async function bootstrapAirportLayout(context: EntryContext): Promise<void> {
+export async function bootstrapAirportLayout(context: AirportTerminalContext): Promise<void> {
 	const sessionName = resolveTerminalManagerSessionName(context.controlRoot);
 	const terminalManagerBinary = resolveTerminalManagerBinary();
 	const runtimeRoot = resolveRuntimeRoot();
@@ -16,24 +16,24 @@ export async function bootstrapAirportLayout(context: EntryContext): Promise<voi
 	const runtimeConfigRoot = path.join(runtimeRoot, 'mission', `runtime-${sessionSlug}`);
 	const terminalManagerConfigDir = path.join(runtimeConfigRoot, 'terminal-manager');
 	const layoutFile = path.join(runtimeRoot, 'mission', `airport-layout-${sessionSlug}.kdl`);
-	const rightWidth = process.env['MISSION_TERMINAL_RIGHT_COLUMN_WIDTH']?.trim()
-		|| process.env['MISSION_TERMINAL_OPERATOR_PANE_SIZE']?.trim()
+	const rightWidth = process.env['AIRPORT_TERMINAL_RIGHT_COLUMN_WIDTH']?.trim()
+		|| process.env['AIRPORT_TERMINAL_OPERATOR_PANE_SIZE']?.trim()
 		|| '50%';
 	const repoRoot = context.controlRoot;
-	const missionEntry = path.join(repoRoot, 'mission');
+	const missionEntryCommand = resolveMissionEntryCommand();
 	const towerCommand = buildShellCommand([
 		'env',
-		'MISSION_TERMINAL_ACTIVE=1',
-		'MISSION_GATE_ID=dashboard',
-		`MISSION_TERMINAL_SESSION=${sessionName}`,
-		missionEntry,
+		'AIRPORT_TERMINAL_ACTIVE=1',
+		'AIRPORT_PANE_ID=tower',
+		`AIRPORT_TERMINAL_SESSION=${sessionName}`,
+		...missionEntryCommand,
 		...context.args
 	]);
-	const editorCommand = buildShellCommand([
+	const briefingRoomCommand = buildShellCommand([
 		'env',
-		'MISSION_GATE_ID=editor',
-		`MISSION_TERMINAL_SESSION=${sessionName}`,
-		missionEntry,
+		'AIRPORT_PANE_ID=briefingRoom',
+		`AIRPORT_TERMINAL_SESSION=${sessionName}`,
+		...missionEntryCommand,
 		'__airport-layout-briefing-room-pane'
 	]);
 
@@ -43,7 +43,7 @@ export async function bootstrapAirportLayout(context: EntryContext): Promise<voi
 	await writeFile(layoutFile, buildAirportLayout({
 		repoRoot,
 		towerCommand,
-		editorCommand,
+		briefingRoomCommand,
 		rightWidth
 	}), 'utf8');
 
@@ -75,8 +75,8 @@ export async function bootstrapAirportLayout(context: EntryContext): Promise<voi
 }
 
 function resolveTerminalManagerSessionName(controlRoot: string): string {
-	return process.env['MISSION_TERMINAL_SESSION']?.trim()
-		|| process.env['MISSION_TERMINAL_SESSION_NAME']?.trim()
+	return process.env['AIRPORT_TERMINAL_SESSION']?.trim()
+		|| process.env['AIRPORT_TERMINAL_SESSION_NAME']?.trim()
 		|| `mission-${path.basename(controlRoot)}`;
 }
 
@@ -86,6 +86,17 @@ function slugifySessionName(sessionName: string): string {
 
 function resolveRuntimeRoot(): string {
 	return process.env['XDG_RUNTIME_DIR']?.trim() || process.env['TMPDIR']?.trim() || os.tmpdir();
+}
+
+function resolveMissionEntryCommand(): string[] {
+	const entryScriptPath = process.argv[1]?.trim();
+	if (!entryScriptPath) {
+		throw new Error('Mission CLI entry path is unavailable for airport layout bootstrap.');
+	}
+	if (process.versions['bun']) {
+		return [process.execPath, entryScriptPath];
+	}
+	return ['bun', entryScriptPath];
 }
 
 async function resetTerminalManagerSession(terminalManagerBinary: string, sessionName: string): Promise<void> {
@@ -105,7 +116,7 @@ async function resetTerminalManagerSession(terminalManagerBinary: string, sessio
 	const lingeringSession = await waitForSessionToDisappear(terminalManagerBinary, normalizedSessionName);
 	if (lingeringSession) {
 		throw new Error(
-			`Unable to reset terminal-manager session '${normalizedSessionName}' before launch (${lingeringSession.state}).`
+			`Unable to reset terminal-manager session '${normalizedSessionName}' before opening the airport layout (${lingeringSession.state}).`
 		);
 	}
 }
@@ -166,7 +177,7 @@ ui {
 function buildAirportLayout(input: {
 	repoRoot: string;
 	towerCommand: string;
-	editorCommand: string;
+	briefingRoomCommand: string;
 	rightWidth: string;
 }): string {
 	return `layout {
@@ -175,11 +186,11 @@ function buildAirportLayout(input: {
 	}
 	tab name="TOWER" {
 		pane split_direction="vertical" {
-			pane name="MISSION" focus=true command="sh" cwd="${kdlEscape(input.repoRoot)}" {
+			pane name="TOWER" focus=true command="sh" cwd="${kdlEscape(input.repoRoot)}" {
 				args "-lc" "${kdlEscape(`exec ${input.towerCommand}`)}"
 			}
-			pane size="${kdlEscape(input.rightWidth)}" name="EDITOR" command="sh" cwd="${kdlEscape(input.repoRoot)}" {
-				args "-lc" "${kdlEscape(`exec ${input.editorCommand}`)}"
+			pane size="${kdlEscape(input.rightWidth)}" name="BRIEFING ROOM" command="sh" cwd="${kdlEscape(input.repoRoot)}" {
+				args "-lc" "${kdlEscape(`exec ${input.briefingRoomCommand}`)}"
 			}
 		}
 	}
@@ -192,7 +203,7 @@ function kdlEscape(value: string): string {
 }
 
 function resolveTerminalManagerBinary(): string {
-	return process.env['MISSION_TERMINAL_BINARY']?.trim()
+	return process.env['AIRPORT_TERMINAL_BINARY']?.trim()
 		|| readMissionUserConfig()?.terminalBinary?.trim()
 		|| 'zellij';
 }

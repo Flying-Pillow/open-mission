@@ -1,15 +1,16 @@
 import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import type { AirportSubstrateEffect } from './effects.js';
-import type { AirportPaneState, AirportState, AirportSubstrateState, GateId } from './types.js';
+import type { AirportPaneId, AirportPaneState, AirportState, AirportSubstrateState } from './types.js';
 
 const execFileAsync = promisify(execFile);
 
-const GATE_DISPLAY_TITLES: Record<GateId, string> = {
-	dashboard: 'MISSION',
-	editor: 'EDITOR',
-	agentSession: 'AGENT SESSION'
+const PANE_DISPLAY_TITLES: Record<AirportPaneId, string> = {
+	tower: 'TOWER',
+	briefingRoom: 'BRIEFING ROOM',
+	runway: 'RUNWAY'
 };
 
 type TerminalManagerPaneMetadata = {
@@ -47,7 +48,7 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 
 	public constructor(options: TerminalManagerSubstrateOptions) {
 		this.state = createDefaultTerminalManagerSubstrateState(options);
-		const terminalBinary = options.terminalBinary?.trim() || process.env['MISSION_TERMINAL_BINARY']?.trim() || 'zellij';
+		const terminalBinary = options.terminalBinary?.trim() || process.env['AIRPORT_TERMINAL_BINARY']?.trim() || 'zellij';
 		this.executor = options.executor ?? (async (args) => {
 			const result = await execFileAsync(terminalBinary, args, {
 				encoding: 'utf8',
@@ -76,14 +77,14 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 	public async applyEffects(effects: AirportSubstrateEffect[]): Promise<AirportSubstrateState> {
 		for (const effect of effects) {
 			switch (effect.kind) {
-				case 'focus-gate': {
+				case 'focus-pane': {
 					try {
 						await this.executor([
 							'--session',
 							this.state.sessionName,
 							'action',
 							'focus-pane-id',
-							toTerminalPaneReference(effect.paneId)
+							toTerminalPaneReference(effect.terminalPaneId)
 						]);
 					} catch (error) {
 						if (isAlreadyFocusedPaneError(error)) {
@@ -93,12 +94,12 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 					}
 					break;
 				}
-				case 'ensure-gate-pane': {
-					await this.ensureAgentSessionPane();
+				case 'ensure-pane': {
+					await this.ensureRunwayPane();
 					break;
 				}
-				case 'remove-gate-pane': {
-					await this.removePane(toTerminalPaneReference(effect.paneId));
+				case 'remove-pane': {
+					await this.removePane(toTerminalPaneReference(effect.terminalPaneId));
 					break;
 				}
 			}
@@ -110,29 +111,29 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 		return this.getState();
 	}
 
-	private async ensureAgentSessionPane(): Promise<void> {
+	private async ensureRunwayPane(): Promise<void> {
 		const panes = await this.listPanes();
-		const existingAgentPane = panes.find((pane) => pane.title === GATE_DISPLAY_TITLES.agentSession && !pane.is_suppressed);
-		if (existingAgentPane) {
+		const existingRunwayPane = panes.find((pane) => pane.title === PANE_DISPLAY_TITLES.runway && !pane.is_suppressed);
+		if (existingRunwayPane) {
 			return;
 		}
 
-		const editorPane = panes.find((pane) => pane.title === GATE_DISPLAY_TITLES.editor && !pane.is_suppressed)
+		const briefingRoomPane = panes.find((pane) => pane.title === PANE_DISPLAY_TITLES.briefingRoom && !pane.is_suppressed)
 			?? panes.find((pane) => !pane.is_suppressed)
 			?? panes[0];
-		if (!editorPane) {
-			throw new Error(`Unable to locate a target pane to create '${GATE_DISPLAY_TITLES.agentSession}'.`);
+		if (!briefingRoomPane) {
+			throw new Error(`Unable to locate a target pane to create '${PANE_DISPLAY_TITLES.runway}'.`);
 		}
 
 		const controlRoot = process.env['MISSION_CONTROL_ROOT']?.trim()
 			|| process.env['MISSION_SURFACE_PATH']?.trim()
 			|| process.cwd();
-		const missionEntry = path.join(controlRoot, 'mission');
+		const missionEntry = resolveMissionCliEntryPath();
 		const launchCommand = [
 			'env',
-			'\'MISSION_GATE_ID=agentSession\'',
-			shellEscape(`MISSION_TERMINAL_SESSION=${this.state.sessionName}`),
-			shellEscape(missionEntry),
+			'\'AIRPORT_PANE_ID=runway\'',
+			shellEscape(`AIRPORT_TERMINAL_SESSION=${this.state.sessionName}`),
+			...resolveAirportPaneRuntimeCommand(missionEntry).map(shellEscape),
 			'\'__airport-layout-runway-pane\''
 		].join(' ');
 
@@ -142,9 +143,9 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 			'action',
 			'new-pane',
 			'--in-place',
-			toTerminalPaneReference(editorPane.id),
+			toTerminalPaneReference(briefingRoomPane.id),
 			'--name',
-			GATE_DISPLAY_TITLES.agentSession,
+			PANE_DISPLAY_TITLES.runway,
 			'--cwd',
 			controlRoot,
 			'--',
@@ -229,10 +230,10 @@ export class InMemoryTerminalManagerSubstrateController implements AirportSubstr
 	}
 
 	public applyEffects(effects: AirportSubstrateEffect[]): Promise<AirportSubstrateState> {
-		const focusEffect = effects.find((effect) => effect.kind === 'focus-gate');
+		const focusEffect = effects.find((effect) => effect.kind === 'focus-pane');
 		this.state = {
 			...this.state,
-			...(focusEffect ? { observedFocusedPaneId: focusEffect.paneId } : {}),
+			...(focusEffect ? { observedFocusedTerminalPaneId: focusEffect.terminalPaneId } : {}),
 			lastAppliedAt: new Date().toISOString()
 		};
 		return Promise.resolve(this.getState());
@@ -251,7 +252,7 @@ export function createDefaultTerminalManagerSubstrateState(options: { sessionNam
 		sessionName,
 		layoutIntent: 'mission-control-v1',
 		attached: false,
-		panesByGate: {}
+		panes: {}
 	};
 }
 
@@ -262,40 +263,40 @@ function buildObservedState(
 ): AirportSubstrateState {
 	const currentState = state.substrate;
 	const focusedPaneId = panes.find((pane) => pane.is_focused)?.id;
-	const panesByGate = Object.fromEntries(
-		(Object.keys(GATE_DISPLAY_TITLES) as GateId[]).map((gateId) => {
-			const expected = isGatePaneExpected(state, gateId);
-			const currentPane = currentState.panesByGate[gateId];
-			const pane = currentPane?.paneId !== undefined && currentPane.paneId >= 0
-				? panes.find((candidate) => candidate.id === currentPane.paneId)
-				: panes.find((candidate) => candidate.title === GATE_DISPLAY_TITLES[gateId]);
+	const panesById = Object.fromEntries(
+		(Object.keys(PANE_DISPLAY_TITLES) as AirportPaneId[]).map((paneId) => {
+			const expected = isAirportPaneExpected(state, paneId);
+			const currentPane = currentState.panes[paneId];
+			const pane = currentPane?.terminalPaneId !== undefined && currentPane.terminalPaneId >= 0
+				? panes.find((candidate) => candidate.id === currentPane.terminalPaneId)
+				: panes.find((candidate) => candidate.title === PANE_DISPLAY_TITLES[paneId]);
 			return [
-				gateId,
+				paneId,
 				pane
 					? {
-						paneId: pane.id,
+						terminalPaneId: pane.id,
 						expected,
 						exists: true,
 						title: pane.title
 					}
 					: {
-						paneId: currentPane?.paneId ?? -1,
+						terminalPaneId: currentPane?.terminalPaneId ?? -1,
 						expected,
 						exists: false,
-						title: currentPane?.title ?? GATE_DISPLAY_TITLES[gateId]
+						title: currentPane?.title ?? PANE_DISPLAY_TITLES[paneId]
 					}
 			] as const;
 		})
-	) as Partial<Record<GateId, AirportPaneState>>;
+	) as Partial<Record<AirportPaneId, AirportPaneState>>;
 
 	return {
 		...currentState,
 		attached: true,
-		panesByGate,
+		panes: panesById,
 		...(currentState.lastAppliedAt ? { lastAppliedAt: currentState.lastAppliedAt } : {}),
 		lastObservedAt: now,
 		...(focusedPaneId !== undefined
-			? { observedFocusedPaneId: focusedPaneId }
+			? { observedFocusedTerminalPaneId: focusedPaneId }
 			: {})
 	};
 }
@@ -307,17 +308,17 @@ function buildDetachedState(state: AirportState, now: string): AirportSubstrateS
 		sessionName: currentState.sessionName,
 		layoutIntent: currentState.layoutIntent,
 		attached: false,
-		panesByGate: Object.fromEntries(
-			(Object.keys(GATE_DISPLAY_TITLES) as GateId[]).map((gateId) => [
-				gateId,
+		panes: Object.fromEntries(
+			(Object.keys(PANE_DISPLAY_TITLES) as AirportPaneId[]).map((paneId) => [
+				paneId,
 				{
-					paneId: currentState.panesByGate[gateId]?.paneId ?? -1,
-					expected: isGatePaneExpected(state, gateId),
+					terminalPaneId: currentState.panes[paneId]?.terminalPaneId ?? -1,
+					expected: isAirportPaneExpected(state, paneId),
 					exists: false,
-					title: currentState.panesByGate[gateId]?.title ?? GATE_DISPLAY_TITLES[gateId]
+					title: currentState.panes[paneId]?.title ?? PANE_DISPLAY_TITLES[paneId]
 				}
 			])
-		) as Partial<Record<GateId, AirportPaneState>>,
+		) as Partial<Record<AirportPaneId, AirportPaneState>>,
 		...(currentState.lastAppliedAt ? { lastAppliedAt: currentState.lastAppliedAt } : {}),
 		lastObservedAt: now
 	};
@@ -327,14 +328,26 @@ function toTerminalPaneReference(paneId: number): string {
 	return `terminal_${String(paneId)}`;
 }
 
+function resolveMissionCliEntryPath(): string {
+	const currentFilePath = fileURLToPath(import.meta.url);
+	return path.resolve(path.dirname(currentFilePath), '..', '..', 'mission', 'build', 'mission.js');
+}
+
+function resolveAirportPaneRuntimeCommand(entryScriptPath: string): string[] {
+	if (process.versions['bun']) {
+		return [process.execPath, entryScriptPath];
+	}
+	return ['bun', entryScriptPath];
+}
+
 function isAlreadyFocusedPaneError(error: unknown): boolean {
 	const message = error instanceof Error ? error.message : String(error);
 	return message.includes('already focused');
 }
 
-function isGatePaneExpected(state: AirportState, gateId: GateId): boolean {
-	if (gateId === 'agentSession') {
-		return state.gates.agentSession.targetKind === 'agentSession';
+function isAirportPaneExpected(state: AirportState, paneId: AirportPaneId): boolean {
+	if (paneId === 'runway') {
+		return state.panes.runway.targetKind === 'agentSession';
 	}
 	return true;
 }

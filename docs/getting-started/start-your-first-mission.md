@@ -66,10 +66,10 @@ Those artifacts do not all appear fully populated at once, but that is the dossi
 
 ## What You See In Mission Next
 
-The Airport layout changes emphasis depending on where you launch it:
+The Airport layout changes emphasis depending on where you open it:
 
-- launching from the repository checkout opens repository mode
-- launching from a mission workspace auto-selects that mission and opens mission mode
+- opening from the repository checkout opens repository mode
+- opening from a mission workspace auto-selects that mission and opens mission mode
 
 Once a mission is selected, the Tower becomes the left-side control surface inside the Airport layout for:
 

@@ -130,7 +130,7 @@ That staged model is what makes Mission feel safe. It does not ask you to trust 
 Mission is already usable, but it is still an alpha product. A few current truths matter for operators:
 
 - the published CLI package is `@flying-pillow/mission`
-- the public CLI centers on launching the Mission terminal surface, installing prerequisites, inspecting airport state, and stopping the daemon
+- the public CLI centers on opening the Mission terminal surface, installing prerequisites, inspecting airport state, and stopping the daemon
 - the Airport terminal surfaces currently require Bun at runtime
 - GitHub is the tracking provider used by the implemented mission intake flows
 - repository scaffolding is real, but `mission init` is not currently exposed as a public routed command

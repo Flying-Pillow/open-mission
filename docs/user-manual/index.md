@@ -14,7 +14,7 @@ has_children: true
 </section>
 
 <div class="mission-section-grid mission-section-grid--three">
-	<a class="mission-section-card" href="{{ '/user-manual/tower-layout.html' | relative_url }}">
+	<a class="mission-section-card" href="{{ '/user-manual/airport-layout.html' | relative_url }}">
 		<span class="mission-section-card__eyebrow">Surface</span>
 		<span class="mission-section-card__title">Airport Layout Overview</span>
 		<span class="mission-section-card__text">See how Tower, Runway, and Briefing Room fit together into one operational surface.</span>

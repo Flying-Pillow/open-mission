@@ -113,7 +113,7 @@ export function selectorFromTowerState(
 	if (status.missionId) {
 		return { missionId: status.missionId };
 	}
-	const projectedMissionId = snapshot?.airportProjections.dashboard.missionId;
+	const projectedMissionId = snapshot?.airportProjections.tower.missionId;
 	if (projectedMissionId) {
 		return { missionId: projectedMissionId };
 	}

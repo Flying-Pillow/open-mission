@@ -63,7 +63,7 @@ Its top-level shape is:
 
 ## Request Execution Boundary
 
-The reducer never opens files, launches zellij, or talks to a model provider. It emits requests. The current request executor handles these request categories:
+The reducer never opens files, starts zellij, or talks to a model provider. It emits requests. The current request executor handles these request categories:
 
 | Request type | Current executor behavior |
 | --- | --- |

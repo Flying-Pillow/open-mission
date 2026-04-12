@@ -1,6 +1,6 @@
-export type GateId = 'dashboard' | 'editor' | 'agentSession';
+export type AirportPaneId = 'tower' | 'briefingRoom' | 'runway';
 
-export type GateTargetKind =
+export type PaneTargetKind =
 	| 'empty'
 	| 'repository'
 	| 'mission'
@@ -8,22 +8,22 @@ export type GateTargetKind =
 	| 'artifact'
 	| 'agentSession';
 
-export type GateMode = 'view' | 'control';
+export type PaneMode = 'view' | 'control';
 
-const GATE_IDS = ['dashboard', 'editor', 'agentSession'] as const;
-const GATE_TARGET_KINDS = ['empty', 'repository', 'mission', 'task', 'artifact', 'agentSession'] as const;
-const GATE_MODES = ['view', 'control'] as const;
+const AIRPORT_PANE_IDS = ['tower', 'briefingRoom', 'runway'] as const;
+const PANE_TARGET_KINDS = ['empty', 'repository', 'mission', 'task', 'artifact', 'agentSession'] as const;
+const PANE_MODES = ['view', 'control'] as const;
 
-export interface GateBinding {
-	targetKind: GateTargetKind;
+export interface PaneBinding {
+	targetKind: PaneTargetKind;
 	targetId?: string;
-	mode?: GateMode;
+	mode?: PaneMode;
 }
 
 export interface AirportFocusState {
-	intentGateId?: GateId;
-	observedGateId?: GateId;
-	observedGateIdByClientId?: Record<string, GateId>;
+	intentPaneId?: AirportPaneId;
+	observedPaneId?: AirportPaneId;
+	observedPaneIdByClientId?: Record<string, AirportPaneId>;
 }
 
 export interface AirportClientState {
@@ -31,15 +31,15 @@ export interface AirportClientState {
 	connected: boolean;
 	label: string;
 	surfacePath?: string;
-	claimedGateId?: GateId;
-	focusedGateId?: GateId;
+	claimedPaneId?: AirportPaneId;
+	focusedPaneId?: AirportPaneId;
 	connectedAt: string;
 	lastSeenAt: string;
 	panelProcessId?: string;
 }
 
 export interface AirportPaneState {
-	paneId: number;
+	terminalPaneId: number;
 	expected: boolean;
 	exists: boolean;
 	title?: string;
@@ -50,8 +50,8 @@ export interface AirportSubstrateState {
 	sessionName: string;
 	layoutIntent: 'mission-control-v1';
 	attached: boolean;
-	panesByGate: Partial<Record<GateId, AirportPaneState>>;
-	observedFocusedPaneId?: number;
+	panes: Partial<Record<AirportPaneId, AirportPaneState>>;
+	observedFocusedTerminalPaneId?: number;
 	lastAppliedAt?: string;
 	lastObservedAt?: string;
 }
@@ -61,28 +61,28 @@ export interface AirportState {
 	repositoryId?: string;
 	repositoryRootPath?: string;
 	sessionId?: string;
-	gates: Record<GateId, GateBinding>;
+	panes: Record<AirportPaneId, PaneBinding>;
 	focus: AirportFocusState;
 	clients: Record<string, AirportClientState>;
 	substrate: AirportSubstrateState;
 }
 
 export interface PersistedAirportIntent {
-	gates?: Partial<Record<GateId, GateBinding>>;
+	panes?: Partial<Record<AirportPaneId, PaneBinding>>;
 	focus?: {
-		intentGateId?: GateId;
+		intentPaneId?: AirportPaneId;
 	};
 }
 
-export interface AirportGateProjectionBase {
-	gateId: GateId;
-	binding: GateBinding;
+export interface AirportPaneProjectionBase {
+	paneId: AirportPaneId;
+	binding: PaneBinding;
 	connectedClientIds: string[];
 	title: string;
 	subtitle: string;
 	intentFocused: boolean;
 	observedFocused: boolean;
-	pane?: AirportPaneState;
+	terminalPane?: AirportPaneState;
 }
 
 export type DashboardStageRailItemState = 'done' | 'active' | 'blocked' | 'pending';
@@ -110,7 +110,7 @@ export interface DashboardTreeNode {
 	sessionId?: string;
 }
 
-export interface DashboardProjection extends AirportGateProjectionBase {
+export interface TowerProjection extends AirportPaneProjectionBase {
 	surfaceMode: 'repository' | 'mission';
 	repositoryId?: string;
 	repositoryLabel: string;
@@ -121,7 +121,7 @@ export interface DashboardProjection extends AirportGateProjectionBase {
 	emptyLabel: string;
 }
 
-export interface EditorProjection extends AirportGateProjectionBase {
+export interface BriefingRoomProjection extends AirportPaneProjectionBase {
 	artifactId?: string;
 	artifactPath?: string;
 	resourceLabel?: string;
@@ -129,7 +129,7 @@ export interface EditorProjection extends AirportGateProjectionBase {
 	emptyLabel: string;
 }
 
-export interface AgentSessionProjection extends AirportGateProjectionBase {
+export interface RunwayProjection extends AirportPaneProjectionBase {
 	sessionId?: string;
 	taskId?: string;
 	missionId?: string;
@@ -140,9 +140,9 @@ export interface AgentSessionProjection extends AirportGateProjectionBase {
 }
 
 export interface AirportProjectionSet {
-	dashboard: DashboardProjection;
-	editor: EditorProjection;
-	agentSession: AgentSessionProjection;
+	tower: TowerProjection;
+	briefingRoom: BriefingRoomProjection;
+	runway: RunwayProjection;
 }
 
 export interface AirportStatus {
@@ -154,35 +154,35 @@ export interface ConnectAirportClientParams {
 	clientId: string;
 	label?: string;
 	surfacePath?: string;
-	gateId: GateId;
+	paneId: AirportPaneId;
 	panelProcessId?: string;
-	paneId?: number;
+	terminalPaneId?: number;
 }
 
 export interface ObserveAirportClientParams {
 	clientId: string;
-	focusedGateId?: GateId;
-	intentGateId?: GateId;
+	focusedPaneId?: AirportPaneId;
+	intentPaneId?: AirportPaneId;
 	surfacePath?: string;
-	paneId?: number;
+	terminalPaneId?: number;
 }
 
-export interface BindAirportGateParams {
-	gateId: GateId;
-	binding: GateBinding;
+export interface BindAirportPaneParams {
+	paneId: AirportPaneId;
+	binding: PaneBinding;
 }
 
 export function derivePersistedAirportIntent(state: AirportState): PersistedAirportIntent {
 	return {
-		gates: {
-			dashboard: normalizeGateBinding(state.gates.dashboard),
-			editor: normalizeGateBinding(state.gates.editor),
-			agentSession: normalizeGateBinding(state.gates.agentSession)
+		panes: {
+			tower: normalizePaneBinding(state.panes.tower),
+			briefingRoom: normalizePaneBinding(state.panes.briefingRoom),
+			runway: normalizePaneBinding(state.panes.runway)
 		},
-		...(state.focus.intentGateId
+		...(state.focus.intentPaneId
 			? {
 				focus: {
-					intentGateId: state.focus.intentGateId
+					intentPaneId: state.focus.intentPaneId
 				}
 			}
 			: {})
@@ -194,57 +194,57 @@ export function normalizePersistedAirportIntent(intent: unknown): PersistedAirpo
 		return undefined;
 	}
 
-	const gates = normalizePersistedAirportGates((intent as { gates?: unknown }).gates);
+	const panes = normalizePersistedAirportPanes((intent as { panes?: unknown }).panes);
 	const focus = normalizePersistedAirportFocus((intent as { focus?: unknown }).focus);
-	if (!gates && !focus) {
+	if (!panes && !focus) {
 		return undefined;
 	}
 
 	return {
-		...(gates ? { gates } : {}),
+		...(panes ? { panes } : {}),
 		...(focus ? { focus } : {})
 	};
 }
 
-export function createEmptyGateBinding(): GateBinding {
+export function createEmptyPaneBinding(): PaneBinding {
 	return { targetKind: 'empty' };
 }
 
-export function createDefaultGateBindings(repositoryId: string): Record<GateId, GateBinding> {
+export function createDefaultPaneBindings(repositoryId: string): Record<AirportPaneId, PaneBinding> {
 	return {
-		dashboard: { targetKind: 'repository', targetId: repositoryId, mode: 'control' },
-		editor: { targetKind: 'repository', targetId: repositoryId, mode: 'view' },
-		agentSession: createEmptyGateBinding()
+		tower: { targetKind: 'repository', targetId: repositoryId, mode: 'control' },
+		briefingRoom: { targetKind: 'repository', targetId: repositoryId, mode: 'view' },
+		runway: createEmptyPaneBinding()
 	};
 }
 
 export function deriveAirportProjections(state: AirportState): AirportProjectionSet {
 	return {
-		dashboard: createDashboardProjection(state),
-		editor: createEditorProjection(state),
-		agentSession: createAgentSessionProjection(state)
+		tower: createTowerProjection(state),
+		briefingRoom: createBriefingRoomProjection(state),
+		runway: createRunwayProjection(state)
 	};
 }
 
-function createGateProjectionBase(state: AirportState, gateId: GateId): AirportGateProjectionBase {
-	const binding = state.gates[gateId];
-	const pane = state.substrate.panesByGate[gateId];
+function createPaneProjectionBase(state: AirportState, paneId: AirportPaneId): AirportPaneProjectionBase {
+	const binding = state.panes[paneId];
+	const terminalPane = state.substrate.panes[paneId];
 	return {
-		gateId,
+		paneId,
 		binding: structuredClone(binding),
 		connectedClientIds: Object.values(state.clients)
-			.filter((client) => client.connected && client.claimedGateId === gateId)
+			.filter((client) => client.connected && client.claimedPaneId === paneId)
 			.map((client) => client.clientId),
-		title: formatGateTitle(gateId),
-		subtitle: formatGateSubtitle(binding),
-		intentFocused: state.focus.intentGateId === gateId,
-		observedFocused: state.focus.observedGateId === gateId,
-		...(pane ? { pane: { ...pane } } : {})
+		title: formatPaneTitle(paneId),
+		subtitle: formatPaneSubtitle(binding),
+		intentFocused: state.focus.intentPaneId === paneId,
+		observedFocused: state.focus.observedPaneId === paneId,
+		...(terminalPane ? { terminalPane: { ...terminalPane } } : {})
 	};
 }
 
-function createDashboardProjection(state: AirportState): DashboardProjection {
-	const base = createGateProjectionBase(state, 'dashboard');
+function createTowerProjection(state: AirportState): TowerProjection {
+	const base = createPaneProjectionBase(state, 'tower');
 	const binding = base.binding;
 	const missionId = binding.targetKind === 'mission' ? binding.targetId : undefined;
 	const repositoryId = state.repositoryId ?? (binding.targetKind === 'repository' ? binding.targetId : undefined);
@@ -263,8 +263,8 @@ function createDashboardProjection(state: AirportState): DashboardProjection {
 	};
 }
 
-function createEditorProjection(state: AirportState): EditorProjection {
-	const base = createGateProjectionBase(state, 'editor');
+function createBriefingRoomProjection(state: AirportState): BriefingRoomProjection {
+	const base = createPaneProjectionBase(state, 'briefingRoom');
 	const binding = base.binding;
 	const artifactId = binding.targetKind === 'artifact' ? binding.targetId : undefined;
 	const launchPath = state.repositoryRootPath?.trim() || state.repositoryId?.trim();
@@ -273,13 +273,13 @@ function createEditorProjection(state: AirportState): EditorProjection {
 		...(artifactId ? { artifactId, resourceLabel: artifactId } : {}),
 		...(launchPath ? { launchPath } : {}),
 		emptyLabel: artifactId
-			? 'Artifact path is resolving for the editor gate.'
-			: 'Editor gate is waiting for an artifact binding.'
+			? 'Artifact path is resolving for Briefing Room.'
+			: 'Briefing Room is waiting for an artifact binding.'
 	};
 }
 
-function createAgentSessionProjection(state: AirportState): AgentSessionProjection {
-	const base = createGateProjectionBase(state, 'agentSession');
+function createRunwayProjection(state: AirportState): RunwayProjection {
+	const base = createPaneProjectionBase(state, 'runway');
 	const binding = base.binding;
 	const sessionId = binding.targetKind === 'agentSession' ? binding.targetId : undefined;
 	return {
@@ -287,12 +287,12 @@ function createAgentSessionProjection(state: AirportState): AgentSessionProjecti
 		...(sessionId ? { sessionId, sessionLabel: sessionId } : {}),
 		statusLabel: sessionId ? 'bound' : 'idle',
 		emptyLabel: sessionId
-			? 'Agent session details are resolving.'
-			: 'Agent session gate is idle.'
+			? 'Agent session details are resolving for Runway.'
+			: 'Runway is idle.'
 	};
 }
 
-export function normalizeGateBinding(binding: GateBinding): GateBinding {
+export function normalizePaneBinding(binding: PaneBinding): PaneBinding {
 	return {
 		targetKind: binding.targetKind,
 		...(binding.targetId?.trim() ? { targetId: binding.targetId.trim() } : {}),
@@ -300,19 +300,20 @@ export function normalizeGateBinding(binding: GateBinding): GateBinding {
 	};
 }
 
-function formatGateTitle(gateId: GateId): string {
-	switch (gateId) {
-		case 'dashboard':
-			return 'Dashboard';
-		case 'editor':
-			return 'Editor';
-			case 'agentSession':
-				return 'Agent Session';
+
+function formatPaneTitle(paneId: AirportPaneId): string {
+	switch (paneId) {
+		case 'tower':
+			return 'Tower';
+		case 'briefingRoom':
+			return 'Briefing Room';
+		case 'runway':
+			return 'Runway';
 	}
-	return gateId;
+	return paneId;
 }
 
-function formatGateSubtitle(binding: GateBinding): string {
+function formatPaneSubtitle(binding: PaneBinding): string {
 	if (binding.targetKind === 'empty') {
 		return 'No target bound';
 	}
@@ -321,17 +322,17 @@ function formatGateSubtitle(binding: GateBinding): string {
 	return binding.mode ? `${binding.targetKind}:${targetLabel} (${binding.mode})` : `${binding.targetKind}:${targetLabel}`;
 }
 
-function normalizePersistedAirportGates(value: unknown): Partial<Record<GateId, GateBinding>> | undefined {
+function normalizePersistedAirportPanes(value: unknown): Partial<Record<AirportPaneId, PaneBinding>> | undefined {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		return undefined;
 	}
 
-	const entries = GATE_IDS
-		.map((gateId) => {
-			const binding = normalizePersistedGateBinding((value as Partial<Record<GateId, unknown>>)[gateId]);
-			return binding ? [gateId, binding] as const : undefined;
+	const entries = AIRPORT_PANE_IDS
+		.map((paneId) => {
+			const binding = normalizePersistedPaneBinding((value as Partial<Record<AirportPaneId, unknown>>)[paneId]);
+			return binding ? [paneId, binding] as const : undefined;
 		})
-		.filter((entry): entry is readonly [GateId, GateBinding] => entry !== undefined);
+		.filter((entry): entry is readonly [AirportPaneId, PaneBinding] => entry !== undefined);
 	return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
@@ -340,41 +341,41 @@ function normalizePersistedAirportFocus(value: unknown): PersistedAirportIntent[
 		return undefined;
 	}
 
-	const intentGateId = (value as { intentGateId?: unknown }).intentGateId;
-	return isGateId(intentGateId)
+	const intentPaneId = (value as { intentPaneId?: unknown }).intentPaneId;
+	return isAirportPaneId(intentPaneId)
 		? {
-			intentGateId
+			intentPaneId
 		}
 		: undefined;
 }
 
-function normalizePersistedGateBinding(value: unknown): GateBinding | undefined {
+function normalizePersistedPaneBinding(value: unknown): PaneBinding | undefined {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		return undefined;
 	}
 
 	const targetKind = (value as { targetKind?: unknown }).targetKind;
-	if (!isGateTargetKind(targetKind)) {
+	if (!isPaneTargetKind(targetKind)) {
 		return undefined;
 	}
 
 	const targetId = (value as { targetId?: unknown }).targetId;
 	const mode = (value as { mode?: unknown }).mode;
-	return normalizeGateBinding({
+	return normalizePaneBinding({
 		targetKind,
 		...(typeof targetId === 'string' ? { targetId } : {}),
-		...(isGateMode(mode) ? { mode } : {})
+		...(isPaneMode(mode) ? { mode } : {})
 	});
 }
 
-function isGateId(value: unknown): value is GateId {
-	return typeof value === 'string' && (GATE_IDS as readonly string[]).includes(value);
+function isAirportPaneId(value: unknown): value is AirportPaneId {
+	return typeof value === 'string' && (AIRPORT_PANE_IDS as readonly string[]).includes(value);
 }
 
-function isGateTargetKind(value: unknown): value is GateTargetKind {
-	return typeof value === 'string' && (GATE_TARGET_KINDS as readonly string[]).includes(value);
+function isPaneTargetKind(value: unknown): value is PaneTargetKind {
+	return typeof value === 'string' && (PANE_TARGET_KINDS as readonly string[]).includes(value);
 }
 
-function isGateMode(value: unknown): value is GateMode {
-	return typeof value === 'string' && (GATE_MODES as readonly string[]).includes(value);
+function isPaneMode(value: unknown): value is PaneMode {
+	return typeof value === 'string' && (PANE_MODES as readonly string[]).includes(value);
 }

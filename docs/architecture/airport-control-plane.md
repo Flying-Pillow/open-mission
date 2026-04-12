@@ -7,7 +7,7 @@ nav_order: 7
 
 # Airport Control Plane
 
-Airport is the repository-scoped layout authority for Mission surfaces. It decides what each gate means, which client is attached to which gate, and how focus intent should be reconciled against the observed terminal substrate.
+Airport is the repository-scoped layout authority for Mission surfaces. It decides what each pane means, which client is attached to which pane, and how focus intent should be reconciled against the observed terminal substrate.
 
 ## Primary Components
 
@@ -16,19 +16,19 @@ Airport is the repository-scoped layout authority for Mission surfaces. It decid
 | `AirportControl` | Pure repository-scoped layout controller | `AirportState` |
 | `RepositoryAirportRegistry` | Multi-repository registry of airport controllers and substrate controllers | active repository id, airport records, client-to-repository index |
 | `TerminalManagerSubstrateController` | Observe and drive the terminal substrate | observed zellij pane state |
-| Projection helpers | Derive dashboard, editor, and agent session projections | pure projection output |
+| Projection helpers | Derive Tower, Briefing Room, and Runway projections | pure projection output |
 
 ## Gate Model
 
-The current airport implementation has three fixed gates:
+The current airport implementation has three fixed panes:
 
 | Gate id | Purpose |
 | --- | --- |
-| `dashboard` | Repository or mission control surface |
-| `editor` | Artifact or mission view surface |
-| `agentSession` | Live agent-session surface |
+| `tower` | Repository or mission control surface |
+| `briefingRoom` | Artifact or mission view surface |
+| `runway` | Live agent-session surface |
 
-Each gate has a `GateBinding`:
+Each pane has a `PaneBinding`:
 
 | Binding field | Meaning |
 | --- | --- |
@@ -40,7 +40,7 @@ Each gate has a `GateBinding`:
 
 `AirportState` carries:
 
-- repository-scoped gate bindings
+- repository-scoped pane bindings
 - focus intent and observed focus
 - connected client registrations
 - substrate observations and pane mapping
@@ -62,15 +62,15 @@ flowchart TD
 
 `planAirportSubstrateEffects(...)` only emits a focus effect when:
 
-1. a gate is the intended focus target
+1. a pane is the intended focus target
 2. the observed focus does not already match
 3. the bound pane exists in the current substrate observation
 
 Semantic selection is a separate concern from focus intent:
 
-- mission or repository selection updates gate bindings and projections
-- explicit airport focus observations update `focus.intentGateId`
-- selecting an artifact or agent session must not, by itself, move terminal focus away from the dashboard gate
+- mission or repository selection updates pane bindings and projections
+- explicit airport focus observations update `focus.intentPaneId`
+- selecting an artifact or agent session must not, by itself, move terminal focus away from Tower
 
 ## Persistence Boundary
 
@@ -78,8 +78,8 @@ Airport intent is persisted inside repository daemon settings, not inside `missi
 
 | Persisted field | Location |
 | --- | --- |
-| `airport.gates` | `.mission/settings.json` |
-| `airport.focus.intentGateId` | `.mission/settings.json` |
+| `airport.panes` | `.mission/settings.json` |
+| `airport.focus.intentPaneId` | `.mission/settings.json` |
 
 If the current airport intent matches the default bindings, the registry omits it rather than persisting redundant state.
 
@@ -98,5 +98,5 @@ Airport does not own mission execution. It does not own task generation. It does
 ## Relationship To Other Pages
 
 - See [daemon.md](./daemon.html) for the multi-repository registry and daemon integration.
-- See [tower.md](./tower.html) for how the Airport terminal surfaces attach to airport gates.
-- See [semantic-model.md](./semantic-model.html) for the semantic targets referenced by gate bindings.
+- See [airport-terminal-surface.md](./airport-terminal-surface.html) for how the Airport terminal surfaces attach to airport panes.
+- See [semantic-model.md](./semantic-model.html) for the semantic targets referenced by pane bindings.

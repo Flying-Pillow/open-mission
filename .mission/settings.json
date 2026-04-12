@@ -161,25 +161,5 @@
   },
   "agentRunner": "copilot-cli",
   "defaultAgentMode": "interactive",
-  "towerTheme": "ocean",
-  "airport": {
-    "gates": {
-      "dashboard": {
-        "targetKind": "mission",
-        "targetId": "13-stop-empty-stage-generation-from-recursively-re-",
-        "mode": "control"
-      },
-      "editor": {
-        "targetKind": "mission",
-        "targetId": "13-stop-empty-stage-generation-from-recursively-re-",
-        "mode": "view"
-      },
-      "agentSession": {
-        "targetKind": "empty"
-      }
-    },
-    "focus": {
-      "intentGateId": "dashboard"
-    }
-  }
+  "towerTheme": "ocean"
 }

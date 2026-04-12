@@ -1,6 +1,6 @@
 import { getMissionUserConfigPath } from '@flying-pillow/mission-core';
-import { ensureMissionInstallation, getMissionInstallationOutput } from './ensureMissionInstallation.js';
 import type { EntryContext } from './entryContext.js';
+import { ensureMissionInstallation, getMissionInstallationOutput } from './ensureMissionInstallation.js';
 
 export async function runInstallCommand(context: EntryContext): Promise<void> {
 	const config = await ensureMissionInstallation({

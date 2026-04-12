@@ -12,7 +12,7 @@ import {
 	readDaemonManifest
 } from './daemonPaths.js';
 
-export type DaemonLaunchMode = 'build' | 'source';
+export type DaemonRuntimeMode = 'build' | 'source';
 
 export type DaemonStatusResult = {
 	manifestPath: string;
@@ -80,7 +80,7 @@ export async function getMissionDaemonProcessStatus(): Promise<DaemonStatusResul
 export async function startMissionDaemonProcess(options: {
 	socketPath?: string;
 	surfacePath?: string;
-	launchMode?: DaemonLaunchMode;
+	runtimeMode?: DaemonRuntimeMode;
 	runtimeFactoryModulePath?: string;
 }): Promise<DaemonStartResult> {
 	const currentStatus = await getMissionDaemonProcessStatus();
@@ -154,18 +154,18 @@ export async function stopMissionDaemonProcess(): Promise<DaemonStopResult> {
 }
 
 export function resolveDefaultRuntimeFactoryModulePath(
-	launchMode: DaemonLaunchMode
+	runtimeMode: DaemonRuntimeMode
 ): string | undefined {
 	const currentFilePath = fileURLToPath(import.meta.url);
 	const packageRoot = path.resolve(path.dirname(currentFilePath), '..', '..');
 	const sourcePath = path.join(packageRoot, 'src', 'daemon', 'defaultRuntimeFactory.ts');
 	const buildPath = path.join(packageRoot, 'build', 'daemon', 'defaultRuntimeFactory.js');
 
-	if (launchMode === 'source' && fsSync.existsSync(sourcePath)) {
+	if (runtimeMode === 'source' && fsSync.existsSync(sourcePath)) {
 		return sourcePath;
 	}
 
-	if (launchMode === 'build' && fsSync.existsSync(buildPath)) {
+	if (runtimeMode === 'build' && fsSync.existsSync(buildPath)) {
 		return buildPath;
 	}
 
@@ -183,20 +183,20 @@ export function resolveDefaultRuntimeFactoryModulePath(
 async function spawnDaemonRunner(options: {
 	socketPath?: string;
 	surfacePath?: string;
-	launchMode?: DaemonLaunchMode;
+	runtimeMode?: DaemonRuntimeMode;
 	runtimeFactoryModulePath?: string;
 }) {
 	const packageRoot = resolveCorePackageRoot();
-	const launchMode =
-		options.launchMode ?? (process.env['MISSION_DAEMON_LAUNCH_MODE']?.trim() === 'source' ? 'source' : 'build');
+	const runtimeMode =
+		options.runtimeMode ?? (process.env['MISSION_DAEMON_RUNTIME_MODE']?.trim() === 'source' ? 'source' : 'build');
 	const socketArgs = options.socketPath ? ['--socket', options.socketPath] : [];
 	const sourceEntry = path.join(packageRoot, 'src', 'daemon', 'missiond.ts');
 	const buildEntry = path.join(packageRoot, 'build', 'daemon', 'missiond.js');
 	const env = {
 		...process.env,
 		...(options.surfacePath ? { MISSION_SURFACE_PATH: options.surfacePath } : {}),
-		MISSION_DAEMON_LAUNCH_MODE: launchMode,
-		...(launchMode === 'source'
+		MISSION_DAEMON_RUNTIME_MODE: runtimeMode,
+		...(runtimeMode === 'source'
 			? { NODE_OPTIONS: appendNodeCondition(process.env['NODE_OPTIONS'], 'typescript') }
 			: {}),
 		...(options.runtimeFactoryModulePath
@@ -208,7 +208,7 @@ async function spawnDaemonRunner(options: {
 	const daemonLogFd = fsSync.openSync(daemonLogPath, 'a');
 	const stdio: [number | 'ignore', number, number] = ['ignore', daemonLogFd, daemonLogFd];
 
-	if (launchMode === 'source') {
+	if (runtimeMode === 'source') {
 		const child = spawn(
 			'pnpm',
 			['--dir', packageRoot, 'exec', 'tsx', sourceEntry, 'run', ...socketArgs],

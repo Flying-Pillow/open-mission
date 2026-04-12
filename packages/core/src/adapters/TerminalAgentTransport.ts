@@ -47,8 +47,8 @@ export class TerminalAgentTransport {
 	public constructor(options: TerminalAgentTransportOptions = {}) {
 		this.logLine = options.logLine;
 		this.sharedSessionName = options.sharedSessionName?.trim()
-			|| process.env['MISSION_TERMINAL_SESSION']?.trim()
-			|| process.env['MISSION_TERMINAL_SESSION_NAME']?.trim()
+			|| process.env['AIRPORT_TERMINAL_SESSION']?.trim()
+			|| process.env['AIRPORT_TERMINAL_SESSION_NAME']?.trim()
 			|| undefined;
 		this.agentSessionPaneTitle = options.agentSessionPaneTitle?.trim() || 'AGENT SESSION';
 		const terminalBinary = options.terminalBinary?.trim()

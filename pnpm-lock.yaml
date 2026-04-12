@@ -41,9 +41,6 @@ importers:
 
   apps/airport/terminal:
     dependencies:
-      '@clack/prompts':
-        specifier: ^1.1.0
-        version: 1.1.0
       '@dimforge/rapier2d-simd-compat':
         specifier: ^0.17.3
         version: 0.17.3
@@ -106,6 +103,9 @@ importers:
 
   packages/mission:
     dependencies:
+      '@clack/prompts':
+        specifier: ^1.1.0
+        version: 1.1.0
       '@flying-pillow/mission-airport-terminal':
         specifier: workspace:*
         version: link:../../apps/airport/terminal

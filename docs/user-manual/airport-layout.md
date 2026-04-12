@@ -11,7 +11,7 @@ The Airport layout is the operator's cockpit for Mission.
 
 It is where you move from “I have work to do” to “I can see the mission, the stage, the tasks, the artifacts, and the live agent session that is doing the work.”
 
-## What You See When Mission Launches
+## What You See When Mission Opens
 
 On a normal POSIX setup, Mission can bootstrap an airport-style layout with three coordinated surfaces:
 
@@ -30,7 +30,7 @@ Tower, as the left-side control surface inside Airport, has two main operating c
 | Repository mode | Repository setup, mission intake, issue browsing, and selection |
 | Mission mode | Stage progress, tasks, artifacts, sessions, and mission actions |
 
-Launching from a repository checkout opens repository mode. Launching from an existing mission workspace automatically selects that mission and opens mission mode.
+Opening from a repository checkout opens repository mode. Opening from an existing mission workspace automatically selects that mission and opens mission mode.
 
 That is a good product detail because it means the surface adapts to where you are in the workflow instead of making every screen feel the same.
 

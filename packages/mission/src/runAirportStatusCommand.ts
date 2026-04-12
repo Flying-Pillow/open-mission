@@ -2,8 +2,8 @@ import { note, outro } from '@clack/prompts';
 import { DaemonApi } from '@flying-pillow/mission-core';
 import {
 	connectAirportControl,
-	resolveAirportControlLaunchMode
-} from '../airport/connectAirportControl.js';
+	resolveAirportControlRuntimeMode
+} from '@flying-pillow/mission-airport-terminal';
 import type { EntryContext } from './entryContext.js';
 
 export async function runAirportStatusCommand(context: EntryContext): Promise<void> {
@@ -17,8 +17,8 @@ export async function runAirportStatusCommand(context: EntryContext): Promise<vo
 	}
 
 	const client = await connectAirportControl({
-		surfacePath: context.launchCwd,
-		launchMode: resolveAirportControlLaunchMode(import.meta.url)
+		surfacePath: context.workingDirectory,
+		runtimeMode: resolveAirportControlRuntimeMode(import.meta.url)
 	});
 
 	try {
@@ -30,10 +30,10 @@ export async function runAirportStatusCommand(context: EntryContext): Promise<vo
 			return;
 		}
 
-		const gateLines = Object.entries(snapshot.state.airport.gates).map(([gateId, binding]) => {
+		const paneLines = Object.entries(snapshot.state.airport.panes).map(([paneId, binding]) => {
 			const suffix = binding.targetId ? `:${binding.targetId}` : '';
 			const mode = binding.mode ? ` (${binding.mode})` : '';
-			return `${gateId}: ${binding.targetKind}${suffix}${mode}`;
+			return `${paneId}: ${binding.targetKind}${suffix}${mode}`;
 		});
 
 		const clientLines = Object.values(snapshot.state.airport.clients).map((airportClient) => {
@@ -41,8 +41,8 @@ export async function runAirportStatusCommand(context: EntryContext): Promise<vo
 				airportClient.clientId,
 				airportClient.label,
 				airportClient.connected ? 'connected' : 'disconnected',
-				airportClient.claimedGateId ? `gate=${airportClient.claimedGateId}` : undefined,
-				airportClient.focusedGateId ? `focus=${airportClient.focusedGateId}` : undefined
+				airportClient.claimedPaneId ? `pane=${airportClient.claimedPaneId}` : undefined,
+				airportClient.focusedPaneId ? `focus=${airportClient.focusedPaneId}` : undefined
 			].filter(Boolean).join(' | ');
 		});
 		const knownAirportLines = Object.values(snapshot.state.airports.repositories).map((entry) => {
@@ -55,8 +55,8 @@ export async function runAirportStatusCommand(context: EntryContext): Promise<vo
 				activeMarker
 			].join(' | ');
 		});
-		const substrateLines = Object.entries(snapshot.state.airport.substrate.panesByGate).map(([gateId, pane]) => {
-			return `${gateId}: ${pane.exists ? `pane=${String(pane.paneId)}` : 'missing'}${pane.title ? ` title=${pane.title}` : ''}`;
+		const substrateLines = Object.entries(snapshot.state.airport.substrate.panes).map(([paneId, pane]) => {
+			return `${paneId}: ${pane.exists ? `terminalPane=${String(pane.terminalPaneId)}` : 'missing'}${pane.title ? ` title=${pane.title}` : ''}`;
 		});
 
 		note(
@@ -65,18 +65,18 @@ export async function runAirportStatusCommand(context: EntryContext): Promise<vo
 				`airport: ${snapshot.state.airport.airportId}`,
 				`repository: ${snapshot.state.airport.repositoryRootPath ?? snapshot.state.airport.repositoryId ?? 'unscoped'}`,
 				`session: ${snapshot.state.airport.substrate.sessionName}`,
-				`focus intent: ${snapshot.state.airport.focus.intentGateId ?? 'none'}`,
-				`focus observed: ${snapshot.state.airport.focus.observedGateId ?? 'none'}`,
+				`focus intent: ${snapshot.state.airport.focus.intentPaneId ?? 'none'}`,
+				`focus observed: ${snapshot.state.airport.focus.observedPaneId ?? 'none'}`,
 				`substrate: ${snapshot.state.airport.substrate.kind} (${snapshot.state.airport.substrate.attached ? 'attached' : 'detached'})`,
-				`focused pane: ${snapshot.state.airport.substrate.observedFocusedPaneId ?? 'none'}`,
+				`focused pane: ${snapshot.state.airport.substrate.observedFocusedTerminalPaneId ?? 'none'}`,
 				`known airports: ${String(Object.keys(snapshot.state.airports.repositories).length)}`,
 				`active repository: ${snapshot.state.airports.activeRepositoryId ?? 'unscoped'}`,
 				'',
 				'Known airports:',
 				...(knownAirportLines.length > 0 ? knownAirportLines : ['none']),
 				'',
-				'Gates:',
-				...gateLines,
+				'Panes:',
+				...paneLines,
 				'',
 				'Substrate:',
 				...(substrateLines.length > 0 ? substrateLines : ['none']),

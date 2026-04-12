@@ -36,7 +36,7 @@ Then run the installer:
 mission install
 ```
 
-That prepares the operator environment without launching the full Airport terminal session.
+That prepares the operator environment without opening the full Airport terminal session.
 
 ## What The Installer Sets Up
 
@@ -47,7 +47,7 @@ The current installer prepares the things Mission needs in order to feel smooth 
 | Operator config | Creates the Mission user config file |
 | Mission workspace root | Chooses where isolated mission workspaces and worktrees will live |
 | Terminal substrate | Resolves the terminal manager Mission uses for the airport layout |
-| Editor integration | Resolves the editor binary used in the editor gate |
+| Editor integration | Resolves the editor binary used in Briefing Room |
 
 In the current implementation, the user config is written to the usual XDG config location when available, otherwise under `~/.config/mission/config.json`.
 
@@ -60,7 +60,7 @@ These current runtime facts matter:
 | Bun | Required for the Airport terminal surfaces today |
 | Node.js | Still fine for CLI-only and daemon-only commands |
 | zellij | Preferred terminal substrate for the airport layout |
-| An editor binary | Needed for the editor gate |
+| An editor binary | Needed for Briefing Room |
 | The daemon | Auto-started by Mission terminal surfaces when needed |
 
 On Linux, Mission can auto-install some dependencies, including `zellij`, into the local user bin path when they are missing.
@@ -78,7 +78,7 @@ mission
 What happens next:
 
 1. Mission validates the operator setup.
-2. Mission launches the Airport terminal layout.
+2. Mission opens the Airport terminal layout.
 3. The daemon starts automatically if it is not already running.
 4. If repository control state is missing, Mission can scaffold it on the way in.
 

@@ -2,8 +2,8 @@ import {
 	resolveMissionWorkspaceContext
 } from '@flying-pillow/mission-core';
 import type { MissionWorkspaceContext } from '@flying-pillow/mission-core';
-import type { EntryContext } from '../entry/entryContext.js';
+import type { AirportTerminalContext } from '../airportTerminalContext.js';
 
-export function resolveTowerWorkspaceContext(context: EntryContext): MissionWorkspaceContext {
-	return resolveMissionWorkspaceContext(context.launchCwd, context.controlRoot);
+export function resolveTowerWorkspaceContext(context: AirportTerminalContext): MissionWorkspaceContext {
+	return resolveMissionWorkspaceContext(context.workingDirectory, context.controlRoot);
 }

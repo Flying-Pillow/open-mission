@@ -4,13 +4,13 @@ import path from 'node:path';
 import {
 	AirportControl,
 	TerminalManagerSubstrateController,
-	createDefaultGateBindings,
+	createDefaultPaneBindings,
 	type AirportSubstrateEffect,
 	type AirportSubstrateState,
-	type BindAirportGateParams,
+	type BindAirportPaneParams,
 	type ConnectAirportClientParams,
-	type GateBinding,
-	type GateId,
+	type PaneBinding,
+	type AirportPaneId,
 	type PersistedAirportIntent
 } from '../../../../airport/build/index.js';
 import {
@@ -134,16 +134,16 @@ export class RepositoryAirportRegistry {
 		airport.control.observeClient(params);
 	}
 
-	public bindGate(repositoryId: string, params: BindAirportGateParams): void {
+	public bindPane(repositoryId: string, params: BindAirportPaneParams): void {
 		const airport = this.requireAirport(repositoryId);
 		this.activeRepositoryId = repositoryId;
-		airport.control.bindGate(params);
+		airport.control.bindPane(params);
 	}
 
 	public applyDefaultBindings(
 		repositoryId: string,
-		bindings: Partial<Record<GateId, GateBinding>>,
-		options: { focusIntent?: GateId } = {}
+		bindings: Partial<Record<AirportPaneId, PaneBinding>>,
+		options: { focusIntent?: AirportPaneId } = {}
 	): void {
 		const airport = this.requireAirport(repositoryId);
 		this.activeRepositoryId = repositoryId;
@@ -246,8 +246,8 @@ export function deriveRepositoryAirportIdentity(repositoryId: string, repository
 		repositoryId,
 		repositoryRootPath,
 		airportId: `airport:${repositoryLabel}:${repositoryHash}`,
-		sessionName: process.env['MISSION_TERMINAL_SESSION']?.trim()
-			|| process.env['MISSION_TERMINAL_SESSION_NAME']?.trim()
+		sessionName: process.env['AIRPORT_TERMINAL_SESSION']?.trim()
+			|| process.env['AIRPORT_TERMINAL_SESSION_NAME']?.trim()
 			|| `mission-control-${repositoryLabel}-${repositoryHash}`
 	};
 }
@@ -272,7 +272,7 @@ function serializePersistedAirportIntent(intent: PersistedAirportIntent | undefi
 function toPersistableAirportIntent(record: RepositoryAirportRecord): PersistedAirportIntent | undefined {
 	const currentIntent = record.control.getPersistedIntent();
 	const defaultIntent: PersistedAirportIntent = {
-		gates: createDefaultGateBindings(record.repositoryId)
+		panes: createDefaultPaneBindings(record.repositoryId)
 	};
 	return serializePersistedAirportIntent(currentIntent) === serializePersistedAirportIntent(defaultIntent)
 		? undefined

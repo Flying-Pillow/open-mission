@@ -78,8 +78,8 @@ Sessions also exist in more than one form.
 It exists to answer questions such as:
 
 - which repository is currently selected
-- which mission should the dashboard center on
-- which artifact the editor gate should show
+- which mission Tower should center on
+- which artifact Briefing Room should show
 - which task or session the operator is targeting
 
 ## Invariants

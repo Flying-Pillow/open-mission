@@ -120,7 +120,7 @@ The runtime section of `mission.json` contains:
 - stage projections
 - task runtime state
 - session runtime state
-- gate projections
+- airport pane projections
 - launch queue
 - last update timestamp
 
@@ -133,11 +133,11 @@ Mission deliberately mixes persisted facts with derived projections, but only in
 | Scope | Persisted facts | Derived projections |
 | --- | --- | --- |
 | Daemon system snapshot | Active and registry airport state, semantic context graph, version | Airport projections for active and registry airports |
-| Mission runtime record | Configuration snapshot, mission lifecycle, task state, session state, pause and panic state, launch queue, event log | Stage projections and gate projections stored inside runtime after reducer normalization |
+| Mission runtime record | Configuration snapshot, mission lifecycle, task state, session state, pause and panic state, launch queue, event log | Stage projections and airport pane projections stored inside runtime after reducer normalization |
 
 Two distinctions are especially important:
 
-1. `mission.json` does not contain airport gate bindings, panel registrations, or substrate pane ids.
+1. `mission.json` does not contain airport pane bindings, panel registrations, or substrate pane ids.
 2. `MissionSystemSnapshot` does not replace the mission runtime record for per-mission execution semantics.
 
 ## Repository Control State Versus Mission Execution State

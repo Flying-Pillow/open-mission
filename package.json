@@ -6,6 +6,8 @@
   "private": true,
   "packageManager": "pnpm@10.30.3",
   "scripts": {
+    "airport": "pnpm exec turbo run build --filter=@flying-pillow/mission && node packages/mission/build/mission.js",
+    "airport:hmr": "pnpm exec turbo run build --filter=@flying-pillow/mission && node packages/mission/build/mission.js --hmr",
     "airport:status": "pnpm exec turbo run build --filter=@flying-pillow/mission && node packages/mission/build/mission.js airport:status",
     "build": "turbo run build",
     "check": "turbo run check",

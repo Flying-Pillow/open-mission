@@ -279,14 +279,14 @@ export type MissionAgentEvent =
 		state: MissionAgentSessionState;
 	};
 
-export const PROTOCOL_VERSION = 17;
+export const PROTOCOL_VERSION = 18;
 
 export type Method =
 	| 'ping'
 	| 'airport.status'
 	| 'airport.client.connect'
 	| 'airport.client.observe'
-	| 'airport.gate.bind'
+	| 'airport.pane.bind'
 	| 'control.status'
 	| 'control.settings.update'
 	| 'control.document.read'
@@ -446,23 +446,23 @@ export type ControlRepositoriesAdd = {
 };
 
 export type AirportClientConnect = {
-	gateId: 'dashboard' | 'editor' | 'agentSession';
+	paneId: 'tower' | 'briefingRoom' | 'runway';
 	label?: string;
 	panelProcessId?: string;
-	paneId?: number;
+	terminalPaneId?: number;
 	terminalSessionName?: string;
 };
 
 export type AirportClientObserve = {
-	focusedGateId?: 'dashboard' | 'editor' | 'agentSession';
-	intentGateId?: 'dashboard' | 'editor' | 'agentSession';
+	focusedPaneId?: 'tower' | 'briefingRoom' | 'runway';
+	intentPaneId?: 'tower' | 'briefingRoom' | 'runway';
 	repositoryId?: string;
-	paneId?: number;
+	terminalPaneId?: number;
 	terminalSessionName?: string;
 };
 
-export type AirportGateBind = {
-	gateId: 'dashboard' | 'editor' | 'agentSession';
+export type AirportPaneBind = {
+	paneId: 'tower' | 'briefingRoom' | 'runway';
 	binding: {
 		targetKind: 'empty' | 'repository' | 'mission' | 'task' | 'artifact' | 'agentSession';
 		targetId?: string;

@@ -128,7 +128,7 @@ async function ensureWorkspaceRoot(config: MissionUserConfig, interactive: boole
 			message: 'Choose a mission workspace root',
 			placeholder: configuredRoot,
 			defaultValue: configuredRoot,
-			validate(value) {
+			validate(value: unknown) {
 				const candidate = String(value ?? '').trim();
 				if (!candidate) {
 					return 'Mission workspace root is required.';
@@ -196,7 +196,7 @@ async function ensureBinary(input: {
 		message: `Enter the ${input.label} command or absolute path`,
 		placeholder: configuredBinary,
 		defaultValue: configuredBinary,
-		validate(value) {
+		validate(value: unknown) {
 			const candidate = String(value ?? '').trim();
 			if (!candidate) {
 				return `${input.label} is required.`;

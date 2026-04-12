@@ -27,7 +27,7 @@ This is not a speculative redesign document. When older specs, older notes, and 
 1. Start with [system-context.md](./system-context.html) for the end-to-end topology.
 2. Read [repository-and-dossier.md](./repository-and-dossier.html) and [semantic-model.md](./semantic-model.html) for the repository, mission, stage, task, artifact, and session model.
 3. Read [daemon.md](./daemon.html), [workflow-engine.md](./workflow-engine.html), [agent-runtime.md](./agent-runtime.html), and [airport-control-plane.md](./airport-control-plane.html) for the main authorities.
-4. Read [tower.md](./tower.html) and [contracts.md](./contracts.html) for Airport terminal surface and protocol boundaries.
+4. Read [airport-terminal-surface.md](./airport-terminal-surface.html) and [contracts.md](./contracts.html) for Airport terminal surface and protocol boundaries.
 5. Use [recovery-and-reconciliation.md](./recovery-and-reconciliation.html), [package-map.md](./package-map.html), and [integrity-checklist.md](./integrity-checklist.html) as operational reference pages.
 
 ## System Context
@@ -75,7 +75,7 @@ The architecture coverage in this section reflects the five replayed architectur
 | Mission Semantic Model | [semantic-model.md](./semantic-model.html) |
 | Workflow Engine And Repository Workflow Settings | [workflow-engine.md](./workflow-engine.html) and [contracts.md](./contracts.html) |
 | Agent Runtime Unification | [agent-runtime.md](./agent-runtime.html) |
-| Airport Control Plane | [airport-control-plane.md](./airport-control-plane.html) and [tower.md](./tower.html) |
+| Airport Control Plane | [airport-control-plane.md](./airport-control-plane.html) and [airport-terminal-surface.md](./airport-terminal-surface.html) |
 
 ## Source-Of-Truth Ladder
 

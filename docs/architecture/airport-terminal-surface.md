@@ -73,7 +73,7 @@ The Airport terminal app does not own:
 
 Those come from `OperatorStatus` and `MissionSystemSnapshot` returned by the daemon.
 
-Tower may still ask the daemon to update shared pane bindings, but that is a layout command, not a transfer of UI ownership. The daemon should know which artifact the briefing-room gate is showing. It should not decide which tree row the user is currently on.
+Tower may still ask the daemon to update shared pane bindings, but that is a layout command, not a transfer of UI ownership. The daemon should know which artifact Briefing Room is showing. It should not decide which tree row the user is currently on.
 
 ## Tower Feature Controllers
 
@@ -112,7 +112,7 @@ This is a UI architecture rule, not a business rule exception. The daemon still 
 
 ## Gate Attachment Model
 
-Each terminal surface launches with an injected `MISSION_GATE_ID` and claims exactly one airport gate. The daemon then uses that registration to associate the pane with the repository airport state.
+Each terminal surface starts with an injected `AIRPORT_PANE_ID` and claims exactly one airport pane. The shared session is propagated through `AIRPORT_TERMINAL_SESSION`, and the daemon then uses that registration to associate the pane with the repository airport state.
 
 ## Runtime Constraint
 
@@ -120,6 +120,6 @@ The current Airport terminal implementation requires Bun at runtime because `@op
 
 ## Non-Responsibilities
 
-No Airport terminal surface must become the source of truth for mission routing, task lifecycle, or gate ownership. If a surface and the daemon disagree, the daemon wins.
+No Airport terminal surface must become the source of truth for mission routing, task lifecycle, or pane ownership. If a surface and the daemon disagree, the daemon wins.
 
 That rule also applies to available actions: ordering, filtering, and enablement are daemon-owned semantics, not UI policy.

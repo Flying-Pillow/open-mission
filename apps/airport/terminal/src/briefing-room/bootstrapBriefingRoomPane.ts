@@ -5,16 +5,16 @@ import {
 	DaemonApi,
 	readMissionUserConfig,
 } from '@flying-pillow/mission-core';
-import { connectAirportControl, resolveAirportControlLaunchMode } from '../airport/connectAirportControl.js';
+import { connectAirportControl, resolveAirportControlRuntimeMode } from '../airport/connectAirportControl.js';
 import { createPaneConnectParams } from '../airport/createPaneConnectParams.js';
-import type { EntryContext } from '../entry/entryContext.js';
+import type { AirportTerminalContext } from '../airportTerminalContext.js';
 
 type AirportLayoutSnapshot = Awaited<ReturnType<DaemonApi['airport']['getStatus']>>;
 
-export async function bootstrapBriefingRoomPane(_context: EntryContext): Promise<void> {
+export async function bootstrapBriefingRoomPane(_context: AirportTerminalContext): Promise<void> {
 	const client = await connectAirportControl({
 		surfacePath: process.cwd(),
-		launchMode: resolveAirportControlLaunchMode(import.meta.url)
+		runtimeMode: resolveAirportControlRuntimeMode(import.meta.url)
 	});
 	const api = new DaemonApi(client);
 	let activeChild: ReturnType<typeof spawn> | undefined;
@@ -69,8 +69,8 @@ export async function bootstrapBriefingRoomPane(_context: EntryContext): Promise
 		});
 	};
 
-	let snapshotFromCurrentState = await api.airport.connectPanel(
-		createPaneConnectParams('editor', 'mission-briefing-room')
+	let snapshotFromCurrentState = await api.airport.connectPane(
+		createPaneConnectParams('briefingRoom', 'mission-briefing-room')
 	);
 	await launchBriefingRoom(snapshotFromCurrentState);
 
@@ -126,7 +126,7 @@ function resolveBriefingRoomLaunchPath(
 	snapshot: AirportLayoutSnapshot,
 	fallbackPath: string
 ): string {
-	return snapshot.airportProjections.editor.launchPath?.trim() || fallbackPath;
+	return snapshot.airportProjections.briefingRoom.launchPath?.trim() || fallbackPath;
 }
 
 function buildShellCommand(args: string[]): string {

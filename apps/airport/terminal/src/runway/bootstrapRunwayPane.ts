@@ -2,22 +2,22 @@ import {
 	DaemonApi,
 	type MissionAgentSessionState
 } from '@flying-pillow/mission-core';
-import { connectAirportControl, resolveAirportControlLaunchMode } from '../airport/connectAirportControl.js';
+import { connectAirportControl, resolveAirportControlRuntimeMode } from '../airport/connectAirportControl.js';
 import { createPaneConnectParams } from '../airport/createPaneConnectParams.js';
-import type { EntryContext } from '../entry/entryContext.js';
+import type { AirportTerminalContext } from '../airportTerminalContext.js';
 
 type AirportLayoutSnapshot = Awaited<ReturnType<DaemonApi['airport']['getStatus']>>;
 type AirportLayoutSessionRecord = Awaited<ReturnType<DaemonApi['mission']['listSessions']>>[number];
 type AirportLayoutConsoleState = Awaited<ReturnType<DaemonApi['mission']['getSessionConsoleState']>>;
 
-export async function bootstrapRunwayPane(_context: EntryContext): Promise<void> {
+export async function bootstrapRunwayPane(_context: AirportTerminalContext): Promise<void> {
 	const client = await connectAirportControl({
 		surfacePath: process.cwd(),
-		launchMode: resolveAirportControlLaunchMode(import.meta.url)
+		runtimeMode: resolveAirportControlRuntimeMode(import.meta.url)
 	});
 	const api = new DaemonApi(client);
-	let currentSnapshot = await api.airport.connectPanel(
-		createPaneConnectParams('agentSession', 'mission-runway')
+	let currentSnapshot = await api.airport.connectPane(
+		createPaneConnectParams('runway', 'mission-runway')
 	);
 	let currentSession: AirportLayoutSessionRecord | undefined;
 	let currentConsoleState: AirportLayoutConsoleState = null;
@@ -124,7 +124,7 @@ function resolveRunwayTarget(snapshot: AirportLayoutSnapshot): {
 	missionId?: string;
 	sessionId?: string;
 } {
-	const projection = snapshot.airportProjections.agentSession;
+	const projection = snapshot.airportProjections.runway;
 	const missionId = projection.missionId;
 	const sessionId = projection.sessionId;
 	return {
@@ -139,13 +139,13 @@ function renderRunwayPane(input: {
 	consoleState: AirportLayoutConsoleState;
 }): void {
 	printRunwayHeader('MISSION RUNWAY');
-	const binding = input.snapshot.state.airport.gates.agentSession;
-	const projection = input.snapshot.airportProjections.agentSession;
+	const binding = input.snapshot.state.airport.panes.runway;
+	const projection = input.snapshot.airportProjections.runway;
 	process.stdout.write(`airport: ${input.snapshot.state.airport.airportId}\n`);
 	process.stdout.write(`session: ${input.snapshot.state.airport.substrate.sessionName}\n`);
 	process.stdout.write(`binding: ${binding.targetKind}${binding.targetId ? `:${binding.targetId}` : ''}${binding.mode ? ` (${binding.mode})` : ''}\n`);
-	process.stdout.write(`focus intent: ${input.snapshot.state.airport.focus.intentGateId ?? 'none'}\n`);
-	process.stdout.write(`focus observed: ${input.snapshot.state.airport.focus.observedGateId ?? 'none'}\n`);
+	process.stdout.write(`focus intent: ${input.snapshot.state.airport.focus.intentPaneId ?? 'none'}\n`);
+	process.stdout.write(`focus observed: ${input.snapshot.state.airport.focus.observedPaneId ?? 'none'}\n`);
 	process.stdout.write('\n');
 
 	if (!projection.sessionId) {

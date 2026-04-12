@@ -294,13 +294,13 @@ describe('Daemon', () => {
 								airportId: expect.stringMatching(/^airport:/),
 								repositoryId: workspaceRoot,
 								repositoryRootPath: workspaceRoot,
-								gates: {
-									dashboard: {
+								panes: {
+									tower: {
 										targetKind: 'repository',
 										targetId: workspaceRoot,
 										mode: 'control'
 									},
-									editor: {
+									briefingRoom: {
 										targetKind: 'repository',
 										targetId: workspaceRoot,
 										mode: 'view'
@@ -320,29 +320,29 @@ describe('Daemon', () => {
 							}
 						},
 						airportProjections: {
-							dashboard: {
-								title: 'Dashboard',
+							tower: {
+								title: 'Tower',
 								surfaceMode: 'repository',
 								repositoryLabel: path.basename(workspaceRoot),
 								stageRail: [],
 								treeNodes: [],
 								emptyLabel: 'Repository mode is ready.'
 							},
-							editor: {
-								title: 'Editor',
+							briefingRoom: {
+								title: 'Briefing Room',
 								launchPath: workspaceRoot,
-								emptyLabel: 'Editor gate is waiting for an artifact binding.'
+								emptyLabel: 'Briefing Room is waiting for an artifact binding.'
 							},
-							agentSession: {
-								title: 'Agent Session',
+							runway: {
+								title: 'Runway',
 								statusLabel: 'idle',
-								emptyLabel: 'Agent session gate is idle.'
+								emptyLabel: 'Runway is idle.'
 							}
 						},
 						airportRegistryProjections: {
 							[workspaceRoot]: {
-								dashboard: {
-									title: 'Dashboard',
+								tower: {
+									title: 'Tower',
 									surfaceMode: 'repository'
 								}
 							}
@@ -360,7 +360,7 @@ describe('Daemon', () => {
 	});
 
 
-	it('registers airport clients and allows gate observation through the daemon API', async () => {
+	it('registers airport clients and allows pane observation through the daemon API', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
 			await initializeMissionRepository(workspaceRoot);
@@ -373,16 +373,16 @@ describe('Daemon', () => {
 					await client.connect({ surfacePath: workspaceRoot });
 					const api = new DaemonApi(client);
 					const initial = await api.airport.getStatus();
-					const connected = await api.airport.connectPanel({
-						gateId: 'dashboard',
+					const connected = await api.airport.connectPane({
+						paneId: 'tower',
 						label: 'test-tower'
 					});
 					const observed = await api.airport.observeClient({
-						focusedGateId: 'agentSession',
-						intentGateId: 'agentSession'
+						focusedPaneId: 'runway',
+						intentPaneId: 'runway'
 					});
-					const rebound = await api.airport.bindGate({
-						gateId: 'agentSession',
+					const rebound = await api.airport.bindPane({
+						paneId: 'runway',
 						binding: {
 							targetKind: 'task',
 							targetId: 'implementation/01-airport',
@@ -398,30 +398,30 @@ describe('Daemon', () => {
 							expect.objectContaining({
 								label: 'test-tower',
 								connected: true,
-								claimedGateId: 'dashboard',
+								claimedPaneId: 'tower',
 								surfacePath: workspaceRoot
 							})
 						])
 					);
 					expect(observed.state.airport.focus).toMatchObject({
-						intentGateId: 'agentSession',
-						observedGateId: 'agentSession'
+						intentPaneId: 'runway',
+						observedPaneId: 'runway'
 					});
-					expect(rebound.state.airport.gates.agentSession).toMatchObject({
+					expect(rebound.state.airport.panes.runway).toMatchObject({
 						targetKind: 'task',
 						targetId: 'implementation/01-airport',
 						mode: 'control'
 					});
 					expect(rebound.state.airports.repositories[workspaceRoot]?.persistedIntent).toMatchObject({
-						gates: {
-							agentSession: {
+						panes: {
+							runway: {
 								targetKind: 'task',
 								targetId: 'implementation/01-airport',
 								mode: 'control'
 							}
 						}
 					});
-					expect(rebound.airportProjections.agentSession.subtitle).toContain('task:implementation/01-airport');
+					expect(rebound.airportProjections.runway.subtitle).toContain('task:implementation/01-airport');
 				} finally {
 					client.dispose();
 					await daemon.close();
@@ -545,7 +545,7 @@ describe('Daemon', () => {
 				try {
 					await firstClient.connect({ surfacePath: workspaceRoot });
 					const firstApi = new DaemonApi(firstClient);
-					await firstApi.airport.connectPanel({ gateId: 'dashboard', label: 'test-dashboard-1' });
+					await firstApi.airport.connectPane({ paneId: 'tower', label: 'test-dashboard-1' });
 					await firstApi.control.getStatus();
 					const selected = await firstApi.mission.getStatus({ missionId: seededMission.getRecord().id });
 					const selectedSystem = selected.system;
@@ -559,13 +559,13 @@ describe('Daemon', () => {
 
 					await secondClient.connect({ surfacePath: workspaceRoot });
 					const secondApi = new DaemonApi(secondClient);
-					const reconnected = await secondApi.airport.connectPanel({ gateId: 'dashboard', label: 'test-dashboard-2' });
+					const reconnected = await secondApi.airport.connectPane({ paneId: 'tower', label: 'test-dashboard-2' });
 
 					expect(reconnected.state.missionOperatorViews[seededMission.getRecord().id]).toBeDefined();
 					expect(reconnected.state.domain.missions[seededMission.getRecord().id]?.taskIds.length).toBeGreaterThan(0);
-					expect(reconnected.airportProjections.dashboard.surfaceMode).toBe('mission');
-					expect(reconnected.airportProjections.dashboard.treeNodes.length).toBeGreaterThan(0);
-					expect(reconnected.airportProjections.dashboard.stageRail.length).toBeGreaterThan(0);
+					expect(reconnected.airportProjections.tower.surfaceMode).toBe('mission');
+					expect(reconnected.airportProjections.tower.treeNodes.length).toBeGreaterThan(0);
+					expect(reconnected.airportProjections.tower.stageRail.length).toBeGreaterThan(0);
 				} finally {
 					firstClient.dispose();
 					secondClient.dispose();
@@ -579,7 +579,7 @@ describe('Daemon', () => {
 		});
 	});
 
-	it('keeps airport observation transport-scoped when the dashboard reobserves the repository', async () => {
+	it('keeps airport observation transport-scoped when Tower reobserves the repository', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
 			await initializeMissionRepository(workspaceRoot);
@@ -591,18 +591,18 @@ describe('Daemon', () => {
 				try {
 					await client.connect({ surfacePath: workspaceRoot });
 					const api = new DaemonApi(client);
-					await api.airport.connectPanel({ gateId: 'dashboard', label: 'test-dashboard' });
+					await api.airport.connectPane({ paneId: 'tower', label: 'test-dashboard' });
 					const reset = await api.airport.observeClient({
 						repositoryId: workspaceRoot,
-						focusedGateId: 'dashboard',
-						intentGateId: 'dashboard'
+						focusedPaneId: 'tower',
+						intentPaneId: 'tower'
 					});
 
 					expect(reset.state.domain.selection.repositoryId).toBe(workspaceRoot);
 					expect(reset.state.domain.selection.missionId).toBeUndefined();
-					expect(reset.airportProjections.dashboard.surfaceMode).toBe('repository');
-					expect(reset.airportProjections.dashboard.stageRail).toEqual([]);
-					expect(reset.airportProjections.dashboard.treeNodes).toEqual([]);
+					expect(reset.airportProjections.tower.surfaceMode).toBe('repository');
+					expect(reset.airportProjections.tower.stageRail).toEqual([]);
+					expect(reset.airportProjections.tower.treeNodes).toEqual([]);
 				} finally {
 					client.dispose();
 					await daemon.close();
@@ -614,7 +614,7 @@ describe('Daemon', () => {
 		});
 	});
 
-	it('rebinds the editor via airport gate binding without changing airport focus intent', async () => {
+	it('rebinds Briefing Room without changing airport focus intent', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
 			await initializeMissionRepository(workspaceRoot);
@@ -627,11 +627,11 @@ describe('Daemon', () => {
 				try {
 					await client.connect({ surfacePath: workspaceRoot });
 					const api = new DaemonApi(client);
-					await api.airport.connectPanel({ gateId: 'dashboard', label: 'test-dashboard' });
+					await api.airport.connectPane({ paneId: 'tower', label: 'test-dashboard' });
 					await api.control.getStatus();
 					await api.airport.observeClient({
-						focusedGateId: 'dashboard',
-						intentGateId: 'dashboard'
+						focusedPaneId: 'tower',
+						intentPaneId: 'tower'
 					});
 
 					const missionId = seededMission.getRecord().id;
@@ -644,8 +644,8 @@ describe('Daemon', () => {
 
 					expect(artifactNode?.sourcePath).toBeTruthy();
 
-					const observed = await api.airport.bindGate({
-						gateId: 'editor',
+					const observed = await api.airport.bindPane({
+						paneId: 'briefingRoom',
 						binding: {
 							targetKind: 'artifact',
 							targetId: artifactNode!.sourcePath!,
@@ -653,13 +653,13 @@ describe('Daemon', () => {
 						}
 					});
 
-					expect(observed.state.airport.gates.editor).toMatchObject({
+					expect(observed.state.airport.panes.briefingRoom).toMatchObject({
 						targetKind: 'artifact',
 						targetId: artifactNode!.sourcePath,
 						mode: 'view'
 					});
-					expect(observed.airportProjections.editor.artifactPath).toBe(artifactNode!.sourcePath);
-					expect(observed.state.airport.focus.intentGateId).toBe('dashboard');
+					expect(observed.airportProjections.briefingRoom.artifactPath).toBe(artifactNode!.sourcePath);
+					expect(observed.state.airport.focus.intentPaneId).toBe('tower');
 				} finally {
 					client.dispose();
 					await daemon.close();
@@ -672,7 +672,7 @@ describe('Daemon', () => {
 		});
 	});
 
-	it('broadcasts the resolved editor projection to connected editor clients after editor gate binding', async () => {
+	it('broadcasts the resolved Briefing Room projection after Briefing Room binding', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
 			await initializeMissionRepository(workspaceRoot);
@@ -689,8 +689,8 @@ describe('Daemon', () => {
 					const dashboardApi = new DaemonApi(dashboardClient);
 					const editorApi = new DaemonApi(editorClient);
 
-					await dashboardApi.airport.connectPanel({ gateId: 'dashboard', label: 'test-dashboard' });
-					await editorApi.airport.connectPanel({ gateId: 'editor', label: 'test-editor' });
+					await dashboardApi.airport.connectPane({ paneId: 'tower', label: 'test-dashboard' });
+					await editorApi.airport.connectPane({ paneId: 'briefingRoom', label: 'test-editor' });
 					await dashboardApi.control.getStatus();
 
 					const missionId = seededMission.getRecord().id;
@@ -708,7 +708,7 @@ describe('Daemon', () => {
 							if (event.type !== 'airport.state') {
 								return;
 							}
-							if (event.snapshot.airportProjections.editor.artifactPath !== artifactNode!.sourcePath) {
+							if (event.snapshot.airportProjections.briefingRoom.artifactPath !== artifactNode!.sourcePath) {
 								return;
 							}
 							subscription.dispose();
@@ -716,8 +716,8 @@ describe('Daemon', () => {
 						});
 					});
 
-					await dashboardApi.airport.bindGate({
-						gateId: 'editor',
+					await dashboardApi.airport.bindPane({
+						paneId: 'briefingRoom',
 						binding: {
 							targetKind: 'artifact',
 							targetId: artifactNode!.sourcePath!,
@@ -726,13 +726,13 @@ describe('Daemon', () => {
 					});
 
 					const snapshot = await editorUpdate;
-					expect(snapshot.state.airport.gates.editor).toMatchObject({
+					expect(snapshot.state.airport.panes.briefingRoom).toMatchObject({
 						targetKind: 'artifact',
 						targetId: artifactNode!.sourcePath,
 						mode: 'view'
 					});
-					expect(snapshot.airportProjections.editor.artifactPath).toBe(artifactNode!.sourcePath);
-					expect(snapshot.airportProjections.editor.launchPath).toBe(artifactNode!.sourcePath);
+					expect(snapshot.airportProjections.briefingRoom.artifactPath).toBe(artifactNode!.sourcePath);
+					expect(snapshot.airportProjections.briefingRoom.launchPath).toBe(artifactNode!.sourcePath);
 				} finally {
 					dashboardClient.dispose();
 					editorClient.dispose();
@@ -762,33 +762,33 @@ describe('Daemon', () => {
 					const firstApi = new DaemonApi(firstClient);
 					const secondApi = new DaemonApi(secondClient);
 
-					await firstApi.airport.connectPanel({
-						gateId: 'dashboard',
+					await firstApi.airport.connectPane({
+						paneId: 'tower',
 						label: 'tower-a',
 						panelProcessId: '111'
 					});
-					const replaced = await secondApi.airport.connectPanel({
-						gateId: 'dashboard',
+					const replaced = await secondApi.airport.connectPane({
+						paneId: 'tower',
 						label: 'tower-b',
 						panelProcessId: '222'
 					});
-					const firstRegistration = Object.values(replaced.state.airport.clients).find((client) => client.label === 'tower-a');
-					const secondRegistration = Object.values(replaced.state.airport.clients).find((client) => client.label === 'tower-b');
+					const firstRegistration = Object.values(replaced.state.airport.clients).find((client: { label: string }) => client.label === 'tower-a');
+					const secondRegistration = Object.values(replaced.state.airport.clients).find((client: { label: string }) => client.label === 'tower-b');
 
-					expect(firstRegistration?.claimedGateId).toBeUndefined();
-					expect(secondRegistration?.claimedGateId).toBe('dashboard');
+					expect(firstRegistration?.claimedPaneId).toBeUndefined();
+					expect(secondRegistration?.claimedPaneId).toBe('tower');
 
-					await firstApi.airport.observeClient({ focusedGateId: 'editor' });
+					await firstApi.airport.observeClient({ focusedPaneId: 'briefingRoom' });
 					const observed = await secondApi.airport.observeClient({
-						focusedGateId: 'agentSession',
-						intentGateId: 'agentSession'
+						focusedPaneId: 'runway',
+						intentPaneId: 'runway'
 					});
 
-					expect(observed.state.airport.focus.intentGateId).toBe('agentSession');
-					expect(observed.state.airport.focus.observedGateId).toBe('agentSession');
-					expect(Object.values(observed.state.airport.focus.observedGateIdByClientId ?? {}).sort()).toEqual([
-						'agentSession',
-						'editor'
+					expect(observed.state.airport.focus.intentPaneId).toBe('runway');
+					expect(observed.state.airport.focus.observedPaneId).toBe('runway');
+					expect(Object.values(observed.state.airport.focus.observedPaneIdByClientId ?? {}).sort()).toEqual([
+						'briefingRoom',
+						'runway'
 					]);
 				} finally {
 					firstClient.dispose();
@@ -815,8 +815,8 @@ describe('Daemon', () => {
 					try {
 						await client.connect({ surfacePath: workspaceRoot });
 						const api = new DaemonApi(client);
-						await api.airport.bindGate({
-							gateId: 'agentSession',
+						await api.airport.bindPane({
+							paneId: 'runway',
 							binding: {
 								targetKind: 'task',
 								targetId: 'persisted/task',
@@ -838,14 +838,14 @@ describe('Daemon', () => {
 						const api = new DaemonApi(client);
 						const snapshot = await api.airport.getStatus();
 
-						expect(snapshot.state.airport.gates.agentSession).toMatchObject({
+						expect(snapshot.state.airport.panes.runway).toMatchObject({
 							targetKind: 'task',
 							targetId: 'persisted/task',
 							mode: 'control'
 						});
 						expect(snapshot.state.airports.repositories[workspaceRoot]?.persistedIntent).toMatchObject({
-							gates: {
-								agentSession: {
+							panes: {
+								runway: {
 									targetKind: 'task',
 									targetId: 'persisted/task',
 									mode: 'control'
@@ -864,12 +864,12 @@ describe('Daemon', () => {
 		});
 	});
 
-	it('reconnects dashboard, editor, and agentSession gates as real clients after daemon restart', async () => {
+	it('reconnects Tower, Briefing Room, and Runway as real clients after daemon restart', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
 			await initializeMissionRepository(workspaceRoot);
 
-			const connectAllGates = async () => {
+			const connectAllPanes = async () => {
 				const dashboardClient = new DaemonClient();
 				const editorClient = new DaemonClient();
 				const agentClient = new DaemonClient();
@@ -880,16 +880,16 @@ describe('Daemon', () => {
 				const editorApi = new DaemonApi(editorClient);
 				const agentApi = new DaemonApi(agentClient);
 
-				await dashboardApi.airport.connectPanel({
-					gateId: 'dashboard',
+				await dashboardApi.airport.connectPane({
+					paneId: 'tower',
 					label: 'mission-dashboard'
 				});
-				await editorApi.airport.connectPanel({
-					gateId: 'editor',
+				await editorApi.airport.connectPane({
+					paneId: 'briefingRoom',
 					label: 'mission-editor'
 				});
-				const snapshot = await agentApi.airport.connectPanel({
-					gateId: 'agentSession',
+				const snapshot = await agentApi.airport.connectPane({
+					paneId: 'runway',
 					label: 'mission-agent-session'
 				});
 
@@ -907,19 +907,19 @@ describe('Daemon', () => {
 				{
 					const daemon = await startDaemon();
 					try {
-						const { snapshot, dispose } = await connectAllGates();
+						const { snapshot, dispose } = await connectAllPanes();
 						try {
 							expect(Object.values(snapshot.state.airport.clients)).toEqual(
 								expect.arrayContaining([
-									expect.objectContaining({ label: 'mission-dashboard', claimedGateId: 'dashboard' }),
-									expect.objectContaining({ label: 'mission-editor', claimedGateId: 'editor' }),
-									expect.objectContaining({ label: 'mission-agent-session', claimedGateId: 'agentSession' })
+									expect.objectContaining({ label: 'mission-dashboard', claimedPaneId: 'tower' }),
+									expect.objectContaining({ label: 'mission-editor', claimedPaneId: 'briefingRoom' }),
+									expect.objectContaining({ label: 'mission-agent-session', claimedPaneId: 'runway' })
 								])
 							);
-							expect(Object.values(snapshot.state.airport.clients).map((client) => client.claimedGateId).sort()).toEqual([
-								'agentSession',
-								'dashboard',
-								'editor'
+							expect(Object.values(snapshot.state.airport.clients).map((client: { claimedPaneId?: string }) => client.claimedPaneId).sort()).toEqual([
+								'briefingRoom',
+								'runway',
+								'tower'
 							]);
 						} finally {
 							dispose();
@@ -932,16 +932,16 @@ describe('Daemon', () => {
 				{
 					const daemon = await startDaemon();
 					try {
-						const { snapshot, dispose } = await connectAllGates();
+						const { snapshot, dispose } = await connectAllPanes();
 						try {
-							expect(Object.values(snapshot.state.airport.clients).map((client) => client.label).sort()).toEqual([
+							expect(Object.values(snapshot.state.airport.clients).map((client: { label: string }) => client.label).sort()).toEqual([
 								'mission-agent-session',
 								'mission-dashboard',
 								'mission-editor'
 							]);
-							expect(snapshot.airportProjections.editor.connectedClientIds.length).toBe(1);
-							expect(snapshot.airportProjections.agentSession.connectedClientIds.length).toBe(1);
-							expect(snapshot.airportProjections.dashboard.connectedClientIds.length).toBe(1);
+							expect(snapshot.airportProjections.briefingRoom.connectedClientIds.length).toBe(1);
+							expect(snapshot.airportProjections.runway.connectedClientIds.length).toBe(1);
+							expect(snapshot.airportProjections.tower.connectedClientIds.length).toBe(1);
 						} finally {
 							dispose();
 						}
@@ -974,16 +974,16 @@ describe('Daemon', () => {
 					const leftApi = new DaemonApi(leftClient);
 					const rightApi = new DaemonApi(rightClient);
 
-					await leftApi.airport.bindGate({
-						gateId: 'agentSession',
+					await leftApi.airport.bindPane({
+						paneId: 'runway',
 						binding: {
 							targetKind: 'task',
 							targetId: 'left/task',
 							mode: 'control'
 						}
 					});
-					const rightSnapshot = await rightApi.airport.bindGate({
-						gateId: 'agentSession',
+					const rightSnapshot = await rightApi.airport.bindPane({
+						paneId: 'runway',
 						binding: {
 							targetKind: 'task',
 							targetId: 'right/task',
@@ -997,18 +997,18 @@ describe('Daemon', () => {
 						rightWorkspaceRoot
 					].sort());
 					expect(rightSnapshot.state.airports.activeRepositoryId).toBe(rightWorkspaceRoot);
-					expect(rightSnapshot.state.airports.repositories[leftWorkspaceRoot]?.airport.gates.agentSession).toMatchObject({
+					expect(rightSnapshot.state.airports.repositories[leftWorkspaceRoot]?.airport.panes.runway).toMatchObject({
 						targetKind: 'task',
 						targetId: 'left/task',
 						mode: 'control'
 					});
-					expect(rightSnapshot.state.airports.repositories[rightWorkspaceRoot]?.airport.gates.agentSession).toMatchObject({
+					expect(rightSnapshot.state.airports.repositories[rightWorkspaceRoot]?.airport.panes.runway).toMatchObject({
 						targetKind: 'task',
 						targetId: 'right/task',
 						mode: 'control'
 					});
 					expect(leftSnapshot.state.airport.repositoryRootPath).toBe(leftWorkspaceRoot);
-					expect(leftSnapshot.state.airport.gates.agentSession).toMatchObject({
+					expect(leftSnapshot.state.airport.panes.runway).toMatchObject({
 						targetKind: 'task',
 						targetId: 'left/task',
 						mode: 'control'

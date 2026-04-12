@@ -3,10 +3,10 @@ import {
 	type AirportProjectionSet,
 	type AirportSubstrateEffect,
 	type AirportSubstrateState,
-	type BindAirportGateParams,
+	type BindAirportPaneParams,
 	type ConnectAirportClientParams,
-	type GateBinding,
-	type GateId
+	type PaneBinding,
+	type AirportPaneId
 } from '../../../airport/build/index.js';
 import type {
 	ContextGraph,
@@ -38,17 +38,17 @@ type MissionSystemCommand =
 		kind: 'airport.client.observed';
 		params: {
 			clientId: string;
-			focusedGateId?: GateId;
-			intentGateId?: GateId;
+			focusedPaneId?: AirportPaneId;
+			intentPaneId?: AirportPaneId;
 			repositoryId?: string;
 			surfacePath?: string;
-			paneId?: number;
+			terminalPaneId?: number;
 			terminalSessionName?: string;
 		};
 	}
 	| {
-		kind: 'airport.gate.bound';
-		params: BindAirportGateParams;
+		kind: 'airport.pane.bound';
+		params: BindAirportPaneParams;
 	}
 	| {
 		kind: 'airport.substrate.observed';
@@ -94,9 +94,9 @@ export class MissionSystemController {
 		clientId: string;
 		label?: string;
 		surfacePath?: string;
-		gateId: GateId;
+		paneId: AirportPaneId;
 		panelProcessId?: string;
-		paneId?: number;
+		terminalPaneId?: number;
 		terminalSessionName?: string;
 	}): Promise<MissionSystemSnapshot> {
 		return this.dispatch({ kind: 'airport.client.connected', params });
@@ -111,21 +111,21 @@ export class MissionSystemController {
 
 	public async observeAirportClient(params: {
 		clientId: string;
-		focusedGateId?: GateId;
-		intentGateId?: GateId;
+		focusedPaneId?: AirportPaneId;
+		intentPaneId?: AirportPaneId;
 		repositoryId?: string;
 		surfacePath?: string;
-		paneId?: number;
+		terminalPaneId?: number;
 		terminalSessionName?: string;
 	}): Promise<MissionSystemSnapshot> {
 		return this.dispatch({ kind: 'airport.client.observed', params });
 	}
 
-	public async bindAirportGate(params: {
-		gateId: GateId;
-		binding: GateBinding;
+	public async bindAirportPane(params: {
+		paneId: AirportPaneId;
+		binding: PaneBinding;
 	}): Promise<MissionSystemSnapshot> {
-		return this.dispatch({ kind: 'airport.gate.bound', params });
+		return this.dispatch({ kind: 'airport.pane.bound', params });
 	}
 
 	private async dispatch(
@@ -159,8 +159,8 @@ export class MissionSystemController {
 				return this.reduceAirportClientDisconnected(command.clientId);
 			case 'airport.client.observed':
 				return this.reduceAirportClientObserved(command.params);
-			case 'airport.gate.bound':
-				return this.reduceAirportGateBound(command.params);
+			case 'airport.pane.bound':
+				return this.reduceAirportPaneBound(command.params);
 			case 'airport.substrate.observed':
 				this.airportRegistry.observeSubstrate(command.repositoryId, command.substrate);
 				return [command.repositoryId];
@@ -183,7 +183,7 @@ export class MissionSystemController {
 		const domain = this.missionControl.synchronize(source, command.selectionHint);
 		this.airportRegistry.applyDefaultBindings(
 			source.repositoryId,
-			deriveGateBindings(domain, airportRecord.control.getState().gates.agentSession, domain.agentSessions)
+			derivePaneBindings(domain, airportRecord.control.getState().panes.runway, domain.agentSessions)
 		);
 		return [source.repositoryId];
 	}
@@ -213,21 +213,21 @@ export class MissionSystemController {
 		}
 		this.airportRegistry.observeClient(repositoryId, {
 			clientId: params.clientId,
-			...(params.focusedGateId ? { focusedGateId: params.focusedGateId } : {}),
-			...(params.intentGateId ? { intentGateId: params.intentGateId } : {}),
-			...(Number.isInteger(params.paneId) && (params.paneId as number) >= 0 ? { paneId: params.paneId } : {}),
+			...(params.focusedPaneId ? { focusedPaneId: params.focusedPaneId } : {}),
+			...(params.intentPaneId ? { intentPaneId: params.intentPaneId } : {}),
+			...(Number.isInteger(params.terminalPaneId) && (params.terminalPaneId as number) >= 0 ? { terminalPaneId: params.terminalPaneId } : {}),
 			...(params.surfacePath ? { surfacePath: params.surfacePath } : {})
 		});
 		const airportRecord = this.airportRegistry.getActiveAirport();
 		const domain = this.missionControl.getState();
-		const nextBindings = deriveGateBindings(
+		const nextBindings = derivePaneBindings(
 			domain,
-			airportRecord.control.getState().gates.agentSession,
+			airportRecord.control.getState().panes.runway,
 			domain.agentSessions
 		);
-		if (params.intentGateId) {
+		if (params.intentPaneId) {
 			this.airportRegistry.applyDefaultBindings(repositoryId, nextBindings, {
-				focusIntent: params.intentGateId
+				focusIntent: params.intentPaneId
 			});
 			return [repositoryId];
 		}
@@ -235,9 +235,9 @@ export class MissionSystemController {
 		return [repositoryId];
 	}
 
-	private reduceAirportGateBound(params: BindAirportGateParams): string[] {
+	private reduceAirportPaneBound(params: BindAirportPaneParams): string[] {
 		const repositoryId = this.airportRegistry.getActiveAirport().repositoryId;
-		this.airportRegistry.bindGate(repositoryId, params);
+		this.airportRegistry.bindPane(repositoryId, params);
 		return [repositoryId];
 	}
 
@@ -340,19 +340,19 @@ export class MissionSystemController {
 	}
 }
 
-function deriveGateBindings(
+function derivePaneBindings(
 	graph: ContextGraph,
-	currentAgentSessionBinding: GateBinding,
+	currentRunwayBinding: PaneBinding,
 	agentSessions: ContextGraph['agentSessions']
-): Partial<Record<GateId, GateBinding>> {
+): Partial<Record<AirportPaneId, PaneBinding>> {
 	const { repositoryId, missionId, artifactId, agentSessionId } = graph.selection;
-	const nextBindings: Partial<Record<GateId, GateBinding>> = {
-		dashboard: missionId
+	const nextBindings: Partial<Record<AirportPaneId, PaneBinding>> = {
+		tower: missionId
 			? { targetKind: 'mission', targetId: missionId, mode: 'control' }
 			: repositoryId
 				? { targetKind: 'repository', targetId: repositoryId, mode: 'control' }
 				: { targetKind: 'empty' },
-		editor: artifactId
+		briefingRoom: artifactId
 			? { targetKind: 'artifact', targetId: artifactId, mode: 'view' }
 			: missionId
 				? { targetKind: 'mission', targetId: missionId, mode: 'view' }
@@ -362,7 +362,7 @@ function deriveGateBindings(
 	};
 
 	if (agentSessionId) {
-		nextBindings.agentSession = {
+		nextBindings['runway'] = {
 			targetKind: 'agentSession',
 			targetId: agentSessionId,
 			mode: 'control'
@@ -371,11 +371,11 @@ function deriveGateBindings(
 	}
 
 	if (
-		currentAgentSessionBinding.targetKind === 'agentSession'
-		&& currentAgentSessionBinding.targetId
-		&& !(currentAgentSessionBinding.targetId in agentSessions)
+		currentRunwayBinding.targetKind === 'agentSession'
+		&& currentRunwayBinding.targetId
+		&& !(currentRunwayBinding.targetId in agentSessions)
 	) {
-		nextBindings.agentSession = { targetKind: 'empty' };
+		nextBindings['runway'] = { targetKind: 'empty' };
 	}
 
 	return nextBindings;

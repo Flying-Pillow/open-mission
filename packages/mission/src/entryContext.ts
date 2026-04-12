@@ -1,6 +1,6 @@
 export type EntryContext = {
 	controlRoot: string;
-	launchCwd: string;
+	workingDirectory: string;
 	args: string[];
 	json: boolean;
 };

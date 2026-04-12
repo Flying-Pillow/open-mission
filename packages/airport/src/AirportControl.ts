@@ -1,22 +1,22 @@
 import {
-	createDefaultGateBindings,
+	createDefaultPaneBindings,
 	deriveAirportProjections,
 	type AirportFocusState,
 	type AirportProjectionSet,
 	type AirportState,
 	type AirportStatus,
 	type AirportSubstrateState,
-	type BindAirportGateParams,
+	type BindAirportPaneParams,
 	type ConnectAirportClientParams,
-	type GateBinding,
-	type GateId,
+	type PaneBinding,
+	type AirportPaneId,
 	type PersistedAirportIntent,
 	derivePersistedAirportIntent,
-	normalizeGateBinding,
+	normalizePaneBinding,
 	normalizePersistedAirportIntent,
 	type ObserveAirportClientParams
 } from './types.js';
-import { resolveObservedGateIdFromSubstrate } from './effects.js';
+import { resolveObservedPaneIdFromSubstrate } from './effects.js';
 import { createDefaultTerminalManagerSubstrateState } from './terminal-manager.js';
 
 type RepositoryScopedAirportControlOptions = {
@@ -52,11 +52,11 @@ export class AirportControl {
 			repositoryId,
 			...(options.repositoryRootPath?.trim() ? { repositoryRootPath: options.repositoryRootPath.trim() } : {}),
 			...(options.sessionId?.trim() ? { sessionId: options.sessionId.trim() } : {}),
-			gates: {
-				...createDefaultGateBindings(repositoryId),
-				...(persistedIntent?.gates ?? {})
+			panes: {
+				...createDefaultPaneBindings(repositoryId),
+				...(persistedIntent?.panes ?? {})
 			},
-			focus: persistedIntent?.focus?.intentGateId ? { intentGateId: persistedIntent.focus.intentGateId } : {},
+			focus: persistedIntent?.focus?.intentPaneId ? { intentPaneId: persistedIntent.focus.intentPaneId } : {},
 			clients: {},
 			substrate: options.initialSubstrateState
 				? structuredClone(options.initialSubstrateState)
@@ -87,7 +87,7 @@ export class AirportControl {
 			airportId,
 			repositoryId,
 			...(repositoryRootPath ? { repositoryRootPath } : {}),
-			gates: createDefaultGateBindings(repositoryId),
+			panes: createDefaultPaneBindings(repositoryId),
 			substrate: {
 				...createDefaultTerminalManagerSubstrateState({ sessionName }),
 				layoutIntent: this.state.substrate.layoutIntent
@@ -118,13 +118,13 @@ export class AirportControl {
 	public connectClient(params: ConnectAirportClientParams): AirportStatus {
 		const now = new Date().toISOString();
 		const existing = this.state.clients[params.clientId];
-		const clients = releaseClaimedGate(this.state.clients, params.clientId, params.gateId);
-		const substrate = params.paneId !== undefined
-			? assignSubstratePaneToGate(this.state.substrate, params.gateId, params.paneId)
+		const clients = releaseClaimedPane(this.state.clients, params.clientId, params.paneId);
+		const substrate = params.terminalPaneId !== undefined
+			? assignTerminalPaneToAirportPane(this.state.substrate, params.paneId, params.terminalPaneId)
 			: this.state.substrate;
 		this.state = {
 			...this.state,
-			focus: deriveFocusState(clients, this.state.focus.intentGateId, substrate),
+			focus: deriveFocusState(clients, this.state.focus.intentPaneId, substrate),
 			clients: {
 				...clients,
 				[params.clientId]: {
@@ -138,8 +138,8 @@ export class AirportControl {
 						: existing?.surfacePath
 							? { surfacePath: existing.surfacePath }
 							: {}),
-					claimedGateId: params.gateId,
-					...(existing?.focusedGateId ? { focusedGateId: existing.focusedGateId } : {}),
+					claimedPaneId: params.paneId,
+					...(existing?.focusedPaneId ? { focusedPaneId: existing.focusedPaneId } : {}),
 					...(params.panelProcessId?.trim()
 						? { panelProcessId: params.panelProcessId.trim() }
 						: existing?.panelProcessId
@@ -162,14 +162,14 @@ export class AirportControl {
 			connected: false,
 			lastSeenAt: new Date().toISOString()
 		};
-		const { claimedGateId: _claimedGateId, focusedGateId: _focusedGateId, ...releasedClient } = disconnectedClient;
+		const { claimedPaneId: _claimedPaneId, focusedPaneId: _focusedPaneId, ...releasedClient } = disconnectedClient;
 		const clients = {
 			...this.state.clients,
 			[clientId]: releasedClient
 		};
 		this.state = {
 			...this.state,
-			focus: deriveFocusState(clients, this.state.focus.intentGateId, this.state.substrate),
+			focus: deriveFocusState(clients, this.state.focus.intentPaneId, this.state.substrate),
 			clients: {
 				...clients
 			}
@@ -182,8 +182,8 @@ export class AirportControl {
 		if (!existing) {
 			throw new Error(`Airport client '${params.clientId}' is not registered.`);
 		}
-		const substrate = params.paneId !== undefined && existing.claimedGateId
-			? assignSubstratePaneToGate(this.state.substrate, existing.claimedGateId, params.paneId)
+		const substrate = params.terminalPaneId !== undefined && existing.claimedPaneId
+			? assignTerminalPaneToAirportPane(this.state.substrate, existing.claimedPaneId, params.terminalPaneId)
 			: this.state.substrate;
 		const clients = {
 			...this.state.clients,
@@ -191,43 +191,43 @@ export class AirportControl {
 				...existing,
 				lastSeenAt: new Date().toISOString(),
 				...(params.surfacePath?.trim() ? { surfacePath: params.surfacePath.trim() } : {}),
-				...(params.focusedGateId ? { focusedGateId: params.focusedGateId } : {})
+				...(params.focusedPaneId ? { focusedPaneId: params.focusedPaneId } : {})
 			}
 		};
 
 		this.state = {
 			...this.state,
-			focus: deriveFocusState(clients, params.intentGateId ?? this.state.focus.intentGateId, substrate),
+			focus: deriveFocusState(clients, params.intentPaneId ?? this.state.focus.intentPaneId, substrate),
 			clients,
 			substrate
 		};
 		return this.getStatus();
 	}
 
-	public bindGate(params: BindAirportGateParams): AirportStatus {
+	public bindPane(params: BindAirportPaneParams): AirportStatus {
 		this.state = {
 			...this.state,
-			gates: {
-				...this.state.gates,
-				[params.gateId]: normalizeGateBinding(params.binding)
+			panes: {
+				...this.state.panes,
+				[params.paneId]: normalizePaneBinding(params.binding)
 			}
 		};
 		return this.getStatus();
 	}
 
 	public applyDefaultBindings(
-		bindings: Partial<Record<GateId, GateBinding>>,
-		options: { focusIntent?: GateId } = {}
+		bindings: Partial<Record<AirportPaneId, PaneBinding>>,
+		options: { focusIntent?: AirportPaneId } = {}
 	): AirportStatus {
 		this.state = {
 			...this.state,
-			gates: {
-				...this.state.gates,
-				...(bindings.dashboard ? { dashboard: normalizeGateBinding(bindings.dashboard) } : {}),
-				...(bindings.editor ? { editor: normalizeGateBinding(bindings.editor) } : {}),
-				...(bindings.agentSession ? { agentSession: normalizeGateBinding(bindings.agentSession) } : {})
+			panes: {
+				...this.state.panes,
+				...(bindings.tower ? { tower: normalizePaneBinding(bindings.tower) } : {}),
+				...(bindings.briefingRoom ? { briefingRoom: normalizePaneBinding(bindings.briefingRoom) } : {}),
+				...(bindings.runway ? { runway: normalizePaneBinding(bindings.runway) } : {})
 			},
-			focus: deriveFocusState(this.state.clients, options.focusIntent ?? this.state.focus.intentGateId, this.state.substrate)
+			focus: deriveFocusState(this.state.clients, options.focusIntent ?? this.state.focus.intentPaneId, this.state.substrate)
 		};
 		return this.getStatus();
 	}
@@ -236,23 +236,23 @@ export class AirportControl {
 		this.state = {
 			...this.state,
 			substrate: structuredClone(substrate),
-			focus: deriveFocusState(this.state.clients, this.state.focus.intentGateId, substrate)
+			focus: deriveFocusState(this.state.clients, this.state.focus.intentPaneId, substrate)
 		};
 		return this.getStatus();
 	}
 }
 
-function releaseClaimedGate(
+function releaseClaimedPane(
 	clients: AirportState['clients'],
 	clientId: string,
-	gateId: GateId
+	paneId: AirportPaneId
 ): AirportState['clients'] {
 	const nextClients = { ...clients };
 	for (const [candidateClientId, client] of Object.entries(clients)) {
-		if (candidateClientId === clientId || !client.connected || client.claimedGateId !== gateId) {
+		if (candidateClientId === clientId || !client.connected || client.claimedPaneId !== paneId) {
 			continue;
 		}
-		const { claimedGateId: _claimedGateId, ...releasedClient } = client;
+		const { claimedPaneId: _claimedPaneId, ...releasedClient } = client;
 		nextClients[candidateClientId] = releasedClient;
 	}
 	return nextClients;
@@ -260,51 +260,51 @@ function releaseClaimedGate(
 
 function deriveFocusState(
 	clients: AirportState['clients'],
-	intentGateId: GateId | undefined,
+	intentPaneId: AirportPaneId | undefined,
 	substrate: AirportSubstrateState
 ): AirportFocusState {
 	const observedClients = Object.values(clients)
-		.filter((client) => client.connected && client.focusedGateId)
+		.filter((client) => client.connected && client.focusedPaneId)
 		.sort((left, right) => right.lastSeenAt.localeCompare(left.lastSeenAt) || left.clientId.localeCompare(right.clientId));
-	const observedGateIdByClientId = Object.fromEntries(
-		observedClients.map((client) => [client.clientId, client.focusedGateId as GateId])
+	const observedPaneIdByClientId = Object.fromEntries(
+		observedClients.map((client) => [client.clientId, client.focusedPaneId as AirportPaneId])
 	);
-	const observedGateId = resolveObservedGateIdFromSubstrate(substrate) ?? observedClients[0]?.focusedGateId;
+	const observedPaneId = resolveObservedPaneIdFromSubstrate(substrate) ?? observedClients[0]?.focusedPaneId;
 	return {
-		...(intentGateId ? { intentGateId } : {}),
-		...(observedGateId ? { observedGateId } : {}),
-		...(Object.keys(observedGateIdByClientId).length > 0 ? { observedGateIdByClientId } : {})
+		...(intentPaneId ? { intentPaneId } : {}),
+		...(observedPaneId ? { observedPaneId } : {}),
+		...(Object.keys(observedPaneIdByClientId).length > 0 ? { observedPaneIdByClientId } : {})
 	};
 }
 
-function assignSubstratePaneToGate(
+function assignTerminalPaneToAirportPane(
 	substrate: AirportSubstrateState,
-	gateId: GateId,
-	paneId: number
+	paneId: AirportPaneId,
+	terminalPaneId: number
 ): AirportSubstrateState {
-	if (!Number.isInteger(paneId) || paneId < 0) {
+	if (!Number.isInteger(terminalPaneId) || terminalPaneId < 0) {
 		return substrate;
 	}
 
-	const nextPanesByGate = Object.fromEntries(
-		(Object.entries(substrate.panesByGate) as Array<[GateId, AirportSubstrateState['panesByGate'][GateId]]>).map(
-			([candidateGateId, pane]) => {
-				if (!pane || pane.paneId !== paneId || candidateGateId === gateId) {
-					return [candidateGateId, pane];
+	const nextPanes = Object.fromEntries(
+		(Object.entries(substrate.panes) as Array<[AirportPaneId, AirportSubstrateState['panes'][AirportPaneId]]>).map(
+			([candidatePaneId, pane]) => {
+				if (!pane || pane.terminalPaneId !== terminalPaneId || candidatePaneId === paneId) {
+					return [candidatePaneId, pane];
 				}
 
-				return [candidateGateId, { ...pane, exists: false }];
+				return [candidatePaneId, { ...pane, exists: false }];
 			}
 		)
-	) as AirportSubstrateState['panesByGate'];
-	const currentPane = nextPanesByGate[gateId];
+	) as AirportSubstrateState['panes'];
+	const currentPane = nextPanes[paneId];
 
 	return {
 		...substrate,
-		panesByGate: {
-			...nextPanesByGate,
-			[gateId]: {
-				paneId,
+		panes: {
+			...nextPanes,
+			[paneId]: {
+				terminalPaneId,
 				expected: currentPane?.expected ?? true,
 				exists: substrate.attached,
 				...(currentPane?.title ? { title: currentPane.title } : {})

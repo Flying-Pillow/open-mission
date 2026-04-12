@@ -1,64 +1,64 @@
-import type { AirportState, AirportSubstrateState, GateId } from './types.js';
+import type { AirportPaneId, AirportState, AirportSubstrateState } from './types.js';
 
 export type AirportSubstrateEffect = {
-	kind: 'focus-gate';
-	gateId: GateId;
-	paneId: number;
+	kind: 'focus-pane';
+	paneId: AirportPaneId;
+	terminalPaneId: number;
 } | {
-	kind: 'ensure-gate-pane';
-	gateId: 'agentSession';
+	kind: 'ensure-pane';
+	paneId: 'runway';
 } | {
-	kind: 'remove-gate-pane';
-	gateId: 'agentSession';
-	paneId: number;
+	kind: 'remove-pane';
+	paneId: 'runway';
+	terminalPaneId: number;
 };
 
 export function planAirportSubstrateEffects(state: AirportState): AirportSubstrateEffect[] {
 	const effects: AirportSubstrateEffect[] = [];
-	const agentSessionBinding = state.gates.agentSession;
-	const agentSessionPane = state.substrate.panesByGate.agentSession;
-	const shouldShowAgentSessionPane = agentSessionBinding.targetKind === 'agentSession';
-	const hasAgentSessionPane = Boolean(agentSessionPane?.exists && (agentSessionPane.paneId ?? -1) >= 0);
+	const runwayBinding = state.panes.runway;
+	const runwayPane = state.substrate.panes.runway;
+	const shouldShowAgentSessionPane = runwayBinding.targetKind === 'agentSession';
+	const hasAgentSessionPane = Boolean(runwayPane?.exists && (runwayPane.terminalPaneId ?? -1) >= 0);
 
 	if (shouldShowAgentSessionPane && !hasAgentSessionPane) {
-		effects.push({ kind: 'ensure-gate-pane', gateId: 'agentSession' });
+		effects.push({ kind: 'ensure-pane', paneId: 'runway' });
 	}
 
-	if (!shouldShowAgentSessionPane && hasAgentSessionPane && (agentSessionPane?.paneId ?? -1) >= 0) {
+	if (!shouldShowAgentSessionPane && hasAgentSessionPane && (runwayPane?.terminalPaneId ?? -1) >= 0) {
 		effects.push({
-			kind: 'remove-gate-pane',
-			gateId: 'agentSession',
-			paneId: agentSessionPane?.paneId ?? -1
+			kind: 'remove-pane',
+			paneId: 'runway',
+			terminalPaneId: runwayPane?.terminalPaneId ?? -1
 		});
 	}
 
-	const intentGateId = state.focus.intentGateId;
-	if (!intentGateId) {
+	const intentPaneId = state.focus.intentPaneId;
+	if (!intentPaneId) {
 		return effects;
 	}
 
-	const observedGateId = resolveObservedGateIdFromSubstrate(state.substrate) ?? state.focus.observedGateId;
-	if (observedGateId === intentGateId) {
+	const observedPaneId = resolveObservedPaneIdFromSubstrate(state.substrate) ?? state.focus.observedPaneId;
+	if (observedPaneId === intentPaneId) {
 		return effects;
 	}
 
-	const pane = state.substrate.panesByGate[intentGateId];
-	if (!pane?.exists || pane.paneId < 0) {
+	const pane = state.substrate.panes[intentPaneId];
+	if (!pane?.exists || pane.terminalPaneId < 0) {
 		return effects;
 	}
 
-	effects.push({ kind: 'focus-gate', gateId: intentGateId, paneId: pane.paneId });
+	effects.push({ kind: 'focus-pane', paneId: intentPaneId, terminalPaneId: pane.terminalPaneId });
 	return effects;
 }
 
-export function resolveObservedGateIdFromSubstrate(substrate: AirportSubstrateState): GateId | undefined {
-	if (substrate.observedFocusedPaneId === undefined) {
+export function resolveObservedPaneIdFromSubstrate(substrate: AirportSubstrateState): AirportPaneId | undefined {
+	if (substrate.observedFocusedTerminalPaneId === undefined) {
 		return undefined;
 	}
 
-	for (const [gateId, pane] of Object.entries(substrate.panesByGate) as Array<[GateId, AirportSubstrateState['panesByGate'][GateId]]>) {
-		if (pane?.exists && pane.paneId === substrate.observedFocusedPaneId) {
-			return gateId;
+	for (const [paneId, pane] of Object.entries(substrate.panes) as Array<[AirportPaneId, AirportSubstrateState['panes'][AirportPaneId]]>) {
+		if (pane?.exists && pane.terminalPaneId === substrate.observedFocusedTerminalPaneId) {
+			return paneId;
 		}
 	}
 

@@ -1,33 +1,32 @@
 {
   "name": "@flying-pillow/mission-airport-terminal",
   "version": "0.1.0-beta.0",
-  "description": "Airport terminal surfaces for operating Mission repositories and missions",
+  "description": "Airport terminal surface package for Mission repositories and missions; the OpenTUI runtime currently requires Bun",
   "type": "module",
-  "main": "build/main.js",
-  "types": "build/main.d.ts",
+  "main": "build/node-main.js",
+  "types": "build/node-main.d.ts",
   "exports": {
     ".": {
-      "typescript": "./src/main.ts",
-      "types": "./build/main.d.ts",
-      "import": "./build/main.js",
-      "default": "./build/main.js"
+      "typescript": "./src/node-main.ts",
+      "types": "./build/node-main.d.ts",
+      "import": "./build/node-main.js",
+      "default": "./build/node-main.js"
     }
   },
   "files": [
     "build"
   ],
   "scripts": {
-    "airport:status": "tsx src/index.ts airport:status",
-    "build": "rm -rf build && rm -f tsconfig.tsbuildinfo && tsc -p tsconfig.json",
+    "build": "rm -rf build && rm -f tsconfig.tsbuildinfo tsconfig.runtime.tsbuildinfo && tsc -p tsconfig.runtime.json && tsc -p tsconfig.json --emitDeclarationOnly && bun run ./scripts/build-terminal.mjs",
     "check": "tsc --noEmit -p tsconfig.json",
-    "dev": "MISSION_GATE_ID=dashboard tsx src/index.ts",
+    "layout": "tsx src/index.ts __airport-layout-open__",
+    "dev": "AIRPORT_PANE_ID=tower tsx src/index.ts",
     "lint": "eslint src --ext .ts,.tsx",
     "test": "vitest run --passWithNoTests",
     "test:daemon-mission": "tsx src/scripts/daemonMissionSmokeTest.ts",
     "test:workflow-e2e": "tsx src/scripts/daemonCurrentWorkflowE2eTest.ts"
   },
   "dependencies": {
-    "@clack/prompts": "^1.1.0",
     "@dimforge/rapier2d-simd-compat": "^0.17.3",
     "@flying-pillow/mission-core": "workspace:*",
     "@opentui/core": "^0.1.96",

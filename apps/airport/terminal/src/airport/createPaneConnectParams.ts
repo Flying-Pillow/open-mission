@@ -1,28 +1,28 @@
-type AirportPaneGateId = 'dashboard' | 'editor' | 'agentSession';
+type AirportPaneId = 'tower' | 'briefingRoom' | 'runway';
 
-export function createPaneConnectParams(gateId: AirportPaneGateId, label: string) {
-	const paneId = resolveInjectedPaneId();
-	const terminalSessionName = process.env['MISSION_TERMINAL_SESSION']?.trim()
-		|| process.env['MISSION_TERMINAL_SESSION_NAME']?.trim();
+export function createPaneConnectParams(paneId: AirportPaneId, label: string) {
+	const terminalPaneId = resolveInjectedTerminalPaneId();
+	const terminalSessionName = process.env['AIRPORT_TERMINAL_SESSION']?.trim()
+		|| process.env['AIRPORT_TERMINAL_SESSION_NAME']?.trim();
 	return {
-		gateId,
+		paneId,
 		label,
 		panelProcessId: String(process.pid),
-		...(paneId !== undefined ? { paneId } : {}),
+		...(terminalPaneId !== undefined ? { terminalPaneId } : {}),
 		...(terminalSessionName ? { terminalSessionName } : {})
 	};
 }
 
-function resolveInjectedPaneId(): number | undefined {
-	const rawPaneId = process.env['ZELLIJ_PANE_ID']?.trim();
-	if (!rawPaneId) {
+function resolveInjectedTerminalPaneId(): number | undefined {
+	const rawTerminalPaneId = process.env['ZELLIJ_PANE_ID']?.trim();
+	if (!rawTerminalPaneId) {
 		return undefined;
 	}
 
-	const paneId = Number.parseInt(rawPaneId, 10);
-	if (!Number.isInteger(paneId) || paneId < 0) {
+	const terminalPaneId = Number.parseInt(rawTerminalPaneId, 10);
+	if (!Number.isInteger(terminalPaneId) || terminalPaneId < 0) {
 		return undefined;
 	}
 
-	return paneId;
+	return terminalPaneId;
 }

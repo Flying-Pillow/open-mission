@@ -7,14 +7,14 @@ import {
 	resolveDefaultRuntimeFactoryModulePath,
 	startMissionDaemonProcess,
 	stopMissionDaemonProcess,
-	type DaemonLaunchMode,
+	type DaemonRuntimeMode,
 	type Ping
 } from '@flying-pillow/mission-core';
 
 export type ConnectAirportControlOptions = {
 	surfacePath: string;
 	startupTimeoutMs?: number;
-	launchMode?: DaemonLaunchMode;
+	runtimeMode?: DaemonRuntimeMode;
 	runtimeFactoryModulePath?: string;
 	logLine?: (line: string) => void;
 };
@@ -31,12 +31,12 @@ class IncompatibleDaemonError extends Error {
 	}
 }
 
-export function resolveAirportControlLaunchMode(
+export function resolveAirportControlRuntimeMode(
 	moduleUrl: string | URL
-): DaemonLaunchMode {
-	const environmentLaunchMode = readConfiguredLaunchMode();
-	if (environmentLaunchMode) {
-		return environmentLaunchMode;
+): DaemonRuntimeMode {
+	const environmentRuntimeMode = readConfiguredRuntimeMode();
+	if (environmentRuntimeMode) {
+		return environmentRuntimeMode;
 	}
 
 	const modulePath = fileURLToPath(moduleUrl);
@@ -46,9 +46,9 @@ export function resolveAirportControlLaunchMode(
 export async function connectAirportControl(
 	options: ConnectAirportControlOptions
 ): Promise<DaemonClient> {
-	const launchMode = options.launchMode ?? resolveAirportControlLaunchMode(import.meta.url);
+	const runtimeMode = options.runtimeMode ?? resolveAirportControlRuntimeMode(import.meta.url);
 	const runtimeFactoryModulePath =
-		options.runtimeFactoryModulePath ?? resolveDefaultRuntimeFactoryModulePath(launchMode);
+		options.runtimeFactoryModulePath ?? resolveDefaultRuntimeFactoryModulePath(runtimeMode);
 
 	try {
 		return await connectCompatibleDaemon(options.surfacePath);
@@ -58,7 +58,7 @@ export async function connectAirportControl(
 
 	await startMissionDaemonProcess({
 		surfacePath: options.surfacePath,
-		launchMode,
+		runtimeMode,
 		...(runtimeFactoryModulePath ? { runtimeFactoryModulePath } : {})
 	});
 
@@ -110,7 +110,7 @@ async function restartIncompatibleDaemon(
 	await stopMissionDaemonProcess();
 }
 
-function readConfiguredLaunchMode(): DaemonLaunchMode | undefined {
-	const launchMode = process.env['MISSION_DAEMON_LAUNCH_MODE']?.trim();
-	return launchMode === 'source' || launchMode === 'build' ? launchMode : undefined;
+function readConfiguredRuntimeMode(): DaemonRuntimeMode | undefined {
+	const runtimeMode = process.env['MISSION_DAEMON_RUNTIME_MODE']?.trim();
+	return runtimeMode === 'source' || runtimeMode === 'build' ? runtimeMode : undefined;
 }

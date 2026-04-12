@@ -62,4 +62,4 @@ That means:
 
 - See [workflow-engine.md](./workflow-engine.html) for how runtime events are ingested into mission state.
 - See [contracts.md](./contracts.html) for session-related IPC methods.
-- See [airport-control-plane.md](./airport-control-plane.html) for how agent sessions are projected into the `agentSession` gate.
+- See [airport-control-plane.md](./airport-control-plane.html) for how agent sessions are projected into Runway.

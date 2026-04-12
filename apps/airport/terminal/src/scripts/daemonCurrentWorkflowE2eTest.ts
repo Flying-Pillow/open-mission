@@ -14,7 +14,7 @@ import {
 } from '@flying-pillow/mission-core';
 import {
     connectAirportControl,
-    resolveAirportControlLaunchMode
+    resolveAirportControlRuntimeMode
 } from '../airport/connectAirportControl.js';
 
 const MISSION_ARTIFACT_KEY_LIST = Object.keys(MISSION_ARTIFACTS) as MissionArtifactKey[];
@@ -88,7 +88,7 @@ async function main(): Promise<void> {
 
     const client = await connectAirportControl({
         surfacePath: workspaceContext.missionDir,
-        launchMode: resolveAirportControlLaunchMode(import.meta.url)
+        runtimeMode: resolveAirportControlRuntimeMode(import.meta.url)
     });
 
     try {

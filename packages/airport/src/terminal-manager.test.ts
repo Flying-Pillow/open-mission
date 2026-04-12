@@ -4,14 +4,14 @@ import type { AirportState } from './types.js';
 import { TerminalManagerSubstrateController } from './terminal-manager.js';
 
 describe('TerminalManagerSubstrateController', () => {
-	it('discovers gate panes by title when pane ids are unknown', async () => {
+	it('discovers airport panes by title when terminal pane ids are unknown', async () => {
 		const executor = (args: string[]) => {
 			if (args.includes('list-panes')) {
 				return Promise.resolve({
 					stdout: JSON.stringify([
-						{ id: 0, title: 'MISSION', is_plugin: false, is_focused: false },
-						{ id: 1, title: 'AGENT SESSION', is_plugin: false, is_focused: true },
-						{ id: 2, title: 'EDITOR', is_plugin: false, is_focused: false }
+						{ id: 0, title: 'TOWER', is_plugin: false, is_focused: false },
+						{ id: 1, title: 'RUNWAY', is_plugin: false, is_focused: true },
+						{ id: 2, title: 'BRIEFING ROOM', is_plugin: false, is_focused: false }
 					]),
 					stderr: ''
 				});
@@ -24,19 +24,19 @@ describe('TerminalManagerSubstrateController', () => {
 			executor
 		});
 		const airportState = createAirportState({}, {
-			dashboard: { paneId: -1, expected: true, exists: false, title: 'MISSION' },
-			agentSession: { paneId: -1, expected: true, exists: false, title: 'AGENT SESSION' },
-			editor: { paneId: -1, expected: true, exists: false, title: 'EDITOR' }
+			tower: { terminalPaneId: -1, expected: true, exists: false, title: 'TOWER' },
+			runway: { terminalPaneId: -1, expected: true, exists: false, title: 'RUNWAY' },
+			briefingRoom: { terminalPaneId: -1, expected: true, exists: false, title: 'BRIEFING ROOM' }
 		});
 
 		const observed = await controller.observe(airportState);
 
-		expect(observed.panesByGate.agentSession).toMatchObject({
-			paneId: 1,
+		expect(observed.panes.runway).toMatchObject({
+			terminalPaneId: 1,
 			exists: true,
-			title: 'AGENT SESSION'
+			title: 'RUNWAY'
 		});
-		expect(observed.observedFocusedPaneId).toBe(1);
+		expect(observed.observedFocusedTerminalPaneId).toBe(1);
 	});
 
 	it('observes terminal-manager panes without applying focus effects', async () => {
@@ -62,20 +62,20 @@ describe('TerminalManagerSubstrateController', () => {
 		});
 		const airportState = createAirportState(
 			{
-				agentSession: { targetKind: 'agentSession', targetId: 'session-1', mode: 'control' }
+				runway: { targetKind: 'agentSession', targetId: 'session-1', mode: 'control' }
 			},
 			{
-				dashboard: { paneId: 1, expected: true, exists: true, title: 'MISSION' },
-				agentSession: { paneId: 2, expected: true, exists: true, title: 'AGENT SESSION' },
-				editor: { paneId: 3, expected: true, exists: true, title: 'EDITOR' }
+				tower: { terminalPaneId: 1, expected: true, exists: true, title: 'TOWER' },
+				runway: { terminalPaneId: 2, expected: true, exists: true, title: 'RUNWAY' },
+				briefingRoom: { terminalPaneId: 3, expected: true, exists: true, title: 'BRIEFING ROOM' }
 			}
 		);
 
 		const observed = await controller.observe(airportState);
 
 		expect(observed.attached).toBe(true);
-		expect(observed.panesByGate.agentSession).toMatchObject({
-			paneId: 2,
+		expect(observed.panes.runway).toMatchObject({
+			terminalPaneId: 2,
 			exists: true,
 			expected: true,
 			title: 'session-1'
@@ -105,14 +105,14 @@ describe('TerminalManagerSubstrateController', () => {
 			executor
 		});
 		const observed = await controller.observe(createAirportState({
-			agentSession: { targetKind: 'agentSession', targetId: 'session-1', mode: 'control' }
+			runway: { targetKind: 'agentSession', targetId: 'session-1', mode: 'control' }
 		}, {
-			dashboard: { paneId: 1, expected: true, exists: true, title: 'MISSION' },
-			editor: { paneId: 2, expected: true, exists: true, title: 'EDITOR' },
-			agentSession: { paneId: 3, expected: true, exists: true, title: 'AGENT SESSION' }
+			tower: { terminalPaneId: 1, expected: true, exists: true, title: 'TOWER' },
+			briefingRoom: { terminalPaneId: 2, expected: true, exists: true, title: 'BRIEFING ROOM' },
+			runway: { terminalPaneId: 3, expected: true, exists: true, title: 'RUNWAY' }
 		}));
 		const airportState = createAirportState();
-		airportState.focus.intentGateId = 'editor';
+		airportState.focus.intentPaneId = 'briefingRoom';
 		airportState.substrate = observed;
 
 		await controller.applyEffects(planAirportSubstrateEffects(airportState));
@@ -126,7 +126,7 @@ describe('TerminalManagerSubstrateController', () => {
 		]);
 	});
 
-	it('creates the agent-session gate pane when a session binding appears', async () => {
+	it('creates the runway pane when a session binding appears', async () => {
 		const calls: string[][] = [];
 		let includeAgentPane = false;
 		const executor = (args: string[]) => {
@@ -134,9 +134,9 @@ describe('TerminalManagerSubstrateController', () => {
 			if (args.includes('list-panes')) {
 				return Promise.resolve({
 					stdout: JSON.stringify([
-						{ id: 1, title: 'MISSION', is_plugin: false, is_focused: true },
-						{ id: 2, title: 'EDITOR', is_plugin: false, is_focused: false },
-						...(includeAgentPane ? [{ id: 3, title: 'AGENT SESSION', is_plugin: false, is_focused: false }] : [])
+						{ id: 1, title: 'TOWER', is_plugin: false, is_focused: true },
+						{ id: 2, title: 'BRIEFING ROOM', is_plugin: false, is_focused: false },
+						...(includeAgentPane ? [{ id: 3, title: 'RUNWAY', is_plugin: false, is_focused: false }] : [])
 					]),
 					stderr: ''
 				});
@@ -153,7 +153,7 @@ describe('TerminalManagerSubstrateController', () => {
 			executor
 		});
 		const state = createAirportState({
-			agentSession: { targetKind: 'agentSession', targetId: 'session-1', mode: 'control' }
+			runway: { targetKind: 'agentSession', targetId: 'session-1', mode: 'control' }
 		});
 
 		await controller.observe(state);
@@ -162,16 +162,16 @@ describe('TerminalManagerSubstrateController', () => {
 		expect(calls.some((args) => args.includes('new-pane') && args.includes('--in-place'))).toBe(true);
 	});
 
-	it('removes the agent-session gate pane when no session is selected', async () => {
+	it('removes the runway pane when no session is selected', async () => {
 		const calls: string[][] = [];
 		const executor = (args: string[]) => {
 			calls.push(args);
 			if (args.includes('list-panes')) {
 				return Promise.resolve({
 					stdout: JSON.stringify([
-						{ id: 1, title: 'MISSION', is_plugin: false, is_focused: false },
-						{ id: 2, title: 'EDITOR', is_plugin: false, is_focused: true },
-						{ id: 3, title: 'AGENT SESSION', is_plugin: false, is_focused: false }
+						{ id: 1, title: 'TOWER', is_plugin: false, is_focused: false },
+						{ id: 2, title: 'BRIEFING ROOM', is_plugin: false, is_focused: true },
+						{ id: 3, title: 'RUNWAY', is_plugin: false, is_focused: false }
 					]),
 					stderr: ''
 				});
@@ -184,9 +184,9 @@ describe('TerminalManagerSubstrateController', () => {
 			executor
 		});
 		const state = createAirportState({}, {
-			dashboard: { paneId: 1, expected: true, exists: true, title: 'MISSION' },
-			editor: { paneId: 2, expected: true, exists: true, title: 'EDITOR' },
-			agentSession: { paneId: 3, expected: false, exists: true, title: 'AGENT SESSION' }
+			tower: { terminalPaneId: 1, expected: true, exists: true, title: 'TOWER' },
+			briefingRoom: { terminalPaneId: 2, expected: true, exists: true, title: 'BRIEFING ROOM' },
+			runway: { terminalPaneId: 3, expected: false, exists: true, title: 'RUNWAY' }
 		});
 
 		await controller.observe(state);
@@ -213,22 +213,19 @@ describe('TerminalManagerSubstrateController', () => {
 		const observed = await controller.observe(createAirportState());
 
 		expect(observed.attached).toBe(false);
-		expect(observed.panesByGate.dashboard).toMatchObject({ exists: false, expected: true, title: 'MISSION' });
+		expect(observed.panes.tower).toMatchObject({ exists: false, expected: true, title: 'TOWER' });
 	});
 });
 
-function createAirportState(
-	overrides: Partial<AirportState['gates']> = {},
-	panesByGate: AirportState['substrate']['panesByGate'] = {}
-): AirportState {
+function createAirportState(overrides: Partial<AirportState['panes']> = {}, panes: AirportState['substrate']['panes'] = {}): AirportState {
 	return {
 		airportId: 'airport:test',
 		repositoryId: 'repo',
 		repositoryRootPath: '/tmp/repo',
-		gates: {
-			dashboard: { targetKind: 'repository', targetId: 'repo', mode: 'control' },
-			editor: { targetKind: 'repository', targetId: 'repo', mode: 'view' },
-			agentSession: { targetKind: 'empty' },
+		panes: {
+			tower: { targetKind: 'repository', targetId: 'repo', mode: 'control' },
+			briefingRoom: { targetKind: 'repository', targetId: 'repo', mode: 'view' },
+			runway: { targetKind: 'empty' },
 			...overrides
 		},
 		focus: {},
@@ -238,7 +235,7 @@ function createAirportState(
 			sessionName: 'mission-mission',
 			layoutIntent: 'mission-control-v1',
 			attached: false,
-			panesByGate
+			panes
 		}
 	};
 }

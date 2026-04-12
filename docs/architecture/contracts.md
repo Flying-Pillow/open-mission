@@ -19,7 +19,7 @@ The daemon protocol is context-first rather than object-wrapper-first.
 | Namespace | Current methods | Meaning |
 | --- | --- | --- |
 | `ping` | `ping` | Protocol compatibility and daemon health |
-| `airport.*` | `airport.status`, `airport.client.connect`, `airport.client.observe`, `airport.gate.bind` | Repository airport status and layout control |
+| `airport.*` | `airport.status`, `airport.client.connect`, `airport.client.observe`, `airport.pane.bind` | Repository airport status and layout control |
 | `control.*` | `control.status`, `control.settings.update`, `control.document.*`, `control.workflow.settings.*`, `control.repositories.*`, `control.issues.list`, `control.action.*` | Repository-scoped control plane operations |
 | `mission.*` | `mission.from-brief`, `mission.from-issue`, `mission.status`, `mission.action.*`, `mission.gate.evaluate` | Mission creation and mission aggregate operations |
 | `task.*` | `task.launch` | Task-scoped runtime launch |
@@ -46,7 +46,7 @@ This is the daemon-wide live composite snapshot returned to surfaces.
 | `state.missionOperatorViews` | Mission dashboard projections used to populate stage rail and tree nodes |
 | `state.airport` | Active repository airport state |
 | `state.airports` | Registry of repository airports known to the daemon |
-| `airportProjections` | Active repository gate projections |
+| `airportProjections` | Active repository pane projections |
 | `airportRegistryProjections` | Projections for each known repository airport |
 
 ## `mission.json`

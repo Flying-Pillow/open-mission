@@ -2,7 +2,7 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "rename-build-tower",
+			"label": "rename-build-airport-terminal",
 			"type": "shell",
 			"command": "pnpm",
 			"args": [
@@ -28,7 +28,7 @@
 			"group": "build"
 		},
 		{
-			"label": "rename-build-tower-retry",
+			"label": "rename-build-airport-terminal-retry",
 			"type": "shell",
 			"command": "pnpm",
 			"args": [
@@ -43,7 +43,7 @@
 			"group": "build"
 		},
 		{
-			"label": "rename-build-tower-final",
+			"label": "rename-build-airport-terminal-final",
 			"type": "shell",
 			"command": "pnpm",
 			"args": [
@@ -58,7 +58,7 @@
 			"group": "build"
 		},
 		{
-			"label": "rename-reinstall-tower-node-modules",
+			"label": "rename-reinstall-airport-terminal-node-modules",
 			"type": "shell",
 			"command": "bash",
 			"args": [
@@ -70,7 +70,7 @@
 			"group": "build"
 		},
 		{
-			"label": "rename-build-tower-post-reinstall",
+			"label": "rename-build-airport-terminal-post-reinstall",
 			"type": "shell",
 			"command": "pnpm",
 			"args": [
@@ -85,7 +85,7 @@
 			"group": "build"
 		},
 		{
-			"label": "rename-test-tower",
+			"label": "rename-test-airport-terminal",
 			"type": "shell",
 			"command": "pnpm",
 			"args": [

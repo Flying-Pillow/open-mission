@@ -19,7 +19,7 @@ import {
 } from '@flying-pillow/mission-core';
 import {
     connectAirportControl,
-    resolveAirportControlLaunchMode
+    resolveAirportControlRuntimeMode
 } from '../airport/connectAirportControl.js';
 
 type SmokeTestOptions = {
@@ -51,7 +51,7 @@ async function main(): Promise<void> {
         await initializeMissionRepository(controlRoot);
         client = await connectAirportControl({
             surfacePath: controlRoot,
-            launchMode: resolveAirportControlLaunchMode(import.meta.url)
+            runtimeMode: resolveAirportControlRuntimeMode(import.meta.url)
         });
         const api = new DaemonApi(client);
 

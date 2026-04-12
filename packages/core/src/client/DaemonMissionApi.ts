@@ -172,7 +172,7 @@ export class DaemonMissionApi {
 			return { missionId: status.missionId };
 		}
 		const projectedMissionId = status.system?.state.domain.selection.missionId
-			?? status.system?.airportProjections.dashboard.missionId;
+			?? status.system?.airportProjections.tower.missionId;
 		if (projectedMissionId) {
 			return { missionId: projectedMissionId };
 		}

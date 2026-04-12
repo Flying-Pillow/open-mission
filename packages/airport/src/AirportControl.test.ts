@@ -12,14 +12,14 @@ describe('AirportControl', () => {
 		});
 
 		control.connectClient({
-			clientId: 'dashboard',
-			gateId: 'dashboard',
-			paneId: 1
+			clientId: 'tower',
+			paneId: 'tower',
+			terminalPaneId: 1
 		});
 
 		control.observeClient({
-			clientId: 'dashboard',
-			focusedGateId: 'dashboard'
+			clientId: 'tower',
+			focusedPaneId: 'tower'
 		});
 
 		const substrate: AirportSubstrateState = {
@@ -27,16 +27,16 @@ describe('AirportControl', () => {
 			sessionName: 'mission-control',
 			layoutIntent: 'mission-control-v1',
 			attached: true,
-			observedFocusedPaneId: 2,
-			panesByGate: {
-				dashboard: { paneId: 1, expected: true, exists: true, title: 'mission-dashboard' },
-				editor: { paneId: 2, expected: true, exists: true, title: 'EDITOR' },
-				agentSession: { paneId: 3, expected: true, exists: true, title: 'AGENT SESSION' }
+			observedFocusedTerminalPaneId: 2,
+			panes: {
+				tower: { terminalPaneId: 1, expected: true, exists: true, title: 'TOWER' },
+				briefingRoom: { terminalPaneId: 2, expected: true, exists: true, title: 'BRIEFING ROOM' },
+				runway: { terminalPaneId: 3, expected: true, exists: true, title: 'RUNWAY' }
 			}
 		};
 
 		control.observeSubstrate(substrate);
 
-		expect(control.getState().focus).toMatchObject({ observedGateId: 'editor' });
+		expect(control.getState().focus).toMatchObject({ observedPaneId: 'briefingRoom' });
 	});
 });

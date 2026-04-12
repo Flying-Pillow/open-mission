@@ -6,7 +6,7 @@ import {
 	PROTOCOL_VERSION,
 	type AirportClientConnect,
 	type AirportClientObserve,
-	type AirportGateBind,
+	type AirportPaneBind,
 	type ErrorResponse,
 	type EventMessage,
 	type Manifest,
@@ -214,8 +214,8 @@ export class Daemon {
 		if (request.method === 'airport.client.observe') {
 			return this.executeAirportClientObserve(request);
 		}
-		if (request.method === 'airport.gate.bind') {
-			return this.executeAirportGateBind(request);
+		if (request.method === 'airport.pane.bind') {
+			return this.executeAirportPaneBind(request);
 		}
 
 		const result = await this.workspaceManager.executeMethod(request);
@@ -246,16 +246,16 @@ export class Daemon {
 		}
 		await this.systemController.scopeAirportToSurfacePath(request.surfacePath);
 		const params = (request.params ?? {}) as AirportClientConnect;
-		if (!params.gateId) {
-			throw new Error('Airport client registration requires a gate id.');
+		if (!params.paneId) {
+			throw new Error('Airport client registration requires a pane id.');
 		}
 		const snapshot = await this.systemController.connectAirportClient({
 			clientId: request.clientId,
 			...(params.label?.trim() ? { label: params.label.trim() } : {}),
 			...(request.surfacePath?.trim() ? { surfacePath: request.surfacePath.trim() } : {}),
-			gateId: params.gateId,
+			paneId: params.paneId,
 			...(params.panelProcessId?.trim() ? { panelProcessId: params.panelProcessId.trim() } : {}),
-			...(Number.isInteger(params.paneId) && (params.paneId as number) >= 0 ? { paneId: params.paneId } : {}),
+			...(Number.isInteger(params.terminalPaneId) && (params.terminalPaneId as number) >= 0 ? { terminalPaneId: params.terminalPaneId } : {}),
 			...(params.terminalSessionName?.trim() ? { terminalSessionName: params.terminalSessionName.trim() } : {})
 		});
 		this.broadcastAirportState(snapshot);
@@ -269,10 +269,10 @@ export class Daemon {
 		const params = (request.params ?? {}) as AirportClientObserve;
 		const snapshot = await this.systemController.observeAirportClient({
 			clientId: request.clientId,
-			...(params.focusedGateId ? { focusedGateId: params.focusedGateId } : {}),
-			...(params.intentGateId ? { intentGateId: params.intentGateId } : {}),
+			...(params.focusedPaneId ? { focusedPaneId: params.focusedPaneId } : {}),
+			...(params.intentPaneId ? { intentPaneId: params.intentPaneId } : {}),
 			...(params.repositoryId?.trim() ? { repositoryId: params.repositoryId.trim() } : {}),
-			...(Number.isInteger(params.paneId) && (params.paneId as number) >= 0 ? { paneId: params.paneId } : {}),
+			...(Number.isInteger(params.terminalPaneId) && (params.terminalPaneId as number) >= 0 ? { terminalPaneId: params.terminalPaneId } : {}),
 			...(params.terminalSessionName?.trim() ? { terminalSessionName: params.terminalSessionName.trim() } : {}),
 			...(request.surfacePath?.trim() ? { surfacePath: request.surfacePath.trim() } : {})
 		});
@@ -280,10 +280,10 @@ export class Daemon {
 		return snapshot;
 	}
 
-	private async executeAirportGateBind(request: Request): Promise<any> {
+	private async executeAirportPaneBind(request: Request): Promise<any> {
 		await this.systemController.scopeAirportToSurfacePath(request.surfacePath);
-		const params = (request.params ?? {}) as AirportGateBind;
-		const snapshot = await this.systemController.bindAirportGate(params);
+		const params = (request.params ?? {}) as AirportPaneBind;
+		const snapshot = await this.systemController.bindAirportPane(params);
 		this.broadcastAirportState(snapshot);
 		return snapshot;
 	}

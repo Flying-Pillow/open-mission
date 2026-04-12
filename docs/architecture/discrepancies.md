@@ -18,7 +18,7 @@ Practical rule: use the current code as the authority for what exists, and use t
 ## 2. There Are Two Distinct Gate Vocabularies
 
 - Workflow gates in `mission.json` use gate ids such as `implement`, `verify`, `audit`, and `deliver`.
-- Airport gates in `packages/airport/src/types.ts` use `dashboard`, `editor`, and `agentSession`.
+- Airport panes in `packages/airport/src/types.ts` use `tower`, `briefingRoom`, and `runway`.
 
 They are both first-class, but they mean different things. One is workflow progression projection. The other is UI layout topology.
 

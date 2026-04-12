@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import type {
 	DaemonClient,
 	ContextGraph,
-	GateBinding,
+	PaneBinding,
 	MissionSystemSnapshot,
 	OperatorActionDescriptor,
 	OperatorActionTargetContext,
@@ -189,7 +189,7 @@ export function AirportShell({
 		return 'repository';
 	});
 	const airportProjections = createMemo(() => systemSnapshot()?.airportProjections);
-	const dashboardProjection = createMemo(() => airportProjections()?.dashboard);
+	const towerProjection = createMemo(() => airportProjections()?.tower);
 	const selectedMissionContext = createMemo(() => {
 		const target = selectedShellTarget();
 		return target.kind === 'mission'
@@ -206,15 +206,15 @@ export function AirportShell({
 		towerMode,
 		currentMissionId,
 		systemDomain,
-		stageRail: createMemo(() => dashboardProjection()?.stageRail),
-		treeNodes: createMemo(() => dashboardProjection()?.treeNodes),
+		stageRail: createMemo(() => towerProjection()?.stageRail),
+		treeNodes: createMemo(() => towerProjection()?.treeNodes),
 	});
 	const selectedTreeTarget = missionControlController.selectedTreeTarget;
 	const selectedTreeContext = createMemo(() =>
 		resolveTreeSelectionContext(selectedTreeTarget(), systemDomain())
 	);
 	const stageItems = createMemo<ProgressRailItem[]>(() =>
-		(dashboardProjection()?.stageRail ?? []).map((item: { id: string; label: string; state: ProgressRailItem['state']; subtitle?: string }) => ({
+		(towerProjection()?.stageRail ?? []).map((item: { id: string; label: string; state: ProgressRailItem['state']; subtitle?: string }) => ({
 			id: item.id,
 			label: item.label,
 			state: item.state,
@@ -374,7 +374,7 @@ export function AirportShell({
 	});
 	const screenTitle = createMemo(() => {
 		if (towerMode() !== 'mission') {
-					return dashboardProjection()?.repositoryLabel || resolveHeaderWorkspaceLabel(status().control, currentControlRoot());
+					return towerProjection()?.repositoryLabel || resolveHeaderWorkspaceLabel(status().control, currentControlRoot());
 		}
 		return currentMissionTitle()
 			|| (selectedMissionMatchesLoaded() ? currentMissionId() ?? 'Mission' : 'Mission');
@@ -428,9 +428,9 @@ export function AirportShell({
 		inFlightSelectionSyncKey = selectionSyncKey;
 		const api = new DaemonApi(currentClient);
 		void Promise.all(
-			Object.entries(bindings).map(([gateId, binding]) =>
-				api.airport.bindGate({
-					gateId: gateId as 'editor' | 'agentSession',
+			Object.entries(bindings).map(([paneId, binding]) =>
+				api.airport.bindPane({
+					paneId: paneId as 'briefingRoom' | 'runway',
 					binding
 				})
 			)
@@ -460,7 +460,7 @@ export function AirportShell({
 				selectedRowId={missionControlController.selectedTreeTarget()?.id}
 				{...(missionLifecycleState() ? { missionLifecycleState: missionLifecycleState() } : {})}
 				treePageScrollRequest={missionControlController.treePageScrollRequest()}
-				emptyLabel={dashboardProjection()?.emptyLabel ?? 'No mission structure is available yet.'}
+				emptyLabel={towerProjection()?.emptyLabel ?? 'No mission structure is available yet.'}
 				onMoveSelection={(delta) => {
 					missionControlController.moveSelection(delta);
 				}}
@@ -490,11 +490,11 @@ export function AirportShell({
 							text: exactCommand.flow.steps[0]?.helperText ?? 'Press Enter in the command dock to start this flow.'
 						}
 					}
-					: dashboardProjection()
+					: towerProjection()
 						? {
 							preview: {
-								title: dashboardProjection()?.title ?? 'DASHBOARD',
-								text: dashboardProjection()?.emptyLabel ?? 'Repository mode is ready.'
+								title: towerProjection()?.title ?? 'TOWER',
+								text: towerProjection()?.emptyLabel ?? 'Repository mode is ready.'
 							}
 						}
 					: {})}
@@ -1019,14 +1019,14 @@ function resolvePanelBindingsFromTreeTarget(
 		sourcePath?: string;
 	} | undefined,
 	missionId: string | undefined
-): Partial<Record<'editor' | 'agentSession', GateBinding>> | undefined {
+): Partial<Record<'briefingRoom' | 'runway', PaneBinding>> | undefined {
 	const normalizedMissionId = missionId?.trim();
 	if (!target) {
 		if (!normalizedMissionId) {
 			return undefined;
 		}
 		return {
-			editor: {
+			briefingRoom: {
 				targetKind: 'mission',
 				targetId: normalizedMissionId,
 				mode: 'view'
@@ -1038,14 +1038,14 @@ function resolvePanelBindingsFromTreeTarget(
 		return {
 			...(normalizedMissionId
 				? {
-					editor: {
+					briefingRoom: {
 						targetKind: 'mission',
 						targetId: normalizedMissionId,
 						mode: 'view'
 					}
 				}
 				: {}),
-			agentSession: {
+			runway: {
 				targetKind: 'agentSession',
 				targetId: target.sessionId,
 				mode: 'control'
@@ -1055,7 +1055,7 @@ function resolvePanelBindingsFromTreeTarget(
 
 	if ((target.kind === 'task-artifact' || target.kind === 'stage-artifact') && target.sourcePath?.trim()) {
 		return {
-			editor: {
+			briefingRoom: {
 				targetKind: 'artifact',
 				targetId: target.sourcePath.trim(),
 				mode: 'view'
@@ -1068,7 +1068,7 @@ function resolvePanelBindingsFromTreeTarget(
 	}
 
 	return {
-		editor: {
+		briefingRoom: {
 			targetKind: 'mission',
 			targetId: normalizedMissionId,
 			mode: 'view'

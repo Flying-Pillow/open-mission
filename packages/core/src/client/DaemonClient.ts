@@ -170,7 +170,7 @@ function shouldIncludeSurfacePath(method: Method): boolean {
 		method === 'airport.status'
 		|| method === 'airport.client.connect'
 		|| method === 'airport.client.observe'
-		|| method === 'airport.gate.bind'
+		|| method === 'airport.pane.bind'
 		|| method === 'control.status'
 		|| method === 'control.settings.update'
 		|| method === 'control.document.read'

@@ -7,7 +7,7 @@ nav_order: 1
 
 # CLI Commands
 
-This page documents the public Mission CLI surface as it is actually routed today. The source of truth is the published CLI package in `packages/mission`, plus the terminal entry router in `apps/airport/terminal/src/entry/routeMissionEntry.ts`.
+This page documents the public Mission CLI surface as it is actually routed today. The source of truth is the published CLI package in `packages/mission`, plus the terminal surface router in `apps/airport/terminal/src/routeAirportTerminalSurfaceEntry.ts`.
 
 ## Public Commands
 
@@ -15,7 +15,7 @@ The current public command surface is:
 
 | Command | Status | What it does |
 | --- | --- | --- |
-| `mission` | Public | Launches the Mission terminal surface |
+| `mission` | Public | Opens the Mission terminal surface |
 | `mission install` | Public | Runs user-level Mission setup and writes operator config |
 | `mission airport:status` | Public | Prints daemon airport status, or JSON with `--json` |
 | `mission daemon:stop` | Public | Stops the daemon process and reports the result |
@@ -47,11 +47,11 @@ mission [--hmr] [--banner] [--no-banner]
 Behavior verified in the current CLI package and Airport terminal router:
 
 - runs the installation guard before the Mission terminal surface starts
-- launches the Airport layout by default, with Tower as the left-side control surface
+- opens the Airport layout by default, with Tower as the left-side control surface
 - auto-starts the daemon when needed
 - attempts airport layout bootstrap through the terminal manager on POSIX shells when available
-- auto-selects a mission when launched from a mission worktree
-- opens repository mode when launched from the repository checkout
+- auto-selects a mission when opened from a mission worktree
+- opens repository mode when opened from the repository checkout
 - requires Bun for the OpenTUI Airport terminal surfaces
 
 Supported terminal flags are currently limited to:
@@ -84,7 +84,7 @@ mission airport:status [--json]
 This command connects to the daemon and reports airport control-plane state, including:
 
 - active airport identity
-- gate bindings
+- pane bindings
 - connected clients
 - substrate pane state
 - known repository airports
@@ -116,7 +116,7 @@ This bin is shipped by the same `@flying-pillow/mission` package and delegates t
 
 The router also contains internal commands used for airport surface bootstrap:
 
-- `__airport-layout-launch__`
+- `__airport-layout-open__`
 - `__airport-layout-briefing-room-pane`
 - `__airport-layout-runway-pane`
 

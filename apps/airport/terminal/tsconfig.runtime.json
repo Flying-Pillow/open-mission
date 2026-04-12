@@ -1,0 +1,18 @@
+{
+	"$schema": "https://json.schemastore.org/tsconfig",
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"jsx": "preserve",
+		"declaration": false,
+		"declarationMap": false,
+		"sourceMap": true,
+		"noEmit": false,
+		"tsBuildInfoFile": "tsconfig.runtime.tsbuildinfo"
+	},
+	"include": [
+		"src/**/*.ts"
+	],
+	"exclude": [
+		"src/**/*.tsx"
+	]
+}

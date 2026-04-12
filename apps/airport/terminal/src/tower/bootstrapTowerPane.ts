@@ -5,21 +5,20 @@ import {
 	readMissionDaemonSettings,
 	type MissionSelector
 } from '@flying-pillow/mission-core';
-import { connectAirportControl, resolveAirportControlLaunchMode } from '../airport/connectAirportControl.js';
+import { connectAirportControl, resolveAirportControlRuntimeMode } from '../airport/connectAirportControl.js';
 import { createPaneConnectParams } from '../airport/createPaneConnectParams.js';
-import type { EntryContext } from '../entry/entryContext.js';
+import type { AirportTerminalContext } from '../airportTerminalContext.js';
 import {
 } from '../airport/connectAirportControl.js';
 import { applyTowerTheme, type TowerThemeName } from './components/towerTheme.js';
-import { playMissionStartupBanner } from './components/MissionStartupBanner.js';
 import { resolveTowerWorkspaceContext } from './resolveTowerWorkspaceContext.js';
 
-function resolveInjectedGateId(): 'dashboard' | 'editor' | 'agentSession' {
-	const gateId = process.env['MISSION_GATE_ID']?.trim();
-	if (gateId === 'dashboard' || gateId === 'editor' || gateId === 'agentSession') {
-		return gateId;
+function resolveInjectedPaneId(): 'tower' {
+	const paneId = process.env['AIRPORT_PANE_ID']?.trim();
+	if (paneId === 'tower') {
+		return paneId;
 	}
-	throw new Error('MISSION_GATE_ID must be set to dashboard, editor, or agentSession before launching a tower panel.');
+	throw new Error('AIRPORT_PANE_ID must be set to tower before starting the Tower pane.');
 }
 
 export type TowerConnectRequest = {
@@ -27,7 +26,7 @@ export type TowerConnectRequest = {
 	surfacePath?: string;
 };
 
-export async function bootstrapTowerPane(context: EntryContext): Promise<void> {
+export async function bootstrapTowerPane(context: AirportTerminalContext): Promise<void> {
 	const hmrMode = context.args.includes('--hmr') || process.env['MISSION_TOWER_HMR'] === '1';
 	if (
 		context.args.includes('--help') ||
@@ -60,24 +59,24 @@ export async function bootstrapTowerPane(context: EntryContext): Promise<void> {
 		flags.add(flag);
 	}
 
-	const launchMode = resolveAirportControlLaunchMode(import.meta.url);
+	const runtimeMode = resolveAirportControlRuntimeMode(import.meta.url);
 
 	const workspaceContext = resolveTowerWorkspaceContext(context);
 	const selector = workspaceContext.selector;
-	const gateId = resolveInjectedGateId();
+	const paneId = resolveInjectedPaneId();
 	const configuredTheme = readMissionDaemonSettings(context.controlRoot)?.towerTheme;
 	const initialTheme: TowerThemeName = configuredTheme === 'sand' || configuredTheme === 'mono' || configuredTheme === 'paper' || configuredTheme === 'ocean'
 		? configuredTheme
 		: 'ocean';
 	applyTowerTheme(initialTheme);
-	const connect = async ({ selector: nextSelector = selector, surfacePath = context.launchCwd }: TowerConnectRequest = {}) => {
+	const connect = async ({ selector: nextSelector = selector, surfacePath = context.workingDirectory }: TowerConnectRequest = {}) => {
 		const client = await connectAirportControl({
 			surfacePath,
-			launchMode
+			runtimeMode
 		});
 		const api = new DaemonApi(client);
-		const snapshot = await api.airport.connectPanel(
-			createPaneConnectParams(gateId, `mission-${gateId}`)
+		const snapshot = await api.airport.connectPane(
+			createPaneConnectParams(paneId, `mission-${paneId}`)
 		);
 		const discoveryStatus = await api.control.getStatus();
 		const resolvedSelector = selectorFromConnection(discoveryStatus, snapshot, nextSelector);
@@ -106,11 +105,12 @@ export async function bootstrapTowerPane(context: EntryContext): Promise<void> {
 
 	if (!process.versions['bun']) {
 		throw new Error(
-			'Mission tower currently requires Bun because @opentui/core imports bun:ffi at runtime. Install Bun and relaunch the tower, or use non-tower Mission commands from Node.'
+			'Airport terminal surfaces currently require Bun because @opentui/core imports bun:ffi at runtime. Install Bun and relaunch the Airport layout, or continue using missiond and other non-terminal Mission commands from Node.'
 		);
 	}
 
 	if (flags.has('banner') && !flags.has('no-banner')) {
+		const { playMissionStartupBanner } = await import('./components/MissionStartupBanner.js');
 		await playMissionStartupBanner();
 	}
 
@@ -136,7 +136,7 @@ function selectorFromConnection(
 	snapshot: MissionSystemSnapshot,
 	fallback: MissionSelector
 ): MissionSelector {
-	const projectedMissionId = snapshot.airportProjections.dashboard.missionId;
+	const projectedMissionId = snapshot.airportProjections.tower.missionId;
 	if (projectedMissionId) {
 		return { missionId: projectedMissionId };
 	}
