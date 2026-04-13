@@ -1,5 +1,5 @@
 export const COPILOT_CLI_AGENT_RUNNER_ID = 'copilot-cli';
-export const COPILOT_SDK_AGENT_RUNNER_ID = 'copilot-sdk';
+export const COPILOT_SDK_AGENT_RUNNER_ID = 'pi';
 
 export const DEFAULT_AGENT_RUNNER_ID = COPILOT_CLI_AGENT_RUNNER_ID;
 

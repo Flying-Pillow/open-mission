@@ -25,7 +25,7 @@ Mission's architecture is split along package boundaries that mirror its runtime
 | `src/daemon` | IPC server, workspace routing, mission system control plane |
 | `src/daemon/mission` | Mission aggregate wrappers such as `Mission`, `MissionTask`, `MissionSession`, and `Artifact` |
 | `src/workflow/engine` | Workflow document, reducer ingestion, request execution, generation, validation |
-| `src/runtime` | Provider-neutral runner, session, and orchestrator contracts |
+| `src/runtime` | Provider-neutral runner, session, runtime types, and daemon-facing control helpers |
 | `src/adapters` | Concrete runtime adapters and transports |
 | `src/client` | IPC client and namespaced API surfaces |
 | `src/settings` | Repository workflow settings initialization, patching, revision control, validation |

@@ -54,7 +54,7 @@ flowchart LR
 	Daemon --> Workspace[WorkspaceManager\nMissionWorkspace]
 	Workspace --> Mission[Mission aggregate]
 	Mission --> Workflow[MissionWorkflowController\nReducer + request executor]
-	Workflow --> Runtime[AgentSessionOrchestrator\nAgentRunner adapters]
+	Workflow --> Runtime[daemon-owned agent control\nAgentRunner + AgentSession]
 	Workflow --> Dossier[(.mission/missions/<mission-id>/mission.json)]
 	Workspace --> Settings[(.mission/settings.json)]
 	Workspace --> Briefs[(.mission/missions/<mission-id>/*)]
@@ -73,7 +73,7 @@ flowchart LR
 | Semantic selection graph | `MissionControl` inside `MissionSystemController` | `mission.json`, zellij |
 | Layout bindings and focus intent | `AirportControl` and `RepositoryAirportRegistry` | surface-local routing, workflow engine |
 | Live terminal panes | `TerminalManagerSubstrateController` observing and driving zellij | Workflow reducer |
-| Agent execution | `AgentSessionOrchestrator` + `AgentRunner` implementations | Airport terminal surfaces, Airport control |
+| Agent execution | daemon-owned agent control path + `AgentRunner` / `AgentSession` implementations | Airport terminal surfaces, Airport control |
 | Client protocol | `DaemonClient` / `DaemonApi` + daemon request handlers | Direct file editing from local surfaces |
 
 ## Replay Anchors

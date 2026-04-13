@@ -1078,7 +1078,7 @@ describe('Daemon', () => {
 				try {
 					await client.connect({ surfacePath: workspaceRoot });
 					const api = new DaemonApi(client);
-					await api.control.updateSetting('agentRunner', 'copilot-sdk');
+					await api.control.updateSetting('agentRunner', 'pi');
 					await api.control.updateSetting('defaultAgentMode', 'interactive');
 					const status = await api.control.updateSetting('defaultModel', 'gpt-5.4');
 					const settingsContent = await fs.readFile(getMissionDaemonSettingsPath(workspaceRoot), 'utf8');
@@ -1088,13 +1088,13 @@ describe('Daemon', () => {
 					expect(status.control).toMatchObject({
 						settingsComplete: true,
 						settings: expect.objectContaining({
-							agentRunner: 'copilot-sdk',
+							agentRunner: 'pi',
 							defaultAgentMode: 'interactive',
 							defaultModel: 'gpt-5.4'
 						})
 					});
 					expect(JSON.parse(settingsContent)).toMatchObject({
-						agentRunner: 'copilot-sdk',
+						agentRunner: 'pi',
 						defaultAgentMode: 'interactive',
 						defaultModel: 'gpt-5.4'
 					});
@@ -1136,7 +1136,7 @@ describe('Daemon', () => {
 					{
 						kind: 'selection',
 						stepId: 'value',
-						optionIds: ['copilot-sdk']
+						optionIds: ['pi']
 					}
 				]);
 				const settingsContent = await fs.readFile(getMissionDaemonSettingsPath(workspaceRoot), 'utf8');
@@ -1150,12 +1150,12 @@ describe('Daemon', () => {
 				expect(result).toMatchObject({
 					control: expect.objectContaining({
 						settings: expect.objectContaining({
-							agentRunner: 'copilot-sdk'
+							agentRunner: 'pi'
 						})
 					})
 				});
 				expect(JSON.parse(settingsContent)).toMatchObject({
-					agentRunner: 'copilot-sdk'
+					agentRunner: 'pi'
 				});
 			} finally {
 				client.dispose();

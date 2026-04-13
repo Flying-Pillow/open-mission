@@ -792,7 +792,7 @@ export class MissionWorkspace {
 						description: 'Interactive Copilot CLI session in terminal-manager transport'
 					},
 					{
-						id: 'copilot-sdk',
+						id: 'pi',
 						label: 'Copilot SDK',
 						description: 'Headless Copilot SDK process with no UI'
 					}
@@ -1023,7 +1023,7 @@ export class MissionWorkspace {
 					delete nextSettings.agentRunner;
 					break;
 				}
-				if (value !== 'copilot-cli' && value !== 'copilot-sdk') {
+				if (value !== 'copilot-cli' && value !== 'pi') {
 					throw new Error(`Unsupported Mission agent runner '${value}'.`);
 				}
 				nextSettings.agentRunner = value;

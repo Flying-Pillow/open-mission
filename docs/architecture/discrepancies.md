@@ -42,7 +42,7 @@ This is not merely duplication. It is an intentional split between execution tru
 
 ## 4. Session Persistence Is A Hook, Not Yet A Universal Hard Requirement
 
-The runtime architecture exposes `PersistedAgentSessionStore`, and `AgentSessionOrchestrator` can save and reload snapshots through it. But the core mission path constructs `MissionWorkflowRequestExecutor` without always supplying a concrete store. The workflow architecture should therefore be described as supporting runtime session persistence hooks rather than requiring a single always-on persisted session store.
+The runtime architecture exposes session-persistence hooks, and a daemon-owned control layer may save and reload normalized session references or snapshots through them. But the core mission path does not always supply a concrete persisted store. The workflow architecture should therefore be described as supporting runtime session persistence hooks rather than requiring a single always-on persisted session store.
 
 ## 5. Repository Control State, Daemon Snapshot State, And Mission Execution State Are Sometimes Blurred In Older Docs
 

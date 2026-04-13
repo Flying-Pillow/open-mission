@@ -15,7 +15,7 @@ The workflow engine is the mission-local execution authority. Its job is to redu
 | --- | --- | --- | --- |
 | `MissionWorkflowController` | Loads, initializes, normalizes, updates, and persists the mission runtime record | cached `MissionRuntimeRecord` | `mission.json` |
 | reducer ingestion logic | Applies one event to the current runtime record and yields requests | none, pure transformation | none |
-| `MissionWorkflowRequestExecutor` | Executes request side effects such as task generation and session launch | orchestrator, runner map, buffered runtime events | none directly |
+| `MissionWorkflowRequestExecutor` | Executes request side effects such as task generation and session launch | daemon-owned agent control dependency, buffered runtime events | none directly |
 | Task generation helpers | Turn workflow config and templates into task records | generation result in memory | task files + artifact files |
 
 ## Runtime Record Structure
@@ -68,11 +68,11 @@ The reducer never opens files, starts zellij, or talks to a model provider. It e
 | Request type | Current executor behavior |
 | --- | --- |
 | `tasks.request-generation` | Materializes stage artifacts and generated task files, then emits `tasks.generated` |
-| `session.launch` | Starts an `AgentSession` through the orchestrator, then emits `session.started` or `session.launch-failed` |
-| `session.prompt` | Sends a prompt to a running session |
-| `session.command` | Sends a normalized command to a running session |
-| `session.cancel` | Cancels a running session |
-| `session.terminate` | Terminates a running session |
+| `session.launch` | Resolves a runner and starts an `AgentSession` through the shared daemon-owned agent control path, then emits `session.started` or `session.launch-failed` |
+| `session.prompt` | Routes a prompt to a running `AgentSession` through the same control path |
+| `session.command` | Routes a normalized command to a running `AgentSession` through the same control path |
+| `session.cancel` | Cancels a running session through the same control path |
+| `session.terminate` | Terminates a running session through the same control path |
 
 ## Execution Loop
 
@@ -83,7 +83,7 @@ sequenceDiagram
 	participant Controller as MissionWorkflowController
 	participant Reducer as reducer ingestion
 	participant Executor as RequestExecutor
-	participant Runtime as Agent runtime
+	participant Control as daemon-owned agent control
 	participant Disk as mission.json
 
 	Mission->>Controller: apply event
@@ -91,8 +91,8 @@ sequenceDiagram
 	Reducer-->>Controller: next document + requests
 	Controller->>Disk: write mission.json
 	Controller->>Executor: execute requests
-	Executor->>Runtime: start or control sessions
-	Runtime-->>Executor: runtime events
+	Executor->>Control: start or control sessions
+	Control-->>Executor: runtime events
 	Executor-->>Controller: emitted workflow events
 	Controller->>Controller: recursively apply emitted events
 ```

@@ -205,6 +205,7 @@ export type MissionTaskLifecycleState =
 
 export interface MissionTaskRuntimeSettings {
   autostart: boolean;
+  agentMetadata?: Record<string, string | number | boolean | null>;
 }
 
 export interface MissionTaskRuntimeState {
@@ -225,6 +226,12 @@ export interface MissionTaskRuntimeState {
   cancelledAt?: string;
 }
 ```
+
+`agentRunner` selects the adapter family.
+
+`runtime.agentMetadata` is an opaque adapter configuration bag.
+
+The workflow engine stores and snapshots it, but does not interpret provider-specific keys semantically.
 
 ### Task Autostart Semantics
 
@@ -360,6 +367,7 @@ export interface MissionDaemonSettings {
   agentRunner?: string;
   defaultAgentMode?: 'interactive' | 'autonomous';
   defaultModel?: string;
+  defaultAgentMetadata?: Record<string, string | number | boolean | null>;
   towerTheme?: string;
   trackingProvider?: 'github';
   instructionsPath?: string;
@@ -367,6 +375,10 @@ export interface MissionDaemonSettings {
   workflow?: WorkflowGlobalSettings;
 }
 ```
+
+`defaultAgentMode` and `defaultModel` remain scalar Mission preferences because they are already used as cross-runner setup defaults.
+
+Runner-specific launch knobs that do not generalize across adapters belong in opaque metadata instead of new top-level core fields.
 
 ## Mission Snapshot Rule
 
@@ -694,6 +706,8 @@ export interface MissionWorkflowReducer {
 The request executor is not part of the reducer.
 
 It performs requested runtime work and feeds completion back into the engine as new events.
+
+It must route all live session work through the daemon-owned agent control path built on `AgentRunner` and `AgentSession`.
 
 Examples:
 

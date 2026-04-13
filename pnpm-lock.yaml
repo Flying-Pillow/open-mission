@@ -90,7 +90,7 @@ importers:
       '@flying-pillow/mission-airport':
         specifier: workspace:*
         version: link:../airport
-      '@github/copilot-sdk':
+      '@github/pi':
         specifier: ^0.2.1
         version: 0.2.1
       gray-matter:
@@ -569,7 +569,7 @@ packages:
     os: [linux]
     hasBin: true
 
-  '@github/copilot-sdk@0.2.1':
+  '@github/pi@0.2.1':
     resolution: {integrity: sha512-S1n/4X1viqbSAWcHDZcFyZ/7hgTLAXr3NY7yNmHoX/CL4LTuYIJ6y5w2jrqUnrJNQgtNrMDSFGwFU+H1GeynFw==}
     engines: {node: '>=20.0.0'}
 
@@ -3038,7 +3038,7 @@ snapshots:
   '@github/copilot-linux-x64@1.0.18':
     optional: true
 
-  '@github/copilot-sdk@0.2.1':
+  '@github/pi@0.2.1':
     dependencies:
       '@github/copilot': 1.0.18
       vscode-jsonrpc: 8.2.1

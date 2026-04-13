@@ -65,8 +65,8 @@ Sessions also exist in more than one form.
 
 | Shape | Scope | Owned by |
 | --- | --- | --- |
-| `AgentSession` | Live runtime object | Runner implementation |
-| `AgentSessionSnapshot` | Provider-neutral runtime snapshot | Agent runtime orchestrator |
+| `AgentSession` | Live runtime object | daemon-owned agent control plus concrete adapter |
+| `AgentSessionSnapshot` | Provider-neutral runtime snapshot | daemon-owned agent control |
 | `MissionAgentSessionRuntimeState` | Workflow-tracked session state | Workflow runtime |
 | `MissionAgentSessionRecord` | Mission aggregate record for surfaces | `Mission` aggregate |
 | `AgentSessionContext` | Daemon selection/projection context | `MissionControl` |

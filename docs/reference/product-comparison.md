@@ -163,7 +163,7 @@ Those are architectural advantages, not just prompt-writing differences.
 
 Mission is also younger and more opinionated than the tools above, and the current alpha has real limits:
 
-- the first shipped agent path is Copilot, with `copilot-cli` and `copilot-sdk` in the codebase today, others coming soon
+- the first shipped agent path is Copilot, with `copilot-cli` and `pi` in the codebase today, others coming soon
 - the implemented issue intake path is GitHub-based
 - the public routed CLI is still narrower than the internal system capabilities
 

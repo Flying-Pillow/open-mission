@@ -27,9 +27,9 @@ The runtime rewrite must follow these rules.
 1. One authoritative runtime boundary only.
 2. No fallback to the legacy runtime contracts.
 3. No compatibility shim that translates between old and new contracts for long-term use.
-4. No adapter work before the core contract and orchestrator exist.
+4. No adapter work before the core contract and daemon-owned control layer exist.
 5. No provider-specific types in the new core contract.
-6. OOD is mandatory: session behavior, runner behavior, orchestration, and provider translation each need explicit ownership.
+6. OOD is mandatory: session behavior, runner behavior, daemon-side control, and provider translation each need explicit ownership.
 7. DRY is mandatory: shared session bookkeeping may live in a neutral base class or helper layer, but provider-specific protocol logic must remain in concrete adapters.
 
 ## Desired End State
@@ -38,7 +38,7 @@ At the end of this work, the system should have:
 
 1. one `AgentRunner` contract in core
 2. one `AgentSession` contract in core
-3. one orchestrator path used by both workflow-engine execution and operator-driven session interaction
+3. one daemon-owned agent control path used by both workflow-engine execution and operator-driven session interaction
 4. one provider registration mechanism for runners
 5. zero use of `WorkflowTaskRunner`
 6. zero use of the current `MissionAgentRuntime` contract
@@ -62,7 +62,7 @@ This phase blocks all other work.
 
 Do not start rewriting adapters before this phase is complete.
 
-### Phase 2: Create Session Orchestrator Layer
+### Phase 2: Create Daemon-Owned Agent Control Layer
 
 Add the runtime coordination layer that owns:
 
@@ -76,7 +76,7 @@ Add the runtime coordination layer that owns:
 
 This layer must be the only place where Mission coordinates live sessions.
 
-The workflow engine and daemon surfaces should both depend on this orchestrator, not on provider adapters directly.
+The workflow engine and daemon surfaces should both depend on this control layer, not on provider adapters directly.
 
 ### Phase 3: Rewire Workflow Engine To The New Runtime Boundary
 
@@ -97,7 +97,7 @@ Replace the current mission-plane interactive session path.
 
 Required outcome:
 
-- mission launch, prompt submission, input submission, cancel, terminate, and future engine commands all route through the same orchestrator
+- mission launch, prompt submission, input submission, cancel, terminate, and future engine commands all route through the same control path
 - protocol shapes stop depending on the old runtime type names
 - daemon startup loads only one runtime registry type
 
@@ -214,11 +214,11 @@ These files are not the root problem, but they will need significant rewiring.
 Reason:
 
 - currently steers `WorkflowTaskRunner`
-- should steer the new orchestrator or shared runtime boundary instead
+- should steer the new shared agent control boundary instead
 
 Target action:
 
-- route `session.launch`, `session.prompt`, `session.command`, `session.cancel`, and `session.terminate` through the new orchestrator-facing API
+- route `session.launch`, `session.prompt`, `session.command`, `session.cancel`, and `session.terminate` through the new daemon-owned control API
 - support future engine command effects without adding another parallel path
 
 #### Refactor `packages/core/src/workflow/engine/controller.ts`
@@ -230,7 +230,7 @@ Reason:
 Target action:
 
 - keep reducer and event ingestion logic
-- swap runtime coordination dependency to the new orchestrator
+- swap runtime coordination dependency to the new agent control path
 
 #### Refactor `packages/core/src/daemon/Workspace.ts`
 
@@ -242,7 +242,7 @@ Reason:
 Target action:
 
 - own one runner registry only
-- delegate all live session behavior to the new orchestrator
+- delegate all live session behavior to the new control layer
 - stop storing separate interactive runtime and workflow runner maps
 
 #### Refactor `packages/core/src/daemon/protocol.ts`
@@ -265,7 +265,7 @@ Reason:
 
 Target action:
 
-- either rewrite it as the new orchestrator-managed session wrapper or replace it with a new runtime session aggregate
+- either rewrite it as the new control-layer-managed session wrapper or replace it with a new runtime session aggregate
 - preserve object ownership, not the old type dependency
 
 #### Refactor `packages/core/src/daemon/mission/Mission.ts`
@@ -276,7 +276,7 @@ Reason:
 
 Target action:
 
-- route through the new orchestrator
+- route through the new daemon-owned control path
 - keep Mission focused on mission policy and authorization rather than provider session mechanics
 
 ### Preserve As Neutral Infrastructure
@@ -349,9 +349,9 @@ Purpose:
 
 - isolate the new runtime contract from daemon, workflow, and provider implementation details
 
-### Orchestration Layer
+### Daemon-Owned Control Layer
 
-- `packages/core/src/runtime/AgentSessionOrchestrator.ts`
+- `packages/core/src/runtime/AgentControlService.ts`
 - `packages/core/src/runtime/AgentRunnerRegistry.ts`
 - `packages/core/src/runtime/PersistedAgentSessionStore.ts`
 
@@ -384,7 +384,7 @@ Do not touch provider code first.
 
 ### Step 2
 
-Create the orchestrator and session registry.
+Create the daemon-owned control service and session registry.
 
 Give it a small public API such as:
 
@@ -400,11 +400,11 @@ Give it a small public API such as:
 
 ### Step 3
 
-Refactor workflow effect execution to call the orchestrator rather than a workflow-only runner.
+Refactor workflow effect execution to call the daemon-owned control service rather than a workflow-only runner.
 
 ### Step 4
 
-Refactor daemon workspace and mission session flows to call the same orchestrator.
+Refactor daemon workspace and mission session flows to call the same control service.
 
 ### Step 5
 
@@ -449,6 +449,6 @@ This plan is complete only when all of the following are true.
 
 ## Decision
 
-The first implementation work after the new specification should be core-contract and orchestrator creation, not provider-adapter refactoring.
+The first implementation work after the new specification should be core-contract and daemon-owned control creation, not provider-adapter refactoring.
 
 The old split between `MissionAgentRuntime` and `WorkflowTaskRunner` should be treated as architecture to remove, not architecture to evolve.

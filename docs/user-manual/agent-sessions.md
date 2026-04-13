@@ -31,7 +31,7 @@ That separation is what allows Mission to stay stable even as runtimes evolve.
 In the current codebase, the built-in runtimes are:
 
 - `copilot-cli`
-- `copilot-sdk`
+- `pi`
 
 Those are the concrete adapters Mission ships today. For the current product story, Copilot CLI is the first real agent integration to emphasize. The broader point is architectural: these are execution adapters under Mission, not the definition of Mission itself.
 

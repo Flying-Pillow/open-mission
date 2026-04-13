@@ -66,12 +66,17 @@ The daemon settings model remains `MissionDaemonSettings` and includes:
 - non-workflow daemon settings (runner, mode, model, paths, theme, tracking)
 - `workflow: WorkflowGlobalSettings`
 
+Repository and task-level workflow settings may also carry opaque agent metadata used by a selected runner.
+
+That metadata is configuration for the adapter, not a new source of Mission semantics.
+
 Required behavior:
 
 1. Repository initialization must always produce a complete `workflow` object.
 2. Partial update requests must be merged against the current effective settings.
 3. Missing fields must be filled from `createDefaultWorkflowSettings()` through normalization.
 4. Invalid values must be rejected before persistence.
+5. Opaque runner metadata may be persisted and snapshotted, but the daemon must treat unknown metadata keys as adapter-owned unless a key is promoted into a cross-runner Mission concept by specification.
 
 ## Ownership And Responsibility Boundaries
 
@@ -200,6 +205,11 @@ Minimum required validations:
 - each gate references a valid stage when `stageId` is present
 - task generation rules reference known stages
 - task launch policy booleans are valid
+
+Validation rule for opaque metadata:
+
+- the daemon may validate that metadata is a JSON object containing scalar JSON values only
+- the daemon must not reject unknown metadata keys merely because one runner currently ignores them
 
 Validation failures must be deterministic and surface-safe.
 

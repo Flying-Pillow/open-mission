@@ -1,15 +1,13 @@
 import type { AgentRunner } from '../runtime/AgentRunner.js';
-import type { AgentSession } from '../runtime/AgentSession.js';
-import {
-	type AgentCommand,
-	type AgentRunnerCapabilities,
-	type AgentSessionEvent,
-	type AgentSessionReference,
-	type AgentSessionSnapshot,
-	type AgentSessionStartRequest,
-	type AgentPrompt
+import type {
+	AgentLaunchRequest,
+	AgentPrompt,
+	AgentRuntimePrimitive,
+	AgentSessionEvent,
+	AgentSessionReference,
+	AgentSessionSnapshot,
+	AgentSteerAction
 } from '../runtime/AgentRuntimeTypes.js';
-import { AgentSessionEventEmitter } from '../runtime/AgentSessionEventEmitter.js';
 import { COPILOT_CLI_AGENT_RUNNER_ID } from '../lib/agentRuntimes.js';
 import {
 	TerminalAgentTransport,
@@ -20,13 +18,14 @@ import {
 type TerminalRunnerSessionHandle = {
 	transportHandle: TerminalSessionHandle;
 	snapshot: AgentSessionSnapshot;
-	eventEmitter: AgentSessionEventEmitter<AgentSessionEvent>;
 	lastCapture: string;
 	pollTimer: ReturnType<typeof setInterval> | undefined;
 	polling: boolean;
 };
 
-type SnapshotOverrides = Omit<Partial<AgentSessionSnapshot>, 'failureMessage'> & {
+type Listener = (event: AgentSessionEvent) => void;
+
+type SnapshotOverrides = Partial<AgentSessionSnapshot> & {
 	failureMessage?: string | undefined;
 };
 
@@ -42,17 +41,7 @@ export type CopilotCliAgentRunnerOptions = TerminalAgentTransportOptions & {
 
 export class CopilotCliAgentRunner implements AgentRunner {
 	public readonly id: string;
-	public readonly transportId = 'terminal';
 	public readonly displayName: string;
-	public readonly capabilities: AgentRunnerCapabilities = {
-		attachableSessions: true,
-		promptSubmission: true,
-		structuredCommands: true,
-		interruptible: true,
-		interactiveInput: true,
-		telemetry: false,
-		mcpClient: false
-	};
 
 	private readonly transport: TerminalAgentTransport;
 	private readonly command: string;
@@ -62,6 +51,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 	private readonly pollIntervalMs: number;
 	private readonly logLine: ((line: string) => void) | undefined;
 	private readonly sessions = new Map<string, TerminalRunnerSessionHandle>();
+	private readonly listeners = new Set<Listener>();
 
 	public constructor(options: CopilotCliAgentRunnerOptions) {
 		this.id = options.runnerId?.trim() || COPILOT_CLI_AGENT_RUNNER_ID;
@@ -84,95 +74,119 @@ export class CopilotCliAgentRunner implements AgentRunner {
 		});
 	}
 
-	public async isAvailable(): Promise<{ available: boolean; detail?: string }> {
+	public async checkAvailability(): Promise<{ available: boolean; detail?: string }> {
 		return this.transport.isAvailable();
 	}
 
-	public async startSession(request: AgentSessionStartRequest): Promise<AgentSession> {
-		const availability = await this.isAvailable();
+	public observe(listener: Listener): { dispose(): void } {
+		this.listeners.add(listener);
+		return {
+			dispose: () => {
+				this.listeners.delete(listener);
+			}
+		};
+	}
+
+	public async launch(request: AgentLaunchRequest): Promise<AgentSessionSnapshot> {
+		const availability = await this.checkAvailability();
 		if (!availability.available) {
 			throw new Error(availability.detail ?? `${this.displayName} is unavailable.`);
 		}
 
+		const requestedSharedSessionName = getRequestedTerminalSessionName(request);
 		const transportHandle = await this.transport.openSession({
 			workingDirectory: request.workingDirectory,
 			command: this.command,
 			args: this.args,
 			...(this.env ? { env: this.env } : {}),
 			sessionPrefix: this.sessionPrefix,
-			sessionName: buildTaskSessionName(request.taskId, this.id),
-			...(request.terminalSessionName?.trim() ? { sharedSessionName: request.terminalSessionName.trim() } : {})
+			sessionName: buildTaskSessionName(request.task.taskId, this.id),
+			...(requestedSharedSessionName ? { sharedSessionName: requestedSharedSessionName } : {})
 		});
 
-		const snapshot: AgentSessionSnapshot = {
+		const snapshot = createRunningSnapshot({
 			runnerId: this.id,
-			transportId: this.transportId,
 			sessionId: transportHandle.sessionName,
-			...(transportHandle.sharedSessionName
-				? { terminalSessionName: transportHandle.sharedSessionName, terminalPaneId: transportHandle.paneId }
-				: { terminalSessionName: transportHandle.sessionName }),
-			phase: 'running',
 			workingDirectory: request.workingDirectory,
-			taskId: request.taskId,
+			taskId: request.task.taskId,
 			missionId: request.missionId,
-			acceptsPrompts: true,
-			acceptedCommands: ['interrupt'],
-			awaitingInput: false,
-			updatedAt: new Date().toISOString()
-		};
+			stageId: request.task.stageId,
+			transport: {
+				kind: 'terminal',
+				terminalSessionName: transportHandle.sharedSessionName ?? transportHandle.sessionName,
+				...(transportHandle.paneId !== transportHandle.sessionName ? { paneId: transportHandle.paneId } : {})
+			}
+		});
 		this.registerHandle(transportHandle, snapshot);
 
 		if (request.initialPrompt?.text) {
-			await this.submitPromptInternal(transportHandle.sessionName, request.initialPrompt, false);
+			await this.prompt(transportHandle.sessionName, request.initialPrompt);
 		}
 
-		return this.createAgentSession(transportHandle.sessionName);
+		return cloneSnapshot(this.requireSnapshot(transportHandle.sessionName));
 	}
 
-	public async attachSession(reference: AgentSessionReference): Promise<AgentSession> {
+	public async attach(reference: AgentSessionReference): Promise<AgentSessionSnapshot> {
 		const existing = this.sessions.get(reference.sessionId);
 		if (existing) {
-			return this.createAgentSession(reference.sessionId);
+			return cloneSnapshot(existing.snapshot);
 		}
 
-		const transportHandle = reference.terminalPaneId
+		const transportHandle = reference.transport?.paneId
 			? await this.transport.attachSession(reference.sessionId, {
-				sharedSessionName: reference.terminalSessionName,
-				paneId: reference.terminalPaneId
+				sharedSessionName: reference.transport.terminalSessionName,
+				paneId: reference.transport.paneId
 			})
 			: await this.transport.attachSession(reference.sessionId, {
-				sharedSessionName: undefined
+				sharedSessionName: reference.transport?.terminalSessionName
 			});
 		if (!transportHandle) {
-			return this.createTerminatedAttachedSession(reference);
+			return createTerminatedAttachedSnapshot(this.id, reference, 'Session no longer exists in terminal transport.');
 		}
 
 		const paneState = await this.transport.readPaneState(transportHandle);
 		const initialCapture = paneState.dead ? '' : await this.transport.capturePane(transportHandle).catch(() => '');
 
-		const snapshot: AgentSessionSnapshot = {
-			runnerId: this.id,
-			transportId: this.transportId,
-			sessionId: reference.sessionId,
-			...(transportHandle.sharedSessionName
-				? { terminalSessionName: transportHandle.sharedSessionName, terminalPaneId: transportHandle.paneId }
-				: { terminalSessionName: transportHandle.sessionName }),
-			phase: paneState.dead ? (paneState.exitCode === 0 ? 'completed' : 'failed') : 'running',
-			missionId: 'unknown',
-			taskId: 'unknown',
-			acceptsPrompts: !paneState.dead,
-			acceptedCommands: ['interrupt'],
-			awaitingInput: false,
-			updatedAt: new Date().toISOString(),
-			...(paneState.dead && paneState.exitCode !== 0
-				? { failureMessage: `terminal command exited with status ${String(paneState.exitCode)}.` }
-				: {})
-		};
+		const snapshot = paneState.dead
+			? createTerminalSnapshot({
+				runnerId: this.id,
+				sessionId: reference.sessionId,
+				workingDirectory: 'unknown',
+				taskId: 'unknown',
+				missionId: 'unknown',
+				stageId: 'unknown',
+				transport: {
+					kind: 'terminal',
+					terminalSessionName: transportHandle.sharedSessionName ?? transportHandle.sessionName,
+					...(transportHandle.paneId !== transportHandle.sessionName ? { paneId: transportHandle.paneId } : {})
+				},
+				status: paneState.exitCode === 0 ? 'completed' : 'failed',
+				progressState: paneState.exitCode === 0 ? 'done' : 'failed',
+				acceptsPrompts: false,
+				acceptedActions: [],
+				...(paneState.exitCode === 0
+					? {}
+					: { failureMessage: `terminal command exited with status ${String(paneState.exitCode)}.` }),
+				endedAt: new Date().toISOString()
+			})
+			: createRunningSnapshot({
+				runnerId: this.id,
+				sessionId: reference.sessionId,
+				workingDirectory: 'unknown',
+				taskId: 'unknown',
+				missionId: 'unknown',
+				stageId: 'unknown',
+				transport: {
+					kind: 'terminal',
+					terminalSessionName: transportHandle.sharedSessionName ?? transportHandle.sessionName,
+					...(transportHandle.paneId !== transportHandle.sessionName ? { paneId: transportHandle.paneId } : {})
+				}
+			});
 		this.registerHandle(transportHandle, snapshot, initialCapture);
-		return this.createAgentSession(reference.sessionId);
+		return cloneSnapshot(snapshot);
 	}
 
-	public async listSessions(): Promise<AgentSessionSnapshot[]> {
+	public async list(): Promise<AgentSessionSnapshot[]> {
 		return [...this.sessions.values()].map((handle) => cloneSnapshot(handle.snapshot));
 	}
 
@@ -180,102 +194,83 @@ export class CopilotCliAgentRunner implements AgentRunner {
 		const handle: TerminalRunnerSessionHandle = {
 			transportHandle,
 			snapshot,
-			eventEmitter: new AgentSessionEventEmitter<AgentSessionEvent>(),
 			lastCapture,
 			pollTimer: undefined,
 			polling: false
 		};
 		this.sessions.set(transportHandle.sessionName, handle);
-		if (!isTerminalPhase(snapshot.phase)) {
+		if (!isTerminalStatus(snapshot.status)) {
 			this.startPolling(transportHandle.sessionName);
 		}
 	}
 
-	private createAgentSession(sessionId: string): AgentSession {
-		return {
-			runnerId: this.id,
-			transportId: this.transportId,
-			sessionId,
-			getSnapshot: () => cloneSnapshot(this.requireSnapshot(sessionId)),
-			onDidEvent: (listener) => this.requireHandle(sessionId).eventEmitter.event(listener),
-			submitPrompt: (prompt) => this.submitPromptInternal(sessionId, prompt, true),
-			submitCommand: (command) => this.submitCommandInternal(sessionId, command),
-			cancel: (reason) => this.cancelSession(sessionId, reason),
-			terminate: (reason) => this.terminateSession(sessionId, reason),
-			dispose: () => {
-				const handle = this.sessions.get(sessionId);
-				if (!handle) {
-					return;
-				}
-				this.stopPolling(handle);
-				handle.eventEmitter.dispose();
-			}
-		};
-	}
-
-	private async submitPromptInternal(
-		sessionId: string,
-		prompt: AgentPrompt,
-		recordEvent: boolean
-	): Promise<AgentSessionSnapshot> {
+	public async prompt(sessionId: string, prompt: AgentPrompt): Promise<AgentSessionSnapshot> {
 		const handle = this.requireActiveHandle(sessionId, 'submit a prompt');
 		await this.preparePaneForPrompt(handle);
 		await sendText(this.transport, handle.transportHandle, prompt.text);
 		const snapshot = this.updateSnapshot(sessionId, {
-			phase: 'running',
-			awaitingInput: false
+			status: 'running',
+			attention: 'autonomous',
+			waitingForInput: false,
+			acceptsPrompts: true,
+			acceptedActions: ['pause', 'checkpoint', 'nudge', 'finish'],
+			progress: {
+				state: 'working',
+				updatedAt: new Date().toISOString()
+			}
 		});
-		if (recordEvent) {
-			handle.eventEmitter.fire({
-				type: 'prompt.accepted',
-				prompt,
-				snapshot: cloneSnapshot(snapshot)
-			});
-		}
+		this.emit({ type: 'session.updated', snapshot: cloneSnapshot(snapshot) });
 		return cloneSnapshot(snapshot);
 	}
 
-	private async submitCommandInternal(sessionId: string, command: AgentCommand): Promise<AgentSessionSnapshot> {
-		const handle = this.requireActiveHandle(sessionId, `submit command '${command.kind}'`);
-		if (command.kind !== 'interrupt') {
-			const reason = `Command '${command.kind}' is unsupported by ${this.displayName}.`;
-			handle.eventEmitter.fire({
-				type: 'command.rejected',
-				command,
-				reason,
-				snapshot: cloneSnapshot(handle.snapshot)
+	public async steer(
+		sessionId: string,
+		action: AgentSteerAction,
+		options?: {
+			reason?: string;
+			metadata?: Record<string, AgentRuntimePrimitive>;
+		}
+	): Promise<AgentSessionSnapshot> {
+		const handle = this.requireActiveHandle(sessionId, `apply action '${action}'`);
+		if (action === 'pause') {
+			await this.transport.sendKeys(handle.transportHandle, 'C-c');
+			const snapshot = this.updateSnapshot(sessionId, {
+				status: 'awaiting-input',
+				attention: 'awaiting-system',
+				waitingForInput: true,
+				acceptedActions: ['resume', 'checkpoint', 'nudge', 'finish'],
+				progress: {
+					state: 'waiting-input',
+					detail: options?.reason,
+					updatedAt: new Date().toISOString()
+				}
 			});
-			throw new Error(reason);
+			this.emit({ type: 'session.awaiting-input', snapshot: cloneSnapshot(snapshot) });
+			return cloneSnapshot(snapshot);
 		}
 
-		await this.transport.sendKeys(handle.transportHandle, 'C-c');
-		const snapshot = this.updateSnapshot(sessionId, {
-			phase: 'running',
-			awaitingInput: true
-		});
-		handle.eventEmitter.fire({
-			type: 'command.accepted',
-			command,
-			snapshot: cloneSnapshot(snapshot)
-		});
-		handle.eventEmitter.fire({
-			type: 'session.awaiting-input',
-			snapshot: cloneSnapshot(snapshot)
-		});
-		return cloneSnapshot(snapshot);
+		return this.prompt(sessionId, buildSteerPrompt(action, options?.reason));
 	}
 
-	private async cancelSession(sessionId: string, reason?: string): Promise<AgentSessionSnapshot> {
+	public async cancel(sessionId: string, reason?: string): Promise<AgentSessionSnapshot> {
 		const handle = this.requireHandle(sessionId);
 		await this.transport.killSession(handle.transportHandle);
 		this.stopPolling(handle);
 		const snapshot = this.updateSnapshot(sessionId, {
-			phase: 'cancelled',
+			status: 'cancelled',
+			attention: 'none',
 			acceptsPrompts: false,
-			awaitingInput: false,
+			waitingForInput: false,
+			acceptedActions: [],
+			endedAt: new Date().toISOString(),
+			progress: {
+				state: 'done',
+				detail: reason,
+				updatedAt: new Date().toISOString()
+			},
 			...(reason ? { failureMessage: reason } : {})
 		});
-		handle.eventEmitter.fire({
+		this.emit({
 			type: 'session.cancelled',
 			...(reason ? { reason } : {}),
 			snapshot: cloneSnapshot(snapshot)
@@ -283,17 +278,25 @@ export class CopilotCliAgentRunner implements AgentRunner {
 		return cloneSnapshot(snapshot);
 	}
 
-	private async terminateSession(sessionId: string, reason?: string): Promise<AgentSessionSnapshot> {
+	public async terminate(sessionId: string, reason?: string): Promise<AgentSessionSnapshot> {
 		const handle = this.requireHandle(sessionId);
 		await this.transport.killSession(handle.transportHandle);
 		this.stopPolling(handle);
 		const snapshot = this.updateSnapshot(sessionId, {
-			phase: 'terminated',
+			status: 'terminated',
+			attention: 'none',
 			acceptsPrompts: false,
-			awaitingInput: false,
+			waitingForInput: false,
+			acceptedActions: [],
+			endedAt: new Date().toISOString(),
+			progress: {
+				state: 'failed',
+				detail: reason,
+				updatedAt: new Date().toISOString()
+			},
 			...(reason ? { failureMessage: reason } : {})
 		});
-		handle.eventEmitter.fire({
+		this.emit({
 			type: 'session.terminated',
 			...(reason ? { reason } : {}),
 			snapshot: cloneSnapshot(snapshot)
@@ -322,7 +325,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 
 	private async pollSession(sessionId: string): Promise<void> {
 		const handle = this.sessions.get(sessionId);
-		if (!handle || handle.polling || isTerminalPhase(handle.snapshot.phase)) {
+		if (!handle || handle.polling || isTerminalStatus(handle.snapshot.status)) {
 			return;
 		}
 		handle.polling = true;
@@ -331,12 +334,20 @@ export class CopilotCliAgentRunner implements AgentRunner {
 			if (!exists) {
 				this.stopPolling(handle);
 				const snapshot = this.updateSnapshot(sessionId, {
-					phase: 'terminated',
+					status: 'terminated',
+					attention: 'none',
 					acceptsPrompts: false,
-					awaitingInput: false,
+					waitingForInput: false,
+					acceptedActions: [],
+					endedAt: new Date().toISOString(),
+					progress: {
+						state: 'failed',
+						detail: 'terminal session no longer exists.',
+						updatedAt: new Date().toISOString()
+					},
 					failureMessage: 'terminal session no longer exists.'
 				});
-				handle.eventEmitter.fire({
+				this.emit({
 					type: 'session.terminated',
 					reason: 'terminal session no longer exists.',
 					snapshot: cloneSnapshot(snapshot)
@@ -348,7 +359,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 			const newLines = diffCapturedOutput(handle.lastCapture, capture);
 			handle.lastCapture = capture;
 			for (const line of newLines) {
-				handle.eventEmitter.fire({
+				this.emit({
 					type: 'session.message',
 					channel: 'stdout',
 					text: line,
@@ -359,22 +370,29 @@ export class CopilotCliAgentRunner implements AgentRunner {
 			const paneState = await this.transport.readPaneState(handle.transportHandle);
 			if (paneState.dead) {
 				this.stopPolling(handle);
-				const nextPhase = paneState.exitCode === 0 ? 'completed' : 'failed';
+				const nextStatus = paneState.exitCode === 0 ? 'completed' : 'failed';
 				const snapshot = this.updateSnapshot(sessionId, {
-					phase: nextPhase,
+					status: nextStatus,
+					attention: 'none',
 					acceptsPrompts: false,
-					awaitingInput: false,
+					waitingForInput: false,
+					acceptedActions: [],
+					endedAt: new Date().toISOString(),
+					progress: {
+						state: paneState.exitCode === 0 ? 'done' : 'failed',
+						updatedAt: new Date().toISOString()
+					},
 					...(paneState.exitCode === 0
 						? {}
 						: { failureMessage: `terminal command exited with status ${String(paneState.exitCode)}.` })
 				});
-				if (nextPhase === 'completed') {
-					handle.eventEmitter.fire({
+				if (nextStatus === 'completed') {
+					this.emit({
 						type: 'session.completed',
 						snapshot: cloneSnapshot(snapshot)
 					});
 				} else {
-					handle.eventEmitter.fire({
+					this.emit({
 						type: 'session.failed',
 						reason: snapshot.failureMessage ?? 'terminal command failed.',
 						snapshot: cloneSnapshot(snapshot)
@@ -398,8 +416,8 @@ export class CopilotCliAgentRunner implements AgentRunner {
 
 	private requireActiveHandle(sessionId: string, action: string): TerminalRunnerSessionHandle {
 		const handle = this.requireHandle(sessionId);
-		if (isTerminalPhase(handle.snapshot.phase)) {
-			throw new Error(`Cannot ${action} for session '${sessionId}' because it is ${handle.snapshot.phase}.`);
+		if (isTerminalStatus(handle.snapshot.status)) {
+			throw new Error(`Cannot ${action} for session '${sessionId}' because it is ${handle.snapshot.status}.`);
 		}
 		if (!handle.snapshot.acceptsPrompts && action.includes('prompt')) {
 			throw new Error(`Cannot ${action} for session '${sessionId}' because prompts are disabled.`);
@@ -415,9 +433,18 @@ export class CopilotCliAgentRunner implements AgentRunner {
 		const handle = this.requireHandle(sessionId);
 		const nextSnapshot: AgentSessionSnapshot = {
 			...handle.snapshot,
-			acceptedCommands: overrides.acceptedCommands
-				? [...overrides.acceptedCommands]
-				: [...handle.snapshot.acceptedCommands],
+			acceptedActions: overrides.acceptedActions
+				? [...overrides.acceptedActions]
+				: [...handle.snapshot.acceptedActions],
+			progress: overrides.progress
+				? {
+					...overrides.progress,
+					...(overrides.progress.units ? { units: { ...overrides.progress.units } } : {})
+				}
+				: {
+					...handle.snapshot.progress,
+					...(handle.snapshot.progress.units ? { units: { ...handle.snapshot.progress.units } } : {})
+				},
 			updatedAt: new Date().toISOString()
 		};
 		for (const key of Object.keys(overrides) as Array<keyof SnapshotOverrides>) {
@@ -439,17 +466,24 @@ export class CopilotCliAgentRunner implements AgentRunner {
 	private async preparePaneForPrompt(handle: TerminalRunnerSessionHandle): Promise<void> {
 		const paneState = await this.transport.readPaneState(handle.transportHandle);
 		if (paneState.dead) {
-			const nextPhase = paneState.exitCode === 0 ? 'completed' : 'failed';
+			const nextStatus = paneState.exitCode === 0 ? 'completed' : 'failed';
 			const snapshot = this.updateSnapshot(handle.transportHandle.sessionName, {
-				phase: nextPhase,
+				status: nextStatus,
+				attention: 'none',
 				acceptsPrompts: false,
-				awaitingInput: false,
-				...(nextPhase === 'failed'
+				waitingForInput: false,
+				acceptedActions: [],
+				endedAt: new Date().toISOString(),
+				progress: {
+					state: nextStatus === 'completed' ? 'done' : 'failed',
+					updatedAt: new Date().toISOString()
+				},
+				...(nextStatus === 'failed'
 					? { failureMessage: `terminal command exited with status ${String(paneState.exitCode)}.` }
 					: {})
 			});
-			handle.eventEmitter.fire(
-				nextPhase === 'completed'
+			this.emit(
+				nextStatus === 'completed'
 					? {
 						type: 'session.completed',
 						snapshot: cloneSnapshot(snapshot)
@@ -461,7 +495,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 					}
 			);
 			throw new Error(
-				nextPhase === 'completed'
+				nextStatus === 'completed'
 					? `Cannot submit a prompt for session '${handle.transportHandle.sessionName}' because the terminal pane has exited.`
 					: snapshot.failureMessage ?? `Cannot submit a prompt for session '${handle.transportHandle.sessionName}'.`
 			);
@@ -476,47 +510,10 @@ export class CopilotCliAgentRunner implements AgentRunner {
 		}
 	}
 
-	private createTerminatedAttachedSession(reference: AgentSessionReference): AgentSession {
-		const snapshot: AgentSessionSnapshot = {
-			runnerId: this.id,
-			transportId: this.transportId,
-			sessionId: reference.sessionId,
-			...(reference.terminalSessionName ? { terminalSessionName: reference.terminalSessionName } : {}),
-			...(reference.terminalPaneId ? { terminalPaneId: reference.terminalPaneId } : {}),
-			phase: 'terminated',
-			missionId: 'unknown',
-			taskId: 'unknown',
-			acceptsPrompts: false,
-			acceptedCommands: [],
-			awaitingInput: false,
-			failureMessage: 'Session no longer exists in terminal transport.',
-			updatedAt: new Date().toISOString()
-		};
-		const eventEmitter = new AgentSessionEventEmitter<AgentSessionEvent>();
-		return {
-			runnerId: this.id,
-			transportId: this.transportId,
-			sessionId: reference.sessionId,
-			getSnapshot: () => cloneSnapshot(snapshot),
-			onDidEvent: (listener) => {
-				const subscription = eventEmitter.event(listener);
-				queueMicrotask(() => {
-					listener({
-						type: 'session.terminated',
-						reason: 'Session no longer exists in terminal transport.',
-						snapshot: cloneSnapshot(snapshot)
-					});
-				});
-				return subscription;
-			},
-			submitPrompt: async () => cloneSnapshot(snapshot),
-			submitCommand: async () => cloneSnapshot(snapshot),
-			cancel: async () => cloneSnapshot(snapshot),
-			terminate: async () => cloneSnapshot(snapshot),
-			dispose: () => {
-				eventEmitter.dispose();
-			}
-		};
+	private emit(event: AgentSessionEvent): void {
+		for (const listener of this.listeners) {
+			listener(event);
+		}
 	}
 }
 
@@ -555,12 +552,17 @@ async function sendText(transport: TerminalAgentTransport, handle: TerminalSessi
 function cloneSnapshot(snapshot: AgentSessionSnapshot): AgentSessionSnapshot {
 	return {
 		...snapshot,
-		acceptedCommands: [...snapshot.acceptedCommands]
+		acceptedActions: [...snapshot.acceptedActions],
+		progress: {
+			...snapshot.progress,
+			...(snapshot.progress.units ? { units: { ...snapshot.progress.units } } : {})
+		},
+		...(snapshot.transport ? { transport: { ...snapshot.transport } } : {})
 	};
 }
 
-function isTerminalPhase(phase: AgentSessionSnapshot['phase']): boolean {
-	return phase === 'completed' || phase === 'failed' || phase === 'cancelled' || phase === 'terminated';
+function isTerminalStatus(status: AgentSessionSnapshot['status']): boolean {
+	return status === 'completed' || status === 'failed' || status === 'cancelled' || status === 'terminated';
 }
 
 function diffCapturedOutput(previous: string, next: string): string[] {
@@ -597,4 +599,119 @@ function splitLines(text: string): string[] {
 function isFolderTrustPrompt(capture: string): boolean {
 	return capture.includes('Confirm folder trust')
 		&& capture.includes('Do you trust the files in this folder?');
+}
+
+function createRunningSnapshot(input: {
+	runnerId: string;
+	sessionId: string;
+	workingDirectory: string;
+	taskId: string;
+	missionId: string;
+	stageId: string;
+	transport: AgentSessionSnapshot['transport'];
+}): AgentSessionSnapshot {
+	return createTerminalSnapshot({
+		...input,
+		status: 'running',
+		progressState: 'working',
+		acceptsPrompts: true,
+		acceptedActions: ['pause', 'checkpoint', 'nudge', 'finish']
+	});
+}
+
+function createTerminalSnapshot(input: {
+	runnerId: string;
+	sessionId: string;
+	workingDirectory: string;
+	taskId: string;
+	missionId: string;
+	stageId: string;
+	transport: AgentSessionSnapshot['transport'];
+	status: AgentSessionSnapshot['status'];
+	progressState: AgentSessionSnapshot['progress']['state'];
+	acceptsPrompts: boolean;
+	acceptedActions: AgentSteerAction[];
+	failureMessage?: string;
+	endedAt?: string;
+}): AgentSessionSnapshot {
+	const timestamp = new Date().toISOString();
+	return {
+		runnerId: input.runnerId,
+		sessionId: input.sessionId,
+		workingDirectory: input.workingDirectory,
+		taskId: input.taskId,
+		missionId: input.missionId,
+		stageId: input.stageId,
+		status: input.status,
+		attention: input.status === 'running' ? 'autonomous' : 'none',
+		progress: {
+			state: input.progressState,
+			updatedAt: timestamp
+		},
+		waitingForInput: false,
+		acceptsPrompts: input.acceptsPrompts,
+		acceptedActions: [...input.acceptedActions],
+		transport: input.transport,
+		startedAt: timestamp,
+		updatedAt: timestamp,
+		...(input.failureMessage ? { failureMessage: input.failureMessage } : {}),
+		...(input.endedAt ? { endedAt: input.endedAt } : {})
+	};
+}
+
+function createTerminatedAttachedSnapshot(
+	runnerId: string,
+	reference: AgentSessionReference,
+	reason: string
+): AgentSessionSnapshot {
+	const timestamp = new Date().toISOString();
+	return {
+		runnerId,
+		sessionId: reference.sessionId,
+		workingDirectory: 'unknown',
+		taskId: 'unknown',
+		missionId: 'unknown',
+		stageId: 'unknown',
+		status: 'terminated',
+		attention: 'none',
+		progress: {
+			state: 'failed',
+			detail: reason,
+			updatedAt: timestamp
+		},
+		waitingForInput: false,
+		acceptsPrompts: false,
+		acceptedActions: [],
+		...(reference.transport ? { transport: { ...reference.transport } } : {}),
+		failureMessage: reason,
+		startedAt: timestamp,
+		updatedAt: timestamp,
+		endedAt: timestamp
+	};
+}
+
+function getRequestedTerminalSessionName(request: AgentLaunchRequest): string | undefined {
+	const value = request.metadata?.['terminalSessionName'];
+	return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function buildSteerPrompt(action: AgentSteerAction, reason?: string): AgentPrompt {
+	switch (action) {
+		case 'resume':
+			return { source: 'system', text: reason?.trim() || 'Resume execution.' };
+		case 'checkpoint':
+			return {
+				source: 'system',
+				text: reason?.trim() || 'Provide a concise checkpoint, then continue with the task.'
+			};
+		case 'nudge':
+			return { source: 'system', text: reason?.trim() || 'Continue with the assigned task.' };
+		case 'finish':
+			return {
+				source: 'system',
+				text: reason?.trim() || 'Stop at a clean point and summarize completion status.'
+			};
+		default:
+			throw new Error(`Action '${action}' is unsupported by ${COPILOT_CLI_AGENT_RUNNER_ID}.`);
+	}
 }

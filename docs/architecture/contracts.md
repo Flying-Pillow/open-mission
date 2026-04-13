@@ -23,7 +23,7 @@ The daemon protocol is context-first rather than object-wrapper-first.
 | `control.*` | `control.status`, `control.settings.update`, `control.document.*`, `control.workflow.settings.*`, `control.repositories.*`, `control.issues.list`, `control.action.*` | Repository-scoped control plane operations |
 | `mission.*` | `mission.from-brief`, `mission.from-issue`, `mission.status`, `mission.action.*`, `mission.gate.evaluate` | Mission creation and mission aggregate operations |
 | `task.*` | `task.launch` | Task-scoped runtime launch |
-| `session.*` | `session.list`, `session.console.state`, `session.prompt`, `session.command`, `session.cancel`, `session.terminate` | Live session control |
+| `session.*` | `session.list`, `session.console.state`, `session.prompt`, `session.command`, `session.cancel`, `session.terminate` | Live session control through the daemon-owned agent control path |
 
 ## Client Surface
 
@@ -58,6 +58,10 @@ This is the daemon-wide live composite snapshot returned to surfaces.
 | `configuration` | Frozen workflow settings snapshot used for the mission |
 | `runtime` | Current lifecycle, stage, task, session, gate, pause, and panic state |
 | `eventLog` | Append-only workflow event history |
+
+`mission.json` stores normalized workflow-facing session truth.
+
+It does not store provider-native control protocol.
 
 ## `.mission/settings.json`
 
@@ -113,7 +117,7 @@ The intended architecture is:
 - the daemon constructs actions
 - Tower renders actions as commands
 - operator input resolves back to an action by matching action text
-- session commands remain a separate runtime contract
+- session commands remain a separate daemon-routed runtime contract backed by shared runner and session control
 
 If a behavior only exists as Tower-side command handling and not as a daemon action, that is a layering bug.
 

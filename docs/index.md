@@ -122,14 +122,14 @@ Mission is attractive when you care about these outcomes:
 
 Mission is not meant to lock you into one giant vendor-specific session.
 
-The workflow engine, runtime contract, and Airport layout all treat the agent layer as a replaceable execution boundary. Today, the built-in runtimes in the codebase are `copilot-cli` and `copilot-sdk`, and repository settings already separate:
+The workflow engine, runtime contract, and Airport layout all treat the agent layer as a replaceable execution boundary. Today, the built-in runtimes in the codebase are `copilot-cli` and `pi`, and repository settings already separate:
 
 - the selected runtime
 - the default execution mode
 - the default model
 - task-level runner assignment in workflow settings and task templates
 
-That matters because it keeps Mission's workflow model independent from any one provider. In practical terms: Mission orchestrates, the selected agent executes. Today the first shipped agent path is Copilot, with `copilot-cli` as the first concrete CLI runtime and `copilot-sdk` also present in the codebase. Claude Code, Gemini CLI, Codex, and other runtimes are intended follow-on integrations rather than a redesign of the product.
+That matters because it keeps Mission's workflow model independent from any one provider. In practical terms: Mission orchestrates, the selected agent executes. Today the first shipped agent path is Copilot, with `copilot-cli` as the first concrete CLI runtime and `pi` also present in the codebase. Claude Code, Gemini CLI, Codex, and other runtimes are intended follow-on integrations rather than a redesign of the product.
 
 ## The Mission Flow In One View
 
