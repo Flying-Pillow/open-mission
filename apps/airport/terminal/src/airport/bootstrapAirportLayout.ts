@@ -42,15 +42,18 @@ export async function bootstrapAirportLayout(context: AirportTerminalContext): P
 		...missionEntryCommand,
 		'__airport-layout-briefing-room-pane'
 	]);
+	const viewportColumns = resolveViewportColumns();
+	const layoutInput = {
+		repoRoot,
+		towerCommand,
+		briefingRoomCommand,
+		...(viewportColumns === undefined ? {} : { viewportColumns })
+	};
 
 	await mkdir(terminalManagerConfigDir, { recursive: true });
 	await mkdir(path.dirname(layoutFile), { recursive: true });
 	await writeFile(path.join(terminalManagerConfigDir, 'config.kdl'), buildTerminalManagerConfig(), 'utf8');
-	await writeFile(layoutFile, buildAirportBootstrapLayout({
-		repoRoot,
-		towerCommand,
-		briefingRoomCommand
-	}), 'utf8');
+	await writeFile(layoutFile, buildAirportBootstrapLayout(layoutInput), 'utf8');
 
 	const daemonClient = await connectAirportControl({
 		surfacePath: repoRoot,
@@ -98,6 +101,21 @@ function slugifySessionName(sessionName: string): string {
 
 function resolveRuntimeRoot(): string {
 	return process.env['XDG_RUNTIME_DIR']?.trim() || process.env['TMPDIR']?.trim() || os.tmpdir();
+}
+
+function resolveViewportColumns(): number | undefined {
+	const envColumns = process.env['COLUMNS']?.trim();
+	if (envColumns) {
+		const parsedColumns = Number.parseInt(envColumns, 10);
+		if (Number.isFinite(parsedColumns) && parsedColumns > 0) {
+			return parsedColumns;
+		}
+	}
+
+	const stdoutColumns = process.stdout.columns;
+	return typeof stdoutColumns === 'number' && Number.isFinite(stdoutColumns) && stdoutColumns > 0
+		? stdoutColumns
+		: undefined;
 }
 
 function resolveMissionEntryCommand(): string[] {
@@ -167,7 +185,7 @@ export function buildTerminalManagerConfig(): string {
     tower {
         bg "#0F1419"
         fg "#555555"
-        green "#1E40AF"
+		green "#FFFFFF"
         black "#000000"
         red "#FF3333"
         yellow "#E5C07B"
@@ -176,6 +194,31 @@ export function buildTerminalManagerConfig(): string {
         cyan "#56B6C2"
         white "#FFFFFF"
         orange "#D19A66"
+
+		frame_unselected {
+			base 85 85 85
+			background 15 20 25
+			emphasis_0 255 255 255
+			emphasis_1 255 255 255
+			emphasis_2 255 255 255
+			emphasis_3 255 255 255
+		}
+		frame_selected {
+			base 255 255 255
+			background 15 20 25
+			emphasis_0 255 255 255
+			emphasis_1 255 255 255
+			emphasis_2 255 255 255
+			emphasis_3 255 255 255
+		}
+		frame_highlight {
+			base 255 255 255
+			background 15 20 25
+			emphasis_0 255 255 255
+			emphasis_1 255 255 255
+			emphasis_2 255 255 255
+			emphasis_3 255 255 255
+		}
     }
 }
 

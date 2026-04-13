@@ -18,6 +18,7 @@ type TerminalPaneMetadata = {
 	is_focused?: boolean;
 	is_suppressed?: boolean;
 	tab_id?: number;
+	pane_columns?: number;
 };
 
 type TabInfoSnapshot = {
@@ -39,6 +40,7 @@ export function createAirportLayoutController(options: AirportLayoutControllerOp
 		|| 'zellij';
 	let disposed = false;
 	let currentTargetKey: string | undefined;
+	let currentRunwayDirection: 'down' | 'right' | undefined;
 	let lastRequestedKey = '__initial__';
 	let serial = Promise.resolve();
 
@@ -70,9 +72,6 @@ export function createAirportLayoutController(options: AirportLayoutControllerOp
 
 		const tabInfo = await getCurrentTabInfo();
 		const currentTabId = typeof tabInfo?.tab_id === 'number' ? tabInfo.tab_id : undefined;
-		const runwayPaneDirection = resolveAirportCompanionPaneDirection(
-			tabInfo?.viewport_columns ?? tabInfo?.display_area_columns
-		);
 		let panes = await listPanes(currentTabId);
 		let existingPane = panes.find((pane) => pane.title === RUNWAY_PANE_TITLE && !pane.is_suppressed);
 		if (!target) {
@@ -80,48 +79,56 @@ export function createAirportLayoutController(options: AirportLayoutControllerOp
 				await removePane(existingPane.id);
 			}
 			currentTargetKey = undefined;
+			currentRunwayDirection = undefined;
 			return;
 		}
 
-		let briefingRoomPane = panes.find((pane) => pane.title === 'BRIEFING ROOM' && !pane.is_suppressed)
-			?? panes.find((pane) => !pane.is_suppressed)
-			?? panes[0];
+		let briefingRoomPane = panes.find((pane) => pane.title === 'BRIEFING ROOM' && !pane.is_suppressed);
 		if (!briefingRoomPane) {
 			return;
 		}
+		let runwayPaneDirection = resolveAirportCompanionPaneDirection(
+			briefingRoomPane.pane_columns ?? tabInfo?.viewport_columns ?? tabInfo?.display_area_columns
+		);
 		const needsRunwayRestart = currentTargetKey !== requestKey;
 		if (needsRunwayRestart && existingPane) {
 			await removePane(existingPane.id);
 			existingPane = undefined;
 			panes = await listPanes(currentTabId);
-			briefingRoomPane = panes.find((pane) => pane.title === 'BRIEFING ROOM' && !pane.is_suppressed)
-				?? panes.find((pane) => !pane.is_suppressed)
-				?? panes[0];
+			briefingRoomPane = panes.find((pane) => pane.title === 'BRIEFING ROOM' && !pane.is_suppressed);
 			if (!briefingRoomPane) {
 				return;
 			}
+			runwayPaneDirection = resolveAirportCompanionPaneDirection(
+				briefingRoomPane.pane_columns ?? tabInfo?.viewport_columns ?? tabInfo?.display_area_columns
+			);
 		}
 
 		if (!existingPane) {
 			await createRunwayPane(target, briefingRoomPane, runwayPaneDirection);
 			currentTargetKey = requestKey;
+			currentRunwayDirection = runwayPaneDirection;
 			return;
 		}
 
-		if (currentTargetKey === requestKey) {
+		await setPaneBorderless(existingPane.id);
+
+		if (currentTargetKey === requestKey && currentRunwayDirection === runwayPaneDirection) {
 			return;
 		}
 
 		await removePane(existingPane.id);
 		const refreshedPanes = await listPanes(currentTabId);
-		const refreshedBriefingRoomPane = refreshedPanes.find((pane) => pane.title === 'BRIEFING ROOM' && !pane.is_suppressed)
-			?? refreshedPanes.find((pane) => !pane.is_suppressed)
-			?? refreshedPanes[0];
+		const refreshedBriefingRoomPane = refreshedPanes.find((pane) => pane.title === 'BRIEFING ROOM' && !pane.is_suppressed);
 		if (!refreshedBriefingRoomPane) {
 			return;
 		}
+		runwayPaneDirection = resolveAirportCompanionPaneDirection(
+			refreshedBriefingRoomPane.pane_columns ?? tabInfo?.viewport_columns ?? tabInfo?.display_area_columns
+		);
 		await createRunwayPane(target, refreshedBriefingRoomPane, runwayPaneDirection);
 		currentTargetKey = requestKey;
+		currentRunwayDirection = runwayPaneDirection;
 	}
 
 	async function createRunwayPane(
@@ -152,6 +159,8 @@ export function createAirportLayoutController(options: AirportLayoutControllerOp
 				'new-pane',
 				'--direction',
 				direction,
+				'--borderless',
+				'true',
 				'--name',
 				RUNWAY_PANE_TITLE,
 				'--cwd',
@@ -170,6 +179,16 @@ export function createAirportLayoutController(options: AirportLayoutControllerOp
 				await execTerminalAction(['focus-pane-id', toTerminalPaneReference(previouslyFocusedPane.id)]).catch(() => undefined);
 			}
 		}
+	}
+
+	async function setPaneBorderless(terminalPaneId: number): Promise<void> {
+		await execTerminalAction([
+			'set-pane-borderless',
+			'--pane-id',
+			toTerminalPaneReference(terminalPaneId),
+			'--borderless',
+			'true'
+		]).catch(() => undefined);
 	}
 
 	async function removePane(terminalPaneId: number): Promise<void> {

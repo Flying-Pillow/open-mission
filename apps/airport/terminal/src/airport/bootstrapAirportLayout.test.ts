@@ -33,20 +33,21 @@ describe('bootstrapAirportLayout session reset parsing', () => {
 		const layout = buildAirportBootstrapLayout({
 			repoRoot: '/repo',
 			towerCommand: 'tower-command',
-			briefingRoomCommand: 'briefing-command'
+			briefingRoomCommand: 'briefing-command',
+			viewportColumns: 200
 		});
-		expect(layout).toContain('pane split_direction="horizontal" {');
-		expect(layout).toContain('pane name="TOWER" focus=true size="56%" command="sh" cwd="/repo" {');
+		expect(layout).toContain('pane split_direction="vertical" {');
+		expect(layout).toContain('pane name="TOWER" focus=true size="50%" borderless=true command="sh" cwd="/repo" {');
 		expect(layout).toContain(`args "-lc" "exec tower-command"`);
-		expect(layout).toContain(`pane name="BRIEFING ROOM" size="44%" command="sh" cwd="/repo" {
+		expect(layout).toContain(`pane name="BRIEFING ROOM" size="50%" command="sh" cwd="/repo" {
 				args "-lc" "exec briefing-command"
 			}`);
 		expect(layout).not.toContain('pane name="RUNWAY"');
 	});
 
 	it('uses a horizontal split for runway only when the viewport is wide enough', () => {
-		expect(resolveAirportCompanionPaneDirection(200)).toBe('down');
-		expect(resolveAirportCompanionPaneDirection(220)).toBe('right');
+		expect(resolveAirportCompanionPaneDirection(79)).toBe('down');
+		expect(resolveAirportCompanionPaneDirection(80)).toBe('right');
 	});
 
 	it('adds global ctrl-tab pane cycling to the airport terminal manager config', () => {
