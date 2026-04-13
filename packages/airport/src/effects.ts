@@ -4,33 +4,10 @@ export type AirportSubstrateEffect = {
 	kind: 'focus-pane';
 	paneId: AirportPaneId;
 	terminalPaneId: number;
-} | {
-	kind: 'ensure-pane';
-	paneId: 'runway';
-} | {
-	kind: 'remove-pane';
-	paneId: 'runway';
-	terminalPaneId: number;
 };
 
 export function planAirportSubstrateEffects(state: AirportState): AirportSubstrateEffect[] {
 	const effects: AirportSubstrateEffect[] = [];
-	const runwayBinding = state.panes.runway;
-	const runwayPane = state.substrate.panes.runway;
-	const shouldShowAgentSessionPane = runwayBinding.targetKind === 'agentSession';
-	const hasAgentSessionPane = Boolean(runwayPane?.exists && (runwayPane.terminalPaneId ?? -1) >= 0);
-
-	if (shouldShowAgentSessionPane && !hasAgentSessionPane) {
-		effects.push({ kind: 'ensure-pane', paneId: 'runway' });
-	}
-
-	if (!shouldShowAgentSessionPane && hasAgentSessionPane && (runwayPane?.terminalPaneId ?? -1) >= 0) {
-		effects.push({
-			kind: 'remove-pane',
-			paneId: 'runway',
-			terminalPaneId: runwayPane?.terminalPaneId ?? -1
-		});
-	}
 
 	const intentPaneId = state.focus.intentPaneId;
 	if (!intentPaneId) {

@@ -147,7 +147,7 @@ describe('FilesystemAdapter', () => {
 			expect(taskContent).not.toContain('retries:');
 
 			const [task] = await adapter.listTaskStates(missionDir, 'spec');
-			expect(task?.status).toBe('todo');
+			expect(task?.status).toBe('pending');
 			expect(task?.agent).toBe('planner');
 
 			const workflowDocument = await adapter.readMissionRuntimeRecord(missionDir);

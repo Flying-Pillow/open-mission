@@ -260,6 +260,8 @@ function applyEventMutation(
                 taskId: event.taskId,
                 runnerId: event.runnerId,
                 ...(event.transportId ? { transportId: event.transportId } : {}),
+                ...(event.terminalSessionName ? { terminalSessionName: event.terminalSessionName } : {}),
+                ...(event.terminalPaneId ? { terminalPaneId: event.terminalPaneId } : {}),
                 lifecycle: 'running',
                 launchedAt: event.occurredAt,
                 updatedAt: event.occurredAt

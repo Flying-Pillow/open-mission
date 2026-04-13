@@ -2,12 +2,25 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { createDefaultWorkflowSettings } from '../../workflow/engine/defaultWorkflow.js';
 import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import { getMissionWorktreesPath } from '../../lib/repoConfig.js';
 import { FakeAgentRunner } from '../../testing/FakeAgentRunner.js';
 import { Factory } from './Factory.js';
 import type { MissionWorkflowBindings } from './Mission.js';
+
+const temporaryWorkspaceRoots = new Set<string>();
+
+afterEach(async () => {
+    await Promise.all(
+        [...temporaryWorkspaceRoots].map(async (workspaceRoot) => {
+            temporaryWorkspaceRoots.delete(workspaceRoot);
+            await fs.rm(getMissionWorktreesPath(workspaceRoot), { recursive: true, force: true }).catch(() => undefined);
+            await fs.rm(workspaceRoot, { recursive: true, force: true }).catch(() => undefined);
+        })
+    );
+});
 
 describe('Mission', () => {
     it('launches task sessions and translates runtime events into compatibility events', async () => {
@@ -272,9 +285,12 @@ describe('Mission', () => {
                     targetId: taskId
                 });
 
-                const nextStatus = await mission.executeAction(`task.launch.${taskId}`);
+                const nextStatus = await mission.executeAction(`task.launch.${taskId}`, [], {
+                    terminalSessionName: 'airport-terminal-session'
+                });
                 expect(await runner.listSessions()).toHaveLength(1);
                 expect(runner.getLastStartRequest()?.workingDirectory).toBe(startedStatus.missionDir);
+                expect(runner.getLastStartRequest()?.terminalSessionName).toBe('airport-terminal-session');
                 expect(runner.getLastStartRequest()?.initialPrompt?.text).toContain(
                     `Stay strictly within this mission workspace: ${startedStatus.missionDir}`
                 );
@@ -314,7 +330,7 @@ describe('Mission', () => {
                 }
 
                 const runningStatus = await mission.executeAction(`task.start.${taskId}`);
-                expect(runningStatus.stages?.flatMap((stage) => stage.tasks).find((task) => task.taskId === taskId)?.status).toBe('active');
+                expect(runningStatus.stages?.flatMap((stage) => stage.tasks).find((task) => task.taskId === taskId)?.status).toBe('running');
 
                 const launchedStatus = await mission.executeAction(`task.launch.${taskId}`);
                 expect(await runner.listSessions()).toHaveLength(1);
@@ -490,6 +506,7 @@ function createBrief(issueId: number, title: string) {
 
 async function createTempRepo(): Promise<string> {
     const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-core-mission-'));
+    temporaryWorkspaceRoots.add(workspaceRoot);
     runGit(workspaceRoot, ['init']);
     runGit(workspaceRoot, ['config', 'user.email', 'mission@example.com']);
     runGit(workspaceRoot, ['config', 'user.name', 'Mission Test']);

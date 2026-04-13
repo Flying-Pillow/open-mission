@@ -1,30 +1,21 @@
 import { createHash } from 'node:crypto';
-import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import {
 	AirportControl,
 	TerminalManagerSubstrateController,
-	createDefaultPaneBindings,
 	type AirportSubstrateEffect,
 	type AirportSubstrateState,
 	type BindAirportPaneParams,
 	type ConnectAirportClientParams,
 	type PaneBinding,
-	type AirportPaneId,
-	type PersistedAirportIntent
+	type AirportPaneId
 } from '../../../../airport/build/index.js';
-import {
-	getMissionDaemonSettingsPath,
-	readMissionDaemonSettings,
-	writeMissionDaemonSettings
-} from '../../lib/daemonConfig.js';
 
 type RepositoryAirportRecord = {
 	repositoryId: string;
 	repositoryRootPath: string;
 	control: AirportControl;
 	substrateController: TerminalManagerSubstrateController;
-	serializedPersistedIntent?: string;
 };
 
 export class RepositoryAirportRegistry {
@@ -166,33 +157,7 @@ export class RepositoryAirportRegistry {
 	}
 
 	public async persistTouchedAirportIntents(repositoryIds: string[]): Promise<void> {
-		for (const repositoryId of new Set(repositoryIds)) {
-			const airport = this.airportRegistry.get(repositoryId);
-			if (!airport) {
-				continue;
-			}
-
-			const nextPersistedIntent = toPersistableAirportIntent(airport);
-			const serializedPersistedIntent = serializePersistedAirportIntent(nextPersistedIntent);
-			if (serializedPersistedIntent === airport.serializedPersistedIntent) {
-				continue;
-			}
-			if (!(await daemonSettingsExist(airport.repositoryRootPath))) {
-				airport.serializedPersistedIntent = serializedPersistedIntent;
-				continue;
-			}
-
-			const currentSettings = readMissionDaemonSettings(airport.repositoryRootPath) ?? {};
-			const { airport: _currentAirport, ...baseSettings } = currentSettings;
-			await writeMissionDaemonSettings(
-				{
-					...baseSettings,
-					...(nextPersistedIntent ? { airport: nextPersistedIntent } : {})
-				},
-				airport.repositoryRootPath
-			);
-			airport.serializedPersistedIntent = serializedPersistedIntent;
-		}
+		void repositoryIds;
 	}
 
 	private requireAirport(repositoryId: string): RepositoryAirportRecord {
@@ -210,7 +175,6 @@ export class RepositoryAirportRegistry {
 		}
 
 		const identity = deriveRepositoryAirportIdentity(repositoryId, repositoryRootPath);
-		const persistedIntent = this.readPersistedAirportIntent(repositoryRootPath);
 		const substrateController = new TerminalManagerSubstrateController({
 			sessionName: identity.sessionName
 		});
@@ -219,23 +183,16 @@ export class RepositoryAirportRegistry {
 			repositoryId,
 			repositoryRootPath,
 			terminalSessionName: identity.sessionName,
-			...(persistedIntent ? { persistedIntent } : {}),
 			initialSubstrateState: substrateController.getState()
 		});
 		const record: RepositoryAirportRecord = {
 			repositoryId,
 			repositoryRootPath,
 			control,
-			substrateController,
-			serializedPersistedIntent: serializePersistedAirportIntent(persistedIntent)
+			substrateController
 		};
 		this.airportRegistry.set(repositoryId, record);
 		return record;
-	}
-
-	private readPersistedAirportIntent(repositoryRootPath: string): PersistedAirportIntent | undefined {
-		const settings = readMissionDaemonSettings(repositoryRootPath);
-		return settings?.airport;
 	}
 }
 
@@ -263,27 +220,4 @@ function slugifyRepositoryLabel(value: string): string {
 		.replace(/[^a-z0-9]+/g, '-')
 		.replace(/^-+|-+$/g, '');
 	return normalizedValue || 'repository';
-}
-
-function serializePersistedAirportIntent(intent: PersistedAirportIntent | undefined): string {
-	return JSON.stringify(intent ?? null);
-}
-
-function toPersistableAirportIntent(record: RepositoryAirportRecord): PersistedAirportIntent | undefined {
-	const currentIntent = record.control.getPersistedIntent();
-	const defaultIntent: PersistedAirportIntent = {
-		panes: createDefaultPaneBindings(record.repositoryId)
-	};
-	return serializePersistedAirportIntent(currentIntent) === serializePersistedAirportIntent(defaultIntent)
-		? undefined
-		: currentIntent;
-}
-
-async function daemonSettingsExist(repositoryRootPath: string): Promise<boolean> {
-	try {
-		await fs.access(getMissionDaemonSettingsPath(repositoryRootPath));
-		return true;
-	} catch {
-		return false;
-	}
 }

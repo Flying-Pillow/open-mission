@@ -4,14 +4,13 @@ import type { AirportState } from './types.js';
 import { TerminalManagerSubstrateController } from './terminal-manager.js';
 
 describe('TerminalManagerSubstrateController', () => {
-	it('discovers airport panes by title when terminal pane ids are unknown', async () => {
+	it('discovers fixed airport panes by title when terminal pane ids are unknown', async () => {
 		const executor = (args: string[]) => {
 			if (args.includes('list-panes')) {
 				return Promise.resolve({
 					stdout: JSON.stringify([
 						{ id: 0, title: 'TOWER', is_plugin: false, is_focused: false },
-						{ id: 1, title: 'RUNWAY', is_plugin: false, is_focused: true },
-						{ id: 2, title: 'BRIEFING ROOM', is_plugin: false, is_focused: false }
+						{ id: 2, title: 'BRIEFING ROOM', is_plugin: false, is_focused: true }
 					]),
 					stderr: ''
 				});
@@ -25,62 +24,22 @@ describe('TerminalManagerSubstrateController', () => {
 		});
 		const airportState = createAirportState({}, {
 			tower: { terminalPaneId: -1, expected: true, exists: false, title: 'TOWER' },
-			runway: { terminalPaneId: -1, expected: true, exists: false, title: 'RUNWAY' },
 			briefingRoom: { terminalPaneId: -1, expected: true, exists: false, title: 'BRIEFING ROOM' }
 		});
 
 		const observed = await controller.observe(airportState);
 
-		expect(observed.panes.runway).toMatchObject({
-			terminalPaneId: 1,
+		expect(observed.panes.tower).toMatchObject({
+			terminalPaneId: 0,
 			exists: true,
-			title: 'RUNWAY'
+			title: 'TOWER'
 		});
-		expect(observed.observedFocusedTerminalPaneId).toBe(1);
-	});
-
-	it('observes terminal-manager panes without applying focus effects', async () => {
-		const calls: string[][] = [];
-		const executor = (args: string[]) => {
-			calls.push(args);
-			if (args.includes('list-panes')) {
-				return Promise.resolve({
-					stdout: JSON.stringify([
-						{ id: 1, title: 'mission-dashboard', is_plugin: false, is_focused: true },
-						{ id: 2, title: 'session-1', is_plugin: false, is_focused: false },
-						{ id: 3, title: 'editor-pane', is_plugin: false, is_focused: false }
-					]),
-					stderr: ''
-				});
-			}
-			return Promise.resolve({ stdout: '', stderr: '' });
-		};
-
-		const controller = new TerminalManagerSubstrateController({
-			sessionName: 'mission-mission',
-			executor
-		});
-		const airportState = createAirportState(
-			{
-				runway: { targetKind: 'agentSession', targetId: 'session-1', mode: 'control' }
-			},
-			{
-				tower: { terminalPaneId: 1, expected: true, exists: true, title: 'TOWER' },
-				runway: { terminalPaneId: 2, expected: true, exists: true, title: 'RUNWAY' },
-				briefingRoom: { terminalPaneId: 3, expected: true, exists: true, title: 'BRIEFING ROOM' }
-			}
-		);
-
-		const observed = await controller.observe(airportState);
-
-		expect(observed.attached).toBe(true);
-		expect(observed.panes.runway).toMatchObject({
+		expect(observed.panes.briefingRoom).toMatchObject({
 			terminalPaneId: 2,
 			exists: true,
-			expected: true,
-			title: 'session-1'
+			title: 'BRIEFING ROOM'
 		});
-		expect(calls.filter((args) => args.includes('focus-pane-id'))).toEqual([]);
+		expect(observed.observedFocusedTerminalPaneId).toBe(2);
 	});
 
 	it('applies planned focus effects through terminal-manager', async () => {
@@ -126,26 +85,12 @@ describe('TerminalManagerSubstrateController', () => {
 		]);
 	});
 
-	it('creates the runway pane when a session binding appears', async () => {
+	it('ignores missing-pane errors during focus sync', async () => {
 		const calls: string[][] = [];
-		let includeAgentPane = false;
-		const previousEntryPath = process.env['AIRPORT_TERMINAL_ENTRY_PATH'];
-		process.env['AIRPORT_TERMINAL_ENTRY_PATH'] = '/tmp/airport-terminal/index.js';
 		const executor = (args: string[]) => {
 			calls.push(args);
-			if (args.includes('list-panes')) {
-				return Promise.resolve({
-					stdout: JSON.stringify([
-						{ id: 1, title: 'TOWER', is_plugin: false, is_focused: true },
-						{ id: 2, title: 'BRIEFING ROOM', is_plugin: false, is_focused: false },
-						...(includeAgentPane ? [{ id: 3, title: 'RUNWAY', is_plugin: false, is_focused: false }] : [])
-					]),
-					stderr: ''
-				});
-			}
-			if (args.includes('new-pane')) {
-				includeAgentPane = true;
-				return Promise.resolve({ stdout: '', stderr: '' });
+			if (args.includes('focus-pane-id')) {
+				return Promise.reject(new Error('Pane with id Terminal(2) not found'));
 			}
 			return Promise.resolve({ stdout: '', stderr: '' });
 		};
@@ -154,56 +99,34 @@ describe('TerminalManagerSubstrateController', () => {
 			sessionName: 'mission-mission',
 			executor
 		});
-		const state = createAirportState({
+		const airportState = createAirportState();
+		airportState.focus.intentPaneId = 'briefingRoom';
+		airportState.substrate = {
+			...airportState.substrate,
+			panes: {
+				briefingRoom: { terminalPaneId: 2, expected: true, exists: true, title: 'BRIEFING ROOM' }
+			}
+		};
+
+		await controller.applyEffects(planAirportSubstrateEffects(airportState));
+
+		expect(calls).toContainEqual([
+			'--session',
+			'mission-mission',
+			'action',
+			'focus-pane-id',
+			'terminal_2'
+		]);
+	});
+
+	it('does not plan runway substrate effects from runway bindings', async () => {
+		const airportState = createAirportState({
 			runway: { targetKind: 'agentSession', targetId: 'session-1', mode: 'control' }
 		});
 
-		try {
-			await controller.observe(state);
-			await controller.applyEffects(planAirportSubstrateEffects(state));
-		} finally {
-			if (previousEntryPath === undefined) {
-				delete process.env['AIRPORT_TERMINAL_ENTRY_PATH'];
-			} else {
-				process.env['AIRPORT_TERMINAL_ENTRY_PATH'] = previousEntryPath;
-			}
-		}
-
-		expect(calls.some((args) => args.includes('new-pane') && args.includes('--in-place'))).toBe(true);
+		expect(planAirportSubstrateEffects(airportState)).toEqual([]);
 	});
 
-	it('removes the runway pane when no session is selected', async () => {
-		const calls: string[][] = [];
-		const executor = (args: string[]) => {
-			calls.push(args);
-			if (args.includes('list-panes')) {
-				return Promise.resolve({
-					stdout: JSON.stringify([
-						{ id: 1, title: 'TOWER', is_plugin: false, is_focused: false },
-						{ id: 2, title: 'BRIEFING ROOM', is_plugin: false, is_focused: true },
-						{ id: 3, title: 'RUNWAY', is_plugin: false, is_focused: false }
-					]),
-					stderr: ''
-				});
-			}
-			return Promise.resolve({ stdout: '', stderr: '' });
-		};
-
-		const controller = new TerminalManagerSubstrateController({
-			sessionName: 'mission-mission',
-			executor
-		});
-		const state = createAirportState({}, {
-			tower: { terminalPaneId: 1, expected: true, exists: true, title: 'TOWER' },
-			briefingRoom: { terminalPaneId: 2, expected: true, exists: true, title: 'BRIEFING ROOM' },
-			runway: { terminalPaneId: 3, expected: false, exists: true, title: 'RUNWAY' }
-		});
-
-		await controller.observe(state);
-		await controller.applyEffects(planAirportSubstrateEffects(state));
-
-		expect(calls).toContainEqual(['--session', 'mission-mission', 'action', 'close-pane']);
-	});
 
 	it('reports a detached substrate when pane listing fails', async () => {
 		const calls: string[][] = [];
@@ -224,6 +147,47 @@ describe('TerminalManagerSubstrateController', () => {
 
 		expect(observed.attached).toBe(false);
 		expect(observed.panes.tower).toMatchObject({ exists: false, expected: true, title: 'TOWER' });
+	});
+
+	it('treats empty pane listings as no panes instead of crashing', async () => {
+		const executor = (args: string[]) => {
+			if (args.includes('list-panes')) {
+				return Promise.resolve({ stdout: '', stderr: '' });
+			}
+			return Promise.resolve({ stdout: '', stderr: '' });
+		};
+
+		const controller = new TerminalManagerSubstrateController({
+			sessionName: 'mission-mission',
+			executor
+		});
+
+		const observed = await controller.observe(createAirportState());
+
+		expect(observed.attached).toBe(true);
+		expect(observed.panes.tower).toMatchObject({ exists: false, expected: true, title: 'TOWER' });
+	});
+
+	it('treats non-json pane listings as no panes instead of crashing', async () => {
+		const executor = (args: string[]) => {
+			if (args.includes('list-panes')) {
+				return Promise.resolve({
+					stdout: 'mission-agent-c412ae18-c129-4fb8-a040-ca6e54944f7c [Created 16m 54s ago]\n',
+					stderr: ''
+				});
+			}
+			return Promise.resolve({ stdout: '', stderr: '' });
+		};
+
+		const controller = new TerminalManagerSubstrateController({
+			sessionName: 'mission-mission',
+			executor
+		});
+
+		const observed = await controller.observe(createAirportState());
+
+		expect(observed.attached).toBe(true);
+		expect(observed.panes.briefingRoom).toMatchObject({ exists: false, expected: true, title: 'BRIEFING ROOM' });
 	});
 });
 

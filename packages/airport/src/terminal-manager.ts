@@ -85,19 +85,11 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 							toTerminalPaneReference(effect.terminalPaneId)
 						]);
 					} catch (error) {
-						if (isAlreadyFocusedPaneError(error)) {
+							if (isAlreadyFocusedPaneError(error) || isMissingPaneError(error)) {
 							continue;
 						}
 						throw error;
 					}
-					break;
-				}
-				case 'ensure-pane': {
-					await this.ensureRunwayPane();
-					break;
-				}
-				case 'remove-pane': {
-					await this.removePane(toTerminalPaneReference(effect.terminalPaneId));
 					break;
 				}
 			}
@@ -109,91 +101,6 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 		return this.getState();
 	}
 
-	private async ensureRunwayPane(): Promise<void> {
-		const panes = await this.listPanes();
-		const existingRunwayPane = panes.find((pane) => pane.title === PANE_DISPLAY_TITLES.runway && !pane.is_suppressed);
-		if (existingRunwayPane) {
-			return;
-		}
-
-		const briefingRoomPane = panes.find((pane) => pane.title === PANE_DISPLAY_TITLES.briefingRoom && !pane.is_suppressed)
-			?? panes.find((pane) => !pane.is_suppressed)
-			?? panes[0];
-		if (!briefingRoomPane) {
-			throw new Error(`Unable to locate a target pane to create '${PANE_DISPLAY_TITLES.runway}'.`);
-		}
-
-		const controlRoot = process.env['MISSION_CONTROL_ROOT']?.trim()
-			|| process.env['MISSION_SURFACE_PATH']?.trim()
-			|| process.cwd();
-		const airportTerminalEntryPath = resolveAirportTerminalEntryPath();
-		const launchCommand = [
-			'env',
-			'\'AIRPORT_PANE_ID=runway\'',
-			shellEscape(`AIRPORT_TERMINAL_SESSION=${this.state.sessionName}`),
-			shellEscape(`AIRPORT_TERMINAL_ENTRY_PATH=${airportTerminalEntryPath}`),
-			...resolveAirportPaneRuntimeCommand(airportTerminalEntryPath).map(shellEscape),
-			'\'__airport-layout-runway-pane\''
-		].join(' ');
-
-		await this.executor([
-			'--session',
-			this.state.sessionName,
-			'action',
-			'new-pane',
-			'--in-place',
-			toTerminalPaneReference(briefingRoomPane.id),
-			'--name',
-			PANE_DISPLAY_TITLES.runway,
-			'--cwd',
-			controlRoot,
-			'--',
-			'sh',
-			'-lc',
-			`exec ${launchCommand}`
-		]);
-	}
-
-	private async removePane(paneId: string): Promise<void> {
-		const previouslyFocusedPane = await this.getFocusedPaneId();
-		if (previouslyFocusedPane !== paneId) {
-			await this.executor([
-				'--session',
-				this.state.sessionName,
-				'action',
-				'focus-pane-id',
-				paneId
-			]);
-		}
-
-		try {
-			await this.executor([
-				'--session',
-				this.state.sessionName,
-				'action',
-				'close-pane'
-			]);
-		} finally {
-			if (previouslyFocusedPane && previouslyFocusedPane !== paneId) {
-				await this.executor([
-					'--session',
-					this.state.sessionName,
-					'action',
-					'focus-pane-id',
-					previouslyFocusedPane
-				]).catch(() => {
-					// Best effort focus restoration.
-				});
-			}
-		}
-	}
-
-	private async getFocusedPaneId(): Promise<string | undefined> {
-		const panes = await this.listPanes();
-		const focusedPane = panes.find((pane) => pane.is_focused);
-		return focusedPane ? toTerminalPaneReference(focusedPane.id) : undefined;
-	}
-
 	private async listPanes(): Promise<TerminalManagerPaneMetadata[]> {
 		const result = await this.executor([
 			'--session',
@@ -203,7 +110,7 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 			'--json',
 			'--all'
 		]);
-		return (JSON.parse(result.stdout) as TerminalManagerPaneMetadata[]).filter((pane) => !pane.is_plugin);
+		return parseTerminalManagerPaneListing(result.stdout).filter((pane) => !pane.is_plugin);
 	}
 }
 
@@ -327,33 +234,31 @@ function toTerminalPaneReference(paneId: number): string {
 	return `terminal_${String(paneId)}`;
 }
 
-function resolveAirportTerminalEntryPath(): string {
-	const airportTerminalEntryPath = process.env['AIRPORT_TERMINAL_ENTRY_PATH']?.trim();
-	if (!airportTerminalEntryPath) {
-		throw new Error('AIRPORT_TERMINAL_ENTRY_PATH must be set before opening Airport runway panes.');
-	}
-	return airportTerminalEntryPath;
-}
-
-function resolveAirportPaneRuntimeCommand(entryScriptPath: string): string[] {
-	if (process.versions['bun']) {
-		return [process.execPath, entryScriptPath];
-	}
-	return ['bun', entryScriptPath];
-}
-
 function isAlreadyFocusedPaneError(error: unknown): boolean {
 	const message = error instanceof Error ? error.message : String(error);
 	return message.includes('already focused');
 }
 
-function isAirportPaneExpected(state: AirportState, paneId: AirportPaneId): boolean {
-	if (paneId === 'runway') {
-		return state.panes.runway.targetKind === 'agentSession';
-	}
-	return true;
+function isMissingPaneError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return message.includes('Pane with id') && message.includes('not found');
 }
 
-function shellEscape(value: string): string {
-	return `'${value.replace(/'/g, `'\\''`)}'`;
+function parseTerminalManagerPaneListing(output: string): TerminalManagerPaneMetadata[] {
+	const normalizedOutput = output.trim();
+	if (!normalizedOutput || !normalizedOutput.startsWith('[')) {
+		return [];
+	}
+
+	try {
+		return JSON.parse(normalizedOutput) as TerminalManagerPaneMetadata[];
+	} catch {
+		return [];
+	}
+}
+
+function isAirportPaneExpected(state: AirportState, paneId: AirportPaneId): boolean {
+	void state;
+	void paneId;
+	return true;
 }

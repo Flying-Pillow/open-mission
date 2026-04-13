@@ -33,7 +33,7 @@ export async function bootstrapTowerPane(context: AirportTerminalContext): Promi
 		context.args.includes('help')
 	) {
 		process.stdout.write('mission [--hmr] [--banner] [--no-banner]\n');
-		process.stdout.write('airport layout: Mission tower | execution details (editor + dynamic agent pane)\n');
+		process.stdout.write('airport layout: Tower | Briefing Room | optional Runway session pane\n');
 		return;
 	}
 
@@ -71,7 +71,8 @@ export async function bootstrapTowerPane(context: AirportTerminalContext): Promi
 	const connect = async ({ selector: nextSelector = selector, surfacePath = context.workingDirectory }: TowerConnectRequest = {}) => {
 		const client = await connectAirportControl({
 			surfacePath,
-			runtimeMode
+			runtimeMode,
+			allowStart: false
 		});
 		const api = new DaemonApi(client);
 		const snapshot = await api.airport.connectPane(

@@ -1,5 +1,9 @@
 import path from 'node:path';
-import type { MissionSelectionCandidate, OperatorStatus } from '@flying-pillow/mission-core';
+import type {
+	MissionSelectionCandidate,
+	MissionTowerStageRailItemState,
+	OperatorStatus
+} from '@flying-pillow/mission-core';
 import { towerTheme } from '../towerTheme.js';
 
 export type HeaderTab = {
@@ -8,7 +12,7 @@ export type HeaderTab = {
 	target: { kind: 'repository' } | { kind: 'mission'; missionId: string };
 };
 
-export type ProgressRailItemState = 'done' | 'active' | 'blocked' | 'pending';
+export type ProgressRailItemState = MissionTowerStageRailItemState;
 
 export type ProgressRailItem = {
 	id: string;

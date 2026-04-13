@@ -15,7 +15,8 @@ type AirportLayoutSnapshot = Awaited<ReturnType<DaemonApi['airport']['getStatus'
 export async function bootstrapBriefingRoomPane(_context: AirportTerminalContext): Promise<void> {
 	const client = await connectAirportControl({
 		surfacePath: process.cwd(),
-		runtimeMode: resolveAirportControlRuntimeMode(import.meta.url)
+		runtimeMode: resolveAirportControlRuntimeMode(import.meta.url),
+		allowStart: false
 	});
 	const api = new DaemonApi(client);
 	let activeChild: ReturnType<typeof spawn> | undefined;
@@ -103,11 +104,17 @@ export async function bootstrapBriefingRoomPane(_context: AirportTerminalContext
 	});
 }
 
-function buildBriefingRoomCommand(repoRoot: string, launchPath?: string): string {
+export function buildBriefingRoomCommand(repoRoot: string, launchPath?: string): string {
 	const explicitEditorCommand = process.env['MISSION_TERMINAL_EDITOR_COMMAND']?.trim()
 		|| process.env['MISSION_EDITOR_COMMAND']?.trim();
 	if (explicitEditorCommand) {
-		return explicitEditorCommand;
+		if (!launchPath?.trim()) {
+			return explicitEditorCommand;
+		}
+		const escapedLaunchPath = shellEscape(launchPath.trim());
+		return explicitEditorCommand.includes('{path}')
+			? explicitEditorCommand.replaceAll('{path}', escapedLaunchPath)
+			: `${explicitEditorCommand} ${escapedLaunchPath}`;
 	}
 	const configuredEditorBinary = readMissionUserConfig()?.editorBinary?.trim();
 

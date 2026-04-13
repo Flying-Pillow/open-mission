@@ -13,10 +13,6 @@ import {
     COPILOT_SDK_AGENT_RUNNER_ID,
     isSupportedAgentRunner
 } from './agentRuntimes.js';
-import {
-    normalizePersistedAirportIntent,
-    type PersistedAirportIntent
-} from '../../../airport/build/index.js';
 import { normalizeWorkflowSettings } from '../settings/validation.js';
 
 export const MISSION_DAEMON_SETTINGS_FILE = 'settings.json';
@@ -36,7 +32,6 @@ export type MissionDaemonSettings = {
     instructionsPath?: string;
     skillsPath?: string;
     workflow?: WorkflowGlobalSettings;
-    airport?: PersistedAirportIntent;
 };
 
 type MissionDaemonPathOptions = {
@@ -76,7 +71,6 @@ export function getDefaultMissionDaemonSettingsWithOverrides(
         ?? normalizeOptionalString(userConfig?.missionWorkspaceRoot);
     const instructionsPath = normalizeOptionalString(overrides.instructionsPath);
     const skillsPath = normalizeOptionalString(overrides.skillsPath);
-    const airport = normalizePersistedAirportIntent(overrides.airport);
     return {
         missionWorkspaceRoot: 'missions',
         trackingProvider: 'github',
@@ -90,8 +84,7 @@ export function getDefaultMissionDaemonSettingsWithOverrides(
         ...(missionWorkspaceRoot ? { missionWorkspaceRoot } : {}),
         ...(overrides.trackingProvider ? { trackingProvider: overrides.trackingProvider } : {}),
         ...(instructionsPath ? { instructionsPath } : {}),
-        ...(skillsPath ? { skillsPath } : {}),
-        ...(airport ? { airport } : {})
+        ...(skillsPath ? { skillsPath } : {})
     };
 }
 

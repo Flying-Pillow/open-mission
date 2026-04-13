@@ -30,8 +30,7 @@ describe('AirportControl', () => {
 			observedFocusedTerminalPaneId: 2,
 			panes: {
 				tower: { terminalPaneId: 1, expected: true, exists: true, title: 'TOWER' },
-				briefingRoom: { terminalPaneId: 2, expected: true, exists: true, title: 'BRIEFING ROOM' },
-				runway: { terminalPaneId: 3, expected: true, exists: true, title: 'RUNWAY' }
+				briefingRoom: { terminalPaneId: 2, expected: true, exists: true, title: 'BRIEFING ROOM' }
 			}
 		};
 

@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 
 import type { ScrollBoxRenderable } from '@opentui/core';
+import type { MissionLifecycleState } from '@flying-pillow/mission-core';
 import { useTerminalDimensions } from '@opentui/solid';
 import { For, Show, createEffect, createMemo, type Accessor } from 'solid-js';
 import { Panel } from '../Panel.js';
@@ -20,7 +21,7 @@ type MissionControlPanelProps = {
 	focused: boolean;
 	rows: MissionControlRow[];
 	selectedRowId: string | undefined;
-	missionLifecycleState?: string | undefined;
+	missionLifecycleState?: MissionLifecycleState | undefined;
 	treePageScrollRequest: { delta: number } | undefined;
 	contentWidth?: number | undefined;
 	emptyLabel: string;
@@ -308,7 +309,7 @@ function missionLifecycleTone(
 	if (missionLifecycleState === 'paused') {
 		return 'warning';
 	}
-	if (missionLifecycleState === 'running' || missionLifecycleState === 'active') {
+	if (missionLifecycleState === 'running') {
 		return 'success';
 	}
 	if (missionLifecycleState === 'ready') {

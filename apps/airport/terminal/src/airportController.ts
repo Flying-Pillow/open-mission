@@ -129,8 +129,12 @@ export function createAirportController(options: AirportControllerOptions) {
 	) {
 		const nextStatus = await withDaemonClientRetry(nextSelector, async (currentClient) => {
 			const api = new DaemonApi(currentClient);
+			const terminalSessionName = process.env['AIRPORT_TERMINAL_SESSION']?.trim()
+				|| process.env['AIRPORT_TERMINAL_SESSION_NAME']?.trim();
 			return Object.keys(nextSelector).length > 0
-				? await api.mission.executeAction(nextSelector, actionId, steps)
+				? await api.mission.executeAction(nextSelector, actionId, steps, {
+					...(terminalSessionName ? { terminalSessionName } : {})
+				})
 				: await api.control.executeAction(actionId, steps);
 		});
 		applyMissionStatus(nextStatus, nextSelector);

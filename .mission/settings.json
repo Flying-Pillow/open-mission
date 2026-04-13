@@ -122,17 +122,17 @@
           {
             "templateId": "debrief",
             "path": "tasks/AUDIT/01-debrief.md"
-          },
-          {
-            "templateId": "touchdown",
-            "path": "tasks/AUDIT/02-touchdown.md"
           }
         ],
         "tasks": []
       },
       {
         "stageId": "delivery",
-        "templateSources": [],
+        "templateSources": [
+          {
+            "templateId": "touchdown",
+            "path": "tasks/AUDIT/02-touchdown.md"
+          }],
         "tasks": []
       }
     ],

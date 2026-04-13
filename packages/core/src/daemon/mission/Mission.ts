@@ -373,7 +373,8 @@ export class Mission {
 
 	public async executeAction(
 		actionId: string,
-		steps: OperatorActionExecutionStep[] = []
+		steps: OperatorActionExecutionStep[] = [],
+		options: { terminalSessionName?: string } = {}
 	): Promise<OperatorStatus> {
 		if (steps.length > 0) {
 			throw new Error(`Mission action '${actionId}' does not accept input steps.`);
@@ -387,7 +388,7 @@ export class Mission {
 			await this.resumeMission();
 			return this.status();
 		}
-		if (actionId === MISSION_ACTION_IDS.panicStop) {
+		if (actionId === MISSION_ACTION_IDS.panic) {
 			await this.panicStopMission();
 			return this.status();
 		}
@@ -408,7 +409,7 @@ export class Mission {
 			return this.status();
 		}
 		if (actionId.startsWith('task.launch.')) {
-			await this.launchTaskAction(actionId.slice('task.launch.'.length));
+			await this.launchTaskAction(actionId.slice('task.launch.'.length), options);
 			return this.status();
 		}
 		if (actionId.startsWith('task.done.')) {
@@ -453,14 +454,17 @@ export class Mission {
 
 	public async updateTaskState(taskId: string, changes: MissionTaskUpdate): Promise<MissionTaskState> {
 		const task = await this.requireTask(taskId);
-		if (changes.status === 'active') {
+		if (changes.status === 'ready' || changes.status === 'queued' || changes.status === 'running') {
 			return task.start();
 		}
-		if (changes.status === 'done') {
+		if (changes.status === 'completed') {
 			return task.complete();
 		}
 		if (changes.status === 'blocked') {
 			return task.block('Marked blocked by operator.');
+		}
+		if (changes.status === 'pending') {
+			return task.reopen();
 		}
 		return task.toState();
 	}
@@ -690,15 +694,12 @@ export class Mission {
 			return {
 				stage: stageId,
 				folderName: MISSION_STAGE_FOLDERS[stageId],
-				status:
-					document.runtime.lifecycle === 'delivered' && stageId === 'delivery'
-						? 'done'
-						: tasks.length === 0 && runtimeStage?.lifecycle === 'blocked'
-							? 'pending'
-							: this.toLegacyStageProgress(runtimeStage?.lifecycle),
+				status: runtimeStage?.lifecycle ?? 'pending',
 				taskCount: tasks.length,
-				completedTaskCount: tasks.filter((task) => task.status === 'done').length,
-				activeTaskIds: tasks.filter((task) => task.status === 'active').map((task) => task.taskId),
+				completedTaskCount: tasks.filter((task) => task.status === 'completed').length,
+				activeTaskIds: tasks
+					.filter((task) => task.status === 'queued' || task.status === 'running')
+					.map((task) => task.taskId),
 				readyTaskIds: tasks.filter((task) => this.isTaskReady(task)).map((task) => task.taskId),
 				tasks
 			};
@@ -841,32 +842,35 @@ export class Mission {
 	}
 
 	private toTowerStageRailState(status: MissionStageStatus['status']): MissionTowerStageRailItem['state'] {
-		if (status === 'done') {
-			return 'done';
-		}
-		if (status === 'active') {
-			return 'active';
-		}
-		if (status === 'blocked') {
-			return 'blocked';
-		}
-		return 'pending';
+		return status;
 	}
 
 	private progressTone(status: MissionStageStatus['status'] | MissionTaskState['status']): string {
-		if (status === 'done') {
+		if (status === 'completed') {
 			return '#3fb950';
 		}
-		if (status === 'active') {
+		if (status === 'active' || status === 'queued' || status === 'running') {
 			return '#58a6ff';
+		}
+		if (status === 'ready') {
+			return '#79c0ff';
 		}
 		if (status === 'blocked') {
 			return '#d29922';
+		}
+		if (status === 'failed') {
+			return '#f85149';
+		}
+		if (status === 'cancelled') {
+			return '#ffa657';
 		}
 		return '#8b949e';
 	}
 
 	private sessionTone(state: string, fallbackColor: string): string {
+		if (state === 'starting') {
+			return '#79c0ff';
+		}
 		if (state === 'running') {
 			return '#3fb950';
 		}
@@ -908,50 +912,13 @@ export class Mission {
 			body: task.instruction,
 			dependsOn: [...task.dependsOn],
 			blockedBy: [...task.blockedByTaskIds],
-			status: this.toLegacyTaskStatus(task.lifecycle),
+			status: task.lifecycle,
 			agent: task.agentRunner ?? 'copilot',
 			retries: task.retries,
 			fileName,
 			filePath,
 			relativePath
 		};
-	}
-
-	private toLegacyTaskStatus(
-		lifecycle: MissionRuntimeRecord['runtime']['tasks'][number]['lifecycle']
-	): MissionTaskState['status'] {
-		switch (lifecycle) {
-			case 'completed':
-				return 'done';
-			case 'queued':
-			case 'running':
-				return 'active';
-			case 'blocked':
-			case 'failed':
-			case 'cancelled':
-				return 'blocked';
-			case 'pending':
-			case 'ready':
-			default:
-				return 'todo';
-		}
-	}
-
-	private toLegacyStageProgress(
-		lifecycle: MissionRuntimeRecord['runtime']['stages'][number]['lifecycle'] | undefined
-	): MissionStageStatus['status'] {
-		switch (lifecycle) {
-			case 'completed':
-				return 'done';
-			case 'active':
-			case 'blocked':
-				return 'active';
-			case 'ready':
-				return 'pending';
-			case 'pending':
-			default:
-				return 'pending';
-		}
 	}
 
 	private resolveCurrentStageFromWorkflow(document: MissionRuntimeRecord): MissionStageId {
@@ -996,7 +963,7 @@ export class Mission {
 			return [];
 		}
 
-		return stage.tasks.filter((task) => task.status === 'active');
+		return stage.tasks.filter((task) => task.status === 'queued' || task.status === 'running');
 	}
 
 	private resolveReadyTasks(stage: MissionStageStatus | undefined): MissionTaskState[] {
@@ -1064,7 +1031,7 @@ export class Mission {
 	}
 
 	private isDelivered(stages: MissionStageStatus[]): boolean {
-		return stages.some((stage) => stage.stage === 'delivery' && stage.status === 'done');
+		return stages.some((stage) => stage.stage === 'delivery' && stage.status === 'completed');
 	}
 
 	private async requireWorkflowTask(
@@ -1091,7 +1058,7 @@ export class Mission {
 	}
 
 	private isTaskReady(task: MissionTaskState): boolean {
-		return task.status === 'todo' && task.blockedBy.length === 0;
+		return task.status === 'ready' && task.blockedBy.length === 0;
 	}
 
 	private async requireTask(taskId: string): Promise<MissionTask> {
@@ -1148,7 +1115,9 @@ export class Mission {
 			sessionId: snapshot.sessionId,
 			taskId: snapshot.taskId,
 			runnerId: snapshot.runnerId,
-			...(snapshot.transportId ? { transportId: snapshot.transportId } : {})
+			...(snapshot.transportId ? { transportId: snapshot.transportId } : {}),
+			...(snapshot.terminalSessionName ? { terminalSessionName: snapshot.terminalSessionName } : {}),
+			...(snapshot.terminalPaneId ? { terminalPaneId: snapshot.terminalPaneId } : {})
 		});
 		await this.refresh();
 		this.emitSyntheticSessionStart(snapshot);
@@ -1168,7 +1137,10 @@ export class Mission {
 		await this.refresh();
 	}
 
-	private async launchTaskAction(taskId: string): Promise<MissionAgentSessionRecord> {
+	private async launchTaskAction(
+		taskId: string,
+		options: { terminalSessionName?: string } = {}
+	): Promise<MissionAgentSessionRecord> {
 		const task = await this.requireTask(taskId);
 		const taskState = task.toState();
 		const status = await this.status();
@@ -1176,6 +1148,7 @@ export class Mission {
 		const session = await task.launchSession({
 			runnerId: this.resolveDefaultRunnerId(),
 			transportId: this.requireAgentRunner(this.resolveDefaultRunnerId()).transportId,
+			...(options.terminalSessionName?.trim() ? { terminalSessionName: options.terminalSessionName.trim() } : {}),
 			workingDirectory: missionDir,
 			prompt: buildMissionTaskLaunchPrompt(taskState, missionDir),
 			title: taskState.subject,
@@ -1297,7 +1270,9 @@ export class Mission {
 		await this.workflowController.attachRuntimeSession({
 			runnerId: record.runnerId,
 			...(record.transportId ? { transportId: record.transportId } : {}),
-			sessionId: record.sessionId
+			sessionId: record.sessionId,
+			...(record.terminalSessionName ? { terminalSessionName: record.terminalSessionName } : {}),
+			...(record.terminalPaneId ? { terminalPaneId: record.terminalPaneId } : {})
 		});
 	}
 
@@ -1571,7 +1546,7 @@ type MissionAvailableActionsInput = {
 const MISSION_ACTION_IDS = {
 	pause: 'mission.pause',
 	resume: 'mission.resume',
-	panicStop: 'mission.panic-stop',
+	panic: 'mission.panic',
 	clearPanic: 'mission.clear-panic',
 	deliver: 'mission.deliver'
 } as const;
@@ -1671,7 +1646,7 @@ function buildPanicStopAction(
 		&& !input.runtime.panic.active
 		&& errors.length === 0;
 	return {
-		id: MISSION_ACTION_IDS.panicStop,
+		id: MISSION_ACTION_IDS.panic,
 		label: 'Panic Stop',
 		action: '/mission panic',
 		scope: 'mission',

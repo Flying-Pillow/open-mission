@@ -39,8 +39,9 @@ export function pickPreferredTaskId(tasks: MissionTaskState[], current: string):
 		return current;
 	}
 	const preferred =
-		tasks.find((task) => task.status === 'active') ??
-		tasks.find((task) => task.status === 'todo' && task.blockedBy.length === 0) ??
+		tasks.find((task) => task.status === 'running') ??
+		tasks.find((task) => task.status === 'queued') ??
+		tasks.find((task) => task.status === 'ready' && task.blockedBy.length === 0) ??
 		tasks[0];
 	return preferred?.taskId ?? '';
 }
@@ -144,7 +145,7 @@ export function buildDefaultCollapsedTreeNodeIds(
 	for (const stage of stages) {
 		const stageNodeId = createStageNodeId(stage.stage);
 		const hasExpandedTask = stage.tasks.some(
-			(task) => task.status === 'active' || runningSessionTaskIds.has(task.taskId)
+			(task) => task.status === 'queued' || task.status === 'running' || runningSessionTaskIds.has(task.taskId)
 		);
 		if (stage.status !== 'active' && !hasExpandedTask) {
 			collapsed.add(stageNodeId);
@@ -152,7 +153,7 @@ export function buildDefaultCollapsedTreeNodeIds(
 
 		for (const task of stage.tasks) {
 			const taskNodeId = createTaskNodeId(task.taskId);
-			if (task.status !== 'active' && !runningSessionTaskIds.has(task.taskId)) {
+			if (task.status !== 'queued' && task.status !== 'running' && !runningSessionTaskIds.has(task.taskId)) {
 				collapsed.add(taskNodeId);
 			}
 		}
@@ -183,7 +184,7 @@ export function buildProjectedStageStatuses(
 
 	const tasksByStage = new Map<MissionStageId, MissionTaskState[]>();
 	for (const taskContext of Object.values(domain.tasks)) {
-		const blockedBy = taskContext.dependencyIds.filter((dependencyId) => domain.tasks[dependencyId]?.lifecycleState !== 'done');
+		const blockedBy = taskContext.dependencyIds.filter((dependencyId) => domain.tasks[dependencyId]?.lifecycleState !== 'completed');
 		const tasks = tasksByStage.get(taskContext.stageId) ?? [];
 		tasks.push({
 			taskId: taskContext.taskId,
@@ -216,18 +217,22 @@ export function buildProjectedStageStatuses(
 
 	return [...orderedStageIds].map((stageId) => {
 		const tasks = (tasksByStage.get(stageId) ?? []).sort((left, right) => left.sequence - right.sequence || left.taskId.localeCompare(right.taskId));
-		const activeTaskIds = tasks.filter((task) => task.status === 'active').map((task) => task.taskId);
-		const readyTaskIds = tasks.filter((task) => task.status === 'todo' && task.blockedBy.length === 0).map((task) => task.taskId);
-		const completedTaskCount = tasks.filter((task) => task.status === 'done').length;
+		const activeTaskIds = tasks
+			.filter((task) => task.status === 'queued' || task.status === 'running')
+			.map((task) => task.taskId);
+		const readyTaskIds = tasks.filter((task) => task.status === 'ready' && task.blockedBy.length === 0).map((task) => task.taskId);
+		const completedTaskCount = tasks.filter((task) => task.status === 'completed').length;
 		const railState = stageRail?.find((item) => item.id === stageId)?.state;
-		const status = railState === 'done' || railState === 'active' || railState === 'blocked' || railState === 'pending'
+		const status = railState === 'completed' || railState === 'active' || railState === 'blocked' || railState === 'ready' || railState === 'pending'
 			? railState
 			: activeTaskIds.length > 0
 				? 'active'
 				: completedTaskCount === tasks.length && tasks.length > 0
-					? 'done'
-					: tasks.some((task) => task.blockedBy.length > 0)
+					? 'completed'
+					: tasks.some((task) => task.status === 'blocked' || task.status === 'failed' || task.status === 'cancelled' || task.blockedBy.length > 0)
 						? 'blocked'
+						: readyTaskIds.length > 0
+							? 'ready'
 						: 'pending';
 		return {
 			stage: stageId,
@@ -260,6 +265,8 @@ export function buildProjectedSessionRecords(
 			...(session.workingDirectory ? { workingDirectory: session.workingDirectory } : {}),
 			...(session.promptTitle ? { currentTurnTitle: session.promptTitle } : {}),
 			...(session.transportId ? { transportId: session.transportId } : {}),
+			...(session.terminalSessionName ? { terminalSessionName: session.terminalSessionName } : {}),
+			...(session.terminalPaneId ? { terminalPaneId: session.terminalPaneId } : {}),
 			createdAt: '',
 			lastUpdatedAt: ''
 		}))

@@ -4,7 +4,9 @@ import {
     DaemonApi,
     MISSION_ARTIFACTS,
     MISSION_GATE_INTENTS,
+    MISSION_STAGE_DERIVED_STATES,
     MISSION_STAGE_FOLDERS,
+    MISSION_TASK_LIFECYCLE_STATES,
     connectAirportControl,
     isMissionStageId,
     resolveAirportControlRuntimeMode,
@@ -37,7 +39,7 @@ type MissionRuntimeTask = {
 
 type MissionRuntimeStage = {
     stageId: MissionStageId;
-    lifecycle: string;
+    lifecycle: MissionStageProgress;
     taskIds: string[];
     readyTaskIds: string[];
     queuedTaskIds: string[];
@@ -379,35 +381,18 @@ function mapRuntimeStageProgress(
     stage: MissionRuntimeStage,
     missionLifecycle: string
 ): MissionStageProgress {
-    if (missionLifecycle === 'delivered' && stage.stageId === 'delivery') {
-        return 'done';
-    }
-    switch (stage.lifecycle) {
-        case 'completed':
-            return 'done';
-        case 'active':
-        case 'blocked':
-            return 'active';
-        case 'ready':
-        case 'pending':
-        default:
-            return 'pending';
-    }
+    void missionLifecycle;
+    return stage.lifecycle;
 }
 
 function isRuntimeStageLifecycle(value: unknown): value is MissionRuntimeStage['lifecycle'] {
-    return value === 'pending' || value === 'ready' || value === 'active' || value === 'blocked' || value === 'completed';
+    return typeof value === 'string'
+        && (MISSION_STAGE_DERIVED_STATES as readonly string[]).includes(value);
 }
 
 function isRuntimeTaskLifecycle(value: unknown): value is MissionRuntimeTask['lifecycle'] {
-    return value === 'pending'
-        || value === 'ready'
-        || value === 'queued'
-        || value === 'running'
-        || value === 'blocked'
-        || value === 'completed'
-        || value === 'failed'
-        || value === 'cancelled';
+    return typeof value === 'string'
+        && (MISSION_TASK_LIFECYCLE_STATES as readonly string[]).includes(value);
 }
 
 async function resolveExpectedArtifactFiles(

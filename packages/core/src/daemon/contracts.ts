@@ -164,6 +164,8 @@ export type MissionAgentSessionState = {
 	transportId?: string;
 	runnerLabel: string;
 	sessionId: string;
+	terminalSessionName?: string;
+	terminalPaneId?: string;
 	lifecycleState: MissionAgentLifecycleState;
 	workingDirectory?: string;
 	currentTurnTitle?: string;
@@ -179,6 +181,8 @@ export type MissionAgentSessionRecord = {
 	runnerId: string;
 	transportId?: string;
 	runnerLabel: string;
+	terminalSessionName?: string;
+	terminalPaneId?: string;
 	lifecycleState: MissionAgentLifecycleState;
 	taskId?: string;
 	assignmentLabel?: string;
@@ -404,6 +408,7 @@ export type MissionActionList = MissionSelect & {
 export type MissionActionExecute = MissionSelect & {
 	actionId: string;
 	steps?: OperatorActionExecutionStep[];
+	terminalSessionName?: string;
 };
 
 export type TaskSelect = MissionSelect & {

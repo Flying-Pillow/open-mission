@@ -3,7 +3,11 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { readMissionUserConfig } from '@flying-pillow/mission-core';
+import {
+	connectAirportControl,
+	readMissionUserConfig,
+	resolveAirportControlRuntimeMode
+} from '@flying-pillow/mission-core';
 import type { AirportTerminalContext } from '../airportTerminalContext.js';
 
 const execFileAsync = promisify(execFile);
@@ -17,9 +21,6 @@ export async function bootstrapAirportLayout(context: AirportTerminalContext): P
 	const runtimeConfigRoot = path.join(runtimeRoot, 'mission', `runtime-${sessionSlug}`);
 	const terminalManagerConfigDir = path.join(runtimeConfigRoot, 'terminal-manager');
 	const layoutFile = path.join(runtimeRoot, 'mission', `airport-layout-${sessionSlug}.kdl`);
-	const rightWidth = process.env['AIRPORT_TERMINAL_RIGHT_COLUMN_WIDTH']?.trim()
-		|| process.env['AIRPORT_TERMINAL_OPERATOR_PANE_SIZE']?.trim()
-		|| '50%';
 	const repoRoot = context.controlRoot;
 	const missionEntryCommand = resolveMissionEntryCommand();
 	const airportTerminalEntryPath = missionEntryCommand[missionEntryCommand.length - 1] ?? '';
@@ -47,9 +48,15 @@ export async function bootstrapAirportLayout(context: AirportTerminalContext): P
 	await writeFile(layoutFile, buildAirportLayout({
 		repoRoot,
 		towerCommand,
-		briefingRoomCommand,
-		rightWidth
+		briefingRoomCommand
 	}), 'utf8');
+
+	const daemonClient = await connectAirportControl({
+		surfacePath: repoRoot,
+		runtimeMode: resolveAirportControlRuntimeMode(import.meta.url),
+		allowStart: true
+	});
+	daemonClient.dispose();
 
 	await resetTerminalManagerSession(terminalManagerBinary, sessionName);
 
@@ -178,11 +185,10 @@ ui {
 `;
 }
 
-function buildAirportLayout(input: {
+export function buildAirportLayout(input: {
 	repoRoot: string;
 	towerCommand: string;
 	briefingRoomCommand: string;
-	rightWidth: string;
 }): string {
 	return `layout {
 	default_tab_template {
@@ -193,7 +199,7 @@ function buildAirportLayout(input: {
 			pane name="TOWER" focus=true command="sh" cwd="${kdlEscape(input.repoRoot)}" {
 				args "-lc" "${kdlEscape(`exec ${input.towerCommand}`)}"
 			}
-			pane size="${kdlEscape(input.rightWidth)}" name="BRIEFING ROOM" command="sh" cwd="${kdlEscape(input.repoRoot)}" {
+			pane name="BRIEFING ROOM" size="50%" command="sh" cwd="${kdlEscape(input.repoRoot)}" {
 				args "-lc" "${kdlEscape(`exec ${input.briefingRoomCommand}`)}"
 			}
 		}
@@ -229,7 +235,7 @@ async function listTerminalManagerSessions(terminalManagerBinary: string): Promi
 		.filter((session): session is TerminalManagerSessionSummary => session !== undefined);
 }
 
-function parseTerminalManagerSessionSummary(line: string): TerminalManagerSessionSummary | undefined {
+export function parseTerminalManagerSessionSummary(line: string): TerminalManagerSessionSummary | undefined {
 	const name = parseTerminalManagerSessionName(line);
 	if (!name) {
 		return undefined;
@@ -240,14 +246,14 @@ function parseTerminalManagerSessionSummary(line: string): TerminalManagerSessio
 	};
 }
 
-function parseTerminalManagerSessionName(line: string): string | undefined {
+export function parseTerminalManagerSessionName(line: string): string | undefined {
 	const normalizedLine = line.trim();
 	if (!normalizedLine) {
 		return undefined;
 	}
-	const withoutCreatedSuffix = normalizedLine.replace(/\s+\[[^\]]*\]\s*$/u, '');
-	const withoutExitedSuffix = withoutCreatedSuffix.replace(/\s+\(EXITED[^)]*\)\s*$/u, '');
-	return withoutExitedSuffix.trim() || undefined;
+	const withoutExitedSuffix = normalizedLine.replace(/\s+\(EXITED[^)]*\)\s*$/u, '');
+	const withoutCreatedSuffix = withoutExitedSuffix.replace(/\s+\[[^\]]*\]\s*$/u, '');
+	return withoutCreatedSuffix.trim() || undefined;
 }
 
 async function execTerminalManager(terminalManagerBinary: string, args: string[]): Promise<{ stdout: string; stderr: string }> {

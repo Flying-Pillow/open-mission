@@ -34,6 +34,10 @@ describe('DaemonClient', () => {
 			client.dispose();
 		} finally {
 			await new Promise<void>((resolve, reject) => {
+				if (!server.listening) {
+					resolve();
+					return;
+				}
 				server.close((error) => {
 					if (error) {
 						reject(error);

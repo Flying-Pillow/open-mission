@@ -179,11 +179,10 @@ export class MissionSystemController {
 			...(selectedMissionId ? { selectedMissionId } : {})
 		});
 		await this.airportRegistry.activateRepository(source.repositoryId, source.repositoryRootPath);
-		const airportRecord = this.airportRegistry.getActiveAirport();
 		const domain = this.missionControl.synchronize(source, command.selectionHint);
 		this.airportRegistry.applyDefaultBindings(
 			source.repositoryId,
-			derivePaneBindings(domain, airportRecord.control.getState().panes.runway, domain.agentSessions)
+			derivePaneBindings(domain)
 		);
 		return [source.repositoryId];
 	}
@@ -218,13 +217,8 @@ export class MissionSystemController {
 			...(Number.isInteger(params.terminalPaneId) && (params.terminalPaneId as number) >= 0 ? { terminalPaneId: params.terminalPaneId } : {}),
 			...(params.surfacePath ? { surfacePath: params.surfacePath } : {})
 		});
-		const airportRecord = this.airportRegistry.getActiveAirport();
 		const domain = this.missionControl.getState();
-		const nextBindings = derivePaneBindings(
-			domain,
-			airportRecord.control.getState().panes.runway,
-			domain.agentSessions
-		);
+		const nextBindings = derivePaneBindings(domain);
 		if (params.intentPaneId) {
 			this.airportRegistry.applyDefaultBindings(repositoryId, nextBindings, {
 				focusIntent: params.intentPaneId
@@ -341,11 +335,9 @@ export class MissionSystemController {
 }
 
 function derivePaneBindings(
-	graph: ContextGraph,
-	currentRunwayBinding: PaneBinding,
-	agentSessions: ContextGraph['agentSessions']
+	graph: ContextGraph
 ): Partial<Record<AirportPaneId, PaneBinding>> {
-	const { repositoryId, missionId, artifactId, agentSessionId } = graph.selection;
+	const { repositoryId, missionId, artifactId } = graph.selection;
 	const nextBindings: Partial<Record<AirportPaneId, PaneBinding>> = {
 		tower: missionId
 			? { targetKind: 'mission', targetId: missionId, mode: 'control' }
@@ -358,25 +350,9 @@ function derivePaneBindings(
 				? { targetKind: 'mission', targetId: missionId, mode: 'view' }
 				: repositoryId
 					? { targetKind: 'repository', targetId: repositoryId, mode: 'view' }
-					: { targetKind: 'empty' }
+					: { targetKind: 'empty' },
+			runway: { targetKind: 'empty' }
 	};
-
-	if (agentSessionId) {
-		nextBindings['runway'] = {
-			targetKind: 'agentSession',
-			targetId: agentSessionId,
-			mode: 'control'
-		};
-		return nextBindings;
-	}
-
-	if (
-		currentRunwayBinding.targetKind === 'agentSession'
-		&& currentRunwayBinding.targetId
-		&& !(currentRunwayBinding.targetId in agentSessions)
-	) {
-		nextBindings['runway'] = { targetKind: 'empty' };
-	}
 
 	return nextBindings;
 }

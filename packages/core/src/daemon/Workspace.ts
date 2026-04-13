@@ -314,7 +314,9 @@ export class MissionWorkspace {
 
 	private async executeMissionAction(params: MissionActionExecute): Promise<OperatorStatus> {
 		const loadedMission = await this.requireMissionContext(params.selector);
-		const status = await loadedMission.mission.executeAction(params.actionId, params.steps ?? []);
+		const status = await loadedMission.mission.executeAction(params.actionId, params.steps ?? [], {
+			...(params.terminalSessionName?.trim() ? { terminalSessionName: params.terminalSessionName.trim() } : {})
+		});
 		await this.broadcastMissionStatus(loadedMission.missionId, status);
 		return this.decorateMissionStatus(status, 'mission');
 	}
@@ -1440,36 +1442,8 @@ export class MissionWorkspace {
 		loadedMission: LoadedMission,
 		event: MissionAgentEvent
 	): Promise<void> {
-		switch (event.type) {
-			case 'session-completed':
-				await this.updateAutopilotTaskState(loadedMission, event.state.sessionId, 'done');
-				break;
-			case 'session-failed':
-			case 'session-cancelled':
-				await this.updateAutopilotTaskState(loadedMission, event.state.sessionId, 'blocked');
-				break;
-			default:
-				break;
-		}
-	}
-
-	private async updateAutopilotTaskState(
-		loadedMission: LoadedMission,
-		sessionId: string,
-		status: MissionTaskState['status']
-	): Promise<void> {
-		const sessionRecord = loadedMission.mission.getAgentSession(sessionId);
-		if (!sessionRecord?.taskId) {
-			return;
-		}
-
-		const missionStatus = await loadedMission.mission.status();
-		const task = this.findTaskState(missionStatus, sessionRecord.taskId);
-		if (!task || task.status === status || task.status === 'done') {
-			return;
-		}
-
-		await loadedMission.mission.updateTaskState(sessionRecord.taskId, { status });
+		void loadedMission;
+		void event;
 	}
 
 	private async runAutopilotLoop(loadedMission: LoadedMission): Promise<void> {

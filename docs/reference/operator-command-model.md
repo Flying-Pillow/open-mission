@@ -8,8 +8,7 @@ nav_order: 4
 # Operator Command Model
 
 This page defines the intended operator command model for Mission.
-
-It is deliberately written around command cards instead of wide tables because the important part is not only the command name. The operator needs to understand:
+The operator needs to understand:
 
 - when a command is available
 - what context should surface it

@@ -10,7 +10,7 @@ export type PaneTargetKind =
 
 export type PaneMode = 'view' | 'control';
 
-const AIRPORT_PANE_IDS = ['tower', 'briefingRoom', 'runway'] as const;
+const PERSISTED_AIRPORT_PANE_IDS = ['tower', 'briefingRoom'] as const;
 const PANE_TARGET_KINDS = ['empty', 'repository', 'mission', 'task', 'artifact', 'agentSession'] as const;
 const PANE_MODES = ['view', 'control'] as const;
 
@@ -85,7 +85,7 @@ export interface AirportPaneProjectionBase {
 	terminalPane?: AirportPaneState;
 }
 
-export type DashboardStageRailItemState = 'done' | 'active' | 'blocked' | 'pending';
+export type DashboardStageRailItemState = 'pending' | 'ready' | 'active' | 'blocked' | 'completed';
 
 export interface DashboardStageRailItem {
 	id: string;
@@ -176,10 +176,9 @@ export function derivePersistedAirportIntent(state: AirportState): PersistedAirp
 	return {
 		panes: {
 			tower: normalizePaneBinding(state.panes.tower),
-			briefingRoom: normalizePaneBinding(state.panes.briefingRoom),
-			runway: normalizePaneBinding(state.panes.runway)
+			briefingRoom: normalizePaneBinding(state.panes.briefingRoom)
 		},
-		...(state.focus.intentPaneId
+		...(state.focus.intentPaneId && state.focus.intentPaneId !== 'runway'
 			? {
 				focus: {
 					intentPaneId: state.focus.intentPaneId
@@ -327,12 +326,12 @@ function normalizePersistedAirportPanes(value: unknown): Partial<Record<AirportP
 		return undefined;
 	}
 
-	const entries = AIRPORT_PANE_IDS
+	const entries = PERSISTED_AIRPORT_PANE_IDS
 		.map((paneId) => {
 			const binding = normalizePersistedPaneBinding((value as Partial<Record<AirportPaneId, unknown>>)[paneId]);
 			return binding ? [paneId, binding] as const : undefined;
 		})
-		.filter((entry): entry is readonly [AirportPaneId, PaneBinding] => entry !== undefined);
+		.filter((entry): entry is readonly [(typeof PERSISTED_AIRPORT_PANE_IDS)[number], PaneBinding] => entry !== undefined);
 	return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
@@ -342,7 +341,7 @@ function normalizePersistedAirportFocus(value: unknown): PersistedAirportIntent[
 	}
 
 	const intentPaneId = (value as { intentPaneId?: unknown }).intentPaneId;
-	return isAirportPaneId(intentPaneId)
+	return isPersistedAirportPaneId(intentPaneId)
 		? {
 			intentPaneId
 		}
@@ -368,8 +367,8 @@ function normalizePersistedPaneBinding(value: unknown): PaneBinding | undefined 
 	});
 }
 
-function isAirportPaneId(value: unknown): value is AirportPaneId {
-	return typeof value === 'string' && (AIRPORT_PANE_IDS as readonly string[]).includes(value);
+function isPersistedAirportPaneId(value: unknown): value is (typeof PERSISTED_AIRPORT_PANE_IDS)[number] {
+	return typeof value === 'string' && (PERSISTED_AIRPORT_PANE_IDS as readonly string[]).includes(value);
 }
 
 function isPaneTargetKind(value: unknown): value is PaneTargetKind {

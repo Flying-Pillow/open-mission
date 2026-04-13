@@ -50,8 +50,8 @@ export class MissionTask {
 
 	public async start(): Promise<MissionTaskState> {
 		await this.refresh();
-		this.assertCanTransition('active');
-		if (this.state.status === 'todo' || this.state.status === 'blocked') {
+		this.assertCanTransition('start');
+		if (this.state.status === 'ready') {
 			await this.owner.queueTask(this.state.taskId);
 			await this.owner.startTaskExecution(this.state.taskId);
 		}
@@ -77,6 +77,7 @@ export class MissionTask {
 
 	public async reopen(): Promise<MissionTaskState> {
 		await this.refresh();
+		this.assertCanTransition('reopen');
 		await this.owner.reopenTask(this.state.taskId);
 		await this.refresh();
 		return this.toState();
@@ -142,11 +143,11 @@ export class MissionTask {
 
 	private async prepareForSessionLaunch(): Promise<void> {
 		await this.refresh();
-		if (this.state.status === 'active') {
+		if (this.state.status === 'queued' || this.state.status === 'running') {
 			return;
 		}
 
-		this.assertCanTransition('active');
+		this.assertCanTransition('start');
 		await this.owner.queueTask(this.state.taskId);
 		await this.refresh();
 	}

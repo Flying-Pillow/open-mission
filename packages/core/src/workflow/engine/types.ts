@@ -1,30 +1,39 @@
 export type MissionStageId = string;
 
-export type MissionLifecycleState =
-    | 'draft'
-    | 'ready'
-    | 'running'
-    | 'paused'
-    | 'panicked'
-    | 'completed'
-    | 'delivered';
+export const MISSION_LIFECYCLE_STATES = [
+    'draft',
+    'ready',
+    'running',
+    'paused',
+    'panicked',
+    'completed',
+    'delivered'
+] as const;
 
-export type MissionStageDerivedState =
-    | 'pending'
-    | 'ready'
-    | 'active'
-    | 'blocked'
-    | 'completed';
+export type MissionLifecycleState = (typeof MISSION_LIFECYCLE_STATES)[number];
 
-export type MissionTaskLifecycleState =
-    | 'pending'
-    | 'ready'
-    | 'queued'
-    | 'running'
-    | 'blocked'
-    | 'completed'
-    | 'failed'
-    | 'cancelled';
+export const MISSION_STAGE_DERIVED_STATES = [
+    'pending',
+    'ready',
+    'active',
+    'blocked',
+    'completed'
+] as const;
+
+export type MissionStageDerivedState = (typeof MISSION_STAGE_DERIVED_STATES)[number];
+
+export const MISSION_TASK_LIFECYCLE_STATES = [
+    'pending',
+    'ready',
+    'queued',
+    'running',
+    'blocked',
+    'completed',
+    'failed',
+    'cancelled'
+] as const;
+
+export type MissionTaskLifecycleState = (typeof MISSION_TASK_LIFECYCLE_STATES)[number];
 
 export type MissionTaskLaunchMode = 'automatic' | 'manual';
 
@@ -35,13 +44,16 @@ export type MissionPauseReason =
     | 'agent-failure'
     | 'system';
 
-export type MissionAgentSessionLifecycleState =
-    | 'starting'
-    | 'running'
-    | 'completed'
-    | 'failed'
-    | 'cancelled'
-    | 'terminated';
+export const MISSION_AGENT_SESSION_LIFECYCLE_STATES = [
+    'starting',
+    'running',
+    'completed',
+    'failed',
+    'cancelled',
+    'terminated'
+] as const;
+
+export type MissionAgentSessionLifecycleState = (typeof MISSION_AGENT_SESSION_LIFECYCLE_STATES)[number];
 
 export type MissionGateIntent = 'implement' | 'verify' | 'audit' | 'deliver';
 export type MissionGateState = 'blocked' | 'passed';
@@ -112,6 +124,8 @@ export interface MissionAgentSessionRuntimeState {
     taskId: string;
     runnerId: string;
     transportId?: string;
+    terminalSessionName?: string;
+    terminalPaneId?: string;
     lifecycle: MissionAgentSessionLifecycleState;
     launchedAt: string;
     updatedAt: string;
@@ -314,6 +328,8 @@ export interface AgentSessionStartedEvent extends MissionWorkflowEventBase {
     taskId: string;
     runnerId: string;
     transportId?: string;
+    terminalSessionName?: string;
+    terminalPaneId?: string;
 }
 
 export interface AgentSessionLaunchFailedEvent extends MissionWorkflowEventBase {

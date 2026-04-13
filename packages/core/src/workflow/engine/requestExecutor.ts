@@ -198,7 +198,9 @@ export class MissionWorkflowRequestExecutor {
 							sessionId: snapshot.sessionId,
 							taskId: task.taskId,
 							runnerId: snapshot.runnerId,
-							...(snapshot.transportId ? { transportId: snapshot.transportId } : {})
+							...(snapshot.transportId ? { transportId: snapshot.transportId } : {}),
+							...(snapshot.terminalSessionName ? { terminalSessionName: snapshot.terminalSessionName } : {}),
+							...(snapshot.terminalPaneId ? { terminalPaneId: snapshot.terminalPaneId } : {})
 						});
 					} catch (error) {
 						events.push({

@@ -2,11 +2,24 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
+import { getMissionWorktreesPath } from '../lib/repoConfig.js';
 import { createDefaultWorkflowSettings } from '../workflow/engine/defaultWorkflow.js';
 import { Factory } from './mission/Factory.js';
 import type { MissionWorkflowBindings } from './mission/Mission.js';
+
+const temporaryWorkspaceRoots = new Set<string>();
+
+afterEach(async () => {
+    await Promise.all(
+        [...temporaryWorkspaceRoots].map(async (workspaceRoot) => {
+            temporaryWorkspaceRoots.delete(workspaceRoot);
+            await fs.rm(getMissionWorktreesPath(workspaceRoot), { recursive: true, force: true }).catch(() => undefined);
+            await fs.rm(workspaceRoot, { recursive: true, force: true }).catch(() => undefined);
+        })
+    );
+});
 
 describe('Mission workflow snapshot timing', () => {
     it('keeps draft missions linked to repository workflow settings until workflow start', async () => {
@@ -125,6 +138,7 @@ describe('Mission workflow snapshot timing', () => {
 
 async function createTempRepo(): Promise<string> {
     const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-snapshot-'));
+    temporaryWorkspaceRoots.add(workspaceRoot);
     runGit(workspaceRoot, ['init']);
     runGit(workspaceRoot, ['config', 'user.email', 'mission@example.com']);
     runGit(workspaceRoot, ['config', 'user.name', 'Mission Test']);

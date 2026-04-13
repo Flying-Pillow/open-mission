@@ -9,6 +9,51 @@ import { validateMissionWorkflowEvent } from './validation.js';
 import type { MissionWorkflowEvent } from './types.js';
 
 describe('workflow reducer delivery completion', () => {
+    it('persists terminal attachment metadata on started sessions', () => {
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow: createDefaultWorkflowSettings()
+        });
+
+        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime.tasks = [{
+            taskId: 'implementation/01',
+            stageId: 'implementation',
+            title: 'Implement',
+            instruction: 'Ship it.',
+            dependsOn: [],
+            lifecycle: 'queued',
+            blockedByTaskIds: [],
+            runtime: { autostart: false, launchMode: 'manual' },
+            retries: 0,
+            createdAt: '2026-04-10T15:51:25.000Z',
+            updatedAt: '2026-04-10T15:51:25.000Z'
+        }];
+
+        const event: MissionWorkflowEvent = {
+            eventId: 'session.started:implementation/01',
+            type: 'session.started',
+            occurredAt: '2026-04-10T15:52:00.000Z',
+            source: 'daemon',
+            sessionId: 'session-1',
+            taskId: 'implementation/01',
+            runnerId: 'copilot-cli',
+            transportId: 'terminal',
+            terminalSessionName: 'airport-terminal-session',
+            terminalPaneId: 'terminal_44'
+        };
+
+        validateMissionWorkflowEvent(runtime, event, configuration);
+        runtime = reduceMissionWorkflowEvent(runtime, event, configuration).nextState;
+
+        expect(runtime.sessions).toContainEqual(expect.objectContaining({
+            sessionId: 'session-1',
+            terminalSessionName: 'airport-terminal-session',
+            terminalPaneId: 'terminal_44'
+        }));
+    });
+
     it('tracks the reducer-owned active stage id as work advances', () => {
         const configuration = createMissionWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',

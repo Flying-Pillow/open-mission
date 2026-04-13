@@ -16,6 +16,7 @@ export type ConnectAirportControlOptions = {
 	runtimeMode?: DaemonRuntimeMode;
 	runtimeFactoryModulePath?: string;
 	logLine?: (line: string) => void;
+	allowStart?: boolean;
 };
 
 class IncompatibleDaemonError extends Error {
@@ -46,10 +47,14 @@ export async function connectAirportControl(
 	const runtimeMode = options.runtimeMode ?? resolveAirportControlRuntimeMode(import.meta.url);
 	const runtimeFactoryModulePath =
 		options.runtimeFactoryModulePath ?? resolveDefaultRuntimeFactoryModulePath(runtimeMode);
+	const allowStart = options.allowStart !== false;
 
 	try {
 		return await connectCompatibleDaemon(options.surfacePath);
 	} catch (error) {
+		if (!allowStart) {
+			throw error;
+		}
 		await restartIncompatibleDaemon(error, options.logLine);
 	}
 

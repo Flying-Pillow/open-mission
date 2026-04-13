@@ -186,7 +186,7 @@ async function driveMissionToCompletion(
         const nextTask = pickNextTask(status);
         if (nextTask) {
             const taskActions = await api.mission.listAvailableActions(selector, { taskId: nextTask.taskId });
-            if (nextTask.status !== 'active') {
+            if (nextTask.status !== 'running') {
                 const startCommand = requireTaskCommand(taskActions, nextTask.taskId, 'task.start.');
                 await api.mission.executeAction(selector, startCommand.id);
             }
@@ -414,7 +414,7 @@ function printReport(report: SmokeTestReport): void {
 }
 
 function isMissionDelivered(status: OperatorStatus): boolean {
-    return Boolean(status.stages?.some((stage) => stage.stage === 'delivery' && stage.status === 'done'));
+    return Boolean(status.stages?.some((stage) => stage.stage === 'delivery' && stage.status === 'completed'));
 }
 
 void main().catch((error: unknown) => {

@@ -1,7 +1,9 @@
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import * as fsSync from 'node:fs';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { DaemonClient } from '../client/DaemonClient.js';
 import type { Ping } from './contracts.js';
@@ -11,6 +13,8 @@ import {
 	getDaemonRuntimePath,
 	readDaemonManifest
 } from './daemonPaths.js';
+
+const execFileAsync = promisify(execFile);
 
 export type DaemonRuntimeMode = 'build' | 'source';
 
@@ -114,8 +118,9 @@ export async function startMissionDaemonProcess(options: {
 export async function stopMissionDaemonProcess(): Promise<DaemonStopResult> {
 	const manifestPath = getDaemonManifestPath();
 	const manifest = await readDaemonManifest();
+	const staleProcessIds = await listMissionDaemonProcessIds();
 
-	if (!manifest) {
+	if (!manifest && staleProcessIds.length === 0) {
 		return {
 			stopped: true,
 			manifestPath,
@@ -125,18 +130,24 @@ export async function stopMissionDaemonProcess(): Promise<DaemonStopResult> {
 	}
 
 	let killed = false;
-	try {
-		process.kill(manifest.pid, 'SIGTERM');
-		killed = true;
-	} catch (error) {
-		const code = (error as NodeJS.ErrnoException).code;
-		if (code !== 'ESRCH') {
-			throw error;
+	const processIdsToStop = new Set<number>([
+		...(manifest ? [manifest.pid] : []),
+		...staleProcessIds
+	]);
+	for (const processId of processIdsToStop) {
+		try {
+			process.kill(processId, 'SIGTERM');
+			killed = true;
+		} catch (error) {
+			const code = (error as NodeJS.ErrnoException).code;
+			if (code !== 'ESRCH') {
+				throw error;
+			}
 		}
 	}
 
 	await fs.rm(manifestPath, { force: true }).catch(() => undefined);
-	if (manifest.endpoint.transport === 'ipc') {
+	if (manifest?.endpoint.transport === 'ipc') {
 		await fs.rm(manifest.endpoint.path, { force: true }).catch(() => undefined);
 	}
 	await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
@@ -144,8 +155,8 @@ export async function stopMissionDaemonProcess(): Promise<DaemonStopResult> {
 	return {
 		stopped: true,
 		manifestPath,
-		endpointPath: manifest.endpoint.path,
-		pid: manifest.pid,
+		...(manifest?.endpoint.path ? { endpointPath: manifest.endpoint.path } : {}),
+		...(manifest?.pid ? { pid: manifest.pid } : {}),
 		killed,
 		message: killed
 			? 'Mission daemon stop signal sent and runtime files cleaned.'
@@ -156,8 +167,7 @@ export async function stopMissionDaemonProcess(): Promise<DaemonStopResult> {
 export function resolveDefaultRuntimeFactoryModulePath(
 	runtimeMode: DaemonRuntimeMode
 ): string | undefined {
-	const currentFilePath = fileURLToPath(import.meta.url);
-	const packageRoot = path.resolve(path.dirname(currentFilePath), '..', '..');
+	const packageRoot = resolveCorePackageRoot();
 	const sourcePath = path.join(packageRoot, 'src', 'daemon', 'defaultRuntimeFactory.ts');
 	const buildPath = path.join(packageRoot, 'build', 'daemon', 'defaultRuntimeFactory.js');
 
@@ -195,6 +205,7 @@ async function spawnDaemonRunner(options: {
 	const env = {
 		...process.env,
 		...(options.surfacePath ? { MISSION_SURFACE_PATH: options.surfacePath } : {}),
+		...(resolveAirportTerminalEntryPath() ? { AIRPORT_TERMINAL_ENTRY_PATH: resolveAirportTerminalEntryPath() } : {}),
 		MISSION_DAEMON_RUNTIME_MODE: runtimeMode,
 		...(runtimeMode === 'source'
 			? { NODE_OPTIONS: appendNodeCondition(process.env['NODE_OPTIONS'], 'typescript') }
@@ -236,8 +247,33 @@ async function spawnDaemonRunner(options: {
 }
 
 function resolveCorePackageRoot(): string {
+	try {
+		const require = createRequire(import.meta.url);
+		const resolvedPackageEntry = require.resolve('@flying-pillow/mission-core');
+		return path.resolve(resolvedPackageEntry, '..', '..');
+	} catch {
+		// Fall back to the local source layout when package resolution is unavailable.
+	}
+
 	const currentFilePath = fileURLToPath(import.meta.url);
 	return path.resolve(path.dirname(currentFilePath), '..', '..');
+}
+
+function resolveAirportTerminalEntryPath(): string | undefined {
+	const configuredEntryPath = process.env['AIRPORT_TERMINAL_ENTRY_PATH']?.trim();
+	if (configuredEntryPath) {
+		return configuredEntryPath;
+	}
+
+	try {
+		const require = createRequire(import.meta.url);
+		const resolvedPackageEntry = require.resolve('@flying-pillow/mission-airport-terminal');
+		return path.join(path.dirname(resolvedPackageEntry), 'index.js');
+	} catch {
+		const packageRoot = resolveCorePackageRoot();
+		const monorepoEntryPath = path.join(packageRoot, '..', '..', 'apps', 'airport', 'terminal', 'build', 'index.js');
+		return fsSync.existsSync(monorepoEntryPath) ? monorepoEntryPath : undefined;
+	}
 }
 
 function appendNodeCondition(existingOptions: string | undefined, condition: string): string {
@@ -249,4 +285,22 @@ function appendNodeCondition(existingOptions: string | undefined, condition: str
 		return existingOptions;
 	}
 	return `${existingOptions} ${nextFlag}`;
+}
+
+async function listMissionDaemonProcessIds(): Promise<number[]> {
+	if (process.platform === 'win32') {
+		return [];
+	}
+
+	try {
+		const result = await execFileAsync('ps', ['-eo', 'pid=,args='], { encoding: 'utf8' });
+		return result.stdout
+			.split(/\r?\n/gu)
+			.map((line) => line.trim())
+			.filter((line) => line.includes('/packages/core/build/daemon/missiond.js run') || line.includes('/packages/core/src/daemon/missiond.ts run'))
+			.map((line) => Number.parseInt(line.split(/\s+/u, 1)[0] ?? '', 10))
+			.filter((pid) => Number.isInteger(pid) && pid > 0 && pid !== process.pid);
+	} catch {
+		return [];
+	}
 }

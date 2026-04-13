@@ -61,13 +61,15 @@ export class DaemonMissionApi {
 	public async executeAction(
 		selector: MissionSelector,
 		actionId: string,
-		steps: OperatorActionExecutionStep[] = []
+		steps: OperatorActionExecutionStep[] = [],
+		options: { terminalSessionName?: string } = {}
 	): Promise<OperatorStatus> {
 		const resolvedSelector = DaemonMissionApi.requireSelector(selector, `Mission action '${actionId}'`);
 		const params: MissionActionExecute = {
 			selector: resolvedSelector,
 			actionId,
-			...(steps.length > 0 ? { steps } : {})
+			...(steps.length > 0 ? { steps } : {}),
+			...(options.terminalSessionName?.trim() ? { terminalSessionName: options.terminalSessionName.trim() } : {})
 		};
 		return this.client.request<OperatorStatus>('mission.action.execute', params);
 	}

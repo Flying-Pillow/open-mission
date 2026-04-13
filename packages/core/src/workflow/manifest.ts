@@ -1,12 +1,18 @@
+import {
+    MISSION_STAGE_DERIVED_STATES,
+    type MissionStageDerivedState,
+    type MissionTaskLifecycleState
+} from './engine/types.js';
+
 export type MissionStageId = 'prd' | 'spec' | 'implementation' | 'audit' | 'delivery';
 
-export type MissionWorkflowTaskStatus = 'todo' | 'active' | 'blocked' | 'done';
-export type MissionTaskStatusIntent = 'active' | 'done' | 'blocked';
+export type MissionWorkflowTaskStatus = MissionTaskLifecycleState;
+export type MissionTaskStatusIntent = 'start' | 'done' | 'blocked' | 'reopen';
 export type MissionStageStatusIntent = 'start' | 'restart';
 
 export type MissionArtifactKey = 'brief' | 'prd' | 'spec' | 'verify' | 'audit' | 'delivery';
 
-export type MissionStageProgress = 'pending' | 'active' | 'blocked' | 'done';
+export type MissionStageProgress = MissionStageDerivedState;
 
 export type MissionTaskPairingDefinition = {
     enabled: true;
@@ -144,7 +150,7 @@ export function getMissionTaskPairingDefinition(
 }
 
 export function getInitialMissionStageProgress(stageId: MissionStageId): MissionStageProgress {
-    return stageId === MISSION_STAGES[0] ? 'active' : 'pending';
+    return stageId === MISSION_STAGES[0] ? 'ready' : 'pending';
 }
 
 export function isMissionStageId(value: unknown): value is MissionStageId {
@@ -156,7 +162,8 @@ export function isMissionArtifactKey(value: unknown): value is MissionArtifactKe
 }
 
 export function isMissionStageProgress(value: unknown): value is MissionStageProgress {
-    return value === 'pending' || value === 'active' || value === 'blocked' || value === 'done';
+    return typeof value === 'string'
+        && (MISSION_STAGE_DERIVED_STATES as readonly string[]).includes(value);
 }
 
 type MissionStageRuleContext = {
@@ -176,13 +183,13 @@ const WORKFLOW_STAGE_TRANSITION_RULES: readonly MissionStageTransitionRule[] = [
     {
         intent: 'start',
         nextStatus: 'active',
-        allowedFrom: ['pending'],
+        allowedFrom: ['ready'],
         requiresPreviousStagesComplete: true
     },
     {
         intent: 'restart',
         nextStatus: 'active',
-        allowedFrom: ['active', 'blocked', 'done']
+        allowedFrom: ['active', 'blocked', 'completed']
     }
 ] as const;
 
@@ -195,7 +202,7 @@ type MissionStageRuleEvaluation = {
 export function getPrimaryMissionStageStatusIntent(
     currentStatus: MissionStageProgress
 ): MissionStageStatusIntent {
-    return currentStatus === 'pending' ? 'start' : 'restart';
+    return currentStatus === 'ready' ? 'start' : 'restart';
 }
 
 export function evaluateMissionStageStatusIntent(
@@ -257,20 +264,25 @@ type MissionTaskTransitionRule = {
 
 const WORKFLOW_TASK_TRANSITION_RULES: readonly MissionTaskTransitionRule[] = [
     {
-        intent: 'active',
-        nextStatus: 'active',
-        allowedFrom: ['todo', 'blocked'],
+        intent: 'start',
+        nextStatus: 'queued',
+        allowedFrom: ['ready'],
         requiresDependenciesClear: true
     },
     {
         intent: 'done',
-        nextStatus: 'done',
-        allowedFrom: ['todo', 'active', 'blocked']
+        nextStatus: 'completed',
+        allowedFrom: ['ready', 'queued', 'running']
     },
     {
         intent: 'blocked',
         nextStatus: 'blocked',
-        allowedFrom: ['todo', 'active']
+        allowedFrom: ['pending', 'ready', 'queued', 'running']
+    },
+    {
+        intent: 'reopen',
+        nextStatus: 'pending',
+        allowedFrom: ['completed', 'failed', 'cancelled']
     }
 ] as const;
 
@@ -338,11 +350,17 @@ export function evaluateMissionTaskLaunchEligibility(
     if (context.delivered) {
         return { enabled: false, reason: 'Mission already delivered.' };
     }
-    if (context.currentStatus === 'done') {
+    if (context.currentStatus === 'completed') {
         return { enabled: false, reason: 'Task is already complete.' };
+    }
+    if (context.currentStatus === 'failed' || context.currentStatus === 'cancelled') {
+        return { enabled: false, reason: `Task is ${context.currentStatus}.` };
     }
     if (context.currentStatus === 'blocked') {
         return { enabled: false, reason: 'Task is blocked.' };
+    }
+    if (context.currentStatus === 'pending') {
+        return { enabled: false, reason: 'Task is not ready.' };
     }
     if (context.blockedBy.length > 0) {
         return { enabled: false, reason: `Waiting on ${context.blockedBy.join(', ')}.` };

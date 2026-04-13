@@ -27,6 +27,12 @@ class FakeSession implements AgentSession {
 			runnerId: input.runnerId,
 			...(input.transportId ? { transportId: input.transportId } : {}),
 			sessionId: input.sessionId,
+			...(input.transportId === 'terminal'
+				? {
+					terminalSessionName: 'airport-terminal-session',
+					terminalPaneId: 'terminal_44'
+				}
+				: {}),
 			missionId: 'mission-17',
 			taskId: input.taskId,
 			phase: 'running' as const,
@@ -170,7 +176,9 @@ describe('MissionWorkflowRequestExecutor', () => {
 			type: 'session.started',
 			taskId: task.taskId,
 			runnerId: 'fake-runner',
-			transportId: 'terminal'
+			transportId: 'terminal',
+			terminalSessionName: 'airport-terminal-session',
+			terminalPaneId: 'terminal_44'
 		});
 	});
 

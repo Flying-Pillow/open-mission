@@ -44,6 +44,8 @@ export interface AgentSessionReference {
     runnerId: AgentRunnerId;
     transportId?: AgentTransportId;
     sessionId: AgentSessionId;
+    terminalSessionName?: string;
+    terminalPaneId?: string;
 }
 
 export interface AgentSessionStartRequest {
@@ -73,6 +75,8 @@ export interface AgentSessionSnapshot {
     runnerId: AgentRunnerId;
     transportId?: AgentTransportId;
     sessionId: AgentSessionId;
+    terminalSessionName?: string;
+    terminalPaneId?: string;
     phase: AgentSessionPhase;
     workingDirectory?: string;
     taskId: string;

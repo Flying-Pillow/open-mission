@@ -90,6 +90,8 @@ export function toMissionAgentSessionRuntimeState(
         taskId: session.taskId,
         runnerId: session.runnerId,
         ...(session.transportId ? { transportId: session.transportId } : {}),
+        ...(session.terminalSessionName ? { terminalSessionName: session.terminalSessionName } : {}),
+        ...(session.terminalPaneId ? { terminalPaneId: session.terminalPaneId } : {}),
         lifecycle: session.lifecycle,
         launchedAt: session.launchedAt,
         updatedAt: session.updatedAt,

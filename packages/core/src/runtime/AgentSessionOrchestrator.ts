@@ -194,7 +194,9 @@ export class AgentSessionOrchestrator {
             reference: {
                 runnerId: session.runnerId,
                 ...(session.transportId ? { transportId: session.transportId } : {}),
-                sessionId: session.sessionId
+                sessionId: session.sessionId,
+                ...(normalizedSnapshot.terminalSessionName ? { terminalSessionName: normalizedSnapshot.terminalSessionName } : {}),
+                ...(normalizedSnapshot.terminalPaneId ? { terminalPaneId: normalizedSnapshot.terminalPaneId } : {})
             },
             session,
             snapshot: { ...normalizedSnapshot },
@@ -281,6 +283,16 @@ export class AgentSessionOrchestrator {
                     ? { transportId: reference.transportId }
                     : {}),
             sessionId,
+            ...(persistedSnapshot?.terminalSessionName
+                ? { terminalSessionName: persistedSnapshot.terminalSessionName }
+                : reference?.terminalSessionName
+                    ? { terminalSessionName: reference.terminalSessionName }
+                    : {}),
+            ...(persistedSnapshot?.terminalPaneId
+                ? { terminalPaneId: persistedSnapshot.terminalPaneId }
+                : reference?.terminalPaneId
+                    ? { terminalPaneId: reference.terminalPaneId }
+                    : {}),
             phase: action === 'cancel' ? 'cancelled' : 'terminated',
             missionId: persistedSnapshot?.missionId ?? 'unknown',
             taskId: persistedSnapshot?.taskId ?? 'unknown',
@@ -306,12 +318,18 @@ export class AgentSessionOrchestrator {
 
     private normalizeSnapshot(
         snapshot: AgentSessionSnapshot,
-        fallback: Pick<AgentSessionSnapshot, 'missionId' | 'taskId'>
+        fallback: Pick<AgentSessionSnapshot, 'missionId' | 'taskId' | 'terminalSessionName' | 'terminalPaneId'>
     ): AgentSessionSnapshot {
         return {
             ...snapshot,
             missionId: snapshot.missionId || fallback.missionId,
-            taskId: snapshot.taskId || fallback.taskId
+            taskId: snapshot.taskId || fallback.taskId,
+            ...(snapshot.terminalSessionName || fallback.terminalSessionName
+                ? { terminalSessionName: snapshot.terminalSessionName || fallback.terminalSessionName }
+                : {}),
+            ...(snapshot.terminalPaneId || fallback.terminalPaneId
+                ? { terminalPaneId: snapshot.terminalPaneId || fallback.terminalPaneId }
+                : {})
         };
     }
 
@@ -341,6 +359,16 @@ export class AgentSessionOrchestrator {
                     ? { transportId: reference.transportId }
                     : {}),
             sessionId: reference.sessionId,
+            ...(persistedSnapshot?.terminalSessionName
+                ? { terminalSessionName: persistedSnapshot.terminalSessionName }
+                : reference.terminalSessionName
+                    ? { terminalSessionName: reference.terminalSessionName }
+                    : {}),
+            ...(persistedSnapshot?.terminalPaneId
+                ? { terminalPaneId: persistedSnapshot.terminalPaneId }
+                : reference.terminalPaneId
+                    ? { terminalPaneId: reference.terminalPaneId }
+                    : {}),
             phase: 'terminated',
             missionId: persistedSnapshot?.missionId ?? 'unknown',
             taskId: persistedSnapshot?.taskId ?? 'unknown',

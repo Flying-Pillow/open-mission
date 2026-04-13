@@ -23,6 +23,8 @@ type MissionRuntimeSessionRecord = {
 	sessionId: string;
 	runnerId: string;
 	transportId?: string;
+	terminalSessionName?: string;
+	terminalPaneId?: string;
 	taskId: string;
 	lifecycle: MissionAgentSessionRecord['lifecycleState'] | AgentSessionSnapshot['phase'];
 	launchedAt: string;
@@ -67,6 +69,16 @@ export class MissionSession {
 			sessionId: input.runtime.sessionId,
 			runnerId: input.runtime.runnerId,
 			...(input.runtime.transportId ? { transportId: input.runtime.transportId } : {}),
+			...(input.snapshot?.terminalSessionName
+				? { terminalSessionName: input.snapshot.terminalSessionName }
+				: input.runtime.terminalSessionName
+					? { terminalSessionName: input.runtime.terminalSessionName }
+					: {}),
+			...(input.snapshot?.terminalPaneId
+				? { terminalPaneId: input.snapshot.terminalPaneId }
+				: input.runtime.terminalPaneId
+					? { terminalPaneId: input.runtime.terminalPaneId }
+					: {}),
 			runnerLabel: input.runnerLabel,
 			lifecycleState: MissionSession.toLifecycleState(
 				input.snapshot?.phase ?? input.runtime.lifecycle
@@ -93,6 +105,16 @@ export class MissionSession {
 			...(snapshot.transportId ? { transportId: snapshot.transportId } : {}),
 			runnerLabel,
 			sessionId: snapshot.sessionId,
+			...(snapshot.terminalSessionName
+				? { terminalSessionName: snapshot.terminalSessionName }
+				: record?.terminalSessionName
+					? { terminalSessionName: record.terminalSessionName }
+					: {}),
+			...(snapshot.terminalPaneId
+				? { terminalPaneId: snapshot.terminalPaneId }
+				: record?.terminalPaneId
+					? { terminalPaneId: record.terminalPaneId }
+					: {}),
 			lifecycleState: MissionSession.toLifecycleState(snapshot.phase),
 			lastUpdatedAt: snapshot.updatedAt,
 			...(snapshot.workingDirectory
@@ -116,6 +138,8 @@ export class MissionSession {
 			sessionId: record.sessionId,
 			runnerId: record.runnerId,
 			...(record.transportId ? { transportId: record.transportId } : {}),
+			...(record.terminalSessionName ? { terminalSessionName: record.terminalSessionName } : {}),
+			...(record.terminalPaneId ? { terminalPaneId: record.terminalPaneId } : {}),
 			runnerLabel: record.runnerLabel,
 			lifecycleState: record.lifecycleState,
 			createdAt: record.createdAt,
@@ -137,6 +161,8 @@ export class MissionSession {
 			...(state.transportId ? { transportId: state.transportId } : {}),
 			runnerLabel: state.runnerLabel,
 			sessionId: state.sessionId,
+			...(state.terminalSessionName ? { terminalSessionName: state.terminalSessionName } : {}),
+			...(state.terminalPaneId ? { terminalPaneId: state.terminalPaneId } : {}),
 			lifecycleState: state.lifecycleState,
 			lastUpdatedAt: state.lastUpdatedAt,
 			...(state.workingDirectory ? { workingDirectory: state.workingDirectory } : {}),
@@ -199,6 +225,8 @@ export class MissionSession {
 				...(this.record.transportId ? { transportId: this.record.transportId } : {}),
 				runnerLabel: this.record.runnerLabel,
 				sessionId: this.record.sessionId,
+				...(this.record.terminalSessionName ? { terminalSessionName: this.record.terminalSessionName } : {}),
+				...(this.record.terminalPaneId ? { terminalPaneId: this.record.terminalPaneId } : {}),
 				lifecycleState: this.record.lifecycleState,
 				lastUpdatedAt: this.record.lastUpdatedAt,
 				...(this.record.workingDirectory ? { workingDirectory: this.record.workingDirectory } : {}),

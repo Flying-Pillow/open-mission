@@ -100,6 +100,7 @@ export class CopilotCliAgentRunner implements AgentRunner {
 			args: this.args,
 			...(this.env ? { env: this.env } : {}),
 			sessionPrefix: this.sessionPrefix,
+			sessionName: buildTaskSessionName(request.taskId, this.id),
 			...(request.terminalSessionName?.trim() ? { sharedSessionName: request.terminalSessionName.trim() } : {})
 		});
 
@@ -107,6 +108,9 @@ export class CopilotCliAgentRunner implements AgentRunner {
 			runnerId: this.id,
 			transportId: this.transportId,
 			sessionId: transportHandle.sessionName,
+			...(transportHandle.sharedSessionName
+				? { terminalSessionName: transportHandle.sharedSessionName, terminalPaneId: transportHandle.paneId }
+				: { terminalSessionName: transportHandle.sessionName }),
 			phase: 'running',
 			workingDirectory: request.workingDirectory,
 			taskId: request.taskId,
@@ -131,7 +135,14 @@ export class CopilotCliAgentRunner implements AgentRunner {
 			return this.createAgentSession(reference.sessionId);
 		}
 
-		const transportHandle = await this.transport.attachSession(reference.sessionId);
+		const transportHandle = reference.terminalPaneId
+			? await this.transport.attachSession(reference.sessionId, {
+				sharedSessionName: reference.terminalSessionName,
+				paneId: reference.terminalPaneId
+			})
+			: await this.transport.attachSession(reference.sessionId, {
+				sharedSessionName: undefined
+			});
 		if (!transportHandle) {
 			return this.createTerminatedAttachedSession(reference);
 		}
@@ -143,6 +154,9 @@ export class CopilotCliAgentRunner implements AgentRunner {
 			runnerId: this.id,
 			transportId: this.transportId,
 			sessionId: reference.sessionId,
+			...(transportHandle.sharedSessionName
+				? { terminalSessionName: transportHandle.sharedSessionName, terminalPaneId: transportHandle.paneId }
+				: { terminalSessionName: transportHandle.sessionName }),
 			phase: paneState.dead ? (paneState.exitCode === 0 ? 'completed' : 'failed') : 'running',
 			missionId: 'unknown',
 			taskId: 'unknown',
@@ -467,6 +481,8 @@ export class CopilotCliAgentRunner implements AgentRunner {
 			runnerId: this.id,
 			transportId: this.transportId,
 			sessionId: reference.sessionId,
+			...(reference.terminalSessionName ? { terminalSessionName: reference.terminalSessionName } : {}),
+			...(reference.terminalPaneId ? { terminalPaneId: reference.terminalPaneId } : {}),
 			phase: 'terminated',
 			missionId: 'unknown',
 			taskId: 'unknown',
@@ -502,6 +518,24 @@ export class CopilotCliAgentRunner implements AgentRunner {
 			}
 		};
 	}
+}
+
+function buildTaskSessionName(taskId: string, runnerId: string): string {
+	const taskSegment = taskId.split('/').at(-1)?.trim() || taskId.trim();
+	const normalizedTaskSegment = slugSessionSegment(taskSegment);
+	const normalizedRunnerId = slugSessionSegment(runnerId);
+	if (!normalizedTaskSegment) {
+		return normalizedRunnerId || 'mission-agent';
+	}
+	return normalizedRunnerId ? `${normalizedTaskSegment}-${normalizedRunnerId}` : normalizedTaskSegment;
+}
+
+function slugSessionSegment(value: string): string {
+	return value
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '');
 }
 
 async function sendText(transport: TerminalAgentTransport, handle: TerminalSessionHandle, text: string): Promise<void> {

@@ -18,7 +18,7 @@ export type TerminalExecutor = (args: string[]) => Promise<TerminalExecutorResul
 export type TerminalSessionHandle = {
 	sessionName: string;
 	paneId: string;
-	sharedSessionName?: string;
+	sharedSessionName?: string | undefined;
 };
 
 export type TerminalAgentTransportOptions = {
@@ -35,6 +35,7 @@ export type TerminalOpenSessionRequest = {
 	args?: string[];
 	env?: NodeJS.ProcessEnv;
 	sessionPrefix?: string;
+	sessionName?: string;
 	sharedSessionName?: string;
 };
 
@@ -50,7 +51,7 @@ export class TerminalAgentTransport {
 			|| process.env['AIRPORT_TERMINAL_SESSION']?.trim()
 			|| process.env['AIRPORT_TERMINAL_SESSION_NAME']?.trim()
 			|| undefined;
-		this.agentSessionPaneTitle = options.agentSessionPaneTitle?.trim() || 'AGENT SESSION';
+		this.agentSessionPaneTitle = options.agentSessionPaneTitle?.trim() || 'RUNWAY';
 		const terminalBinary = options.terminalBinary?.trim()
 			|| readMissionUserConfig()?.terminalBinary?.trim()
 			|| 'zellij';
@@ -86,36 +87,53 @@ export class TerminalAgentTransport {
 			|| this.sharedSessionName
 			|| await this.discoverAirportLayoutSessionName();
 		if (sharedSessionName) {
-			return this.openSharedSession(request, sharedSessionName);
+			try {
+				return await this.openSharedSession(request, sharedSessionName);
+			} catch (error) {
+				if (!isMissingAgentSessionPaneError(error)) {
+					throw error;
+				}
+			}
 		}
 
 		return this.openStandaloneSession(request);
 	}
 
-	public async attachSession(sessionName: string): Promise<TerminalSessionHandle | undefined> {
-		if (this.sharedSessionName) {
-			const pane = await this.findPaneByTitle(sessionName);
-			if (!pane) {
+	public async attachSession(
+		sessionName: string,
+		options: { sharedSessionName?: string | undefined; paneId?: string | undefined } = {}
+	): Promise<TerminalSessionHandle | undefined> {
+		const sharedSessionName = Object.prototype.hasOwnProperty.call(options, 'sharedSessionName')
+			? options.sharedSessionName?.trim() || undefined
+			: this.sharedSessionName;
+		if (sharedSessionName) {
+			const pane = options.paneId
+				? await this.findPaneById(options.paneId, sharedSessionName)
+				: undefined;
+			const resolvedPane = pane ?? await this.findPaneByTitle(sessionName, sharedSessionName);
+			if (!resolvedPane) {
 				return undefined;
 			}
 			return {
 				sessionName,
-				paneId: toPaneReference(pane.id)
+				paneId: toPaneReference(resolvedPane.id),
+				sharedSessionName
 			};
 		}
 
-		const exists = await this.hasSession(sessionName);
+		const exists = await this.hasSession(sessionName, { sharedSessionName });
 		if (!exists) {
 			return undefined;
 		}
 		return {
 			sessionName,
-			paneId: sessionName
+			paneId: sessionName,
+			sharedSessionName: undefined
 		};
 	}
 
 	public async sendKeys(handle: TerminalSessionHandle, keys: string, options: { literal?: boolean } = {}): Promise<void> {
-		const sharedSessionName = handle.sharedSessionName ?? this.sharedSessionName;
+		const sharedSessionName = this.resolveHandleSharedSessionName(handle);
 		if (sharedSessionName) {
 			await this.withPaneFocus(handle.paneId, async () => {
 				if (!options.literal && keys === 'Enter') {
@@ -143,7 +161,7 @@ export class TerminalAgentTransport {
 	}
 
 	public async capturePane(handle: TerminalSessionHandle, _startLine = -200): Promise<string> {
-		const sharedSessionName = handle.sharedSessionName ?? this.sharedSessionName;
+		const sharedSessionName = this.resolveHandleSharedSessionName(handle);
 		if (sharedSessionName) {
 			const result = await this.runTerminal([
 				'--session',
@@ -156,12 +174,19 @@ export class TerminalAgentTransport {
 			return result.stdout.replace(/\r\n/g, '\n');
 		}
 
-		const result = await this.runTerminal(['--session', handle.sessionName, 'action', 'dump-screen']);
+		const standalonePane = await this.findStandalonePane(handle.sessionName);
+		const result = await this.runTerminal([
+			'--session',
+			handle.sessionName,
+			'action',
+			'dump-screen',
+			...(standalonePane ? ['--pane-id', toPaneReference(standalonePane.id)] : [])
+		]);
 		return result.stdout.replace(/\r\n/g, '\n');
 	}
 
 	public async readPaneState(handle: TerminalSessionHandle): Promise<{ dead: boolean; exitCode: number }> {
-		const sharedSessionName = handle.sharedSessionName ?? this.sharedSessionName;
+		const sharedSessionName = this.resolveHandleSharedSessionName(handle);
 		if (sharedSessionName) {
 			const pane = await this.findPaneById(handle.paneId, sharedSessionName);
 			if (!pane) {
@@ -176,16 +201,23 @@ export class TerminalAgentTransport {
 			};
 		}
 
-		const alive = await this.hasSession(handle.sessionName);
+		const standaloneAlive = await this.hasSession(handle.sessionName, { sharedSessionName: undefined });
+		const standalonePane = await this.findStandalonePane(handle.sessionName).catch(() => undefined);
+		if (standalonePane) {
+			return {
+				dead: standalonePane.exited,
+				exitCode: standalonePane.exitStatus ?? 0
+			};
+		}
 		return {
-			dead: !alive,
-			exitCode: alive ? 0 : 1
+			dead: !standaloneAlive,
+			exitCode: standaloneAlive ? 0 : 1
 		};
 	}
 
 	public async killSession(handle: TerminalSessionHandle): Promise<void> {
 		try {
-			const sharedSessionName = handle.sharedSessionName ?? this.sharedSessionName;
+			const sharedSessionName = this.resolveHandleSharedSessionName(handle);
 			if (sharedSessionName) {
 				await this.withPaneFocus(handle.paneId, async () => {
 					await this.runTerminal(['--session', sharedSessionName, 'action', 'close-pane']);
@@ -198,9 +230,12 @@ export class TerminalAgentTransport {
 		}
 	}
 
-	public async hasSession(sessionName: string): Promise<boolean> {
-		if (this.sharedSessionName) {
-			return Boolean(await this.findPaneByTitle(sessionName));
+	public async hasSession(sessionName: string, options: { sharedSessionName?: string | undefined } = {}): Promise<boolean> {
+		const sharedSessionName = Object.prototype.hasOwnProperty.call(options, 'sharedSessionName')
+			? options.sharedSessionName?.trim() || undefined
+			: this.sharedSessionName;
+		if (sharedSessionName) {
+			return Boolean(await this.findPaneByTitle(sessionName, sharedSessionName));
 		}
 
 		try {
@@ -216,8 +251,7 @@ export class TerminalAgentTransport {
 	}
 
 	private async openSharedSession(request: TerminalOpenSessionRequest, sharedSessionName: string): Promise<TerminalSessionHandle> {
-		const sessionPrefix = request.sessionPrefix?.trim() || 'mission-agent';
-		const sessionName = `${sessionPrefix}-${randomUUID()}`;
+		const sessionName = await this.resolveLaunchSessionName(request, { sharedSessionName });
 		const launchCommand = buildLaunchCommand(request);
 		const agentSessionPane = await this.resolveAgentSessionPane(sharedSessionName);
 		const agentSessionTabId = resolvePaneTabId(agentSessionPane);
@@ -289,8 +323,7 @@ export class TerminalAgentTransport {
 	}
 
 	private async openStandaloneSession(request: TerminalOpenSessionRequest): Promise<TerminalSessionHandle> {
-		const sessionPrefix = request.sessionPrefix?.trim() || 'mission-agent';
-		const sessionName = `${sessionPrefix}-${randomUUID()}`;
+		const sessionName = await this.resolveLaunchSessionName(request, { sharedSessionName: undefined });
 		const launchCommand = buildLaunchCommand(request);
 
 		const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mission-terminal-manager-'));
@@ -306,7 +339,7 @@ export class TerminalAgentTransport {
 			]);
 			let sessionVisible = false;
 			for (let attempt = 0; attempt < 20; attempt += 1) {
-				if (await this.hasSession(sessionName)) {
+				if (await this.hasSession(sessionName, { sharedSessionName: undefined })) {
 					sessionVisible = true;
 					break;
 				}
@@ -321,7 +354,8 @@ export class TerminalAgentTransport {
 
 		return {
 			sessionName,
-			paneId: sessionName
+			paneId: sessionName,
+			sharedSessionName: undefined
 		};
 	}
 
@@ -343,6 +377,42 @@ export class TerminalAgentTransport {
 		);
 	}
 
+	private async resolveLaunchSessionName(
+		request: TerminalOpenSessionRequest,
+		options: { sharedSessionName?: string | undefined }
+	): Promise<string> {
+		const explicitSessionName = request.sessionName?.trim();
+		if (explicitSessionName) {
+			return this.resolveAvailableSessionName(explicitSessionName, options);
+		}
+
+		const sessionPrefix = request.sessionPrefix?.trim() || 'mission-agent';
+		return `${sessionPrefix}-${randomUUID()}`;
+	}
+
+	private async resolveAvailableSessionName(
+		baseName: string,
+		options: { sharedSessionName?: string | undefined }
+	): Promise<string> {
+		const normalizedBaseName = baseName.trim();
+		if (!normalizedBaseName) {
+			throw new Error('Terminal session name cannot be empty.');
+		}
+
+		if (!(await this.hasSession(normalizedBaseName, options))) {
+			return normalizedBaseName;
+		}
+
+		for (let suffix = 2; suffix < 1000; suffix += 1) {
+			const candidate = `${normalizedBaseName}-${String(suffix)}`;
+			if (!(await this.hasSession(candidate, options))) {
+				return candidate;
+			}
+		}
+
+		return `${normalizedBaseName}-${randomUUID()}`;
+	}
+
 	private async findPaneByTitle(title: string, sharedSessionName?: string): Promise<TerminalPaneMetadata | undefined> {
 		const panes = await this.listSessionPanesFor(sharedSessionName);
 		return panes.find((pane) => pane.title === title && !pane.is_suppressed);
@@ -352,6 +422,12 @@ export class TerminalAgentTransport {
 		const panes = await this.listSessionPanesFor(sharedSessionName);
 		const numericId = parsePaneNumericId(paneId);
 		return panes.find((pane) => pane.id === numericId);
+	}
+
+	private async findStandalonePane(sessionName: string): Promise<TerminalPaneMetadata | undefined> {
+		const panes = await this.listSessionPanesFor(sessionName);
+		return panes.find((pane) => !pane.is_suppressed && !pane.is_plugin)
+			?? panes.find((pane) => !pane.is_plugin);
 	}
 
 	private async focusPane(paneId: string, sharedSessionName = this.sharedSessionName): Promise<void> {
@@ -454,6 +530,12 @@ export class TerminalAgentTransport {
 		this.logLine?.(`terminal-manager ${args.join(' ')}`);
 		return this.executor(args);
 	}
+
+	private resolveHandleSharedSessionName(handle: TerminalSessionHandle): string | undefined {
+		return Object.prototype.hasOwnProperty.call(handle, 'sharedSessionName')
+			? handle.sharedSessionName?.trim() || undefined
+			: this.sharedSessionName;
+	}
 }
 
 type TerminalPaneMetadata = {
@@ -511,6 +593,11 @@ function delay(ms: number): Promise<void> {
 
 function stripAnsi(value: string): string {
 	return value.replace(/\u001b\[[0-9;]*m/gu, '');
+}
+
+function isMissingAgentSessionPaneError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return message.includes("Unable to locate terminal-manager pane 'RUNWAY'");
 }
 
 function parseTerminalManagerSessionName(line: string): string | undefined {

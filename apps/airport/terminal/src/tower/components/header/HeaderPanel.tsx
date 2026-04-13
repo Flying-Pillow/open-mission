@@ -220,7 +220,7 @@ function resolveAnimatedStageIndex(stageItems: ProgressRailItem[]): number {
 	}
 	const doneIndex = stageItems
 		.map((item, index) => ({ item, index }))
-		.filter(({ item }) => item.state === 'done')
+		.filter(({ item }) => item.state === 'completed')
 		.map(({ index }) => index)
 		.at(-1);
 	if (doneIndex !== undefined) {
@@ -295,7 +295,7 @@ function timelineMarker(
 	isActive: boolean,
 	timelinePhase: number
 ): string {
-	if (state === 'done') {
+	if (state === 'completed') {
 		return '◆';
 	}
 	if (state === 'active') {
@@ -319,7 +319,7 @@ function timelineMarkerColor(
 }
 
 function timelineTrackChar(state: ProgressRailItem['state']): string {
-	if (state === 'done') {
+	if (state === 'completed') {
 		return '═';
 	}
 	if (state === 'active') {

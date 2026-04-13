@@ -1,14 +1,17 @@
 import { towerTheme } from '../towerTheme.js';
 import type { ProgressRailItemState } from './headerDomain.js';
 
-type ProgressStateTone = ProgressRailItemState | 'todo';
+type ProgressStateTone = ProgressRailItemState;
 
 export function progressStateTone(state: ProgressStateTone): string {
-	if (state === 'done') {
+	if (state === 'completed') {
 		return towerTheme.success;
 	}
 	if (state === 'active') {
 		return towerTheme.accent;
+	}
+	if (state === 'ready') {
+		return towerTheme.brightText;
 	}
 	if (state === 'blocked') {
 		return towerTheme.warning;
@@ -17,11 +20,14 @@ export function progressStateTone(state: ProgressStateTone): string {
 }
 
 export function progressConnectorTone(state: ProgressStateTone): string {
-	if (state === 'done') {
+	if (state === 'completed') {
 		return towerTheme.success;
 	}
 	if (state === 'active') {
 		return towerTheme.accent;
+	}
+	if (state === 'ready') {
+		return towerTheme.brightText;
 	}
 	if (state === 'blocked') {
 		return towerTheme.warning;

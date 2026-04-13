@@ -51,7 +51,7 @@ describe('CopilotCliAgentRunner', () => {
 			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
 				return {
 					stdout: JSON.stringify([
-						{ id: 1, title: 'AGENT SESSION', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false },
+						{ id: 1, title: 'RUNWAY', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false },
 						{ id: 2, title: 'MISSION', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: true },
 						...(state.exists && activeSessionName
 							? [{ id: 4, title: activeSessionName, tab_id: 0, exited: state.dead, exitStatus: state.dead ? state.exitCode : null, is_plugin: false, is_focused: false }]
@@ -103,9 +103,76 @@ describe('CopilotCliAgentRunner', () => {
 
 		expect(snapshot.runnerId).toBe('copilot-cli');
 		expect(snapshot.transportId).toBe('terminal');
-		expect(snapshot.sessionId).toMatch(/^mission-agent-/u);
+		expect(snapshot.sessionId).toBe('task-1-copilot-cli');
+		expect(snapshot.terminalSessionName).toBe('mission-mission');
+		expect(snapshot.terminalPaneId).toBe('terminal_4');
 		expect(snapshot.phase).toBe('running');
 		expect(state.sentKeys.some((args) => args.includes('write-chars') && args.includes('Implement the task.'))).toBe(true);
+	});
+
+	it('falls back to a standalone terminal session when the runway gate pane is unavailable', async () => {
+		let standaloneSessionName: string | undefined;
+		const fallbackExecutor: NonNullable<CopilotCliAgentRunnerOptions['executor']> = async (args) => {
+			if (args[0] === '--version') {
+				return { stdout: 'zellij 0.40.1\n', stderr: '' };
+			}
+			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
+				return {
+					stdout: JSON.stringify([
+						{ id: 2, title: 'MISSION', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: true }
+					]),
+					stderr: ''
+				};
+			}
+			if (args[0] === '--new-session-with-layout') {
+				standaloneSessionName = args.at(-1);
+				return { stdout: '', stderr: '' };
+			}
+			if (args[0] === 'list-sessions') {
+				return {
+					stdout: standaloneSessionName ? `${standaloneSessionName} [Created 1s ago]\n` : '',
+					stderr: ''
+				};
+			}
+			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'dump-screen') {
+				return { stdout: state.capture, stderr: '' };
+			}
+			if (args[0] === '--session' && args[2] === 'action' && (args[3] === 'write-chars' || args[3] === 'write')) {
+				state.sentKeys.push(args);
+				return { stdout: '', stderr: '' };
+			}
+			throw new Error(`Unexpected terminal command: ${args.join(' ')}`);
+		};
+
+		const runner = new CopilotCliAgentRunner({
+			command: 'copilot',
+			executor: fallbackExecutor,
+			sharedSessionName: 'mission-mission',
+			pollIntervalMs: 500
+		});
+
+		const session = await runner.startSession(createStartRequest());
+		const snapshot = session.getSnapshot();
+
+		expect(snapshot.sessionId).toBe('task-1-copilot-cli');
+		expect(snapshot.terminalSessionName).toBe(snapshot.sessionId);
+		expect(snapshot.terminalPaneId).toBeUndefined();
+		expect(state.sentKeys.some((args) => args.includes('write-chars') && args.includes('Implement the task.'))).toBe(true);
+	});
+
+	it('derives a task-based session name from the task path on launch', async () => {
+		const runner = new CopilotCliAgentRunner({
+			command: 'copilot',
+			executor,
+			sharedSessionName: 'mission-mission',
+			pollIntervalMs: 500
+		});
+
+		const session = await runner.startSession(createStartRequest({
+			taskId: 'spec/01-spec-from-prd'
+		}));
+
+		expect(session.getSnapshot().sessionId).toBe('01-spec-from-prd-copilot-cli');
 	});
 
 	it('accepts prompt submission by sending literal keys into terminal transport', async () => {

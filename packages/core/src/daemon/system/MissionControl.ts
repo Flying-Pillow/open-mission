@@ -112,7 +112,9 @@ function deriveContextGraph(
 				lifecycleState: session.lifecycleState,
 				...(session.workingDirectory ? { workingDirectory: session.workingDirectory } : {}),
 				...(session.currentTurnTitle ? { promptTitle: session.currentTurnTitle } : {}),
-				...(session.transportId ? { transportId: session.transportId } : {})
+				...(session.transportId ? { transportId: session.transportId } : {}),
+				...(session.terminalSessionName ? { terminalSessionName: session.terminalSessionName } : {}),
+				...(session.terminalPaneId ? { terminalPaneId: session.terminalPaneId } : {})
 			};
 			return [session.sessionId, sessionContext] as const;
 		})

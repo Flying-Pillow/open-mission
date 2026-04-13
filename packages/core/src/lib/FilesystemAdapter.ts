@@ -743,7 +743,7 @@ export class FilesystemAdapter {
 			body,
 			dependsOn: this.readTaskDependsOn(document.attributes, filePath),
 			blockedBy: [],
-			status: 'todo',
+			status: 'pending',
 			agent,
 			retries: 0,
 			fileName,
@@ -971,7 +971,7 @@ export class FilesystemAdapter {
 					: this.resolveDefaultTaskDependencies(index, tasks);
 			const blockedBy = dependsOn.filter((dependencyTaskId) => {
 				const dependency = tasks.find((candidate) => candidate.taskId === dependencyTaskId);
-				return dependency?.status !== 'done';
+				return dependency?.status !== 'completed';
 			});
 
 			return {

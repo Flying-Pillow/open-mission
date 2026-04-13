@@ -1,15 +1,22 @@
 import type { AirportProjectionSet, AirportState, PersistedAirportIntent } from '../../airport/build/index.js';
 import type { MissionAgentSessionRecord } from './daemon/contracts.js';
 import type { MissionDaemonSettings } from './lib/daemonConfig.js';
-import type {
+import {
 	MissionGateProjection,
-	MissionLifecycleState,
+	MISSION_AGENT_SESSION_LIFECYCLE_STATES,
+	MISSION_LIFECYCLE_STATES,
+	MISSION_STAGE_DERIVED_STATES,
+	MISSION_TASK_LIFECYCLE_STATES,
+	type MissionAgentSessionLifecycleState,
+	type MissionLifecycleState,
 	MissionPanicState,
 	MissionPauseState,
+	type MissionStageDerivedState,
 	MissionStageRuntimeProjection,
-	MissionTaskLaunchMode,
-	MissionTaskRuntimeState,
-	MissionWorkflowConfigurationSnapshot
+	type MissionTaskLifecycleState,
+	type MissionTaskLaunchMode,
+	type MissionTaskRuntimeState,
+	type MissionWorkflowConfigurationSnapshot
 } from './workflow/engine/types.js';
 import {
 	MISSION_ARTIFACT_KEYS,
@@ -34,10 +41,14 @@ import {
 } from './workflow/manifest.js';
 
 export {
+	MISSION_AGENT_SESSION_LIFECYCLE_STATES,
 	MISSION_ARTIFACT_LABELS,
 	MISSION_ARTIFACTS,
+	MISSION_LIFECYCLE_STATES,
+	MISSION_STAGE_DERIVED_STATES,
 	MISSION_STAGES,
 	MISSION_STAGE_FOLDERS,
+	MISSION_TASK_LIFECYCLE_STATES,
 	getMissionArtifactDefinition,
 	getMissionStageDefinition,
 	evaluateMissionTaskLaunchEligibility,
@@ -50,8 +61,12 @@ export {
 
 export type {
 	MissionArtifactKey,
+	MissionAgentSessionLifecycleState,
+	MissionLifecycleState,
 	MissionStageId,
+	MissionStageDerivedState,
 	MissionStageProgress,
+	MissionTaskLifecycleState,
 	MissionTaskPairingDefinition,
 	MissionTaskStatusIntent,
 	MissionWorkflowTaskStatus
@@ -77,7 +92,7 @@ export const MISSION_GATE_INTENTS: GateIntent[] = [
 ];
 
 export type MissionType = 'feature' | 'fix' | 'docs' | 'refactor' | 'task';
-export type MissionTaskStatus = MissionWorkflowTaskStatus;
+export type MissionTaskStatus = MissionTaskLifecycleState;
 export type MissionTaskAgent = string;
 
 export type OperatorActionScope = 'mission' | 'task' | 'session' | 'generation';
@@ -285,7 +300,7 @@ export type MissionTaskUpdate = Partial<Pick<MissionTaskState, 'status' | 'agent
 export type MissionStageStatus = {
 	stage: MissionStageId;
 	folderName: string;
-	status: MissionStageProgress;
+	status: MissionStageDerivedState;
 	taskCount: number;
 	completedTaskCount: number;
 	activeTaskIds: string[];
@@ -403,6 +418,8 @@ export type AgentSessionContext = {
 	lifecycleState: string;
 	promptTitle?: string;
 	transportId?: string;
+	terminalSessionName?: string;
+	terminalPaneId?: string;
 };
 
 export type ContextGraph = {
@@ -460,7 +477,7 @@ export type MissionControlPlaneStatus = {
 
 export type StageData = MissionStageStatus;
 
-export type MissionTowerStageRailItemState = 'done' | 'active' | 'blocked' | 'pending';
+export type MissionTowerStageRailItemState = MissionStageDerivedState;
 
 export type MissionTowerStageRailItem = {
 	id: string;
@@ -529,7 +546,8 @@ export type OperatorStatus = {
 export type OperatorData = OperatorStatus;
 
 export function isMissionTaskStatus(value: unknown): value is MissionTaskStatus {
-	return value === 'todo' || value === 'active' || value === 'blocked' || value === 'done';
+	return typeof value === 'string'
+		&& (MISSION_TASK_LIFECYCLE_STATES as readonly string[]).includes(value);
 }
 
 export function isMissionTaskAgent(value: unknown): value is MissionTaskAgent {

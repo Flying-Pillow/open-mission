@@ -406,5 +406,5 @@ function dockTargetLabel(kind: TreeTargetKind | undefined): string {
 }
 
 function isMissionDelivered(status: OperatorStatus): boolean {
-	return Boolean(status.stages?.some((stage) => stage.stage === 'delivery' && stage.status === 'done'));
+	return Boolean(status.stages?.some((stage) => stage.stage === 'delivery' && stage.status === 'completed'));
 }

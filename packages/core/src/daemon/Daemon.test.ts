@@ -2,16 +2,36 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { DaemonApi } from '../client/DaemonApi.js';
 import { DaemonClient } from '../client/DaemonClient.js';
 import { getMissionDaemonSettingsPath } from '../lib/daemonConfig.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
+import { getMissionWorktreesPath } from '../lib/repoConfig.js';
 import { initializeMissionRepository } from '../initializeMissionRepository.js';
 import { Mission } from './mission/Mission.js';
 import { startDaemon } from './Daemon.js';
 import { getDaemonManifestPath, getDaemonRuntimePath } from './daemonPaths.js';
 import { createDefaultWorkflowSettings } from '../workflow/engine/defaultWorkflow.js';
+
+const temporaryWorkspaceRoots = new Set<string>();
+const temporaryDirectories = new Set<string>();
+
+afterEach(async () => {
+	await Promise.all(
+		[...temporaryWorkspaceRoots].map(async (workspaceRoot) => {
+			temporaryWorkspaceRoots.delete(workspaceRoot);
+			await fs.rm(getMissionWorktreesPath(workspaceRoot), { recursive: true, force: true }).catch(() => undefined);
+			await fs.rm(workspaceRoot, { recursive: true, force: true }).catch(() => undefined);
+		})
+	);
+	await Promise.all(
+		[...temporaryDirectories].map(async (directory) => {
+			temporaryDirectories.delete(directory);
+			await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);
+		})
+	);
+});
 
 describe('Daemon', () => {
 	it('does not initialize daemon settings when a workspace first connects', async () => {
@@ -412,15 +432,6 @@ describe('Daemon', () => {
 						targetId: 'implementation/01-airport',
 						mode: 'control'
 					});
-					expect(rebound.state.airports.repositories[workspaceRoot]?.persistedIntent).toMatchObject({
-						panes: {
-							runway: {
-								targetKind: 'task',
-								targetId: 'implementation/01-airport',
-								mode: 'control'
-							}
-						}
-					});
 					expect(rebound.airportProjections.runway.subtitle).toContain('task:implementation/01-airport');
 				} finally {
 					client.dispose();
@@ -802,7 +813,7 @@ describe('Daemon', () => {
 		});
 	});
 
-	it('persists airport intent per repository across daemon restarts', async () => {
+	it('does not persist airport pane bindings across daemon restarts', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
 			await initializeMissionRepository(workspaceRoot);
@@ -839,18 +850,7 @@ describe('Daemon', () => {
 						const snapshot = await api.airport.getStatus();
 
 						expect(snapshot.state.airport.panes.runway).toMatchObject({
-							targetKind: 'task',
-							targetId: 'persisted/task',
-							mode: 'control'
-						});
-						expect(snapshot.state.airports.repositories[workspaceRoot]?.persistedIntent).toMatchObject({
-							panes: {
-								runway: {
-									targetKind: 'task',
-									targetId: 'persisted/task',
-									mode: 'control'
-								}
-							}
+							targetKind: 'empty'
 						});
 					} finally {
 						client.dispose();
@@ -1009,9 +1009,7 @@ describe('Daemon', () => {
 					});
 					expect(leftSnapshot.state.airport.repositoryRootPath).toBe(leftWorkspaceRoot);
 					expect(leftSnapshot.state.airport.panes.runway).toMatchObject({
-						targetKind: 'task',
-						targetId: 'left/task',
-						mode: 'control'
+						targetKind: 'empty'
 					});
 				} finally {
 					leftClient.dispose();
@@ -1494,6 +1492,7 @@ async function commitMissionRepositoryBootstrap(workspaceRoot: string): Promise<
 
 async function createTempRepo(): Promise<string> {
 	const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-'));
+	temporaryWorkspaceRoots.add(workspaceRoot);
 	runGit(workspaceRoot, ['init']);
 	runGit(workspaceRoot, ['config', 'user.email', 'mission@example.com']);
 	runGit(workspaceRoot, ['config', 'user.name', 'Mission Test']);
@@ -1505,6 +1504,7 @@ async function createTempRepo(): Promise<string> {
 
 async function createTempBareRemote(): Promise<string> {
 	const remoteRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-origin-'));
+	temporaryDirectories.add(remoteRoot);
 	runGit(remoteRoot, ['init', '--bare']);
 	return remoteRoot;
 }
@@ -1523,6 +1523,7 @@ async function withFakeGitHubCli(
 	run: (context: { callsPath: string }) => Promise<void>
 ): Promise<void> {
 	const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-fake-gh-'));
+	temporaryDirectories.add(fakeHome);
 	const callsPath = path.join(fakeHome, 'gh-calls.ndjson');
 	const statePath = path.join(fakeHome, 'gh-state.json');
 	const ghPath = path.join(fakeHome, 'gh');
@@ -1679,6 +1680,7 @@ async function readFakeGitHubCalls(callsPath: string): Promise<Array<{ args: str
 async function withTemporaryDaemonConfigHome(run: () => Promise<void>): Promise<void> {
 	const previousConfigHome = process.env['XDG_CONFIG_HOME'];
 	const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
+	temporaryDirectories.add(configHome);
 	process.env['XDG_CONFIG_HOME'] = configHome;
 	try {
 		await run();
