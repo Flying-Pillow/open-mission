@@ -10,14 +10,14 @@ import {
 } from '../workflow/engine/index.js';
 import {
     COPILOT_CLI_AGENT_RUNNER_ID,
-    COPILOT_SDK_AGENT_RUNNER_ID,
+    PI_AGENT_RUNNER_ID,
     isSupportedAgentRunner
-} from './agentRuntimes.js';
+} from '../agent/runtimes/AgentRuntimeIds.js';
 import { normalizeWorkflowSettings } from '../settings/validation.js';
 
 export const MISSION_DAEMON_SETTINGS_FILE = 'settings.json';
 
-export const MISSION_AGENT_RUNNERS = [COPILOT_CLI_AGENT_RUNNER_ID, COPILOT_SDK_AGENT_RUNNER_ID] as const;
+export const MISSION_AGENT_RUNNERS = [COPILOT_CLI_AGENT_RUNNER_ID, PI_AGENT_RUNNER_ID] as const;
 
 export type MissionAgentRunner = (typeof MISSION_AGENT_RUNNERS)[number];
 export type MissionDefaultAgentMode = 'interactive' | 'autonomous';

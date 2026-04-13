@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { Manifest } from './contracts.js';
+import type { Manifest } from './protocol/contracts.js';
 
 const MISSION_RUNTIME_DIRECTORY = 'mission';
 const MISSION_DAEMON_MANIFEST_FILE = 'daemon.json';

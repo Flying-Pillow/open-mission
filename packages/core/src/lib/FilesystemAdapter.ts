@@ -19,7 +19,7 @@ import {
 	type MissionTaskState,
 	type MissionType
 } from '../types.js';
-import { renderMissionBriefBody } from '../templates/mission/index.js';
+import { renderMissionBriefBody } from '../workflow/templates/mission/index.js';
 import {
 	getMissionArtifactDefinition,
 	getMissionStageDefinition
@@ -30,7 +30,7 @@ import {
 	type MissionRuntimeRecord,
 	MISSION_WORKFLOW_RUNTIME_SCHEMA_VERSION
 } from '../workflow/engine/index.js';
-import { DEFAULT_AGENT_RUNNER_ID, normalizeLegacyAgentRunnerId } from './agentRuntimes.js';
+import { DEFAULT_AGENT_RUNNER_ID } from '../agent/runtimes/AgentRuntimeIds.js';
 
 export class ArtifactFormatError extends Error {
 	public constructor(message: string) {
@@ -730,9 +730,10 @@ export class FilesystemAdapter {
 		const sequence = this.parseTaskSequence(fileName, sequenceFallback);
 		const parsedTaskBody = this.parseTaskBody(body, fileName);
 		const taskId = this.createTaskId(stage, fileName);
-		const agent =
-			normalizeLegacyAgentRunnerId(this.readOptionalStringAttribute(document.attributes, 'agent', filePath))
-			?? DEFAULT_AGENT_RUNNER_ID;
+		const agentAttribute = this.readOptionalStringAttribute(document.attributes, 'agent', filePath);
+		const agent = typeof agentAttribute === 'string' && agentAttribute.trim()
+			? agentAttribute.trim()
+			: DEFAULT_AGENT_RUNNER_ID;
 
 		return {
 			taskId,

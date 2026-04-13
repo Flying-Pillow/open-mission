@@ -57,3 +57,14 @@ Any document that compresses those into one "Mission state" concept is underspec
 ## 6. Replay Material Preserves Historical Intent, Not Always Exact Current Runtime Wiring
 
 The replayed dossiers under `.mission/missions/11-*` through `.mission/missions/18-*` preserve the five architecture anchors well, but some replay language still describes architectural outcomes at a coarser level than the current code's module boundaries. This is expected. The replay set is an architectural preservation artifact, not a module-by-module code map.
+
+## 7. Core Folder Boundaries Were Recently Realigned
+
+The current `packages/core/src` structure promotes mission, repository, workspace, and agent concerns to first-class folders:
+
+- `src/mission`
+- `src/repository`
+- `src/workspace`
+- `src/agent`
+
+Older notes or diffs may still reference prior placements such as `src/daemon/mission`, `src/daemon/workspace`, `src/events.ts`, or `src/lib/agentRuntimes.ts`. Treat those as historical references; the current tree and imports are the operational authority.

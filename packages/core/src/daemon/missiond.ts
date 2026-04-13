@@ -1,3 +1,3 @@
-import { runMissiondCommand } from './runMissiondCommand.js';
+import { runMissiondCommand } from './runtime/runMissiondCommand.js';
 
 await runMissiondCommand();

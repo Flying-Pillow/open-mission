@@ -2,7 +2,7 @@ import type {
 	AirportClientConnect,
 	AirportClientObserve,
 	AirportPaneBind
-} from '../daemon/contracts.js';
+} from '../daemon/protocol/contracts.js';
 import type { MissionSystemSnapshot } from '../types.js';
 import { DaemonClient } from './DaemonClient.js';
 

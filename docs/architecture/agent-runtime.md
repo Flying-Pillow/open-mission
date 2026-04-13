@@ -32,19 +32,20 @@ The runtime architecture has two first-class execution contracts:
 1. `AgentRunner`
 2. `AgentSession`
 
-`AgentRunner` is the factory and capability boundary for one adapter family.
+`AgentRunner` is the abstract base class and capability boundary for one adapter family.
 
 `AgentSession` is the live instance boundary for one running external session.
 
-Mission may still use a daemon-owned coordination service internally to keep a session registry, reconcile restarts, and expose IPC methods. That service is operational glue, not the core abstraction exported by the architecture.
+Mission may still use daemon-owned coordination helpers internally to expose IPC methods or hold process-local registries. Those helpers are operational glue, not the core abstraction exported by the architecture.
 
 ## Primary Components
 
 | Component | Responsibility | Owned state | Runtime boundary |
 | --- | --- | --- | --- |
-| daemon-owned agent control path | resolve runners, hold live sessions, reconcile restarts, route workflow and external session control | live session registry, recovery, event fanout | Daemon/runtime |
-| `AgentRunner` | Thin executable adapter contract implemented per agent family | executable-specific validation, launch, reconciliation, capabilities | Provider-specific |
-| `AgentSession` | Live adapter-backed session instance | transport handle, process or SDK attachment, live snapshot | Provider-specific instance |
+| daemon-owned runtime routing | resolve runner subclasses, invoke launches, expose workflow and external session control | daemon-local request routing and recovery hooks | Daemon/runtime |
+| `AgentRunner` | Abstract base class that owns shared Mission session mechanics and exposes subclass hooks | launch validation, managed snapshots, event fanout, reconciliation entry points | Shared runtime base |
+| runner subclass | Concrete executable or SDK adapter for one external agent family | transport handles, executable-specific parsing, provider control | Provider-specific |
+| `AgentSession` | Live adapter-backed session instance returned by the base/runtime boundary | session reference and control facade | Provider-specific instance |
 | `AgentSessionSnapshot` | Normalized session state exposed to the workflow engine and surfaces | no behavior, state only | Shared contract |
 | `AgentSessionEvent` | Normalized runtime facts emitted by the runtime | append-only runtime observations | Shared contract |
 
@@ -54,7 +55,7 @@ That means a runner should use structured dual-channel communication such as a M
 
 ## Runner Contract
 
-Each runner should implement only the small set of methods required to wrap an external coding agent:
+Each runner subclass should implement only the small set of hooks required to wrap an external coding agent:
 
 1. report capabilities
 2. report availability
@@ -64,7 +65,7 @@ Each runner should implement only the small set of methods required to wrap an e
 
 This is intentionally narrow.
 
-The runner is not responsible for:
+The base runner plus its subclass are not responsible for:
 
 - defining workflow policy
 - defining mission task semantics
@@ -114,7 +115,7 @@ These are the files that define the architecture seen by the workflow engine and
 
 That means the first-class concepts are:
 
-- `AgentRunner`
+- `AgentRunner` as an abstract base class
 - `AgentSession`
 - `AgentSessionSnapshot`
 - `AgentSessionEvent`
@@ -124,7 +125,7 @@ That means the first-class concepts are:
 These may exist in code, but they are not first-class architecture:
 
 - an in-memory session registry
-- a daemon-side agent control service
+- a daemon-side routing helper
 - a persistence helper
 - a terminal transport helper
 
@@ -136,8 +137,9 @@ The runtime architecture separates three concerns:
 
 | Concern | Primary component | Description |
 | --- | --- | --- |
-| Mission-facing control path | daemon-owned agent control path | Shared control boundary used by workflow and external daemon clients |
-| Provider integration | `AgentRunner` | Thin adapter that translates Mission launch and reconciliation into executable behavior |
+| Mission-facing control path | daemon-owned runtime routing | Shared control boundary used by workflow and external daemon clients |
+| Shared runtime lifecycle | `AgentRunner` | Abstract base class that normalizes Mission launch, session state, and event wiring |
+| Provider integration | runner subclass | Concrete adapter that translates Mission launch and reconciliation into executable behavior |
 | Live session instance | `AgentSession` | One running adapter-backed session object |
 | Shared runtime facts | `AgentSessionSnapshot`, `AgentSessionEvent` | The normalized state and event contract used across runtime boundaries |
 
@@ -148,8 +150,9 @@ This separation keeps provider mechanics out of workflow logic and prevents inte
 | Layer | Owns | Must not own |
 | --- | --- | --- |
 | Workflow engine | when work should start, be steered, stop, or recover; mission truth | provider protocol, terminal IO details |
-| daemon-owned agent control | live session registry, reconciliation, persistence hooks, session routing | workflow truth, Airport layout semantics |
-| Agent runner | executable translation and provider-specific process or SDK interaction | workflow policy, surface policy |
+| daemon-owned runtime routing | daemon entrypoints, recovery hooks, session routing | workflow truth, Airport layout semantics |
+| `AgentRunner` base class | shared Mission launch/session mechanics and normalized runtime behavior | provider protocol, workflow policy |
+| runner subclass | executable translation and provider-specific process or SDK interaction | workflow policy, surface policy |
 | Agent session | one live executable-backed interaction boundary | workflow policy, pane routing |
 
 ## Public Model
@@ -161,17 +164,18 @@ The public execution model is defined by four first-class concepts:
 - `AgentSessionSnapshot`
 - `AgentSessionEvent`
 
-The daemon-owned control path uses these contracts to serve workflow requests and external session commands.
+The daemon-owned runtime routing layer uses these contracts to serve workflow requests and external session commands.
 
 ### Component Semantics
 
 | Component | Architectural meaning |
 | --- | --- |
-| daemon-owned agent control path | Shared daemon service that resolves runners, owns live session registry, and exposes runtime control to workflow and surfaces |
-| `AgentRunner` | Thin executable adapter responsible for validation, start, capability reporting, and reconciliation |
+| daemon-owned runtime routing | Shared daemon entrypoint layer that resolves runner subclasses and exposes runtime control to workflow and surfaces |
+| `AgentRunner` | Abstract base class responsible for validation, managed session lifecycle, capability reporting, and reconciliation entry points |
+| runner subclass | Concrete adapter that supplies executable-specific launch, attach, prompt, command, and transport behavior |
 | `AgentSession` | Live provider-backed session instance that accepts prompts and commands and emits normalized events |
 
-If an implementation helper such as an orchestrator exists in code, it is internal plumbing for the daemon-owned control path.
+If an implementation helper such as a router or registry exists in code, it is internal plumbing for the daemon-owned runtime routing layer.
 
 ## Runtime Sequence
 
@@ -181,14 +185,17 @@ This diagram shows the intended responsibility split.
 sequenceDiagram
 	autonumber
 	participant Engine as Workflow Engine
-	participant Control as Agent control path
+	participant Control as Runtime routing
 	participant Runner as AgentRunner
+	participant Adapter as Runner subclass
 	participant Session as AgentSession
 	participant Agent as External Coding Agent
 
 	Engine->>Control: session.launch(request)
 	Control->>Runner: startSession(config)
-	Runner->>Agent: start or resume executable session
+	Runner->>Adapter: subclass launch hook
+	Adapter->>Agent: start or resume executable session
+	Adapter-->>Runner: executable-backed session control
 	Runner-->>Control: AgentSession
 	Control->>Session: subscribe to events
 	Agent-->>Session: runtime updates
@@ -203,11 +210,13 @@ sequenceDiagram
 	Control-->>Engine: workflow event input
 
 	Control->>Runner: reconcileSession(reference)
+	Runner->>Adapter: subclass reconcile hook
+	Adapter-->>Runner: executable-backed session control
 	Runner-->>Control: AgentSession
 	Session-->>Control: session.attached(snapshot)
 ```
 
-The key point is that workflow requests and external daemon clients use the same daemon-owned control path.
+The key point is that workflow requests and external daemon clients use the same daemon-owned runtime routing layer.
 
 Adapters remain behind that boundary.
 
@@ -215,15 +224,16 @@ Adapters remain behind that boundary.
 
 | Component | Must do | Must not do |
 | --- | --- | --- |
-| daemon-owned agent control path | resolve runners, manage live sessions, own recovery, route workflow and external control | encode provider-specific flags as public Mission semantics |
-| `AgentRunner` | validate config, start sessions, reconcile persisted references, report capabilities | own workflow policy, own mission truth |
+| daemon-owned runtime routing | resolve runners, route workflow and external control, own process-local recovery glue | encode provider-specific flags as public Mission semantics |
+| `AgentRunner` | validate config, own managed session lifecycle, start sessions, reconcile persisted references, report capabilities | own workflow policy, own mission truth |
+| runner subclass | supply executable-specific launch, attach, prompt, command, and transport behavior | redefine Mission lifecycle semantics or workflow policy |
 | `AgentSession` | represent one live runtime-managed session and execute Mission prompts or commands | define workflow policy or surface behavior |
 
 ## Normalized Contract Addendum
 
 The runtime contract is intentionally small, but it is not vague.
 
-A contributor implementing a new runner should satisfy the following minimum contract.
+A contributor implementing a new runner subclass should satisfy the following minimum contract.
 
 ### Required `AgentRunner` Methods
 

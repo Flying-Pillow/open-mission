@@ -10,7 +10,7 @@ import type {
 	ControlWorkflowSettingsUpdate,
 	ControlActionExecute,
 	ControlWorkflowSettingsUpdateResponse
-} from '../daemon/contracts.js';
+} from '../daemon/protocol/contracts.js';
 import type { WorkflowSettingsGetResult } from '../settings/types.js';
 import type {
 	OperatorActionDescriptor,
@@ -21,7 +21,7 @@ import type {
 	OperatorStatus
 } from '../types.js';
 import { DaemonClient } from './DaemonClient.js';
-import type { ControlRepositoriesAdd } from '../daemon/contracts.js';
+import type { ControlRepositoriesAdd } from '../daemon/protocol/contracts.js';
 
 export class DaemonControlApi {
 	public constructor(private readonly client: DaemonClient) { }

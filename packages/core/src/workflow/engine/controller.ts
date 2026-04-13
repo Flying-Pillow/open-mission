@@ -1,12 +1,12 @@
 import type { MissionDescriptor } from '../../types.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import type {
+	AgentLaunchConfig,
     AgentCommand,
     AgentPrompt,
     AgentSessionReference,
-    AgentSessionSnapshot,
-    AgentSessionStartRequest
-} from '../../runtime/AgentRuntimeTypes.js';
+    AgentSessionSnapshot
+} from '../../agent/AgentRuntimeTypes.js';
 import {
     createMissionWorkflowConfigurationSnapshot,
     createMissionRuntimeRecordForMission,
@@ -121,11 +121,8 @@ export class MissionWorkflowController {
 		return this.requestExecutor.attachSession(reference);
 	}
 
-    public async startRuntimeSession(input: {
-        runnerId: string;
-        request: AgentSessionStartRequest;
-    }): Promise<AgentSessionSnapshot> {
-        return this.requestExecutor.startSession(input);
+        public async startRuntimeSession(config: AgentLaunchConfig): Promise<AgentSessionSnapshot> {
+		return this.requestExecutor.startSession(config);
     }
 
     public async cancelRuntimeSession(

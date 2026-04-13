@@ -1,6 +1,7 @@
 import type { AirportProjectionSet, AirportState, PersistedAirportIntent } from '../../airport/build/index.js';
-import type { MissionAgentSessionRecord } from './daemon/contracts.js';
+import type { MissionAgentSessionRecord } from './daemon/protocol/contracts.js';
 import type { MissionDaemonSettings } from './lib/daemonConfig.js';
+import { MISSION_STAGE_IDS, type MissionStageId } from './workflow/stages.js';
 import {
 	MissionGateProjection,
 	MISSION_AGENT_SESSION_LIFECYCLE_STATES,
@@ -32,7 +33,6 @@ import {
 	isMissionStageId,
 	isMissionStageProgress,
 	type MissionArtifactKey,
-	type MissionStageId,
 	type MissionTaskPairingDefinition,
 	type MissionStageProgress,
 	type MissionTaskStatusIntent,
@@ -44,6 +44,7 @@ export {
 	MISSION_ARTIFACT_LABELS,
 	MISSION_ARTIFACTS,
 	MISSION_LIFECYCLE_STATES,
+	MISSION_STAGE_IDS,
 	MISSION_STAGE_DERIVED_STATES,
 	MISSION_STAGES,
 	MISSION_STAGE_FOLDERS,

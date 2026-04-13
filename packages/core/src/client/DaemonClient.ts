@@ -2,14 +2,14 @@ import * as net from 'node:net';
 import {
 	MissionAgentEventEmitter,
 	type MissionAgentDisposable
-	} from '../daemon/events.js';
+	} from '../agent/events.js';
 import type {
 	Message,
 	Method,
 	Notification,
 	Response,
 	Request
-} from '../daemon/contracts.js';
+} from '../daemon/protocol/contracts.js';
 import {
 	readDaemonManifest,
 	resolveDaemonSocketPath

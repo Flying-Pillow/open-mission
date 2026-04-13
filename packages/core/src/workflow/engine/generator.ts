@@ -1,7 +1,7 @@
 import {
     renderMissionTaskTemplate,
     type MissionTaskTemplate
-} from '../../templates/mission/index.js';
+} from '../templates/mission/index.js';
 import type { MissionDescriptor } from '../../types.js';
 import type {
     MissionGeneratedTaskPayload,

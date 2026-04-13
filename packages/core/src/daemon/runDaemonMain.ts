@@ -1,7 +1,7 @@
 import { startDaemon } from './Daemon.js';
 import { ensureMissionUserConfig } from '../lib/userConfig.js';
 import { resolveGitWorkspaceRoot } from '../lib/workspacePaths.js';
-import type { AgentRunner } from '../runtime/AgentRunner.js';
+import type { AgentRunner } from '../agent/AgentRunner.js';
 
 type RuntimeFactoryModule = {
 	createConfiguredAgentRunners?: (options: {

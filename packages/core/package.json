@@ -7,7 +7,7 @@
     "access": "restricted"
   },
   "scripts": {
-    "build": "rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./scripts/copy-template-files.mjs",
+    "build": "rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./src/workflow/templates/copyTemplateFiles.mjs",
     "check": "tsc --noEmit -p tsconfig.json",
     "daemon:dev": "nodemon --watch src --ext ts --signal SIGTERM --exec \"tsx src/daemon/main.ts\"",
     "lint": "eslint src --ext .ts",

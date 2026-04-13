@@ -2,13 +2,13 @@ import * as path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { DaemonClient } from '../client/DaemonClient.js';
-import { PROTOCOL_VERSION, type Ping } from '../daemon/contracts.js';
+import { PROTOCOL_VERSION, type Ping } from '../daemon/protocol/contracts.js';
 import {
 	type DaemonRuntimeMode,
 	resolveDefaultRuntimeFactoryModulePath,
 	startMissionDaemonProcess,
 	stopMissionDaemonProcess
-} from '../daemon/processControl.js';
+} from '../daemon/runtime/DaemonProcessControl.js';
 
 export type ConnectAirportControlOptions = {
 	surfacePath: string;

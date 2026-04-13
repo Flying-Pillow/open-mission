@@ -3,8 +3,9 @@ import {
     type MissionStageDerivedState,
     type MissionTaskLifecycleState
 } from './engine/types.js';
+import { MISSION_STAGE_IDS, type MissionStageId } from './stages.js';
 
-export type MissionStageId = 'prd' | 'spec' | 'implementation' | 'audit' | 'delivery';
+export type { MissionStageId };
 
 export type MissionWorkflowTaskStatus = MissionTaskLifecycleState;
 export type MissionTaskStatusIntent = 'start' | 'done' | 'blocked' | 'reopen';
@@ -113,7 +114,7 @@ export const WORKFLOW_ARTIFACT_DEFINITIONS: Readonly<Record<MissionArtifactKey, 
     }
 };
 
-export const MISSION_STAGES: readonly MissionStageId[] = WORKFLOW_STAGE_DEFINITIONS.map((stage) => stage.id);
+export const MISSION_STAGES: readonly MissionStageId[] = [...MISSION_STAGE_IDS];
 
 export const MISSION_ARTIFACT_KEYS: readonly MissionArtifactKey[] = Object.keys(
     WORKFLOW_ARTIFACT_DEFINITIONS

@@ -6,11 +6,11 @@ import type {
 	MissionFromBriefRequest,
 	SessionCommand,
 	SessionPrompt
-} from '../daemon/contracts.js';
+} from '../daemon/protocol/contracts.js';
 import type {
 	AgentCommand,
 	AgentPrompt
-} from '../runtime/AgentRuntimeTypes.js';
+} from '../agent/AgentRuntimeTypes.js';
 import type {
 	GateIntent,
 	OperatorActionDescriptor,

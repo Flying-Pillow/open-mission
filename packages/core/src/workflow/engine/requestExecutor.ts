@@ -1,46 +1,48 @@
 import type { MissionDescriptor, MissionStageId } from '../../types.js';
 import type { MissionDefaultAgentMode } from '../../lib/daemonConfig.js';
-import { DEFAULT_AGENT_RUNNER_ID, normalizeLegacyAgentRunnerId } from '../../lib/agentRuntimes.js';
+import { DEFAULT_AGENT_RUNNER_ID } from '../../agent/runtimes/AgentRuntimeIds.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import {
 	MISSION_STAGE_TEMPLATE_DEFINITIONS,
 	renderMissionProductTemplate
-} from '../../templates/mission/index.js';
-import { renderMissionArtifactTitle } from '../../templates/mission/common.js';
+} from '../templates/mission/index.js';
+import { renderMissionArtifactTitle } from '../templates/mission/common.js';
 import { getMissionArtifactDefinition } from '../manifest.js';
 import {
 	type MissionWorkflowConfigurationSnapshot,
 	type MissionWorkflowEvent,
 	type MissionWorkflowRequest,
 	type MissionWorkflowRuntimeState,
-	type MissionTaskRuntimeState
+	type MissionTaskRuntimeState,
+	type MissionAgentSessionRuntimeState,
+	type MissionRuntimeRecord
 } from './types.js';
 import {
 	generateMissionWorkflowTasks,
 	type MissionWorkflowTaskGenerationResult
 } from './generator.js';
-import type { MissionAgentSessionRuntimeState, MissionRuntimeRecord } from './types.js';
-import type { AgentRunner } from '../../runtime/AgentRunner.js';
-import { AgentSessionOrchestrator } from '../../runtime/AgentSessionOrchestrator.js';
-import { AgentSessionEventEmitter } from '../../runtime/AgentSessionEventEmitter.js';
-import type { PersistedAgentSessionStore } from '../../runtime/PersistedAgentSessionStore.js';
+import type { AgentRunner } from '../../agent/AgentRunner.js';
+import type { AgentSession } from '../../agent/AgentSession.js';
 import type {
 	AgentCommand,
-	AgentControlKind,
+	AgentLaunchConfig,
 	AgentPrompt,
 	AgentSessionEvent,
-	AgentSessionLaunchRequest,
-	AgentSessionReference,
 	AgentSessionId,
-	AgentPromptSource,
-	AgentSessionSnapshot,
-	AgentSessionStartRequest
-} from '../../runtime/AgentRuntimeTypes.js';
+	AgentSessionReference,
+	AgentSessionSnapshot
+} from '../../agent/AgentRuntimeTypes.js';
+
+type RuntimeSessionHandle = {
+	session: AgentSession;
+	subscription: { dispose(): void };
+};
+
+type RuntimeEventListener = (event: AgentSessionEvent) => void;
 
 export interface MissionWorkflowRequestExecutorOptions {
 	adapter: FilesystemAdapter;
 	runners: Map<string, AgentRunner>;
-	sessionStore?: PersistedAgentSessionStore;
 	instructionsPath?: string;
 	skillsPath?: string;
 	defaultModel?: string;
@@ -49,67 +51,47 @@ export interface MissionWorkflowRequestExecutorOptions {
 }
 
 export class MissionWorkflowRequestExecutor {
-	private readonly adapter: FilesystemAdapter;
-	private readonly runners: Map<string, AgentRunner>;
-	private readonly orchestrator: AgentSessionOrchestrator;
-	private readonly sessionStore: PersistedAgentSessionStore | undefined;
+	private readonly runtimeSessions = new Map<AgentSessionId, RuntimeSessionHandle>();
+	private readonly runtimeEvents: MissionWorkflowEvent[] = [];
+	private readonly sessionTaskIds = new Map<AgentSessionId, string>();
+	private readonly runtimeListeners = new Set<RuntimeEventListener>();
 	private readonly defaultModel: string | undefined;
 	private readonly defaultMode: MissionDefaultAgentMode | undefined;
 	private readonly workingDirectoryResolver: (task: MissionTaskRuntimeState, descriptor: MissionDescriptor) => string;
-	private readonly runtimeEvents: MissionWorkflowEvent[] = [];
-	private readonly sessionTaskIds = new Map<AgentSessionId, string>();
-	private readonly runtimeEventEmitter = new AgentSessionEventEmitter<AgentSessionEvent>();
-	private readonly orchestratorSubscription: { dispose(): void };
 
-	public readonly onDidRuntimeEvent = this.runtimeEventEmitter.event;
-
-	public constructor(options: MissionWorkflowRequestExecutorOptions) {
-		this.adapter = options.adapter;
-		this.runners = options.runners;
-		this.sessionStore = options.sessionStore;
-		this.orchestrator = new AgentSessionOrchestrator({
-			runners: this.runners.values(),
-			...(this.sessionStore ? { store: this.sessionStore } : {})
-		});
-		this.orchestratorSubscription = this.orchestrator.subscribe((event: AgentSessionEvent) => {
-			this.runtimeEventEmitter.fire(event);
-			const translated = this.translateRuntimeEvent(event);
-			if (translated) {
-				this.runtimeEvents.push(translated);
-			}
-		});
+	public constructor(private readonly options: MissionWorkflowRequestExecutorOptions) {
 		this.defaultModel = options.defaultModel;
 		this.defaultMode = options.defaultMode;
 		this.workingDirectoryResolver =
-			options.workingDirectoryResolver ??
-			((_task, descriptor) => descriptor.missionDir);
+			options.workingDirectoryResolver ?? ((_task, descriptor) => descriptor.missionDir);
 	}
 
+	public readonly onDidRuntimeEvent = (listener: RuntimeEventListener): { dispose(): void } => {
+		this.runtimeListeners.add(listener);
+		return {
+			dispose: () => {
+				this.runtimeListeners.delete(listener);
+			}
+		};
+	};
+
 	public dispose(): void {
-		this.orchestratorSubscription.dispose();
-		this.orchestrator.dispose();
-		this.runtimeEventEmitter.dispose();
+		for (const handle of this.runtimeSessions.values()) {
+			handle.subscription.dispose();
+		}
+		this.runtimeSessions.clear();
+		this.runtimeListeners.clear();
 		this.runtimeEvents.length = 0;
 	}
 
 	public normalizePersistedSessionIdentity(
 		session: MissionAgentSessionRuntimeState
 	): MissionAgentSessionRuntimeState {
-		if (session.transportId) {
+		if (session.transportId || session.runnerId !== 'copilot-cli') {
 			return session;
 		}
-		if (session.runnerId !== 'copilot-cli') {
-			return session;
-		}
-
-		const terminalRuntime = [...this.runners.values()].find((runner) => runner.transportId === 'terminal');
-		if (!terminalRuntime) {
-			return session;
-		}
-
 		return {
 			...session,
-			runnerId: terminalRuntime.id,
 			transportId: 'terminal'
 		};
 	}
@@ -139,7 +121,7 @@ export class MissionWorkflowRequestExecutor {
 				}
 				case 'session.launch': {
 					const taskId = String(request.payload['taskId'] ?? '');
-					const task = input.runtime.tasks.find(candidate => candidate.taskId === taskId);
+					const task = input.runtime.tasks.find((candidate) => candidate.taskId === taskId);
 					if (!task) {
 						events.push({
 							eventId: `${request.requestId}:launch-failed`,
@@ -154,15 +136,13 @@ export class MissionWorkflowRequestExecutor {
 					}
 
 					const requestedRunnerId =
-						typeof request.payload['runnerId'] === 'string' ? request.payload['runnerId'] : undefined;
-					const taskRunnerId = normalizeLegacyAgentRunnerId(task.agentRunner);
+						typeof request.payload['runnerId'] === 'string' ? request.payload['runnerId'].trim() : undefined;
+					const configuredRunnerId = typeof task.agentRunner === 'string' ? task.agentRunner.trim() : undefined;
 					const runnerId =
-						(requestedRunnerId && this.runners.has(requestedRunnerId) ? requestedRunnerId : undefined) ??
-						(taskRunnerId && this.runners.has(taskRunnerId) ? taskRunnerId : undefined) ??
-						(this.runners.size === 1 ? this.runners.keys().next().value : undefined) ??
-						(this.runners.has(DEFAULT_AGENT_RUNNER_ID) ? DEFAULT_AGENT_RUNNER_ID : undefined) ??
-						requestedRunnerId ??
-						taskRunnerId;
+						(requestedRunnerId && this.options.runners.has(requestedRunnerId) ? requestedRunnerId : undefined)
+						?? (configuredRunnerId && this.options.runners.has(configuredRunnerId) ? configuredRunnerId : undefined)
+						?? (this.options.runners.size === 1 ? this.options.runners.keys().next().value : undefined)
+						?? (this.options.runners.has(DEFAULT_AGENT_RUNNER_ID) ? DEFAULT_AGENT_RUNNER_ID : undefined);
 					if (!runnerId) {
 						events.push({
 							eventId: `${request.requestId}:launch-failed`,
@@ -171,18 +151,17 @@ export class MissionWorkflowRequestExecutor {
 							source: 'daemon',
 							causedByRequestId: request.requestId,
 							taskId,
-							reason: `Task '${task.taskId}' does not specify an agent runner.`
+							reason: `Task '${task.taskId}' does not specify a registered agent runner.`
 						});
 						break;
 					}
 
 					try {
-						const transportId = this.runners.get(runnerId)?.transportId;
 						const promptText =
 							typeof request.payload['prompt'] === 'string' && request.payload['prompt'].trim()
 								? request.payload['prompt'].trim()
 								: task.instruction;
-						const launchRequest: AgentSessionLaunchRequest = {
+						const launchConfig: AgentLaunchConfig = {
 							missionId: input.missionId,
 							workingDirectory:
 								typeof request.payload['workingDirectory'] === 'string' && request.payload['workingDirectory'].trim()
@@ -196,21 +175,14 @@ export class MissionWorkflowRequestExecutor {
 								instruction: task.instruction
 							},
 							specification: {
-								summary: typeof request.payload['specificationSummary'] === 'string'
-									? request.payload['specificationSummary']
-									: '',
+								summary:
+									typeof request.payload['specificationSummary'] === 'string'
+										? request.payload['specificationSummary']
+										: task.title || task.instruction,
 								documents: []
 							},
-							runner: {
-								runnerId
-							},
-							transport: {
-								transportId: 'runway-terminal',
-								visibleInRunway: transportId === 'terminal'
-							},
-							resume: {
-								mode: 'new'
-							},
+							requestedRunnerId: runnerId,
+							resume: { mode: 'new' },
 							initialPrompt: {
 								source: 'engine',
 								text: promptText,
@@ -225,20 +197,8 @@ export class MissionWorkflowRequestExecutor {
 								? { metadata: { terminalSessionName: request.payload['terminalSessionName'].trim() } }
 								: {})
 						};
-						const snapshot = await this.orchestrator.launch(launchRequest);
-						events.push({
-							eventId: `${request.requestId}:session-started`,
-							type: 'session.started',
-							occurredAt: snapshot.updatedAt,
-							source: 'daemon',
-							causedByRequestId: request.requestId,
-							sessionId: snapshot.sessionId,
-							taskId: task.taskId,
-							runnerId: snapshot.runnerId,
-							...(snapshot.transportId ? { transportId: snapshot.transportId } : {}),
-							...(snapshot.terminalSessionName ? { terminalSessionName: snapshot.terminalSessionName } : {}),
-							...(snapshot.terminalPaneId ? { terminalPaneId: snapshot.terminalPaneId } : {})
-						});
+						const snapshot = await this.startSession(launchConfig);
+						events.push(this.createSessionStartedEvent(request.requestId, snapshot, task.taskId));
 					} catch (error) {
 						events.push({
 							eventId: `${request.requestId}:launch-failed`,
@@ -253,23 +213,17 @@ export class MissionWorkflowRequestExecutor {
 					break;
 				}
 				case 'session.prompt': {
-					const sessionId = String(request.payload['sessionId'] ?? '');
+					const sessionId = String(request.payload['sessionId'] ?? '').trim();
 					const text = String(request.payload['text'] ?? '').trim();
-					if (!sessionId || text.length === 0) {
+					if (!sessionId || !text) {
 						break;
 					}
-
-					const sourceValue = typeof request.payload['source'] === 'string'
-						? request.payload['source']
-						: 'engine';
-					const source: AgentPromptSource =
-						sourceValue === 'operator' || sourceValue === 'system' ? sourceValue : 'engine';
-					const title =
-						typeof request.payload['title'] === 'string' && request.payload['title'].trim().length > 0
-							? request.payload['title'].trim()
-							: undefined;
-
-					await this.orchestrator.prompt(sessionId, {
+					const sourceValue = typeof request.payload['source'] === 'string' ? request.payload['source'] : 'engine';
+					const source = sourceValue === 'operator' || sourceValue === 'system' ? sourceValue : 'engine';
+					const title = typeof request.payload['title'] === 'string' && request.payload['title'].trim()
+						? request.payload['title'].trim()
+						: undefined;
+					await this.promptRuntimeSession(sessionId, {
 						source,
 						text,
 						...(title ? { title } : {})
@@ -277,37 +231,29 @@ export class MissionWorkflowRequestExecutor {
 					break;
 				}
 				case 'session.command': {
-					const sessionId = String(request.payload['sessionId'] ?? '');
-					const kindValue = String(request.payload['kind'] ?? '').trim();
-					if (!sessionId || !isAgentControlKind(kindValue)) {
+					const sessionId = String(request.payload['sessionId'] ?? '').trim();
+					const typeValue = typeof request.payload['kind'] === 'string' ? request.payload['kind'].trim() : '';
+					const command = toAgentCommand(typeValue);
+					if (!sessionId || !command) {
 						break;
 					}
-
-					await this.orchestrator.control(sessionId, {
-						kind: kindValue
-					});
+					await this.commandRuntimeSession(sessionId, command);
 					break;
 				}
 				case 'session.cancel': {
-					const sessionId = String(request.payload['sessionId'] ?? '');
+					const sessionId = String(request.payload['sessionId'] ?? '').trim();
 					if (!sessionId) {
 						break;
 					}
-					await this.orchestrator.cancel(
-						sessionId,
-						'cancelled by workflow engine'
-					);
+					await this.cancelRuntimeSession(sessionId, 'cancelled by workflow engine');
 					break;
 				}
 				case 'session.terminate': {
-					const sessionId = String(request.payload['sessionId'] ?? '');
+					const sessionId = String(request.payload['sessionId'] ?? '').trim();
 					if (!sessionId) {
 						break;
 					}
-					await this.orchestrator.terminate(
-						sessionId,
-						'terminated by workflow engine'
-					);
+					await this.terminateRuntimeSession(sessionId, 'terminated by workflow engine');
 					break;
 				}
 				case 'mission.pause':
@@ -322,116 +268,56 @@ export class MissionWorkflowRequestExecutor {
 	}
 
 	public async reconcileSessions(document?: MissionRuntimeRecord): Promise<MissionWorkflowEvent[]> {
-		const events: MissionWorkflowEvent[] = [];
-		const missionId = document?.missionId;
-		if (this.sessionStore) {
-			const references = await this.sessionStore.list();
-			for (const reference of references) {
-				await this.orchestrator.attachSession(reference);
-			}
-			events.push(...this.drainRuntimeEvents());
-		}
-
-		for (const runner of this.runners.values()) {
-			const sessions = runner.listSessions ? await runner.listSessions() : [];
-			for (const session of sessions) {
-				if (missionId && session.missionId !== missionId) {
+		if (document) {
+			for (const persistedSession of document.runtime.sessions) {
+				if (this.runtimeSessions.has(persistedSession.sessionId)) {
 					continue;
 				}
-				if (document && hasMatchingTerminalLifecycle(document, session)) {
+				const snapshot = await this.attachSession(this.toSessionReference(persistedSession)).catch(() => undefined);
+				if (!snapshot) {
 					continue;
 				}
-				if (session.phase === 'completed') {
-					events.push({
-						eventId: `reconcile:${session.sessionId}:completed:${session.updatedAt}`,
-						type: 'session.completed',
-						occurredAt: session.updatedAt,
-						source: 'daemon',
-						sessionId: session.sessionId,
-						taskId: session.taskId
-					});
-				} else if (session.phase === 'failed') {
-					events.push({
-						eventId: `reconcile:${session.sessionId}:failed:${session.updatedAt}`,
-						type: 'session.failed',
-						occurredAt: session.updatedAt,
-						source: 'daemon',
-						sessionId: session.sessionId,
-						taskId: session.taskId
-					});
-				} else if (session.phase === 'cancelled') {
-					events.push({
-						eventId: `reconcile:${session.sessionId}:cancelled:${session.updatedAt}`,
-						type: 'session.cancelled',
-						occurredAt: session.updatedAt,
-						source: 'daemon',
-						sessionId: session.sessionId,
-						taskId: session.taskId
-					});
-				} else if (session.phase === 'terminated') {
-					events.push({
-						eventId: `reconcile:${session.sessionId}:terminated:${session.updatedAt}`,
-						type: 'session.terminated',
-						occurredAt: session.updatedAt,
-						source: 'daemon',
-						sessionId: session.sessionId,
-						taskId: session.taskId
-					});
+				if (!hasMatchingTerminalLifecycle(document, snapshot)) {
+					const translated = this.translateTerminalSnapshot(snapshot);
+					if (translated) {
+						this.runtimeEvents.push(translated);
+					}
 				}
 			}
 		}
-
-		events.push(...this.drainRuntimeEvents());
-		return events;
+		return this.drainRuntimeEvents();
 	}
 
-	public async startSession(input: {
-		runnerId: string;
-		request: AgentSessionStartRequest;
-	}): Promise<AgentSessionSnapshot> {
-		const snapshot = await this.orchestrator.launch({
-			missionId: input.request.missionId,
-			workingDirectory: input.request.workingDirectory,
-			task: {
-				taskId: input.request.taskId,
-				stageId: String(input.request.initialPrompt?.metadata?.['stageId'] ?? ''),
-				title: input.request.initialPrompt?.title ?? input.request.taskId,
-				description: input.request.initialPrompt?.title ?? input.request.initialPrompt?.text ?? input.request.taskId,
-				instruction: input.request.initialPrompt?.text ?? ''
-			},
-			specification: {
-				summary: '',
-				documents: []
-			},
-			runner: {
-				runnerId: input.runnerId
-			},
-			transport: {
-				transportId: 'runway-terminal'
-			},
-			resume: {
-				mode: 'new'
-			},
-			...(input.request.initialPrompt ? { initialPrompt: input.request.initialPrompt } : {}),
-			...(input.request.metadata ? { metadata: input.request.metadata } : {})
-		});
-		this.rememberSessionTaskId(snapshot.sessionId, snapshot.taskId);
-		return snapshot;
+	public async startSession(config: AgentLaunchConfig): Promise<AgentSessionSnapshot> {
+		const runner = this.resolveRunner(config.requestedRunnerId);
+		const session = await runner.startSession(config);
+		return this.registerSession(session);
 	}
 
 	public listRuntimeSessions(): AgentSessionSnapshot[] {
-		return (this.orchestrator as AgentSessionOrchestrator).listSessions();
+		const snapshots: AgentSessionSnapshot[] = [];
+		for (const [sessionId, handle] of this.runtimeSessions) {
+			const snapshot = this.readRuntimeSessionSnapshot(sessionId, handle);
+			if (snapshot) {
+				snapshots.push(snapshot);
+			}
+		}
+		return snapshots;
 	}
 
 	public async attachSession(reference: AgentSessionReference): Promise<AgentSessionSnapshot> {
-		const session = await (this.orchestrator as AgentSessionOrchestrator).attachSession(reference);
-		const snapshot = session.getSnapshot();
-		this.rememberSessionTaskId(snapshot.sessionId, snapshot.taskId);
-		return snapshot;
+		const existing = this.runtimeSessions.get(reference.sessionId);
+		if (existing) {
+			return existing.session.getSnapshot();
+		}
+		const runner = this.requireRunner(reference.runnerId);
+		const session = await runner.reconcileSession(reference);
+		return this.registerSession(session);
 	}
 
 	public getRuntimeSession(sessionId: AgentSessionId): AgentSessionSnapshot | undefined {
-		return this.orchestrator.getSnapshot(sessionId);
+		const handle = this.runtimeSessions.get(sessionId);
+		return handle ? this.readRuntimeSessionSnapshot(sessionId, handle) : undefined;
 	}
 
 	public async cancelRuntimeSession(
@@ -440,20 +326,22 @@ export class MissionWorkflowRequestExecutor {
 		fallbackTaskId?: string
 	): Promise<MissionWorkflowEvent[]> {
 		this.rememberSessionTaskId(sessionId, fallbackTaskId);
-		await this.orchestrator.cancel(sessionId, reason);
-		return this.drainRuntimeEvents();
+		const snapshot = await this.requireRuntimeSession(sessionId).cancel(reason);
+		const events = this.drainRuntimeEvents();
+		if (events.length > 0) {
+			return events;
+		}
+		const translated = this.createSessionLifecycleEvent('session.cancelled', snapshot);
+		return translated ? [translated] : [];
 	}
 
 	public async promptRuntimeSession(sessionId: AgentSessionId, prompt: AgentPrompt): Promise<MissionWorkflowEvent[]> {
-		await this.orchestrator.prompt(sessionId, prompt);
+		await this.requireRuntimeSession(sessionId).submitPrompt(prompt);
 		return this.drainRuntimeEvents();
 	}
 
 	public async commandRuntimeSession(sessionId: AgentSessionId, command: AgentCommand): Promise<MissionWorkflowEvent[]> {
-		await this.orchestrator.control(sessionId, {
-			kind: mapCommandKindToControlKind(command.kind),
-			...(command.metadata ? { metadata: command.metadata } : {})
-		});
+		await this.requireRuntimeSession(sessionId).submitCommand(command);
 		return this.drainRuntimeEvents();
 	}
 
@@ -463,8 +351,82 @@ export class MissionWorkflowRequestExecutor {
 		fallbackTaskId?: string
 	): Promise<MissionWorkflowEvent[]> {
 		this.rememberSessionTaskId(sessionId, fallbackTaskId);
-		await this.orchestrator.terminate(sessionId, reason);
-		return this.drainRuntimeEvents();
+		const snapshot = await this.requireRuntimeSession(sessionId).terminate(reason);
+		const events = this.drainRuntimeEvents();
+		if (events.length > 0) {
+			return events;
+		}
+		const translated = this.createSessionLifecycleEvent('session.terminated', snapshot);
+		return translated ? [translated] : [];
+	}
+
+	private registerSession(session: AgentSession): AgentSessionSnapshot {
+		const snapshot = session.getSnapshot();
+		this.rememberSessionTaskId(snapshot.sessionId, snapshot.taskId);
+		const existing = this.runtimeSessions.get(snapshot.sessionId);
+		if (existing) {
+			existing.subscription.dispose();
+		}
+		const subscription = session.onDidEvent((event) => {
+			this.rememberSessionTaskId(event.snapshot.sessionId, event.snapshot.taskId);
+			this.fireRuntimeEvent(event);
+			const translated = this.translateRuntimeEvent(event);
+			if (translated) {
+				this.runtimeEvents.push(translated);
+			}
+		});
+		this.runtimeSessions.set(snapshot.sessionId, { session, subscription });
+		return snapshot;
+	}
+
+	private resolveRunner(requestedRunnerId?: string): AgentRunner {
+		if (requestedRunnerId?.trim()) {
+			return this.requireRunner(requestedRunnerId.trim());
+		}
+		const defaultRunner = this.options.runners.get(DEFAULT_AGENT_RUNNER_ID);
+		if (defaultRunner) {
+			return defaultRunner;
+		}
+		const firstRunner = this.options.runners.values().next().value;
+		if (!firstRunner) {
+			throw new Error('No agent runners are registered.');
+		}
+		return firstRunner;
+	}
+
+	private requireRunner(runnerId: string): AgentRunner {
+		const runner = this.options.runners.get(runnerId);
+		if (!runner) {
+			throw new Error(`Agent runner '${runnerId}' is not registered.`);
+		}
+		return runner;
+	}
+
+	private requireRuntimeSession(sessionId: AgentSessionId): AgentSession {
+		const handle = this.runtimeSessions.get(sessionId);
+		if (!handle) {
+			throw new Error(`Agent session '${sessionId}' is not attached.`);
+		}
+		return handle.session;
+	}
+
+	private readRuntimeSessionSnapshot(
+		sessionId: AgentSessionId,
+		handle: RuntimeSessionHandle
+	): AgentSessionSnapshot | undefined {
+		try {
+			return handle.session.getSnapshot();
+		} catch {
+			handle.subscription.dispose();
+			this.runtimeSessions.delete(sessionId);
+			return undefined;
+		}
+	}
+
+	private fireRuntimeEvent(event: AgentSessionEvent): void {
+		for (const listener of this.runtimeListeners) {
+			listener(event);
+		}
 	}
 
 	private drainRuntimeEvents(): MissionWorkflowEvent[] {
@@ -483,27 +445,24 @@ export class MissionWorkflowRequestExecutor {
 				return this.createSessionLifecycleEvent('session.cancelled', event.snapshot);
 			case 'session.terminated':
 				return this.createSessionLifecycleEvent('session.terminated', event.snapshot);
-			case 'session.state-changed':
-				return this.createSessionLifecycleEventFromPhase(event.snapshot);
 			default:
 				return undefined;
 		}
 	}
 
-	private createSessionLifecycleEventFromPhase(snapshot: AgentSessionSnapshot): MissionWorkflowEvent | undefined {
-		if (snapshot.phase === 'completed') {
-			return this.createSessionLifecycleEvent('session.completed', snapshot);
+	private translateTerminalSnapshot(snapshot: AgentSessionSnapshot): MissionWorkflowEvent | undefined {
+		switch (snapshot.status) {
+			case 'completed':
+				return this.createSessionLifecycleEvent('session.completed', snapshot);
+			case 'failed':
+				return this.createSessionLifecycleEvent('session.failed', snapshot);
+			case 'cancelled':
+				return this.createSessionLifecycleEvent('session.cancelled', snapshot);
+			case 'terminated':
+				return this.createSessionLifecycleEvent('session.terminated', snapshot);
+			default:
+				return undefined;
 		}
-		if (snapshot.phase === 'failed') {
-			return this.createSessionLifecycleEvent('session.failed', snapshot);
-		}
-		if (snapshot.phase === 'cancelled') {
-			return this.createSessionLifecycleEvent('session.cancelled', snapshot);
-		}
-		if (snapshot.phase === 'terminated') {
-			return this.createSessionLifecycleEvent('session.terminated', snapshot);
-		}
-		return undefined;
 	}
 
 	private createSessionLifecycleEvent(
@@ -514,7 +473,7 @@ export class MissionWorkflowRequestExecutor {
 		if (!taskId) {
 			return undefined;
 		}
-		if (isTerminalPhase(snapshot.phase)) {
+		if (isTerminalStatus(snapshot.status)) {
 			this.sessionTaskIds.delete(snapshot.sessionId);
 		}
 		return {
@@ -524,6 +483,24 @@ export class MissionWorkflowRequestExecutor {
 			source: 'daemon',
 			sessionId: snapshot.sessionId,
 			taskId
+		};
+	}
+
+	private createSessionStartedEvent(
+		requestId: string,
+		snapshot: AgentSessionSnapshot,
+		taskId: string
+	): MissionWorkflowEvent {
+		return {
+			eventId: `${requestId}:session-started`,
+			type: 'session.started',
+			occurredAt: snapshot.updatedAt,
+			source: 'daemon',
+			causedByRequestId: requestId,
+			sessionId: snapshot.sessionId,
+			taskId,
+			runnerId: snapshot.runnerId,
+			...toTransportEventFields(snapshot)
 		};
 	}
 
@@ -538,10 +515,25 @@ export class MissionWorkflowRequestExecutor {
 
 	private rememberSessionTaskId(sessionId: AgentSessionId, taskId: string | undefined): void {
 		const normalizedTaskId = normalizeTaskId(taskId);
-		if (!normalizedTaskId) {
-			return;
+		if (normalizedTaskId) {
+			this.sessionTaskIds.set(sessionId, normalizedTaskId);
 		}
-		this.sessionTaskIds.set(sessionId, normalizedTaskId);
+	}
+
+	private toSessionReference(session: MissionAgentSessionRuntimeState): AgentSessionReference {
+		return {
+			runnerId: session.runnerId,
+			sessionId: session.sessionId,
+			...(session.transportId === 'terminal' || session.terminalSessionName || session.terminalPaneId
+				? {
+					transport: {
+						kind: 'terminal',
+						terminalSessionName: session.terminalSessionName ?? session.sessionId,
+						...(session.terminalPaneId ? { paneId: session.terminalPaneId } : {})
+					}
+				}
+				: {})
+		};
 	}
 
 	private createTasksGeneratedEvent(
@@ -559,10 +551,7 @@ export class MissionWorkflowRequestExecutor {
 		};
 	}
 
-	private async materializeStageArtifacts(
-		descriptor: MissionDescriptor,
-		stageId: MissionStageId
-	): Promise<void> {
+	private async materializeStageArtifacts(descriptor: MissionDescriptor, stageId: MissionStageId): Promise<void> {
 		const definition = MISSION_STAGE_TEMPLATE_DEFINITIONS[stageId];
 		if (!definition) {
 			return;
@@ -570,7 +559,7 @@ export class MissionWorkflowRequestExecutor {
 
 		for (const template of definition.artifacts) {
 			const artifact = getMissionArtifactDefinition(template.key);
-			await this.adapter.writeArtifactRecord(descriptor.missionDir, template.key, {
+			await this.options.adapter.writeArtifactRecord(descriptor.missionDir, template.key, {
 				attributes: {
 					title: renderMissionArtifactTitle(template.key, descriptor.brief),
 					artifact: template.key,
@@ -591,60 +580,57 @@ export class MissionWorkflowRequestExecutor {
 		generation: MissionWorkflowTaskGenerationResult
 	): Promise<void> {
 		for (const task of generation.tasks) {
-			await this.adapter.writeTaskRecord(descriptor.missionDir, generation.stageId as MissionStageId, `${task.taskId.split('/').pop() ?? task.taskId}.md`, {
-				subject: task.title,
-				instruction: task.instruction,
-				...(task.dependsOn.length > 0 ? { dependsOn: task.dependsOn } : {}),
-				agent: normalizeLegacyAgentRunnerId(task.agentRunner) ?? DEFAULT_AGENT_RUNNER_ID
-			});
+			await this.options.adapter.writeTaskRecord(
+				descriptor.missionDir,
+				generation.stageId as MissionStageId,
+				`${task.taskId.split('/').pop() ?? task.taskId}.md`,
+				{
+					subject: task.title,
+					instruction: task.instruction,
+					...(task.dependsOn.length > 0 ? { dependsOn: task.dependsOn } : {}),
+					agent: task.agentRunner ?? DEFAULT_AGENT_RUNNER_ID
+				}
+			);
 		}
 	}
 }
 
-function isAgentControlKind(value: string): value is AgentControlKind {
-	return value === 'pause'
-		|| value === 'resume'
-		|| value === 'checkpoint'
-		|| value === 'nudge'
-		|| value === 'finish';
-}
-
-function mapCommandKindToControlKind(kind: AgentCommand['kind']): AgentControlKind {
-	switch (kind) {
+function toAgentCommand(value: string): AgentCommand | undefined {
+	switch (value) {
 		case 'interrupt':
-			return 'pause';
-		case 'continue':
-			return 'resume';
+			return { type: 'interrupt' };
+		case 'resume':
+			return { type: 'resume' };
 		case 'checkpoint':
-			return 'checkpoint';
-		case 'finish':
-			return 'finish';
+			return { type: 'checkpoint' };
+		case 'nudge':
+			return { type: 'nudge' };
+		default:
+			return undefined;
 	}
 }
 
-function hasMatchingTerminalLifecycle(
-	document: MissionRuntimeRecord,
-	snapshot: AgentSessionSnapshot
-): boolean {
-	const runtimeSession = document.runtime.sessions.find(
-		(session) => session.sessionId === snapshot.sessionId
-	);
+function toTransportEventFields(snapshot: AgentSessionSnapshot): {
+	transportId?: string;
+	terminalSessionName?: string;
+	terminalPaneId?: string;
+} {
+	if (snapshot.transport?.kind !== 'terminal') {
+		return {};
+	}
+	return {
+		transportId: 'terminal',
+		terminalSessionName: snapshot.transport.terminalSessionName,
+		...(snapshot.transport.paneId ? { terminalPaneId: snapshot.transport.paneId } : {})
+	};
+}
+
+function hasMatchingTerminalLifecycle(document: MissionRuntimeRecord, snapshot: AgentSessionSnapshot): boolean {
+	const runtimeSession = document.runtime.sessions.find((session) => session.sessionId === snapshot.sessionId);
 	if (!runtimeSession) {
 		return false;
 	}
-
-	switch (snapshot.phase) {
-		case 'completed':
-			return runtimeSession.lifecycle === 'completed';
-		case 'failed':
-			return runtimeSession.lifecycle === 'failed';
-		case 'cancelled':
-			return runtimeSession.lifecycle === 'cancelled';
-		case 'terminated':
-			return runtimeSession.lifecycle === 'terminated';
-		default:
-			return false;
-	}
+	return runtimeSession.lifecycle === snapshot.status;
 }
 
 function normalizeTaskId(taskId: string | undefined): string | undefined {
@@ -658,9 +644,9 @@ function normalizeTaskId(taskId: string | undefined): string | undefined {
 	return normalizedTaskId;
 }
 
-function isTerminalPhase(phase: AgentSessionSnapshot['phase']): boolean {
-	return phase === 'completed'
-		|| phase === 'failed'
-		|| phase === 'cancelled'
-		|| phase === 'terminated';
+function isTerminalStatus(status: AgentSessionSnapshot['status']): boolean {
+	return status === 'completed'
+		|| status === 'failed'
+		|| status === 'cancelled'
+		|| status === 'terminated';
 }

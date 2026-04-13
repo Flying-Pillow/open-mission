@@ -1,83 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { MissionDescriptor } from '../../types.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
-import type { AgentRunner } from '../../runtime/AgentRunner.js';
-import type { AgentSession } from '../../runtime/AgentSession.js';
-import type { AgentSessionReference } from '../../runtime/AgentRuntimeTypes.js';
-import type { AgentSessionStartRequest } from '../../runtime/AgentRuntimeTypes.js';
 import {
 	createInitialMissionWorkflowRuntimeState,
 	createMissionWorkflowConfigurationSnapshot
 } from './document.js';
 import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from './defaultWorkflow.js';
 import { MissionWorkflowRequestExecutor } from './requestExecutor.js';
+import { FakeAgentRunner } from '../../agent/testing/FakeAgentRunner.js';
 import type { MissionTaskRuntimeState, MissionWorkflowRequest } from './types.js';
-
-class FakeSession implements AgentSession {
-	public readonly runnerId: string;
-	public readonly transportId: string | undefined;
-	public readonly sessionId: string;
-	private readonly snapshot;
-
-	public constructor(input: { runnerId: string; transportId?: string; sessionId: string; taskId: string }) {
-		this.runnerId = input.runnerId;
-		this.transportId = input.transportId;
-		this.sessionId = input.sessionId;
-		this.snapshot = {
-			runnerId: input.runnerId,
-			...(input.transportId ? { transportId: input.transportId } : {}),
-			sessionId: input.sessionId,
-			...(input.transportId === 'terminal'
-				? {
-					terminalSessionName: 'airport-terminal-session',
-					terminalPaneId: 'terminal_44'
-				}
-				: {}),
-			missionId: 'mission-17',
-			taskId: input.taskId,
-			phase: 'running' as const,
-			acceptsPrompts: true,
-			acceptedCommands: ['interrupt'] as const,
-			awaitingInput: false,
-			updatedAt: '2026-04-10T21:30:00.000Z'
-		};
-	}
-
-	public getSnapshot() {
-		return {
-			...this.snapshot,
-			acceptedCommands: [...this.snapshot.acceptedCommands]
-		};
-	}
-
-	public onDidEvent(): { dispose(): void } {
-		return {
-			dispose() {
-				return;
-			}
-		};
-	}
-
-	public async submitPrompt() {
-		return this.getSnapshot();
-	}
-
-	public async submitCommand() {
-		return this.getSnapshot();
-	}
-
-	public async cancel() {
-		return this.getSnapshot();
-	}
-
-	public async terminate() {
-		return this.getSnapshot();
-	}
-
-	public dispose(): void {
-		return;
-	}
-}
 
 function createDescriptor(): MissionDescriptor {
 	return {
@@ -112,31 +43,7 @@ function createTask(task: Partial<MissionTaskRuntimeState> = {}): MissionTaskRun
 
 describe('MissionWorkflowRequestExecutor', () => {
 	it('launches sessions from runnerId request payloads and emits runnerId session facts', async () => {
-		const startedRequests: AgentSessionStartRequest[] = [];
-		const runner: AgentRunner = {
-			id: 'fake-runner',
-			transportId: 'terminal',
-			displayName: 'Fake Runner',
-			capabilities: {
-				attachableSessions: false,
-				promptSubmission: true,
-				structuredCommands: true,
-				interruptible: true,
-				interactiveInput: false,
-				telemetry: false,
-				mcpClient: false
-			},
-			isAvailable: async () => ({ available: true }),
-			startSession: async (request) => {
-				startedRequests.push(request);
-				return new FakeSession({
-					runnerId: 'fake-runner',
-					transportId: 'terminal',
-					sessionId: 'session-1',
-					taskId: request.taskId
-				});
-			}
-		};
+		const runner = new FakeAgentRunner('fake-runner', 'Fake Runner', 'terminal');
 
 		const executor = new MissionWorkflowRequestExecutor({
 			adapter: {} as FilesystemAdapter,
@@ -166,8 +73,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 			} satisfies MissionWorkflowRequest]
 		});
 
-		expect(startedRequests).toHaveLength(1);
-		expect(startedRequests[0]?.taskId).toBe(task.taskId);
+		expect(runner.getLastStartRequest()?.task.taskId).toBe(task.taskId);
 
 		const startedEvent = events.find((event) => event.type === 'session.started');
 		expect(startedEvent).toBeDefined();
@@ -175,35 +81,12 @@ describe('MissionWorkflowRequestExecutor', () => {
 			type: 'session.started',
 			taskId: task.taskId,
 			runnerId: 'fake-runner',
-			transportId: 'terminal',
-			terminalSessionName: 'airport-terminal-session',
-			terminalPaneId: 'terminal_44'
+			transportId: 'terminal'
 		});
 	});
 
 	it('preserves canonical task identity when cancelling an unattached runtime session', async () => {
-		const runner: AgentRunner = {
-			id: 'fake-runner',
-			transportId: 'terminal',
-			displayName: 'Fake Runner',
-			capabilities: {
-				attachableSessions: true,
-				promptSubmission: true,
-				structuredCommands: true,
-				interruptible: true,
-				interactiveInput: false,
-				telemetry: false,
-				mcpClient: false
-			},
-			isAvailable: async () => ({ available: true }),
-			startSession: async () => {
-				throw new Error('unused in this test');
-			},
-			attachSession: async (_reference: AgentSessionReference) => {
-				throw new Error('detached runtime');
-			}
-		};
-
+		const runner = new FakeAgentRunner('fake-runner', 'Fake Runner', 'terminal');
 		const executor = new MissionWorkflowRequestExecutor({
 			adapter: {} as FilesystemAdapter,
 			runners: new Map([[runner.id, runner]])
@@ -211,8 +94,11 @@ describe('MissionWorkflowRequestExecutor', () => {
 
 		await executor.attachSession({
 			runnerId: 'fake-runner',
-			transportId: 'terminal',
-			sessionId: 'session-detached'
+			sessionId: 'session-detached',
+			transport: {
+				kind: 'terminal',
+				terminalSessionName: 'session-detached'
+			}
 		});
 
 		const events = await executor.cancelRuntimeSession(

@@ -15,15 +15,15 @@ import {
 	type Ping,
 	type Request,
 	type Response
-} from './contracts.js';
+} from './protocol/contracts.js';
 import {
 	getDaemonManifestPath,
 	isNamedPipePath,
 	resolveDaemonSocketPath
 } from './daemonPaths.js';
-import { MissionSystemController } from './MissionSystemController.js';
-import { WorkspaceManager } from './WorkspaceManager.js';
-import type { AgentRunner } from '../runtime/AgentRunner.js';
+import { MissionSystemController } from './control-plane/MissionSystemController.js';
+import { WorkspaceManager } from '../workspace/WorkspaceManager.js';
+import type { AgentRunner } from '../agent/AgentRunner.js';
 
 export type DaemonOptions = {
 	logLine?: (line: string) => void;
