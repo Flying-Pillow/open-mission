@@ -83,6 +83,24 @@ describe('resolveMissionSelection', () => {
 		expect(resolved?.activeInstructionArtifactId).toBe('mission-1:task:task-1');
 		expect(resolved?.activeAgentSessionId).toBe('session-new');
 	});
+
+	it('prioritizes an explicitly selected artifact over a concurrently selected session', () => {
+		const domain = createDomain();
+
+		const resolved = resolveMissionSelectionFromContext({
+			selection: {
+				missionId: 'mission-1',
+				stageId: 'prd',
+				taskId: 'task-1',
+				agentSessionId: 'session-old',
+				artifactId: 'mission-1:task:task-1:alternate'
+			},
+			domain
+		});
+
+		expect(resolved?.activeInstructionArtifactId).toBe('mission-1:task:task-1:alternate');
+		expect(resolved?.activeInstructionPath).toBe('/repo/.mission/missions/mission-1/01-PRD/tasks/02-prd-appendix.md');
+	});
 });
 
 function createDomain(): ContextGraph {
@@ -142,6 +160,14 @@ function createDomain(): ContextGraph {
 				filePath: '/repo/.mission/missions/mission-1/01-PRD/tasks/01-prd-from-brief.md',
 				logicalKind: 'task-instruction',
 				displayLabel: '01-prd-from-brief.md'
+			},
+			'mission-1:task:task-1:alternate': {
+				artifactId: 'mission-1:task:task-1:alternate',
+				missionId: 'mission-1',
+				ownerTaskId: 'task-1',
+				filePath: '/repo/.mission/missions/mission-1/01-PRD/tasks/02-prd-appendix.md',
+				logicalKind: 'task-instruction',
+				displayLabel: '02-prd-appendix.md'
 			}
 		},
 		agentSessions: {

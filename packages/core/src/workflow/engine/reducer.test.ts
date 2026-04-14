@@ -103,6 +103,56 @@ describe('workflow reducer delivery completion', () => {
         }));
     });
 
+    it('restarts a stale launch queue and re-emits launch requests for queued tasks', () => {
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow: createDefaultWorkflowSettings()
+        });
+
+        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime.lifecycle = 'running';
+        runtime.pause = { paused: false };
+        runtime.tasks = [{
+            taskId: 'prd/01',
+            stageId: 'prd',
+            title: 'PRD',
+            instruction: 'Draft PRD.',
+            dependsOn: [],
+            lifecycle: 'queued',
+            blockedByTaskIds: [],
+            runtime: { autostart: true },
+            retries: 0,
+            createdAt: '2026-04-10T15:51:25.000Z',
+            updatedAt: '2026-04-10T15:51:25.000Z'
+        }];
+        runtime.launchQueue = [{
+            requestId: 'task.launch:prd/01:stale',
+            taskId: 'prd/01',
+            requestedAt: '2026-04-10T15:51:25.000Z',
+            requestedBy: 'human',
+            dispatchedAt: '2026-04-10T15:51:40.000Z'
+        }];
+
+        const restartEvent: MissionWorkflowEvent = {
+            eventId: 'mission.launch-queue.restarted',
+            type: 'mission.launch-queue.restarted',
+            occurredAt: '2026-04-10T15:52:00.000Z',
+            source: 'human'
+        };
+
+        validateMissionWorkflowEvent(runtime, restartEvent, configuration);
+        const result = reduceMissionWorkflowEvent(runtime, restartEvent, configuration);
+
+        expect(result.nextState.launchQueue).toHaveLength(1);
+        expect(result.nextState.launchQueue[0]?.taskId).toBe('prd/01');
+        expect(result.nextState.launchQueue[0]?.dispatchedAt).toBe('2026-04-10T15:52:00.000Z');
+        expect(result.requests).toContainEqual(expect.objectContaining({
+            type: 'session.launch',
+            payload: { taskId: 'prd/01' }
+        }));
+    });
+
     it('tracks the reducer-owned active stage id as work advances', () => {
         const configuration = createMissionWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',

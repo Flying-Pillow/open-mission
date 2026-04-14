@@ -32,11 +32,18 @@ type CommandPanelProps = {
 export function CommandPanel(props: CommandPanelProps) {
 	let inputRef: InputRenderable | undefined;
 	const terminal = useTerminalDimensions();
+	const commandPickerTotalWidth = () => {
+		const terminalWidth = terminal().width;
+		const normalizedTerminalWidth = Number.isFinite(terminalWidth)
+			? Math.floor(terminalWidth)
+			: 0;
+		return Math.max(24, normalizedTerminalWidth - 10);
+	};
 	const commandFocused = () => props.focusArea === 'command';
 	const pickerFocused = () => commandFocused() && props.showCommandPicker;
 	const inputFocused = () => commandFocused() && !props.showCommandPicker;
 	const pickerOptions = () => {
-		const [commandWidth, descriptionWidth] = splitOptionColumns(Math.max(24, terminal().width - 10));
+		const [commandWidth, descriptionWidth] = splitOptionColumns(commandPickerTotalWidth());
 		return props.commandPickerItems.map<SelectOption>((item) => ({
 			name: formatOptionLine(item.command, item.description, commandWidth, descriptionWidth),
 			description: '',

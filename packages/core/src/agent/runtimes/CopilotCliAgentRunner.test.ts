@@ -108,7 +108,7 @@ describe('CopilotCliAgentRunner', () => {
 		vi.useRealTimers();
 	});
 
-	it('starts a terminal-backed session and injects the initial prompt', async () => {
+	it('starts a terminal-backed session and passes the initial prompt via launch args', async () => {
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
 			args: ['--add-dir', '/tmp/work'],
@@ -135,7 +135,9 @@ describe('CopilotCliAgentRunner', () => {
 		expect(state.lastLaunchCommand).toContain(`'${TEST_TRUSTED_CONFIG_DIR}'`);
 		expect(state.lastLaunchCommand).toContain("'--add-dir'");
 		expect(state.lastLaunchCommand).toContain("'/tmp/work'");
-		expect(state.sentKeys.some((args) => args.includes('write-chars') && args.includes('Implement the task.'))).toBe(true);
+		expect(state.lastLaunchCommand).toContain("'-i'");
+		expect(state.lastLaunchCommand).toContain("'Implement the task.'");
+		expect(state.sentKeys.some((args) => args.includes('write-chars') && args.includes('Implement the task.'))).toBe(false);
 	});
 
 	it('falls back to a standalone terminal session when the runway gate pane is unavailable', async () => {
@@ -154,6 +156,11 @@ describe('CopilotCliAgentRunner', () => {
 			}
 			if (args[0] === '--new-session-with-layout') {
 				standaloneSessionName = args.at(-1);
+				const layoutPath = args[1];
+				if (layoutPath) {
+					const layout = await fs.readFile(layoutPath, 'utf8');
+					state.lastLaunchCommand = layout;
+				}
 				return { stdout: '', stderr: '' };
 			}
 			if (args[0] === 'list-sessions') {
@@ -187,7 +194,9 @@ describe('CopilotCliAgentRunner', () => {
 		expect(snapshot.sessionId).toBe('task-1-copilot-cli');
 		expect(snapshot.transport?.terminalSessionName).toBe(snapshot.sessionId);
 		expect(snapshot.transport?.paneId).toBeUndefined();
-		expect(state.sentKeys.some((args) => args.includes('write-chars') && args.includes('Implement the task.'))).toBe(true);
+		expect(state.lastLaunchCommand).toContain("'-i'");
+		expect(state.lastLaunchCommand).toContain("'Implement the task.'");
+		expect(state.sentKeys.some((args) => args.includes('write-chars') && args.includes('Implement the task.'))).toBe(false);
 	});
 
 	it('derives a task-based session name from the task path on launch', async () => {

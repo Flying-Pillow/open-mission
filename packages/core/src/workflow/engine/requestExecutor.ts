@@ -75,6 +75,10 @@ export class MissionWorkflowRequestExecutor {
 		};
 	};
 
+	public consumeRuntimeLifecycleEvents(): MissionWorkflowEvent[] {
+		return this.drainRuntimeEvents();
+	}
+
 	public dispose(): void {
 		for (const handle of this.runtimeSessions.values()) {
 			handle.subscription.dispose();
@@ -378,11 +382,11 @@ export class MissionWorkflowRequestExecutor {
 		}
 		const subscription = session.onDidEvent((event) => {
 			this.rememberSessionTaskId(event.snapshot.sessionId, event.snapshot.taskId);
-			this.fireRuntimeEvent(event);
 			const translated = this.translateRuntimeEvent(event);
 			if (translated) {
 				this.runtimeEvents.push(translated);
 			}
+			this.fireRuntimeEvent(event);
 		});
 		this.runtimeSessions.set(snapshot.sessionId, { session, subscription });
 		return snapshot;
@@ -570,24 +574,31 @@ export class MissionWorkflowRequestExecutor {
 			return explicitPrompt;
 		}
 
+		const missionWorkspaceDir = typeof this.options.adapter.getMissionWorkspacePath === 'function'
+			? this.options.adapter.getMissionWorkspacePath(descriptor.missionDir)
+			: descriptor.missionDir;
+		const artifactBaseName = task.taskId.split('/').at(-1)?.trim() || task.taskId.trim();
+		const artifactName = artifactBaseName.toLowerCase().endsWith('.md')
+			? artifactBaseName
+			: `${artifactBaseName}.md`;
+
 		try {
-			const fileSegment = task.taskId.split('/').at(-1)?.trim() || task.taskId.trim();
 			const taskState = await this.options.adapter.readTaskState(
 				descriptor.missionDir,
 				task.stageId as MissionStageId,
-				`${fileSegment}.md`
+				artifactName
 			);
 			if (taskState) {
 				return buildTaskArtifactLaunchPrompt(
 					taskState,
-					this.options.adapter.getMissionWorkspacePath(descriptor.missionDir)
+					missionWorkspaceDir
 				);
 			}
 		} catch {
 			// Fall back to runtime task instruction when task artifact resolution fails.
 		}
 
-		return task.instruction;
+		return buildRuntimeTaskLaunchPrompt(task, missionWorkspaceDir, artifactName);
 	}
 
 	private async materializeStageArtifacts(descriptor: MissionDescriptor, stageId: MissionStageId): Promise<void> {
@@ -706,10 +717,32 @@ function buildTaskArtifactLaunchPrompt(task: MissionTaskState, missionWorkspaceD
 		`You are working on task '${task.sequence} ${task.subject}'.`,
 		`Stay strictly within this mission workspace: ${missionWorkspaceDir}`,
 		'Do not read, modify, or create files outside that folder boundary.',
+		`Perform the task exactly as specified in <${task.fileName}>.`,
 		`Here are your instructions: @${task.filePath}`,
 		'That task file is authoritative.'
 	];
 
+	if (instruction.length > 0) {
+		lines.push('', 'Task summary:', instruction);
+	}
+
+	return lines.join('\n');
+}
+
+function buildRuntimeTaskLaunchPrompt(
+	task: MissionTaskRuntimeState,
+	missionWorkspaceDir: string,
+	artifactName: string
+): string {
+	const lines = [
+		`You are working on task '${task.title}'.`,
+		`Stay strictly within this mission workspace: ${missionWorkspaceDir}`,
+		'Do not read, modify, or create files outside that folder boundary.',
+		`Perform the task exactly as specified in <${artifactName}>.`,
+		`Open @${artifactName} and use it as the authoritative task instruction file.`
+	];
+
+	const instruction = task.instruction.trim();
 	if (instruction.length > 0) {
 		lines.push('', 'Task summary:', instruction);
 	}

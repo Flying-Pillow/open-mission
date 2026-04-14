@@ -26,9 +26,13 @@ type SelectPanelProps = {
 
 export function SelectPanel(props: SelectPanelProps) {
 	const terminal = useTerminalDimensions();
-	const availableOptionWidth = createMemo(() =>
-		computeOptionWidth(terminal().width, props.style?.['width'])
-	);
+	const availableOptionWidth = createMemo(() => {
+		const terminalWidth = terminal().width;
+		const normalizedTerminalWidth = Number.isFinite(terminalWidth)
+			? Math.floor(terminalWidth)
+			: 0;
+		return computeOptionWidth(normalizedTerminalWidth, props.style?.['width']);
+	});
 	const selectedIndex = createMemo(() =>
 		resolveSelectedIndex(props.items, props.selectedItemId)
 	);

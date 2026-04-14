@@ -274,7 +274,7 @@ export abstract class AgentRunner {
 
     protected async startTerminalCommandSession(
         config: AgentLaunchConfig,
-        options: { launchArgs?: string[] } = {}
+        options: { launchArgs?: string[]; skipInitialPromptSubmission?: boolean } = {}
     ): Promise<AgentSession> {
         const runtime = this.requireTerminalRuntime();
         const requestedSharedSessionName = getRequestedTerminalSessionName(config);
@@ -307,7 +307,7 @@ export abstract class AgentRunner {
             controller: this.createTerminalSessionController(transportHandle.sessionName)
         });
 
-        if (config.initialPrompt?.text) {
+        if (!options.skipInitialPromptSubmission && config.initialPrompt?.text) {
             await session.submitPrompt(config.initialPrompt);
         }
 

@@ -14,22 +14,22 @@ describe('buildAirportBootstrapLayout', () => {
 			viewportColumns: 200
 		});
 		expect(layout).toContain('tab name="TOWER" split_direction="vertical" {');
-		expect(layout).toContain('pane name="TOWER" focus=true size=100 borderless=true command="sh" cwd="/repo" {');
-		expect(layout).toContain('pane split_direction="vertical" {');
-		expect(layout).toContain('pane name="BRIEFING ROOM" size="50%" command="sh" cwd="/repo" {');
-		expect(layout).toContain('pane name="RUNWAY" size="50%" command="sh" cwd="/repo" {');
+		expect(layout).toContain('pane name="TOWER" focus=true size="33%" command="sh" cwd="/repo" {');
+		expect(layout).toContain('pane name="BRIEFING ROOM" size="33%" command="sh" cwd="/repo" {');
+		expect(layout).toContain('pane name="RUNWAY" size="34%" borderless=true command="sh" cwd="/repo" {');
 	});
 
-	it('stacks briefing room over runway when remaining width is narrow', () => {
+	it('keeps explicit right-pane sizes when viewport is narrow', () => {
 		const layout = buildAirportBootstrapLayout({
 			repoRoot: '/repo',
 			towerCommand: 'tower-command',
 			briefingRoomCommand: 'briefing-command',
 			runwayCommand: 'runway-command',
-			viewportColumns: 160
+			viewportColumns: 120
 		});
-		expect(layout).toContain('pane name="TOWER" focus=true size=80 borderless=true command="sh" cwd="/repo" {');
-		expect(layout).toContain('pane split_direction="horizontal" {');
+		expect(layout).toContain('pane name="TOWER" focus=true size="33%" command="sh" cwd="/repo" {');
+		expect(layout).toContain('pane name="BRIEFING ROOM" size="33%" command="sh" cwd="/repo" {');
+		expect(layout).toContain('pane name="RUNWAY" size="34%" borderless=true command="sh" cwd="/repo" {');
 	});
 
 	it('stacks companion panes when the terminal is narrow', () => {

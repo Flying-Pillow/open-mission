@@ -75,7 +75,7 @@ export async function bootstrapAirportLayout(context: AirportTerminalContext): P
 
 	const child = spawn(
 		terminalManagerBinary,
-		['--config-dir', terminalManagerConfigDir, '--session', sessionName, '--new-session-with-layout', layoutFile],
+		resolveTerminalManagerLaunchArgs(terminalManagerBinary, terminalManagerConfigDir, sessionName, layoutFile),
 		{
 			stdio: 'inherit',
 			env: process.env
@@ -140,6 +140,17 @@ export function resolveAirportRuntimeCommand(entryScriptPath: string): string[] 
 		return [process.execPath, entryScriptPath];
 	}
 	return [readMissionUserConfig()?.bunBinary?.trim() || 'bun', entryScriptPath];
+}
+
+export function resolveTerminalManagerLaunchArgs(
+	terminalManagerBinary: string,
+	terminalManagerConfigDir: string,
+	sessionName: string,
+	layoutFile: string
+): string[] {
+	void terminalManagerBinary;
+	const args = ['--config-dir', terminalManagerConfigDir, '--session', sessionName, '--new-session-with-layout', layoutFile];
+	return ['--debug', ...args];
 }
 
 async function resetTerminalManagerSession(terminalManagerBinary: string, sessionName: string): Promise<void> {

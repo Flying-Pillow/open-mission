@@ -169,6 +169,9 @@ describe('MissionWorkflowRequestExecutor', () => {
 		expect(runner.getLastStartRequest()?.initialPrompt?.text).toContain(
 			'Here are your instructions: @/tmp/mission-17/.mission/missions/mission-17/03-IMPLEMENTATION/tasks/03-align-workflow-request-execution-with-unified-runtime.md'
 		);
+		expect(runner.getLastStartRequest()?.initialPrompt?.text).toContain(
+			'Perform the task exactly as specified in <03-align-workflow-request-execution-with-unified-runtime.md>.'
+		);
 	});
 
 	it('reconciles unattached persisted active sessions as terminated when runtime attach fails', async () => {

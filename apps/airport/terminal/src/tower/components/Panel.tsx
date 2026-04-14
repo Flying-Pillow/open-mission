@@ -37,10 +37,14 @@ type PanelProps = ParentProps<{
 export function Panel(props: PanelProps) {
 	const terminal = useTerminalDimensions();
 	const resolvedContentWidth = createMemo(() => {
-		if (typeof props.contentWidth === 'number') {
+		if (typeof props.contentWidth === 'number' && Number.isFinite(props.contentWidth)) {
 			return Math.max(1, Math.floor(props.contentWidth));
 		}
-		return Math.max(1, terminal().width - 8);
+		const terminalWidth = terminal().width;
+		const normalizedTerminalWidth = Number.isFinite(terminalWidth)
+			? Math.floor(terminalWidth)
+			: 0;
+		return Math.max(1, normalizedTerminalWidth - 8);
 	});
 	const renderedBodyLines = createMemo<PanelBodyLine[]>(() => {
 		const rows = Math.max(0, props.bodyRows ?? 0);

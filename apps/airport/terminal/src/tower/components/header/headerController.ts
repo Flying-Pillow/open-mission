@@ -59,8 +59,14 @@ export function useHeaderController(options: HeaderControllerOptions) {
 		void activateTab(nextTabId, { preserveFocus: true });
 	}
 
-	function selectMissionTab(missionId: string): void {
-		setSelectedTabId(`mission:${missionId}`);
+	function selectTab(tabId: string | undefined): void {
+		if (!tabId) {
+			return;
+		}
+		if (!options.tabs().some((tab) => tab.id === tabId)) {
+			return;
+		}
+		setSelectedTabId(tabId);
 	}
 
 	return {
@@ -69,8 +75,8 @@ export function useHeaderController(options: HeaderControllerOptions) {
 		selectedTab,
 		tabsFocusable,
 		activateTab,
+		selectTab,
 		activateSelected: (activationOptions?: HeaderActivationOptions) => activateTab(currentTabId(), activationOptions),
 		previewSelection,
-		selectMissionTab,
 	};
 }

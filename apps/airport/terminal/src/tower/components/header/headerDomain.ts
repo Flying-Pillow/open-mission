@@ -69,10 +69,18 @@ export function buildHeaderTabs(
 	}
 	tabs.push({
 		id: repositoryTabId,
-		label: 'REPOSITORY',
+		label: resolveRepositoryTabLabel(status.control),
 		target: { kind: 'repository' }
 	});
 	return tabs;
+}
+
+function resolveRepositoryTabLabel(control: OperatorStatus['control']): string {
+	const githubRepository = resolvedControlGitHubRepository(control);
+	if (!githubRepository) {
+		return 'REPOSITORY';
+	}
+	return extractRepositoryName(githubRepository);
 }
 
 export function pickPreferredHeaderTabId(
@@ -154,10 +162,19 @@ export function buildHeaderFooterBadges(input: {
 export function resolveHeaderWorkspaceLabel(control: OperatorStatus['control'], workspaceRoot: string): string {
 	const githubRepository = resolvedControlGitHubRepository(control);
 	if (githubRepository) {
-		return githubRepository;
+		return extractRepositoryName(githubRepository);
 	}
 	const normalizedRoot = workspaceRoot.trim();
 	return normalizedRoot.length > 0 ? normalizedRoot : 'workspace';
+}
+
+function extractRepositoryName(githubRepository: string): string {
+	const trimmed = githubRepository.trim();
+	if (trimmed.length === 0) {
+		return 'repository';
+	}
+	const parts = trimmed.split('/').map((part) => part.trim()).filter((part) => part.length > 0);
+	return parts[parts.length - 1] ?? 'repository';
 }
 
 function formatHeaderMissionLabel(missionId: string, issueId?: number, title?: string): string {

@@ -38,25 +38,25 @@ describe('bootstrapAirportLayout session reset parsing', () => {
 			viewportColumns: 200
 		});
 		expect(layout).toContain('tab name="TOWER" split_direction="vertical" {');
-		expect(layout).toContain('pane name="TOWER" focus=true size=100 borderless=true command="sh" cwd="/repo" {');
+		expect(layout).toContain('pane name="TOWER" focus=true size="33%" command="sh" cwd="/repo" {');
 		expect(layout).toContain(`args "-lc" "exec tower-command"`);
-		expect(layout).toContain(`pane split_direction="vertical" {`);
-		expect(layout).toContain(`pane name="BRIEFING ROOM" size="50%" command="sh" cwd="/repo" {`);
+		expect(layout).toContain(`pane name="BRIEFING ROOM" size="33%" command="sh" cwd="/repo" {`);
 		expect(layout).toContain(`args "-lc" "exec briefing-command"`);
-		expect(layout).toContain(`pane name="RUNWAY" size="50%" command="sh" cwd="/repo" {`);
+		expect(layout).toContain(`pane name="RUNWAY" size="34%" borderless=true command="sh" cwd="/repo" {`);
 		expect(layout).toContain(`args "-lc" "exec runway-command"`);
 	});
 
-	it('stacks briefing room and runway when remaining width is below side-by-side minimum', () => {
+	it('keeps briefing room and runway explicit-width when viewport is narrow', () => {
 		const layout = buildAirportBootstrapLayout({
 			repoRoot: '/repo',
 			towerCommand: 'tower-command',
 			briefingRoomCommand: 'briefing-command',
 			runwayCommand: 'runway-command',
-			viewportColumns: 160
+			viewportColumns: 120
 		});
-		expect(layout).toContain(`pane name="TOWER" focus=true size=80 borderless=true command="sh" cwd="/repo" {`);
-		expect(layout).toContain(`pane split_direction="horizontal" {`);
+		expect(layout).toContain(`pane name="TOWER" focus=true size="33%" command="sh" cwd="/repo" {`);
+		expect(layout).toContain(`pane name="BRIEFING ROOM" size="33%" command="sh" cwd="/repo" {`);
+		expect(layout).toContain(`pane name="RUNWAY" size="34%" borderless=true command="sh" cwd="/repo" {`);
 	});
 
 	it('uses a horizontal split for runway only when the viewport is wide enough', () => {

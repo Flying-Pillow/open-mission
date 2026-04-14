@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 
-import { useKeyboard, useTerminalDimensions, useTimeline } from '@opentui/solid';
-import { createMemo, createSignal, onMount } from 'solid-js';
+import { useKeyboard, useTerminalDimensions } from '@opentui/solid';
+import { createMemo } from 'solid-js';
 import { towerTheme } from '../towerTheme.js';
 import type { PanelBadge } from '../Panel.js';
 import { TabPanel, type TabPanelLine, type TabPanelTab } from '../TabPanel.js';
@@ -34,21 +34,13 @@ type HeaderPanelProps = {
 export function HeaderPanel(props: HeaderPanelProps) {
 	void props.title;
 	const terminal = useTerminalDimensions();
-	const [timelinePhase, setTimelinePhase] = createSignal(0);
-	const timeline = useTimeline({ duration: 2800, loop: false });
-	const interiorWidth = createMemo(() => Math.max(terminal().width - 4, 18));
-
-	onMount(() => {
-		const animationState = { phase: 0 };
-		timeline.add(animationState, {
-			phase: 1,
-			duration: 2800,
-			ease: 'linear',
-			onUpdate: (animation) => {
-				const target = animation.targets[0] as { phase: number };
-				setTimelinePhase(Math.max(0, Math.min(target.phase, 1)));
-			}
-		});
+	const timelinePhase = createMemo(() => 0);
+	const interiorWidth = createMemo(() => {
+		const terminalWidth = terminal().width;
+		const normalizedTerminalWidth = Number.isFinite(terminalWidth)
+			? Math.floor(terminalWidth)
+			: 0;
+		return Math.max(normalizedTerminalWidth - 4, 18);
 	});
 
 	const bodyLines = createMemo<TabPanelLine[]>(() => {

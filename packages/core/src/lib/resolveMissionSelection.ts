@@ -40,19 +40,6 @@ export function resolveMissionSelectionFromContext(input: {
 	domain: ContextGraph;
 }): MissionResolvedSelection | undefined {
 	const { selection, domain } = input;
-	if (selection.agentSessionId) {
-		const missionId = selection.missionId?.trim();
-		return resolveMissionSelection({
-			target: {
-				kind: 'session',
-				sessionId: selection.agentSessionId,
-				...(selection.taskId ? { taskId: selection.taskId } : {}),
-				...(selection.stageId ? { stageId: selection.stageId } : {})
-			},
-			domain,
-			...(missionId ? { missionId } : {})
-		});
-	}
 	if (selection.artifactId) {
 		const artifact = domain.artifacts[selection.artifactId];
 		if (artifact?.ownerTaskId) {
@@ -80,6 +67,19 @@ export function resolveMissionSelectionFromContext(input: {
 				...(missionId ? { missionId } : {})
 			});
 		}
+	}
+	if (selection.agentSessionId) {
+		const missionId = selection.missionId?.trim();
+		return resolveMissionSelection({
+			target: {
+				kind: 'session',
+				sessionId: selection.agentSessionId,
+				...(selection.taskId ? { taskId: selection.taskId } : {}),
+				...(selection.stageId ? { stageId: selection.stageId } : {})
+			},
+			domain,
+			...(missionId ? { missionId } : {})
+		});
 	}
 	if (selection.taskId) {
 		const missionId = selection.missionId?.trim();

@@ -73,8 +73,13 @@ export class CopilotCliAgentRunner extends AgentRunner {
 		for (const directory of trustedDirectories) {
 			launchArgs.push('--add-dir', directory);
 		}
+		const initialPromptText = config.initialPrompt?.text.trim();
+		if (initialPromptText) {
+			launchArgs.push('-i', initialPromptText);
+		}
 		return this.startTerminalCommandSession(config, {
-			launchArgs
+			launchArgs,
+			skipInitialPromptSubmission: Boolean(initialPromptText)
 		});
 	}
 
@@ -120,15 +125,45 @@ async function ensureTrustedFolderConfig(configDir: string, trustedDirectories: 
 		}
 	}
 
-	const trustedFolders = Array.isArray(document['trusted_folders'])
-		? document['trusted_folders'].filter((value): value is string => typeof value === 'string')
-		: [];
-	for (const directory of trustedDirectories) {
-		if (!trustedFolders.includes(directory)) {
-			trustedFolders.push(directory);
+	const trustedFolders = new Set<string>([
+		...readStringArrayConfig(document, 'trusted_folders'),
+		...readStringArrayConfig(document, 'trustedFolders')
+	]);
+	for (const directory of await resolveCanonicalTrustedDirectories(trustedDirectories)) {
+		if (!trustedFolders.has(directory)) {
+			trustedFolders.add(directory);
 		}
 	}
 
-	document['trusted_folders'] = trustedFolders;
+	const trustedFolderList = [...trustedFolders];
+	document['trusted_folders'] = trustedFolderList;
+	document['trustedFolders'] = trustedFolderList;
 	await fs.writeFile(configPath, `${JSON.stringify(document, null, 2)}\n`, 'utf8');
+}
+
+function readStringArrayConfig(document: Record<string, unknown>, key: string): string[] {
+	const raw = document[key];
+	if (!Array.isArray(raw)) {
+		return [];
+	}
+	return raw.filter((value): value is string => typeof value === 'string');
+}
+
+async function resolveCanonicalTrustedDirectories(trustedDirectories: string[]): Promise<string[]> {
+	const resolved = new Set<string>();
+	for (const directory of trustedDirectories) {
+		const normalized = path.resolve(directory);
+		if (normalized) {
+			resolved.add(normalized);
+		}
+		try {
+			const real = await fs.realpath(normalized);
+			if (real) {
+				resolved.add(real);
+			}
+		} catch {
+			// Keep the normalized path when realpath resolution is unavailable.
+		}
+	}
+	return [...resolved];
 }

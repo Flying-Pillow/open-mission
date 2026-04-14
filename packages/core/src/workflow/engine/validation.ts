@@ -80,6 +80,20 @@ export function getMissionWorkflowEventValidationErrors(
                 errors.push(`mission.panic.cleared requires lifecycle panicked, received '${runtime.lifecycle}'.`);
             }
             break;
+        case 'mission.launch-queue.restarted':
+            if (runtime.lifecycle !== 'running') {
+                errors.push(`mission.launch-queue.restarted requires lifecycle running, received '${runtime.lifecycle}'.`);
+            }
+            if (runtime.pause.paused) {
+                errors.push('mission.launch-queue.restarted is not allowed while the mission is paused.');
+            }
+            if (runtime.panic.active) {
+                errors.push('mission.launch-queue.restarted is not allowed while panic is active.');
+            }
+            if (runtime.launchQueue.length === 0 && !runtime.tasks.some((task) => task.lifecycle === 'queued')) {
+                errors.push('mission.launch-queue.restarted requires at least one queued task or launch request.');
+            }
+            break;
         case 'mission.delivered':
             if (runtime.lifecycle !== 'completed') {
                 errors.push(`mission.delivered requires lifecycle completed, received '${runtime.lifecycle}'.`);

@@ -11,7 +11,9 @@ import type {
 	MissionSelector,
 	MissionStageId,
 	MissionSelectionCandidate,
+	TrackedIssueSummary,
 	OperatorStatus,
+	PaneBinding,
 	MissionWorkspaceContext,
 	SystemStatus
 } from '@flying-pillow/mission-core';
@@ -93,19 +95,17 @@ type ShellOverlay =
 type RepositorySelectionAction =
 	| {
 		kind: 'mission';
-		actionId: 'control.mission.select';
-		stepId: string;
-		optionId: string;
+		missionId: string;
 	  }
 	| {
 		kind: 'issue';
-		actionId: 'control.mission.start';
-		optionId: string;
+		issueNumber: number;
 	  }
 	| {
 		kind: 'start';
 		actionId: 'control.mission.start';
 	  };
+type TreeSelectionPaneBindings = NonNullable<ReturnType<typeof resolvePanelBindingsFromSelection>>;
 const repositoryFocusOrder: FocusArea[] = ['header', 'flow', 'command'];
 const missionFocusOrder: FocusArea[] = ['header', 'tree', 'command'];
 
@@ -139,12 +139,14 @@ export function AirportApp({
 	const currentControlRoot = createMemo(() => status().control?.controlRoot?.trim() || workspaceContext.workspaceRoot);
 	const [selectedThemeName, setSelectedThemeName] = createSignal<TowerThemeName>(initialTheme);
 	let lastObservedSelectionKey: string | undefined;
-	let lastRequestedSelectionSyncKey: string | undefined;
 	let inFlightSelectionSyncKey: string | undefined;
+	let queuedSelectionBindings: TreeSelectionPaneBindings | undefined;
+	let selectionSyncWorkerActive = false;
 	const [systemStatus, setSystemStatus] = createSignal<SystemStatus | undefined>();
 	const [fallbackControlBranch, setFallbackControlBranch] = createSignal<string | undefined>();
 	const [isControlBranchProbeInFlight, setIsControlBranchProbeInFlight] = createSignal<boolean>(false);
 	const [showIntroSplash, setShowIntroSplash] = createSignal<boolean>(initialShowIntroSplash ?? true);
+	const [repositoryOpenIssues, setRepositoryOpenIssues] = createSignal<TrackedIssueSummary[]>([]);
 	const flowController = createFlowController({
 		onNotify: appendLog,
 		onFlowClosed: () => {
@@ -401,9 +403,12 @@ export function AirportApp({
 	const repositorySelectionItems = createMemo(() => {
 		const items: Array<{ id: string; label: string; description: string }> = [];
 		const selectCommand = commandController.availableCommandById().get('control.mission.select');
-		const startCommand = commandController.availableCommandById().get('control.mission.start');
 		const selectStep = selectCommand?.flow?.steps[0];
-		const startStep = startCommand?.flow?.steps[0];
+		items.push({
+			id: 'section:missions',
+			label: 'Your missions:',
+			description: ''
+		});
 		if (selectStep?.kind === 'selection') {
 			for (const option of selectStep.options) {
 				items.push({
@@ -413,27 +418,39 @@ export function AirportApp({
 				});
 			}
 		}
+		items.push({
+			id: 'separator:between-missions-and-issues',
+			label: '',
+			description: ''
+		});
+		items.push({
+			id: 'section:issues',
+			label: 'New issues:',
+			description: ''
+		});
 		const activeIssueIds = new Set<number>(
 			projectedAvailableMissions()
 				.map((mission) => mission.issueId)
 				.filter((issueId): issueId is number => typeof issueId === 'number')
 		);
-		if (startStep?.kind === 'selection') {
-			for (const option of startStep.options) {
-				const issueId = extractIssueIdFromFlowOption(option);
-				if (issueId !== undefined && activeIssueIds.has(issueId)) {
-					continue;
-				}
-				items.push({
-					id: `issue:${option.id}`,
-					label: option.label,
-					description: option.description
-				});
+		for (const issue of repositoryOpenIssues()) {
+			if (activeIssueIds.has(issue.number)) {
+				continue;
 			}
+			items.push({
+				id: `issue:${String(issue.number)}`,
+				label: `#${String(issue.number)} ${issue.title}`,
+				description: issue.labels.length > 0 ? issue.labels.join(', ') : issue.url
+			});
 		}
 		items.push({
-			id: 'separator:before-start',
+			id: 'separator:between-issues-and-start',
 			label: '',
+			description: ''
+		});
+		items.push({
+			id: 'section:start',
+			label: 'Start:',
 			description: ''
 		});
 		items.push({
@@ -446,16 +463,12 @@ export function AirportApp({
 	const repositorySelectionActionsByItemId = createMemo(() => {
 		const actions = new Map<string, RepositorySelectionAction>();
 		const selectCommand = commandController.availableCommandById().get('control.mission.select');
-		const startCommand = commandController.availableCommandById().get('control.mission.start');
 		const selectStep = selectCommand?.flow?.steps[0];
-		const startStep = startCommand?.flow?.steps[0];
 		if (selectStep?.kind === 'selection') {
 			for (const option of selectStep.options) {
 				actions.set(`mission:${option.id}`, {
 					kind: 'mission',
-					actionId: 'control.mission.select',
-					stepId: selectStep.id,
-					optionId: option.id
+					missionId: option.id
 				});
 			}
 		}
@@ -464,18 +477,14 @@ export function AirportApp({
 				.map((mission) => mission.issueId)
 				.filter((issueId): issueId is number => typeof issueId === 'number')
 		);
-		if (startStep?.kind === 'selection') {
-			for (const option of startStep.options) {
-				const issueId = extractIssueIdFromFlowOption(option);
-				if (issueId !== undefined && activeIssueIds.has(issueId)) {
-					continue;
-				}
-				actions.set(`issue:${option.id}`, {
-					kind: 'issue',
-					actionId: 'control.mission.start',
-					optionId: option.id
-				});
+		for (const issue of repositoryOpenIssues()) {
+			if (activeIssueIds.has(issue.number)) {
+				continue;
 			}
+			actions.set(`issue:${String(issue.number)}`, {
+				kind: 'issue',
+				issueNumber: issue.number
+			});
 		}
 		actions.set('start:new', {
 			kind: 'start',
@@ -489,10 +498,10 @@ export function AirportApp({
 			if (items.length === 0) {
 				return undefined;
 			}
-			if (current && items.some((item) => item.id === current)) {
+			if (current && items.some((item) => item.id === current) && !isRepositorySelectionNonSelectableId(current)) {
 				return current;
 			}
-			return items[0]?.id;
+			return items.find((item) => !isRepositorySelectionNonSelectableId(item.id))?.id;
 		});
 	});
 	const focusOrder = createMemo<FocusArea[]>(() =>
@@ -553,8 +562,9 @@ export function AirportApp({
 
 	createEffect(() => {
 		selectedShellTargetKey();
-		lastRequestedSelectionSyncKey = undefined;
 		inFlightSelectionSyncKey = undefined;
+		queuedSelectionBindings = undefined;
+		selectionSyncWorkerActive = false;
 	});
 
 	createEffect(() => {
@@ -565,41 +575,64 @@ export function AirportApp({
 		if (!bindings) {
 			return;
 		}
-		const selectionSyncKey = JSON.stringify(bindings);
-		if (
-			selectionSyncKey === lastRequestedSelectionSyncKey
-			|| selectionSyncKey === inFlightSelectionSyncKey
-		) {
+		const airportPanes = systemSnapshot()?.state.airport.panes;
+		const updates = computeSelectionBindingUpdates(bindings, airportPanes);
+		if (updates.length === 0) {
+			return;
+		}
+		queuedSelectionBindings = bindings;
+		if (selectionSyncWorkerActive) {
 			return;
 		}
 		const currentClient = client();
 		if (!currentClient) {
 			return;
 		}
-		inFlightSelectionSyncKey = selectionSyncKey;
-		const api = new DaemonApi(currentClient);
-		const applyBindings = (targetApi: DaemonApi) =>
-			Promise.all(
-				Object.entries(bindings).map(([paneId, binding]) =>
-					targetApi.airport.bindPane({
-						paneId: paneId as 'briefingRoom' | 'runway',
+		selectionSyncWorkerActive = true;
+		void flushQueuedTreeSelectionBindings();
+	});
+
+	async function flushQueuedTreeSelectionBindings(): Promise<void> {
+		try {
+			while (queuedSelectionBindings) {
+				const targetBindings = queuedSelectionBindings;
+				queuedSelectionBindings = undefined;
+
+				const currentClient = client();
+				if (!currentClient) {
+					queuedSelectionBindings = targetBindings;
+					return;
+				}
+
+				const airportPanes = systemSnapshot()?.state.airport.panes;
+				const updates = computeSelectionBindingUpdates(targetBindings, airportPanes);
+				if (updates.length === 0) {
+					continue;
+				}
+
+				const selectionSyncKey = JSON.stringify(targetBindings);
+				inFlightSelectionSyncKey = selectionSyncKey;
+				const api = new DaemonApi(currentClient);
+				for (const [paneId, binding] of updates) {
+					await api.airport.bindPane({
+						paneId,
 						binding
-					})
-				)
-			);
-		void applyBindings(api)
-			.then(() => {
-				lastRequestedSelectionSyncKey = selectionSyncKey;
-			})
-			.catch((error) => {
-				appendLog(`Failed to sync pane bindings: ${toErrorMessage(error)}`);
-			})
-			.finally(() => {
+					});
+				}
 				if (inFlightSelectionSyncKey === selectionSyncKey) {
 					inFlightSelectionSyncKey = undefined;
 				}
-			});
-	});
+			}
+		} catch (error) {
+			appendLog(`Failed to sync pane bindings: ${toErrorMessage(error)}`);
+		} finally {
+			selectionSyncWorkerActive = false;
+			if (queuedSelectionBindings && client()) {
+				selectionSyncWorkerActive = true;
+				void flushQueuedTreeSelectionBindings();
+			}
+		}
+	}
 
 	function renderMissionControlPanel(): JSXElement | undefined {
 		if (towerMode() !== 'mission') {
@@ -665,6 +698,9 @@ export function AirportApp({
 				void activateRepositorySelection(itemId);
 			}}
 			onItemChange={(itemId) => {
+				if (isRepositorySelectionNonSelectableId(itemId)) {
+					return;
+				}
 				setSelectedRepositorySelectionItemId(itemId);
 			}}
 			onFocusCommand={() => {
@@ -731,6 +767,32 @@ export function AirportApp({
 				if (!disposed) {
 					setSystemStatus(undefined);
 					appendLog(`Failed to load system status: ${toErrorMessage(error)}`);
+				}
+			});
+		onCleanup(() => {
+			disposed = true;
+		});
+	});
+
+	createEffect(() => {
+		const currentClient = client();
+		status().control?.availableMissionCount;
+		status().control?.currentBranch;
+		if (!currentClient) {
+			setRepositoryOpenIssues([]);
+			return;
+		}
+		let disposed = false;
+		void new DaemonApi(currentClient).control.listOpenIssues(100)
+			.then((issues) => {
+				if (!disposed) {
+					setRepositoryOpenIssues(issues);
+				}
+			})
+			.catch((error: unknown) => {
+				if (!disposed) {
+					setRepositoryOpenIssues([]);
+					appendLog(`Failed to load open issues: ${toErrorMessage(error)}`);
 				}
 			});
 		onCleanup(() => {
@@ -892,18 +954,22 @@ export function AirportApp({
 
 	function moveRepositorySelection(delta: number): void {
 		const items = repositorySelectionItems();
-		if (items.length === 0) {
+		const selectableItems = items.filter((item) => !isRepositorySelectionNonSelectableId(item.id));
+		if (selectableItems.length === 0) {
 			setSelectedRepositorySelectionItemId(undefined);
 			return;
 		}
 		const current = selectedRepositorySelectionItemId();
-		const currentIndex = Math.max(0, items.findIndex((item) => item.id === current));
-		const nextIndex = (currentIndex + delta + items.length) % items.length;
-		setSelectedRepositorySelectionItemId(items[nextIndex]?.id);
+		const currentIndex = Math.max(0, selectableItems.findIndex((item) => item.id === current));
+		const nextIndex = (currentIndex + delta + selectableItems.length) % selectableItems.length;
+		setSelectedRepositorySelectionItemId(selectableItems[nextIndex]?.id);
 	}
 
 	async function activateRepositorySelection(itemId: string | undefined): Promise<void> {
 		if (!itemId) {
+			return;
+		}
+		if (isRepositorySelectionNonSelectableId(itemId)) {
 			return;
 		}
 		const action = repositorySelectionActionsByItemId().get(itemId);
@@ -911,18 +977,22 @@ export function AirportApp({
 			return;
 		}
 		if (action.kind === 'mission') {
+			setFocusArea('header');
+			await headerController.activateTab(`mission:${action.missionId}`, { preserveFocus: true });
+			return;
+		}
+		if (action.kind === 'issue') {
 			setIsRunningCommand(true);
 			try {
-				const result = await executeDaemonActionById(action.actionId, [
-					{
-						kind: 'selection',
-						stepId: action.stepId,
-						optionIds: [action.optionId]
-					}
-				], {});
-				activateLoadedMissionShell(result.status, {});
+				const currentClient = client() ?? (await connectClient({}));
+				if (!currentClient) {
+					appendLog('Unable to connect to Mission daemon.');
+					return;
+				}
+				const nextStatus = await new DaemonApi(currentClient).mission.fromIssue(action.issueNumber);
+				await activateLoadedMissionShell(nextStatus, {});
 				commandController.refreshAvailableActions();
-				appendLog(`Selected mission ${result.status.missionId ?? action.optionId}.`);
+				appendLog(`Prepared mission from issue #${String(action.issueNumber)}.`);
 			} catch (error) {
 				appendLog(toErrorMessage(error));
 			} finally {
@@ -941,12 +1011,6 @@ export function AirportApp({
 			return;
 		}
 		commandController.startCommandFlow(definition);
-		if (action.kind === 'issue') {
-			queueMicrotask(() => {
-				flowController.setSelectionHighlight(action.optionId);
-				void flowController.commitCurrentStep();
-			});
-		}
 	}
 
 	function appendLog(message: string): void {
@@ -974,7 +1038,7 @@ export function AirportApp({
 				runtimeController.loadControlFlowDescriptor(actionId, steps, selector),
 			onComplete: ({ command: completedCommand, executionResult, flowResult }) => {
 				if (completedCommand.id === 'control.mission.start' || completedCommand.id === 'control.mission.select') {
-					activateLoadedMissionShell(executionResult.status, executeSelector);
+					void activateLoadedMissionShell(executionResult.status, executeSelector);
 				}
 				commandController.refreshAvailableActions();
 				const message = onCompleteLog?.(executionResult, flowResult);
@@ -985,13 +1049,12 @@ export function AirportApp({
 		});
 	}
 
-	function activateLoadedMissionShell(nextStatus: OperatorStatus, nextSelector: MissionSelector = selector()): void {
+	async function activateLoadedMissionShell(nextStatus: OperatorStatus, nextSelector: MissionSelector = selector()): Promise<void> {
 		const missionId = nextStatus.missionId ?? nextSelector.missionId;
 		if (!missionId) {
 			return;
 		}
-		headerController.selectMissionTab(missionId);
-		setFocusArea('tree');
+		await headerController.activateTab(`mission:${missionId}`);
 	}
 
 	async function connectClient(nextSelector: MissionSelector = selector(), surfacePath?: string): Promise<DaemonClient | undefined> {
@@ -1243,6 +1306,25 @@ function resolveTreeSelectionContext(
 	};
 }
 
+function computeSelectionBindingUpdates(
+	desiredBindings: TreeSelectionPaneBindings,
+	currentPanes: MissionSystemSnapshot['state']['airport']['panes'] | undefined
+): Array<['briefingRoom' | 'runway', PaneBinding]> {
+	const updates: Array<['briefingRoom' | 'runway', PaneBinding]> = [];
+	for (const paneId of ['briefingRoom', 'runway'] as const) {
+		const desiredBinding = desiredBindings[paneId];
+		if (!desiredBinding) {
+			continue;
+		}
+		const currentBinding = currentPanes?.[paneId];
+		if (JSON.stringify(desiredBinding) === JSON.stringify(currentBinding)) {
+			continue;
+		}
+		updates.push([paneId, desiredBinding as PaneBinding]);
+	}
+	return updates;
+}
+
 async function resolveGitBranchName(cwd: string): Promise<string | undefined> {
 	return new Promise<string | undefined>((resolve) => {
 		const child = spawn('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
@@ -1281,18 +1363,6 @@ function noMissionSelectedMessage(status: OperatorStatus): string {
 	return 'No mission is selected. Use /start to create one or /select to open an existing mission.';
 }
 
-function extractIssueIdFromFlowOption(option: { id: string; label: string; description: string }): number | undefined {
-	const issueTokenMatch = option.id.match(/(?:^|[^a-z])issue[^0-9]*(\d+)/iu);
-	if (issueTokenMatch) {
-		return Number.parseInt(issueTokenMatch[1] ?? '', 10);
-	}
-	const hashMatch = option.label.match(/#(\d+)/u) ?? option.description.match(/#(\d+)/u);
-	if (hashMatch) {
-		return Number.parseInt(hashMatch[1] ?? '', 10);
-	}
-	const plainIdMatch = option.id.match(/^(\d+)$/u);
-	if (plainIdMatch) {
-		return Number.parseInt(plainIdMatch[1] ?? '', 10);
-	}
-	return undefined;
+function isRepositorySelectionNonSelectableId(itemId: string): boolean {
+	return itemId.startsWith('separator:') || itemId.startsWith('section:');
 }

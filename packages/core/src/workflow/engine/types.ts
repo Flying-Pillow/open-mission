@@ -280,6 +280,10 @@ export interface PanicStopClearedEvent extends MissionWorkflowEventBase {
     type: 'mission.panic.cleared';
 }
 
+export interface MissionLaunchQueueRestartedEvent extends MissionWorkflowEventBase {
+    type: 'mission.launch-queue.restarted';
+}
+
 export interface MissionDeliveredEvent extends MissionWorkflowEventBase {
     type: 'mission.delivered';
 }
@@ -373,6 +377,7 @@ export type MissionWorkflowEvent =
     | MissionPausedEvent
     | PanicStopRequestedEvent
     | PanicStopClearedEvent
+    | MissionLaunchQueueRestartedEvent
     | MissionDeliveredEvent
     | TasksGeneratedEvent
     | TaskLaunchPolicyChangedEvent

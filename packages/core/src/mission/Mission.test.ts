@@ -298,6 +298,9 @@ describe('Mission', () => {
                     `Stay strictly within this mission workspace: ${startedStatus.missionDir}`
                 );
                 expect(runner.getLastStartRequest()?.initialPrompt?.text).toContain(
+                    `Perform the task exactly as specified in <${task.fileName}>.`
+                );
+                expect(runner.getLastStartRequest()?.initialPrompt?.text).toContain(
                     `Here are your instructions: @${task.filePath}`
                 );
                 expect(nextStatus.agentSessions?.length ?? 0).toBe(1);
@@ -306,6 +309,45 @@ describe('Mission', () => {
                     runnerId: runner.id,
                     assignmentLabel: expect.stringContaining('01-PRD/tasks/')
                 });
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('falls back to task artifact launch instructions when session prompt is empty', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner');
+
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const mission = await Factory.create(adapter, {
+                brief: createBrief(207, 'Mission empty launch prompt fallback'),
+                branchRef: adapter.deriveMissionBranchName(207, 'Mission empty launch prompt fallback')
+            }, createWorkflowBindings(runner));
+
+            try {
+                const startedStatus = await mission.startWorkflow();
+                const task = startedStatus.readyTasks?.[0];
+                if (!task || !startedStatus.missionDir) {
+                    throw new Error('Expected a ready task and mission working directory after workflow start.');
+                }
+
+                await mission.launchAgentSession({
+                    runnerId: runner.id,
+                    taskId: task.taskId,
+                    workingDirectory: startedStatus.missionDir,
+                    prompt: ' '
+                });
+
+                expect(runner.getLastStartRequest()?.initialPrompt?.text).toContain(
+                    `Perform the task exactly as specified in <${task.fileName}>.`
+                );
+                expect(runner.getLastStartRequest()?.initialPrompt?.text).toContain(
+                    `Here are your instructions: @${task.filePath}`
+                );
             } finally {
                 mission.dispose();
             }

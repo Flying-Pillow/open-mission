@@ -40,6 +40,7 @@ import type {
 	MissionSelectionCandidate,
 	MissionTaskState,
 	MissionSelector,
+	TrackedIssueSummary,
 	OperatorStatus
 } from '../types.js';
 import type { MissionControlSource } from '../daemon/control-plane/types.js';
@@ -50,6 +51,7 @@ import {
 	type ControlDocumentRead,
 	type ControlDocumentResponse,
 	type ControlDocumentWrite,
+	type ControlIssuesList,
 	type MissionFromBriefRequest,
 	type MissionFromIssueRequest,
 	type ControlSettingsUpdate,
@@ -126,6 +128,8 @@ export class MissionWorkspace {
 				return this.initializeWorkflowSettings((request.params ?? {}) as ControlWorkflowSettingsInitialize);
 			case 'control.workflow.settings.update':
 				return this.updateWorkflowSettings((request.params ?? {}) as ControlWorkflowSettingsUpdate);
+			case 'control.issues.list':
+				return this.listOpenIssues((request.params ?? {}) as ControlIssuesList);
 			case 'mission.from-issue':
 				return this.createMissionFromIssue((request.params ?? {}) as MissionFromIssueRequest);
 			case 'mission.from-brief':
@@ -171,6 +175,26 @@ export class MissionWorkspace {
 		}));
 	}
 
+	private async listOpenIssues(params: ControlIssuesList = {}): Promise<TrackedIssueSummary[]> {
+		const settings = getDefaultMissionDaemonSettingsWithOverrides(
+			readMissionDaemonSettings(this.workspaceRoot) ?? {}
+		);
+		if (settings.trackingProvider !== 'github') {
+			return [];
+		}
+		const githubRepository = resolveGitHubRepositoryFromWorkspace(this.workspaceRoot);
+		if (!githubRepository) {
+			return [];
+		}
+		this.requireGitHubAuthentication();
+		const requestedLimit = typeof params.limit === 'number' && Number.isFinite(params.limit)
+			? Math.floor(params.limit)
+			: 50;
+		const limit = Math.max(1, Math.min(200, requestedLimit));
+		const adapter = new GitHubPlatformAdapter(this.workspaceRoot, githubRepository);
+		return adapter.listOpenIssues(limit);
+	}
+
 	public async buildDiscoveryStatus(
 		availableMissions: MissionSelectionCandidate[],
 		availableRepositories: MissionControlSource['availableRepositories'] = []
@@ -214,8 +238,18 @@ export class MissionWorkspace {
 
 	private buildDiscoveryAvailableActions(
 		control: MissionControlPlaneStatus,
-		availableMissions: MissionSelectionCandidate[]
+		availableMissions: MissionSelectionCandidate[],
+		openIssues: TrackedIssueSummary[]
 	): OperatorActionDescriptor[] {
+		const issuesCommandEnabled =
+			control.trackingProvider === 'github'
+			&& control.issuesConfigured;
+		const issuesCommandReason =
+			control.trackingProvider !== 'github'
+				? 'GitHub tracking is not configured for this repository.'
+				: !control.issuesConfigured
+					? 'GitHub repository configuration is incomplete.'
+					: '';
 		return [
 			{
 				id: 'control.setup.edit',
@@ -260,6 +294,21 @@ export class MissionWorkspace {
 				},
 				flow: this.buildMissionSwitchFlow(availableMissions),
 				...(availableMissions.length > 0 ? {} : { reason: 'No local missions are available.' })
+			},
+			{
+				id: 'control.mission.from-issue',
+				label: 'Prepare a mission from an open GitHub issue',
+				action: '/issues',
+				scope: 'mission',
+				disabled: !issuesCommandEnabled,
+				disabledReason: issuesCommandReason,
+				enabled: issuesCommandEnabled,
+				ui: {
+					toolbarLabel: 'ISSUES',
+					requiresConfirmation: false
+				},
+				flow: this.buildMissionIssueFlow(openIssues),
+				...(issuesCommandEnabled ? {} : { reason: issuesCommandReason })
 			}
 		];
 	}
@@ -299,14 +348,31 @@ export class MissionWorkspace {
 			return this.getMissionStatus({ selector: { missionId } });
 		}
 
+		if (params.actionId === 'control.mission.from-issue') {
+			const issueSelection = requireSingleSelectionActionStep(params.steps ?? [], 'issue');
+			const issueNumber = Number.parseInt(issueSelection.optionIds[0] ?? '', 10);
+			if (!Number.isFinite(issueNumber) || issueNumber <= 0) {
+				throw new Error('Issue selection requires a valid issue number.');
+			}
+			return this.createMissionFromIssue({ issueNumber });
+		}
+
 		throw new Error(`Unsupported control action '${params.actionId}'.`);
 	}
 
 	private async listControlActions(params: ControlActionList = {}): Promise<OperatorActionListSnapshot> {
 		const availableMissions = await this.listMissionSelectionCandidates();
 		const control = await this.buildControlPlaneStatus(availableMissions.length);
+		let openIssues: TrackedIssueSummary[] = [];
+		if (control.trackingProvider === 'github' && control.issuesConfigured) {
+			try {
+				openIssues = await this.listOpenIssues({ limit: 100 });
+			} catch {
+				openIssues = [];
+			}
+		}
 		return {
-			actions: this.resolveAvailableActions(this.buildDiscoveryAvailableActions(control, availableMissions), params.context),
+			actions: this.resolveAvailableActions(this.buildDiscoveryAvailableActions(control, availableMissions, openIssues), params.context),
 			revision: this.buildControlActionRevision(control)
 		};
 	}
@@ -1007,6 +1073,31 @@ export class MissionWorkspace {
 		};
 	}
 
+	private buildMissionIssueFlow(
+		openIssues: TrackedIssueSummary[]
+	): OperatorActionFlowDescriptor {
+		return {
+			targetLabel: 'MISSION',
+			actionLabel: 'FROM ISSUE',
+			steps: [
+				{
+					kind: 'selection',
+					id: 'issue',
+					label: 'ISSUE',
+					title: 'SELECT ISSUE',
+					emptyLabel: 'No open GitHub issues are available.',
+					helperText: 'Choose the open GitHub issue to materialize as a mission.',
+					selectionMode: 'single',
+					options: openIssues.map((issue) => ({
+						id: String(issue.number),
+						label: `#${String(issue.number)} ${issue.title}`,
+						description: issue.labels.length > 0 ? issue.labels.join(', ') : issue.url
+					}))
+				}
+			]
+		};
+	}
+
 	private async describeControlAction(
 		params: ControlActionDescribe
 	): Promise<OperatorActionFlowDescriptor> {
@@ -1019,6 +1110,9 @@ export class MissionWorkspace {
 		}
 		if (params.actionId === 'control.mission.select') {
 			return this.buildMissionSwitchFlow(await this.listMissionSelectionCandidates());
+		}
+		if (params.actionId === 'control.mission.from-issue') {
+			return this.buildMissionIssueFlow(await this.listOpenIssues({ limit: 100 }));
 		}
 		throw new Error(`Unsupported control action '${params.actionId}'.`);
 	}

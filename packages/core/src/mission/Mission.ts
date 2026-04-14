@@ -80,6 +80,8 @@ export class Mission {
 	private readonly workflowController: MissionWorkflowController;
 	private readonly workflowResolver: () => WorkflowGlobalSettings;
 	private readonly runtimeEventSubscription: MissionAgentDisposable;
+	private runtimeLifecycleIngestionQueue: Promise<void> = Promise.resolve();
+	private workflowEventApplicationQueue: Promise<void> = Promise.resolve();
 
 	public readonly onDidAgentConsoleEvent = this.agentConsoleEventEmitter.event;
 	public readonly onDidAgentEvent = this.agentEventEmitter.event;
@@ -107,6 +109,9 @@ export class Mission {
 		});
 		this.runtimeEventSubscription = this.workflowRequestExecutor.onDidRuntimeEvent((event) => {
 			this.handleRuntimeEvent(event);
+			if (event.type === 'session.completed' || event.type === 'session.failed') {
+				this.enqueueRuntimeLifecycleIngestion();
+			}
 		});
 		this.workflowController = new MissionWorkflowController({
 			adapter: this.adapter,
@@ -412,6 +417,10 @@ export class Mission {
 			await this.clearMissionPanic();
 			return this.status();
 		}
+		if (actionId === MISSION_ACTION_IDS.restartQueue) {
+			await this.restartLaunchQueue();
+			return this.status();
+		}
 		if (actionId === MISSION_ACTION_IDS.deliver) {
 			await this.deliver();
 			return this.status();
@@ -492,6 +501,11 @@ export class Mission {
 
 	public async clearMissionPanic(): Promise<void> {
 		await this.workflowController.applyEvent(this.createWorkflowEvent('mission.panic.cleared', {}));
+		await this.status();
+	}
+
+	public async restartLaunchQueue(): Promise<void> {
+		await this.workflowController.applyEvent(this.createWorkflowEvent('mission.launch-queue.restarted', {}));
 		await this.status();
 	}
 
@@ -1099,6 +1113,9 @@ export class Mission {
 		runner: AgentRunner,
 		request: MissionAgentSessionLaunchRequest
 	): Promise<AgentSessionSnapshot> {
+		const promptText = request.prompt.trim().length > 0
+			? request.prompt
+			: buildMissionTaskLaunchPrompt(task, this.adapter.getMissionWorkspacePath(this.missionDir));
 		return this.workflowController.startRuntimeSession({
 			missionId: this.descriptor.missionId,
 			workingDirectory: request.workingDirectory,
@@ -1117,7 +1134,7 @@ export class Mission {
 			resume: { mode: 'new' },
 			initialPrompt: {
 				source: 'operator',
-				text: request.prompt,
+				text: promptText,
 				...(request.title ? { title: request.title } : task.subject ? { title: task.subject } : {})
 			},
 			...(request.terminalSessionName?.trim()
@@ -1429,9 +1446,37 @@ export class Mission {
 		}
 	}
 
+	private enqueueRuntimeLifecycleIngestion(): void {
+		this.runtimeLifecycleIngestionQueue = this.runtimeLifecycleIngestionQueue
+			.then(async () => {
+				await this.ingestRuntimeLifecycleEvents();
+			})
+			.catch(() => undefined);
+	}
+
+	private async ingestRuntimeLifecycleEvents(): Promise<void> {
+		const events = this.workflowRequestExecutor.consumeRuntimeLifecycleEvents();
+		if (events.length === 0) {
+			return;
+		}
+		for (const event of events) {
+			try {
+				await this.applyWorkflowEvent(event);
+			} catch {
+				// Best-effort ingestion avoids stalling runtime event delivery to clients.
+			}
+		}
+		const document = await this.workflowController.getPersistedDocument();
+		this.syncAgentSessions(document);
+	}
+
 	private async applyWorkflowEvent(event: MissionWorkflowEvent): Promise<void> {
-		await this.workflowController.applyEvent(event);
-		this.lastKnownStatus = undefined;
+		const run = this.workflowEventApplicationQueue.then(async () => {
+			await this.workflowController.applyEvent(event);
+			this.lastKnownStatus = undefined;
+		});
+		this.workflowEventApplicationQueue = run.catch(() => undefined);
+		await run;
 	}
 
 	private async queueTask(taskId: string, options: { runnerId?: string; prompt?: string; workingDirectory?: string; terminalSessionName?: string } = {}): Promise<void> {
@@ -1482,6 +1527,7 @@ const MISSION_ACTION_IDS = {
 	resume: 'mission.resume',
 	panic: 'mission.panic',
 	clearPanic: 'mission.clear-panic',
+	restartQueue: 'mission.restart-queue',
 	deliver: 'mission.deliver'
 } as const;
 
@@ -1493,6 +1539,7 @@ function buildMissionAvailableActions(input: MissionAvailableActionsInput): Oper
 		buildResumeMissionAction(input, currentStageId),
 		buildPanicStopAction(input, currentStageId),
 		buildClearPanicAction(input, currentStageId),
+		buildRestartLaunchQueueAction(input, currentStageId),
 		buildDeliverMissionAction(input, currentStageId)
 	];
 
@@ -1612,6 +1659,29 @@ function buildClearPanicAction(
 			confirmationPrompt: 'Clear the mission panic state?'
 		},
 		flow: { targetLabel: 'MISSION', actionLabel: 'CLEAR PANIC', steps: [] },
+		presentationTargets: buildMissionPresentationTargets(currentStageId),
+		ordering: { group: 'recovery' }
+	};
+}
+
+function buildRestartLaunchQueueAction(
+	input: MissionAvailableActionsInput,
+	currentStageId: MissionStageId | undefined
+): OperatorActionDescriptor {
+	const errors = getValidationErrors(input, { type: 'mission.launch-queue.restarted' });
+	const enabled = errors.length === 0;
+	return {
+		id: MISSION_ACTION_IDS.restartQueue,
+		label: 'Restart Launch Queue',
+		action: '/mission restart-queue',
+		scope: 'mission',
+		...buildAvailability(enabled, describeRestartLaunchQueueUnavailable(input, errors)),
+		ui: {
+			toolbarLabel: 'RESTART QUEUE',
+			requiresConfirmation: true,
+			confirmationPrompt: 'Clear stale launch requests and retry queued tasks now?'
+		},
+		flow: { targetLabel: 'MISSION', actionLabel: 'RESTART QUEUE', steps: [] },
 		presentationTargets: buildMissionPresentationTargets(currentStageId),
 		ordering: { group: 'recovery' }
 	};
@@ -1884,6 +1954,22 @@ function describeClearPanicUnavailable(input: MissionAvailableActionsInput, erro
 	return errors[0] ?? 'Panic cannot be cleared right now.';
 }
 
+function describeRestartLaunchQueueUnavailable(input: MissionAvailableActionsInput, errors: string[]): string {
+	if (input.runtime.panic.active || input.runtime.lifecycle === 'panicked') {
+		return 'Clear panic before restarting the launch queue.';
+	}
+	if (input.runtime.pause.paused || input.runtime.lifecycle !== 'running') {
+		return 'Mission must be running to restart the launch queue.';
+	}
+	const hasQueuedWork =
+		input.runtime.launchQueue.length > 0
+		|| input.runtime.tasks.some((task) => task.lifecycle === 'queued');
+	if (!hasQueuedWork) {
+		return 'There are no queued tasks to restart.';
+	}
+	return errors[0] ?? 'Launch queue cannot be restarted right now.';
+}
+
 function describeTaskStartUnavailable(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number], errors: string[]): string {
 	if (input.runtime.lifecycle === 'panicked' || input.runtime.panic.active) {
 		return 'Clear panic before starting new work.';
@@ -1925,6 +2011,7 @@ function getValidationErrors(
 		| { type: 'mission.resumed' }
 		| { type: 'mission.panic.requested' }
 		| { type: 'mission.panic.cleared' }
+		| { type: 'mission.launch-queue.restarted' }
 		| { type: 'mission.delivered' }
 		| { type: 'task.queued'; taskId: string }
 		| { type: 'task.completed'; taskId: string }

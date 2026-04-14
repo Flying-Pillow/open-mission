@@ -1,6 +1,7 @@
 import type {
 	ControlActionList,
 	ControlActionDescribe,
+	ControlIssuesList,
 	ControlDocumentRead,
 	ControlDocumentResponse,
 	ControlDocumentWrite,
@@ -19,6 +20,7 @@ import type {
 	OperatorActionFlowDescriptor,
 	OperatorActionQueryContext,
 	MissionRepositoryCandidate,
+	TrackedIssueSummary,
 	OperatorStatus
 } from '../types.js';
 import { DaemonClient } from './DaemonClient.js';
@@ -39,6 +41,11 @@ export class DaemonControlApi {
 	public async listAvailableActionsSnapshot(context?: OperatorActionQueryContext): Promise<OperatorActionListSnapshot> {
 		const params: ControlActionList = context ? { context } : {};
 		return this.client.request<OperatorActionListSnapshot>('control.action.list', params);
+	}
+
+	public async listOpenIssues(limit = 50): Promise<TrackedIssueSummary[]> {
+		const params: ControlIssuesList = { limit };
+		return this.client.request<TrackedIssueSummary[]>('control.issues.list', params);
 	}
 
 	public async executeAction(

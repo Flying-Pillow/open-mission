@@ -48,7 +48,11 @@ export function MissionControlPanel(props: MissionControlPanelProps) {
 		if (typeof props.contentWidth === 'number' && Number.isFinite(props.contentWidth)) {
 			return Math.max(12, Math.floor(props.contentWidth));
 		}
-		return Math.max(terminal().width - 8, 20);
+		const terminalWidth = terminal().width;
+		const normalizedTerminalWidth = Number.isFinite(terminalWidth)
+			? Math.floor(terminalWidth)
+			: 0;
+		return Math.max(normalizedTerminalWidth - 8, 20);
 	});
 
 	createEffect(() => {
@@ -78,7 +82,7 @@ export function MissionControlPanel(props: MissionControlPanelProps) {
 		if (!request || !scrollboxRef) {
 			return;
 		}
-		scrollboxRef.scrollBy(request.delta / 2, 'viewport');
+		scrollboxRef.scrollBy(request.delta, 'viewport');
 	});
 
 	return (
@@ -167,31 +171,19 @@ export function MissionControlPanel(props: MissionControlPanelProps) {
 }
 
 function MissionControlTreeRow(props: { line: TreeLine; width: Accessor<number> }) {
-	const rowLayout = createMemo(() =>
-		formatTreeRow(props.line.text, props.line.statusBadgeText, props.width())
+	const rowText = createMemo(() =>
+		fitTreeRow(`${props.line.text} ${props.line.statusBadgeText}`, props.width())
 	);
 
 	return (
 		<box
-			id={props.line.id}
 			style={{
 				flexDirection: 'row',
 				backgroundColor: props.line.selected ? props.line.backgroundColor : towerTheme.panelBackground
 			}}
 		>
 			<text style={{ fg: props.line.selected ? towerTheme.primaryText : props.line.color }}>
-				{rowLayout().label}
-			</text>
-			<text style={{ fg: props.line.selected ? towerTheme.primaryText : props.line.color }}>
-				{rowLayout().spacer}
-			</text>
-			<text
-				style={{
-					fg: props.line.color,
-					bg: props.line.selected ? props.line.backgroundColor : towerTheme.panelBackground
-				}}
-			>
-				{rowLayout().badge}
+				{rowText()}
 			</text>
 		</box>
 	);
@@ -253,30 +245,6 @@ function fitTreeRow(text: string, width: number): string {
 	const safeWidth = Math.max(1, width);
 	const singleLine = text.replace(/[\r\n\t\f\v]+/g, ' ');
 	return singleLine.slice(0, safeWidth);
-}
-
-function formatTreeRow(
-	text: string,
-	badge: string,
-	width: number
-): { label: string; spacer: string; badge: string } {
-	const safeWidth = Math.max(1, width);
-	if (safeWidth <= badge.length) {
-		return {
-			label: '',
-			spacer: '',
-			badge: badge.slice(0, safeWidth)
-		};
-	}
-	const singleLine = fitTreeRow(text, safeWidth);
-	const labelBudget = Math.max(1, safeWidth - badge.length - 1);
-	const label = singleLine.slice(0, labelBudget);
-	const spacerWidth = Math.max(1, safeWidth - label.length - badge.length);
-	return {
-		label,
-		spacer: ' '.repeat(spacerWidth),
-		badge
-	};
 }
 
 function toStatusBadgeLabel(statusLabel: string | undefined): string {

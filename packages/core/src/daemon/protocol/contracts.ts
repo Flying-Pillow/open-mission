@@ -301,6 +301,7 @@ export type Method =
 	| 'control.workflow.settings.update'
 	| 'control.repositories.list'
 	| 'control.repositories.add'
+	| 'control.issues.list'
 	| 'control.action.list'
 	| 'control.action.describe'
 	| 'control.action.execute'
@@ -340,6 +341,7 @@ export const METHOD_METADATA: Record<Method, MethodMetadata> = {
 	'control.workflow.settings.update': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.repositories.list': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.repositories.add': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'control.issues.list': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.action.list': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.action.describe': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.action.execute': { includeSurfacePath: true, workspaceRoute: 'control' },
@@ -482,6 +484,10 @@ export type ControlRepositoriesList = Record<string, never>;
 
 export type ControlRepositoriesAdd = {
 	repositoryPath: string;
+};
+
+export type ControlIssuesList = {
+	limit?: number;
 };
 
 export type AirportClientConnect = {

@@ -15,7 +15,6 @@ import type {
 	MissionSystemState,
 	OperatorStatus
 } from '../../types.js';
-import { resolveMissionSelectionFromContext } from '../../lib/resolveMissionSelection.js';
 import { MissionControl } from './ContextGraphControl.js';
 import { deriveSystemAirportProjections } from './AirportProjectionService.js';
 import { RepositoryAirportRegistry } from './RepositoryAirportRegistry.js';
@@ -195,7 +194,7 @@ export class MissionSystemController {
 		const bindingsStartedAt = performance.now();
 		this.airportRegistry.applyDefaultBindings(
 			source.repositoryId,
-			derivePaneBindings(domain)
+			deriveTowerPaneBinding(domain)
 		);
 		const bindingsDurationMs = performance.now() - bindingsStartedAt;
 		const totalDurationMs = performance.now() - startedAt;
@@ -236,7 +235,7 @@ export class MissionSystemController {
 			...(params.surfacePath ? { surfacePath: params.surfacePath } : {})
 		});
 		const domain = this.missionControl.getState();
-		const nextBindings = derivePaneBindings(domain);
+		const nextBindings = deriveTowerPaneBinding(domain);
 		if (params.intentPaneId) {
 			this.airportRegistry.applyDefaultBindings(repositoryId, nextBindings, {
 				focusIntent: params.intentPaneId
@@ -356,33 +355,16 @@ export class MissionSystemController {
 	}
 }
 
-function derivePaneBindings(
+function deriveTowerPaneBinding(
 	graph: ContextGraph
 ): Partial<Record<AirportPaneId, PaneBinding>> {
-	const { repositoryId, missionId, artifactId } = graph.selection;
-	const resolvedSelection = resolveMissionSelectionFromContext({
-		selection: graph.selection,
-		domain: graph
-	});
-	const resolvedArtifactId = artifactId
-		|| resolvedSelection?.activeInstructionArtifactId
-		|| resolvedSelection?.activeStageResultArtifactId;
-	const nextBindings: Partial<Record<AirportPaneId, PaneBinding>> = {
+	const { repositoryId, missionId } = graph.selection;
+	return {
 		tower: missionId
 			? { targetKind: 'mission', targetId: missionId, mode: 'control' }
 			: repositoryId
 				? { targetKind: 'repository', targetId: repositoryId, mode: 'control' }
-				: { targetKind: 'empty' },
-		briefingRoom: resolvedArtifactId
-			? { targetKind: 'artifact', targetId: resolvedArtifactId, mode: 'view' }
-			: missionId
-				? { targetKind: 'mission', targetId: missionId, mode: 'view' }
-				: repositoryId
-					? { targetKind: 'repository', targetId: repositoryId, mode: 'view' }
-					: { targetKind: 'empty' },
-			runway: { targetKind: 'empty' }
+				: { targetKind: 'empty' }
 	};
-
-	return nextBindings;
 }
 

@@ -139,6 +139,33 @@ function applyEventMutation(
                 active: false
             };
             return;
+        case 'mission.launch-queue.restarted': {
+            const existingRequestsByTaskId = new Map(state.launchQueue.map((request) => [request.taskId, request]));
+            const queuedTasks = state.tasks.filter((task) => task.lifecycle === 'queued');
+            state.launchQueue = queuedTasks.map((task, index) => {
+                const existing = existingRequestsByTaskId.get(task.taskId);
+                return {
+                    requestId: `task.launch:${task.taskId}:${event.occurredAt}:${index.toString(36)}`,
+                    taskId: task.taskId,
+                    requestedAt: event.occurredAt,
+                    requestedBy: event.source === 'human' ? 'human' : event.source === 'daemon' ? 'daemon' : 'system',
+                    causedByEventId: event.eventId,
+                    ...(existing?.runnerId ? { runnerId: existing.runnerId } : {}),
+                    ...(existing?.prompt ? { prompt: existing.prompt } : {}),
+                    ...(existing?.workingDirectory ? { workingDirectory: existing.workingDirectory } : {}),
+                    ...(existing?.terminalSessionName ? { terminalSessionName: existing.terminalSessionName } : {})
+                };
+            });
+            state.tasks = state.tasks.map((task) =>
+                task.lifecycle === 'queued'
+                    ? {
+                        ...task,
+                        updatedAt: event.occurredAt
+                    }
+                    : task
+            );
+            return;
+        }
         case 'mission.delivered':
             state.lifecycle = 'delivered';
             return;
@@ -520,7 +547,7 @@ function enforceLifecycleInvariants(
 function queueAutostartTasks(
     state: MissionWorkflowRuntimeState,
     event: MissionWorkflowEvent,
-    configuration: MissionWorkflowConfigurationSnapshot,
+    _configuration: MissionWorkflowConfigurationSnapshot,
     requests: MissionWorkflowRequest[]
 ): void {
     if (state.lifecycle !== 'running' || state.pause.paused || state.panic.active) {
@@ -533,11 +560,6 @@ function queueAutostartTasks(
             .filter((session) => isActiveSessionLifecycle(session.lifecycle))
             .map((session) => session.taskId)
     );
-    const activeTaskCount = state.tasks.filter((task) => task.lifecycle === 'queued' || task.lifecycle === 'running').length;
-    const activeSessionCount = state.sessions.filter((session) => isActiveSessionLifecycle(session.lifecycle)).length;
-
-    let availableTaskSlots = Math.max(0, configuration.workflow.execution.maxParallelTasks - activeTaskCount);
-    let availableSessionSlots = Math.max(0, configuration.workflow.execution.maxParallelSessions - activeSessionCount);
 
     for (const task of state.tasks) {
         if (task.lifecycle !== 'ready' || !task.runtime.autostart) {
@@ -545,9 +567,6 @@ function queueAutostartTasks(
         }
         if (queuedLaunchTaskIds.has(task.taskId) || activeSessionTaskIds.has(task.taskId)) {
             continue;
-        }
-        if (availableTaskSlots < 1) {
-            break;
         }
         task.lifecycle = 'queued';
         task.updatedAt = event.occurredAt;
@@ -559,15 +578,11 @@ function queueAutostartTasks(
             causedByEventId: event.eventId
         });
         queuedLaunchTaskIds.add(task.taskId);
-        availableTaskSlots -= 1;
     }
 
     for (const launchRequest of state.launchQueue) {
         if (launchRequest.dispatchedAt || activeSessionTaskIds.has(launchRequest.taskId)) {
             continue;
-        }
-        if (availableSessionSlots < 1) {
-            break;
         }
         const request = createRequest('session.launch', event.occurredAt, {
             taskId: launchRequest.taskId,
@@ -579,7 +594,6 @@ function queueAutostartTasks(
         launchRequest.dispatchedAt = event.occurredAt;
         launchRequest.requestId = request.requestId;
         requests.push(request);
-        availableSessionSlots -= 1;
     }
 }
 

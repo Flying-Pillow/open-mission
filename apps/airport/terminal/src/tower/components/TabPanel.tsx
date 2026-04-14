@@ -44,8 +44,18 @@ export function TabPanel(props: TabPanelProps) {
 	void props.titleColor;
 
 	const terminal = useTerminalDimensions();
-	const panelWidth = createMemo(() => Math.max(terminal().width - 2, 20));
-	const interiorWidth = createMemo(() => Math.max(panelWidth() - 2, 18));
+	const panelWidth = createMemo(() => {
+		const terminalWidth = terminal().width;
+		const normalizedTerminalWidth = Number.isFinite(terminalWidth)
+			? Math.floor(terminalWidth)
+			: 0;
+		return Math.max(normalizedTerminalWidth - 2, 20);
+	});
+	const interiorWidth = createMemo(() => {
+		const width = panelWidth();
+		const normalizedWidth = Number.isFinite(width) ? Math.floor(width) : 20;
+		return Math.max(normalizedWidth - 2, 18);
+	});
 	const rows = createMemo(() => Math.max(1, props.bodyRows ?? 1));
 	const borderColor = createMemo(() =>
 		props.borderColor ?? (props.focused ? towerTheme.accent : towerTheme.border)
