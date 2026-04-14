@@ -2,7 +2,8 @@ import path from 'node:path';
 import type {
 	MissionSelectionCandidate,
 	MissionTowerStageRailItemState,
-	OperatorStatus
+	OperatorStatus,
+	SystemStatus
 } from '@flying-pillow/mission-core';
 import { towerTheme } from '../towerTheme.js';
 
@@ -141,11 +142,11 @@ export function buildHeaderStatusLines(
 export function buildHeaderFooterBadges(input: {
 	status: OperatorStatus;
 	daemonState: 'connected' | 'degraded' | 'booting';
-	fallbackGitHubUser: string | undefined;
+	systemStatus: SystemStatus | undefined;
 }): HeaderBadge[] {
 	const control = input.status.control;
 	return [
-		...buildControlHeaderGitHubBadges(control, input.fallbackGitHubUser),
+		...buildControlHeaderGitHubBadges(control, input.systemStatus),
 		{ text: '●', tone: daemonStateTone(input.daemonState), framed: false }
 	];
 }
@@ -238,51 +239,28 @@ function resolvedControlGitHubRepository(control: OperatorStatus['control']): st
 
 function buildControlHeaderGitHubBadges(
 	control: OperatorStatus['control'],
-	fallbackGitHubUser?: string
+	systemStatus?: SystemStatus
 ): HeaderBadge[] {
-	const githubUser = resolveHeaderGitHubUser(control, fallbackGitHubUser);
+	if (control?.trackingProvider !== 'github') {
+		return [];
+	}
+	const githubStatus = systemStatus?.github;
+	if (!githubStatus) {
+		return [{ text: 'github?', tone: 'neutral' }];
+	}
+	const githubUser = resolveHeaderGitHubUser(githubStatus.user);
 	if (githubUser && githubUser.length > 0) {
 		return [{ text: githubUser, tone: 'success' }];
 	}
-	if (control?.githubAuthenticated === true) {
+	if (githubStatus.authenticated) {
 		return [{ text: 'github', tone: 'success' }];
 	}
 	return [{ text: 'github', tone: 'danger' }];
 }
 
-function resolveHeaderGitHubUser(
-	control: OperatorStatus['control'],
-	fallbackGitHubUser?: string
-): string | undefined {
-	if (control?.githubAuthenticated === false) {
-		return undefined;
-	}
-	const githubUser =
-		control?.githubUser?.trim()
-			|| parseGitHubUserFromAuthDetail(control?.githubAuthMessage)?.trim()
-			|| fallbackGitHubUser?.trim();
-	return githubUser && githubUser.length > 0 ? githubUser : undefined;
-}
-
-function parseGitHubUserFromAuthDetail(detail: string | undefined): string | undefined {
-	const normalized = detail?.replace(/\u001b\[[0-9;]*m/gu, '').trim();
-	if (!normalized) {
-		return undefined;
-	}
-	const patterns = [
-		/Logged in to [^\s]+ account\s+([A-Za-z0-9-]+)/iu,
-		/Logged in to [^\s]+ as\s+([A-Za-z0-9-]+)/iu,
-		/account\s+([A-Za-z0-9-]+)\s*\(/iu,
-		/as\s+([A-Za-z0-9-]+)\s*\(/iu
-	];
-	for (const pattern of patterns) {
-		const match = pattern.exec(normalized);
-		const candidate = match?.[1]?.trim();
-		if (candidate) {
-			return candidate;
-		}
-	}
-	return undefined;
+function resolveHeaderGitHubUser(githubUser?: string): string | undefined {
+	const normalizedGitHubUser = githubUser?.trim();
+	return normalizedGitHubUser && normalizedGitHubUser.length > 0 ? normalizedGitHubUser : undefined;
 }
 
 function daemonStateTone(state: 'connected' | 'degraded' | 'booting'): 'accent' | 'success' | 'warning' | 'danger' {

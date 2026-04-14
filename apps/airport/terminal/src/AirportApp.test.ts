@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { resolvePanelBindingsFromSelection } from './tower/components/mission-control/panelBindings.js';
 
 describe('resolvePanelBindingsFromSelection', () => {
-	it('clears the runway when a mission-level target is selected', () => {
+	it('binds mission-level briefing room target and keeps runway empty', () => {
 		expect(resolvePanelBindingsFromSelection(undefined, 'mission-13')).toEqual({
 			briefingRoom: {
 				targetKind: 'mission',
 				targetId: 'mission-13',
 				mode: 'view'
+			},
+			runway: {
+				targetKind: 'empty'
 			}
 		});
 	});
@@ -23,6 +26,9 @@ describe('resolvePanelBindingsFromSelection', () => {
 				targetKind: 'artifact',
 				targetId: 'mission-13:task:task-1',
 				mode: 'view'
+			},
+			runway: {
+				targetKind: 'empty'
 			}
 		});
 	});
@@ -37,6 +43,27 @@ describe('resolvePanelBindingsFromSelection', () => {
 			briefingRoom: {
 				targetKind: 'artifact',
 				targetId: 'mission-13:spec',
+				mode: 'view'
+			},
+			runway: {
+				targetKind: 'empty'
+			}
+		});
+	});
+
+	it('binds runway to the selected active agent session', () => {
+		expect(resolvePanelBindingsFromSelection({
+			missionId: 'mission-13',
+			activeAgentSessionId: 'session-7'
+		}, 'mission-13')).toEqual({
+			briefingRoom: {
+				targetKind: 'mission',
+				targetId: 'mission-13',
+				mode: 'view'
+			},
+			runway: {
+				targetKind: 'agentSession',
+				targetId: 'session-7',
 				mode: 'view'
 			}
 		});

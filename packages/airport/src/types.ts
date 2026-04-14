@@ -85,39 +85,9 @@ export interface AirportPaneProjectionBase {
 	terminalPane?: AirportPaneState;
 }
 
-export type DashboardStageRailItemState = 'pending' | 'ready' | 'active' | 'blocked' | 'completed';
-
-export interface DashboardStageRailItem {
-	id: string;
-	label: string;
-	state: DashboardStageRailItemState;
-	subtitle?: string;
-}
-
-export type DashboardTreeNodeKind = 'stage' | 'stage-artifact' | 'task' | 'task-artifact' | 'session';
-
-export interface DashboardTreeNode {
-	id: string;
-	label: string;
-	kind: DashboardTreeNodeKind;
-	depth: number;
-	color: string;
-	statusLabel?: string;
-	collapsible: boolean;
-	sourcePath?: string;
-	stageId?: string;
-	taskId?: string;
-	sessionId?: string;
-}
-
 export interface TowerProjection extends AirportPaneProjectionBase {
-	surfaceMode: 'repository' | 'mission';
 	repositoryId?: string;
 	repositoryLabel: string;
-	missionId?: string;
-	missionLabel?: string;
-	stageRail: DashboardStageRailItem[];
-	treeNodes: DashboardTreeNode[];
 	emptyLabel: string;
 }
 
@@ -168,7 +138,7 @@ export interface ObserveAirportClientParams {
 }
 
 export interface BindAirportPaneParams {
-	paneId: AirportPaneId;
+	paneId: Exclude<AirportPaneId, 'tower'>;
 	binding: PaneBinding;
 }
 
@@ -245,20 +215,13 @@ function createPaneProjectionBase(state: AirportState, paneId: AirportPaneId): A
 function createTowerProjection(state: AirportState): TowerProjection {
 	const base = createPaneProjectionBase(state, 'tower');
 	const binding = base.binding;
-	const missionId = binding.targetKind === 'mission' ? binding.targetId : undefined;
 	const repositoryId = state.repositoryId ?? (binding.targetKind === 'repository' ? binding.targetId : undefined);
 	const repositoryLabel = state.repositoryRootPath?.trim() || repositoryId || 'Repository';
 	return {
 		...base,
-		surfaceMode: missionId ? 'mission' : 'repository',
 		...(repositoryId ? { repositoryId } : {}),
 		repositoryLabel,
-		...(missionId ? { missionId, missionLabel: missionId } : {}),
-		stageRail: [],
-		treeNodes: [],
-		emptyLabel: missionId
-			? 'No mission-control projection is available yet.'
-			: 'Repository mode is ready.'
+		emptyLabel: 'Tower is ready.'
 	};
 }
 

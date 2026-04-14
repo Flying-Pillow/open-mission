@@ -29,29 +29,44 @@ afterEach(async () => {
 });
 
 describe('bootstrapAirportLayout session reset parsing', () => {
-	it('keeps briefing room as the only right-side pane in the initial layout', () => {
+	it('includes both briefing room and runway in the right-side column', () => {
 		const layout = buildAirportBootstrapLayout({
 			repoRoot: '/repo',
 			towerCommand: 'tower-command',
 			briefingRoomCommand: 'briefing-command',
+			runwayCommand: 'runway-command',
 			viewportColumns: 200
 		});
-		expect(layout).toContain('pane split_direction="vertical" {');
-		expect(layout).toContain('pane name="TOWER" focus=true size="50%" borderless=true command="sh" cwd="/repo" {');
+		expect(layout).toContain('tab name="TOWER" split_direction="vertical" {');
+		expect(layout).toContain('pane name="TOWER" focus=true size=100 borderless=true command="sh" cwd="/repo" {');
 		expect(layout).toContain(`args "-lc" "exec tower-command"`);
-		expect(layout).toContain(`pane name="BRIEFING ROOM" size="50%" command="sh" cwd="/repo" {
-				args "-lc" "exec briefing-command"
-			}`);
-		expect(layout).not.toContain('pane name="RUNWAY"');
+		expect(layout).toContain(`pane split_direction="vertical" {`);
+		expect(layout).toContain(`pane name="BRIEFING ROOM" size="50%" command="sh" cwd="/repo" {`);
+		expect(layout).toContain(`args "-lc" "exec briefing-command"`);
+		expect(layout).toContain(`pane name="RUNWAY" size="50%" command="sh" cwd="/repo" {`);
+		expect(layout).toContain(`args "-lc" "exec runway-command"`);
+	});
+
+	it('stacks briefing room and runway when remaining width is below side-by-side minimum', () => {
+		const layout = buildAirportBootstrapLayout({
+			repoRoot: '/repo',
+			towerCommand: 'tower-command',
+			briefingRoomCommand: 'briefing-command',
+			runwayCommand: 'runway-command',
+			viewportColumns: 160
+		});
+		expect(layout).toContain(`pane name="TOWER" focus=true size=80 borderless=true command="sh" cwd="/repo" {`);
+		expect(layout).toContain(`pane split_direction="horizontal" {`);
 	});
 
 	it('uses a horizontal split for runway only when the viewport is wide enough', () => {
-		expect(resolveAirportCompanionPaneDirection(79)).toBe('down');
-		expect(resolveAirportCompanionPaneDirection(80)).toBe('right');
+		expect(resolveAirportCompanionPaneDirection(99)).toBe('down');
+		expect(resolveAirportCompanionPaneDirection(100)).toBe('right');
 	});
 
 	it('adds global ctrl-tab pane cycling to the airport terminal manager config', () => {
 		const config = buildTerminalManagerConfig();
+		expect(config).toContain('auto_layout false');
 		expect(config).toContain('bind "Alt Right" "Alt l" { FocusNextPane; }');
 		expect(config).toContain('bind "Alt Left" "Alt h" { FocusPreviousPane; }');
 	});

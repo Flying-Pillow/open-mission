@@ -193,6 +193,11 @@ export type OperatorActionDescriptor = {
 	ordering?: OperatorActionOrderingMetadata;
 };
 
+export type OperatorActionListSnapshot = {
+	actions: OperatorActionDescriptor[];
+	revision: string;
+};
+
 export type OperatorActionExecutionSelectionStep = {
 	kind: 'selection';
 	stepId: string;
@@ -468,12 +473,18 @@ export type MissionControlPlaneStatus = {
 	trackingProvider?: 'github';
 	githubRepository?: string;
 	issuesConfigured: boolean;
-	githubAuthenticated?: boolean;
-	githubUser?: string;
-	githubAuthMessage?: string;
 	availableMissionCount: number;
 	problems: string[];
 	warnings: string[];
+};
+
+export type SystemStatus = {
+	github: {
+		cliAvailable: boolean;
+		authenticated: boolean;
+		user?: string;
+		detail?: string;
+	};
 };
 
 export type StageData = MissionStageStatus;

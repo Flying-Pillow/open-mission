@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { performance } from 'node:perf_hooks';
 import { promisify } from 'node:util';
 import type { AirportSubstrateEffect } from './effects.js';
 import type { AirportPaneId, AirportPaneState, AirportState, AirportSubstrateState } from './types.js';
@@ -64,15 +65,21 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 	}
 
 	public async observe(state: AirportState): Promise<AirportSubstrateState> {
+		const startedAt = performance.now();
 		const now = new Date().toISOString();
 		const panes = await this.listPanes().catch(() => undefined);
 		this.state = panes
 			? buildObservedState(state, panes, now)
 			: buildDetachedState(state, now);
+		const durationMs = performance.now() - startedAt;
+		process.stdout.write(
+			`${new Date().toISOString().slice(11, 19)} terminal-manager.observe session=${this.state.sessionName} attached=${String(Boolean(panes))} duration=${durationMs.toFixed(1)}ms paneCount=${String(panes?.length ?? 0)}\n`
+		);
 		return this.getState();
 	}
 
 	public async applyEffects(effects: AirportSubstrateEffect[]): Promise<AirportSubstrateState> {
+		const startedAt = performance.now();
 		for (const effect of effects) {
 			try {
 				await this.executor([
@@ -93,6 +100,10 @@ export class TerminalManagerSubstrateController implements AirportSubstrateContr
 			...this.state,
 			lastAppliedAt: new Date().toISOString()
 		};
+		const durationMs = performance.now() - startedAt;
+		process.stdout.write(
+			`${new Date().toISOString().slice(11, 19)} terminal-manager.applyEffects session=${this.state.sessionName} effects=${String(effects.length)} duration=${durationMs.toFixed(1)}ms\n`
+		);
 		return this.getState();
 	}
 

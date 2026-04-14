@@ -12,7 +12,8 @@ import type {
 	ContextGraph,
 	ContextSelection,
 	MissionSystemSnapshot,
-	MissionSystemState
+	MissionSystemState,
+	OperatorStatus
 } from '../../types.js';
 import { resolveMissionSelectionFromContext } from '../../lib/resolveMissionSelection.js';
 import { MissionControl } from './ContextGraphControl.js';
@@ -26,6 +27,7 @@ type MissionSystemCommand =
 		surfacePath?: string;
 		workspaceRoot?: string;
 		selectionHint?: Partial<ContextSelection>;
+		missionStatusHint?: OperatorStatus;
 	}
 	| {
 		kind: 'airport.client.connected';
@@ -82,12 +84,14 @@ export class MissionSystemController {
 		surfacePath?: string;
 		workspaceRoot?: string;
 		selectionHint?: Partial<ContextSelection>;
+		missionStatusHint?: OperatorStatus;
 	}): Promise<MissionSystemSnapshot> {
 		return this.dispatch({
 			kind: 'workspace.synchronized',
 			...(input.surfacePath?.trim() ? { surfacePath: input.surfacePath.trim() } : {}),
 			...(input.workspaceRoot?.trim() ? { workspaceRoot: input.workspaceRoot.trim() } : {}),
-			...(input.selectionHint ? { selectionHint: input.selectionHint } : {})
+			...(input.selectionHint ? { selectionHint: input.selectionHint } : {}),
+			...(input.missionStatusHint ? { missionStatusHint: input.missionStatusHint } : {})
 		});
 	}
 
@@ -123,7 +127,7 @@ export class MissionSystemController {
 	}
 
 	public async bindAirportPane(params: {
-		paneId: AirportPaneId;
+		paneId: Exclude<AirportPaneId, 'tower'>;
 		binding: PaneBinding;
 	}): Promise<MissionSystemSnapshot> {
 		return this.dispatch({ kind: 'airport.pane.bound', params });
@@ -135,7 +139,7 @@ export class MissionSystemController {
 	): Promise<MissionSystemSnapshot> {
 		const touchedRepositoryIds = await this.reduceCommand(command);
 		const plannedEffects = this.planEffects(touchedRepositoryIds);
-		await this.commit(touchedRepositoryIds);
+		await this.commit();
 
 		if (options.applyEffects === false || command.kind === 'airport.substrate.observed') {
 			return this.buildSnapshot();
@@ -171,19 +175,32 @@ export class MissionSystemController {
 	private async reduceWorkspaceSynchronization(
 		command: Extract<MissionSystemCommand, { kind: 'workspace.synchronized' }>
 	): Promise<string[]> {
+		const startedAt = performance.now();
 		const currentSelection = this.missionControl.getState().selection;
 		const selectedMissionId = command.selectionHint?.missionId?.trim()
 			|| currentSelection.missionId?.trim();
 		const source = await this.workspaceManager.readMissionControlSource({
 			...(command.surfacePath?.trim() ? { surfacePath: command.surfacePath.trim() } : {}),
 			...(command.workspaceRoot?.trim() ? { workspaceRoot: command.workspaceRoot.trim() } : {}),
-			...(selectedMissionId ? { selectedMissionId } : {})
+			...(selectedMissionId ? { selectedMissionId } : {}),
+			...(command.missionStatusHint ? { missionStatusHint: command.missionStatusHint } : {})
 		});
+		const readSourceDurationMs = performance.now() - startedAt;
+		const activateStartedAt = performance.now();
 		await this.airportRegistry.activateRepository(source.repositoryId, source.repositoryRootPath);
+		const activateDurationMs = performance.now() - activateStartedAt;
+		const synchronizeStartedAt = performance.now();
 		const domain = this.missionControl.synchronize(source, command.selectionHint);
+		const synchronizeDurationMs = performance.now() - synchronizeStartedAt;
+		const bindingsStartedAt = performance.now();
 		this.airportRegistry.applyDefaultBindings(
 			source.repositoryId,
 			derivePaneBindings(domain)
+		);
+		const bindingsDurationMs = performance.now() - bindingsStartedAt;
+		const totalDurationMs = performance.now() - startedAt;
+		process.stdout.write(
+			`${new Date().toISOString().slice(11, 19)} workspace.synchronized repository=${source.repositoryId} selectedMission=${selectedMissionId ?? 'none'} total=${totalDurationMs.toFixed(1)}ms readSource=${readSourceDurationMs.toFixed(1)}ms activate=${activateDurationMs.toFixed(1)}ms synchronize=${synchronizeDurationMs.toFixed(1)}ms defaultBindings=${bindingsDurationMs.toFixed(1)}ms\n`
 		);
 		return [source.repositoryId];
 	}
@@ -207,7 +224,7 @@ export class MissionSystemController {
 	private async reduceAirportClientObserved(
 		params: Extract<MissionSystemCommand, { kind: 'airport.client.observed' }>['params']
 	): Promise<string[]> {
-		const repositoryId = await this.resolveRepositoryId(params.clientId, params.surfacePath);
+		const repositoryId = await this.resolveRepositoryId(params.clientId, params.surfacePath, params.repositoryId);
 		if (params.terminalSessionName?.trim()) {
 			this.airportRegistry.setTerminalSessionName(repositoryId, params.terminalSessionName.trim());
 		}
@@ -268,13 +285,12 @@ export class MissionSystemController {
 		return followUpCommands;
 	}
 
-	private async commit(touchedRepositoryIds: string[] = []): Promise<void> {
+	private async commit(): Promise<void> {
 		const serializedState = this.serializeSystemState();
 		if (serializedState !== this.serializedState) {
 			this.serializedState = serializedState;
 			this.version += 1;
 		}
-		await this.airportRegistry.persistTouchedAirportIntents(touchedRepositoryIds);
 	}
 
 	private buildSnapshot(): MissionSystemSnapshot {
@@ -303,11 +319,11 @@ export class MissionSystemController {
 				...(activeRepositoryId ? { activeRepositoryId } : {})
 			}
 		};
-		const airportProjections: AirportProjectionSet = deriveSystemAirportProjections(domain, missionOperatorViews, activeAirport.control.getState());
+		const airportProjections: AirportProjectionSet = deriveSystemAirportProjections(domain, activeAirport.control.getState());
 		const airportRegistryProjections = Object.fromEntries(
 			this.airportRegistry.listAirportRecords().map(([repositoryId, record]) => [
 				repositoryId,
-				deriveSystemAirportProjections(domain, missionOperatorViews, record.control.getState())
+				deriveSystemAirportProjections(domain, record.control.getState())
 			])
 		);
 		return { state, airportProjections, airportRegistryProjections };
@@ -324,7 +340,12 @@ export class MissionSystemController {
 		});
 	}
 
-	private async resolveRepositoryId(clientId: string, surfacePath?: string): Promise<string> {
+	private async resolveRepositoryId(clientId: string, surfacePath?: string, repositoryId?: string): Promise<string> {
+		const explicitRepositoryId = repositoryId?.trim();
+		if (explicitRepositoryId) {
+			await this.airportRegistry.activateRepository(explicitRepositoryId, explicitRepositoryId);
+			return explicitRepositoryId;
+		}
 		if (surfacePath?.trim()) {
 			const repositoryRootPath = this.workspaceManager.resolveWorkspaceRootForSurfacePath(surfacePath.trim());
 			await this.airportRegistry.activateRepository(repositoryRootPath, repositoryRootPath);

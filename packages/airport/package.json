@@ -1,6 +1,6 @@
 {
   "name": "@flying-pillow/mission-airport",
-  "version": "0.1.0-beta.0",
+  "version": "0.1.0-alpha.0",
   "description": "Mission airport control-plane state and projection primitives",
   "type": "module",
   "publishConfig": {

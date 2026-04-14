@@ -80,6 +80,7 @@ export type AgentRunnerTerminalTransportRuntimeOptions = {
     terminalBinary?: TerminalAgentTransportOptions['terminalBinary'];
     sharedSessionName?: TerminalAgentTransportOptions['sharedSessionName'];
     agentSessionPaneTitle?: TerminalAgentTransportOptions['agentSessionPaneTitle'];
+    discoverSharedSessionName?: TerminalAgentTransportOptions['discoverSharedSessionName'];
     executor?: TerminalAgentTransportOptions['executor'];
 };
 
@@ -114,7 +115,10 @@ type ManagedTerminalSessionRecord = {
     lastCapture: string;
     pollTimer: ReturnType<typeof setInterval> | undefined;
     polling: boolean;
+    pollFailureCount: number;
 };
+
+const MAX_TERMINAL_POLL_FAILURES = 3;
 
 export abstract class AgentRunner {
     public readonly id: AgentRunnerId;
@@ -218,6 +222,7 @@ export abstract class AgentRunner {
             ...(options.terminalBinary ? { terminalBinary: options.terminalBinary } : {}),
             ...(options.sharedSessionName ? { sharedSessionName: options.sharedSessionName } : {}),
             ...(options.agentSessionPaneTitle ? { agentSessionPaneTitle: options.agentSessionPaneTitle } : {}),
+            ...(options.discoverSharedSessionName !== undefined ? { discoverSharedSessionName: options.discoverSharedSessionName } : {}),
             ...(options.executor ? { executor: options.executor } : {}),
             ...(options.logLine ? { logLine: options.logLine } : {})
         });
@@ -267,13 +272,20 @@ export abstract class AgentRunner {
         return this.requireTerminalRuntime().isAvailable();
     }
 
-    protected async startTerminalCommandSession(config: AgentLaunchConfig): Promise<AgentSession> {
+    protected async startTerminalCommandSession(
+        config: AgentLaunchConfig,
+        options: { launchArgs?: string[] } = {}
+    ): Promise<AgentSession> {
         const runtime = this.requireTerminalRuntime();
         const requestedSharedSessionName = getRequestedTerminalSessionName(config);
+        const launchArgs = [
+            ...runtime.args,
+            ...(options.launchArgs ?? [])
+        ];
         const transportHandle = await runtime.openSession({
             workingDirectory: config.workingDirectory,
             command: runtime.command,
-            args: runtime.args,
+            args: launchArgs,
             ...(runtime.env ? { env: runtime.env } : {}),
             sessionPrefix: runtime.sessionPrefix,
             sessionName: buildTaskSessionName(config.task.taskId, this.id),
@@ -495,7 +507,8 @@ export abstract class AgentRunner {
             transportHandle,
             lastCapture,
             pollTimer: undefined,
-            polling: false
+            polling: false,
+            pollFailureCount: 0
         });
         if (!isTerminalStatus(snapshot.status)) {
             this.startTerminalPolling(sessionId);
@@ -525,7 +538,6 @@ export abstract class AgentRunner {
     private async submitTerminalPrompt(sessionId: string, prompt: AgentPrompt): Promise<AgentSessionSnapshot> {
         const runtime = this.requireTerminalRuntime();
         const handle = this.requireActiveTerminalSession(sessionId, 'submit a prompt', { requirePromptAcceptance: true });
-        await this.prepareTerminalPaneForPrompt(sessionId, handle, runtime);
         await sendTerminalText(runtime, handle.transportHandle, prompt.text);
         const snapshot = this.updateManagedSnapshot(sessionId, {
             status: 'running',
@@ -640,18 +652,6 @@ export abstract class AgentRunner {
         handle.polling = true;
 
         try {
-            const capture = await runtime.capturePane(handle.transportHandle);
-            const newLines = diffCapturedOutput(handle.lastCapture, capture);
-            handle.lastCapture = capture;
-            for (const line of newLines) {
-                this.emitSessionEvent({
-                    type: 'session.message',
-                    channel: 'stdout',
-                    text: line,
-                    snapshot: this.getManagedSnapshot(sessionId)
-                });
-            }
-
             const paneState = await runtime.readPaneState(handle.transportHandle);
             if (paneState.dead) {
                 this.stopTerminalPolling(sessionId);
@@ -694,38 +694,32 @@ export abstract class AgentRunner {
                             snapshot
                         }
                 );
+                handle.pollFailureCount = 0;
+                return;
             }
+
+            const capture = await runtime.capturePane(handle.transportHandle);
+            const newLines = diffCapturedOutput(handle.lastCapture, capture);
+            handle.lastCapture = capture;
+            for (const line of newLines) {
+                this.emitSessionEvent({
+                    type: 'session.message',
+                    channel: 'stdout',
+                    text: line,
+                    snapshot: this.getManagedSnapshot(sessionId)
+                });
+            }
+
+            handle.pollFailureCount = 0;
         } catch (error) {
             runtime.logLine?.(
                 `${this.displayName} poll failed for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`
             );
-        } finally {
-            handle.polling = false;
-        }
-    }
 
-    private async prepareTerminalPaneForPrompt(
-        sessionId: string,
-        handle: ManagedTerminalSessionRecord,
-        runtime: ConfiguredTerminalRuntime
-    ): Promise<void> {
-        const paneState = await runtime.readPaneState(handle.transportHandle);
-        if (paneState.dead) {
-            const snapshot = paneState.exitCode === 0
-                ? this.updateManagedSnapshot(sessionId, {
-                    status: 'completed',
-                    attention: 'none',
-                    acceptsPrompts: false,
-                    waitingForInput: false,
-                    acceptedCommands: [],
-                    endedAt: new Date().toISOString(),
-                    progress: {
-                        state: 'done',
-                        updatedAt: new Date().toISOString()
-                    },
-                    failureMessage: undefined
-                })
-                : this.updateManagedSnapshot(sessionId, {
+            handle.pollFailureCount += 1;
+            if (handle.pollFailureCount >= MAX_TERMINAL_POLL_FAILURES) {
+                this.stopTerminalPolling(sessionId);
+                const snapshot = this.updateManagedSnapshot(sessionId, {
                     status: 'failed',
                     attention: 'none',
                     acceptsPrompts: false,
@@ -734,35 +728,21 @@ export abstract class AgentRunner {
                     endedAt: new Date().toISOString(),
                     progress: {
                         state: 'failed',
+                        detail: 'terminal polling failed repeatedly; marking session as failed.',
                         updatedAt: new Date().toISOString()
                     },
-                    failureMessage: `terminal command exited with status ${String(paneState.exitCode)}.`
+                    failureMessage: error instanceof Error
+                        ? `terminal polling failed repeatedly: ${error.message}`
+                        : `terminal polling failed repeatedly: ${String(error)}`
                 });
-            this.emitSessionEvent(
-                snapshot.status === 'completed'
-                    ? {
-                        type: 'session.completed',
-                        snapshot
-                    }
-                    : {
-                        type: 'session.failed',
-                        reason: snapshot.failureMessage ?? 'terminal command failed.',
-                        snapshot
-                    }
-            );
-            throw new Error(
-                snapshot.status === 'completed'
-                    ? `Cannot submit a prompt for session '${handle.transportHandle.sessionName}' because the terminal pane has exited.`
-                    : snapshot.failureMessage ?? `Cannot submit a prompt for session '${handle.transportHandle.sessionName}'.`
-            );
-        }
-
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-            const capture = await runtime.capturePane(handle.transportHandle);
-            if (!isFolderTrustPrompt(capture)) {
-                return;
+                this.emitSessionEvent({
+                    type: 'session.failed',
+                    reason: snapshot.failureMessage ?? 'terminal polling failed repeatedly.',
+                    snapshot
+                });
             }
-            await runtime.sendKeys(handle.transportHandle, 'Enter');
+        } finally {
+            handle.polling = false;
         }
     }
 
@@ -1002,11 +982,6 @@ function splitLines(text: string): string[] {
         .split('\n')
         .map((line) => line.trimEnd())
         .filter((line) => line.length > 0);
-}
-
-function isFolderTrustPrompt(capture: string): boolean {
-    return capture.includes('Confirm folder trust')
-        && capture.includes('Do you trust the files in this folder?');
 }
 
 function createRunningSnapshot(input: {

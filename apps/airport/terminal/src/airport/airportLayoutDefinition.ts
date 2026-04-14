@@ -1,27 +1,31 @@
-const TOWER_DEFAULT_COLUMNS = 100;
+const TOWER_MAX_COLUMNS = 100;
 const FALLBACK_VIEWPORT_COLUMNS = 200;
-const SIDE_BY_SIDE_COMPANION_MIN_COLUMNS = 80;
+const SIDE_BY_SIDE_COMPANION_MIN_COLUMNS = 100;
 
 export function buildAirportBootstrapLayout(input: {
 	repoRoot: string;
 	towerCommand: string;
 	briefingRoomCommand: string;
+	runwayCommand: string;
 	viewportColumns?: number;
 }): string {
 	const viewportColumns = resolveViewportColumnsForLayout(input.viewportColumns);
-	const towerWidthPercent = resolveTowerWidthPercent(viewportColumns);
-	const rightColumnWidthPercent = 100 - towerWidthPercent;
+	const towerColumns = resolveTowerColumns(viewportColumns);
+	const rightColumnColumns = Math.max(1, viewportColumns - towerColumns);
+	const companionPaneDirection = resolveAirportCompanionPaneDirection(rightColumnColumns) === 'right'
+		? 'vertical'
+		: 'horizontal';
 	return `layout {
-	default_tab_template {
-		children
-	}
-	tab name="TOWER" {
-		pane split_direction="vertical" {
-			pane name="TOWER" focus=true size="${towerWidthPercent}%" borderless=true command="sh" cwd="${kdlEscape(input.repoRoot)}" {
-				args "-lc" "${kdlEscape(`exec ${input.towerCommand}`)}"
-			}
-			pane name="BRIEFING ROOM" size="${rightColumnWidthPercent}%" command="sh" cwd="${kdlEscape(input.repoRoot)}" {
+	tab name="TOWER" split_direction="vertical" {
+		pane name="TOWER" focus=true size=${towerColumns} borderless=true command="sh" cwd="${kdlEscape(input.repoRoot)}" {
+			args "-lc" "${kdlEscape(`exec ${input.towerCommand}`)}"
+		}
+		pane split_direction="${companionPaneDirection}" {
+			pane name="BRIEFING ROOM" size="50%" command="sh" cwd="${kdlEscape(input.repoRoot)}" {
 				args "-lc" "${kdlEscape(`exec ${input.briefingRoomCommand}`)}"
+			}
+			pane name="RUNWAY" size="50%" command="sh" cwd="${kdlEscape(input.repoRoot)}" {
+				args "-lc" "${kdlEscape(`exec ${input.runwayCommand}`)}"
 			}
 		}
 	}
@@ -42,9 +46,12 @@ function resolveViewportColumnsForLayout(viewportColumns: number | undefined): n
 	return FALLBACK_VIEWPORT_COLUMNS;
 }
 
-function resolveTowerWidthPercent(viewportColumns: number): number {
-	const widthPercent = Math.round((TOWER_DEFAULT_COLUMNS * 100) / viewportColumns);
-	return Math.max(1, Math.min(100, widthPercent));
+function resolveTowerColumns(viewportColumns: number): number {
+	if (viewportColumns <= 1) {
+		return 1;
+	}
+	const halfViewportColumns = Math.max(1, Math.floor(viewportColumns / 2));
+	return Math.max(1, Math.min(TOWER_MAX_COLUMNS, halfViewportColumns, viewportColumns - 1));
 }
 
 function kdlEscape(value: string): string {

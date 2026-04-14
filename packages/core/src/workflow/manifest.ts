@@ -283,7 +283,7 @@ const WORKFLOW_TASK_TRANSITION_RULES: readonly MissionTaskTransitionRule[] = [
     {
         intent: 'reopen',
         nextStatus: 'pending',
-        allowedFrom: ['completed', 'failed', 'cancelled']
+        allowedFrom: ['completed', 'failed', 'cancelled', 'blocked']
     }
 ] as const;
 

@@ -74,6 +74,10 @@ The reducer never opens files, starts zellij, or talks to a model provider. It e
 | `session.cancel` | Cancels a running session through the same control path |
 | `session.terminate` | Terminates a running session through the same control path |
 
+The important boundary is that workflow does not depend on UI pane state, but it does depend on normalized runtime truth.
+
+That includes operator interference when it changes the real execution substrate. If a human kills a terminal-backed session outside the happy path, the daemon must reconcile that disappearance back into workflow state. Treating that as workflow input is correct because it is runtime truth, not presentation state.
+
 ## Execution Loop
 
 ```mermaid
@@ -114,6 +118,32 @@ This means stage progression and task generation are tightly coupled to the pers
 2. The controller persists after every applied event before running follow-up requests.
 3. Stage state is derived from tasks, not manually edited by Tower.
 4. Session events must be translated back into workflow events before they become mission truth.
+5. Operator-facing surfaces may refresh or invalidate command projections, but they must not decide workflow transitions.
+6. Runtime transport failures, detached sessions, and externally terminated sessions are valid workflow inputs once normalized by the daemon runtime layer.
+
+## Operator Interference Boundary
+
+Mission intentionally supports humans interrupting the normal flow.
+
+That means the workflow engine must tolerate these cases:
+
+- a terminal session is closed outside Mission
+- a prompt is interrupted manually
+- a daemon restart must reconcile persisted session references against reality
+
+These are not UI concerns. They are execution concerns.
+
+The correct architecture is:
+
+- surfaces may observe and request actions
+- runtime normalizes what is actually alive, failed, or terminated
+- workflow consumes those normalized facts
+
+The incorrect architecture would be:
+
+- surfaces reporting focus, selection, or pane visibility as workflow truth
+- workflow inferring session liveness from client attachment
+- pane binding deciding task eligibility
 
 ## Relationship To Replay Anchors
 

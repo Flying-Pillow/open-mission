@@ -14,6 +14,7 @@ import type {
 import type { WorkflowSettingsGetResult } from '../settings/types.js';
 import type {
 	OperatorActionDescriptor,
+	OperatorActionListSnapshot,
 	OperatorActionExecutionStep,
 	OperatorActionFlowDescriptor,
 	OperatorActionQueryContext,
@@ -31,8 +32,13 @@ export class DaemonControlApi {
 	}
 
 	public async listAvailableActions(context?: OperatorActionQueryContext): Promise<OperatorActionDescriptor[]> {
+		const snapshot = await this.listAvailableActionsSnapshot(context);
+		return snapshot.actions;
+	}
+
+	public async listAvailableActionsSnapshot(context?: OperatorActionQueryContext): Promise<OperatorActionListSnapshot> {
 		const params: ControlActionList = context ? { context } : {};
-		return this.client.request<OperatorActionDescriptor[]>('control.action.list', params);
+		return this.client.request<OperatorActionListSnapshot>('control.action.list', params);
 	}
 
 	public async executeAction(

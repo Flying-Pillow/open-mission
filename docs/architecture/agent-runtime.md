@@ -155,6 +155,30 @@ This separation keeps provider mechanics out of workflow logic and prevents inte
 | runner subclass | executable translation and provider-specific process or SDK interaction | workflow policy, surface policy |
 | Agent session | one live executable-backed interaction boundary | workflow policy, pane routing |
 
+## Shared Airport Hosting
+
+Terminal-backed runners may choose to host a live agent session inside the shared Airport terminal session when that substrate is available.
+
+That is a transport-hosting decision, not a workflow decision.
+
+Examples of allowed coupling:
+
+- discovering the shared Airport terminal session name
+- attaching to a persisted terminal pane id when reconciling a live session
+- falling back to a standalone terminal session when the shared Runway pane is unavailable
+
+Examples of disallowed coupling:
+
+- treating Runway focus, visibility, or client attachment as evidence that a session is alive
+- changing task eligibility because a pane exists or does not exist in the Airport layout
+- letting airport projection state redefine workflow lifecycle
+
+This keeps the boundary precise:
+
+- runtime may use Airport substrate affordances to host or reattach a terminal-backed session
+- workflow still consumes only normalized runtime facts
+- surfaces still consume daemon truth rather than defining it
+
 ## Public Model
 
 The public execution model is defined by four first-class concepts:

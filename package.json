@@ -1,6 +1,6 @@
 {
   "name": "@flying-pillow/mission-workspace",
-  "version": "0.1.0-beta.0",
+  "version": "0.1.0-alpha.0",
   "description": "Mission workspace and filesystem manager for the full monorepo.",
   "type": "module",
   "private": true,

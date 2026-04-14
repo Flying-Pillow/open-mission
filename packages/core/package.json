@@ -1,6 +1,6 @@
 {
   "name": "@flying-pillow/mission-core",
-  "version": "0.1.0-beta.0",
+  "version": "0.1.0-alpha.0",
   "description": "Mission core workflow orchestrator and central mission logic",
   "type": "module",
   "publishConfig": {

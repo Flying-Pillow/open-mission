@@ -1,5 +1,5 @@
 import type {
-	MissionSelector,
+	MissionOperatorProjectionContext,
 	MissionSystemSnapshot,
 	OperatorStatus,
 } from '@flying-pillow/mission-core';
@@ -106,22 +106,15 @@ export function buildKeyHintsText(input: {
 	return `Tab/Shift+Tab focus${globalPaneCycleHint} | Ctrl+Q quit`;
 }
 
-export function selectorFromTowerState(
-	status: OperatorStatus,
+export function resolveMissionOperatorView(
 	snapshot: MissionSystemSnapshot | undefined,
-	fallback: MissionSelector = {}
-): MissionSelector {
-	if (status.missionId) {
-		return { missionId: status.missionId };
+	missionId: string | undefined
+): MissionOperatorProjectionContext | undefined {
+	const normalizedMissionId = missionId?.trim();
+	if (!normalizedMissionId) {
+		return undefined;
 	}
-	const projectedMissionId = snapshot?.airportProjections.tower.missionId;
-	if (projectedMissionId) {
-		return { missionId: projectedMissionId };
-	}
-	if (fallback.missionId) {
-		return { missionId: fallback.missionId };
-	}
-	return {};
+	return snapshot?.state.missionOperatorViews[normalizedMissionId];
 }
 
 export function describeControlConnection(status: OperatorStatus): string {

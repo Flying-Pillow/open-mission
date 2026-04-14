@@ -6,14 +6,13 @@ import type {
 	OperatorActionFlowDescriptor,
 	OperatorStatus,
 } from '@flying-pillow/mission-core';
-import { DaemonApi } from '@flying-pillow/mission-core';
+import { DaemonApi, DaemonMissionApi } from '@flying-pillow/mission-core';
 import { createMemo, createSignal } from 'solid-js';
 import type { TowerConnectRequest } from './tower/bootstrapTowerPane.js';
 import type { AirportConnection } from './AirportApp.js';
 import {
 	describeControlConnection,
 	isRecoverableDaemonDisconnect,
-	selectorFromTowerState,
 	toErrorMessage,
 } from './airportDomain.js';
 
@@ -58,10 +57,10 @@ export function createAirportController(options: AirportControllerOptions) {
 	}
 
 	function applyMissionStatus(nextStatus: OperatorStatus, fallbackSelector: MissionSelector = selector()): MissionSelector {
-		const nextSelector = selectorFromTowerState(nextStatus, systemSnapshot(), fallbackSelector);
 		if (nextStatus.system) {
 			applySystemSnapshot(nextStatus.system);
 		}
+		const nextSelector = DaemonMissionApi.selectorFromStatus(nextStatus, fallbackSelector);
 		setStatus(nextStatus);
 		setSelector(nextSelector);
 		return nextSelector;
@@ -129,12 +128,8 @@ export function createAirportController(options: AirportControllerOptions) {
 	) {
 		const nextStatus = await withDaemonClientRetry(nextSelector, async (currentClient) => {
 			const api = new DaemonApi(currentClient);
-			const terminalSessionName = process.env['AIRPORT_TERMINAL_SESSION']?.trim()
-				|| process.env['AIRPORT_TERMINAL_SESSION_NAME']?.trim();
 			return Object.keys(nextSelector).length > 0
-				? await api.mission.executeAction(nextSelector, actionId, steps, {
-					...(terminalSessionName ? { terminalSessionName } : {})
-				})
+				? await api.mission.executeAction(nextSelector, actionId, steps)
 				: await api.control.executeAction(actionId, steps);
 		});
 		applyMissionStatus(nextStatus, nextSelector);

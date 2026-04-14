@@ -1,6 +1,6 @@
 {
   "name": "@flying-pillow/mission",
-  "version": "0.1.0-beta.0",
+  "version": "0.1.0-alpha.0",
   "description": "Mission CLI distribution package for the mission and missiond launchers; the Airport terminal surface is provided by a separate package.",
   "type": "module",
   "bin": {

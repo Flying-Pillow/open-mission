@@ -1,5 +1,4 @@
 import * as fs from 'node:fs/promises';
-import { spawnSync } from 'node:child_process';
 import * as path from 'node:path';
 import { MissionPreparationService } from '../mission/MissionPreparationService.js';
 import { Mission } from '../mission/Mission.js';
@@ -32,6 +31,7 @@ import type {
 	OperatorActionExecutionSelectionStep,
 	OperatorActionExecutionTextStep,
 	OperatorActionDescriptor,
+	OperatorActionListSnapshot,
 	OperatorActionFlowDescriptor,
 	OperatorActionFlowOption,
 	OperatorActionQueryContext,
@@ -77,6 +77,7 @@ import type {
 } from '../agent/AgentRuntimeTypes.js';
 import type { AgentRunner } from '../agent/AgentRunner.js';
 import { createDefaultWorkflowSettings } from '../workflow/engine/defaultWorkflow.js';
+import { readSystemStatus } from '../system/SystemStatus.js';
 import {
 	WorkflowSettingsStore,
 	type WorkflowSettingsGetResult
@@ -96,13 +97,6 @@ export class MissionWorkspace {
 	private readonly workflowSettingsStore: WorkflowSettingsStore;
 	private readonly agentRunners = new Map<string, AgentRunner>();
 	private readonly loadedMissions = new Map<string, LoadedMission>();
-
-	private githubAuthCache?: {
-		checkedAt: number;
-		authenticated: boolean;
-		user?: string;
-		detail?: string;
-	};
 
 	public constructor(
 		private readonly workspaceRoot: string,
@@ -195,13 +189,19 @@ export class MissionWorkspace {
 	public async readMissionControlSource(input: {
 		availableRepositories?: MissionControlSource['availableRepositories'];
 		selectedMissionId?: string;
+		missionStatusHint?: OperatorStatus;
 	} = {}): Promise<MissionControlSource> {
 		const availableMissions = await this.listMissionSelectionCandidates();
 		const discoveryStatus = await this.buildDiscoveryStatus(availableMissions, input.availableRepositories ?? []);
 		const selectedMissionId = input.selectedMissionId?.trim();
-		const missionStatus = selectedMissionId
-			? await this.getMissionStatus({ selector: { missionId: selectedMissionId } }).catch(() => undefined)
+		const hintedMissionStatus = input.missionStatusHint?.missionId?.trim()
+			&& input.missionStatusHint.missionId.trim() === selectedMissionId
+			? input.missionStatusHint
 			: undefined;
+		const missionStatus = hintedMissionStatus
+			?? (selectedMissionId
+				? await this.getMissionStatus({ selector: { missionId: selectedMissionId } }).catch(() => undefined)
+				: undefined);
 		return {
 			repositoryId: this.workspaceRoot,
 			repositoryRootPath: this.workspaceRoot,
@@ -302,10 +302,13 @@ export class MissionWorkspace {
 		throw new Error(`Unsupported control action '${params.actionId}'.`);
 	}
 
-	private async listControlActions(params: ControlActionList = {}): Promise<OperatorActionDescriptor[]> {
+	private async listControlActions(params: ControlActionList = {}): Promise<OperatorActionListSnapshot> {
 		const availableMissions = await this.listMissionSelectionCandidates();
 		const control = await this.buildControlPlaneStatus(availableMissions.length);
-		return this.resolveAvailableActions(this.buildDiscoveryAvailableActions(control, availableMissions), params.context);
+		return {
+			actions: this.resolveAvailableActions(this.buildDiscoveryAvailableActions(control, availableMissions), params.context),
+			revision: this.buildControlActionRevision(control)
+		};
 	}
 
 	private async executeMissionAction(params: MissionActionExecute): Promise<OperatorStatus> {
@@ -317,9 +320,13 @@ export class MissionWorkspace {
 		return this.decorateMissionStatus(status, 'mission');
 	}
 
-	private async listMissionActions(params: MissionActionList): Promise<OperatorActionDescriptor[]> {
+	private async listMissionActions(params: MissionActionList): Promise<OperatorActionListSnapshot> {
 		const loadedMission = await this.requireMissionContext(params.selector);
-		return this.resolveAvailableActions(await loadedMission.mission.listAvailableActions(), params.context);
+		const snapshot = await loadedMission.mission.listAvailableActionsSnapshot();
+		return {
+			actions: this.resolveAvailableActions(snapshot.actions, params.context),
+			revision: snapshot.revision
+		};
 	}
 
 	private async createMissionFromBrief(params: MissionFromBriefRequest): Promise<OperatorStatus> {
@@ -535,11 +542,18 @@ export class MissionWorkspace {
 	}
 
 	private async broadcastMissionStatus(missionId: string, status: OperatorStatus): Promise<void> {
+		const decoratedStatus = await this.decorateMissionStatus(status, 'mission');
 		this.emitEvent({
 			type: 'mission.status',
 			workspaceRoot: this.workspaceRoot,
 			missionId,
-			status: await this.decorateMissionStatus(status, 'mission')
+			status: decoratedStatus
+		});
+		this.emitEvent({
+			type: 'mission.actions.changed',
+			workspaceRoot: this.workspaceRoot,
+			missionId,
+			revision: this.buildMissionActionRevision(missionId, decoratedStatus)
 		});
 	}
 
@@ -660,19 +674,6 @@ export class MissionWorkspace {
 			warnings.push('Mission could not resolve a GitHub repository from the current workspace.');
 		}
 
-		let githubAuthenticated: boolean | undefined;
-		let githubUser: string | undefined;
-		let githubAuthMessage: string | undefined;
-		if (effectiveSettings.trackingProvider === 'github') {
-			const auth = this.getGitHubAuthStatus();
-			githubAuthenticated = auth.authenticated;
-			githubUser = auth.user;
-			githubAuthMessage = auth.detail;
-			if (!auth.authenticated && auth.detail) {
-				warnings.push(auth.detail);
-			}
-		}
-
 		return {
 			controlRoot: this.workspaceRoot,
 			missionDirectory: getMissionDirectoryPath(this.workspaceRoot),
@@ -692,9 +693,6 @@ export class MissionWorkspace {
 			...(effectiveSettings.trackingProvider ? { trackingProvider: effectiveSettings.trackingProvider } : {}),
 			...(githubRepository ? { githubRepository } : {}),
 			issuesConfigured,
-			...(githubAuthenticated !== undefined ? { githubAuthenticated } : {}),
-			...(githubUser ? { githubUser } : {}),
-			...(githubAuthMessage ? { githubAuthMessage } : {}),
 			availableMissionCount:
 				availableMissionCount ?? (await this.store.listMissions()).length,
 			problems,
@@ -704,6 +702,29 @@ export class MissionWorkspace {
 
 	private resolveOperationalMode(control: MissionControlPlaneStatus): Extract<MissionOperationalMode, 'setup' | 'root'> {
 		return control.problems.length > 0 ? 'setup' : 'root';
+	}
+
+	private buildControlActionRevision(control: MissionControlPlaneStatus): string {
+		return JSON.stringify({
+			scope: 'control',
+			settingsPath: control.settingsPath,
+			settingsComplete: control.settingsComplete,
+			availableMissionCount: control.availableMissionCount,
+			currentBranch: control.currentBranch ?? null,
+			trackingProvider: control.trackingProvider ?? null
+		});
+	}
+
+	private buildMissionActionRevision(missionId: string, status: OperatorStatus): string {
+		const workflowUpdatedAt = status.workflow?.updatedAt?.trim();
+		if (workflowUpdatedAt) {
+			return `mission:${missionId}:${workflowUpdatedAt}`;
+		}
+		const systemVersion = status.system?.state.version;
+		if (typeof systemVersion === 'number') {
+			return `mission:${missionId}:system:${String(systemVersion)}`;
+		}
+		return `mission:${missionId}:status`;
 	}
 
 	private buildSetupCommandFlow(
@@ -1084,57 +1105,6 @@ export class MissionWorkspace {
 		return false;
 	}
 
-	private getGitHubAuthStatus(): { authenticated: boolean; user?: string; detail?: string } {
-		const cache = this.githubAuthCache;
-		const now = Date.now();
-		if (cache && now - cache.checkedAt < 10_000) {
-			return {
-				authenticated: cache.authenticated,
-				...(cache.user ? { user: cache.user } : {}),
-				...(cache.detail ? { detail: cache.detail } : {})
-			};
-		}
-
-		const result = spawnSync('gh', ['auth', 'status'], {
-			cwd: this.workspaceRoot,
-			encoding: 'utf8',
-			stdio: ['ignore', 'pipe', 'pipe']
-		});
-		const detail = `${result.stdout ?? ''}${result.stderr ?? ''}`
-			.split(/\r?\n/u)
-			.map((line) => line.trim())
-			.find((line) => line.length > 0);
-		const authenticated = result.status === 0;
-		let user = parseGitHubAuthUser(`${result.stdout ?? ''}\n${result.stderr ?? ''}`);
-		if (authenticated && !user) {
-			const userResult = spawnSync('gh', ['api', 'user', '--jq', '.login'], {
-				cwd: this.workspaceRoot,
-				encoding: 'utf8',
-				stdio: ['ignore', 'pipe', 'ignore']
-			});
-			const fallbackUser = userResult.status === 0
-				? userResult.stdout.trim()
-				: '';
-			if (fallbackUser.length > 0) {
-				user = fallbackUser;
-			}
-		}
-		this.githubAuthCache = {
-			checkedAt: now,
-			authenticated,
-			...(user ? { user } : {}),
-			detail:
-				result.error && 'code' in result.error && result.error.code === 'ENOENT'
-					? 'GitHub CLI is not installed.'
-					: detail ?? (authenticated ? 'GitHub CLI authenticated.' : 'GitHub CLI authentication is required.')
-		};
-		return {
-			authenticated: this.githubAuthCache.authenticated,
-			...(this.githubAuthCache.user ? { user: this.githubAuthCache.user } : {}),
-			...(this.githubAuthCache.detail ? { detail: this.githubAuthCache.detail } : {})
-		};
-	}
-
 	private requireGitHubRepository(): string {
 		const settings = getDefaultMissionDaemonSettingsWithOverrides(
 			readMissionDaemonSettings(this.workspaceRoot) ?? {}
@@ -1152,9 +1122,9 @@ export class MissionWorkspace {
 	}
 
 	private requireGitHubAuthentication(): void {
-		const auth = this.getGitHubAuthStatus();
-		if (!auth.authenticated) {
-			throw new Error(auth.detail ?? 'GitHub CLI authentication is required.');
+		const systemStatus = readSystemStatus({ cwd: this.workspaceRoot });
+		if (!systemStatus.github.authenticated) {
+			throw new Error(systemStatus.github.detail ?? 'GitHub CLI authentication is required.');
 		}
 	}
 
@@ -1609,27 +1579,6 @@ function shouldScheduleAutopilotForAgentEvent(event: MissionAgentEvent): boolean
 		default:
 			return false;
 	}
-}
-
-function parseGitHubAuthUser(output: string): string | undefined {
-	const patterns = [
-		/Logged in to\s+[^\s]+\s+as\s+([A-Za-z0-9-]+)/iu,
-		/Logged in to [^\s]+ account\s+([A-Za-z0-9-]+)/u,
-		/\baccount\s+([A-Za-z0-9-]+)\b/iu,
-		/as\s+([A-Za-z0-9-]+)\s*\(/u,
-		/account\s+([A-Za-z0-9-]+)\s*\(/u,
-		/\u2713\s+Logged in to\s+[^\s]+\s+account\s+([A-Za-z0-9-]+)/iu,
-		/\u2713\s+Logged in to\s+[^\s]+\s+as\s+([A-Za-z0-9-]+)/iu
-	];
-	const normalizedOutput = output.replace(/\u001b\[[0-9;]*m/gu, '');
-	for (const pattern of patterns) {
-		const match = pattern.exec(normalizedOutput);
-		const user = match?.[1]?.trim();
-		if (user) {
-			return user;
-		}
-	}
-	return undefined;
 }
 
 function normalizeMissionSelector(selector: MissionSelector = {}): MissionSelector {

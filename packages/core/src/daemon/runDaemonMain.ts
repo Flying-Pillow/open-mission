@@ -42,11 +42,6 @@ async function loadConfiguredAgentRunners(logLine?: (line: string) => void): Pro
 
 	return await loadedModule.createConfiguredAgentRunners({
 		controlRoot,
-		...(process.env['AIRPORT_TERMINAL_SESSION']?.trim()
-			? { terminalSessionName: process.env['AIRPORT_TERMINAL_SESSION'].trim() }
-			: process.env['AIRPORT_TERMINAL_SESSION_NAME']?.trim()
-				? { terminalSessionName: process.env['AIRPORT_TERMINAL_SESSION_NAME'].trim() }
-				: {}),
 		...(logLine ? { logLine } : {})
 	});
 }

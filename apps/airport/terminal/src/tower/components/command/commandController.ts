@@ -83,8 +83,10 @@ export function useCommandController(options: CommandControllerOptions) {
 	const [confirmingToolbarCommandId, setConfirmingToolbarCommandId] = createSignal<string | undefined>();
 	const [toolbarConfirmationChoice, setToolbarConfirmationChoice] = createSignal<'confirm' | 'cancel'>('confirm');
 	const [availableActions, setAvailableActions] = createSignal<OperatorActionDescriptor[]>([]);
+	const [availableActionsRefreshNonce, setAvailableActionsRefreshNonce] = createSignal<number>(0);
 	let availableActionsQueryVersion = 0;
 	let lastActionsQueryKey: string | undefined;
+	let lastActionsRefreshNonce: number | undefined;
 
 	const currentCommandFlow = options.flowController.flow;
 	const currentCommandFlowStep = options.flowController.currentStep;
@@ -163,24 +165,20 @@ export function useCommandController(options: CommandControllerOptions) {
 	createEffect(() => {
 		const currentClient = options.client();
 		const actionsInvalidationKey = options.actionsInvalidationKey();
+		const refreshNonce = availableActionsRefreshNonce();
 		const mode = options.towerMode();
 		const missionId = options.currentMissionId();
 		const context = options.commandTargetContext();
-		const shouldQueryActions =
-			options.focusArea() === 'command'
-			|| activePicker() === 'command-select'
-			|| currentCommandFlow() !== undefined;
 		if (!currentClient) {
 			setAvailableActions([]);
 			lastActionsQueryKey = undefined;
-			return;
-		}
-		if (!shouldQueryActions) {
+			lastActionsRefreshNonce = undefined;
 			return;
 		}
 		if (mode === 'mission' && (!missionId || !options.selectedMissionMatchesLoaded())) {
 			setAvailableActions([]);
 			lastActionsQueryKey = undefined;
+			lastActionsRefreshNonce = undefined;
 			return;
 		}
 		const queryKey = buildAvailableActionsQueryKey({
@@ -189,31 +187,37 @@ export function useCommandController(options: CommandControllerOptions) {
 			missionId,
 			context,
 		});
-		if (queryKey === lastActionsQueryKey) {
+		if (queryKey === lastActionsQueryKey && refreshNonce === lastActionsRefreshNonce) {
 			return;
 		}
 		lastActionsQueryKey = queryKey;
+		lastActionsRefreshNonce = refreshNonce;
 		const requestVersion = ++availableActionsQueryVersion;
 		const nextContext: OperatorActionQueryContext | undefined = mode === 'mission' ? context : undefined;
 		void (async () => {
 			try {
 				const api = new DaemonApi(currentClient);
-				const nextActions = mode === 'mission'
-					? await api.mission.listAvailableActions({ missionId: missionId! }, nextContext)
-					: await api.control.listAvailableActions();
+				const nextActionsSnapshot = mode === 'mission'
+					? await api.mission.listAvailableActionsSnapshot({ missionId: missionId! }, nextContext)
+					: await api.control.listAvailableActionsSnapshot();
 				if (requestVersion === availableActionsQueryVersion) {
-					setAvailableActions(nextActions);
+					setAvailableActions(nextActionsSnapshot.actions);
 				}
 			} catch {
 				if (requestVersion === availableActionsQueryVersion) {
 					setAvailableActions([]);
-					if (lastActionsQueryKey === queryKey) {
+					if (lastActionsQueryKey === queryKey && lastActionsRefreshNonce === refreshNonce) {
 						lastActionsQueryKey = undefined;
+						lastActionsRefreshNonce = undefined;
 					}
 				}
 			}
 		})();
 	});
+
+	function refreshAvailableActions(): void {
+		setAvailableActionsRefreshNonce((current) => current + 1);
+	}
 
 	createEffect(() => {
 		setSelectedToolbarCommandId((current) =>
@@ -687,6 +691,7 @@ export function useCommandController(options: CommandControllerOptions) {
 		commandPanelInputValue,
 		commandPanelPrefix,
 		isCommandInteractionRunning,
+		refreshAvailableActions,
 		openCommandPickerShortcut,
 		appendCommandPickerFilter,
 		popCommandPickerFilter,

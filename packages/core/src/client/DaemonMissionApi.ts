@@ -14,6 +14,7 @@ import type {
 import type {
 	GateIntent,
 	OperatorActionDescriptor,
+	OperatorActionListSnapshot,
 	OperatorActionExecutionStep,
 	OperatorActionQueryContext,
 	MissionGateResult,
@@ -49,12 +50,20 @@ export class DaemonMissionApi {
 		selector: MissionSelector,
 		context?: OperatorActionQueryContext
 	): Promise<OperatorActionDescriptor[]> {
+		const snapshot = await this.listAvailableActionsSnapshot(selector, context);
+		return snapshot.actions;
+	}
+
+	public async listAvailableActionsSnapshot(
+		selector: MissionSelector,
+		context?: OperatorActionQueryContext
+	): Promise<OperatorActionListSnapshot> {
 		const resolvedSelector = DaemonMissionApi.requireSelector(selector, 'Mission action listing');
 		const params: MissionActionList = {
 			selector: resolvedSelector,
 			...(context ? { context } : {})
 		};
-		return this.client.request<OperatorActionDescriptor[]>('mission.action.list', params);
+		return this.client.request<OperatorActionListSnapshot>('mission.action.list', params);
 	}
 
 	public async executeAction(
@@ -158,13 +167,12 @@ export class DaemonMissionApi {
 		if (status.missionId) {
 			return { missionId: status.missionId };
 		}
-		const projectedMissionId = status.system?.state.domain.selection.missionId
-			?? status.system?.airportProjections.tower.missionId;
-		if (projectedMissionId) {
-			return { missionId: projectedMissionId };
-		}
 		if (fallback.missionId) {
 			return { missionId: fallback.missionId };
+		}
+		const selectedMissionId = status.system?.state.domain.selection.missionId;
+		if (selectedMissionId) {
+			return { missionId: selectedMissionId };
 		}
 		return {};
 	}

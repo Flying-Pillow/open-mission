@@ -2,6 +2,7 @@ import type {
 	MissionSystemSnapshot,
 	GateIntent,
 	MissionRepositoryCandidate,
+	OperatorActionListSnapshot,
 	OperatorActionExecutionStep,
 	OperatorActionQueryContext,
 	MissionBrief,
@@ -286,6 +287,7 @@ export const PROTOCOL_VERSION = 19;
 
 export type Method =
 	| 'ping'
+	| 'system.status'
 	| 'airport.status'
 	| 'airport.client.connect'
 	| 'airport.client.observe'
@@ -314,6 +316,46 @@ export type Method =
 	| 'session.command'
 	| 'session.cancel'
 	| 'session.terminate';
+
+export type MethodWorkspaceRoute = 'none' | 'control' | 'mission';
+
+export type MethodMetadata = {
+	includeSurfacePath: boolean;
+	workspaceRoute: MethodWorkspaceRoute;
+};
+
+export const METHOD_METADATA: Record<Method, MethodMetadata> = {
+	'ping': { includeSurfacePath: false, workspaceRoute: 'none' },
+	'system.status': { includeSurfacePath: false, workspaceRoute: 'none' },
+	'airport.status': { includeSurfacePath: true, workspaceRoute: 'none' },
+	'airport.client.connect': { includeSurfacePath: true, workspaceRoute: 'none' },
+	'airport.client.observe': { includeSurfacePath: true, workspaceRoute: 'none' },
+	'airport.pane.bind': { includeSurfacePath: true, workspaceRoute: 'none' },
+	'control.status': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'control.settings.update': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'control.document.read': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'control.document.write': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'control.workflow.settings.get': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'control.workflow.settings.initialize': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'control.workflow.settings.update': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'control.repositories.list': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'control.repositories.add': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'control.action.list': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'control.action.describe': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'control.action.execute': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'mission.from-brief': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'mission.from-issue': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'mission.status': { includeSurfacePath: false, workspaceRoute: 'mission' },
+	'mission.action.list': { includeSurfacePath: false, workspaceRoute: 'mission' },
+	'mission.action.execute': { includeSurfacePath: false, workspaceRoute: 'mission' },
+	'mission.gate.evaluate': { includeSurfacePath: false, workspaceRoute: 'mission' },
+	'session.list': { includeSurfacePath: false, workspaceRoute: 'mission' },
+	'session.console.state': { includeSurfacePath: false, workspaceRoute: 'mission' },
+	'session.prompt': { includeSurfacePath: false, workspaceRoute: 'mission' },
+	'session.command': { includeSurfacePath: false, workspaceRoute: 'mission' },
+	'session.cancel': { includeSurfacePath: false, workspaceRoute: 'mission' },
+	'session.terminate': { includeSurfacePath: false, workspaceRoute: 'mission' }
+};
 
 export type Endpoint = {
 	transport: 'ipc';
@@ -459,7 +501,7 @@ export type AirportClientObserve = {
 };
 
 export type AirportPaneBind = {
-	paneId: 'tower' | 'briefingRoom' | 'runway';
+	paneId: 'briefingRoom' | 'runway';
 	binding: {
 		targetKind: 'empty' | 'repository' | 'mission' | 'task' | 'artifact' | 'agentSession';
 		targetId?: string;
@@ -471,6 +513,12 @@ export type Notification =
 	| {
 		type: 'airport.state';
 		snapshot: MissionSystemSnapshot;
+	}
+	| {
+		type: 'mission.actions.changed';
+		workspaceRoot: string;
+		missionId: string;
+		revision: string;
 	}
 	| {
 		type: 'mission.status';
@@ -532,6 +580,7 @@ export type SuccessResponse = {
 	| null
 	| MissionAgentSessionRecord
 	| MissionAgentSessionRecord[]
+	| OperatorActionListSnapshot
 	| TrackedIssueSummary[];
 };
 

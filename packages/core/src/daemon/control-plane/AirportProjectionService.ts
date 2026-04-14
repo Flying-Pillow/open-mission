@@ -1,14 +1,13 @@
 import path from 'node:path';
 import type { AirportProjectionSet, AirportState, PaneBinding, AirportPaneId } from '../../../../airport/build/index.js';
-import type { ContextGraph, MissionOperatorProjectionContext } from '../../types.js';
+import type { ContextGraph } from '../../types.js';
 
 export function deriveSystemAirportProjections(
 	domain: ContextGraph,
-	missionOperatorViews: Record<string, MissionOperatorProjectionContext>,
 	airportState: AirportState
 ): AirportProjectionSet {
 	return {
-		tower: deriveTowerProjection(domain, missionOperatorViews, airportState),
+		tower: deriveTowerProjection(domain, airportState),
 		briefingRoom: deriveBriefingRoomProjection(domain, airportState),
 		runway: deriveRunwayProjection(domain, airportState)
 	};
@@ -16,39 +15,21 @@ export function deriveSystemAirportProjections(
 
 function deriveTowerProjection(
 	domain: ContextGraph,
-	missionOperatorViews: Record<string, MissionOperatorProjectionContext>,
 	airportState: AirportState
 ): AirportProjectionSet['tower'] {
 	const base = createPaneProjectionBase(airportState, 'tower');
 	const repositoryId = airportState.repositoryId ?? domain.selection.repositoryId;
 	const repositoryContext = repositoryId ? domain.repositories[repositoryId] : undefined;
-	const requestedMissionId = base.binding.targetKind === 'mission'
-		? base.binding.targetId
-		: undefined;
-	const requestedMissionContext = requestedMissionId ? domain.missions[requestedMissionId] : undefined;
-	const requestedMissionView = requestedMissionId ? missionOperatorViews[requestedMissionId] : undefined;
-	const missionId = requestedMissionContext && requestedMissionView ? requestedMissionId : undefined;
-	const missionContext = missionId ? requestedMissionContext : undefined;
-	const missionView = missionId ? requestedMissionView : undefined;
 	return {
 		...base,
-		surfaceMode: missionId ? 'mission' : 'repository',
 		...(repositoryId ? { repositoryId } : {}),
 		repositoryLabel: repositoryContext?.displayLabel
 			|| path.basename(airportState.repositoryRootPath || repositoryId || 'repository')
 			|| 'Repository',
-		...(missionId ? { missionId } : {}),
-		...(missionContext?.briefSummary ? { missionLabel: missionContext.briefSummary } : missionId ? { missionLabel: missionId } : {}),
-		stageRail: missionView?.stageRail.map((item) => ({ ...item })) ?? [],
-		treeNodes: missionView?.treeNodes.map((node) => ({ ...node })) ?? [],
-		subtitle: missionContext?.briefSummary
-			|| missionId
-			|| repositoryContext?.displayLabel
+		subtitle: repositoryContext?.displayLabel
 			|| airportState.repositoryRootPath
 			|| 'Repository overview',
-		emptyLabel: missionId
-			? 'Mission control is ready.'
-			: 'Repository mode is ready.'
+		emptyLabel: 'Tower is ready.'
 	};
 }
 

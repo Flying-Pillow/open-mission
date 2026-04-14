@@ -47,6 +47,14 @@ Each pane has a `PaneBinding`:
 
 It does not carry workflow execution truth.
 
+It may react to workflow truth for projection purposes, but it must not feed pane-local state back into workflow decisions.
+
+Examples:
+
+- valid: project the currently selected `agentSession` into Runway
+- valid: update Tower or Briefing Room when daemon status changes
+- invalid: let focused pane, visible pane, or client-local cursor change whether a task may start or whether a session is considered alive
+
 ## Focus And Substrate Reconciliation
 
 ```mermaid
@@ -95,9 +103,13 @@ The current substrate controller targets `zellij` by default, using `list-panes 
 - The substrate controller owns terminal-manager translation.
 - zellij owns real pane existence and focus.
 
+That boundary is operational only. Real pane existence can matter to Airport reconciliation and may be observed by runtime transport code, but pane focus or pane visibility must never become workflow input.
+
 ## Non-Responsibilities
 
 Airport does not own mission execution. It does not own task generation. It does not decide whether a session should start. It only projects and reconciles layout state.
+
+Airport also does not arbitrate session truth. If a client and the daemon disagree about what is visible, the daemon wins. If Airport and workflow disagree about whether work is active, workflow plus normalized runtime facts win.
 
 ## Relationship To Other Pages
 

@@ -71,6 +71,8 @@ The Airport terminal app does not own:
 - session lifecycle
 - workflow gate state
 
+It also must not define session liveness. A pane may be visible while the underlying session is already failed, or a session may still be running while a pane is temporarily unavailable. Tower consumes daemon truth; it does not manufacture it.
+
 Those come from `OperatorStatus` and `MissionSystemSnapshot` returned by the daemon.
 
 Tower may still ask the daemon to update shared pane bindings, but that is a layout command, not a transfer of UI ownership. The daemon should know which artifact Briefing Room is showing. It should not decide which tree row the user is currently on.
@@ -130,3 +132,9 @@ The current Airport terminal implementation requires Bun at runtime because `@op
 No Airport terminal surface must become the source of truth for mission routing, task lifecycle, or pane ownership. If a surface and the daemon disagree, the daemon wins.
 
 That rule also applies to available actions: ordering, filtering, and enablement are daemon-owned semantics, not UI policy.
+
+The same rule applies to cross-client synchronization:
+
+- Tower may immediately refresh actions when daemon revisions change
+- Tower may react to mission or airport events to stay visually current
+- Tower must not treat local selection, focus, or pane attachment as evidence that workflow state changed

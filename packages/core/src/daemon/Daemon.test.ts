@@ -342,11 +342,8 @@ describe('Daemon', () => {
 						airportProjections: {
 							tower: {
 								title: 'Tower',
-								surfaceMode: 'repository',
 								repositoryLabel: path.basename(workspaceRoot),
-								stageRail: [],
-								treeNodes: [],
-								emptyLabel: 'Repository mode is ready.'
+								emptyLabel: 'Tower is ready.'
 							},
 							briefingRoom: {
 								title: 'Briefing Room',
@@ -362,8 +359,7 @@ describe('Daemon', () => {
 						airportRegistryProjections: {
 							[workspaceRoot]: {
 								tower: {
-									title: 'Tower',
-									surfaceMode: 'repository'
+									title: 'Tower'
 								}
 							}
 						}
@@ -574,9 +570,8 @@ describe('Daemon', () => {
 
 					expect(reconnected.state.missionOperatorViews[seededMission.getRecord().id]).toBeDefined();
 					expect(reconnected.state.domain.missions[seededMission.getRecord().id]?.taskIds.length).toBeGreaterThan(0);
-					expect(reconnected.airportProjections.tower.surfaceMode).toBe('mission');
-					expect(reconnected.airportProjections.tower.treeNodes.length).toBeGreaterThan(0);
-					expect(reconnected.airportProjections.tower.stageRail.length).toBeGreaterThan(0);
+					expect(reconnected.airportProjections.tower.repositoryLabel).toBe(path.basename(workspaceRoot));
+					expect(reconnected.airportProjections.tower.emptyLabel).toBe('Tower is ready.');
 				} finally {
 					firstClient.dispose();
 					secondClient.dispose();
@@ -611,9 +606,8 @@ describe('Daemon', () => {
 
 					expect(reset.state.domain.selection.repositoryId).toBe(workspaceRoot);
 					expect(reset.state.domain.selection.missionId).toBeUndefined();
-					expect(reset.airportProjections.tower.surfaceMode).toBe('repository');
-					expect(reset.airportProjections.tower.stageRail).toEqual([]);
-					expect(reset.airportProjections.tower.treeNodes).toEqual([]);
+					expect(reset.airportProjections.tower.repositoryLabel).toBe(path.basename(workspaceRoot));
+					expect(reset.airportProjections.tower.emptyLabel).toBe('Tower is ready.');
 				} finally {
 					client.dispose();
 					await daemon.close();

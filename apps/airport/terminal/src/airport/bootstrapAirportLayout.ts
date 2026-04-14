@@ -42,11 +42,20 @@ export async function bootstrapAirportLayout(context: AirportTerminalContext): P
 		...missionEntryCommand,
 		'__airport-layout-briefing-room-pane'
 	]);
+	const runwayCommand = buildShellCommand([
+		'env',
+		'AIRPORT_PANE_ID=runway',
+		`AIRPORT_TERMINAL_SESSION=${sessionName}`,
+		`AIRPORT_TERMINAL_ENTRY_PATH=${airportTerminalEntryPath}`,
+		...missionEntryCommand,
+		'__airport-layout-runway-pane'
+	]);
 	const viewportColumns = resolveViewportColumns();
 	const layoutInput = {
 		repoRoot,
 		towerCommand,
 		briefingRoomCommand,
+		runwayCommand,
 		...(viewportColumns === undefined ? {} : { viewportColumns })
 	};
 
@@ -224,6 +233,7 @@ export function buildTerminalManagerConfig(): string {
 
 theme "tower"
 show_startup_tips false
+auto_layout false
 
 keybinds {
 	shared_except "locked" {

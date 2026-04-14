@@ -1,6 +1,12 @@
 import * as path from 'node:path';
-import type { MissionRepositoryCandidate, MissionSelectionCandidate } from '../types.js';
-import type { ControlRepositoriesAdd, Notification, Request } from '../daemon/protocol/contracts.js';
+import type { MissionRepositoryCandidate, MissionSelectionCandidate, OperatorStatus } from '../types.js';
+import {
+    METHOD_METADATA,
+    type ControlRepositoriesAdd,
+    type Method,
+    type Notification,
+    type Request
+} from '../daemon/protocol/contracts.js';
 import { MissionWorkspace } from './Workspace.js';
 import type { AgentRunner } from '../agent/AgentRunner.js';
 import { listRegisteredMissionUserRepos, registerMissionUserRepo } from '../lib/userConfig.js';
@@ -43,6 +49,7 @@ export class WorkspaceManager {
         surfacePath?: string;
         workspaceRoot?: string;
         selectedMissionId?: string;
+        missionStatusHint?: OperatorStatus;
     }): Promise<MissionControlSource> {
         const workspaceRoot = input.workspaceRoot
             ? path.resolve(input.workspaceRoot)
@@ -56,7 +63,8 @@ export class WorkspaceManager {
         const availableRepositories = await this.listRegisteredRepositories(workspaceRoot);
         return workspace.readMissionControlSource({
             availableRepositories,
-            ...(input.selectedMissionId?.trim() ? { selectedMissionId: input.selectedMissionId.trim() } : {})
+            ...(input.selectedMissionId?.trim() ? { selectedMissionId: input.selectedMissionId.trim() } : {}),
+            ...(input.missionStatusHint ? { missionStatusHint: input.missionStatusHint } : {})
         });
     }
 
@@ -199,23 +207,8 @@ export class WorkspaceManager {
     }
 }
 
-function isControlMethod(method: Request['method']): boolean {
-    return (
-        method === 'control.status'
-        || method === 'control.settings.update'
-        || method === 'control.document.read'
-        || method === 'control.document.write'
-        || method === 'control.repositories.list'
-        || method === 'control.repositories.add'
-        || method === 'control.action.list'
-        || method === 'control.action.describe'
-        || method === 'control.action.execute'
-        || method === 'control.workflow.settings.get'
-        || method === 'control.workflow.settings.initialize'
-        || method === 'control.workflow.settings.update'
-        || method === 'mission.from-brief'
-        || method === 'mission.from-issue'
-    );
+function isControlMethod(method: Method): boolean {
+    return METHOD_METADATA[method].workspaceRoute === 'control';
 }
 
 function readMissionSelector(params: unknown): { missionId?: string } | undefined {

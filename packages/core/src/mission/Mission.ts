@@ -27,6 +27,7 @@ import {
 	MISSION_STAGE_FOLDERS,
 	getMissionStageDefinition,
 	type OperatorActionDescriptor,
+	type OperatorActionListSnapshot,
 	type MissionTowerProjection,
 	type MissionTowerStageRailItem,
 	type MissionTowerTreeNode,
@@ -185,6 +186,10 @@ export class Mission {
 	}
 
 	public async listAvailableActions(): Promise<OperatorActionDescriptor[]> {
+		return (await this.listAvailableActionsSnapshot()).actions;
+	}
+
+	public async listAvailableActionsSnapshot(): Promise<OperatorActionListSnapshot> {
 		const nextDescriptor = await this.adapter.readMissionDescriptor(this.missionDir);
 		if (nextDescriptor) {
 			this.descriptor = nextDescriptor;
@@ -200,7 +205,10 @@ export class Mission {
 			}
 		}
 		this.syncAgentSessions(document);
-		return this.buildActionList(document);
+		return {
+			actions: this.buildActionList(document),
+			revision: this.buildActionRevision(document)
+		};
 	}
 
 	public async startWorkflow(): Promise<OperatorStatus> {
@@ -679,6 +687,14 @@ export class Mission {
 			document.runtime,
 			this.getAgentSessions()
 		);
+	}
+
+	private buildActionRevision(document?: MissionRuntimeRecord): string {
+		const runtimeUpdatedAt = document?.runtime.updatedAt?.trim();
+		if (runtimeUpdatedAt) {
+			return `mission:${this.descriptor.missionId}:${runtimeUpdatedAt}`;
+		}
+		return `mission:${this.descriptor.missionId}:${this.descriptor.createdAt}`;
 	}
 
 	private async buildWorkflowStageStatuses(

@@ -423,7 +423,7 @@ function normalizeState(
 
     if (nextState.panic.active && nextState.panic.terminateSessions) {
         for (const session of nextState.sessions) {
-            if (session.lifecycle === 'starting' || session.lifecycle === 'running') {
+            if (isActiveSessionLifecycle(session.lifecycle)) {
                 requests.push(createRequest('session.terminate', event.occurredAt, {
                     sessionId: session.sessionId,
                     taskId: session.taskId,
@@ -530,11 +530,11 @@ function queueAutostartTasks(
     const queuedLaunchTaskIds = new Set(state.launchQueue.map((request) => request.taskId));
     const activeSessionTaskIds = new Set(
         state.sessions
-            .filter((session) => session.lifecycle === 'starting' || session.lifecycle === 'running')
+            .filter((session) => isActiveSessionLifecycle(session.lifecycle))
             .map((session) => session.taskId)
     );
     const activeTaskCount = state.tasks.filter((task) => task.lifecycle === 'queued' || task.lifecycle === 'running').length;
-    const activeSessionCount = state.sessions.filter((session) => session.lifecycle === 'starting' || session.lifecycle === 'running').length;
+    const activeSessionCount = state.sessions.filter((session) => isActiveSessionLifecycle(session.lifecycle)).length;
 
     let availableTaskSlots = Math.max(0, configuration.workflow.execution.maxParallelTasks - activeTaskCount);
     let availableSessionSlots = Math.max(0, configuration.workflow.execution.maxParallelSessions - activeSessionCount);
@@ -713,7 +713,11 @@ function isMissionCompleted(
         return stage?.lifecycle === 'completed';
     }) &&
         !state.tasks.some((task) => task.lifecycle === 'queued' || task.lifecycle === 'running') &&
-        !state.sessions.some((session) => session.lifecycle === 'starting' || session.lifecycle === 'running');
+        !state.sessions.some((session) => isActiveSessionLifecycle(session.lifecycle));
+}
+
+function isActiveSessionLifecycle(lifecycle: MissionAgentSessionRuntimeState['lifecycle']): boolean {
+    return lifecycle === 'starting' || lifecycle === 'running';
 }
 
 function isTerminalTaskLifecycle(lifecycle: MissionTaskLifecycleState): boolean {

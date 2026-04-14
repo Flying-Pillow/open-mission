@@ -156,8 +156,8 @@ export function getMissionWorkflowEventValidationErrors(
         case 'task.reopened': {
             const task = requireTask(findTask(event.taskId), event.taskId, errors, event.type);
             if (task) {
-                if (task.lifecycle !== 'completed' && task.lifecycle !== 'failed' && task.lifecycle !== 'cancelled') {
-                    errors.push(`task.reopened requires task '${event.taskId}' to be completed, failed, or cancelled, received '${task.lifecycle}'.`);
+                if (task.lifecycle !== 'completed' && task.lifecycle !== 'failed' && task.lifecycle !== 'cancelled' && task.lifecycle !== 'blocked') {
+                    errors.push(`task.reopened requires task '${event.taskId}' to be completed, failed, cancelled, or blocked, received '${task.lifecycle}'.`);
                 }
                 const stageOrder = configuration.workflow.stageOrder;
                 const reopenedStageIndex = stageOrder.indexOf(task.stageId);
@@ -171,7 +171,7 @@ export function getMissionWorkflowEventValidationErrors(
                         return false;
                     }
                     const candidateStageIndex = stageOrder.indexOf(sessionTask.stageId);
-                    return candidateStageIndex > reopenedStageIndex && (session.lifecycle === 'starting' || session.lifecycle === 'running');
+                    return candidateStageIndex > reopenedStageIndex && isActiveSessionLifecycle(session.lifecycle);
                 });
                 if (hasActiveDownstreamWork || hasActiveDownstreamSessions) {
                     errors.push(`task.reopened for '${event.taskId}' is not allowed while downstream work is active.`);
@@ -184,7 +184,7 @@ export function getMissionWorkflowEventValidationErrors(
             if (task && task.lifecycle !== 'ready' && task.lifecycle !== 'queued' && task.lifecycle !== 'running') {
                 errors.push(`session.started requires task '${event.taskId}' to be ready, queued or running, received '${task.lifecycle}'.`);
             }
-            if (runtime.sessions.some((session) => session.taskId === event.taskId && (session.lifecycle === 'starting' || session.lifecycle === 'running'))) {
+            if (runtime.sessions.some((session) => session.taskId === event.taskId && isActiveSessionLifecycle(session.lifecycle))) {
                 errors.push(`session.started is not allowed while task '${event.taskId}' already has an active session.`);
             }
             break;
@@ -205,7 +205,7 @@ export function getMissionWorkflowEventValidationErrors(
         case 'session.terminated': {
             const session = requireSession(findSession(event.sessionId), event.sessionId, errors, event.type);
             requireTask(findTask(event.taskId), event.taskId, errors, event.type);
-            if (session && session.lifecycle !== 'starting' && session.lifecycle !== 'running') {
+            if (session && !isActiveSessionLifecycle(session.lifecycle)) {
                 errors.push(`${event.type} requires session '${event.sessionId}' to be starting or running, received '${session.lifecycle}'.`);
             }
             break;
@@ -213,6 +213,10 @@ export function getMissionWorkflowEventValidationErrors(
     }
 
     return errors;
+}
+
+function isActiveSessionLifecycle(lifecycle: MissionAgentSessionRuntimeState['lifecycle']): boolean {
+    return lifecycle === 'starting' || lifecycle === 'running';
 }
 
 function resolveEligibleStageId(

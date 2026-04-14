@@ -2,7 +2,6 @@ import {
 	DaemonApi,
 	DaemonMissionApi,
 	connectAirportControl,
-	type MissionSystemSnapshot,
 	readMissionDaemonSettings,
 	resolveAirportControlRuntimeMode,
 	type MissionSelector
@@ -33,7 +32,7 @@ export async function bootstrapTowerPane(context: AirportTerminalContext): Promi
 		context.args.includes('help')
 	) {
 		process.stdout.write('mission [--hmr] [--banner] [--no-banner]\n');
-		process.stdout.write('airport layout: Tower | Briefing Room | optional Runway session pane\n');
+		process.stdout.write('airport layout: Tower | Briefing Room | Runway\n');
 		return;
 	}
 
@@ -68,7 +67,7 @@ export async function bootstrapTowerPane(context: AirportTerminalContext): Promi
 		? configuredTheme
 		: 'ocean';
 	applyTowerTheme(initialTheme);
-	const connect = async ({ selector: nextSelector = selector, surfacePath = context.workingDirectory }: TowerConnectRequest = {}) => {
+	const connect = async ({ selector: nextSelector = selector, surfacePath = context.controlRoot }: TowerConnectRequest = {}) => {
 		const client = await connectAirportControl({
 			surfacePath,
 			runtimeMode,
@@ -133,12 +132,8 @@ export async function bootstrapTowerPane(context: AirportTerminalContext): Promi
 
 function selectorFromConnection(
 	status: Awaited<ReturnType<DaemonApi['control']['getStatus']>>,
-	snapshot: MissionSystemSnapshot,
+	_snapshot: Awaited<ReturnType<DaemonApi['airport']['connectPane']>>,
 	fallback: MissionSelector
 ): MissionSelector {
-	const projectedMissionId = snapshot.airportProjections.tower.missionId;
-	if (projectedMissionId) {
-		return { missionId: projectedMissionId };
-	}
 	return DaemonMissionApi.selectorFromStatus(status, fallback);
 }

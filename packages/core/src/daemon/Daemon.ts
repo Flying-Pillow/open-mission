@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as net from 'node:net';
 import * as path from 'node:path';
 import type { Socket } from 'node:net';
+import { performance } from 'node:perf_hooks';
 import {
 	PROTOCOL_VERSION,
 	type AirportClientConnect,
@@ -24,6 +25,7 @@ import {
 import { MissionSystemController } from './control-plane/MissionSystemController.js';
 import { WorkspaceManager } from '../workspace/WorkspaceManager.js';
 import type { AgentRunner } from '../agent/AgentRunner.js';
+import { readSystemStatus } from '../system/SystemStatus.js';
 
 export type DaemonOptions = {
 	logLine?: (line: string) => void;
@@ -164,6 +166,7 @@ export class Daemon {
 	}
 
 	private async handleLine(socket: Socket, line: string, clientId: string): Promise<void> {
+		const startedAt = performance.now();
 		try {
 			const message = JSON.parse(line) as Message;
 			if (message.type !== 'request') return;
@@ -176,11 +179,14 @@ export class Daemon {
 				`Incoming ${request.method} request (${request.id})${request.surfacePath ? ` surface=${request.surfacePath}` : ''}`
 			);
 			const response = await this.handleRequest(request);
+			const durationMs = performance.now() - startedAt;
+			this.logLine?.(`Completed ${request.method} request (${request.id}) in ${durationMs.toFixed(1)}ms`);
 			if (this.clients.has(socket)) {
 				socket.write(JSON.stringify(response) + '\n');
 			}
 		} catch (error) {
-			this.logLine?.(`Failed to handle message: ${error}`);
+			const durationMs = performance.now() - startedAt;
+			this.logLine?.(`Failed to handle message after ${durationMs.toFixed(1)}ms: ${error}`);
 		}
 	}
 
@@ -202,6 +208,10 @@ export class Daemon {
 				protocolVersion: PROTOCOL_VERSION
 			};
 			return pingResult;
+		}
+
+		if (request.method === 'system.status') {
+			return readSystemStatus();
 		}
 
 		if (request.method === 'airport.status') {
@@ -283,6 +293,9 @@ export class Daemon {
 	private async executeAirportPaneBind(request: Request): Promise<any> {
 		await this.systemController.scopeAirportToSurfacePath(request.surfacePath);
 		const params = (request.params ?? {}) as AirportPaneBind;
+		if (params.paneId !== 'briefingRoom' && params.paneId !== 'runway') {
+			throw new Error('airport.pane.bind only supports briefingRoom and runway. Tower binding is derived from canonical selection.');
+		}
 		this.logLine?.(
 			[
 				`Airport pane bind`,
@@ -322,9 +335,15 @@ export class Daemon {
 		}
 
 		const selectionHint = readSelectionHintFromResult(result);
+		const missionStatusHint = isOperatorStatus(result)
+			? result
+			: hasEmbeddedOperatorStatus(result)
+				? result.status
+				: undefined;
 		const snapshot = await this.systemController.synchronizeWorkspace({
 			workspaceRoot,
-			...(selectionHint ? { selectionHint } : {})
+			...(selectionHint ? { selectionHint } : {}),
+			...(missionStatusHint ? { missionStatusHint } : {})
 		});
 
 		if (isOperatorStatus(result)) {
@@ -426,7 +445,8 @@ export class Daemon {
 			}
 		};
 	}
-}
+
+	}
 
 function isOperatorStatus(value: unknown): value is import('../types.js').OperatorStatus & { system?: import('../types.js').MissionSystemSnapshot } {
 	return Boolean(value && typeof value === 'object' && 'found' in value && typeof (value as { found?: unknown }).found === 'boolean');

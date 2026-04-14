@@ -27,6 +27,7 @@ export type TerminalAgentTransportOptions = {
 	executor?: TerminalExecutor;
 	sharedSessionName?: string;
 	agentSessionPaneTitle?: string;
+	discoverSharedSessionName?: boolean;
 };
 
 export type TerminalOpenSessionRequest = {
@@ -44,6 +45,7 @@ export class TerminalAgentTransport {
 	private readonly executor: TerminalExecutor;
 	private readonly sharedSessionName: string | undefined;
 	private readonly agentSessionPaneTitle: string;
+	private readonly discoverSharedSessionName: boolean;
 
 	public constructor(options: TerminalAgentTransportOptions = {}) {
 		this.logLine = options.logLine;
@@ -52,6 +54,7 @@ export class TerminalAgentTransport {
 			|| process.env['AIRPORT_TERMINAL_SESSION_NAME']?.trim()
 			|| undefined;
 		this.agentSessionPaneTitle = options.agentSessionPaneTitle?.trim() || 'RUNWAY';
+		this.discoverSharedSessionName = options.discoverSharedSessionName ?? true;
 		const terminalBinary = options.terminalBinary?.trim()
 			|| readMissionUserConfig()?.terminalBinary?.trim()
 			|| 'zellij';
@@ -85,7 +88,7 @@ export class TerminalAgentTransport {
 	public async openSession(request: TerminalOpenSessionRequest): Promise<TerminalSessionHandle> {
 		const sharedSessionName = request.sharedSessionName?.trim()
 			|| this.sharedSessionName
-			|| await this.discoverAirportLayoutSessionName();
+			|| (this.discoverSharedSessionName ? await this.discoverAirportLayoutSessionName() : undefined);
 		if (sharedSessionName) {
 			try {
 				return await this.openSharedSession(request, sharedSessionName);

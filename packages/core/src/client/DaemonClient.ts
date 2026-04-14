@@ -3,6 +3,7 @@ import {
 	MissionAgentEventEmitter,
 	type MissionAgentDisposable
 	} from '../agent/events.js';
+import { METHOD_METADATA } from '../daemon/protocol/contracts.js';
 import type {
 	Message,
 	Method,
@@ -62,7 +63,7 @@ export class DaemonClient implements MissionAgentDisposable {
 		}
 
 		const id = `request-${String(++this.nextRequestId)}`;
-		const includeSurfacePath = shouldIncludeSurfacePath(method);
+		const includeSurfacePath = METHOD_METADATA[method].includeSurfacePath;
 		const request: Request = {
 			type: 'request',
 			id,
@@ -163,31 +164,4 @@ function createDaemonClientError(message: Extract<Response, { type: 'response'; 
 		error.validationErrors = message.error.validationErrors;
 	}
 	return error;
-}
-
-function shouldIncludeSurfacePath(method: Method): boolean {
-	if (
-		method === 'airport.status'
-		|| method === 'airport.client.connect'
-		|| method === 'airport.client.observe'
-		|| method === 'airport.pane.bind'
-		|| method === 'control.status'
-		|| method === 'control.settings.update'
-		|| method === 'control.document.read'
-		|| method === 'control.document.write'
-		|| method === 'control.action.list'
-		|| method === 'control.action.describe'
-		|| method === 'control.action.execute'
-		|| method === 'control.workflow.settings.get'
-		|| method === 'control.workflow.settings.initialize'
-		|| method === 'control.workflow.settings.update'
-		|| method === 'control.repositories.list'
-		|| method === 'control.repositories.add'
-		|| method === 'mission.from-brief'
-		|| method === 'mission.from-issue'
-	) {
-		return true;
-	}
-
-	return false;
 }

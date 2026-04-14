@@ -156,10 +156,6 @@ export class RepositoryAirportRegistry {
 		return airport.substrateController.applyEffects(effects);
 	}
 
-	public async persistTouchedAirportIntents(repositoryIds: string[]): Promise<void> {
-		void repositoryIds;
-	}
-
 	private requireAirport(repositoryId: string): RepositoryAirportRecord {
 		const airport = this.airportRegistry.get(repositoryId);
 		if (!airport) {

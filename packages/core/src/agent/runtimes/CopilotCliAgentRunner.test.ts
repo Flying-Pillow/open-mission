@@ -1,6 +1,9 @@
+import * as fs from 'node:fs/promises';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentLaunchConfig, AgentSessionEvent } from '../AgentRuntimeTypes.js';
 import { CopilotCliAgentRunner, type CopilotCliAgentRunnerOptions } from './CopilotCliAgentRunner.js';
+
+const TEST_TRUSTED_CONFIG_DIR = '/tmp/mission-copilot-runner-config';
 
 type MockTerminalState = {
 	exists: boolean;
@@ -8,6 +11,7 @@ type MockTerminalState = {
 	dead: boolean;
 	exitCode: number;
 	sentKeys: string[][];
+	lastLaunchCommand: string;
 };
 
 function createLaunchConfig(overrides: Partial<AgentLaunchConfig> = {}): AgentLaunchConfig {
@@ -45,14 +49,16 @@ describe('CopilotCliAgentRunner', () => {
 	let executor: NonNullable<CopilotCliAgentRunnerOptions['executor']>;
 	let activeSessionName: string | undefined;
 
-	beforeEach(() => {
+	beforeEach(async () => {
 		vi.useFakeTimers();
+		await fs.rm(TEST_TRUSTED_CONFIG_DIR, { recursive: true, force: true });
 		state = {
 			exists: true,
 			capture: '',
 			dead: false,
 			exitCode: 0,
-			sentKeys: []
+			sentKeys: [],
+			lastLaunchCommand: ''
 		};
 		activeSessionName = undefined;
 		executor = async (args) => {
@@ -73,6 +79,7 @@ describe('CopilotCliAgentRunner', () => {
 			}
 			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'new-pane') {
 				activeSessionName = args[8];
+				state.lastLaunchCommand = args.at(-1) ?? '';
 				return { stdout: 'terminal_4\n', stderr: '' };
 			}
 			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'stack-panes') {
@@ -96,7 +103,8 @@ describe('CopilotCliAgentRunner', () => {
 		};
 	});
 
-	afterEach(() => {
+	afterEach(async () => {
+		await fs.rm(TEST_TRUSTED_CONFIG_DIR, { recursive: true, force: true });
 		vi.useRealTimers();
 	});
 
@@ -104,6 +112,8 @@ describe('CopilotCliAgentRunner', () => {
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
 			args: ['--add-dir', '/tmp/work'],
+			trustedConfigDir: TEST_TRUSTED_CONFIG_DIR,
+			sharedSessionMode: 'enabled',
 			executor,
 			sharedSessionName: 'mission-mission',
 			pollIntervalMs: 500
@@ -118,6 +128,13 @@ describe('CopilotCliAgentRunner', () => {
 		expect(snapshot.transport?.terminalSessionName).toBe('mission-mission');
 		expect(snapshot.transport?.paneId).toBe('terminal_4');
 		expect(snapshot.status).toBe('running');
+		expect(state.lastLaunchCommand).toContain("'--allow-all-paths'");
+		expect(state.lastLaunchCommand).toContain("'--allow-all-tools'");
+		expect(state.lastLaunchCommand).toContain("'--allow-all-urls'");
+		expect(state.lastLaunchCommand).toContain("'--config-dir'");
+		expect(state.lastLaunchCommand).toContain(`'${TEST_TRUSTED_CONFIG_DIR}'`);
+		expect(state.lastLaunchCommand).toContain("'--add-dir'");
+		expect(state.lastLaunchCommand).toContain("'/tmp/work'");
 		expect(state.sentKeys.some((args) => args.includes('write-chars') && args.includes('Implement the task.'))).toBe(true);
 	});
 
@@ -157,6 +174,8 @@ describe('CopilotCliAgentRunner', () => {
 
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
+			trustedConfigDir: TEST_TRUSTED_CONFIG_DIR,
+			sharedSessionMode: 'enabled',
 			executor: fallbackExecutor,
 			sharedSessionName: 'mission-mission',
 			pollIntervalMs: 500
@@ -174,6 +193,8 @@ describe('CopilotCliAgentRunner', () => {
 	it('derives a task-based session name from the task path on launch', async () => {
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
+			trustedConfigDir: TEST_TRUSTED_CONFIG_DIR,
+			sharedSessionMode: 'enabled',
 			executor,
 			sharedSessionName: 'mission-mission',
 			pollIntervalMs: 500
@@ -195,6 +216,8 @@ describe('CopilotCliAgentRunner', () => {
 	it('submits prompts by sending literal keys into terminal transport', async () => {
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
+			trustedConfigDir: TEST_TRUSTED_CONFIG_DIR,
+			sharedSessionMode: 'enabled',
 			executor,
 			sharedSessionName: 'mission-mission',
 			pollIntervalMs: 500
@@ -214,6 +237,8 @@ describe('CopilotCliAgentRunner', () => {
 	it('maps interrupt commands to Ctrl+C and awaiting-input state', async () => {
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
+			trustedConfigDir: TEST_TRUSTED_CONFIG_DIR,
+			sharedSessionMode: 'enabled',
 			executor,
 			sharedSessionName: 'mission-mission',
 			pollIntervalMs: 500
@@ -234,6 +259,8 @@ describe('CopilotCliAgentRunner', () => {
 	it('terminates a session through the runner API', async () => {
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
+			trustedConfigDir: TEST_TRUSTED_CONFIG_DIR,
+			sharedSessionMode: 'enabled',
 			executor,
 			sharedSessionName: 'mission-mission',
 			pollIntervalMs: 500
@@ -248,5 +275,31 @@ describe('CopilotCliAgentRunner', () => {
 		expect(events.some((event) => event.type === 'session.terminated')).toBe(true);
 		expect(session.getSnapshot().status).toBe('terminated');
 		expect(state.exists).toBe(false);
+	});
+
+	it('trusts mission dossier cwd and mission root ancestor when launching', async () => {
+		const missionDossierWorkingDirectory = '/tmp/mission-root/.mission/missions/mission-13';
+		const missionRootDirectory = '/tmp/mission-root';
+		const runner = new CopilotCliAgentRunner({
+			command: 'copilot',
+			trustedConfigDir: TEST_TRUSTED_CONFIG_DIR,
+			sharedSessionMode: 'enabled',
+			executor,
+			sharedSessionName: 'mission-mission',
+			pollIntervalMs: 500
+		});
+
+		await runner.startSession(createLaunchConfig({
+			workingDirectory: missionDossierWorkingDirectory
+		}));
+
+		expect(state.lastLaunchCommand).toContain(`'${missionDossierWorkingDirectory}'`);
+		expect(state.lastLaunchCommand).toContain(`'${missionRootDirectory}'`);
+
+		const config = JSON.parse(
+			await fs.readFile(`${TEST_TRUSTED_CONFIG_DIR}/config.json`, 'utf8')
+		) as { trusted_folders?: string[] };
+		expect(config.trusted_folders).toContain(missionDossierWorkingDirectory);
+		expect(config.trusted_folders).toContain(missionRootDirectory);
 	});
 });

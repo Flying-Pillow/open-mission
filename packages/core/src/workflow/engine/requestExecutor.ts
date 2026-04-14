@@ -1,4 +1,4 @@
-import type { MissionDescriptor, MissionStageId } from '../../types.js';
+import type { MissionDescriptor, MissionStageId, MissionTaskState } from '../../types.js';
 import type { MissionDefaultAgentMode } from '../../lib/daemonConfig.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../../agent/runtimes/AgentRuntimeIds.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
@@ -157,10 +157,11 @@ export class MissionWorkflowRequestExecutor {
 					}
 
 					try {
-						const promptText =
-							typeof request.payload['prompt'] === 'string' && request.payload['prompt'].trim()
-								? request.payload['prompt'].trim()
-								: task.instruction;
+						const promptText = await this.resolveLaunchPromptText(
+							request.payload,
+							task,
+							input.descriptor
+						);
 						const launchConfig: AgentLaunchConfig = {
 							missionId: input.missionId,
 							workingDirectory:
@@ -270,11 +271,19 @@ export class MissionWorkflowRequestExecutor {
 	public async reconcileSessions(document?: MissionRuntimeRecord): Promise<MissionWorkflowEvent[]> {
 		if (document) {
 			for (const persistedSession of document.runtime.sessions) {
+				this.sessionTaskIds.set(persistedSession.sessionId, persistedSession.taskId);
+				if (isTerminalStatus(persistedSession.lifecycle)) {
+					continue;
+				}
 				if (this.runtimeSessions.has(persistedSession.sessionId)) {
 					continue;
 				}
 				const snapshot = await this.attachSession(this.toSessionReference(persistedSession)).catch(() => undefined);
 				if (!snapshot) {
+					const translated = this.createAttachFailureLifecycleEvent(persistedSession);
+					if (translated) {
+						this.runtimeEvents.push(translated);
+					}
 					continue;
 				}
 				if (!hasMatchingTerminalLifecycle(document, snapshot)) {
@@ -551,6 +560,36 @@ export class MissionWorkflowRequestExecutor {
 		};
 	}
 
+	private async resolveLaunchPromptText(
+		payload: Record<string, unknown>,
+		task: MissionTaskRuntimeState,
+		descriptor: MissionDescriptor
+	): Promise<string> {
+		const explicitPrompt = typeof payload['prompt'] === 'string' ? payload['prompt'].trim() : '';
+		if (explicitPrompt.length > 0) {
+			return explicitPrompt;
+		}
+
+		try {
+			const fileSegment = task.taskId.split('/').at(-1)?.trim() || task.taskId.trim();
+			const taskState = await this.options.adapter.readTaskState(
+				descriptor.missionDir,
+				task.stageId as MissionStageId,
+				`${fileSegment}.md`
+			);
+			if (taskState) {
+				return buildTaskArtifactLaunchPrompt(
+					taskState,
+					this.options.adapter.getMissionWorkspacePath(descriptor.missionDir)
+				);
+			}
+		} catch {
+			// Fall back to runtime task instruction when task artifact resolution fails.
+		}
+
+		return task.instruction;
+	}
+
 	private async materializeStageArtifacts(descriptor: MissionDescriptor, stageId: MissionStageId): Promise<void> {
 		const definition = MISSION_STAGE_TEMPLATE_DEFINITIONS[stageId];
 		if (!definition) {
@@ -592,6 +631,23 @@ export class MissionWorkflowRequestExecutor {
 				}
 			);
 		}
+	}
+
+	private createAttachFailureLifecycleEvent(
+		session: MissionAgentSessionRuntimeState
+	): MissionWorkflowEvent | undefined {
+		if (isTerminalStatus(session.lifecycle)) {
+			return undefined;
+		}
+		this.sessionTaskIds.set(session.sessionId, session.taskId);
+		return {
+			eventId: `reconcile:${session.sessionId}:terminated:${new Date().toISOString()}`,
+			type: 'session.terminated',
+			occurredAt: new Date().toISOString(),
+			source: 'daemon',
+			sessionId: session.sessionId,
+			taskId: session.taskId
+		};
 	}
 }
 
@@ -642,6 +698,23 @@ function normalizeTaskId(taskId: string | undefined): string | undefined {
 		return undefined;
 	}
 	return normalizedTaskId;
+}
+
+function buildTaskArtifactLaunchPrompt(task: MissionTaskState, missionWorkspaceDir: string): string {
+	const instruction = task.instruction.trim();
+	const lines = [
+		`You are working on task '${task.sequence} ${task.subject}'.`,
+		`Stay strictly within this mission workspace: ${missionWorkspaceDir}`,
+		'Do not read, modify, or create files outside that folder boundary.',
+		`Here are your instructions: @${task.filePath}`,
+		'That task file is authoritative.'
+	];
+
+	if (instruction.length > 0) {
+		lines.push('', 'Task summary:', instruction);
+	}
+
+	return lines.join('\n');
 }
 
 function isTerminalStatus(status: AgentSessionSnapshot['status']): boolean {
