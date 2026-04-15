@@ -477,6 +477,13 @@ function buildGenerationRequests(
     if (hasTasks) {
         return [];
     }
+    const generationRule = configuration.workflow.taskGeneration.find((candidate) => candidate.stageId === eligibleStageId);
+    if (!generationRule) {
+        return [];
+    }
+    if (generationRule.templateSources.length === 0 && generationRule.tasks.length === 0) {
+        return [];
+    }
     return [
         createRequest('tasks.request-generation', event.occurredAt, {
             stageId: eligibleStageId

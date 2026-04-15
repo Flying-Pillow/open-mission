@@ -394,6 +394,84 @@ describe('Mission', () => {
         }
     });
 
+    it('shows implementation task files in stage status while spec planning task is running', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner');
+
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const mission = await Factory.create(adapter, {
+                brief: createBrief(208, 'Mission implementation task visibility during planning'),
+                branchRef: adapter.deriveMissionBranchName(208, 'Mission implementation task visibility during planning')
+            }, createWorkflowBindings(runner));
+
+            try {
+                const startedStatus = await mission.startWorkflow();
+                const prdTaskId = startedStatus.readyTasks?.[0]?.taskId;
+                if (!prdTaskId || !startedStatus.missionDir) {
+                    throw new Error('Expected a ready PRD task and mission working directory after workflow start.');
+                }
+
+                await mission.completeTask(prdTaskId);
+                let specStatus = await mission.status();
+                const specStages = specStatus.stages ?? [];
+                const specStage = specStages.find((stage) => stage.stage === 'spec');
+                if (!specStage) {
+                    throw new Error('Expected spec stage after completing PRD task.');
+                }
+
+                let planTask = specStage.tasks.find((task) => task.taskId === 'spec/02-plan');
+                if (!planTask) {
+                    throw new Error('Expected spec/02-plan task in spec stage.');
+                }
+
+                if (planTask.status !== 'ready') {
+                    await mission.completeTask('spec/01-spec-from-prd');
+                    specStatus = await mission.status();
+                    const refreshedSpecStages = specStatus.stages ?? [];
+                    const refreshedSpecStage = refreshedSpecStages.find((stage) => stage.stage === 'spec');
+                    planTask = refreshedSpecStage?.tasks.find((task) => task.taskId === 'spec/02-plan');
+                    if (!planTask || planTask.status !== 'ready') {
+                        throw new Error('Expected spec/02-plan to be ready after completing spec/01 task.');
+                    }
+                }
+
+                await mission.launchAgentSession({
+                    runnerId: runner.id,
+                    taskId: planTask.taskId,
+                    workingDirectory: startedStatus.missionDir,
+                    prompt: 'Plan implementation tasks now.'
+                });
+
+                await adapter.writeTaskRecord(
+                    mission.getMissionDir(),
+                    'implementation',
+                    '01-visible-while-planning.md',
+                    {
+                        subject: 'Visible While Planning',
+                        instruction: 'Make implementation slices visible in the mission-control tree during planning.',
+                        agent: runner.id
+                    }
+                );
+
+                const statusDuringPlanning = await mission.status();
+                const planningStages = statusDuringPlanning.stages ?? [];
+                const runningPlanTask = planningStages
+                    .flatMap((stage) => stage.tasks)
+                    .find((task) => task.taskId === 'spec/02-plan');
+                expect(runningPlanTask?.status).toBe('running');
+
+                const implementationStage = planningStages.find((stage) => stage.stage === 'implementation');
+                expect(implementationStage?.tasks.map((task) => task.taskId)).toContain('implementation/01-visible-while-planning');
+                expect(implementationStage?.tasks.find((task) => task.taskId === 'implementation/01-visible-while-planning')?.status).toBe('pending');
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
     it('fills missing transport identity for persisted copilot-cli runtime sessions', async () => {
         const workspaceRoot = await createTempRepo();
         const runner = new FakeAgentRunner('copilot-cli', 'Copilot CLI', 'terminal');

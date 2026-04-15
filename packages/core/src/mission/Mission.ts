@@ -549,7 +549,10 @@ export class Mission {
 		const generationRule = document.configuration.workflow.taskGeneration.find(
 			(candidate) => candidate.stageId === stageId
 		);
-		if (!generationRule || generationRule.templateSources.length === 0) {
+		if (
+			!generationRule
+			|| (generationRule.templateSources.length === 0 && generationRule.tasks.length === 0)
+		) {
 			throw new Error(`Stage '${stageId}' does not support task generation.`);
 		}
 
@@ -714,10 +717,35 @@ export class Mission {
 	private async buildWorkflowStageStatuses(
 		document: MissionRuntimeRecord
 	): Promise<MissionStageStatus[]> {
-		return MISSION_STAGES.map((stageId) => {
+		return Promise.all(MISSION_STAGES.map(async (stageId) => {
 			const runtimeStage = document.runtime.stages.find((stage) => stage.stageId === stageId);
 			const runtimeTasks = document.runtime.tasks.filter((task) => task.stageId === stageId);
-			const tasks = runtimeTasks.map((task, index) => this.toWorkflowProjectedTaskState(task, index));
+			const runtimeTasksById = new Map(runtimeTasks.map((task, index) => [task.taskId, { task, index }]));
+			const fileTasks = await this.adapter.listTaskStates(this.missionDir, stageId).catch(() => []);
+			const fileTaskIds = new Set(fileTasks.map((task) => task.taskId));
+			const tasks: MissionTaskState[] = [];
+
+			for (const fileTask of fileTasks) {
+				const runtimeTaskEntry = runtimeTasksById.get(fileTask.taskId);
+				if (runtimeTaskEntry) {
+					tasks.push(this.toWorkflowProjectedTaskState(runtimeTaskEntry.task, runtimeTaskEntry.index, fileTask));
+					continue;
+				}
+				tasks.push({
+					...fileTask,
+					blockedBy: [...fileTask.blockedBy],
+					status: 'pending'
+				});
+			}
+
+			for (const [taskId, runtimeTaskEntry] of runtimeTasksById.entries()) {
+				if (fileTaskIds.has(taskId)) {
+					continue;
+				}
+				tasks.push(this.toWorkflowProjectedTaskState(runtimeTaskEntry.task, runtimeTaskEntry.index));
+			}
+
+			tasks.sort((left, right) => left.sequence - right.sequence || left.taskId.localeCompare(right.taskId));
 			return {
 				stage: stageId,
 				folderName: MISSION_STAGE_FOLDERS[stageId],
@@ -730,7 +758,7 @@ export class Mission {
 				readyTaskIds: tasks.filter((task) => this.isTaskReady(task)).map((task) => task.taskId),
 				tasks
 			};
-		});
+		}));
 	}
 
 	private buildTowerProjection(
@@ -920,27 +948,27 @@ export class Mission {
 
 	private toWorkflowProjectedTaskState(
 		task: MissionRuntimeRecord['runtime']['tasks'][number],
-		index: number
+		index: number,
+		fileTask?: MissionTaskState
 	): MissionTaskState {
-		const fileName = `${task.taskId.split('/').pop() ?? task.taskId}.md`;
-		const relativePath =
-			[
-				MISSION_STAGE_FOLDERS[task.stageId as MissionStageId],
-				'tasks',
-				fileName
-			].join('/');
-		const filePath = path.join(this.missionDir, ...relativePath.split('/'));
+		const fileName = fileTask?.fileName ?? `${task.taskId.split('/').pop() ?? task.taskId}.md`;
+		const relativePath = fileTask?.relativePath ?? [
+			MISSION_STAGE_FOLDERS[task.stageId as MissionStageId],
+			'tasks',
+			fileName
+		].join('/');
+		const filePath = fileTask?.filePath ?? path.join(this.missionDir, ...relativePath.split('/'));
 		return {
 			taskId: task.taskId,
 			stage: task.stageId as MissionStageId,
-			sequence: index + 1,
+			sequence: fileTask?.sequence ?? index + 1,
 			subject: task.title,
 			instruction: task.instruction,
 			body: task.instruction,
 			dependsOn: [...task.dependsOn],
 			blockedBy: [...task.blockedByTaskIds],
 			status: task.lifecycle,
-			agent: task.agentRunner ?? 'copilot',
+			agent: task.agentRunner ?? fileTask?.agent ?? 'copilot',
 			retries: task.retries,
 			fileName,
 			filePath,
@@ -1713,7 +1741,10 @@ function buildGenerationAction(
 	stageId: MissionStageId
 ): OperatorActionDescriptor | undefined {
 	const generationRule = input.configuration.workflow.taskGeneration.find((candidate) => candidate.stageId === stageId);
-	if (!generationRule || generationRule.templateSources.length === 0) {
+	if (
+		!generationRule
+		|| (generationRule.templateSources.length === 0 && generationRule.tasks.length === 0)
+	) {
 		return undefined;
 	}
 	if (input.runtime.tasks.some((task) => task.stageId === stageId)) {

@@ -49,6 +49,7 @@ import {
 import { useMissionControlController } from './tower/components/mission-control/missionControlController.js';
 import { MissionControlPanel } from './tower/components/mission-control/MissionControlPanel.js';
 import { resolvePanelBindingsFromSelection } from './tower/components/mission-control/panelBindings.js';
+import { resolveOperatorActionContextFromSelection } from './tower/components/mission-control/commandContext.js';
 import { MissionFlowOverlay, RepositoryFlowSurface } from './tower/components/flow/FlowPanel.js';
 import { createFlowController } from './tower/components/flow/flowController.js';
 import { RepositoryPanel } from './tower/components/repository/RepositoryPanel.js';
@@ -66,6 +67,7 @@ import {
 	buildKeyHintsText,
 	createInitialStatusMessage,
 	resolveMissionOperatorView,
+	toErrorDetails,
 	toErrorMessage,
 } from './airportDomain.js';
 import type { TowerConnectRequest } from './tower/bootstrapTowerPane.js';
@@ -123,6 +125,8 @@ export function AirportApp({
 		createInitialStatusMessage(initialConnectionError)
 	]);
 	const [isRunningCommand, setIsRunningCommand] = createSignal<boolean>(false);
+	const [lastCommandStatusText, setLastCommandStatusText] = createSignal<string | undefined>();
+	const [showCommandDebug, setShowCommandDebug] = createSignal<boolean>(false);
 	const [focusArea, setFocusArea] = createSignal<FocusArea>('command');
 	const [selectedRepositorySelectionItemId, setSelectedRepositorySelectionItemId] = createSignal<string | undefined>();
 	const runtimeController = createAirportController({
@@ -313,19 +317,17 @@ export function AirportApp({
 		})
 	);
 	const commandFlowOwner = flowController.owner;
+	const commandSelectionKey = createMemo(() => {
+		if (towerMode() !== 'mission') {
+			return `repository:${selectedHeaderTab()?.id ?? 'repository'}`;
+		}
+		return selectedTreeTarget()?.id ?? (selectedMissionId() ? `mission:${selectedMissionId()}` : 'mission:none');
+	});
 	const commandTargetContext = createMemo<OperatorActionTargetContext>(() => {
 		if (towerMode() !== 'mission') {
 			return {};
 		}
-		const treeContext = selectedTreeContext();
-		const stageId = treeContext?.stageId;
-		const taskId = treeContext?.taskId;
-		const sessionId = treeContext?.sessionId;
-		return {
-			...(stageId ? { stageId } : {}),
-			...(taskId ? { taskId } : {}),
-			...(sessionId ? { sessionId } : {})
-		};
+		return resolveOperatorActionContextFromSelection(resolvedMissionSelection());
 	});
 	const selectedCommandTargetDescriptor = createMemo<{
 		sessionId?: string;
@@ -346,6 +348,7 @@ export function AirportApp({
 	const commandController = useCommandController({
 		client,
 		actionsInvalidationKey,
+		commandSelectionKey,
 		towerMode,
 		currentMissionId,
 		selectedMissionMatchesLoaded,
@@ -367,6 +370,12 @@ export function AirportApp({
 				: executeOperatorInput(commandTextOverride ?? actionId.replace(/^custom:/u, ''));
 			void execution
 				.catch((error) => {
+						const details = toErrorDetails(error);
+						setLastCommandStatusText(
+							details.code
+								? `ERR ${details.code}: ${details.message}`
+								: `ERR: ${details.message}`
+						);
 					appendLog(toErrorMessage(error));
 				})
 				.finally(() => {
@@ -376,6 +385,7 @@ export function AirportApp({
 		onExecuteOperatorInput: (commandText) => executeOperatorInput(commandText),
 		onSubmitFlowTextStep: (value) => submitCommandFlowTextStep(value),
 		onNoCommandsAvailable: () => {
+			setLastCommandStatusText('ERR: No commands are available for the current selection.');
 			appendLog('No commands are available for the current selection.');
 		},
 		onNotify: appendLog,
@@ -516,24 +526,50 @@ export function AirportApp({
 		})
 	);
 	const commandHelp = createMemo(() => {
+		const statusPrefix = lastCommandStatusText();
+		const debugSuffix = showCommandDebug()
+			? (() => {
+				const context = commandTargetContext();
+				const contextParts = [
+					context.stageId ? `stage=${context.stageId}` : undefined,
+					context.taskId ? `task=${context.taskId}` : undefined,
+					context.sessionId ? `session=${context.sessionId}` : undefined
+				].filter((part): part is string => Boolean(part));
+				const contextText = contextParts.length > 0 ? contextParts.join(',') : 'none';
+				const totalActions = commandController.availableActions().length;
+				const enabledActions = commandController.availableActions().filter((action) => action.enabled).length;
+				return `DBG sel=${commandSelectionKey() ?? 'none'} ctx=${contextText} actions=${String(enabledActions)}/${String(totalActions)}`;
+			})()
+			: undefined;
+		const withStatus = (base: string) => statusPrefix ? `${statusPrefix} | ${base}` : base;
+		const withDebug = (base: string) => debugSuffix ? `${base} | ${debugSuffix}` : base;
 		const step = currentCommandFlowStep();
 		if (step && towerMode() !== 'repository') {
-			return step.helperText;
+			return withDebug(withStatus(step.helperText));
 		}
 		if (towerMode() === 'repository' && step?.kind === 'selection') {
-			return 'Repository flow active. Tab to the flow panel, use left/right to move between steps, and use up/down to browse options.';
+			return withDebug(withStatus('Repository flow active. Tab to the flow panel, use left/right to move between steps, and use up/down to browse options.'));
 		}
 		if (towerMode() === 'repository' && step?.kind === 'text') {
-			return 'Repository flow active. Tab to the flow panel to continue, or use Ctrl+left/right to move between steps.';
+			return withDebug(withStatus('Repository flow active. Tab to the flow panel to continue, or use Ctrl+left/right to move between steps.'));
 		}
-		const enabledCommands = commandController.availableActions()
+		const actions = commandController.availableActions();
+		if (actions.length === 0) {
+			return withDebug(withStatus('No daemon actions returned for the current selection.'));
+		}
+		const enabledCommands = actions
 			.filter((command) => command.enabled)
 			.map((command) => command.action);
 		const uniqueCommands = [...new Set(enabledCommands)];
 		if (uniqueCommands.length === 0) {
-			return 'No commands available for the current selection.';
+			const firstReason = actions.find((command) => command.reason?.trim())?.reason?.trim();
+			return withDebug(withStatus(
+				firstReason
+					? `No enabled commands for current selection (${String(actions.length)} actions). ${firstReason}`
+					: `No enabled commands for current selection (${String(actions.length)} actions).`
+			));
 		}
-		return `Available: ${uniqueCommands.join(', ')}`;
+		return withDebug(withStatus(`Available: ${uniqueCommands.join(', ')}`));
 	});
 	const screenTitle = createMemo(() => {
 		if (towerMode() !== 'mission') {
@@ -565,6 +601,11 @@ export function AirportApp({
 		inFlightSelectionSyncKey = undefined;
 		queuedSelectionBindings = undefined;
 		selectionSyncWorkerActive = false;
+	});
+
+	createEffect(() => {
+		commandSelectionKey();
+		setLastCommandStatusText(undefined);
 	});
 
 	createEffect(() => {
@@ -856,6 +897,9 @@ export function AirportApp({
 			const missionStatusEvent = asMissionStatusNotification(event);
 			if (missionStatusEvent) {
 				runtimeController.handleMissionStatus(missionStatusEvent.status);
+				if (event.missionId === currentMissionId()) {
+					commandController.refreshAvailableActions();
+				}
 				return;
 			}
 			if (event.type === 'session.console') {
@@ -1119,16 +1163,21 @@ export function AirportApp({
 	async function executeAvailableActionById(actionId: string): Promise<boolean> {
 		const actionDescriptor = commandController.availableCommandById().get(actionId);
 		if (!actionDescriptor) {
+			setLastCommandStatusText(`ERR: Command '${actionId}' is not available in the current selection.`);
 			return false;
 		}
 
 		if (!actionDescriptor.enabled) {
-			appendLog(actionDescriptor.reason ?? `Action ${actionDescriptor.action} is not available for the selected target.`);
+			const message = actionDescriptor.reason ?? `Action ${actionDescriptor.action} is not available for the selected target.`;
+			setLastCommandStatusText(`ERR: ${message}`);
+			appendLog(message);
 			return true;
 		}
 
 		if (!actionDescriptor.id.startsWith('control.') && !currentMissionSelector()) {
-			appendLog(noMissionSelectedMessage(status()));
+			const message = noMissionSelectedMessage(status());
+			setLastCommandStatusText(`ERR: ${message}`);
+			appendLog(message);
 			return true;
 		}
 
@@ -1140,9 +1189,12 @@ export function AirportApp({
 				(result) => describeCommandFlowCompletionMessage(actionDescriptor, result.status)
 			);
 			if (!definition) {
-				appendLog(`Mission action ${actionDescriptor.action} is not available right now.`);
+				const message = `Mission action ${actionDescriptor.action} is not available right now.`;
+				setLastCommandStatusText(`ERR: ${message}`);
+				appendLog(message);
 				return true;
 			}
+			setLastCommandStatusText(`OK: Started flow for ${actionDescriptor.action}.`);
 			commandController.startCommandFlow(definition);
 			return true;
 		}
@@ -1154,7 +1206,9 @@ export function AirportApp({
 		);
 
 		commandController.refreshAvailableActions();
-		appendLog(describeExecutedActionMessage(actionDescriptor, result.status));
+		const message = describeExecutedActionMessage(actionDescriptor, result.status);
+		setLastCommandStatusText(`OK: ${message}`);
+		appendLog(message);
 		return true;
 	}
 
@@ -1176,14 +1230,43 @@ export function AirportApp({
 				case '/quit':
 					renderer.destroy();
 					return;
+				case '/debug on':
+					setShowCommandDebug(true);
+					setLastCommandStatusText('OK: Command debug is ON.');
+					appendLog('Command debug enabled.');
+					return;
+				case '/debug off':
+					setShowCommandDebug(false);
+					setLastCommandStatusText('OK: Command debug is OFF.');
+					appendLog('Command debug disabled.');
+					return;
+				case '/debug toggle':
+					setShowCommandDebug((current) => {
+						const next = !current;
+						setLastCommandStatusText(`OK: Command debug is ${next ? 'ON' : 'OFF'}.`);
+						appendLog(`Command debug ${next ? 'enabled' : 'disabled'}.`);
+						return next;
+					});
+					return;
+				case '/debug status':
+					setLastCommandStatusText(`OK: Command debug is ${showCommandDebug() ? 'ON' : 'OFF'}.`);
+					appendLog(`Command debug is ${showCommandDebug() ? 'enabled' : 'disabled'}.`);
+					return;
 				default:
 					if (await executeAvailableActionByCommandText(trimmed)) {
 						return;
 					}
+					setLastCommandStatusText(`ERR: Unknown command '${trimmed}'.`);
 					appendLog(`Unknown command '${trimmed}'.`);
 					return;
 			}
 		} catch (error) {
+			const details = toErrorDetails(error);
+			setLastCommandStatusText(
+				details.code
+					? `ERR ${details.code}: ${details.message}`
+					: `ERR: ${details.message}`
+			);
 			appendLog(toErrorMessage(error));
 		} finally {
 			setIsRunningCommand(false);

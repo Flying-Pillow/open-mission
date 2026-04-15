@@ -6,6 +6,7 @@ describe('buildAvailableActionsQueryKey', () => {
 		const base = {
 			mode: 'mission' as const,
 			missionId: 'mission-42',
+			commandSelectionKey: 'tree:task:task-1',
 			context: { taskId: 'task-1' }
 		};
 
@@ -26,12 +27,33 @@ describe('buildAvailableActionsQueryKey', () => {
 			actionsInvalidationKey: 'revision-1',
 			mode: 'repository',
 			missionId: 'mission-42',
+			commandSelectionKey: 'tree:task:task-1',
 			context: { taskId: 'task-1' }
 		})).toBe(buildAvailableActionsQueryKey({
 			actionsInvalidationKey: 'revision-1',
 			mode: 'repository',
 			missionId: undefined,
+			commandSelectionKey: 'tree:task:task-2',
 			context: {}
 		}));
+	});
+
+	it('changes when mission tree selection changes even if context shape is unchanged', () => {
+		const before = buildAvailableActionsQueryKey({
+			actionsInvalidationKey: 'revision-1',
+			mode: 'mission',
+			missionId: 'mission-42',
+			commandSelectionKey: 'tree:task:task-1',
+			context: { stageId: 'implementation' }
+		});
+		const after = buildAvailableActionsQueryKey({
+			actionsInvalidationKey: 'revision-1',
+			mode: 'mission',
+			missionId: 'mission-42',
+			commandSelectionKey: 'tree:task:task-2',
+			context: { stageId: 'implementation' }
+		});
+
+		expect(before).not.toBe(after);
 	});
 });

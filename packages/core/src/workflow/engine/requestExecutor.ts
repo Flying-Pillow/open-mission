@@ -10,6 +10,7 @@ import { renderMissionArtifactTitle } from '../templates/mission/common.js';
 import { getMissionArtifactDefinition } from '../manifest.js';
 import {
 	type MissionWorkflowConfigurationSnapshot,
+	type MissionGeneratedTaskPayload,
 	type MissionWorkflowEvent,
 	type MissionWorkflowRequest,
 	type MissionWorkflowRuntimeState,
@@ -112,13 +113,24 @@ export class MissionWorkflowRequestExecutor {
 		for (const request of input.requests) {
 			switch (request.type) {
 				case 'tasks.request-generation': {
-					const stageId = String(request.payload['stageId'] ?? '');
+					const stageId = String(request.payload['stageId'] ?? '') as MissionStageId;
 					await this.materializeStageArtifacts(input.descriptor, stageId as MissionStageId);
-					const generation = await generateMissionWorkflowTasks({
+					const generatedFromWorkflow = await generateMissionWorkflowTasks({
 						descriptor: input.descriptor,
 						configuration: input.configuration,
 						stageId
 					});
+					const generatedFromTaskArtifacts = await this.readGeneratedTasksFromStageArtifacts(
+						input.descriptor,
+						stageId
+					);
+					const generation: MissionWorkflowTaskGenerationResult = {
+						...generatedFromWorkflow,
+						tasks: mergeGeneratedTasks(
+							generatedFromWorkflow.tasks,
+							generatedFromTaskArtifacts
+						)
+					};
 					await this.materializeGeneratedTasks(input.descriptor, generation);
 					events.push(this.createTasksGeneratedEvent(request.requestId, generation));
 					break;
@@ -644,6 +656,20 @@ export class MissionWorkflowRequestExecutor {
 		}
 	}
 
+	private async readGeneratedTasksFromStageArtifacts(
+		descriptor: MissionDescriptor,
+		stageId: MissionStageId
+	): Promise<MissionGeneratedTaskPayload[]> {
+		const taskStates = await this.options.adapter.listTaskStates(descriptor.missionDir, stageId).catch(() => []);
+		return taskStates.map((taskState) => ({
+			taskId: taskState.taskId,
+			title: taskState.subject,
+			instruction: taskState.instruction,
+			dependsOn: [...taskState.dependsOn],
+			...(taskState.agent ? { agentRunner: taskState.agent } : {})
+		}));
+	}
+
 	private createAttachFailureLifecycleEvent(
 		session: MissionAgentSessionRuntimeState
 	): MissionWorkflowEvent | undefined {
@@ -755,4 +781,31 @@ function isTerminalStatus(status: AgentSessionSnapshot['status']): boolean {
 		|| status === 'failed'
 		|| status === 'cancelled'
 		|| status === 'terminated';
+}
+
+function mergeGeneratedTasks(
+	workflowTasks: MissionGeneratedTaskPayload[],
+	artifactTasks: MissionGeneratedTaskPayload[]
+): MissionGeneratedTaskPayload[] {
+	if (artifactTasks.length === 0) {
+		return workflowTasks;
+	}
+
+	const mergedByTaskId = new Map<string, MissionGeneratedTaskPayload>();
+	for (const task of workflowTasks) {
+		mergedByTaskId.set(task.taskId, task);
+	}
+	for (const task of artifactTasks) {
+		mergedByTaskId.set(task.taskId, task);
+	}
+
+	const artifactTaskIds = new Set(artifactTasks.map((task) => task.taskId));
+	const orderedTaskIds = [
+		...artifactTasks.map((task) => task.taskId),
+		...workflowTasks.map((task) => task.taskId).filter((taskId) => !artifactTaskIds.has(taskId))
+	];
+
+	return orderedTaskIds
+		.map((taskId) => mergedByTaskId.get(taskId))
+		.filter((task): task is MissionGeneratedTaskPayload => Boolean(task));
 }

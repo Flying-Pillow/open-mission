@@ -39,6 +39,7 @@ type CommandTargetDescriptor = {
 type CommandControllerOptions = {
 	client: Accessor<DaemonClient | undefined>;
 	actionsInvalidationKey: Accessor<string | number | undefined>;
+	commandSelectionKey: Accessor<string | undefined>;
 	towerMode: Accessor<TowerMode>;
 	currentMissionId: Accessor<string | undefined>;
 	selectedMissionMatchesLoaded: Accessor<boolean>;
@@ -61,12 +62,14 @@ type CommandControllerOptions = {
 
 export function buildAvailableActionsQueryKey(input: {
 	actionsInvalidationKey: string | number | undefined;
+	commandSelectionKey: string | undefined;
 	mode: TowerMode;
 	missionId: string | undefined;
 	context: OperatorActionQueryContext;
 }): string {
 	return JSON.stringify({
 		actionsInvalidationKey: input.actionsInvalidationKey,
+		commandSelectionKey: input.mode === 'mission' ? input.commandSelectionKey : undefined,
 		mode: input.mode,
 		missionId: input.mode === 'mission' ? input.missionId : undefined,
 		context: input.mode === 'mission' ? input.context : undefined
@@ -165,6 +168,7 @@ export function useCommandController(options: CommandControllerOptions) {
 	createEffect(() => {
 		const currentClient = options.client();
 		const actionsInvalidationKey = options.actionsInvalidationKey();
+		const commandSelectionKey = options.commandSelectionKey();
 		const refreshNonce = availableActionsRefreshNonce();
 		const mode = options.towerMode();
 		const missionId = options.currentMissionId();
@@ -183,6 +187,7 @@ export function useCommandController(options: CommandControllerOptions) {
 		}
 		const queryKey = buildAvailableActionsQueryKey({
 			actionsInvalidationKey,
+			commandSelectionKey,
 			mode,
 			missionId,
 			context,
@@ -220,9 +225,29 @@ export function useCommandController(options: CommandControllerOptions) {
 	}
 
 	createEffect(() => {
+		options.commandSelectionKey();
+		setSelectedCommandId(undefined);
+		setSelectedToolbarCommandId(undefined);
+		setConfirmingToolbarCommandId(undefined);
+		setToolbarConfirmationChoice('confirm');
+		closeCommandPicker({ clearCommandInput: true });
+		resetCommandFlow({ clearCommandInput: true });
+	});
+
+	createEffect(() => {
 		setSelectedToolbarCommandId((current) =>
 			pickPreferredToolbarCommandId(toolbarCommands(), current)
 		);
+	});
+
+	createEffect(() => {
+		const selectedId = selectedCommandId();
+		if (!selectedId) {
+			return;
+		}
+		if (!availableCommandById().has(selectedId)) {
+			setSelectedCommandId(undefined);
+		}
 	});
 
 	createEffect(() => {

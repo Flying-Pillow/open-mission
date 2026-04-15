@@ -35,8 +35,34 @@ export function createInitialStatusMessage(initialConnectionError?: string): str
 	return 'Connecting to the Mission daemon.';
 }
 
+export type ErrorDetails = {
+	message: string;
+	code?: string;
+	validationErrors?: unknown;
+};
+
+export function toErrorDetails(error: unknown): ErrorDetails {
+	if (error instanceof Error) {
+		const candidate = error as Error & { code?: unknown; validationErrors?: unknown };
+		const code = typeof candidate.code === 'string' && candidate.code.trim().length > 0
+			? candidate.code.trim()
+			: undefined;
+		return {
+			message: error.message,
+			...(code ? { code } : {}),
+			...(candidate.validationErrors !== undefined ? { validationErrors: candidate.validationErrors } : {})
+		};
+	}
+
+	return { message: String(error) };
+}
+
 export function toErrorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
+	const details = toErrorDetails(error);
+	if (details.code) {
+		return `[${details.code}] ${details.message}`;
+	}
+	return details.message;
 }
 
 export function buildFocusOrder(input: {

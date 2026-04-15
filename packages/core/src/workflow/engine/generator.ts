@@ -40,9 +40,18 @@ export async function generateMissionWorkflowTasks(input: {
         )
     );
 
-    const tasks = renderedTasks.map((taskTemplate) =>
-        toGeneratedTaskPayload(input.stageId, taskTemplate)
-    );
+    const tasks = deduplicateGeneratedTasksByTaskId([
+        ...rule.tasks.map((task) => ({
+            taskId: task.taskId,
+            title: task.title,
+            instruction: task.instruction,
+            dependsOn: [...task.dependsOn],
+            ...(task.agentRunner ? { agentRunner: task.agentRunner } : {})
+        })),
+        ...renderedTasks.map((taskTemplate) =>
+            toGeneratedTaskPayload(input.stageId, taskTemplate)
+        )
+    ]);
 
     return {
         stageId: input.stageId,
@@ -66,4 +75,17 @@ function toGeneratedTaskPayload(
 
 function stripMarkdownExtension(fileName: string): string {
     return fileName.toLowerCase().endsWith('.md') ? fileName.slice(0, -3) : fileName;
+}
+
+function deduplicateGeneratedTasksByTaskId(tasks: MissionGeneratedTaskPayload[]): MissionGeneratedTaskPayload[] {
+    const seen = new Set<string>();
+    const deduplicated: MissionGeneratedTaskPayload[] = [];
+    for (const task of tasks) {
+        if (seen.has(task.taskId)) {
+            continue;
+        }
+        seen.add(task.taskId);
+        deduplicated.push(task);
+    }
+    return deduplicated;
 }

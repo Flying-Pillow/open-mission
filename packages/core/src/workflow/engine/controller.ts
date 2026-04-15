@@ -305,7 +305,10 @@ export class MissionWorkflowController {
         const generationRule = document.configuration.workflow.taskGeneration.find(
             (candidate) => candidate.stageId === stageId
         );
-        if (!generationRule || generationRule.templateSources.length === 0) {
+        if (
+            !generationRule
+            || (generationRule.templateSources.length === 0 && generationRule.tasks.length === 0)
+        ) {
             return document;
         }
 

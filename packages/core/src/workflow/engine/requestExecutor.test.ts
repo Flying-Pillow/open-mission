@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { MissionDescriptor } from '../../types.js';
+import type { MissionDescriptor, MissionTaskState } from '../../types.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import {
 	createInitialMissionWorkflowRuntimeState,
@@ -19,7 +19,9 @@ function createDescriptor(): MissionDescriptor {
 		branchRef: 'mission/17-reconstruct-agent-runtime-unification',
 		createdAt: '2026-04-10T21:00:07.000Z',
 		brief: {
-			title: 'Reconstruct agent runtime unification'
+			title: 'Reconstruct agent runtime unification',
+			body: 'Reconstruct agent runtime unification body',
+			type: 'refactor'
 		}
 	} as MissionDescriptor;
 }
@@ -44,6 +46,147 @@ function createTask(task: Partial<MissionTaskRuntimeState> = {}): MissionTaskRun
 }
 
 describe('MissionWorkflowRequestExecutor', () => {
+	it('generates implementation tasks from configured task-generation tasks', async () => {
+		const runner = new FakeAgentRunner('fake-runner', 'Fake Runner', 'terminal');
+		const writtenTasks: Array<{ stage: string; fileName: string }> = [];
+		const adapter = {
+			writeArtifactRecord: async () => undefined,
+			listTaskStates: async () => [],
+			writeTaskRecord: async (_missionDir: string, stage: string, fileName: string) => {
+				writtenTasks.push({ stage, fileName });
+			}
+		} as unknown as FilesystemAdapter;
+
+		const executor = new MissionWorkflowRequestExecutor({
+			adapter,
+			runners: new Map([[runner.id, runner]])
+		});
+		const workflow = createDefaultWorkflowSettings();
+		workflow.taskGeneration = workflow.taskGeneration.map((rule) =>
+			rule.stageId === 'implementation'
+				? {
+					...rule,
+					tasks: [
+						{
+							taskId: 'implementation/01-visible-while-planning',
+							title: 'Visible While Planning',
+							instruction: 'Keep implementation slices visible while planning executes.',
+							dependsOn: []
+						}
+					]
+				}
+				: rule
+		);
+		const configuration = createMissionWorkflowConfigurationSnapshot({
+			createdAt: '2026-04-10T21:00:07.000Z',
+			workflowVersion: DEFAULT_WORKFLOW_VERSION,
+			workflow
+		});
+		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+
+		const events = await executor.executeRequests({
+			missionId: 'mission-17',
+			descriptor: createDescriptor(),
+			configuration,
+			runtime,
+			requests: [{
+				requestId: 'request-generate-implementation',
+				type: 'tasks.request-generation',
+				payload: {
+					stageId: 'implementation'
+				}
+			} satisfies MissionWorkflowRequest]
+		});
+
+		expect(events[0]).toMatchObject({
+			type: 'tasks.generated',
+			stageId: 'implementation',
+			tasks: [
+				{
+					taskId: 'implementation/01-visible-while-planning',
+					title: 'Visible While Planning'
+				}
+			]
+		});
+		expect(writtenTasks).toEqual(
+			expect.arrayContaining([
+				{ stage: 'implementation', fileName: '01-visible-while-planning.md' }
+			])
+		);
+	});
+
+	it('generates implementation tasks from existing stage task artifacts when workflow rules are empty', async () => {
+		const runner = new FakeAgentRunner('fake-runner', 'Fake Runner', 'terminal');
+		const implementationTaskArtifact: MissionTaskState = {
+			taskId: 'implementation/01-from-artifact',
+			stage: 'implementation',
+			sequence: 1,
+			subject: 'From Artifact',
+			instruction: 'Promote artifact-defined implementation task into runtime generation.',
+			body: 'Promote artifact-defined implementation task into runtime generation.',
+			dependsOn: [],
+			blockedBy: [],
+			status: 'pending',
+			agent: 'copilot',
+			retries: 0,
+			fileName: '01-from-artifact.md',
+			filePath: '/tmp/mission-17/.mission/missions/mission-17/03-IMPLEMENTATION/tasks/01-from-artifact.md',
+			relativePath: '03-IMPLEMENTATION/tasks/01-from-artifact.md'
+		};
+		const adapter = {
+			writeArtifactRecord: async () => undefined,
+			listTaskStates: async (_missionDir: string, stage: string) =>
+				stage === 'implementation' ? [implementationTaskArtifact] : [],
+			writeTaskRecord: async () => undefined
+		} as unknown as FilesystemAdapter;
+
+		const executor = new MissionWorkflowRequestExecutor({
+			adapter,
+			runners: new Map([[runner.id, runner]])
+		});
+		const workflow = createDefaultWorkflowSettings();
+		workflow.taskGeneration = workflow.taskGeneration.map((rule) =>
+			rule.stageId === 'implementation'
+				? {
+					...rule,
+					templateSources: [],
+					tasks: []
+				}
+				: rule
+		);
+		const configuration = createMissionWorkflowConfigurationSnapshot({
+			createdAt: '2026-04-10T21:00:07.000Z',
+			workflowVersion: DEFAULT_WORKFLOW_VERSION,
+			workflow
+		});
+		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+
+		const events = await executor.executeRequests({
+			missionId: 'mission-17',
+			descriptor: createDescriptor(),
+			configuration,
+			runtime,
+			requests: [{
+				requestId: 'request-generate-implementation-from-artifact',
+				type: 'tasks.request-generation',
+				payload: {
+					stageId: 'implementation'
+				}
+			} satisfies MissionWorkflowRequest]
+		});
+
+		expect(events[0]).toMatchObject({
+			type: 'tasks.generated',
+			stageId: 'implementation',
+			tasks: [
+				{
+					taskId: 'implementation/01-from-artifact',
+					title: 'From Artifact'
+				}
+			]
+		});
+	});
+
 	it('launches sessions from runnerId request payloads and emits runnerId session facts', async () => {
 		const runner = new FakeAgentRunner('fake-runner', 'Fake Runner', 'terminal');
 
