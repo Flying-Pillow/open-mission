@@ -275,13 +275,20 @@ type TerminalManagerSessionSummary = {
 };
 
 async function listTerminalManagerSessions(terminalManagerBinary: string): Promise<TerminalManagerSessionSummary[]> {
-	const result = await execTerminalManager(terminalManagerBinary, ['list-sessions']);
-	return result.stdout
-		.split(/\r?\n/gu)
-		.map((line) => stripAnsi(line).trim())
-		.filter((line) => line.length > 0)
-		.map(parseTerminalManagerSessionSummary)
-		.filter((session): session is TerminalManagerSessionSummary => session !== undefined);
+	try {
+		const result = await execTerminalManager(terminalManagerBinary, ['list-sessions']);
+		return result.stdout
+			.split(/\r?\n/gu)
+			.map((line) => stripAnsi(line).trim())
+			.filter((line) => line.length > 0)
+			.map(parseTerminalManagerSessionSummary)
+			.filter((session): session is TerminalManagerSessionSummary => session !== undefined);
+	} catch (error) {
+		if (isNoActiveTerminalManagerSessionsError(error)) {
+			return [];
+		}
+		throw error;
+	}
 }
 
 export function parseTerminalManagerSessionSummary(line: string): TerminalManagerSessionSummary | undefined {
@@ -314,6 +321,28 @@ async function execTerminalManager(terminalManagerBinary: string, args: string[]
 		stdout: result.stdout,
 		stderr: result.stderr
 	};
+}
+
+function isNoActiveTerminalManagerSessionsError(error: unknown): boolean {
+	if (!error || typeof error !== 'object') {
+		return false;
+	}
+
+	const maybeExecError = error as NodeJS.ErrnoException & { stdout?: unknown; stderr?: unknown };
+	const parts: string[] = [];
+
+	if (typeof maybeExecError.message === 'string') {
+		parts.push(maybeExecError.message);
+	}
+	if (typeof maybeExecError.stdout === 'string') {
+		parts.push(maybeExecError.stdout);
+	}
+	if (typeof maybeExecError.stderr === 'string') {
+		parts.push(maybeExecError.stderr);
+	}
+
+	const diagnostic = parts.join('\n');
+	return /No active zellij sessions found\./iu.test(diagnostic);
 }
 
 async function delay(ms: number): Promise<void> {
