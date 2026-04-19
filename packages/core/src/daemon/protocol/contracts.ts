@@ -315,6 +315,7 @@ export type Method =
 	| 'session.console.state'
 	| 'session.prompt'
 	| 'session.command'
+	| 'session.complete'
 	| 'session.cancel'
 	| 'session.terminate';
 
@@ -355,6 +356,7 @@ export const METHOD_METADATA: Record<Method, MethodMetadata> = {
 	'session.console.state': { includeSurfacePath: true, workspaceRoute: 'mission' },
 	'session.prompt': { includeSurfacePath: true, workspaceRoute: 'mission' },
 	'session.command': { includeSurfacePath: true, workspaceRoute: 'mission' },
+	'session.complete': { includeSurfacePath: true, workspaceRoute: 'mission' },
 	'session.cancel': { includeSurfacePath: true, workspaceRoute: 'mission' },
 	'session.terminate': { includeSurfacePath: true, workspaceRoute: 'mission' }
 };
@@ -404,6 +406,8 @@ export type ControlDocumentWrite = {
 	filePath: string;
 	content: string;
 };
+
+export type SessionComplete = SessionSelect;
 
 export type ControlDocumentResponse = {
 	filePath: string;

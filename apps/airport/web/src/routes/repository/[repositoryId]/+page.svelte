@@ -5,6 +5,7 @@
     import { onMount, type Component } from "svelte";
     import AirportHeader from "$lib/components/airport/airport-header.svelte";
     import AirportSidebar from "$lib/components/airport/airport-sidebar.svelte";
+    import { MissionCommandTransport } from "$lib";
     import { Repository as RepositoryEntity } from "$lib/client/entities/Repository";
     import BriefForm from "$lib/components/entities/Brief/BriefForm.svelte";
     import IssueList from "$lib/components/entities/Issue/IssueList.svelte";
@@ -25,12 +26,16 @@
     };
 
     let { data }: Props = $props();
+    const missionCommands = new MissionCommandTransport();
     const repository = $derived(
         new RepositoryEntity(data.repositorySurface, {
-            listIssues: (input) => getRepositoryIssues(input),
-            getIssue: (input) => getRepositoryIssue(input),
-            startMissionFromIssue: async (input) =>
-                await startMissionFromIssue(input),
+            gateway: {
+                listIssues: (input) => getRepositoryIssues(input),
+                getIssue: (input) => getRepositoryIssue(input).run(),
+                startMissionFromIssue: async (input) =>
+                    await startMissionFromIssue(input),
+            },
+            missionCommands,
         }),
     );
     const missionCountLabel = $derived(repository.missionCountLabel);

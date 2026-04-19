@@ -4,9 +4,9 @@ import type {
     MissionRuntimeSnapshotDto,
     RepositorySurfaceSnapshotDto,
     TrackedIssueSummaryDto
-} from '@flying-pillow/mission-core';
+} from '@flying-pillow/mission-core/airport/runtime';
 import type { EntityModel } from '$lib/client/entities/EntityModel';
-import { Mission } from '$lib/client/entities/Mission';
+import { Mission, type MissionCommandGateway } from '$lib/client/entities/Mission';
 
 export type RepositoryIssueGateway = {
     listIssues(input: {
@@ -34,11 +34,19 @@ export type RepositoryGateway = RepositoryIssueGateway & RepositoryMissionGatewa
 export class Repository implements EntityModel<RepositorySurfaceSnapshotDto> {
     private surface: RepositorySurfaceSnapshotDto;
     private readonly gateway: RepositoryGateway;
+    private readonly missionCommands: MissionCommandGateway;
     private selectedMissionModel?: Mission;
 
-    public constructor(surface: RepositorySurfaceSnapshotDto, gateway: RepositoryGateway) {
+    public constructor(
+        surface: RepositorySurfaceSnapshotDto,
+        input: {
+            gateway: RepositoryGateway;
+            missionCommands: MissionCommandGateway;
+        }
+    ) {
         this.surface = structuredClone(surface);
-        this.gateway = gateway;
+        this.gateway = input.gateway;
+        this.missionCommands = input.missionCommands;
         this.selectedMissionModel = this.createSelectedMission(surface.selectedMission);
     }
 
@@ -153,6 +161,6 @@ export class Repository implements EntityModel<RepositorySurfaceSnapshotDto> {
             return undefined;
         }
 
-        return new Mission(snapshot, async () => snapshot);
+        return new Mission(snapshot, async () => snapshot, this.missionCommands);
     }
 }

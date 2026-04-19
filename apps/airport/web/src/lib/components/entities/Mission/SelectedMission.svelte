@@ -1,6 +1,8 @@
 <script lang="ts">
     import type { Mission } from "$lib/client/entities/Mission";
+    import type { Stage } from "$lib/client/entities/Stage";
     import { Badge } from "$lib/components/ui/badge/index.js";
+    import { Button } from "$lib/components/ui/button/index.js";
 
     let {
         selectedMissionId,
@@ -10,19 +12,21 @@
         selectedMission?: Mission;
     } = $props();
 
-    const workflowStages = $derived(selectedMission?.workflowStages ?? []);
+    const stages = $derived(selectedMission?.listStages() ?? []);
     const completedStageCount = $derived(
-        workflowStages.filter((stage) => stage.lifecycle === "completed")
-            .length,
+        stages.filter((stage) => stage.lifecycle === "completed").length,
     );
     const progressPercent = $derived(
-        workflowStages.length === 0
+        stages.length === 0
             ? 0
-            : Math.round((completedStageCount / workflowStages.length) * 100),
+            : Math.round((completedStageCount / stages.length) * 100),
     );
+    let missionActionPending = $state<string | null>(null);
+    let itemActionPending = $state<string | null>(null);
+    let actionError = $state<string | null>(null);
 
-    function stageTone(stageLifecycle: string): string {
-        switch (stageLifecycle) {
+    function stageTone(stage: Stage): string {
+        switch (stage.lifecycle) {
             case "completed":
                 return "border-emerald-500/40 bg-emerald-500/10 text-emerald-700";
             case "active":
@@ -33,6 +37,38 @@
                 return "border-amber-500/40 bg-amber-500/10 text-amber-700";
             default:
                 return "border-muted bg-background/80 text-muted-foreground";
+        }
+    }
+
+    async function runMissionAction(
+        actionId: string,
+        run: () => Promise<unknown>,
+    ): Promise<void> {
+        actionError = null;
+        missionActionPending = actionId;
+        try {
+            await run();
+        } catch (error) {
+            actionError =
+                error instanceof Error ? error.message : String(error);
+        } finally {
+            missionActionPending = null;
+        }
+    }
+
+    async function runItemAction(
+        actionId: string,
+        run: () => Promise<unknown>,
+    ): Promise<void> {
+        actionError = null;
+        itemActionPending = actionId;
+        try {
+            await run();
+        } catch (error) {
+            actionError =
+                error instanceof Error ? error.message : String(error);
+        } finally {
+            itemActionPending = null;
         }
     }
 </script>
@@ -70,14 +106,96 @@
                     class="mt-2 flex items-center justify-between text-xs text-muted-foreground"
                 >
                     <span
-                        >{completedStageCount}/{workflowStages.length} stages complete</span
+                        >{completedStageCount}/{stages.length} stages complete</span
                     >
                     <span>{progressPercent}%</span>
                 </div>
+                <div class="mt-4 flex flex-wrap gap-2">
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={missionActionPending !== null}
+                        onclick={() =>
+                            runMissionAction("pause", () =>
+                                selectedMission.pause(),
+                            )}
+                    >
+                        {missionActionPending === "pause"
+                            ? "Pausing..."
+                            : "Pause"}
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={missionActionPending !== null}
+                        onclick={() =>
+                            runMissionAction("resume", () =>
+                                selectedMission.resume(),
+                            )}
+                    >
+                        {missionActionPending === "resume"
+                            ? "Resuming..."
+                            : "Resume"}
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={missionActionPending !== null}
+                        onclick={() =>
+                            runMissionAction("panic", () =>
+                                selectedMission.panic(),
+                            )}
+                    >
+                        {missionActionPending === "panic"
+                            ? "Stopping..."
+                            : "Panic"}
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={missionActionPending !== null}
+                        onclick={() =>
+                            runMissionAction("clearPanic", () =>
+                                selectedMission.clearPanic(),
+                            )}
+                    >
+                        {missionActionPending === "clearPanic"
+                            ? "Clearing..."
+                            : "Clear panic"}
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={missionActionPending !== null}
+                        onclick={() =>
+                            runMissionAction("restartQueue", () =>
+                                selectedMission.restartQueue(),
+                            )}
+                    >
+                        {missionActionPending === "restartQueue"
+                            ? "Restarting..."
+                            : "Restart queue"}
+                    </Button>
+                    <Button
+                        size="sm"
+                        disabled={missionActionPending !== null}
+                        onclick={() =>
+                            runMissionAction("deliver", () =>
+                                selectedMission.deliver(),
+                            )}
+                    >
+                        {missionActionPending === "deliver"
+                            ? "Delivering..."
+                            : "Deliver"}
+                    </Button>
+                </div>
+                {#if actionError}
+                    <p class="mt-3 text-sm text-rose-600">{actionError}</p>
+                {/if}
                 <div class="mt-4 flex gap-2 overflow-x-auto pb-1">
-                    {#each workflowStages as stage (stage.stageId)}
+                    {#each stages as stage (stage.stageId)}
                         <div
-                            class={`min-w-36 rounded-lg border px-3 py-2 ${stageTone(stage.lifecycle)}`}
+                            class={`min-w-36 rounded-lg border px-3 py-2 ${stageTone(stage)}`}
                         >
                             <p class="text-xs uppercase tracking-wide">
                                 {stage.stageId}
@@ -89,7 +207,7 @@
             </header>
 
             <section class="grid gap-3">
-                {#each workflowStages as stage (stage.stageId)}
+                {#each stages as stage (stage.stageId)}
                     <article class="rounded-xl border bg-background/70 p-4">
                         <div class="flex items-center justify-between gap-3">
                             <h3 class="text-sm font-semibold text-foreground">
@@ -140,7 +258,7 @@
                                 >
                                     Tasks
                                 </p>
-                                {#if stage.tasks.length === 0}
+                                {#if stage.listTasks().length === 0}
                                     <p
                                         class="mt-2 text-sm text-muted-foreground"
                                     >
@@ -148,7 +266,7 @@
                                     </p>
                                 {:else}
                                     <ul class="mt-2 space-y-2">
-                                        {#each selectedMission.listTasksForStage(stage.stageId) as task (task.taskId)}
+                                        {#each stage.listTasks() as task (task.taskId)}
                                             <li
                                                 class="rounded-md border bg-card px-2 py-2"
                                             >
@@ -163,6 +281,78 @@
                                                     <Badge variant="outline"
                                                         >{task.lifecycle}</Badge
                                                     >
+                                                </div>
+                                                <div
+                                                    class="mt-2 flex flex-wrap gap-2"
+                                                >
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        disabled={itemActionPending !==
+                                                            null}
+                                                        onclick={() =>
+                                                            runItemAction(
+                                                                `task:start:${task.taskId}`,
+                                                                () =>
+                                                                    task.start(),
+                                                            )}
+                                                    >
+                                                        {itemActionPending ===
+                                                        `task:start:${task.taskId}`
+                                                            ? "Starting..."
+                                                            : "Start"}
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        disabled={itemActionPending !==
+                                                            null}
+                                                        onclick={() =>
+                                                            runItemAction(
+                                                                `task:complete:${task.taskId}`,
+                                                                () =>
+                                                                    task.complete(),
+                                                            )}
+                                                    >
+                                                        {itemActionPending ===
+                                                        `task:complete:${task.taskId}`
+                                                            ? "Completing..."
+                                                            : "Complete"}
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        disabled={itemActionPending !==
+                                                            null}
+                                                        onclick={() =>
+                                                            runItemAction(
+                                                                `task:block:${task.taskId}`,
+                                                                () =>
+                                                                    task.block(),
+                                                            )}
+                                                    >
+                                                        {itemActionPending ===
+                                                        `task:block:${task.taskId}`
+                                                            ? "Blocking..."
+                                                            : "Block"}
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        disabled={itemActionPending !==
+                                                            null}
+                                                        onclick={() =>
+                                                            runItemAction(
+                                                                `task:reopen:${task.taskId}`,
+                                                                () =>
+                                                                    task.reopen(),
+                                                            )}
+                                                    >
+                                                        {itemActionPending ===
+                                                        `task:reopen:${task.taskId}`
+                                                            ? "Reopening..."
+                                                            : "Reopen"}
+                                                    </Button>
                                                 </div>
                                                 <p
                                                     class="mt-1 font-mono text-xs text-muted-foreground"
@@ -214,6 +404,53 @@
                                         {session.currentTurnTitle}
                                     </p>
                                 {/if}
+                                <div class="mt-2 flex flex-wrap gap-2">
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={itemActionPending !== null}
+                                        onclick={() =>
+                                            runItemAction(
+                                                `session:done:${session.sessionId}`,
+                                                () => session.done(),
+                                            )}
+                                    >
+                                        {itemActionPending ===
+                                        `session:done:${session.sessionId}`
+                                            ? "Completing..."
+                                            : "Done"}
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={itemActionPending !== null}
+                                        onclick={() =>
+                                            runItemAction(
+                                                `session:cancel:${session.sessionId}`,
+                                                () => session.cancel(),
+                                            )}
+                                    >
+                                        {itemActionPending ===
+                                        `session:cancel:${session.sessionId}`
+                                            ? "Cancelling..."
+                                            : "Cancel"}
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={itemActionPending !== null}
+                                        onclick={() =>
+                                            runItemAction(
+                                                `session:terminate:${session.sessionId}`,
+                                                () => session.terminate(),
+                                            )}
+                                    >
+                                        {itemActionPending ===
+                                        `session:terminate:${session.sessionId}`
+                                            ? "Terminating..."
+                                            : "Terminate"}
+                                    </Button>
+                                </div>
                             </div>
                         {/each}
                     </div>

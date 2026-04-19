@@ -23,6 +23,20 @@
       "import": "./build/index.js",
       "default": "./build/index.js"
     },
+    "./airport": {
+      "development": "./src/airport/index.ts",
+      "typescript": "./src/airport/index.ts",
+      "types": "./build/airport/index.d.ts",
+      "import": "./build/airport/index.js",
+      "default": "./build/airport/index.js"
+    },
+    "./airport/runtime": {
+      "development": "./src/airport/runtime.ts",
+      "typescript": "./src/airport/runtime.ts",
+      "types": "./build/airport/runtime.d.ts",
+      "import": "./build/airport/runtime.js",
+      "default": "./build/airport/runtime.js"
+    },
     "./*": {
       "development": "./src/*",
       "typescript": "./src/*",

@@ -1,5 +1,5 @@
 // /apps/airport/web/src/lib/client/entities/Task.ts: OO browser entity for workflow tasks exposed by a mission snapshot.
-import type { MissionRuntimeSnapshotDto } from '@flying-pillow/mission-core';
+import type { MissionRuntimeSnapshotDto } from '@flying-pillow/mission-core/airport/runtime';
 import type { EntityModel } from '$lib/client/entities/EntityModel';
 
 export type MissionWorkflowTaskDto = NonNullable<
@@ -11,11 +11,24 @@ export type TaskSnapshot = {
     task: MissionWorkflowTaskDto;
 };
 
+export type TaskStartOptions = {
+    terminalSessionName?: string;
+};
+
+export type TaskCommandOwner = {
+    startTask(taskId: string, options?: TaskStartOptions): Promise<void>;
+    completeTask(taskId: string): Promise<void>;
+    blockTask(taskId: string): Promise<void>;
+    reopenTask(taskId: string): Promise<void>;
+};
+
 export class Task implements EntityModel<TaskSnapshot> {
     private snapshot: TaskSnapshot;
+    private readonly owner: TaskCommandOwner;
 
-    public constructor(snapshot: TaskSnapshot) {
+    public constructor(snapshot: TaskSnapshot, owner: TaskCommandOwner) {
         this.snapshot = structuredClone(snapshot);
+        this.owner = owner;
     }
 
     public get taskId(): string {
@@ -44,6 +57,26 @@ export class Task implements EntityModel<TaskSnapshot> {
 
     public get blockedByTaskIds(): string[] {
         return [...this.snapshot.task.blockedByTaskIds];
+    }
+
+    public async start(options: TaskStartOptions = {}): Promise<this> {
+        await this.owner.startTask(this.taskId, options);
+        return this;
+    }
+
+    public async complete(): Promise<this> {
+        await this.owner.completeTask(this.taskId);
+        return this;
+    }
+
+    public async block(): Promise<this> {
+        await this.owner.blockTask(this.taskId);
+        return this;
+    }
+
+    public async reopen(): Promise<this> {
+        await this.owner.reopenTask(this.taskId);
+        return this;
     }
 
     public updateFromSnapshot(snapshot: TaskSnapshot): this {

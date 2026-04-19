@@ -1,12 +1,26 @@
 // /apps/airport/web/src/lib/client/entities/AgentSession.ts: OO browser entity for a mission agent session hydrated from validated DTOs.
-import type { MissionAgentSessionDto } from '@flying-pillow/mission-core';
+import type {
+    AgentCommandDto as AgentCommand,
+    AgentPromptDto as AgentPrompt,
+    MissionAgentSessionDto
+} from '@flying-pillow/mission-core/airport/runtime';
 import type { EntityModel } from '$lib/client/entities/EntityModel';
+
+export type AgentSessionCommandOwner = {
+    completeSession(sessionId: string): Promise<void>;
+    cancelSession(sessionId: string, reason?: string): Promise<void>;
+    terminateSession(sessionId: string, reason?: string): Promise<void>;
+    sendSessionPrompt(sessionId: string, prompt: AgentPrompt): Promise<void>;
+    sendSessionCommand(sessionId: string, command: AgentCommand): Promise<void>;
+};
 
 export class AgentSession implements EntityModel<MissionAgentSessionDto> {
     private data: MissionAgentSessionDto;
+    private readonly owner: AgentSessionCommandOwner;
 
-    public constructor(data: MissionAgentSessionDto) {
+    public constructor(data: MissionAgentSessionDto, owner: AgentSessionCommandOwner) {
         this.data = structuredClone(data);
+        this.owner = owner;
     }
 
     public get sessionId(): string {
@@ -58,6 +72,31 @@ export class AgentSession implements EntityModel<MissionAgentSessionDto> {
     public isTerminalBacked(): boolean {
         return this.transportId === 'terminal'
             && Boolean(this.terminalHandle?.sessionName || this.terminalSessionName);
+    }
+
+    public async sendPrompt(prompt: AgentPrompt): Promise<this> {
+        await this.owner.sendSessionPrompt(this.sessionId, prompt);
+        return this;
+    }
+
+    public async sendCommand(command: AgentCommand): Promise<this> {
+        await this.owner.sendSessionCommand(this.sessionId, command);
+        return this;
+    }
+
+    public async done(): Promise<this> {
+        await this.owner.completeSession(this.sessionId);
+        return this;
+    }
+
+    public async cancel(reason?: string): Promise<this> {
+        await this.owner.cancelSession(this.sessionId, reason);
+        return this;
+    }
+
+    public async terminate(reason?: string): Promise<this> {
+        await this.owner.terminateSession(this.sessionId, reason);
+        return this;
     }
 
     public updateFromSnapshot(data: MissionAgentSessionDto): this {

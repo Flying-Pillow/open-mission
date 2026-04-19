@@ -15,6 +15,8 @@ import {
     type TrackedIssueSummary
 } from '@flying-pillow/mission-core';
 import type {
+    AgentCommand,
+    AgentPrompt,
     AirportHomeSnapshotDto,
     AirportRuntimeEventEnvelopeDto,
     GitHubIssueDetailDto,
@@ -43,6 +45,31 @@ import { fetchGitHubIssueDetail } from '$lib/server/github-issues.server';
 
 export class AirportWebGateway {
     public constructor(private readonly locals?: App.Locals) { }
+
+    private async buildMissionRuntimeSnapshot(input: {
+        api: DaemonApi;
+        missionId: string;
+        status?: OperatorStatus;
+    }): Promise<MissionRuntimeSnapshotDto> {
+        const normalizedMissionId = input.missionId.trim();
+        const status = input.status
+            ?? await withTimeout(
+                input.api.mission.getStatus({ missionId: normalizedMissionId }),
+                2500,
+                'Mission status request timed out.'
+            );
+        const sessions = await withTimeout(
+            input.api.mission.listSessions({ missionId: normalizedMissionId }),
+            2500,
+            'Mission session listing timed out.'
+        );
+
+        return missionRuntimeSnapshotDtoSchema.parse({
+            missionId: normalizedMissionId,
+            status: this.toMissionStatusSummary(status, normalizedMissionId),
+            sessions: sessions.map((session) => this.toMissionSessionDto(session))
+        });
+    }
 
     public async getRepositoryIssues(input: {
         repositoryId: string;
@@ -104,21 +131,159 @@ export class AirportWebGateway {
         const daemon = await this.connectDaemon(surfacePath);
         try {
             const api = new DaemonApi(daemon.client);
-            const [status, sessions] = await Promise.all([
-                withTimeout(api.mission.getStatus({ missionId: normalizedMissionId }), 2500, 'Mission status request timed out.'),
-                withTimeout(api.mission.listSessions({ missionId: normalizedMissionId }), 2500, 'Mission session listing timed out.')
-            ]);
-
-            return missionRuntimeSnapshotDtoSchema.parse({
-                missionId: normalizedMissionId,
-                status: this.toMissionStatusSummary(status, normalizedMissionId),
-                sessions: sessions.map((session) => this.toMissionSessionDto(session))
+            return this.buildMissionRuntimeSnapshot({
+                api,
+                missionId: normalizedMissionId
             });
         } finally {
             logAirportWebPerf('gateway.missionRuntimeSnapshot.total', startedAt, {
                 missionId: normalizedMissionId,
                 surfacePath: surfacePath?.trim()
             });
+            daemon.dispose();
+        }
+    }
+
+    public async executeMissionTaskCommand(input: {
+        missionId: string;
+        taskId: string;
+        action: 'start' | 'complete' | 'block' | 'reopen';
+        terminalSessionName?: string;
+    }): Promise<MissionRuntimeSnapshotDto> {
+        const missionId = input.missionId.trim();
+        const taskId = input.taskId.trim();
+        if (!missionId || !taskId) {
+            throw new Error('Mission task command requires missionId and taskId.');
+        }
+
+        const actionId = this.resolveMissionTaskActionId(taskId, input.action);
+        const daemon = await this.connectDaemon();
+        try {
+            const api = new DaemonApi(daemon.client);
+            const status = await withTimeout(
+                api.mission.executeAction(
+                    { missionId },
+                    actionId,
+                    [],
+                    input.action === 'start' && input.terminalSessionName?.trim()
+                        ? { terminalSessionName: input.terminalSessionName.trim() }
+                        : {}
+                ),
+                2500,
+                `Mission task command '${input.action}' timed out.`
+            );
+
+            return this.buildMissionRuntimeSnapshot({
+                api,
+                missionId,
+                status
+            });
+        } finally {
+            daemon.dispose();
+        }
+    }
+
+    public async executeMissionCommand(input: {
+        missionId: string;
+        action: 'pause' | 'resume' | 'panic' | 'clearPanic' | 'restartQueue' | 'deliver';
+    }): Promise<MissionRuntimeSnapshotDto> {
+        const missionId = input.missionId.trim();
+        if (!missionId) {
+            throw new Error('Mission command requires a missionId.');
+        }
+
+        const daemon = await this.connectDaemon();
+        try {
+            const api = new DaemonApi(daemon.client);
+            const status = await withTimeout(
+                api.mission.executeAction({ missionId }, this.resolveMissionActionId(input.action)),
+                2500,
+                `Mission command '${input.action}' timed out.`
+            );
+
+            return this.buildMissionRuntimeSnapshot({
+                api,
+                missionId,
+                status
+            });
+        } finally {
+            daemon.dispose();
+        }
+    }
+
+    public async executeMissionSessionCommand(input: {
+        missionId: string;
+        sessionId: string;
+        action: 'complete';
+    } | {
+        missionId: string;
+        sessionId: string;
+        action: 'cancel' | 'terminate';
+        reason?: string;
+    } | {
+        missionId: string;
+        sessionId: string;
+        action: 'prompt';
+        prompt: AgentPrompt;
+    } | {
+        missionId: string;
+        sessionId: string;
+        action: 'command';
+        command: AgentCommand;
+    }): Promise<MissionRuntimeSnapshotDto> {
+        const missionId = input.missionId.trim();
+        const sessionId = input.sessionId.trim();
+        if (!missionId || !sessionId) {
+            throw new Error('Mission session command requires missionId and sessionId.');
+        }
+
+        const daemon = await this.connectDaemon();
+        try {
+            const api = new DaemonApi(daemon.client);
+
+            switch (input.action) {
+                case 'complete':
+                    await withTimeout(
+                        api.mission.completeSession({ missionId }, sessionId),
+                        2500,
+                        'Mission session completion timed out.'
+                    );
+                    break;
+                case 'cancel':
+                    await withTimeout(
+                        api.mission.cancelSession({ missionId }, sessionId, input.reason?.trim()),
+                        2500,
+                        'Mission session cancel timed out.'
+                    );
+                    break;
+                case 'terminate':
+                    await withTimeout(
+                        api.mission.terminateSession({ missionId }, sessionId, input.reason?.trim()),
+                        2500,
+                        'Mission session terminate timed out.'
+                    );
+                    break;
+                case 'prompt':
+                    await withTimeout(
+                        api.mission.promptSession({ missionId }, sessionId, input.prompt),
+                        2500,
+                        'Mission session prompt timed out.'
+                    );
+                    break;
+                case 'command':
+                    await withTimeout(
+                        api.mission.commandSession({ missionId }, sessionId, input.command),
+                        2500,
+                        'Mission session command timed out.'
+                    );
+                    break;
+            }
+
+            return this.buildMissionRuntimeSnapshot({
+                api,
+                missionId
+            });
+        } finally {
             daemon.dispose();
         }
     }
@@ -327,7 +492,7 @@ export class AirportWebGateway {
                         type: input.brief.type
                     }
                 }),
-                2500,
+                8000,
                 'Mission creation from brief timed out.'
             );
         } finally {
@@ -459,6 +624,41 @@ export class AirportWebGateway {
                 return true;
             case 'control.workflow.settings.updated':
                 return false;
+        }
+    }
+
+    private resolveMissionTaskActionId(
+        taskId: string,
+        action: 'start' | 'complete' | 'block' | 'reopen'
+    ): string {
+        switch (action) {
+            case 'start':
+                return `task.start.${taskId}`;
+            case 'complete':
+                return `task.done.${taskId}`;
+            case 'block':
+                return `task.block.${taskId}`;
+            case 'reopen':
+                return `task.reopen.${taskId}`;
+        }
+    }
+
+    private resolveMissionActionId(
+        action: 'pause' | 'resume' | 'panic' | 'clearPanic' | 'restartQueue' | 'deliver'
+    ): string {
+        switch (action) {
+            case 'pause':
+                return 'mission.pause';
+            case 'resume':
+                return 'mission.resume';
+            case 'panic':
+                return 'mission.panic';
+            case 'clearPanic':
+                return 'mission.clear-panic';
+            case 'restartQueue':
+                return 'mission.restart-queue';
+            case 'deliver':
+                return 'mission.deliver';
         }
     }
 

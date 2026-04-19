@@ -16,6 +16,81 @@ export const missionRuntimeRouteParamsSchema = z.object({
     missionId: z.string().trim().min(1)
 });
 
+const agentMetadataValueSchema = z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null()
+]);
+
+const agentMetadataSchema = z.record(z.string(), agentMetadataValueSchema);
+
+export const agentPromptSchema = z.object({
+    source: z.enum(['engine', 'operator', 'system']),
+    text: z.string(),
+    title: z.string().trim().min(1).optional(),
+    metadata: agentMetadataSchema.optional()
+});
+
+export const agentCommandSchema = z.discriminatedUnion('type', [
+    z.object({
+        type: z.literal('interrupt'),
+        reason: z.string().trim().min(1).optional(),
+        metadata: agentMetadataSchema.optional()
+    }),
+    z.object({
+        type: z.literal('checkpoint'),
+        reason: z.string().trim().min(1).optional(),
+        metadata: agentMetadataSchema.optional()
+    }),
+    z.object({
+        type: z.literal('nudge'),
+        reason: z.string().trim().min(1).optional(),
+        metadata: agentMetadataSchema.optional()
+    }),
+    z.object({
+        type: z.literal('resume'),
+        reason: z.string().trim().min(1).optional(),
+        metadata: agentMetadataSchema.optional()
+    })
+]);
+
+export const missionRuntimeTaskCommandSchema = z.discriminatedUnion('action', [
+    z.object({
+        action: z.literal('start'),
+        terminalSessionName: z.string().trim().min(1).optional()
+    }),
+    z.object({ action: z.literal('complete') }),
+    z.object({ action: z.literal('block') }),
+    z.object({ action: z.literal('reopen') })
+]);
+
+export const missionRuntimeMissionCommandSchema = z.object({
+    action: z.enum(['pause', 'resume', 'panic', 'clearPanic', 'restartQueue', 'deliver'])
+});
+
+export const missionRuntimeSessionCommandSchema = z.discriminatedUnion('action', [
+    z.object({
+        action: z.literal('complete')
+    }),
+    z.object({
+        action: z.literal('cancel'),
+        reason: z.string().trim().min(1).optional()
+    }),
+    z.object({
+        action: z.literal('terminate'),
+        reason: z.string().trim().min(1).optional()
+    }),
+    z.object({
+        action: z.literal('prompt'),
+        prompt: agentPromptSchema
+    }),
+    z.object({
+        action: z.literal('command'),
+        command: agentCommandSchema
+    })
+]);
+
 export const missionSessionTerminalRouteParamsSchema = z.object({
     sessionId: z.string().trim().min(1)
 });
@@ -203,11 +278,16 @@ export const airportRuntimeEventEnvelopeSchema = z.object({
 
 export type AirportRuntimeEventEnvelopeDto = z.infer<typeof airportRuntimeEventEnvelopeSchema>;
 export type AirportRuntimeEventType = z.infer<typeof airportRuntimeEventTypeSchema>;
+export type AgentCommandDto = z.infer<typeof agentCommandSchema>;
+export type AgentPromptDto = z.infer<typeof agentPromptSchema>;
 export type AirportHomeSnapshotDto = z.infer<typeof airportHomeSnapshotDtoSchema>;
 export type MissionAgentSessionDto = z.infer<typeof missionAgentSessionDtoSchema>;
 export type MissionSessionTerminalHandleDto = z.infer<typeof missionSessionTerminalHandleDtoSchema>;
 export type MissionSessionTerminalSnapshotDto = z.infer<typeof missionSessionTerminalSnapshotDtoSchema>;
 export type MissionSelectionCandidateDto = z.infer<typeof missionSelectionCandidateDtoSchema>;
+export type MissionRuntimeMissionCommandInputDto = z.infer<typeof missionRuntimeMissionCommandSchema>;
+export type MissionRuntimeSessionCommandInputDto = z.infer<typeof missionRuntimeSessionCommandSchema>;
+export type MissionRuntimeTaskCommandInputDto = z.infer<typeof missionRuntimeTaskCommandSchema>;
 export type MissionRuntimeSnapshotDto = z.infer<typeof missionRuntimeSnapshotDtoSchema>;
 export type RepositoryCandidateDto = z.infer<typeof repositoryCandidateDtoSchema>;
 export type RepositorySurfaceSnapshotDto = z.infer<typeof repositorySurfaceSnapshotDtoSchema>;

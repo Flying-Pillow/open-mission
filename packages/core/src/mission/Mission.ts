@@ -307,6 +307,13 @@ export class Mission {
 		return (await session.sendCommand(command)).toRecord();
 	}
 
+	public async completeAgentSession(
+		sessionId: string
+	): Promise<MissionAgentSessionRecord> {
+		const session = this.requireAgentSession(sessionId);
+		return (await session.done()).toRecord();
+	}
+
 	public async terminateAgentSession(
 		sessionId: string,
 		reason?: string

@@ -19,7 +19,21 @@
 
     let remoteStartFromIssueError = $state<string | null>(null);
 
-    const repositoryIssues = $derived(repository.listIssues());
+    const repositoryIssueState = $derived(
+        await repository
+            .listIssues()
+            .then((issues) => ({
+                issues,
+                loadError: null,
+            }))
+            .catch((error) => ({
+                issues: [],
+                loadError:
+                    error instanceof Error ? error.message : String(error),
+            })),
+    );
+    const repositoryIssues = $derived(repositoryIssueState.issues);
+    const repositoryIssueLoadError = $derived(repositoryIssueState.loadError);
 
     async function viewIssue(issueNumber: number): Promise<void> {
         issueLoadingNumber = issueNumber;
@@ -38,52 +52,48 @@
 <section
     class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
 >
-    <div class="flex items-center justify-between gap-4">
-        <div>
-            <h2 class="text-lg font-semibold text-foreground">
-                Start from issue
-            </h2>
-            <p class="mt-1 text-sm text-muted-foreground">
-                Turn a tracked repository issue into a new mission with one
-                step.
-            </p>
-        </div>
-        <Badge variant="outline">
-            {#await repositoryIssues}
-                Loading issues...
-            {:then issues}
-                {issues.length === 1
+    <svelte:boundary>
+        <div class="flex items-center justify-between gap-4">
+            <div>
+                <h2 class="text-lg font-semibold text-foreground">
+                    Start from issue
+                </h2>
+                <p class="mt-1 text-sm text-muted-foreground">
+                    Turn a tracked repository issue into a new mission with one
+                    step.
+                </p>
+            </div>
+            <Badge variant="outline">
+                {repositoryIssues.length === 1
                     ? "1 open issue"
-                    : `${issues.length} open issues`}
-            {:catch}
-                Issue list unavailable
-            {/await}
-        </Badge>
-    </div>
+                    : `${repositoryIssues.length} open issues`}
+            </Badge>
+        </div>
 
-    {#if issueError || remoteStartFromIssueError}
-        <p class="mt-3 text-sm text-rose-600">
-            {issueError ?? remoteStartFromIssueError}
-        </p>
-    {/if}
+        {#if issueError || remoteStartFromIssueError || repositoryIssueLoadError}
+            <p class="mt-3 text-sm text-rose-600">
+                {issueError ??
+                    remoteStartFromIssueError ??
+                    repositoryIssueLoadError}
+            </p>
+        {/if}
 
-    <ScrollArea class="mt-4 min-h-0 flex-1 pr-3">
-        <div class="grid gap-3">
-            {#await repositoryIssues}
-                <div
-                    class="rounded-xl border border-dashed bg-background/60 px-4 py-6 text-sm text-muted-foreground"
-                >
-                    Loading tracked issues for this repository...
-                </div>
-            {:then issues}
-                {#if issues.length === 0}
+        <ScrollArea class="mt-4 min-h-0 flex-1 pr-3">
+            <div class="grid gap-3">
+                {#if repositoryIssueLoadError}
+                    <div
+                        class="rounded-xl border border-dashed bg-background/60 px-4 py-6 text-sm text-rose-600"
+                    >
+                        {repositoryIssueLoadError}
+                    </div>
+                {:else if repositoryIssues.length === 0}
                     <div
                         class="rounded-xl border border-dashed bg-background/60 px-4 py-6 text-sm text-muted-foreground"
                     >
                         No tracked issues are available for this repository.
                     </div>
                 {:else}
-                    {#each issues as issue (issue.number)}
+                    {#each repositoryIssues as issue (issue.number)}
                         <Issue
                             {repository}
                             {issue}
@@ -96,15 +106,32 @@
                         />
                     {/each}
                 {/if}
-            {:catch issueListError}
-                <div
-                    class="rounded-xl border border-dashed bg-background/60 px-4 py-6 text-sm text-rose-600"
-                >
-                    {issueListError instanceof Error
-                        ? issueListError.message
-                        : String(issueListError)}
+            </div>
+        </ScrollArea>
+
+        {#snippet pending()}
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-semibold text-foreground">
+                        Start from issue
+                    </h2>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        Turn a tracked repository issue into a new mission with
+                        one step.
+                    </p>
                 </div>
-            {/await}
-        </div>
-    </ScrollArea>
+                <Badge variant="outline">Loading issues...</Badge>
+            </div>
+
+            <ScrollArea class="mt-4 min-h-0 flex-1 pr-3">
+                <div class="grid gap-3">
+                    <div
+                        class="rounded-xl border border-dashed bg-background/60 px-4 py-6 text-sm text-muted-foreground"
+                    >
+                        Loading tracked issues for this repository...
+                    </div>
+                </div>
+            </ScrollArea>
+        {/snippet}
+    </svelte:boundary>
 </section>

@@ -51,7 +51,7 @@ The final target stack is:
 | UI framework | Svelte 5 | Shared Airport UI implementation |
 | Native host | Tauri v2 | Desktop host, capabilities, packaging, and secure native bridge |
 | Native systems language | Rust stable | Tauri commands, native integrations, filesystem/process/window capabilities |
-| Frontend testing | Vitest through Vite+ | Unit, component, and frontend integration tests |
+| Frontend testing | Vite+ test runner | Unit, component, and frontend integration tests through `vp test` |
 | Fast JS/TS linting | Oxlint through Vite+ | High-speed general JavaScript and TypeScript linting |
 | Fast formatting | Oxfmt through Vite+ | Repository formatting for supported file types |
 | Svelte-specific linting | ESLint + eslint-plugin-svelte | `.svelte` markup and framework-specific lint coverage |
@@ -102,13 +102,13 @@ Vite+ owns:
 - fast linting and formatting
 - frontend package-local and workspace-aware task execution where Vite+ is the right boundary
 
-In the implemented repository, that means frontend-facing scripts should invoke `vp` directly instead of treating `vite`, `vitest`, `oxlint`, or `oxfmt` as separate primary entrypoints.
+In the implemented repository, that means frontend-facing scripts should invoke `vp` directly instead of treating `vite`, `vitest`, `oxlint`, or `oxfmt` as operator-facing primary entrypoints.
 
 Vite+ is chosen because it unifies:
 
 - Vite
 - Rolldown
-- Vitest
+- Vitest as an internal Vite+ subsystem
 - Oxlint
 - Oxfmt
 - tsdown

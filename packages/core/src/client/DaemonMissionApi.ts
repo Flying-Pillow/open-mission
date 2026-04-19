@@ -4,6 +4,7 @@ import type {
 	MissionAgentSessionRecord,
 	MissionActionExecute,
 	MissionFromBriefRequest,
+	SessionComplete,
 	SessionCommand,
 	SessionPrompt
 } from '../daemon/protocol/contracts.js';
@@ -146,6 +147,17 @@ export class DaemonMissionApi {
 			command
 		};
 		return this.client.request<MissionAgentSessionRecord>('session.command', params);
+	}
+
+	public async completeSession(
+		selector: MissionSelector | undefined,
+		sessionId: string
+	): Promise<MissionAgentSessionRecord> {
+		const params: SessionComplete = {
+			...(selector && Object.keys(selector).length > 0 ? { selector } : {}),
+			sessionId
+		};
+		return this.client.request<MissionAgentSessionRecord>('session.complete', params);
 	}
 
 	public async terminateSession(

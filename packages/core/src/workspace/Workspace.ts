@@ -70,6 +70,7 @@ import {
 	type Notification,
 	type Request,
 	type SessionCommand,
+	type SessionComplete,
 	type SessionConsoleState,
 	type SessionControl,
 	type SessionPrompt
@@ -157,6 +158,8 @@ export class MissionWorkspace {
 				return this.promptAgentSession((request.params ?? {}) as SessionPrompt);
 			case 'session.command':
 				return this.commandAgentSession((request.params ?? {}) as SessionCommand);
+			case 'session.complete':
+				return this.completeAgentSession((request.params ?? {}) as SessionComplete);
 			case 'session.cancel':
 				return this.cancelAgentSession((request.params ?? {}) as SessionControl);
 			case 'session.terminate':
@@ -650,6 +653,11 @@ export class MissionWorkspace {
 	private async commandAgentSession(params: SessionCommand) {
 		const loadedMission = await this.requireMissionSession(params);
 		return loadedMission.mission.sendAgentSessionCommand(params.sessionId, params.command as AgentCommand);
+	}
+
+	private async completeAgentSession(params: SessionComplete) {
+		const loadedMission = await this.requireMissionSession(params);
+		return loadedMission.mission.completeAgentSession(params.sessionId);
 	}
 
 	private async terminateAgentSession(params: SessionControl) {
