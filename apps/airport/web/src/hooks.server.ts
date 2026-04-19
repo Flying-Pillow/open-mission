@@ -6,7 +6,10 @@ import {
     readSystemStatus,
     resolveAirportControlRuntimeMode,
 } from '@flying-pillow/mission-core';
-import { readGithubAuthToken } from '$lib/server/github-auth.server';
+import {
+    clearGithubAuthSession,
+    readGithubAuthToken
+} from '$lib/server/github-auth.server';
 
 type GithubStatus = 'connected' | 'disconnected' | 'unknown';
 
@@ -140,8 +143,19 @@ function resolveGitHubContext(authToken?: string): {
 
 export const handle: Handle = async ({ event, resolve }) => {
     const daemonState = await ensureDaemonState();
-    const githubAuthToken = readGithubAuthToken(event.cookies);
+    const githubAuthToken = await readGithubAuthToken(event.cookies);
     const githubContext = resolveGitHubContext(githubAuthToken);
+    if (githubAuthToken && githubContext.githubStatus !== 'connected') {
+        await clearGithubAuthSession(event.cookies);
+        event.locals.githubAuthToken = undefined;
+        event.locals.appContext = {
+            daemon: daemonState,
+            githubStatus: 'disconnected'
+        };
+
+        return resolve(event);
+    }
+
     event.locals.githubAuthToken = githubAuthToken;
     event.locals.appContext = {
         daemon: daemonState,

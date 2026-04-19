@@ -2,14 +2,16 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import {
 	AirportControl,
-	TerminalManagerSubstrateController,
-	type AirportSubstrateEffect,
-	type AirportSubstrateState,
 	type BindAirportPaneParams,
 	type ConnectAirportClientParams,
+	type AirportSubstrateState,
 	type PaneBinding,
 	type AirportPaneId
-} from '@flying-pillow/mission-airport';
+} from '../../airport/index.js';
+import {
+	TerminalManagerSubstrateController,
+	type AirportSubstrateEffect
+} from './AirportTerminalSubstrate.js';
 
 type RepositoryAirportRecord = {
 	repositoryId: string;

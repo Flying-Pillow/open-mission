@@ -1,14 +1,13 @@
 // /packages/core/src/daemon/control-plane/MissionSystemController.ts: Maintains the daemon's authoritative mission and airport snapshot state.
 import {
-	planAirportSubstrateEffects,
 	type AirportProjectionSet,
-	type AirportSubstrateEffect,
 	type AirportSubstrateState,
 	type BindAirportPaneParams,
 	type ConnectAirportClientParams,
 	type PaneBinding,
 	type AirportPaneId
-} from '@flying-pillow/mission-airport';
+} from '../../airport/index.js';
+import { planAirportSubstrateEffects, type AirportSubstrateEffect } from './AirportTerminalSubstrate.js';
 import path from 'node:path';
 import type {
 	ContextGraph,

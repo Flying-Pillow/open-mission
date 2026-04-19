@@ -8,7 +8,6 @@ const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 const workspacePackageRoots = {
 	"@flying-pillow/mission-core": path.resolve(currentDirectory, "../../../packages/core/src"),
-	"@flying-pillow/mission-airport": path.resolve(currentDirectory, "../../../packages/airport/src"),
 	"@flying-pillow/mission": path.resolve(currentDirectory, "../../../packages/mission/src")
 } as const;
 
@@ -22,7 +21,6 @@ export default defineConfig(({ command }) => {
 			? {
 				noExternal: [
 					"@flying-pillow/mission-core",
-					"@flying-pillow/mission-airport",
 					"@flying-pillow/mission"
 				]
 			}

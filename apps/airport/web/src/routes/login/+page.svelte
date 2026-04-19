@@ -1,9 +1,35 @@
 <!-- /apps/airport/web/src/routes/login/+page.svelte: GitHub login surface for Mission Airport web auth. -->
 <script lang="ts">
     import Login from "$lib/components/login.svelte";
-    import type { PageProps } from "./$types";
 
-    let { data, form }: PageProps = $props();
+    let { data } = $props<{
+        data: {
+            appContext: {
+                githubStatus: "connected" | "disconnected" | "unknown";
+                user?: {
+                    name: string;
+                    email?: string;
+                    avatarUrl?: string;
+                };
+            };
+            redirectTo: string;
+            githubProbe: {
+                status: "idle" | "success" | "error";
+                message: string;
+            };
+            oauth: {
+                available: boolean;
+                error?: string;
+                startHref: string;
+            };
+            device: {
+                available: boolean;
+                error?: string;
+                startHref: string;
+                pollHref: string;
+            };
+        };
+    }>();
 </script>
 
 <svelte:head>
@@ -24,9 +50,11 @@
         <Login
             githubStatus={data.appContext.githubStatus}
             user={data.appContext.user}
-            error={form?.githubAuth?.error}
+            error={data.oauth.error}
             probe={data.githubProbe}
             redirectTo={data.redirectTo}
+            oauth={data.oauth}
+            device={data.device}
         />
     </div>
 </div>

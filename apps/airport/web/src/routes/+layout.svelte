@@ -2,11 +2,33 @@
 <script lang="ts">
 	import "../app.css";
 	import { ModeWatcher } from "mode-watcher";
-	import type { Snippet } from "svelte";
+	import { getAirportRepositories } from "./airport.remote";
+	import { onMount, type Snippet } from "svelte";
 	import { asset } from "$app/paths";
+	import {
+		createAppContext,
+		setAppContext,
+	} from "$lib/client/context/app-context.svelte";
 	import type { LayoutData } from "./$types";
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
+	const appContext = setAppContext(createAppContext(() => data.appContext));
+	let repositoriesLoading = $state(false);
+
+	onMount(() => {
+		if (repositoriesLoading || appContext.airport.repositories.length > 0) {
+			return;
+		}
+
+		repositoriesLoading = true;
+		void getAirportRepositories({})
+			.then((repositories) => {
+				appContext.setRepositories(repositories);
+			})
+			.finally(() => {
+				repositoriesLoading = false;
+			});
+	});
 </script>
 
 <svelte:head>

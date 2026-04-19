@@ -5,6 +5,8 @@ nav_order: 5
 has_children: true
 ---
 
+<!-- /docs/architecture/index.md: Entry page for Mission architecture references, including the current Airport web blueprint alongside existing daemon and terminal surface docs. -->
+
 # Architecture
 
 This section is the implementation-grounded architecture reference for Mission.
@@ -17,20 +19,21 @@ It documents the system as it exists in the repository today across:
 - the provider-neutral agent runtime contract
 - the repository-scoped airport layout authority
 - the Airport terminal surfaces and their client relationship to the daemon
+- the Airport web blueprint and its gateway relationship to the daemon and terminal runtime
 - the published Mission CLI package and its distribution boundary
 - the public IPC and package export surfaces
 
 This is not a speculative redesign document. When older specs, older notes, and current code differ, this section resolves against the current implementation while calling out meaningful drift in [discrepancies.md](./discrepancies.html).
 
 <div class="mission-status-grid">
-	<div class="mission-status-card mission-status-card--current">
-		<strong>Current implementation</strong>
-		<p>This architecture section resolves against the repository code, daemon behavior, persisted state, and routed surfaces that exist today.</p>
-	</div>
-	<div class="mission-status-card mission-status-card--target">
-		<strong>Target architecture</strong>
-		<p>Specifications and replay material still matter because they capture the cleaner end-state Mission is driving toward. Treat them as directional intent unless this section explicitly says the current code already matches.</p>
-	</div>
+ <div class="mission-status-card mission-status-card--current">
+  <strong>Current implementation</strong>
+  <p>This architecture section resolves against the repository code, daemon behavior, persisted state, and routed surfaces that exist today.</p>
+ </div>
+ <div class="mission-status-card mission-status-card--target">
+  <strong>Target architecture</strong>
+  <p>Specifications and replay material still matter because they capture the cleaner end-state Mission is driving toward. Treat them as directional intent unless this section explicitly says the current code already matches.</p>
+ </div>
 </div>
 
 ## How To Read This Section
@@ -38,31 +41,34 @@ This is not a speculative redesign document. When older specs, older notes, and 
 1. Start with [system-context.md](./system-context.html) for the end-to-end topology.
 2. Read [repository-and-dossier.md](./repository-and-dossier.html) and [semantic-model.md](./semantic-model.html) for the repository, mission, stage, task, artifact, and session model.
 3. Read [daemon.md](./daemon.html), [workflow-engine.md](./workflow-engine.html), [agent-runtime.md](./agent-runtime.html), and [airport-control-plane.md](./airport-control-plane.html) for the main authorities.
-4. Read [airport-terminal-surface.md](./airport-terminal-surface.html) and [contracts.md](./contracts.html) for Airport terminal surface and protocol boundaries.
+4. Read [airport-terminal-surface.md](./airport-terminal-surface.html), [airport-web-surface-blueprint.md](./airport-web-surface-blueprint.html), and [contracts.md](./contracts.html) for Airport surface and protocol boundaries.
 5. Use [recovery-and-reconciliation.md](./recovery-and-reconciliation.html), [package-map.md](./package-map.html), and [integrity-checklist.md](./integrity-checklist.html) as operational reference pages.
 
 ## System Context
 
 ```mermaid
 flowchart LR
-	Operator[Operator] --> CLI[Mission CLI package]
-	CLI --> AirportSurface[Airport terminal surface]
-	AirportSurface -->|IPC requests and subscriptions| Daemon[Mission daemon]
-	Daemon --> System[MissionSystemController]
-	System --> Airport[Repository airport registry\nAirportControl]
-	System --> Domain[MissionControl\nContextGraph]
-	Daemon --> Workspace[WorkspaceManager\nMissionWorkspace]
-	Workspace --> Mission[Mission aggregate]
-	Mission --> Workflow[MissionWorkflowController\nReducer + request executor]
-	Workflow --> Runtime[daemon-owned agent control\nAgentRunner + AgentSession]
-	Workflow --> Dossier[(.mission/missions/<mission-id>/mission.json)]
-	Workspace --> Settings[(.mission/settings.json)]
-	Workspace --> WorkflowPreset[(.mission/workflow/*)]
-	Workspace --> Briefs[(.mission/missions/<mission-id>/*)]
-	Airport --> Zellij[zellij substrate]
-	Runtime --> Providers[Copilot CLI / Copilot SDK / transport]
-	Workspace --> UserConfig[(~/.config/mission/config.json)]
-	Runtime --> DaemonRuntime[(XDG runtime or tmp daemon state)]
+ Operator[Operator] --> CLI[Mission CLI package]
+ CLI --> AirportSurface[Airport terminal surface]
+ AirportSurface -->|IPC requests and subscriptions| Daemon[Mission daemon]
+ BrowserSurface[Airport web surface] -->|HTTP, SSE, terminal relay| Gateway[SvelteKit gateway]
+ Gateway --> Daemon
+ Gateway --> Zellij
+ Daemon --> System[MissionSystemController]
+ System --> Airport[Repository airport registry\nAirportControl]
+ System --> Domain[MissionControl\nContextGraph]
+ Daemon --> Workspace[WorkspaceManager\nMissionWorkspace]
+ Workspace --> Mission[Mission aggregate]
+ Mission --> Workflow[MissionWorkflowController\nReducer + request executor]
+ Workflow --> Runtime[daemon-owned agent control\nAgentRunner + AgentSession]
+ Workflow --> Dossier[(.mission/missions/<mission-id>/mission.json)]
+ Workspace --> Settings[(.mission/settings.json)]
+ Workspace --> WorkflowPreset[(.mission/workflow/*)]
+ Workspace --> Briefs[(.mission/missions/<mission-id>/*)]
+ Airport --> Zellij[zellij substrate]
+ Runtime --> Providers[Copilot CLI / Copilot SDK / transport]
+ Workspace --> UserConfig[(~/.config/mission/config.json)]
+ Runtime --> DaemonRuntime[(XDG runtime or tmp daemon state)]
 ```
 
 ## Authority Matrix

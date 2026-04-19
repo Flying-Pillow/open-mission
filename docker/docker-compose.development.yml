@@ -10,6 +10,8 @@ services:
     init: true
     tty: true
     stdin_open: true
+    env_file:
+      - ../.env
     volumes:
       - "../:/mission"
       - "../../flying-pillow/dev/flying-pillow:/flying-pillow"
@@ -17,12 +19,12 @@ services:
       - "cargo-git:/home/dev/.cargo/git"
       - "rustup:/home/dev/.rustup"
     expose:
-      - "5173"
+      - "5174"
       - "1420"
       - "1421"
       - "9229"
     ports:
-      - "5173:5173"
+      - "5174:5174"
       - "1420:1420"
       - "1421:1421"
 

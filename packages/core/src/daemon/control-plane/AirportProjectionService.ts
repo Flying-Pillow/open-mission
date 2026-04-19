@@ -5,7 +5,7 @@ import type {
 	AirportState,
 	PaneBinding,
 	AirportPaneId
-} from '@flying-pillow/mission-airport';
+} from '../../airport/types.js';
 import type { ContextGraph, SystemStatus } from '../../types.js';
 
 export function deriveSystemAirportProjections(

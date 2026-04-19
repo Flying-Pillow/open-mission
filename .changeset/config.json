@@ -12,12 +12,13 @@
     [
       "@flying-pillow/mission",
       "@flying-pillow/mission-core",
-      "@flying-pillow/mission-airport",
       "@flying-pillow/mission-airport-terminal"
     ]
   ],
   "access": "restricted",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": ["@flying-pillow/mission-tsconfig"]
+  "ignore": [
+    "@flying-pillow/mission-tsconfig"
+  ]
 }

@@ -1,19 +1,19 @@
-import type { AirportProjectionSet, AirportState, PersistedAirportIntent } from '@flying-pillow/mission-airport';
+import type { AirportProjectionSet, AirportState, PersistedAirportIntent } from './airport/types.js';
 import type { MissionAgentSessionRecord } from './daemon/protocol/contracts.js';
 import type { MissionDaemonSettings } from './lib/daemonConfig.js';
 import { MISSION_STAGE_IDS, type MissionStageId } from './workflow/stages.js';
 import {
-	MissionGateProjection,
 	MISSION_AGENT_SESSION_LIFECYCLE_STATES,
 	MISSION_LIFECYCLE_STATES,
 	MISSION_STAGE_DERIVED_STATES,
 	MISSION_TASK_LIFECYCLE_STATES,
+	type MissionGateProjection,
 	type MissionAgentSessionLifecycleState,
 	type MissionLifecycleState,
-	MissionPanicState,
-	MissionPauseState,
+	type MissionPanicState,
+	type MissionPauseState,
 	type MissionStageDerivedState,
-	MissionStageRuntimeProjection,
+	type MissionStageRuntimeProjection,
 	type MissionTaskLifecycleState,
 	type MissionTaskRuntimeState,
 	type MissionWorkflowConfigurationSnapshot

@@ -5,7 +5,6 @@
 	import SiteHeader from "$lib/components/site-header.svelte";
 	import SectionCards from "$lib/components/section-cards.svelte";
 	import ChartAreaInteractive from "$lib/components/chart-area-interactive.svelte";
-	import DataTable from "$lib/components/data-table/data-table.svelte";
 </script>
 
 <Sidebar.Provider
@@ -21,7 +20,14 @@
 					<div class="px-4 lg:px-6">
 						<ChartAreaInteractive />
 					</div>
-					<DataTable {data} />
+					<div class="px-4 lg:px-6">
+						<pre
+							class="rounded-xl border bg-card/70 p-4 text-xs text-muted-foreground overflow-auto">{JSON.stringify(
+								data,
+								null,
+								2,
+							)}</pre>
+					</div>
 				</div>
 			</div>
 		</div>

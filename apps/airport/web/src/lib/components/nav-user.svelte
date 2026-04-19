@@ -1,4 +1,4 @@
-<!-- /apps/airport/web/src/lib/components/nav-user.svelte: GitHub-backed user menu with theme toggle and token-clearing logout action. -->
+<!-- /apps/airport/web/src/lib/components/nav-user.svelte: GitHub-backed user menu with theme toggle and OAuth logout action. -->
 <script lang="ts">
 	import { mode, toggleMode } from "mode-watcher";
 	import DotsVerticalIcon from "@tabler/icons-svelte/icons/dots-vertical";

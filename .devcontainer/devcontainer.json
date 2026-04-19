@@ -12,13 +12,13 @@
         "development"
     ],
     "forwardPorts": [
-        5173,
+        5174,
         1420,
         1421,
         9229
     ],
     "portsAttributes": {
-        "5173": {
+        "5174": {
             "label": "Mission web dev server",
             "onAutoForward": "silent"
         },

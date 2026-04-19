@@ -5,6 +5,8 @@ parent: Architecture
 nav_order: 9
 ---
 
+<!-- /docs/architecture/contracts.md: Reference for daemon IPC contracts and the rule that Airport web gateway contracts must wrap existing daemon and terminal runtime surfaces rather than redefining them. -->
+
 # Contracts And State Surfaces
 
 Mission exposes two public contract families:
@@ -34,6 +36,18 @@ The daemon protocol is context-first rather than object-wrapper-first.
 | `DaemonAirportApi` | Airport-focused convenience methods |
 | `DaemonControlApi` | Control-plane methods |
 | `DaemonMissionApi` | Mission, task, and session methods |
+
+## Airport Web Gateway Rule
+
+The Airport web surface may define browser-facing transport contracts for its own gateway, but those contracts are wrappers over existing runtime surfaces rather than additions to the daemon IPC contract.
+
+That means:
+
+- request-response browser endpoints must proxy existing daemon methods
+- browser event streams must forward existing daemon notifications
+- browser terminal relay contracts must wrap the existing terminal runtime and terminal-manager behavior already present in the repository
+
+The web gateway must not silently invent a second daemon API family.
 
 ## `MissionSystemSnapshot`
 

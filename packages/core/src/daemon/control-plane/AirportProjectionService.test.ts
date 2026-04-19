@@ -1,6 +1,6 @@
 // /packages/core/src/daemon/control-plane/AirportProjectionService.test.ts: Verifies that tower projections include GitHub auth status for surface rendering.
 import { describe, expect, it } from 'vitest';
-import type { AirportState } from '@flying-pillow/mission-airport';
+import type { AirportState } from '../../airport/types.js';
 import type { ContextGraph, SystemStatus } from '../../types.js';
 import { deriveSystemAirportProjections } from './AirportProjectionService.js';
 
@@ -41,9 +41,11 @@ describe('deriveSystemAirportProjections', () => {
             focus: {},
             clients: {},
             substrate: {
+                kind: 'terminal-manager',
                 sessionName: 'mission-airport',
                 panes: {},
-                layoutIntent: 'mission-control-v1'
+                layoutIntent: 'mission-control-v1',
+                attached: false
             }
         };
         const systemStatus: SystemStatus = {
@@ -92,9 +94,11 @@ describe('deriveSystemAirportProjections', () => {
             focus: {},
             clients: {},
             substrate: {
+                kind: 'terminal-manager',
                 sessionName: 'mission-airport',
                 panes: {},
-                layoutIntent: 'mission-control-v1'
+                layoutIntent: 'mission-control-v1',
+                attached: false
             }
         };
 
