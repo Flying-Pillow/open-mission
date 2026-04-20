@@ -2,6 +2,7 @@ import type { Component } from "svelte";
 import { describe, expect, it } from "vitest";
 import {
 	createDocsManifest,
+	getDocsModuleBySourcePath,
 	getDocsModulePath,
 	resolveDocsPage,
 	serializeDocsNavigation,
@@ -152,6 +153,35 @@ describe("docs manifest", () => {
 		expect(getDocsModulePath("reference/index.md")).toBe(
 			"$docs/reference/index.md",
 		);
+	});
+
+	it("resolves docs modules by normalized source path across glob key shapes", () => {
+		const rootModule = createModule({
+			title: "Mission",
+			nav_title: "Overview",
+		});
+		const nestedModule = createModule({
+			title: "Reference",
+		});
+
+		expect(
+			getDocsModuleBySourcePath(
+				{
+					"/repo/docs/index.md": rootModule,
+					"$docs/reference/index.md": nestedModule,
+				},
+				"index.md",
+			),
+		).toBe(rootModule);
+		expect(
+			getDocsModuleBySourcePath(
+				{
+					"/repo/docs/index.md": rootModule,
+					"$docs/reference/index.md": nestedModule,
+				},
+				"reference/index.md",
+			),
+		).toBe(nestedModule);
 	});
 });
 

@@ -10,6 +10,11 @@ const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const docsRootDirectory = path.resolve(currentDirectory, "../../../docs");
 
 const config: Config = {
+	compilerOptions: {
+		experimental: {
+			async: true,
+		},
+	},
 	extensions: [".svelte", ".md"],
 	preprocess: [
 		createDocsSourcePreprocessor({ docsRootDirectory }),
@@ -18,7 +23,11 @@ const config: Config = {
 	],
 	kit: {
 		adapter: adapter(),
+		experimental: {
+			remoteFunctions: true,
+		},
 		alias: {
+			$lib: path.resolve(currentDirectory, "src/lib"),
 			$docs: docsRootDirectory,
 		},
 	},

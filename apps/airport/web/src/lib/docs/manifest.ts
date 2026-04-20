@@ -12,9 +12,10 @@ import type {
 const DOCS_MODULE_PATH_PREFIX = "$docs/";
 const DEFAULT_SORT_ORDER = Number.MAX_SAFE_INTEGER;
 
-const docsModuleRegistry = import.meta.glob(
-	"$docs/**/*.md",
-) as DocsModuleRegistry;
+const docsModuleRegistry = {
+	...import.meta.glob("$docs/*.md"),
+	...import.meta.glob("$docs/**/*.md"),
+} as DocsModuleRegistry;
 
 let docsManifestPromise: Promise<DocsManifest> | undefined;
 
@@ -298,6 +299,35 @@ function getDocsSourcePathFromModulePath(modulePath: string): string {
 
 export function getDocsModulePath(sourcePath: string): string {
 	return `${DOCS_MODULE_PATH_PREFIX}${sourcePath}`;
+}
+
+export function loadEagerDocsModules(): Record<string, DocsMarkdownModule> {
+	return {
+		...import.meta.glob("$docs/*.md", {
+			eager: true,
+		}),
+		...import.meta.glob("$docs/**/*.md", {
+			eager: true,
+		}),
+	} as Record<string, DocsMarkdownModule>;
+}
+
+export function getDocsModuleBySourcePath(
+	docsModules: Record<string, DocsMarkdownModule>,
+	sourcePath: string,
+): DocsMarkdownModule | undefined {
+	const aliasedModule = docsModules[getDocsModulePath(sourcePath)];
+	if (aliasedModule) {
+		return aliasedModule;
+	}
+
+	for (const [modulePath, docsModule] of Object.entries(docsModules)) {
+		if (getDocsSourcePathFromModulePath(modulePath) === sourcePath) {
+			return docsModule;
+		}
+	}
+
+	return undefined;
 }
 
 function getDocsSlugFromSourcePath(sourcePath: string): string[] {
