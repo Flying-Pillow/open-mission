@@ -72,23 +72,44 @@
 </div>
 
 <style>
+    .markdown-viewer {
+        --markdown-fg: #1f2328;
+        --markdown-muted: #656d76;
+        --markdown-link: #0969da;
+        --markdown-border: #d0d7de;
+        --markdown-code-bg: #f6f8fa;
+        --markdown-pre-bg: #f6f8fa;
+        --markdown-table-header-bg: #f6f8fa;
+    }
+
+    :global(.dark .markdown-viewer) {
+        --markdown-fg: #e6edf3;
+        --markdown-muted: #9198a1;
+        --markdown-link: #4493f8;
+        --markdown-border: #3d444d;
+        --markdown-code-bg: #161b22;
+        --markdown-pre-bg: #161b22;
+        --markdown-table-header-bg: #161b22;
+    }
+
     :global(.markdown) {
-        color: color-mix(in oklab, var(--foreground) 70%, transparent);
-        font-size: 0.98rem;
-        line-height: 1.8;
+        color: var(--markdown-fg);
+        font-size: 1rem;
+        line-height: 1.5;
+        word-wrap: break-word;
     }
 
     .markdown-frontmatter {
         margin: 0 0 1rem;
         overflow-x: auto;
-        border: 1px solid var(--border);
-        border-radius: 0.75rem;
-        background: color-mix(in oklab, var(--muted) 72%, transparent);
-        padding: 0.625rem 0.875rem;
-        color: var(--muted-foreground);
+        border: 1px solid var(--markdown-border);
+        border-radius: 0.375rem;
+        background: var(--markdown-code-bg);
+        padding: 1rem;
+        color: var(--markdown-muted);
         font-family: "Courier New", Courier, ui-monospace, monospace;
         font-size: 0.75rem;
-        line-height: 1.45;
+        line-height: 1.5;
         white-space: pre-wrap;
     }
 
@@ -101,170 +122,184 @@
     }
 
     :global(.markdown h1) {
-        margin-top: 2rem;
+        margin: 1.5rem 0 1rem;
         scroll-margin-top: 5rem;
-        color: color-mix(in oklab, var(--primary) 80%, transparent);
-        font-size: 2.25rem;
-        line-height: 2.5rem;
-        font-weight: 700;
-        letter-spacing: -0.02em;
-        text-wrap: balance;
+        border-bottom: 1px solid var(--markdown-border);
+        padding-bottom: 0.3em;
+        color: var(--markdown-fg);
+        font-size: 2em;
+        line-height: 1.25;
+        font-weight: 600;
     }
 
     :global(.markdown h2) {
-        margin-top: 2.5rem;
-        padding-bottom: 0.5rem;
+        margin: 1.5rem 0 1rem;
         scroll-margin-top: 5rem;
-        border-bottom: 1px solid var(--border);
-        color: color-mix(in oklab, var(--secondary) 80%, transparent);
-        font-size: 1.875rem;
-        line-height: 2.25rem;
+        border-bottom: 1px solid var(--markdown-border);
+        padding-bottom: 0.3em;
+        color: var(--markdown-fg);
+        font-size: 1.5em;
+        line-height: 1.25;
         font-weight: 600;
-        letter-spacing: -0.025em;
     }
 
     :global(.markdown h3) {
-        margin-top: 2rem;
+        margin: 1.5rem 0 1rem;
         scroll-margin-top: 5rem;
-        color: var(--foreground);
-        font-size: 1.5rem;
-        line-height: 2rem;
+        color: var(--markdown-fg);
+        font-size: 1.25em;
+        line-height: 1.25;
         font-weight: 600;
-        letter-spacing: -0.025em;
     }
 
     :global(.markdown h4) {
-        margin-top: 2rem;
+        margin: 1.5rem 0 1rem;
         scroll-margin-top: 5rem;
-        color: var(--foreground);
-        font-size: 1.25rem;
-        line-height: 1.75rem;
+        color: var(--markdown-fg);
+        font-size: 1em;
+        line-height: 1.25;
         font-weight: 600;
-        letter-spacing: -0.025em;
+    }
+
+    :global(.markdown h5) {
+        margin: 1.5rem 0 1rem;
+        color: var(--markdown-fg);
+        font-size: 0.875em;
+        line-height: 1.25;
+        font-weight: 600;
+    }
+
+    :global(.markdown h6) {
+        margin: 1.5rem 0 1rem;
+        color: var(--markdown-muted);
+        font-size: 0.85em;
+        line-height: 1.25;
+        font-weight: 600;
     }
 
     :global(.markdown p) {
-        margin-top: 1.5rem;
-        line-height: 1.75rem;
+        margin: 0 0 1rem;
+    }
+
+    :global(.markdown blockquote p:last-child) {
+        margin-bottom: 0;
     }
 
     :global(.markdown :is(ul, ol, li, td, th)) {
-        color: color-mix(in oklab, var(--foreground) 70%, transparent);
+        color: inherit;
     }
 
     :global(.markdown a) {
-        color: var(--primary);
-        font-weight: 500;
+        color: var(--markdown-link);
         text-decoration-line: underline;
         text-underline-offset: 4px;
     }
 
     :global(.markdown strong) {
-        color: var(--foreground);
+        color: var(--markdown-fg);
         font-weight: 600;
     }
 
     :global(.markdown blockquote) {
-        margin-top: 1.5rem;
-        border-inline-start: 3px solid
-            color-mix(in oklab, var(--primary) 35%, var(--border));
-        padding-inline-start: 1.5rem;
-        color: var(--muted-foreground);
-        font-style: italic;
+        margin: 0 0 1rem;
+        border-inline-start: 0.25em solid var(--markdown-border);
+        padding-inline-start: 1em;
+        color: var(--markdown-muted);
+    }
+
+    :global(.markdown ul),
+    :global(.markdown ol) {
+        margin: 0 0 1rem;
+        padding-left: 2em;
     }
 
     :global(.markdown ul) {
-        margin: 1.5rem 0 1.5rem 1.5rem;
         list-style-type: disc;
     }
 
     :global(.markdown ol) {
-        margin: 1.5rem 0 1.5rem 1.5rem;
         list-style-type: decimal;
     }
 
     :global(.markdown li + li) {
-        margin-top: 0.5rem;
+        margin-top: 0.25rem;
     }
 
     :global(.markdown li > p) {
-        margin-top: 0.5rem;
+        margin: 0.25rem 0;
     }
 
     :global(.markdown hr) {
-        margin: 2rem 0;
+        margin: 1.5rem 0;
         border: 0;
-        border-top: 1px solid var(--border);
+        border-top: 1px solid var(--markdown-border);
     }
 
     :global(.markdown code) {
-        position: relative;
         border-radius: 0.375rem;
-        background: color-mix(in oklab, var(--muted) 84%, white);
-        padding: 0.2rem 0.3rem;
-        color: var(--foreground);
+        background: var(--markdown-code-bg);
+        padding: 0.2em 0.4em;
+        color: var(--markdown-fg);
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
             "Liberation Mono", "Courier New", monospace;
-        font-size: 0.875rem;
-        font-weight: 600;
+        font-size: 85%;
     }
 
     :global(.markdown pre) {
-        margin: 1.5rem 0;
+        margin: 0 0 1rem;
         overflow-x: auto;
-        border: 1px solid var(--border);
-        border-radius: 0.75rem;
-        background: color-mix(in oklab, var(--muted) 88%, white);
-        color: var(--foreground);
-        padding: 0.75rem 1rem;
-        box-shadow: 0 0.75rem 2rem -1.5rem color-mix(in oklab, var(--foreground)
-                    25%, transparent);
+        border: 1px solid var(--markdown-border);
+        border-radius: 0.375rem;
+        background: var(--markdown-pre-bg);
+        color: var(--markdown-fg);
+        padding: 1rem;
     }
 
     :global(.markdown pre code) {
         background: transparent;
         padding: 0;
-        font-weight: 500;
+        color: inherit;
+        font-size: 100%;
     }
 
     :global(.markdown table) {
-        margin: 1.5rem 0;
+        display: block;
+        margin: 0 0 1rem;
+        overflow-x: auto;
         width: 100%;
         border-collapse: collapse;
         font-size: 0.875rem;
     }
 
     :global(.markdown thead tr) {
-        border-top: 1px solid var(--border);
-        background: color-mix(in oklab, var(--muted) 82%, white);
+        border-top: 1px solid var(--markdown-border);
+        background: var(--markdown-table-header-bg);
     }
 
     :global(.markdown tbody tr) {
-        border-top: 1px solid var(--border);
-    }
-
-    :global(.markdown tbody tr:nth-child(even)) {
-        background: color-mix(in oklab, var(--muted) 55%, transparent);
+        border-top: 1px solid var(--markdown-border);
     }
 
     :global(.markdown th) {
-        border: 1px solid var(--border);
-        padding: 0.5rem 1rem;
+        border: 1px solid var(--markdown-border);
+        padding: 0.375rem 0.8125rem;
         text-align: left;
-        font-weight: 700;
+        font-weight: 600;
     }
 
     :global(.markdown td) {
-        border: 1px solid var(--border);
-        padding: 0.5rem 1rem;
+        border: 1px solid var(--markdown-border);
+        padding: 0.375rem 0.8125rem;
         text-align: left;
         vertical-align: top;
     }
 
     :global(.markdown img) {
-        margin: 1.5rem 0;
-        border: 1px solid var(--border);
-        border-radius: 0.75rem;
+        display: block;
+        max-width: 100%;
+        margin: 0 0 1rem;
+        border: 1px solid var(--markdown-border);
+        border-radius: 0.375rem;
     }
 
     :global(.markdown :is(th, td)[align="center"]) {

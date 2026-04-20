@@ -3,17 +3,17 @@ description: 'Prepare Node and pnpm tooling for Mission CI and release workflows
 runs:
   using: 'composite'
   steps:
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 10.30.3
+
     - name: Setup Node.js
       uses: actions/setup-node@v6
       with:
         node-version: 24
         cache: 'pnpm'
-
-    - name: Enable Corepack
-      shell: bash
-      run: |
-        corepack enable
-        COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack install
+        cache-dependency-path: pnpm-lock.yaml
 
     - name: Install Workspace Dependencies
       shell: bash

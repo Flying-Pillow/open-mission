@@ -17,7 +17,7 @@
     "build"
   ],
   "publishConfig": {
-    "access": "restricted"
+    "access": "public"
   },
   "scripts": {
     "build": "rm -rf build && rm -f tsconfig.tsbuildinfo && tsc -p tsconfig.json --emitDeclarationOnly && bun run ./scripts/build-terminal.mjs",

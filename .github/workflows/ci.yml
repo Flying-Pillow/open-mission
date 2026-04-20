@@ -22,19 +22,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Enable Corepack
-        run: |
-          corepack enable
-          COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack install
-
-      - name: Validate pnpm lockfile
-        run: pnpm install --frozen-lockfile
+      - name: Setup Environment
+        uses: ./.github/actions/setup-environment
 
   verify:
     name: Lint, Build, and Test
@@ -46,6 +35,9 @@ jobs:
 
       - name: Setup Environment
         uses: ./.github/actions/setup-environment
+
+      - name: Validate Changesets State
+        run: pnpm changeset status > /dev/null
 
       - name: Verify Workspace
         run: pnpm run ci:verify

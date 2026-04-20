@@ -4,7 +4,7 @@
   "description": "Mission core workflow orchestrator and central mission logic",
   "type": "module",
   "publishConfig": {
-    "access": "restricted"
+    "access": "public"
   },
   "scripts": {
     "build": "rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./build/workflow/engine/copyTemplateFiles.js",
