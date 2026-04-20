@@ -16,8 +16,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     const oauthError = url.searchParams.get('githubAuthError')?.trim();
     const oauthConfigurationError = getGitHubOAuthConfigurationError();
     const deviceConfigurationError = getGitHubDeviceConfigurationError();
+    const githubStatus = locals.appContext.githubStatus;
 
-    if (!locals.githubAuthToken) {
+    if (githubStatus !== 'connected') {
         return {
             redirectTo,
             oauth: {

@@ -317,6 +317,39 @@ describe('Mission', () => {
         }
     });
 
+    it('orders the tower tree with BRIEF first and stage artifacts after stage tasks', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner');
+
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const mission = await Factory.create(adapter, {
+                brief: createBrief(206, 'Mission tree ordering'),
+                branchRef: adapter.deriveMissionBranchName(206, 'Mission tree ordering')
+            }, createWorkflowBindings(runner));
+
+            try {
+                const status = await mission.startWorkflow();
+                const treeNodes = status.tower?.treeNodes ?? [];
+
+                expect(treeNodes[0]).toMatchObject({
+                    kind: 'mission-artifact',
+                    label: 'BRIEF.md'
+                });
+
+                const prdTaskIndex = treeNodes.findIndex((node) => node.kind === 'task' && node.stageId === 'prd');
+                const prdArtifactIndex = treeNodes.findIndex((node) => node.kind === 'stage-artifact' && node.stageId === 'prd');
+
+                expect(prdTaskIndex).toBeGreaterThan(-1);
+                expect(prdArtifactIndex).toBeGreaterThan(prdTaskIndex);
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
     it('falls back to task artifact launch instructions when session prompt is empty', async () => {
         const workspaceRoot = await createTempRepo();
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');

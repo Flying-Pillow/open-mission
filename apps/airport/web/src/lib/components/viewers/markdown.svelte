@@ -35,7 +35,7 @@
     );
 </script>
 
-<div class="markdown max-w-none break-words p-2 text-sm text-foreground">
+<div class="markdown max-w-none break-words p-2 pb-6text-sm text-foreground">
     {@html rendered}
 </div>
 
@@ -53,8 +53,8 @@
         scroll-margin-top: 5rem;
         font-size: 2.25rem;
         line-height: 2.5rem;
-        font-weight: 800;
-        letter-spacing: -0.025em;
+        font-weight: 700;
+        letter-spacing: -0.02em;
         text-wrap: balance;
     }
 

@@ -68,6 +68,25 @@ describe('resolveMissionSelection', () => {
 		});
 	});
 
+	it('resolves mission artifact selection to the mission brief', () => {
+		const domain = createDomain();
+
+		const resolved = resolveMissionSelection({
+			target: {
+				kind: 'mission-artifact',
+				sourcePath: '/repo/.mission/missions/mission-1/BRIEF.md'
+			},
+			domain,
+			missionId: 'mission-1'
+		});
+
+		expect(resolved).toEqual({
+			missionId: 'mission-1',
+			activeMissionArtifactId: 'mission-1:brief',
+			activeMissionArtifactPath: '/repo/.mission/missions/mission-1/BRIEF.md'
+		});
+	});
+
 	it('resolves daemon context selection through the same companion rules', () => {
 		const domain = createDomain();
 
@@ -121,7 +140,7 @@ function createDomain(): ContextGraph {
 				briefSummary: 'Mission 1',
 				workspacePath: '/repo/.mission/missions/mission-1',
 				taskIds: ['task-1'],
-				artifactIds: ['mission-1:prd', 'mission-1:spec', 'mission-1:task:task-1'],
+				artifactIds: ['mission-1:brief', 'mission-1:prd', 'mission-1:spec', 'mission-1:task:task-1'],
 				sessionIds: ['session-old', 'session-new']
 			}
 		},
@@ -139,6 +158,13 @@ function createDomain(): ContextGraph {
 			}
 		},
 		artifacts: {
+			'mission-1:brief': {
+				artifactId: 'mission-1:brief',
+				missionId: 'mission-1',
+				filePath: '/repo/.mission/missions/mission-1/BRIEF.md',
+				logicalKind: 'brief',
+				displayLabel: 'BRIEF.md'
+			},
 			'mission-1:prd': {
 				artifactId: 'mission-1:prd',
 				missionId: 'mission-1',

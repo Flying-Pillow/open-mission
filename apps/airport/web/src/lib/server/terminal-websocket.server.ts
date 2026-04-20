@@ -12,7 +12,7 @@ import {
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, WebSocket as NodeWebSocket } from 'ws';
-import { connectDedicatedAuthenticatedDaemonClient } from './daemon.server';
+import { connectDedicatedAuthenticatedDaemonClient } from './daemon/connections.server';
 
 const TERMINAL_WS_PATH_PATTERN = /^\/api\/runtime\/sessions\/([^/]+)\/terminal\/ws$/u;
 const AIRPORT_WEB_TERMINAL_SCREEN_LIMIT = 40_000;

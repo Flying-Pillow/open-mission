@@ -7,7 +7,8 @@ import {
     getDaemonRuntimeState,
     readCachedDaemonSystemStatus,
     type DaemonRuntimeState,
-} from '$lib/server/daemon.server';
+} from '$lib/server/daemon/health.server';
+import { resolveSurfacePath } from '$lib/server/daemon/context.server';
 import type { SystemStatus } from '@flying-pillow/mission-core';
 
 type GithubStatus = 'connected' | 'disconnected' | 'unknown';
@@ -15,13 +16,17 @@ type GithubStatus = 'connected' | 'disconnected' | 'unknown';
 const DAEMON_STATE_REQUEST_TIMEOUT_MS = 1_500;
 const GITHUB_STATE_REQUEST_TIMEOUT_MS = 1_000;
 
-function resolveSurfacePath(): string {
-    const configuredSurfacePath = process.env['MISSION_SURFACE_PATH']?.trim();
-    if (configuredSurfacePath && configuredSurfacePath.length > 0) {
-        return configuredSurfacePath;
+function resolveCanonicalOrigin(requestUrl: URL): string | undefined {
+    const configuredCallbackUrl = process.env['GITHUB_OAUTH_CALLBACK_URL']?.trim();
+    if (configuredCallbackUrl) {
+        return new URL(configuredCallbackUrl).origin;
     }
 
-    return process.cwd();
+    if (process.env['NODE_ENV'] !== 'production' && requestUrl.port === '5174') {
+        return `${requestUrl.protocol}//127.0.0.1:${requestUrl.port}`;
+    }
+
+    return undefined;
 }
 
 async function ensureDaemonState(): Promise<DaemonRuntimeState> {
@@ -72,6 +77,11 @@ function resolveGitHubContext(systemStatus?: SystemStatus): {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
+    const canonicalOrigin = resolveCanonicalOrigin(event.url);
+    if (canonicalOrigin && event.url.origin !== canonicalOrigin && ['GET', 'HEAD'].includes(event.request.method)) {
+        throw redirect(307, `${canonicalOrigin}${event.url.pathname}${event.url.search}`);
+    }
+
     const daemonState = await ensureDaemonState();
     const githubAuthToken = await readGithubAuthToken(event.cookies);
     const daemonSystemStatus = daemonState.running

@@ -44,9 +44,9 @@ import {
     trackedIssueSummaryDtoSchema
 } from '@flying-pillow/mission-core';
 import {
-    connectAuthenticatedDaemonClient,
-    connectDedicatedAuthenticatedDaemonClient
-} from '$lib/server/daemon.server';
+    connectDedicatedAuthenticatedDaemonClient,
+    connectSharedAuthenticatedDaemonClient
+} from '$lib/server/daemon/connections.server';
 import { fetchGitHubIssueDetail } from '$lib/server/github-issues.server';
 
 const AIRPORT_WEB_TERMINAL_SCREEN_LIMIT = 40_000;
@@ -88,7 +88,7 @@ export class AirportWebGateway {
                 repositoryId: input.repositoryId
             })).repositoryRootPath;
 
-        const daemon = await this.connectDaemon(repositoryRootPath);
+        const daemon = await this.connectSharedDaemonClient(repositoryRootPath);
         try {
             const api = new DaemonApi(daemon.client);
             const status = await withTimeout(
@@ -119,7 +119,7 @@ export class AirportWebGateway {
             throw new Error('Mission runtime snapshot requires a missionId.');
         }
 
-        const daemon = await this.connectDaemon(surfacePath);
+        const daemon = await this.connectSharedDaemonClient(surfacePath);
         try {
             const api = new DaemonApi(daemon.client);
             return await this.buildMissionRuntimeSnapshot({
@@ -143,7 +143,7 @@ export class AirportWebGateway {
             throw new Error('Mission control snapshot requires a missionId.');
         }
 
-        const daemon = await this.connectDaemon(input.surfacePath);
+        const daemon = await this.connectSharedDaemonClient(input.surfacePath);
         try {
             const api = new DaemonApi(daemon.client);
             const operatorStatus = await withTimeout(
@@ -171,7 +171,7 @@ export class AirportWebGateway {
             throw new Error('Mission operator status requires a missionId.');
         }
 
-        const daemon = await this.connectDaemon(surfacePath);
+        const daemon = await this.connectSharedDaemonClient(surfacePath);
         try {
             const api = new DaemonApi(daemon.client);
             return await withTimeout(
@@ -194,7 +194,7 @@ export class AirportWebGateway {
             throw new Error('Mission action snapshot requires a missionId.');
         }
 
-        const daemon = await this.connectDaemon(input.surfacePath);
+        const daemon = await this.connectSharedDaemonClient(input.surfacePath);
         try {
             const api = new DaemonApi(daemon.client);
             return await withTimeout(
@@ -223,7 +223,7 @@ export class AirportWebGateway {
             throw new Error('Mission action execution requires missionId and actionId.');
         }
 
-        const daemon = await this.connectDaemon(input.surfacePath);
+        const daemon = await this.connectSharedDaemonClient(input.surfacePath);
         try {
             const api = new DaemonApi(daemon.client);
             return await withTimeout(
@@ -249,7 +249,7 @@ export class AirportWebGateway {
             throw new Error('Document read requires a filePath.');
         }
 
-        const daemon = await this.connectDaemon(surfacePath);
+        const daemon = await this.connectSharedDaemonClient(surfacePath);
         try {
             const api = new DaemonApi(daemon.client);
             return await withTimeout(
@@ -272,7 +272,7 @@ export class AirportWebGateway {
             throw new Error('Document write requires a filePath.');
         }
 
-        const daemon = await this.connectDaemon(input.surfacePath);
+        const daemon = await this.connectSharedDaemonClient(input.surfacePath);
         try {
             const api = new DaemonApi(daemon.client);
             return await withTimeout(
@@ -298,7 +298,7 @@ export class AirportWebGateway {
         }
 
         const actionId = this.resolveMissionTaskActionId(taskId, input.action);
-        const daemon = await this.connectDaemon();
+        const daemon = await this.connectSharedDaemonClient();
         try {
             const api = new DaemonApi(daemon.client);
             const status = await withTimeout(
@@ -333,7 +333,7 @@ export class AirportWebGateway {
             throw new Error('Mission command requires a missionId.');
         }
 
-        const daemon = await this.connectDaemon();
+        const daemon = await this.connectSharedDaemonClient();
         try {
             const api = new DaemonApi(daemon.client);
             const status = await withTimeout(
@@ -378,7 +378,7 @@ export class AirportWebGateway {
             throw new Error('Mission session command requires missionId and sessionId.');
         }
 
-        const daemon = await this.connectDaemon();
+        const daemon = await this.connectSharedDaemonClient();
         try {
             const api = new DaemonApi(daemon.client);
 
@@ -434,9 +434,9 @@ export class AirportWebGateway {
             return this.createEmptyAirportHomeSnapshot();
         }
 
-        let daemon: Awaited<ReturnType<AirportWebGateway['connectDaemon']>> | undefined;
+        let daemon: Awaited<ReturnType<AirportWebGateway['connectSharedDaemonClient']>> | undefined;
         try {
-            daemon = await this.connectDaemon();
+            daemon = await this.connectSharedDaemonClient();
             const api = new DaemonApi(daemon.client);
             const status = await withTimeout(
                 api.control.getStatus(),
@@ -471,7 +471,7 @@ export class AirportWebGateway {
             throw new Error('Repository registration requires a repositoryPath.');
         }
 
-        const daemon = await this.connectDaemon();
+        const daemon = await this.connectSharedDaemonClient();
         try {
             const api = new DaemonApi(daemon.client);
             return this.toRepositoryCandidateDto(
@@ -498,7 +498,7 @@ export class AirportWebGateway {
                 repositoryRootPath: input.repositoryRootPath
             });
 
-        const daemon = await this.connectDaemon(repository.repositoryRootPath);
+        const daemon = await this.connectSharedDaemonClient(repository.repositoryRootPath);
         try {
             const api = new DaemonApi(daemon.client);
             const status = await withTimeout(
@@ -540,7 +540,7 @@ export class AirportWebGateway {
                 repositoryId: input.repositoryId
             })).repositoryRootPath;
 
-        const daemon = await this.connectDaemon(repositoryRootPath);
+        const daemon = await this.connectSharedDaemonClient(repositoryRootPath);
         try {
             const api = new DaemonApi(daemon.client);
             const status = await withTimeout(
@@ -572,7 +572,7 @@ export class AirportWebGateway {
             throw new Error('Mission creation from issue requires a repositoryId.');
         }
 
-        const daemon = await this.connectDaemon(repositoryId);
+        const daemon = await this.connectSharedDaemonClient(repositoryId);
         try {
             const api = new DaemonApi(daemon.client);
             return await withTimeout(
@@ -598,7 +598,7 @@ export class AirportWebGateway {
             throw new Error('Mission creation from brief requires a repositoryId.');
         }
 
-        const daemon = await this.connectDaemon(repositoryId);
+        const daemon = await this.connectSharedDaemonClient(repositoryId);
         try {
             const api = new DaemonApi(daemon.client);
             return await withTimeout(
@@ -622,7 +622,7 @@ export class AirportWebGateway {
         onEvent: (event: AirportRuntimeEventEnvelopeDto) => void;
     }): Promise<{ dispose(): void }> {
         const missionId = input.missionId?.trim();
-        const daemon = await this.connectDedicatedDaemon();
+        const daemon = await this.connectDedicatedDaemonClient();
         await daemon.client.request<null>('event.subscribe', {
             eventTypes: ['mission.actions.changed', 'mission.status', 'session.lifecycle'],
             ...(missionId ? { missionId } : {})
@@ -656,7 +656,7 @@ export class AirportWebGateway {
             });
         }
 
-        const daemon = await this.connectDaemon();
+        const daemon = await this.connectSharedDaemonClient();
         try {
             const api = new DaemonApi(daemon.client);
             const state = await withTimeout(
@@ -702,7 +702,7 @@ export class AirportWebGateway {
     }): Promise<MissionSessionTerminalSnapshotDto> {
         const missionId = input.missionId.trim();
         const sessionId = input.sessionId.trim();
-        const daemon = await this.connectDaemon();
+        const daemon = await this.connectSharedDaemonClient();
         try {
             const api = new DaemonApi(daemon.client);
             const state = await withTimeout(
@@ -945,7 +945,7 @@ export class AirportWebGateway {
             return undefined;
         }
 
-        const daemon = await this.connectDaemon();
+        const daemon = await this.connectSharedDaemonClient();
         try {
             const api = new DaemonApi(daemon.client);
             const sessions = await withTimeout(
@@ -1054,9 +1054,9 @@ export class AirportWebGateway {
         );
     }
 
-    private async connectDaemon(surfacePath?: string) {
+    private async connectSharedDaemonClient(surfacePath?: string) {
         return withTimeout(
-            connectAuthenticatedDaemonClient({
+            connectSharedAuthenticatedDaemonClient({
                 locals: this.locals,
                 allowStart: true,
                 ...(surfacePath?.trim() ? { surfacePath: surfacePath.trim() } : {})
@@ -1066,7 +1066,7 @@ export class AirportWebGateway {
         );
     }
 
-    private async connectDedicatedDaemon(surfacePath?: string) {
+    private async connectDedicatedDaemonClient(surfacePath?: string) {
         return withTimeout(
             connectDedicatedAuthenticatedDaemonClient({
                 locals: this.locals,

@@ -54,11 +54,11 @@
     const appContext = getAppContext();
 
     const daemonStatusTone = $derived(
-        data.appContext.daemon.running ? "connected" : "disconnected",
+        appContext.daemon.running ? "connected" : "disconnected",
     );
-    const githubStatusTone = $derived(data.appContext.githubStatus);
+    const githubStatusTone = $derived(appContext.githubStatus);
     const githubAccountLabel = $derived(
-        data.appContext.user?.name ??
+        appContext.user?.name ??
             (githubStatusTone === "connected"
                 ? "Authenticated GitHub account"
                 : "No authenticated GitHub account"),
@@ -141,7 +141,7 @@
                                     </p>
                                 </div>
                                 <p class="mt-1 text-sm text-muted-foreground">
-                                    {data.appContext.daemon.message}
+                                    {appContext.daemon.message}
                                 </p>
                             </div>
                             <div

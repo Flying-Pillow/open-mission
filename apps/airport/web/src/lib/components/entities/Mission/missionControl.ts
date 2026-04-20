@@ -171,7 +171,9 @@ export function computeMissionControlState(input: {
         domain,
         missionId: input.status.missionId
     });
-    const activeArtifactPath = resolvedSelection?.activeInstructionPath ?? resolvedSelection?.activeStageResultPath;
+    const activeArtifactPath = resolvedSelection?.activeMissionArtifactPath
+        ?? resolvedSelection?.activeInstructionPath
+        ?? resolvedSelection?.activeStageResultPath;
     const activeArtifact = activeArtifactPath && domain
         ? Object.values(domain.artifacts).find((artifact: ArtifactContext) => artifact.filePath === activeArtifactPath)
         : undefined;
@@ -217,6 +219,10 @@ function deriveNodeIdFromContextSelection(
                 node.id === nodeId && (!artifact?.filePath || node.sourcePath === artifact.filePath)
             )?.id;
         }
+
+        return treeNodes.find((node) =>
+            node.kind === 'mission-artifact' && node.sourcePath === artifact?.filePath
+        )?.id;
     }
 
     if (selection.taskId) {

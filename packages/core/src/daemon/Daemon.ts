@@ -26,7 +26,7 @@ import {
 import { MissionSystemController } from './control-plane/MissionSystemController.js';
 import { WorkspaceManager } from '../workspace/WorkspaceManager.js';
 import type { AgentRunner } from '../agent/AgentRunner.js';
-import { peekCachedSystemStatus } from '../system/SystemStatus.js';
+import { readSystemStatus } from '../system/SystemStatus.js';
 
 export type DaemonOptions = {
 	logLine?: (line: string) => void;
@@ -226,7 +226,7 @@ export class Daemon {
 		}
 
 		if (request.method === 'system.status') {
-			return peekCachedSystemStatus({
+			return readSystemStatus({
 				...(request.surfacePath?.trim() ? { cwd: request.surfacePath.trim() } : {}),
 				...(request.authToken?.trim() ? { authToken: request.authToken.trim() } : {})
 			});

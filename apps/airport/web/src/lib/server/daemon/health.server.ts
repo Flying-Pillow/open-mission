@@ -1,12 +1,9 @@
-// /apps/airport/web/src/lib/server/daemon.server.ts: Resolves authenticated Mission daemon connections for SvelteKit server routes.
-import {
-    connectAirportControl,
-    type DaemonClient,
-    type SystemStatus,
-    resolveAirportControlRuntimeMode
-} from '@flying-pillow/mission-core';
+// /apps/airport/web/src/lib/server/daemon/health.server.ts: Tracks daemon availability and recovery state for the Airport web server.
+import type { SystemStatus } from '@flying-pillow/mission-core';
+import { resolveRequestAuthToken, resolveSurfacePath } from './context.server';
+import { clearSharedDaemonClient } from './shared-client.server';
+import { openDaemonConnection } from './transport.server';
 
-const DAEMON_CLIENT_IDLE_TIMEOUT_MS = 15_000;
 const DAEMON_HEALTH_CACHE_TTL_MS = 3_000;
 const DAEMON_RECOVERY_BACKOFF_MS = [0, 2_000, 5_000, 15_000, 30_000, 60_000] as const;
 
@@ -27,14 +24,6 @@ type DaemonRecoveryRecord = {
     nextRetryAtMs: number;
 };
 
-type SharedDaemonClientEntry = {
-    clientPromise: Promise<DaemonClient>;
-    client?: DaemonClient;
-    activeLeases: number;
-    idleTimer?: ReturnType<typeof setTimeout>;
-};
-
-const sharedDaemonClients = new Map<string, SharedDaemonClientEntry>();
 let daemonRecoveryRecord: DaemonRecoveryRecord | undefined;
 let daemonRecoveryCheck: Promise<DaemonRuntimeState> | undefined;
 
@@ -52,20 +41,6 @@ export function isDaemonUnavailableError(error: unknown): error is DaemonUnavail
     return error instanceof DaemonUnavailableError;
 }
 
-export function resolveRequestAuthToken(locals?: App.Locals): string | undefined {
-    const authToken = locals?.githubAuthToken?.trim();
-    return authToken && authToken.length > 0 ? authToken : undefined;
-}
-
-export function resolveSurfacePath(): string {
-    const configuredSurfacePath = process.env['MISSION_SURFACE_PATH']?.trim();
-    if (configuredSurfacePath && configuredSurfacePath.length > 0) {
-        return configuredSurfacePath;
-    }
-
-    return process.cwd();
-}
-
 export async function readCachedDaemonSystemStatus(input: {
     locals?: App.Locals;
     authToken?: string;
@@ -77,7 +52,7 @@ export async function readCachedDaemonSystemStatus(input: {
     const timeoutMs = input.timeoutMs ?? 1_000;
 
     try {
-        const daemon = await connectDedicatedAuthenticatedDaemonClient({
+        const daemon = await openDaemonConnection({
             surfacePath,
             allowStart: false,
             ...(authToken ? { authToken } : {})
@@ -151,20 +126,6 @@ async function raceDaemonRuntimeState(
     }
 }
 
-function clearSharedDaemonClient(surfacePath: string, authToken?: string): void {
-    const key = createDaemonClientKey(surfacePath, authToken);
-    const entry = sharedDaemonClients.get(key);
-    if (!entry) {
-        return;
-    }
-
-    if (entry.idleTimer) {
-        clearTimeout(entry.idleTimer);
-    }
-    sharedDaemonClients.delete(key);
-    entry.client?.dispose();
-}
-
 function rememberDaemonRuntimeState(input: {
     state: DaemonRuntimeState;
     checkedAtMs: number;
@@ -190,7 +151,7 @@ async function checkDaemonRuntimeState(input: {
     const authToken = input.authToken?.trim();
 
     try {
-        const daemon = await connectDedicatedAuthenticatedDaemonClient({
+        const daemon = await openDaemonConnection({
             surfacePath: input.surfacePath,
             allowStart: false,
             ...(authToken ? { authToken } : {})
@@ -234,7 +195,7 @@ async function checkDaemonRuntimeState(input: {
         }
 
         try {
-            const daemon = await connectDedicatedAuthenticatedDaemonClient({
+            const daemon = await openDaemonConnection({
                 surfacePath: input.surfacePath,
                 allowStart: true,
                 ...(authToken ? { authToken } : {})
@@ -318,224 +279,4 @@ function buildPendingDaemonState(checkedAtMs: number): DaemonRuntimeState {
         ...(lastKnownState?.nextRetryAt ? { nextRetryAt: lastKnownState.nextRetryAt } : {}),
         ...(lastKnownFailureCount > 0 ? { failureCount: lastKnownFailureCount } : {})
     };
-}
-
-export async function connectAuthenticatedDaemonClient(input: {
-    locals?: App.Locals;
-    authToken?: string;
-    allowStart?: boolean;
-    surfacePath?: string;
-} = {}): Promise<{
-    client: DaemonClient;
-    dispose: () => void;
-}> {
-    const authToken = input.authToken?.trim() || resolveRequestAuthToken(input.locals);
-    const surfacePath = input.surfacePath?.trim() || resolveSurfacePath();
-    const allowStart = input.allowStart ?? false;
-
-    try {
-        if (allowStart) {
-            const daemonState = await getDaemonRuntimeState({
-                surfacePath,
-                allowStart,
-                ...(authToken ? { authToken } : {}),
-                ...(input.locals ? { locals: input.locals } : {})
-            });
-            if (!daemonState.running) {
-                throw new DaemonUnavailableError(daemonState);
-            }
-        }
-
-        const lease = await acquireSharedDaemonClient({
-            surfacePath,
-            allowStart: false,
-            ...(authToken ? { authToken } : {})
-        });
-
-        return {
-            client: lease.client,
-            dispose: lease.dispose
-        };
-    } catch (error) {
-        if (allowStart && !isDaemonUnavailableError(error)) {
-            clearSharedDaemonClient(surfacePath, authToken);
-            const daemonState = await getDaemonRuntimeState({
-                surfacePath,
-                allowStart,
-                ...(authToken ? { authToken } : {}),
-                ...(input.locals ? { locals: input.locals } : {})
-            });
-            if (!daemonState.running) {
-                throw new DaemonUnavailableError(daemonState);
-            }
-
-            const lease = await acquireSharedDaemonClient({
-                surfacePath,
-                allowStart: false,
-                ...(authToken ? { authToken } : {})
-            });
-            return {
-                client: lease.client,
-                dispose: lease.dispose
-            };
-        }
-        throw error;
-    }
-}
-
-export async function connectDedicatedAuthenticatedDaemonClient(input: {
-    locals?: App.Locals;
-    authToken?: string;
-    allowStart?: boolean;
-    surfacePath?: string;
-} = {}): Promise<{
-    client: DaemonClient;
-    dispose: () => void;
-}> {
-    const authToken = input.authToken?.trim() || resolveRequestAuthToken(input.locals);
-    const surfacePath = input.surfacePath?.trim() || resolveSurfacePath();
-    const allowStart = input.allowStart ?? false;
-
-    try {
-        if (allowStart) {
-            const daemonState = await getDaemonRuntimeState({
-                surfacePath,
-                allowStart,
-                ...(authToken ? { authToken } : {}),
-                ...(input.locals ? { locals: input.locals } : {})
-            });
-            if (!daemonState.running) {
-                throw new DaemonUnavailableError(daemonState);
-            }
-        }
-
-        const client = await connectAirportControl({
-            surfacePath,
-            runtimeMode: resolveAirportControlRuntimeMode(import.meta.url),
-            allowStart: false,
-            ...(authToken ? { authToken } : {})
-        });
-
-        return {
-            client,
-            dispose: () => {
-                client.dispose();
-            }
-        };
-    } catch (error) {
-        if (allowStart && !isDaemonUnavailableError(error)) {
-            const daemonState = await getDaemonRuntimeState({
-                surfacePath,
-                allowStart,
-                ...(authToken ? { authToken } : {}),
-                ...(input.locals ? { locals: input.locals } : {})
-            });
-            if (!daemonState.running) {
-                throw new DaemonUnavailableError(daemonState);
-            }
-
-            const client = await connectAirportControl({
-                surfacePath,
-                runtimeMode: resolveAirportControlRuntimeMode(import.meta.url),
-                allowStart: false,
-                ...(authToken ? { authToken } : {})
-            });
-            return {
-                client,
-                dispose: () => {
-                    client.dispose();
-                }
-            };
-        }
-        throw error;
-    }
-}
-
-async function acquireSharedDaemonClient(input: {
-    surfacePath: string;
-    allowStart: boolean;
-    authToken?: string;
-}): Promise<{
-    client: DaemonClient;
-    dispose: () => void;
-}> {
-    const key = createDaemonClientKey(input.surfacePath, input.authToken);
-    let entry = sharedDaemonClients.get(key);
-    if (!entry) {
-        const newEntry: SharedDaemonClientEntry = {
-            clientPromise: connectAirportControl({
-                surfacePath: input.surfacePath,
-                runtimeMode: resolveAirportControlRuntimeMode(import.meta.url),
-                allowStart: input.allowStart,
-                ...(input.authToken ? { authToken: input.authToken } : {})
-            }),
-            activeLeases: 0
-        };
-        sharedDaemonClients.set(key, newEntry);
-        newEntry.clientPromise = newEntry.clientPromise.then(
-            (client) => {
-                newEntry.client = client;
-                return client;
-            },
-            (error) => {
-                sharedDaemonClients.delete(key);
-                throw error;
-            }
-        );
-        entry = newEntry;
-    }
-
-    if (entry.idleTimer) {
-        clearTimeout(entry.idleTimer);
-        entry.idleTimer = undefined;
-    }
-
-    entry.activeLeases += 1;
-    let client: DaemonClient;
-    try {
-        client = await entry.clientPromise;
-        await client.connect({ surfacePath: input.surfacePath });
-    } catch (error) {
-        sharedDaemonClients.delete(key);
-        entry.client?.dispose();
-        throw error;
-    }
-
-    let disposed = false;
-    return {
-        client,
-        dispose: () => {
-            if (disposed) {
-                return;
-            }
-            disposed = true;
-
-            const currentEntry = sharedDaemonClients.get(key);
-            if (!currentEntry) {
-                return;
-            }
-
-            currentEntry.activeLeases = Math.max(0, currentEntry.activeLeases - 1);
-            if (currentEntry.activeLeases > 0 || currentEntry.idleTimer) {
-                return;
-            }
-
-            currentEntry.idleTimer = setTimeout(() => {
-                const idleEntry = sharedDaemonClients.get(key);
-                if (!idleEntry || idleEntry.activeLeases > 0) {
-                    return;
-                }
-
-                sharedDaemonClients.delete(key);
-                idleEntry.client?.dispose();
-            }, DAEMON_CLIENT_IDLE_TIMEOUT_MS);
-        }
-    };
-}
-
-function createDaemonClientKey(surfacePath: string, authToken?: string): string {
-    return JSON.stringify({
-        surfacePath,
-        authToken: authToken?.trim() || ''
-    });
 }

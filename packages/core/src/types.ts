@@ -501,7 +501,7 @@ export type MissionTowerStageRailItem = {
 	subtitle?: string;
 };
 
-export type MissionTowerTreeNodeKind = 'stage' | 'stage-artifact' | 'task' | 'task-artifact' | 'session';
+export type MissionTowerTreeNodeKind = 'mission-artifact' | 'stage' | 'stage-artifact' | 'task' | 'task-artifact' | 'session';
 
 export type MissionTowerTreeNode = {
 	id: string;
@@ -530,6 +530,8 @@ export type MissionResolvedSelection = {
 	missionId?: string;
 	stageId?: MissionStageId;
 	taskId?: string;
+	activeMissionArtifactId?: string;
+	activeMissionArtifactPath?: string;
 	activeInstructionArtifactId?: string;
 	activeInstructionPath?: string;
 	activeStageResultArtifactId?: string;

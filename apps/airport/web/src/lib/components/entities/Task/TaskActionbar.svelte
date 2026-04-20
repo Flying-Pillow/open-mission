@@ -1,15 +1,20 @@
 <script lang="ts">
     import ScopedActionbar from "$lib/components/entities/Actionbar/ScopedActionbar.svelte";
+    import type { MissionStageId } from "@flying-pillow/mission-core/types.js";
 
     let {
         missionId,
         repositoryId,
         refreshNonce,
+        stageId,
+        taskId,
         onActionExecuted,
     }: {
         missionId: string;
         repositoryId: string;
         refreshNonce: number;
+        stageId?: MissionStageId;
+        taskId?: string;
         onActionExecuted: () => Promise<void>;
     } = $props();
 </script>
@@ -18,10 +23,11 @@
     {missionId}
     {repositoryId}
     {refreshNonce}
-    scope="mission"
-    class="xl:justify-end"
-    buttonClass="shadow-sm"
-    defaultVariant="outline"
-    showEmptyState={true}
+    {stageId}
+    {taskId}
+    scope="task"
+    defaultVariant="default"
+    buttonClass="shadow-sm shadow-primary/10"
+    showEmptyState={false}
     {onActionExecuted}
 />

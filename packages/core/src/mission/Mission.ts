@@ -805,6 +805,19 @@ export class Mission {
 		productFiles: Partial<Record<MissionArtifactKey, string>>
 	): MissionTowerTreeNode[] {
 		const nodes: MissionTowerTreeNode[] = [];
+		const missionArtifactPath = productFiles.brief;
+		if (missionArtifactPath) {
+			nodes.push({
+				id: 'tree:mission-artifact:brief',
+				label: MISSION_ARTIFACTS.brief,
+				kind: 'mission-artifact',
+				depth: 0,
+				color: this.progressTone('pending'),
+				statusLabel: 'Mission artifact',
+				collapsible: false,
+				sourcePath: missionArtifactPath
+			});
+		}
 		for (const stage of stages) {
 			const stageArtifactPath = this.resolveStageArtifactPath(stage.stage, productFiles);
 			const stageStatusLabel = this.toStatusLabel(stage.status);
@@ -818,20 +831,6 @@ export class Mission {
 				collapsible: Boolean(stageArtifactPath) || stage.tasks.length > 0,
 				stageId: stage.stage
 			});
-
-			if (stageArtifactPath) {
-				nodes.push({
-					id: `tree:stage-artifact:${stage.stage}`,
-					label: path.basename(stageArtifactPath),
-					kind: 'stage-artifact',
-					depth: 1,
-					color: this.progressTone(stage.status),
-					statusLabel: stageStatusLabel,
-					collapsible: false,
-					sourcePath: stageArtifactPath,
-					stageId: stage.stage
-				});
-			}
 
 			for (const task of stage.tasks) {
 				const taskColor = this.progressTone(task.status);
@@ -880,6 +879,20 @@ export class Mission {
 						taskId: task.taskId
 					});
 				}
+			}
+
+			if (stageArtifactPath) {
+				nodes.push({
+					id: `tree:stage-artifact:${stage.stage}`,
+					label: path.basename(stageArtifactPath),
+					kind: 'stage-artifact',
+					depth: 1,
+					color: this.progressTone(stage.status),
+					statusLabel: stageStatusLabel,
+					collapsible: false,
+					sourcePath: stageArtifactPath,
+					stageId: stage.stage
+				});
 			}
 		}
 		return nodes;
@@ -940,7 +953,7 @@ export class Mission {
 			return '#79c0ff';
 		}
 		if (state === 'running') {
-			return '#3fb950';
+			return '#58a6ff';
 		}
 		if (state === 'terminated') {
 			return '#9be9a8';

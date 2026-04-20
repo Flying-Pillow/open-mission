@@ -77,6 +77,57 @@ describe('Daemon', () => {
 		});
 	});
 
+	it('derives system status from an explicit auth token without waiting for another daemon action', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			const configHome = path.join(workspaceRoot, 'config-home');
+			const binDirectory = path.join(workspaceRoot, 'bin');
+			const originalPath = process.env['PATH'] ?? '';
+			await fs.mkdir(binDirectory, { recursive: true });
+			await fs.writeFile(
+				path.join(binDirectory, 'gh'),
+				`#!/bin/sh
+if [ "$GH_TOKEN" = "ghp_test_token" ] && [ "$1" = "api" ] && [ "$2" = "user" ]; then
+  echo '{"login":"mission-token-user","email":"mission@example.com"}'
+  exit 0
+fi
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "authentication required" >&2
+  exit 1
+fi
+exit 1
+`,
+				{ mode: 0o755 }
+			);
+
+			process.env['XDG_CONFIG_HOME'] = configHome;
+			process.env['PATH'] = `${binDirectory}:${originalPath}`;
+
+			try {
+				const daemon = await startDaemon({ socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+				const client = new DaemonClient();
+
+				try {
+					client.setAuthToken('ghp_test_token');
+					await client.connect({ surfacePath: workspaceRoot, socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
+					const api = new DaemonApi(client);
+					const status = await api.system.getStatus();
+
+					expect(status.github.authenticated).toBe(true);
+					expect(status.github.user).toBe('mission-token-user');
+					expect(status.github.email).toBe('mission@example.com');
+				} finally {
+					client.dispose();
+					await daemon.close();
+				}
+			} finally {
+				process.env['XDG_CONFIG_HOME'] = undefined;
+				process.env['PATH'] = originalPath;
+				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
 	it('drops session.terminal broadcasts until a matching subscriber is attached', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();

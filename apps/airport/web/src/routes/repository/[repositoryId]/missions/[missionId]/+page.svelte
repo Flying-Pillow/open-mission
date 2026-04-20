@@ -9,7 +9,9 @@
         MissionRuntimeTransport,
     } from "$lib";
     import ArtifactEditor from "$lib/components/entities/Artifact/ArtifactEditor.svelte";
-    import MissionActionbar from "$lib/components/entities/Mission/MissionActionbar.svelte";
+    import ArtifactViewer from "$lib/components/entities/Artifact/ArtifactViewer.svelte";
+    import MissionControlTree from "$lib/components/entities/Mission/MissionControlTree.svelte";
+    import MissionFileTree from "$lib/components/entities/Mission/MissionFileTree.svelte";
     import MissionView from "$lib/components/entities/Mission/Mission.svelte";
     import AgentSession from "$lib/components/entities/AgentSession/AgentSession.svelte";
     import {
@@ -25,6 +27,8 @@
         SidebarInset,
         SidebarProvider,
     } from "$lib/components/ui/sidebar/index.js";
+    import * as Tabs from "$lib/components/ui/tabs/index.js";
+    import type { MissionFileTreeNode } from "$lib/types/mission-file-tree";
     import type { MissionControlSnapshot } from "$lib/types/mission-control";
     import type {
         AirportRuntimeEventEnvelopeDto,
@@ -63,6 +67,10 @@
     let controlError = $state<string | null>(null);
     let runtimeError = $state<string | null>(null);
     let actionRefreshNonce = $state(0);
+    let artifactPanelMode = $state<"view" | "edit">("view");
+    let leftTreeMode = $state<"control" | "files">("control");
+    let selectedWorktreeNode = $state<MissionFileTreeNode | null>(null);
+    let artifactPanelSourceKey = $state<string | null>(null);
 
     let controlRefreshTimer: number | null = null;
     let missionRefreshTimer: number | null = null;
@@ -95,6 +103,45 @@
             selectedNodeId,
         }),
     );
+    const missionOutline = $derived({
+        title: controlSnapshot.operatorStatus.title,
+        currentStageId: controlSnapshot.operatorStatus.workflow?.currentStageId,
+        briefPath: controlSnapshot.operatorStatus.productFiles?.brief,
+        treeNodes: controlSnapshot.operatorStatus.tower?.treeNodes ?? [],
+    });
+    const activeArtifactPath = $derived(controlState.activeArtifactPath);
+    const selectedWorktreeFile = $derived(
+        selectedWorktreeNode?.kind === "file" ? selectedWorktreeNode : null,
+    );
+    const displayArtifactPath = $derived(
+        selectedWorktreeFile?.absolutePath ?? activeArtifactPath,
+    );
+    const displayArtifactLabel = $derived(
+        selectedWorktreeFile?.name ?? controlState.activeArtifact?.displayLabel,
+    );
+    const displayStageId = $derived(
+        selectedWorktreeFile
+            ? undefined
+            : controlState.resolvedSelection?.stageId,
+    );
+    const displayTaskId = $derived(
+        selectedWorktreeFile
+            ? undefined
+            : controlState.resolvedSelection?.taskId,
+    );
+    const showArtifactEditor = $derived.by(() => {
+        if (!displayArtifactPath) {
+            return false;
+        }
+
+        if (!selectedWorktreeFile) {
+            return artifactPanelMode === "edit";
+        }
+
+        return (
+            !isMarkdownPath(displayArtifactPath) || artifactPanelMode === "edit"
+        );
+    });
     const resolvedSession = $derived(
         controlState.activeSessionId
             ? mission.getSession(controlState.activeSessionId)
@@ -113,6 +160,22 @@
         if (appContext.airport.activeMissionSelectedNodeId !== selectedNodeId) {
             appContext.setActiveMissionSelectedNodeId(selectedNodeId);
         }
+    });
+
+    $effect(() => {
+        const nextSourceKey =
+            selectedWorktreeFile?.absolutePath ?? activeArtifactPath ?? null;
+        if (artifactPanelSourceKey === nextSourceKey) {
+            return;
+        }
+
+        artifactPanelSourceKey = nextSourceKey;
+        artifactPanelMode =
+            selectedWorktreeFile &&
+            nextSourceKey &&
+            !isMarkdownPath(nextSourceKey)
+                ? "edit"
+                : "view";
     });
 
     onMount(() => {
@@ -247,7 +310,36 @@
     }
 
     function handleSelectNode(nodeId: string): void {
+        selectedWorktreeNode = null;
         appContext.setActiveMissionSelectedNodeId(nodeId);
+    }
+
+    function handleSelectWorktreeNode(node: MissionFileTreeNode): void {
+        selectedWorktreeNode = node.kind === "file" ? node : null;
+    }
+
+    function handleEditArtifact(): void {
+        artifactPanelMode = "edit";
+    }
+
+    function handleCloseArtifactEditor(): void {
+        if (
+            selectedWorktreeFile?.absolutePath &&
+            !isMarkdownPath(selectedWorktreeFile.absolutePath)
+        ) {
+            selectedWorktreeNode = null;
+        }
+
+        artifactPanelMode = "view";
+    }
+
+    function isMarkdownPath(filePath: string | undefined): boolean {
+        const extension = filePath?.split(".").pop()?.toLowerCase();
+        return (
+            extension === "md" ||
+            extension === "markdown" ||
+            extension === "mdx"
+        );
     }
 
     function syncAppContext(): void {
@@ -267,6 +359,7 @@
             title: controlSnapshot.operatorStatus.title,
             currentStageId:
                 controlSnapshot.operatorStatus.workflow?.currentStageId,
+            briefPath: controlSnapshot.operatorStatus.productFiles?.brief,
             treeNodes: controlSnapshot.operatorStatus.tower?.treeNodes ?? [],
         });
     }
@@ -315,36 +408,113 @@
             <MissionView
                 {repository}
                 {mission}
+                refreshNonce={actionRefreshNonce}
                 operatorStatus={controlSnapshot.operatorStatus}
                 selectionState={controlState}
                 onSelectNode={handleSelectNode}
                 onMissionMutated={handleMissionMutated}
-            />
-            <MissionActionbar
-                {missionId}
-                repositoryId={repository.repositoryId}
-                refreshNonce={actionRefreshNonce}
-                selectionState={controlState}
-                onActionExecuted={handleMissionMutated}
             />
             <ResizablePaneGroup
                 direction="horizontal"
                 class="min-h-0 flex-1 overflow-hidden"
                 autoSaveId={`mission-control:${missionId}`}
             >
-                <ResizablePane defaultSize={50} class="min-h-0 pr-2">
-                    <ArtifactEditor
-                        {missionId}
-                        artifactPath={controlState.activeArtifactPath}
-                        artifactLabel={controlState.activeArtifact
-                            ?.displayLabel}
-                    />
+                <ResizablePane
+                    defaultSize={24}
+                    minSize={18}
+                    class="flex h-full min-h-0 flex-col p-2"
+                >
+                    <Tabs.Root
+                        bind:value={leftTreeMode}
+                        class="min-h-0 flex-1 overflow-hidden rounded-2xl border bg-card/70 backdrop-blur-sm"
+                    >
+                        <div class="border-b px-3 py-2">
+                            <Tabs.List class="w-full">
+                                <Tabs.Trigger value="control"
+                                    >Mission Control</Tabs.Trigger
+                                >
+                                <Tabs.Trigger value="files"
+                                    >Mission Files</Tabs.Trigger
+                                >
+                            </Tabs.List>
+                        </div>
+
+                        <Tabs.Content
+                            value="control"
+                            class="min-h-0 flex-1 overflow-hidden p-0"
+                        >
+                            <MissionControlTree
+                                outline={missionOutline}
+                                {missionId}
+                                activeNodeId={selectedNodeId}
+                                title="Mission control"
+                                class="h-full rounded-none border-0 bg-transparent"
+                                onSelectNode={handleSelectNode}
+                            />
+                        </Tabs.Content>
+
+                        <Tabs.Content
+                            value="files"
+                            class="min-h-0 flex-1 overflow-hidden p-0"
+                        >
+                            <MissionFileTree
+                                {missionId}
+                                repositoryRootPath={repository.repositoryRootPath}
+                                activePath={selectedWorktreeFile?.absolutePath}
+                                refreshNonce={actionRefreshNonce}
+                                class="h-full rounded-none border-0 bg-transparent"
+                                onSelectPath={handleSelectWorktreeNode}
+                            />
+                        </Tabs.Content>
+                    </Tabs.Root>
                 </ResizablePane>
 
                 <ResizableHandle withHandle />
 
-                <ResizablePane defaultSize={50} class="min-h-0 pl-2">
-                    <AgentSession {missionId} session={resolvedSession} />
+                <ResizablePane
+                    defaultSize={38}
+                    minSize={24}
+                    class="flex h-full min-h-0 flex-col p-2"
+                >
+                    {#if showArtifactEditor}
+                        <ArtifactEditor
+                            {missionId}
+                            repositoryRootPath={repository.repositoryRootPath}
+                            artifactPath={displayArtifactPath}
+                            artifactLabel={displayArtifactLabel}
+                            onCloseRequested={handleCloseArtifactEditor}
+                        />
+                    {:else}
+                        <ArtifactViewer
+                            {missionId}
+                            repositoryId={repository.repositoryId}
+                            repositoryRootPath={repository.repositoryRootPath}
+                            refreshNonce={actionRefreshNonce}
+                            artifactPath={displayArtifactPath}
+                            artifactLabel={displayArtifactLabel}
+                            stageId={displayStageId}
+                            taskId={displayTaskId}
+                            onEditRequested={handleEditArtifact}
+                            onActionExecuted={handleMissionMutated}
+                        />
+                    {/if}
+                </ResizablePane>
+
+                <ResizableHandle withHandle />
+
+                <ResizablePane
+                    defaultSize={38}
+                    minSize={24}
+                    class="flex h-full min-h-0 flex-col p-2"
+                >
+                    <AgentSession
+                        {missionId}
+                        repositoryId={repository.repositoryId}
+                        refreshNonce={actionRefreshNonce}
+                        stageId={controlState.resolvedSelection?.stageId}
+                        session={resolvedSession}
+                        onActionExecuted={handleMissionMutated}
+                    />
                 </ResizablePane>
             </ResizablePaneGroup>
         </div>

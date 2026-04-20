@@ -1,5 +1,7 @@
 <script lang="ts">
     import type { AgentSession } from "$lib/client/entities/AgentSession";
+    import AgentSessionActionbar from "$lib/components/entities/AgentSession/AgentSessionActionbar.svelte";
+    import type { MissionStageId } from "@flying-pillow/mission-core/types.js";
     import {
         missionSessionTerminalSnapshotDtoSchema,
         missionSessionTerminalSocketServerMessageSchema,
@@ -10,10 +12,18 @@
 
     let {
         missionId,
+        repositoryId,
+        refreshNonce,
+        stageId,
         session,
+        onActionExecuted,
     }: {
         missionId: string;
+        repositoryId: string;
+        refreshNonce: number;
+        stageId?: MissionStageId;
         session?: AgentSession;
+        onActionExecuted: () => Promise<void>;
     } = $props();
 
     let container = $state<HTMLDivElement | null>(null);
@@ -61,12 +71,6 @@
             return "Failed";
         }
         return "Connecting";
-    });
-    const terminalDetailLabel = $derived.by(() => {
-        if (terminalSnapshot?.truncated) {
-            return "Scrollback clipped to the most recent PTY output.";
-        }
-        return null;
     });
 
     $effect(() => {
@@ -498,80 +502,65 @@
     }
 </script>
 
-<section
-    class="h-full grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
->
-    <header class="space-y-2 border-b pb-3">
-        <div class="flex items-start justify-between gap-3">
-            <div>
-                <h2 class="text-sm font-semibold text-foreground">
+<section class="flex h-full min-h-0 flex-col overflow-hidden">
+    <header class="px-3 py-2">
+        <div class="flex flex-wrap items-start gap-2">
+            <div class="min-w-0 flex-1">
+                <h2 class="truncate text-sm font-semibold text-foreground">
                     {session?.sessionId ?? "Agent session"}
                 </h2>
-                <p class="mt-1 text-xs text-muted-foreground">
+                <p class="truncate text-xs text-muted-foreground">
                     {session?.currentTurnTitle ??
                         session?.workingDirectory ??
                         "Select a task or session row to pin the runtime console."}
                 </p>
             </div>
 
+            <AgentSessionActionbar
+                {missionId}
+                {repositoryId}
+                {refreshNonce}
+                {stageId}
+                taskId={session?.taskId}
+                sessionId={session?.sessionId}
+                {onActionExecuted}
+            />
+
             <div class="text-right text-xs text-muted-foreground">
                 <p>{terminalStateLabel}</p>
                 {#if session}
                     <p class="mt-1">{session.lifecycleState}</p>
                 {/if}
-                {#if terminalDetailLabel}
-                    <p class="mt-1 max-w-56">{terminalDetailLabel}</p>
-                {/if}
             </div>
         </div>
-
         {#if error}
             <p class="text-sm text-rose-600">{error}</p>
         {/if}
     </header>
 
-    <div class="min-h-0 pt-3">
+    <div class="flex-1 min-h-0">
         {#if !session}
             <div
-                class="flex h-full min-h-[24rem] items-center justify-center rounded-xl border border-dashed bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
+                class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
             >
                 No session resolves from the current mission-control selection.
             </div>
         {:else if !canAttachTerminal}
             <div
-                class="flex h-full min-h-[24rem] items-center justify-center rounded-xl border border-dashed bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
+                class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
             >
                 This session is not terminal-backed, so Mission Control cannot
                 attach an interactive console.
             </div>
         {:else}
-            <div
-                class="grid h-full min-h-[24rem] grid-rows-[minmax(0,1fr)_auto] gap-3 overflow-hidden"
-            >
+            <div class="h-full min-h-[24rem] overflow-hidden">
                 <div
-                    class="min-h-0 overflow-hidden rounded-xl border bg-slate-950 px-2 py-2"
+                    class="h-full min-h-0 overflow-hidden bg-slate-950 px-2 py-2"
                 >
                     <div
                         bind:this={container}
                         class="h-full w-full min-h-0"
                     ></div>
-                </div>
-
-                <div
-                    class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"
-                >
-                    <span>
-                        {loading
-                            ? "Attaching live terminal stream..."
-                            : "Keystrokes and resize events are relayed to the daemon-backed PTY session."}
-                    </span>
-                    {#if terminalSnapshot?.terminalHandle}
-                        <span>
-                            {terminalSnapshot.terminalHandle
-                                .sessionName}:{terminalSnapshot.terminalHandle
-                                .paneId}
-                        </span>
-                    {/if}
                 </div>
             </div>
         {/if}

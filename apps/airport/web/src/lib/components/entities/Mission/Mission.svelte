@@ -1,16 +1,15 @@
 <script lang="ts">
     import type { RepositoryCandidateDto } from "@flying-pillow/mission-core/airport/runtime";
-    import type {
-        MissionResolvedSelection,
-        OperatorStatus,
-    } from "@flying-pillow/mission-core/types.js";
+    import type { OperatorStatus } from "@flying-pillow/mission-core/types.js";
     import type { Mission as MissionEntity } from "$lib/client/entities/Mission";
+    import MissionActionbar from "$lib/components/entities/Mission/MissionActionbar.svelte";
     import type { MissionControlComputedState } from "$lib/components/entities/Mission/missionControl";
     import MissionCockpit from "$lib/components/entities/Mission/MissionCockpit.svelte";
 
     let {
         repository,
         mission,
+        refreshNonce,
         operatorStatus,
         selectionState,
         onSelectNode,
@@ -18,6 +17,7 @@
     }: {
         repository: RepositoryCandidateDto;
         mission: MissionEntity;
+        refreshNonce: number;
         operatorStatus: OperatorStatus;
         selectionState: MissionControlComputedState;
         onSelectNode: (nodeId: string) => void;
@@ -28,24 +28,6 @@
     const workflowUpdatedAt = $derived(operatorStatus.workflow?.updatedAt);
     const currentStageId = $derived(operatorStatus.workflow?.currentStageId);
     const missionTitle = $derived(operatorStatus.title ?? mission.missionId);
-
-    function selectionLabel(
-        selection: MissionResolvedSelection | undefined,
-    ): string {
-        if (!selection) {
-            return "Mission scope";
-        }
-        if (selection.activeAgentSessionId && selection.taskId) {
-            return `Task ${selection.taskId} with session ${selection.activeAgentSessionId}`;
-        }
-        if (selection.taskId) {
-            return `Task ${selection.taskId}`;
-        }
-        if (selection.stageId) {
-            return `Stage ${selection.stageId}`;
-        }
-        return selection.missionId ?? "Mission scope";
-    }
 
     function currentStageLabel(stageId: string | undefined): string {
         return stageId ? `Current stage ${stageId}` : "No active stage";
@@ -59,7 +41,7 @@
         <div
             class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between"
         >
-            <div class="space-y-2">
+            <div class="min-w-0 space-y-2">
                 <p
                     class="text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground"
                 >
@@ -79,13 +61,15 @@
                         <span>Updated {workflowUpdatedAt ?? "unknown"}</span>
                         <span>{repository.repositoryRootPath}</span>
                     </div>
-                    {#if selectionState.resolvedSelection}
-                        <p class="mt-2 text-sm text-muted-foreground">
-                            {selectionLabel(selectionState.resolvedSelection)}
-                        </p>
-                    {/if}
                 </div>
             </div>
+
+            <MissionActionbar
+                missionId={mission.missionId}
+                repositoryId={repository.repositoryId}
+                {refreshNonce}
+                onActionExecuted={onMissionMutated}
+            />
         </div>
     </header>
 

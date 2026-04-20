@@ -27,6 +27,7 @@ export type AppContextServerValue = {
 export type ActiveMissionOutline = {
     title?: string;
     currentStageId?: string;
+    briefPath?: string;
     treeNodes: MissionTowerTreeNode[];
 };
 

@@ -22,6 +22,8 @@ export function resolveMissionSelection(input: {
 	}
 
 	switch (target.kind) {
+		case 'mission-artifact':
+			return resolveMissionArtifactTarget(target, domain, missionId);
 		case 'session':
 			return resolveSessionTarget(target, domain, missionId);
 		case 'task':
@@ -67,6 +69,15 @@ export function resolveMissionSelectionFromContext(input: {
 				...(missionId ? { missionId } : {})
 			});
 		}
+		const missionId = selection.missionId?.trim();
+		return resolveMissionSelection({
+			target: {
+				kind: 'mission-artifact',
+				...(artifact?.filePath ? { sourcePath: artifact.filePath } : {})
+			},
+			domain,
+			...(missionId ? { missionId } : {})
+		});
 	}
 	if (selection.agentSessionId) {
 		const missionId = selection.missionId?.trim();
@@ -105,6 +116,19 @@ export function resolveMissionSelectionFromContext(input: {
 		});
 	}
 	return selection.missionId ? { missionId: selection.missionId } : undefined;
+}
+
+function resolveMissionArtifactTarget(
+	target: MissionSelectionTarget,
+	domain: ContextGraph,
+	missionId: string | undefined
+): MissionResolvedSelection | undefined {
+	const artifact = resolveMissionArtifact(domain, missionId, target.sourcePath);
+	const resolvedMissionId = missionId ?? artifact?.missionId;
+	return {
+		...(resolvedMissionId ? { missionId: resolvedMissionId } : {}),
+		...(artifact ? { activeMissionArtifactId: artifact.artifactId, activeMissionArtifactPath: artifact.filePath } : {})
+	};
 }
 
 function resolveSessionTarget(
@@ -215,6 +239,30 @@ function resolveStageResultArtifact(
 		}
 	}
 	return undefined;
+}
+
+function resolveMissionArtifact(
+	domain: ContextGraph,
+	missionId: string | undefined,
+	explicitPath?: string
+): ArtifactContext | undefined {
+	const normalizedPath = explicitPath?.trim();
+	if (normalizedPath) {
+		const explicitArtifact = Object.values(domain.artifacts).find((artifact) =>
+			artifact.filePath === normalizedPath
+			&& !artifact.ownerTaskId
+			&& (!missionId || artifact.missionId === missionId)
+		);
+		if (explicitArtifact) {
+			return explicitArtifact;
+		}
+	}
+
+	return Object.values(domain.artifacts).find((artifact) =>
+		artifact.logicalKind === 'brief'
+		&& !artifact.ownerTaskId
+		&& (!missionId || artifact.missionId === missionId)
+	);
 }
 
 function resolvePreferredTaskSession(
