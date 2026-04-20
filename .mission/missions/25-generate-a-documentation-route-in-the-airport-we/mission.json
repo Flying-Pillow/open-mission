@@ -1,0 +1,326 @@
+{
+  "schemaVersion": 1,
+  "missionId": "25-generate-a-documentation-route-in-the-airport-we",
+  "configuration": {
+    "createdAt": "2026-04-20T19:25:26.900Z",
+    "source": "global-settings",
+    "workflowVersion": "mission-workflow-v1",
+    "workflow": {
+      "autostart": {
+        "mission": true
+      },
+      "humanInLoop": {
+        "enabled": true,
+        "pauseOnMissionStart": false
+      },
+      "panic": {
+        "terminateSessions": true,
+        "clearLaunchQueue": true,
+        "haltMission": true
+      },
+      "execution": {
+        "maxParallelTasks": 1,
+        "maxParallelSessions": 1
+      },
+      "stageOrder": [
+        "prd",
+        "spec",
+        "implementation",
+        "audit",
+        "delivery"
+      ],
+      "stages": {
+        "prd": {
+          "stageId": "prd",
+          "displayName": "PRD",
+          "taskLaunchPolicy": {
+            "defaultAutostart": true
+          }
+        },
+        "spec": {
+          "stageId": "spec",
+          "displayName": "Spec",
+          "taskLaunchPolicy": {
+            "defaultAutostart": true
+          }
+        },
+        "implementation": {
+          "stageId": "implementation",
+          "displayName": "Implement",
+          "taskLaunchPolicy": {
+            "defaultAutostart": false
+          }
+        },
+        "audit": {
+          "stageId": "audit",
+          "displayName": "Audit",
+          "taskLaunchPolicy": {
+            "defaultAutostart": true
+          }
+        },
+        "delivery": {
+          "stageId": "delivery",
+          "displayName": "Delivery",
+          "taskLaunchPolicy": {
+            "defaultAutostart": false
+          }
+        }
+      },
+      "taskGeneration": [
+        {
+          "stageId": "prd",
+          "artifactTasks": false,
+          "templateSources": [
+            {
+              "templateId": "prd-from-brief",
+              "path": "tasks/PRD/01-prd-from-brief.md"
+            }
+          ],
+          "tasks": []
+        },
+        {
+          "stageId": "spec",
+          "artifactTasks": false,
+          "templateSources": [
+            {
+              "templateId": "draft-spec",
+              "path": "tasks/SPEC/01-spec-from-prd.md"
+            },
+            {
+              "templateId": "plan-implementation",
+              "path": "tasks/SPEC/02-plan.md"
+            }
+          ],
+          "tasks": []
+        },
+        {
+          "stageId": "implementation",
+          "artifactTasks": true,
+          "templateSources": [],
+          "tasks": []
+        },
+        {
+          "stageId": "audit",
+          "artifactTasks": false,
+          "templateSources": [
+            {
+              "templateId": "debrief",
+              "path": "tasks/AUDIT/01-debrief.md"
+            }
+          ],
+          "tasks": []
+        },
+        {
+          "stageId": "delivery",
+          "artifactTasks": false,
+          "templateSources": [
+            {
+              "templateId": "closeout",
+              "path": "tasks/DELIVERY/01-closeout.md"
+            }
+          ],
+          "tasks": []
+        }
+      ],
+      "gates": [
+        {
+          "gateId": "implement",
+          "intent": "implement",
+          "stageId": "implementation"
+        },
+        {
+          "gateId": "verify",
+          "intent": "verify",
+          "stageId": "implementation"
+        },
+        {
+          "gateId": "audit",
+          "intent": "audit",
+          "stageId": "audit"
+        },
+        {
+          "gateId": "deliver",
+          "intent": "deliver",
+          "stageId": "delivery"
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "lifecycle": "running",
+    "activeStageId": "prd",
+    "pause": {
+      "paused": false
+    },
+    "panic": {
+      "active": false,
+      "terminateSessions": true,
+      "clearLaunchQueue": true,
+      "haltMission": true
+    },
+    "stages": [
+      {
+        "stageId": "prd",
+        "lifecycle": "blocked",
+        "taskIds": [
+          "prd/01-prd-from-brief"
+        ],
+        "readyTaskIds": [],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
+        "blockedTaskIds": [],
+        "completedTaskIds": []
+      },
+      {
+        "stageId": "spec",
+        "lifecycle": "pending",
+        "taskIds": [],
+        "readyTaskIds": [],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
+        "blockedTaskIds": [],
+        "completedTaskIds": []
+      },
+      {
+        "stageId": "implementation",
+        "lifecycle": "pending",
+        "taskIds": [],
+        "readyTaskIds": [],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
+        "blockedTaskIds": [],
+        "completedTaskIds": []
+      },
+      {
+        "stageId": "audit",
+        "lifecycle": "pending",
+        "taskIds": [],
+        "readyTaskIds": [],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
+        "blockedTaskIds": [],
+        "completedTaskIds": []
+      },
+      {
+        "stageId": "delivery",
+        "lifecycle": "pending",
+        "taskIds": [],
+        "readyTaskIds": [],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
+        "blockedTaskIds": [],
+        "completedTaskIds": []
+      }
+    ],
+    "tasks": [
+      {
+        "taskId": "prd/01-prd-from-brief",
+        "stageId": "prd",
+        "title": "PRD From Brief",
+        "instruction": "Use BRIEF.md as the canonical intake context. Rewrite or enrich PRD.md so it clearly states the problem, the target outcome, the constraints, and the success criteria for this mission. Only modify PRD.md in this task. Do not create or edit SPEC.md, implementation files, verification files, or delivery artifacts. Do not create application code in this task.",
+        "dependsOn": [],
+        "lifecycle": "failed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": true
+        },
+        "agentRunner": "copilot",
+        "retries": 0,
+        "createdAt": "2026-04-20T19:25:27.328Z",
+        "updatedAt": "2026-04-20T19:25:27.334Z",
+        "failedAt": "2026-04-20T19:25:27.334Z"
+      }
+    ],
+    "sessions": [],
+    "gates": [
+      {
+        "gateId": "implement",
+        "intent": "implement",
+        "state": "blocked",
+        "stageId": "implementation",
+        "reasons": [
+          "Stage 'implementation' is not completed."
+        ],
+        "updatedAt": "2026-04-20T19:25:27.334Z"
+      },
+      {
+        "gateId": "verify",
+        "intent": "verify",
+        "state": "blocked",
+        "stageId": "implementation",
+        "reasons": [
+          "Stage 'implementation' is not completed."
+        ],
+        "updatedAt": "2026-04-20T19:25:27.334Z"
+      },
+      {
+        "gateId": "audit",
+        "intent": "audit",
+        "state": "blocked",
+        "stageId": "audit",
+        "reasons": [
+          "Stage 'audit' is not completed."
+        ],
+        "updatedAt": "2026-04-20T19:25:27.334Z"
+      },
+      {
+        "gateId": "deliver",
+        "intent": "deliver",
+        "state": "blocked",
+        "stageId": "delivery",
+        "reasons": [
+          "Stage 'delivery' is not completed."
+        ],
+        "updatedAt": "2026-04-20T19:25:27.334Z"
+      }
+    ],
+    "launchQueue": [],
+    "updatedAt": "2026-04-20T19:25:27.334Z"
+  },
+  "eventLog": [
+    {
+      "eventId": "25-generate-a-documentation-route-in-the-airport-we:mission-created",
+      "type": "mission.created",
+      "occurredAt": "2026-04-20T19:25:26.900Z",
+      "source": "system",
+      "payload": {}
+    },
+    {
+      "eventId": "tasks.request-generation:2026-04-20T19:25:26.900Z:tasks-generated",
+      "type": "tasks.generated",
+      "occurredAt": "2026-04-20T19:25:27.328Z",
+      "source": "daemon",
+      "causedByRequestId": "tasks.request-generation:2026-04-20T19:25:26.900Z",
+      "payload": {
+        "stageId": "prd",
+        "tasks": [
+          {
+            "taskId": "prd/01-prd-from-brief",
+            "title": "PRD From Brief",
+            "instruction": "Use BRIEF.md as the canonical intake context. Rewrite or enrich PRD.md so it clearly states the problem, the target outcome, the constraints, and the success criteria for this mission. Only modify PRD.md in this task. Do not create or edit SPEC.md, implementation files, verification files, or delivery artifacts. Do not create application code in this task.",
+            "dependsOn": [],
+            "agentRunner": "copilot"
+          }
+        ]
+      }
+    },
+    {
+      "eventId": "25-generate-a-documentation-route-in-the-airport-we:mission-started",
+      "type": "mission.started",
+      "occurredAt": "2026-04-20T19:25:26.900Z",
+      "source": "system",
+      "payload": {}
+    },
+    {
+      "eventId": "session.launch:2026-04-20T19:25:26.900Z:{\"taskId\":\"prd/01-prd-from-brief\"}:launch-failed",
+      "type": "session.launch-failed",
+      "occurredAt": "2026-04-20T19:25:27.334Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T19:25:26.900Z:{\"taskId\":\"prd/01-prd-from-brief\"}",
+      "payload": {
+        "taskId": "prd/01-prd-from-brief",
+        "reason": "posix_spawnp failed."
+      }
+    }
+  ]
+}
