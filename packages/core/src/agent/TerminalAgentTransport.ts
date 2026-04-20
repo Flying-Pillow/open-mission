@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { spawn as spawnPty, type IPty } from 'node-pty';
 
 export type TerminalExecutorResult = {
@@ -62,10 +65,18 @@ type PtySessionUpdate = TerminalSessionSnapshot & {
     chunk: string;
 };
 
+type PtyLaunchCommand = {
+    command: string;
+    args: string[];
+    resolvedCommand: string;
+};
+
 const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 32;
 const MAX_BUFFER_SIZE = 200_000;
 const PTY_PANE_ID = 'pty';
+const DEFAULT_UNIX_PATH_SEGMENTS = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'];
+const COPILOT_CLI_DIRECTORY_SUFFIX = path.join('User', 'globalStorage', 'github.copilot-chat', 'copilotCli');
 
 class PtySessionRegistry {
     private readonly sessions = new Map<string, PtySessionRecord>();
@@ -80,14 +91,26 @@ class PtySessionRegistry {
             throw new Error('TerminalAgentTransport requires a command.');
         }
 
-        const pty = this.spawnImpl(command, request.args ?? [], {
-            name: 'xterm-256color',
-            cols: DEFAULT_COLS,
-            rows: DEFAULT_ROWS,
-            cwd: request.workingDirectory,
-            env: buildPtyEnv(request.env)
-        });
-        this.logLine?.(`pty spawn ${command} ${(request.args ?? []).join(' ')}`.trim());
+        const env = buildPtyEnv(request.env);
+        const launchCommand = resolvePtyLaunchCommand(command, request.args ?? [], env);
+
+        let pty: IPty;
+        try {
+            pty = this.spawnImpl(launchCommand.command, launchCommand.args, {
+                name: 'xterm-256color',
+                cols: DEFAULT_COLS,
+                rows: DEFAULT_ROWS,
+                cwd: request.workingDirectory,
+                env
+            });
+        } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error);
+            const resolutionDetail = launchCommand.resolvedCommand === command
+                ? ''
+                : ` (resolved to '${launchCommand.resolvedCommand}')`;
+            throw new Error(`Failed to spawn PTY command '${command}'${resolutionDetail}: ${detail}`);
+        }
+        this.logLine?.(`pty spawn ${launchCommand.command} ${launchCommand.args.join(' ')}`.trim());
 
         const record: PtySessionRecord = {
             sessionName,
@@ -364,6 +387,217 @@ function buildPtyEnv(env: NodeJS.ProcessEnv | undefined): Record<string, string>
         }
     }
     return output;
+}
+
+function resolvePtySpawnCommand(command: string, env: NodeJS.ProcessEnv): string {
+    const trimmedCommand = command.trim();
+    if (!trimmedCommand) {
+        throw new Error('PTY command is required.');
+    }
+
+    if (path.isAbsolute(trimmedCommand) || trimmedCommand.startsWith('.') || /[\\/]/u.test(trimmedCommand)) {
+        return trimmedCommand;
+    }
+
+    const resolvedFromSearchPath = resolveExecutableFromSearchPath(trimmedCommand, env);
+    if (resolvedFromSearchPath) {
+        return resolvedFromSearchPath;
+    }
+
+    const knownShellPath = resolveKnownShellPath(trimmedCommand);
+    if (knownShellPath) {
+        return knownShellPath;
+    }
+
+    throw new Error(buildMissingExecutableMessage(trimmedCommand, env));
+}
+
+function resolvePtyLaunchCommand(command: string, args: string[], env: NodeJS.ProcessEnv): PtyLaunchCommand {
+    const resolvedCommand = resolvePtySpawnCommand(command, env);
+    const interpreterLaunch = resolveShebangLaunchCommand(resolvedCommand, args, env);
+    if (interpreterLaunch) {
+        return {
+            ...interpreterLaunch,
+            resolvedCommand
+        };
+    }
+
+    return {
+        command: resolvedCommand,
+        args: [...args],
+        resolvedCommand
+    };
+}
+
+function resolveExecutableFromSearchPath(command: string, env: NodeJS.ProcessEnv): string | undefined {
+    for (const directory of collectSearchPathEntries(env, command)) {
+        const candidate = path.join(directory, command);
+        if (isExecutableFile(candidate)) {
+            return candidate;
+        }
+        if (process.platform === 'win32') {
+            for (const extension of collectWindowsExecutableExtensions(env)) {
+                const candidateWithExtension = `${candidate}${extension}`;
+                if (isExecutableFile(candidateWithExtension)) {
+                    return candidateWithExtension;
+                }
+            }
+        }
+    }
+    return undefined;
+}
+
+function collectSearchPathEntries(env: NodeJS.ProcessEnv, command: string): string[] {
+    const pathKey = resolveProcessPathKey(env);
+    const entries = new Set<string>();
+    const pushEntry = (value: string | undefined): void => {
+        const trimmedValue = value?.trim();
+        if (trimmedValue) {
+            entries.add(trimmedValue);
+        }
+    };
+
+    for (const entry of (pathKey ? env[pathKey] : undefined)?.split(path.delimiter) ?? []) {
+        pushEntry(entry);
+    }
+
+    if (process.platform !== 'win32') {
+        for (const entry of DEFAULT_UNIX_PATH_SEGMENTS) {
+            pushEntry(entry);
+        }
+    }
+
+    const homeDirectory = env['HOME']?.trim() || os.homedir();
+    if (homeDirectory) {
+        pushEntry(path.join(homeDirectory, '.local', 'bin'));
+        pushEntry(path.join(homeDirectory, '.cargo', 'bin'));
+        pushEntry(path.join(homeDirectory, '.nvm', 'current', 'bin'));
+        if (command === 'copilot') {
+            pushEntry(path.join(homeDirectory, 'Library', 'Application Support', 'Code', COPILOT_CLI_DIRECTORY_SUFFIX));
+            pushEntry(path.join(homeDirectory, 'Library', 'Application Support', 'Code - Insiders', COPILOT_CLI_DIRECTORY_SUFFIX));
+        }
+    }
+
+    return [...entries];
+}
+
+function resolveProcessPathKey(env: NodeJS.ProcessEnv): string | undefined {
+    if (process.platform === 'win32') {
+        return Object.keys(env).find((key) => key.toLowerCase() === 'path') ?? 'Path';
+    }
+
+    return 'PATH';
+}
+
+function collectWindowsExecutableExtensions(env: NodeJS.ProcessEnv): string[] {
+    const configuredExtensions = env['PATHEXT']?.split(';') ?? ['.COM', '.EXE', '.BAT', '.CMD'];
+    return configuredExtensions
+        .map((extension) => extension.trim())
+        .filter((extension) => extension.length > 0)
+        .map((extension) => extension.startsWith('.') ? extension : `.${extension}`);
+}
+
+function resolveKnownShellPath(command: string): string | undefined {
+    if (process.platform === 'win32') {
+        if (command === 'powershell' || command === 'powershell.exe') {
+            return 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+        }
+        return undefined;
+    }
+
+    const shellCandidates = new Map<string, string>([
+        ['sh', '/bin/sh'],
+        ['bash', '/bin/bash'],
+        ['zsh', '/bin/zsh']
+    ]);
+    const candidate = shellCandidates.get(command);
+    return candidate && isExecutableFile(candidate) ? candidate : undefined;
+}
+
+function resolveShebangLaunchCommand(
+    resolvedCommand: string,
+    args: string[],
+    env: NodeJS.ProcessEnv
+): Omit<PtyLaunchCommand, 'resolvedCommand'> | undefined {
+    if (process.platform === 'win32' || !path.isAbsolute(resolvedCommand)) {
+        return undefined;
+    }
+
+    const shebang = readShebangLine(resolvedCommand);
+    if (!shebang) {
+        return undefined;
+    }
+
+    const interpreter = resolveShebangInterpreter(shebang, env);
+    if (!interpreter) {
+        return undefined;
+    }
+
+    return {
+        command: interpreter.command,
+        args: [...interpreter.args, resolvedCommand, ...args]
+    };
+}
+
+function readShebangLine(filePath: string): string | undefined {
+    try {
+        const content = fs.readFileSync(filePath, 'utf8');
+        const firstLine = content.split(/\r?\n/u, 1)[0]?.trim();
+        if (!firstLine?.startsWith('#!')) {
+            return undefined;
+        }
+        return firstLine.slice(2).trim();
+    } catch {
+        return undefined;
+    }
+}
+
+function resolveShebangInterpreter(
+    shebang: string,
+    env: NodeJS.ProcessEnv
+): { command: string; args: string[] } | undefined {
+    const parts = shebang.split(/\s+/u).filter((part) => part.length > 0);
+    const interpreter = parts[0];
+    if (!interpreter) {
+        return undefined;
+    }
+
+    if (interpreter === '/usr/bin/env') {
+        const envTarget = parts.find((part, index) => index > 0 && !part.startsWith('-'));
+        if (!envTarget) {
+            return isExecutableFile(interpreter)
+                ? { command: interpreter, args: parts.slice(1) }
+                : undefined;
+        }
+        return {
+            command: resolvePtySpawnCommand(envTarget, env),
+            args: []
+        };
+    }
+
+    return isExecutableFile(interpreter)
+        ? {
+            command: interpreter,
+            args: parts.slice(1)
+        }
+        : undefined;
+}
+
+function isExecutableFile(candidatePath: string): boolean {
+    try {
+        fs.accessSync(candidatePath, fs.constants.X_OK);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function buildMissingExecutableMessage(command: string, env: NodeJS.ProcessEnv): string {
+    const pathKey = resolveProcessPathKey(env);
+    const pathValue = pathKey ? env[pathKey]?.trim() : undefined;
+    return pathValue
+        ? `Unable to resolve executable '${command}' for PTY launch. ${pathKey}=${pathValue}`
+        : `Unable to resolve executable '${command}' for PTY launch because no ${pathKey ?? 'PATH'} is configured.`;
 }
 
 function translateKeys(keys: string, options: { literal?: boolean }): string {

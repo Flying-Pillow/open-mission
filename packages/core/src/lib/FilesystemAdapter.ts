@@ -700,8 +700,6 @@ export class FilesystemAdapter {
 			`# ${subject}`,
 			'',
 			instruction,
-			'',
-			'Use the product artifacts in this mission folder as the canonical context boundary.',
 			''
 		].join('\n');
 		const attributes: Record<string, FrontmatterValue> = {};

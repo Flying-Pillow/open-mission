@@ -1,3 +1,6 @@
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import type { IPty } from 'node-pty';
 import { describe, expect, it } from 'vitest';
 import { TerminalAgentTransport } from './TerminalAgentTransport.js';
@@ -181,6 +184,97 @@ describe('TerminalAgentTransport', () => {
 		const snapshot = await transport.readSnapshot(handle);
 		expect(snapshot.truncated).toBe(true);
 		expect(snapshot.screen).toHaveLength(200_000);
+	});
+
+	it('resolves commands from the provided PATH before spawning the PTY', async () => {
+		const runtimeDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-pty-path-'));
+		const binaryPath = path.join(runtimeDirectory, 'custom-cli');
+		await fs.writeFile(binaryPath, '#!/bin/sh\nexit 0\n', { encoding: 'utf8', mode: 0o755 });
+
+		let spawnedCommand = '';
+		let spawnedArgs: string[] = [];
+		const transport = new TerminalAgentTransport({
+			spawn: ((command: string, args: string[]) => {
+				spawnedCommand = command;
+				spawnedArgs = [...args];
+				return createFakePty();
+			}) as never
+		});
+
+		await transport.openSession({
+			workingDirectory: '/tmp/work',
+			command: 'custom-cli',
+			env: { PATH: runtimeDirectory },
+			sessionName: 'path-resolution-session'
+		});
+
+		expect(spawnedCommand).toBe('/bin/sh');
+		expect(spawnedArgs).toEqual([binaryPath]);
+	});
+
+	it('resolves the Copilot CLI from the VS Code global storage fallback when PATH is missing it', async () => {
+		const homeDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-pty-home-'));
+		const copilotDirectory = path.join(
+			homeDirectory,
+			'Library',
+			'Application Support',
+			'Code - Insiders',
+			'User',
+			'globalStorage',
+			'github.copilot-chat',
+			'copilotCli'
+		);
+		const copilotPath = path.join(copilotDirectory, 'copilot');
+		await fs.mkdir(copilotDirectory, { recursive: true });
+		await fs.writeFile(copilotPath, '#!/bin/sh\nexit 0\n', { encoding: 'utf8', mode: 0o755 });
+
+		let spawnedCommand = '';
+		let spawnedArgs: string[] = [];
+		const transport = new TerminalAgentTransport({
+			spawn: ((command: string, args: string[]) => {
+				spawnedCommand = command;
+				spawnedArgs = [...args];
+				return createFakePty();
+			}) as never
+		});
+
+		await transport.openSession({
+			workingDirectory: '/tmp/work',
+			command: 'copilot',
+			env: { HOME: homeDirectory, PATH: '/usr/bin:/bin' },
+			sessionName: 'copilot-resolution-session'
+		});
+
+		expect(spawnedCommand).toBe('/bin/sh');
+		expect(spawnedArgs).toEqual([copilotPath]);
+	});
+
+	it('launches shebang scripts through their interpreter when the resolved executable is a script', async () => {
+		const runtimeDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-pty-script-'));
+		const scriptDirectory = path.join(runtimeDirectory, 'Application Support', 'copilotCli');
+		const scriptPath = path.join(scriptDirectory, 'copilot');
+		await fs.mkdir(scriptDirectory, { recursive: true });
+		await fs.writeFile(scriptPath, '#!/bin/sh\nexit 0\n', { encoding: 'utf8', mode: 0o755 });
+
+		let spawnedCommand = '';
+		let spawnedArgs: string[] = [];
+		const transport = new TerminalAgentTransport({
+			spawn: ((command: string, args: string[]) => {
+				spawnedCommand = command;
+				spawnedArgs = [...args];
+				return createFakePty();
+			}) as never
+		});
+
+		await transport.openSession({
+			workingDirectory: '/tmp/work',
+			command: scriptPath,
+			args: ['--version'],
+			sessionName: 'script-launch-session'
+		});
+
+		expect(spawnedCommand).toBe('/bin/sh');
+		expect(spawnedArgs).toEqual([scriptPath, '--version']);
 	});
 });
 
