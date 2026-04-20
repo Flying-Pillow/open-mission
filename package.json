@@ -43,6 +43,7 @@
     "mission:native-preview": "node ./scripts/tsgo-native-preview.mjs run mission",
     "missiond": "pnpm run build:packages && node packages/mission/build/missiond.js",
     "missiond:native-preview": "node ./scripts/tsgo-native-preview.mjs run missiond",
+    "postinstall": "node ./scripts/repair-node-pty-helper-permissions.mjs",
     "release:publish": "pnpm run build && changeset publish",
     "release:version": "changeset version && pnpm install --lockfile-only",
     "test": "turbo run test",

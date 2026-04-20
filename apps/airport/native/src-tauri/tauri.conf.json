@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "pnpm run frontend:dev",
     "beforeBuildCommand": "pnpm run frontend:build",
-    "devUrl": "http://127.0.0.1:5173",
+    "devUrl": "http://127.0.0.1:5174",
     "frontendDist": "../../web/build"
   },
   "app": {
@@ -30,7 +30,7 @@
     "active": false,
     "targets": [],
     "icon": [
-      "/tmp/mission-airport-icon.png"
+      "../../web/static/icon-512x512.png"
     ]
   }
 }

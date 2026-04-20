@@ -4,8 +4,8 @@
   "version": "0.1.0-alpha.0",
   "type": "module",
   "scripts": {
-    "frontend:dev": "pnpm --dir ../web exec vp dev --host 127.0.0.1 --strictPort",
-    "frontend:build": "pnpm --dir ../web exec vp build",
+    "frontend:dev": "pnpm --dir ../../.. run build:packages && pnpm --dir ../web run dev -- --host 127.0.0.1",
+    "frontend:build": "pnpm --dir ../../.. run build:packages && pnpm --dir ../web exec vp build",
     "dev": "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/mission-airport-target tauri dev",
     "build": "tauri build",
     "check": "cargo check --manifest-path src-tauri/Cargo.toml"
