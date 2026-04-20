@@ -9,17 +9,17 @@
 		createAppContext,
 		setAppContext,
 	} from "$lib/client/context/app-context.svelte";
-	import { shouldRenderDaemonRouteContent } from "$lib/server/daemon/route-access";
+	//import { shouldRenderDaemonRouteContent } from "$lib/server/daemon/route-access";
 	import type { LayoutData } from "./$types";
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 	const appContext = createAppContext(() => data.appContext);
 	let retryReloadTimer: ReturnType<typeof setTimeout> | undefined;
-	const showsRouteContent = $derived(
-		shouldRenderDaemonRouteContent({
-			pathname: page.url.pathname,
-			daemonRunning: appContext.daemon.running,
-		}),
+	const showsRouteContent = $derived(true
+		//shouldRenderDaemonRouteContent({
+		//	pathname: page.url.pathname,
+		//	daemonRunning: appContext.daemon.running,
+		//}),
 	);
 
 	setAppContext(appContext);

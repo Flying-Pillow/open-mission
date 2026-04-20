@@ -129,3 +129,576 @@
 		@apply font-sans;
 	}
 }
+
+@layer components {
+	.docs-shell {
+		background:
+			radial-gradient(
+				circle at top right,
+				color-mix(in oklab, var(--primary) 12%, transparent) 0%,
+				transparent 28%
+			),
+			linear-gradient(
+				180deg,
+				color-mix(in oklab, var(--background) 92%, black 8%) 0%,
+				var(--background) 100%
+			);
+	}
+
+	.markdown-viewer,
+	.markdown {
+		--markdown-fg: var(--foreground);
+		--markdown-muted: var(--muted-foreground);
+		--markdown-link: color-mix(in oklab, var(--primary) 78%, white 22%);
+		--markdown-border: color-mix(in oklab, var(--border) 80%, black 8%);
+		--markdown-code-bg: color-mix(in oklab, var(--muted) 88%, black 12%);
+		--markdown-pre-bg: color-mix(in oklab, var(--card) 82%, black 18%);
+		--markdown-table-header-bg: color-mix(
+			in oklab,
+			var(--muted) 85%,
+			black 15%
+		);
+		color: var(--markdown-fg);
+	}
+
+	.markdown-viewer {
+		font-size: 0.875rem;
+		line-height: 1.6;
+	}
+
+	.markdown {
+		font-size: 1rem;
+		line-height: 1.8;
+		word-wrap: break-word;
+	}
+
+	.dark .markdown-viewer,
+	.dark .markdown {
+		--markdown-link: color-mix(in oklab, var(--primary) 68%, white 32%);
+		--markdown-border: color-mix(in oklab, var(--border) 72%, white 8%);
+		--markdown-code-bg: color-mix(in oklab, var(--muted) 78%, black 22%);
+		--markdown-pre-bg: color-mix(in oklab, var(--card) 90%, black 10%);
+		--markdown-table-header-bg: color-mix(
+			in oklab,
+			var(--muted) 72%,
+			black 28%
+		);
+	}
+
+	.markdown-frontmatter {
+		margin: 0 0 1rem;
+		overflow-x: auto;
+		border: 1px solid var(--markdown-border);
+		border-radius: 0.75rem;
+		background: var(--markdown-code-bg);
+		padding: 1rem;
+		color: var(--markdown-muted);
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+			"Liberation Mono", "Courier New", monospace;
+		font-size: 0.75rem;
+		line-height: 1.5;
+		white-space: pre-wrap;
+	}
+
+	.markdown > :first-child {
+		margin-top: 0;
+	}
+
+	.markdown > :last-child {
+		margin-bottom: 0;
+	}
+
+	.markdown h1,
+	.markdown h2,
+	.markdown h3,
+	.markdown h4,
+	.markdown h5,
+	.markdown h6 {
+		color: var(--markdown-fg);
+		font-weight: 650;
+		letter-spacing: -0.03em;
+	}
+
+	.markdown h1 {
+		margin: 0 0 1rem;
+		scroll-margin-top: 5rem;
+		font-size: clamp(2.2rem, 4vw, 3.7rem);
+		line-height: 1;
+	}
+
+	.markdown h2 {
+		margin: 3rem 0 1rem;
+		scroll-margin-top: 5rem;
+		border-bottom: 1px solid var(--markdown-border);
+		padding-bottom: 0.35rem;
+		font-size: clamp(1.65rem, 2.8vw, 2.2rem);
+		line-height: 1.15;
+	}
+
+	.markdown h3 {
+		margin: 2.25rem 0 0.85rem;
+		scroll-margin-top: 5rem;
+		font-size: 1.3rem;
+		line-height: 1.2;
+	}
+
+	.markdown h4 {
+		margin: 1.8rem 0 0.75rem;
+		scroll-margin-top: 5rem;
+		font-size: 1.05rem;
+		line-height: 1.3;
+	}
+
+	.markdown h5 {
+		margin: 1.5rem 0 0.75rem;
+		font-size: 0.95rem;
+		line-height: 1.3;
+	}
+
+	.markdown h6 {
+		margin: 1.5rem 0 0.75rem;
+		color: var(--markdown-muted);
+		font-size: 0.9rem;
+		line-height: 1.3;
+	}
+
+	.markdown p,
+	.markdown ul,
+	.markdown ol,
+	.markdown table,
+	.markdown blockquote,
+	.markdown pre {
+		margin: 1rem 0;
+	}
+
+	.markdown blockquote p:last-child {
+		margin-bottom: 0;
+	}
+
+	.markdown :is(ul, ol, li, td, th) {
+		color: inherit;
+	}
+
+	.markdown ul,
+	.markdown ol {
+		padding-left: 1.5rem;
+	}
+
+	.markdown ul {
+		list-style-type: disc;
+	}
+
+	.markdown ol {
+		list-style-type: decimal;
+	}
+
+	.markdown li + li {
+		margin-top: 0.3rem;
+	}
+
+	.markdown li > p {
+		margin: 0.25rem 0;
+	}
+
+	.markdown a {
+		color: var(--markdown-link);
+		text-decoration-line: underline;
+		text-underline-offset: 0.18em;
+	}
+
+	.markdown a:hover {
+		color: var(--markdown-fg);
+	}
+
+	.markdown strong {
+		color: var(--markdown-fg);
+		font-weight: 650;
+	}
+
+	.markdown blockquote {
+		border-inline-start: 4px solid var(--primary);
+		border-radius: 0 1rem 1rem 0;
+		background: color-mix(in oklab, var(--muted) 78%, transparent);
+		padding: 1rem 1.2rem;
+		color: var(--markdown-muted);
+	}
+
+	.markdown hr {
+		margin: 2rem 0;
+		border: 0;
+		border-top: 1px solid var(--markdown-border);
+	}
+
+	.markdown code {
+		border-radius: 0.45rem;
+		background: var(--markdown-code-bg);
+		padding: 0.14em 0.38em;
+		color: var(--markdown-fg);
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+			"Liberation Mono", "Courier New", monospace;
+		font-size: 0.94em;
+	}
+
+	.markdown pre {
+		overflow-x: auto;
+		border: 1px solid var(--markdown-border);
+		border-radius: 1rem;
+		background: var(--markdown-pre-bg);
+		padding: 1rem 1.1rem;
+		box-shadow: 0 20px 44px rgba(0, 0, 0, 0.2);
+	}
+
+	.markdown pre code {
+		background: transparent;
+		padding: 0;
+		color: inherit;
+		font-size: 100%;
+	}
+
+	.markdown table {
+		display: block;
+		width: 100%;
+		overflow-x: auto;
+		border-collapse: collapse;
+		font-size: 0.95rem;
+	}
+
+	.markdown thead tr {
+		border-top: 1px solid var(--markdown-border);
+		background: var(--markdown-table-header-bg);
+	}
+
+	.markdown tbody tr {
+		border-top: 1px solid var(--markdown-border);
+	}
+
+	.markdown tbody tr:nth-child(even) {
+		background: color-mix(in oklab, var(--muted) 55%, transparent);
+	}
+
+	.markdown th,
+	.markdown td {
+		border: 1px solid var(--markdown-border);
+		padding: 0.75rem 0.9rem;
+		text-align: left;
+		vertical-align: top;
+	}
+
+	.markdown th {
+		font-weight: 650;
+	}
+
+	.markdown img {
+		display: block;
+		max-width: 100%;
+		margin: 0 0 1rem;
+		border: 1px solid var(--markdown-border);
+		border-radius: 0.75rem;
+	}
+
+	.markdown :is(th, td)[align="center"] {
+		text-align: center;
+	}
+
+	.markdown :is(th, td)[align="right"] {
+		text-align: right;
+	}
+
+	.markdown .btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 999px;
+		border: 1px solid color-mix(in oklab, var(--primary) 22%, white 10%);
+		background: color-mix(in oklab, var(--card) 70%, transparent);
+		padding: 0.8rem 1.1rem;
+		color: var(--foreground);
+		text-decoration: none;
+	}
+
+	.markdown .btn-primary {
+		border: 0;
+		background-image: linear-gradient(
+			135deg,
+			color-mix(in oklab, var(--primary) 90%, white 10%),
+			color-mix(in oklab, var(--secondary) 80%, black 20%)
+		);
+		color: var(--primary-foreground);
+	}
+
+	.markdown .mission-home-hero {
+		position: relative;
+		margin: 0.4rem 0 2.5rem;
+		overflow: hidden;
+		border: 1px solid color-mix(in oklab, var(--border) 78%, white 8%);
+		border-radius: 1.75rem;
+		background:
+			radial-gradient(
+				circle at top left,
+				color-mix(in oklab, var(--primary) 22%, transparent) 0%,
+				transparent 34%
+			),
+			linear-gradient(
+				135deg,
+				color-mix(in oklab, var(--card) 86%, black 14%) 0%,
+				color-mix(in oklab, var(--background) 88%, black 12%) 100%
+			);
+		padding: 2rem;
+		color: var(--foreground);
+		box-shadow: 0 30px 80px rgba(0, 0, 0, 0.22);
+	}
+
+	.markdown .mission-home-title {
+		margin: 0 0 0.85rem;
+		font-size: clamp(2.4rem, 4vw, 4rem);
+		line-height: 1;
+		letter-spacing: -0.04em;
+		font-weight: 800;
+		color: inherit;
+	}
+
+	.markdown :is(
+			.mission-home-kicker,
+			.mission-section-kicker,
+			.mission-section-card__eyebrow,
+			.mission-video-link__eyebrow
+		) {
+		display: inline-block;
+		border-radius: 999px;
+		font-size: 0.75rem;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+	}
+
+	.markdown .mission-home-kicker {
+		margin-bottom: 0.9rem;
+		padding: 0.38rem 0.75rem;
+		background: color-mix(in oklab, var(--primary) 18%, transparent);
+		color: color-mix(in oklab, var(--primary) 55%, white 45%);
+	}
+
+	.markdown .mission-home-tagline {
+		max-width: 42rem;
+		margin: 0 0 1.25rem;
+		font-size: 1.15rem;
+		color: color-mix(in oklab, var(--foreground) 84%, transparent);
+	}
+
+	.markdown .mission-home-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.85rem;
+		margin-top: 1.25rem;
+	}
+
+	.markdown :is(
+			.mission-home-grid,
+			.mission-section-grid,
+			.mission-comparison-grid,
+			.mission-status-grid
+		) {
+		display: grid;
+		gap: 1rem;
+		margin: 1.5rem 0 2rem;
+	}
+
+	.markdown .mission-home-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		margin-top: 1.8rem;
+	}
+
+	.markdown .mission-section-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		margin-top: 1.8rem;
+	}
+
+	.markdown .mission-section-grid--three {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+
+	.markdown .mission-comparison-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.markdown .mission-status-grid {
+		grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+	}
+
+	.markdown :is(
+			.mission-home-card,
+			.mission-section-card,
+			.mission-comparison-card,
+			.mission-status-card,
+			.mission-compare-callout,
+			.mission-video-embed
+		) {
+		border: 1px solid color-mix(in oklab, var(--border) 82%, white 8%);
+		box-shadow: 0 16px 40px rgba(0, 0, 0, 0.14);
+	}
+
+	.markdown .mission-home-card {
+		border-color: color-mix(in oklab, var(--border) 72%, white 12%);
+		background: color-mix(in oklab, var(--card) 68%, transparent);
+		padding: 1.1rem 1rem;
+		color: var(--foreground);
+	}
+
+	.markdown .mission-home-card span {
+		color: color-mix(in oklab, var(--foreground) 72%, transparent);
+	}
+
+	.markdown .mission-section-hero {
+		position: relative;
+		margin: 0 0 2rem;
+		overflow: hidden;
+		border-radius: 1.5rem;
+		border: 1px solid color-mix(in oklab, var(--border) 78%, white 10%);
+		background:
+			radial-gradient(
+				circle at top left,
+				color-mix(in oklab, var(--primary) 18%, transparent) 0%,
+				transparent 32%
+			),
+			linear-gradient(
+				135deg,
+				color-mix(in oklab, var(--card) 88%, black 12%) 0%,
+				color-mix(in oklab, var(--background) 94%, black 6%) 100%
+			);
+		padding: 1.6rem 1.5rem;
+		box-shadow: 0 22px 50px rgba(0, 0, 0, 0.16);
+	}
+
+	.markdown .mission-section-kicker {
+		margin-bottom: 0.75rem;
+		padding: 0.3rem 0.65rem;
+		background: color-mix(in oklab, var(--primary) 12%, transparent);
+		color: color-mix(in oklab, var(--primary) 60%, white 40%);
+	}
+
+	.markdown .mission-section-title {
+		margin: 0 0 0.7rem;
+		font-size: clamp(1.8rem, 3.1vw, 2.6rem);
+		line-height: 1.05;
+		letter-spacing: -0.04em;
+		color: var(--foreground);
+	}
+
+	.markdown .mission-section-lead {
+		max-width: 44rem;
+		margin: 0;
+		color: color-mix(in oklab, var(--foreground) 74%, transparent);
+		font-size: 1.06rem;
+	}
+
+	.markdown :is(.mission-section-card, .mission-comparison-card) {
+		display: block;
+		border-radius: 1.2rem;
+		background: color-mix(in oklab, var(--card) 92%, black 8%);
+		padding: 1.15rem 1.1rem;
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.markdown :is(.mission-status-card, .mission-compare-callout) {
+		border-radius: 1rem;
+		background: color-mix(in oklab, var(--muted) 68%, transparent);
+		padding: 1rem 1.1rem;
+	}
+
+	.markdown .mission-status-card--current {
+		border-color: color-mix(in oklab, var(--primary) 34%, white 10%);
+		background: color-mix(in oklab, var(--primary) 12%, transparent);
+	}
+
+	.markdown .mission-status-card--target {
+		border-color: color-mix(in oklab, var(--secondary) 34%, white 10%);
+		background: color-mix(in oklab, var(--secondary) 10%, transparent);
+	}
+
+	.markdown .mission-table-scroll {
+		margin: 1.5rem 0 2rem;
+		overflow-x: auto;
+	}
+
+	.markdown .mission-table-scroll table {
+		min-width: 100%;
+		margin: 0;
+	}
+
+	.markdown .mission-video-embed {
+		border-radius: 1.2rem;
+		background: color-mix(in oklab, var(--muted) 68%, transparent);
+		padding: 0.8rem;
+	}
+
+	.markdown .mission-video-link {
+		display: grid;
+		grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr);
+		gap: 1rem;
+		align-items: stretch;
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.markdown .mission-video-link__poster {
+		display: block;
+		width: 100%;
+		aspect-ratio: 16 / 9;
+		border-radius: 0.9rem;
+		background: var(--card) center / cover no-repeat;
+	}
+
+	.markdown .mission-video-link__body {
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+		justify-content: center;
+		gap: 0.45rem;
+	}
+
+	.markdown .mission-video-link__title {
+		font-size: 1.15rem;
+		line-height: 1.15;
+		font-weight: 700;
+		color: var(--foreground);
+	}
+
+	.markdown :is(
+			.mission-video-link__text,
+			.mission-status-card p,
+			.mission-compare-callout p,
+			.mission-comparison-card p,
+			.mission-section-card__text
+		) {
+		margin: 0;
+		color: color-mix(in oklab, var(--foreground) 72%, transparent);
+	}
+
+	.dark .docs-shell {
+		background:
+			radial-gradient(
+				circle at top right,
+				color-mix(in oklab, var(--primary) 20%, transparent) 0%,
+				transparent 30%
+			),
+			linear-gradient(
+				180deg,
+				color-mix(in oklab, var(--background) 84%, black 16%) 0%,
+				var(--background) 100%
+			);
+	}
+
+	.dark .markdown .btn {
+		border-color: color-mix(in oklab, var(--border) 72%, white 12%);
+		background: color-mix(in oklab, var(--card) 62%, transparent);
+	}
+
+	.dark .markdown .mission-home-kicker {
+		color: color-mix(in oklab, var(--primary) 72%, white 28%);
+	}
+
+	.dark .markdown .mission-home-tagline {
+		color: color-mix(in oklab, var(--foreground) 76%, transparent);
+	}
+	}

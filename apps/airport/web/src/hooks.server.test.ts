@@ -1,3 +1,4 @@
+import type { RequestEvent } from "@sveltejs/kit";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getDaemonRuntimeState = vi.fn();
@@ -81,10 +82,20 @@ describe("handle", () => {
 });
 
 function createEvent(url: string) {
+	const requestUrl = new URL(url);
+
 	return {
-		url: new URL(url),
+		url: requestUrl,
 		request: new Request(url),
-		cookies: {},
-		locals: {},
-	};
+		cookies: {} as RequestEvent['cookies'],
+		locals: {} as App.Locals,
+		fetch,
+		getClientAddress: () => '127.0.0.1',
+		params: {},
+		platform: undefined,
+		route: { id: null },
+		setHeaders: () => {},
+		isDataRequest: false,
+		isSubRequest: false,
+	} satisfies RequestEvent;
 }

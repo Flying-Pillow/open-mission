@@ -2,14 +2,13 @@
 	import DocsContent from "$lib/components/docs/docs-content.svelte";
 	import DocsPageHeader from "$lib/components/docs/docs-page-header.svelte";
 	import {
-		getDocsModulePath,
+		getDocsModuleBySourcePath,
+		loadEagerDocsModules,
 		type DocsMarkdownModule,
 	} from "$lib/docs/manifest";
 	import type { PageData } from "./$types";
 
-	const docsModules = import.meta.glob("$docs/**/*.md", {
-		eager: true,
-	}) as Record<string, DocsMarkdownModule>;
+	const docsModules = loadEagerDocsModules();
 
 	let { data }: { data: PageData } = $props();
 
@@ -21,8 +20,7 @@
 	);
 
 	function resolvePageComponent(sourcePath: string): DocsMarkdownModule["default"] {
-		const modulePath = getDocsModulePath(sourcePath);
-		const docsModule = docsModules[modulePath];
+		const docsModule = getDocsModuleBySourcePath(docsModules, sourcePath);
 
 		if (!docsModule) {
 			throw new Error(
