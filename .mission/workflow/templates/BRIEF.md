@@ -1,0 +1,3 @@
+{{mission.issueLine}}
+
+{{brief.body}}

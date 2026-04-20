@@ -1,0 +1,1559 @@
+{
+  "schemaVersion": 1,
+  "missionId": "25-generate-a-documentation-route-in-the-airport-we",
+  "configuration": {
+    "createdAt": "2026-04-20T19:25:26.900Z",
+    "source": "global-settings",
+    "workflowVersion": "mission-workflow-v1",
+    "workflow": {
+      "autostart": {
+        "mission": true
+      },
+      "humanInLoop": {
+        "enabled": true,
+        "pauseOnMissionStart": false
+      },
+      "panic": {
+        "terminateSessions": true,
+        "clearLaunchQueue": true,
+        "haltMission": true
+      },
+      "execution": {
+        "maxParallelTasks": 1,
+        "maxParallelSessions": 1
+      },
+      "stageOrder": [
+        "prd",
+        "spec",
+        "implementation",
+        "audit",
+        "delivery"
+      ],
+      "stages": {
+        "prd": {
+          "stageId": "prd",
+          "displayName": "PRD",
+          "taskLaunchPolicy": {
+            "defaultAutostart": true
+          }
+        },
+        "spec": {
+          "stageId": "spec",
+          "displayName": "Spec",
+          "taskLaunchPolicy": {
+            "defaultAutostart": true
+          }
+        },
+        "implementation": {
+          "stageId": "implementation",
+          "displayName": "Implement",
+          "taskLaunchPolicy": {
+            "defaultAutostart": false
+          }
+        },
+        "audit": {
+          "stageId": "audit",
+          "displayName": "Audit",
+          "taskLaunchPolicy": {
+            "defaultAutostart": true
+          }
+        },
+        "delivery": {
+          "stageId": "delivery",
+          "displayName": "Delivery",
+          "taskLaunchPolicy": {
+            "defaultAutostart": false
+          }
+        }
+      },
+      "taskGeneration": [
+        {
+          "stageId": "prd",
+          "artifactTasks": false,
+          "templateSources": [
+            {
+              "templateId": "prd-from-brief",
+              "path": "tasks/PRD/01-prd-from-brief.md"
+            }
+          ],
+          "tasks": []
+        },
+        {
+          "stageId": "spec",
+          "artifactTasks": false,
+          "templateSources": [
+            {
+              "templateId": "draft-spec",
+              "path": "tasks/SPEC/01-spec-from-prd.md"
+            },
+            {
+              "templateId": "plan-implementation",
+              "path": "tasks/SPEC/02-plan.md"
+            }
+          ],
+          "tasks": []
+        },
+        {
+          "stageId": "implementation",
+          "artifactTasks": true,
+          "templateSources": [],
+          "tasks": []
+        },
+        {
+          "stageId": "audit",
+          "artifactTasks": false,
+          "templateSources": [
+            {
+              "templateId": "debrief",
+              "path": "tasks/AUDIT/01-debrief.md"
+            }
+          ],
+          "tasks": []
+        },
+        {
+          "stageId": "delivery",
+          "artifactTasks": false,
+          "templateSources": [
+            {
+              "templateId": "closeout",
+              "path": "tasks/DELIVERY/01-closeout.md"
+            }
+          ],
+          "tasks": []
+        }
+      ],
+      "gates": [
+        {
+          "gateId": "implement",
+          "intent": "implement",
+          "stageId": "implementation"
+        },
+        {
+          "gateId": "verify",
+          "intent": "verify",
+          "stageId": "implementation"
+        },
+        {
+          "gateId": "audit",
+          "intent": "audit",
+          "stageId": "audit"
+        },
+        {
+          "gateId": "deliver",
+          "intent": "deliver",
+          "stageId": "delivery"
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "lifecycle": "completed",
+    "pause": {
+      "paused": false
+    },
+    "panic": {
+      "active": false,
+      "terminateSessions": true,
+      "clearLaunchQueue": true,
+      "haltMission": true
+    },
+    "stages": [
+      {
+        "stageId": "prd",
+        "lifecycle": "completed",
+        "taskIds": [
+          "prd/01-prd-from-brief"
+        ],
+        "readyTaskIds": [],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
+        "blockedTaskIds": [],
+        "completedTaskIds": [
+          "prd/01-prd-from-brief"
+        ]
+      },
+      {
+        "stageId": "spec",
+        "lifecycle": "completed",
+        "taskIds": [
+          "spec/01-spec-from-prd",
+          "spec/02-plan"
+        ],
+        "readyTaskIds": [],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
+        "blockedTaskIds": [],
+        "completedTaskIds": [
+          "spec/01-spec-from-prd",
+          "spec/02-plan"
+        ]
+      },
+      {
+        "stageId": "implementation",
+        "lifecycle": "completed",
+        "taskIds": [
+          "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization",
+          "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization-verify",
+          "implementation/02-build-docs-manifest-navigation-and-page-resolution",
+          "implementation/02-build-docs-manifest-navigation-and-page-resolution-verify",
+          "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering",
+          "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering-verify",
+          "implementation/04-integrate-docs-discoverability-and-daemon-independent-access",
+          "implementation/04-integrate-docs-discoverability-and-daemon-independent-access-verify"
+        ],
+        "readyTaskIds": [],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
+        "blockedTaskIds": [],
+        "completedTaskIds": [
+          "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization",
+          "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization-verify",
+          "implementation/02-build-docs-manifest-navigation-and-page-resolution",
+          "implementation/02-build-docs-manifest-navigation-and-page-resolution-verify",
+          "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering",
+          "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering-verify",
+          "implementation/04-integrate-docs-discoverability-and-daemon-independent-access",
+          "implementation/04-integrate-docs-discoverability-and-daemon-independent-access-verify"
+        ]
+      },
+      {
+        "stageId": "audit",
+        "lifecycle": "completed",
+        "taskIds": [
+          "audit/01-debrief"
+        ],
+        "readyTaskIds": [],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
+        "blockedTaskIds": [],
+        "completedTaskIds": [
+          "audit/01-debrief"
+        ]
+      },
+      {
+        "stageId": "delivery",
+        "lifecycle": "completed",
+        "taskIds": [
+          "delivery/01-closeout"
+        ],
+        "readyTaskIds": [],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
+        "blockedTaskIds": [],
+        "completedTaskIds": [
+          "delivery/01-closeout"
+        ]
+      }
+    ],
+    "tasks": [
+      {
+        "taskId": "prd/01-prd-from-brief",
+        "stageId": "prd",
+        "title": "PRD From Brief",
+        "instruction": "Use BRIEF.md as the canonical intake context. Rewrite or enrich PRD.md so it clearly states the problem, the target outcome, the constraints, and the success criteria for this mission. Only modify PRD.md in this task. Do not create or edit SPEC.md, implementation files, verification files, or delivery artifacts. Do not create application code in this task.",
+        "dependsOn": [],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": true
+        },
+        "agentRunner": "copilot",
+        "retries": 0,
+        "createdAt": "2026-04-20T19:25:27.328Z",
+        "updatedAt": "2026-04-20T19:57:09.531Z",
+        "completedAt": "2026-04-20T19:57:09.531Z"
+      },
+      {
+        "taskId": "spec/01-spec-from-prd",
+        "stageId": "spec",
+        "title": "Draft Spec",
+        "instruction": "Read PRD.md and define the technical target in SPEC.md. The specification must describe the intended design, the key boundaries, and the concrete files that will change. Only modify SPEC.md in this task. Do not create implementation code or verification evidence in this task.",
+        "dependsOn": [],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": true
+        },
+        "agentRunner": "copilot",
+        "retries": 0,
+        "createdAt": "2026-04-20T19:57:09.954Z",
+        "updatedAt": "2026-04-20T20:04:47.755Z",
+        "completedAt": "2026-04-20T20:04:47.755Z"
+      },
+      {
+        "taskId": "spec/02-plan",
+        "stageId": "spec",
+        "title": "Plan Implementation And Verification",
+        "instruction": "Read SPEC.md and turn it into an execution ledger. Create paired markdown task files under 03-IMPLEMENTATION/tasks for each implementation slice: one task for building the slice and a second verification task for testing or validating that same slice. Name the verification task with the \"-verify.md\" suffix, keep both tasks in 03-IMPLEMENTATION/tasks, and make the verification task depend on its implementation task. The verification task must focus on tests and validation rather than feature creation. Do not create application code in this planning task. Do not modify delivery artifacts.",
+        "dependsOn": [
+          "spec/01-spec-from-prd"
+        ],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": true
+        },
+        "agentRunner": "copilot",
+        "retries": 0,
+        "createdAt": "2026-04-20T19:57:09.954Z",
+        "updatedAt": "2026-04-20T20:09:08.249Z",
+        "completedAt": "2026-04-20T20:09:08.249Z"
+      },
+      {
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization",
+        "stageId": "implementation",
+        "title": "Establish Mdsvex Docs Pipeline And Source Normalization",
+        "instruction": "Set up the Airport web app so the repository-root `docs/` tree can compile through an `mdsvex` pipeline instead of the existing raw-markdown viewer path. This slice should add the required web-app dependencies and config, allow the module graph to read the root docs corpus, and introduce the narrow compatibility normalization needed for existing Jekyll-flavored source conventions such as legacy frontmatter fields, preserved inline HTML, and rewritten internal docs links.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "dependsOn": [],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot",
+        "retries": 0,
+        "createdAt": "2026-04-20T20:09:08.690Z",
+        "updatedAt": "2026-04-20T20:22:43.754Z",
+        "completedAt": "2026-04-20T20:22:43.754Z"
+      },
+      {
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization-verify",
+        "stageId": "implementation",
+        "title": "Verify Mdsvex Docs Pipeline And Source Normalization",
+        "instruction": "Verify that Airport web can compile the repository-root docs corpus through the new `mdsvex` path and that the compatibility layer only covers the intended legacy conventions. Confirm focused validation covers frontmatter normalization, internal-link rewriting to `/docs/...`, preserved inline HTML blocks, and the absence of any broadened Jekyll-runtime behavior. Record any remaining gaps in VERIFY.md.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "dependsOn": [
+          "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization"
+        ],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot",
+        "retries": 0,
+        "createdAt": "2026-04-20T20:09:08.690Z",
+        "updatedAt": "2026-04-20T20:30:31.724Z",
+        "completedAt": "2026-04-20T20:30:31.724Z"
+      },
+      {
+        "taskId": "implementation/02-build-docs-manifest-navigation-and-page-resolution",
+        "stageId": "implementation",
+        "title": "Build Docs Manifest Navigation And Page Resolution",
+        "instruction": "Implement the normalized docs domain model and manifest loader that discover compiled markdown modules under `docs/`, map legacy metadata into typed docs frontmatter, derive deterministic navigation ordering, and resolve `/docs` plus nested slug requests to the correct page entry. This slice should keep route resolution, navigation derivation, and source metadata aligned around one shared manifest instead of duplicating logic across loaders and components.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "dependsOn": [
+          "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization"
+        ],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot",
+        "retries": 0,
+        "createdAt": "2026-04-20T20:09:08.690Z",
+        "updatedAt": "2026-04-20T20:40:34.900Z",
+        "completedAt": "2026-04-20T20:40:34.900Z"
+      },
+      {
+        "taskId": "implementation/02-build-docs-manifest-navigation-and-page-resolution-verify",
+        "stageId": "implementation",
+        "title": "Verify Docs Manifest Navigation And Page Resolution",
+        "instruction": "Verify that the shared docs manifest produces stable page records and sidebar structure from the repository `docs/` tree. Confirm focused tests or validation cover slug resolution for `/docs` and nested pages, frontmatter-driven ordering and labeling, explicit failures for missing sources, and consistency between the route map and derived navigation tree. Record any remaining gaps in VERIFY.md.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "dependsOn": [
+          "implementation/02-build-docs-manifest-navigation-and-page-resolution"
+        ],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot",
+        "retries": 0,
+        "createdAt": "2026-04-20T20:09:08.690Z",
+        "updatedAt": "2026-04-20T20:42:16.260Z",
+        "completedAt": "2026-04-20T20:42:16.260Z"
+      },
+      {
+        "taskId": "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering",
+        "stageId": "implementation",
+        "title": "Compose Docs Route Layout And Mdsvex Page Rendering",
+        "instruction": "Create the dedicated `/docs` route surface inside Airport web, including the docs layout loader, docs frame components, and the catch-all page that mounts the resolved mdsvex component with docs-specific chrome and metadata. This slice should render long-form content through a docs content wrapper, surface normalized page title and description data, and keep docs presentation isolated from repository and mission operation views.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "dependsOn": [
+          "implementation/02-build-docs-manifest-navigation-and-page-resolution"
+        ],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot",
+        "retries": 0,
+        "createdAt": "2026-04-20T20:09:08.690Z",
+        "updatedAt": "2026-04-20T20:54:50.708Z",
+        "completedAt": "2026-04-20T20:54:50.708Z"
+      },
+      {
+        "taskId": "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering-verify",
+        "stageId": "implementation",
+        "title": "Verify Docs Route Layout And Mdsvex Page Rendering",
+        "instruction": "Verify that the `/docs` route renders the resolved markdown component inside the dedicated docs layout without falling back to the legacy markdown viewer. Confirm focused validation covers docs page metadata, sidebar-aware layout behavior, long-form content styling for existing docs HTML blocks, and correct rendering for both the docs index and nested docs pages. Record any remaining gaps in VERIFY.md.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "dependsOn": [
+          "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering"
+        ],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot",
+        "retries": 0,
+        "createdAt": "2026-04-20T20:09:08.690Z",
+        "updatedAt": "2026-04-20T21:00:36.886Z",
+        "completedAt": "2026-04-20T21:00:36.886Z"
+      },
+      {
+        "taskId": "implementation/04-integrate-docs-discoverability-and-daemon-independent-access",
+        "stageId": "implementation",
+        "title": "Integrate Docs Discoverability And Daemon-Independent Access",
+        "instruction": "Integrate the new docs surface into the shared Airport shell so users can discover and reach it without disturbing existing daemon-backed routes. This slice should add the first-class `/docs` sidebar affordance, active-route behavior, and the narrow daemon-gate exception that keeps docs reachable when the daemon is unavailable while leaving the rest of the Airport route protections intact.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "dependsOn": [
+          "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering"
+        ],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot",
+        "retries": 0,
+        "createdAt": "2026-04-20T20:09:08.690Z",
+        "updatedAt": "2026-04-20T21:06:59.797Z",
+        "completedAt": "2026-04-20T21:06:59.797Z"
+      },
+      {
+        "taskId": "implementation/04-integrate-docs-discoverability-and-daemon-independent-access-verify",
+        "stageId": "implementation",
+        "title": "Verify Docs Discoverability And Daemon-Independent Access",
+        "instruction": "Verify that `/docs` remains reachable through the shared Airport shell when the daemon is unavailable and that the exception does not weaken protection for non-doc routes. Confirm focused validation covers sidebar navigation state, discoverability of the `/docs` entry, daemon-gated behavior outside the docs surface, and any route-level checks needed to prove the new exception stays narrow. Record any remaining gaps in VERIFY.md.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "dependsOn": [
+          "implementation/04-integrate-docs-discoverability-and-daemon-independent-access"
+        ],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot",
+        "retries": 0,
+        "createdAt": "2026-04-20T20:09:08.690Z",
+        "updatedAt": "2026-04-20T21:16:43.624Z",
+        "completedAt": "2026-04-20T21:16:43.624Z"
+      },
+      {
+        "taskId": "audit/01-debrief",
+        "stageId": "audit",
+        "title": "Debrief",
+        "instruction": "Run the repo-wide end-to-end validation required for the mission. Record the simulator run results, residual risks, and release readiness in AUDIT.md.",
+        "dependsOn": [],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": true
+        },
+        "agentRunner": "copilot",
+        "retries": 0,
+        "createdAt": "2026-04-20T21:16:44.009Z",
+        "updatedAt": "2026-04-20T21:23:50.746Z",
+        "completedAt": "2026-04-20T21:23:50.746Z"
+      },
+      {
+        "taskId": "delivery/01-closeout",
+        "stageId": "delivery",
+        "title": "Closing the mission",
+        "instruction": "Prepare the final delivery motion. Confirm AUDIT.md is complete, summarize the final status, and write DELIVERY.md as the final delivery artifact for the mission.",
+        "dependsOn": [],
+        "lifecycle": "completed",
+        "blockedByTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot",
+        "retries": 0,
+        "createdAt": "2026-04-20T21:23:51.752Z",
+        "updatedAt": "2026-04-20T21:25:07.202Z",
+        "completedAt": "2026-04-20T21:25:07.202Z"
+      }
+    ],
+    "sessions": [
+      {
+        "sessionId": "01-prd-from-brief-copilot-cli",
+        "taskId": "prd/01-prd-from-brief",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "01-prd-from-brief-copilot-cli",
+        "terminalPaneId": "pty",
+        "lifecycle": "cancelled",
+        "launchedAt": "2026-04-20T19:52:02.984Z",
+        "updatedAt": "2026-04-20T19:52:43.967Z",
+        "cancelledAt": "2026-04-20T19:52:43.967Z"
+      },
+      {
+        "sessionId": "01-prd-from-brief-copilot-cli-2",
+        "taskId": "prd/01-prd-from-brief",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "01-prd-from-brief-copilot-cli-2",
+        "terminalPaneId": "pty",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-20T19:52:43.973Z",
+        "updatedAt": "2026-04-20T19:57:09.531Z",
+        "completedAt": "2026-04-20T19:57:09.531Z"
+      },
+      {
+        "sessionId": "01-spec-from-prd-copilot-cli-2",
+        "taskId": "spec/01-spec-from-prd",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "01-spec-from-prd-copilot-cli-2",
+        "terminalPaneId": "pty",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-20T19:57:09.962Z",
+        "updatedAt": "2026-04-20T20:04:47.755Z",
+        "completedAt": "2026-04-20T20:04:47.755Z"
+      },
+      {
+        "sessionId": "02-plan-copilot-cli-2",
+        "taskId": "spec/02-plan",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "02-plan-copilot-cli-2",
+        "terminalPaneId": "pty",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-20T20:04:48.187Z",
+        "updatedAt": "2026-04-20T20:09:08.249Z",
+        "completedAt": "2026-04-20T20:09:08.249Z"
+      },
+      {
+        "sessionId": "01-establish-mdsvex-docs-pipeline-and-source-normalization-copilot-cli",
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "01-establish-mdsvex-docs-pipeline-and-source-normalization-copilot-cli",
+        "terminalPaneId": "pty",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-20T20:18:17.596Z",
+        "updatedAt": "2026-04-20T20:22:43.754Z",
+        "completedAt": "2026-04-20T20:22:43.754Z"
+      },
+      {
+        "sessionId": "01-establish-mdsvex-docs-pipeline-and-source-normalization-verify-copilot-cli",
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "01-establish-mdsvex-docs-pipeline-and-source-normalization-verify-copilot-cli",
+        "terminalPaneId": "pty",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-20T20:23:01.737Z",
+        "updatedAt": "2026-04-20T20:30:31.724Z",
+        "completedAt": "2026-04-20T20:30:31.724Z"
+      },
+      {
+        "sessionId": "02-build-docs-manifest-navigation-and-page-resolution-copilot-cli",
+        "taskId": "implementation/02-build-docs-manifest-navigation-and-page-resolution",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "02-build-docs-manifest-navigation-and-page-resolution-copilot-cli",
+        "terminalPaneId": "pty",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-20T20:30:42.119Z",
+        "updatedAt": "2026-04-20T20:40:34.900Z",
+        "completedAt": "2026-04-20T20:40:34.900Z"
+      },
+      {
+        "sessionId": "02-build-docs-manifest-navigation-and-page-resolution-verify-copilot-cli",
+        "taskId": "implementation/02-build-docs-manifest-navigation-and-page-resolution-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "02-build-docs-manifest-navigation-and-page-resolution-verify-copilot-cli",
+        "terminalPaneId": "pty",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-20T20:40:44.844Z",
+        "updatedAt": "2026-04-20T20:42:16.260Z",
+        "completedAt": "2026-04-20T20:42:16.260Z"
+      },
+      {
+        "sessionId": "03-compose-docs-route-layout-and-mdsvex-page-rendering-copilot-cli",
+        "taskId": "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "03-compose-docs-route-layout-and-mdsvex-page-rendering-copilot-cli",
+        "terminalPaneId": "pty",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-20T20:42:24.400Z",
+        "updatedAt": "2026-04-20T20:54:50.708Z",
+        "completedAt": "2026-04-20T20:54:50.708Z"
+      },
+      {
+        "sessionId": "03-compose-docs-route-layout-and-mdsvex-page-rendering-verify-copilot-cli",
+        "taskId": "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "03-compose-docs-route-layout-and-mdsvex-page-rendering-verify-copilot-cli",
+        "terminalPaneId": "pty",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-20T20:54:59.646Z",
+        "updatedAt": "2026-04-20T21:00:36.886Z",
+        "completedAt": "2026-04-20T21:00:36.886Z"
+      },
+      {
+        "sessionId": "04-integrate-docs-discoverability-and-daemon-independent-access-copilot-cli",
+        "taskId": "implementation/04-integrate-docs-discoverability-and-daemon-independent-access",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "04-integrate-docs-discoverability-and-daemon-independent-access-copilot-cli",
+        "terminalPaneId": "pty",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-20T21:00:46.699Z",
+        "updatedAt": "2026-04-20T21:06:59.797Z",
+        "completedAt": "2026-04-20T21:06:59.797Z"
+      },
+      {
+        "sessionId": "04-integrate-docs-discoverability-and-daemon-independent-access-verify-copilot-cli",
+        "taskId": "implementation/04-integrate-docs-discoverability-and-daemon-independent-access-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "04-integrate-docs-discoverability-and-daemon-independent-access-verify-copilot-cli",
+        "terminalPaneId": "pty",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-20T21:07:07.430Z",
+        "updatedAt": "2026-04-20T21:16:43.624Z",
+        "completedAt": "2026-04-20T21:16:43.624Z"
+      },
+      {
+        "sessionId": "01-debrief-copilot-cli-2",
+        "taskId": "audit/01-debrief",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "01-debrief-copilot-cli-2",
+        "terminalPaneId": "pty",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-20T21:23:39.340Z",
+        "updatedAt": "2026-04-20T21:23:50.746Z",
+        "completedAt": "2026-04-20T21:23:50.746Z"
+      },
+      {
+        "sessionId": "01-debrief-copilot-cli",
+        "taskId": "audit/01-debrief",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "01-debrief-copilot-cli",
+        "terminalPaneId": "pty",
+        "lifecycle": "cancelled",
+        "launchedAt": "2026-04-20T21:20:47.057Z",
+        "updatedAt": "2026-04-20T21:23:39.315Z",
+        "cancelledAt": "2026-04-20T21:23:39.315Z"
+      }
+    ],
+    "gates": [
+      {
+        "gateId": "implement",
+        "intent": "implement",
+        "state": "passed",
+        "stageId": "implementation",
+        "reasons": [],
+        "updatedAt": "2026-04-20T21:25:07.202Z"
+      },
+      {
+        "gateId": "verify",
+        "intent": "verify",
+        "state": "passed",
+        "stageId": "implementation",
+        "reasons": [],
+        "updatedAt": "2026-04-20T21:25:07.202Z"
+      },
+      {
+        "gateId": "audit",
+        "intent": "audit",
+        "state": "passed",
+        "stageId": "audit",
+        "reasons": [],
+        "updatedAt": "2026-04-20T21:25:07.202Z"
+      },
+      {
+        "gateId": "deliver",
+        "intent": "deliver",
+        "state": "passed",
+        "stageId": "delivery",
+        "reasons": [],
+        "updatedAt": "2026-04-20T21:25:07.202Z"
+      }
+    ],
+    "launchQueue": [],
+    "updatedAt": "2026-04-20T21:25:07.202Z"
+  },
+  "eventLog": [
+    {
+      "eventId": "25-generate-a-documentation-route-in-the-airport-we:mission-created",
+      "type": "mission.created",
+      "occurredAt": "2026-04-20T19:25:26.900Z",
+      "source": "system",
+      "payload": {}
+    },
+    {
+      "eventId": "tasks.request-generation:2026-04-20T19:25:26.900Z:tasks-generated",
+      "type": "tasks.generated",
+      "occurredAt": "2026-04-20T19:25:27.328Z",
+      "source": "daemon",
+      "causedByRequestId": "tasks.request-generation:2026-04-20T19:25:26.900Z",
+      "payload": {
+        "stageId": "prd",
+        "tasks": [
+          {
+            "taskId": "prd/01-prd-from-brief",
+            "title": "PRD From Brief",
+            "instruction": "Use BRIEF.md as the canonical intake context. Rewrite or enrich PRD.md so it clearly states the problem, the target outcome, the constraints, and the success criteria for this mission. Only modify PRD.md in this task. Do not create or edit SPEC.md, implementation files, verification files, or delivery artifacts. Do not create application code in this task.",
+            "dependsOn": [],
+            "agentRunner": "copilot"
+          }
+        ]
+      }
+    },
+    {
+      "eventId": "25-generate-a-documentation-route-in-the-airport-we:mission-started",
+      "type": "mission.started",
+      "occurredAt": "2026-04-20T19:25:26.900Z",
+      "source": "system",
+      "payload": {}
+    },
+    {
+      "eventId": "session.launch:2026-04-20T19:25:26.900Z:{\"taskId\":\"prd/01-prd-from-brief\"}:launch-failed",
+      "type": "session.launch-failed",
+      "occurredAt": "2026-04-20T19:25:27.334Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T19:25:26.900Z:{\"taskId\":\"prd/01-prd-from-brief\"}",
+      "payload": {
+        "taskId": "prd/01-prd-from-brief",
+        "reason": "posix_spawnp failed."
+      }
+    },
+    {
+      "eventId": "25-generate-a-documentation-route-in-the-airport-we:task.reopened:mo7m2m5a",
+      "type": "task.reopened",
+      "occurredAt": "2026-04-20T19:52:02.974Z",
+      "source": "human",
+      "payload": {
+        "taskId": "prd/01-prd-from-brief"
+      }
+    },
+    {
+      "eventId": "session.launch:2026-04-20T19:52:02.974Z:{\"taskId\":\"prd/01-prd-from-brief\"}:session-started",
+      "type": "session.started",
+      "occurredAt": "2026-04-20T19:52:02.984Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T19:52:02.974Z:{\"taskId\":\"prd/01-prd-from-brief\"}",
+      "payload": {
+        "sessionId": "01-prd-from-brief-copilot-cli",
+        "taskId": "prd/01-prd-from-brief",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "01-prd-from-brief-copilot-cli",
+        "terminalPaneId": "pty"
+      }
+    },
+    {
+      "eventId": "runtime:01-prd-from-brief-copilot-cli:session.cancelled:2026-04-20T19:52:43.967Z",
+      "type": "session.cancelled",
+      "occurredAt": "2026-04-20T19:52:43.967Z",
+      "source": "daemon",
+      "payload": {
+        "sessionId": "01-prd-from-brief-copilot-cli",
+        "taskId": "prd/01-prd-from-brief"
+      }
+    },
+    {
+      "eventId": "session.launch:2026-04-20T19:52:43.967Z:{\"taskId\":\"prd/01-prd-from-brief\"}:session-started",
+      "type": "session.started",
+      "occurredAt": "2026-04-20T19:52:43.973Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T19:52:43.967Z:{\"taskId\":\"prd/01-prd-from-brief\"}",
+      "payload": {
+        "sessionId": "01-prd-from-brief-copilot-cli-2",
+        "taskId": "prd/01-prd-from-brief",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "01-prd-from-brief-copilot-cli-2",
+        "terminalPaneId": "pty"
+      }
+    },
+    {
+      "eventId": "runtime:01-prd-from-brief-copilot-cli-2:session.completed:2026-04-20T19:57:09.531Z",
+      "type": "session.completed",
+      "occurredAt": "2026-04-20T19:57:09.531Z",
+      "source": "daemon",
+      "payload": {
+        "sessionId": "01-prd-from-brief-copilot-cli-2",
+        "taskId": "prd/01-prd-from-brief"
+      }
+    },
+    {
+      "eventId": "runtime:01-prd-from-brief-copilot-cli-2:task.completed:2026-04-20T19:57:09.531Z",
+      "type": "task.completed",
+      "occurredAt": "2026-04-20T19:57:09.531Z",
+      "source": "daemon",
+      "payload": {
+        "taskId": "prd/01-prd-from-brief"
+      }
+    },
+    {
+      "eventId": "tasks.request-generation:2026-04-20T19:57:09.531Z:tasks-generated",
+      "type": "tasks.generated",
+      "occurredAt": "2026-04-20T19:57:09.954Z",
+      "source": "daemon",
+      "causedByRequestId": "tasks.request-generation:2026-04-20T19:57:09.531Z",
+      "payload": {
+        "stageId": "spec",
+        "tasks": [
+          {
+            "taskId": "spec/01-spec-from-prd",
+            "title": "Draft Spec",
+            "instruction": "Read PRD.md and define the technical target in SPEC.md. The specification must describe the intended design, the key boundaries, and the concrete files that will change. Only modify SPEC.md in this task. Do not create implementation code or verification evidence in this task.",
+            "dependsOn": [],
+            "agentRunner": "copilot"
+          },
+          {
+            "taskId": "spec/02-plan",
+            "title": "Plan Implementation And Verification",
+            "instruction": "Read SPEC.md and turn it into an execution ledger. Create paired markdown task files under 03-IMPLEMENTATION/tasks for each implementation slice: one task for building the slice and a second verification task for testing or validating that same slice. Name the verification task with the \"-verify.md\" suffix, keep both tasks in 03-IMPLEMENTATION/tasks, and make the verification task depend on its implementation task. The verification task must focus on tests and validation rather than feature creation. Do not create application code in this planning task. Do not modify delivery artifacts.",
+            "dependsOn": [
+              "spec/01-spec-from-prd"
+            ],
+            "agentRunner": "copilot"
+          }
+        ]
+      }
+    },
+    {
+      "eventId": "session.launch:2026-04-20T19:57:09.954Z:{\"taskId\":\"spec/01-spec-from-prd\"}:session-started",
+      "type": "session.started",
+      "occurredAt": "2026-04-20T19:57:09.962Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T19:57:09.954Z:{\"taskId\":\"spec/01-spec-from-prd\"}",
+      "payload": {
+        "sessionId": "01-spec-from-prd-copilot-cli-2",
+        "taskId": "spec/01-spec-from-prd",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "01-spec-from-prd-copilot-cli-2",
+        "terminalPaneId": "pty"
+      }
+    },
+    {
+      "eventId": "runtime:01-spec-from-prd-copilot-cli-2:session.completed:2026-04-20T20:04:47.755Z",
+      "type": "session.completed",
+      "occurredAt": "2026-04-20T20:04:47.755Z",
+      "source": "daemon",
+      "payload": {
+        "sessionId": "01-spec-from-prd-copilot-cli-2",
+        "taskId": "spec/01-spec-from-prd"
+      }
+    },
+    {
+      "eventId": "runtime:01-spec-from-prd-copilot-cli-2:task.completed:2026-04-20T20:04:47.755Z",
+      "type": "task.completed",
+      "occurredAt": "2026-04-20T20:04:47.755Z",
+      "source": "daemon",
+      "payload": {
+        "taskId": "spec/01-spec-from-prd"
+      }
+    },
+    {
+      "eventId": "session.launch:2026-04-20T20:04:47.755Z:{\"taskId\":\"spec/02-plan\"}:session-started",
+      "type": "session.started",
+      "occurredAt": "2026-04-20T20:04:48.187Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T20:04:47.755Z:{\"taskId\":\"spec/02-plan\"}",
+      "payload": {
+        "sessionId": "02-plan-copilot-cli-2",
+        "taskId": "spec/02-plan",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "02-plan-copilot-cli-2",
+        "terminalPaneId": "pty"
+      }
+    },
+    {
+      "eventId": "runtime:02-plan-copilot-cli-2:session.completed:2026-04-20T20:09:08.249Z",
+      "type": "session.completed",
+      "occurredAt": "2026-04-20T20:09:08.249Z",
+      "source": "daemon",
+      "payload": {
+        "sessionId": "02-plan-copilot-cli-2",
+        "taskId": "spec/02-plan"
+      }
+    },
+    {
+      "eventId": "runtime:02-plan-copilot-cli-2:task.completed:2026-04-20T20:09:08.249Z",
+      "type": "task.completed",
+      "occurredAt": "2026-04-20T20:09:08.249Z",
+      "source": "daemon",
+      "payload": {
+        "taskId": "spec/02-plan"
+      }
+    },
+    {
+      "eventId": "tasks.request-generation:2026-04-20T20:09:08.249Z:tasks-generated",
+      "type": "tasks.generated",
+      "occurredAt": "2026-04-20T20:09:08.690Z",
+      "source": "daemon",
+      "causedByRequestId": "tasks.request-generation:2026-04-20T20:09:08.249Z",
+      "payload": {
+        "stageId": "implementation",
+        "tasks": [
+          {
+            "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization",
+            "title": "Establish Mdsvex Docs Pipeline And Source Normalization",
+            "instruction": "Set up the Airport web app so the repository-root `docs/` tree can compile through an `mdsvex` pipeline instead of the existing raw-markdown viewer path. This slice should add the required web-app dependencies and config, allow the module graph to read the root docs corpus, and introduce the narrow compatibility normalization needed for existing Jekyll-flavored source conventions such as legacy frontmatter fields, preserved inline HTML, and rewritten internal docs links.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+            "dependsOn": [],
+            "agentRunner": "copilot"
+          },
+          {
+            "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization-verify",
+            "title": "Verify Mdsvex Docs Pipeline And Source Normalization",
+            "instruction": "Verify that Airport web can compile the repository-root docs corpus through the new `mdsvex` path and that the compatibility layer only covers the intended legacy conventions. Confirm focused validation covers frontmatter normalization, internal-link rewriting to `/docs/...`, preserved inline HTML blocks, and the absence of any broadened Jekyll-runtime behavior. Record any remaining gaps in VERIFY.md.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+            "dependsOn": [
+              "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization"
+            ],
+            "agentRunner": "copilot"
+          },
+          {
+            "taskId": "implementation/02-build-docs-manifest-navigation-and-page-resolution",
+            "title": "Build Docs Manifest Navigation And Page Resolution",
+            "instruction": "Implement the normalized docs domain model and manifest loader that discover compiled markdown modules under `docs/`, map legacy metadata into typed docs frontmatter, derive deterministic navigation ordering, and resolve `/docs` plus nested slug requests to the correct page entry. This slice should keep route resolution, navigation derivation, and source metadata aligned around one shared manifest instead of duplicating logic across loaders and components.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+            "dependsOn": [
+              "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization"
+            ],
+            "agentRunner": "copilot"
+          },
+          {
+            "taskId": "implementation/02-build-docs-manifest-navigation-and-page-resolution-verify",
+            "title": "Verify Docs Manifest Navigation And Page Resolution",
+            "instruction": "Verify that the shared docs manifest produces stable page records and sidebar structure from the repository `docs/` tree. Confirm focused tests or validation cover slug resolution for `/docs` and nested pages, frontmatter-driven ordering and labeling, explicit failures for missing sources, and consistency between the route map and derived navigation tree. Record any remaining gaps in VERIFY.md.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+            "dependsOn": [
+              "implementation/02-build-docs-manifest-navigation-and-page-resolution"
+            ],
+            "agentRunner": "copilot"
+          },
+          {
+            "taskId": "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering",
+            "title": "Compose Docs Route Layout And Mdsvex Page Rendering",
+            "instruction": "Create the dedicated `/docs` route surface inside Airport web, including the docs layout loader, docs frame components, and the catch-all page that mounts the resolved mdsvex component with docs-specific chrome and metadata. This slice should render long-form content through a docs content wrapper, surface normalized page title and description data, and keep docs presentation isolated from repository and mission operation views.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+            "dependsOn": [
+              "implementation/02-build-docs-manifest-navigation-and-page-resolution"
+            ],
+            "agentRunner": "copilot"
+          },
+          {
+            "taskId": "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering-verify",
+            "title": "Verify Docs Route Layout And Mdsvex Page Rendering",
+            "instruction": "Verify that the `/docs` route renders the resolved markdown component inside the dedicated docs layout without falling back to the legacy markdown viewer. Confirm focused validation covers docs page metadata, sidebar-aware layout behavior, long-form content styling for existing docs HTML blocks, and correct rendering for both the docs index and nested docs pages. Record any remaining gaps in VERIFY.md.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+            "dependsOn": [
+              "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering"
+            ],
+            "agentRunner": "copilot"
+          },
+          {
+            "taskId": "implementation/04-integrate-docs-discoverability-and-daemon-independent-access",
+            "title": "Integrate Docs Discoverability And Daemon-Independent Access",
+            "instruction": "Integrate the new docs surface into the shared Airport shell so users can discover and reach it without disturbing existing daemon-backed routes. This slice should add the first-class `/docs` sidebar affordance, active-route behavior, and the narrow daemon-gate exception that keeps docs reachable when the daemon is unavailable while leaving the rest of the Airport route protections intact.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+            "dependsOn": [
+              "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering"
+            ],
+            "agentRunner": "copilot"
+          },
+          {
+            "taskId": "implementation/04-integrate-docs-discoverability-and-daemon-independent-access-verify",
+            "title": "Verify Docs Discoverability And Daemon-Independent Access",
+            "instruction": "Verify that `/docs` remains reachable through the shared Airport shell when the daemon is unavailable and that the exception does not weaken protection for non-doc routes. Confirm focused validation covers sidebar navigation state, discoverability of the `/docs` entry, daemon-gated behavior outside the docs surface, and any route-level checks needed to prove the new exception stays narrow. Record any remaining gaps in VERIFY.md.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+            "dependsOn": [
+              "implementation/04-integrate-docs-discoverability-and-daemon-independent-access"
+            ],
+            "agentRunner": "copilot"
+          }
+        ]
+      }
+    },
+    {
+      "eventId": "25-generate-a-documentation-route-in-the-airport-we:task.queued:mo7mp335",
+      "type": "task.queued",
+      "occurredAt": "2026-04-20T20:09:31.361Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization",
+        "runnerId": "copilot-cli",
+        "prompt": "You are working on task '1 Establish Mdsvex Docs Pipeline And Source Normalization'.\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\nDo not read, modify, or create files outside that folder boundary.\nPerform the task exactly as specified in <01-establish-mdsvex-docs-pipeline-and-source-normalization.md>.\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/01-establish-mdsvex-docs-pipeline-and-source-normalization.md\nThat task file is authoritative.\n\nTask summary:\nSet up the Airport web app so the repository-root `docs/` tree can compile through an `mdsvex` pipeline instead of the existing raw-markdown viewer path. This slice should add the required web-app dependencies and config, allow the module graph to read the root docs corpus, and introduce the narrow compatibility normalization needed for existing Jekyll-flavored source conventions such as legacy frontmatter fields, preserved inline HTML, and rewritten internal docs links.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "workingDirectory": "/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we"
+      }
+    },
+    {
+      "eventId": "session.launch:2026-04-20T20:09:31.361Z:{\"taskId\":\"implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '1 Establish Mdsvex Docs Pipeline And Source Normalization'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <01-establish-mdsvex-docs-pipeline-and-source-normalization.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/01-establish-mdsvex-docs-pipeline-and-source-normalization.md\\nThat task file is authoritative.\\n\\nTask summary:\\nSet up the Airport web app so the repository-root `docs/` tree can compile through an `mdsvex` pipeline instead of the existing raw-markdown viewer path. This slice should add the required web-app dependencies and config, allow the module graph to read the root docs corpus, and introduce the narrow compatibility normalization needed for existing Jekyll-flavored source conventions such as legacy frontmatter fields, preserved inline HTML, and rewritten internal docs links.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}:session-started",
+      "type": "session.started",
+      "occurredAt": "2026-04-20T20:09:31.369Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T20:09:31.361Z:{\"taskId\":\"implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '1 Establish Mdsvex Docs Pipeline And Source Normalization'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <01-establish-mdsvex-docs-pipeline-and-source-normalization.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/01-establish-mdsvex-docs-pipeline-and-source-normalization.md\\nThat task file is authoritative.\\n\\nTask summary:\\nSet up the Airport web app so the repository-root `docs/` tree can compile through an `mdsvex` pipeline instead of the existing raw-markdown viewer path. This slice should add the required web-app dependencies and config, allow the module graph to read the root docs corpus, and introduce the narrow compatibility normalization needed for existing Jekyll-flavored source conventions such as legacy frontmatter fields, preserved inline HTML, and rewritten internal docs links.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}",
+      "payload": {
+        "sessionId": "01-establish-mdsvex-docs-pipeline-and-source-normalization-copilot-cli",
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "01-establish-mdsvex-docs-pipeline-and-source-normalization-copilot-cli",
+        "terminalPaneId": "pty"
+      }
+    },
+    {
+      "eventId": "runtime:01-establish-mdsvex-docs-pipeline-and-source-normalization-copilot-cli:session.terminated:2026-04-20T20:16:40.091Z",
+      "type": "session.terminated",
+      "occurredAt": "2026-04-20T20:16:40.091Z",
+      "source": "daemon",
+      "payload": {
+        "sessionId": "01-establish-mdsvex-docs-pipeline-and-source-normalization-copilot-cli",
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization"
+      }
+    },
+    {
+      "eventId": "25-generate-a-documentation-route-in-the-airport-we:task.queued:mo7mzock",
+      "type": "task.queued",
+      "occurredAt": "2026-04-20T20:17:45.476Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization",
+        "runnerId": "copilot-cli",
+        "prompt": "You are working on task '1 Establish Mdsvex Docs Pipeline And Source Normalization'.\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\nDo not read, modify, or create files outside that folder boundary.\nPerform the task exactly as specified in <01-establish-mdsvex-docs-pipeline-and-source-normalization.md>.\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/01-establish-mdsvex-docs-pipeline-and-source-normalization.md\nThat task file is authoritative.\n\nTask summary:\nSet up the Airport web app so the repository-root `docs/` tree can compile through an `mdsvex` pipeline instead of the existing raw-markdown viewer path. This slice should add the required web-app dependencies and config, allow the module graph to read the root docs corpus, and introduce the narrow compatibility normalization needed for existing Jekyll-flavored source conventions such as legacy frontmatter fields, preserved inline HTML, and rewritten internal docs links.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "workingDirectory": "/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we"
+      }
+    },
+    {
+      "eventId": "session.launch:2026-04-20T20:17:45.476Z:{\"taskId\":\"implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '1 Establish Mdsvex Docs Pipeline And Source Normalization'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <01-establish-mdsvex-docs-pipeline-and-source-normalization.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/01-establish-mdsvex-docs-pipeline-and-source-normalization.md\\nThat task file is authoritative.\\n\\nTask summary:\\nSet up the Airport web app so the repository-root `docs/` tree can compile through an `mdsvex` pipeline instead of the existing raw-markdown viewer path. This slice should add the required web-app dependencies and config, allow the module graph to read the root docs corpus, and introduce the narrow compatibility normalization needed for existing Jekyll-flavored source conventions such as legacy frontmatter fields, preserved inline HTML, and rewritten internal docs links.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}:session-started",
+      "type": "session.started",
+      "occurredAt": "2026-04-20T20:17:45.485Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T20:17:45.476Z:{\"taskId\":\"implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '1 Establish Mdsvex Docs Pipeline And Source Normalization'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <01-establish-mdsvex-docs-pipeline-and-source-normalization.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/01-establish-mdsvex-docs-pipeline-and-source-normalization.md\\nThat task file is authoritative.\\n\\nTask summary:\\nSet up the Airport web app so the repository-root `docs/` tree can compile through an `mdsvex` pipeline instead of the existing raw-markdown viewer path. This slice should add the required web-app dependencies and config, allow the module graph to read the root docs corpus, and introduce the narrow compatibility normalization needed for existing Jekyll-flavored source conventions such as legacy frontmatter fields, preserved inline HTML, and rewritten internal docs links.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}",
+      "payload": {
+        "sessionId": "01-establish-mdsvex-docs-pipeline-and-source-normalization-copilot-cli",
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "01-establish-mdsvex-docs-pipeline-and-source-normalization-copilot-cli",
+        "terminalPaneId": "pty"
+      }
+    },
+    {
+      "eventId": "runtime:01-establish-mdsvex-docs-pipeline-and-source-normalization-copilot-cli:session.terminated:2026-04-20T20:18:09.920Z",
+      "type": "session.terminated",
+      "occurredAt": "2026-04-20T20:18:09.920Z",
+      "source": "daemon",
+      "payload": {
+        "sessionId": "01-establish-mdsvex-docs-pipeline-and-source-normalization-copilot-cli",
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization"
+      }
+    },
+    {
+      "eventId": "25-generate-a-documentation-route-in-the-airport-we:task.queued:mo7n0d4o",
+      "type": "task.queued",
+      "occurredAt": "2026-04-20T20:18:17.592Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization",
+        "runnerId": "copilot-cli",
+        "prompt": "You are working on task '1 Establish Mdsvex Docs Pipeline And Source Normalization'.\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\nDo not read, modify, or create files outside that folder boundary.\nPerform the task exactly as specified in <01-establish-mdsvex-docs-pipeline-and-source-normalization.md>.\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/01-establish-mdsvex-docs-pipeline-and-source-normalization.md\nThat task file is authoritative.\n\nTask summary:\nSet up the Airport web app so the repository-root `docs/` tree can compile through an `mdsvex` pipeline instead of the existing raw-markdown viewer path. This slice should add the required web-app dependencies and config, allow the module graph to read the root docs corpus, and introduce the narrow compatibility normalization needed for existing Jekyll-flavored source conventions such as legacy frontmatter fields, preserved inline HTML, and rewritten internal docs links.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "workingDirectory": "/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we"
+      }
+    },
+    {
+      "eventId": "session.launch:2026-04-20T20:18:17.592Z:{\"taskId\":\"implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '1 Establish Mdsvex Docs Pipeline And Source Normalization'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <01-establish-mdsvex-docs-pipeline-and-source-normalization.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/01-establish-mdsvex-docs-pipeline-and-source-normalization.md\\nThat task file is authoritative.\\n\\nTask summary:\\nSet up the Airport web app so the repository-root `docs/` tree can compile through an `mdsvex` pipeline instead of the existing raw-markdown viewer path. This slice should add the required web-app dependencies and config, allow the module graph to read the root docs corpus, and introduce the narrow compatibility normalization needed for existing Jekyll-flavored source conventions such as legacy frontmatter fields, preserved inline HTML, and rewritten internal docs links.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}:session-started",
+      "type": "session.started",
+      "occurredAt": "2026-04-20T20:18:17.596Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T20:18:17.592Z:{\"taskId\":\"implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '1 Establish Mdsvex Docs Pipeline And Source Normalization'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <01-establish-mdsvex-docs-pipeline-and-source-normalization.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/01-establish-mdsvex-docs-pipeline-and-source-normalization.md\\nThat task file is authoritative.\\n\\nTask summary:\\nSet up the Airport web app so the repository-root `docs/` tree can compile through an `mdsvex` pipeline instead of the existing raw-markdown viewer path. This slice should add the required web-app dependencies and config, allow the module graph to read the root docs corpus, and introduce the narrow compatibility normalization needed for existing Jekyll-flavored source conventions such as legacy frontmatter fields, preserved inline HTML, and rewritten internal docs links.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}",
+      "payload": {
+        "sessionId": "01-establish-mdsvex-docs-pipeline-and-source-normalization-copilot-cli",
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "01-establish-mdsvex-docs-pipeline-and-source-normalization-copilot-cli",
+        "terminalPaneId": "pty"
+      }
+    },
+    {
+      "eventId": "runtime:01-establish-mdsvex-docs-pipeline-and-source-normalization-copilot-cli:session.completed:2026-04-20T20:22:43.754Z",
+      "type": "session.completed",
+      "occurredAt": "2026-04-20T20:22:43.754Z",
+      "source": "daemon",
+      "payload": {
+        "sessionId": "01-establish-mdsvex-docs-pipeline-and-source-normalization-copilot-cli",
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization"
+      }
+    },
+    {
+      "eventId": "runtime:01-establish-mdsvex-docs-pipeline-and-source-normalization-copilot-cli:task.completed:2026-04-20T20:22:43.754Z",
+      "type": "task.completed",
+      "occurredAt": "2026-04-20T20:22:43.754Z",
+      "source": "daemon",
+      "payload": {
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization"
+      }
+    },
+    {
+      "eventId": "25-generate-a-documentation-route-in-the-airport-we:task.queued:mo7n6gdg",
+      "type": "task.queued",
+      "occurredAt": "2026-04-20T20:23:01.732Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization-verify",
+        "runnerId": "copilot-cli",
+        "prompt": "You are working on task '1 Verify Mdsvex Docs Pipeline And Source Normalization'.\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\nDo not read, modify, or create files outside that folder boundary.\nPerform the task exactly as specified in <01-establish-mdsvex-docs-pipeline-and-source-normalization-verify.md>.\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/01-establish-mdsvex-docs-pipeline-and-source-normalization-verify.md\nThat task file is authoritative.\n\nTask summary:\nVerify that Airport web can compile the repository-root docs corpus through the new `mdsvex` path and that the compatibility layer only covers the intended legacy conventions. Confirm focused validation covers frontmatter normalization, internal-link rewriting to `/docs/...`, preserved inline HTML blocks, and the absence of any broadened Jekyll-runtime behavior. Record any remaining gaps in VERIFY.md.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "workingDirectory": "/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we"
+      }
+    },
+    {
+      "eventId": "session.launch:2026-04-20T20:23:01.732Z:{\"taskId\":\"implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization-verify\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '1 Verify Mdsvex Docs Pipeline And Source Normalization'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <01-establish-mdsvex-docs-pipeline-and-source-normalization-verify.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/01-establish-mdsvex-docs-pipeline-and-source-normalization-verify.md\\nThat task file is authoritative.\\n\\nTask summary:\\nVerify that Airport web can compile the repository-root docs corpus through the new `mdsvex` path and that the compatibility layer only covers the intended legacy conventions. Confirm focused validation covers frontmatter normalization, internal-link rewriting to `/docs/...`, preserved inline HTML blocks, and the absence of any broadened Jekyll-runtime behavior. Record any remaining gaps in VERIFY.md.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}:session-started",
+      "type": "session.started",
+      "occurredAt": "2026-04-20T20:23:01.737Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T20:23:01.732Z:{\"taskId\":\"implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization-verify\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '1 Verify Mdsvex Docs Pipeline And Source Normalization'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <01-establish-mdsvex-docs-pipeline-and-source-normalization-verify.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/01-establish-mdsvex-docs-pipeline-and-source-normalization-verify.md\\nThat task file is authoritative.\\n\\nTask summary:\\nVerify that Airport web can compile the repository-root docs corpus through the new `mdsvex` path and that the compatibility layer only covers the intended legacy conventions. Confirm focused validation covers frontmatter normalization, internal-link rewriting to `/docs/...`, preserved inline HTML blocks, and the absence of any broadened Jekyll-runtime behavior. Record any remaining gaps in VERIFY.md.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}",
+      "payload": {
+        "sessionId": "01-establish-mdsvex-docs-pipeline-and-source-normalization-verify-copilot-cli",
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "01-establish-mdsvex-docs-pipeline-and-source-normalization-verify-copilot-cli",
+        "terminalPaneId": "pty"
+      }
+    },
+    {
+      "eventId": "runtime:01-establish-mdsvex-docs-pipeline-and-source-normalization-verify-copilot-cli:session.completed:2026-04-20T20:30:31.724Z",
+      "type": "session.completed",
+      "occurredAt": "2026-04-20T20:30:31.724Z",
+      "source": "daemon",
+      "payload": {
+        "sessionId": "01-establish-mdsvex-docs-pipeline-and-source-normalization-verify-copilot-cli",
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization-verify"
+      }
+    },
+    {
+      "eventId": "runtime:01-establish-mdsvex-docs-pipeline-and-source-normalization-verify-copilot-cli:task.completed:2026-04-20T20:30:31.724Z",
+      "type": "task.completed",
+      "occurredAt": "2026-04-20T20:30:31.724Z",
+      "source": "daemon",
+      "payload": {
+        "taskId": "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization-verify"
+      }
+    },
+    {
+      "eventId": "25-generate-a-documentation-route-in-the-airport-we:task.queued:mo7ngblt",
+      "type": "task.queued",
+      "occurredAt": "2026-04-20T20:30:42.113Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/02-build-docs-manifest-navigation-and-page-resolution",
+        "runnerId": "copilot-cli",
+        "prompt": "You are working on task '2 Build Docs Manifest Navigation And Page Resolution'.\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\nDo not read, modify, or create files outside that folder boundary.\nPerform the task exactly as specified in <02-build-docs-manifest-navigation-and-page-resolution.md>.\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/02-build-docs-manifest-navigation-and-page-resolution.md\nThat task file is authoritative.\n\nTask summary:\nImplement the normalized docs domain model and manifest loader that discover compiled markdown modules under `docs/`, map legacy metadata into typed docs frontmatter, derive deterministic navigation ordering, and resolve `/docs` plus nested slug requests to the correct page entry. This slice should keep route resolution, navigation derivation, and source metadata aligned around one shared manifest instead of duplicating logic across loaders and components.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "workingDirectory": "/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we"
+      }
+    },
+    {
+      "eventId": "session.launch:2026-04-20T20:30:42.113Z:{\"taskId\":\"implementation/02-build-docs-manifest-navigation-and-page-resolution\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '2 Build Docs Manifest Navigation And Page Resolution'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <02-build-docs-manifest-navigation-and-page-resolution.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/02-build-docs-manifest-navigation-and-page-resolution.md\\nThat task file is authoritative.\\n\\nTask summary:\\nImplement the normalized docs domain model and manifest loader that discover compiled markdown modules under `docs/`, map legacy metadata into typed docs frontmatter, derive deterministic navigation ordering, and resolve `/docs` plus nested slug requests to the correct page entry. This slice should keep route resolution, navigation derivation, and source metadata aligned around one shared manifest instead of duplicating logic across loaders and components.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}:session-started",
+      "type": "session.started",
+      "occurredAt": "2026-04-20T20:30:42.119Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T20:30:42.113Z:{\"taskId\":\"implementation/02-build-docs-manifest-navigation-and-page-resolution\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '2 Build Docs Manifest Navigation And Page Resolution'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <02-build-docs-manifest-navigation-and-page-resolution.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/02-build-docs-manifest-navigation-and-page-resolution.md\\nThat task file is authoritative.\\n\\nTask summary:\\nImplement the normalized docs domain model and manifest loader that discover compiled markdown modules under `docs/`, map legacy metadata into typed docs frontmatter, derive deterministic navigation ordering, and resolve `/docs` plus nested slug requests to the correct page entry. This slice should keep route resolution, navigation derivation, and source metadata aligned around one shared manifest instead of duplicating logic across loaders and components.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}",
+      "payload": {
+        "sessionId": "02-build-docs-manifest-navigation-and-page-resolution-copilot-cli",
+        "taskId": "implementation/02-build-docs-manifest-navigation-and-page-resolution",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "02-build-docs-manifest-navigation-and-page-resolution-copilot-cli",
+        "terminalPaneId": "pty"
+      }
+    },
+    {
+      "eventId": "runtime:02-build-docs-manifest-navigation-and-page-resolution-copilot-cli:session.completed:2026-04-20T20:40:34.900Z",
+      "type": "session.completed",
+      "occurredAt": "2026-04-20T20:40:34.900Z",
+      "source": "daemon",
+      "payload": {
+        "sessionId": "02-build-docs-manifest-navigation-and-page-resolution-copilot-cli",
+        "taskId": "implementation/02-build-docs-manifest-navigation-and-page-resolution"
+      }
+    },
+    {
+      "eventId": "runtime:02-build-docs-manifest-navigation-and-page-resolution-copilot-cli:task.completed:2026-04-20T20:40:34.900Z",
+      "type": "task.completed",
+      "occurredAt": "2026-04-20T20:40:34.900Z",
+      "source": "daemon",
+      "payload": {
+        "taskId": "implementation/02-build-docs-manifest-navigation-and-page-resolution"
+      }
+    },
+    {
+      "eventId": "25-generate-a-documentation-route-in-the-airport-we:task.queued:mo7nt8o5",
+      "type": "task.queued",
+      "occurredAt": "2026-04-20T20:40:44.837Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/02-build-docs-manifest-navigation-and-page-resolution-verify",
+        "runnerId": "copilot-cli",
+        "prompt": "You are working on task '2 Verify Docs Manifest Navigation And Page Resolution'.\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\nDo not read, modify, or create files outside that folder boundary.\nPerform the task exactly as specified in <02-build-docs-manifest-navigation-and-page-resolution-verify.md>.\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/02-build-docs-manifest-navigation-and-page-resolution-verify.md\nThat task file is authoritative.\n\nTask summary:\nVerify that the shared docs manifest produces stable page records and sidebar structure from the repository `docs/` tree. Confirm focused tests or validation cover slug resolution for `/docs` and nested pages, frontmatter-driven ordering and labeling, explicit failures for missing sources, and consistency between the route map and derived navigation tree. Record any remaining gaps in VERIFY.md.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "workingDirectory": "/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we"
+      }
+    },
+    {
+      "eventId": "session.launch:2026-04-20T20:40:44.837Z:{\"taskId\":\"implementation/02-build-docs-manifest-navigation-and-page-resolution-verify\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '2 Verify Docs Manifest Navigation And Page Resolution'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <02-build-docs-manifest-navigation-and-page-resolution-verify.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/02-build-docs-manifest-navigation-and-page-resolution-verify.md\\nThat task file is authoritative.\\n\\nTask summary:\\nVerify that the shared docs manifest produces stable page records and sidebar structure from the repository `docs/` tree. Confirm focused tests or validation cover slug resolution for `/docs` and nested pages, frontmatter-driven ordering and labeling, explicit failures for missing sources, and consistency between the route map and derived navigation tree. Record any remaining gaps in VERIFY.md.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}:session-started",
+      "type": "session.started",
+      "occurredAt": "2026-04-20T20:40:44.844Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T20:40:44.837Z:{\"taskId\":\"implementation/02-build-docs-manifest-navigation-and-page-resolution-verify\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '2 Verify Docs Manifest Navigation And Page Resolution'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <02-build-docs-manifest-navigation-and-page-resolution-verify.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/02-build-docs-manifest-navigation-and-page-resolution-verify.md\\nThat task file is authoritative.\\n\\nTask summary:\\nVerify that the shared docs manifest produces stable page records and sidebar structure from the repository `docs/` tree. Confirm focused tests or validation cover slug resolution for `/docs` and nested pages, frontmatter-driven ordering and labeling, explicit failures for missing sources, and consistency between the route map and derived navigation tree. Record any remaining gaps in VERIFY.md.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}",
+      "payload": {
+        "sessionId": "02-build-docs-manifest-navigation-and-page-resolution-verify-copilot-cli",
+        "taskId": "implementation/02-build-docs-manifest-navigation-and-page-resolution-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "02-build-docs-manifest-navigation-and-page-resolution-verify-copilot-cli",
+        "terminalPaneId": "pty"
+      }
+    },
+    {
+      "eventId": "runtime:02-build-docs-manifest-navigation-and-page-resolution-verify-copilot-cli:session.completed:2026-04-20T20:42:16.260Z",
+      "type": "session.completed",
+      "occurredAt": "2026-04-20T20:42:16.260Z",
+      "source": "daemon",
+      "payload": {
+        "sessionId": "02-build-docs-manifest-navigation-and-page-resolution-verify-copilot-cli",
+        "taskId": "implementation/02-build-docs-manifest-navigation-and-page-resolution-verify"
+      }
+    },
+    {
+      "eventId": "runtime:02-build-docs-manifest-navigation-and-page-resolution-verify-copilot-cli:task.completed:2026-04-20T20:42:16.260Z",
+      "type": "task.completed",
+      "occurredAt": "2026-04-20T20:42:16.260Z",
+      "source": "daemon",
+      "payload": {
+        "taskId": "implementation/02-build-docs-manifest-navigation-and-page-resolution-verify"
+      }
+    },
+    {
+      "eventId": "25-generate-a-documentation-route-in-the-airport-we:task.queued:mo7nvdhn",
+      "type": "task.queued",
+      "occurredAt": "2026-04-20T20:42:24.395Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering",
+        "runnerId": "copilot-cli",
+        "prompt": "You are working on task '3 Compose Docs Route Layout And Mdsvex Page Rendering'.\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\nDo not read, modify, or create files outside that folder boundary.\nPerform the task exactly as specified in <03-compose-docs-route-layout-and-mdsvex-page-rendering.md>.\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/03-compose-docs-route-layout-and-mdsvex-page-rendering.md\nThat task file is authoritative.\n\nTask summary:\nCreate the dedicated `/docs` route surface inside Airport web, including the docs layout loader, docs frame components, and the catch-all page that mounts the resolved mdsvex component with docs-specific chrome and metadata. This slice should render long-form content through a docs content wrapper, surface normalized page title and description data, and keep docs presentation isolated from repository and mission operation views.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "workingDirectory": "/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we"
+      }
+    },
+    {
+      "eventId": "session.launch:2026-04-20T20:42:24.395Z:{\"taskId\":\"implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '3 Compose Docs Route Layout And Mdsvex Page Rendering'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <03-compose-docs-route-layout-and-mdsvex-page-rendering.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/03-compose-docs-route-layout-and-mdsvex-page-rendering.md\\nThat task file is authoritative.\\n\\nTask summary:\\nCreate the dedicated `/docs` route surface inside Airport web, including the docs layout loader, docs frame components, and the catch-all page that mounts the resolved mdsvex component with docs-specific chrome and metadata. This slice should render long-form content through a docs content wrapper, surface normalized page title and description data, and keep docs presentation isolated from repository and mission operation views.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}:session-started",
+      "type": "session.started",
+      "occurredAt": "2026-04-20T20:42:24.400Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T20:42:24.395Z:{\"taskId\":\"implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '3 Compose Docs Route Layout And Mdsvex Page Rendering'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <03-compose-docs-route-layout-and-mdsvex-page-rendering.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/03-compose-docs-route-layout-and-mdsvex-page-rendering.md\\nThat task file is authoritative.\\n\\nTask summary:\\nCreate the dedicated `/docs` route surface inside Airport web, including the docs layout loader, docs frame components, and the catch-all page that mounts the resolved mdsvex component with docs-specific chrome and metadata. This slice should render long-form content through a docs content wrapper, surface normalized page title and description data, and keep docs presentation isolated from repository and mission operation views.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}",
+      "payload": {
+        "sessionId": "03-compose-docs-route-layout-and-mdsvex-page-rendering-copilot-cli",
+        "taskId": "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "03-compose-docs-route-layout-and-mdsvex-page-rendering-copilot-cli",
+        "terminalPaneId": "pty"
+      }
+    },
+    {
+      "eventId": "runtime:03-compose-docs-route-layout-and-mdsvex-page-rendering-copilot-cli:session.completed:2026-04-20T20:54:50.708Z",
+      "type": "session.completed",
+      "occurredAt": "2026-04-20T20:54:50.708Z",
+      "source": "daemon",
+      "payload": {
+        "sessionId": "03-compose-docs-route-layout-and-mdsvex-page-rendering-copilot-cli",
+        "taskId": "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering"
+      }
+    },
+    {
+      "eventId": "runtime:03-compose-docs-route-layout-and-mdsvex-page-rendering-copilot-cli:task.completed:2026-04-20T20:54:50.708Z",
+      "type": "task.completed",
+      "occurredAt": "2026-04-20T20:54:50.708Z",
+      "source": "daemon",
+      "payload": {
+        "taskId": "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering"
+      }
+    },
+    {
+      "eventId": "25-generate-a-documentation-route-in-the-airport-we:task.queued:mo7obk8m",
+      "type": "task.queued",
+      "occurredAt": "2026-04-20T20:54:59.638Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering-verify",
+        "runnerId": "copilot-cli",
+        "prompt": "You are working on task '3 Verify Docs Route Layout And Mdsvex Page Rendering'.\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\nDo not read, modify, or create files outside that folder boundary.\nPerform the task exactly as specified in <03-compose-docs-route-layout-and-mdsvex-page-rendering-verify.md>.\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/03-compose-docs-route-layout-and-mdsvex-page-rendering-verify.md\nThat task file is authoritative.\n\nTask summary:\nVerify that the `/docs` route renders the resolved markdown component inside the dedicated docs layout without falling back to the legacy markdown viewer. Confirm focused validation covers docs page metadata, sidebar-aware layout behavior, long-form content styling for existing docs HTML blocks, and correct rendering for both the docs index and nested docs pages. Record any remaining gaps in VERIFY.md.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "workingDirectory": "/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we"
+      }
+    },
+    {
+      "eventId": "session.launch:2026-04-20T20:54:59.638Z:{\"taskId\":\"implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering-verify\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '3 Verify Docs Route Layout And Mdsvex Page Rendering'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <03-compose-docs-route-layout-and-mdsvex-page-rendering-verify.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/03-compose-docs-route-layout-and-mdsvex-page-rendering-verify.md\\nThat task file is authoritative.\\n\\nTask summary:\\nVerify that the `/docs` route renders the resolved markdown component inside the dedicated docs layout without falling back to the legacy markdown viewer. Confirm focused validation covers docs page metadata, sidebar-aware layout behavior, long-form content styling for existing docs HTML blocks, and correct rendering for both the docs index and nested docs pages. Record any remaining gaps in VERIFY.md.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}:session-started",
+      "type": "session.started",
+      "occurredAt": "2026-04-20T20:54:59.646Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T20:54:59.638Z:{\"taskId\":\"implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering-verify\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '3 Verify Docs Route Layout And Mdsvex Page Rendering'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <03-compose-docs-route-layout-and-mdsvex-page-rendering-verify.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/03-compose-docs-route-layout-and-mdsvex-page-rendering-verify.md\\nThat task file is authoritative.\\n\\nTask summary:\\nVerify that the `/docs` route renders the resolved markdown component inside the dedicated docs layout without falling back to the legacy markdown viewer. Confirm focused validation covers docs page metadata, sidebar-aware layout behavior, long-form content styling for existing docs HTML blocks, and correct rendering for both the docs index and nested docs pages. Record any remaining gaps in VERIFY.md.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}",
+      "payload": {
+        "sessionId": "03-compose-docs-route-layout-and-mdsvex-page-rendering-verify-copilot-cli",
+        "taskId": "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "03-compose-docs-route-layout-and-mdsvex-page-rendering-verify-copilot-cli",
+        "terminalPaneId": "pty"
+      }
+    },
+    {
+      "eventId": "runtime:03-compose-docs-route-layout-and-mdsvex-page-rendering-verify-copilot-cli:session.completed:2026-04-20T21:00:36.886Z",
+      "type": "session.completed",
+      "occurredAt": "2026-04-20T21:00:36.886Z",
+      "source": "daemon",
+      "payload": {
+        "sessionId": "03-compose-docs-route-layout-and-mdsvex-page-rendering-verify-copilot-cli",
+        "taskId": "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering-verify"
+      }
+    },
+    {
+      "eventId": "runtime:03-compose-docs-route-layout-and-mdsvex-page-rendering-verify-copilot-cli:task.completed:2026-04-20T21:00:36.886Z",
+      "type": "task.completed",
+      "occurredAt": "2026-04-20T21:00:36.886Z",
+      "source": "daemon",
+      "payload": {
+        "taskId": "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering-verify"
+      }
+    },
+    {
+      "eventId": "25-generate-a-documentation-route-in-the-airport-we:task.queued:mo7oj012",
+      "type": "task.queued",
+      "occurredAt": "2026-04-20T21:00:46.694Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/04-integrate-docs-discoverability-and-daemon-independent-access",
+        "runnerId": "copilot-cli",
+        "prompt": "You are working on task '4 Integrate Docs Discoverability And Daemon-Independent Access'.\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\nDo not read, modify, or create files outside that folder boundary.\nPerform the task exactly as specified in <04-integrate-docs-discoverability-and-daemon-independent-access.md>.\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/04-integrate-docs-discoverability-and-daemon-independent-access.md\nThat task file is authoritative.\n\nTask summary:\nIntegrate the new docs surface into the shared Airport shell so users can discover and reach it without disturbing existing daemon-backed routes. This slice should add the first-class `/docs` sidebar affordance, active-route behavior, and the narrow daemon-gate exception that keeps docs reachable when the daemon is unavailable while leaving the rest of the Airport route protections intact.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "workingDirectory": "/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we"
+      }
+    },
+    {
+      "eventId": "session.launch:2026-04-20T21:00:46.694Z:{\"taskId\":\"implementation/04-integrate-docs-discoverability-and-daemon-independent-access\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '4 Integrate Docs Discoverability And Daemon-Independent Access'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <04-integrate-docs-discoverability-and-daemon-independent-access.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/04-integrate-docs-discoverability-and-daemon-independent-access.md\\nThat task file is authoritative.\\n\\nTask summary:\\nIntegrate the new docs surface into the shared Airport shell so users can discover and reach it without disturbing existing daemon-backed routes. This slice should add the first-class `/docs` sidebar affordance, active-route behavior, and the narrow daemon-gate exception that keeps docs reachable when the daemon is unavailable while leaving the rest of the Airport route protections intact.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}:session-started",
+      "type": "session.started",
+      "occurredAt": "2026-04-20T21:00:46.699Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T21:00:46.694Z:{\"taskId\":\"implementation/04-integrate-docs-discoverability-and-daemon-independent-access\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '4 Integrate Docs Discoverability And Daemon-Independent Access'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <04-integrate-docs-discoverability-and-daemon-independent-access.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/04-integrate-docs-discoverability-and-daemon-independent-access.md\\nThat task file is authoritative.\\n\\nTask summary:\\nIntegrate the new docs surface into the shared Airport shell so users can discover and reach it without disturbing existing daemon-backed routes. This slice should add the first-class `/docs` sidebar affordance, active-route behavior, and the narrow daemon-gate exception that keeps docs reachable when the daemon is unavailable while leaving the rest of the Airport route protections intact.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}",
+      "payload": {
+        "sessionId": "04-integrate-docs-discoverability-and-daemon-independent-access-copilot-cli",
+        "taskId": "implementation/04-integrate-docs-discoverability-and-daemon-independent-access",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "04-integrate-docs-discoverability-and-daemon-independent-access-copilot-cli",
+        "terminalPaneId": "pty"
+      }
+    },
+    {
+      "eventId": "runtime:04-integrate-docs-discoverability-and-daemon-independent-access-copilot-cli:session.completed:2026-04-20T21:06:59.797Z",
+      "type": "session.completed",
+      "occurredAt": "2026-04-20T21:06:59.797Z",
+      "source": "daemon",
+      "payload": {
+        "sessionId": "04-integrate-docs-discoverability-and-daemon-independent-access-copilot-cli",
+        "taskId": "implementation/04-integrate-docs-discoverability-and-daemon-independent-access"
+      }
+    },
+    {
+      "eventId": "runtime:04-integrate-docs-discoverability-and-daemon-independent-access-copilot-cli:task.completed:2026-04-20T21:06:59.797Z",
+      "type": "task.completed",
+      "occurredAt": "2026-04-20T21:06:59.797Z",
+      "source": "daemon",
+      "payload": {
+        "taskId": "implementation/04-integrate-docs-discoverability-and-daemon-independent-access"
+      }
+    },
+    {
+      "eventId": "25-generate-a-documentation-route-in-the-airport-we:task.queued:mo7or5sw",
+      "type": "task.queued",
+      "occurredAt": "2026-04-20T21:07:07.424Z",
+      "source": "human",
+      "payload": {
+        "taskId": "implementation/04-integrate-docs-discoverability-and-daemon-independent-access-verify",
+        "runnerId": "copilot-cli",
+        "prompt": "You are working on task '4 Verify Docs Discoverability And Daemon-Independent Access'.\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\nDo not read, modify, or create files outside that folder boundary.\nPerform the task exactly as specified in <04-integrate-docs-discoverability-and-daemon-independent-access-verify.md>.\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/04-integrate-docs-discoverability-and-daemon-independent-access-verify.md\nThat task file is authoritative.\n\nTask summary:\nVerify that `/docs` remains reachable through the shared Airport shell when the daemon is unavailable and that the exception does not weaken protection for non-doc routes. Confirm focused validation covers sidebar navigation state, discoverability of the `/docs` entry, daemon-gated behavior outside the docs surface, and any route-level checks needed to prove the new exception stays narrow. Record any remaining gaps in VERIFY.md.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "workingDirectory": "/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we"
+      }
+    },
+    {
+      "eventId": "session.launch:2026-04-20T21:07:07.424Z:{\"taskId\":\"implementation/04-integrate-docs-discoverability-and-daemon-independent-access-verify\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '4 Verify Docs Discoverability And Daemon-Independent Access'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <04-integrate-docs-discoverability-and-daemon-independent-access-verify.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/04-integrate-docs-discoverability-and-daemon-independent-access-verify.md\\nThat task file is authoritative.\\n\\nTask summary:\\nVerify that `/docs` remains reachable through the shared Airport shell when the daemon is unavailable and that the exception does not weaken protection for non-doc routes. Confirm focused validation covers sidebar navigation state, discoverability of the `/docs` entry, daemon-gated behavior outside the docs surface, and any route-level checks needed to prove the new exception stays narrow. Record any remaining gaps in VERIFY.md.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}:session-started",
+      "type": "session.started",
+      "occurredAt": "2026-04-20T21:07:07.430Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T21:07:07.424Z:{\"taskId\":\"implementation/04-integrate-docs-discoverability-and-daemon-independent-access-verify\",\"runnerId\":\"copilot-cli\",\"prompt\":\"You are working on task '4 Verify Docs Discoverability And Daemon-Independent Access'.\\nStay strictly within this mission workspace: /Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\\nDo not read, modify, or create files outside that folder boundary.\\nPerform the task exactly as specified in <04-integrate-docs-discoverability-and-daemon-independent-access-verify.md>.\\nHere are your instructions: @/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we/.mission/missions/25-generate-a-documentation-route-in-the-airport-we/03-IMPLEMENTATION/tasks/04-integrate-docs-discoverability-and-daemon-independent-access-verify.md\\nThat task file is authoritative.\\n\\nTask summary:\\nVerify that `/docs` remains reachable through the shared Airport shell when the daemon is unavailable and that the exception does not weaken protection for non-doc routes. Confirm focused validation covers sidebar navigation state, discoverability of the `/docs` entry, daemon-gated behavior outside the docs surface, and any route-level checks needed to prove the new exception stays narrow. Record any remaining gaps in VERIFY.md.\\n\\nUse the product artifacts in this mission folder as the canonical context boundary.\",\"workingDirectory\":\"/Users/ronb/missions/mission/25-generate-a-documentation-route-in-the-airport-we\"}",
+      "payload": {
+        "sessionId": "04-integrate-docs-discoverability-and-daemon-independent-access-verify-copilot-cli",
+        "taskId": "implementation/04-integrate-docs-discoverability-and-daemon-independent-access-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "04-integrate-docs-discoverability-and-daemon-independent-access-verify-copilot-cli",
+        "terminalPaneId": "pty"
+      }
+    },
+    {
+      "eventId": "runtime:04-integrate-docs-discoverability-and-daemon-independent-access-verify-copilot-cli:session.completed:2026-04-20T21:16:43.624Z",
+      "type": "session.completed",
+      "occurredAt": "2026-04-20T21:16:43.624Z",
+      "source": "daemon",
+      "payload": {
+        "sessionId": "04-integrate-docs-discoverability-and-daemon-independent-access-verify-copilot-cli",
+        "taskId": "implementation/04-integrate-docs-discoverability-and-daemon-independent-access-verify"
+      }
+    },
+    {
+      "eventId": "runtime:04-integrate-docs-discoverability-and-daemon-independent-access-verify-copilot-cli:task.completed:2026-04-20T21:16:43.624Z",
+      "type": "task.completed",
+      "occurredAt": "2026-04-20T21:16:43.624Z",
+      "source": "daemon",
+      "payload": {
+        "taskId": "implementation/04-integrate-docs-discoverability-and-daemon-independent-access-verify"
+      }
+    },
+    {
+      "eventId": "tasks.request-generation:2026-04-20T21:16:43.624Z:tasks-generated",
+      "type": "tasks.generated",
+      "occurredAt": "2026-04-20T21:16:44.009Z",
+      "source": "daemon",
+      "causedByRequestId": "tasks.request-generation:2026-04-20T21:16:43.624Z",
+      "payload": {
+        "stageId": "audit",
+        "tasks": [
+          {
+            "taskId": "audit/01-debrief",
+            "title": "Debrief",
+            "instruction": "Run the repo-wide end-to-end validation required for the mission. Record the simulator run results, residual risks, and release readiness in AUDIT.md.",
+            "dependsOn": [],
+            "agentRunner": "copilot"
+          }
+        ]
+      }
+    },
+    {
+      "eventId": "session.launch:2026-04-20T21:16:44.009Z:{\"taskId\":\"audit/01-debrief\"}:session-started",
+      "type": "session.started",
+      "occurredAt": "2026-04-20T21:16:44.018Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T21:16:44.009Z:{\"taskId\":\"audit/01-debrief\"}",
+      "payload": {
+        "sessionId": "01-debrief-copilot-cli-2",
+        "taskId": "audit/01-debrief",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "01-debrief-copilot-cli-2",
+        "terminalPaneId": "pty"
+      }
+    },
+    {
+      "eventId": "runtime:01-debrief-copilot-cli-2:session.terminated:2026-04-20T21:20:46.714Z",
+      "type": "session.terminated",
+      "occurredAt": "2026-04-20T21:20:46.714Z",
+      "source": "daemon",
+      "payload": {
+        "sessionId": "01-debrief-copilot-cli-2",
+        "taskId": "audit/01-debrief"
+      }
+    },
+    {
+      "eventId": "session.launch:2026-04-20T21:20:46.714Z:{\"taskId\":\"audit/01-debrief\"}:session-started",
+      "type": "session.started",
+      "occurredAt": "2026-04-20T21:20:47.057Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T21:20:46.714Z:{\"taskId\":\"audit/01-debrief\"}",
+      "payload": {
+        "sessionId": "01-debrief-copilot-cli",
+        "taskId": "audit/01-debrief",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "01-debrief-copilot-cli",
+        "terminalPaneId": "pty"
+      }
+    },
+    {
+      "eventId": "runtime:01-debrief-copilot-cli:session.cancelled:2026-04-20T21:23:39.315Z",
+      "type": "session.cancelled",
+      "occurredAt": "2026-04-20T21:23:39.315Z",
+      "source": "daemon",
+      "payload": {
+        "sessionId": "01-debrief-copilot-cli",
+        "taskId": "audit/01-debrief"
+      }
+    },
+    {
+      "eventId": "session.launch:2026-04-20T21:23:39.315Z:{\"taskId\":\"audit/01-debrief\"}:session-started",
+      "type": "session.started",
+      "occurredAt": "2026-04-20T21:23:39.340Z",
+      "source": "daemon",
+      "causedByRequestId": "session.launch:2026-04-20T21:23:39.315Z:{\"taskId\":\"audit/01-debrief\"}",
+      "payload": {
+        "sessionId": "01-debrief-copilot-cli-2",
+        "taskId": "audit/01-debrief",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "terminalSessionName": "01-debrief-copilot-cli-2",
+        "terminalPaneId": "pty"
+      }
+    },
+    {
+      "eventId": "runtime:01-debrief-copilot-cli-2:session.completed:2026-04-20T21:23:50.746Z",
+      "type": "session.completed",
+      "occurredAt": "2026-04-20T21:23:50.746Z",
+      "source": "daemon",
+      "payload": {
+        "sessionId": "01-debrief-copilot-cli-2",
+        "taskId": "audit/01-debrief"
+      }
+    },
+    {
+      "eventId": "runtime:01-debrief-copilot-cli-2:task.completed:2026-04-20T21:23:50.746Z",
+      "type": "task.completed",
+      "occurredAt": "2026-04-20T21:23:50.746Z",
+      "source": "daemon",
+      "payload": {
+        "taskId": "audit/01-debrief"
+      }
+    },
+    {
+      "eventId": "tasks.request-generation:2026-04-20T21:23:50.746Z:tasks-generated",
+      "type": "tasks.generated",
+      "occurredAt": "2026-04-20T21:23:51.752Z",
+      "source": "daemon",
+      "causedByRequestId": "tasks.request-generation:2026-04-20T21:23:50.746Z",
+      "payload": {
+        "stageId": "delivery",
+        "tasks": [
+          {
+            "taskId": "delivery/01-closeout",
+            "title": "Closing the mission",
+            "instruction": "Prepare the final delivery motion. Confirm AUDIT.md is complete, summarize the final status, and write DELIVERY.md as the final delivery artifact for the mission.",
+            "dependsOn": [],
+            "agentRunner": "copilot"
+          }
+        ]
+      }
+    },
+    {
+      "eventId": "25-generate-a-documentation-route-in-the-airport-we:task.completed:mo7peayq",
+      "type": "task.completed",
+      "occurredAt": "2026-04-20T21:25:07.202Z",
+      "source": "human",
+      "payload": {
+        "taskId": "delivery/01-closeout"
+      }
+    }
+  ]
+}

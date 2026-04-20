@@ -1,8 +1,10 @@
 // /apps/airport/web/src/hooks.server.ts: Initializes daemon connectivity state and GitHub-backed app context for each request.
 import { redirect, type Handle } from '@sveltejs/kit';
+import type { AppContextServerValue } from '$lib/client/context/app-context.svelte';
 import {
     readGithubAuthToken
 } from '$lib/server/github-auth.server';
+import { shouldRedirectUnavailableDaemonRoute } from '$lib/server/daemon/route-access';
 import {
     getDaemonRuntimeState,
     readCachedDaemonSystemStatus,
@@ -54,7 +56,7 @@ function resolveGithubStatus(systemStatus?: SystemStatus): GithubStatus {
 
 function resolveGitHubContext(systemStatus?: SystemStatus): {
     githubStatus: GithubStatus;
-    user?: App.AppContext['user'];
+    user?: AppContextServerValue['user'];
 } {
     const githubStatus = resolveGithubStatus(systemStatus);
     const githubUser = systemStatus?.github.user?.trim();
@@ -101,11 +103,10 @@ export const handle: Handle = async ({ event, resolve }) => {
     };
 
     const pathname = event.url.pathname;
-    const isRootPage = pathname === '/';
-    const isApiRequest = pathname.startsWith('/api/');
-    const isAuthRequest = pathname.startsWith('/auth/');
-
-    if (!daemonState.running && !isRootPage && !isApiRequest && !isAuthRequest) {
+    if (shouldRedirectUnavailableDaemonRoute({
+        pathname,
+        daemonRunning: daemonState.running
+    })) {
         throw redirect(303, '/');
     }
 
