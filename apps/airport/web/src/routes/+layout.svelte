@@ -3,16 +3,24 @@
 	import type { Snippet } from "svelte";
 	import { browser } from "$app/environment";
 	import { asset } from "$app/paths";
+	import { page } from "$app/state";
 	import { ModeWatcher } from "mode-watcher";
 	import {
 		createAppContext,
 		setAppContext,
 	} from "$lib/client/context/app-context.svelte";
+	import { shouldRenderDaemonRouteContent } from "$lib/server/daemon/route-access";
 	import type { LayoutData } from "./$types";
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 	const appContext = createAppContext(() => data.appContext);
 	let retryReloadTimer: ReturnType<typeof setTimeout> | undefined;
+	const showsRouteContent = $derived(
+		shouldRenderDaemonRouteContent({
+			pathname: page.url.pathname,
+			daemonRunning: appContext.daemon.running,
+		}),
+	);
 
 	setAppContext(appContext);
 
@@ -28,7 +36,7 @@
 
 		if (
 			!browser ||
-			appContext.daemon.running ||
+			showsRouteContent ||
 			!appContext.daemon.nextRetryAt
 		) {
 			return;
@@ -66,7 +74,7 @@
 	<link rel="apple-touch-icon" href={asset("/apple-touch-icon.png")} />
 </svelte:head>
 
-{#if appContext.daemon.running}
+{#if showsRouteContent}
 	{@render children()}
 {:else}
 	<div

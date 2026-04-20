@@ -2,6 +2,7 @@
 <script lang="ts">
     import { page } from "$app/state";
     import { asset } from "$app/paths";
+    import BookIcon from "@tabler/icons-svelte/icons/book";
     import CalendarIcon from "@tabler/icons-svelte/icons/calendar";
     import DashboardIcon from "@tabler/icons-svelte/icons/dashboard";
     import FolderIcon from "@tabler/icons-svelte/icons/folder";
@@ -9,6 +10,7 @@
     import SearchIcon from "@tabler/icons-svelte/icons/search";
     import SettingsIcon from "@tabler/icons-svelte/icons/settings";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { getAirportSidebarNavigation } from "./airport-sidebar-navigation";
     import NavSecondary from "$lib/components/nav-secondary.svelte";
     import NavUser from "$lib/components/nav-user.svelte";
     import * as Sidebar from "$lib/components/ui/sidebar/index.js";
@@ -53,6 +55,9 @@
 
     const routeSegments = $derived(
         page.url.pathname.split("/").filter((segment) => segment.length > 0),
+    );
+    const primaryNavigation = $derived(
+        getAirportSidebarNavigation(page.url.pathname),
     );
     const activeRepositoryId = $derived(
         routeSegments[0] === "repository"
@@ -110,6 +115,26 @@
     </Sidebar.Header>
 
     <Sidebar.Content>
+        <Sidebar.Group>
+            <Sidebar.GroupLabel>Navigate</Sidebar.GroupLabel>
+            <Sidebar.GroupContent>
+                <Sidebar.Menu>
+                    {#each primaryNavigation as item (item.href)}
+                        <Sidebar.MenuItem>
+                            <Sidebar.MenuButton isActive={item.isActive}>
+                                {#snippet child({ props })}
+                                    <a href={item.href} {...props}>
+                                        <BookIcon />
+                                        <span>{item.title}</span>
+                                    </a>
+                                {/snippet}
+                            </Sidebar.MenuButton>
+                        </Sidebar.MenuItem>
+                    {/each}
+                </Sidebar.Menu>
+            </Sidebar.GroupContent>
+        </Sidebar.Group>
+
         <Sidebar.Group>
             <Sidebar.GroupLabel>Repositories</Sidebar.GroupLabel>
             <Sidebar.GroupContent>
