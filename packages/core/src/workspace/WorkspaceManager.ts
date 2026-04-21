@@ -116,6 +116,10 @@ export class WorkspaceManager {
             return primaryWorkspace.executeMethod(request);
         }
 
+        if (request.method === 'control.github.repositories.clone') {
+            return primaryWorkspace.executeMethod(request);
+        }
+
         if (request.method === 'control.github.issue.detail') {
             return primaryWorkspace.executeMethod(request);
         }
@@ -144,7 +148,7 @@ export class WorkspaceManager {
         if (!resolveGitWorkspaceRoot(controlRoot) && !resolveGitWorkspaceRoot(trimmedPath)) {
             throw new Error(`Mission could not resolve a Git repository from '${repositoryPath}'.`);
         }
-		await registerMissionUserRepo(controlRoot);
+        await registerMissionUserRepo(controlRoot);
         const repos = await this.listRegisteredRepositories(controlRoot);
         const registered = repos.find((candidate) => candidate.repositoryRootPath === controlRoot);
         if (!registered) {

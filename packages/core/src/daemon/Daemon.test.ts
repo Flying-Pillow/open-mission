@@ -7,6 +7,7 @@ import { DaemonApi } from '../client/DaemonApi.js';
 import { DaemonClient } from '../client/DaemonClient.js';
 import { getMissionDaemonSettingsPath } from '../lib/daemonConfig.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
+import { writeMissionUserConfig } from '../lib/userConfig.js';
 import { getMissionWorktreesPath } from '../lib/repoConfig.js';
 import { initializeMissionRepository } from '../repository/initializeMissionRepository.js';
 import { Mission } from '../mission/Mission.js';
@@ -124,6 +125,72 @@ exit 1
 				process.env['XDG_CONFIG_HOME'] = undefined;
 				process.env['PATH'] = originalPath;
 				await fs.rm(workspaceRoot, { recursive: true, force: true });
+			}
+		});
+	});
+
+	it('clones a visible GitHub repository through the daemon and registers the cloned checkout', async () => {
+		await withTemporaryDaemonConfigHome(async () => {
+			const workspaceRoot = await createTempRepo();
+			const sourceRepositoryPath = await createTempRepo();
+			const cloneParentPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-clone-parent-'));
+			const clonePath = path.join(cloneParentPath, 'cloned-mission');
+			const previousCloneRepository = process.env['MISSION_FAKE_GH_CLONE_REPOSITORY'];
+			const previousCloneSourcePath = process.env['MISSION_FAKE_GH_CLONE_SOURCE_PATH'];
+			process.env['MISSION_FAKE_GH_CLONE_REPOSITORY'] = 'Flying-Pillow/mission-clone-source';
+			process.env['MISSION_FAKE_GH_CLONE_SOURCE_PATH'] = sourceRepositoryPath;
+
+			try {
+				await withFakeGitHubCli(async ({ ghPath }) => {
+					await writeMissionUserConfig({ ghBinary: ghPath });
+					const socketPath = path.join(workspaceRoot, '.mission-daemon-test.sock');
+					const daemon = await startDaemon({ socketPath });
+					const client = new DaemonClient();
+
+					try {
+						client.setAuthToken('ghp_clone_token');
+						await client.connect({ surfacePath: workspaceRoot, socketPath });
+						const api = new DaemonApi(client);
+						const clonedRepository = await api.control.cloneGitHubRepository(
+							'Flying-Pillow/mission-clone-source',
+							clonePath
+						);
+
+						expect(clonedRepository).toMatchObject({
+							repositoryRootPath: clonePath,
+							label: 'mission-clone-source',
+							description: 'Flying-Pillow/mission-clone-source',
+							githubRepository: 'Flying-Pillow/mission-clone-source'
+						});
+						await expect(fs.access(path.join(clonePath, '.git'))).resolves.toBeUndefined();
+						const registeredRepositories = await api.control.listRegisteredRepositories();
+						expect(registeredRepositories).toEqual(
+							expect.arrayContaining([
+								expect.objectContaining({
+									repositoryRootPath: clonePath,
+									githubRepository: 'Flying-Pillow/mission-clone-source'
+								})
+							])
+						);
+					} finally {
+						client.dispose();
+						await daemon.close();
+					}
+				});
+			} finally {
+				if (previousCloneRepository === undefined) {
+					delete process.env['MISSION_FAKE_GH_CLONE_REPOSITORY'];
+				} else {
+					process.env['MISSION_FAKE_GH_CLONE_REPOSITORY'] = previousCloneRepository;
+				}
+				if (previousCloneSourcePath === undefined) {
+					delete process.env['MISSION_FAKE_GH_CLONE_SOURCE_PATH'];
+				} else {
+					process.env['MISSION_FAKE_GH_CLONE_SOURCE_PATH'] = previousCloneSourcePath;
+				}
+				await fs.rm(cloneParentPath, { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(sourceRepositoryPath, { recursive: true, force: true }).catch(() => undefined);
+				await fs.rm(workspaceRoot, { recursive: true, force: true }).catch(() => undefined);
 			}
 		});
 	});
@@ -814,72 +881,72 @@ exit 1
 					const firstEnabledAction = scopedTaskActions.find((action) => action.enabled);
 
 
-			it('surfaces and executes pull-origin as a daemon-owned mission action when origin is ahead on mission open', async () => {
-				await withTemporaryDaemonConfigHome(async () => {
-					const workspaceRoot = await createTempRepo();
-					const originPath = await createTempBareRemote();
-					runGit(workspaceRoot, ['remote', 'add', 'origin', originPath]);
-					runGit(workspaceRoot, ['push', '--set-upstream', 'origin', 'master']);
-					runGit(workspaceRoot, ['remote', 'add', 'github', 'https://github.com/Flying-Pillow/mission.git']);
-					await initializeMissionRepository(workspaceRoot);
-					const seededMission = await seedTrackedMission(workspaceRoot, 8, 'Pull origin daemon action');
+					it('surfaces and executes pull-origin as a daemon-owned mission action when origin is ahead on mission open', async () => {
+						await withTemporaryDaemonConfigHome(async () => {
+							const workspaceRoot = await createTempRepo();
+							const originPath = await createTempBareRemote();
+							runGit(workspaceRoot, ['remote', 'add', 'origin', originPath]);
+							runGit(workspaceRoot, ['push', '--set-upstream', 'origin', 'master']);
+							runGit(workspaceRoot, ['remote', 'add', 'github', 'https://github.com/Flying-Pillow/mission.git']);
+							await initializeMissionRepository(workspaceRoot);
+							const seededMission = await seedTrackedMission(workspaceRoot, 8, 'Pull origin daemon action');
 
-					try {
-						const missionRecord = seededMission.getRecord();
-						runGit(missionRecord.missionDir, ['push', '--set-upstream', 'origin', missionRecord.branchRef]);
+							try {
+								const missionRecord = seededMission.getRecord();
+								runGit(missionRecord.missionDir, ['push', '--set-upstream', 'origin', missionRecord.branchRef]);
 
-						const remoteCloneRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-remote-clone-'));
-						temporaryDirectories.add(remoteCloneRoot);
-						try {
-							runGit(workspaceRoot, ['clone', originPath, remoteCloneRoot]);
-							runGit(remoteCloneRoot, ['config', 'user.email', 'mission@example.com']);
-							runGit(remoteCloneRoot, ['config', 'user.name', 'Mission Test']);
-							runGit(remoteCloneRoot, ['checkout', missionRecord.branchRef]);
-							await fs.writeFile(path.join(remoteCloneRoot, 'REMOTE_ONLY.md'), 'remote update\n', 'utf8');
-							runGit(remoteCloneRoot, ['add', 'REMOTE_ONLY.md']);
-							runGit(remoteCloneRoot, ['commit', '-m', 'remote update']);
-							runGit(remoteCloneRoot, ['push', 'origin', missionRecord.branchRef]);
-						} finally {
-							await fs.rm(remoteCloneRoot, { recursive: true, force: true });
-						}
+								const remoteCloneRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-remote-clone-'));
+								temporaryDirectories.add(remoteCloneRoot);
+								try {
+									runGit(workspaceRoot, ['clone', originPath, remoteCloneRoot]);
+									runGit(remoteCloneRoot, ['config', 'user.email', 'mission@example.com']);
+									runGit(remoteCloneRoot, ['config', 'user.name', 'Mission Test']);
+									runGit(remoteCloneRoot, ['checkout', missionRecord.branchRef]);
+									await fs.writeFile(path.join(remoteCloneRoot, 'REMOTE_ONLY.md'), 'remote update\n', 'utf8');
+									runGit(remoteCloneRoot, ['add', 'REMOTE_ONLY.md']);
+									runGit(remoteCloneRoot, ['commit', '-m', 'remote update']);
+									runGit(remoteCloneRoot, ['push', 'origin', missionRecord.branchRef]);
+								} finally {
+									await fs.rm(remoteCloneRoot, { recursive: true, force: true });
+								}
 
-						const daemon = await startDaemon();
-						const client = new DaemonClient();
+								const daemon = await startDaemon();
+								const client = new DaemonClient();
 
-						try {
-							await client.connect({ surfacePath: workspaceRoot });
-							const api = new DaemonApi(client);
-							await api.control.getStatus();
-							const actions = await api.mission.listAvailableActions({ missionId: missionRecord.id });
-							const pullOriginAction = actions.find((action) => action.id === 'mission.pull-origin');
+								try {
+									await client.connect({ surfacePath: workspaceRoot });
+									const api = new DaemonApi(client);
+									await api.control.getStatus();
+									const actions = await api.mission.listAvailableActions({ missionId: missionRecord.id });
+									const pullOriginAction = actions.find((action) => action.id === 'mission.pull-origin');
 
-							expect(pullOriginAction).toMatchObject({
-								id: 'mission.pull-origin',
-								action: '/mission pull-origin',
-								enabled: true,
-								disabled: false,
-								scope: 'mission'
-							});
+									expect(pullOriginAction).toMatchObject({
+										id: 'mission.pull-origin',
+										action: '/mission pull-origin',
+										enabled: true,
+										disabled: false,
+										scope: 'mission'
+									});
 
-							await api.mission.executeAction({ missionId: missionRecord.id }, 'mission.pull-origin');
+									await api.mission.executeAction({ missionId: missionRecord.id }, 'mission.pull-origin');
 
-							const refreshedActions = await api.mission.listAvailableActions({ missionId: missionRecord.id });
-							expect(
-								refreshedActions.find((action) => action.id === 'mission.pull-origin')
-							).toMatchObject({ enabled: false, disabled: true });
-							await expect(fs.readFile(path.join(missionRecord.missionDir, 'REMOTE_ONLY.md'), 'utf8')).resolves.toContain('remote update');
-						} finally {
-							client.dispose();
-							await daemon.close();
-						}
-					} finally {
-						seededMission.dispose();
-						await fs.rm(originPath, { recursive: true, force: true });
-						await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
-						await fs.rm(workspaceRoot, { recursive: true, force: true });
-					}
-				});
-			});
+									const refreshedActions = await api.mission.listAvailableActions({ missionId: missionRecord.id });
+									expect(
+										refreshedActions.find((action) => action.id === 'mission.pull-origin')
+									).toMatchObject({ enabled: false, disabled: true });
+									await expect(fs.readFile(path.join(missionRecord.missionDir, 'REMOTE_ONLY.md'), 'utf8')).resolves.toContain('remote update');
+								} finally {
+									client.dispose();
+									await daemon.close();
+								}
+							} finally {
+								seededMission.dispose();
+								await fs.rm(originPath, { recursive: true, force: true });
+								await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+								await fs.rm(workspaceRoot, { recursive: true, force: true });
+							}
+						});
+					});
 					expect(firstEnabledAction).toMatchObject({
 						id: 'mission.resume',
 						action: '/mission resume'
@@ -2208,7 +2275,7 @@ function runGit(workspaceRoot: string, args: string[]): void {
 }
 
 async function withFakeGitHubCli(
-	run: (context: { callsPath: string }) => Promise<void>
+	run: (context: { callsPath: string; ghPath: string }) => Promise<void>
 ): Promise<void> {
 	const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-fake-gh-'));
 	temporaryDirectories.add(fakeHome);
@@ -2258,6 +2325,25 @@ if (args[0] === 'auth' && args[1] === 'status') {
 }
 if (args[0] === 'api' && args[1] === 'user') {
 	process.stdout.write('mission-test\n');
+	process.exit(0);
+}
+if (
+	args[0] === 'repo'
+	&& args[1] === 'clone'
+	&& process.env.MISSION_FAKE_GH_CLONE_REPOSITORY
+	&& process.env.MISSION_FAKE_GH_CLONE_SOURCE_PATH
+	&& args[2] === process.env.MISSION_FAKE_GH_CLONE_REPOSITORY
+	&& args[3]
+) {
+	const destinationPath = String(args[3]);
+	execFileSync('git', ['clone', process.env.MISSION_FAKE_GH_CLONE_SOURCE_PATH, destinationPath], {
+		cwd: process.cwd(),
+		stdio: 'ignore'
+	});
+	execFileSync('git', ['remote', 'set-url', 'origin', 'https://github.com/' + String(args[2]) + '.git'], {
+		cwd: destinationPath,
+		stdio: 'ignore'
+	});
 	process.exit(0);
 }
 if (args[0] === 'api' && typeof args[1] === 'string' && args[1].startsWith('repos/')) {
@@ -2326,7 +2412,7 @@ process.exit(1);
 	process.env['GIT_COMMITTER_NAME'] = 'Mission Test';
 	process.env['GIT_COMMITTER_EMAIL'] = 'mission@example.com';
 	try {
-		await run({ callsPath });
+		await run({ callsPath, ghPath });
 	} finally {
 		if (previousPath === undefined) {
 			delete process.env['PATH'];
@@ -2367,9 +2453,11 @@ async function readFakeGitHubCalls(callsPath: string): Promise<Array<{ args: str
 
 async function withTemporaryDaemonConfigHome(run: () => Promise<void>): Promise<void> {
 	const previousConfigHome = process.env['XDG_CONFIG_HOME'];
+	const previousMissionConfigPath = process.env['MISSION_CONFIG_PATH'];
 	const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
 	temporaryDirectories.add(configHome);
 	process.env['XDG_CONFIG_HOME'] = configHome;
+	delete process.env['MISSION_CONFIG_PATH'];
 	try {
 		await run();
 	} finally {
@@ -2377,6 +2465,11 @@ async function withTemporaryDaemonConfigHome(run: () => Promise<void>): Promise<
 			delete process.env['XDG_CONFIG_HOME'];
 		} else {
 			process.env['XDG_CONFIG_HOME'] = previousConfigHome;
+		}
+		if (previousMissionConfigPath === undefined) {
+			delete process.env['MISSION_CONFIG_PATH'];
+		} else {
+			process.env['MISSION_CONFIG_PATH'] = previousMissionConfigPath;
 		}
 		await fs.rm(configHome, { recursive: true, force: true });
 	}

@@ -74,12 +74,21 @@ fn resolve_mission_root() -> Result<PathBuf, String> {
     }
 
     let manifest_directory = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let mission_root = manifest_directory
-        .join("../../..")
-        .canonicalize()
-        .map_err(|error| format!("could not resolve Mission workspace root from {}: {error}", manifest_directory.display()))?;
+    for relative_path in ["../../../..", "../../.."] {
+        let candidate = manifest_directory.join(relative_path);
+        let Ok(candidate_root) = candidate.canonicalize() else {
+            continue;
+        };
 
-    Ok(mission_root)
+        if candidate_root.join("packages/mission").is_dir() {
+            return Ok(candidate_root);
+        }
+    }
+
+    Err(format!(
+        "could not resolve Mission workspace root from {}",
+        manifest_directory.display()
+    ))
 }
 
 fn resolve_daemon_entry_path(mission_root: &Path) -> Result<PathBuf, String> {

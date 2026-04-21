@@ -14,7 +14,11 @@ import {
 	type MissionDaemonSettings,
 	writeMissionDaemonSettings
 } from '../lib/daemonConfig.js';
-import { getMissionGitHubCliBinary } from '../lib/userConfig.js';
+import {
+	getMissionGitHubCliBinary,
+	listRegisteredMissionUserRepos,
+	registerMissionUserRepo
+} from '../lib/userConfig.js';
 import {
 	GitHubPlatformAdapter,
 	type GitHubBranchSyncStatus,
@@ -324,10 +328,15 @@ export class MissionWorkspace {
 				return this.initializeWorkflowSettings((request.params ?? {}) as ControlWorkflowSettingsInitialize);
 			case 'control.workflow.settings.update':
 				return this.updateWorkflowSettings((request.params ?? {}) as ControlWorkflowSettingsUpdate);
-				case 'control.github.repositories.list':
-					return this.listVisibleGitHubRepositories(request);
-				case 'control.github.issue.detail':
-					return this.getGitHubIssueDetail((request.params ?? {}) as import('../daemon/protocol/contracts.js').ControlGitHubIssueDetail, request);
+			case 'control.github.repositories.list':
+				return this.listVisibleGitHubRepositories(request);
+			case 'control.github.repositories.clone':
+				return this.cloneGitHubRepository(
+					(request.params ?? {}) as import('../daemon/protocol/contracts.js').ControlGitHubRepositoriesClone,
+					request
+				);
+			case 'control.github.issue.detail':
+				return this.getGitHubIssueDetail((request.params ?? {}) as import('../daemon/protocol/contracts.js').ControlGitHubIssueDetail, request);
 			case 'control.issues.list':
 				return this.listOpenIssues((request.params ?? {}) as ControlIssuesList, request);
 			case 'mission.from-issue':
@@ -450,6 +459,47 @@ export class MissionWorkspace {
 			authToken ? { authToken } : {}
 		);
 		return adapter.fetchIssueDetail(String(issueNumber));
+	}
+
+	private async cloneGitHubRepository(
+		params: import('../daemon/protocol/contracts.js').ControlGitHubRepositoriesClone,
+		request?: Request
+	) {
+		this.requireGitHubAuthentication(request);
+		const githubRepository = params.githubRepository?.trim();
+		const destinationPath = params.destinationPath?.trim();
+		if (!githubRepository) {
+			throw new Error('GitHub repository clone requires a repository name.');
+		}
+		if (!destinationPath) {
+			throw new Error('GitHub repository clone requires a destination path.');
+		}
+		if (!path.isAbsolute(destinationPath)) {
+			throw new Error('GitHub repository clone requires an absolute destination path on the daemon host.');
+		}
+
+		const authToken = this.readRequestAuthToken(request);
+		refreshSystemStatus({
+			cwd: this.workspaceRoot,
+			...(authToken ? { authToken } : {})
+		});
+		const adapter = new GitHubPlatformAdapter(
+			this.workspaceRoot,
+			undefined,
+			authToken ? { authToken } : {}
+		);
+		const repositoryRootPath = await adapter.cloneRepository({
+			repository: githubRepository,
+			destinationPath
+		});
+		await registerMissionUserRepo(repositoryRootPath);
+		const registeredRepository = (await listRegisteredMissionUserRepos()).find(
+			(candidate) => candidate.repositoryRootPath === repositoryRootPath
+		);
+		if (!registeredRepository) {
+			throw new Error(`Mission could not register cloned repository '${githubRepository}'.`);
+		}
+		return registeredRepository;
 	}
 
 	public async buildDiscoveryStatus(
@@ -2600,9 +2650,9 @@ const WORKSPACE_MISSION_COMMAND_DEFINITIONS: readonly MissionWorkspaceCommandDef
 			if (!repositorySync) {
 				return { enabled: false, reason: 'Repository sync state is not available for this mission.' };
 			}
-				if (repositorySync.worktreeClean === false) {
-					return { enabled: false, reason: 'Mission worktree has local changes. Commit, stash, or discard them before pulling origin.' };
-				}
+			if (repositorySync.worktreeClean === false) {
+				return { enabled: false, reason: 'Mission worktree has local changes. Commit, stash, or discard them before pulling origin.' };
+			}
 			switch (repositorySync.status) {
 				case 'behind':
 					return { enabled: true };

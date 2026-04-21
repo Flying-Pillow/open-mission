@@ -7,9 +7,10 @@ import { WorkspaceManager } from './WorkspaceManager.js';
 import { readMissionUserConfig } from '../lib/userConfig.js';
 
 describe('WorkspaceManager surface resolution', () => {
-	beforeEach(async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-workspace-manager-config-'));
-	});
+    beforeEach(async () => {
+        delete process.env['MISSION_CONFIG_PATH'];
+        process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-workspace-manager-config-'));
+    });
 
     afterEach(async () => {
         const configHome = process.env['XDG_CONFIG_HOME'];
@@ -17,6 +18,7 @@ describe('WorkspaceManager surface resolution', () => {
             await fs.rm(configHome, { recursive: true, force: true });
             delete process.env['XDG_CONFIG_HOME'];
         }
+        delete process.env['MISSION_CONFIG_PATH'];
     });
 
     it('binds a surface to the git repository root instead of scanning descendants', async () => {

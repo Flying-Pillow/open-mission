@@ -1,9 +1,7 @@
 <script lang="ts">
     import { enhance } from "$app/forms";
     import GithubRepositoryList from "$lib/components/entities/Repository/GithubRepositoryList.svelte";
-    import type {
-        GitHubVisibleRepositorySummary,
-    } from "$lib/components/entities/types";
+    import type { GitHubVisibleRepositorySummary } from "$lib/components/entities/types";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
 
@@ -41,11 +39,17 @@
     <div class="space-y-2">
         <h2 class="text-xl font-semibold text-foreground">Add repository</h2>
         <p class="text-sm text-muted-foreground">
-            Pair a GitHub repository with the matching local checkout on disk, then let Airport validate the mapping before registration.
+            Clone a selected GitHub repository into a local path through the
+            daemon, or register an existing local checkout directly.
         </p>
     </div>
 
-    <form method="POST" action="?/addRepository" use:enhance class="mt-5 grid gap-4">
+    <form
+        method="POST"
+        action="?/addRepository"
+        use:enhance
+        class="mt-5 grid gap-4"
+    >
         <input
             type="hidden"
             name="githubRepository"
@@ -53,19 +57,25 @@
         />
 
         <div class="rounded-2xl border bg-background/60 p-4">
-            <p class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+            <p
+                class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
+            >
                 Selected GitHub repository
             </p>
             <p class="mt-2 text-sm font-medium text-foreground">
                 {selectedRepositoryLabel}
             </p>
             <p class="mt-1 text-sm text-muted-foreground">
-                Airport verifies the local checkout path against this remote before completing registration.
+                If you submit with a GitHub selection, Mission will clone that
+                repository into the path below on the daemon host.
             </p>
         </div>
 
         <div class="grid gap-2">
-            <label class="text-sm font-medium text-foreground" for="repositoryPath">
+            <label
+                class="text-sm font-medium text-foreground"
+                for="repositoryPath"
+            >
                 Local checkout path
             </label>
             <Input
@@ -101,7 +111,8 @@
                 {/if}
             </div>
             <p class="text-sm text-muted-foreground">
-                This must be an absolute path on the daemon host to a local Git checkout.
+                Enter the absolute destination path for the clone, or the full
+                path to an existing local Git checkout on this machine.
             </p>
         </div>
 
@@ -111,11 +122,11 @@
 
         {#if formState?.addRepository?.success}
             <p class="text-sm text-emerald-600">
-                Repository registered: {formState.addRepository.repositoryPath}
+                Repository ready: {formState.addRepository.repositoryPath}
             </p>
         {/if}
 
-        <Button type="submit" class="w-full">Register repository</Button>
+        <Button type="submit" class="w-full">Clone or add repository</Button>
     </form>
 
     <div class="mt-5">

@@ -7,15 +7,21 @@ import { clearGithubAuthSession } from '$lib/server/github-auth.server';
 import type { PageServerLoad } from './$types';
 
 const repositoryRegistrationInputSchema = z.object({
-	repositoryPath: z.string().trim().min(1, 'Repository path is required.'),
-	githubRepository: z.string().trim().min(1).optional()
+    repositoryPath: z.string().trim().min(1, 'Repository path is required.'),
+    githubRepository: z.string().trim().min(1).optional()
 });
 
 export const prerender = false;
 
 export const load: PageServerLoad = async ({ locals }) => {
     const gateway = new AirportWebGateway(locals);
-    let githubRepositories = [];
+    let githubRepositories: Array<{
+        fullName: string;
+        ownerLogin?: string;
+        htmlUrl?: string;
+        visibility: 'private' | 'public';
+        archived: boolean;
+    }> = [];
     let githubRepositoriesError: string | undefined;
 
     try {
@@ -63,21 +69,10 @@ export const actions: Actions = {
 
         try {
             const gateway = new AirportWebGateway(locals);
-            const inspectedRepository = await gateway.inspectRepositoryPath(repositoryPath);
             const selectedGitHubRepository = parsed.data.githubRepository?.trim();
-            if (selectedGitHubRepository && inspectedRepository.githubRepository !== selectedGitHubRepository) {
-                return fail(400, {
-                    addRepository: {
-                        error: inspectedRepository.githubRepository
-                            ? `Local checkout '${inspectedRepository.repositoryRootPath}' resolves to '${inspectedRepository.githubRepository}', not '${selectedGitHubRepository}'.`
-                            : `Local checkout '${inspectedRepository.repositoryRootPath}' does not expose a GitHub remote for '${selectedGitHubRepository}'.`,
-                        repositoryPath: inspectedRepository.repositoryRootPath,
-                        githubRepository: selectedGitHubRepository
-                    }
-                });
-            }
-
-            const repository = await gateway.addRepository(inspectedRepository.repositoryRootPath);
+            const repository = selectedGitHubRepository
+                ? await gateway.cloneGitHubRepository(selectedGitHubRepository, repositoryPath)
+                : await gateway.inspectRepositoryPath(repositoryPath).then((inspectedRepository) => gateway.addRepository(inspectedRepository.repositoryRootPath));
             return {
                 addRepository: {
                     success: true,

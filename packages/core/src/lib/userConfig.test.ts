@@ -107,6 +107,16 @@ describe('userConfig', () => {
 		expect(getMissionGitHubCliBinary()).toBe('/opt/gh/bin/gh');
 	});
 
+	it('ignores a configured GitHub CLI path when the binary no longer exists', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+
+		await writeMissionUserConfig({
+			ghBinary: '/tmp/mission-fake-gh-does-not-exist/gh'
+		});
+
+		expect(getMissionGitHubCliBinary()).toBeUndefined();
+	});
+
 	it('does not read legacy repos-map config', async () => {
 		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
 		await fs.mkdir(path.dirname(getMissionUserConfigPath()), { recursive: true });

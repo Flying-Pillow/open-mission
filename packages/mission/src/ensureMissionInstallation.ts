@@ -23,7 +23,7 @@ import {
 	resolveMissionWorkspaceRoot,
 	type MissionUserConfig,
 	writeMissionUserConfig
-} from '@flying-pillow/mission-core';
+} from '@flying-pillow/mission-core/node';
 
 const execFileAsync = promisify(execFile);
 

@@ -3,7 +3,7 @@ import {
     connectAirportControl,
     type DaemonClient,
     resolveAirportControlRuntimeMode
-} from '@flying-pillow/mission-core';
+} from '@flying-pillow/mission-core/node';
 
 export async function openDaemonConnection(input: {
     surfacePath: string;

@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import path from "node:path";
-import { getMissionWorktreesPath } from "@flying-pillow/mission-core";
+import { getMissionWorktreesPath } from "@flying-pillow/mission-core/node";
 import { resolveSurfacePath } from "$lib/server/daemon/context.server";
 import type {
 	MissionFileTreeNode,

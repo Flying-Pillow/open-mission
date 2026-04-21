@@ -18,7 +18,7 @@ import {
     type OperatorActionQueryContext,
     type OperatorStatus,
     type TrackedIssueSummary
-} from '@flying-pillow/mission-core';
+} from '@flying-pillow/mission-core/node';
 import type {
     AgentCommand,
     AgentPrompt,
@@ -506,6 +506,34 @@ export class AirportWebGateway {
         }
     }
 
+    public async cloneGitHubRepository(
+        githubRepository: string,
+        destinationPath: string
+    ): Promise<RepositoryCandidateDto> {
+        const normalizedGitHubRepository = githubRepository.trim();
+        const normalizedDestinationPath = destinationPath.trim();
+        if (!normalizedGitHubRepository) {
+            throw new Error('GitHub repository clone requires a githubRepository.');
+        }
+        if (!normalizedDestinationPath) {
+            throw new Error('GitHub repository clone requires a destinationPath.');
+        }
+
+        const daemon = await this.connectSharedDaemonClient();
+        try {
+            const api = new DaemonApi(daemon.client);
+            return this.toRepositoryCandidateDto(
+                await withTimeout(
+                    api.control.cloneGitHubRepository(normalizedGitHubRepository, normalizedDestinationPath),
+                    30_000,
+                    'GitHub repository clone timed out.'
+                )
+            );
+        } finally {
+            daemon.dispose();
+        }
+    }
+
     public async inspectRepositoryPath(repositoryPath: string): Promise<RepositoryCandidateDto> {
         const normalizedRepositoryPath = repositoryPath.trim();
         if (!normalizedRepositoryPath) {
@@ -613,7 +641,7 @@ export class AirportWebGateway {
 
         const repository = await this.resolveRepositoryCandidate({ repositoryId });
 
-		const daemon = await this.connectSharedDaemonClient(repository.repositoryRootPath);
+        const daemon = await this.connectSharedDaemonClient(repository.repositoryRootPath);
         try {
             const api = new DaemonApi(daemon.client);
             return await withTimeout(
@@ -641,7 +669,7 @@ export class AirportWebGateway {
 
         const repository = await this.resolveRepositoryCandidate({ repositoryId });
 
-		const daemon = await this.connectSharedDaemonClient(repository.repositoryRootPath);
+        const daemon = await this.connectSharedDaemonClient(repository.repositoryRootPath);
         try {
             const api = new DaemonApi(daemon.client);
             return await withTimeout(

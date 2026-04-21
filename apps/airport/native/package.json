@@ -4,10 +4,12 @@
   "version": "0.1.0-alpha.0",
   "type": "module",
   "scripts": {
+    "doctor:linux": "bash ../../../scripts/check-linux-native-env.sh",
     "frontend:dev": "pnpm --dir ../../.. run build:packages && pnpm --dir ../web run dev -- --host 127.0.0.1",
     "frontend:build": "pnpm --dir ../../.. run build:packages && pnpm --dir ../web exec vp build",
-    "dev": "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/mission-airport-target tauri dev",
-    "build": "tauri build",
+    "dev": "bash ../../../scripts/check-linux-native-env.sh --require-display && LANG=${LANG:-en_US.UTF-8} LC_ALL=${LC_ALL:-en_US.UTF-8} NO_AT_BRIDGE=${NO_AT_BRIDGE:-1} CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/mission-airport-target tauri dev",
+    "dev:xvfb": "LANG=${LANG:-en_US.UTF-8} LC_ALL=${LC_ALL:-en_US.UTF-8} NO_AT_BRIDGE=${NO_AT_BRIDGE:-1} xvfb-run -a --server-args='-screen 0 1440x900x24 -ac +extension RANDR' pnpm run dev",
+    "build": "bash ../../../scripts/check-linux-native-env.sh && tauri build",
     "check": "cargo check --manifest-path src-tauri/Cargo.toml"
   },
   "devDependencies": {

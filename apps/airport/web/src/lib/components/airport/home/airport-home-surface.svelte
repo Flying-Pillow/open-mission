@@ -81,7 +81,7 @@
         {repositoryCountLabel}
         {githubRepositoryCountLabel}
         {selectedRepository}
-        daemonMessage={daemonMessage}
+        {daemonMessage}
         loginHref={data.loginHref}
     />
 
@@ -89,10 +89,10 @@
         <RepositoryList
             mode="repositories"
             repositories={data.airportHome.repositories}
-            repositoryCountLabel={repositoryCountLabel}
+            {repositoryCountLabel}
             selectedRepositoryRoot={data.airportHome.selectedRepositoryRoot}
             heading="Workspace repositories"
-            description="The registered local checkouts Airport can route into repository-scoped mission views."
+            description="Your saved local repositories, ready to open and work from."
         />
 
         <AirportHomeAddRepository

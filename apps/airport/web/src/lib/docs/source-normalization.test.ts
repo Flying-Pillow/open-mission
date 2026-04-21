@@ -1,6 +1,7 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { rewriteDocsHref } from "./link-rewrite.ts";
+import { loadEagerDocsModules } from "./manifest.ts";
 import {
 	createDocsSourcePreprocessor,
 	getDocsSourcePath,
@@ -109,13 +110,7 @@ describe("repo docs mdsvex integration", () => {
 	});
 
 	it("imports the full repository-root docs corpus through the mdsvex pipeline", async () => {
-		const docsModules = import.meta.glob<DocsMarkdownModule>("$docs/**/*.md");
-		const loadedModules = await Promise.all(
-			Object.entries(docsModules).map(async ([docPath, loadModule]) => [
-				docPath,
-				await loadModule(),
-			] as const),
-		);
+		const loadedModules = Object.entries(loadEagerDocsModules());
 
 		expect(loadedModules.length).toBeGreaterThan(20);
 

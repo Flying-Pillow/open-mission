@@ -4,6 +4,7 @@ import {
 	createDocsManifest,
 	getDocsModuleBySourcePath,
 	getDocsModulePath,
+	loadEagerDocsModules,
 	resolveDocsPage,
 	serializeDocsNavigation,
 	serializeDocsPage,
@@ -14,11 +15,7 @@ const TestComponent = (() => null) as unknown as Component;
 
 describe("docs manifest", () => {
 	it("derives stable navigation and page records from the docs corpus", () => {
-		const manifest = createDocsManifest(
-			import.meta.glob("$docs/**/*.md", {
-				eager: true,
-			}) as Record<string, DocsMarkdownModule>,
-		);
+		const manifest = createDocsManifest(loadEagerDocsModules());
 
 		expect(manifest.rootPage.sourcePath).toBe("index.md");
 		expect(manifest.pages.length).toBeGreaterThan(20);
@@ -67,9 +64,7 @@ describe("docs manifest", () => {
 	});
 
 	it("resolves the docs root and nested slugs against the same shared manifest", async () => {
-		const modules = import.meta.glob("$docs/**/*.md", {
-			eager: true,
-		}) as Record<string, DocsMarkdownModule>;
+		const modules = loadEagerDocsModules();
 
 		await expect(resolveDocsPage([], { modules })).resolves.toMatchObject({
 			sourcePath: "index.md",
@@ -135,11 +130,7 @@ describe("docs manifest", () => {
 	});
 
 	it("projects docs manifest records into route-safe navigation and page data", () => {
-		const manifest = createDocsManifest(
-			import.meta.glob("$docs/**/*.md", {
-				eager: true,
-			}) as Record<string, DocsMarkdownModule>,
-		);
+		const manifest = createDocsManifest(loadEagerDocsModules());
 
 		expect(serializeDocsPage(manifest.rootPage)).toMatchObject({
 			href: "/docs",

@@ -35,10 +35,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     patchelf \
     libxdo-dev \
     webkit2gtk-driver \
+    xvfb \
+    xauth \
+    fluxbox \
+    x11vnc \
+    novnc \
+    websockify \
+    dbus-x11 \
+    locales \
     && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
     | tar -xJ -C /usr/local --strip-components=1 --no-same-owner \
     && npm install -g @github/copilot \
     && ln -s /usr/local/bin/node /usr/local/bin/nodejs \
+    && sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
+    && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -g 1000 dev \
@@ -49,6 +59,8 @@ RUN groupadd -g 1000 dev \
 USER dev
 ENV CARGO_HOME=/home/dev/.cargo
 ENV RUSTUP_HOME=/home/dev/.rustup
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
 ENV PATH=/home/dev/.local/bin:/home/dev/.cargo/bin:${PATH}
 WORKDIR /mission
 

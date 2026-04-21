@@ -22,6 +22,8 @@ const workspacePackageAliases = Object.fromEntries(
 
 const config: Config = {
 	compilerOptions: {
+		runes: ({ filename }) =>
+			filename.split(/[/\\]/).includes("node_modules") ? undefined : true,
 		experimental: {
 			async: true,
 		},
@@ -41,6 +43,10 @@ const config: Config = {
 			$lib: path.resolve(currentDirectory, "src/lib"),
 			$docs: docsRootDirectory,
 			"$docs/*": `${docsRootDirectory}/*`,
+			"@flying-pillow/mission-core/browser": path.resolve(
+				currentDirectory,
+				"../../../packages/core/src/browser.ts",
+			),
 			...workspacePackageAliases,
 		},
 	},

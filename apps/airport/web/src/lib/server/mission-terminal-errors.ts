@@ -1,4 +1,4 @@
-import { stopMissionDaemonProcess } from '@flying-pillow/mission-core';
+import { stopMissionDaemonProcess } from '@flying-pillow/mission-core/node';
 import { resolveRequestAuthToken, resolveSurfacePath } from './daemon/context.server';
 import { clearSharedDaemonClient } from './daemon/shared-client.server';
 import { openDaemonConnection } from './daemon/transport.server';

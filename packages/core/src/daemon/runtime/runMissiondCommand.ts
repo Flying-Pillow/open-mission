@@ -1,4 +1,4 @@
-import { runMissionDaemon } from '../../index.js';
+import { runMissionDaemon } from '../../daemon.js';
 import {
 	getMissionDaemonProcessStatus,
 	resolveDefaultRuntimeFactoryModulePath,

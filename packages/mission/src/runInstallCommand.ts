@@ -1,4 +1,4 @@
-import { getMissionUserConfigPath } from '@flying-pillow/mission-core';
+import { getMissionUserConfigPath } from '@flying-pillow/mission-core/node';
 import type { EntryContext } from './entryContext.js';
 import { ensureMissionInstallation, getMissionInstallationOutput } from './ensureMissionInstallation.js';
 

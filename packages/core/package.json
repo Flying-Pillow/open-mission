@@ -44,6 +44,20 @@
       "import": "./build/browser.js",
       "default": "./build/browser.js"
     },
+    "./node": {
+      "development": "./src/node.ts",
+      "typescript": "./src/node.ts",
+      "types": "./build/node.d.ts",
+      "import": "./build/node.js",
+      "default": "./build/node.js"
+    },
+    "./daemon": {
+      "development": "./src/daemon.ts",
+      "typescript": "./src/daemon.ts",
+      "types": "./build/daemon.d.ts",
+      "import": "./build/daemon.js",
+      "default": "./build/daemon.js"
+    },
     "./*": {
       "development": "./src/*",
       "typescript": "./src/*",

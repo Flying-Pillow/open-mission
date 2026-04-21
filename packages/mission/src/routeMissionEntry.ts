@@ -1,5 +1,5 @@
 import { intro } from '@clack/prompts';
-import { getWorkspaceRoot } from '@flying-pillow/mission-core';
+import { getWorkspaceRoot } from '@flying-pillow/mission-core/node';
 import type { EntryContext, MissionEntryHandler } from './entryContext.js';
 import { ensureMissionInstallation } from './ensureMissionInstallation.js';
 import { runAirportNativeCommand } from './runAirportNativeCommand.js';

@@ -13,8 +13,10 @@ const DOCS_MODULE_PATH_PREFIX = "$docs/";
 const DEFAULT_SORT_ORDER = Number.MAX_SAFE_INTEGER;
 
 const docsModuleRegistry = {
-	...import.meta.glob("$docs/*.md"),
-	...import.meta.glob("$docs/**/*.md"),
+	...import.meta.glob([
+		"../../../../../../docs/*.md",
+		"../../../../../../docs/**/*.md",
+	]),
 } as DocsModuleRegistry;
 
 let docsManifestPromise: Promise<DocsManifest> | undefined;
@@ -227,8 +229,8 @@ function createDocsNavNode(
 		page.slug.length === 0
 			? []
 			: (childrenByParent.get(toSlugKey(page.slug)) ?? [])
-					.sort(compareDocsPages)
-					.map((childPage) => createDocsNavNode(childPage, childrenByParent));
+				.sort(compareDocsPages)
+				.map((childPage) => createDocsNavNode(childPage, childrenByParent));
 
 	return {
 		slug: page.slug,
@@ -303,10 +305,10 @@ export function getDocsModulePath(sourcePath: string): string {
 
 export function loadEagerDocsModules(): Record<string, DocsMarkdownModule> {
 	return {
-		...import.meta.glob("$docs/*.md", {
-			eager: true,
-		}),
-		...import.meta.glob("$docs/**/*.md", {
+		...import.meta.glob([
+			"../../../../../../docs/*.md",
+			"../../../../../../docs/**/*.md",
+		], {
 			eager: true,
 		}),
 	} as Record<string, DocsMarkdownModule>;

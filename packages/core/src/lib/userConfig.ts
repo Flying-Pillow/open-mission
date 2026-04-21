@@ -54,7 +54,14 @@ export function getDefaultMissionUserConfig(overrides: Partial<MissionUserConfig
 }
 
 export function getMissionGitHubCliBinary(): string | undefined {
-	return normalizeOptionalString(readMissionUserConfig()?.ghBinary);
+	const configuredBinary = normalizeOptionalString(readMissionUserConfig()?.ghBinary);
+	if (!configuredBinary) {
+		return undefined;
+	}
+	if ((path.isAbsolute(configuredBinary) || configuredBinary.includes(path.sep)) && !fs.existsSync(configuredBinary)) {
+		return undefined;
+	}
+	return configuredBinary;
 }
 
 export function readMissionUserConfig(): MissionUserConfig | undefined {

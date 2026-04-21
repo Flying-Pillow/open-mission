@@ -1,4 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { getMissionGitHubCliBinary } from '../lib/userConfig.js';
 import type { GitHubIssueDetail, GitHubVisibleRepository, MissionBrief, MissionType, TrackedIssueSummary } from '../types.js';
 
@@ -149,6 +151,25 @@ export class GitHubPlatformAdapter {
 		}
 
 		return [...repositories.values()].sort((left, right) => left.fullName.localeCompare(right.fullName));
+	}
+
+	public async cloneRepository(input: {
+		repository: string;
+		destinationPath: string;
+	}): Promise<string> {
+		const repository = input.repository.trim();
+		const destinationPath = input.destinationPath.trim();
+		if (!repository) {
+			throw new Error('GitHub repository clone requires a repository name.');
+		}
+		if (!destinationPath) {
+			throw new Error('GitHub repository clone requires a destination path.');
+		}
+
+		const resolvedDestinationPath = path.resolve(destinationPath);
+		await fs.mkdir(path.dirname(resolvedDestinationPath), { recursive: true });
+		await this.runTextProcess(['repo', 'clone', repository, resolvedDestinationPath]);
+		return resolvedDestinationPath;
 	}
 
 	public async createIssue(input: {

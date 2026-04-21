@@ -26,7 +26,11 @@ import type {
 	OperatorStatus
 } from '../types.js';
 import { DaemonClient } from './DaemonClient.js';
-import type { ControlGitHubIssueDetail, ControlRepositoriesAdd } from '../daemon/protocol/contracts.js';
+import type {
+	ControlGitHubIssueDetail,
+	ControlGitHubRepositoriesClone,
+	ControlRepositoriesAdd
+} from '../daemon/protocol/contracts.js';
 
 export class DaemonControlApi {
 	public constructor(private readonly client: DaemonClient) { }
@@ -117,6 +121,14 @@ export class DaemonControlApi {
 
 	public async listVisibleGitHubRepositories(): Promise<GitHubVisibleRepository[]> {
 		return this.client.request<GitHubVisibleRepository[]>('control.github.repositories.list');
+	}
+
+	public async cloneGitHubRepository(
+		githubRepository: string,
+		destinationPath: string
+	): Promise<MissionRepositoryCandidate> {
+		const params: ControlGitHubRepositoriesClone = { githubRepository, destinationPath };
+		return this.client.request<MissionRepositoryCandidate>('control.github.repositories.clone', params);
 	}
 
 	public async getGitHubIssueDetail(issueNumber: number): Promise<GitHubIssueDetail> {

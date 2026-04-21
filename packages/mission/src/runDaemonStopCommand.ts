@@ -2,7 +2,7 @@ import { note, outro } from '@clack/prompts';
 import {
 	getDaemonManifestPath,
 	stopMissionDaemonProcess,
-} from '@flying-pillow/mission-core';
+} from '@flying-pillow/mission-core/node';
 import type { EntryContext } from './entryContext.js';
 
 export async function runDaemonStopCommand(context: EntryContext): Promise<void> {
