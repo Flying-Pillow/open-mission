@@ -126,7 +126,7 @@ describe('workflow engine e2e', () => {
         expect(document.runtime.lifecycle).toBe('delivered');
         expect(executor.promptCalls).toHaveLength(1);
         expect(executor.commandCalls).toHaveLength(1);
-        expect(document.eventLog.map((event) => event.type)).toEqual(expect.arrayContaining([
+        expect(adapter.getPersistedEventLog().map((event) => event.type)).toEqual(expect.arrayContaining([
             'mission.created',
             'tasks.generated',
             'mission.started',
@@ -172,7 +172,7 @@ describe('workflow engine e2e', () => {
         });
 
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('failed');
-        expect(document.eventLog.at(-1)?.type).toBe('session.launch-failed');
+        expect(adapter.getPersistedEventLog().at(-1)?.type).toBe('session.launch-failed');
 
         document = await controller.applyEvent(createTaskReopenedEvent('prd/01', '2026-04-14T11:00:30.000Z'));
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('running');
@@ -197,7 +197,7 @@ describe('workflow engine e2e', () => {
         document = await completeTask(controller, 'prd/01', executor.requireSessionId('prd/01'), '2026-04-14T11:02:00.000Z');
 
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('completed');
-        expect(document.eventLog.map((event) => event.type)).toEqual(expect.arrayContaining([
+        expect(adapter.getPersistedEventLog().map((event) => event.type)).toEqual(expect.arrayContaining([
             'session.launch-failed',
             'task.reopened',
             'task.blocked',
@@ -356,7 +356,7 @@ describe('workflow engine e2e', () => {
         });
 
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/02')?.lifecycle).toBe('running');
-        expect(document.eventLog.map((event) => event.type)).toEqual(expect.arrayContaining([
+        expect(adapter.getPersistedEventLog().map((event) => event.type)).toEqual(expect.arrayContaining([
             'mission.panic.requested',
             'session.terminated',
             'mission.panic.cleared',
@@ -383,18 +383,25 @@ function createDescriptor(missionId: string): MissionDescriptor {
 
 function createAdapter() {
     let persisted: MissionRuntimeRecord | undefined;
+    const eventLog: Array<{ type: string }> = [];
 
     return {
         readMissionRuntimeRecord: async () => persisted,
+        readMissionRuntimeEventLog: async () => [...eventLog],
         writeMissionRuntimeRecord: async (_missionDir: string, document: MissionRuntimeRecord) => {
             persisted = document;
         },
+        appendMissionRuntimeEventRecord: async (_missionDir: string, eventRecord: { type: string }) => {
+            eventLog.push(eventRecord);
+        },
         getPersistedDocument: () => persisted,
+        getPersistedEventLog: () => [...eventLog],
         setPersistedDocument: (document: MissionRuntimeRecord | undefined) => {
             persisted = document;
         }
     } as unknown as FilesystemAdapter & {
         getPersistedDocument(): MissionRuntimeRecord | undefined;
+        getPersistedEventLog(): Array<{ type: string }>;
         setPersistedDocument(document: MissionRuntimeRecord | undefined): void;
     };
 }

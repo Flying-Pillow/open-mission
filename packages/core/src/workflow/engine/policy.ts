@@ -113,6 +113,11 @@ export function resolvePendingTaskGenerationStageId(
         return undefined;
     }
 
+    const runtimeStage = runtime.stages.find((stage) => stage.stageId === eligibleStageId);
+    if (runtimeStage?.lifecycle === 'blocked' && generationRule.artifactTasks) {
+        return undefined;
+    }
+
     return generationRule.artifactTasks === false
         && generationRule.templateSources.length === 0
         && generationRule.tasks.length === 0

@@ -55,6 +55,7 @@ import {
     connectSharedAuthenticatedDaemonClient
 } from '../daemon/connections.server';
 const AIRPORT_WEB_TERMINAL_SCREEN_LIMIT = 40_000;
+const MISSION_STATUS_TIMEOUT_MS = 8_000;
 
 export class AirportWebGateway {
     public constructor(private readonly locals?: App.Locals) { }
@@ -68,7 +69,7 @@ export class AirportWebGateway {
         const status = input.status
             ?? await withTimeout(
                 input.api.mission.getStatus({ missionId: normalizedMissionId }),
-                2500,
+                MISSION_STATUS_TIMEOUT_MS,
                 'Mission status request timed out.'
             );
         const sessions = await withTimeout(
@@ -153,7 +154,7 @@ export class AirportWebGateway {
             const api = new DaemonApi(daemon.client);
             const operatorStatus = await withTimeout(
                 api.mission.getStatus({ missionId }),
-                2500,
+                MISSION_STATUS_TIMEOUT_MS,
                 'Mission operator status request timed out.'
             );
 
@@ -181,7 +182,7 @@ export class AirportWebGateway {
             const api = new DaemonApi(daemon.client);
             return await withTimeout(
                 api.mission.getStatus({ missionId: normalizedMissionId }),
-                2500,
+                MISSION_STATUS_TIMEOUT_MS,
                 'Mission operator status request timed out.'
             );
         } finally {

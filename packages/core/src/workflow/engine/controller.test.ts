@@ -31,7 +31,7 @@ describe('MissionWorkflowController', () => {
             startMission: false
         });
 
-        expect(adapter.getPersistedDocument()?.eventLog.map((event) => event.type)).toEqual([
+        expect(adapter.getPersistedEventLog().map((event) => event.type)).toEqual([
             'mission.created',
             'tasks.generated'
         ]);
@@ -123,29 +123,6 @@ describe('MissionWorkflowController', () => {
                 updatedAt: '2026-04-14T09:12:05.000Z'
             }
         ];
-        persisted.eventLog.push({
-            eventId: 'tasks.generated:spec:2026-04-14T09:12:00.000Z',
-            type: 'tasks.generated',
-            occurredAt: '2026-04-14T09:12:00.000Z',
-            source: 'daemon',
-            payload: {
-                stageId: 'spec',
-                tasks: [
-                    {
-                        taskId: 'spec/01-draft-spec',
-                        title: 'Draft Spec',
-                        instruction: 'Draft the spec.',
-                        dependsOn: []
-                    },
-                    {
-                        taskId: 'spec/02-plan',
-                        title: 'Plan',
-                        instruction: 'Plan the implementation.',
-                        dependsOn: []
-                    }
-                ]
-            }
-        } satisfies MissionWorkflowEventRecord);
         adapter.setPersistedDocument(persisted);
 
         const controller = new MissionWorkflowController({
@@ -160,14 +137,6 @@ describe('MissionWorkflowController', () => {
         expect(document?.runtime.tasks.find((task) => task.taskId === 'spec/02-plan')?.dependsOn).toEqual([
             'spec/01-draft-spec'
         ]);
-        expect(adapter.getPersistedDocument()?.eventLog.find((event) => event.type === 'tasks.generated')).toMatchObject({
-            payload: {
-                tasks: [
-                    { taskId: 'spec/01-draft-spec', dependsOn: [] },
-                    { taskId: 'spec/02-plan', dependsOn: ['spec/01-draft-spec'] }
-                ]
-            }
-        });
     });
 
     it('normalizes persisted artifact-backed generation settings from workflow defaults', async () => {
@@ -267,7 +236,7 @@ describe('MissionWorkflowController', () => {
             taskId: 'implementation/01-from-artifact',
             stageId: 'implementation'
         }));
-        expect(adapter.getPersistedDocument()?.eventLog.map((event) => event.type)).toContain('tasks.generated');
+        expect(adapter.getPersistedEventLog().map((event) => event.type)).toContain('tasks.generated');
         expect(executor.getExecutedRequestTypes()).toContain('tasks.request-generation');
     });
 });
@@ -290,20 +259,31 @@ function createAdapter(options: {
     stageTasks?: Partial<Record<string, MissionTaskState[]>>;
 } = {}) {
     let persisted: MissionRuntimeRecord | undefined;
+    const eventLog: MissionWorkflowEventRecord[] = [];
 
     return {
         readMissionRuntimeRecord: async () => persisted,
+        readMissionRuntimeEventLog: async () => [...eventLog],
         writeMissionRuntimeRecord: async (_missionDir: string, document: MissionRuntimeRecord) => {
             persisted = document;
         },
+        appendMissionRuntimeEventRecord: async (_missionDir: string, eventRecord: MissionWorkflowEventRecord) => {
+            eventLog.push(eventRecord);
+        },
         listTaskStates: async (_missionDir: string, stageId: string) => options.stageTasks?.[stageId] ?? [],
         getPersistedDocument: () => persisted,
+        getPersistedEventLog: () => [...eventLog],
         setPersistedDocument: (document: MissionRuntimeRecord | undefined) => {
             persisted = document;
+        },
+        setPersistedEventLog: (records: MissionWorkflowEventRecord[]) => {
+            eventLog.splice(0, eventLog.length, ...records);
         }
     } as unknown as FilesystemAdapter & {
         getPersistedDocument(): MissionRuntimeRecord | undefined;
+        getPersistedEventLog(): MissionWorkflowEventRecord[];
         setPersistedDocument(document: MissionRuntimeRecord | undefined): void;
+        setPersistedEventLog(records: MissionWorkflowEventRecord[]): void;
     };
 }
 

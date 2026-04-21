@@ -16,6 +16,7 @@ import { ensureMissionWorkflowEventAccepted } from './validation.js';
 
 export interface MissionWorkflowIngestResult {
     document: MissionRuntimeRecord;
+    eventRecord: MissionWorkflowEventRecord;
     signals: MissionWorkflowSignal[];
     requests: MissionWorkflowRequest[];
 }
@@ -79,7 +80,6 @@ export function createMissionRuntimeRecord(input: {
     missionId: string;
     configuration: MissionWorkflowConfigurationSnapshot;
     runtime?: MissionWorkflowRuntimeState;
-    eventLog?: MissionRuntimeRecord['eventLog'];
     createdAt?: string;
 }): MissionRuntimeRecord {
     const createdAt = input.createdAt ?? input.configuration.createdAt;
@@ -89,8 +89,7 @@ export function createMissionRuntimeRecord(input: {
         configuration: input.configuration,
         runtime:
             input.runtime ??
-            createInitialMissionWorkflowRuntimeState(input.configuration, createdAt),
-        eventLog: input.eventLog ?? []
+            createInitialMissionWorkflowRuntimeState(input.configuration, createdAt)
     };
 }
 
@@ -102,11 +101,11 @@ export function ingestMissionWorkflowEvent(
     const reduction = reduceMissionWorkflowEvent(document.runtime, event, document.configuration);
     const nextDocument: MissionRuntimeRecord = {
         ...document,
-        runtime: reduction.nextState,
-        eventLog: [...document.eventLog, toEventRecord(event)]
+        runtime: reduction.nextState
     };
     return {
         document: nextDocument,
+        eventRecord: toEventRecord(event),
         signals: reduction.signals,
         requests: reduction.requests
     };

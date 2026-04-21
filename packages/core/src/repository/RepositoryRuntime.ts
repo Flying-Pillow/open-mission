@@ -2457,9 +2457,7 @@ export class RepositoryRuntime {
 		if (directSession) {
 			return directSession;
 		}
-		return loadedMission.mission.getAgentSessions().find(
-			(candidate) => candidate.terminalSessionName === sessionIdOrTerminalName,
-		);
+		return loadedMission.mission.getAgentSessionByTerminalSessionName(sessionIdOrTerminalName);
 	}
 
 	private toAgentTerminalState(

@@ -38,9 +38,6 @@ export function ensureMissionWorkflowEventAccepted(
     document: MissionRuntimeRecord,
     event: MissionWorkflowEvent
 ): void {
-    if (document.eventLog.some((record) => record.eventId === event.eventId)) {
-        throw new MissionWorkflowValidationError(`Workflow event '${event.eventId}' has already been processed.`);
-    }
     validateMissionWorkflowEvent(document.runtime, event, document.configuration);
 }
 

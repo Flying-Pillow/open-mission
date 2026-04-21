@@ -70,6 +70,8 @@ export type MissionWorkflowBindings = {
 };
 
 export class Mission {
+	private static readonly SESSION_RECONCILE_TIMEOUT_MS = 1_000;
+
 	private readonly agentConsoleEventEmitter = new MissionAgentEventEmitter<MissionAgentConsoleEvent>();
 	private readonly agentEventEmitter = new MissionAgentEventEmitter<MissionAgentEvent>();
 	private readonly agentRunners = new Map<string, AgentRunner>();
@@ -239,6 +241,15 @@ export class Mission {
 
 	public getAgentSession(sessionId: string): MissionAgentSessionRecord | undefined {
 		const record = this.agentSessions.find((candidate) => candidate.sessionId === sessionId);
+		return record ? MissionSession.cloneRecord(record) : undefined;
+	}
+
+	public getAgentSessionByTerminalSessionName(
+		terminalSessionName: string,
+	): MissionAgentSessionRecord | undefined {
+		const record = this.agentSessions.find(
+			(candidate) => candidate.terminalSessionName === terminalSessionName,
+		);
 		return record ? MissionSession.cloneRecord(record) : undefined;
 	}
 
@@ -569,8 +580,7 @@ export class Mission {
 			throw new Error(`Stage '${stageId}' does not support task generation.`);
 		}
 
-		await this.workflowController.refresh();
-		const refreshedDocument = await this.workflowController.getDocument();
+		const refreshedDocument = await this.workflowController.generateTasksForStage(stageId);
 		if (!refreshedDocument.runtime.tasks.some((task) => task.stageId === stageId)) {
 			throw new Error(`Task generation for stage '${stageId}' produced no runtime tasks.`);
 		}
@@ -1612,7 +1622,10 @@ export class Mission {
 			return currentDocument;
 		}
 		try {
-			return await this.workflowController.reconcileSessions();
+			return await promiseWithTimeout(
+				this.workflowController.reconcileSessions(),
+				Mission.SESSION_RECONCILE_TIMEOUT_MS
+			);
 		} catch {
 			return currentDocument;
 		}
@@ -2087,6 +2100,25 @@ function describePauseUnavailable(input: MissionAvailableActionsInput): string {
 		case 'delivered': return 'Mission already delivered.';
 		default: return 'Mission is not running.';
 	}
+}
+
+function promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		const timeout = setTimeout(() => {
+			reject(new Error(`Timed out after ${String(timeoutMs)}ms.`));
+		}, timeoutMs);
+
+		promise.then(
+			(value) => {
+				clearTimeout(timeout);
+				resolve(value);
+			},
+			(error) => {
+				clearTimeout(timeout);
+				reject(error);
+			}
+		);
+	});
 }
 
 function describeResumeUnavailable(input: MissionAvailableActionsInput, errors: string[]): string {

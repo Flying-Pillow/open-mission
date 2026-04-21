@@ -68,8 +68,9 @@ describe('Mission workflow snapshot timing', () => {
             expect(startedStatus.workflow?.lifecycle).toBe('running');
 
             const workflowDocument = await adapter.readMissionRuntimeRecord(mission.getMissionDir());
+            const eventLog = await adapter.readMissionRuntimeEventLog(mission.getMissionDir());
             expect(workflowDocument?.configuration.workflow.execution.maxParallelTasks).toBe(3);
-            expect(workflowDocument?.eventLog.slice(0, 3).map((event) => event.type)).toEqual([
+            expect(eventLog.slice(0, 3).map((event) => event.type)).toEqual([
                 'mission.created',
                 'tasks.generated',
                 'mission.started'
@@ -125,11 +126,11 @@ describe('Mission workflow snapshot timing', () => {
 
             const workflowDocument = await adapter.readMissionRuntimeRecord(mission.getMissionDir());
             expect(workflowDocument?.configuration.workflow.execution.maxParallelTasks).toBe(2);
-            const eventTypesBeforeRestart = workflowDocument?.eventLog.map((event) => event.type) ?? [];
+            const eventTypesBeforeRestart = (await adapter.readMissionRuntimeEventLog(mission.getMissionDir())).map((event) => event.type);
 
             await mission.startWorkflow();
-            const unchangedDocument = await adapter.readMissionRuntimeRecord(mission.getMissionDir());
-            expect(unchangedDocument?.eventLog.map((event) => event.type)).toEqual(eventTypesBeforeRestart);
+            const unchangedEventTypes = (await adapter.readMissionRuntimeEventLog(mission.getMissionDir())).map((event) => event.type);
+            expect(unchangedEventTypes).toEqual(eventTypesBeforeRestart);
             mission.dispose();
         } finally {
             await fs.rm(workspaceRoot, { recursive: true, force: true });

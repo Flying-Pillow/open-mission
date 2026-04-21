@@ -11,6 +11,7 @@ import { getMissionCatalogPath, getMissionWorktreesPath } from './repoConfig.js'
 import { readMissionDaemonSettings } from './daemonConfig.js';
 import {
 	MISSION_RUNTIME_FILE_NAME,
+	MISSION_RUNTIME_EVENT_LOG_FILE_NAME,
 	type MissionBrief,
 	type MissionDescriptor,
 	type MissionArtifactKey,
@@ -27,6 +28,7 @@ import {
 } from '../workflow/manifest.js';
 import {
 	createMissionRuntimeRecord,
+	type MissionWorkflowEventRecord,
 	type MissionWorkflowConfigurationSnapshot,
 	type MissionRuntimeRecord,
 	MISSION_WORKFLOW_RUNTIME_SCHEMA_VERSION
@@ -475,13 +477,21 @@ export class FilesystemAdapter {
 		return path.join(missionDir, MISSION_RUNTIME_FILE_NAME);
 	}
 
+		public getMissionRuntimeEventLogPath(missionDir: string): string {
+			return path.join(missionDir, MISSION_RUNTIME_EVENT_LOG_FILE_NAME);
+		}
+
 	public async readMissionRuntimeRecord(
 		missionDir: string
 	): Promise<MissionRuntimeRecord | undefined> {
 		const filePath = this.getMissionRuntimeRecordPath(missionDir);
 		try {
 			const content = await fs.readFile(filePath, 'utf8');
-			return this.parseMissionRuntimeRecord(JSON.parse(content) as unknown, filePath);
+				const parsed = this.parseMissionRuntimeRecord(JSON.parse(content) as unknown, filePath);
+				if (parsed.legacyEventLog.length > 0) {
+					await this.migrateLegacyMissionRuntimeEventLog(missionDir, parsed.record, parsed.legacyEventLog);
+				}
+				return parsed.record;
 		} catch (error) {
 			if (this.isMissingFileError(error)) {
 				return undefined;
@@ -500,8 +510,40 @@ export class FilesystemAdapter {
 		const filePath = this.getMissionRuntimeRecordPath(missionDir);
 		await fs.mkdir(path.dirname(filePath), { recursive: true });
 		const temporaryPath = `${filePath}.${process.pid.toString(36)}.${randomUUID()}.tmp`;
-		await fs.writeFile(temporaryPath, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+		const { eventLog: _legacyEventLog, ...persistedRecord } = record;
+		await fs.writeFile(temporaryPath, `${JSON.stringify(persistedRecord, null, 2)}\n`, 'utf8');
 		await fs.rename(temporaryPath, filePath);
+	}
+
+	public async appendMissionRuntimeEventRecord(
+		missionDir: string,
+		eventRecord: MissionWorkflowEventRecord
+	): Promise<void> {
+		const filePath = this.getMissionRuntimeEventLogPath(missionDir);
+		await fs.mkdir(path.dirname(filePath), { recursive: true });
+		await fs.appendFile(filePath, `${JSON.stringify(eventRecord)}\n`, 'utf8');
+	}
+
+	public async readMissionRuntimeEventLog(
+		missionDir: string
+	): Promise<MissionWorkflowEventRecord[]> {
+		const filePath = this.getMissionRuntimeEventLogPath(missionDir);
+		try {
+			const content = await fs.readFile(filePath, 'utf8');
+			return content
+				.split(/\r?\n/u)
+				.map((line) => line.trim())
+				.filter((line) => line.length > 0)
+				.map((line) => this.parseMissionWorkflowEventRecord(JSON.parse(line) as unknown, filePath));
+		} catch (error) {
+			if (this.isMissingFileError(error)) {
+				return [];
+			}
+			if (error instanceof SyntaxError) {
+				throw new ArtifactFormatError(`Mission runtime event log '${filePath}' is not valid JSONL.`);
+			}
+			throw error;
+		}
 	}
 
 	public async initializeMissionRuntimeRecord(input: {
@@ -641,7 +683,7 @@ export class FilesystemAdapter {
 	private parseMissionRuntimeRecord(
 		rawDocument: unknown,
 		filePath: string
-	): MissionRuntimeRecord {
+	): { record: MissionRuntimeRecord; legacyEventLog: MissionWorkflowEventRecord[] } {
 		if (!rawDocument || typeof rawDocument !== 'object' || Array.isArray(rawDocument)) {
 			throw new ArtifactFormatError(`Mission runtime record '${filePath}' must be a JSON object.`);
 		}
@@ -668,11 +710,82 @@ export class FilesystemAdapter {
 		if (!candidateDocument.runtime || typeof candidateDocument.runtime !== 'object' || Array.isArray(candidateDocument.runtime)) {
 			throw new ArtifactTypeError(`Mission runtime record '${filePath}' is missing runtime.`);
 		}
-		if (!Array.isArray(candidateDocument.eventLog)) {
-			throw new ArtifactTypeError(`Mission runtime record '${filePath}' must contain an eventLog array.`);
+		if (candidateDocument.eventLog !== undefined && !Array.isArray(candidateDocument.eventLog)) {
+			throw new ArtifactTypeError(`Mission runtime record '${filePath}' must contain an eventLog array when provided.`);
 		}
 
-		return candidateDocument as MissionRuntimeRecord;
+		const legacyEventLog = Array.isArray(candidateDocument.eventLog)
+			? candidateDocument.eventLog.map((event) => this.parseMissionWorkflowEventRecord(event, filePath))
+			: [];
+		const { eventLog: _legacyEventLog, ...record } = candidateDocument;
+		return {
+			record: record as MissionRuntimeRecord,
+			legacyEventLog
+		};
+	}
+
+	private parseMissionWorkflowEventRecord(rawEvent: unknown, filePath: string): MissionWorkflowEventRecord {
+		if (!rawEvent || typeof rawEvent !== 'object' || Array.isArray(rawEvent)) {
+			throw new ArtifactTypeError(`Mission workflow event record in '${filePath}' must be a JSON object.`);
+		}
+		const candidateEvent = rawEvent as {
+			eventId?: unknown;
+			type?: unknown;
+			occurredAt?: unknown;
+			source?: unknown;
+			causedByRequestId?: unknown;
+			payload?: unknown;
+		};
+		if (typeof candidateEvent.eventId !== 'string' || candidateEvent.eventId.trim().length === 0) {
+			throw new ArtifactTypeError(`Mission workflow event record in '${filePath}' is missing eventId.`);
+		}
+		if (typeof candidateEvent.type !== 'string' || candidateEvent.type.trim().length === 0) {
+			throw new ArtifactTypeError(`Mission workflow event record in '${filePath}' is missing type.`);
+		}
+		if (typeof candidateEvent.occurredAt !== 'string' || candidateEvent.occurredAt.trim().length === 0) {
+			throw new ArtifactTypeError(`Mission workflow event record in '${filePath}' is missing occurredAt.`);
+		}
+		if (
+			candidateEvent.source !== 'system'
+			&& candidateEvent.source !== 'human'
+			&& candidateEvent.source !== 'agent'
+			&& candidateEvent.source !== 'daemon'
+		) {
+			throw new ArtifactTypeError(`Mission workflow event record in '${filePath}' has invalid source '${String(candidateEvent.source)}'.`);
+		}
+		if (!candidateEvent.payload || typeof candidateEvent.payload !== 'object' || Array.isArray(candidateEvent.payload)) {
+			throw new ArtifactTypeError(`Mission workflow event record in '${filePath}' is missing payload.`);
+		}
+		return {
+			eventId: candidateEvent.eventId,
+			type: candidateEvent.type,
+			occurredAt: candidateEvent.occurredAt,
+			source: candidateEvent.source,
+			...(typeof candidateEvent.causedByRequestId === 'string' && candidateEvent.causedByRequestId.trim().length > 0
+				? { causedByRequestId: candidateEvent.causedByRequestId }
+				: {}),
+			payload: candidateEvent.payload as Record<string, unknown>
+		};
+	}
+
+	private async migrateLegacyMissionRuntimeEventLog(
+		missionDir: string,
+		record: MissionRuntimeRecord,
+		legacyEventLog: MissionWorkflowEventRecord[]
+	): Promise<void> {
+		const eventLogPath = this.getMissionRuntimeEventLogPath(missionDir);
+		const hasExistingEventLog = await fs.access(eventLogPath).then(
+			() => true,
+			() => false
+		);
+		if (!hasExistingEventLog && legacyEventLog.length > 0) {
+			await fs.writeFile(
+				eventLogPath,
+				`${legacyEventLog.map((event) => JSON.stringify(event)).join('\n')}\n`,
+				'utf8'
+			);
+		}
+		await this.writeMissionRuntimeRecord(missionDir, record);
 	}
 
 	private async listTaskFileNames(missionDir: string, stage: MissionStageId): Promise<string[]> {
@@ -1003,6 +1116,12 @@ export class FilesystemAdapter {
 		tasks: MissionTaskState[]
 	): string {
 		const trimmedDependency = dependency.trim();
+		if (trimmedDependency.includes('/')) {
+			if (trimmedDependency === task.taskId) {
+				throw new ArtifactFormatError(`Task '${task.relativePath}' cannot depend on itself.`);
+			}
+			return trimmedDependency;
+		}
 		const matches = tasks.filter((candidate) => {
 			const fileStem = path.basename(candidate.fileName, '.md');
 			return (

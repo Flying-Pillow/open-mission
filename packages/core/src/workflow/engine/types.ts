@@ -443,7 +443,7 @@ export interface MissionRuntimeRecord {
     missionId: string;
     configuration: MissionWorkflowConfigurationSnapshot;
     runtime: MissionWorkflowRuntimeState;
-    eventLog: MissionWorkflowEventRecord[];
+    eventLog?: MissionWorkflowEventRecord[];
 }
 
 export const MISSION_WORKFLOW_RUNTIME_SCHEMA_VERSION = 1;

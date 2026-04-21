@@ -75,6 +75,7 @@ export type {
 export type MissionProductKey = MissionArtifactKey;
 
 export const MISSION_RUNTIME_FILE_NAME = 'mission.json';
+export const MISSION_RUNTIME_EVENT_LOG_FILE_NAME = 'mission.events.jsonl';
 
 export const MISSION_ARTIFACT_FILE_NAMES: string[] = MISSION_ARTIFACT_KEYS.map(
 	(artifactKey) => MISSION_ARTIFACTS[artifactKey]

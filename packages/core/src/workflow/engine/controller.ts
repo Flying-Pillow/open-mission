@@ -193,6 +193,7 @@ export class MissionWorkflowController {
             );
             document = created.document;
             await this.adapter.writeMissionRuntimeRecord(this.descriptor.missionDir, document);
+            await this.adapter.appendMissionRuntimeEventRecord(this.descriptor.missionDir, created.eventRecord);
             this.document = document;
 
             const emittedEvents = await this.executeRequests(document, created.requests);
@@ -228,6 +229,7 @@ export class MissionWorkflowController {
         const document = await this.requireDocument();
         const ingested = ingestMissionWorkflowEvent(document, event);
         await this.adapter.writeMissionRuntimeRecord(this.descriptor.missionDir, ingested.document);
+        await this.adapter.appendMissionRuntimeEventRecord(this.descriptor.missionDir, ingested.eventRecord);
         let nextDocument = ingested.document;
         this.document = ingested.document;
         const emittedEvents = await this.executeRequests(nextDocument, ingested.requests);
@@ -236,6 +238,16 @@ export class MissionWorkflowController {
         }
         this.document = nextDocument;
         return nextDocument;
+    }
+
+    public async generateTasksForStage(stageId: string): Promise<MissionRuntimeRecord> {
+        const document = await this.getDocument();
+        const emittedEvents = await this.executeRequests(document, [{
+            requestId: `tasks.request-generation:manual:${stageId}:${new Date().toISOString()}`,
+            type: 'tasks.request-generation',
+            payload: { stageId }
+        }]);
+        return this.ingestEmittedEvents(emittedEvents);
     }
 
     private async executeRequests(
@@ -299,13 +311,6 @@ export class MissionWorkflowController {
         if (tasks.some((task, index) => task !== document.runtime.tasks[index])) {
             changed = true;
         }
-        const eventLog = document.eventLog.map((event) => {
-            const normalized = normalizePersistedEventRecord(event);
-            if (normalized !== event) {
-                changed = true;
-            }
-            return normalized;
-        });
 
         if (!changed) {
             return document;
@@ -331,8 +336,7 @@ export class MissionWorkflowController {
                 tasks: derivedProjection.tasks,
                 stages: derivedProjection.stages,
                 gates: derivedProjection.gates
-            },
-            eventLog
+            }
         };
         await this.adapter.writeMissionRuntimeRecord(this.descriptor.missionDir, normalizedDocument);
         return normalizedDocument;
@@ -436,43 +440,6 @@ function normalizePersistedRuntimeTasks(document: MissionRuntimeRecord): Mission
             dependsOn: normalizedDependsOn
         };
     });
-}
-
-function normalizePersistedEventRecord(event: MissionRuntimeRecord['eventLog'][number]): MissionRuntimeRecord['eventLog'][number] {
-    if (event.type !== 'tasks.generated') {
-        return event;
-    }
-
-    const payload = 'payload' in event && event.payload && typeof event.payload === 'object'
-        ? event.payload as { tasks?: Array<{ taskId: string; title: string; instruction: string; dependsOn?: string[]; agentRunner?: string }> }
-        : undefined;
-    if (!payload?.tasks || payload.tasks.length === 0) {
-        return event;
-    }
-
-    const normalizedTasks = normalizeGeneratedTaskDependencies(payload.tasks.map((task) => ({
-        taskId: task.taskId,
-        title: task.title,
-        instruction: task.instruction,
-        dependsOn: [...(task.dependsOn ?? [])],
-        ...(task.agentRunner ? { agentRunner: task.agentRunner } : {})
-    })));
-
-    const changed = normalizedTasks.some((task, index) => !sameStringArray(task.dependsOn, payload.tasks?.[index]?.dependsOn ?? []));
-    if (!changed) {
-        return event;
-    }
-
-    return {
-        ...event,
-        payload: {
-            ...payload,
-            tasks: payload.tasks.map((task, index) => ({
-                ...task,
-                dependsOn: normalizedTasks[index]?.dependsOn ?? []
-            }))
-        }
-    };
 }
 
 function sameStringArray(left: string[], right: string[]): boolean {
