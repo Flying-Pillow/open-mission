@@ -5,4 +5,4 @@ export * from './daemon/Daemon.js';
 export * from './daemon/runDaemonMain.js';
 export * from './daemon/runtime/DaemonProcessControl.js';
 export * from './daemon/runtime/runMissiondCommand.js';
-export * from './daemon/control-plane/MissionSystemController.js';
+export * from './daemon/control-plane/SystemController.js';

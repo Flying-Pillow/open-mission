@@ -13,6 +13,7 @@
     let {
         missionId,
         repositoryId,
+        repositoryRootPath,
         refreshNonce,
         stageId,
         session,
@@ -20,6 +21,7 @@
     }: {
         missionId: string;
         repositoryId: string;
+        repositoryRootPath: string;
         refreshNonce: number;
         stageId?: MissionStageId;
         session?: AgentSession;
@@ -203,7 +205,7 @@
     ): Promise<MissionSessionTerminalSnapshotDto | null> {
         try {
             const response = await fetch(
-                `/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal?missionId=${encodeURIComponent(missionId)}`,
+                `/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal?missionId=${encodeURIComponent(missionId)}&repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
             );
             if (!response.ok) {
                 throw new Error(
@@ -231,13 +233,14 @@
         const wsProtocol =
             window.location.protocol === "https:" ? "wss:" : "ws:";
         const wsUrl = new URL(
-            `/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal/ws?missionId=${encodeURIComponent(missionId)}`,
+            `/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal/ws?missionId=${encodeURIComponent(missionId)}&repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
             `${wsProtocol}//${window.location.host}`,
         );
         const socket = new WebSocket(wsUrl);
         terminalSocket = socket;
 
         let receivedSnapshot = false;
+        let receivedInitializationSignal = false;
         const connectionTimer = window.setTimeout(() => {
             if (!receivedSnapshot) {
                 if (terminalSocket === socket) {
@@ -275,6 +278,12 @@
                 message.type === "disconnected"
             ) {
                 receivedSnapshot = true;
+                receivedInitializationSignal = true;
+                window.clearTimeout(connectionTimer);
+                return;
+            }
+            if (message.type === "error") {
+                receivedInitializationSignal = true;
                 window.clearTimeout(connectionTimer);
             }
         });
@@ -284,9 +293,12 @@
                 return;
             }
             window.clearTimeout(connectionTimer);
-            error = receivedSnapshot
-                ? "Terminal socket failed."
-                : "Terminal socket could not connect.";
+            if (!error) {
+                error =
+                    receivedInitializationSignal || receivedSnapshot
+                        ? "Terminal socket failed."
+                        : "Terminal socket could not connect.";
+            }
             loading = false;
         });
 
@@ -296,7 +308,11 @@
                 return;
             }
             terminalSocket = null;
-            if (!receivedSnapshot) {
+            if (error) {
+                loading = false;
+                return;
+            }
+            if (!receivedInitializationSignal) {
                 error = "Terminal socket disconnected before initialization.";
             } else if (!terminalSnapshot?.dead) {
                 error = "Terminal socket disconnected.";
@@ -580,6 +596,7 @@
             <AgentSessionActionbar
                 {missionId}
                 {repositoryId}
+                {repositoryRootPath}
                 {refreshNonce}
                 {stageId}
                 taskId={session?.taskId}

@@ -1,8 +1,10 @@
+import path from 'node:path';
 import { error as kitError } from '@sveltejs/kit';
 import {
     missionRuntimeRouteParamsSchema,
     repositoryRuntimeRouteParamsSchema
 } from '@flying-pillow/mission-core';
+import { getMissionWorktreesPath } from '@flying-pillow/mission-core/node';
 import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
 import type { MissionControlSnapshot } from '$lib/types/mission-control';
 import type { PageServerLoad } from './$types';
@@ -20,9 +22,13 @@ export const load: PageServerLoad = async ({ locals, params }) => {
             repositoryId,
             selectedMissionId: missionId
         });
+        const missionWorktreePath = path.join(
+            getMissionWorktreesPath(repositorySurface.repository.repositoryRootPath),
+            missionId
+        );
         const missionControl = await gateway.getMissionControlSnapshot({
             missionId,
-            surfacePath: repositorySurface.repository.repositoryRootPath
+            surfacePath: missionWorktreePath
         });
 
         const snapshot: MissionControlSnapshot = missionControl;
@@ -31,6 +37,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
             airportRepositories: airportHome.repositories,
             repositorySurface,
             missionControl: snapshot,
+            missionWorktreePath,
             repositoryId,
             missionId,
         };

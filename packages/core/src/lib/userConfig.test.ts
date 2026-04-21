@@ -8,7 +8,7 @@ import {
 	getMissionGitHubCliBinary,
 	getMissionRuntimeDirectory,
 	getMissionUserConfigPath,
-	listRegisteredMissionUserRepos,
+	listRegisteredUserRepositories,
 	registerMissionUserRepo,
 	readMissionUserConfig,
 	writeMissionUserConfig
@@ -180,7 +180,7 @@ describe('userConfig', () => {
 			runGit(workspaceRoot, ['remote', 'add', 'origin', 'https://github.com/Flying-Pillow/mission.git']);
 
 			await registerMissionUserRepo(workspaceRoot);
-			const repositories = await listRegisteredMissionUserRepos();
+			const repositories = await listRegisteredUserRepositories();
 
 			expect(repositories).toEqual([
 				{

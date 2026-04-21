@@ -5,6 +5,7 @@
 
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { deriveRepositoryIdentity } from './repositoryIdentity.js';
 
 export const MISSION_DIRECTORY = '.mission';
 export const DEFAULT_MISSION_WORKSPACE_ROOT = 'missions';
@@ -59,6 +60,18 @@ export function getMissionWorktreesPath(
 	controlRoot: string,
 	options: { missionWorkspaceRoot?: string } = {}
 ): string {
+	const repositoryIdentity = deriveRepositoryIdentity(controlRoot);
+	if (repositoryIdentity.githubRepository) {
+		const [owner, repository] = repositoryIdentity.githubRepository.split('/');
+		if (owner && repository) {
+			return path.join(
+				resolveMissionWorkspaceRoot(options.missionWorkspaceRoot),
+				owner,
+				repository
+			);
+		}
+	}
+
 	return path.join(
 		resolveMissionWorkspaceRoot(options.missionWorkspaceRoot),
 		path.basename(path.resolve(controlRoot))

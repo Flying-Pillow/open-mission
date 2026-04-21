@@ -749,6 +749,49 @@ describe('Mission', () => {
         }
     });
 
+    it('keeps session stop actions enabled while an agent is awaiting input', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner');
+
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const mission = await Factory.create(adapter, {
+                brief: createBrief(210, 'Mission awaiting-input session actions'),
+                branchRef: adapter.deriveMissionBranchName(210, 'Mission awaiting-input session actions')
+            }, createWorkflowBindings(runner));
+
+            try {
+                const startedStatus = await mission.startWorkflow();
+                const taskId = startedStatus.readyTasks?.[0]?.taskId;
+                if (!taskId || !startedStatus.missionDir) {
+                    throw new Error('Expected a ready task and mission working directory after workflow start.');
+                }
+
+                const launched = await mission.launchAgentSession({
+                    runnerId: runner.id,
+                    taskId,
+                    workingDirectory: startedStatus.missionDir,
+                    prompt: 'Need operator input.'
+                });
+                const session = runner.getSession(launched.sessionId);
+                if (!session) {
+                    throw new Error(`Expected fake runner session '${launched.sessionId}' to exist.`);
+                }
+
+                session.emitAwaitingInput();
+                await flushMicrotasks();
+
+                const actions = await mission.listAvailableActionsSnapshot();
+                expect(actions.actions.find((action) => action.id === `session.cancel.${launched.sessionId}`)?.enabled).toBe(true);
+                expect(actions.actions.find((action) => action.id === `session.terminate.${launched.sessionId}`)?.enabled).toBe(true);
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
     it('does not expose deliver when the delivery stage is already completed', async () => {
         const workspaceRoot = await createTempRepo();
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');

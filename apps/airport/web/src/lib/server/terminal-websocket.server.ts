@@ -18,6 +18,7 @@ import type { Duplex } from 'node:stream';
 import { WebSocketServer, WebSocket as NodeWebSocket } from 'ws';
 import { connectDedicatedAuthenticatedDaemonClient } from './daemon/connections.server';
 import { resolveMissionTerminalRuntimeError } from './mission-terminal-errors';
+import { AirportWebGateway } from './gateway/AirportWebGateway.server';
 
 const TERMINAL_WS_PATH_PATTERN = /^\/api\/runtime\/sessions\/([^/]+)\/terminal\/ws$/u;
 const MISSION_TERMINAL_WS_PATH_PATTERN = /^\/api\/runtime\/missions\/([^/]+)\/terminal\/ws$/u;
@@ -49,7 +50,7 @@ export function attachTerminalWebSocketServer(server: UpgradeCapableServer): voi
 
     webSocketServer.on('connection', (webSocket: NodeWebSocket, request: IncomingMessage, context: { kind: 'mission'; missionId: string } | { kind: 'session'; sessionId: string }) => {
         if (context.kind === 'mission') {
-            void handleMissionTerminalConnection(webSocket, context.missionId);
+            void handleMissionTerminalConnection(webSocket, request, context.missionId);
             return;
         }
         void handleTerminalConnection(webSocket, request, context.sessionId);
@@ -87,8 +88,13 @@ async function handleTerminalConnection(
     sessionId: string
 ): Promise<void> {
     const requestUrl = new URL(request.url ?? '/', 'http://localhost');
-    const query = missionSessionTerminalQuerySchema.parse({
-        missionId: requestUrl.searchParams.get('missionId')
+    const query = missionSessionTerminalQuerySchema.extend({
+        repositoryId: missionSessionTerminalQuerySchema.shape.missionId.optional(),
+        repositoryRootPath: missionSessionTerminalQuerySchema.shape.missionId.optional()
+    }).parse({
+        missionId: requestUrl.searchParams.get('missionId'),
+        repositoryId: requestUrl.searchParams.get('repositoryId') ?? undefined,
+        repositoryRootPath: requestUrl.searchParams.get('repositoryRootPath') ?? undefined
     });
 
     let daemon: Awaited<ReturnType<typeof connectDedicatedAuthenticatedDaemonClient>> | undefined;
@@ -148,7 +154,14 @@ async function handleTerminalConnection(
     };
 
     try {
-        daemon = await connectDedicatedAuthenticatedDaemonClient({ allowStart: false });
+        const repositoryRootPath = query.repositoryRootPath?.trim()
+            || (query.repositoryId
+                ? (await new AirportWebGateway().resolveRepositoryCandidate({ repositoryId: query.repositoryId })).repositoryRootPath
+                : undefined);
+        daemon = await connectDedicatedAuthenticatedDaemonClient({
+            allowStart: false,
+            ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {})
+        });
         api = new DaemonApi(daemon.client);
         await daemon.client.request<null>('event.subscribe', {
             eventTypes: ['session.terminal'],
@@ -239,8 +252,12 @@ async function handleTerminalConnection(
 
 async function handleMissionTerminalConnection(
     webSocket: NodeWebSocket,
+    request: IncomingMessage,
     missionId: string
 ): Promise<void> {
+    const requestUrl = new URL(request.url ?? '/', 'http://localhost');
+    const repositoryId = requestUrl.searchParams.get('repositoryId')?.trim();
+    const requestedRepositoryRootPath = requestUrl.searchParams.get('repositoryRootPath')?.trim();
     let daemon: Awaited<ReturnType<typeof connectDedicatedAuthenticatedDaemonClient>> | undefined;
     let api: DaemonApi | undefined;
     let closed = false;
@@ -297,7 +314,14 @@ async function handleMissionTerminalConnection(
     };
 
     try {
-        daemon = await connectDedicatedAuthenticatedDaemonClient({ allowStart: false });
+        const repositoryRootPath = requestedRepositoryRootPath
+            || (repositoryId
+                ? (await new AirportWebGateway().resolveRepositoryCandidate({ repositoryId })).repositoryRootPath
+                : undefined);
+        daemon = await connectDedicatedAuthenticatedDaemonClient({
+            allowStart: false,
+            ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {})
+        });
         api = new DaemonApi(daemon.client);
         const initialState = await api.mission.getMissionTerminalState({ missionId });
         sessionId = initialState?.sessionId?.trim();

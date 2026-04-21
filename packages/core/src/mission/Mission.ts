@@ -17,7 +17,7 @@ import type {
 } from '../agent/AgentRuntimeTypes.js';
 
 import type { MissionDefaultAgentMode } from '../lib/daemonConfig.js';
-import { initializeMissionRepository } from '../repository/initializeMissionRepository.js';
+import { initializeRepository } from '../repository/initializeRepository.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../agent/runtimes/AgentRuntimeIds.js';
 import { MissionSession } from './MissionSession.js';
 import { MissionTask } from './MissionTask.js';
@@ -135,7 +135,7 @@ export class Mission {
 
 	public async initialize(): Promise<this> {
 		const missionWorkspaceRoot = this.adapter.getMissionWorkspacePath(this.missionDir);
-		await initializeMissionRepository(missionWorkspaceRoot, {
+		await initializeRepository(missionWorkspaceRoot, {
 			includeRuntimeDirectories: false
 		});
 		await this.adapter.initializeMissionEnvironment(this.missionDir);
@@ -1279,7 +1279,8 @@ export class Mission {
 	): Promise<MissionAgentSessionRecord> {
 		const record = this.requireAgentSessionRecord(sessionId);
 		await this.ensureRuntimeSessionAttached(sessionId);
-		await this.workflowController.cancelRuntimeSession(sessionId, reason, record.taskId);
+		const document = await this.workflowController.cancelRuntimeSession(sessionId, reason, record.taskId);
+		await this.ensureSessionLifecycleRecorded(document, record, 'cancelled');
 		await this.refresh();
 		return this.requireAgentSessionRecord(sessionId);
 	}
@@ -1320,9 +1321,32 @@ export class Mission {
 	): Promise<MissionAgentSessionRecord> {
 		const record = this.requireAgentSessionRecord(sessionId);
 		await this.ensureRuntimeSessionAttached(sessionId);
-		await this.workflowController.terminateRuntimeSession(sessionId, reason, record.taskId);
+		const document = await this.workflowController.terminateRuntimeSession(sessionId, reason, record.taskId);
+		await this.ensureSessionLifecycleRecorded(document, record, 'terminated');
 		await this.refresh();
 		return this.requireAgentSessionRecord(sessionId);
+	}
+
+	private async ensureSessionLifecycleRecorded(
+		document: MissionRuntimeRecord,
+		record: MissionAgentSessionRecord,
+		lifecycle: 'cancelled' | 'terminated'
+	): Promise<void> {
+		const persistedSession = document.runtime.sessions.find(
+			(candidate) => candidate.sessionId === record.sessionId,
+		);
+		if (persistedSession?.lifecycle === lifecycle) {
+			return;
+		}
+		await this.applyWorkflowEvent(
+			this.createWorkflowEvent(
+				lifecycle === 'cancelled' ? 'session.cancelled' : 'session.terminated',
+				{
+					sessionId: record.sessionId,
+					taskId: record.taskId,
+				},
+			),
+		);
 	}
 
 	private createTask(task: MissionTaskState): MissionTask {
@@ -1985,7 +2009,7 @@ function buildTaskLaunchPolicyActions(input: MissionAvailableActionsInput, task:
 }
 
 function buildSessionCancelAction(session: MissionAgentSessionRecord, stageId: MissionStageId | undefined): OperatorActionDescriptor {
-	const enabled = session.lifecycleState === 'starting' || session.lifecycleState === 'running';
+	const enabled = session.lifecycleState === 'starting' || session.lifecycleState === 'running' || session.lifecycleState === 'awaiting-input';
 	return {
 		id: `session.cancel.${session.sessionId}`,
 		label: 'Stop Running Agent',
@@ -2000,7 +2024,7 @@ function buildSessionCancelAction(session: MissionAgentSessionRecord, stageId: M
 }
 
 function buildSessionTerminateAction(session: MissionAgentSessionRecord, stageId: MissionStageId | undefined): OperatorActionDescriptor {
-	const enabled = session.lifecycleState === 'starting' || session.lifecycleState === 'running';
+	const enabled = session.lifecycleState === 'starting' || session.lifecycleState === 'running' || session.lifecycleState === 'awaiting-input';
 	return {
 		id: `session.terminate.${session.sessionId}`,
 		label: 'Force Stop Agent',

@@ -23,9 +23,14 @@
         OperatorActionTargetContext,
     } from "@flying-pillow/mission-core/types.js";
 
+    type ActionTransportContext = OperatorActionQueryContext & {
+        repositoryRootPath: string;
+    };
+
     let {
         missionId,
         repositoryId,
+        repositoryRootPath,
         refreshNonce,
         scope,
         stageId,
@@ -40,6 +45,7 @@
     }: {
         missionId: string;
         repositoryId: string;
+        repositoryRootPath: string;
         refreshNonce: number;
         scope: "mission" | "task" | "session";
         stageId?: MissionStageId;
@@ -72,17 +78,27 @@
         () =>
             ({
                 repositoryId,
+                repositoryRootPath,
                 ...(stageId ? { stageId } : {}),
                 ...(taskId ? { taskId } : {}),
                 ...(sessionId ? { sessionId } : {}),
-            }) satisfies OperatorActionQueryContext,
+            }) satisfies ActionTransportContext,
+    );
+    const actionTargetContext = $derived.by(
+        () =>
+            ({
+                repositoryId,
+                ...(stageId ? { stageId } : {}),
+                ...(taskId ? { taskId } : {}),
+                ...(sessionId ? { sessionId } : {}),
+            }) satisfies OperatorActionTargetContext,
     );
     const actionContextKey = $derived(JSON.stringify(actionContext));
     const availableActions = $derived.by(() => {
         const snapshotActions = actionSnapshot?.actions ?? [];
         const orderedActions = orderAvailableActions(
             snapshotActions,
-            actionContext as OperatorActionTargetContext,
+            actionTargetContext,
         );
 
         return orderedActions.filter(
@@ -179,7 +195,7 @@
 
     async function loadActions(
         contextKey: string,
-        context: OperatorActionQueryContext,
+        context: ActionTransportContext,
     ): Promise<void> {
         actionLoading = true;
         actionError = null;
@@ -187,6 +203,9 @@
             const query = new URLSearchParams();
             if (context.repositoryId) {
                 query.set("repositoryId", context.repositoryId);
+            }
+            if (context.repositoryRootPath) {
+                query.set("repositoryRootPath", context.repositoryRootPath);
             }
             if (context.stageId) {
                 query.set("stageId", context.stageId);
@@ -391,7 +410,7 @@
         actionError = null;
         try {
             const response = await fetch(
-                `/api/runtime/missions/${encodeURIComponent(missionId)}/actions`,
+                `/api/runtime/missions/${encodeURIComponent(missionId)}/actions?repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
                 {
                     method: "POST",
                     headers: {

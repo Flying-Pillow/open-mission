@@ -5,6 +5,7 @@
     let {
         missionId,
         repositoryId,
+        repositoryRootPath,
         refreshNonce,
         stageId,
         taskId,
@@ -12,6 +13,7 @@
     }: {
         missionId: string;
         repositoryId: string;
+        repositoryRootPath: string;
         refreshNonce: number;
         stageId?: MissionStageId;
         taskId?: string;
@@ -22,6 +24,7 @@
 <ScopedActionbar
     {missionId}
     {repositoryId}
+    {repositoryRootPath}
     {refreshNonce}
     {stageId}
     {taskId}

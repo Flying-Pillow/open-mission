@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FilesystemAdapter } from './FilesystemAdapter.js';
+import { resolveMissionWorkspaceRoot } from './repoConfig.js';
 import { createDefaultWorkflowSettings, DEFAULT_WORKFLOW_VERSION } from '../workflow/mission/workflow.js';
 import { createMissionWorkflowConfigurationSnapshot } from '../workflow/engine/document.js';
 
@@ -28,6 +29,34 @@ describe('FilesystemAdapter', () => {
 		expect(adapter.getMissionStagePath(missionDir, 'spec')).toBe(
 			path.join('/tmp/repo', '.mission', 'missions', 'mission-101', '02-SPEC')
 		);
+	});
+
+	it('nests mission worktrees under the GitHub owner and repository name', async () => {
+		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-github-'));
+		try {
+			const initResult = await import('node:child_process').then(({ spawnSync }) =>
+				spawnSync('git', ['init'], { cwd: workspaceRoot, stdio: 'pipe' })
+			);
+			if (initResult.status !== 0) {
+				throw new Error('Failed to initialize temporary git repository for mission path test.');
+			}
+			const remoteResult = await import('node:child_process').then(({ spawnSync }) =>
+				spawnSync('git', ['remote', 'add', 'origin', 'git@github.com:Flying-Pillow/connect-four.git'], {
+					cwd: workspaceRoot,
+					stdio: 'pipe'
+				})
+			);
+			if (remoteResult.status !== 0) {
+				throw new Error('Failed to add git remote for mission path test.');
+			}
+
+			const adapter = new FilesystemAdapter(workspaceRoot);
+			expect(adapter.getMissionWorktreePath('mission-101')).toBe(
+				path.join(resolveMissionWorkspaceRoot(), 'flying-pillow', 'connect-four', 'mission-101')
+			);
+		} finally {
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		}
 	});
 
 	it('derives mission branch names without a trailing slug when title is empty', () => {

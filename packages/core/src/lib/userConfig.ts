@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { resolveGitHubRepositoryFromWorkspace } from '../platforms/GitHubPlatformAdapter.js';
 import { resolveGitWorkspaceRoot } from './workspacePaths.js';
 import { deriveRepositoryIdentity } from './repositoryIdentity.js';
-import type { MissionRepositoryCandidate } from '../types.js';
+import type { RepositoryCandidate } from '../types.js';
 
 export const MISSION_USER_CONFIG_DIRECTORY = 'mission';
 export const MISSION_USER_CONFIG_FILE = 'config.json';
@@ -108,20 +108,20 @@ export async function registerMissionUserRepo(workspacePath: string): Promise<Mi
 	return nextConfig;
 }
 
-export async function listRegisteredMissionUserRepos(): Promise<MissionRepositoryCandidate[]> {
+export async function listRegisteredUserRepositories(): Promise<RepositoryCandidate[]> {
 	const config = await ensureMissionUserConfig();
 	return (normalizeRegisteredRepositories(config.registeredRepositories) ?? [])
-		.map((entry) => buildMissionRepositoryCandidate(entry.checkoutPath))
-		.filter((entry): entry is MissionRepositoryCandidate => entry !== undefined)
+		.map((entry) => buildRepositoryCandidate(entry.checkoutPath))
+		.filter((entry): entry is RepositoryCandidate => entry !== undefined)
 		.sort((left, right) => left.label.localeCompare(right.label));
 }
 
-export async function findRegisteredMissionUserRepoById(repositoryId: string): Promise<MissionRepositoryCandidate | undefined> {
+export async function findRegisteredUserRepositoryById(repositoryId: string): Promise<RepositoryCandidate | undefined> {
 	const normalizedRepositoryId = repositoryId.trim();
 	if (!normalizedRepositoryId) {
 		return undefined;
 	}
-	return (await listRegisteredMissionUserRepos()).find((candidate) => candidate.repositoryId === normalizedRepositoryId);
+	return (await listRegisteredUserRepositories()).find((candidate) => candidate.repositoryId === normalizedRepositoryId);
 }
 
 function loadMissionUserConfig(): {
@@ -195,9 +195,9 @@ function normalizeRegisteredRepositories(
 	return deduplicated.length > 0 ? deduplicated : undefined;
 }
 
-function buildMissionRepositoryCandidate(
+function buildRepositoryCandidate(
 	workspacePath: string
-): MissionRepositoryCandidate | undefined {
+): RepositoryCandidate | undefined {
 	const controlRoot = resolveGitWorkspaceRoot(workspacePath);
 	if (!controlRoot) {
 		return undefined;

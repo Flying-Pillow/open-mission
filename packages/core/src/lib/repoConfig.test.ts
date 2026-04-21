@@ -1,7 +1,9 @@
+import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { resolveMissionWorkspaceRoot } from './repoConfig.js';
+import { getMissionWorktreesPath, resolveMissionWorkspaceRoot } from './repoConfig.js';
 
 describe('repoConfig', () => {
 	beforeEach(() => {
@@ -29,5 +31,22 @@ describe('repoConfig', () => {
 		delete process.env['MISSIONS_PATH'];
 
 		expect(resolveMissionWorkspaceRoot()).toBe(path.resolve(os.homedir(), 'missions'));
+	});
+
+	it('nests mission worktrees under owner and repository for GitHub checkouts', async () => {
+		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'repo-config-github-'));
+		try {
+			spawnSync('git', ['init'], { cwd: workspaceRoot, stdio: 'pipe' });
+			spawnSync('git', ['remote', 'add', 'origin', 'git@github.com:Flying-Pillow/connect-four.git'], {
+				cwd: workspaceRoot,
+				stdio: 'pipe'
+			});
+
+			expect(getMissionWorktreesPath(workspaceRoot, { missionWorkspaceRoot: '/missions' })).toBe(
+				path.join('/missions', 'flying-pillow', 'connect-four')
+			);
+		} finally {
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		}
 	});
 });

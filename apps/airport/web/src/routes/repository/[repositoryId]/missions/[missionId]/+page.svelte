@@ -8,6 +8,7 @@
         MissionCommandTransport,
         MissionRuntimeTransport,
     } from "$lib";
+    import type { MissionCommandGateway } from "$lib/client/entities/Mission";
     import ArtifactEditor from "$lib/components/entities/Artifact/ArtifactEditor.svelte";
     import ArtifactViewer from "$lib/components/entities/Artifact/ArtifactViewer.svelte";
     import MissionControlTree from "$lib/components/entities/Mission/MissionControlTree.svelte";
@@ -41,6 +42,7 @@
             airportRepositories: import("$lib/components/entities/types").RepositorySummary[];
             repositorySurface: RepositorySurfaceSnapshotDto;
             missionControl: MissionControlSnapshot;
+            missionWorktreePath: string;
             repositoryId: string;
             missionId: string;
         };
@@ -48,8 +50,38 @@
 
     let { data }: Props = $props();
     const appContext = getAppContext();
-    const missionTransport = new MissionRuntimeTransport();
-    const missionCommands = new MissionCommandTransport();
+    const missionWorktreePath = $derived.by(() => data.missionWorktreePath);
+    const missionTransport = $derived.by(
+        () =>
+            new MissionRuntimeTransport({
+                repositoryRootPath: missionWorktreePath,
+            }),
+    );
+    const missionCommands = $derived.by(
+        () =>
+            new MissionCommandTransport({
+                repositoryRootPath: missionWorktreePath,
+            }),
+    );
+    const missionCommandGateway: MissionCommandGateway = {
+        pauseMission: (input) => missionCommands.pauseMission(input),
+        resumeMission: (input) => missionCommands.resumeMission(input),
+        panicMission: (input) => missionCommands.panicMission(input),
+        clearMissionPanic: (input) => missionCommands.clearMissionPanic(input),
+        restartMissionQueue: (input) =>
+            missionCommands.restartMissionQueue(input),
+        deliverMission: (input) => missionCommands.deliverMission(input),
+        startTask: (input) => missionCommands.startTask(input),
+        completeTask: (input) => missionCommands.completeTask(input),
+        blockTask: (input) => missionCommands.blockTask(input),
+        reopenTask: (input) => missionCommands.reopenTask(input),
+        completeSession: (input) => missionCommands.completeSession(input),
+        cancelSession: (input) => missionCommands.cancelSession(input),
+        terminateSession: (input) => missionCommands.terminateSession(input),
+        sendSessionPrompt: (input) => missionCommands.sendSessionPrompt(input),
+        sendSessionCommand: (input) =>
+            missionCommands.sendSessionCommand(input),
+    };
     const repositorySurface = $derived(data.repositorySurface);
 
     let refreshedControlSnapshot = $state<MissionControlSnapshot | null>(null);
@@ -61,7 +93,7 @@
             createInitialMissionRuntimeSnapshot(),
             (missionId) =>
                 missionTransport.getMissionRuntimeSnapshot(missionId),
-            missionCommands,
+            missionCommandGateway,
         ),
     );
     let controlLoading = $state(false);
@@ -238,8 +270,11 @@
         controlLoading = true;
         controlError = null;
         try {
+            const query = new URLSearchParams({
+                repositoryRootPath: missionWorktreePath,
+            });
             const response = await fetch(
-                `/api/runtime/missions/${encodeURIComponent(missionId)}/control`,
+                `/api/runtime/missions/${encodeURIComponent(missionId)}/control?${query.toString()}`,
             );
             if (!response.ok) {
                 throw new Error(
@@ -432,6 +467,7 @@
 
             <MissionView
                 {repository}
+                runtimeRepositoryRootPath={missionWorktreePath}
                 {mission}
                 refreshNonce={actionRefreshNonce}
                 operatorStatus={controlSnapshot.operatorStatus}
@@ -504,7 +540,7 @@
                     {#if showArtifactEditor}
                         <ArtifactEditor
                             {missionId}
-                            repositoryRootPath={repository.repositoryRootPath}
+                            repositoryRootPath={missionWorktreePath}
                             artifactPath={displayArtifactPath}
                             artifactLabel={displayArtifactLabel}
                             onCloseRequested={handleCloseArtifactEditor}
@@ -513,7 +549,7 @@
                         <ArtifactViewer
                             {missionId}
                             repositoryId={repository.repositoryId}
-                            repositoryRootPath={repository.repositoryRootPath}
+                            repositoryRootPath={missionWorktreePath}
                             refreshNonce={actionRefreshNonce}
                             artifactPath={displayArtifactPath}
                             artifactLabel={displayArtifactLabel}
@@ -554,7 +590,11 @@
                                 class={`absolute inset-0 min-h-0 overflow-hidden ${rightPanelMode === "terminal" ? "block" : "hidden"}`}
                                 aria-hidden={rightPanelMode !== "terminal"}
                             >
-                                <MissionTerminal {missionId} />
+                                <MissionTerminal
+                                    {missionId}
+                                    repositoryId={repository.repositoryId}
+                                    repositoryRootPath={missionWorktreePath}
+                                />
                             </div>
 
                             <div
@@ -564,6 +604,7 @@
                                 <AgentSession
                                     {missionId}
                                     repositoryId={repository.repositoryId}
+                                    repositoryRootPath={missionWorktreePath}
                                     refreshNonce={actionRefreshNonce}
                                     stageId={controlState.resolvedSelection
                                         ?.stageId}

@@ -11,11 +11,11 @@ import type {
 	TaskContext
 } from '../../types.js';
 import type {
-	MissionControlSource,
-	MissionControlSourceSelectionHint
+	ControlSource,
+	ControlSourceSelectionHint
 } from './types.js';
 
-export class MissionControl {
+export class ContextGraphController {
 	private domain: ContextGraph = createEmptyContextGraph();
 	private missionOperatorViews: Record<string, MissionOperatorProjectionContext> = {};
 
@@ -27,7 +27,7 @@ export class MissionControl {
 		return structuredClone(this.missionOperatorViews);
 	}
 
-	public synchronize(source: MissionControlSource, selectionHint: MissionControlSourceSelectionHint = {}): ContextGraph {
+	public synchronize(source: ControlSource, selectionHint: ControlSourceSelectionHint = {}): ContextGraph {
 		const previousSelection = shouldPreserveSelection(this.domain.selection, source.repositoryId)
 			? this.domain.selection
 			: {};
@@ -54,9 +54,9 @@ function shouldPreserveSelection(selection: ContextSelection, repositoryId: stri
 }
 
 function deriveContextGraph(
-	source: MissionControlSource,
+	source: ControlSource,
 	previousSelection: ContextSelection,
-	selectionHint: MissionControlSourceSelectionHint
+	selectionHint: ControlSourceSelectionHint
 ): {
 	domain: ContextGraph;
 	missionOperatorViews: Record<string, MissionOperatorProjectionContext>;
@@ -225,7 +225,7 @@ function deriveContextGraph(
 
 function resolveContextSelection(input: {
 	repositoryId: string;
-	missionStatus?: MissionControlSource['missionStatus'];
+	missionStatus?: ControlSource['missionStatus'];
 	previousSelection: ContextSelection;
 	missions: Record<string, MissionContext>;
 	tasks: Record<string, TaskContext>;
@@ -251,7 +251,7 @@ function resolveContextSelection(input: {
 }
 
 function resolveSelectedMissionId(
-	missionStatus: MissionControlSource['missionStatus'] | undefined,
+	missionStatus: ControlSource['missionStatus'] | undefined,
 	previousSelection: ContextSelection,
 	missions: Record<string, MissionContext>
 ): string | undefined {
@@ -328,7 +328,7 @@ function resolveSelectedSessionId(
 }
 
 function resolveSelectedStageId(
-	missionStatus: MissionControlSource['missionStatus'] | undefined,
+	missionStatus: ControlSource['missionStatus'] | undefined,
 	previousSelection: ContextSelection,
 	tasks: Record<string, TaskContext>,
 	agentSessions: Record<string, AgentSessionContext>,
@@ -389,7 +389,7 @@ function isSessionSelectionValid(
 function isStageSelectionValid(
 	stageId: MissionStageId,
 	missionId: string | undefined,
-	missionStatus: MissionControlSource['missionStatus'] | undefined
+	missionStatus: ControlSource['missionStatus'] | undefined
 ): boolean {
 	if (!missionId) {
 		return false;
@@ -410,7 +410,7 @@ function hasExplicitNonSessionSelection(selection: ContextSelection): boolean {
 	return Boolean(selection.stageId || selection.taskId || selection.artifactId);
 }
 
-function dedupeTasks(missionStatus: MissionControlSource['missionStatus'] | undefined) {
+function dedupeTasks(missionStatus: ControlSource['missionStatus'] | undefined) {
 	const seen = new Set<string>();
 	const tasks = [
 		...(missionStatus?.activeTasks ?? []),
@@ -436,7 +436,7 @@ function buildTaskArtifactId(repositoryId: string, missionId: string | undefined
 	return `${missionScope}:task:${taskId}`;
 }
 
-function pickSelectedTaskId(missionStatus: MissionControlSource['missionStatus'] | undefined): string | undefined {
+function pickSelectedTaskId(missionStatus: ControlSource['missionStatus'] | undefined): string | undefined {
 	return missionStatus?.activeTasks?.[0]?.taskId
 		|| missionStatus?.readyTasks?.[0]?.taskId
 		|| missionStatus?.stages?.flatMap((stage) => stage.tasks)[0]?.taskId;
@@ -444,13 +444,13 @@ function pickSelectedTaskId(missionStatus: MissionControlSource['missionStatus']
 
 function pickSelectedArtifactId(
 	repositoryId: string,
-	missionStatus: MissionControlSource['missionStatus'] | undefined
+	missionStatus: ControlSource['missionStatus'] | undefined
 ): string | undefined {
 	const artifactKey = Object.keys(missionStatus?.productFiles ?? {})[0];
 	return artifactKey ? buildArtifactId(repositoryId, missionStatus?.missionId, artifactKey) : undefined;
 }
 
-function pickSelectedSessionId(missionStatus: MissionControlSource['missionStatus'] | undefined): string | undefined {
+function pickSelectedSessionId(missionStatus: ControlSource['missionStatus'] | undefined): string | undefined {
 	const preferred = (missionStatus?.agentSessions ?? []).find((session) =>
 		session.lifecycleState === 'running'
 		|| session.lifecycleState === 'starting'

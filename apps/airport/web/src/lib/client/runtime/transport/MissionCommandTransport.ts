@@ -14,9 +14,11 @@ import type { MissionCommandGateway } from '$lib/client/entities/Mission';
 
 export class MissionCommandTransport implements MissionCommandGateway {
     private readonly fetcher: typeof fetch;
+    private readonly repositoryRootPath?: string;
 
-    public constructor(input: { fetch?: typeof fetch } = {}) {
+    public constructor(input: { fetch?: typeof fetch; repositoryRootPath?: string } = {}) {
         this.fetcher = input.fetch ?? fetch;
+        this.repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
     }
 
     public startTask(input: {
@@ -152,7 +154,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
 
         const payload = missionRuntimeTaskCommandSchema.parse(body);
         const response = await this.fetcher(
-            `/api/runtime/missions/${encodeURIComponent(normalizedMissionId)}/tasks/${encodeURIComponent(normalizedTaskId)}`,
+            `/api/runtime/missions/${encodeURIComponent(normalizedMissionId)}/tasks/${encodeURIComponent(normalizedTaskId)}${this.buildQuerySuffix()}`,
             {
                 method: 'POST',
                 headers: {
@@ -184,7 +186,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
         const payload = missionRuntimeMissionCommandSchema.parse(body);
         const actionId = this.resolveMissionActionId(payload.action);
         const response = await this.fetcher(
-            `/api/runtime/missions/${encodeURIComponent(normalizedMissionId)}/actions`,
+            `/api/runtime/missions/${encodeURIComponent(normalizedMissionId)}/actions${this.buildQuerySuffix()}`,
             {
                 method: 'POST',
                 headers: {
@@ -238,7 +240,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
 
         const payload = missionRuntimeSessionCommandSchema.parse(body);
         const response = await this.fetcher(
-            `/api/runtime/missions/${encodeURIComponent(normalizedMissionId)}/sessions/${encodeURIComponent(normalizedSessionId)}`,
+            `/api/runtime/missions/${encodeURIComponent(normalizedMissionId)}/sessions/${encodeURIComponent(normalizedSessionId)}${this.buildQuerySuffix()}`,
             {
                 method: 'POST',
                 headers: {
@@ -254,5 +256,16 @@ export class MissionCommandTransport implements MissionCommandGateway {
         }
 
         return missionRuntimeSnapshotDtoSchema.parse(await response.json());
+    }
+
+    private buildQuerySuffix(): string {
+        if (!this.repositoryRootPath) {
+            return '';
+        }
+
+        const query = new URLSearchParams({
+            repositoryRootPath: this.repositoryRootPath
+        });
+        return `?${query.toString()}`;
     }
 }

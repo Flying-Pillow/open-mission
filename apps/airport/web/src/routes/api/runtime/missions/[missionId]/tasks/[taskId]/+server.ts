@@ -7,16 +7,18 @@ import {
 import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
 import type { RequestHandler } from './$types';
 
-export const POST: RequestHandler = async ({ locals, params, request }) => {
+export const POST: RequestHandler = async ({ locals, params, request, url }) => {
     const { missionId, taskId } = missionRuntimeRouteParamsSchema.extend({
         taskId: missionRuntimeRouteParamsSchema.shape.missionId
     }).parse(params);
     const body = missionRuntimeTaskCommandSchema.parse(await request.json());
+    const repositoryRootPath = url.searchParams.get('repositoryRootPath')?.trim() || undefined;
     const gateway = new AirportWebGateway(locals);
     const snapshot = await gateway.executeMissionTaskCommand({
         missionId,
         taskId,
         action: body.action,
+        ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {}),
         ...(body.action === 'start' && body.terminalSessionName
             ? { terminalSessionName: body.terminalSessionName }
             : {})

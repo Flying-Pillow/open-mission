@@ -3,6 +3,7 @@ import { z } from "zod";
 
 export const missionActionQuerySchema = z.object({
     repositoryId: z.string().trim().min(1).optional(),
+    repositoryRootPath: z.string().trim().min(1).optional(),
     stageId: z
         .string()
         .trim()

@@ -9,7 +9,7 @@ import { getMissionDaemonSettingsPath } from '../lib/daemonConfig.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import { writeMissionUserConfig } from '../lib/userConfig.js';
 import { getMissionWorktreesPath } from '../lib/repoConfig.js';
-import { initializeMissionRepository } from '../repository/initializeMissionRepository.js';
+import { initializeRepository } from '../repository/initializeRepository.js';
 import { Mission } from '../mission/Mission.js';
 import { startDaemon } from './Daemon.js';
 import { getDaemonManifestPath, getDaemonRuntimePath } from './daemonPaths.js';
@@ -134,7 +134,7 @@ exit 1
 			const workspaceRoot = await createTempRepo();
 			const sourceRepositoryPath = await createTempRepo();
 			const cloneParentPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-clone-parent-'));
-			const clonePath = path.join(cloneParentPath, 'cloned-mission');
+			const clonePath = path.join(cloneParentPath, 'Flying-Pillow', 'mission-clone-source');
 			const previousCloneRepository = process.env['MISSION_FAKE_GH_CLONE_REPOSITORY'];
 			const previousCloneSourcePath = process.env['MISSION_FAKE_GH_CLONE_SOURCE_PATH'];
 			process.env['MISSION_FAKE_GH_CLONE_REPOSITORY'] = 'Flying-Pillow/mission-clone-source';
@@ -153,7 +153,7 @@ exit 1
 						const api = new DaemonApi(client);
 						const clonedRepository = await api.control.cloneGitHubRepository(
 							'Flying-Pillow/mission-clone-source',
-							clonePath
+							cloneParentPath
 						);
 
 						expect(clonedRepository).toMatchObject({
@@ -544,7 +544,7 @@ exit 1
 	it('reports control status when no mission is selected', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 
 			try {
 				const daemon = await startDaemon();
@@ -592,7 +592,7 @@ exit 1
 	it('attaches a daemon-owned system snapshot to control status responses', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 
 			try {
 				const daemon = await startDaemon();
@@ -678,7 +678,7 @@ exit 1
 	it('registers airport clients and allows pane observation through the daemon API', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 
 			try {
 				const daemon = await startDaemon();
@@ -742,7 +742,7 @@ exit 1
 	it('lists available actions through explicit daemon APIs instead of ambient selection', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 			const seededMission = await seedTrackedMission(workspaceRoot, 6, 'Explicit action listing');
 
 			try {
@@ -801,7 +801,7 @@ exit 1
 			runGit(workspaceRoot, ['remote', 'add', 'origin', originPath]);
 			runGit(workspaceRoot, ['push', '--set-upstream', 'origin', 'master']);
 			runGit(workspaceRoot, ['remote', 'add', 'github', 'https://github.com/Flying-Pillow/mission.git']);
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 			const seededMission = await seedTrackedMission(workspaceRoot, 81, 'Pull origin dirty worktree');
 
 			try {
@@ -856,7 +856,7 @@ exit 1
 	it('prioritizes mission recovery actions ahead of local target actions when the mission is paused', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 			const seededMission = await seedTrackedMission(workspaceRoot, 7, 'Paused action ordering');
 
 			try {
@@ -888,7 +888,7 @@ exit 1
 							runGit(workspaceRoot, ['remote', 'add', 'origin', originPath]);
 							runGit(workspaceRoot, ['push', '--set-upstream', 'origin', 'master']);
 							runGit(workspaceRoot, ['remote', 'add', 'github', 'https://github.com/Flying-Pillow/mission.git']);
-							await initializeMissionRepository(workspaceRoot);
+							await initializeRepository(workspaceRoot);
 							const seededMission = await seedTrackedMission(workspaceRoot, 8, 'Pull origin daemon action');
 
 							try {
@@ -966,7 +966,7 @@ exit 1
 	it('keeps mission data available across airport workspace resynchronization without using client observation as semantic selection', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 			const seededMission = await seedTrackedMission(workspaceRoot, 4, 'Hydrated mission projection');
 
 			try {
@@ -1013,7 +1013,7 @@ exit 1
 	it('keeps airport observation transport-scoped when Tower reobserves the repository', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 
 			try {
 				const daemon = await startDaemon();
@@ -1047,7 +1047,7 @@ exit 1
 	it('returns repository control actions only when the repository context is explicitly selected', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 
 			try {
 				const daemon = await startDaemon();
@@ -1076,7 +1076,7 @@ exit 1
 	it('preserves explicit Briefing Room bindings when repository observation reapplies canonical defaults', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 			const seededMission = await seedTrackedMission(workspaceRoot, 7, 'Preserve explicit briefing-room artifact during airport observation');
 
 			try {
@@ -1140,7 +1140,7 @@ exit 1
 	it('rebinds Briefing Room without changing airport focus intent', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 			const seededMission = await seedTrackedMission(workspaceRoot, 5, 'Keep tree focus on semantic selection');
 
 			try {
@@ -1198,7 +1198,7 @@ exit 1
 	it('broadcasts the resolved Briefing Room projection after Briefing Room binding', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 			const seededMission = await seedTrackedMission(workspaceRoot, 6, 'Broadcast editor projection after artifact selection');
 
 			try {
@@ -1272,7 +1272,7 @@ exit 1
 	it('replaces prior gate claimants and tracks client-specific observed focus', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 
 			try {
 				const daemon = await startDaemon();
@@ -1328,7 +1328,7 @@ exit 1
 	it('does not persist airport pane bindings across daemon restarts', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 
 			try {
 				{
@@ -1379,7 +1379,7 @@ exit 1
 	it('reconnects Tower, Briefing Room, and Runway as real clients after daemon restart', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 
 			const connectAllPanes = async () => {
 				const dashboardClient = new DaemonClient();
@@ -1472,8 +1472,8 @@ exit 1
 		await withTemporaryDaemonConfigHome(async () => {
 			const leftWorkspaceRoot = await createTempRepo();
 			const rightWorkspaceRoot = await createTempRepo();
-			await initializeMissionRepository(leftWorkspaceRoot);
-			await initializeMissionRepository(rightWorkspaceRoot);
+			await initializeRepository(leftWorkspaceRoot);
+			await initializeRepository(rightWorkspaceRoot);
 
 			try {
 				const daemon = await startDaemon();
@@ -1544,8 +1544,8 @@ exit 1
 			const rightWorkspaceRoot = await createTempRepo();
 			const sharedMissionId = 'draft-shared-routing-check';
 
-			await initializeMissionRepository(leftWorkspaceRoot);
-			await initializeMissionRepository(rightWorkspaceRoot);
+			await initializeRepository(leftWorkspaceRoot);
+			await initializeRepository(rightWorkspaceRoot);
 
 			const leftMission = await seedTrackedMissionWithId(leftWorkspaceRoot, {
 				missionId: sharedMissionId,
@@ -1596,7 +1596,7 @@ exit 1
 	it('routes mission-scoped requests from a mission worktree surface back to the control repository', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 			const mission = await seedTrackedMission(workspaceRoot, 701, 'Mission worktree surface routing');
 			const missionRecord = mission.getRecord();
 
@@ -1627,7 +1627,7 @@ exit 1
 	it('derives the GitHub repository from workspace remotes instead of setup settings', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 			runGit(workspaceRoot, ['remote', 'add', 'origin', 'https://github.com/flying-pillow/mission.git']);
 
 			try {
@@ -1669,7 +1669,7 @@ exit 1
 	it('persists control runner defaults and marks setup complete once configured', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 
 			try {
 				const daemon = await startDaemon();
@@ -1713,7 +1713,7 @@ exit 1
 		const workspaceRoot = await createTempRepo();
 
 		try {
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 			const daemon = await startDaemon();
 			const client = new DaemonClient();
 
@@ -1770,7 +1770,7 @@ exit 1
 		const workspaceRoot = await createTempRepo();
 
 		try {
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 			const daemon = await startDaemon();
 			const client = new DaemonClient();
 
@@ -1803,7 +1803,7 @@ exit 1
 		const workspaceRoot = await createTempRepo();
 
 		try {
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 			const daemon = await startDaemon();
 			const client = new DaemonClient();
 
@@ -1892,7 +1892,7 @@ exit 1
 				runGit(workspaceRoot, ['remote', 'add', 'origin', originPath]);
 				runGit(workspaceRoot, ['push', '--set-upstream', 'origin', 'master']);
 				runGit(workspaceRoot, ['remote', 'add', 'github', 'https://github.com/Flying-Pillow/mission.git']);
-				await initializeMissionRepository(workspaceRoot);
+				await initializeRepository(workspaceRoot);
 				await commitMissionRepositoryBootstrap(workspaceRoot);
 
 				try {
@@ -1943,7 +1943,7 @@ exit 1
 				runGit(workspaceRoot, ['remote', 'add', 'origin', originPath]);
 				runGit(workspaceRoot, ['push', '--set-upstream', 'origin', 'master']);
 				runGit(workspaceRoot, ['remote', 'add', 'github', 'https://github.com/Flying-Pillow/mission.git']);
-				await initializeMissionRepository(workspaceRoot);
+				await initializeRepository(workspaceRoot);
 				await commitMissionRepositoryBootstrap(workspaceRoot);
 
 				try {
@@ -1991,7 +1991,7 @@ exit 1
 				runGit(workspaceRoot, ['remote', 'add', 'origin', originPath]);
 				runGit(workspaceRoot, ['push', '--set-upstream', 'origin', 'master']);
 				runGit(workspaceRoot, ['remote', 'add', 'github', 'https://github.com/Flying-Pillow/mission.git']);
-				await initializeMissionRepository(workspaceRoot);
+				await initializeRepository(workspaceRoot);
 				await commitMissionRepositoryBootstrap(workspaceRoot);
 				const adapter = new FilesystemAdapter(workspaceRoot);
 				const missionId = '42-existing-issue';
@@ -2060,7 +2060,7 @@ exit 1
 	it('surfaces and executes a delivery-gated changeset mission action from the daemon registry', async () => {
 		await withTemporaryDaemonConfigHome(async () => {
 			const workspaceRoot = await createTempRepo();
-			await initializeMissionRepository(workspaceRoot);
+			await initializeRepository(workspaceRoot);
 			const seededMission = await seedTrackedMissionInDeliveryStage(workspaceRoot, 9, 'Delivery changeset action');
 
 			try {

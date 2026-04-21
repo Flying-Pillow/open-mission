@@ -15,8 +15,8 @@ import {
     type TerminalAgentTransportOptions
 } from './TerminalAgentTransport.js';
 import {
-	deriveRepositoryIdentity,
-	slugRepositoryIdentitySegment
+    deriveRepositoryIdentity,
+    slugRepositoryIdentitySegment
 } from '../lib/repositoryIdentity.js';
 
 export type AgentRunnerDefinition = {
@@ -861,7 +861,7 @@ type ManagedAgentSessionOptions = {
 };
 
 class ManagedAgentSession implements AgentSession {
-    public constructor(private readonly options: ManagedAgentSessionOptions) {}
+    public constructor(private readonly options: ManagedAgentSessionOptions) { }
 
     public get reference(): AgentSessionReference {
         return this.options.getSnapshot().reference;
@@ -897,7 +897,7 @@ class ManagedAgentSession implements AgentSession {
 }
 
 class DetachedAgentSession implements AgentSession {
-    public constructor(private readonly snapshot: AgentSessionSnapshot) {}
+    public constructor(private readonly snapshot: AgentSessionSnapshot) { }
 
     public get reference(): AgentSessionReference {
         return this.snapshot.reference;
@@ -908,7 +908,7 @@ class DetachedAgentSession implements AgentSession {
     }
 
     public onDidEvent(): { dispose(): void } {
-        return { dispose() {} };
+        return { dispose() { } };
     }
 
     public async done(): Promise<AgentSessionSnapshot> {
@@ -969,19 +969,18 @@ function buildAgentSessionId(taskId: string, runnerId: string): string {
 }
 
 function buildTaskTerminalSessionName(
-	workingDirectory: string,
-	missionId: string,
-	taskId: string,
-	agentSessionId: string
+    workingDirectory: string,
+    missionId: string,
+    taskId: string,
+    agentSessionId: string
 ): string {
-	const repositoryId = deriveRepositoryIdentity(workingDirectory).repositoryId;
-	return [
-		'agent-shell',
-		repositoryId,
-		slugRepositoryIdentitySegment(missionId) || 'mission',
-		slugSessionSegment(taskId) || 'task',
-		slugSessionSegment(agentSessionId) || 'session'
-	].join(':');
+    const repositoryId = deriveRepositoryIdentity(workingDirectory).repositoryId;
+    return [
+        repositoryId,
+        slugRepositoryIdentitySegment(missionId) || 'mission',
+        slugSessionSegment(taskId) || 'task',
+        slugSessionSegment(agentSessionId) || 'session'
+    ].join(':');
 }
 
 function slugSessionSegment(value: string): string {

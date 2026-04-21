@@ -90,6 +90,7 @@
         <TaskActionbar
             {missionId}
             {repositoryId}
+            {repositoryRootPath}
             {refreshNonce}
             {stageId}
             {taskId}

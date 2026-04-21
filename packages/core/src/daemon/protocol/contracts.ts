@@ -1,9 +1,9 @@
 import type {
 	GitHubIssueDetail,
-	MissionSystemSnapshot,
+	SystemSnapshot,
 	GateIntent,
 	GitHubVisibleRepository,
-	MissionRepositoryCandidate,
+	RepositoryCandidate,
 	OperatorActionListSnapshot,
 	OperatorActionExecutionStep,
 	OperatorActionQueryContext,
@@ -586,7 +586,7 @@ export type AirportPaneBind = {
 export type Notification =
 	| {
 		type: 'airport.state';
-		snapshot: MissionSystemSnapshot;
+		snapshot: SystemSnapshot;
 	}
 	| {
 		type: 'mission.actions.changed';
@@ -654,11 +654,11 @@ export type SuccessResponse = {
 	ok: true;
 	result:
 	| Ping
-	| MissionSystemSnapshot
+	| SystemSnapshot
 	| OperatorStatus
 	| ControlDocumentResponse
-	| MissionRepositoryCandidate
-	| MissionRepositoryCandidate[]
+	| RepositoryCandidate
+	| RepositoryCandidate[]
 	| GitHubVisibleRepository[]
 	| GitHubIssueDetail
 	| MissionGateResult

@@ -1,5 +1,5 @@
 import { note, outro } from '@clack/prompts';
-import { DaemonApi, connectAirportControl, resolveAirportControlRuntimeMode } from '@flying-pillow/mission-core/node';
+import { DaemonApi, connectAirportDaemon, resolveAirportDaemonRuntimeMode } from '@flying-pillow/mission-core/node';
 import type { EntryContext } from './entryContext.js';
 
 export async function runAirportStatusCommand(context: EntryContext): Promise<void> {
@@ -12,9 +12,9 @@ export async function runAirportStatusCommand(context: EntryContext): Promise<vo
 		return;
 	}
 
-	const client = await connectAirportControl({
+	const client = await connectAirportDaemon({
 		surfacePath: context.workingDirectory,
-		runtimeMode: resolveAirportControlRuntimeMode(import.meta.url)
+		runtimeMode: resolveAirportDaemonRuntimeMode(import.meta.url)
 	});
 
 	try {

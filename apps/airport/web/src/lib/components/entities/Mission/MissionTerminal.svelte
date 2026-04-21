@@ -41,8 +41,12 @@
 
     let {
         missionId,
+        repositoryId,
+        repositoryRootPath,
     }: {
         missionId: string;
+        repositoryId: string;
+        repositoryRootPath: string;
     } = $props();
 
     let container = $state<HTMLDivElement | null>(null);
@@ -215,7 +219,7 @@
     ): Promise<MissionTerminalSnapshotDto | null> {
         try {
             const response = await fetch(
-                `/api/runtime/missions/${encodeURIComponent(nextMissionId)}/terminal`,
+                `/api/runtime/missions/${encodeURIComponent(nextMissionId)}/terminal?repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
             );
             if (!response.ok) {
                 const errorBody = (await response
@@ -245,7 +249,7 @@
         const wsProtocol =
             window.location.protocol === "https:" ? "wss:" : "ws:";
         const wsUrl = new URL(
-            `/api/runtime/missions/${encodeURIComponent(nextMissionId)}/terminal/ws`,
+            `/api/runtime/missions/${encodeURIComponent(nextMissionId)}/terminal/ws?repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
             `${wsProtocol}//${window.location.host}`,
         );
         const socket = new WebSocket(wsUrl);

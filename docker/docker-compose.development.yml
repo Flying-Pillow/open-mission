@@ -18,6 +18,7 @@ services:
     volumes:
       - "../:/mission"
       - "../../flying-pillow/dev/flying-pillow:/flying-pillow"
+      - "../../repositories:/repositories"
       - "${HOST_MISSIONS_PATH:-/mnt/volatile/missions}:/missions"
       - "${HOST_MISSION_CONFIG_PATH:-/mnt/volatile/config}:/config"
       - "cargo-registry:/home/dev/.cargo/registry"

@@ -40,7 +40,7 @@
 
     let { ...restProps }: ComponentProps<typeof Sidebar.Root> = $props();
 
-    const workspaceUser = $derived.by(() => {
+    const airportUser = $derived.by(() => {
         if (!appContext?.user?.name) {
             return undefined;
         }
@@ -209,9 +209,9 @@
         <NavSecondary items={bottomMenu} class="mt-auto" />
     </Sidebar.Content>
 
-    {#if workspaceUser}
+    {#if airportUser}
         <Sidebar.Footer>
-            <NavUser user={workspaceUser} />
+            <NavUser user={airportUser} />
         </Sidebar.Footer>
     {/if}
 </Sidebar.Root>

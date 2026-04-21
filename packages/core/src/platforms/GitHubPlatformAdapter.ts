@@ -166,7 +166,7 @@ export class GitHubPlatformAdapter {
 			throw new Error('GitHub repository clone requires a destination path.');
 		}
 
-		const resolvedDestinationPath = path.resolve(destinationPath);
+		const resolvedDestinationPath = resolveCloneDestinationPath(repository, destinationPath);
 		await fs.mkdir(path.dirname(resolvedDestinationPath), { recursive: true });
 		await this.runTextProcess(['repo', 'clone', repository, resolvedDestinationPath]);
 		return resolvedDestinationPath;
@@ -481,4 +481,15 @@ function parseGitHubRepositoryFromRemote(remoteUrl: string): string | undefined 
 		return `${httpsMatch.groups['owner']}/${httpsMatch.groups['repo']}`;
 	}
 	return undefined;
+}
+
+function resolveCloneDestinationPath(repository: string, destinationPath: string): string {
+	const [owner, repo, ...rest] = repository
+		.split('/')
+		.map((segment) => segment.trim())
+		.filter((segment) => segment.length > 0);
+	if (!owner || !repo || rest.length > 0) {
+		throw new Error(`GitHub repository '${repository}' is invalid.`);
+	}
+	return path.resolve(destinationPath, owner, repo);
 }

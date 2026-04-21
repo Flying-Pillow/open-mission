@@ -56,7 +56,9 @@
     );
 </script>
 
-<section class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm">
+<section
+    class="flex min-h-[24rem] flex-col rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm xl:h-full xl:min-h-0"
+>
     <div class="flex items-center justify-between gap-4">
         <div>
             <h2 class="text-lg font-semibold text-foreground">
@@ -69,7 +71,7 @@
         <Badge variant="secondary">{resolvedCountLabel}</Badge>
     </div>
 
-    <ScrollArea class="mt-4 max-h-72 pr-3">
+    <ScrollArea class="mt-4 min-h-0 flex-1 pr-3">
         <div class="grid gap-3">
             {#if mode === "repositories"}
                 {#if repositories.length === 0}
@@ -87,7 +89,9 @@
                                 class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"
                             >
                                 <div>
-                                    <div class="flex flex-wrap items-center gap-2">
+                                    <div
+                                        class="flex flex-wrap items-center gap-2"
+                                    >
                                         <h3
                                             class="text-sm font-semibold text-foreground"
                                         >
@@ -128,63 +132,61 @@
                         </article>
                     {/each}
                 {/if}
+            {:else if missions.length === 0}
+                <div
+                    class="rounded-xl border border-dashed bg-background/60 px-4 py-8 text-sm text-muted-foreground"
+                >
+                    {resolvedEmptyMessage}
+                </div>
             {:else}
-                {#if missions.length === 0}
-                    <div
-                        class="rounded-xl border border-dashed bg-background/60 px-4 py-8 text-sm text-muted-foreground"
+                {#each missions as mission (mission.missionId)}
+                    <article
+                        class="rounded-xl border bg-background/70 px-4 py-4"
                     >
-                        {resolvedEmptyMessage}
-                    </div>
-                {:else}
-                    {#each missions as mission (mission.missionId)}
-                        <article
-                            class="rounded-xl border bg-background/70 px-4 py-4"
+                        <div
+                            class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"
                         >
-                            <div
-                                class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"
-                            >
-                                <div>
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <h3
-                                            class="text-sm font-semibold text-foreground"
+                            <div>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <h3
+                                        class="text-sm font-semibold text-foreground"
+                                    >
+                                        {mission.title}
+                                    </h3>
+                                    {#if mission.issueId}
+                                        <Badge variant="outline"
+                                            >Issue #{mission.issueId}</Badge
                                         >
-                                            {mission.title}
-                                        </h3>
-                                        {#if mission.issueId}
-                                            <Badge variant="outline"
-                                                >Issue #{mission.issueId}</Badge
-                                            >
-                                        {/if}
-                                        {#if mission.missionId === selectedMissionId}
-                                            <Badge variant="secondary"
-                                                >Selected</Badge
-                                            >
-                                        {/if}
-                                    </div>
-                                    <p
-                                        class="mt-1 font-mono text-xs text-muted-foreground"
-                                    >
-                                        {mission.missionId}
-                                    </p>
-                                    <p class="mt-1 text-sm text-muted-foreground">
-                                        Branch: {mission.branchRef}
-                                    </p>
-                                    <p class="mt-1 text-sm text-muted-foreground">
-                                        Created: {mission.createdAt}
-                                    </p>
+                                    {/if}
+                                    {#if mission.missionId === selectedMissionId}
+                                        <Badge variant="secondary"
+                                            >Selected</Badge
+                                        >
+                                    {/if}
                                 </div>
-                                <div class="flex flex-wrap gap-2">
-                                    <Button
-                                        href={`/repository/${encodeURIComponent(repositoryId ?? "")}/missions/${encodeURIComponent(mission.missionId)}`}
-                                        variant="outline"
-                                    >
-                                        Select mission
-                                    </Button>
-                                </div>
+                                <p
+                                    class="mt-1 font-mono text-xs text-muted-foreground"
+                                >
+                                    {mission.missionId}
+                                </p>
+                                <p class="mt-1 text-sm text-muted-foreground">
+                                    Branch: {mission.branchRef}
+                                </p>
+                                <p class="mt-1 text-sm text-muted-foreground">
+                                    Created: {mission.createdAt}
+                                </p>
                             </div>
-                        </article>
-                    {/each}
-                {/if}
+                            <div class="flex flex-wrap gap-2">
+                                <Button
+                                    href={`/repository/${encodeURIComponent(repositoryId ?? "")}/missions/${encodeURIComponent(mission.missionId)}`}
+                                    variant="outline"
+                                >
+                                    Select mission
+                                </Button>
+                            </div>
+                        </div>
+                    </article>
+                {/each}
             {/if}
         </div>
     </ScrollArea>

@@ -23,8 +23,8 @@ import {
 	isNamedPipePath,
 	resolveDaemonSocketPath
 } from './daemonPaths.js';
-import { MissionSystemController } from './control-plane/MissionSystemController.js';
-import { WorkspaceManager } from '../workspace/WorkspaceManager.js';
+import { SystemController } from './control-plane/SystemController.js';
+import { RepositoryManager } from '../repository/RepositoryManager.js';
 import type { AgentRunner } from '../agent/AgentRunner.js';
 import { readSystemStatus } from '../system/SystemStatus.js';
 
@@ -38,8 +38,8 @@ export class Daemon {
 	private readonly server = net.createServer();
 	private readonly clients = new Set<Socket>();
 	private readonly runners = new Map<string, AgentRunner>();
-	private readonly systemController: MissionSystemController;
-	private readonly workspaceManager: WorkspaceManager;
+	private readonly systemController: SystemController;
+	private readonly repositoryManager: RepositoryManager;
 	private readonly shutdownPromise: Promise<void>;
 	private readonly socketPath: string;
 	private readonly logLine: ((line: string) => void) | undefined;
@@ -56,8 +56,8 @@ export class Daemon {
 		for (const runner of options.runners ?? []) {
 			this.runners.set(runner.id, runner);
 		}
-		this.workspaceManager = new WorkspaceManager(this.runners, (event) => this.broadcastEvent(event));
-		this.systemController = new MissionSystemController(this.workspaceManager);
+		this.repositoryManager = new RepositoryManager(this.runners, (event) => this.broadcastEvent(event));
+		this.systemController = new SystemController(this.repositoryManager);
 		this.shutdownPromise = new Promise<void>((resolve) => {
 			this.resolveShutdown = resolve;
 		});
@@ -246,7 +246,7 @@ export class Daemon {
 			return this.executeAirportPaneBind(request);
 		}
 
-		const result = await this.workspaceManager.executeMethod(request);
+		const result = await this.repositoryManager.executeMethod(request);
 		return this.decorateRequestResultWithSystemState(request, result);
 	}
 
@@ -416,8 +416,8 @@ export class Daemon {
 			return result;
 		}
 
-		const workspaceRoot = this.workspaceManager.resolveWorkspaceRootForRequest(request, result);
-		if (!workspaceRoot) {
+		const repositoryRoot = this.repositoryManager.resolveRepositoryRootForRequest(request, result);
+		if (!repositoryRoot) {
 			return result;
 		}
 
@@ -428,7 +428,7 @@ export class Daemon {
 				? result.status
 				: undefined;
 		const snapshot = await this.systemController.synchronizeWorkspace({
-			workspaceRoot,
+			workspaceRoot: repositoryRoot,
 			...(selectionHint ? { selectionHint } : {}),
 			...(missionStatusHint ? { missionStatusHint } : {})
 		});
@@ -472,7 +472,7 @@ export class Daemon {
 		}
 	}
 
-	private broadcastAirportState(snapshot: import('../types.js').MissionSystemSnapshot): void {
+	private broadcastAirportState(snapshot: import('../types.js').SystemSnapshot): void {
 		this.logLine?.(
 			`Broadcasting airport.state version=${String(snapshot.state.version)}`
 		);
@@ -535,11 +535,11 @@ export class Daemon {
 
 }
 
-function isOperatorStatus(value: unknown): value is import('../types.js').OperatorStatus & { system?: import('../types.js').MissionSystemSnapshot } {
+function isOperatorStatus(value: unknown): value is import('../types.js').OperatorStatus & { system?: import('../types.js').SystemSnapshot } {
 	return Boolean(value && typeof value === 'object' && 'found' in value && typeof (value as { found?: unknown }).found === 'boolean');
 }
 
-function hasEmbeddedOperatorStatus(value: unknown): value is { status: import('../types.js').OperatorStatus & { system?: import('../types.js').MissionSystemSnapshot } } {
+function hasEmbeddedOperatorStatus(value: unknown): value is { status: import('../types.js').OperatorStatus & { system?: import('../types.js').SystemSnapshot } } {
 	if (!value || typeof value !== 'object' || !('status' in value)) {
 		return false;
 	}

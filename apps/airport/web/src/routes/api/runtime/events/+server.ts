@@ -22,6 +22,7 @@ export const GET: RequestHandler = async ({ locals, request, url }) => {
     const query = airportRuntimeEventsQuerySchema.parse({
         missionId: url.searchParams.get('missionId') ?? undefined
     });
+    const repositoryRootPath = url.searchParams.get('repositoryRootPath')?.trim() || undefined;
     const gateway = new AirportWebGateway(locals);
     const encoder = new TextEncoder();
 
@@ -69,6 +70,7 @@ export const GET: RequestHandler = async ({ locals, request, url }) => {
 
             const subscription = await gateway.openEventSubscription({
                 missionId: query.missionId,
+                ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {}),
                 onEvent: (event) => {
                     if (closed) {
                         return;

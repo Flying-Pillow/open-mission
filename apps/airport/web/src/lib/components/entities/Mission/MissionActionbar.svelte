@@ -4,11 +4,13 @@
     let {
         missionId,
         repositoryId,
+        repositoryRootPath,
         refreshNonce,
         onActionExecuted,
     }: {
         missionId: string;
         repositoryId: string;
+        repositoryRootPath: string;
         refreshNonce: number;
         onActionExecuted: () => Promise<void>;
     } = $props();
@@ -17,6 +19,7 @@
 <ScopedActionbar
     {missionId}
     {repositoryId}
+    {repositoryRootPath}
     {refreshNonce}
     scope="mission"
     class="xl:justify-end"

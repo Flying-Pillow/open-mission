@@ -114,7 +114,9 @@
 <SidebarProvider>
     <AirportSidebar variant="inset" />
 
-    <SidebarInset>
+    <SidebarInset
+        class="min-h-svh xl:h-svh xl:min-h-0 xl:overflow-hidden md:peer-data-[variant=inset]:my-0"
+    >
         <AirportHeader />
         <AirportHomeSurface
             {data}

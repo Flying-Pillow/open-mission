@@ -321,7 +321,7 @@ export type MissionSelectionCandidate = {
 	issueId?: number;
 };
 
-export type MissionRepositoryCandidate = {
+export type RepositoryCandidate = {
 	repositoryId: string;
 	repositoryRootPath: string;
 	label: string;
@@ -457,7 +457,7 @@ export type ContextGraph = {
 	agentSessions: Record<string, AgentSessionContext>;
 };
 
-export type MissionSystemState = {
+export type SystemState = {
 	version: number;
 	domain: ContextGraph;
 	missionOperatorViews: Record<string, MissionOperatorProjectionContext>;
@@ -473,13 +473,13 @@ export type MissionSystemState = {
 	};
 };
 
-export type MissionSystemSnapshot = {
-	state: MissionSystemState;
+export type SystemSnapshot = {
+	state: SystemState;
 	airportProjections: AirportProjectionSet;
 	airportRegistryProjections: Record<string, AirportProjectionSet>;
 };
 
-export type MissionControlPlaneStatus = {
+export type RepositoryControlStatus = {
 	controlRoot: string;
 	missionDirectory: string;
 	settingsPath: string;
@@ -566,8 +566,8 @@ export type MissionTowerProjection = {
 export type OperatorStatus = {
 	found: boolean;
 	operationalMode?: MissionOperationalMode;
-	control?: MissionControlPlaneStatus;
-	system?: MissionSystemSnapshot;
+	control?: RepositoryControlStatus;
+	system?: SystemSnapshot;
 	missionId?: string;
 	title?: string;
 	issueId?: number;
@@ -595,7 +595,7 @@ export type OperatorStatus = {
 	};
 	recommendedAction?: string;
 	availableMissions?: MissionSelectionCandidate[];
-	availableRepositories?: MissionRepositoryCandidate[];
+	availableRepositories?: RepositoryCandidate[];
 	preparation?: MissionPreparationStatus;
 };
 

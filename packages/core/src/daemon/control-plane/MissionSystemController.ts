@@ -12,17 +12,17 @@ import path from 'node:path';
 import type {
 	ContextGraph,
 	ContextSelection,
-	MissionSystemSnapshot,
-	MissionSystemState,
+	SystemSnapshot,
+	SystemState,
 	OperatorStatus
 } from '../../types.js';
 import { peekCachedSystemStatus } from '../../system/SystemStatus.js';
-import { MissionControl } from './ContextGraphControl.js';
+import { ContextGraphController } from './ContextGraphControl.js';
 import { deriveSystemAirportProjections } from './AirportProjectionService.js';
-import { RepositoryAirportRegistry } from './RepositoryAirportRegistry.js';
-import { WorkspaceManager } from '../../workspace/WorkspaceManager.js';
+import { RepositoryLayoutRegistry } from './RepositoryLayoutRegistry.js';
+import { RepositoryManager } from '../../repository/RepositoryManager.js';
 import { deriveRepositoryIdentity } from '../../lib/repositoryIdentity.js';
-import { findRegisteredMissionUserRepoById } from '../../lib/userConfig.js';
+import { findRegisteredUserRepositoryById } from '../../lib/userConfig.js';
 
 type MissionSystemCommand =
 	| {
@@ -63,20 +63,20 @@ type MissionSystemCommand =
 	};
 
 export class MissionSystemController {
-	private readonly missionControl = new MissionControl();
-	private readonly airportRegistry = new RepositoryAirportRegistry();
+	private readonly missionControl = new ContextGraphController();
+	private readonly airportRegistry = new RepositoryLayoutRegistry();
 	private version = 0;
 	private serializedState = '';
 
-	public constructor(private readonly workspaceManager: WorkspaceManager) {
+	public constructor(private readonly repositoryManager: RepositoryManager) {
 		this.serializedState = this.serializeSystemState();
 	}
 
-	public getSnapshot(): MissionSystemSnapshot {
+	public getSnapshot(): SystemSnapshot {
 		return this.buildSnapshot();
 	}
 
-	public async scopeAirportToSurfacePath(surfacePath?: string): Promise<MissionSystemSnapshot> {
+	public async scopeAirportToSurfacePath(surfacePath?: string): Promise<SystemSnapshot> {
 		return this.dispatch({
 			kind: 'workspace.synchronized',
 			...(surfacePath?.trim() ? { surfacePath: surfacePath.trim() } : {})
@@ -88,7 +88,7 @@ export class MissionSystemController {
 		workspaceRoot?: string;
 		selectionHint?: Partial<ContextSelection>;
 		missionStatusHint?: OperatorStatus;
-	}): Promise<MissionSystemSnapshot> {
+	}): Promise<SystemSnapshot> {
 		return this.dispatch({
 			kind: 'workspace.synchronized',
 			...(input.surfacePath?.trim() ? { surfacePath: input.surfacePath.trim() } : {}),
@@ -106,11 +106,11 @@ export class MissionSystemController {
 		panelProcessId?: string;
 		terminalPaneId?: number;
 		terminalSessionName?: string;
-	}): Promise<MissionSystemSnapshot> {
+	}): Promise<SystemSnapshot> {
 		return this.dispatch({ kind: 'airport.client.connected', params });
 	}
 
-	public async disconnectAirportClient(clientId: string): Promise<MissionSystemSnapshot | undefined> {
+	public async disconnectAirportClient(clientId: string): Promise<SystemSnapshot | undefined> {
 		if (!this.airportRegistry.getRepositoryIdForClient(clientId)) {
 			return undefined;
 		}
@@ -125,7 +125,7 @@ export class MissionSystemController {
 		surfacePath?: string;
 		terminalPaneId?: number;
 		terminalSessionName?: string;
-	}): Promise<MissionSystemSnapshot> {
+	}): Promise<SystemSnapshot> {
 		return this.dispatch({ kind: 'airport.client.observed', params });
 	}
 
@@ -133,14 +133,14 @@ export class MissionSystemController {
 		paneId: Exclude<AirportPaneId, 'tower'>;
 		binding: PaneBinding;
 		surfacePath?: string;
-	}): Promise<MissionSystemSnapshot> {
+	}): Promise<SystemSnapshot> {
 		return this.dispatch({ kind: 'airport.pane.bound', params });
 	}
 
 	private async dispatch(
 		command: MissionSystemCommand,
 		options: { applyEffects?: boolean } = {}
-	): Promise<MissionSystemSnapshot> {
+	): Promise<SystemSnapshot> {
 		const touchedRepositoryIds = await this.reduceCommand(command);
 		const plannedEffects = this.planEffects(touchedRepositoryIds);
 		await this.commit();
@@ -184,7 +184,7 @@ export class MissionSystemController {
 		const scopedWorkspaceRoot = command.workspaceRoot?.trim()
 			? path.resolve(command.workspaceRoot.trim())
 			: command.surfacePath?.trim()
-				? this.workspaceManager.resolveWorkspaceRootForSurfacePath(command.surfacePath.trim())
+				? this.repositoryManager.resolveRepositoryRootForSurfacePath(command.surfacePath.trim())
 				: undefined;
 		const scopedRepositoryId = scopedWorkspaceRoot
 			? deriveRepositoryIdentity(scopedWorkspaceRoot).repositoryId
@@ -193,9 +193,9 @@ export class MissionSystemController {
 			|| (scopedRepositoryId && currentSelection.repositoryId === scopedRepositoryId
 				? currentSelection.missionId?.trim()
 				: undefined);
-		const source = await this.workspaceManager.readMissionControlSource({
+		const source = await this.repositoryManager.readControlSource({
 			...(command.surfacePath?.trim() ? { surfacePath: command.surfacePath.trim() } : {}),
-			...(command.workspaceRoot?.trim() ? { workspaceRoot: command.workspaceRoot.trim() } : {}),
+			...(command.workspaceRoot?.trim() ? { repositoryRoot: command.workspaceRoot.trim() } : {}),
 			...(selectedMissionId ? { selectedMissionId } : {}),
 			...(command.missionStatusHint ? { missionStatusHint: command.missionStatusHint } : {})
 		});
@@ -263,18 +263,18 @@ export class MissionSystemController {
 
 	private reduceAirportPaneBound(params: BindAirportPaneParams & { surfacePath?: string }): string[] {
 		const repositoryId = params.surfacePath?.trim()
-			? this.workspaceManager.resolveWorkspaceRootForSurfacePath(params.surfacePath.trim())
-			: this.airportRegistry.getActiveAirport().repositoryId;
+			? deriveRepositoryIdentity(this.repositoryManager.resolveRepositoryRootForSurfacePath(params.surfacePath.trim())).repositoryId
+			: this.airportRegistry.getActiveLayout().repositoryId;
 		this.airportRegistry.bindPane(repositoryId, params);
 		return [repositoryId];
 	}
 
 	private planEffects(touchedRepositoryIds: string[]): Array<{ repositoryId: string; effects: AirportSubstrateEffect[] }> {
 		return [...new Set(touchedRepositoryIds)].map((repositoryId) => {
-			const record = this.airportRegistry.listAirportRecords().find(([candidateRepositoryId]) => candidateRepositoryId === repositoryId)?.[1];
+			const record = this.airportRegistry.listLayoutRecords().find(([candidateRepositoryId]) => candidateRepositoryId === repositoryId)?.[1];
 			return {
 				repositoryId,
-				effects: record ? planAirportSubstrateEffects(record.control.getState()) : []
+				effects: record ? planAirportSubstrateEffects(record.layoutController.getState()) : []
 			};
 		});
 	}
@@ -309,27 +309,27 @@ export class MissionSystemController {
 		}
 	}
 
-	private buildSnapshot(): MissionSystemSnapshot {
-		const activeAirport = this.airportRegistry.getActiveAirport();
+	private buildSnapshot(): SystemSnapshot {
+		const activeAirport = this.airportRegistry.getActiveLayout();
 		const domain = this.missionControl.getState();
 		const missionOperatorViews = this.missionControl.getMissionOperatorViews();
 		const airportRegistryState = Object.fromEntries(
-			this.airportRegistry.listAirportRecords().map(([repositoryId, record]) => [
+			this.airportRegistry.listLayoutRecords().map(([repositoryId, record]) => [
 				repositoryId,
 				{
 					repositoryId,
 					repositoryRootPath: record.repositoryRootPath,
-					airport: record.control.getState(),
-					persistedIntent: record.control.getPersistedIntent()
+					airport: record.layoutController.getState(),
+					persistedIntent: record.layoutController.getPersistedIntent()
 				}
 			])
 		);
 		const activeRepositoryId = this.airportRegistry.getActiveRepositoryId();
-		const state: MissionSystemState = {
+		const state: SystemState = {
 			version: this.version,
 			domain,
 			missionOperatorViews,
-			airport: activeAirport.control.getState(),
+			airport: activeAirport.layoutController.getState(),
 			airports: {
 				repositories: airportRegistryState,
 				...(activeRepositoryId ? { activeRepositoryId } : {})
@@ -340,15 +340,15 @@ export class MissionSystemController {
 		});
 		const airportProjections: AirportProjectionSet = deriveSystemAirportProjections(
 			domain,
-			activeAirport.control.getState(),
+			activeAirport.layoutController.getState(),
 			systemStatus
 		);
 		const airportRegistryProjections = Object.fromEntries(
-			this.airportRegistry.listAirportRecords().map(([repositoryId, record]) => [
+			this.airportRegistry.listLayoutRecords().map(([repositoryId, record]) => [
 				repositoryId,
 				deriveSystemAirportProjections(
 					domain,
-					record.control.getState(),
+					record.layoutController.getState(),
 					peekCachedSystemStatus({
 						...(record.repositoryRootPath ? { cwd: record.repositoryRootPath } : {})
 					})
@@ -364,7 +364,7 @@ export class MissionSystemController {
 			missionOperatorViews: this.missionControl.getMissionOperatorViews(),
 			activeRepositoryId: this.airportRegistry.getActiveRepositoryId(),
 			airports: Object.fromEntries(
-				this.airportRegistry.listAirportRecords().map(([repositoryId, record]) => [repositoryId, record.control.getState()])
+				this.airportRegistry.listLayoutRecords().map(([repositoryId, record]) => [repositoryId, record.layoutController.getState()])
 			)
 		});
 	}
@@ -372,21 +372,27 @@ export class MissionSystemController {
 	private async resolveRepositoryId(clientId: string, surfacePath?: string, repositoryId?: string): Promise<string> {
 		const explicitRepositoryId = repositoryId?.trim();
 		if (explicitRepositoryId) {
-			const registeredRepository = await findRegisteredMissionUserRepoById(explicitRepositoryId);
-			if (!registeredRepository) {
-				throw new Error(`Unknown repository id: ${explicitRepositoryId}`);
+			const registeredRepository = await findRegisteredUserRepositoryById(explicitRepositoryId);
+			if (registeredRepository) {
+				const repositoryRootPath = registeredRepository.repositoryRootPath;
+				await this.airportRegistry.activateRepository(explicitRepositoryId, repositoryRootPath);
+				return explicitRepositoryId;
 			}
-			const repositoryRootPath = registeredRepository.repositoryRootPath;
-			await this.airportRegistry.activateRepository(explicitRepositoryId, repositoryRootPath);
-			return explicitRepositoryId;
+			if (path.isAbsolute(explicitRepositoryId)) {
+				const repositoryRootPath = path.resolve(explicitRepositoryId);
+				const resolvedRepositoryId = deriveRepositoryIdentity(repositoryRootPath).repositoryId;
+				await this.airportRegistry.activateRepository(resolvedRepositoryId, repositoryRootPath);
+				return resolvedRepositoryId;
+			}
+			throw new Error(`Unknown repository id: ${explicitRepositoryId}`);
 		}
 		if (surfacePath?.trim()) {
-			const repositoryRootPath = this.workspaceManager.resolveWorkspaceRootForSurfacePath(surfacePath.trim());
+			const repositoryRootPath = this.repositoryManager.resolveRepositoryRootForSurfacePath(surfacePath.trim());
 			const resolvedRepositoryId = deriveRepositoryIdentity(repositoryRootPath).repositoryId;
 			await this.airportRegistry.activateRepository(resolvedRepositoryId, repositoryRootPath);
 			return resolvedRepositoryId;
 		}
-		const airport = await this.airportRegistry.resolveAirportForRequest(clientId);
+		const airport = await this.airportRegistry.resolveLayoutForRequest(clientId);
 		return airport.repositoryId;
 	}
 }

@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import { Mission } from './Mission.js';
 import type { MissionWorkflowBindings } from './Mission.js';
-import { initializeMissionRepository } from '../repository/initializeMissionRepository.js';
+import { initializeRepository } from '../repository/initializeRepository.js';
 import { readMissionDaemonSettings } from '../lib/daemonConfig.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import type { MissionBrief, MissionDescriptor, MissionPreparationStatus } from '../types.js';
@@ -34,7 +34,7 @@ export class MissionPreparationService {
 			const proposalStore = new FilesystemAdapter(proposalWorktreePath);
 			const initialization = readMissionDaemonSettings(proposalWorktreePath)
 				? undefined
-				: await initializeMissionRepository(proposalWorktreePath, {
+				: await initializeRepository(proposalWorktreePath, {
 					includeRuntimeDirectories: false
 				});
 			const missionRootDir = proposalStore.getTrackedMissionDir(missionId, proposalWorktreePath);

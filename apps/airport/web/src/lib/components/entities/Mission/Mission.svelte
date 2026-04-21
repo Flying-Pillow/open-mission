@@ -8,6 +8,7 @@
 
     let {
         repository,
+        runtimeRepositoryRootPath,
         mission,
         refreshNonce,
         operatorStatus,
@@ -16,6 +17,7 @@
         onMissionMutated,
     }: {
         repository: RepositoryCandidateDto;
+        runtimeRepositoryRootPath: string;
         mission: MissionEntity;
         refreshNonce: number;
         operatorStatus: OperatorStatus;
@@ -67,6 +69,7 @@
             <MissionActionbar
                 missionId={mission.missionId}
                 repositoryId={repository.repositoryId}
+                repositoryRootPath={runtimeRepositoryRootPath}
                 {refreshNonce}
                 onActionExecuted={onMissionMutated}
             />

@@ -4,26 +4,26 @@ import type {
 } from '../protocol/contracts.js';
 import type {
 	ContextSelection,
-	MissionControlPlaneStatus,
-	MissionRepositoryCandidate,
+	RepositoryControlStatus,
+	RepositoryCandidate,
 	MissionSelectionCandidate,
 	MissionTaskState,
 	MissionTowerProjection,
 	OperatorStatus
 } from '../../types.js';
 
-export type MissionControlSource = {
+export type ControlSource = {
 	repositoryId: string;
 	repositoryRootPath: string;
-	control: MissionControlPlaneStatus;
-	availableRepositories: MissionRepositoryCandidate[];
+	control: RepositoryControlStatus;
+	availableRepositories: RepositoryCandidate[];
 	availableMissions: MissionSelectionCandidate[];
 	missionStatus?: OperatorStatus;
 };
 
-export type MissionControlSourceSelectionHint = Partial<ContextSelection>;
+export type ControlSourceSelectionHint = Partial<ContextSelection>;
 
-export type MissionControlMissionStatusSource = Pick<
+export type ControlMissionStatusSource = Pick<
 	OperatorStatus,
 	| 'missionId'
 	| 'title'
@@ -42,19 +42,19 @@ export type MissionControlMissionStatusSource = Pick<
 	| 'workflow'
 >;
 
-export type MissionControlWorkspaceSource = {
+export type ControlWorkspaceSource = {
 	repositoryId: string;
 	repositoryRootPath: string;
-	control: MissionControlPlaneStatus;
-	availableRepositories: MissionRepositoryCandidate[];
+	control: RepositoryControlStatus;
+	availableRepositories: RepositoryCandidate[];
 	availableMissions: MissionSelectionCandidate[];
-	missionStatus?: MissionControlMissionStatusSource;
+	missionStatus?: ControlMissionStatusSource;
 };
 
-export type MissionControlDocumentPathField = ControlSettingsUpdate['field'];
+export type ControlDocumentPathField = ControlSettingsUpdate['field'];
 
-export type MissionControlAgentSessions = MissionAgentSessionRecord[];
+export type ControlAgentSessions = MissionAgentSessionRecord[];
 
-export type MissionControlTowerProjection = MissionTowerProjection;
+export type ControlTowerProjection = MissionTowerProjection;
 
-export type MissionControlTaskList = MissionTaskState[];
+export type ControlTaskList = MissionTaskState[];

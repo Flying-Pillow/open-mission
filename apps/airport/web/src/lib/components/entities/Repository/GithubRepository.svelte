@@ -1,37 +1,56 @@
 <script lang="ts">
+    import { enhance } from "$app/forms";
     import type { GitHubVisibleRepositorySummary } from "$lib/components/entities/types";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
+    import * as Dialog from "$lib/components/ui/dialog/index.js";
+    import { Input } from "$lib/components/ui/input/index.js";
     import { Separator } from "$lib/components/ui/separator/index.js";
-    import * as Sheet from "$lib/components/ui/sheet/index.js";
 
     let {
         repository,
-        selected = false,
-        onSelect = () => {},
+        addRepositoryState,
     }: {
         repository: GitHubVisibleRepositorySummary;
-        selected?: boolean;
-        onSelect?: (repository: GitHubVisibleRepositorySummary) => void;
+        addRepositoryState?: {
+            error?: string;
+            success?: boolean;
+            repositoryPath?: string;
+            githubRepository?: string;
+        };
     } = $props();
 
+    const uid = $props.id();
+    const defaultRepositoryPath = "/repositories";
     let detailsOpen = $state(false);
+    let repositoryPath = $state(defaultRepositoryPath);
+    const cloneTargetPath = $derived(
+        `${repositoryPath.replace(/\/+$/u, "") || "/"}/${repository.fullName}`,
+    );
 
-    function handleSelect(): void {
-        onSelect(repository);
+    const cloneState = $derived(
+        addRepositoryState?.githubRepository === repository.fullName
+            ? addRepositoryState
+            : undefined,
+    );
+
+    function handleUseRepository(): void {
+        repositoryPath = cloneState?.repositoryPath ?? defaultRepositoryPath;
     }
 </script>
 
 <article
-    class={`rounded-2xl border px-4 py-4 transition-colors ${selected ? "border-primary/40 bg-primary/5" : "bg-background/70 hover:bg-background"}`}
+    class="rounded-2xl border bg-background/70 px-4 py-4 transition-colors hover:bg-background"
 >
-    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div
+        class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"
+    >
         <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
                 <h3 class="truncate text-sm font-semibold text-foreground">
                     {repository.fullName}
                 </h3>
-                <Badge variant={selected ? "default" : "outline"}>
+                <Badge variant="outline">
                     {repository.visibility}
                 </Badge>
                 {#if repository.archived}
@@ -47,107 +66,180 @@
         </div>
 
         <div class="flex flex-wrap gap-2 lg:justify-end">
-            <Button type="button" variant="outline" size="sm" onclick={handleSelect}>
-                {selected ? "Selected" : "Use repository"}
-            </Button>
-            <Sheet.Root bind:open={detailsOpen}>
-                <Sheet.Trigger>
+            <Dialog.Root bind:open={detailsOpen}>
+                <Dialog.Trigger>
                     {#snippet child({ props })}
-                        <Button type="button" variant="ghost" size="sm" {...props}>
-                            Details
+                        <Button
+                            type="button"
+                            size="sm"
+                            onclick={handleUseRepository}
+                            {...props}
+                        >
+                            Use repository
                         </Button>
                     {/snippet}
-                </Sheet.Trigger>
-                <Sheet.Content side="right" class="w-full sm:max-w-xl">
-                    <Sheet.Header class="gap-3 border-b bg-card/60">
+                </Dialog.Trigger>
+                <Dialog.Content class="sm:max-w-xl">
+                    <Dialog.Header class="gap-3 pr-10">
                         <div class="flex flex-wrap items-center gap-2">
                             <Badge variant="outline">GitHub</Badge>
-                            <Badge variant={repository.visibility === "private" ? "secondary" : "outline"}>
+                            <Badge
+                                variant={repository.visibility === "private"
+                                    ? "secondary"
+                                    : "outline"}
+                            >
                                 {repository.visibility}
                             </Badge>
                             {#if repository.archived}
                                 <Badge variant="secondary">Archived</Badge>
                             {/if}
                         </div>
-                        <Sheet.Title>{repository.fullName}</Sheet.Title>
-                        <Sheet.Description>
-                            Review the repository metadata, then use it as the source for Airport registration.
-                        </Sheet.Description>
-                    </Sheet.Header>
+                        <Dialog.Title>{repository.fullName}</Dialog.Title>
+                        <Dialog.Description>
+                            Review the repository details and choose where
+                            Airport should clone it on the daemon host.
+                        </Dialog.Description>
+                    </Dialog.Header>
 
-                    <div class="grid gap-4 p-6">
+                    <form
+                        method="POST"
+                        action="?/addRepository"
+                        use:enhance
+                        class="grid gap-5"
+                    >
+                        <input
+                            type="hidden"
+                            name="githubRepository"
+                            value={repository.fullName}
+                        />
+
                         <div class="grid gap-3 sm:grid-cols-2">
-                            <div class="rounded-2xl border bg-background/80 p-4">
-                                <p class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                            <div
+                                class="rounded-2xl border bg-background/80 p-4"
+                            >
+                                <p
+                                    class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
+                                >
                                     Owner
                                 </p>
-                                <p class="mt-2 text-sm font-medium text-foreground">
+                                <p
+                                    class="mt-2 text-sm font-medium text-foreground"
+                                >
                                     {repository.ownerLogin ?? "Unavailable"}
                                 </p>
                             </div>
-                            <div class="rounded-2xl border bg-background/80 p-4">
-                                <p class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                            <div
+                                class="rounded-2xl border bg-background/80 p-4"
+                            >
+                                <p
+                                    class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
+                                >
                                     Status
                                 </p>
-                                <p class="mt-2 text-sm font-medium text-foreground">
-                                    {repository.archived ? "Archived repository" : "Active repository"}
+                                <p
+                                    class="mt-2 text-sm font-medium text-foreground"
+                                >
+                                    {repository.archived
+                                        ? "Archived repository"
+                                        : "Active repository"}
                                 </p>
                             </div>
                         </div>
 
                         <div class="rounded-3xl border bg-muted/40 p-4">
-                            <p class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                            <p
+                                class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
+                            >
                                 Full name
                             </p>
-                            <p class="mt-2 text-base font-semibold text-foreground">
+                            <p
+                                class="mt-2 text-base font-semibold text-foreground"
+                            >
                                 {repository.fullName}
                             </p>
                             <Separator class="my-4" />
-                            <p class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                            <p
+                                class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
+                            >
                                 Remote URL
                             </p>
-                            <p class="mt-2 break-all font-mono text-xs text-muted-foreground">
+                            <p
+                                class="mt-2 break-all font-mono text-xs text-muted-foreground"
+                            >
                                 {repository.htmlUrl ?? "URL unavailable"}
                             </p>
                         </div>
-                    </div>
 
-                    <Sheet.Footer class="border-t bg-card/40 sm:flex-row sm:justify-between">
-                        {#if repository.htmlUrl}
-                            <Button
-                                href={repository.htmlUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                variant="outline"
+                        <div class="grid gap-2">
+                            <label
+                                class="text-sm font-medium text-foreground"
+                                for={`${uid}-repository-path`}
                             >
-                                Open on GitHub
-                            </Button>
-                        {:else}
-                            <span class="text-sm text-muted-foreground">
-                                GitHub URL is not available for this repository.
-                            </span>
-                        {/if}
-                        <div class="flex flex-wrap gap-2">
-                            <Sheet.Close>
-                                {#snippet child({ props })}
-                                    <Button type="button" variant="ghost" {...props}>
-                                        Close
-                                    </Button>
-                                {/snippet}
-                            </Sheet.Close>
-                            <Button
-                                type="button"
-                                onclick={() => {
-                                    handleSelect();
-                                    detailsOpen = false;
-                                }}
-                            >
-                                Use for registration
-                            </Button>
+                                Clone base folder
+                            </label>
+                            <Input
+                                id={`${uid}-repository-path`}
+                                name="repositoryPath"
+                                placeholder="/repositories"
+                                bind:value={repositoryPath}
+                            />
+                            <p class="text-sm text-muted-foreground">
+                                Airport sends this absolute base folder to the
+                                daemon, which then clones into:
+                                <span
+                                    class="mt-1 block font-mono text-xs text-foreground"
+                                >
+                                    {cloneTargetPath}
+                                </span>
+                            </p>
                         </div>
-                    </Sheet.Footer>
-                </Sheet.Content>
-            </Sheet.Root>
+
+                        {#if cloneState?.error}
+                            <p class="text-sm text-rose-600">
+                                {cloneState.error}
+                            </p>
+                        {/if}
+
+                        {#if cloneState?.success}
+                            <p class="text-sm text-emerald-600">
+                                Repository ready: {cloneState.repositoryPath}
+                            </p>
+                        {/if}
+
+                        <Dialog.Footer class="pt-2 sm:justify-between">
+                            {#if repository.htmlUrl}
+                                <Button
+                                    href={repository.htmlUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    variant="outline"
+                                >
+                                    Open on GitHub
+                                </Button>
+                            {:else}
+                                <span class="text-sm text-muted-foreground">
+                                    GitHub URL is not available for this
+                                    repository.
+                                </span>
+                            {/if}
+                            <div class="flex flex-wrap gap-2">
+                                <Dialog.Close>
+                                    {#snippet child({ props })}
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            {...props}
+                                        >
+                                            Close
+                                        </Button>
+                                    {/snippet}
+                                </Dialog.Close>
+                                <Button type="submit">Clone repository</Button>
+                            </div>
+                        </Dialog.Footer>
+                    </form>
+                </Dialog.Content>
+            </Dialog.Root>
         </div>
     </div>
 </article>

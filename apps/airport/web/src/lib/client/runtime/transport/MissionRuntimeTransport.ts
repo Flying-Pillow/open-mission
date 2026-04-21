@@ -15,6 +15,17 @@ export class MissionRuntimeTransport extends EntityRuntimeTransport<
     MissionRuntimeSnapshotDto,
     AirportRuntimeEventEnvelopeDto
 > {
+    private readonly repositoryRootPath?: string;
+
+    public constructor(input: {
+        fetch?: typeof fetch;
+        createEventSource?: (url: string) => EventSource;
+        repositoryRootPath?: string;
+    } = {}) {
+        super(input);
+        this.repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
+    }
+
     public async getMissionRuntimeSnapshot(missionId: string): Promise<MissionRuntimeSnapshotDto> {
         return this.getSnapshot(missionId);
     }
@@ -32,11 +43,15 @@ export class MissionRuntimeTransport extends EntityRuntimeTransport<
     }
 
     protected buildSnapshotUrl(missionId: string): string {
-        return `/api/runtime/missions/${encodeURIComponent(missionId)}`;
+        return `/api/runtime/missions/${encodeURIComponent(missionId)}${this.buildQuerySuffix()}`;
     }
 
     protected buildEventsUrl(missionId: string): string {
-        return `/api/runtime/events?missionId=${encodeURIComponent(missionId)}`;
+        const query = new URLSearchParams({ missionId });
+        if (this.repositoryRootPath) {
+            query.set('repositoryRootPath', this.repositoryRootPath);
+        }
+        return `/api/runtime/events?${query.toString()}`;
     }
 
     protected parseSnapshot(value: unknown): MissionRuntimeSnapshotDto {
@@ -49,5 +64,16 @@ export class MissionRuntimeTransport extends EntityRuntimeTransport<
 
     protected getEntityLabel(): string {
         return 'Mission';
+    }
+
+    private buildQuerySuffix(): string {
+        if (!this.repositoryRootPath) {
+            return '';
+        }
+
+        const query = new URLSearchParams({
+            repositoryRootPath: this.repositoryRootPath
+        });
+        return `?${query.toString()}`;
     }
 }

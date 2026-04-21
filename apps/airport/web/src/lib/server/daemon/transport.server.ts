@@ -1,8 +1,8 @@
 // /apps/airport/web/src/lib/server/daemon/transport.server.ts: Opens raw daemon connections for the Airport web server without adding web-specific policy.
 import {
-    connectAirportControl,
+    connectAirportDaemon,
     type DaemonClient,
-    resolveAirportControlRuntimeMode
+    resolveAirportDaemonRuntimeMode
 } from '@flying-pillow/mission-core/node';
 
 export async function openDaemonConnection(input: {
@@ -13,9 +13,9 @@ export async function openDaemonConnection(input: {
     client: DaemonClient;
     dispose: () => void;
 }> {
-    const client = await connectAirportControl({
+    const client = await connectAirportDaemon({
         surfacePath: input.surfacePath,
-        runtimeMode: resolveAirportControlRuntimeMode(import.meta.url),
+        runtimeMode: resolveAirportDaemonRuntimeMode(import.meta.url),
         allowStart: input.allowStart,
         ...(input.authToken ? { authToken: input.authToken } : {})
     });

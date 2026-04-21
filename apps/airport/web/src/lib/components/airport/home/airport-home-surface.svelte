@@ -60,20 +60,9 @@
             ? "1 visible GitHub repository"
             : `${data.githubRepositories.length} visible GitHub repositories`,
     );
-
-    let repositoryPath = $state("");
-    let selectedGitHubRepository = $state("");
-
-    $effect(() => {
-        repositoryPath =
-            form?.addRepository?.repositoryPath ??
-            data.airportHome.controlRoot ??
-            "";
-        selectedGitHubRepository = form?.addRepository?.githubRepository ?? "";
-    });
 </script>
 
-<div class="px-4 pb-4 pt-2">
+<div class="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-2">
     <AirportHomeStatus
         {daemonStatusTone}
         {githubStatusTone}
@@ -85,13 +74,15 @@
         loginHref={data.loginHref}
     />
 
-    <div class="mt-4 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+    <div
+        class="mt-4 grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[1.05fr_0.95fr] xl:overflow-hidden"
+    >
         <RepositoryList
             mode="repositories"
             repositories={data.airportHome.repositories}
             {repositoryCountLabel}
             selectedRepositoryRoot={data.airportHome.selectedRepositoryRoot}
-            heading="Workspace repositories"
+            heading="Repositories registered"
             description="Your saved local repositories, ready to open and work from."
         />
 
@@ -99,10 +90,7 @@
             githubRepositories={data.githubRepositories}
             {githubStatusTone}
             githubRepositoriesError={data.githubRepositoriesError}
-            controlRoot={data.airportHome.controlRoot}
             formState={form}
-            bind:repositoryPath
-            bind:selectedGitHubRepository
         />
     </div>
 </div>

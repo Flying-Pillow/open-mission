@@ -42,7 +42,7 @@
                 <h1
                     class="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl"
                 >
-                    Get your workspace ready in a few clicks.
+                    Get your missions ready in a few clicks.
                 </h1>
                 <p class="text-sm leading-6 text-muted-foreground sm:text-base">
                     Connect GitHub, add a local repository, and jump back into
@@ -74,7 +74,7 @@
             {/if}
         </div>
 
-        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <div class="rounded-3xl border bg-background/75 p-4 shadow-sm">
                 <p
                     class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
