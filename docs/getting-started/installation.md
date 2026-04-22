@@ -44,12 +44,12 @@ The current installer prepares the things Mission needs in order to feel smooth 
 
 | Area | What Mission sets up |
 | --- | --- |
-| Operator config | Creates the Mission user config file |
+| Operator config | Creates the Mission config file |
 | Mission workspace root | Chooses where isolated mission workspaces and worktrees will live |
 | Terminal runtime | Provisions or validates the configured terminal multiplexer used to host agent sessions |
 | GitHub integration | Provisions or validates the Mission-managed GitHub CLI when the default `gh` command is unavailable |
 
-In the current implementation, the user config is written to the usual XDG config location when available, otherwise under `~/.config/mission/config.json`. On supported Linux systems, Mission stores its managed runtime envelope under `~/.config/mission/runtime`.
+In the current implementation, the Mission config is written to the usual XDG config location when available, otherwise under `~/.config/mission/config.json`. On supported Linux systems, Mission stores its managed runtime envelope under `~/.config/mission/runtime`.
 
 ## What Mission Expects On Your Machine
 

@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { DaemonApi } from '../client/DaemonApi.js';
 import { DaemonClient } from '../client/DaemonClient.js';
 import { getMissionDaemonSettingsPath } from '../lib/daemonConfig.js';
+import { writeMissionConfig } from '../lib/config.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
-import { writeMissionUserConfig } from '../lib/userConfig.js';
 import { getMissionWorktreesPath } from '../lib/repoConfig.js';
 import { initializeRepository } from '../repository/initializeRepository.js';
 import { Mission } from '../mission/Mission.js';
@@ -142,7 +142,7 @@ exit 1
 
 			try {
 				await withFakeGitHubCli(async ({ ghPath }) => {
-					await writeMissionUserConfig({ ghBinary: ghPath });
+					await writeMissionConfig({ ghBinary: ghPath });
 					const socketPath = path.join(workspaceRoot, '.mission-daemon-test.sock');
 					const daemon = await startDaemon({ socketPath });
 					const client = new DaemonClient();

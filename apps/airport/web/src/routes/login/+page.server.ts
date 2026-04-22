@@ -29,8 +29,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
             githubProbe: {
                 status: 'idle' as const,
                 message: !deviceAvailable
-                    ? 'GitHub device flow is not configured for Airport web yet.'
-                    : 'Sign in with the configured GitHub App device flow to unlock daemon-backed repository workflows.'
+                    ? 'GitHub sign-in is not ready yet.'
+                    : 'Sign in with GitHub to continue.'
             }
         };
     }
@@ -46,7 +46,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
         },
         githubProbe: {
             status: 'success' as const,
-            message: 'GitHub is connected. Mission will attach the server-side OAuth session to authenticated requests.'
+            message: 'You are signed in and ready to continue.'
         }
     };
 };

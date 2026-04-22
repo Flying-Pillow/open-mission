@@ -22,7 +22,7 @@ import { deriveSystemAirportProjections } from './AirportProjectionService.js';
 import { RepositoryLayoutRegistry } from './RepositoryLayoutRegistry.js';
 import { RepositoryManager } from '../../repository/RepositoryManager.js';
 import { deriveRepositoryIdentity } from '../../lib/repositoryIdentity.js';
-import { findRegisteredUserRepositoryById } from '../../lib/userConfig.js';
+import { findRegisteredRepositoryById } from '../../lib/config.js';
 
 type SystemCommand =
 	| {
@@ -372,7 +372,7 @@ export class SystemController {
 	private async resolveRepositoryId(clientId: string, surfacePath?: string, repositoryId?: string): Promise<string> {
 		const explicitRepositoryId = repositoryId?.trim();
 		if (explicitRepositoryId) {
-			const registeredRepository = await findRegisteredUserRepositoryById(explicitRepositoryId);
+			const registeredRepository = await findRegisteredRepositoryById(explicitRepositoryId);
 			if (registeredRepository) {
 				const repositoryRootPath = registeredRepository.repositoryRootPath;
 				await this.airportRegistry.activateRepository(explicitRepositoryId, repositoryRootPath);

@@ -1,5 +1,5 @@
 import { startDaemon } from './Daemon.js';
-import { ensureMissionUserConfig } from '../lib/userConfig.js';
+import { ensureMissionConfig } from '../lib/config.js';
 import { resolveGitWorkspaceRoot } from '../lib/workspacePaths.js';
 import type { AgentRunner } from '../agent/AgentRunner.js';
 
@@ -47,7 +47,7 @@ async function loadConfiguredAgentRunners(logLine?: (line: string) => void): Pro
 }
 
 export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): Promise<void> {
-	await ensureMissionUserConfig();
+	await ensureMissionConfig();
 	const socketPath = readSocketPathFromArgv(argv);
 	const logLine = writeDaemonLogLine;
 	const runners = await loadConfiguredAgentRunners(logLine);

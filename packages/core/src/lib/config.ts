@@ -10,18 +10,19 @@ import type { RepositoryCandidate } from '../types.js';
 export const MISSION_USER_CONFIG_DIRECTORY = 'mission';
 export const MISSION_USER_CONFIG_FILE = 'config.json';
 
-export type MissionUserRegisteredRepository = {
-	checkoutPath: string;
+export type MissionRegisteredRepository = {
+	repositoryId: string;
+	repositoryRootPath: string;
 };
 
-export type MissionUserConfig = {
+export type MissionConfig = {
 	version: 1;
 	missionWorkspaceRoot?: string;
 	ghBinary?: string;
-	registeredRepositories?: MissionUserRegisteredRepository[];
+	registeredRepositories?: MissionRegisteredRepository[];
 };
 
-export function getMissionUserConfigDirectory(): string {
+export function getMissionConfigDirectory(): string {
 	const configuredPath = resolveConfiguredMissionConfigDirectory();
 	if (configuredPath) {
 		return configuredPath;
@@ -33,15 +34,15 @@ export function getMissionUserConfigDirectory(): string {
 		: path.join(os.homedir(), '.config', MISSION_USER_CONFIG_DIRECTORY);
 }
 
-export function getMissionUserConfigPath(): string {
-	return path.join(getMissionUserConfigDirectory(), MISSION_USER_CONFIG_FILE);
+export function getMissionConfigPath(): string {
+	return path.join(getMissionConfigDirectory(), MISSION_USER_CONFIG_FILE);
 }
 
 export function getMissionRuntimeDirectory(): string {
-	return path.join(getMissionUserConfigDirectory(), 'runtime');
+	return path.join(getMissionConfigDirectory(), 'runtime');
 }
 
-export function getDefaultMissionUserConfig(overrides: Partial<MissionUserConfig> = {}): MissionUserConfig {
+export function getDefaultMissionConfig(overrides: Partial<MissionConfig> = {}): MissionConfig {
 	const missionWorkspaceRoot = normalizeOptionalString(overrides.missionWorkspaceRoot);
 	const ghBinary = normalizeOptionalString(overrides.ghBinary);
 	const registeredRepositories = normalizeRegisteredRepositories(overrides.registeredRepositories);
@@ -54,7 +55,7 @@ export function getDefaultMissionUserConfig(overrides: Partial<MissionUserConfig
 }
 
 export function getMissionGitHubCliBinary(): string | undefined {
-	const configuredBinary = normalizeOptionalString(readMissionUserConfig()?.ghBinary);
+	const configuredBinary = normalizeOptionalString(readMissionConfig()?.ghBinary);
 	if (!configuredBinary) {
 		return undefined;
 	}
@@ -64,24 +65,24 @@ export function getMissionGitHubCliBinary(): string | undefined {
 	return configuredBinary;
 }
 
-export function readMissionUserConfig(): MissionUserConfig | undefined {
-	return loadMissionUserConfig().config;
+export function readMissionConfig(): MissionConfig | undefined {
+	return loadMissionConfig().config;
 }
 
-export async function ensureMissionUserConfig(): Promise<MissionUserConfig> {
-	const currentConfig = loadMissionUserConfig();
+export async function ensureMissionConfig(): Promise<MissionConfig> {
+	const currentConfig = loadMissionConfig();
 	if (currentConfig.config) {
 		if (currentConfig.needsRewrite) {
-			return writeMissionUserConfig(currentConfig.config);
+			return writeMissionConfig(currentConfig.config);
 		}
 		return currentConfig.config;
 	}
-	return writeMissionUserConfig(getDefaultMissionUserConfig());
+	return writeMissionConfig(getDefaultMissionConfig());
 }
 
-export async function writeMissionUserConfig(config: Partial<MissionUserConfig>): Promise<MissionUserConfig> {
-	const configPath = getMissionUserConfigPath();
-	const nextConfig = getDefaultMissionUserConfig(config);
+export async function writeMissionConfig(config: Partial<MissionConfig>): Promise<MissionConfig> {
+	const configPath = getMissionConfigPath();
+	const nextConfig = getDefaultMissionConfig(config);
 	const temporaryPath = `${configPath}.${process.pid.toString(36)}.${Date.now().toString(36)}.tmp`;
 	await fsp.mkdir(path.dirname(configPath), { recursive: true });
 	await fsp.writeFile(temporaryPath, `${JSON.stringify(nextConfig, null, 2)}\n`, 'utf8');
@@ -89,46 +90,57 @@ export async function writeMissionUserConfig(config: Partial<MissionUserConfig>)
 	return nextConfig;
 }
 
-export async function registerMissionUserRepo(workspacePath: string): Promise<MissionUserConfig> {
+export async function registerMissionRepo(workspacePath: string): Promise<MissionConfig> {
 	const controlRoot = resolveGitWorkspaceRoot(workspacePath);
 	if (!controlRoot) {
 		throw new Error(`Mission could not resolve a Git repository from '${workspacePath}'.`);
 	}
+	const repositoryIdentity = deriveRepositoryIdentity(controlRoot);
 
-	const config = await ensureMissionUserConfig();
+	const config = await ensureMissionConfig();
 	const currentEntries = normalizeRegisteredRepositories(config.registeredRepositories) ?? [];
-	if (currentEntries.some((entry) => entry.checkoutPath === controlRoot)) {
+	if (
+		currentEntries.some(
+			(entry) => entry.repositoryId === repositoryIdentity.repositoryId || entry.repositoryRootPath === controlRoot
+		)
+	) {
 		return config;
 	}
 
-	const nextConfig = await writeMissionUserConfig({
+	const nextConfig = await writeMissionConfig({
 		...config,
-		registeredRepositories: [...currentEntries, { checkoutPath: controlRoot }]
+		registeredRepositories: [
+			...currentEntries,
+			{
+				repositoryId: repositoryIdentity.repositoryId,
+				repositoryRootPath: repositoryIdentity.repositoryRootPath
+			}
+		]
 	});
 	return nextConfig;
 }
 
-export async function listRegisteredUserRepositories(): Promise<RepositoryCandidate[]> {
-	const config = await ensureMissionUserConfig();
+export async function listRegisteredRepositories(): Promise<RepositoryCandidate[]> {
+	const config = await ensureMissionConfig();
 	return (normalizeRegisteredRepositories(config.registeredRepositories) ?? [])
-		.map((entry) => buildRepositoryCandidate(entry.checkoutPath))
+		.map((entry) => buildRepositoryCandidate(entry))
 		.filter((entry): entry is RepositoryCandidate => entry !== undefined)
 		.sort((left, right) => left.label.localeCompare(right.label));
 }
 
-export async function findRegisteredUserRepositoryById(repositoryId: string): Promise<RepositoryCandidate | undefined> {
+export async function findRegisteredRepositoryById(repositoryId: string): Promise<RepositoryCandidate | undefined> {
 	const normalizedRepositoryId = repositoryId.trim();
 	if (!normalizedRepositoryId) {
 		return undefined;
 	}
-	return (await listRegisteredUserRepositories()).find((candidate) => candidate.repositoryId === normalizedRepositoryId);
+	return (await listRegisteredRepositories()).find((candidate) => candidate.repositoryId === normalizedRepositoryId);
 }
 
-function loadMissionUserConfig(): {
-	config: MissionUserConfig | undefined;
+function loadMissionConfig(): {
+	config: MissionConfig | undefined;
 	needsRewrite: boolean;
 } {
-	const configPath = getMissionUserConfigPath();
+	const configPath = getMissionConfigPath();
 	try {
 		const content = fs.readFileSync(configPath, 'utf8').trim();
 		if (!content) {
@@ -148,12 +160,12 @@ function loadMissionUserConfig(): {
 	}
 }
 
-function normalizeResolvedConfig(rawConfig: unknown): MissionUserConfig | undefined {
+function normalizeResolvedConfig(rawConfig: unknown): MissionConfig | undefined {
 	if (!rawConfig || typeof rawConfig !== 'object' || Array.isArray(rawConfig)) {
 		return undefined;
 	}
 	const candidate = rawConfig as Record<string, unknown>;
-	return getDefaultMissionUserConfig({
+	return getDefaultMissionConfig({
 		...(typeof candidate['missionWorkspaceRoot'] === 'string'
 			? { missionWorkspaceRoot: candidate['missionWorkspaceRoot'] }
 			: {}),
@@ -167,38 +179,46 @@ function normalizeResolvedConfig(rawConfig: unknown): MissionUserConfig | undefi
 }
 
 function normalizeRegisteredRepositories(
-	value: MissionUserRegisteredRepository[] | undefined
-): MissionUserRegisteredRepository[] | undefined {
+	value: MissionRegisteredRepository[] | undefined
+): MissionRegisteredRepository[] | undefined {
 	if (!Array.isArray(value)) {
 		return undefined;
 	}
 	const normalizedEntries = value
 		.map((record) => {
-			const checkoutPath = normalizeOptionalString(record?.checkoutPath);
-			if (!checkoutPath) {
+			const recordCandidate = record as Partial<MissionRegisteredRepository> & {
+				checkoutPath?: string;
+			};
+			const repositoryRootPath = normalizeOptionalString(recordCandidate.repositoryRootPath)
+				?? normalizeOptionalString(recordCandidate.checkoutPath);
+			if (!repositoryRootPath) {
 				return undefined;
 			}
-			const resolvedCheckoutPath = path.resolve(checkoutPath);
-			if (!fs.existsSync(resolvedCheckoutPath)) {
+			const resolvedRepositoryRootPath = path.resolve(repositoryRootPath);
+			if (!fs.existsSync(resolvedRepositoryRootPath)) {
 				return undefined;
 			}
-			const controlRoot = resolveGitWorkspaceRoot(resolvedCheckoutPath);
+			const controlRoot = resolveGitWorkspaceRoot(resolvedRepositoryRootPath);
 			if (!controlRoot) {
 				return undefined;
 			}
-			return { checkoutPath: path.resolve(controlRoot) };
+			const repositoryIdentity = deriveRepositoryIdentity(controlRoot);
+			return {
+				repositoryId: repositoryIdentity.repositoryId,
+				repositoryRootPath: repositoryIdentity.repositoryRootPath
+			};
 		})
-		.filter((entry): entry is MissionUserRegisteredRepository => entry !== undefined);
+		.filter((entry): entry is MissionRegisteredRepository => entry !== undefined);
 	const deduplicated = normalizedEntries.filter(
-		(entry, index, entries) => entries.findIndex((candidate) => candidate.checkoutPath === entry.checkoutPath) === index
+		(entry, index, entries) => entries.findIndex((candidate) => candidate.repositoryRootPath === entry.repositoryRootPath) === index
 	);
 	return deduplicated.length > 0 ? deduplicated : undefined;
 }
 
 function buildRepositoryCandidate(
-	workspacePath: string
+	repository: MissionRegisteredRepository
 ): RepositoryCandidate | undefined {
-	const controlRoot = resolveGitWorkspaceRoot(workspacePath);
+	const controlRoot = resolveGitWorkspaceRoot(repository.repositoryRootPath);
 	if (!controlRoot) {
 		return undefined;
 	}
@@ -207,10 +227,9 @@ function buildRepositoryCandidate(
 	}
 	const githubRepository = resolveGitHubRepositoryFromWorkspace(controlRoot);
 	const label = githubRepository ? githubRepository.split('/').pop() ?? path.basename(controlRoot) : path.basename(controlRoot);
-	const repositoryIdentity = deriveRepositoryIdentity(controlRoot);
 	return {
-		repositoryId: repositoryIdentity.repositoryId,
-		repositoryRootPath: controlRoot,
+		repositoryId: repository.repositoryId,
+		repositoryRootPath: repository.repositoryRootPath,
 		label,
 		description: githubRepository ?? controlRoot,
 		...(githubRepository ? { githubRepository } : {})

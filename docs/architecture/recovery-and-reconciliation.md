@@ -13,7 +13,7 @@ Mission is designed to recover by rebuilding live state from explicit persisted 
 
 | Concern | Survives process restart | Recovery source |
 | --- | --- | --- |
-| Repository registration | Yes | user config |
+| Repository registration | Yes | Mission config |
 | Repository workflow settings | Yes | `.mission/settings.json` |
 | Airport pane intent | Yes | `.mission/settings.json` |
 | Mission execution state | Yes | `mission.json` |

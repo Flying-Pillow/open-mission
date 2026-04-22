@@ -4,17 +4,18 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-	ensureMissionUserConfig,
+	ensureMissionConfig,
 	getMissionGitHubCliBinary,
 	getMissionRuntimeDirectory,
-	getMissionUserConfigPath,
-	listRegisteredUserRepositories,
-	registerMissionUserRepo,
-	readMissionUserConfig,
-	writeMissionUserConfig
-} from './userConfig.js';
+	getMissionConfigPath,
+	listRegisteredRepositories,
+	registerMissionRepo,
+	readMissionConfig,
+	writeMissionConfig
+} from './config.js';
+import { deriveRepositoryIdentity } from './repositoryIdentity.js';
 
-describe('userConfig', () => {
+describe('config', () => {
 	beforeEach(() => {
 		delete process.env['MISSION_CONFIG_PATH'];
 	});
@@ -31,9 +32,9 @@ describe('userConfig', () => {
 	it('scaffolds a default user config in XDG config home', async () => {
 		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
 
-		const config = await ensureMissionUserConfig();
+		const config = await ensureMissionConfig();
 
-		expect(getMissionUserConfigPath()).toBe(path.join(process.env['XDG_CONFIG_HOME'], 'mission', 'config.json'));
+		expect(getMissionConfigPath()).toBe(path.join(process.env['XDG_CONFIG_HOME'], 'mission', 'config.json'));
 		expect(config).toMatchObject({
 			version: 1,
 			missionWorkspaceRoot: 'missions'
@@ -49,26 +50,26 @@ describe('userConfig', () => {
 	it('prefers MISSION_CONFIG_PATH when present and resolves the Mission config beneath it', () => {
 		process.env['MISSION_CONFIG_PATH'] = '/config';
 
-		expect(getMissionUserConfigPath()).toBe('/config/mission/config.json');
+		expect(getMissionConfigPath()).toBe('/config/mission/config.json');
 		expect(getMissionRuntimeDirectory()).toBe('/config/mission/runtime');
 	});
 
 	it('accepts MISSION_CONFIG_PATH values that already point at the Mission config directory', () => {
 		process.env['MISSION_CONFIG_PATH'] = '/config/mission';
 
-		expect(getMissionUserConfigPath()).toBe('/config/mission/config.json');
+		expect(getMissionConfigPath()).toBe('/config/mission/config.json');
 		expect(getMissionRuntimeDirectory()).toBe('/config/mission/runtime');
 	});
 
 	it('persists user-level overrides', async () => {
 		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
 
-		await writeMissionUserConfig({
+		await writeMissionConfig({
 			missionWorkspaceRoot: '/tmp/missions',
 			ghBinary: '/opt/gh/bin/gh'
 		});
 
-		expect(readMissionUserConfig()).toMatchObject({
+		expect(readMissionConfig()).toMatchObject({
 			missionWorkspaceRoot: '/tmp/missions',
 			ghBinary: '/opt/gh/bin/gh'
 		});
@@ -76,9 +77,9 @@ describe('userConfig', () => {
 
 	it('drops legacy terminalBinary values from existing user config', async () => {
 		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
-		await fs.mkdir(path.dirname(getMissionUserConfigPath()), { recursive: true });
+		await fs.mkdir(path.dirname(getMissionConfigPath()), { recursive: true });
 		await fs.writeFile(
-			getMissionUserConfigPath(),
+			getMissionConfigPath(),
 			JSON.stringify({
 				version: 1,
 				missionWorkspaceRoot: '/tmp/missions',
@@ -88,7 +89,7 @@ describe('userConfig', () => {
 			'utf8'
 		);
 
-		expect(readMissionUserConfig()).toEqual({
+		expect(readMissionConfig()).toEqual({
 			version: 1,
 			missionWorkspaceRoot: '/tmp/missions',
 			ghBinary: '/opt/gh/bin/gh'
@@ -97,20 +98,23 @@ describe('userConfig', () => {
 
 	it('resolves the configured GitHub CLI binary when Mission install has configured one', async () => {
 		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+		const binaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-gh-binary-'));
+		const ghBinaryPath = path.join(binaryDirectory, 'gh');
+		await fs.writeFile(ghBinaryPath, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
 
 		expect(getMissionGitHubCliBinary()).toBeUndefined();
 
-		await writeMissionUserConfig({
-			ghBinary: '/opt/gh/bin/gh'
+		await writeMissionConfig({
+			ghBinary: ghBinaryPath
 		});
 
-		expect(getMissionGitHubCliBinary()).toBe('/opt/gh/bin/gh');
+		expect(getMissionGitHubCliBinary()).toBe(ghBinaryPath);
 	});
 
 	it('ignores a configured GitHub CLI path when the binary no longer exists', async () => {
 		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
 
-		await writeMissionUserConfig({
+		await writeMissionConfig({
 			ghBinary: '/tmp/mission-fake-gh-does-not-exist/gh'
 		});
 
@@ -119,9 +123,9 @@ describe('userConfig', () => {
 
 	it('does not read legacy repos-map config', async () => {
 		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
-		await fs.mkdir(path.dirname(getMissionUserConfigPath()), { recursive: true });
+		await fs.mkdir(path.dirname(getMissionConfigPath()), { recursive: true });
 		await fs.writeFile(
-			getMissionUserConfigPath(),
+			getMissionConfigPath(),
 			JSON.stringify({
 				version: 1,
 				repos: {
@@ -133,7 +137,7 @@ describe('userConfig', () => {
 			'utf8'
 		);
 
-		expect(readMissionUserConfig()).toEqual({
+		expect(readMissionConfig()).toEqual({
 			version: 1,
 			missionWorkspaceRoot: 'missions'
 		});
@@ -152,12 +156,14 @@ describe('userConfig', () => {
 			runGit(workspaceRoot, ['commit', '-m', 'init']);
 			runGit(workspaceRoot, ['remote', 'add', 'origin', 'https://github.com/Flying-Pillow/mission.git']);
 
-			await registerMissionUserRepo(workspaceRoot);
+			await registerMissionRepo(workspaceRoot);
+			const repositoryIdentity = deriveRepositoryIdentity(workspaceRoot);
 
-			expect(readMissionUserConfig()).toMatchObject({
+			expect(readMissionConfig()).toMatchObject({
 				registeredRepositories: [
 					{
-						checkoutPath: workspaceRoot
+						repositoryId: repositoryIdentity.repositoryId,
+						repositoryRootPath: workspaceRoot
 					}
 				]
 			});
@@ -179,11 +185,13 @@ describe('userConfig', () => {
 			runGit(workspaceRoot, ['commit', '-m', 'init']);
 			runGit(workspaceRoot, ['remote', 'add', 'origin', 'https://github.com/Flying-Pillow/mission.git']);
 
-			await registerMissionUserRepo(workspaceRoot);
-			const repositories = await listRegisteredUserRepositories();
+			await registerMissionRepo(workspaceRoot);
+			const repositories = await listRegisteredRepositories();
+			const repositoryIdentity = deriveRepositoryIdentity(workspaceRoot);
 
 			expect(repositories).toEqual([
 				{
+					repositoryId: repositoryIdentity.repositoryId,
 					repositoryRootPath: workspaceRoot,
 					label: 'mission',
 					description: 'Flying-Pillow/mission',
@@ -210,14 +218,21 @@ describe('userConfig', () => {
 			runGit(workspaceRoot, ['commit', '-m', 'init']);
 			runGit(workspaceRoot, ['worktree', 'add', worktreePath, '-b', 'mission/test-canonicalize']);
 
-			await writeMissionUserConfig({
-				registeredRepositories: [{ checkoutPath: worktreePath }]
-			});
-
-			expect(readMissionUserConfig()).toMatchObject({
+			await writeMissionConfig({
 				registeredRepositories: [
 					{
-						checkoutPath: workspaceRoot
+						repositoryId: 'stale-id',
+						repositoryRootPath: worktreePath
+					}
+				]
+			});
+			const repositoryIdentity = deriveRepositoryIdentity(workspaceRoot);
+
+			expect(readMissionConfig()).toMatchObject({
+				registeredRepositories: [
+					{
+						repositoryId: repositoryIdentity.repositoryId,
+						repositoryRootPath: workspaceRoot
 					}
 				]
 			});
@@ -230,9 +245,9 @@ describe('userConfig', () => {
 
 	it('rewrites stale registered repositories out of user config', async () => {
 		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
-		await fs.mkdir(path.dirname(getMissionUserConfigPath()), { recursive: true });
+		await fs.mkdir(path.dirname(getMissionConfigPath()), { recursive: true });
 		await fs.writeFile(
-			getMissionUserConfigPath(),
+			getMissionConfigPath(),
 			JSON.stringify({
 				version: 1,
 				missionWorkspaceRoot: 'missions',
@@ -246,15 +261,15 @@ describe('userConfig', () => {
 			'utf8'
 		);
 
-		const config = await ensureMissionUserConfig();
+		const config = await ensureMissionConfig();
 
 		expect(config).toEqual({
 			version: 1,
 			missionWorkspaceRoot: 'missions'
 		});
-		expect(readMissionUserConfig()).toEqual(config);
-		expect(await fs.readFile(getMissionUserConfigPath(), 'utf8')).not.toContain('mission-stale-repository');
-		expect(await fs.readFile(getMissionUserConfigPath(), 'utf8')).not.toContain('terminalBinary');
+		expect(readMissionConfig()).toEqual(config);
+		expect(await fs.readFile(getMissionConfigPath(), 'utf8')).not.toContain('mission-stale-repository');
+		expect(await fs.readFile(getMissionConfigPath(), 'utf8')).not.toContain('terminalBinary');
 	});
 });
 

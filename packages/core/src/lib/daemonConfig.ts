@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { getMissionDirectoryPath } from './repoConfig.js';
-import { readMissionUserConfig } from './userConfig.js';
+import { readMissionConfig } from './config.js';
 import { resolveGitWorkspaceRoot } from './workspacePaths.js';
 import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
 import { readMissionWorkflowDefinition } from '../workflow/mission/preset.js';
@@ -63,13 +63,13 @@ export function getDefaultMissionDaemonSettings(): MissionDaemonSettings {
 export function getDefaultMissionDaemonSettingsWithOverrides(
     overrides: MissionDaemonSettings = {}
 ): MissionDaemonSettings {
-    const userConfig = readMissionUserConfig();
+    const config = readMissionConfig();
     const agentRunner = normalizeOptionalAgentRunner(overrides.agentRunner) ?? COPILOT_CLI_AGENT_RUNNER_ID;
     const defaultAgentMode = normalizeOptionalAgentMode(overrides.defaultAgentMode);
     const defaultModel = normalizeOptionalString(overrides.defaultModel);
     const towerTheme = normalizeOptionalString(overrides.towerTheme);
     const missionWorkspaceRoot = normalizeOptionalString(overrides.missionWorkspaceRoot)
-        ?? normalizeOptionalString(userConfig?.missionWorkspaceRoot);
+        ?? normalizeOptionalString(config?.missionWorkspaceRoot);
     const instructionsPath = normalizeOptionalString(overrides.instructionsPath);
     const skillsPath = normalizeOptionalString(overrides.skillsPath);
     return {
@@ -133,9 +133,9 @@ export async function writeMissionDaemonSettings(
 }
 
 function omitWorkflowSettings(settings: MissionDaemonSettings): Omit<MissionDaemonSettings, 'workflow'> {
-	const { workflow, ...persisted } = settings;
-	void workflow;
-	return persisted;
+    const { workflow, ...persisted } = settings;
+    void workflow;
+    return persisted;
 }
 
 function resolveMissionControlRoot(controlRoot: string): string {

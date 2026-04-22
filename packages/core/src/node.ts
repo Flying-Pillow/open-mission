@@ -4,7 +4,7 @@ export * from './lib/daemonConfig.js';
 export * from './lib/connectAirportDaemon.js';
 export * from './lib/repositoryIdentity.js';
 export * from './lib/repoConfig.js';
-export * from './lib/userConfig.js';
+export * from './lib/config.js';
 export * from './lib/workspacePaths.js';
 export * from './daemon/daemonPaths.js';
 export * from './daemon/runtime/DaemonProcessControl.js';

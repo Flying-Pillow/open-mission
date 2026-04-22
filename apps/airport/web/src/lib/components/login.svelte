@@ -81,6 +81,22 @@
     let deviceFlowPending = $state(false);
     let deviceFlowStarting = $state(false);
     let deviceCodeCopied = $state(false);
+    let requestedDeviceCode = $state(false);
+
+    $effect(() => {
+        if (
+            requestedDeviceCode ||
+            isConnected ||
+            !device.available ||
+            deviceFlow ||
+            deviceFlowStarting
+        ) {
+            return;
+        }
+
+        requestedDeviceCode = true;
+        void beginDeviceFlow();
+    });
 
     $effect(() => {
         if (!deviceFlow || deviceFlowPending) {
@@ -113,7 +129,7 @@
                 throw new Error(
                     typeof payload?.message === "string"
                         ? payload.message
-                        : "GitHub device sign-in could not be started.",
+                        : "The sign-in code could not be created.",
                 );
             }
 
@@ -123,7 +139,7 @@
                 intervalSeconds: Number(payload.intervalSeconds ?? 5),
                 expiresAt: String(payload.expiresAt ?? "").trim(),
                 message:
-                    "Enter this code on GitHub, then Airport will finish sign-in automatically.",
+                    "Open the sign-in page, enter this code, and this page will continue automatically.",
             };
         } catch (deviceError) {
             deviceFlowError =
@@ -166,8 +182,7 @@
                     expiresAt: String(
                         payload.expiresAt ?? deviceFlow.expiresAt,
                     ),
-                    message:
-                        "Waiting for GitHub device authorization to complete...",
+                    message: "Waiting for you to finish signing in...",
                 };
                 return;
             }
@@ -175,7 +190,7 @@
             throw new Error(
                 typeof payload?.message === "string"
                     ? payload.message
-                    : "GitHub device authorization failed.",
+                    : "Sign-in could not be completed.",
             );
         } catch (deviceError) {
             deviceFlowError =
@@ -226,10 +241,9 @@
                 <Card.Description
                     class="max-w-xl text-base leading-7 text-muted-foreground"
                 >
-                    Use your GitHub account to authorize Mission for
-                    repository-backed workflows. GitHub handles the sign-in,
-                    Mission verifies the account on the server, and the browser
-                    keeps only a session cookie.
+                    Sign in with your GitHub account to continue in Mission. We
+                    will show a short code for you to enter, then bring you back
+                    here automatically.
                 </Card.Description>
             </div>
         </Card.Header>
@@ -238,28 +252,26 @@
             <div class="grid gap-4 sm:grid-cols-3">
                 <div class="rounded-2xl border bg-background/70 p-4">
                     <ShieldHalfIcon class="mb-3 size-5 text-primary" />
-                    <p class="font-medium">Protected sign-in</p>
+                    <p class="font-medium">Safe sign-in</p>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        GitHub performs the sign-in flow. Mission keeps the
-                        access token on the server and does not expose it in the
-                        browser UI.
+                        GitHub handles the sign-in, and Mission keeps you signed
+                        in here after approval.
                     </p>
                 </div>
                 <div class="rounded-2xl border bg-background/70 p-4">
                     <BrandGithubIcon class="mb-3 size-5 text-primary" />
-                    <p class="font-medium">Verified account</p>
+                    <p class="font-medium">Your account</p>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        After approval, Mission checks which GitHub account was
-                        authorized and shows that identity before you continue.
+                        After sign-in, Mission shows which GitHub account you
+                        connected before you continue.
                     </p>
                 </div>
                 <div class="rounded-2xl border bg-background/70 p-4">
                     <SparklesIcon class="mb-3 size-5 text-primary" />
-                    <p class="font-medium">Revocable access</p>
+                    <p class="font-medium">Easy to change</p>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        You can sign out here at any time, and you can revoke
-                        the app from GitHub if you no longer want Mission to use
-                        it.
+                        You can sign out at any time and connect a different
+                        account later if needed.
                     </p>
                 </div>
             </div>
@@ -268,19 +280,16 @@
                 <p class="text-sm font-medium">Before you continue</p>
                 <ul class="mt-3 space-y-2 text-sm text-muted-foreground">
                     <li class="flex items-start gap-2">
-                        <CheckIcon class="mt-0.5 size-4 text-primary" />You will
-                        be redirected to GitHub to approve access, or you can
-                        use a device code from another browser.
+                        <CheckIcon class="mt-0.5 size-4 text-primary" />A
+                        sign-in code will appear automatically on this page.
                     </li>
                     <li class="flex items-start gap-2">
-                        <CheckIcon class="mt-0.5 size-4 text-primary" />Mission
-                        uses the GitHub account you approve there and validates
-                        that identity before enabling authenticated actions.
+                        <CheckIcon class="mt-0.5 size-4 text-primary" />Open the
+                        sign-in page and enter that code.
                     </li>
                     <li class="flex items-start gap-2">
-                        <CheckIcon class="mt-0.5 size-4 text-primary" />The
-                        browser stores only a session cookie for this sign-in,
-                        while GitHub access stays on the server.
+                        <CheckIcon class="mt-0.5 size-4 text-primary" />Once you
+                        finish, Mission continues here automatically.
                     </li>
                 </ul>
             </div>
@@ -386,8 +395,8 @@
                     Sign in with GitHub
                 </Card.Title>
                 <Card.Description class="pt-1 text-sm leading-6">
-                    Continue with GitHub using a device code that you can
-                    approve in this browser or any other browser session.
+                    Your sign-in code appears below automatically. Enter it on
+                    the GitHub sign-in page to continue.
                 </Card.Description>
             </Card.Header>
 
@@ -403,27 +412,19 @@
                 <div
                     class="rounded-2xl border bg-background/70 p-4 text-sm text-muted-foreground"
                 >
-                    Mission signs you in through GitHub device flow, validates
-                    the approved account on the server, and then uses that
-                    session for authenticated repository operations.
+                    Use the code below to sign in with GitHub. When you finish,
+                    this page will continue on its own.
                 </div>
 
                 <div class="space-y-3">
                     {#if device.available}
-                        <Button
-                            type="button"
-                            size="lg"
-                            class="w-full rounded-2xl"
-                            onclick={() => {
-                                void beginDeviceFlow();
-                            }}
-                            disabled={deviceFlowStarting}
-                        >
-                            <DeviceMobileIcon class="size-4" />
-                            {deviceFlowStarting
-                                ? "Starting device sign-in..."
-                                : "Continue with GitHub (Device Code)"}
-                        </Button>
+                        {#if deviceFlowStarting && !deviceFlow}
+                            <div
+                                class="rounded-2xl border bg-background/70 p-4 text-sm text-muted-foreground"
+                            >
+                                Preparing your sign-in code...
+                            </div>
+                        {/if}
                     {:else if device.error}
                         <div
                             class="rounded-2xl border bg-background/70 p-4 text-sm text-muted-foreground"
@@ -458,7 +459,7 @@
                         <div class="flex items-center justify-between gap-3">
                             <div>
                                 <p class="text-sm font-medium">
-                                    GitHub device sign-in
+                                    Your sign-in code
                                 </p>
                                 <p class="mt-1 text-sm text-muted-foreground">
                                     {deviceFlow.message}
@@ -490,7 +491,7 @@
                                 rel="noreferrer"
                                 class="w-full rounded-2xl"
                             >
-                                Open GitHub device page
+                                Open sign-in page
                                 <ArrowRightIcon class="size-4" />
                             </Button>
                             <Button
@@ -503,7 +504,7 @@
                                 disabled={deviceFlowPending}
                             >
                                 {deviceFlowPending
-                                    ? "Checking GitHub..."
+                                    ? "Checking sign-in..."
                                     : "I entered the code"}
                             </Button>
                         </div>

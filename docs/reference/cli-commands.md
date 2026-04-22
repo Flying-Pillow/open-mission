@@ -79,7 +79,7 @@ mission install [--json]
 
 This command performs user-level setup:
 
-- ensures Mission user config exists
+- ensures Mission config exists
 - ensures the mission workspace root exists
 - provisions or validates the managed GitHub CLI when the default `gh` command is unavailable
 

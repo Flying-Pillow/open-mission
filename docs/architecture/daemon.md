@@ -25,14 +25,14 @@ The daemon is the root runtime authority for Mission's live system behavior. It 
 
 ```mermaid
 flowchart TD
-	Request[IPC request] --> Daemon
-	Daemon -->|airport.*| System[MissionSystemController]
-	Daemon -->|control.* and mission.*| Workspace[WorkspaceManager]
-	Workspace --> Control[MissionWorkspace control methods]
-	Workspace --> Mission[Mission aggregate]
-	Mission --> Workflow[MissionWorkflowController]
-	Daemon --> Decorate[Attach MissionSystemSnapshot]
-	Decorate --> Response[IPC response or event]
+ Request[IPC request] --> Daemon
+ Daemon -->|airport.*| System[MissionSystemController]
+ Daemon -->|control.* and mission.*| Workspace[WorkspaceManager]
+ Workspace --> Control[MissionWorkspace control methods]
+ Workspace --> Mission[Mission aggregate]
+ Mission --> Workflow[MissionWorkflowController]
+ Daemon --> Decorate[Attach MissionSystemSnapshot]
+ Decorate --> Response[IPC response or event]
 ```
 
 ## Boundary Responsibilities
@@ -48,7 +48,7 @@ flowchart TD
 ### `WorkspaceManager`
 
 - Resolves the control root from `surfacePath` or `missionId`.
-- Registers real repositories into machine-local user config.
+- Registers real repositories into the machine-local Mission config.
 - Creates one `MissionWorkspace` per repository root.
 - Maintains the mission-to-workspace index used to route `mission.*`, `task.*`, and `session.*` calls.
 
@@ -63,7 +63,7 @@ flowchart TD
 
 | State | Persisted | Where |
 | --- | --- | --- |
-| Registered repositories and local tool defaults | Yes | user config under `~/.config/mission/config.json` or `$XDG_CONFIG_HOME/mission/config.json` |
+| Registered repositories and local tool defaults | Yes | Mission config under `~/.config/mission/config.json` or `$XDG_CONFIG_HOME/mission/config.json` |
 | Repository airport intent | Yes | `.mission/settings.json` under the `airport` field |
 | Composite daemon snapshot | No | Rebuilt in memory from workspace, mission, and airport state |
 | Client connections | No | `Daemon` runtime only |

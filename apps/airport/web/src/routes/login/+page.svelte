@@ -30,10 +30,7 @@
 
 <svelte:head>
     <title>Login · Flying-Pillow Mission</title>
-    <meta
-        name="description"
-        content="Connect GitHub to Mission and enable daemon-backed repository workflows."
-    />
+    <meta name="description" content="Sign in to Mission with GitHub." />
 </svelte:head>
 
 <div class="relative min-h-screen overflow-hidden bg-background">

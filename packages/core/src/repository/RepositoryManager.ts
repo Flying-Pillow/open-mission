@@ -9,7 +9,7 @@ import {
 } from '../daemon/protocol/contracts.js';
 import { RepositoryRuntime } from './RepositoryRuntime.js';
 import type { AgentRunner } from '../agent/AgentRunner.js';
-import { listRegisteredUserRepositories, registerMissionUserRepo } from '../lib/userConfig.js';
+import { listRegisteredRepositories, registerMissionRepo } from '../lib/config.js';
 import { resolveGitWorkspaceRoot } from '../lib/workspacePaths.js';
 import { resolveMissionWorkspaceContext } from '../lib/workspacePaths.js';
 import type { ControlSource } from '../daemon/control-plane/types.js';
@@ -136,7 +136,7 @@ export class RepositoryManager {
 
     private async listRegisteredRepositories(repositoryRoot: string): Promise<RepositoryCandidate[]> {
         void repositoryRoot;
-        return listRegisteredUserRepositories();
+        return listRegisteredRepositories();
     }
 
     private async addKnownRepository(repositoryPath: string): Promise<RepositoryCandidate> {
@@ -148,7 +148,7 @@ export class RepositoryManager {
         if (!resolveGitWorkspaceRoot(controlRoot) && !resolveGitWorkspaceRoot(trimmedPath)) {
             throw new Error(`Mission could not resolve a Git repository from '${repositoryPath}'.`);
         }
-        await registerMissionUserRepo(controlRoot);
+        await registerMissionRepo(controlRoot);
         const repos = await this.listRegisteredRepositories(controlRoot);
         const registered = repos.find((candidate) => candidate.repositoryRootPath === controlRoot);
         if (!registered) {

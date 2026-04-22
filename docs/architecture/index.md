@@ -67,7 +67,7 @@ flowchart LR
  Workspace --> Briefs[(.mission/missions/<mission-id>/*)]
  Airport --> Zellij[zellij substrate]
  Runtime --> Providers[Copilot CLI / Copilot SDK / transport]
- Workspace --> UserConfig[(~/.config/mission/config.json)]
+ Workspace --> Config[(~/.config/mission/config.json)]
  Runtime --> DaemonRuntime[(XDG runtime or tmp daemon state)]
 ```
 
@@ -100,7 +100,7 @@ The architecture coverage in this section reflects the five replayed architectur
 Use this order when reconciling architectural questions:
 
 1. Current implementation in `packages/mission`, `packages/core`, `packages/airport`, and `apps/airport/terminal`
-2. Persisted runtime surfaces: `.mission/settings.json`, `.mission/workflow/`, `.mission/missions/<mission-id>/mission.json`, user config, daemon runtime files
+2. Persisted runtime surfaces: `.mission/settings.json`, `.mission/workflow/`, `.mission/missions/<mission-id>/mission.json`, Mission config, daemon runtime files
 3. Current reference docs such as `docs/reference/state-schema.md`
 4. Source specifications under `specifications/`
 5. Replayed mission dossiers under `.mission/missions/`

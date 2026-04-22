@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { RepositoryManager } from './RepositoryManager.js';
-import { readMissionUserConfig } from '../lib/userConfig.js';
+import { readMissionConfig } from '../lib/config.js';
 
 describe('RepositoryManager surface resolution', () => {
     beforeEach(async () => {
@@ -74,7 +74,7 @@ describe('RepositoryManager surface resolution', () => {
 
         try {
             await manager.discoverSurface(workspaceRoot);
-            expect(readMissionUserConfig()).toBeUndefined();
+            expect(readMissionConfig()).toBeUndefined();
         } finally {
             await fs.rm(workspaceRoot, { recursive: true, force: true });
         }

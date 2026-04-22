@@ -16,9 +16,9 @@ import {
 } from '../lib/daemonConfig.js';
 import {
 	getMissionGitHubCliBinary,
-	listRegisteredUserRepositories,
-	registerMissionUserRepo
-} from '../lib/userConfig.js';
+	listRegisteredRepositories,
+	registerMissionRepo
+} from '../lib/config.js';
 import {
 	GitHubPlatformAdapter,
 	type GitHubBranchSyncStatus,
@@ -495,8 +495,8 @@ export class RepositoryRuntime {
 			repository: githubRepository,
 			destinationPath
 		});
-		await registerMissionUserRepo(repositoryRootPath);
-		const registeredRepository = (await listRegisteredUserRepositories()).find(
+		await registerMissionRepo(repositoryRootPath);
+		const registeredRepository = (await listRegisteredRepositories()).find(
 			(candidate) => candidate.repositoryRootPath === repositoryRootPath
 		);
 		if (!registeredRepository) {

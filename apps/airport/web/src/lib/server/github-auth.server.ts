@@ -17,13 +17,21 @@ const GITHUB_AUTH_REFRESH_WINDOW_MS = 60 * 1000;
 type GitHubOAuthSessionRecord = {
     sessionId: string;
     accessToken: string;
+    githubUserId?: string;
+    githubLogin?: string;
     tokenType?: string;
     scope?: string;
     refreshToken?: string;
     accessTokenExpiresAt?: string;
     refreshTokenExpiresAt?: string;
+    sessionExpiresAt?: string;
     createdAt: string;
     updatedAt: string;
+};
+
+type GitHubAuthenticatedUser = {
+    id?: number | string;
+    login?: string;
 };
 
 type GitHubOAuthStateRecord = {
@@ -116,7 +124,12 @@ export async function readGithubAuthToken(cookies: Cookies): Promise<string | un
 export async function clearGithubAuthSession(cookies: Cookies): Promise<void> {
     const sessionId = cookies.get(GITHUB_AUTH_SESSION_COOKIE_NAME)?.trim();
     if (sessionId) {
-        await deleteGithubAuthSessionRecord(sessionId);
+        const session = await readGithubAuthSessionRecord(sessionId);
+        if (session?.githubUserId) {
+            await deleteGithubAuthSessionsForUser(session.githubUserId);
+        } else {
+            await deleteGithubAuthSessionRecord(sessionId);
+        }
     }
 
     clearGithubAuthSessionCookie(cookies);
@@ -426,6 +439,12 @@ async function readGithubAuthSession(cookies: Cookies): Promise<GitHubOAuthSessi
         return undefined;
     }
 
+    if (isExpired(session.sessionExpiresAt)) {
+        await deleteGithubAuthSessionRecord(sessionId);
+        clearGithubAuthSessionCookie(cookies);
+        return undefined;
+    }
+
     if (isExpired(session.refreshTokenExpiresAt)) {
         await deleteGithubAuthSessionRecord(sessionId);
         clearGithubAuthSessionCookie(cookies);
@@ -523,6 +542,7 @@ async function refreshGithubOAuthSession(session: GitHubOAuthSessionRecord): Pro
             : session.refreshTokenExpiresAt
                 ? { refreshTokenExpiresAt: session.refreshTokenExpiresAt }
                 : {}),
+        ...(session.sessionExpiresAt ? { sessionExpiresAt: session.sessionExpiresAt } : {}),
         updatedAt: now.toISOString()
     };
 }
@@ -531,20 +551,25 @@ async function persistGithubAuthSessionFromTokenResponse(
     cookies: Cookies,
     tokenResponse: Required<Pick<GitHubOAuthTokenResponse, 'access_token'>> & GitHubOAuthTokenResponse
 ): Promise<void> {
-    const sessionRecord = buildGithubAuthSessionRecord(tokenResponse);
+    const sessionRecord = await buildGithubAuthSessionRecord(tokenResponse);
     await persistGithubAuthSessionRecord(sessionRecord);
     writeGithubAuthSessionCookie(cookies, sessionRecord.sessionId);
     clearLegacyGithubAuthTokenCookie(cookies);
 }
 
-function buildGithubAuthSessionRecord(
+async function buildGithubAuthSessionRecord(
     tokenResponse: Required<Pick<GitHubOAuthTokenResponse, 'access_token'>> & GitHubOAuthTokenResponse
-): GitHubOAuthSessionRecord {
+): Promise<GitHubOAuthSessionRecord> {
     const now = new Date();
+    const githubUser = await readGitHubAuthenticatedUser(tokenResponse.access_token.trim());
+    const githubUserId = normalizeOptionalString(githubUser?.id);
+    const githubLogin = normalizeOptionalString(githubUser?.login);
 
     return {
         sessionId: randomBytes(24).toString('hex'),
         accessToken: tokenResponse.access_token.trim(),
+        ...(githubUserId ? { githubUserId } : {}),
+        ...(githubLogin ? { githubLogin } : {}),
         ...(tokenResponse.token_type ? { tokenType: tokenResponse.token_type.trim() } : {}),
         ...(tokenResponse.scope ? { scope: tokenResponse.scope.trim() } : {}),
         ...(tokenResponse.refresh_token ? { refreshToken: tokenResponse.refresh_token.trim() } : {}),
@@ -554,9 +579,30 @@ function buildGithubAuthSessionRecord(
         ...(resolveExpiryIso(now, tokenResponse.refresh_token_expires_in)
             ? { refreshTokenExpiresAt: resolveExpiryIso(now, tokenResponse.refresh_token_expires_in) }
             : {}),
+        sessionExpiresAt: new Date(now.getTime() + GITHUB_AUTH_SESSION_TTL_SECONDS * 1000).toISOString(),
         createdAt: now.toISOString(),
         updatedAt: now.toISOString()
     };
+}
+
+async function readGitHubAuthenticatedUser(accessToken: string): Promise<GitHubAuthenticatedUser | undefined> {
+    const response = await fetch('https://api.github.com/user', {
+        headers: {
+            Accept: 'application/vnd.github+json',
+            Authorization: `Bearer ${accessToken}`,
+            'User-Agent': 'mission-airport-web'
+        }
+    });
+
+    if (!response.ok) {
+        return undefined;
+    }
+
+    try {
+        return await response.json() as GitHubAuthenticatedUser;
+    } catch {
+        return undefined;
+    }
 }
 
 async function parseGitHubOAuthTokenResponse(response: Response): Promise<GitHubOAuthTokenResponse> {
@@ -666,6 +712,8 @@ async function readGithubAuthSessionRecord(sessionId: string): Promise<GitHubOAu
         return {
             sessionId,
             accessToken: parsed.accessToken.trim(),
+            ...(normalizeOptionalString(parsed.githubUserId) ? { githubUserId: normalizeOptionalString(parsed.githubUserId) } : {}),
+            ...(normalizeOptionalString(parsed.githubLogin) ? { githubLogin: normalizeOptionalString(parsed.githubLogin) } : {}),
             ...(typeof parsed.tokenType === 'string' && parsed.tokenType.trim()
                 ? { tokenType: parsed.tokenType.trim() }
                 : {}),
@@ -678,6 +726,9 @@ async function readGithubAuthSessionRecord(sessionId: string): Promise<GitHubOAu
                 : {}),
             ...(typeof parsed.refreshTokenExpiresAt === 'string' && parsed.refreshTokenExpiresAt.trim()
                 ? { refreshTokenExpiresAt: parsed.refreshTokenExpiresAt.trim() }
+                : {}),
+            ...(typeof parsed.sessionExpiresAt === 'string' && parsed.sessionExpiresAt.trim()
+                ? { sessionExpiresAt: parsed.sessionExpiresAt.trim() }
                 : {}),
             createdAt:
                 typeof parsed.createdAt === 'string' && parsed.createdAt.trim().length > 0
@@ -705,6 +756,23 @@ async function deleteGithubAuthSessionRecord(sessionId: string): Promise<void> {
     }
 }
 
+async function deleteGithubAuthSessionsForUser(githubUserId: string): Promise<void> {
+    const normalizedGitHubUserId = normalizeOptionalString(githubUserId);
+    if (!normalizedGitHubUserId) {
+        return;
+    }
+
+    const sessionIds = await listGithubAuthSessionIds();
+    await Promise.all(
+        sessionIds.map(async (sessionId) => {
+            const session = await readGithubAuthSessionRecord(sessionId);
+            if (session?.githubUserId === normalizedGitHubUserId) {
+                await deleteGithubAuthSessionRecord(sessionId);
+            }
+        })
+    );
+}
+
 async function ensureGithubAuthSessionDirectory(): Promise<string> {
     const directory = resolveGithubAuthSessionDirectory();
     await fs.mkdir(directory, { recursive: true });
@@ -712,29 +780,31 @@ async function ensureGithubAuthSessionDirectory(): Promise<string> {
 }
 
 async function cleanupGithubAuthSessionDirectory(directory: string): Promise<void> {
-    let entries: Array<{ name: string }> = [];
-    try {
-        entries = await fs.readdir(directory, { withFileTypes: true }) as unknown as Array<{ name: string }>;
-    } catch {
-        return;
-    }
-
+    const sessionIds = await listGithubAuthSessionIds(directory);
     await Promise.all(
-        entries
-            .map((entry) => entry.name)
-            .filter((name) => name.endsWith('.json'))
-            .map(async (name) => {
-                const session = await readGithubAuthSessionRecord(name.slice(0, -5));
-                if (!session) {
-                    await deleteGithubAuthSessionRecord(name.slice(0, -5));
-                    return;
-                }
+        sessionIds.map(async (sessionId) => {
+            const session = await readGithubAuthSessionRecord(sessionId);
+            if (!session) {
+                await deleteGithubAuthSessionRecord(sessionId);
+                return;
+            }
 
-                if (isExpired(session.refreshTokenExpiresAt)) {
-                    await deleteGithubAuthSessionRecord(session.sessionId);
-                }
-            })
+            if (isExpired(session.sessionExpiresAt) || isExpired(session.refreshTokenExpiresAt)) {
+                await deleteGithubAuthSessionRecord(session.sessionId);
+            }
+        })
     );
+}
+
+async function listGithubAuthSessionIds(directory = resolveGithubAuthSessionDirectory()): Promise<string[]> {
+    try {
+        const entries = await fs.readdir(directory, { withFileTypes: true });
+        return entries
+            .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+            .map((entry) => entry.name.slice(0, -5));
+    } catch {
+        return [];
+    }
 }
 
 function resolveGithubAuthSessionDirectory(): string {
@@ -758,6 +828,18 @@ function resolveGitHubOAuthClientId(): string | undefined {
 
 function resolveGitHubOAuthClientSecret(): string | undefined {
     return process.env['GITHUB_APP_CLIENT_SECRET']?.trim() || process.env['GITHUB_OAUTH_CLIENT_SECRET']?.trim();
+}
+
+function normalizeOptionalString(value: unknown): string | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return String(value);
+    }
+    if (typeof value !== 'string') {
+        return undefined;
+    }
+
+    const normalizedValue = value.trim();
+    return normalizedValue.length > 0 ? normalizedValue : undefined;
 }
 
 function requireGitHubOAuthClientId(): string {

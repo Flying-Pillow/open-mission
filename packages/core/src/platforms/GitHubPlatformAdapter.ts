@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { getMissionGitHubCliBinary } from '../lib/userConfig.js';
+import { getMissionGitHubCliBinary } from '../lib/config.js';
 import type { GitHubIssueDetail, GitHubVisibleRepository, MissionBrief, MissionType, TrackedIssueSummary } from '../types.js';
 
 export type GitHubBranchSyncStatus = {

@@ -16,13 +16,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import {
-	ensureMissionUserConfig,
+	ensureMissionConfig,
 	getMissionRuntimeDirectory,
-	getMissionUserConfigPath,
-	readMissionUserConfig,
+	getMissionConfigPath,
+	readMissionConfig,
 	resolveMissionWorkspaceRoot,
-	type MissionUserConfig,
-	writeMissionUserConfig
+	type MissionConfig,
+	writeMissionConfig
 } from '@flying-pillow/mission-core/node';
 
 const execFileAsync = promisify(execFile);
@@ -44,9 +44,9 @@ type ManagedDependency = {
 export async function ensureMissionInstallation(options: {
 	interactive: boolean;
 	verbose?: boolean;
-}): Promise<MissionUserConfig> {
-	const hadConfig = readMissionUserConfig() !== undefined;
-	let config = await ensureMissionUserConfig();
+}): Promise<MissionConfig> {
+	const hadConfig = readMissionConfig() !== undefined;
+	let config = await ensureMissionConfig();
 	let changed = !hadConfig;
 
 	if (options.verbose) {
@@ -73,13 +73,13 @@ export async function ensureMissionInstallation(options: {
 	}
 
 	if (changed) {
-		config = await writeMissionUserConfig(config);
+		config = await writeMissionConfig(config);
 	}
 
 	if (options.verbose) {
 		note(
 			[
-				`config: ${getMissionUserConfigPath()}`,
+				`config: ${getMissionConfigPath()}`,
 				`missions: ${resolveMissionWorkspaceRoot(config.missionWorkspaceRoot)}`,
 				`runtime: ${getMissionRuntimeDirectory()}`,
 				`gh: ${config.ghBinary ?? 'gh'}`
@@ -92,16 +92,16 @@ export async function ensureMissionInstallation(options: {
 	return config;
 }
 
-export function getMissionInstallationOutput(config: MissionUserConfig) {
+export function getMissionInstallationOutput(config: MissionConfig) {
 	return {
-		configPath: getMissionUserConfigPath(),
+		configPath: getMissionConfigPath(),
 		config,
 		missionsPath: resolveMissionWorkspaceRoot(config.missionWorkspaceRoot),
 		runtimePath: getMissionRuntimeDirectory()
 	};
 }
 
-async function ensureWorkspaceRoot(config: MissionUserConfig, interactive: boolean): Promise<string> {
+async function ensureWorkspaceRoot(config: MissionConfig, interactive: boolean): Promise<string> {
 	const configuredRoot = config.missionWorkspaceRoot ?? 'missions';
 	const resolvedRoot = resolveMissionWorkspaceRoot(configuredRoot);
 	try {
