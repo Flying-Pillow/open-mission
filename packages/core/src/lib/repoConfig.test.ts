@@ -33,7 +33,7 @@ describe('repoConfig', () => {
 		expect(resolveMissionWorkspaceRoot()).toBe(path.resolve(os.homedir(), 'missions'));
 	});
 
-	it('nests mission worktrees under owner and repository for GitHub checkouts', async () => {
+	it('nests mission worktrees under the full GitHub repository path for GitHub checkouts', async () => {
 		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'repo-config-github-'));
 		try {
 			spawnSync('git', ['init'], { cwd: workspaceRoot, stdio: 'pipe' });
@@ -43,7 +43,7 @@ describe('repoConfig', () => {
 			});
 
 			expect(getMissionWorktreesPath(workspaceRoot, { missionWorkspaceRoot: '/missions' })).toBe(
-				path.join('/missions', 'flying-pillow', 'connect-four')
+				path.join('/missions', 'Flying-Pillow', 'connect-four')
 			);
 		} finally {
 			await fs.rm(workspaceRoot, { recursive: true, force: true });

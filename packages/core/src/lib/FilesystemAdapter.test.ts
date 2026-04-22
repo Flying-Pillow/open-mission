@@ -31,7 +31,7 @@ describe('FilesystemAdapter', () => {
 		);
 	});
 
-	it('nests mission worktrees under the GitHub owner and repository name', async () => {
+	it('nests mission worktrees under the full GitHub repository path', async () => {
 		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-github-'));
 		try {
 			const initResult = await import('node:child_process').then(({ spawnSync }) =>
@@ -52,7 +52,7 @@ describe('FilesystemAdapter', () => {
 
 			const adapter = new FilesystemAdapter(workspaceRoot);
 			expect(adapter.getMissionWorktreePath('mission-101')).toBe(
-				path.join(resolveMissionWorkspaceRoot(), 'flying-pillow', 'connect-four', 'mission-101')
+				path.join(resolveMissionWorkspaceRoot(), 'Flying-Pillow', 'connect-four', 'mission-101')
 			);
 		} finally {
 			await fs.rm(workspaceRoot, { recursive: true, force: true });

@@ -44,7 +44,7 @@ export function slugRepositoryIdentitySegment(value: string): string {
 }
 
 function normalizeGitHubRepositoryName(value: string | undefined): string | undefined {
-	const [owner, repository, ...rest] = value?.trim().split('/').map((segment) => segment.trim().toLowerCase()) ?? [];
+	const [owner, repository, ...rest] = value?.trim().split('/').map((segment) => segment.trim()) ?? [];
 	if (!owner || !repository || rest.length > 0) {
 		return undefined;
 	}
