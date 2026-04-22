@@ -215,7 +215,7 @@ export interface MissionTaskRuntimeState {
   instruction: string;
   dependsOn: string[];
   lifecycle: MissionTaskLifecycleState;
-  blockedByTaskIds: string[];
+  waitingOnTaskIds: string[];
   runtime: MissionTaskRuntimeSettings;
   agentRunner?: string;
   retries: number;
@@ -238,7 +238,7 @@ The workflow engine stores and snapshots it, but does not interpret provider-spe
 `autostart` means:
 
 - if the task becomes `ready`
-- and every task listed in `dependsOn` is completed, so `blockedByTaskIds` is empty
+- and every task listed in `dependsOn` is completed, so `waitingOnTaskIds` is empty
 - and the mission lifecycle allows auto-execution
 - and concurrency rules permit new work
 - and no panic or global pause is in effect
@@ -602,12 +602,6 @@ export interface TaskMarkedDoneEvent extends MissionWorkflowEventBase {
   taskId: string;
 }
 
-export interface TaskMarkedBlockedEvent extends MissionWorkflowEventBase {
-  type: 'task.blocked';
-  taskId: string;
-  reason?: string;
-}
-
 export interface TaskReopenedEvent extends MissionWorkflowEventBase {
   type: 'task.reopened';
   taskId: string;
@@ -714,7 +708,7 @@ Minimum required scenario coverage:
 
 1. Mission bootstrap from `mission.created` through `mission.started`, generation, auto-launch, stage progression, mission completion, and `mission.delivered`.
 2. Human control events and commands: `mission.paused`, `mission.resumed`, manual `task.queued`, prompt, command, cancel, and terminate.
-3. Failure recovery: `session.launch-failed`, `task.blocked`, and `task.reopened`.
+3. Failure recovery: `session.launch-failed` and `task.reopened`.
 4. Panic recovery: `mission.panic.requested`, queue clearing, `session.terminated`, `mission.panic.cleared`, and launch-queue restart.
 5. Refresh recovery where persisted state is missing machine-derived follow-up work and the controller must replay it.
 
@@ -848,7 +842,6 @@ The daemon and UI should expose commands against these first-class concepts:
 - panic stop mission
 - clear panic
 - mark task done
-- mark task blocked
 - reopen task
 - set task autostart on
 - set task autostart off

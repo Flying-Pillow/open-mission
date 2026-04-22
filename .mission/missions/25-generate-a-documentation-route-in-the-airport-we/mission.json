@@ -253,7 +253,7 @@
         "instruction": "Use BRIEF.md as the canonical intake context. Rewrite or enrich PRD.md so it clearly states the problem, the target outcome, the constraints, and the success criteria for this mission. Only modify PRD.md in this task. Do not create or edit SPEC.md, implementation files, verification files, or delivery artifacts. Do not create application code in this task.",
         "dependsOn": [],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true
         },
@@ -270,7 +270,7 @@
         "instruction": "Read PRD.md and define the technical target in SPEC.md. The specification must describe the intended design, the key boundaries, and the concrete files that will change. Only modify SPEC.md in this task. Do not create implementation code or verification evidence in this task.",
         "dependsOn": [],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true
         },
@@ -289,7 +289,7 @@
           "spec/01-spec-from-prd"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true
         },
@@ -306,7 +306,7 @@
         "instruction": "Set up the Airport web app so the repository-root `docs/` tree can compile through an `mdsvex` pipeline instead of the existing raw-markdown viewer path. This slice should add the required web-app dependencies and config, allow the module graph to read the root docs corpus, and introduce the narrow compatibility normalization needed for existing Jekyll-flavored source conventions such as legacy frontmatter fields, preserved inline HTML, and rewritten internal docs links.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
         "dependsOn": [],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false
         },
@@ -325,7 +325,7 @@
           "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false
         },
@@ -344,7 +344,7 @@
           "implementation/01-establish-mdsvex-docs-pipeline-and-source-normalization"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false
         },
@@ -363,7 +363,7 @@
           "implementation/02-build-docs-manifest-navigation-and-page-resolution"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false
         },
@@ -382,7 +382,7 @@
           "implementation/02-build-docs-manifest-navigation-and-page-resolution"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false
         },
@@ -401,7 +401,7 @@
           "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false
         },
@@ -420,7 +420,7 @@
           "implementation/03-compose-docs-route-layout-and-mdsvex-page-rendering"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false
         },
@@ -439,7 +439,7 @@
           "implementation/04-integrate-docs-discoverability-and-daemon-independent-access"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false
         },
@@ -456,7 +456,7 @@
         "instruction": "Run the repo-wide end-to-end validation required for the mission. Record the simulator run results, residual risks, and release readiness in AUDIT.md.",
         "dependsOn": [],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true
         },
@@ -473,7 +473,7 @@
         "instruction": "Prepare the final delivery motion. Confirm AUDIT.md is complete, summarize the final status, and write DELIVERY.md as the final delivery artifact for the mission.",
         "dependsOn": [],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false
         },

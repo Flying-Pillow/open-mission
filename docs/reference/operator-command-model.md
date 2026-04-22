@@ -368,27 +368,6 @@ Accept the task outcome as complete.
 
 The workflow accepts the task as finished and uses that fact to recompute downstream readiness.
 
-## `/task blocked`
-
-Record that the task cannot currently proceed normally.
-
-**Rules**
-
-- Available for non-terminal tasks when validation accepts a blocked transition.
-- In the current workflow rules this includes tasks that are `pending`, `ready`, `queued`, or `running`.
-
-**Context**
-
-- Task selected.
-
-**Model status changes**
-
-- Task lifecycle: `pending|ready|queued|running -> blocked`
-
-**Derived model effects**
-
-- Stage state may become `blocked` depending on surrounding task state.
-
 **Result**
 
 The workflow records a durable blocked condition instead of pretending the task is still healthy progress.
@@ -645,7 +624,6 @@ The practical command surface should now read like this:
 - `/task start`
 - `/launch`
 - `/task done`
-- `/task blocked`
 - `/task reopen`
 - `/task autostart on`
 - `/task autostart off`

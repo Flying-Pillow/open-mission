@@ -38,7 +38,7 @@ That preset is part of repository policy, not a hidden package implementation de
 
 Execution settings are reducer-owned policy, not documentation-only decoration: `execution.maxParallelTasks` limits how many tasks may be `queued` or `running`, and `execution.maxParallelSessions` limits how many launch/session slots may be occupied at once.
 
-Task auto-launch is also reducer-owned policy. A task may auto-queue only after the derived projection marks it `ready`, which means it is in the active stage and every `dependsOn` task is already `completed`. Tasks with unresolved dependencies stay `pending`, expose `blockedByTaskIds`, and are not eligible for auto-launch yet.
+Task auto-launch is also reducer-owned policy. A task may auto-queue only after the derived projection marks it `ready`, which means it is in the active stage and every `dependsOn` task is already `completed`. Tasks with unresolved dependencies stay `pending`, expose `waitingOnTaskIds`, and are not eligible for auto-launch yet.
 
 ## Runtime Record Structure
 
@@ -79,7 +79,7 @@ Its top-level shape is:
 | --- | --- | --- |
 | Mission lifecycle | `mission.created`, `mission.started`, `mission.paused`, `mission.delivered` | Advances mission-level lifecycle |
 | Task generation | `tasks.generated` | Creates runtime task records for a stage |
-| Task lifecycle | `task.queued`, `task.started`, `task.completed`, `task.blocked`, `task.reopened` | Drives task execution state |
+| Task lifecycle | `task.queued`, `task.started`, `task.completed`, `task.reopened` | Drives task execution state |
 | Session lifecycle | `session.started`, `session.launch-failed`, `session.completed`, `session.failed`, `session.cancelled`, `session.terminated` | Keeps workflow state aligned with agent runtime |
 | Policy changes | `task.launch-policy.changed` | Changes per-task runtime launch settings |
 
@@ -108,23 +108,23 @@ That includes operator interference when it changes the real execution substrate
 
 ```mermaid
 sequenceDiagram
-	autonumber
-	participant Mission
-	participant Controller as MissionWorkflowController
-	participant Reducer as reducer ingestion
-	participant Executor as RequestExecutor
-	participant Control as daemon-owned agent control
-	participant Disk as mission.json
+ autonumber
+ participant Mission
+ participant Controller as MissionWorkflowController
+ participant Reducer as reducer ingestion
+ participant Executor as RequestExecutor
+ participant Control as daemon-owned agent control
+ participant Disk as mission.json
 
-	Mission->>Controller: apply event
-	Controller->>Reducer: ingest current document + event
-	Reducer-->>Controller: next document + requests
-	Controller->>Disk: write mission.json
-	Controller->>Executor: execute requests
-	Executor->>Control: start or control sessions
-	Control-->>Executor: runtime events
-	Executor-->>Controller: emitted workflow events
-	Controller->>Controller: recursively apply emitted events
+ Mission->>Controller: apply event
+ Controller->>Reducer: ingest current document + event
+ Reducer-->>Controller: next document + requests
+ Controller->>Disk: write mission.json
+ Controller->>Executor: execute requests
+ Executor->>Control: start or control sessions
+ Control-->>Executor: runtime events
+ Executor-->>Controller: emitted workflow events
+ Controller->>Controller: recursively apply emitted events
 ```
 
 ## Task Generation Rules
@@ -151,7 +151,7 @@ Automatic queueing and session launch are derived only for tasks that are alread
 5. the task runtime launch policy has `autostart: true`
 6. `execution.maxParallelTasks` and `execution.maxParallelSessions` still have capacity
 
-If dependencies are still unresolved, the task remains `pending` with `blockedByTaskIds` populated and the reducer does not auto-queue it.
+If dependencies are still unresolved, the task remains `pending` with `waitingOnTaskIds` populated and the reducer does not auto-queue it.
 
 ## Invariants
 
@@ -180,7 +180,7 @@ The required scenario matrix covered there is:
 
 1. Happy-path mission execution from `mission.created` through automatic generation, auto-launch, manual queueing, completion, and `mission.delivered`.
 2. Human control paths including `mission.paused`, `mission.resumed`, session prompt, session command, cancel, and terminate.
-3. Failure and recovery paths including `session.launch-failed`, `task.blocked`, and `task.reopened`.
+3. Failure and recovery paths including `session.launch-failed` and `task.reopened`.
 4. Panic and recovery paths including `mission.panic.requested`, queue clearing, session termination, `mission.panic.cleared`, and `mission.launch-queue.restarted`.
 5. Refresh repair of machine-derived requests when persisted state is missing generated follow-up work.
 

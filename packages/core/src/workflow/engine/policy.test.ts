@@ -7,7 +7,7 @@ import {
 import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../mission/workflow.js';
 
 describe('resolvePendingTaskGenerationStageId', () => {
-	it('allows template-backed generation for an empty blocked eligible stage', () => {
+	it('allows template-backed generation for an empty eligible stage', () => {
 		const workflow = createDefaultWorkflowSettings();
 		const configuration = createMissionWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-21T18:00:00.000Z',
@@ -23,19 +23,18 @@ describe('resolvePendingTaskGenerationStageId', () => {
 		document.runtime.activeStageId = 'prd';
 		document.runtime.stages = configuration.workflow.stageOrder.map((stageId) => ({
 			stageId,
-			lifecycle: stageId === 'prd' ? 'blocked' : 'pending',
+			lifecycle: stageId === 'prd' ? 'ready' : 'pending',
 			taskIds: [],
 			readyTaskIds: [],
 			queuedTaskIds: [],
 			runningTaskIds: [],
-			blockedTaskIds: [],
 			completedTaskIds: []
 		}));
 
 		expect(resolvePendingTaskGenerationStageId(document.runtime, configuration)).toBe('prd');
 	});
 
-	it('suppresses artifact-backed generation for an empty blocked eligible stage', () => {
+	it('allows artifact-backed generation for an empty eligible stage', () => {
 		const workflow = createDefaultWorkflowSettings();
 		const configuration = createMissionWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-21T18:00:00.000Z',
@@ -51,12 +50,11 @@ describe('resolvePendingTaskGenerationStageId', () => {
 		document.runtime.activeStageId = 'implementation';
 		document.runtime.stages = configuration.workflow.stageOrder.map((stageId) => ({
 			stageId,
-			lifecycle: stageId === 'implementation' ? 'blocked' : stageId === 'prd' || stageId === 'spec' ? 'completed' : 'pending',
+			lifecycle: stageId === 'implementation' ? 'ready' : stageId === 'prd' || stageId === 'spec' ? 'completed' : 'pending',
 			taskIds: [],
 			readyTaskIds: [],
 			queuedTaskIds: [],
 			runningTaskIds: [],
-			blockedTaskIds: [],
 			completedTaskIds: []
 		}));
 		document.runtime.tasks = [
@@ -67,7 +65,7 @@ describe('resolvePendingTaskGenerationStageId', () => {
 				instruction: 'Draft the PRD.',
 				dependsOn: [],
 				lifecycle: 'completed',
-				blockedByTaskIds: [],
+				waitingOnTaskIds: [],
 				runtime: { autostart: true },
 				retries: 0,
 				createdAt: configuration.createdAt,
@@ -81,7 +79,7 @@ describe('resolvePendingTaskGenerationStageId', () => {
 				instruction: 'Draft the spec.',
 				dependsOn: [],
 				lifecycle: 'completed',
-				blockedByTaskIds: [],
+				waitingOnTaskIds: [],
 				runtime: { autostart: true },
 				retries: 0,
 				createdAt: configuration.createdAt,
@@ -90,6 +88,6 @@ describe('resolvePendingTaskGenerationStageId', () => {
 			}
 		];
 
-		expect(resolvePendingTaskGenerationStageId(document.runtime, configuration)).toBeUndefined();
+		expect(resolvePendingTaskGenerationStageId(document.runtime, configuration)).toBe('implementation');
 	});
 });

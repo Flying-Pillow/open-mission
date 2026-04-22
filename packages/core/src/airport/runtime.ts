@@ -62,7 +62,6 @@ export const missionRuntimeTaskCommandSchema = z.discriminatedUnion('action', [
         terminalSessionName: z.string().trim().min(1).optional()
     }),
     z.object({ action: z.literal('complete') }),
-    z.object({ action: z.literal('block') }),
     z.object({ action: z.literal('reopen') })
 ]);
 
@@ -184,7 +183,7 @@ export const missionWorkflowSummaryDtoSchema = z.object({
                     title: z.string().trim().min(1),
                     lifecycle: z.string().trim().min(1),
                     dependsOn: z.array(z.string().trim().min(1)),
-                    blockedByTaskIds: z.array(z.string().trim().min(1))
+                    waitingOnTaskIds: z.array(z.string().trim().min(1))
                 })
             )
         })

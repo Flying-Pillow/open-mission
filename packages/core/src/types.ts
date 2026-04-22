@@ -290,7 +290,7 @@ export type MissionTaskState = {
 	instruction: string;
 	body: string;
 	dependsOn: string[];
-	blockedBy: string[];
+	waitingOn: string[];
 	status: MissionTaskStatus;
 	agent: MissionTaskAgent;
 	retries: number;

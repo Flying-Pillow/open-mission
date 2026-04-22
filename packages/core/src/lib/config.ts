@@ -173,7 +173,7 @@ function normalizeResolvedConfig(rawConfig: unknown): MissionConfig | undefined 
 			? { ghBinary: candidate['ghBinary'] }
 			: {}),
 		...(Array.isArray(candidate['registeredRepositories'])
-			? { registeredRepositories: candidate['registeredRepositories'] as MissionUserRegisteredRepository[] }
+			? { registeredRepositories: candidate['registeredRepositories'] as MissionRegisteredRepository[] }
 			: {})
 	});
 }

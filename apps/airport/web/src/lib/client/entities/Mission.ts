@@ -44,10 +44,6 @@ export type MissionCommandGateway = {
         missionId: string;
         taskId: string;
     }): Promise<MissionRuntimeSnapshotDto>;
-    blockTask(input: {
-        missionId: string;
-        taskId: string;
-    }): Promise<MissionRuntimeSnapshotDto>;
     reopenTask(input: {
         missionId: string;
         taskId: string;
@@ -101,9 +97,6 @@ const unavailableMissionCommands: MissionCommandGateway = {
         throw new Error('Mission task commands are unavailable in this client context.');
     },
     completeTask: async () => {
-        throw new Error('Mission task commands are unavailable in this client context.');
-    },
-    blockTask: async () => {
         throw new Error('Mission task commands are unavailable in this client context.');
     },
     reopenTask: async () => {
@@ -319,12 +312,6 @@ export class Mission implements EntityModel<MissionRuntimeSnapshotDto> {
                 },
                 completeTask: async (taskId) => {
                     this.applySnapshot(await this.commands.completeTask({
-                        missionId: this.missionId,
-                        taskId
-                    }));
-                },
-                blockTask: async (taskId) => {
-                    this.applySnapshot(await this.commands.blockTask({
                         missionId: this.missionId,
                         taskId
                     }));

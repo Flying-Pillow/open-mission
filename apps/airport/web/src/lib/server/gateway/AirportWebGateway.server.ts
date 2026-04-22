@@ -299,7 +299,7 @@ export class AirportWebGateway {
     public async executeMissionTaskCommand(input: {
         missionId: string;
         taskId: string;
-        action: 'start' | 'complete' | 'block' | 'reopen';
+        action: 'start' | 'complete' | 'reopen';
         terminalSessionName?: string;
         surfacePath?: string;
     }): Promise<MissionRuntimeSnapshotDto> {
@@ -938,15 +938,13 @@ export class AirportWebGateway {
 
     private resolveMissionTaskActionId(
         taskId: string,
-        action: 'start' | 'complete' | 'block' | 'reopen'
+        action: 'start' | 'complete' | 'reopen'
     ): string {
         switch (action) {
             case 'start':
                 return `task.start.${taskId}`;
             case 'complete':
                 return `task.done.${taskId}`;
-            case 'block':
-                return `task.block.${taskId}`;
             case 'reopen':
                 return `task.reopen.${taskId}`;
         }
@@ -1057,7 +1055,7 @@ export class AirportWebGateway {
                                     title: task.title,
                                     lifecycle: task.lifecycle,
                                     dependsOn: task.dependsOn,
-                                    blockedByTaskIds: task.blockedByTaskIds
+                                    waitingOnTaskIds: task.waitingOnTaskIds
                                 }))
                         }))
                     }

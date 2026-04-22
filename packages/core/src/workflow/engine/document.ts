@@ -153,7 +153,6 @@ function createEmptyStageProjection(stageId: MissionStageId, lifecycle: 'pending
         readyTaskIds: [],
         queuedTaskIds: [],
         runningTaskIds: [],
-        blockedTaskIds: [],
         completedTaskIds: []
     };
 }

@@ -41,7 +41,7 @@ describe('workflow reducer delivery completion', () => {
             instruction: 'Ship it.',
             dependsOn: [],
             lifecycle: 'queued',
-            blockedByTaskIds: [],
+            waitingOnTaskIds: [],
             runtime: { autostart: false },
             retries: 0,
             createdAt: '2026-04-10T15:51:25.000Z',
@@ -132,7 +132,7 @@ describe('workflow reducer delivery completion', () => {
         expect(generated.nextState.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('queued');
         expect(generated.nextState.tasks.find((task) => task.taskId === 'prd/02')).toEqual(expect.objectContaining({
             lifecycle: 'pending',
-            blockedByTaskIds: ['prd/01']
+            waitingOnTaskIds: ['prd/01']
         }));
         expect(generated.requests).toContainEqual(expect.objectContaining({
             type: 'session.launch',
@@ -236,7 +236,7 @@ describe('workflow reducer delivery completion', () => {
                 instruction: 'Draft PRD 1.',
                 dependsOn: [],
                 lifecycle: 'queued',
-                blockedByTaskIds: [],
+                waitingOnTaskIds: [],
                 runtime: { autostart: false },
                 retries: 0,
                 createdAt: '2026-04-10T15:51:25.000Z',
@@ -249,7 +249,7 @@ describe('workflow reducer delivery completion', () => {
                 instruction: 'Draft PRD 2.',
                 dependsOn: [],
                 lifecycle: 'ready',
-                blockedByTaskIds: [],
+                waitingOnTaskIds: [],
                 runtime: { autostart: false },
                 retries: 0,
                 createdAt: '2026-04-10T15:51:25.000Z',
@@ -283,7 +283,7 @@ describe('workflow reducer delivery completion', () => {
             instruction: 'Draft PRD.',
             dependsOn: [],
             lifecycle: 'queued',
-            blockedByTaskIds: [],
+            waitingOnTaskIds: [],
             runtime: { autostart: true },
             retries: 0,
             createdAt: '2026-04-10T15:51:25.000Z',
@@ -536,7 +536,7 @@ describe('workflow reducer delivery completion', () => {
         }
 
         expect(runtime.lifecycle).toBe('running');
-        expect(runtime.stages.find((stage) => stage.stageId === 'implementation')?.lifecycle).toBe('blocked');
+        expect(runtime.stages.find((stage) => stage.stageId === 'implementation')?.lifecycle).toBe('pending');
         expect(runtime.gates.find((gate) => gate.gateId === 'deliver')?.state).toBe('blocked');
     });
 
@@ -587,9 +587,9 @@ describe('workflow reducer delivery completion', () => {
         const task = runtime.tasks.find((candidate) => candidate.taskId === 'implementation/01-derive-title');
         expect(task).toBeDefined();
         expect(task?.dependsOn).toEqual(['spec/02-plan.md']);
-        expect(task?.blockedByTaskIds).toEqual(['spec/02-plan.md']);
+        expect(task?.waitingOnTaskIds).toEqual(['spec/02-plan.md']);
         expect(task?.lifecycle).toBe('pending');
-        expect(runtime.stages.find((stage) => stage.stageId === 'implementation')?.lifecycle).toBe('blocked');
+        expect(runtime.stages.find((stage) => stage.stageId === 'implementation')?.lifecycle).toBe('pending');
     });
 
     it('rewinds downstream stage tasks when an upstream task is reopened', () => {
@@ -674,7 +674,7 @@ describe('workflow reducer delivery completion', () => {
                 instruction: 'Draft PRD.',
                 dependsOn: [],
                 lifecycle: 'completed',
-                blockedByTaskIds: [],
+                waitingOnTaskIds: [],
                 runtime: { autostart: false },
                 retries: 0,
                 createdAt: '2026-04-10T15:51:25.000Z',
@@ -688,7 +688,7 @@ describe('workflow reducer delivery completion', () => {
                 instruction: 'Draft spec.',
                 dependsOn: ['prd/01'],
                 lifecycle: 'completed',
-                blockedByTaskIds: [],
+                waitingOnTaskIds: [],
                 runtime: { autostart: false },
                 retries: 0,
                 createdAt: '2026-04-10T15:55:00.000Z',
@@ -702,7 +702,7 @@ describe('workflow reducer delivery completion', () => {
                 instruction: 'Ship it.',
                 dependsOn: ['spec/01'],
                 lifecycle: 'running',
-                blockedByTaskIds: [],
+                waitingOnTaskIds: [],
                 runtime: { autostart: false },
                 retries: 0,
                 createdAt: '2026-04-10T15:57:00.000Z',

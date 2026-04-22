@@ -268,7 +268,7 @@
         "instruction": "Use BRIEF.md as the canonical intake context. Rewrite or enrich PRD.md so it clearly states the problem, the target outcome, the constraints, and the success criteria for this mission. Only modify PRD.md in this task. Do not create or edit SPEC.md, implementation files, verification files, or delivery artifacts. Do not create application code in this task.",
         "dependsOn": [],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true,
           "launchMode": "automatic"
@@ -286,7 +286,7 @@
         "instruction": "Read PRD.md and define the technical target in SPEC.md. The specification must describe the intended design, the key boundaries, and the concrete files that will change. Only modify SPEC.md in this task. Do not create implementation code or verification evidence in this task.",
         "dependsOn": [],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true,
           "launchMode": "automatic"
@@ -306,7 +306,7 @@
           "spec/01-draft-spec"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true,
           "launchMode": "automatic"
@@ -324,7 +324,7 @@
         "instruction": "Align the workflow engine around one canonical mission-local runtime document and reducer-owned state transitions. This slice should preserve mission lifecycle, stage projections, task runtime, gate projections, panic, pause target metadata, and reducer-owned `activeStageId` semantics across `packages/core/src/workflow/engine/types.ts`, `document.ts`, `reducer.ts`, `validation.ts`, and the mission-facing runtime surfaces that consume them.",
         "dependsOn": [],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -344,7 +344,7 @@
           "implementation/01-establish-workflow-runtime-document-and-reducer-boundary"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -364,7 +364,7 @@
           "implementation/01-establish-workflow-runtime-document-and-reducer-boundary"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -384,7 +384,7 @@
           "implementation/02-align-deterministic-task-generation-and-scheduling"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -405,7 +405,7 @@
           "implementation/02-align-deterministic-task-generation-and-scheduling"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -425,7 +425,7 @@
           "implementation/03-align-daemon-owned-workflow-settings-and-snapshot-timing"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -447,7 +447,7 @@
           "implementation/03-align-daemon-owned-workflow-settings-and-snapshot-timing"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -467,7 +467,7 @@
           "implementation/04-update-workflow-specs-control-consumers-and-focused-tests"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -485,7 +485,7 @@
         "instruction": "Run the focused end-to-end validation required for the mission. Record the workflow-runtime replay results, residual risks, and release readiness in AUDIT.md.",
         "dependsOn": [],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true,
           "launchMode": "automatic"
@@ -503,7 +503,7 @@
         "instruction": "Prepare the final delivery motion. Confirm AUDIT.md is complete, summarize the final workflow-runtime replay status, and write DELIVERY.md as the final delivery artifact for the mission.",
         "dependsOn": [],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true,
           "launchMode": "automatic"

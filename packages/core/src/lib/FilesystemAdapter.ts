@@ -477,9 +477,9 @@ export class FilesystemAdapter {
 		return path.join(missionDir, MISSION_RUNTIME_FILE_NAME);
 	}
 
-		public getMissionRuntimeEventLogPath(missionDir: string): string {
-			return path.join(missionDir, MISSION_RUNTIME_EVENT_LOG_FILE_NAME);
-		}
+	public getMissionRuntimeEventLogPath(missionDir: string): string {
+		return path.join(missionDir, MISSION_RUNTIME_EVENT_LOG_FILE_NAME);
+	}
 
 	public async readMissionRuntimeRecord(
 		missionDir: string
@@ -487,11 +487,11 @@ export class FilesystemAdapter {
 		const filePath = this.getMissionRuntimeRecordPath(missionDir);
 		try {
 			const content = await fs.readFile(filePath, 'utf8');
-				const parsed = this.parseMissionRuntimeRecord(JSON.parse(content) as unknown, filePath);
-				if (parsed.legacyEventLog.length > 0) {
-					await this.migrateLegacyMissionRuntimeEventLog(missionDir, parsed.record, parsed.legacyEventLog);
-				}
-				return parsed.record;
+			const parsed = this.parseMissionRuntimeRecord(JSON.parse(content) as unknown, filePath);
+			if (parsed.legacyEventLog.length > 0) {
+				await this.migrateLegacyMissionRuntimeEventLog(missionDir, parsed.record, parsed.legacyEventLog);
+			}
+			return parsed.record;
 		} catch (error) {
 			if (this.isMissingFileError(error)) {
 				return undefined;
@@ -856,7 +856,7 @@ export class FilesystemAdapter {
 			instruction: parsedTaskBody.instruction,
 			body,
 			dependsOn: this.readTaskDependsOn(document.attributes, filePath),
-			blockedBy: [],
+			waitingOn: [],
 			status: 'pending',
 			agent,
 			retries: 0,
@@ -1083,7 +1083,7 @@ export class FilesystemAdapter {
 				task.dependsOn.length > 0
 					? this.resolveExplicitTaskDependencies(task, tasks)
 					: this.resolveDefaultTaskDependencies(index, tasks);
-			const blockedBy = dependsOn.filter((dependencyTaskId) => {
+			const waitingOn = dependsOn.filter((dependencyTaskId) => {
 				const dependency = tasks.find((candidate) => candidate.taskId === dependencyTaskId);
 				return dependency?.status !== 'completed';
 			});
@@ -1091,7 +1091,7 @@ export class FilesystemAdapter {
 			return {
 				...task,
 				dependsOn,
-				blockedBy
+				waitingOn
 			};
 		});
 	}

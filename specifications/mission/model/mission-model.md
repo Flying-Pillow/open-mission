@@ -200,7 +200,7 @@ Fields:
 - `instruction`
 - `body`
 - `dependsOn`
-- `blockedBy`
+- `waitingOn`
 - `status`
 - `agent`
 - `retries`

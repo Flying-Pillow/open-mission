@@ -266,7 +266,6 @@ export class Mission {
 		}
 
 		await this.status();
-		let replacedStaleSession = false;
 
 		const existingSession = this.agentSessions.find(
 			(candidate) => candidate.taskId === request.taskId && isActiveMissionAgentSession(candidate.lifecycleState)
@@ -275,7 +274,6 @@ export class Mission {
 			if (!(await this.isSessionCompatibleForLaunch(existingSession, request))) {
 				await this.terminateAgentSession(existingSession.sessionId, 'replaced stale task session before relaunch');
 				await this.status();
-				replacedStaleSession = true;
 			} else {
 				return MissionSession.cloneRecord(existingSession);
 			}
@@ -285,7 +283,6 @@ export class Mission {
 		const workflowTask = await this.requireWorkflowTask(request.taskId);
 		if (
 			workflowTask.lifecycle === 'cancelled'
-			|| (replacedStaleSession && workflowTask.lifecycle === 'blocked')
 		) {
 			await this.reopenTaskExecution(request.taskId);
 			task = await this.requireTask(request.taskId);
@@ -461,10 +458,6 @@ export class Mission {
 			await this.completeTask(actionId.slice('task.done.'.length));
 			return this.status();
 		}
-		if (actionId.startsWith('task.block.')) {
-			await this.blockTask(actionId.slice('task.block.'.length));
-			return this.status();
-		}
 		if (actionId.startsWith('task.reopen.')) {
 			await this.reopenTask(actionId.slice('task.reopen.'.length));
 			return this.status();
@@ -496,9 +489,6 @@ export class Mission {
 		}
 		if (changes.status === 'completed') {
 			return task.complete();
-		}
-		if (changes.status === 'blocked') {
-			return task.block('Marked blocked by operator.');
 		}
 		if (changes.status === 'pending') {
 			return task.reopen();
@@ -547,10 +537,6 @@ export class Mission {
 
 	public async completeTask(taskId: string): Promise<void> {
 		await (await this.requireTask(taskId)).complete();
-	}
-
-	public async blockTask(taskId: string): Promise<void> {
-		await (await this.requireTask(taskId)).block();
 	}
 
 	public async reopenTask(taskId: string): Promise<void> {
@@ -630,14 +616,13 @@ export class Mission {
 					readyTaskIds: [...stage.readyTaskIds],
 					queuedTaskIds: [...stage.queuedTaskIds],
 					runningTaskIds: [...stage.runningTaskIds],
-					blockedTaskIds: [...stage.blockedTaskIds],
 					completedTaskIds: [...stage.completedTaskIds]
 				})),
 				tasks: persistedDocument.runtime.tasks.map((task) => ({
 					...task,
 					title: projectedTasksById.get(task.taskId)?.subject ?? task.title,
 					dependsOn: [...task.dependsOn],
-					blockedByTaskIds: [...task.blockedByTaskIds],
+					waitingOnTaskIds: [...task.waitingOnTaskIds],
 					runtime: { ...task.runtime }
 				})),
 				gates: persistedDocument.runtime.gates.map((gateProjection) => ({
@@ -698,7 +683,6 @@ export class Mission {
 					readyTaskIds: [...stage.readyTaskIds],
 					queuedTaskIds: [...stage.queuedTaskIds],
 					runningTaskIds: [...stage.runningTaskIds],
-					blockedTaskIds: [...stage.blockedTaskIds],
 					completedTaskIds: [...stage.completedTaskIds]
 				})),
 				tasks: [],
@@ -758,7 +742,7 @@ export class Mission {
 				}
 				tasks.push({
 					...fileTask,
-					blockedBy: [...fileTask.blockedBy],
+					waitingOn: [...fileTask.waitingOn],
 					status: 'pending'
 				});
 			}
@@ -948,9 +932,6 @@ export class Mission {
 		if (status === 'ready') {
 			return '#79c0ff';
 		}
-		if (status === 'blocked') {
-			return '#d29922';
-		}
 		if (status === 'failed') {
 			return '#f85149';
 		}
@@ -1007,7 +988,7 @@ export class Mission {
 			instruction: task.instruction,
 			body: task.instruction,
 			dependsOn: [...task.dependsOn],
-			blockedBy: [...task.blockedByTaskIds],
+			waitingOn: [...task.waitingOnTaskIds],
 			status: task.lifecycle,
 			agent: task.agentRunner ?? fileTask?.agent ?? 'copilot',
 			retries: task.retries,
@@ -1107,11 +1088,6 @@ export class Mission {
 			return 'Mission delivered.';
 		}
 
-		const blockedTask = [...activeTasks, ...readyTasks].find((task) => task.status === 'blocked');
-		if (blockedTask) {
-			return `Resolve the blocked task in ${blockedTask.relativePath}.`;
-		}
-
 		if (activeTasks.length > 0) {
 			const leadTask = activeTasks[0];
 			return activeTasks.length === 1
@@ -1182,7 +1158,7 @@ export class Mission {
 	}
 
 	private isTaskReady(task: MissionTaskState): boolean {
-		return task.status === 'ready' && task.blockedBy.length === 0;
+		return task.status === 'ready' && task.waitingOn.length === 0;
 	}
 
 	private async requireTask(taskId: string): Promise<MissionTask> {
@@ -1365,7 +1341,6 @@ export class Mission {
 			refreshTaskState: (taskId) => this.requireTaskState(taskId),
 			queueTask: (taskId, options) => this.queueTask(taskId, options),
 			completeTask: (taskId) => this.completeTaskExecution(taskId),
-			blockTask: (taskId, reason) => this.blockTaskExecution(taskId, reason),
 			reopenTask: (taskId) => this.reopenTaskExecution(taskId),
 			updateTaskLaunchPolicy: (taskId, launchPolicy) =>
 				this.updateTaskLaunchPolicy(taskId, launchPolicy),
@@ -1663,13 +1638,6 @@ export class Mission {
 		}
 	}
 
-	private async blockTaskExecution(taskId: string, reason?: string): Promise<void> {
-		await this.applyWorkflowEvent(this.createWorkflowEvent('task.blocked', {
-			taskId,
-			reason: reason ?? 'Marked blocked by operator.'
-		}));
-	}
-
 	private async reopenTaskExecution(taskId: string): Promise<void> {
 		await this.applyWorkflowEvent(this.createWorkflowEvent('task.reopened', { taskId }));
 	}
@@ -1723,7 +1691,6 @@ function buildMissionAvailableActions(input: MissionAvailableActionsInput): Oper
 	for (const task of getOrderedTasks(input)) {
 		actions.push(buildTaskStartAction(input, task));
 		actions.push(buildTaskDoneAction(input, task));
-		actions.push(buildTaskBlockedAction(input, task));
 		actions.push(buildTaskReopenAction(input, task));
 		actions.push(...buildTaskLaunchPolicyActions(input, task));
 	}
@@ -1948,22 +1915,6 @@ function buildTaskDoneAction(input: MissionAvailableActionsInput, task: MissionR
 	};
 }
 
-function buildTaskBlockedAction(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): OperatorActionDescriptor {
-	const errors = getValidationErrors(input, { type: 'task.blocked', taskId: task.taskId, reason: 'Marked blocked by operator.' });
-	return {
-		id: `task.block.${task.taskId}`,
-		label: 'Mark Task Blocked',
-		action: '/task blocked',
-		scope: 'task',
-		targetId: task.taskId,
-		...buildAvailability(errors.length === 0, errors[0]),
-		ui: { toolbarLabel: 'BLOCK TASK', requiresConfirmation: true, confirmationPrompt: 'Mark this task blocked?' },
-		flow: { targetLabel: 'TASK', actionLabel: 'BLOCK', steps: [] },
-		presentationTargets: buildTaskPresentationTargets(task.taskId, task.stageId as MissionStageId),
-		metadata: { stageId: task.stageId as MissionStageId }
-	};
-}
-
 function buildTaskReopenAction(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): OperatorActionDescriptor {
 	const errors = getValidationErrors(input, { type: 'task.reopened', taskId: task.taskId });
 	return {
@@ -2179,10 +2130,9 @@ function describeTaskStartUnavailable(input: MissionAvailableActionsInput, task:
 	}
 	switch (task.lifecycle) {
 		case 'pending':
-			return task.blockedByTaskIds.length > 0 ? `Waiting on ${task.blockedByTaskIds.join(', ')}.` : 'Waiting for an earlier stage to become eligible.';
+			return task.waitingOnTaskIds.length > 0 ? `Waiting on ${task.waitingOnTaskIds.join(', ')}.` : 'Waiting for an earlier stage to become eligible.';
 		case 'queued': return 'Task is already queued.';
 		case 'running': return 'Task is already running.';
-		case 'blocked': return 'Task is blocked.';
 		case 'completed': return 'Task is already completed.';
 		case 'failed':
 		case 'cancelled':
@@ -2215,7 +2165,6 @@ function getValidationErrors(
 		| { type: 'mission.delivered' }
 		| { type: 'task.queued'; taskId: string }
 		| { type: 'task.completed'; taskId: string }
-		| { type: 'task.blocked'; taskId: string; reason: string }
 		| { type: 'task.reopened'; taskId: string }
 		| { type: 'task.launch-policy.changed'; taskId: string; autostart: boolean }
 ): string[] {

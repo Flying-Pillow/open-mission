@@ -69,7 +69,7 @@ The `Type` column describes the object's role in the model, not a TypeScript key
 | `StageLaunchPolicy` | `WorkflowStageTaskLaunchPolicy` | Specification | `StageDefinition` | The default launch behavior applied to tasks generated for a stage. | Define default autostart behavior and default launch mode for newly generated tasks. |
 | `TaskGenerationRule` | `prose only` | Specification | `WorkflowDefinition` | The rule that determines which tasks are created when a stage becomes eligible. | Define how tasks are generated for a stage and what task definitions should be instantiated. |
 | `WorkflowGateDefinition` | `gate rules` | Specification | `WorkflowDefinition` | The static workflow checkpoint rule that later becomes a workflow gate projection. | Define semantic progression conditions before workflow gate projections are derived. |
-| `MissionAction` | `daemon/UI command model` | Action | `missiond` | An operator-facing control exposed by the daemon or a Surface. | Express controls such as pause mission, resume mission, panic stop mission, clear panic, mark task done, mark task blocked, reopen task, or manually start a ready task. |
+| `MissionAction` | `daemon/UI command model` | Action | `missiond` | An operator-facing control exposed by the daemon or a Surface. | Express controls such as pause mission, resume mission, panic stop mission, clear panic, mark task done, reopen task, or manually start a ready task. |
 
 ## Mission Terms
 

@@ -43,15 +43,6 @@ export class MissionCommandTransport implements MissionCommandGateway {
         });
     }
 
-    public blockTask(input: {
-        missionId: string;
-        taskId: string;
-    }): Promise<MissionRuntimeSnapshotDto> {
-        return this.sendTaskCommand(input.missionId, input.taskId, {
-            action: 'block'
-        });
-    }
-
     public reopenTask(input: {
         missionId: string;
         taskId: string;
@@ -142,7 +133,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
         missionId: string,
         taskId: string,
         body: {
-            action: 'start' | 'complete' | 'block' | 'reopen';
+            action: 'start' | 'complete' | 'reopen';
             terminalSessionName?: string;
         }
     ): Promise<MissionRuntimeSnapshotDto> {

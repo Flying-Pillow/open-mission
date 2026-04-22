@@ -31,8 +31,6 @@
                 return "border-emerald-500/40 bg-emerald-500/10 text-emerald-700";
             case "active":
                 return "border-sky-500/40 bg-sky-500/10 text-sky-700";
-            case "blocked":
-                return "border-rose-500/40 bg-rose-500/10 text-rose-700";
             case "ready":
                 return "border-amber-500/40 bg-amber-500/10 text-amber-700";
             default:
@@ -316,22 +314,6 @@
                                                         `task:complete:${task.taskId}`
                                                             ? "Completing..."
                                                             : "Complete"}</Button
-                                                    >
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        disabled={itemActionPending !==
-                                                            null}
-                                                        onclick={() =>
-                                                            runItemAction(
-                                                                `task:block:${task.taskId}`,
-                                                                () =>
-                                                                    task.block(),
-                                                            )}
-                                                        >{itemActionPending ===
-                                                        `task:block:${task.taskId}`
-                                                            ? "Blocking..."
-                                                            : "Block"}</Button
                                                     >
                                                     <Button
                                                         size="sm"

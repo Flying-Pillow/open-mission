@@ -58,7 +58,7 @@ class MissionWorkflowTransitionEngine {
         private readonly state: MissionWorkflowRuntimeState,
         private readonly event: MissionWorkflowEvent,
         private readonly configuration: MissionWorkflowConfigurationSnapshot
-    ) {}
+    ) { }
 
     public apply(): void {
         const event = this.event;
@@ -191,7 +191,7 @@ class MissionWorkflowTransitionEngine {
                         instruction: task.instruction,
                         dependsOn: [...task.dependsOn],
                         lifecycle: 'pending',
-                        blockedByTaskIds: [],
+                        waitingOnTaskIds: [],
                         runtime: {
                             autostart: stageDefinition.taskLaunchPolicy.defaultAutostart
                         },
@@ -258,17 +258,6 @@ class MissionWorkflowTransitionEngine {
                             ...task,
                             lifecycle: 'completed',
                             completedAt: event.occurredAt,
-                            updatedAt: event.occurredAt
-                        }
-                        : task
-                );
-                return;
-            case 'task.blocked':
-                this.state.tasks = this.state.tasks.map((task) =>
-                    task.taskId === event.taskId
-                        ? {
-                            ...task,
-                            lifecycle: 'blocked',
                             updatedAt: event.occurredAt
                         }
                         : task
@@ -390,7 +379,7 @@ class MissionWorkflowDerivationEngine {
         private readonly configuration: MissionWorkflowConfigurationSnapshot,
         private readonly signals: MissionWorkflowSignal[],
         private readonly requests: MissionWorkflowRequest[]
-    ) {}
+    ) { }
 
     public derive(): void {
         const event = this.event;
@@ -654,13 +643,12 @@ function cloneRuntimeState(state: MissionWorkflowRuntimeState): MissionWorkflowR
             readyTaskIds: [...stage.readyTaskIds],
             queuedTaskIds: [...stage.queuedTaskIds],
             runningTaskIds: [...stage.runningTaskIds],
-            blockedTaskIds: [...stage.blockedTaskIds],
             completedTaskIds: [...stage.completedTaskIds]
         })),
         tasks: state.tasks.map((task) => ({
             ...task,
             dependsOn: [...task.dependsOn],
-            blockedByTaskIds: [...task.blockedByTaskIds],
+            waitingOnTaskIds: [...task.waitingOnTaskIds],
             runtime: { ...task.runtime }
         })),
         sessions: state.sessions.map((session) => ({ ...session })),

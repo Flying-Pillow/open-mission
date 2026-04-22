@@ -43,23 +43,21 @@ function deriveTaskRuntimeStates(
 ): MissionTaskRuntimeState[] {
     const tasksById = new Map(tasks.map((task) => [task.taskId, task]));
     return tasks.map((task) => {
-        const blockedByTaskIds = task.dependsOn.filter((dependencyTaskId) => tasksById.get(dependencyTaskId)?.lifecycle !== 'completed');
+        const waitingOnTaskIds = task.dependsOn.filter((dependencyTaskId) => tasksById.get(dependencyTaskId)?.lifecycle !== 'completed');
         const stageEligible = task.stageId === activeStageId;
         let lifecycle: MissionTaskLifecycleState = task.lifecycle;
 
         if (isTerminalTaskLifecycle(lifecycle) || lifecycle === 'queued' || lifecycle === 'running') {
             return {
                 ...task,
-                blockedByTaskIds,
+                waitingOnTaskIds,
                 updatedAt: task.updatedAt
             };
         }
 
         if (!stageEligible) {
             lifecycle = 'pending';
-        } else if (lifecycle === 'blocked') {
-            lifecycle = 'blocked';
-        } else if (blockedByTaskIds.length > 0) {
+        } else if (waitingOnTaskIds.length > 0) {
             lifecycle = 'pending';
         } else {
             lifecycle = 'ready';
@@ -68,7 +66,7 @@ function deriveTaskRuntimeStates(
         return {
             ...task,
             lifecycle,
-            blockedByTaskIds,
+            waitingOnTaskIds,
             updatedAt: task.updatedAt
         };
     });
@@ -84,7 +82,6 @@ function buildStageProjections(
         const readyTaskIds = stageTasks.filter((task) => task.lifecycle === 'ready').map((task) => task.taskId);
         const queuedTaskIds = stageTasks.filter((task) => task.lifecycle === 'queued').map((task) => task.taskId);
         const runningTaskIds = stageTasks.filter((task) => task.lifecycle === 'running').map((task) => task.taskId);
-        const blockedTaskIds = stageTasks.filter((task) => task.lifecycle === 'blocked').map((task) => task.taskId);
         const completedTaskIds = stageTasks.filter((task) => task.lifecycle === 'completed').map((task) => task.taskId);
         const completed = isStageCompletedFromTasks(tasks, stageId, configuration);
         const eligible = stageId === activeStageId || completed;
@@ -99,7 +96,7 @@ function buildStageProjections(
         } else if (readyTaskIds.length > 0) {
             lifecycle = 'ready';
         } else {
-            lifecycle = 'blocked';
+            lifecycle = 'pending';
         }
 
         return {
@@ -109,7 +106,6 @@ function buildStageProjections(
             readyTaskIds,
             queuedTaskIds,
             runningTaskIds,
-            blockedTaskIds,
             completedTaskIds
         };
     });

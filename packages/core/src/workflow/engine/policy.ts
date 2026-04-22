@@ -17,7 +17,7 @@ export function isTerminalTaskLifecycle(lifecycle: MissionTaskLifecycleState): b
 }
 
 export function isReopenableTaskLifecycle(lifecycle: MissionTaskLifecycleState): boolean {
-    return lifecycle === 'completed' || lifecycle === 'failed' || lifecycle === 'cancelled' || lifecycle === 'blocked';
+    return lifecycle === 'completed' || lifecycle === 'failed' || lifecycle === 'cancelled';
 }
 
 export function resolveEligibleStageId(
@@ -110,11 +110,6 @@ export function resolvePendingTaskGenerationStageId(
 
     const generationRule = configuration.workflow.taskGeneration.find((candidate) => candidate.stageId === eligibleStageId);
     if (!generationRule) {
-        return undefined;
-    }
-
-    const runtimeStage = runtime.stages.find((stage) => stage.stageId === eligibleStageId);
-    if (runtimeStage?.lifecycle === 'blocked' && generationRule.artifactTasks) {
         return undefined;
     }
 

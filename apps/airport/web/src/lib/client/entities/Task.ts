@@ -18,7 +18,6 @@ export type TaskStartOptions = {
 export type TaskCommandOwner = {
     startTask(taskId: string, options?: TaskStartOptions): Promise<void>;
     completeTask(taskId: string): Promise<void>;
-    blockTask(taskId: string): Promise<void>;
     reopenTask(taskId: string): Promise<void>;
 };
 
@@ -55,8 +54,8 @@ export class Task implements EntityModel<TaskSnapshot> {
         return [...this.snapshot.task.dependsOn];
     }
 
-    public get blockedByTaskIds(): string[] {
-        return [...this.snapshot.task.blockedByTaskIds];
+    public get waitingOnTaskIds(): string[] {
+        return [...this.snapshot.task.waitingOnTaskIds];
     }
 
     public async start(options: TaskStartOptions = {}): Promise<this> {
@@ -66,11 +65,6 @@ export class Task implements EntityModel<TaskSnapshot> {
 
     public async complete(): Promise<this> {
         await this.owner.completeTask(this.taskId);
-        return this;
-    }
-
-    public async block(): Promise<this> {
-        await this.owner.blockTask(this.taskId);
         return this;
     }
 

@@ -270,7 +270,7 @@
         "instruction": "Use BRIEF.md as the canonical intake context. Rewrite or enrich PRD.md so it clearly states the problem, the target outcome, the constraints, and the success criteria for this mission. Only modify PRD.md in this task. Do not create or edit SPEC.md, implementation files, verification files, or delivery artifacts. Do not create application code in this task.",
         "dependsOn": [],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true,
           "launchMode": "automatic"
@@ -288,7 +288,7 @@
         "instruction": "Read PRD.md and define the technical target in SPEC.md. The specification must describe the intended design, the key boundaries, and the concrete files that will change. Only modify SPEC.md in this task. Do not create implementation code or verification evidence in this task.",
         "dependsOn": [],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true,
           "launchMode": "automatic"
@@ -308,7 +308,7 @@
           "spec/01-draft-spec"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true,
           "launchMode": "automatic"
@@ -326,7 +326,7 @@
         "instruction": "Align the core runtime surface around one authoritative provider-neutral contract. This slice should preserve `AgentRunner`, `AgentSession`, normalized prompt, command, snapshot, capability, and event types, while removing split-boundary ambiguity from runtime naming and ownership across `packages/core/src/runtime/*`, `packages/core/src/index.ts`, and any adjacent type or export surfaces that still imply parallel runtime contracts.",
         "dependsOn": [],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -346,7 +346,7 @@
           "implementation/01-establish-unified-runtime-contract-and-normalized-types"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -366,7 +366,7 @@
           "implementation/01-establish-unified-runtime-contract-and-normalized-types"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -386,7 +386,7 @@
           "implementation/02-align-orchestrator-and-persisted-session-coordination"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -407,7 +407,7 @@
           "implementation/02-align-orchestrator-and-persisted-session-coordination"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -427,7 +427,7 @@
           "implementation/03-align-workflow-request-execution-with-unified-runtime"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -448,7 +448,7 @@
           "implementation/03-align-workflow-request-execution-with-unified-runtime"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -468,7 +468,7 @@
           "implementation/04-align-daemon-and-client-session-surfaces"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -489,7 +489,7 @@
           "implementation/04-align-daemon-and-client-session-surfaces"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -509,7 +509,7 @@
           "implementation/05-align-provider-adapters-exports-and-focused-tests"
         ],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false,
           "launchMode": "manual"
@@ -527,7 +527,7 @@
         "instruction": "Run the focused end-to-end validation required for the mission. Record the agent-runtime replay results, residual risks, and release readiness in AUDIT.md.",
         "dependsOn": [],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true,
           "launchMode": "automatic"
@@ -545,7 +545,7 @@
         "instruction": "Prepare the final delivery motion. Confirm AUDIT.md is complete, summarize the final agent-runtime replay status, and write DELIVERY.md as the final delivery artifact for the mission.",
         "dependsOn": [],
         "lifecycle": "completed",
-        "blockedByTaskIds": [],
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true,
           "launchMode": "automatic"

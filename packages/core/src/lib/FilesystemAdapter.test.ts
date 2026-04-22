@@ -215,7 +215,7 @@ describe('FilesystemAdapter', () => {
 			});
 
 			const tasks = await adapter.listTaskStates(missionDir, 'implementation');
-			expect(tasks.map((task) => [task.taskId, task.dependsOn, task.blockedBy])).toEqual([
+			expect(tasks.map((task) => [task.taskId, task.dependsOn, task.waitingOn])).toEqual([
 				['implementation/01-base', [], []],
 				['implementation/02-api', ['implementation/01-base'], ['implementation/01-base']],
 				['implementation/03-ui', ['implementation/01-base'], ['implementation/01-base']],
@@ -252,7 +252,7 @@ describe('FilesystemAdapter', () => {
 			});
 
 			const tasks = await adapter.listTaskStates(missionDir, 'implementation');
-			expect(tasks.map((task) => [task.taskId, task.dependsOn, task.blockedBy])).toEqual([
+			expect(tasks.map((task) => [task.taskId, task.dependsOn, task.waitingOn])).toEqual([
 				['implementation/01-base', [], []],
 				['implementation/01-base-verify', ['implementation/01-base'], ['implementation/01-base']],
 				['implementation/02-next', ['implementation/01-base-verify'], ['implementation/01-base-verify']]

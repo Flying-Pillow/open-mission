@@ -138,7 +138,7 @@ describe('workflow engine e2e', () => {
         ]));
     });
 
-    it('covers launch failure, blocked work, and reopen-driven recovery', async () => {
+    it('covers launch failure and reopen-driven recovery', async () => {
         const adapter = createAdapter();
         const workflow = createDefaultWorkflowSettings();
         workflow.taskGeneration = workflow.taskGeneration.map((rule) =>
@@ -177,19 +177,9 @@ describe('workflow engine e2e', () => {
         document = await controller.applyEvent(createTaskReopenedEvent('prd/01', '2026-04-14T11:00:30.000Z'));
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('running');
 
-        document = await controller.applyEvent({
-            eventId: 'task.blocked:prd/01:2026-04-14T11:01:00.000Z',
-            type: 'task.blocked',
-            occurredAt: '2026-04-14T11:01:00.000Z',
-            source: 'human',
-            taskId: 'prd/01',
-            reason: 'waiting on clarification'
-        });
-        expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('blocked');
-
         document = await controller.terminateRuntimeSession(
             executor.requireSessionId('prd/01'),
-            'clear blocked session',
+            'reset session',
             'prd/01'
         );
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('running');
@@ -200,7 +190,6 @@ describe('workflow engine e2e', () => {
         expect(adapter.getPersistedEventLog().map((event) => event.type)).toEqual(expect.arrayContaining([
             'session.launch-failed',
             'task.reopened',
-            'task.blocked',
             'session.started',
             'task.completed'
         ]));

@@ -8,7 +8,7 @@ import { MISSION_STAGE_IDS, type MissionStageId } from './stages.js';
 export type { MissionStageId };
 
 export type MissionWorkflowTaskStatus = MissionTaskLifecycleState;
-export type MissionTaskStatusIntent = 'start' | 'done' | 'blocked' | 'reopen';
+export type MissionTaskStatusIntent = 'start' | 'done' | 'reopen';
 export type MissionStageStatusIntent = 'start' | 'restart';
 
 export type MissionArtifactKey = 'brief' | 'prd' | 'spec' | 'verify' | 'audit' | 'delivery';
@@ -190,7 +190,7 @@ const WORKFLOW_STAGE_TRANSITION_RULES: readonly MissionStageTransitionRule[] = [
     {
         intent: 'restart',
         nextStatus: 'active',
-        allowedFrom: ['active', 'blocked', 'completed']
+        allowedFrom: ['active', 'completed']
     }
 ] as const;
 
@@ -252,7 +252,7 @@ export function evaluateMissionStageStatusIntent(
 
 type MissionTaskRuleContext = {
     currentStatus: MissionWorkflowTaskStatus;
-    blockedBy: readonly string[];
+    waitingOn: readonly string[];
     delivered: boolean;
 };
 
@@ -276,14 +276,9 @@ const WORKFLOW_TASK_TRANSITION_RULES: readonly MissionTaskTransitionRule[] = [
         allowedFrom: ['ready', 'queued', 'running']
     },
     {
-        intent: 'blocked',
-        nextStatus: 'blocked',
-        allowedFrom: ['pending', 'ready', 'queued', 'running']
-    },
-    {
         intent: 'reopen',
         nextStatus: 'pending',
-        allowedFrom: ['completed', 'failed', 'cancelled', 'blocked']
+        allowedFrom: ['completed', 'failed', 'cancelled']
     }
 ] as const;
 
@@ -331,10 +326,10 @@ export function evaluateMissionTaskStatusIntent(
         };
     }
 
-    if (rule.requiresDependenciesClear && context.blockedBy.length > 0) {
+    if (rule.requiresDependenciesClear && context.waitingOn.length > 0) {
         return {
             enabled: false,
-            reason: `Waiting on ${context.blockedBy.join(', ')}.`,
+            reason: `Waiting on ${context.waitingOn.join(', ')}.`,
             nextStatus: rule.nextStatus
         };
     }
@@ -357,14 +352,11 @@ export function evaluateMissionTaskLaunchEligibility(
     if (context.currentStatus === 'failed' || context.currentStatus === 'cancelled') {
         return { enabled: false, reason: `Task is ${context.currentStatus}.` };
     }
-    if (context.currentStatus === 'blocked') {
-        return { enabled: false, reason: 'Task is blocked.' };
-    }
     if (context.currentStatus === 'pending') {
         return { enabled: false, reason: 'Task is not ready.' };
     }
-    if (context.blockedBy.length > 0) {
-        return { enabled: false, reason: `Waiting on ${context.blockedBy.join(', ')}.` };
+    if (context.waitingOn.length > 0) {
+        return { enabled: false, reason: `Waiting on ${context.waitingOn.join(', ')}.` };
     }
     return { enabled: true };
 }

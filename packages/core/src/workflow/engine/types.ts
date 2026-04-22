@@ -16,7 +16,6 @@ export const MISSION_STAGE_DERIVED_STATES = [
     'pending',
     'ready',
     'active',
-    'blocked',
     'completed'
 ] as const;
 
@@ -27,7 +26,6 @@ export const MISSION_TASK_LIFECYCLE_STATES = [
     'ready',
     'queued',
     'running',
-    'blocked',
     'completed',
     'failed',
     'cancelled'
@@ -67,7 +65,7 @@ export interface MissionTaskRuntimeState {
     instruction: string;
     dependsOn: string[];
     lifecycle: MissionTaskLifecycleState;
-    blockedByTaskIds: string[];
+    waitingOnTaskIds: string[];
     runtime: MissionTaskRuntimeSettings;
     agentRunner?: string;
     retries: number;
@@ -115,7 +113,6 @@ export interface MissionStageRuntimeProjection {
     readyTaskIds: string[];
     queuedTaskIds: string[];
     runningTaskIds: string[];
-    blockedTaskIds: string[];
     completedTaskIds: string[];
     enteredAt?: string;
     completedAt?: string;
@@ -315,12 +312,6 @@ export interface TaskMarkedDoneEvent extends MissionWorkflowEventBase {
     taskId: string;
 }
 
-export interface TaskMarkedBlockedEvent extends MissionWorkflowEventBase {
-    type: 'task.blocked';
-    taskId: string;
-    reason?: string;
-}
-
 export interface TaskReopenedEvent extends MissionWorkflowEventBase {
     type: 'task.reopened';
     taskId: string;
@@ -380,7 +371,6 @@ export type MissionWorkflowEvent =
     | TaskQueuedEvent
     | TaskStartedEvent
     | TaskMarkedDoneEvent
-    | TaskMarkedBlockedEvent
     | TaskReopenedEvent
     | AgentSessionStartedEvent
     | AgentSessionLaunchFailedEvent

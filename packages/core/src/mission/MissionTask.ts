@@ -17,7 +17,6 @@ export type MissionTaskOwner = {
 	refreshTaskState(taskId: string): Promise<MissionTaskState>;
 	queueTask(taskId: string, options?: { runnerId?: string; prompt?: string; workingDirectory?: string; terminalSessionName?: string }): Promise<void>;
 	completeTask(taskId: string): Promise<void>;
-	blockTask(taskId: string, reason?: string): Promise<void>;
 	reopenTask(taskId: string): Promise<void>;
 	updateTaskLaunchPolicy(taskId: string, launchPolicy: MissionTaskLaunchPolicy): Promise<void>;
 	requireAgentRunner(runnerId: string): AgentRunner;
@@ -58,14 +57,6 @@ export class MissionTask {
 		await this.refresh();
 		this.assertCanTransition('done');
 		await this.owner.completeTask(this.state.taskId);
-		await this.refresh();
-		return this.toState();
-	}
-
-	public async block(reason = 'Marked blocked by operator.'): Promise<MissionTaskState> {
-		await this.refresh();
-		this.assertCanTransition('blocked');
-		await this.owner.blockTask(this.state.taskId, reason);
 		await this.refresh();
 		return this.toState();
 	}
@@ -112,7 +103,7 @@ export class MissionTask {
 	private assertCanTransition(intent: MissionTaskStatusIntent): void {
 		const evaluation = evaluateMissionTaskStatusIntent(intent, {
 			currentStatus: this.state.status,
-			blockedBy: this.state.blockedBy,
+			waitingOn: this.state.waitingOn,
 			delivered: this.owner.isMissionDelivered()
 		});
 		if (!evaluation.enabled) {

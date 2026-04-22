@@ -74,7 +74,6 @@
         deliverMission: (input) => missionCommands.deliverMission(input),
         startTask: (input) => missionCommands.startTask(input),
         completeTask: (input) => missionCommands.completeTask(input),
-        blockTask: (input) => missionCommands.blockTask(input),
         reopenTask: (input) => missionCommands.reopenTask(input),
         completeSession: (input) => missionCommands.completeSession(input),
         cancelSession: (input) => missionCommands.cancelSession(input),

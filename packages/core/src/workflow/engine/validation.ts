@@ -135,8 +135,8 @@ export function getMissionWorkflowEventValidationErrors(
             }
             const task = requireTask(findTask(event.taskId), event.taskId, errors, event.type);
             if (task) {
-                if (task.lifecycle !== 'ready' && task.lifecycle !== 'blocked') {
-                    errors.push(`task.queued requires task '${event.taskId}' to be ready or blocked, received '${task.lifecycle}'.`);
+                if (task.lifecycle !== 'ready') {
+                    errors.push(`task.queued requires task '${event.taskId}' to be ready, received '${task.lifecycle}'.`);
                 }
                 if (task.stageId !== eligibleStageId) {
                     errors.push(`task.queued requires task '${event.taskId}' to be in eligible stage '${eligibleStageId ?? 'none'}'.`);
@@ -161,24 +161,11 @@ export function getMissionWorkflowEventValidationErrors(
             }
             break;
         }
-        case 'task.blocked': {
-            const task = requireTask(findTask(event.taskId), event.taskId, errors, event.type);
-            if (
-                task &&
-                task.lifecycle !== 'pending' &&
-                task.lifecycle !== 'ready' &&
-                task.lifecycle !== 'queued' &&
-                task.lifecycle !== 'running'
-            ) {
-                errors.push(`task.blocked requires task '${event.taskId}' to be pending, ready, queued, or running, received '${task.lifecycle}'.`);
-            }
-            break;
-        }
         case 'task.reopened': {
             const task = requireTask(findTask(event.taskId), event.taskId, errors, event.type);
             if (task) {
                 if (!isReopenableTaskLifecycle(task.lifecycle)) {
-                    errors.push(`task.reopened requires task '${event.taskId}' to be completed, failed, cancelled, or blocked, received '${task.lifecycle}'.`);
+                    errors.push(`task.reopened requires task '${event.taskId}' to be completed, failed, or cancelled, received '${task.lifecycle}'.`);
                 }
                 if (hasActiveDownstreamActivity(runtime, task.stageId, configuration)) {
                     errors.push(`task.reopened for '${event.taskId}' is not allowed while downstream work is active.`);
