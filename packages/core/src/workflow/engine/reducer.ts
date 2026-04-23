@@ -341,10 +341,11 @@ class MissionWorkflowTransitionEngine {
                         reworkIterationCount: iteration,
                         reworkRequest
                     };
+                    const pendingLaunchContext = buildReworkPendingLaunchContext(reworkedRuntimeTask);
 
                     return {
                         ...reworkedRuntimeTask,
-                        pendingLaunchContext: buildReworkPendingLaunchContext(reworkedRuntimeTask)
+                        ...(pendingLaunchContext ? { pendingLaunchContext } : {})
                     };
                 });
 
