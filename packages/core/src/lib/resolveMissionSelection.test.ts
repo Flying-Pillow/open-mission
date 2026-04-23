@@ -3,7 +3,7 @@ import type { ContextGraph } from '../types.js';
 import { resolveMissionSelection, resolveMissionSelectionFromContext } from './resolveMissionSelection.js';
 
 describe('resolveMissionSelection', () => {
-	it('resolves task selection to the canonical instruction artifact and most recent session', () => {
+	it('resolves task selection to the canonical instruction artifact and preferred active session', () => {
 		const domain = createDomain();
 
 		const resolved = resolveMissionSelection({
@@ -24,6 +24,32 @@ describe('resolveMissionSelection', () => {
 			activeInstructionPath: '/repo/.mission/missions/mission-1/01-PRD/tasks/01-prd-from-brief.md',
 			activeAgentSessionId: 'session-new'
 		});
+	});
+
+	it('prefers an active task session over a newer completed one', () => {
+		const domain = createDomain();
+		domain.agentSessions['session-finished-latest'] = {
+			sessionId: 'session-finished-latest',
+			missionId: 'mission-1',
+			taskId: 'task-1',
+			runnerId: 'copilot-cli',
+			lifecycleState: 'completed',
+			createdAt: '2026-04-13T11:00:00.000Z',
+			lastUpdatedAt: '2026-04-13T11:30:00.000Z'
+		};
+		domain.tasks['task-1']!.agentSessionIds = ['session-old', 'session-new', 'session-finished-latest'];
+
+		const resolved = resolveMissionSelection({
+			target: {
+				kind: 'task',
+				taskId: 'task-1',
+				stageId: 'prd'
+			},
+			domain,
+			missionId: 'mission-1'
+		});
+
+		expect(resolved?.activeAgentSessionId).toBe('session-new');
 	});
 
 	it('keeps explicit session selection while retaining the owning task instruction', () => {
@@ -48,13 +74,13 @@ describe('resolveMissionSelection', () => {
 		});
 	});
 
-	it('resolves stage selection to the canonical stage result artifact', () => {
+	it('resolves stage selection to the canonical stage result artifact and preferred stage session', () => {
 		const domain = createDomain();
 
 		const resolved = resolveMissionSelection({
 			target: {
 				kind: 'stage',
-				stageId: 'spec'
+				stageId: 'prd'
 			},
 			domain,
 			missionId: 'mission-1'
@@ -62,9 +88,34 @@ describe('resolveMissionSelection', () => {
 
 		expect(resolved).toEqual({
 			missionId: 'mission-1',
-			stageId: 'spec',
-			activeStageResultArtifactId: 'mission-1:spec',
-			activeStageResultPath: '/repo/.mission/missions/mission-1/02-SPEC/SPEC.md'
+			stageId: 'prd',
+			activeStageResultArtifactId: 'mission-1:prd',
+			activeStageResultPath: '/repo/.mission/missions/mission-1/01-PRD/PRD.md',
+			activeAgentSessionId: 'session-new'
+		});
+	});
+
+	it('resolves stage artifact selection to the stage artifact and falls back to the latest stage session when none are active', () => {
+		const domain = createDomain();
+		domain.agentSessions['session-old']!.lifecycleState = 'completed';
+		domain.agentSessions['session-new']!.lifecycleState = 'completed';
+
+		const resolved = resolveMissionSelection({
+			target: {
+				kind: 'stage-artifact',
+				stageId: 'prd',
+				sourcePath: '/repo/.mission/missions/mission-1/01-PRD/PRD.md'
+			},
+			domain,
+			missionId: 'mission-1'
+		});
+
+		expect(resolved).toEqual({
+			missionId: 'mission-1',
+			stageId: 'prd',
+			activeStageResultArtifactId: 'mission-1:prd',
+			activeStageResultPath: '/repo/.mission/missions/mission-1/01-PRD/PRD.md',
+			activeAgentSessionId: 'session-new'
 		});
 	});
 

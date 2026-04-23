@@ -183,10 +183,18 @@ function resolveStageTarget(
 		return missionId ? { missionId } : undefined;
 	}
 	const stageArtifact = resolveStageResultArtifact(stageId, domain, missionId, target.sourcePath);
+	const preferredSession = resolvePreferredStageSession(stageId, missionId, domain);
 	return {
-		...(missionId ? { missionId } : stageArtifact?.missionId ? { missionId: stageArtifact.missionId } : {}),
+		...(missionId
+			? { missionId }
+			: stageArtifact?.missionId
+				? { missionId: stageArtifact.missionId }
+				: preferredSession?.missionId
+					? { missionId: preferredSession.missionId }
+					: {}),
 		stageId,
-		...(stageArtifact ? { activeStageResultArtifactId: stageArtifact.artifactId, activeStageResultPath: stageArtifact.filePath } : {})
+		...(stageArtifact ? { activeStageResultArtifactId: stageArtifact.artifactId, activeStageResultPath: stageArtifact.filePath } : {}),
+		...(preferredSession?.sessionId ? { activeAgentSessionId: preferredSession.sessionId } : {})
 	};
 }
 
@@ -278,7 +286,48 @@ function resolvePreferredTaskSession(
 	const sessions = candidateSessionIds
 		.map((sessionId) => domain.agentSessions[sessionId])
 		.filter((session): session is AgentSessionContext => Boolean(session));
-	return sessions.sort(compareAgentSessionsByRecencyDesc)[0];
+	return sessions.sort(comparePreferredAgentSessions)[0];
+}
+
+function resolvePreferredStageSession(
+	stageId: MissionStageId,
+	missionId: string | undefined,
+	domain: ContextGraph
+): AgentSessionContext | undefined {
+	const sessions = Object.values(domain.agentSessions).filter((session) => {
+		if (missionId && session.missionId && session.missionId !== missionId) {
+			return false;
+		}
+		const taskId = session.taskId?.trim();
+		if (!taskId) {
+			return false;
+		}
+		const task = domain.tasks[taskId];
+		return task?.stageId === stageId;
+	});
+	return sessions.sort(comparePreferredAgentSessions)[0];
+}
+
+function comparePreferredAgentSessions(left: AgentSessionContext, right: AgentSessionContext): number {
+	const leftActiveRank = getAgentSessionActiveRank(left);
+	const rightActiveRank = getAgentSessionActiveRank(right);
+	if (leftActiveRank !== rightActiveRank) {
+		return rightActiveRank - leftActiveRank;
+	}
+	return compareAgentSessionsByRecencyDesc(left, right);
+}
+
+function getAgentSessionActiveRank(session: AgentSessionContext): number {
+	if (session.lifecycleState === 'awaiting-input') {
+		return 3;
+	}
+	if (session.lifecycleState === 'running') {
+		return 2;
+	}
+	if (session.lifecycleState === 'starting') {
+		return 1;
+	}
+	return 0;
 }
 
 function compareAgentSessionsByRecencyDesc(left: AgentSessionContext, right: AgentSessionContext): number {

@@ -85,12 +85,6 @@
     let lastRenderedScreen = "";
     let pendingResize: { cols: number; rows: number } | null = null;
     let renderWriteToken = 0;
-    let maxScrollLine = $state(0);
-    let viewportRows = $state(24);
-    let scrollbarViewport = $state<HTMLDivElement | null>(null);
-    let syncingScrollbar = false;
-
-    const SCROLLBAR_LINE_HEIGHT_PX = 16;
 
     type TerminalResizeEvent = { cols: number; rows: number };
 
@@ -145,10 +139,6 @@
         }
         return "Connecting";
     });
-    const scrollbarContentHeight = $derived(
-        `${Math.max(maxScrollLine + viewportRows, viewportRows, 1) * SCROLLBAR_LINE_HEIGHT_PX}px`,
-    );
-
     $effect(() => {
         if (isPersistedTranscriptSnapshot) {
             resizeObserver?.disconnect();
@@ -157,8 +147,6 @@
             fitAddon = null;
             terminal = null;
             lastRenderedScreen = "";
-            maxScrollLine = 0;
-            viewportRows = 24;
             return;
         }
 
@@ -277,17 +265,10 @@
             return;
         }
 
-        const writeToken = ++renderWriteToken;
-
         if (typeof chunk === "string" && chunk.length > 0) {
             lastRenderedScreen = preparedScreen;
-            terminal.write(chunk, () => {
-                if (renderWriteToken !== writeToken) {
-                    return;
-                }
-
-                syncScrollState();
-            });
+            renderWriteToken += 1;
+            terminal.write(chunk);
             return;
         }
 
@@ -296,25 +277,15 @@
         if (nextRender.startsWith(previousRender)) {
             const appendedOutput = nextRender.slice(previousRender.length);
             lastRenderedScreen = preparedScreen;
-            terminal.write(appendedOutput, () => {
-                if (renderWriteToken !== writeToken) {
-                    return;
-                }
-
-                syncScrollState();
-            });
+            renderWriteToken += 1;
+            terminal.write(appendedOutput);
             return;
         }
 
         lastRenderedScreen = preparedScreen;
         terminal.reset();
-        terminal.write(nextRender, () => {
-            if (renderWriteToken !== writeToken) {
-                return;
-            }
-
-            syncScrollState();
-        });
+        renderWriteToken += 1;
+        terminal.write(nextRender);
     });
 
     $effect(() => {
@@ -392,10 +363,6 @@
         terminal.loadAddon(fitAddon);
         terminal.open(target);
         fitAddon.fit();
-        syncScrollState();
-        terminal.onScroll(() => {
-            syncScrollState();
-        });
         terminal.onResize(({ cols, rows }: TerminalResizeEvent) => {
             if (
                 !session ||
@@ -435,7 +402,6 @@
 
         resizeObserver = new ResizeObserver(() => {
             fitAddon?.fit();
-            syncScrollState();
         });
         resizeObserver.observe(target);
     }
@@ -497,8 +463,7 @@
             .trim();
 
         return sanitizeHtml(
-            Anser.ansiToHtml(normalizedTranscript, {
-                escape_xml: true,
+            Anser.ansiToHtml(Anser.escapeForHtml(normalizedTranscript), {
                 use_classes: false,
             }),
             {
@@ -521,43 +486,6 @@
                 },
             },
         );
-    }
-
-    function syncScrollState(): void {
-        if (!terminal) {
-            maxScrollLine = 0;
-            viewportRows = 24;
-            return;
-        }
-
-        const activeBuffer = terminal.buffer.active;
-        viewportRows = Math.max(terminal.rows, 1);
-        maxScrollLine = Math.max(activeBuffer.length - viewportRows, 0);
-        const viewportLine = Math.min(activeBuffer.viewportY, maxScrollLine);
-
-        if (scrollbarViewport) {
-            const nextScrollTop = viewportLine * SCROLLBAR_LINE_HEIGHT_PX;
-
-            if (Math.abs(scrollbarViewport.scrollTop - nextScrollTop) > 1) {
-                syncingScrollbar = true;
-                scrollbarViewport.scrollTop = nextScrollTop;
-                syncingScrollbar = false;
-            }
-        }
-    }
-
-    function handleScrollbarScroll(event: Event): void {
-        if (!terminal || syncingScrollbar) {
-            return;
-        }
-
-        const scrollbarElement = event.currentTarget as HTMLDivElement;
-        const nextValue = Math.round(
-            scrollbarElement.scrollTop / SCROLLBAR_LINE_HEIGHT_PX,
-        );
-
-        terminal.scrollToLine(Math.min(Math.max(nextValue, 0), maxScrollLine));
-        syncScrollState();
     }
 
     function sanitizeTerminalInputData(data: string): string {
@@ -678,24 +606,12 @@
         {:else}
             <div class="h-full min-h-[24rem] overflow-hidden">
                 <div
-                    class="agent-session-terminal-shell flex h-full min-h-0 overflow-hidden bg-slate-950 py-2 pl-2 pr-1"
+                    class="agent-session-terminal-shell flex h-full min-h-0 overflow-hidden bg-slate-950 p-2"
                 >
                     <div
                         bind:this={container}
                         class="h-full min-h-0 flex-1"
                     ></div>
-
-                    <div
-                        bind:this={scrollbarViewport}
-                        class={`agent-session-scrollbar ${maxScrollLine > 0 ? "opacity-100" : "opacity-40"}`}
-                        onscroll={handleScrollbarScroll}
-                    >
-                        <div
-                            class="agent-session-scrollbar-spacer"
-                            style={`height: ${scrollbarContentHeight};`}
-                            aria-label="Scroll agent session transcript"
-                        ></div>
-                    </div>
                 </div>
             </div>
         {/if}
@@ -703,50 +619,6 @@
 </section>
 
 <style>
-    :global(
-            .agent-session-terminal-shell
-                .xterm
-                .xterm-scrollable-element
-                > .scrollbar.vertical
-        ) {
-        display: none !important;
-    }
-
-    .agent-session-scrollbar {
-        width: 1rem;
-        min-width: 1rem;
-        overflow-y: scroll;
-        overflow-x: hidden;
-        border-left: 1px solid rgba(71, 85, 105, 0.45);
-        padding-left: 0.25rem;
-        transition: opacity 120ms linear;
-        scrollbar-width: auto;
-        scrollbar-color: rgba(148, 163, 184, 0.82) rgba(15, 23, 42, 0.95);
-    }
-
-    .agent-session-scrollbar-spacer {
-        width: 1px;
-    }
-
-    .agent-session-scrollbar::-webkit-scrollbar {
-        width: 0.875rem;
-    }
-
-    .agent-session-scrollbar::-webkit-scrollbar-track {
-        background: rgba(15, 23, 42, 0.95);
-        border-radius: 999px;
-    }
-
-    .agent-session-scrollbar::-webkit-scrollbar-thumb {
-        border: 3px solid #020617;
-        border-radius: 999px;
-        background: rgba(148, 163, 184, 0.82);
-    }
-
-    .agent-session-scrollbar::-webkit-scrollbar-thumb:hover {
-        background: rgba(226, 232, 240, 0.92);
-    }
-
     .agent-session-transcript {
         margin: 0;
         white-space: pre-wrap;

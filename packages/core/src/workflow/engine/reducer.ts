@@ -352,24 +352,27 @@ class MissionWorkflowTransitionEngine {
                 return;
             }
             case 'session.started': {
-                this.state.tasks = this.state.tasks.map((task) =>
-                    task.taskId === event.taskId
-                        ? {
-                            ...task,
-                            lifecycle: 'running',
-                            ...(task.reworkRequest && !task.reworkRequest.launchedAt
-                                ? {
-                                    reworkRequest: {
-                                        ...task.reworkRequest,
-                                        launchedAt: event.occurredAt
-                                    }
+                this.state.tasks = this.state.tasks.map((task) => {
+                    if (task.taskId !== event.taskId) {
+                        return task;
+                    }
+
+                    const { pendingLaunchContext, ...rest } = task;
+                    void pendingLaunchContext;
+                    return {
+                        ...rest,
+                        lifecycle: 'running',
+                        ...(task.reworkRequest && !task.reworkRequest.launchedAt
+                            ? {
+                                reworkRequest: {
+                                    ...task.reworkRequest,
+                                    launchedAt: event.occurredAt
                                 }
-                                : {}),
-                            pendingLaunchContext: undefined,
-                            updatedAt: event.occurredAt
-                        }
-                        : task
-                );
+                            }
+                            : {}),
+                        updatedAt: event.occurredAt
+                    };
+                });
                 this.state.sessions = upsertSession(this.state.sessions, {
                     sessionId: event.sessionId,
                     taskId: event.taskId,
