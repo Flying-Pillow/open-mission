@@ -3,7 +3,6 @@ import type {
 	SystemSnapshot,
 	GateIntent,
 	GitHubVisibleRepository,
-	RepositoryCandidate,
 	OperatorActionListSnapshot,
 	OperatorActionExecutionStep,
 	OperatorActionQueryContext,
@@ -13,6 +12,9 @@ import type {
 	OperatorStatus,
 	TrackedIssueSummary
 } from '../../types.js';
+import type { Mission } from '../../mission/Mission.js';
+import type { AgentSession } from '../../mission/AgentSession.js';
+import type { Repository } from '../../repository/Repository.js';
 import type {
 	AgentCommand,
 	AgentPrompt
@@ -330,6 +332,7 @@ export type Method =
 	| 'control.action.execute'
 	| 'mission.from-brief'
 	| 'mission.from-issue'
+	| 'mission.operator-status'
 	| 'mission.status'
 	| 'mission.action.list'
 	| 'mission.action.execute'
@@ -379,6 +382,7 @@ export const METHOD_METADATA: Record<Method, MethodMetadata> = {
 	'control.action.execute': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'mission.from-brief': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'mission.from-issue': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'mission.operator-status': { includeSurfacePath: true, workspaceRoute: 'mission' },
 	'mission.status': { includeSurfacePath: true, workspaceRoute: 'mission' },
 	'mission.action.list': { includeSurfacePath: true, workspaceRoute: 'mission' },
 	'mission.action.execute': { includeSurfacePath: true, workspaceRoute: 'mission' },
@@ -600,7 +604,7 @@ export type Notification =
 		type: 'mission.status';
 		workspaceRoot: string;
 		missionId: string;
-		status: OperatorStatus;
+		status: Mission;
 	}
 	| {
 		type: 'session.console';
@@ -659,8 +663,9 @@ export type SuccessResponse = {
 	| SystemSnapshot
 	| OperatorStatus
 	| ControlDocumentResponse
-	| RepositoryCandidate
-	| RepositoryCandidate[]
+	| Mission
+	| Repository
+	| Repository[]
 	| GitHubVisibleRepository[]
 	| GitHubIssueDetail
 	| MissionGateResult
@@ -670,8 +675,8 @@ export type SuccessResponse = {
 	| MissionAgentConsoleState
 	| MissionAgentTerminalState
 	| null
-	| MissionAgentSessionRecord
-	| MissionAgentSessionRecord[]
+	| AgentSession
+	| AgentSession[]
 	| OperatorActionListSnapshot
 	| TrackedIssueSummary[];
 };

@@ -1,11 +1,15 @@
-// /apps/airport/web/src/routes/repository/[repositoryId]/issue.remote.ts: Client-callable remote queries for repository issue lists and issue details.
+// /apps/airport/web/src/routes/repository/[repositoryId]/issue.remote.ts: Transitional repository query glue over the generic entity boundary.
 import { getRequestEvent, query } from '$app/server';
 import { z } from 'zod/v4';
 import {
-    githubIssueDetailDtoSchema,
-    trackedIssueSummaryDtoSchema
+    githubIssueDetailSchema,
+    trackedIssueSummarySchema
 } from '@flying-pillow/mission-core/airport/runtime';
 import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
+import {
+    getRepositoryIssueThroughEntityBoundary,
+    listRepositoryIssuesThroughEntityBoundary
+} from '../../api/entities/remote/dispatch';
 
 const repositoryIssuesQuerySchema = z.object({
     repositoryId: z.string().trim().min(1),
@@ -19,24 +23,19 @@ const repositoryIssueQuerySchema = z.object({
 });
 
 export const getRepositoryIssues = query(repositoryIssuesQuerySchema, async (input) => {
-    const { locals } = getRequestEvent();
-    const gateway = new AirportWebGateway(locals);
-    return z.array(trackedIssueSummaryDtoSchema).parse(
-        await gateway.getRepositoryIssues({
-            repositoryId: input.repositoryId,
-            repositoryRootPath: input.repositoryRootPath
-        })
+    return z.array(trackedIssueSummarySchema).parse(
+        await listRepositoryIssuesThroughEntityBoundary(
+            new AirportWebGateway(getRequestEvent().locals),
+            input
+        )
     );
 });
 
 export const getRepositoryIssue = query(repositoryIssueQuerySchema, async (input) => {
-    const { locals } = getRequestEvent();
-    const gateway = new AirportWebGateway(locals);
-    return githubIssueDetailDtoSchema.parse(
-        await gateway.getRepositoryIssueDetail({
-            repositoryId: input.repositoryId,
-            repositoryRootPath: input.repositoryRootPath,
-            issueNumber: input.issueNumber
-        })
+    return githubIssueDetailSchema.parse(
+        await getRepositoryIssueThroughEntityBoundary(
+            new AirportWebGateway(getRequestEvent().locals),
+            input
+        )
     );
 });

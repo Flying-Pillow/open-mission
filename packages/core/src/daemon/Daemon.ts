@@ -473,20 +473,7 @@ export class Daemon {
 		if (event.type !== 'mission.status') {
 			return event;
 		}
-		const snapshot = await this.systemController.synchronizeWorkspace({
-			workspaceRoot: event.workspaceRoot,
-			selectionHint: {
-				repositoryId: event.workspaceRoot,
-				missionId: event.missionId
-			}
-		});
-		return {
-			...event,
-			status: {
-				...event.status,
-				system: snapshot
-			}
-		};
+		return event;
 	}
 
 	private async handleClientDisconnected(clientId: string): Promise<void> {

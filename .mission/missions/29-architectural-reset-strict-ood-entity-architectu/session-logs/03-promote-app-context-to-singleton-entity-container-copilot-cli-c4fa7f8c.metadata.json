@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "missionId": "29-architectural-reset-strict-ood-entity-architectu",
+  "sessionId": "03-promote-app-context-to-singleton-entity-container-copilot-cli-c4fa7f8c",
+  "sessionLogPath": "session-logs/03-promote-app-context-to-singleton-entity-container-copilot-cli-c4fa7f8c.ansi",
+  "sessionMetadataPath": "session-logs/03-promote-app-context-to-singleton-entity-container-copilot-cli-c4fa7f8c.metadata.json",
+  "runnerId": "copilot-cli",
+  "runnerLabel": "copilot-cli via PTY transport",
+  "lifecycleState": "running",
+  "startedAt": "2026-04-23T18:47:12.031Z",
+  "updatedAt": "2026-04-23T18:47:12.031Z",
+  "inputBytes": 9,
+  "outputBytes": 497535,
+  "transportId": "terminal",
+  "taskId": "implementation/03-promote-app-context-to-singleton-entity-container",
+  "terminalSessionName": "github:Flying-Pillow:mission:29-architectural-reset-strict-ood-entity-architectu:implementation-03-promote-app-context-to-singleton-entity-container:03-promote-app-context-to-singleton-entity-container-copilot-cli-c4fa7f8c",
+  "terminalPaneId": "pty",
+  "workingDirectory": "/missions/Flying-Pillow/mission/29-architectural-reset-strict-ood-entity-architectu/.mission/missions/29-architectural-reset-strict-ood-entity-architectu"
+}

@@ -10,6 +10,23 @@ import {
 } from '../types.js';
 import { getMissionArtifactDefinition } from '../workflow/manifest.js';
 
+export type ArtifactKind = 'mission' | 'stage' | 'task';
+
+export type Artifact = {
+	artifactId: string;
+	kind: ArtifactKind;
+	label: string;
+	fileName: string;
+	key?: MissionArtifactKey;
+	stageId?: MissionStageId;
+	taskId?: string;
+	filePath?: string;
+	relativePath?: string;
+};
+
+export type ArtifactEntityKind = ArtifactKind;
+export type ArtifactEntity = Artifact;
+
 type ProductArtifactDefinition = {
 	kind: 'product';
 	key: MissionArtifactKey;
@@ -29,7 +46,7 @@ type TaskArtifactDefinition = {
 	retries?: number;
 };
 
-export class Artifact {
+class ArtifactRuntime {
 	public constructor(
 		private readonly missionDir: string,
 		private readonly definition: ProductArtifactDefinition | TaskArtifactDefinition
@@ -81,4 +98,50 @@ export class Artifact {
 			...(this.definition.retries !== undefined ? { retries: this.definition.retries } : {})
 		});
 	}
+}
+
+export const Artifact = ArtifactRuntime;
+
+export function createMissionArtifactEntity(input: {
+	artifactKey: MissionArtifactKey;
+	missionRootDir?: string;
+	filePath?: string;
+	stageId?: MissionStageId;
+}): ArtifactEntity {
+	const definition = getMissionArtifactDefinition(input.artifactKey);
+	const relativePath = definition.stageId
+		? `${MISSION_STAGE_FOLDERS[definition.stageId]}/${definition.fileName}`
+		: definition.fileName;
+	return {
+		artifactId: definition.stageId
+			? `stage:${definition.stageId}:${definition.key}`
+			: `mission:${definition.key}`,
+		kind: definition.stageId ? 'stage' : 'mission',
+		key: definition.key,
+		label: definition.label,
+		fileName: definition.fileName,
+		...(input.stageId ?? definition.stageId ? { stageId: input.stageId ?? definition.stageId } : {}),
+		...(input.filePath ? { filePath: input.filePath } : {}),
+		...(input.filePath || input.missionRootDir ? { relativePath } : {})
+	};
+}
+
+export function createTaskArtifactEntity(input: {
+	taskId: string;
+	stageId: MissionStageId;
+	fileName: string;
+	label?: string;
+	filePath?: string;
+	relativePath?: string;
+}): ArtifactEntity {
+	return {
+		artifactId: `task:${input.taskId}`,
+		kind: 'task',
+		label: input.label ?? input.fileName,
+		fileName: input.fileName,
+		stageId: input.stageId,
+		taskId: input.taskId,
+		...(input.filePath ? { filePath: input.filePath } : {}),
+		...(input.relativePath ? { relativePath: input.relativePath } : {})
+	};
 }

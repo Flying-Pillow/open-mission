@@ -1,9 +1,9 @@
 // /apps/airport/web/src/lib/client/runtime/transport/MissionRuntimeTransport.ts: Mission transport adapter for runtime snapshot and daemon event contracts.
 import {
     airportRuntimeEventEnvelopeSchema,
-    missionRuntimeSnapshotDtoSchema,
-    type AirportRuntimeEventEnvelopeDto,
-    type MissionRuntimeSnapshotDto
+    missionRuntimeSnapshotSchema,
+    type AirportRuntimeEventEnvelope,
+    type MissionRuntimeSnapshot
 } from '@flying-pillow/mission-core/airport/runtime';
 import {
     EntityRuntimeTransport,
@@ -12,8 +12,8 @@ import {
 
 export class MissionRuntimeTransport extends EntityRuntimeTransport<
     string,
-    MissionRuntimeSnapshotDto,
-    AirportRuntimeEventEnvelopeDto
+    MissionRuntimeSnapshot,
+    AirportRuntimeEventEnvelope
 > {
     private readonly repositoryRootPath?: string;
 
@@ -26,13 +26,13 @@ export class MissionRuntimeTransport extends EntityRuntimeTransport<
         this.repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
     }
 
-    public async getMissionRuntimeSnapshot(missionId: string): Promise<MissionRuntimeSnapshotDto> {
+    public async getMissionRuntimeSnapshot(missionId: string): Promise<MissionRuntimeSnapshot> {
         return this.getSnapshot(missionId);
     }
 
     public observeMissionRuntime(input: {
         missionId: string;
-        onEvent?: (event: AirportRuntimeEventEnvelopeDto) => void | Promise<void>;
+        onEvent?: (event: AirportRuntimeEventEnvelope) => void | Promise<void>;
         onError?: (error: Error) => void;
     }): RuntimeSubscription {
         return this.observe({
@@ -54,11 +54,11 @@ export class MissionRuntimeTransport extends EntityRuntimeTransport<
         return `/api/runtime/events?${query.toString()}`;
     }
 
-    protected parseSnapshot(value: unknown): MissionRuntimeSnapshotDto {
-        return missionRuntimeSnapshotDtoSchema.parse(value);
+    protected parseSnapshot(value: unknown): MissionRuntimeSnapshot {
+        return missionRuntimeSnapshotSchema.parse(value);
     }
 
-    protected parseEvent(value: unknown): AirportRuntimeEventEnvelopeDto {
+    protected parseEvent(value: unknown): AirportRuntimeEventEnvelope {
         return airportRuntimeEventEnvelopeSchema.parse(value);
     }
 

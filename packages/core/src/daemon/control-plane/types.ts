@@ -5,18 +5,18 @@ import type {
 import type {
 	ContextSelection,
 	RepositoryControlStatus,
-	RepositoryCandidate,
 	MissionSelectionCandidate,
 	MissionTaskState,
 	MissionTowerProjection,
 	OperatorStatus
 } from '../../types.js';
+import type { Repository } from '../../repository/Repository.js';
 
 export type ControlSource = {
 	repositoryId: string;
 	repositoryRootPath: string;
 	control: RepositoryControlStatus;
-	availableRepositories: RepositoryCandidate[];
+	availableRepositories: Repository[];
 	availableMissions: MissionSelectionCandidate[];
 	missionStatus?: OperatorStatus;
 };
@@ -46,7 +46,7 @@ export type ControlWorkspaceSource = {
 	repositoryId: string;
 	repositoryRootPath: string;
 	control: RepositoryControlStatus;
-	availableRepositories: RepositoryCandidate[];
+	availableRepositories: Repository[];
 	availableMissions: MissionSelectionCandidate[];
 	missionStatus?: ControlMissionStatusSource;
 };

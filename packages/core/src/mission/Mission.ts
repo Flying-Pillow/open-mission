@@ -21,7 +21,12 @@ import { initializeRepository } from '../repository/initializeRepository.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../agent/runtimes/AgentRuntimeIds.js';
 import { MissionSession } from './MissionSession.js';
 import { MissionTask } from './MissionTask.js';
+import { createMissionArtifactEntity, createTaskArtifactEntity, type Artifact } from './Artifact.js';
+import { createStage, type Stage } from './Stage.js';
+import { toTask, type Task } from './Task.js';
+import { toAgentSession, type AgentSession } from './AgentSession.js';
 import { buildMissionTaskLaunchPrompt } from './taskLaunchPrompt.js';
+import { MISSION_ARTIFACT_KEYS } from '../workflow/manifest.js';
 import {
 	MISSION_ARTIFACTS,
 	MISSION_STAGES,
@@ -38,9 +43,11 @@ import {
 	type MissionDescriptor,
 	type MissionGateResult,
 	type MissionArtifactKey,
+	type MissionLifecycleState,
 	type MissionRecord,
 	type MissionStageId,
 	type MissionStageStatus,
+	type MissionType,
 	type OperatorStatus,
 	type MissionTaskState
 } from '../types.js';
@@ -69,7 +76,105 @@ export type MissionWorkflowBindings = {
 	defaultMode?: MissionDefaultAgentMode;
 };
 
-export class Mission {
+export type Mission = {
+	missionId: string;
+	title?: string;
+	issueId?: number;
+	type?: MissionType;
+	operationalMode?: string;
+	branchRef?: string;
+	missionDir?: string;
+	missionRootDir?: string;
+	lifecycle?: MissionLifecycleState;
+	updatedAt?: string;
+	currentStageId?: MissionStageId;
+	artifacts: Artifact[];
+	stages: Stage[];
+	agentSessions: AgentSession[];
+	recommendedAction?: string;
+};
+
+export type MissionEntity = Mission;
+
+export function toMission(status: OperatorStatus): Mission {
+	const missionId = status.missionId?.trim();
+	if (!missionId) {
+		throw new Error('Mission entity conversion requires an OperatorStatus with missionId.');
+	}
+
+	const missionRootDir = status.missionRootDir ?? status.missionDir;
+	const productFiles = status.productFiles ?? {};
+	const currentStageId = status.workflow?.currentStageId ?? status.stage;
+	const artifacts: Artifact[] = [];
+
+	for (const artifactKey of MISSION_ARTIFACT_KEYS) {
+		const filePath = productFiles[artifactKey];
+		if (!filePath) {
+			continue;
+		}
+
+		artifacts.push(createMissionArtifactEntity({
+			artifactKey,
+			filePath,
+			...(missionRootDir ? { missionRootDir } : {})
+		}));
+	}
+
+	const stages: Stage[] = (status.stages ?? []).map((stage) => {
+		const stageArtifacts = getMissionStageDefinition(stage.stage).artifacts
+			.map((artifactKey) => productFiles[artifactKey]
+				? createMissionArtifactEntity({
+					artifactKey,
+					filePath: productFiles[artifactKey],
+					stageId: stage.stage,
+					...(missionRootDir ? { missionRootDir } : {})
+				})
+				: undefined)
+			.filter((artifact): artifact is Artifact => artifact !== undefined);
+		const tasks: Task[] = stage.tasks.map((task) => {
+			const entity = toTask(task);
+			if (task.filePath) {
+				artifacts.push(createTaskArtifactEntity({
+					taskId: task.taskId,
+					stageId: task.stage,
+					fileName: task.fileName,
+					filePath: task.filePath,
+					relativePath: task.relativePath
+				}));
+			}
+			return entity;
+		});
+		return createStage({
+			stageId: stage.stage,
+			lifecycle: stage.status,
+			isCurrentStage: currentStageId === stage.stage,
+			artifacts: stageArtifacts,
+			tasks
+		});
+	});
+
+	return {
+		missionId,
+		...(status.title ? { title: status.title } : {}),
+		...(status.issueId !== undefined ? { issueId: status.issueId } : {}),
+		...(status.type ? { type: status.type } : {}),
+		...(status.operationalMode ? { operationalMode: status.operationalMode } : {}),
+		...(status.branchRef ? { branchRef: status.branchRef } : {}),
+		...(status.missionDir ? { missionDir: status.missionDir } : {}),
+		...(status.missionRootDir ? { missionRootDir: status.missionRootDir } : {}),
+		...(status.workflow?.lifecycle ? { lifecycle: status.workflow.lifecycle } : {}),
+		...(status.workflow?.updatedAt ? { updatedAt: status.workflow.updatedAt } : {}),
+		...(currentStageId ? { currentStageId } : {}),
+		artifacts,
+		stages,
+		agentSessions: (status.agentSessions ?? []).map((session) => toAgentSession(session)),
+		...(status.recommendedAction ? { recommendedAction: status.recommendedAction } : {})
+	};
+}
+
+export const toMissionEntity = toMission;
+
+export class MissionRuntime {
 	private static readonly SESSION_RECONCILE_TIMEOUT_MS = 1_000;
 
 	private readonly agentConsoleEventEmitter = new MissionAgentEventEmitter<MissionAgentConsoleEvent>();
@@ -131,8 +236,8 @@ export class Mission {
 		missionDir: string,
 		descriptor: MissionDescriptor,
 		workflowBindings: MissionWorkflowBindings
-	): Mission {
-		return new Mission(adapter, missionDir, descriptor, workflowBindings);
+	): MissionRuntime {
+		return new MissionRuntime(adapter, missionDir, descriptor, workflowBindings);
 	}
 
 	public async initialize(): Promise<this> {
@@ -196,6 +301,10 @@ export class Mission {
 		this.lastKnownActionSnapshot = undefined;
 		this.lastKnownStatus = await this.buildStatus(document);
 		return this.lastKnownStatus;
+	}
+
+	public async toEntity(): Promise<Mission> {
+		return toMission(await this.status());
 	}
 
 	public async listAvailableActions(): Promise<OperatorActionDescriptor[]> {
@@ -1710,7 +1819,7 @@ export class Mission {
 		try {
 			return await promiseWithTimeout(
 				this.workflowController.reconcileSessions(),
-				Mission.SESSION_RECONCILE_TIMEOUT_MS
+				MissionRuntime.SESSION_RECONCILE_TIMEOUT_MS
 			);
 		} catch {
 			return currentDocument;
@@ -1823,6 +1932,7 @@ export class Mission {
 		}));
 	}
 }
+
 
 type MissionAvailableActionsInput = {
 	missionId: string;

@@ -2,7 +2,6 @@ import type {
 	MissionActionList,
 	MissionAgentConsoleState,
 	MissionAgentTerminalState,
-	MissionAgentSessionRecord,
 	MissionActionExecute,
 	MissionFromBriefRequest,
 	SessionComplete,
@@ -24,6 +23,8 @@ import type {
 	MissionSelector,
 	OperatorStatus
 } from '../types.js';
+import type { Mission } from '../mission/Mission.js';
+import type { AgentSession } from '../mission/AgentSession.js';
 import { DaemonClient } from './DaemonClient.js';
 
 export class DaemonMissionApi {
@@ -43,9 +44,19 @@ export class DaemonMissionApi {
 		});
 	}
 
-	public async getStatus(selector: MissionSelector): Promise<OperatorStatus> {
-		return this.client.request<OperatorStatus>('mission.status', {
+	public async getStatus(selector: MissionSelector): Promise<Mission> {
+		return this.client.request<Mission>('mission.status', {
 			selector: DaemonMissionApi.requireSelector(selector, 'Mission status')
+		});
+	}
+
+	public async getMission(selector: MissionSelector): Promise<Mission> {
+		return this.getStatus(selector);
+	}
+
+	public async getOperatorStatus(selector: MissionSelector): Promise<OperatorStatus> {
+		return this.client.request<OperatorStatus>('mission.operator-status', {
+			selector: DaemonMissionApi.requireSelector(selector, 'Mission operator status')
 		});
 	}
 
@@ -74,7 +85,7 @@ export class DaemonMissionApi {
 		actionId: string,
 		steps: OperatorActionExecutionStep[] = [],
 		options: { terminalSessionName?: string } = {}
-	): Promise<OperatorStatus> {
+	): Promise<Mission> {
 		const resolvedSelector = DaemonMissionApi.requireSelector(selector, `Mission action '${actionId}'`);
 		const params: MissionActionExecute = {
 			selector: resolvedSelector,
@@ -82,7 +93,16 @@ export class DaemonMissionApi {
 			...(steps.length > 0 ? { steps } : {}),
 			...(options.terminalSessionName?.trim() ? { terminalSessionName: options.terminalSessionName.trim() } : {})
 		};
-		return this.client.request<OperatorStatus>('mission.action.execute', params);
+		return this.client.request<Mission>('mission.action.execute', params);
+	}
+
+	public async executeMissionAction(
+		selector: MissionSelector,
+		actionId: string,
+		steps: OperatorActionExecutionStep[] = [],
+		options: { terminalSessionName?: string } = {}
+	): Promise<Mission> {
+		return this.executeAction(selector, actionId, steps, options);
 	}
 
 	public async evaluateGate(
@@ -119,8 +139,8 @@ export class DaemonMissionApi {
 
 	public async listSessions(
 		selector: MissionSelector
-	): Promise<MissionAgentSessionRecord[]> {
-		return this.client.request<MissionAgentSessionRecord[]>('session.list', {
+	): Promise<AgentSession[]> {
+		return this.client.request<AgentSession[]>('session.list', {
 			selector: DaemonMissionApi.requireSelector(selector, 'Mission session listing')
 		});
 	}
@@ -166,8 +186,8 @@ export class DaemonMissionApi {
 		selector: MissionSelector | undefined,
 		sessionId: string,
 		reason?: string
-	): Promise<MissionAgentSessionRecord> {
-		return this.client.request<MissionAgentSessionRecord>('session.cancel', {
+	): Promise<AgentSession> {
+		return this.client.request<AgentSession>('session.cancel', {
 			...(selector && Object.keys(selector).length > 0 ? { selector } : {}),
 			sessionId,
 			...(reason ? { reason } : {})
@@ -178,45 +198,45 @@ export class DaemonMissionApi {
 		selector: MissionSelector | undefined,
 		sessionId: string,
 		prompt: AgentPrompt
-	): Promise<MissionAgentSessionRecord> {
+	): Promise<AgentSession> {
 		const params: SessionPrompt = {
 			...(selector && Object.keys(selector).length > 0 ? { selector } : {}),
 			sessionId,
 			prompt
 		};
-		return this.client.request<MissionAgentSessionRecord>('session.prompt', params);
+		return this.client.request<AgentSession>('session.prompt', params);
 	}
 
 	public async commandSession(
 		selector: MissionSelector | undefined,
 		sessionId: string,
 		command: AgentCommand
-	): Promise<MissionAgentSessionRecord> {
+	): Promise<AgentSession> {
 		const params: SessionCommand = {
 			...(selector && Object.keys(selector).length > 0 ? { selector } : {}),
 			sessionId,
 			command
 		};
-		return this.client.request<MissionAgentSessionRecord>('session.command', params);
+		return this.client.request<AgentSession>('session.command', params);
 	}
 
 	public async completeSession(
 		selector: MissionSelector | undefined,
 		sessionId: string
-	): Promise<MissionAgentSessionRecord> {
+	): Promise<AgentSession> {
 		const params: SessionComplete = {
 			...(selector && Object.keys(selector).length > 0 ? { selector } : {}),
 			sessionId
 		};
-		return this.client.request<MissionAgentSessionRecord>('session.complete', params);
+		return this.client.request<AgentSession>('session.complete', params);
 	}
 
 	public async terminateSession(
 		selector: MissionSelector | undefined,
 		sessionId: string,
 		reason?: string
-	): Promise<MissionAgentSessionRecord> {
-		return this.client.request<MissionAgentSessionRecord>('session.terminate', {
+	): Promise<AgentSession> {
+		return this.client.request<AgentSession>('session.terminate', {
 			...(selector && Object.keys(selector).length > 0 ? { selector } : {}),
 			sessionId,
 			...(reason ? { reason } : {})

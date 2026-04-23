@@ -1,9 +1,9 @@
 // /apps/airport/web/src/lib/client/entities/Repository.ts: OO browser entity for repository surface state with remote issue and mission commands.
 import type {
-    GitHubIssueDetailDto,
-    MissionRuntimeSnapshotDto,
-    RepositorySurfaceSnapshotDto,
-    TrackedIssueSummaryDto
+    GitHubIssueDetail,
+    MissionRuntimeSnapshot,
+    RepositorySurfaceSnapshot,
+    TrackedIssueSummary
 } from '@flying-pillow/mission-core/airport/runtime';
 import type { EntityModel } from '$lib/client/entities/EntityModel';
 import { Mission, type MissionCommandGateway } from '$lib/client/entities/Mission';
@@ -12,12 +12,12 @@ export type RepositoryIssueGateway = {
     listIssues(input: {
         repositoryId: string;
         repositoryRootPath: string;
-    }): Promise<TrackedIssueSummaryDto[]>;
+    }): Promise<TrackedIssueSummary[]>;
     getIssue(input: {
         repositoryId: string;
         repositoryRootPath: string;
         issueNumber: number;
-    }): Promise<GitHubIssueDetailDto>;
+    }): Promise<GitHubIssueDetail>;
 };
 
 export type RepositoryMissionGateway = {
@@ -31,14 +31,14 @@ export type RepositoryMissionGateway = {
 
 export type RepositoryGateway = RepositoryIssueGateway & RepositoryMissionGateway;
 
-export class Repository implements EntityModel<RepositorySurfaceSnapshotDto> {
-    private surface: RepositorySurfaceSnapshotDto;
+export class Repository implements EntityModel<RepositorySurfaceSnapshot> {
+    private surface: RepositorySurfaceSnapshot;
     private readonly gateway: RepositoryGateway;
     private readonly missionCommands: MissionCommandGateway;
     private selectedMissionModel?: Mission;
 
     public constructor(
-        surface: RepositorySurfaceSnapshotDto,
+        surface: RepositorySurfaceSnapshot,
         input: {
             gateway: RepositoryGateway;
             missionCommands: MissionCommandGateway;
@@ -66,7 +66,7 @@ export class Repository implements EntityModel<RepositorySurfaceSnapshotDto> {
         return this.surface.repository.label;
     }
 
-    public get summary(): RepositorySurfaceSnapshotDto['repository'] {
+    public get summary(): RepositorySurfaceSnapshot['repository'] {
         return structuredClone(this.surface.repository);
     }
 
@@ -78,7 +78,7 @@ export class Repository implements EntityModel<RepositorySurfaceSnapshotDto> {
         return this.selectedMissionModel;
     }
 
-    public get missions(): RepositorySurfaceSnapshotDto['missions'] {
+    public get missions(): RepositorySurfaceSnapshot['missions'] {
         return structuredClone(this.surface.missions);
     }
 
@@ -108,7 +108,7 @@ export class Repository implements EntityModel<RepositorySurfaceSnapshotDto> {
             : `${this.surface.missions.length} missions`;
     }
 
-    public updateFromSnapshot(surface: RepositorySurfaceSnapshotDto): this {
+    public updateFromSnapshot(surface: RepositorySurfaceSnapshot): this {
         this.surface = structuredClone(surface);
 
         if (!surface.selectedMission) {
@@ -125,26 +125,26 @@ export class Repository implements EntityModel<RepositorySurfaceSnapshotDto> {
         return this;
     }
 
-    public applySurface(surface: RepositorySurfaceSnapshotDto): this {
+    public applySurface(surface: RepositorySurfaceSnapshot): this {
         return this.updateFromSnapshot(surface);
     }
 
-    public toSnapshot(): RepositorySurfaceSnapshotDto {
+    public toSnapshot(): RepositorySurfaceSnapshot {
         return structuredClone(this.surface);
     }
 
-    public toJSON(): RepositorySurfaceSnapshotDto {
+    public toJSON(): RepositorySurfaceSnapshot {
         return this.toSnapshot();
     }
 
-    public async listIssues(): Promise<TrackedIssueSummaryDto[]> {
+    public async listIssues(): Promise<TrackedIssueSummary[]> {
         return this.gateway.listIssues({
             repositoryId: this.repositoryId,
             repositoryRootPath: this.repositoryRootPath
         });
     }
 
-    public async getIssue(issueNumber: number): Promise<GitHubIssueDetailDto> {
+    public async getIssue(issueNumber: number): Promise<GitHubIssueDetail> {
         return this.gateway.getIssue({
             repositoryId: this.repositoryId,
             repositoryRootPath: this.repositoryRootPath,
@@ -156,7 +156,7 @@ export class Repository implements EntityModel<RepositorySurfaceSnapshotDto> {
         return this.gateway.startMissionFromIssue({ issueNumber });
     }
 
-    private createSelectedMission(snapshot?: MissionRuntimeSnapshotDto): Mission | undefined {
+    private createSelectedMission(snapshot?: MissionRuntimeSnapshot): Mission | undefined {
         if (!snapshot) {
             return undefined;
         }

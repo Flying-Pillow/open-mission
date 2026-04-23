@@ -4,6 +4,7 @@ import type {
 	AgentSessionSnapshot
 } from '../agent/AgentRuntimeTypes.js';
 import type { MissionTaskState } from '../types.js';
+import { toAgentSession, type AgentSession } from './AgentSession.js';
 import type {
 	MissionAgentModelInfo,
 	MissionAgentScope,
@@ -224,6 +225,10 @@ export class MissionSession {
 
 	public toRecord(): MissionAgentSessionRecord {
 		return MissionSession.cloneRecord(this.record);
+	}
+
+	public toEntity(): AgentSession {
+		return toAgentSession(this.record);
 	}
 
 	public toState(snapshot?: AgentSessionSnapshot): MissionAgentSessionState {

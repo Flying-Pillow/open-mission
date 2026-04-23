@@ -1,8 +1,8 @@
-// /apps/airport/web/src/lib/client/entities/AgentSession.ts: OO browser entity for a mission agent session hydrated from validated DTOs.
+// /apps/airport/web/src/lib/client/entities/AgentSession.ts: OO browser entity for a mission agent session hydrated from validated runtime snapshots.
 import type {
-    AgentCommandDto as AgentCommand,
-    AgentPromptDto as AgentPrompt,
-    MissionAgentSessionDto
+    AgentCommand as AgentCommand,
+    AgentPrompt as AgentPrompt,
+    AgentSession as AgentSessionSnapshot
 } from '@flying-pillow/mission-core/airport/runtime';
 import type { EntityModel } from '$lib/client/entities/EntityModel';
 
@@ -14,11 +14,11 @@ export type AgentSessionCommandOwner = {
     sendSessionCommand(sessionId: string, command: AgentCommand): Promise<void>;
 };
 
-export class AgentSession implements EntityModel<MissionAgentSessionDto> {
-    private data: MissionAgentSessionDto;
+export class AgentSession implements EntityModel<AgentSessionSnapshot> {
+    private data: AgentSessionSnapshot;
     private readonly owner: AgentSessionCommandOwner;
 
-    public constructor(data: MissionAgentSessionDto, owner: AgentSessionCommandOwner) {
+    public constructor(data: AgentSessionSnapshot, owner: AgentSessionCommandOwner) {
         this.data = structuredClone(data);
         this.owner = owner;
     }
@@ -35,7 +35,7 @@ export class AgentSession implements EntityModel<MissionAgentSessionDto> {
         return this.data.taskId;
     }
 
-    public get lifecycleState(): MissionAgentSessionDto['lifecycleState'] {
+    public get lifecycleState(): AgentSessionSnapshot['lifecycleState'] {
         return this.data.lifecycleState;
     }
 
@@ -63,7 +63,7 @@ export class AgentSession implements EntityModel<MissionAgentSessionDto> {
         return this.data.terminalPaneId;
     }
 
-    public get terminalHandle(): MissionAgentSessionDto['terminalHandle'] {
+    public get terminalHandle(): AgentSessionSnapshot['terminalHandle'] {
         return this.data.terminalHandle;
     }
 
@@ -107,20 +107,20 @@ export class AgentSession implements EntityModel<MissionAgentSessionDto> {
         return this;
     }
 
-    public updateFromSnapshot(data: MissionAgentSessionDto): this {
+    public updateFromSnapshot(data: AgentSessionSnapshot): this {
         this.data = structuredClone(data);
         return this;
     }
 
-    public update(data: MissionAgentSessionDto): this {
+    public update(data: AgentSessionSnapshot): this {
         return this.updateFromSnapshot(data);
     }
 
-    public toSnapshot(): MissionAgentSessionDto {
+    public toSnapshot(): AgentSessionSnapshotSnapshot {
         return structuredClone(this.data);
     }
 
-    public toJSON(): MissionAgentSessionDto {
+    public toJSON(): AgentSessionSnapshotSnapshot {
         return this.toSnapshot();
     }
 }

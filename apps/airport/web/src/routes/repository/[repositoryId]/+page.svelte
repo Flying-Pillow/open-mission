@@ -15,7 +15,7 @@
     import RepositoryList from "$lib/components/entities/Repository/RepositoryList.svelte";
     import RepositoryCard from "$lib/components/entities/Repository/Repository.svelte";
     import type { SelectedIssueSummary } from "$lib/components/entities/types";
-    import type { RepositorySurfaceSnapshotDto } from "@flying-pillow/mission-core";
+    import type { RepositorySurfaceSnapshot } from "@flying-pillow/mission-core";
     import {
         SidebarInset,
         SidebarProvider,
@@ -24,7 +24,7 @@
     type Props = {
         data: {
             airportRepositories: import("$lib/components/entities/types").RepositorySummary[];
-            repositorySurface: RepositorySurfaceSnapshotDto;
+            repositorySurface: RepositorySurfaceSnapshot;
             repositoryId: string;
         };
     };

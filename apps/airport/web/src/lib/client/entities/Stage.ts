@@ -1,18 +1,21 @@
 // /apps/airport/web/src/lib/client/entities/Stage.ts: OO browser entity for a mission workflow stage with task accessors.
-import type { MissionRuntimeSnapshotDto } from '@flying-pillow/mission-core/airport/runtime';
+import type {
+    MissionRuntimeSnapshot,
+    Stage as StageSnapshotRecord
+} from '@flying-pillow/mission-core/airport/runtime';
 import type { EntityModel } from '$lib/client/entities/EntityModel';
 import type { Task } from '$lib/client/entities/Task';
 
-export type MissionWorkflowStageDto = NonNullable<
-    NonNullable<MissionRuntimeSnapshotDto['status']['workflow']>['stages']
->[number];
+export type StageSnapshot = NonNullable<
+    NonNullable<MissionRuntimeSnapshot['status']['workflow']>['stages']
+>[number] & Stage;
 
-export class Stage implements EntityModel<MissionWorkflowStageDto> {
-    private snapshot: MissionWorkflowStageDto;
+export class Stage implements EntityModel<StageSnapshot> {
+    private snapshot: StageSnapshot;
     private readonly resolveTask: (taskId: string) => Task | undefined;
 
     public constructor(
-        snapshot: MissionWorkflowStageDto,
+        snapshot: StageSnapshot,
         resolveTask: (taskId: string) => Task | undefined
     ) {
         this.snapshot = structuredClone(snapshot);
@@ -35,7 +38,7 @@ export class Stage implements EntityModel<MissionWorkflowStageDto> {
         return this.snapshot.isCurrentStage;
     }
 
-    public get artifacts(): MissionWorkflowStageDto['artifacts'] {
+    public get artifacts(): StageSnapshot['artifacts'] {
         return structuredClone(this.snapshot.artifacts);
     }
 
@@ -45,16 +48,16 @@ export class Stage implements EntityModel<MissionWorkflowStageDto> {
             .filter((task): task is Task => task !== undefined);
     }
 
-    public updateFromSnapshot(snapshot: MissionWorkflowStageDto): this {
+    public updateFromSnapshot(snapshot: StageSnapshot): this {
         this.snapshot = structuredClone(snapshot);
         return this;
     }
 
-    public toSnapshot(): MissionWorkflowStageDto {
+    public toSnapshot(): StageSnapshot {
         return structuredClone(this.snapshot);
     }
 
-    public toJSON(): MissionWorkflowStageDto {
+    public toJSON(): StageSnapshot {
         return this.toSnapshot();
     }
 }

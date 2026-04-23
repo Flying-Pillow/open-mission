@@ -1,14 +1,17 @@
 // /apps/airport/web/src/lib/client/entities/Task.ts: OO browser entity for workflow tasks exposed by a mission snapshot.
-import type { MissionRuntimeSnapshotDto } from '@flying-pillow/mission-core/airport/runtime';
+import type {
+    MissionRuntimeSnapshot,
+    Task as TaskRecord
+} from '@flying-pillow/mission-core/airport/runtime';
 import type { EntityModel } from '$lib/client/entities/EntityModel';
 
-export type MissionWorkflowTaskDto = NonNullable<
-    NonNullable<MissionRuntimeSnapshotDto['status']['workflow']>['stages']
->[number]['tasks'][number];
+export type TaskData = NonNullable<
+    NonNullable<MissionRuntimeSnapshot['status']['workflow']>['stages']
+>[number]['tasks'][number] & TaskRecord;
 
 export type TaskSnapshot = {
     stageId: string;
-    task: MissionWorkflowTaskDto;
+    task: TaskData;
 };
 
 export type TaskStartOptions = {
@@ -78,7 +81,7 @@ export class Task implements EntityModel<TaskSnapshot> {
         return this;
     }
 
-    public update(data: MissionWorkflowTaskDto, stageId = this.stageId): this {
+    public update(data: TaskData, stageId = this.stageId): this {
         return this.updateFromSnapshot({
             stageId,
             task: data
@@ -89,7 +92,7 @@ export class Task implements EntityModel<TaskSnapshot> {
         return structuredClone(this.snapshot);
     }
 
-    public toJSON(): MissionWorkflowTaskDto {
+    public toJSON(): TaskData {
         return structuredClone(this.snapshot.task);
     }
 

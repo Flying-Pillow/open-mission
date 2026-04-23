@@ -1,12 +1,12 @@
 // /apps/airport/web/src/lib/client/runtime/transport/MissionCommandTransport.ts: Snapshot-and-command transport for mission task and session operations.
 import type {
-    AgentCommandDto as AgentCommand,
-    AgentPromptDto as AgentPrompt,
-    MissionRuntimeSnapshotDto
+    AgentCommand as AgentCommand,
+    AgentPrompt as AgentPrompt,
+    MissionRuntimeSnapshot
 } from '@flying-pillow/mission-core/airport/runtime';
 import {
     missionRuntimeMissionCommandSchema,
-    missionRuntimeSnapshotDtoSchema,
+    missionRuntimeSnapshotSchema,
     missionRuntimeSessionCommandSchema,
     missionRuntimeTaskCommandSchema
 } from '@flying-pillow/mission-core/airport/runtime';
@@ -25,7 +25,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
         missionId: string;
         taskId: string;
         terminalSessionName?: string;
-    }): Promise<MissionRuntimeSnapshotDto> {
+    }): Promise<MissionRuntimeSnapshot> {
         return this.sendTaskCommand(input.missionId, input.taskId, {
             action: 'start',
             ...(input.terminalSessionName?.trim()
@@ -37,7 +37,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
     public completeTask(input: {
         missionId: string;
         taskId: string;
-    }): Promise<MissionRuntimeSnapshotDto> {
+    }): Promise<MissionRuntimeSnapshot> {
         return this.sendTaskCommand(input.missionId, input.taskId, {
             action: 'complete'
         });
@@ -46,40 +46,40 @@ export class MissionCommandTransport implements MissionCommandGateway {
     public reopenTask(input: {
         missionId: string;
         taskId: string;
-    }): Promise<MissionRuntimeSnapshotDto> {
+    }): Promise<MissionRuntimeSnapshot> {
         return this.sendTaskCommand(input.missionId, input.taskId, {
             action: 'reopen'
         });
     }
 
-    public pauseMission(input: { missionId: string }): Promise<MissionRuntimeSnapshotDto> {
+    public pauseMission(input: { missionId: string }): Promise<MissionRuntimeSnapshot> {
         return this.sendMissionCommand(input.missionId, { action: 'pause' });
     }
 
-    public resumeMission(input: { missionId: string }): Promise<MissionRuntimeSnapshotDto> {
+    public resumeMission(input: { missionId: string }): Promise<MissionRuntimeSnapshot> {
         return this.sendMissionCommand(input.missionId, { action: 'resume' });
     }
 
-    public panicMission(input: { missionId: string }): Promise<MissionRuntimeSnapshotDto> {
+    public panicMission(input: { missionId: string }): Promise<MissionRuntimeSnapshot> {
         return this.sendMissionCommand(input.missionId, { action: 'panic' });
     }
 
-    public clearMissionPanic(input: { missionId: string }): Promise<MissionRuntimeSnapshotDto> {
+    public clearMissionPanic(input: { missionId: string }): Promise<MissionRuntimeSnapshot> {
         return this.sendMissionCommand(input.missionId, { action: 'clearPanic' });
     }
 
-    public restartMissionQueue(input: { missionId: string }): Promise<MissionRuntimeSnapshotDto> {
+    public restartMissionQueue(input: { missionId: string }): Promise<MissionRuntimeSnapshot> {
         return this.sendMissionCommand(input.missionId, { action: 'restartQueue' });
     }
 
-    public deliverMission(input: { missionId: string }): Promise<MissionRuntimeSnapshotDto> {
+    public deliverMission(input: { missionId: string }): Promise<MissionRuntimeSnapshot> {
         return this.sendMissionCommand(input.missionId, { action: 'deliver' });
     }
 
     public completeSession(input: {
         missionId: string;
         sessionId: string;
-    }): Promise<MissionRuntimeSnapshotDto> {
+    }): Promise<MissionRuntimeSnapshot> {
         return this.sendSessionRequest(input.missionId, input.sessionId, {
             action: 'complete'
         });
@@ -89,7 +89,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
         missionId: string;
         sessionId: string;
         reason?: string;
-    }): Promise<MissionRuntimeSnapshotDto> {
+    }): Promise<MissionRuntimeSnapshot> {
         return this.sendSessionRequest(input.missionId, input.sessionId, {
             action: 'cancel',
             ...(input.reason?.trim() ? { reason: input.reason.trim() } : {})
@@ -100,7 +100,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
         missionId: string;
         sessionId: string;
         reason?: string;
-    }): Promise<MissionRuntimeSnapshotDto> {
+    }): Promise<MissionRuntimeSnapshot> {
         return this.sendSessionRequest(input.missionId, input.sessionId, {
             action: 'terminate',
             ...(input.reason?.trim() ? { reason: input.reason.trim() } : {})
@@ -111,7 +111,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
         missionId: string;
         sessionId: string;
         prompt: AgentPrompt;
-    }): Promise<MissionRuntimeSnapshotDto> {
+    }): Promise<MissionRuntimeSnapshot> {
         return this.sendSessionRequest(input.missionId, input.sessionId, {
             action: 'prompt',
             prompt: input.prompt
@@ -122,7 +122,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
         missionId: string;
         sessionId: string;
         command: AgentCommand;
-    }): Promise<MissionRuntimeSnapshotDto> {
+    }): Promise<MissionRuntimeSnapshot> {
         return this.sendSessionRequest(input.missionId, input.sessionId, {
             action: 'command',
             command: input.command
@@ -136,7 +136,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
             action: 'start' | 'complete' | 'reopen';
             terminalSessionName?: string;
         }
-    ): Promise<MissionRuntimeSnapshotDto> {
+    ): Promise<MissionRuntimeSnapshot> {
         const normalizedMissionId = missionId.trim();
         const normalizedTaskId = taskId.trim();
         if (!normalizedMissionId || !normalizedTaskId) {
@@ -160,7 +160,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
             throw new Error(`Mission task command '${payload.action}' failed for '${normalizedTaskId}' (${response.status}).`);
         }
 
-        return missionRuntimeSnapshotDtoSchema.parse(await response.json());
+        return missionRuntimeSnapshotSchema.parse(await response.json());
     }
 
     private async sendMissionCommand(
@@ -168,7 +168,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
         body: {
             action: 'pause' | 'resume' | 'panic' | 'clearPanic' | 'restartQueue' | 'deliver';
         }
-    ): Promise<MissionRuntimeSnapshotDto> {
+    ): Promise<MissionRuntimeSnapshot> {
         const normalizedMissionId = missionId.trim();
         if (!normalizedMissionId) {
             throw new Error('Mission commands require a missionId.');
@@ -192,7 +192,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
             throw new Error(`Mission command '${payload.action}' failed for '${normalizedMissionId}' (${response.status}).`);
         }
 
-        return missionRuntimeSnapshotDtoSchema.parse(await response.json());
+        return missionRuntimeSnapshotSchema.parse(await response.json());
     }
 
     private resolveMissionActionId(
@@ -222,7 +222,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
             | { action: 'cancel' | 'terminate'; reason?: string }
             | { action: 'prompt'; prompt: AgentPrompt }
             | { action: 'command'; command: AgentCommand }
-    ): Promise<MissionRuntimeSnapshotDto> {
+    ): Promise<MissionRuntimeSnapshot> {
         const normalizedMissionId = missionId.trim();
         const normalizedSessionId = sessionId.trim();
         if (!normalizedMissionId || !normalizedSessionId) {
@@ -246,7 +246,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
             throw new Error(`Mission session command '${payload.action}' failed for '${normalizedSessionId}' (${response.status}).`);
         }
 
-        return missionRuntimeSnapshotDtoSchema.parse(await response.json());
+        return missionRuntimeSnapshotSchema.parse(await response.json());
     }
 
     private buildQuerySuffix(): string {

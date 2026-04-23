@@ -1,77 +1,77 @@
 // /apps/airport/web/src/lib/client/entities/Mission.ts: OO browser entity for a mission runtime snapshot and its live agent sessions.
 import type {
-    AgentCommandDto as AgentCommand,
-    AgentPromptDto as AgentPrompt,
-    MissionAgentSessionDto,
-    MissionRuntimeSnapshotDto
+    AgentCommand as AgentCommand,
+    AgentPrompt as AgentPrompt,
+    AgentSession as AgentSessionSnapshot,
+    MissionRuntimeSnapshot
 } from '@flying-pillow/mission-core/airport/runtime';
 import { AgentSession } from '$lib/client/entities/AgentSession';
 import { EntityRegistry, type EntityModel } from '$lib/client/entities/EntityModel';
-import { Stage, type MissionWorkflowStageDto } from '$lib/client/entities/Stage';
+import { Stage, type StageSnapshot } from '$lib/client/entities/Stage';
 import {
     Task,
     type TaskSnapshot,
     type TaskStartOptions
 } from '$lib/client/entities/Task';
 
-export type MissionSnapshotLoader = (missionId: string) => Promise<MissionRuntimeSnapshotDto>;
+export type MissionSnapshotLoader = (missionId: string) => Promise<MissionRuntimeSnapshot>;
 
 export type MissionCommandGateway = {
     pauseMission(input: {
         missionId: string;
-    }): Promise<MissionRuntimeSnapshotDto>;
+    }): Promise<MissionRuntimeSnapshot>;
     resumeMission(input: {
         missionId: string;
-    }): Promise<MissionRuntimeSnapshotDto>;
+    }): Promise<MissionRuntimeSnapshot>;
     panicMission(input: {
         missionId: string;
-    }): Promise<MissionRuntimeSnapshotDto>;
+    }): Promise<MissionRuntimeSnapshot>;
     clearMissionPanic(input: {
         missionId: string;
-    }): Promise<MissionRuntimeSnapshotDto>;
+    }): Promise<MissionRuntimeSnapshot>;
     restartMissionQueue(input: {
         missionId: string;
-    }): Promise<MissionRuntimeSnapshotDto>;
+    }): Promise<MissionRuntimeSnapshot>;
     deliverMission(input: {
         missionId: string;
-    }): Promise<MissionRuntimeSnapshotDto>;
+    }): Promise<MissionRuntimeSnapshot>;
     startTask(input: {
         missionId: string;
         taskId: string;
         terminalSessionName?: string;
-    }): Promise<MissionRuntimeSnapshotDto>;
+    }): Promise<MissionRuntimeSnapshot>;
     completeTask(input: {
         missionId: string;
         taskId: string;
-    }): Promise<MissionRuntimeSnapshotDto>;
+    }): Promise<MissionRuntimeSnapshot>;
     reopenTask(input: {
         missionId: string;
         taskId: string;
-    }): Promise<MissionRuntimeSnapshotDto>;
+    }): Promise<MissionRuntimeSnapshot>;
     completeSession(input: {
         missionId: string;
         sessionId: string;
-    }): Promise<MissionRuntimeSnapshotDto>;
+    }): Promise<MissionRuntimeSnapshot>;
     cancelSession(input: {
         missionId: string;
         sessionId: string;
         reason?: string;
-    }): Promise<MissionRuntimeSnapshotDto>;
+    }): Promise<MissionRuntimeSnapshot>;
     terminateSession(input: {
         missionId: string;
         sessionId: string;
         reason?: string;
-    }): Promise<MissionRuntimeSnapshotDto>;
+    }): Promise<MissionRuntimeSnapshot>;
     sendSessionPrompt(input: {
         missionId: string;
         sessionId: string;
         prompt: AgentPrompt;
-    }): Promise<MissionRuntimeSnapshotDto>;
+    }): Promise<MissionRuntimeSnapshot>;
     sendSessionCommand(input: {
         missionId: string;
         sessionId: string;
         command: AgentCommand;
-    }): Promise<MissionRuntimeSnapshotDto>;
+    }): Promise<MissionRuntimeSnapshot>;
 };
 
 const unavailableMissionCommands: MissionCommandGateway = {
@@ -119,25 +119,25 @@ const unavailableMissionCommands: MissionCommandGateway = {
     }
 };
 
-export class Mission implements EntityModel<MissionRuntimeSnapshotDto> {
+export class Mission implements EntityModel<MissionRuntimeSnapshot> {
     private readonly loadSnapshot: MissionSnapshotLoader;
     private readonly commands: MissionCommandGateway;
-    private snapshot: MissionRuntimeSnapshotDto;
-    private readonly sessions = new EntityRegistry<string, MissionAgentSessionDto, AgentSession>();
-    private readonly stages = new EntityRegistry<string, MissionWorkflowStageDto, Stage>();
+    private snapshot: MissionRuntimeSnapshot;
+    private readonly sessions = new EntityRegistry<string, AgentSessionSnapshot, AgentSession>();
+    private readonly stages = new EntityRegistry<string, StageSnapshot, Stage>();
     private readonly tasks = new EntityRegistry<string, TaskSnapshot, Task>();
 
     public constructor(
-        snapshot: MissionRuntimeSnapshotDto,
+        snapshot: MissionRuntimeSnapshot,
         loadSnapshot: MissionSnapshotLoader,
         commands: MissionCommandGateway = unavailableMissionCommands
     ) {
         this.snapshot = structuredClone(snapshot);
         this.loadSnapshot = loadSnapshot;
         this.commands = commands;
-        this.applySessionDtos(snapshot.sessions);
-        this.applyTaskDtos(snapshot);
-        this.applyStageDtos(snapshot);
+        this.applySessionSnapshots(snapshot.sessions);
+        this.applyTaskSnapshots(snapshot);
+        this.applyStageSnapshots(snapshot);
     }
 
     public get missionId(): string {
@@ -223,34 +223,34 @@ export class Mission implements EntityModel<MissionRuntimeSnapshotDto> {
         return this;
     }
 
-    public updateFromSnapshot(snapshot: MissionRuntimeSnapshotDto): this {
+    public updateFromSnapshot(snapshot: MissionRuntimeSnapshot): this {
         this.snapshot = structuredClone(snapshot);
-        this.applySessionDtos(snapshot.sessions);
-        this.applyTaskDtos(snapshot);
-        this.applyStageDtos(snapshot);
+        this.applySessionSnapshots(snapshot.sessions);
+        this.applyTaskSnapshots(snapshot);
+        this.applyStageSnapshots(snapshot);
         return this;
     }
 
-    public applySnapshot(snapshot: MissionRuntimeSnapshotDto): this {
+    public applySnapshot(snapshot: MissionRuntimeSnapshot): this {
         return this.updateFromSnapshot(snapshot);
     }
 
-    public toSnapshot(): MissionRuntimeSnapshotDto {
+    public toSnapshot(): MissionRuntimeSnapshot {
         return {
             ...structuredClone(this.snapshot),
             sessions: this.listSessions().map((session) => session.toSnapshot())
         };
     }
 
-    public toJSON(): MissionRuntimeSnapshotDto {
+    public toJSON(): MissionRuntimeSnapshot {
         return this.toSnapshot();
     }
 
-    private applySessionDtos(sessionDtos: MissionAgentSessionDto[]): void {
+    private applySessionSnapshots(sessionSnapshots: AgentSessionSnapshot[]): void {
         this.sessions.reconcile(
-            sessionDtos,
-            (sessionDto) => sessionDto.sessionId,
-            (sessionDto) => new AgentSession(sessionDto, {
+            sessionSnapshots,
+            (sessionSnapshot) => sessionSnapshot.sessionId,
+            (sessionSnapshot) => new AgentSession(sessionSnapshot, {
                 completeSession: async (sessionId) => {
                     this.applySnapshot(await this.commands.completeSession({
                         missionId: this.missionId,
@@ -289,7 +289,7 @@ export class Mission implements EntityModel<MissionRuntimeSnapshotDto> {
         );
     }
 
-    private applyTaskDtos(snapshot: MissionRuntimeSnapshotDto): void {
+    private applyTaskSnapshots(snapshot: MissionRuntimeSnapshot): void {
         const taskSnapshots: TaskSnapshot[] = (snapshot.status.workflow?.stages ?? []).flatMap((stage) =>
             stage.tasks.map((task) => ({
                 stageId: stage.stageId,
@@ -326,7 +326,7 @@ export class Mission implements EntityModel<MissionRuntimeSnapshotDto> {
         );
     }
 
-    private applyStageDtos(snapshot: MissionRuntimeSnapshotDto): void {
+    private applyStageSnapshots(snapshot: MissionRuntimeSnapshot): void {
         this.stages.reconcile(
             snapshot.status.workflow?.stages ?? [],
             (stage) => stage.stageId,

@@ -1,4 +1,4 @@
-import { Mission } from './Mission.js';
+import { MissionRuntime } from './Mission.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import type { MissionBrief, MissionDescriptor, MissionSelector } from '../types.js';
 import type { MissionWorkflowBindings } from './Mission.js';
@@ -12,13 +12,13 @@ export class Factory {
 			branchRef: string;
 		},
 		workflowBindings: MissionWorkflowBindings = createDefaultMissionWorkflowBindings()
-	): Promise<Mission> {
+	): Promise<MissionRuntime> {
 		const existing = await adapter.resolveMission({
 			...(input.brief.issueId !== undefined ? { issueId: input.brief.issueId } : {}),
 			branchRef: input.branchRef
 		});
 		if (existing) {
-			const mission = Mission.hydrate(adapter, existing.missionDir, existing.descriptor, workflowBindings);
+			const mission = MissionRuntime.hydrate(adapter, existing.missionDir, existing.descriptor, workflowBindings);
 			await mission.refresh();
 			return mission;
 		}
@@ -36,7 +36,7 @@ export class Factory {
 			createdAt
 		};
 
-		const mission = Mission.hydrate(adapter, missionDir, descriptor, workflowBindings);
+		const mission = MissionRuntime.hydrate(adapter, missionDir, descriptor, workflowBindings);
 		return mission.initialize();
 	}
 
@@ -44,13 +44,13 @@ export class Factory {
 		adapter: FilesystemAdapter,
 		selector: MissionSelector = {},
 		workflowBindings: MissionWorkflowBindings = createDefaultMissionWorkflowBindings()
-	): Promise<Mission | undefined> {
+	): Promise<MissionRuntime | undefined> {
 		const resolved = await adapter.resolveKnownMission(selector);
 		if (!resolved) {
 			return undefined;
 		}
 
-		const mission = Mission.hydrate(adapter, resolved.missionDir, resolved.descriptor, workflowBindings);
+		const mission = MissionRuntime.hydrate(adapter, resolved.missionDir, resolved.descriptor, workflowBindings);
 		await mission.refresh();
 		return mission;
 	}

@@ -1,7 +1,7 @@
 // /apps/airport/web/src/lib/client/runtime/AirportClientRuntime.ts: Root browser runtime that composes mission runtime transport, entity cache, and live mission observation.
 import type {
-    AirportRuntimeEventEnvelopeDto,
-    MissionRuntimeSnapshotDto
+    AirportRuntimeEventEnvelope,
+    MissionRuntimeSnapshot
 } from '@flying-pillow/mission-core/airport/runtime';
 import { Mission } from '$lib/client/entities/Mission';
 import {
@@ -16,9 +16,9 @@ type EventSourceFactory = (url: string) => EventSource;
 export class AirportClientRuntime {
     private readonly missions: EntityRuntimeClient<
         string,
-        MissionRuntimeSnapshotDto,
+        MissionRuntimeSnapshot,
         Mission,
-        AirportRuntimeEventEnvelopeDto
+        AirportRuntimeEventEnvelope
     >;
 
     public constructor(input: {
@@ -40,7 +40,7 @@ export class AirportClientRuntime {
 
     public observeMission(input: {
         missionId: string;
-        onUpdate?: (mission: Mission, event: AirportRuntimeEventEnvelopeDto) => void;
+        onUpdate?: (mission: Mission, event: AirportRuntimeEventEnvelope) => void;
         onError?: (error: Error) => void;
     }): { dispose(): void } {
         return this.missions.observe({

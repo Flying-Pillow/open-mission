@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { Mission } from './Mission.js';
+import { MissionRuntime } from './Mission.js';
 import type { MissionWorkflowBindings } from './Mission.js';
 import { initializeRepository } from '../repository/initializeRepository.js';
 import { readMissionDaemonSettings } from '../lib/daemonConfig.js';
@@ -26,7 +26,7 @@ export class MissionPreparationService {
 		const baseBranch = this.store.getDefaultBranch();
 		const createdAt = new Date().toISOString();
 		const proposalWorktreePath = this.store.getMissionWorktreePath(missionId);
-		let preparedMission: Mission | undefined;
+		let preparedMission: MissionRuntime | undefined;
 
 		try {
 			await this.store.materializeMissionWorktree(proposalWorktreePath, branchRef, baseBranch);
@@ -61,7 +61,7 @@ export class MissionPreparationService {
 				createdAt
 			};
 
-			preparedMission = Mission.hydrate(
+			preparedMission = MissionRuntime.hydrate(
 				proposalStore,
 				missionRootDir,
 				descriptor,

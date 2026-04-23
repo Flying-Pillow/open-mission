@@ -1,5 +1,6 @@
 import * as path from 'node:path';
-import type { RepositoryCandidate, MissionSelectionCandidate, OperatorStatus } from '../types.js';
+import type { MissionSelectionCandidate, OperatorStatus } from '../types.js';
+import { toRepository, type Repository } from './Repository.js';
 import {
     METHOD_METADATA,
     type ControlRepositoriesAdd,
@@ -134,12 +135,12 @@ export class RepositoryManager {
         return result;
     }
 
-    private async listRegisteredRepositories(repositoryRoot: string): Promise<RepositoryCandidate[]> {
+    private async listRegisteredRepositories(repositoryRoot: string): Promise<Repository[]> {
         void repositoryRoot;
-        return listRegisteredRepositories();
+        return (await listRegisteredRepositories()).map((candidate) => toRepository(candidate));
     }
 
-    private async addKnownRepository(repositoryPath: string): Promise<RepositoryCandidate> {
+    private async addKnownRepository(repositoryPath: string): Promise<Repository> {
         const trimmedPath = repositoryPath.trim();
         if (!trimmedPath) {
             throw new Error('Repository path is required.');

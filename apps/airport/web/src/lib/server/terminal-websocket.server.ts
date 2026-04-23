@@ -1,11 +1,11 @@
 import {
     DaemonApi,
-    missionTerminalOutputDtoSchema,
-    missionTerminalSnapshotDtoSchema,
+    missionTerminalOutputSchema,
+    missionTerminalSnapshotSchema,
     missionTerminalSocketClientMessageSchema,
     missionTerminalSocketServerMessageSchema,
-    missionSessionTerminalOutputDtoSchema,
-    missionSessionTerminalSnapshotDtoSchema,
+    missionSessionTerminalOutputSchema,
+    missionSessionTerminalSnapshotSchema,
     missionSessionTerminalSocketClientMessageSchema,
     missionSessionTerminalSocketServerMessageSchema,
     missionSessionTerminalRouteParamsSchema,
@@ -122,7 +122,7 @@ async function handleTerminalConnection(
 
     const sendSnapshot = (state: MissionAgentTerminalState | null, type: 'snapshot' | 'disconnected' = 'snapshot') => {
         const terminalScreen = clipMissionSessionTerminalScreen(state);
-        const snapshot = missionSessionTerminalSnapshotDtoSchema.parse({
+        const snapshot = missionSessionTerminalSnapshotSchema.parse({
             missionId: query.missionId,
             sessionId,
             connected: state?.connected ?? false,
@@ -136,7 +136,7 @@ async function handleTerminalConnection(
     };
 
     const sendOutput = (state: MissionAgentTerminalState) => {
-        const output = missionSessionTerminalOutputDtoSchema.parse({
+        const output = missionSessionTerminalOutputSchema.parse({
             missionId: query.missionId,
             sessionId,
             chunk: state.chunk ?? '',
@@ -299,7 +299,7 @@ async function handleMissionTerminalConnection(
 
     const sendSnapshot = (state: MissionAgentTerminalState | null, type: 'snapshot' | 'disconnected' = 'snapshot') => {
         const terminalScreen = clipTerminalScreen(state?.screen ?? '');
-        const snapshot = missionTerminalSnapshotDtoSchema.parse({
+        const snapshot = missionTerminalSnapshotSchema.parse({
             missionId,
             connected: state?.connected ?? false,
             dead: state?.dead ?? true,
@@ -312,7 +312,7 @@ async function handleMissionTerminalConnection(
     };
 
     const sendOutput = (state: MissionAgentTerminalState) => {
-        const output = missionTerminalOutputDtoSchema.parse({
+        const output = missionTerminalOutputSchema.parse({
             missionId,
             chunk: state.chunk ?? '',
             dead: state.dead,

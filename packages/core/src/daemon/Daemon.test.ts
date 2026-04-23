@@ -10,7 +10,7 @@ import { writeMissionConfig } from '../lib/config.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import { getMissionWorktreesPath } from '../lib/repoConfig.js';
 import { initializeRepository } from '../repository/initializeRepository.js';
-import { Mission } from '../mission/Mission.js';
+import { MissionRuntime } from '../mission/Mission.js';
 import { startDaemon } from './Daemon.js';
 import { getDaemonManifestPath, getDaemonRuntimePath } from './daemonPaths.js';
 import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
@@ -980,14 +980,16 @@ exit 1
 					await firstApi.airport.connectPane({ paneId: 'tower', label: 'test-dashboard-1' });
 					await firstApi.control.getStatus();
 					const selected = await firstApi.mission.getStatus({ missionId: seededMission.getRecord().id });
-					const selectedSystem = selected.system;
+					const selectedAirport = await firstApi.airport.getStatus();
 
-					expect(selectedSystem?.state.domain.selection).toMatchObject({
+					expect(selected.missionId).toBe(seededMission.getRecord().id);
+					expect(selected.stages.some((stage) => stage.tasks.length > 0)).toBe(true);
+					expect(selectedAirport.state.domain.selection).toMatchObject({
 						repositoryId: workspaceRoot,
 						missionId: seededMission.getRecord().id
 					});
-					expect(selectedSystem?.state.missionOperatorViews[seededMission.getRecord().id]).toBeDefined();
-					expect(selectedSystem?.state.domain.missions[seededMission.getRecord().id]?.taskIds.length).toBeGreaterThan(0);
+					expect(selectedAirport.state.missionOperatorViews[seededMission.getRecord().id]).toBeDefined();
+					expect(selectedAirport.state.domain.missions[seededMission.getRecord().id]?.taskIds.length).toBeGreaterThan(0);
 
 					await secondClient.connect({ surfacePath: workspaceRoot });
 					const secondApi = new DaemonApi(secondClient);
@@ -1091,19 +1093,19 @@ exit 1
 
 					const missionId = seededMission.getRecord().id;
 					const selected = await api.mission.getStatus({ missionId });
-					const artifactNode = selected.system?.state.missionOperatorViews[missionId]?.treeNodes.find((node) =>
-						(node.kind === 'stage-artifact' || node.kind === 'task-artifact')
-						&& typeof node.sourcePath === 'string'
-						&& node.sourcePath.length > 0
+					const artifact = selected.artifacts.find((candidate) =>
+						(candidate.kind === 'stage' || candidate.kind === 'task')
+						&& typeof candidate.filePath === 'string'
+						&& candidate.filePath.length > 0
 					);
 
-					expect(artifactNode?.sourcePath).toBeTruthy();
+					expect(artifact?.filePath).toBeTruthy();
 
 					await api.airport.bindPane({
 						paneId: 'briefingRoom',
 						binding: {
 							targetKind: 'artifact',
-							targetId: artifactNode!.sourcePath!,
+							targetId: artifact!.filePath!,
 							mode: 'view'
 						}
 					});
@@ -1111,20 +1113,20 @@ exit 1
 					const observed = await api.airport.observeClient({ repositoryId: workspaceRoot });
 
 					expect(observed.state.airport.defaultPanes.briefingRoom).not.toMatchObject({
-						targetId: artifactNode!.sourcePath
+						targetId: artifact!.filePath
 					});
 					expect(observed.state.airport.paneOverrides.briefingRoom).toMatchObject({
 						targetKind: 'artifact',
-						targetId: artifactNode!.sourcePath,
+						targetId: artifact!.filePath,
 						mode: 'view'
 					});
 					expect(observed.state.airport.panes.briefingRoom).toMatchObject({
 						targetKind: 'artifact',
-						targetId: artifactNode!.sourcePath,
+						targetId: artifact!.filePath,
 						mode: 'view'
 					});
-					expect(observed.airportProjections.briefingRoom.artifactPath).toBe(artifactNode!.sourcePath);
-					expect(observed.airportProjections.briefingRoom.launchPath).toBe(artifactNode!.sourcePath);
+					expect(observed.airportProjections.briefingRoom.artifactPath).toBe(artifact!.filePath);
+					expect(observed.airportProjections.briefingRoom.launchPath).toBe(artifact!.filePath);
 				} finally {
 					client.dispose();
 					await daemon.close();
@@ -1159,29 +1161,29 @@ exit 1
 
 					const missionId = seededMission.getRecord().id;
 					const selected = await api.mission.getStatus({ missionId });
-					const artifactNode = selected.system?.state.missionOperatorViews[missionId]?.treeNodes.find((node) =>
-						(node.kind === 'stage-artifact' || node.kind === 'task-artifact')
-						&& typeof node.sourcePath === 'string'
-						&& node.sourcePath.length > 0
+					const artifact = selected.artifacts.find((candidate) =>
+						(candidate.kind === 'stage' || candidate.kind === 'task')
+						&& typeof candidate.filePath === 'string'
+						&& candidate.filePath.length > 0
 					);
 
-					expect(artifactNode?.sourcePath).toBeTruthy();
+					expect(artifact?.filePath).toBeTruthy();
 
 					const observed = await api.airport.bindPane({
 						paneId: 'briefingRoom',
 						binding: {
 							targetKind: 'artifact',
-							targetId: artifactNode!.sourcePath!,
+							targetId: artifact!.filePath!,
 							mode: 'view'
 						}
 					});
 
 					expect(observed.state.airport.panes.briefingRoom).toMatchObject({
 						targetKind: 'artifact',
-						targetId: artifactNode!.sourcePath,
+						targetId: artifact!.filePath,
 						mode: 'view'
 					});
-					expect(observed.airportProjections.briefingRoom.artifactPath).toBe(artifactNode!.sourcePath);
+					expect(observed.airportProjections.briefingRoom.artifactPath).toBe(artifact!.filePath);
 					expect(observed.state.airport.focus.intentPaneId).toBe('tower');
 				} finally {
 					client.dispose();
@@ -1218,20 +1220,20 @@ exit 1
 
 					const missionId = seededMission.getRecord().id;
 					const selected = await dashboardApi.mission.getStatus({ missionId });
-					const artifactNode = selected.system?.state.missionOperatorViews[missionId]?.treeNodes.find((node) =>
-						(node.kind === 'stage-artifact' || node.kind === 'task-artifact')
-						&& typeof node.sourcePath === 'string'
-						&& node.sourcePath.length > 0
+					const artifact = selected.artifacts.find((candidate) =>
+						(candidate.kind === 'stage' || candidate.kind === 'task')
+						&& typeof candidate.filePath === 'string'
+						&& candidate.filePath.length > 0
 					);
 
-					expect(artifactNode?.sourcePath).toBeTruthy();
+					expect(artifact?.filePath).toBeTruthy();
 
 					const editorUpdate = new Promise<Awaited<ReturnType<typeof editorApi.airport.getStatus>>>((resolve) => {
 						const subscription = editorClient.onDidEvent((event) => {
 							if (event.type !== 'airport.state') {
 								return;
 							}
-							if (event.snapshot.airportProjections.briefingRoom.artifactPath !== artifactNode!.sourcePath) {
+							if (event.snapshot.airportProjections.briefingRoom.artifactPath !== artifact!.filePath) {
 								return;
 							}
 							subscription.dispose();
@@ -1243,7 +1245,7 @@ exit 1
 						paneId: 'briefingRoom',
 						binding: {
 							targetKind: 'artifact',
-							targetId: artifactNode!.sourcePath!,
+							targetId: artifact!.filePath!,
 							mode: 'view'
 						}
 					});
@@ -2000,7 +2002,7 @@ exit 1
 				const workflow = createDefaultWorkflowSettings();
 				await adapter.materializeMissionWorktree(missionWorktreePath, 'mission/42-existing-issue');
 				const worktreeAdapter = new FilesystemAdapter(missionWorktreePath);
-				const preparedMission = Mission.hydrate(
+				const preparedMission = MissionRuntime.hydrate(
 					worktreeAdapter,
 					missionRootDir,
 					{
@@ -2136,7 +2138,7 @@ function createBrief(issueId: number | undefined, title: string) {
 	};
 }
 
-async function seedTrackedMission(workspaceRoot: string, issueId: number, title: string): Promise<Mission> {
+async function seedTrackedMission(workspaceRoot: string, issueId: number, title: string): Promise<MissionRuntime> {
 	const adapter = new FilesystemAdapter(workspaceRoot);
 	const missionId = adapter.createMissionId(createBrief(issueId, title));
 	return seedTrackedMissionWithId(workspaceRoot, {
@@ -2147,7 +2149,7 @@ async function seedTrackedMission(workspaceRoot: string, issueId: number, title:
 	});
 }
 
-async function seedTrackedMissionInDeliveryStage(workspaceRoot: string, issueId: number, title: string): Promise<Mission> {
+async function seedTrackedMissionInDeliveryStage(workspaceRoot: string, issueId: number, title: string): Promise<MissionRuntime> {
 	const adapter = new FilesystemAdapter(workspaceRoot);
 	const missionId = adapter.createMissionId(createBrief(issueId, title));
 	const branchRef = adapter.deriveMissionBranchName(issueId, title);
@@ -2172,7 +2174,7 @@ async function seedTrackedMissionInDeliveryStage(workspaceRoot: string, issueId:
 	workflow.gates = workflow.gates.filter((gate) => gate.stageId === 'delivery');
 	await adapter.materializeMissionWorktree(missionWorktreePath, branchRef);
 	const worktreeAdapter = new FilesystemAdapter(missionWorktreePath);
-	const mission = Mission.hydrate(
+	const mission = MissionRuntime.hydrate(
 		worktreeAdapter,
 		missionRootDir,
 		{
@@ -2195,7 +2197,7 @@ async function seedTrackedMissionInDeliveryStage(workspaceRoot: string, issueId:
 async function seedTrackedMissionWithId(
 	workspaceRoot: string,
 	input: { missionId: string; issueId: number; title: string; branchRef: string }
-): Promise<Mission> {
+): Promise<MissionRuntime> {
 	const adapter = new FilesystemAdapter(workspaceRoot);
 	const missionId = input.missionId;
 	const missionWorktreePath = adapter.getMissionWorktreePath(missionId);
@@ -2215,7 +2217,7 @@ async function seedTrackedMissionWithId(
 	) as typeof workflow.stages;
 	await adapter.materializeMissionWorktree(missionWorktreePath, input.branchRef);
 	const worktreeAdapter = new FilesystemAdapter(missionWorktreePath);
-	const mission = Mission.hydrate(
+	const mission = MissionRuntime.hydrate(
 		worktreeAdapter,
 		missionRootDir,
 		{

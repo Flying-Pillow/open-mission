@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { MissionPreparationService } from '../mission/MissionPreparationService.js';
-import { Mission } from '../mission/Mission.js';
+import { MissionRuntime } from '../mission/Mission.js';
 import { Factory } from '../mission/Factory.js';
 import { buildMissionTaskLaunchPrompt } from '../mission/taskLaunchPrompt.js';
 import type { MissionWorkflowBindings } from '../mission/Mission.js';
@@ -103,6 +103,9 @@ import type {
 import type { AgentRunner } from '../agent/AgentRunner.js';
 import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
 import { refreshSystemStatus } from '../system/SystemStatus.js';
+import { toMissionEntity, type MissionEntity } from '../mission/Mission.js';
+import { toAgentSession } from '../mission/AgentSession.js';
+import { toRepository } from './Repository.js';
 import {
 	WorkflowSettingsStore,
 	type WorkflowSettingsGetResult
@@ -111,7 +114,7 @@ import {
 type LoadedMission = {
 	missionId: string;
 	branchRef: string;
-	mission: Mission;
+	mission: MissionRuntime;
 	commandState: LoadedMissionCommandState;
 	consoleSubscription: MissionAgentDisposable;
 	eventSubscription: MissionAgentDisposable;
@@ -320,6 +323,8 @@ export class RepositoryRuntime {
 				return this.describeControlAction((request.params ?? {}) as ControlActionDescribe);
 			case 'control.action.execute':
 				return this.executeControlAction((request.params ?? {}) as ControlActionExecute);
+			case 'mission.operator-status':
+				return this.getMissionOperatorStatus(this.toMissionParams(request.params, request));
 			case 'mission.status':
 				return this.getMissionStatus(this.toMissionParams(request.params, request));
 			case 'mission.action.list':
@@ -470,7 +475,7 @@ export class RepositoryRuntime {
 		if (!registeredRepository) {
 			throw new Error(`Mission could not register cloned repository '${githubRepository}'.`);
 		}
-		return registeredRepository;
+		return toRepository(registeredRepository);
 	}
 
 	public async buildDiscoveryStatus(
@@ -655,7 +660,7 @@ export class RepositoryRuntime {
 			if (!missionId) {
 				throw new Error('Mission selection requires a mission id.');
 			}
-			return this.getMissionStatus({ selector: { missionId } });
+			return this.getMissionOperatorStatus({ selector: { missionId } });
 		}
 
 		if (params.actionId === 'control.mission.from-issue') {
@@ -687,7 +692,7 @@ export class RepositoryRuntime {
 		};
 	}
 
-	private async executeMissionAction(params: MissionActionExecute): Promise<OperatorStatus> {
+	private async executeMissionAction(params: MissionActionExecute): Promise<MissionEntity> {
 		const loadedMission = await this.requireMissionContext(params.selector);
 		const workspaceStatus = await this.executeWorkspaceMissionAction(loadedMission, params);
 		if (workspaceStatus) {
@@ -697,7 +702,7 @@ export class RepositoryRuntime {
 			...(params.terminalSessionName?.trim() ? { terminalSessionName: params.terminalSessionName.trim() } : {})
 		});
 		await this.broadcastMissionStatus(loadedMission.missionId, status);
-		return this.decorateMissionStatus(status, 'mission');
+		return this.toMissionStatusEntity(status);
 	}
 
 	private async listMissionActions(params: MissionActionList): Promise<OperatorActionListSnapshot> {
@@ -753,7 +758,7 @@ export class RepositoryRuntime {
 			...(branchRefOverride ? { branchRef: branchRefOverride } : {})
 		});
 		if (existingMission) {
-			const status = await this.getMissionStatus({
+			const status = await this.getMissionOperatorStatus({
 				selector: { missionId: existingMission.descriptor.missionId }
 			});
 			return {
@@ -787,7 +792,7 @@ export class RepositoryRuntime {
 			throw new Error('Mission preparation returned an unexpected non-mission result.');
 		}
 
-		const selectedStatus = await this.getMissionStatus({
+		const selectedStatus = await this.getMissionOperatorStatus({
 			selector: { missionId: preparation.missionId }
 		});
 		return {
@@ -898,11 +903,18 @@ export class RepositoryRuntime {
 		return this.prepareMissionFromResolvedBrief(brief);
 	}
 
-	private async getMissionStatus(
+	private async getMissionOperatorStatus(
 		params: MissionSelect = {}
 	): Promise<OperatorStatus> {
 		const loadedMission = await this.requireMissionContext(params.selector);
 		return this.decorateMissionStatus(await loadedMission.mission.status(), 'mission');
+	}
+
+	private async getMissionStatus(
+		params: MissionSelect = {}
+	): Promise<MissionEntity> {
+		const loadedMission = await this.requireMissionContext(params.selector);
+		return this.toMissionStatusEntity(await loadedMission.mission.status());
 	}
 
 	private async buildIdleMissionStatus(): Promise<OperatorStatus> {
@@ -951,7 +963,7 @@ export class RepositoryRuntime {
 		params: MissionSelect = {}
 	) {
 		const loadedMission = await this.requireMissionContext(params.selector);
-		return loadedMission.mission.getAgentSessions();
+		return loadedMission.mission.getAgentSessions().map((session) => toAgentSession(session));
 	}
 
 	private async getAgentConsoleState(
@@ -1028,27 +1040,27 @@ export class RepositoryRuntime {
 
 	private async cancelAgentSession(params: SessionControl) {
 		const loadedMission = await this.requireMissionSession(params);
-		return loadedMission.mission.cancelAgentSession(params.sessionId, params.reason);
+		return toAgentSession(await loadedMission.mission.cancelAgentSession(params.sessionId, params.reason));
 	}
 
 	private async promptAgentSession(params: SessionPrompt) {
 		const loadedMission = await this.requireMissionSession(params);
-		return loadedMission.mission.sendAgentSessionPrompt(params.sessionId, params.prompt as AgentPrompt);
+		return toAgentSession(await loadedMission.mission.sendAgentSessionPrompt(params.sessionId, params.prompt as AgentPrompt));
 	}
 
 	private async commandAgentSession(params: SessionCommand) {
 		const loadedMission = await this.requireMissionSession(params);
-		return loadedMission.mission.sendAgentSessionCommand(params.sessionId, params.command as AgentCommand);
+		return toAgentSession(await loadedMission.mission.sendAgentSessionCommand(params.sessionId, params.command as AgentCommand));
 	}
 
 	private async completeAgentSession(params: SessionComplete) {
 		const loadedMission = await this.requireMissionSession(params);
-		return loadedMission.mission.completeAgentSession(params.sessionId);
+		return toAgentSession(await loadedMission.mission.completeAgentSession(params.sessionId));
 	}
 
 	private async terminateAgentSession(params: SessionControl) {
 		const loadedMission = await this.requireMissionSession(params);
-		return loadedMission.mission.terminateAgentSession(params.sessionId, params.reason);
+		return toAgentSession(await loadedMission.mission.terminateAgentSession(params.sessionId, params.reason));
 	}
 
 	private resolveAvailableActions(
@@ -1156,7 +1168,7 @@ export class RepositoryRuntime {
 	private async executeWorkspaceMissionAction(
 		loadedMission: LoadedMission,
 		params: MissionActionExecute
-	): Promise<OperatorStatus | undefined> {
+	): Promise<MissionEntity | undefined> {
 		const definition = REPOSITORY_MISSION_COMMAND_DEFINITIONS.find((candidate) => candidate.id === params.actionId);
 		if (!definition) {
 			return undefined;
@@ -1196,7 +1208,7 @@ export class RepositoryRuntime {
 		await this.refreshLoadedMissionCommandState(loadedMission);
 		const refreshedStatus = await loadedMission.mission.status();
 		await this.broadcastMissionStatus(loadedMission.missionId, refreshedStatus);
-		return this.decorateMissionStatus(refreshedStatus, 'mission');
+		return this.toMissionStatusEntity(refreshedStatus);
 	}
 
 	private pullMissionOrigin(loadedMission: LoadedMission): void {
@@ -1393,19 +1405,19 @@ export class RepositoryRuntime {
 	}
 
 	private async broadcastMissionStatus(missionId: string, status: OperatorStatus): Promise<void> {
-		const decoratedStatus = await this.decorateMissionStatus(status, 'mission');
+		const mission = await this.toMissionStatusEntity(status);
 		const loadedMission = this.loadedMissions.get(missionId);
 		this.emitEvent({
 			type: 'mission.status',
 			workspaceRoot: this.repositoryRoot,
 			missionId,
-			status: decoratedStatus
+			status: mission
 		});
 		this.emitEvent({
 			type: 'mission.actions.changed',
 			workspaceRoot: this.repositoryRoot,
 			missionId,
-			revision: this.buildMissionActionRevision(missionId, decoratedStatus, loadedMission)
+			revision: this.buildMissionActionRevision(missionId, status, loadedMission)
 		});
 	}
 
@@ -1583,6 +1595,10 @@ export class RepositoryRuntime {
 			return `mission:${missionId}:system:${String(systemVersion)}:${repositorySyncRevision ?? 'workspace'}`;
 		}
 		return `mission:${missionId}:status:${repositorySyncRevision ?? 'workspace'}`;
+	}
+
+	private async toMissionStatusEntity(status: OperatorStatus): Promise<MissionEntity> {
+		return toMissionEntity(await this.decorateMissionStatus(status, 'mission'));
 	}
 
 	private buildSetupCommandFlow(
@@ -2163,7 +2179,7 @@ export class RepositoryRuntime {
 	}
 
 	private registerLoadedMission(
-		mission: Mission,
+		mission: MissionRuntime,
 		options: { autopilotEnabled?: boolean } = {}
 	): LoadedMission {
 		const record = mission.getRecord();

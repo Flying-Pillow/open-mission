@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "missionId": "29-architectural-reset-strict-ood-entity-architectu",
+  "sessionId": "02-introduce-generic-entity-remote-boundary-verify-copilot-cli-5ddab538",
+  "sessionLogPath": "session-logs/02-introduce-generic-entity-remote-boundary-verify-copilot-cli-5ddab538.ansi",
+  "sessionMetadataPath": "session-logs/02-introduce-generic-entity-remote-boundary-verify-copilot-cli-5ddab538.metadata.json",
+  "runnerId": "copilot-cli",
+  "runnerLabel": "copilot-cli via PTY transport",
+  "lifecycleState": "completed",
+  "startedAt": "2026-04-23T14:21:48.043Z",
+  "updatedAt": "2026-04-23T14:28:33.584Z",
+  "inputBytes": 318,
+  "outputBytes": 422757,
+  "transportId": "terminal",
+  "taskId": "implementation/02-introduce-generic-entity-remote-boundary-verify",
+  "terminalSessionName": "github:Flying-Pillow:mission:29-architectural-reset-strict-ood-entity-architectu:implementation-02-introduce-generic-entity-remote-boundary-verify:02-introduce-generic-entity-remote-boundary-verify-copilot-cli-5ddab538",
+  "terminalPaneId": "pty",
+  "workingDirectory": "/missions/Flying-Pillow/mission/29-architectural-reset-strict-ood-entity-architectu",
+  "endedAt": "2026-04-23T14:28:33.584Z"
+}

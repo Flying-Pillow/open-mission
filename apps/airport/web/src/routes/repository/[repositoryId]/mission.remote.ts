@@ -1,4 +1,4 @@
-// /apps/airport/web/src/routes/repository/[repositoryId]/mission.remote.ts: Remote mutations for creating repository missions from issues and authored briefs.
+// /apps/airport/web/src/routes/repository/[repositoryId]/mission.remote.ts: Transitional repository mutation glue over the generic entity boundary.
 import { command, form, getRequestEvent } from '$app/server';
 import { invalid, redirect } from '@sveltejs/kit';
 import {
@@ -7,6 +7,10 @@ import {
     repositoryRuntimeRouteParamsSchema
 } from '@flying-pillow/mission-core/airport/runtime';
 import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
+import {
+    startMissionFromBriefThroughEntityBoundary,
+    startMissionFromIssueThroughEntityBoundary
+} from '../../api/entities/remote/dispatch';
 
 function resolveRepositoryContext(): {
     gateway: AirportWebGateway;
@@ -25,19 +29,10 @@ export const startMissionFromIssue = command(
     missionFromIssueInputSchema,
     async (input): Promise<{ missionId: string; redirectTo: string }> => {
         const { gateway, repositoryId } = resolveRepositoryContext();
-        const status = await gateway.createMissionFromIssue({
+        return await startMissionFromIssueThroughEntityBoundary(gateway, {
             repositoryId,
             issueNumber: input.issueNumber
         });
-
-        if (!status.missionId) {
-            throw new Error('Mission creation did not return a missionId.');
-        }
-
-        return {
-            missionId: status.missionId,
-            redirectTo: `/repository/${encodeURIComponent(repositoryId)}/missions/${encodeURIComponent(status.missionId)}`
-        };
     }
 );
 
@@ -47,16 +42,12 @@ export const startMissionFromBrief = form(
         const { gateway, repositoryId } = resolveRepositoryContext();
 
         try {
-            const status = await gateway.createMissionFromBrief({
+            const result = await startMissionFromBriefThroughEntityBoundary(gateway, {
                 repositoryId,
                 brief: input
             });
 
-            if (!status.missionId) {
-                throw new Error('Mission creation did not return a missionId.');
-            }
-
-            redirect(303, `/repository/${encodeURIComponent(repositoryId)}/missions/${encodeURIComponent(status.missionId)}`);
+            redirect(303, result.redirectTo);
         } catch (error) {
             invalid(
                 error instanceof Error

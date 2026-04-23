@@ -34,14 +34,14 @@
     import type { MissionFileTreeNode } from "$lib/types/mission-file-tree";
     import type { MissionControlSnapshot } from "$lib/types/mission-control";
     import type {
-        AirportRuntimeEventEnvelopeDto,
-        RepositorySurfaceSnapshotDto,
+        AirportRuntimeEventEnvelope,
+        RepositorySurfaceSnapshot,
     } from "@flying-pillow/mission-core";
 
     type Props = {
         data: {
             airportRepositories: import("$lib/components/entities/types").RepositorySummary[];
-            repositorySurface: RepositorySurfaceSnapshotDto;
+            repositorySurface: RepositorySurfaceSnapshot;
             missionControl: MissionControlSnapshot;
             missionWorktreePath: string;
             repositoryId: string;
@@ -322,7 +322,7 @@
     }
 
     function applyMissionStatusEvent(
-        event: AirportRuntimeEventEnvelopeDto,
+        event: AirportRuntimeEventEnvelope,
     ): void {
         const payload = event.payload as {
             status?: MissionControlSnapshot["operatorStatus"];
@@ -338,7 +338,7 @@
     }
 
     function handleMissionRuntimeEvent(
-        event: AirportRuntimeEventEnvelopeDto,
+        event: AirportRuntimeEventEnvelope,
     ): void {
         switch (event.type) {
             case "mission.status":

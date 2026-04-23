@@ -21,11 +21,11 @@ import type {
 	OperatorActionExecutionStep,
 	OperatorActionFlowDescriptor,
 	OperatorActionQueryContext,
-	RepositoryCandidate,
 	TrackedIssueSummary,
 	OperatorStatus
 } from '../types.js';
 import { DaemonClient } from './DaemonClient.js';
+import type { Repository } from '../repository/Repository.js';
 import type {
 	ControlGitHubIssueDetail,
 	ControlGitHubRepositoriesClone,
@@ -115,8 +115,8 @@ export class DaemonControlApi {
 		);
 	}
 
-	public async listRegisteredRepositories(): Promise<RepositoryCandidate[]> {
-		return this.client.request<RepositoryCandidate[]>('control.repositories.list');
+	public async listRegisteredRepositories(): Promise<Repository[]> {
+		return this.client.request<Repository[]>('control.repositories.list');
 	}
 
 	public async listVisibleGitHubRepositories(): Promise<GitHubVisibleRepository[]> {
@@ -126,9 +126,9 @@ export class DaemonControlApi {
 	public async cloneGitHubRepository(
 		githubRepository: string,
 		destinationPath: string
-	): Promise<RepositoryCandidate> {
+	): Promise<Repository> {
 		const params: ControlGitHubRepositoriesClone = { githubRepository, destinationPath };
-		return this.client.request<RepositoryCandidate>('control.github.repositories.clone', params);
+		return this.client.request<Repository>('control.github.repositories.clone', params);
 	}
 
 	public async getGitHubIssueDetail(issueNumber: number): Promise<GitHubIssueDetail> {
@@ -136,8 +136,8 @@ export class DaemonControlApi {
 		return this.client.request<GitHubIssueDetail>('control.github.issue.detail', params);
 	}
 
-	public async addRepository(repositoryPath: string): Promise<RepositoryCandidate> {
+	public async addRepository(repositoryPath: string): Promise<Repository> {
 		const params: ControlRepositoriesAdd = { repositoryPath };
-		return this.client.request<RepositoryCandidate>('control.repositories.add', params);
+		return this.client.request<Repository>('control.repositories.add', params);
 	}
 }
