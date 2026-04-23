@@ -8,7 +8,7 @@ import type {
 } from './types.js';
 import {
     countOccupiedTaskExecutionSlots,
-    hasActiveDownstreamActivity,
+    hasActiveDependentActivity,
     isActiveSessionLifecycle,
     isReopenableTaskLifecycle,
     isTerminalTaskLifecycle,
@@ -167,7 +167,7 @@ export function getMissionWorkflowEventValidationErrors(
                 if (!isReopenableTaskLifecycle(task.lifecycle)) {
                     errors.push(`task.reopened requires task '${event.taskId}' to be completed, failed, or cancelled, received '${task.lifecycle}'.`);
                 }
-                if (hasActiveDownstreamActivity(runtime, task.stageId, configuration)) {
+                if (hasActiveDependentActivity(runtime, task.taskId)) {
                     errors.push(`task.reopened for '${event.taskId}' is not allowed while downstream work is active.`);
                 }
             }

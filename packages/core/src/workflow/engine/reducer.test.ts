@@ -592,7 +592,7 @@ describe('workflow reducer delivery completion', () => {
         expect(runtime.stages.find((stage) => stage.stageId === 'implementation')?.lifecycle).toBe('pending');
     });
 
-    it('rewinds downstream stage tasks when an upstream task is reopened', () => {
+    it('rewinds transitive dependent tasks when an upstream task is reopened', () => {
         const configuration = createMissionWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
@@ -654,6 +654,203 @@ describe('workflow reducer delivery completion', () => {
         expect(specTask?.lifecycle).toBe('ready');
         expect(runtime.stages.find((stage) => stage.stageId === 'spec')?.lifecycle).toBe('ready');
         expect(runtime.stages.find((stage) => stage.stageId === 'implementation')?.lifecycle).toBe('pending');
+    });
+
+    it('rewinds same-stage transitive dependents when a completed task is reopened', () => {
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow: createWorkflowSettingsWithoutTaskAutostart()
+        });
+
+        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime.lifecycle = 'running';
+        runtime.pause = { paused: false };
+        runtime.tasks = [
+            {
+                taskId: 'prd/01',
+                stageId: 'prd',
+                title: 'Draft PRD',
+                instruction: 'Draft PRD.',
+                dependsOn: [],
+                lifecycle: 'completed',
+                waitingOnTaskIds: [],
+                runtime: { autostart: false },
+                retries: 0,
+                createdAt: '2026-04-10T15:51:25.000Z',
+                updatedAt: '2026-04-10T15:54:00.000Z',
+                completedAt: '2026-04-10T15:54:00.000Z'
+            },
+            {
+                taskId: 'prd/02',
+                stageId: 'prd',
+                title: 'Review PRD',
+                instruction: 'Review PRD.',
+                dependsOn: ['prd/01'],
+                lifecycle: 'completed',
+                waitingOnTaskIds: [],
+                runtime: { autostart: false },
+                retries: 0,
+                createdAt: '2026-04-10T15:52:25.000Z',
+                updatedAt: '2026-04-10T15:55:00.000Z',
+                completedAt: '2026-04-10T15:55:00.000Z'
+            },
+            {
+                taskId: 'spec/01',
+                stageId: 'spec',
+                title: 'Draft spec',
+                instruction: 'Draft spec.',
+                dependsOn: ['prd/02'],
+                lifecycle: 'completed',
+                waitingOnTaskIds: [],
+                runtime: { autostart: false },
+                retries: 0,
+                createdAt: '2026-04-10T15:53:25.000Z',
+                updatedAt: '2026-04-10T15:56:00.000Z',
+                completedAt: '2026-04-10T15:56:00.000Z'
+            }
+        ];
+
+        const result = reduceMissionWorkflowEvent(runtime, createTaskReopenedEvent('prd/01', '2026-04-10T15:57:00.000Z'), configuration);
+
+        expect(result.nextState.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('ready');
+        expect(result.nextState.tasks.find((task) => task.taskId === 'prd/02')?.lifecycle).toBe('pending');
+        expect(result.nextState.tasks.find((task) => task.taskId === 'spec/01')?.lifecycle).toBe('pending');
+    });
+
+    it('preserves independent later-stage tasks when a completed task is reopened', () => {
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow: createWorkflowSettingsWithoutTaskAutostart()
+        });
+
+        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime.lifecycle = 'running';
+        runtime.pause = { paused: false };
+        runtime.tasks = [
+            {
+                taskId: 'prd/01',
+                stageId: 'prd',
+                title: 'Draft PRD',
+                instruction: 'Draft PRD.',
+                dependsOn: [],
+                lifecycle: 'completed',
+                waitingOnTaskIds: [],
+                runtime: { autostart: false },
+                retries: 0,
+                createdAt: '2026-04-10T15:51:25.000Z',
+                updatedAt: '2026-04-10T15:54:00.000Z',
+                completedAt: '2026-04-10T15:54:00.000Z'
+            },
+            {
+                taskId: 'spec/01',
+                stageId: 'spec',
+                title: 'Independent spec',
+                instruction: 'Draft independent spec.',
+                dependsOn: [],
+                lifecycle: 'completed',
+                waitingOnTaskIds: [],
+                runtime: { autostart: false },
+                retries: 0,
+                createdAt: '2026-04-10T15:52:25.000Z',
+                updatedAt: '2026-04-10T15:55:00.000Z',
+                completedAt: '2026-04-10T15:55:00.000Z'
+            }
+        ];
+
+        const result = reduceMissionWorkflowEvent(runtime, createTaskReopenedEvent('prd/01', '2026-04-10T15:56:00.000Z'), configuration);
+
+        expect(result.nextState.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('ready');
+        expect(result.nextState.tasks.find((task) => task.taskId === 'spec/01')?.lifecycle).toBe('completed');
+    });
+
+    it('rejects reopening a task while a transitive dependent task is active', () => {
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow: createDefaultWorkflowSettings()
+        });
+
+        const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime.lifecycle = 'running';
+        runtime.pause = { paused: false };
+        runtime.tasks = [
+            {
+                taskId: 'prd/01',
+                stageId: 'prd',
+                title: 'Draft PRD',
+                instruction: 'Draft PRD.',
+                dependsOn: [],
+                lifecycle: 'completed',
+                waitingOnTaskIds: [],
+                runtime: { autostart: false },
+                retries: 0,
+                createdAt: '2026-04-10T15:51:25.000Z',
+                updatedAt: '2026-04-10T15:54:00.000Z',
+                completedAt: '2026-04-10T15:54:00.000Z'
+            },
+            {
+                taskId: 'prd/02',
+                stageId: 'prd',
+                title: 'Review PRD',
+                instruction: 'Review PRD.',
+                dependsOn: ['prd/01'],
+                lifecycle: 'running',
+                waitingOnTaskIds: [],
+                runtime: { autostart: false },
+                retries: 0,
+                createdAt: '2026-04-10T15:52:25.000Z',
+                updatedAt: '2026-04-10T15:55:00.000Z'
+            }
+        ];
+
+        expect(() => validateMissionWorkflowEvent(runtime, createTaskReopenedEvent('prd/01', '2026-04-10T15:56:00.000Z'), configuration)).toThrow(
+            /downstream work is active/
+        );
+    });
+
+    it('allows reopening a task while unrelated later-stage work is active', () => {
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow: createDefaultWorkflowSettings()
+        });
+
+        const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime.lifecycle = 'running';
+        runtime.pause = { paused: false };
+        runtime.tasks = [
+            {
+                taskId: 'prd/01',
+                stageId: 'prd',
+                title: 'Draft PRD',
+                instruction: 'Draft PRD.',
+                dependsOn: [],
+                lifecycle: 'completed',
+                waitingOnTaskIds: [],
+                runtime: { autostart: false },
+                retries: 0,
+                createdAt: '2026-04-10T15:51:25.000Z',
+                updatedAt: '2026-04-10T15:54:00.000Z',
+                completedAt: '2026-04-10T15:54:00.000Z'
+            },
+            {
+                taskId: 'spec/01',
+                stageId: 'spec',
+                title: 'Independent spec',
+                instruction: 'Draft independent spec.',
+                dependsOn: [],
+                lifecycle: 'running',
+                waitingOnTaskIds: [],
+                runtime: { autostart: false },
+                retries: 0,
+                createdAt: '2026-04-10T15:52:25.000Z',
+                updatedAt: '2026-04-10T15:55:00.000Z'
+            }
+        ];
+
+        expect(() => validateMissionWorkflowEvent(runtime, createTaskReopenedEvent('prd/01', '2026-04-10T15:56:00.000Z'), configuration)).not.toThrow();
     });
 
     it('returns a task to ready when its running session is cancelled', () => {

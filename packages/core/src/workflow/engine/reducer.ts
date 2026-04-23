@@ -15,7 +15,8 @@ import {
     countOccupiedSessionExecutionSlots,
     countOccupiedTaskExecutionSlots,
     isActiveSessionLifecycle,
-    isMissionCompleted
+    isMissionCompleted,
+    resolveDependentTaskIds
 } from './policy.js';
 import { deriveMissionWorkflowProjectionState } from './projection.js';
 
@@ -264,13 +265,13 @@ class MissionWorkflowTransitionEngine {
                 );
                 return;
             case 'task.reopened': {
-                const stageOrder = this.configuration.workflow.stageOrder;
                 const reopenedTask = this.state.tasks.find((candidate) => candidate.taskId === event.taskId);
-                const reopenedStageIndex = reopenedTask ? stageOrder.indexOf(reopenedTask.stageId) : -1;
+                const resetTaskIds = reopenedTask
+                    ? new Set([reopenedTask.taskId, ...resolveDependentTaskIds(this.state.tasks, reopenedTask.taskId)])
+                    : new Set<string>();
 
                 this.state.tasks = this.state.tasks.map((task) => {
-                    const taskStageIndex = stageOrder.indexOf(task.stageId);
-                    const shouldReset = task.taskId === event.taskId || (reopenedStageIndex >= 0 && taskStageIndex > reopenedStageIndex);
+                    const shouldReset = resetTaskIds.has(task.taskId);
 
                     if (!shouldReset) {
                         return task;
@@ -288,14 +289,7 @@ class MissionWorkflowTransitionEngine {
                 });
 
                 this.state.launchQueue = this.state.launchQueue.filter((request) => {
-                    if (!reopenedTask) {
-                        return true;
-                    }
-                    const queueTask = this.state.tasks.find((candidate) => candidate.taskId === request.taskId);
-                    if (!queueTask) {
-                        return true;
-                    }
-                    return stageOrder.indexOf(queueTask.stageId) <= reopenedStageIndex;
+                    return !resetTaskIds.has(request.taskId);
                 });
                 return;
             }

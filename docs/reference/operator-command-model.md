@@ -379,7 +379,7 @@ Reopen previously finished or aborted work.
 **Rules**
 
 - Available only when task lifecycle is `completed`, `failed`, or `cancelled`.
-- Not allowed while downstream work is still active in later stages.
+- Not allowed while any transitive dependent work is still active.
 
 **Context**
 
@@ -393,7 +393,7 @@ Reopen previously finished or aborted work.
 **Derived model effects**
 
 - Dependency blockers and stage projections are recomputed.
-- Downstream stage progress may be invalidated by recomputation.
+- Transitive dependent task progress may be invalidated by recomputation.
 
 **Result**
 

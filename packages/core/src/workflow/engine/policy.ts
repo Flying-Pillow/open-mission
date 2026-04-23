@@ -166,33 +166,58 @@ export function hasAvailableSessionExecutionSlot(
     return countOccupiedSessionExecutionSlots(runtime) < configuration.workflow.execution.maxParallelSessions;
 }
 
-export function hasActiveDownstreamActivity(
+export function resolveDependentTaskIds(
+    tasks: MissionTaskRuntimeState[],
+    taskId: string
+): Set<string> {
+    const dependentsByTaskId = new Map<string, string[]>();
+
+    for (const task of tasks) {
+        for (const dependencyTaskId of task.dependsOn) {
+            const dependentTaskIds = dependentsByTaskId.get(dependencyTaskId);
+            if (dependentTaskIds) {
+                dependentTaskIds.push(task.taskId);
+            } else {
+                dependentsByTaskId.set(dependencyTaskId, [task.taskId]);
+            }
+        }
+    }
+
+    const dependentTaskIds = new Set<string>();
+    const pendingTaskIds = [...(dependentsByTaskId.get(taskId) ?? [])];
+
+    while (pendingTaskIds.length > 0) {
+        const candidateTaskId = pendingTaskIds.shift();
+        if (!candidateTaskId || dependentTaskIds.has(candidateTaskId)) {
+            continue;
+        }
+
+        dependentTaskIds.add(candidateTaskId);
+        pendingTaskIds.push(...(dependentsByTaskId.get(candidateTaskId) ?? []));
+    }
+
+    return dependentTaskIds;
+}
+
+export function hasActiveDependentActivity(
     runtime: MissionWorkflowRuntimeState,
-    stageId: MissionStageId,
-    configuration: MissionWorkflowConfigurationSnapshot
+    taskId: string
 ): boolean {
-    const stageOrder = configuration.workflow.stageOrder;
-    const reopenedStageIndex = stageOrder.indexOf(stageId);
-    if (reopenedStageIndex < 0) {
+    const dependentTaskIds = resolveDependentTaskIds(runtime.tasks, taskId);
+    if (dependentTaskIds.size === 0) {
         return false;
     }
 
-    const hasActiveDownstreamWork = runtime.tasks.some((task) => {
-        const candidateStageIndex = stageOrder.indexOf(task.stageId);
-        return candidateStageIndex > reopenedStageIndex && (task.lifecycle === 'queued' || task.lifecycle === 'running');
-    });
-    if (hasActiveDownstreamWork) {
+    const hasActiveDependentTask = runtime.tasks.some((task) =>
+        dependentTaskIds.has(task.taskId) && (task.lifecycle === 'queued' || task.lifecycle === 'running')
+    );
+    if (hasActiveDependentTask) {
         return true;
     }
 
-    return runtime.sessions.some((session) => {
-        const sessionTask = runtime.tasks.find((task) => task.taskId === session.taskId);
-        if (!sessionTask) {
-            return false;
-        }
-        const candidateStageIndex = stageOrder.indexOf(sessionTask.stageId);
-        return candidateStageIndex > reopenedStageIndex && isActiveSessionLifecycle(session.lifecycle);
-    });
+    return runtime.sessions.some((session) =>
+        dependentTaskIds.has(session.taskId) && isActiveSessionLifecycle(session.lifecycle)
+    );
 }
 
 export function isMissionCompleted(
