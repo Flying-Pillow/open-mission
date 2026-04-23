@@ -47,6 +47,8 @@ export async function generateMissionWorkflowTasks(input: {
             taskId: task.taskId,
             title: task.title,
             instruction: task.instruction,
+            ...(task.taskKind ? { taskKind: task.taskKind } : {}),
+            ...(task.pairedTaskId ? { pairedTaskId: task.pairedTaskId } : {}),
             dependsOn: [...task.dependsOn],
             ...(task.agentRunner ? { agentRunner: task.agentRunner } : {})
         })),
@@ -70,6 +72,8 @@ function toGeneratedTaskPayload(
         taskId: `${stageId}/${stripMarkdownExtension(taskTemplate.fileName)}`,
         title: taskTemplate.subject,
         instruction: taskTemplate.instruction,
+        ...(taskTemplate.taskKind ? { taskKind: taskTemplate.taskKind } : {}),
+        ...(taskTemplate.pairedTaskId ? { pairedTaskId: taskTemplate.pairedTaskId } : {}),
         dependsOn: taskTemplate.dependsOn ? [...taskTemplate.dependsOn] : [],
         ...(taskTemplate.agent ? { agentRunner: taskTemplate.agent } : {})
     };

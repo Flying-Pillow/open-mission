@@ -6,6 +6,7 @@ import {
 	type MissionTaskStatusIntent
 } from '../types.js';
 import type { MissionAgentSessionLaunchRequest } from '../daemon/protocol/contracts.js';
+import type { MissionTaskArtifactReference } from '../workflow/engine/types.js';
 import { MissionSession } from './MissionSession.js';
 
 export type MissionTaskLaunchPolicy = {
@@ -18,6 +19,14 @@ export type MissionTaskOwner = {
 	queueTask(taskId: string, options?: { runnerId?: string; prompt?: string; workingDirectory?: string; terminalSessionName?: string }): Promise<void>;
 	completeTask(taskId: string): Promise<void>;
 	reopenTask(taskId: string): Promise<void>;
+	reworkTask(taskId: string, input: {
+		actor: 'human' | 'system' | 'workflow';
+		reasonCode: string;
+		summary: string;
+		sourceTaskId?: string;
+		sourceSessionId?: string;
+		artifactRefs?: MissionTaskArtifactReference[];
+	}): Promise<void>;
 	updateTaskLaunchPolicy(taskId: string, launchPolicy: MissionTaskLaunchPolicy): Promise<void>;
 	requireAgentRunner(runnerId: string): AgentRunner;
 	startTaskRuntimeSession(
@@ -65,6 +74,21 @@ export class MissionTask {
 		await this.refresh();
 		this.assertCanTransition('reopen');
 		await this.owner.reopenTask(this.state.taskId);
+		await this.refresh();
+		return this.toState();
+	}
+
+	public async rework(input: {
+		actor: 'human' | 'system' | 'workflow';
+		reasonCode: string;
+		summary: string;
+		sourceTaskId?: string;
+		sourceSessionId?: string;
+		artifactRefs?: MissionTaskArtifactReference[];
+	}): Promise<MissionTaskState> {
+		await this.refresh();
+		this.assertCanTransition('reopen');
+		await this.owner.reworkTask(this.state.taskId, input);
 		await this.refresh();
 		return this.toState();
 	}

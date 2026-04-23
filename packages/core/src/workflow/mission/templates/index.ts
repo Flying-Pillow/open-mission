@@ -55,6 +55,8 @@ export async function renderMissionTaskTemplate(
 
     const subjectAttr = document.attributes['subject'];
     const agentAttr = document.attributes['agent'];
+    const taskKindAttr = document.attributes['taskKind'];
+    const pairedTaskIdAttr = document.attributes['pairedTaskId'];
     const dependsOnAttr = document.attributes['dependsOn'];
     const statusAttr = document.attributes['status'];
     const retriesAttr = document.attributes['retries'];
@@ -68,6 +70,14 @@ export async function renderMissionTaskTemplate(
 
     if (Array.isArray(dependsOnAttr)) {
         result.dependsOn = dependsOnAttr.map(String);
+    }
+
+    if (taskKindAttr === 'implementation' || taskKindAttr === 'verification') {
+        result.taskKind = taskKindAttr;
+    }
+
+    if (typeof pairedTaskIdAttr === 'string' && pairedTaskIdAttr.trim().length > 0) {
+        result.pairedTaskId = pairedTaskIdAttr.trim();
     }
 
     if (typeof statusAttr === 'string') {

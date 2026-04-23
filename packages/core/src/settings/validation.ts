@@ -54,6 +54,12 @@ export function normalizeWorkflowSettings(input: unknown): WorkflowGlobalSetting
 								taskId: typeof task.taskId === 'string' ? task.taskId : '',
 								title: typeof task.title === 'string' ? task.title : '',
 								instruction: typeof task.instruction === 'string' ? task.instruction : '',
+								...(task.taskKind === 'implementation' || task.taskKind === 'verification'
+									? { taskKind: task.taskKind }
+									: {}),
+								...(typeof task.pairedTaskId === 'string' && task.pairedTaskId.trim().length > 0
+									? { pairedTaskId: task.pairedTaskId.trim() }
+									: {}),
 								dependsOn: Array.isArray(task.dependsOn)
 									? task.dependsOn.filter((dependency): dependency is string => typeof dependency === 'string')
 									: [],

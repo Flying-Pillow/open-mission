@@ -79,7 +79,7 @@ Its top-level shape is:
 | --- | --- | --- |
 | Mission lifecycle | `mission.created`, `mission.started`, `mission.paused`, `mission.delivered` | Advances mission-level lifecycle |
 | Task generation | `tasks.generated` | Creates runtime task records for a stage |
-| Task lifecycle | `task.queued`, `task.started`, `task.completed`, `task.reopened` | Drives task execution state |
+| Task lifecycle | `task.queued`, `task.started`, `task.completed`, `task.reopened`, `task.reworked` | Drives task execution state |
 | Session lifecycle | `session.started`, `session.launch-failed`, `session.completed`, `session.failed`, `session.cancelled`, `session.terminated` | Keeps workflow state aligned with agent runtime |
 | Policy changes | `task.launch-policy.changed` | Changes per-task runtime launch settings |
 
@@ -180,7 +180,7 @@ The required scenario matrix covered there is:
 
 1. Happy-path mission execution from `mission.created` through automatic generation, auto-launch, manual queueing, completion, and `mission.delivered`.
 2. Human control paths including `mission.paused`, `mission.resumed`, session prompt, session command, cancel, and terminate.
-3. Failure and recovery paths including `session.launch-failed` and `task.reopened`.
+3. Failure and recovery paths including `session.launch-failed`, manual `task.reopened`, and audited `task.reworked`.
 4. Panic and recovery paths including `mission.panic.requested`, queue clearing, session termination, `mission.panic.cleared`, and `mission.launch-queue.restarted`.
 5. Refresh repair of machine-derived requests when persisted state is missing generated follow-up work.
 

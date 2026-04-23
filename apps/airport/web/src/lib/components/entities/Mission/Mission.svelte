@@ -1,10 +1,13 @@
 <script lang="ts">
     import type { RepositoryCandidateDto } from "@flying-pillow/mission-core/airport/runtime";
+    import ChevronDownIcon from "@tabler/icons-svelte/icons/chevron-down";
+    import ChevronUpIcon from "@tabler/icons-svelte/icons/chevron-up";
     import type { OperatorStatus } from "@flying-pillow/mission-core/types.js";
     import type { Mission as MissionEntity } from "$lib/client/entities/Mission";
     import MissionActionbar from "$lib/components/entities/Mission/MissionActionbar.svelte";
     import type { MissionControlComputedState } from "$lib/components/entities/Mission/missionControl";
     import MissionCockpit from "$lib/components/entities/Mission/MissionCockpit.svelte";
+    import { Button } from "$lib/components/ui/button/index.js";
 
     let {
         repository,
@@ -30,6 +33,7 @@
     const workflowUpdatedAt = $derived(operatorStatus.workflow?.updatedAt);
     const currentStageId = $derived(operatorStatus.workflow?.currentStageId);
     const missionTitle = $derived(operatorStatus.title ?? mission.missionId);
+    let progressCollapsed = $state(false);
 
     function currentStageLabel(stageId: string | undefined): string {
         return stageId ? `Current stage ${stageId}` : "No active stage";
@@ -37,9 +41,9 @@
 </script>
 
 <section
-    class="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
+    class={`min-h-0 gap-4 rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm ${progressCollapsed ? "grid grid-rows-[auto]" : "grid grid-rows-[auto_minmax(0,1fr)]"}`}
 >
-    <header class="space-y-4 border-b pb-4">
+    <header class={`space-y-4 ${progressCollapsed ? "" : "border-b pb-4"}`}>
         <div
             class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between"
         >
@@ -66,15 +70,44 @@
                 </div>
             </div>
 
-            <MissionActionbar
-                missionId={mission.missionId}
-                repositoryId={repository.repositoryId}
-                repositoryRootPath={runtimeRepositoryRootPath}
-                {refreshNonce}
-                onActionExecuted={onMissionMutated}
-            />
+            <div class="flex items-start gap-2 self-start xl:justify-end">
+                <MissionActionbar
+                    missionId={mission.missionId}
+                    repositoryId={repository.repositoryId}
+                    repositoryRootPath={runtimeRepositoryRootPath}
+                    {refreshNonce}
+                    onActionExecuted={onMissionMutated}
+                />
+
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    class="shrink-0 shadow-sm"
+                    aria-expanded={!progressCollapsed}
+                    aria-label={progressCollapsed
+                        ? "Expand mission progress"
+                        : "Collapse mission progress"}
+                    onclick={() => {
+                        progressCollapsed = !progressCollapsed;
+                    }}
+                >
+                    {#if progressCollapsed}
+                        <ChevronDownIcon />
+                    {:else}
+                        <ChevronUpIcon />
+                    {/if}
+                    <span class="sr-only">
+                        {progressCollapsed
+                            ? "Expand mission progress"
+                            : "Collapse mission progress"}
+                    </span>
+                </Button>
+            </div>
         </div>
     </header>
 
-    <MissionCockpit {selectionState} {currentStageId} {onSelectNode} />
+    {#if !progressCollapsed}
+        <MissionCockpit {selectionState} {currentStageId} {onSelectNode} />
+    {/if}
 </section>
