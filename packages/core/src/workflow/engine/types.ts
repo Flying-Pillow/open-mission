@@ -33,6 +33,8 @@ export const MISSION_TASK_LIFECYCLE_STATES = [
 
 export type MissionTaskLifecycleState = (typeof MISSION_TASK_LIFECYCLE_STATES)[number];
 
+export const DEFAULT_TASK_MAX_REWORK_ITERATIONS = 3;
+
 export type MissionPauseReason =
     | 'human-requested'
     | 'panic'
@@ -56,6 +58,38 @@ export type MissionGateState = 'blocked' | 'passed';
 
 export interface MissionTaskRuntimeSettings {
     autostart: boolean;
+    maxReworkIterations?: number;
+}
+
+export interface MissionTaskArtifactReference {
+    path: string;
+    title?: string;
+}
+
+export interface MissionTaskReworkRequest {
+    requestId: string;
+    requestedAt: string;
+    actor: 'human' | 'system' | 'workflow';
+    reasonCode: string;
+    summary: string;
+    iteration: number;
+    maxIterations: number;
+    sourceTaskId?: string;
+    sourceSessionId?: string;
+    launchedAt?: string;
+    resolvedAt?: string;
+    artifactRefs: MissionTaskArtifactReference[];
+}
+
+export interface MissionTaskPendingLaunchContext {
+    source: 'rework';
+    requestId: string;
+    createdAt: string;
+    actor: 'human' | 'system' | 'workflow';
+    reasonCode: string;
+    summary: string;
+    sourceTaskId?: string;
+    artifactRefs: MissionTaskArtifactReference[];
 }
 
 export interface MissionTaskRuntimeState {
@@ -63,12 +97,17 @@ export interface MissionTaskRuntimeState {
     stageId: MissionStageId;
     title: string;
     instruction: string;
+    taskKind?: 'implementation' | 'verification';
+    pairedTaskId?: string;
     dependsOn: string[];
     lifecycle: MissionTaskLifecycleState;
     waitingOnTaskIds: string[];
     runtime: MissionTaskRuntimeSettings;
     agentRunner?: string;
     retries: number;
+    reworkIterationCount?: number;
+    reworkRequest?: MissionTaskReworkRequest;
+    pendingLaunchContext?: MissionTaskPendingLaunchContext;
     createdAt: string;
     updatedAt: string;
     completedAt?: string;
@@ -178,6 +217,8 @@ export interface WorkflowGeneratedTaskDefinition {
     taskId: string;
     title: string;
     instruction: string;
+    taskKind?: 'implementation' | 'verification';
+    pairedTaskId?: string;
     dependsOn: string[];
     agentRunner?: string;
 }
@@ -243,6 +284,8 @@ export interface MissionGeneratedTaskPayload {
     taskId: string;
     title: string;
     instruction: string;
+    taskKind?: 'implementation' | 'verification';
+    pairedTaskId?: string;
     dependsOn: string[];
     agentRunner?: string;
 }
@@ -318,6 +361,17 @@ export interface TaskReopenedEvent extends MissionWorkflowEventBase {
     taskId: string;
 }
 
+export interface TaskReworkedEvent extends MissionWorkflowEventBase {
+    type: 'task.reworked';
+    taskId: string;
+    actor: 'human' | 'system' | 'workflow';
+    reasonCode: string;
+    summary: string;
+    sourceTaskId?: string;
+    sourceSessionId?: string;
+    artifactRefs: MissionTaskArtifactReference[];
+}
+
 export interface AgentSessionStartedEvent extends MissionWorkflowEventBase {
     type: 'session.started';
     sessionId: string;
@@ -374,6 +428,7 @@ export type MissionWorkflowEvent =
     | TaskStartedEvent
     | TaskMarkedDoneEvent
     | TaskReopenedEvent
+    | TaskReworkedEvent
     | AgentSessionStartedEvent
     | AgentSessionLaunchFailedEvent
     | AgentSessionCompletedEvent

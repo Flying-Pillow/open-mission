@@ -528,6 +528,7 @@ export type MissionWorkflowEvent =
   | TaskMarkedDoneEvent
   | TaskMarkedBlockedEvent
   | TaskReopenedEvent
+  | TaskReworkedEvent
   | AgentSessionStartedEvent
   | AgentSessionCompletedEvent
   | AgentSessionFailedEvent
@@ -605,6 +606,17 @@ export interface TaskMarkedDoneEvent extends MissionWorkflowEventBase {
 export interface TaskReopenedEvent extends MissionWorkflowEventBase {
   type: 'task.reopened';
   taskId: string;
+}
+
+export interface TaskReworkedEvent extends MissionWorkflowEventBase {
+  type: 'task.reworked';
+  taskId: string;
+  actor: 'human' | 'system' | 'workflow';
+  reasonCode: string;
+  summary: string;
+  sourceTaskId?: string;
+  sourceSessionId?: string;
+  artifactRefs: Array<{ path: string; title?: string }>;
 }
 
 export interface AgentSessionStartedEvent extends MissionWorkflowEventBase {
@@ -708,7 +720,7 @@ Minimum required scenario coverage:
 
 1. Mission bootstrap from `mission.created` through `mission.started`, generation, auto-launch, stage progression, mission completion, and `mission.delivered`.
 2. Human control events and commands: `mission.paused`, `mission.resumed`, manual `task.queued`, prompt, command, cancel, and terminate.
-3. Failure recovery: `session.launch-failed` and `task.reopened`.
+3. Failure recovery: `session.launch-failed`, manual `task.reopened`, and audited `task.reworked`.
 4. Panic recovery: `mission.panic.requested`, queue clearing, `session.terminated`, `mission.panic.cleared`, and launch-queue restart.
 5. Refresh recovery where persisted state is missing machine-derived follow-up work and the controller must replay it.
 

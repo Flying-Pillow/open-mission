@@ -399,6 +399,40 @@ Reopen previously finished or aborted work.
 
 The task becomes active workflow work again instead of preserved historical completion.
 
+## `/task rework`
+
+Restart previously finished or aborted work with an audited corrective reason.
+
+**Rules**
+
+- Available only when task lifecycle is `completed`, `failed`, or `cancelled`.
+- Not allowed while any transitive dependent work is still active.
+- Requires a non-empty reason code and summary.
+- May be rejected after the task reaches its configured maximum rework iteration count.
+
+**Context**
+
+- Task selected.
+- Usually initiated by workflow logic, review, or verifier output.
+
+**Model status changes**
+
+- Task lifecycle: `completed|failed|cancelled -> pending`
+- Task terminal timestamps such as `completedAt`, `failedAt`, and `cancelledAt`: cleared for the reworked task
+- Task `reworkIterationCount`: incremented
+- Task `reworkRequest`: set with durable actor, reason code, summary, and evidence references
+- Task `pendingLaunchContext`: set for the next session launch
+
+**Derived model effects**
+
+- Dependency blockers and stage projections are recomputed.
+- Transitive dependent task progress may be invalidated by recomputation.
+- The next task launch prompt may include corrective rework context derived from the audited request.
+
+**Result**
+
+The task becomes active workflow work again with a durable audited reason for the restart and bounded iteration control.
+
 ## `/task autostart on`
 
 Enable automatic start policy for the task.

@@ -16,6 +16,8 @@ export type MissionTaskTemplate = {
 	fileName: string;
 	subject: string;
 	instruction: string;
+	taskKind?: 'implementation' | 'verification';
+	pairedTaskId?: string;
 	dependsOn?: string[];
 	agent: MissionTaskAgent;
 	status?: MissionTaskStatus;

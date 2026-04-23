@@ -66,6 +66,8 @@ export type ArtifactRecordWrite = {
 export type TaskArtifactWrite = {
 	subject: string;
 	instruction: string;
+	taskKind?: 'implementation' | 'verification';
+	pairedTaskId?: string;
 	dependsOn?: string[];
 	agent: MissionTaskAgent;
 };
@@ -775,6 +777,8 @@ export class FilesystemAdapter {
 		await fs.writeFile(
 			filePath,
 			this.renderTaskDocument(record.subject, record.instruction, {
+				...(record.taskKind ? { taskKind: record.taskKind } : {}),
+				...(record.pairedTaskId ? { pairedTaskId: record.pairedTaskId } : {}),
 				...(record.dependsOn ? { dependsOn: record.dependsOn } : {}),
 				agent: record.agent
 			}),
@@ -918,6 +922,8 @@ export class FilesystemAdapter {
 		subject: string,
 		instruction: string,
 		options: {
+			taskKind?: 'implementation' | 'verification';
+			pairedTaskId?: string;
 			dependsOn?: string[];
 			agent?: MissionTaskAgent;
 		} = {}
@@ -929,6 +935,12 @@ export class FilesystemAdapter {
 			''
 		].join('\n');
 		const attributes: Record<string, FrontmatterValue> = {};
+		if (options.taskKind) {
+			attributes['taskKind'] = options.taskKind;
+		}
+		if (options.pairedTaskId) {
+			attributes['pairedTaskId'] = options.pairedTaskId;
+		}
 		if (options.dependsOn && options.dependsOn.length > 0) {
 			attributes['dependsOn'] = options.dependsOn;
 		}
@@ -957,6 +969,8 @@ export class FilesystemAdapter {
 		const parsedTaskBody = this.parseTaskBody(body, fileName);
 		const taskId = this.createTaskId(stage, fileName);
 		const agentAttribute = this.readOptionalStringAttribute(document.attributes, 'agent', filePath);
+		const taskKind = this.readOptionalTaskKindAttribute(document.attributes, filePath);
+		const pairedTaskId = this.readOptionalStringAttribute(document.attributes, 'pairedTaskId', filePath);
 		const agent = typeof agentAttribute === 'string' && agentAttribute.trim()
 			? agentAttribute.trim()
 			: DEFAULT_AGENT_RUNNER_ID;
@@ -968,6 +982,8 @@ export class FilesystemAdapter {
 			subject: parsedTaskBody.subject,
 			instruction: parsedTaskBody.instruction,
 			body,
+			...(taskKind ? { taskKind } : {}),
+			...(pairedTaskId ? { pairedTaskId } : {}),
 			dependsOn: this.readTaskDependsOn(document.attributes, filePath),
 			waitingOn: [],
 			status: 'pending',
@@ -1015,6 +1031,20 @@ export class FilesystemAdapter {
 			throw new ArtifactTypeError(`Artifact '${filePath}' expected '${key}' to be a string.`);
 		}
 		return value.trim().length > 0 ? value.trim() : undefined;
+	}
+
+	private readOptionalTaskKindAttribute(
+		attributes: Record<string, FrontmatterValue>,
+		filePath: string
+	): 'implementation' | 'verification' | undefined {
+		const taskKind = this.readOptionalStringAttribute(attributes, 'taskKind', filePath);
+		if (taskKind === undefined) {
+			return undefined;
+		}
+		if (taskKind !== 'implementation' && taskKind !== 'verification') {
+			throw new ArtifactTypeError(`Artifact '${filePath}' expected 'taskKind' to be 'implementation' or 'verification'.`);
+		}
+		return taskKind;
 	}
 
 	private readOptionalStringArrayAttribute(

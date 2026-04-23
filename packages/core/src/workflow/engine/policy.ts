@@ -1,4 +1,5 @@
 import type {
+    MissionTaskPendingLaunchContext,
     MissionAgentSessionLifecycleState,
     MissionStageId,
     MissionTaskLifecycleState,
@@ -7,6 +8,7 @@ import type {
     MissionWorkflowRequest,
     MissionWorkflowRuntimeState
 } from './types.js';
+import { DEFAULT_TASK_MAX_REWORK_ITERATIONS } from './types.js';
 
 export function isActiveSessionLifecycle(lifecycle: MissionAgentSessionLifecycleState): boolean {
     return lifecycle === 'starting' || lifecycle === 'running';
@@ -18,6 +20,27 @@ export function isTerminalTaskLifecycle(lifecycle: MissionTaskLifecycleState): b
 
 export function isReopenableTaskLifecycle(lifecycle: MissionTaskLifecycleState): boolean {
     return lifecycle === 'completed' || lifecycle === 'failed' || lifecycle === 'cancelled';
+}
+
+export function resolveTaskMaxReworkIterations(task: MissionTaskRuntimeState): number {
+    return task.runtime.maxReworkIterations ?? DEFAULT_TASK_MAX_REWORK_ITERATIONS;
+}
+
+export function buildReworkPendingLaunchContext(task: MissionTaskRuntimeState): MissionTaskPendingLaunchContext | undefined {
+    if (!task.reworkRequest) {
+        return undefined;
+    }
+
+    return {
+        source: 'rework',
+        requestId: task.reworkRequest.requestId,
+        createdAt: task.reworkRequest.requestedAt,
+        actor: task.reworkRequest.actor,
+        reasonCode: task.reworkRequest.reasonCode,
+        summary: task.reworkRequest.summary,
+        ...(task.reworkRequest.sourceTaskId ? { sourceTaskId: task.reworkRequest.sourceTaskId } : {}),
+        artifactRefs: task.reworkRequest.artifactRefs.map((artifactRef) => ({ ...artifactRef }))
+    };
 }
 
 export function resolveEligibleStageId(

@@ -12,6 +12,7 @@ import {
     isActiveSessionLifecycle,
     isReopenableTaskLifecycle,
     isTerminalTaskLifecycle,
+    resolveTaskMaxReworkIterations,
     resolveEligibleStageId
 } from './policy.js';
 
@@ -169,6 +170,27 @@ export function getMissionWorkflowEventValidationErrors(
                 }
                 if (hasActiveDependentActivity(runtime, task.taskId)) {
                     errors.push(`task.reopened for '${event.taskId}' is not allowed while downstream work is active.`);
+                }
+            }
+            break;
+        }
+        case 'task.reworked': {
+            const task = requireTask(findTask(event.taskId), event.taskId, errors, event.type);
+            if (task) {
+                if (!isReopenableTaskLifecycle(task.lifecycle)) {
+                    errors.push(`task.reworked requires task '${event.taskId}' to be completed, failed, or cancelled, received '${task.lifecycle}'.`);
+                }
+                if (hasActiveDependentActivity(runtime, task.taskId)) {
+                    errors.push(`task.reworked for '${event.taskId}' is not allowed while downstream work is active.`);
+                }
+                if (event.summary.trim().length === 0) {
+                    errors.push(`task.reworked requires a non-empty summary for task '${event.taskId}'.`);
+                }
+                if (event.reasonCode.trim().length === 0) {
+                    errors.push(`task.reworked requires a non-empty reasonCode for task '${event.taskId}'.`);
+                }
+                if ((task.reworkIterationCount ?? 0) >= resolveTaskMaxReworkIterations(task)) {
+                    errors.push(`task.reworked for '${event.taskId}' exceeded max rework iterations.`);
                 }
             }
             break;

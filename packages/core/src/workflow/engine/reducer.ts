@@ -11,11 +11,13 @@ import {
 } from './types.js';
 import { createInitialMissionWorkflowRuntimeState } from './document.js';
 import {
+    buildReworkPendingLaunchContext,
     buildWorkflowTaskGenerationRequests,
     countOccupiedSessionExecutionSlots,
     countOccupiedTaskExecutionSlots,
     isActiveSessionLifecycle,
     isMissionCompleted,
+    resolveTaskMaxReworkIterations,
     resolveDependentTaskIds
 } from './policy.js';
 import { deriveMissionWorkflowProjectionState } from './projection.js';
@@ -190,6 +192,8 @@ class MissionWorkflowTransitionEngine {
                         stageId: event.stageId,
                         title: task.title,
                         instruction: task.instruction,
+                        ...(task.taskKind ? { taskKind: task.taskKind } : {}),
+                        ...(task.pairedTaskId ? { pairedTaskId: task.pairedTaskId } : {}),
                         dependsOn: [...task.dependsOn],
                         lifecycle: 'pending',
                         waitingOnTaskIds: [],
@@ -198,6 +202,7 @@ class MissionWorkflowTransitionEngine {
                         },
                         ...(task.agentRunner ? { agentRunner: task.agentRunner } : {}),
                         retries: 0,
+                        reworkIterationCount: 0,
                         createdAt: event.occurredAt,
                         updatedAt: event.occurredAt
                     }));
@@ -210,6 +215,7 @@ class MissionWorkflowTransitionEngine {
                         ? {
                             ...task,
                             runtime: {
+                                ...task.runtime,
                                 autostart: event.autostart
                             },
                             updatedAt: event.occurredAt
@@ -259,6 +265,14 @@ class MissionWorkflowTransitionEngine {
                             ...task,
                             lifecycle: 'completed',
                             completedAt: event.occurredAt,
+                            ...(task.reworkRequest && !task.reworkRequest.resolvedAt
+                                ? {
+                                    reworkRequest: {
+                                        ...task.reworkRequest,
+                                        resolvedAt: event.occurredAt
+                                    }
+                                }
+                                : {}),
                             updatedAt: event.occurredAt
                         }
                         : task
@@ -293,12 +307,65 @@ class MissionWorkflowTransitionEngine {
                 });
                 return;
             }
+            case 'task.reworked': {
+                const reworkedTask = this.state.tasks.find((candidate) => candidate.taskId === event.taskId);
+                const resetTaskIds = reworkedTask
+                    ? new Set([reworkedTask.taskId, ...resolveDependentTaskIds(this.state.tasks, reworkedTask.taskId)])
+                    : new Set<string>();
+
+                this.state.tasks = this.state.tasks.map((task) => {
+                    if (!resetTaskIds.has(task.taskId)) {
+                        return task;
+                    }
+
+                    const resetTask = resetLifecycleState(task, event.occurredAt);
+                    if (task.taskId !== event.taskId) {
+                        return resetTask;
+                    }
+
+                    const iteration = (task.reworkIterationCount ?? 0) + 1;
+                    const reworkRequest = {
+                        requestId: `task.reworked:${event.taskId}:${event.occurredAt}`,
+                        requestedAt: event.occurredAt,
+                        actor: event.actor,
+                        reasonCode: event.reasonCode,
+                        summary: event.summary,
+                        iteration,
+                        maxIterations: resolveTaskMaxReworkIterations(task),
+                        ...(event.sourceTaskId ? { sourceTaskId: event.sourceTaskId } : {}),
+                        ...(event.sourceSessionId ? { sourceSessionId: event.sourceSessionId } : {}),
+                        artifactRefs: event.artifactRefs.map((artifactRef) => ({ ...artifactRef }))
+                    };
+                    const reworkedRuntimeTask: MissionTaskRuntimeState = {
+                        ...resetTask,
+                        reworkIterationCount: iteration,
+                        reworkRequest
+                    };
+
+                    return {
+                        ...reworkedRuntimeTask,
+                        pendingLaunchContext: buildReworkPendingLaunchContext(reworkedRuntimeTask)
+                    };
+                });
+
+                this.state.launchQueue = this.state.launchQueue.filter((request) => !resetTaskIds.has(request.taskId));
+                return;
+            }
             case 'session.started': {
                 this.state.tasks = this.state.tasks.map((task) =>
                     task.taskId === event.taskId
                         ? {
                             ...task,
                             lifecycle: 'running',
+                            ...(task.reworkRequest && !task.reworkRequest.launchedAt
+                                ? {
+                                    reworkRequest: {
+                                        ...task.reworkRequest,
+                                        launchedAt: event.occurredAt
+                                    }
+                                }
+                                : {}),
+                            pendingLaunchContext: undefined,
                             updatedAt: event.occurredAt
                         }
                         : task
@@ -615,6 +682,10 @@ function applyDerivedWorkflowProjectionState(
 }
 
 function resetInterruptedTask(task: MissionTaskRuntimeState, occurredAt: string): MissionTaskRuntimeState {
+    return resetLifecycleState(task, occurredAt);
+}
+
+function resetLifecycleState(task: MissionTaskRuntimeState, occurredAt: string): MissionTaskRuntimeState {
     const { completedAt, failedAt, cancelledAt, ...rest } = task;
     void completedAt;
     void failedAt;
@@ -644,7 +715,23 @@ function cloneRuntimeState(state: MissionWorkflowRuntimeState): MissionWorkflowR
             ...task,
             dependsOn: [...task.dependsOn],
             waitingOnTaskIds: [...task.waitingOnTaskIds],
-            runtime: { ...task.runtime }
+            runtime: { ...task.runtime },
+            ...(task.reworkRequest
+                ? {
+                    reworkRequest: {
+                        ...task.reworkRequest,
+                        artifactRefs: task.reworkRequest.artifactRefs.map((artifactRef) => ({ ...artifactRef }))
+                    }
+                }
+                : {}),
+            ...(task.pendingLaunchContext
+                ? {
+                    pendingLaunchContext: {
+                        ...task.pendingLaunchContext,
+                        artifactRefs: task.pendingLaunchContext.artifactRefs.map((artifactRef) => ({ ...artifactRef }))
+                    }
+                }
+                : {})
         })),
         sessions: state.sessions.map((session) => ({ ...session })),
         gates: state.gates.map((gate) => ({ ...gate, reasons: [...gate.reasons] })),

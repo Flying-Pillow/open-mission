@@ -1,8 +1,9 @@
 <script lang="ts">
     import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
+    import * as Dialog from "$lib/components/ui/dialog/index.js";
+    import { Input } from "$lib/components/ui/input/index.js";
     import { Label } from "$lib/components/ui/label/index.js";
-    import * as Sheet from "$lib/components/ui/sheet/index.js";
     import { cn } from "$lib/utils.js";
     import AlertTriangleIcon from "@tabler/icons-svelte/icons/alert-triangle";
     import CircleCheckIcon from "@tabler/icons-svelte/icons/circle-check";
@@ -518,24 +519,23 @@
     {/if}
 </div>
 
-<Sheet.Root bind:open={flowOpen}>
-    <Sheet.Content
-        side="right"
-        class="w-full max-w-2xl p-0 sm:max-w-2xl"
+<Dialog.Root bind:open={flowOpen}>
+    <Dialog.Content
+        class="w-full max-w-3xl p-0 sm:max-w-3xl"
         onInteractOutside={() => actionPending === null && closeActionFlow()}
     >
         {#if flowAction}
             <div class="flex h-full flex-col">
-                <Sheet.Header class="border-b px-6 py-5">
-                    <Sheet.Title>
+                <Dialog.Header class="border-b px-6 py-5 text-left">
+                    <Dialog.Title>
                         {flowAction.flow?.actionLabel ?? flowAction.label}
-                    </Sheet.Title>
-                    <Sheet.Description>
+                    </Dialog.Title>
+                    <Dialog.Description>
                         {flowAction.flow?.targetLabel
                             ? `Complete the daemon action flow for ${flowAction.flow.targetLabel.toLowerCase()}.`
                             : "Complete the action flow."}
-                    </Sheet.Description>
-                </Sheet.Header>
+                    </Dialog.Description>
+                </Dialog.Header>
 
                 <div class="flex-1 space-y-6 overflow-y-auto px-6 py-5">
                     {#each flowAction.flow?.steps ?? [] as step (step.id)}
@@ -621,19 +621,37 @@
                                     <Label for={`flow-${step.id}`}
                                         >{step.label}</Label
                                     >
-                                    <textarea
-                                        id={`flow-${step.id}`}
-                                        class="bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 min-h-32 w-full rounded-3xl border px-4 py-3 text-sm outline-none focus-visible:ring-[3px]"
-                                        placeholder={step.placeholder}
-                                        value={flowTexts[step.id] ?? ""}
-                                        oninput={(event) => {
-                                            flowTexts = {
-                                                ...flowTexts,
-                                                [step.id]:
-                                                    event.currentTarget.value,
-                                            };
-                                        }}
-                                    ></textarea>
+                                    {#if step.inputMode === "compact"}
+                                        <Input
+                                            id={`flow-${step.id}`}
+                                            class="h-11 rounded-2xl"
+                                            placeholder={step.placeholder}
+                                            value={flowTexts[step.id] ?? ""}
+                                            oninput={(event) => {
+                                                flowTexts = {
+                                                    ...flowTexts,
+                                                    [step.id]:
+                                                        event.currentTarget
+                                                            .value,
+                                                };
+                                            }}
+                                        />
+                                    {:else}
+                                        <textarea
+                                            id={`flow-${step.id}`}
+                                            class="bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 min-h-32 w-full rounded-3xl border px-4 py-3 text-sm outline-none focus-visible:ring-[3px]"
+                                            placeholder={step.placeholder}
+                                            value={flowTexts[step.id] ?? ""}
+                                            oninput={(event) => {
+                                                flowTexts = {
+                                                    ...flowTexts,
+                                                    [step.id]:
+                                                        event.currentTarget
+                                                            .value,
+                                                };
+                                            }}
+                                        ></textarea>
+                                    {/if}
                                 </div>
                             {/if}
                         </section>
@@ -644,7 +662,7 @@
                     {/if}
                 </div>
 
-                <Sheet.Footer class="border-t px-6 py-4 sm:justify-between">
+                <Dialog.Footer class="border-t px-6 py-4 sm:justify-between">
                     <Button
                         variant="outline"
                         onclick={closeActionFlow}
@@ -661,8 +679,8 @@
                             : (flowAction.flow?.actionLabel ??
                               flowAction.label)}
                     </Button>
-                </Sheet.Footer>
+                </Dialog.Footer>
             </div>
         {/if}
-    </Sheet.Content>
-</Sheet.Root>
+    </Dialog.Content>
+</Dialog.Root>

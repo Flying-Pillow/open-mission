@@ -418,63 +418,120 @@ export class Mission {
 		steps: OperatorActionExecutionStep[] = [],
 		options: { terminalSessionName?: string } = {}
 	): Promise<OperatorStatus> {
-		if (steps.length > 0) {
-			throw new Error(`Mission action '${actionId}' does not accept input steps.`);
-		}
-
 		if (actionId === MISSION_ACTION_IDS.pause) {
+			if (steps.length > 0) {
+				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
+			}
 			await this.pauseMission();
 			return this.status();
 		}
 		if (actionId === MISSION_ACTION_IDS.resume) {
+			if (steps.length > 0) {
+				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
+			}
 			await this.resumeMission();
 			return this.status();
 		}
 		if (actionId === MISSION_ACTION_IDS.panic) {
+			if (steps.length > 0) {
+				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
+			}
 			await this.panicStopMission();
 			return this.status();
 		}
 		if (actionId === MISSION_ACTION_IDS.clearPanic) {
+			if (steps.length > 0) {
+				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
+			}
 			await this.clearMissionPanic();
 			return this.status();
 		}
 		if (actionId === MISSION_ACTION_IDS.restartQueue) {
+			if (steps.length > 0) {
+				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
+			}
 			await this.restartLaunchQueue();
 			return this.status();
 		}
 		if (actionId === MISSION_ACTION_IDS.deliver) {
+			if (steps.length > 0) {
+				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
+			}
 			await this.deliver();
 			return this.status();
 		}
 		if (actionId.startsWith('generation.tasks.')) {
+			if (steps.length > 0) {
+				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
+			}
 			await this.generateTasksForStage(actionId.slice('generation.tasks.'.length) as MissionStageId);
 			return this.status();
 		}
 		if (actionId.startsWith('task.start.')) {
+			if (steps.length > 0) {
+				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
+			}
 			await this.startTask(actionId.slice('task.start.'.length), options);
 			return this.status();
 		}
 		if (actionId.startsWith('task.done.')) {
+			if (steps.length > 0) {
+				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
+			}
 			await this.completeTask(actionId.slice('task.done.'.length));
 			return this.status();
 		}
 		if (actionId.startsWith('task.reopen.')) {
+			if (steps.length > 0) {
+				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
+			}
 			await this.reopenTask(actionId.slice('task.reopen.'.length));
 			return this.status();
 		}
+		if (actionId.startsWith('task.rework.from-verification.')) {
+			if (steps.length > 0) {
+				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
+			}
+			await this.reworkTaskFromVerification(actionId.slice('task.rework.from-verification.'.length));
+			return this.status();
+		}
+		if (actionId.startsWith('task.rework.')) {
+			const taskId = actionId.slice('task.rework.'.length);
+			const reasonCode = requireTextActionStep(steps, 'task.rework.reasonCode').value.trim();
+			const summary = requireTextActionStep(steps, 'task.rework.summary').value.trim();
+			await this.reworkTask(taskId, {
+				actor: 'human',
+				reasonCode,
+				summary,
+				artifactRefs: []
+			});
+			return this.status();
+		}
 		if (actionId.startsWith('task.autostart.enable.')) {
+			if (steps.length > 0) {
+				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
+			}
 			await this.setTaskAutostart(actionId.slice('task.autostart.enable.'.length), true);
 			return this.status();
 		}
 		if (actionId.startsWith('task.autostart.disable.')) {
+			if (steps.length > 0) {
+				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
+			}
 			await this.setTaskAutostart(actionId.slice('task.autostart.disable.'.length), false);
 			return this.status();
 		}
 		if (actionId.startsWith('session.cancel.')) {
+			if (steps.length > 0) {
+				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
+			}
 			await this.cancelAgentSession(actionId.slice('session.cancel.'.length));
 			return this.status();
 		}
 		if (actionId.startsWith('session.terminate.')) {
+			if (steps.length > 0) {
+				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
+			}
 			await this.terminateAgentSession(actionId.slice('session.terminate.'.length));
 			return this.status();
 		}
@@ -541,6 +598,24 @@ export class Mission {
 
 	public async reopenTask(taskId: string): Promise<void> {
 		await (await this.requireTask(taskId)).reopen();
+	}
+
+	public async reworkTask(inputTaskId: string, input: {
+		actor: 'human' | 'system' | 'workflow';
+		reasonCode: string;
+		summary: string;
+		sourceTaskId?: string;
+		sourceSessionId?: string;
+		artifactRefs?: Array<{ path: string; title?: string }>;
+	}): Promise<void> {
+		await this.requireTaskState(inputTaskId);
+		await this.reworkTaskExecution(inputTaskId, input);
+		await this.status();
+	}
+
+	public async reworkTaskFromVerification(sourceTaskId: string): Promise<void> {
+		const request = await this.buildVerificationTaskReworkRequest(sourceTaskId);
+		await this.reworkTask(request.taskId, request.input);
 	}
 
 	public async setTaskAutostart(taskId: string, autostart: boolean): Promise<void> {
@@ -980,6 +1055,8 @@ export class Mission {
 			fileName
 		].join('/');
 		const filePath = fileTask?.filePath ?? path.join(this.missionDir, ...relativePath.split('/'));
+		const taskKind = task.taskKind ?? fileTask?.taskKind;
+		const pairedTaskId = task.pairedTaskId ?? fileTask?.pairedTaskId;
 		return {
 			taskId: task.taskId,
 			stage: task.stageId as MissionStageId,
@@ -987,6 +1064,8 @@ export class Mission {
 			subject: this.resolveWorkflowTaskSubject(task, fileTask, fileName),
 			instruction: task.instruction,
 			body: task.instruction,
+			...(taskKind ? { taskKind } : {}),
+			...(pairedTaskId ? { pairedTaskId } : {}),
 			dependsOn: [...task.dependsOn],
 			waitingOn: [...task.waitingOnTaskIds],
 			status: task.lifecycle,
@@ -1343,6 +1422,7 @@ export class Mission {
 			queueTask: (taskId, options) => this.queueTask(taskId, options),
 			completeTask: (taskId) => this.completeTaskExecution(taskId),
 			reopenTask: (taskId) => this.reopenTaskExecution(taskId),
+			reworkTask: (taskId, input) => this.reworkTaskExecution(taskId, input),
 			updateTaskLaunchPolicy: (taskId, launchPolicy) =>
 				this.updateTaskLaunchPolicy(taskId, launchPolicy),
 			requireAgentRunner: (runnerId) => this.requireAgentRunner(runnerId),
@@ -1643,6 +1723,66 @@ export class Mission {
 		await this.applyWorkflowEvent(this.createWorkflowEvent('task.reopened', { taskId }));
 	}
 
+	private async reworkTaskExecution(taskId: string, input: {
+		actor: 'human' | 'system' | 'workflow';
+		reasonCode: string;
+		summary: string;
+		sourceTaskId?: string;
+		sourceSessionId?: string;
+		artifactRefs?: Array<{ path: string; title?: string }>;
+	}): Promise<void> {
+		await this.applyWorkflowEvent(this.createWorkflowEvent('task.reworked', {
+			taskId,
+			actor: input.actor,
+			reasonCode: input.reasonCode,
+			summary: input.summary,
+			...(input.sourceTaskId ? { sourceTaskId: input.sourceTaskId } : {}),
+			...(input.sourceSessionId ? { sourceSessionId: input.sourceSessionId } : {}),
+			artifactRefs: (input.artifactRefs ?? []).map((artifactRef) => ({ ...artifactRef }))
+		}));
+	}
+
+	private async buildVerificationTaskReworkRequest(sourceTaskId: string): Promise<{
+		taskId: string;
+		input: {
+			actor: 'workflow';
+			reasonCode: 'verification.failed';
+			summary: string;
+			sourceTaskId: string;
+			artifactRefs: Array<{ path: string; title?: string }>;
+		};
+	}> {
+		const sourceWorkflowTask = await this.requireWorkflowTask(sourceTaskId);
+		const status = this.lastKnownStatus ?? (await this.status());
+		const targetTask = resolveVerificationReworkTargetTask(status.workflow?.tasks ?? [], sourceWorkflowTask);
+		if (!targetTask) {
+			throw new Error(`Mission task '${sourceTaskId}' is not a paired verification task with a resolvable implementation target.`);
+		}
+
+		const sourceTask = await this.requireTaskState(sourceTaskId);
+		const artifactRefs: Array<{ path: string; title?: string }> = [
+			{ path: sourceTask.relativePath, title: sourceTask.subject }
+		];
+		const verificationArtifact = await this.adapter.readArtifactRecord(this.missionDir, 'verify');
+		if (verificationArtifact?.relativePath) {
+			artifactRefs.push({
+				path: verificationArtifact.relativePath,
+				title: verificationArtifact.fileName
+			});
+		}
+
+		return {
+			taskId: targetTask.taskId,
+			input: {
+				actor: 'workflow',
+				reasonCode: 'verification.failed',
+				summary: `Verification task '${sourceTask.subject}' requested corrective rework for '${targetTask.title}'. Review the referenced verification evidence before restarting the implementation task.`,
+				sourceTaskId,
+				artifactRefs: dedupeArtifactRefs(artifactRefs)
+			}
+		};
+	}
+
 	private async updateTaskLaunchPolicy(
 		taskId: string,
 		launchPolicy: { autostart: boolean }
@@ -1693,6 +1833,7 @@ function buildMissionAvailableActions(input: MissionAvailableActionsInput): Oper
 		actions.push(buildTaskStartAction(input, task));
 		actions.push(buildTaskDoneAction(input, task));
 		actions.push(buildTaskReopenAction(input, task));
+		actions.push(buildTaskReworkAction(input, task));
 		actions.push(...buildTaskLaunchPolicyActions(input, task));
 	}
 
@@ -1932,6 +2073,97 @@ function buildTaskReopenAction(input: MissionAvailableActionsInput, task: Missio
 	};
 }
 
+function buildTaskReworkAction(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): OperatorActionDescriptor {
+	const verificationAction = buildVerificationDerivedTaskReworkAction(input, task);
+	if (verificationAction) {
+		return verificationAction;
+	}
+
+	const errors = getValidationErrors(input, {
+		type: 'task.reworked',
+		taskId: task.taskId,
+		actor: 'human',
+		reasonCode: 'manual.rework',
+		summary: 'Manual corrective rework requested.',
+		artifactRefs: []
+	});
+	return {
+		id: `task.rework.${task.taskId}`,
+		label: 'Rework Task',
+		action: '/task rework',
+		scope: 'task',
+		targetId: task.taskId,
+		...buildAvailability(errors.length === 0, errors[0]),
+		ui: { toolbarLabel: 'REWORK', requiresConfirmation: true, confirmationPrompt: 'Restart this task with audited rework context?' },
+		flow: {
+			targetLabel: 'TASK',
+			actionLabel: 'REWORK',
+			steps: [
+				{
+					kind: 'text',
+					id: 'task.rework.reasonCode',
+					label: 'Reason Code',
+					title: 'Enter a machine-readable reason code',
+					helperText: 'Use a stable, workflow-defined code such as verification.failed or review.requested.',
+					placeholder: 'verification.failed',
+					inputMode: 'compact',
+					format: 'plain'
+				},
+				{
+					kind: 'text',
+					id: 'task.rework.summary',
+					label: 'Summary',
+					title: 'Describe why the task is being restarted',
+					helperText: 'This summary is recorded as audited rework context and appended to the next launch prompt.',
+					placeholder: 'Describe what failed and what the next attempt must correct.',
+					inputMode: 'expanded',
+					format: 'markdown'
+				}
+			]
+		},
+		presentationTargets: buildTaskPresentationTargets(task.taskId, task.stageId as MissionStageId),
+		metadata: { stageId: task.stageId as MissionStageId }
+	};
+}
+
+function buildVerificationDerivedTaskReworkAction(
+	input: MissionAvailableActionsInput,
+	task: MissionRuntimeRecord['runtime']['tasks'][number]
+): OperatorActionDescriptor | undefined {
+	const targetTask = resolveVerificationReworkTargetTask(input.runtime.tasks, task);
+	if (!targetTask) {
+		return undefined;
+	}
+
+	const errors = getValidationErrors(input, {
+		type: 'task.reworked',
+		taskId: targetTask.taskId,
+		actor: 'workflow',
+		reasonCode: 'verification.failed',
+		summary: `Verification task '${task.title}' requested corrective rework for '${targetTask.title}'.`,
+		sourceTaskId: task.taskId,
+		artifactRefs: []
+	});
+
+	return {
+		id: `task.rework.from-verification.${task.taskId}`,
+		label: 'Rework Verified Task',
+		action: '/task rework',
+		scope: 'task',
+		targetId: targetTask.taskId,
+		...buildAvailability(errors.length === 0, errors[0]),
+		ui: {
+			toolbarLabel: 'REWORK TARGET',
+			requiresConfirmation: true,
+			confirmationPrompt: `Restart '${targetTask.title}' using the evidence captured by verification task '${task.title}'?`
+		},
+		flow: { targetLabel: 'TASK', actionLabel: 'REWORK TARGET', steps: [] },
+		presentationTargets: [{ scope: 'task', targetId: task.taskId }, { scope: 'stage', targetId: task.stageId as MissionStageId }],
+		metadata: { stageId: task.stageId as MissionStageId },
+		ordering: { group: 'recovery' }
+	};
+}
+
 function buildTaskLaunchPolicyActions(input: MissionAvailableActionsInput, task: MissionRuntimeRecord['runtime']['tasks'][number]): OperatorActionDescriptor[] {
 	const actions: OperatorActionDescriptor[] = [];
 	const changeErrors = (autostart: boolean) => getValidationErrors(input, {
@@ -2039,6 +2271,30 @@ function buildMissionPresentationTargets(currentStageId: MissionStageId | undefi
 
 function buildTaskPresentationTargets(taskId: string, stageId: MissionStageId) {
 	return [{ scope: 'task' as const, targetId: taskId }, { scope: 'stage' as const, targetId: stageId }];
+}
+
+function resolveVerificationReworkTargetTask(
+	tasks: Array<{ taskId: string; stageId: string; title: string; taskKind?: 'implementation' | 'verification'; pairedTaskId?: string }>,
+	task: { taskId: string; stageId: string; title: string; taskKind?: 'implementation' | 'verification'; pairedTaskId?: string }
+) {
+	if (task.taskKind !== 'verification' || !task.pairedTaskId) {
+		return undefined;
+	}
+
+	return tasks.find((candidate) => candidate.taskId === task.pairedTaskId && candidate.taskKind === 'implementation');
+}
+
+function dedupeArtifactRefs(artifactRefs: Array<{ path: string; title?: string }>) {
+	const seen = new Set<string>();
+	const deduplicated: Array<{ path: string; title?: string }> = [];
+	for (const artifactRef of artifactRefs) {
+		if (seen.has(artifactRef.path)) {
+			continue;
+		}
+		seen.add(artifactRef.path);
+		deduplicated.push(artifactRef);
+	}
+	return deduplicated;
 }
 
 function buildSessionPresentationTargets(sessionId: string, stageId: MissionStageId | undefined) {
@@ -2167,6 +2423,7 @@ function getValidationErrors(
 		| { type: 'task.queued'; taskId: string }
 		| { type: 'task.completed'; taskId: string }
 		| { type: 'task.reopened'; taskId: string }
+		| { type: 'task.reworked'; taskId: string; actor: 'human' | 'system' | 'workflow'; reasonCode: string; summary: string; sourceTaskId?: string; sourceSessionId?: string; artifactRefs: Array<{ path: string; title?: string }> }
 		| { type: 'task.launch-policy.changed'; taskId: string; autostart: boolean }
 ): string[] {
 	return getMissionWorkflowEventValidationErrors(
@@ -2174,6 +2431,22 @@ function getValidationErrors(
 		{ eventId: `${input.missionId}:action`, occurredAt: input.runtime.updatedAt, source: 'human', ...event } as MissionWorkflowEvent,
 		input.configuration
 	);
+}
+
+function requireTextActionStep(
+	steps: OperatorActionExecutionStep[],
+	stepId: string
+): Extract<OperatorActionExecutionStep, { kind: 'text' }> {
+	const step = steps.find((candidate): candidate is Extract<OperatorActionExecutionStep, { kind: 'text' }> =>
+		candidate.kind === 'text' && candidate.stepId === stepId
+	);
+	if (!step) {
+		throw new Error(`Mission action requires text step '${stepId}'.`);
+	}
+	if (!step.value.trim()) {
+		throw new Error(`Mission action requires a non-empty text value for step '${stepId}'.`);
+	}
+	return step;
 }
 
 function getOrderedTasks(input: MissionAvailableActionsInput) {

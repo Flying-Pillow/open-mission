@@ -347,7 +347,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 			runnerId: 'fake-runner',
 			transportId: 'terminal'
 		});
-		expect(startedEvent?.sessionId).toMatch(/^task-1-fake-runner-[a-z0-9]{8}$/);
+		expect(startedEvent?.sessionId).toBe('fake-runner-session-1');
 	});
 
 	it('starts a new runtime session id when relaunching the same task after termination', async () => {
@@ -545,6 +545,81 @@ describe('MissionWorkflowRequestExecutor', () => {
 		expect(runner.getLastStartRequest()?.initialPrompt?.text).toContain(
 			'Perform the task exactly as specified in <03-align-workflow-request-execution-with-unified-runtime.md>.'
 		);
+	});
+
+	it('appends generic rework context to the next launch prompt', async () => {
+		const runner = new FakeAgentRunner('fake-runner', 'Fake Runner', 'terminal');
+		const adapter = {
+			readTaskState: async () => ({
+				taskId: 'implementation/03-align-workflow-request-execution-with-unified-runtime',
+				stage: 'implementation',
+				sequence: 3,
+				subject: 'Align Workflow Request Execution With Unified Runtime',
+				instruction: 'Launch through the unified runner path.',
+				body: 'Launch through the unified runner path.',
+				dependsOn: [],
+				waitingOn: [],
+				status: 'ready',
+				agent: 'fake-runner',
+				retries: 0,
+				fileName: '03-align-workflow-request-execution-with-unified-runtime.md',
+				filePath: '/tmp/mission-17/.mission/missions/mission-17/03-IMPLEMENTATION/tasks/03-align-workflow-request-execution-with-unified-runtime.md',
+				relativePath: '03-IMPLEMENTATION/tasks/03-align-workflow-request-execution-with-unified-runtime.md'
+			}),
+			getMissionWorkspacePath: (missionDir: string) => missionDir
+		} as unknown as FilesystemAdapter;
+
+		const executor = new MissionWorkflowRequestExecutor({
+			adapter,
+			runners: new Map([[runner.id, runner]])
+		});
+		const configuration = createMissionWorkflowConfigurationSnapshot({
+			createdAt: '2026-04-10T21:00:07.000Z',
+			workflowVersion: DEFAULT_WORKFLOW_VERSION,
+			workflow: createDefaultWorkflowSettings()
+		});
+		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const task = createTask({
+			pendingLaunchContext: {
+				source: 'rework',
+				requestId: 'task.reworked:implementation/03-align-workflow-request-execution-with-unified-runtime:2026-04-10T21:13:00.000Z',
+				createdAt: '2026-04-10T21:13:00.000Z',
+				actor: 'workflow',
+				reasonCode: 'verification.failed',
+				summary: 'The previous attempt still leaked a transport-specific boundary.',
+				sourceTaskId: 'implementation/03-align-workflow-request-execution-with-unified-runtime-check',
+				artifactRefs: [
+					{ path: 'artifacts/review-notes.md', title: 'Review Notes' },
+					{ path: 'artifacts/review-diff.md' }
+				]
+			}
+		});
+		runtime.tasks = [task];
+
+		await executor.executeRequests({
+			missionId: 'mission-17',
+			descriptor: createDescriptor(),
+			configuration,
+			runtime,
+			requests: [{
+				requestId: 'request-rework-launch',
+				type: 'session.launch',
+				payload: {
+					taskId: task.taskId,
+					runnerId: 'fake-runner',
+					prompt: 'Operator supplied launch prompt.'
+				}
+			} satisfies MissionWorkflowRequest]
+		});
+
+		const prompt = runner.getLastStartRequest()?.initialPrompt?.text;
+		expect(prompt).toContain('Operator supplied launch prompt.');
+		expect(prompt).toContain('Rework context:');
+		expect(prompt).toContain('Actor: workflow');
+		expect(prompt).toContain('Reason code: verification.failed');
+		expect(prompt).toContain('Source task: implementation/03-align-workflow-request-execution-with-unified-runtime-check');
+		expect(prompt).toContain('Review Notes: @artifacts/review-notes.md');
+		expect(prompt).toContain('@artifacts/review-diff.md');
 	});
 
 	it('does not synthesize termination when runtime session reattach fails', async () => {

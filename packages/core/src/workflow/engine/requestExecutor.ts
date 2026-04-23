@@ -547,6 +547,9 @@ export class MissionWorkflowRequestExecutor {
 		snapshot: AgentSessionSnapshot,
 		taskId: string
 	): MissionWorkflowEvent {
+		const sessionLogPath = typeof this.options.adapter.getMissionSessionLogRelativePath === 'function'
+			? this.options.adapter.getMissionSessionLogRelativePath(snapshot.sessionId)
+			: undefined;
 		return {
 			eventId: `${requestId}:session-started`,
 			type: 'session.started',
@@ -556,7 +559,7 @@ export class MissionWorkflowRequestExecutor {
 			sessionId: snapshot.sessionId,
 			taskId,
 			runnerId: snapshot.runnerId,
-			sessionLogPath: this.options.adapter.getMissionSessionLogRelativePath(snapshot.sessionId),
+			...(sessionLogPath ? { sessionLogPath } : {}),
 			...toTransportEventFields(snapshot)
 		};
 	}
@@ -615,7 +618,7 @@ export class MissionWorkflowRequestExecutor {
 	): Promise<string> {
 		const explicitPrompt = typeof payload['prompt'] === 'string' ? payload['prompt'].trim() : '';
 		if (explicitPrompt.length > 0) {
-			return explicitPrompt;
+			return appendPendingLaunchContext(explicitPrompt, task);
 		}
 
 		const missionWorkspaceDir = typeof this.options.adapter.getMissionWorkspacePath === 'function'
@@ -633,16 +636,19 @@ export class MissionWorkflowRequestExecutor {
 				artifactName
 			);
 			if (taskState) {
-				return buildTaskArtifactLaunchPrompt(
-					taskState,
-					missionWorkspaceDir
+				return appendPendingLaunchContext(
+					buildTaskArtifactLaunchPrompt(
+						taskState,
+						missionWorkspaceDir
+					),
+					task
 				);
 			}
 		} catch {
 			// Fall back to runtime task instruction when task artifact resolution fails.
 		}
 
-		return buildRuntimeTaskLaunchPrompt(task, missionWorkspaceDir, artifactName);
+		return appendPendingLaunchContext(buildRuntimeTaskLaunchPrompt(task, missionWorkspaceDir, artifactName), task);
 	}
 
 	private async materializeStageArtifacts(descriptor: MissionDescriptor, stageId: MissionStageId): Promise<void> {
@@ -682,6 +688,8 @@ export class MissionWorkflowRequestExecutor {
 				{
 					subject: task.title,
 					instruction: task.instruction,
+					...(task.taskKind ? { taskKind: task.taskKind } : {}),
+					...(task.pairedTaskId ? { pairedTaskId: task.pairedTaskId } : {}),
 					...(task.dependsOn.length > 0 ? { dependsOn: task.dependsOn } : {}),
 					agent: task.agentRunner ?? DEFAULT_AGENT_RUNNER_ID
 				}
@@ -698,6 +706,8 @@ export class MissionWorkflowRequestExecutor {
 			taskId: taskState.taskId,
 			title: taskState.subject,
 			instruction: taskState.instruction,
+			...(taskState.taskKind ? { taskKind: taskState.taskKind } : {}),
+			...(taskState.pairedTaskId ? { pairedTaskId: taskState.pairedTaskId } : {}),
 			dependsOn: [...taskState.dependsOn],
 			...(taskState.agent ? { agentRunner: taskState.agent } : {})
 		}));
@@ -799,6 +809,37 @@ function buildRuntimeTaskLaunchPrompt(
 		lines.push('', 'Task summary:', instruction);
 	}
 
+	return lines.join('\n');
+}
+
+function appendPendingLaunchContext(basePrompt: string, task: MissionTaskRuntimeState): string {
+	const context = task.pendingLaunchContext;
+	if (!context) {
+		return basePrompt;
+	}
+
+	const lines = [
+		basePrompt,
+		'',
+		'Rework context:',
+		`Actor: ${context.actor}`,
+		`Reason code: ${context.reasonCode}`,
+		'Summary:',
+		context.summary
+	];
+
+	if (context.sourceTaskId) {
+		lines.push('', `Source task: ${context.sourceTaskId}`);
+	}
+
+	if (context.artifactRefs.length > 0) {
+		lines.push('', 'Reference artifacts:');
+		for (const artifactRef of context.artifactRefs) {
+			lines.push(artifactRef.title ? `- ${artifactRef.title}: @${artifactRef.path}` : `- @${artifactRef.path}`);
+		}
+	}
+
+	lines.push('', 'Treat the task instruction file as authoritative. Use this rework context as corrective guidance.');
 	return lines.join('\n');
 }
 

@@ -289,6 +289,8 @@ export type MissionTaskState = {
 	subject: string;
 	instruction: string;
 	body: string;
+	taskKind?: 'implementation' | 'verification';
+	pairedTaskId?: string;
 	dependsOn: string[];
 	waitingOn: string[];
 	status: MissionTaskStatus;
