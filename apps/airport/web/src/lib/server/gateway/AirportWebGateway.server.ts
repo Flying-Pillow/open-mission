@@ -1090,6 +1090,7 @@ export class AirportWebGateway {
             runnerId: session.runnerId,
             ...(session.transportId ? { transportId: session.transportId } : {}),
             runnerLabel: session.runnerLabel,
+            ...(session.sessionLogPath ? { sessionLogPath: session.sessionLogPath } : {}),
             lifecycleState: session.lifecycleState,
             ...(session.terminalSessionName ? { terminalSessionName: session.terminalSessionName } : {}),
             ...(session.terminalPaneId ? { terminalPaneId: session.terminalPaneId } : {}),

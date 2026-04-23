@@ -163,13 +163,37 @@ type RepositoryCommandDefinition = {
 	) => Promise<OperatorActionFlowDescriptor>;
 };
 
-type PendingTerminalNotification = {
-	loadedMission: LoadedMission;
-	event: TerminalSessionSnapshot;
-	timer: ReturnType<typeof setTimeout>;
+type SessionLogMetadata = {
+	schemaVersion: 1;
+	missionId: string;
+	sessionId: string;
+	sessionLogPath: string;
+	sessionMetadataPath: string;
+	runnerId: string;
+	runnerLabel: string;
+	transportId?: string;
+	taskId?: string;
+	terminalSessionName?: string;
+	terminalPaneId?: string;
+	workingDirectory?: string;
+	lifecycleState: MissionAgentSessionRecord['lifecycleState'];
+	startedAt: string;
+	updatedAt: string;
+	endedAt?: string;
+	inputBytes: number;
+	outputBytes: number;
+	telemetry?: MissionAgentSessionRecord['telemetry'];
 };
 
-const TERMINAL_EVENT_BATCH_WINDOW_MS = 50;
+type SessionLogWriterState = {
+	metadata: SessionLogMetadata;
+	queue: Promise<void>;
+	pendingInputBytes: number;
+	pendingOutputBytes: number;
+};
+
+const SESSION_LOG_METADATA_SCHEMA_VERSION = 1;
+const SESSION_LOG_METADATA_FLUSH_THRESHOLD_BYTES = 4096;
 
 export class RepositoryRuntime {
 	private readonly store: FilesystemAdapter;
@@ -178,7 +202,7 @@ export class RepositoryRuntime {
 	private readonly loadedMissions = new Map<string, LoadedMission>();
 	private readonly terminalTransport = new TerminalAgentTransport();
 	private readonly terminalSubscription: MissionAgentDisposable;
-	private readonly pendingTerminalNotifications = new Map<string, PendingTerminalNotification>();
+	private readonly sessionLogWriters = new Map<string, SessionLogWriterState>();
 
 	public constructor(
 		private readonly repositoryRoot: string,
@@ -191,85 +215,29 @@ export class RepositoryRuntime {
 			this.agentRunners.set(runnerId, runner);
 		}
 		this.terminalSubscription = TerminalAgentTransport.onDidSessionUpdate((event) => {
-			const loadedMission = this.findLoadedMissionForSession(event.sessionName);
+			const loadedMission = this.findLoadedMissionForSession(event);
 			if (!loadedMission) {
 				return;
 			}
-			this.queueTerminalEvent(loadedMission, event);
-		});
-	}
-
-	private queueTerminalEvent(
-		loadedMission: LoadedMission,
-		event: TerminalSessionSnapshot
-	): void {
-		const key = this.createTerminalNotificationKey(loadedMission.missionId, event.sessionName);
-		const existing = this.pendingTerminalNotifications.get(key);
-		if (existing) {
-			clearTimeout(existing.timer);
-			const mergedEvent: TerminalSessionSnapshot = {
-				...event,
-				chunk: `${existing.event.chunk ?? ''}${event.chunk ?? ''}`,
-				screen: event.screen,
-				truncated: existing.event.truncated || event.truncated
-			};
-			if (this.shouldFlushTerminalEventImmediately(mergedEvent)) {
-				this.pendingTerminalNotifications.delete(key);
-				this.emitTerminalEvent(loadedMission, mergedEvent);
-				return;
-			}
-			this.pendingTerminalNotifications.set(key, {
-				loadedMission,
-				event: mergedEvent,
-				timer: setTimeout(() => {
-					this.flushTerminalEvent(key);
-				}, TERMINAL_EVENT_BATCH_WINDOW_MS)
-			});
-			return;
-		}
-
-		if (this.shouldFlushTerminalEventImmediately(event)) {
 			this.emitTerminalEvent(loadedMission, event);
-			return;
-		}
-
-		this.pendingTerminalNotifications.set(key, {
-			loadedMission,
-			event,
-			timer: setTimeout(() => {
-				this.flushTerminalEvent(key);
-			}, TERMINAL_EVENT_BATCH_WINDOW_MS)
 		});
-	}
-
-	private flushTerminalEvent(key: string): void {
-		const pending = this.pendingTerminalNotifications.get(key);
-		if (!pending) {
-			return;
-		}
-		this.pendingTerminalNotifications.delete(key);
-		this.emitTerminalEvent(pending.loadedMission, pending.event);
 	}
 
 	private emitTerminalEvent(
 		loadedMission: LoadedMission,
 		event: TerminalSessionSnapshot
 	): void {
-		const sessionId = this.resolveTerminalEventSessionId(loadedMission, event.sessionName);
+		const session = this.findMissionAgentSessionByTerminalSessionName(loadedMission, event.sessionName);
+		const sessionId = session?.sessionId ?? event.sessionName;
+		if (session && typeof event.chunk === 'string' && event.chunk.length > 0) {
+			void this.appendSessionLogOutput(loadedMission, session, event.chunk, event);
+		}
 		this.emitEvent({
 			type: 'session.terminal',
 			missionId: loadedMission.missionId,
 			sessionId,
 			state: this.toAgentTerminalEventState(sessionId, event)
 		});
-	}
-
-	private shouldFlushTerminalEventImmediately(event: TerminalSessionSnapshot): boolean {
-		return event.connected === false || event.dead;
-	}
-
-	private createTerminalNotificationKey(missionId: string, sessionId: string): string {
-		return `${missionId}:${sessionId}`;
 	}
 
 	private async ensureMissionTerminalSession(
@@ -998,14 +966,24 @@ export class RepositoryRuntime {
 	): Promise<MissionAgentTerminalState | null> {
 		const loadedMission = await this.requireMissionSession(params);
 		const session = loadedMission.mission.getAgentSession(params.sessionId);
-		if (!session || session.transportId !== 'terminal' || !session.terminalSessionName) {
+		const terminalAttachment = session
+			? await this.resolveSessionTerminalAttachment(loadedMission, session)
+			: undefined;
+		if (!session) {
 			return null;
 		}
+		if (!terminalAttachment) {
+			return await this.readPersistedAgentTerminalState(loadedMission, session);
+		}
 
-		const handle = await this.terminalTransport.attachSession(session.terminalSessionName, {
-			...(session.terminalPaneId ? { paneId: session.terminalPaneId } : {})
+		const handle = await this.terminalTransport.attachSession(terminalAttachment.terminalSessionName, {
+			...(terminalAttachment.terminalPaneId ? { paneId: terminalAttachment.terminalPaneId } : {})
 		});
 		if (!handle) {
+			const persistedState = await this.readPersistedAgentTerminalState(loadedMission, session);
+			if (persistedState) {
+				return persistedState;
+			}
 			return this.toAgentTerminalState(session.sessionId);
 		}
 
@@ -1017,12 +995,15 @@ export class RepositoryRuntime {
 	): Promise<MissionAgentTerminalState | null> {
 		const loadedMission = await this.requireMissionSession(params);
 		const session = loadedMission.mission.getAgentSession(params.sessionId);
-		if (!session || session.transportId !== 'terminal' || !session.terminalSessionName) {
+		const terminalAttachment = session
+			? await this.resolveSessionTerminalAttachment(loadedMission, session)
+			: undefined;
+		if (!session || !terminalAttachment) {
 			return null;
 		}
 
-		const handle = await this.terminalTransport.attachSession(session.terminalSessionName, {
-			...(session.terminalPaneId ? { paneId: session.terminalPaneId } : {})
+		const handle = await this.terminalTransport.attachSession(terminalAttachment.terminalSessionName, {
+			...(terminalAttachment.terminalPaneId ? { paneId: terminalAttachment.terminalPaneId } : {})
 		});
 		if (!handle) {
 			return this.toAgentTerminalState(session.sessionId);
@@ -1035,6 +1016,7 @@ export class RepositoryRuntime {
 			await this.terminalTransport.sendKeys(handle, params.data, {
 				...(params.literal !== undefined ? { literal: params.literal } : {})
 			});
+			void this.recordSessionLogInput(loadedMission, session, params.data);
 		}
 
 		if (params.respondWithState === false) {
@@ -2217,6 +2199,7 @@ export class RepositoryRuntime {
 			});
 		});
 		loadedMission.eventSubscription = mission.onDidAgentEvent((event) => {
+			this.handleSessionLogEvent(loadedMission, event);
 			this.emitEvent({
 				type: 'session.event',
 				missionId: record.id,
@@ -2381,10 +2364,6 @@ export class RepositoryRuntime {
 
 	public dispose(): void {
 		this.terminalSubscription.dispose();
-		for (const pending of this.pendingTerminalNotifications.values()) {
-			clearTimeout(pending.timer);
-		}
-		this.pendingTerminalNotifications.clear();
 		for (const loadedMission of this.loadedMissions.values()) {
 			loadedMission.consoleSubscription.dispose();
 			loadedMission.eventSubscription.dispose();
@@ -2426,8 +2405,13 @@ export class RepositoryRuntime {
 		return this.loadedMissions.get(loadedMission.missionId) === loadedMission;
 	}
 
-	private findLoadedMissionForSession(sessionId: string): LoadedMission | undefined {
+	private findLoadedMissionForSession(event: TerminalSessionSnapshot): LoadedMission | undefined {
 		for (const loadedMission of this.loadedMissions.values()) {
+			if (!this.terminalEventBelongsToLoadedMission(loadedMission, event)) {
+				continue;
+			}
+
+			const sessionId = event.sessionName;
 			if (sessionId === this.getMissionTerminalSessionId(
 				this.store.getMissionWorkspacePath(loadedMission.mission.getMissionDir()),
 				loadedMission.missionId
@@ -2441,12 +2425,328 @@ export class RepositoryRuntime {
 		return undefined;
 	}
 
-	private resolveTerminalEventSessionId(
+	private terminalEventBelongsToLoadedMission(
 		loadedMission: LoadedMission,
-		terminalSessionName: string
-	): string {
-		return this.findMissionAgentSessionByTerminalSessionName(loadedMission, terminalSessionName)?.sessionId
-			?? terminalSessionName;
+		event: TerminalSessionSnapshot
+	): boolean {
+		const missionWorkspaceRoot = this.store.getMissionWorkspacePath(
+			loadedMission.mission.getMissionDir()
+		);
+		const missionRuntimeRoot = resolveMissionWorkspaceContext(
+			missionWorkspaceRoot
+		).workspaceRoot;
+		if (path.resolve(this.repositoryRoot) !== path.resolve(missionRuntimeRoot)) {
+			return false;
+		}
+
+		const workingDirectory = event.workingDirectory?.trim();
+		if (!workingDirectory) {
+			return true;
+		}
+
+		const relativePath = path.relative(missionWorkspaceRoot, workingDirectory);
+		return (
+			relativePath === '' ||
+			(!relativePath.startsWith('..') && !path.isAbsolute(relativePath))
+		);
+	}
+
+	private handleSessionLogEvent(loadedMission: LoadedMission, event: MissionAgentEvent): void {
+		switch (event.type) {
+			case 'session-started':
+			case 'session-resumed':
+			case 'session-state-changed': {
+				const changes: {
+					lifecycleState?: MissionAgentSessionRecord['lifecycleState'];
+					workingDirectory?: string;
+					updatedAt?: string;
+				} = {
+					lifecycleState: event.state.lifecycleState,
+					updatedAt: event.state.lastUpdatedAt
+				};
+				if (event.state.workingDirectory) {
+					changes.workingDirectory = event.state.workingDirectory;
+				}
+				void this.updateSessionLogState(loadedMission, event.state.sessionId, changes);
+				return;
+			}
+			case 'session-completed':
+			case 'session-failed':
+			case 'session-cancelled':
+				void this.updateSessionLogState(loadedMission, event.state.sessionId, {
+					lifecycleState: event.state.lifecycleState,
+					updatedAt: event.state.lastUpdatedAt,
+					...(event.state.workingDirectory ? { workingDirectory: event.state.workingDirectory } : {})
+				});
+				return;
+			case 'telemetry-updated':
+			case 'context-updated':
+			case 'cost-updated':
+				void this.updateSessionLogState(loadedMission, event.state.sessionId, {
+					updatedAt: event.state.lastUpdatedAt,
+					telemetry: event.telemetry
+				});
+				return;
+			default:
+				return;
+		}
+	}
+
+	private async appendSessionLogOutput(
+		loadedMission: LoadedMission,
+		session: MissionAgentSessionRecord,
+		chunk: string,
+		event: TerminalSessionSnapshot
+	): Promise<void> {
+		const writer = await this.ensureSessionLogWriter(loadedMission, session);
+		if (!writer) {
+			return;
+		}
+
+		const byteCount = Buffer.byteLength(chunk, 'utf8');
+		writer.pendingOutputBytes += byteCount;
+		if (event.workingDirectory?.trim()) {
+			writer.metadata.workingDirectory = event.workingDirectory.trim();
+		}
+		this.enqueueSessionLogWrite(loadedMission, writer, () =>
+			this.store.appendMissionSessionLogChunk(loadedMission.mission.getMissionDir(), session.sessionId, chunk)
+		);
+		if (writer.pendingInputBytes + writer.pendingOutputBytes >= SESSION_LOG_METADATA_FLUSH_THRESHOLD_BYTES) {
+			this.flushSessionLogMetadata(loadedMission, writer, event.connected ? event.workingDirectory?.trim() : undefined);
+		}
+	}
+
+	private async recordSessionLogInput(
+		loadedMission: LoadedMission,
+		session: MissionAgentSessionRecord,
+		input: string
+	): Promise<void> {
+		const writer = await this.ensureSessionLogWriter(loadedMission, session);
+		if (!writer) {
+			return;
+		}
+		writer.pendingInputBytes += Buffer.byteLength(input, 'utf8');
+		if (writer.pendingInputBytes + writer.pendingOutputBytes >= SESSION_LOG_METADATA_FLUSH_THRESHOLD_BYTES) {
+			this.flushSessionLogMetadata(loadedMission, writer);
+		}
+	}
+
+	private async updateSessionLogState(
+		loadedMission: LoadedMission,
+		sessionId: string,
+		changes: {
+			lifecycleState?: MissionAgentSessionRecord['lifecycleState'];
+			workingDirectory?: string;
+			updatedAt?: string;
+			telemetry?: MissionAgentSessionRecord['telemetry'];
+		}
+	): Promise<void> {
+		const session = loadedMission.mission.getAgentSession(sessionId);
+		if (!session) {
+			return;
+		}
+		const writer = await this.ensureSessionLogWriter(loadedMission, session);
+		if (!writer) {
+			return;
+		}
+
+		let changed = false;
+		if (changes.lifecycleState && writer.metadata.lifecycleState !== changes.lifecycleState) {
+			writer.metadata.lifecycleState = changes.lifecycleState;
+			changed = true;
+		}
+		const workingDirectory = changes.workingDirectory?.trim();
+		if (workingDirectory && writer.metadata.workingDirectory !== workingDirectory) {
+			writer.metadata.workingDirectory = workingDirectory;
+			changed = true;
+		}
+		if (changes.updatedAt && writer.metadata.updatedAt !== changes.updatedAt) {
+			writer.metadata.updatedAt = changes.updatedAt;
+			changed = true;
+		}
+		if (changes.telemetry) {
+			writer.metadata.telemetry = structuredClone(changes.telemetry);
+			changed = true;
+		}
+
+		if (isTerminalSessionLifecycle(writer.metadata.lifecycleState)) {
+			const endedAt = changes.updatedAt ?? session.lastUpdatedAt;
+			if (writer.metadata.endedAt !== endedAt) {
+				writer.metadata.endedAt = endedAt;
+				changed = true;
+			}
+		}
+
+		if (changed) {
+			this.flushSessionLogMetadata(loadedMission, writer);
+		}
+	}
+
+	private async ensureSessionLogWriter(
+		loadedMission: LoadedMission,
+		session: MissionAgentSessionRecord
+	): Promise<SessionLogWriterState | undefined> {
+		const key = this.getSessionLogWriterKey(loadedMission.missionId, session.sessionId);
+		const existing = this.sessionLogWriters.get(key);
+		if (existing) {
+			this.refreshSessionLogMetadata(existing.metadata, loadedMission, session);
+			return existing;
+		}
+
+		const missionDir = loadedMission.mission.getMissionDir();
+		const persisted = await this.store.readMissionSessionMetadata<Partial<SessionLogMetadata>>(
+			missionDir,
+			session.sessionId
+		);
+		const metadata = this.createSessionLogMetadata(loadedMission, session, persisted);
+		const writer: SessionLogWriterState = {
+			metadata,
+			queue: Promise.resolve(),
+			pendingInputBytes: 0,
+			pendingOutputBytes: 0
+		};
+		this.sessionLogWriters.set(key, writer);
+		this.flushSessionLogMetadata(loadedMission, writer);
+		return writer;
+	}
+
+	private createSessionLogMetadata(
+		loadedMission: LoadedMission,
+		session: MissionAgentSessionRecord,
+		persisted?: Partial<SessionLogMetadata>
+	): SessionLogMetadata {
+		const sessionLogPath = session.sessionLogPath ?? this.store.getMissionSessionLogRelativePath(session.sessionId);
+		const metadata: SessionLogMetadata = {
+			schemaVersion: SESSION_LOG_METADATA_SCHEMA_VERSION,
+			missionId: loadedMission.missionId,
+			sessionId: session.sessionId,
+			sessionLogPath,
+			sessionMetadataPath: this.store.getMissionSessionMetadataRelativePath(session.sessionId),
+			runnerId: session.runnerId,
+			runnerLabel: session.runnerLabel,
+			lifecycleState: session.lifecycleState,
+			startedAt: session.createdAt,
+			updatedAt: session.lastUpdatedAt,
+			inputBytes: typeof persisted?.inputBytes === 'number' ? persisted.inputBytes : 0,
+			outputBytes: typeof persisted?.outputBytes === 'number' ? persisted.outputBytes : 0,
+			...(session.transportId ? { transportId: session.transportId } : {}),
+			...(session.taskId ? { taskId: session.taskId } : {}),
+			...(session.terminalSessionName ? { terminalSessionName: session.terminalSessionName } : {}),
+			...(session.terminalPaneId ? { terminalPaneId: session.terminalPaneId } : {}),
+			...(session.workingDirectory ? { workingDirectory: session.workingDirectory } : {}),
+			...(session.telemetry ? { telemetry: structuredClone(session.telemetry) } : {}),
+			...(persisted?.endedAt && typeof persisted.endedAt === 'string' ? { endedAt: persisted.endedAt } : {})
+		};
+		this.refreshSessionLogMetadata(metadata, loadedMission, session);
+		return metadata;
+	}
+
+	private refreshSessionLogMetadata(
+		metadata: SessionLogMetadata,
+		loadedMission: LoadedMission,
+		session: MissionAgentSessionRecord
+	): void {
+		metadata.missionId = loadedMission.missionId;
+		metadata.sessionId = session.sessionId;
+		metadata.sessionLogPath = session.sessionLogPath ?? metadata.sessionLogPath;
+		metadata.sessionMetadataPath = this.store.getMissionSessionMetadataRelativePath(session.sessionId);
+		metadata.runnerId = session.runnerId;
+		metadata.runnerLabel = session.runnerLabel;
+		metadata.lifecycleState = session.lifecycleState;
+		metadata.startedAt = session.createdAt;
+		metadata.updatedAt = session.lastUpdatedAt;
+		if (session.transportId) {
+			metadata.transportId = session.transportId;
+		}
+		if (session.taskId) {
+			metadata.taskId = session.taskId;
+		}
+		if (session.terminalSessionName) {
+			metadata.terminalSessionName = session.terminalSessionName;
+		}
+		if (session.terminalPaneId) {
+			metadata.terminalPaneId = session.terminalPaneId;
+		}
+		if (session.workingDirectory) {
+			metadata.workingDirectory = session.workingDirectory;
+		}
+		if (session.telemetry) {
+			metadata.telemetry = structuredClone(session.telemetry);
+		}
+		if (isTerminalSessionLifecycle(session.lifecycleState)) {
+			metadata.endedAt = session.lastUpdatedAt;
+		}
+	}
+
+	private flushSessionLogMetadata(
+		loadedMission: LoadedMission,
+		writer: SessionLogWriterState,
+		workingDirectory?: string
+	): void {
+		if (workingDirectory) {
+			writer.metadata.workingDirectory = workingDirectory;
+		}
+		if (writer.pendingInputBytes > 0) {
+			writer.metadata.inputBytes += writer.pendingInputBytes;
+			writer.pendingInputBytes = 0;
+		}
+		if (writer.pendingOutputBytes > 0) {
+			writer.metadata.outputBytes += writer.pendingOutputBytes;
+			writer.pendingOutputBytes = 0;
+		}
+		const snapshot = structuredClone(writer.metadata);
+		this.enqueueSessionLogWrite(loadedMission, writer, () =>
+			this.store.writeMissionSessionMetadata(
+				loadedMission.mission.getMissionDir(),
+				snapshot.sessionId,
+				snapshot
+			)
+		);
+	}
+
+	private enqueueSessionLogWrite(
+		loadedMission: LoadedMission,
+		writer: SessionLogWriterState,
+		operation: () => Promise<void>
+	): void {
+		const next = writer.queue.then(operation, operation);
+		writer.queue = next.catch((error) => {
+			console.error(
+				`Failed to persist session log artifacts for mission '${loadedMission.missionId}' session '${writer.metadata.sessionId}'.`,
+				error
+			);
+		});
+	}
+
+	private getSessionLogWriterKey(missionId: string, sessionId: string): string {
+		return `${missionId}:${sessionId}`;
+	}
+
+	private async resolveSessionTerminalAttachment(
+		loadedMission: LoadedMission,
+		session: MissionAgentSessionRecord
+	): Promise<{ terminalSessionName: string; terminalPaneId?: string } | undefined> {
+		if (session.transportId === 'terminal' && session.terminalSessionName) {
+			return {
+				terminalSessionName: session.terminalSessionName,
+				...(session.terminalPaneId ? { terminalPaneId: session.terminalPaneId } : {})
+			};
+		}
+		if (!session.sessionLogPath) {
+			return undefined;
+		}
+
+		const metadata = await this.store.readMissionSessionMetadata<Partial<SessionLogMetadata>>(
+			loadedMission.mission.getMissionDir(),
+			session.sessionId
+		);
+		if (metadata?.transportId !== 'terminal' || typeof metadata.terminalSessionName !== 'string') {
+			return undefined;
+		}
+		return {
+			terminalSessionName: metadata.terminalSessionName,
+			...(typeof metadata.terminalPaneId === 'string' ? { terminalPaneId: metadata.terminalPaneId } : {})
+		};
 	}
 
 	private findMissionAgentSessionByTerminalSessionName(
@@ -2457,7 +2757,42 @@ export class RepositoryRuntime {
 		if (directSession) {
 			return directSession;
 		}
-		return loadedMission.mission.getAgentSessionByTerminalSessionName(sessionIdOrTerminalName);
+		const matchedSession = loadedMission.mission.getAgentSessionByTerminalSessionName(sessionIdOrTerminalName);
+		if (matchedSession) {
+			return matchedSession;
+		}
+		for (const session of loadedMission.mission.getAgentSessions()) {
+			const metadata = this.sessionLogWriters.get(this.getSessionLogWriterKey(loadedMission.missionId, session.sessionId))?.metadata;
+			if (metadata?.terminalSessionName === sessionIdOrTerminalName) {
+				return session;
+			}
+		}
+		return undefined;
+	}
+
+	private async readPersistedAgentTerminalState(
+		loadedMission: LoadedMission,
+		session: MissionAgentSessionRecord
+	): Promise<MissionAgentTerminalState | null> {
+		if (this.isRunningSession(session) || !session.sessionLogPath) {
+			return null;
+		}
+
+		const screen = await this.store.readMissionSessionLog(
+			loadedMission.mission.getMissionDir(),
+			session.sessionLogPath
+		);
+		if (screen === undefined) {
+			return null;
+		}
+
+		return {
+			sessionId: session.sessionId,
+			connected: false,
+			dead: true,
+			exitCode: null,
+			screen
+		};
 	}
 
 	private toAgentTerminalState(
@@ -2668,6 +3003,10 @@ function shouldScheduleAutopilotForAgentEvent(event: MissionAgentEvent): boolean
 		default:
 			return false;
 	}
+}
+
+function isTerminalSessionLifecycle(lifecycle: MissionAgentSessionRecord['lifecycleState']): boolean {
+	return lifecycle === 'completed' || lifecycle === 'failed' || lifecycle === 'cancelled' || lifecycle === 'terminated';
 }
 
 const REPOSITORY_MISSION_COMMAND_DEFINITIONS: readonly RepositoryCommandDefinition[] = [

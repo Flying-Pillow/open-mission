@@ -123,6 +123,7 @@ export interface MissionAgentSessionRuntimeState {
     taskId: string;
     runnerId: string;
     transportId?: string;
+    sessionLogPath?: string;
     terminalSessionName?: string;
     terminalPaneId?: string;
     lifecycle: MissionAgentSessionLifecycleState;
@@ -323,6 +324,7 @@ export interface AgentSessionStartedEvent extends MissionWorkflowEventBase {
     taskId: string;
     runnerId: string;
     transportId?: string;
+    sessionLogPath?: string;
     terminalSessionName?: string;
     terminalPaneId?: string;
 }

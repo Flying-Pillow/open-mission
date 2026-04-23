@@ -181,6 +181,7 @@ export type MissionAgentSessionState = {
 	transportId?: string;
 	runnerLabel: string;
 	sessionId: string;
+	sessionLogPath?: string;
 	terminalSessionName?: string;
 	terminalPaneId?: string;
 	lifecycleState: MissionAgentLifecycleState;
@@ -198,6 +199,7 @@ export type MissionAgentSessionRecord = {
 	runnerId: string;
 	transportId?: string;
 	runnerLabel: string;
+	sessionLogPath?: string;
 	terminalSessionName?: string;
 	terminalPaneId?: string;
 	lifecycleState: MissionAgentLifecycleState;

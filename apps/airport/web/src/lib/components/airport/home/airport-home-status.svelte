@@ -1,4 +1,5 @@
 <script lang="ts">
+    import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
     import type { RepositorySummary } from "$lib/components/entities/types";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
@@ -22,6 +23,8 @@
         githubRepositoryCountLabel: string;
         selectedRepository?: RepositorySummary;
     } = $props();
+
+    const isGitHubConnected = $derived(githubStatusTone === "connected");
 </script>
 
 <section
@@ -74,7 +77,7 @@
             {/if}
         </div>
 
-        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
             <div class="rounded-3xl border bg-background/75 p-4 shadow-sm">
                 <p
                     class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
@@ -111,22 +114,34 @@
                     </p>
                 </div>
                 <p class="mt-2 text-sm text-muted-foreground">
-                    {githubStatusTone === "connected"
+                    {isGitHubConnected
                         ? "You're signed in and ready to pick a repository."
                         : "Sign in with GitHub to browse your repos and add one faster."}
                 </p>
-            </div>
 
-            <div class="sm:col-span-2 xl:col-span-1">
-                <Button
-                    href={loginHref}
-                    size="lg"
-                    class="w-full justify-center"
-                >
-                    {githubStatusTone === "connected"
-                        ? "Manage GitHub login"
-                        : "Login with GitHub"}
-                </Button>
+                <div class="mt-4">
+                    {#if isGitHubConnected}
+                        <form method="POST" action="?/logout" class="w-full">
+                            <Button
+                                type="submit"
+                                variant="outline"
+                                size="lg"
+                                class="w-full justify-center"
+                            >
+                                Log out
+                            </Button>
+                        </form>
+                    {:else}
+                        <Button
+                            href={loginHref}
+                            size="lg"
+                            class="w-full justify-center"
+                        >
+                            <BrandGithubIcon class="size-4" />
+                            Login with GitHub
+                        </Button>
+                    {/if}
+                </div>
             </div>
         </div>
     </div>

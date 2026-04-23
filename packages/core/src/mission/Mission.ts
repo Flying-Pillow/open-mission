@@ -1225,6 +1225,7 @@ export class Mission {
 			sessionId: snapshot.sessionId,
 			taskId: snapshot.taskId,
 			runnerId: snapshot.runnerId,
+			sessionLogPath: this.adapter.getMissionSessionLogRelativePath(snapshot.sessionId),
 			...(snapshot.transport?.kind === 'terminal' ? { transportId: 'terminal' } : {}),
 			...(snapshot.transport?.kind === 'terminal' ? { terminalSessionName: snapshot.transport.terminalSessionName } : {}),
 			...(snapshot.transport?.kind === 'terminal' && snapshot.transport.paneId ? { terminalPaneId: snapshot.transport.paneId } : {})

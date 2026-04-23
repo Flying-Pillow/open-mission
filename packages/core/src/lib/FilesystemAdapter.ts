@@ -75,6 +75,10 @@ export type ResolvedMission = {
 	descriptor: MissionDescriptor;
 };
 
+export type MissionSessionLogMetadataRecord = {
+	[key: string]: unknown;
+};
+
 export class FilesystemAdapter {
 	public constructor(private readonly workspaceRoot: string) { }
 
@@ -481,6 +485,35 @@ export class FilesystemAdapter {
 		return path.join(missionDir, MISSION_RUNTIME_EVENT_LOG_FILE_NAME);
 	}
 
+	public getMissionSessionLogDirectoryPath(missionDir: string): string {
+		return path.join(missionDir, 'session-logs');
+	}
+
+	public getMissionSessionLogRelativePath(sessionId: string): string {
+		return path.posix.join('session-logs', `${encodeURIComponent(sessionId)}.ansi`);
+	}
+
+	public getMissionSessionMetadataRelativePath(sessionId: string): string {
+		return path.posix.join('session-logs', `${encodeURIComponent(sessionId)}.metadata.json`);
+	}
+
+	public getMissionSessionLogPath(missionDir: string, sessionId: string): string {
+		return path.join(this.getMissionSessionLogDirectoryPath(missionDir), `${encodeURIComponent(sessionId)}.ansi`);
+	}
+
+	public getMissionSessionMetadataPath(missionDir: string, sessionId: string): string {
+		return path.join(this.getMissionSessionLogDirectoryPath(missionDir), `${encodeURIComponent(sessionId)}.metadata.json`);
+	}
+
+	public resolveMissionSessionLogPath(missionDir: string, sessionLogPath: string): string | undefined {
+		const resolvedLogPath = path.resolve(missionDir, sessionLogPath);
+		const relativeLogPath = path.relative(missionDir, resolvedLogPath);
+		if (relativeLogPath.startsWith('..') || path.isAbsolute(relativeLogPath)) {
+			return undefined;
+		}
+		return resolvedLogPath;
+	}
+
 	public async readMissionRuntimeRecord(
 		missionDir: string
 	): Promise<MissionRuntimeRecord | undefined> {
@@ -511,7 +544,26 @@ export class FilesystemAdapter {
 		await fs.mkdir(path.dirname(filePath), { recursive: true });
 		const temporaryPath = `${filePath}.${process.pid.toString(36)}.${randomUUID()}.tmp`;
 		const { eventLog: _legacyEventLog, ...persistedRecord } = record;
-		await fs.writeFile(temporaryPath, `${JSON.stringify(persistedRecord, null, 2)}\n`, 'utf8');
+		const normalizedRecord: MissionRuntimeRecord = {
+			...persistedRecord,
+			runtime: {
+				...persistedRecord.runtime,
+				sessions: persistedRecord.runtime.sessions.map((session) => ({
+					sessionId: session.sessionId,
+					taskId: session.taskId,
+					runnerId: session.runnerId,
+					...(session.sessionLogPath ? { sessionLogPath: session.sessionLogPath } : {}),
+					lifecycle: session.lifecycle,
+					launchedAt: session.launchedAt,
+					updatedAt: session.updatedAt,
+					...(session.completedAt ? { completedAt: session.completedAt } : {}),
+					...(session.failedAt ? { failedAt: session.failedAt } : {}),
+					...(session.cancelledAt ? { cancelledAt: session.cancelledAt } : {}),
+					...(session.terminatedAt ? { terminatedAt: session.terminatedAt } : {})
+				}))
+			}
+		};
+		await fs.writeFile(temporaryPath, `${JSON.stringify(normalizedRecord, null, 2)}\n`, 'utf8');
 		await fs.rename(temporaryPath, filePath);
 	}
 
@@ -522,6 +574,67 @@ export class FilesystemAdapter {
 		const filePath = this.getMissionRuntimeEventLogPath(missionDir);
 		await fs.mkdir(path.dirname(filePath), { recursive: true });
 		await fs.appendFile(filePath, `${JSON.stringify(eventRecord)}\n`, 'utf8');
+	}
+
+	public async readMissionSessionMetadata<T extends MissionSessionLogMetadataRecord = MissionSessionLogMetadataRecord>(
+		missionDir: string,
+		sessionId: string
+	): Promise<T | undefined> {
+		const filePath = this.getMissionSessionMetadataPath(missionDir, sessionId);
+		try {
+			return JSON.parse(await fs.readFile(filePath, 'utf8')) as T;
+		} catch (error) {
+			if (this.isMissingFileError(error)) {
+				return undefined;
+			}
+			if (error instanceof SyntaxError) {
+				throw new ArtifactFormatError(`Mission session metadata '${filePath}' is not valid JSON.`);
+			}
+			throw error;
+		}
+	}
+
+	public async writeMissionSessionMetadata(
+		missionDir: string,
+		sessionId: string,
+		metadata: MissionSessionLogMetadataRecord
+	): Promise<void> {
+		const filePath = this.getMissionSessionMetadataPath(missionDir, sessionId);
+		await fs.mkdir(path.dirname(filePath), { recursive: true });
+		const temporaryPath = `${filePath}.${process.pid.toString(36)}.${randomUUID()}.tmp`;
+		await fs.writeFile(temporaryPath, `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
+		await fs.rename(temporaryPath, filePath);
+	}
+
+	public async appendMissionSessionLogChunk(
+		missionDir: string,
+		sessionId: string,
+		chunk: string
+	): Promise<void> {
+		if (chunk.length === 0) {
+			return;
+		}
+		const filePath = this.getMissionSessionLogPath(missionDir, sessionId);
+		await fs.mkdir(path.dirname(filePath), { recursive: true });
+		await fs.appendFile(filePath, chunk, 'utf8');
+	}
+
+	public async readMissionSessionLog(
+		missionDir: string,
+		sessionLogPath: string
+	): Promise<string | undefined> {
+		const filePath = this.resolveMissionSessionLogPath(missionDir, sessionLogPath);
+		if (!filePath) {
+			return undefined;
+		}
+		try {
+			return await fs.readFile(filePath, 'utf8');
+		} catch (error) {
+			if (this.isMissingFileError(error)) {
+				return undefined;
+			}
+			throw error;
+		}
 	}
 
 	public async readMissionRuntimeEventLog(

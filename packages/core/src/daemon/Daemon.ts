@@ -420,6 +420,10 @@ export class Daemon {
 	}
 
 	private async decorateRequestResultWithSystemState(request: Request, result: unknown): Promise<unknown> {
+		if (this.shouldSkipSystemStateDecoration(request.method)) {
+			return result;
+		}
+
 		if (!result || typeof result !== 'object') {
 			return result;
 		}
@@ -451,6 +455,18 @@ export class Daemon {
 		}
 
 		return result;
+	}
+
+	private shouldSkipSystemStateDecoration(method: string): boolean {
+		switch (method) {
+			case 'mission.terminal.state':
+			case 'mission.terminal.input':
+			case 'session.terminal.state':
+			case 'session.terminal.input':
+				return true;
+			default:
+				return false;
+		}
 	}
 
 	private async decorateEvent(event: Notification): Promise<Notification> {

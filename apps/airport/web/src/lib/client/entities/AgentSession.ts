@@ -39,6 +39,10 @@ export class AgentSession implements EntityModel<MissionAgentSessionDto> {
         return this.data.lifecycleState;
     }
 
+    public get sessionLogPath(): string | undefined {
+        return this.data.sessionLogPath;
+    }
+
     public get transportId(): string | undefined {
         return this.data.transportId;
     }
@@ -72,6 +76,10 @@ export class AgentSession implements EntityModel<MissionAgentSessionDto> {
     public isTerminalBacked(): boolean {
         return this.transportId === 'terminal'
             && Boolean(this.terminalHandle?.sessionName || this.terminalSessionName);
+    }
+
+    public hasPersistedTerminalLog(): boolean {
+        return typeof this.sessionLogPath === 'string' && this.sessionLogPath.trim().length > 0;
     }
 
     public async sendPrompt(prompt: AgentPrompt): Promise<this> {

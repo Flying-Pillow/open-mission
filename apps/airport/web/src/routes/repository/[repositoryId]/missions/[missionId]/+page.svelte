@@ -618,6 +618,7 @@
                                     {missionId}
                                     repositoryId={repository.repositoryId}
                                     repositoryRootPath={missionWorktreePath}
+                                    active={rightPanelMode === "terminal"}
                                 />
                             </div>
 
@@ -633,6 +634,7 @@
                                     stageId={controlState.resolvedSelection
                                         ?.stageId}
                                     session={resolvedSession}
+                                    active={rightPanelMode === "agent"}
                                     onActionExecuted={handleMissionMutated}
                                 />
                             </div>

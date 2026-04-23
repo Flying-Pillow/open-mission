@@ -556,6 +556,7 @@ export class MissionWorkflowRequestExecutor {
 			sessionId: snapshot.sessionId,
 			taskId,
 			runnerId: snapshot.runnerId,
+			sessionLogPath: this.options.adapter.getMissionSessionLogRelativePath(snapshot.sessionId),
 			...toTransportEventFields(snapshot)
 		};
 	}

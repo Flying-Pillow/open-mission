@@ -10,6 +10,10 @@
         type MissionSessionTerminalSnapshotDto,
         type MissionSessionTerminalSocketServerMessageDto,
     } from "@flying-pillow/mission-core/airport/runtime";
+    import {
+        subscribeSharedTerminalTransport,
+        type SharedTerminalTransportSubscription,
+    } from "$lib/client/runtime/terminal/TerminalTransportBroker";
     import "@xterm/xterm/css/xterm.css";
 
     const Terminal = resolveConstructorExport<
@@ -47,6 +51,7 @@
         refreshNonce,
         stageId,
         session,
+        active = true,
         onActionExecuted,
     }: {
         missionId: string;
@@ -55,6 +60,7 @@
         refreshNonce: number;
         stageId?: MissionStageId;
         session?: AgentSession;
+        active?: boolean;
         onActionExecuted: () => Promise<void>;
     } = $props();
 
@@ -65,30 +71,49 @@
     let loading = $state(false);
     let error = $state<string | null>(null);
     let sendingInput = $state(false);
-    let activeTransportSessionId = $state<string | null>(null);
-    let transportRunToken = 0;
+    let activeTransportKey: string | null = null;
 
     let terminal: XtermTerminal | null = null;
     let fitAddon: XtermFitAddon | null = null;
     let resizeObserver: ResizeObserver | null = null;
-    let terminalSocket: WebSocket | null = null;
+    let terminalTransport: SharedTerminalTransportSubscription<MissionSessionTerminalSnapshotDto> | null =
+        null;
     let pendingInput = "";
     let pendingTerminalResponseFragment = "";
     let lastRenderedScreen = "";
     let pendingResize: { cols: number; rows: number } | null = null;
+    let renderWriteToken = 0;
 
-    const MAX_TERMINAL_SNAPSHOT_LENGTH = 40_000;
-    const TERMINAL_SOCKET_INIT_TIMEOUT_MS = 5000;
     type TerminalResizeEvent = { cols: number; rows: number };
 
-    const canAttachTerminal = $derived(Boolean(session?.isTerminalBacked()));
+    const canAttachTerminal = $derived(
+        Boolean(
+            session?.isTerminalBacked() ||
+                (session?.isRunning() && session?.hasPersistedTerminalLog()),
+        ),
+    );
+    const canShowTerminal = $derived(
+        Boolean(
+            session?.isTerminalBacked() || session?.hasPersistedTerminalLog(),
+        ),
+    );
+    const canSendTerminalInput = $derived(
+        Boolean(active && session?.isRunning() && canAttachTerminal),
+    );
     const terminalSessionId = $derived(session?.sessionId ?? null);
     const terminalStateLabel = $derived.by(() => {
         if (!session) {
             return "No session";
         }
-        if (!canAttachTerminal) {
+        if (!canShowTerminal) {
             return "Not terminal-backed";
+        }
+        if (
+            !session.isRunning() &&
+            !canAttachTerminal &&
+            session.hasPersistedTerminalLog()
+        ) {
+            return "Transcript";
         }
         if (loading && !terminalSnapshot) {
             return "Connecting";
@@ -126,66 +151,146 @@
     });
 
     $effect(() => {
-        if (!terminalSessionId || !canAttachTerminal) {
-            transportRunToken += 1;
-            activeTransportSessionId = null;
+        const transportKey =
+            terminalSessionId && canShowTerminal
+                ? `session:${terminalSessionId}:${missionId}:${repositoryRootPath}:${repositoryId}`
+                : null;
+
+        if (activeTransportKey === transportKey) {
+            return;
+        }
+
+        terminalTransport?.dispose();
+        terminalTransport = null;
+
+        if (!terminalSessionId || !canShowTerminal) {
+            activeTransportKey = null;
             terminalSnapshot = null;
             error = null;
             loading = false;
-            closeTerminalSocket();
             return;
         }
 
-        if (activeTransportSessionId === terminalSessionId) {
+        if (!transportKey) {
             return;
         }
 
-        transportRunToken += 1;
-        const runToken = transportRunToken;
-        activeTransportSessionId = terminalSessionId;
-        loading = true;
-        error = null;
-        closeTerminalSocket();
+        const resolvedTransportKey: string = transportKey;
+        activeTransportKey = resolvedTransportKey;
+        terminalTransport = subscribeSharedTerminalTransport(
+            {
+                key: resolvedTransportKey,
+                loadSnapshot: async () => {
+                    const response = await fetch(
+                        `/api/runtime/sessions/${encodeURIComponent(terminalSessionId)}/terminal?missionId=${encodeURIComponent(missionId)}&repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
+                    );
+                    if (!response.ok) {
+                        throw new Error(
+                            `Terminal snapshot request failed (${response.status}).`,
+                        );
+                    }
 
-        void bootstrapTerminalTransport(
-            terminalSessionId,
-            () => runToken !== transportRunToken,
+                    return missionSessionTerminalSnapshotDtoSchema.parse(
+                        await response.json(),
+                    );
+                },
+                createSocket: () => {
+                    const wsProtocol =
+                        window.location.protocol === "https:" ? "wss:" : "ws:";
+                    const wsUrl = new URL(
+                        `/api/runtime/sessions/${encodeURIComponent(terminalSessionId)}/terminal/ws?missionId=${encodeURIComponent(missionId)}&repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
+                        `${wsProtocol}//${window.location.host}`,
+                    );
+                    return new WebSocket(wsUrl);
+                },
+                parseMessage: (value: unknown) =>
+                    missionSessionTerminalSocketServerMessageSchema.parse(
+                        value,
+                    ),
+            },
+            (state) => {
+                terminalSnapshot = state.snapshot;
+                loading = state.loading;
+                error = state.error;
+            },
         );
+
+        return () => {
+            if (activeTransportKey === transportKey) {
+                activeTransportKey = null;
+            }
+            terminalTransport?.dispose();
+            terminalTransport = null;
+        };
     });
 
     $effect(() => {
         const screen = terminalSnapshot?.screen ?? "";
-        if (
-            !terminal ||
-            typeof screen !== "string" ||
-            screen === lastRenderedScreen
-        ) {
+        const chunk = terminalSnapshot?.chunk;
+        if (!terminal || !active || typeof screen !== "string") {
+            return;
+        }
+
+        if ((!chunk || chunk.length === 0) && screen === lastRenderedScreen) {
+            return;
+        }
+
+        const writeToken = ++renderWriteToken;
+
+        if (typeof chunk === "string" && chunk.length > 0) {
+            lastRenderedScreen = screen;
+            terminal.write(chunk, () => {
+                if (renderWriteToken !== writeToken) {
+                    return;
+                }
+            });
+            return;
+        }
+
+        const nextRender = normalizeScreen(screen);
+        const previousRender = normalizeScreen(lastRenderedScreen);
+        if (nextRender.startsWith(previousRender)) {
+            const appendedOutput = nextRender.slice(previousRender.length);
+            lastRenderedScreen = screen;
+            terminal.write(appendedOutput, () => {
+                if (renderWriteToken !== writeToken) {
+                    return;
+                }
+            });
             return;
         }
 
         lastRenderedScreen = screen;
         terminal.reset();
-        terminal.write(normalizeScreen(screen));
+        terminal.write(nextRender, () => {
+            if (renderWriteToken !== writeToken) {
+                return;
+            }
+        });
+    });
+
+    $effect(() => {
+        if (!terminal || !active) {
+            return;
+        }
+
         fitAddon?.fit();
     });
 
     async function flushPendingInput(): Promise<void> {
-        if (!session || !canAttachTerminal || pendingInput.length === 0) {
+        if (!session || !canSendTerminalInput || pendingInput.length === 0) {
             return;
         }
-        if (terminalSocket?.readyState !== WebSocket.OPEN) {
+        if (!terminalTransport) {
             return;
         }
 
         sendingInput = true;
         try {
-            while (
-                pendingInput.length > 0 &&
-                terminalSocket?.readyState === WebSocket.OPEN
-            ) {
+            while (pendingInput.length > 0 && terminalTransport) {
                 const data = pendingInput;
                 pendingInput = "";
-                await postTerminalUpdate({ data });
+                await terminalTransport.sendInput(data);
             }
         } catch (sendError) {
             error =
@@ -195,214 +300,6 @@
         } finally {
             sendingInput = false;
         }
-    }
-
-    function applyTerminalSnapshot(
-        snapshot: MissionSessionTerminalSnapshotDto,
-    ): void {
-        terminalSnapshot = snapshot;
-        error = null;
-        loading = false;
-    }
-
-    function closeTerminalSocket(): void {
-        terminalSocket?.close();
-        terminalSocket = null;
-        pendingTerminalResponseFragment = "";
-    }
-
-    async function bootstrapTerminalTransport(
-        sessionId: string,
-        isCancelled: () => boolean,
-    ): Promise<void> {
-        const initialSnapshot = await loadTerminalSnapshot(sessionId);
-        if (isCancelled()) {
-            return;
-        }
-
-        if (initialSnapshot) {
-            applyTerminalSnapshot(initialSnapshot);
-            if (!initialSnapshot.connected || initialSnapshot.dead) {
-                closeTerminalSocket();
-                return;
-            }
-        }
-
-        await openTerminalTransport(sessionId, isCancelled);
-    }
-
-    async function loadTerminalSnapshot(
-        sessionId: string,
-    ): Promise<MissionSessionTerminalSnapshotDto | null> {
-        try {
-            const response = await fetch(
-                `/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal?missionId=${encodeURIComponent(missionId)}&repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
-            );
-            if (!response.ok) {
-                throw new Error(
-                    `Terminal snapshot request failed (${response.status}).`,
-                );
-            }
-
-            return missionSessionTerminalSnapshotDtoSchema.parse(
-                await response.json(),
-            );
-        } catch (snapshotError) {
-            error =
-                snapshotError instanceof Error
-                    ? snapshotError.message
-                    : String(snapshotError);
-            loading = false;
-            return null;
-        }
-    }
-
-    async function openTerminalTransport(
-        sessionId: string,
-        isCancelled: () => boolean,
-    ): Promise<void> {
-        const wsProtocol =
-            window.location.protocol === "https:" ? "wss:" : "ws:";
-        const wsUrl = new URL(
-            `/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal/ws?missionId=${encodeURIComponent(missionId)}&repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
-            `${wsProtocol}//${window.location.host}`,
-        );
-        const socket = new WebSocket(wsUrl);
-        terminalSocket = socket;
-
-        let receivedSnapshot = false;
-        let receivedInitializationSignal = false;
-        const connectionTimer = window.setTimeout(() => {
-            if (!receivedSnapshot) {
-                if (terminalSocket === socket) {
-                    terminalSocket = null;
-                }
-                error = "Terminal socket did not initialize.";
-                loading = false;
-                socket.close();
-            }
-        }, TERMINAL_SOCKET_INIT_TIMEOUT_MS);
-
-        socket.addEventListener("open", () => {
-            if (isCancelled() || terminalSocket !== socket) {
-                return;
-            }
-            if (pendingResize) {
-                void flushPendingResize();
-            }
-            if (pendingInput.length > 0 && !sendingInput) {
-                void flushPendingInput();
-            }
-        });
-
-        socket.addEventListener("message", (event) => {
-            if (isCancelled() || terminalSocket !== socket) {
-                return;
-            }
-            const message =
-                missionSessionTerminalSocketServerMessageSchema.parse(
-                    JSON.parse(event.data),
-                );
-            handleTerminalSocketMessage(message);
-            if (
-                message.type === "snapshot" ||
-                message.type === "disconnected"
-            ) {
-                receivedSnapshot = true;
-                receivedInitializationSignal = true;
-                window.clearTimeout(connectionTimer);
-                return;
-            }
-            if (message.type === "error") {
-                receivedInitializationSignal = true;
-                window.clearTimeout(connectionTimer);
-            }
-        });
-
-        socket.addEventListener("error", () => {
-            if (terminalSocket !== socket) {
-                return;
-            }
-            window.clearTimeout(connectionTimer);
-            if (!error) {
-                error =
-                    receivedInitializationSignal || receivedSnapshot
-                        ? "Terminal socket failed."
-                        : "Terminal socket could not connect.";
-            }
-            loading = false;
-        });
-
-        socket.addEventListener("close", () => {
-            window.clearTimeout(connectionTimer);
-            if (isCancelled() || terminalSocket !== socket) {
-                return;
-            }
-            terminalSocket = null;
-            if (error) {
-                loading = false;
-                return;
-            }
-            if (!receivedInitializationSignal) {
-                error = "Terminal socket disconnected before initialization.";
-            } else if (!terminalSnapshot?.dead) {
-                error = "Terminal socket disconnected.";
-            }
-            loading = false;
-        });
-    }
-
-    function handleTerminalSocketMessage(
-        message: MissionSessionTerminalSocketServerMessageDto,
-    ): void {
-        if (message.type === "snapshot" || message.type === "disconnected") {
-            applyTerminalSnapshot(message.snapshot);
-            return;
-        }
-        if (message.type === "error") {
-            error = message.message;
-            loading = false;
-            return;
-        }
-        if (!terminal || message.output.chunk.length === 0) {
-            terminalSnapshot = terminalSnapshot
-                ? {
-                      ...terminalSnapshot,
-                      dead: message.output.dead,
-                      exitCode: message.output.exitCode,
-                      ...(message.output.chunk.length > 0
-                          ? {
-                                screen: appendTerminalScreen(
-                                    terminalSnapshot.screen,
-                                    message.output.chunk,
-                                    message.output.truncated === true,
-                                ),
-                            }
-                          : {}),
-                      ...(message.output.truncated ? { truncated: true } : {}),
-                  }
-                : terminalSnapshot;
-            loading = false;
-            return;
-        }
-        terminal.write(message.output.chunk);
-        const nextScreen = appendTerminalScreen(
-            terminalSnapshot?.screen ?? "",
-            message.output.chunk,
-            message.output.truncated === true,
-        );
-        lastRenderedScreen = nextScreen;
-        terminalSnapshot = terminalSnapshot
-            ? {
-                  ...terminalSnapshot,
-                  dead: message.output.dead,
-                  exitCode: message.output.exitCode,
-                  screen: nextScreen,
-                  ...(message.output.truncated ? { truncated: true } : {}),
-              }
-            : terminalSnapshot;
-        loading = false;
-        error = null;
     }
 
     function initializeTerminal(
@@ -448,7 +345,12 @@
         terminal.open(target);
         fitAddon.fit();
         terminal.onResize(({ cols, rows }: TerminalResizeEvent) => {
-            if (!session || !canAttachTerminal || terminalSnapshot?.dead) {
+            if (
+                !session ||
+                !canSendTerminalInput ||
+                !active ||
+                terminalSnapshot?.dead
+            ) {
                 return;
             }
             if (
@@ -461,7 +363,12 @@
             void flushPendingResize();
         });
         terminal.onData((data: string) => {
-            if (!session || !canAttachTerminal || terminalSnapshot?.dead) {
+            if (
+                !session ||
+                !canSendTerminalInput ||
+                !active ||
+                terminalSnapshot?.dead
+            ) {
                 return;
             }
             const sanitizedData = sanitizeTerminalInputData(data);
@@ -481,56 +388,22 @@
     }
 
     async function flushPendingResize(): Promise<void> {
-        if (!session || !canAttachTerminal || !pendingResize) {
+        if (!session || !canSendTerminalInput || !pendingResize) {
             return;
         }
-        if (terminalSocket?.readyState !== WebSocket.OPEN) {
+        if (!terminalTransport) {
             return;
         }
         const resize = pendingResize;
         pendingResize = null;
         try {
-            await postTerminalUpdate(resize);
+            await terminalTransport.sendResize(resize.cols, resize.rows);
         } catch (sendError) {
             error =
                 sendError instanceof Error
                     ? sendError.message
                     : String(sendError);
         }
-    }
-
-    async function postTerminalUpdate(input: {
-        data?: string;
-        cols?: number;
-        rows?: number;
-    }): Promise<void> {
-        if (!session) {
-            return;
-        }
-
-        if (terminalSocket?.readyState === WebSocket.OPEN) {
-            if (input.data !== undefined) {
-                terminalSocket.send(
-                    JSON.stringify({
-                        type: "input",
-                        data: input.data,
-                    }),
-                );
-                return;
-            }
-            if (input.cols !== undefined && input.rows !== undefined) {
-                terminalSocket.send(
-                    JSON.stringify({
-                        type: "resize",
-                        cols: input.cols,
-                        rows: input.rows,
-                    }),
-                );
-                return;
-            }
-        }
-
-        return;
     }
 
     function normalizeScreen(screen: string): string {
@@ -591,18 +464,6 @@
 
         return sanitizedData;
     }
-
-    function appendTerminalScreen(
-        currentScreen: string,
-        chunk: string,
-        truncated: boolean,
-    ): string {
-        const nextScreen = `${currentScreen}${chunk}`;
-        if (truncated || nextScreen.length > MAX_TERMINAL_SNAPSHOT_LENGTH) {
-            return nextScreen.slice(-MAX_TERMINAL_SNAPSHOT_LENGTH);
-        }
-        return nextScreen;
-    }
 </script>
 
 <section class="flex h-full min-h-0 flex-col overflow-hidden">
@@ -649,7 +510,7 @@
             >
                 No session resolves from the current mission-control selection.
             </div>
-        {:else if !canAttachTerminal}
+        {:else if !canShowTerminal}
             <div
                 class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
             >

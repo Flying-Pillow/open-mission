@@ -264,6 +264,7 @@ export const missionAgentSessionDtoSchema = z.object({
     runnerId: z.string().trim().min(1),
     transportId: z.string().trim().min(1).optional(),
     runnerLabel: z.string().trim().min(1),
+    sessionLogPath: z.string().trim().min(1).optional(),
     lifecycleState: z.enum([
         'starting',
         'running',
@@ -288,6 +289,7 @@ export const missionSessionTerminalSnapshotDtoSchema = z.object({
     dead: z.boolean(),
     exitCode: z.number().int().nullable(),
     screen: z.string(),
+    chunk: z.string().optional(),
     truncated: z.boolean().optional(),
     terminalHandle: missionSessionTerminalHandleDtoSchema.optional()
 });
@@ -298,6 +300,7 @@ export const missionTerminalSnapshotDtoSchema = z.object({
     dead: z.boolean(),
     exitCode: z.number().int().nullable(),
     screen: z.string(),
+    chunk: z.string().optional(),
     truncated: z.boolean().optional(),
     terminalHandle: missionSessionTerminalHandleDtoSchema.optional()
 });

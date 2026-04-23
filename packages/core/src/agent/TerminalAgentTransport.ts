@@ -47,12 +47,14 @@ export type TerminalSessionSnapshot = {
     truncated: boolean;
     chunk?: string;
     sharedSessionName?: string;
+    workingDirectory?: string;
 };
 
 type PtySessionRecord = {
     sessionName: string;
     paneId: string;
     pty: IPty;
+    workingDirectory: string;
     buffer: string;
     dead: boolean;
     exitCode: number | null;
@@ -116,6 +118,7 @@ class PtySessionRegistry {
             sessionName,
             paneId: PTY_PANE_ID,
             pty,
+            workingDirectory: request.workingDirectory,
             buffer: '',
             dead: false,
             exitCode: null,
@@ -137,7 +140,8 @@ class PtySessionRegistry {
                 exitCode: record.exitCode,
                 screen: record.buffer,
                 truncated: record.truncated,
-                chunk
+                chunk,
+                workingDirectory: record.workingDirectory
             });
         });
 
@@ -152,7 +156,8 @@ class PtySessionRegistry {
                 exitCode,
                 screen: record.buffer,
                 truncated: record.truncated,
-                chunk: ''
+                chunk: '',
+                workingDirectory: record.workingDirectory
             });
         });
 
@@ -189,7 +194,8 @@ class PtySessionRegistry {
             dead: record.dead,
             exitCode: record.exitCode,
             screen: record.buffer,
-            truncated: record.truncated
+            truncated: record.truncated,
+            workingDirectory: record.workingDirectory
         };
     }
 
@@ -227,7 +233,8 @@ class PtySessionRegistry {
                 exitCode: record.exitCode,
                 screen: record.buffer,
                 truncated: record.truncated,
-                chunk: ''
+                chunk: '',
+                workingDirectory: record.workingDirectory
             });
         }
     }

@@ -10,7 +10,7 @@ import type {
 	MissionAgentSessionRecord,
 	MissionAgentSessionState,
 	MissionAgentTelemetrySnapshot
-	} from '../daemon/protocol/contracts.js';
+} from '../daemon/protocol/contracts.js';
 
 export type MissionSessionOwner = {
 	completeSessionRecord(sessionId: string): Promise<MissionAgentSessionRecord>;
@@ -24,6 +24,7 @@ type MissionRuntimeSessionRecord = {
 	sessionId: string;
 	runnerId: string;
 	transportId?: string;
+	sessionLogPath?: string;
 	terminalSessionName?: string;
 	terminalPaneId?: string;
 	taskId: string;
@@ -71,6 +72,7 @@ export class MissionSession {
 			sessionId: input.runtime.sessionId,
 			runnerId: input.runtime.runnerId,
 			...(transport.transportId ? { transportId: transport.transportId } : input.runtime.transportId ? { transportId: input.runtime.transportId } : {}),
+			...(input.runtime.sessionLogPath ? { sessionLogPath: input.runtime.sessionLogPath } : {}),
 			...(transport.terminalSessionName
 				? { terminalSessionName: transport.terminalSessionName }
 				: input.runtime.terminalSessionName
@@ -106,6 +108,7 @@ export class MissionSession {
 			...(transport.transportId ? { transportId: transport.transportId } : {}),
 			runnerLabel,
 			sessionId: snapshot.sessionId,
+			...(record?.sessionLogPath ? { sessionLogPath: record.sessionLogPath } : {}),
 			...(transport.terminalSessionName
 				? { terminalSessionName: transport.terminalSessionName }
 				: record?.terminalSessionName
@@ -139,6 +142,7 @@ export class MissionSession {
 			sessionId: record.sessionId,
 			runnerId: record.runnerId,
 			...(record.transportId ? { transportId: record.transportId } : {}),
+			...(record.sessionLogPath ? { sessionLogPath: record.sessionLogPath } : {}),
 			...(record.terminalSessionName ? { terminalSessionName: record.terminalSessionName } : {}),
 			...(record.terminalPaneId ? { terminalPaneId: record.terminalPaneId } : {}),
 			runnerLabel: record.runnerLabel,
@@ -162,6 +166,7 @@ export class MissionSession {
 			...(state.transportId ? { transportId: state.transportId } : {}),
 			runnerLabel: state.runnerLabel,
 			sessionId: state.sessionId,
+			...(state.sessionLogPath ? { sessionLogPath: state.sessionLogPath } : {}),
 			...(state.terminalSessionName ? { terminalSessionName: state.terminalSessionName } : {}),
 			...(state.terminalPaneId ? { terminalPaneId: state.terminalPaneId } : {}),
 			lifecycleState: state.lifecycleState,
@@ -211,7 +216,7 @@ export class MissionSession {
 	public constructor(
 		private readonly owner: MissionSessionOwner,
 		private readonly record: MissionAgentSessionRecord
-	) {}
+	) { }
 
 	public get sessionId(): string {
 		return this.record.sessionId;
