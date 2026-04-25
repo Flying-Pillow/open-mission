@@ -8,7 +8,7 @@ import {
 	type FrontmatterValue
 } from './frontmatter.js';
 import { getMissionCatalogPath, getMissionWorktreesPath } from './repoConfig.js';
-import { readMissionDaemonSettings } from './daemonConfig.js';
+import { readWorkflowSettingsDocument } from './daemonConfig.js';
 import {
 	MISSION_RUNTIME_FILE_NAME,
 	MISSION_RUNTIME_EVENT_LOG_FILE_NAME,
@@ -25,7 +25,7 @@ import { renderMissionBriefBody } from '../workflow/mission/templates/index.js';
 import {
 	getMissionArtifactDefinition,
 	getMissionStageDefinition
-} from '../workflow/manifest.js';
+} from '../workflow/mission/manifest.js';
 import {
 	createMissionRuntimeRecord,
 	type MissionWorkflowEventRecord,
@@ -89,7 +89,7 @@ export class FilesystemAdapter {
 	}
 
 	public getMissionsPath(): string {
-		const missionWorkspaceRoot = readMissionDaemonSettings(this.workspaceRoot)?.missionWorkspaceRoot;
+		const missionWorkspaceRoot = readWorkflowSettingsDocument(this.workspaceRoot)?.paths.missionWorkspaceRoot;
 		return getMissionWorktreesPath(
 			this.workspaceRoot,
 			missionWorkspaceRoot ? { missionWorkspaceRoot } : {}

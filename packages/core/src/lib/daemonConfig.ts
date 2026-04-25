@@ -4,36 +4,20 @@ import * as path from 'node:path';
 import { getMissionDirectoryPath } from './repoConfig.js';
 import { readMissionConfig } from './config.js';
 import { resolveGitWorkspaceRoot } from './workspacePaths.js';
-import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
-import { readMissionWorkflowDefinition } from '../workflow/mission/preset.js';
-import {
-    type WorkflowGlobalSettings
-} from '../workflow/engine/index.js';
 import {
     COPILOT_CLI_AGENT_RUNNER_ID,
-    PI_AGENT_RUNNER_ID,
-    isSupportedAgentRunner
+    PI_AGENT_RUNNER_ID
 } from '../agent/runtimes/AgentRuntimeIds.js';
-import { normalizeWorkflowSettings } from '../settings/validation.js';
-
-export const MISSION_DAEMON_SETTINGS_FILE = 'settings.json';
+import {
+    createDefaultRepositoryWorkflowSettingsDocument,
+    normalizeRepositoryWorkflowSettingsDocument,
+    type RepositoryWorkflowSettingsDocument as WorkflowSettingsDocument
+} from '../entities/Repository/RepositorySettingsDocument.js';
 
 export const MISSION_AGENT_RUNNERS = [COPILOT_CLI_AGENT_RUNNER_ID, PI_AGENT_RUNNER_ID] as const;
 
 export type MissionAgentRunner = (typeof MISSION_AGENT_RUNNERS)[number];
 export type MissionDefaultAgentMode = 'interactive' | 'autonomous';
-
-export type MissionDaemonSettings = {
-    agentRunner?: MissionAgentRunner;
-    defaultAgentMode?: MissionDefaultAgentMode;
-    defaultModel?: string;
-    towerTheme?: string;
-    missionWorkspaceRoot?: string;
-    trackingProvider?: 'github';
-    instructionsPath?: string;
-    skillsPath?: string;
-    workflow?: WorkflowGlobalSettings;
-};
 
 type MissionDaemonPathOptions = {
     resolveWorkspaceRoot?: boolean;
@@ -49,93 +33,93 @@ export function getMissionDaemonRoot(
     return getMissionDirectoryPath(resolvedControlRoot);
 }
 
-export function getMissionDaemonSettingsPath(
+export function getWorkflowSettingsDocumentPath(
     controlRoot = process.cwd(),
     options: MissionDaemonPathOptions = {}
 ): string {
-    return path.join(getMissionDaemonRoot(controlRoot, options), MISSION_DAEMON_SETTINGS_FILE);
+    return path.join(getMissionDaemonRoot(controlRoot, options), 'workflow', 'workflow.json');
 }
 
-export function getDefaultMissionDaemonSettings(): MissionDaemonSettings {
-    return getDefaultMissionDaemonSettingsWithOverrides();
-}
-
-export function getDefaultMissionDaemonSettingsWithOverrides(
-    overrides: MissionDaemonSettings = {}
-): MissionDaemonSettings {
+export function resolveWorkflowSettingsDocument(input: unknown = {}): WorkflowSettingsDocument {
     const config = readMissionConfig();
-    const agentRunner = normalizeOptionalAgentRunner(overrides.agentRunner) ?? COPILOT_CLI_AGENT_RUNNER_ID;
-    const defaultAgentMode = normalizeOptionalAgentMode(overrides.defaultAgentMode);
-    const defaultModel = normalizeOptionalString(overrides.defaultModel);
-    const towerTheme = normalizeOptionalString(overrides.towerTheme);
-    const missionWorkspaceRoot = normalizeOptionalString(overrides.missionWorkspaceRoot)
+    const source = isRecord(input) ? input : {};
+    const runtime = isRecord(source['runtime']) ? source['runtime'] : {};
+    const integration = isRecord(source['integration']) ? source['integration'] : {};
+    const paths = isRecord(source['paths']) ? source['paths'] : {};
+    const runtimeAgentRunner = asMissionAgentRunner(asString(runtime['agentRunner']));
+    const runtimeDefaultAgentMode = normalizeOptionalAgentMode(asString(runtime['defaultAgentMode']) as MissionDefaultAgentMode | undefined);
+    const runtimeDefaultModel = normalizeOptionalString(asString(runtime['defaultModel']));
+    const runtimeTowerTheme = normalizeOptionalString(asString(runtime['towerTheme']));
+    const configuredMissionWorkspaceRoot = normalizeOptionalString(asString(paths['missionWorkspaceRoot']))
         ?? normalizeOptionalString(config?.missionWorkspaceRoot);
-    const instructionsPath = normalizeOptionalString(overrides.instructionsPath);
-    const skillsPath = normalizeOptionalString(overrides.skillsPath);
-    return {
-        missionWorkspaceRoot: 'missions',
-        trackingProvider: 'github',
-        instructionsPath: '.agents',
-        skillsPath: '.agents/skills',
-        workflow: normalizeWorkflowSettings(overrides.workflow ?? createDefaultWorkflowSettings()),
-        agentRunner,
-        ...(defaultAgentMode ? { defaultAgentMode } : {}),
-        ...(defaultModel ? { defaultModel } : {}),
-        ...(towerTheme ? { towerTheme } : {}),
-        ...(missionWorkspaceRoot ? { missionWorkspaceRoot } : {}),
-        ...(overrides.trackingProvider ? { trackingProvider: overrides.trackingProvider } : {}),
-        ...(instructionsPath ? { instructionsPath } : {}),
-        ...(skillsPath ? { skillsPath } : {})
-    };
+
+    return normalizeRepositoryWorkflowSettingsDocument({
+        ...source,
+        runtime: {
+            ...runtime,
+            ...(runtimeAgentRunner
+                ? { agentRunner: runtimeAgentRunner }
+                : {}),
+            ...(runtimeDefaultAgentMode
+                ? { defaultAgentMode: runtimeDefaultAgentMode }
+                : {}),
+            ...(runtimeDefaultModel ? { defaultModel: runtimeDefaultModel } : {}),
+            ...(runtimeTowerTheme ? { towerTheme: runtimeTowerTheme } : {})
+        },
+        integration: {
+            ...integration,
+            trackingProvider: integration['trackingProvider'] === 'github' ? 'github' : 'github'
+        },
+        paths: {
+            ...paths,
+            ...(configuredMissionWorkspaceRoot ? { missionWorkspaceRoot: configuredMissionWorkspaceRoot } : {})
+        }
+    },
+    configuredMissionWorkspaceRoot
+        ? { defaultMissionWorkspaceRoot: configuredMissionWorkspaceRoot }
+        : undefined);
 }
 
-export function readMissionDaemonSettings(controlRoot = process.cwd()): MissionDaemonSettings | undefined {
-    const settingsPath = getMissionDaemonSettingsPath(controlRoot);
+export function readWorkflowSettingsDocument(
+    controlRoot = process.cwd(),
+    options: MissionDaemonPathOptions = {}
+): WorkflowSettingsDocument | undefined {
+    const settingsPath = getWorkflowSettingsDocumentPath(controlRoot, options);
     try {
         const content = fs.readFileSync(settingsPath, 'utf8').trim();
         if (!content) {
             return undefined;
         }
-
-        const parsed = JSON.parse(content) as MissionDaemonSettings;
-        const persistedWorkflow = readMissionWorkflowDefinition(controlRoot) ?? parsed.workflow;
-        return getDefaultMissionDaemonSettingsWithOverrides({
-            ...parsed,
-            ...(persistedWorkflow ? { workflow: normalizeWorkflowSettings(persistedWorkflow) } : {})
-        });
-    } catch {
-        return undefined;
+        return resolveWorkflowSettingsDocument(JSON.parse(content) as unknown);
+    } catch (error) {
+		if ((error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
+			return undefined;
+		}
+		throw error;
     }
 }
 
-export async function ensureMissionDaemonSettings(controlRoot = process.cwd()): Promise<MissionDaemonSettings> {
-    const currentSettings = readMissionDaemonSettings(controlRoot);
-    if (currentSettings) {
-        return currentSettings;
+export async function ensureWorkflowSettingsDocument(controlRoot = process.cwd()): Promise<WorkflowSettingsDocument> {
+    const currentDocument = readWorkflowSettingsDocument(controlRoot);
+    if (currentDocument) {
+        return currentDocument;
     }
 
-    return writeMissionDaemonSettings(getDefaultMissionDaemonSettings(), controlRoot);
+    return writeWorkflowSettingsDocument(createDefaultRepositoryWorkflowSettingsDocument(), controlRoot);
 }
 
-export async function writeMissionDaemonSettings(
-    settings: MissionDaemonSettings,
+export async function writeWorkflowSettingsDocument(
+    document: WorkflowSettingsDocument,
     controlRoot = process.cwd(),
     options: MissionDaemonPathOptions = {}
-): Promise<MissionDaemonSettings> {
-    const settingsPath = getMissionDaemonSettingsPath(controlRoot, options);
-    const nextSettings = getDefaultMissionDaemonSettingsWithOverrides(settings);
-    const persistedSettings = omitWorkflowSettings(nextSettings);
+): Promise<WorkflowSettingsDocument> {
+    const settingsPath = getWorkflowSettingsDocumentPath(controlRoot, options);
+    const nextDocument = resolveWorkflowSettingsDocument(document);
     const temporarySettingsPath = `${settingsPath}.${process.pid.toString(36)}.${Date.now().toString(36)}.tmp`;
     await fsp.mkdir(path.dirname(settingsPath), { recursive: true });
-    await fsp.writeFile(temporarySettingsPath, `${JSON.stringify(persistedSettings, null, 2)}\n`, 'utf8');
+    await fsp.writeFile(temporarySettingsPath, `${JSON.stringify(nextDocument, null, 2)}\n`, 'utf8');
     await fsp.rename(temporarySettingsPath, settingsPath);
-    return nextSettings;
-}
-
-function omitWorkflowSettings(settings: MissionDaemonSettings): Omit<MissionDaemonSettings, 'workflow'> {
-    const { workflow, ...persisted } = settings;
-    void workflow;
-    return persisted;
+    return nextDocument;
 }
 
 function resolveMissionControlRoot(controlRoot: string): string {
@@ -149,12 +133,23 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
     return trimmed && trimmed.length > 0 ? trimmed : undefined;
 }
 
-function normalizeOptionalAgentRunner(value: MissionAgentRunner | undefined): MissionAgentRunner | undefined {
-    return isSupportedAgentRunner(value) ? value : undefined;
+function asMissionAgentRunner(value: string | undefined): MissionAgentRunner | undefined {
+    if (value === COPILOT_CLI_AGENT_RUNNER_ID || value === PI_AGENT_RUNNER_ID) {
+        return value;
+    }
+    return undefined;
 }
 
 function normalizeOptionalAgentMode(
     value: MissionDefaultAgentMode | undefined
 ): MissionDefaultAgentMode | undefined {
     return value === 'interactive' || value === 'autonomous' ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function asString(value: unknown): string | undefined {
+	return typeof value === 'string' ? value : undefined;
 }

@@ -1,12 +1,16 @@
-import * as fs from 'node:fs/promises';
 import {
-	getDefaultMissionDaemonSettingsWithOverrides,
-	getMissionDaemonSettingsPath,
-	type MissionDaemonSettings,
-	writeMissionDaemonSettings
+	getWorkflowSettingsDocumentPath,
+	readWorkflowSettingsDocument,
+	resolveWorkflowSettingsDocument,
+	writeWorkflowSettingsDocument
 } from '../lib/daemonConfig.js';
-import { getMissionWorkflowDefinitionPath } from '../lib/repoConfig.js';
-import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
+import type { RepositoryWorkflowSettingsDocument as WorkflowSettingsDocument } from '../entities/Repository/RepositorySettingsDocument.js';
+import {
+	DEFAULT_WORKFLOW_VERSION,
+	assertValidWorkflowSettings,
+	createDefaultWorkflowSettings,
+	normalizeWorkflowSettings
+} from '../workflow/mission/workflow.js';
 import {
 	readMissionWorkflowDefinition,
 	scaffoldMissionWorkflowPreset,
@@ -22,10 +26,6 @@ import {
 	type WorkflowSettingsFileRevision
 } from './revision.js';
 import {
-	assertValidWorkflowSettings,
-	normalizeWorkflowSettings
-} from './validation.js';
-import {
 	WorkflowSettingsError,
 	type WorkflowSettingsGetResult,
 	type WorkflowSettingsInitializeRequest,
@@ -37,20 +37,16 @@ import {
 
 type WorkflowSettingsFileState = {
 	settingsPath: string;
-	workflowPath: string;
 	revision: WorkflowSettingsFileRevision;
-	settings: MissionDaemonSettings | undefined;
-	workflow: unknown | undefined;
+	document: WorkflowSettingsDocument | undefined;
 	workflowInitialized: boolean;
 };
 
 export class WorkflowSettingsStore {
 	private readonly settingsPath: string;
-	private readonly workflowPath: string;
 
 	public constructor(private readonly controlRoot: string) {
-		this.settingsPath = getMissionDaemonSettingsPath(controlRoot, { resolveWorkspaceRoot: false });
-		this.workflowPath = getMissionWorkflowDefinitionPath(controlRoot);
+		this.settingsPath = getWorkflowSettingsDocumentPath(controlRoot, { resolveWorkspaceRoot: false });
 	}
 
 	public async get(): Promise<WorkflowSettingsGetResult> {
@@ -73,8 +69,8 @@ export class WorkflowSettingsStore {
 			);
 		}
 
-		const nextSettings = this.createInitializedSettings(state.settings);
-		await this.persistSettings(nextSettings, state.revision.token, request.force === true);
+		const nextDocument = this.createInitializedDocument(state.document);
+		await this.persistSettings(nextDocument, state.revision.token, request.force === true);
 		return this.get();
 	}
 
@@ -83,17 +79,17 @@ export class WorkflowSettingsStore {
 		const state = await this.readFileState();
 		this.assertRevisionMatches(request.expectedRevision, state.revision.token);
 
-		const currentWorkflow = normalizeWorkflowSettings(state.workflow ?? state.settings?.workflow ?? createDefaultWorkflowSettings());
+		const currentWorkflow = normalizeWorkflowSettings(state.document?.workflow ?? createDefaultWorkflowSettings());
 		const patchedWorkflow = applyWorkflowSettingsPatch(currentWorkflow, request.patch);
 		const normalizedWorkflow = normalizeWorkflowSettings(patchedWorkflow);
 		assertValidWorkflowSettings(normalizedWorkflow);
 
-		const nextSettings = getDefaultMissionDaemonSettingsWithOverrides(state.settings ?? {});
-
-		await this.persistSettings({
-			...nextSettings,
+		const nextDocument = resolveWorkflowSettingsDocument({
+			...(state.document ?? {}),
 			workflow: normalizedWorkflow
-		}, request.expectedRevision, false);
+		});
+
+		await this.persistSettings(nextDocument, request.expectedRevision, false);
 		const result = await this.get();
 		return {
 			...result,
@@ -103,31 +99,32 @@ export class WorkflowSettingsStore {
 	}
 
 	private async persistSettings(
-		nextSettings: MissionDaemonSettings,
+		nextDocument: WorkflowSettingsDocument,
 		expectedRevision: string,
 		overwritePreset: boolean
 	): Promise<void> {
-		const latestRevision = await readWorkflowSettingsRevision(this.workflowPath);
+		const latestRevision = await readWorkflowSettingsRevision(this.settingsPath);
 		this.assertRevisionMatches(expectedRevision, latestRevision.token);
-		await writeMissionDaemonSettings(nextSettings, this.controlRoot, {
-			resolveWorkspaceRoot: false
-		});
 		if (overwritePreset || !latestRevision.exists) {
 			await scaffoldMissionWorkflowPreset(this.controlRoot, { overwrite: overwritePreset });
 		}
-		await writeMissionWorkflowDefinition(this.controlRoot, normalizeWorkflowSettings(nextSettings.workflow));
+		await writeWorkflowSettingsDocument(nextDocument, this.controlRoot, {
+			resolveWorkspaceRoot: false
+		});
+		await writeMissionWorkflowDefinition(this.controlRoot, nextDocument.workflow);
 	}
 
-	private createInitializedSettings(currentSettings?: MissionDaemonSettings): MissionDaemonSettings {
-		const baseSettings = getDefaultMissionDaemonSettingsWithOverrides(currentSettings ?? {});
-		return {
-			...baseSettings,
-			workflow: normalizeWorkflowSettings(currentSettings?.workflow ?? readMissionWorkflowDefinition(this.controlRoot) ?? createDefaultWorkflowSettings())
-		};
+	private createInitializedDocument(currentDocument?: WorkflowSettingsDocument): WorkflowSettingsDocument {
+		return resolveWorkflowSettingsDocument({
+			...(currentDocument ?? {}),
+			workflow: normalizeWorkflowSettings(
+				currentDocument?.workflow ?? readMissionWorkflowDefinition(this.controlRoot) ?? createDefaultWorkflowSettings()
+			)
+		});
 	}
 
 	private toGetResult(state: WorkflowSettingsFileState): WorkflowSettingsGetResult {
-		const workflow = normalizeWorkflowSettings(state.workflow ?? state.settings?.workflow ?? createDefaultWorkflowSettings());
+		const workflow = normalizeWorkflowSettings(state.document?.workflow ?? createDefaultWorkflowSettings());
 		assertValidWorkflowSettings(workflow);
 		const warnings: string[] = [];
 		if (!state.workflowInitialized) {
@@ -145,53 +142,39 @@ export class WorkflowSettingsStore {
 	private createMetadata(state: WorkflowSettingsFileState): WorkflowSettingsMetadata {
 		return {
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
-			sourcePath: state.workflowPath,
+			sourcePath: state.settingsPath,
 			lastUpdatedAt: state.revision.lastUpdatedAt,
 			initialized: state.workflowInitialized
 		};
 	}
 
 	private async readFileState(): Promise<WorkflowSettingsFileState> {
-		const revision = await readWorkflowSettingsRevision(this.workflowPath);
+		const revision = await readWorkflowSettingsRevision(this.settingsPath);
 
-		let settings: MissionDaemonSettings | undefined;
+		let document: WorkflowSettingsDocument | undefined;
 		try {
-			const rawContent = await fs.readFile(this.settingsPath, 'utf8');
-			const trimmed = rawContent.trim();
-			if (trimmed.length > 0) {
-				const parsed = JSON.parse(trimmed) as unknown;
-				if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-					throw new WorkflowSettingsError(
-						'SETTINGS_FILE_INVALID',
-						`Workflow settings file '${this.settingsPath}' must contain a JSON object.`
-					);
-				}
-				settings = parsed as MissionDaemonSettings;
-			}
+			document = readWorkflowSettingsDocument(this.controlRoot, {
+				resolveWorkspaceRoot: false
+			});
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException | undefined)?.code !== 'ENOENT') {
 				throw this.toFileError(error);
 			}
 		}
 
-		const workflow = readMissionWorkflowDefinition(this.controlRoot);
 		if (!revision.exists) {
 			return {
 				settingsPath: this.settingsPath,
-				workflowPath: this.workflowPath,
 				revision,
-				settings,
-				workflow,
+				document,
 				workflowInitialized: false
 			};
 		}
 		return {
 			settingsPath: this.settingsPath,
-			workflowPath: this.workflowPath,
 			revision,
-			settings,
-			workflow,
-			workflowInitialized: workflow !== undefined
+			document,
+			workflowInitialized: document !== undefined
 		};
 	}
 

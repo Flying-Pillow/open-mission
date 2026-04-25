@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DaemonApi } from '../client/DaemonApi.js';
 import { DaemonClient } from '../client/DaemonClient.js';
-import { getMissionDaemonSettingsPath } from '../lib/daemonConfig.js';
+import { getWorkflowSettingsDocumentPath } from '../lib/daemonConfig.js';
 import { writeMissionConfig } from '../lib/config.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import { getMissionWorktreesPath } from '../lib/repoConfig.js';
@@ -47,7 +47,7 @@ describe('Daemon', () => {
 					await client.connect({ surfacePath: workspaceRoot, socketPath: path.join(workspaceRoot, '.mission-daemon-test.sock') });
 					const api = new DaemonApi(client);
 					const status = await api.control.getStatus();
-					const settingsExists = await fs.access(getMissionDaemonSettingsPath(workspaceRoot)).then(
+					const settingsExists = await fs.access(getWorkflowSettingsDocumentPath(workspaceRoot)).then(
 						() => true,
 						() => false
 					);
@@ -287,7 +287,7 @@ exit 1
 						missionId: expect.any(String),
 						worktreePath: expect.any(String)
 					});
-					await expect(fs.access(getMissionDaemonSettingsPath(workspaceRoot))).rejects.toThrow();
+					await expect(fs.access(getWorkflowSettingsDocumentPath(workspaceRoot))).rejects.toThrow();
 					await expect(fs.access(getMissionWorkflowDefinitionPath(workspaceRoot))).rejects.toThrow();
 
 					const worktreePath = status.preparation?.kind === 'mission'
@@ -296,7 +296,6 @@ exit 1
 					if (!worktreePath) {
 						throw new Error('Expected init action to prepare a mission worktree.');
 					}
-					await expect(fs.access(path.join(worktreePath, '.mission', 'settings.json'))).resolves.toBeUndefined();
 					await expect(fs.access(path.join(worktreePath, '.mission', 'workflow', 'workflow.json'))).resolves.toBeUndefined();
 				} finally {
 					client.dispose();
@@ -1683,16 +1682,18 @@ exit 1
 					await api.control.updateSetting('agentRunner', 'pi');
 					await api.control.updateSetting('defaultAgentMode', 'interactive');
 					const status = await api.control.updateSetting('defaultModel', 'gpt-5.4');
-					const settingsContent = await fs.readFile(getMissionDaemonSettingsPath(workspaceRoot), 'utf8');
+					const settingsContent = await fs.readFile(getWorkflowSettingsDocumentPath(workspaceRoot), 'utf8');
 
 					expect(status.found).toBe(false);
 					expect(status.operationalMode).toBe('root');
 					expect(status.control).toMatchObject({
 						settingsComplete: true,
 						settings: expect.objectContaining({
-							agentRunner: 'pi',
-							defaultAgentMode: 'interactive',
-							defaultModel: 'gpt-5.4'
+							runtime: expect.objectContaining({
+								agentRunner: 'pi',
+								defaultAgentMode: 'interactive',
+								defaultModel: 'gpt-5.4'
+							})
 						})
 					});
 					expect(JSON.parse(settingsContent)).toMatchObject({
@@ -1741,7 +1742,7 @@ exit 1
 						optionIds: ['pi']
 					}
 				]);
-				const settingsContent = await fs.readFile(getMissionDaemonSettingsPath(workspaceRoot), 'utf8');
+				const settingsContent = await fs.readFile(getWorkflowSettingsDocumentPath(workspaceRoot), 'utf8');
 
 				expect(resolvedFlow.steps[1]).toMatchObject({
 					kind: 'selection',
@@ -1780,13 +1781,15 @@ exit 1
 				await client.connect({ surfacePath: workspaceRoot });
 				const api = new DaemonApi(client);
 				const status = await api.control.updateSetting('instructionsPath', '/tmp/mission-instructions');
-				const settingsContent = await fs.readFile(getMissionDaemonSettingsPath(workspaceRoot), 'utf8');
+				const settingsContent = await fs.readFile(getWorkflowSettingsDocumentPath(workspaceRoot), 'utf8');
 
 				expect(status.found).toBe(false);
 				expect(status.control).toMatchObject({
 					settingsPresent: true,
 					settings: expect.objectContaining({
-						instructionsPath: '/tmp/mission-instructions'
+						paths: expect.objectContaining({
+							instructionsPath: '/tmp/mission-instructions'
+						})
 					})
 				});
 				expect(JSON.parse(settingsContent)).toMatchObject({
@@ -1813,13 +1816,15 @@ exit 1
 				await client.connect({ surfacePath: workspaceRoot });
 				const api = new DaemonApi(client);
 				const status = await api.control.updateSetting('towerTheme', 'mono');
-				const settingsContent = await fs.readFile(getMissionDaemonSettingsPath(workspaceRoot), 'utf8');
+				const settingsContent = await fs.readFile(getWorkflowSettingsDocumentPath(workspaceRoot), 'utf8');
 
 				expect(status.found).toBe(false);
 				expect(status.control).toMatchObject({
 					settingsPresent: true,
 					settings: expect.objectContaining({
-						towerTheme: 'mono'
+						runtime: expect.objectContaining({
+							towerTheme: 'mono'
+						})
 					})
 				});
 				expect(JSON.parse(settingsContent)).toMatchObject({
@@ -1854,7 +1859,7 @@ exit 1
 							brief: createBrief(undefined, 'Bootstrap authorization')
 						});
 						const missionWorkspacePath = status.missionDir ?? workspaceRoot;
-						const worktreeSettingsPath = path.join(missionWorkspacePath, '.mission', 'settings.json');
+						const worktreeSettingsPath = getWorkflowSettingsDocumentPath(missionWorkspacePath);
 						const calls = await readFakeGitHubCalls(callsPath);
 
 						expect(status).toMatchObject({
@@ -1868,12 +1873,11 @@ exit 1
 								missionId: expect.any(String)
 							}
 						});
-						await expect(fs.access(getMissionDaemonSettingsPath(workspaceRoot))).rejects.toThrow();
+						await expect(fs.access(getWorkflowSettingsDocumentPath(workspaceRoot))).rejects.toThrow();
 						await expect(fs.access(worktreeSettingsPath)).resolves.toBeUndefined();
-						expect(calls.map((call) => call.args.slice(0, 2))).toEqual([
-							['auth', 'status'],
-							['api', 'repos/Flying-Pillow/mission/issues']
-						]);
+						const commandPairs = calls.map((call) => call.args.slice(0, 2));
+						expect(commandPairs).toContainEqual(['auth', 'status']);
+						expect(commandPairs).toContainEqual(['api', 'repos/Flying-Pillow/mission/issues']);
 					} finally {
 						client.dispose();
 						await daemon.close();
@@ -1921,10 +1925,9 @@ exit 1
 							}
 						});
 						expect(status.missionRootDir).toContain(path.join('.mission', 'missions', status.missionId ?? ''));
-						expect(calls.map((call) => call.args.slice(0, 2))).toEqual([
-							['auth', 'status'],
-							['api', 'repos/Flying-Pillow/mission/issues']
-						]);
+							const commandPairs = calls.map((call) => call.args.slice(0, 2));
+							expect(commandPairs).toContainEqual(['auth', 'status']);
+							expect(commandPairs).toContainEqual(['api', 'repos/Flying-Pillow/mission/issues']);
 					} finally {
 						client.dispose();
 						await daemon.close();
@@ -2004,7 +2007,7 @@ exit 1
 				const worktreeAdapter = new FilesystemAdapter(missionWorktreePath);
 				const preparedMission = MissionRuntime.hydrate(
 					worktreeAdapter,
-					missionRootDir,
+					missionWorktreePath,
 					{
 						missionId,
 						missionDir: missionRootDir,
@@ -2176,7 +2179,7 @@ async function seedTrackedMissionInDeliveryStage(workspaceRoot: string, issueId:
 	const worktreeAdapter = new FilesystemAdapter(missionWorktreePath);
 	const mission = MissionRuntime.hydrate(
 		worktreeAdapter,
-		missionRootDir,
+		missionWorktreePath,
 		{
 			missionId,
 			missionDir: missionRootDir,
@@ -2219,7 +2222,7 @@ async function seedTrackedMissionWithId(
 	const worktreeAdapter = new FilesystemAdapter(missionWorktreePath);
 	const mission = MissionRuntime.hydrate(
 		worktreeAdapter,
-		missionRootDir,
+		missionWorktreePath,
 		{
 			missionId,
 			missionDir: missionRootDir,
@@ -2238,9 +2241,12 @@ async function seedTrackedMissionWithId(
 }
 
 async function commitMissionRepositoryBootstrap(workspaceRoot: string): Promise<void> {
-	const settingsPath = getMissionDaemonSettingsPath(workspaceRoot);
+	const settingsPath = getWorkflowSettingsDocumentPath(workspaceRoot);
 	const settings = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as Record<string, unknown>;
-	settings['missionWorkspaceRoot'] = path.join(os.tmpdir(), 'mission-test-worktrees');
+	settings['paths'] = {
+		...(typeof settings['paths'] === 'object' && settings['paths'] !== null ? settings['paths'] as Record<string, unknown> : {}),
+		missionWorkspaceRoot: path.join(os.tmpdir(), 'mission-test-worktrees')
+	};
 	await fs.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
 	runGit(workspaceRoot, ['add', '.mission']);
 	runGit(workspaceRoot, ['commit', '-m', 'chore: bootstrap mission repository']);

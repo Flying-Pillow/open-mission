@@ -7,7 +7,7 @@ import {
 	renderMissionProductTemplate
 } from '../mission/templates/index.js';
 import { renderMissionArtifactTitle } from '../mission/templates/common.js';
-import { getMissionArtifactDefinition } from '../manifest.js';
+import { getMissionArtifactDefinition } from '../mission/manifest.js';
 import { getMissionControlRootFromMissionDir } from '../../lib/repoConfig.js';
 import {
 	type MissionWorkflowConfigurationSnapshot,

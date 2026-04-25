@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { getMissionDaemonSettingsPath } from '../lib/daemonConfig.js';
+import { getWorkflowSettingsDocumentPath } from '../lib/daemonConfig.js';
 import { getMissionWorkflowDefinitionPath } from '../lib/repoConfig.js';
 import { WorkflowSettingsStore } from './WorkflowSettingsStore.js';
 
@@ -13,16 +13,26 @@ describe('WorkflowSettingsStore', () => {
 		try {
 			const store = new WorkflowSettingsStore(workspaceRoot);
 			const initialized = await store.initialize();
-			const settingsPath = getMissionDaemonSettingsPath(workspaceRoot);
+			const settingsPath = getWorkflowSettingsDocumentPath(workspaceRoot);
 			const workflowPath = getMissionWorkflowDefinitionPath(workspaceRoot);
-			const content = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as { workflow?: unknown };
-			const persistedWorkflow = JSON.parse(await fs.readFile(workflowPath, 'utf8')) as { stageOrder?: unknown };
+			const content = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as {
+				workflow?: { stageOrder?: unknown };
+				runtime?: { agentRunner?: unknown };
+				integration?: { trackingProvider?: unknown };
+				paths?: { missionWorkspaceRoot?: unknown };
+			};
+			const persistedWorkflow = JSON.parse(await fs.readFile(workflowPath, 'utf8')) as {
+				workflow?: { stageOrder?: unknown };
+			};
 
 			expect(initialized.metadata.initialized).toBe(true);
 			expect(initialized.metadata.sourcePath).toBe(workflowPath);
 			expect(initialized.workflow.stageOrder).toEqual(['prd', 'spec', 'implementation', 'audit', 'delivery']);
-			expect(content.workflow).toBeUndefined();
-			expect(persistedWorkflow.stageOrder).toEqual(['prd', 'spec', 'implementation', 'audit', 'delivery']);
+			expect(content.runtime?.agentRunner).toBe('copilot-cli');
+			expect(content.integration?.trackingProvider).toBe('github');
+			expect(content.paths?.missionWorkspaceRoot).toBe('missions');
+			expect(content.workflow?.stageOrder).toEqual(['prd', 'spec', 'implementation', 'audit', 'delivery']);
+			expect(persistedWorkflow.workflow?.stageOrder).toEqual(['prd', 'spec', 'implementation', 'audit', 'delivery']);
 		} finally {
 			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}

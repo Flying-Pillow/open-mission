@@ -1,3 +1,7 @@
+import type {
+    WorkflowGlobalSettings,
+} from '../WorkflowSchema.js';
+
 export type MissionStageId = string;
 
 export const MISSION_LIFECYCLE_STATES = [
@@ -183,74 +187,19 @@ export interface MissionGateProjection {
     updatedAt: string;
 }
 
-export interface WorkflowMissionAutostartSettings {
-    mission: boolean;
-}
-
-export interface WorkflowHumanInLoopSettings {
-    enabled: boolean;
-    pauseOnMissionStart: boolean;
-}
-
-export interface WorkflowPanicSettings {
-    terminateSessions: boolean;
-    clearLaunchQueue: boolean;
-    haltMission: boolean;
-}
-
-export interface WorkflowExecutionSettings {
-    maxParallelTasks: number;
-    maxParallelSessions: number;
-}
-
-export interface WorkflowStageTaskLaunchPolicy {
-    defaultAutostart: boolean;
-}
-
-export interface WorkflowStageDefinition {
-    stageId: MissionStageId;
-    displayName: string;
-    taskLaunchPolicy: WorkflowStageTaskLaunchPolicy;
-}
-
-export interface WorkflowGeneratedTaskDefinition {
-    taskId: string;
-    title: string;
-    instruction: string;
-    taskKind?: 'implementation' | 'verification';
-    pairedTaskId?: string;
-    dependsOn: string[];
-    agentRunner?: string;
-}
-
-export interface WorkflowTaskTemplateSource {
-    templateId: string;
-    path: string;
-}
-
-export interface WorkflowTaskGenerationRule {
-    stageId: MissionStageId;
-    artifactTasks: boolean;
-    templateSources: WorkflowTaskTemplateSource[];
-    tasks: WorkflowGeneratedTaskDefinition[];
-}
-
-export interface WorkflowGateDefinition {
-    gateId: string;
-    intent: MissionGateIntent;
-    stageId?: MissionStageId;
-}
-
-export interface WorkflowGlobalSettings {
-    autostart: WorkflowMissionAutostartSettings;
-    humanInLoop: WorkflowHumanInLoopSettings;
-    panic: WorkflowPanicSettings;
-    execution: WorkflowExecutionSettings;
-    stageOrder: MissionStageId[];
-    stages: Record<MissionStageId, WorkflowStageDefinition>;
-    taskGeneration: WorkflowTaskGenerationRule[];
-    gates: WorkflowGateDefinition[];
-}
+export type {
+    WorkflowExecutionSettings,
+    WorkflowGateDefinition,
+    WorkflowGeneratedTaskDefinition,
+    WorkflowGlobalSettings,
+    WorkflowHumanInLoopSettings,
+    WorkflowMissionAutostartSettings,
+    WorkflowPanicSettings,
+    WorkflowStageDefinition,
+    WorkflowStageTaskLaunchPolicy,
+    WorkflowTaskGenerationRule,
+    WorkflowTaskTemplateSource
+} from '../WorkflowSchema.js';
 
 export interface MissionWorkflowConfigurationSnapshot {
     createdAt: string;

@@ -1,9 +1,6 @@
 import { CopilotCliAgentRunner } from './CopilotCliAgentRunner.js';
 import { PiAgentRunner } from './PiAgentRunner.js';
-import {
-	getDefaultMissionDaemonSettingsWithOverrides,
-	readMissionDaemonSettings
-} from '../../lib/daemonConfig.js';
+import { readWorkflowSettingsDocument } from '../../lib/daemonConfig.js';
 import type { AgentRunner } from '../AgentRunner.js';
 
 export async function createConfiguredAgentRunners(options: {
@@ -11,7 +8,7 @@ export async function createConfiguredAgentRunners(options: {
 	terminalSessionName?: string;
 	logLine?: (line: string) => void;
 }): Promise<AgentRunner[]> {
-	getDefaultMissionDaemonSettingsWithOverrides(readMissionDaemonSettings(options.controlRoot) ?? {});
+	readWorkflowSettingsDocument(options.controlRoot);
 
 	return [
 		new CopilotCliAgentRunner({

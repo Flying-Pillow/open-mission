@@ -10,8 +10,8 @@
 	import type { LayoutData } from "./$types";
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
-	const appContext = createAppContext(() => data.appContext);
 	const airportRouteData = $derived(data.airportRouteData as AirportRouteData | undefined);
+	const appContext = createAppContext(() => data.appContext, data.airportRouteData as AirportRouteData | undefined);
 	let retryReloadTimer: ReturnType<typeof setTimeout> | undefined;
 	const showsRouteContent = $derived(true);
 

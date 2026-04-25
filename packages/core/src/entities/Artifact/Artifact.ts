@@ -8,7 +8,7 @@ import {
 	type MissionTaskAgent,
 	type MissionTaskStatus
 } from '../../types.js';
-import { getMissionArtifactDefinition } from '../../workflow/manifest.js';
+import { getMissionArtifactDefinition } from '../../workflow/mission/manifest.js';
 
 export type ArtifactKind = 'mission' | 'stage' | 'task';
 

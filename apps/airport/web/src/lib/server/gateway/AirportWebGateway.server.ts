@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import {
     DaemonApi,
     deriveRepositoryIdentity,
+    listRegisteredRepositories,
     resolveGitWorkspaceRoot,
     toMissionEntity,
     type MissionEntity,
@@ -505,6 +506,7 @@ export class AirportWebGateway {
             return this.createEmptyAirportHomeSnapshot();
         }
 
+        const registeredRepositories = await listRegisteredRepositories();
         let daemon: Awaited<ReturnType<AirportWebGateway['connectSharedDaemonClient']>> | undefined;
         try {
             daemon = await this.connectSharedDaemonClient();
@@ -522,12 +524,16 @@ export class AirportWebGateway {
                 ...(typeof status.control?.settingsComplete === 'boolean'
                     ? { settingsComplete: status.control.settingsComplete }
                     : {}),
-                repositories: (status.availableRepositories ?? []).map((repository) =>
+                repositories: registeredRepositories.map((repository) =>
                     this.toRepositorySnapshot(repository)
                 )
             });
         } catch {
-            return this.createEmptyAirportHomeSnapshot();
+            return airportHomeSnapshotSchema.parse({
+                repositories: registeredRepositories.map((repository) =>
+                    this.toRepositorySnapshot(repository)
+                )
+            });
         } finally {
             daemon?.dispose();
         }
@@ -614,7 +620,7 @@ export class AirportWebGateway {
         }
 
         const repositoryIdentity = deriveRepositoryIdentity(repositoryRootPath);
-        return repositorySchema.parse({
+        return repositorySnapshotSchema.shape.repository.parse({
             repositoryId: repositoryIdentity.repositoryId,
             repositoryRootPath: repositoryIdentity.repositoryRootPath,
             label: repositoryIdentity.githubRepository?.split('/').pop()
@@ -1179,7 +1185,7 @@ export class AirportWebGateway {
     }
 
     private toRepositorySnapshot(repository: Repository & { repositoryId?: string }): Repository {
-        return repositorySchema.parse({
+        return repositorySnapshotSchema.shape.repository.parse({
             repositoryId: repository.repositoryId,
             repositoryRootPath: repository.repositoryRootPath,
             label: repository.label,
@@ -1220,7 +1226,7 @@ export class AirportWebGateway {
 
         const repositoryRootPath = input.repositoryRootPath?.trim();
         if (repositoryRootPath) {
-            return repositorySchema.parse({
+            return repositorySnapshotSchema.shape.repository.parse({
                 repositoryId,
                 repositoryRootPath,
                 label: path.basename(repositoryRootPath) || repositoryRootPath,

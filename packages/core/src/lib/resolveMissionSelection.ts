@@ -8,7 +8,7 @@ import type {
 	MissionStageId,
 	TaskContext,
 } from '../types.js';
-import { getMissionStageDefinition } from '../workflow/manifest.js';
+import { getMissionStageDefinition } from '../workflow/mission/manifest.js';
 
 export function resolveMissionSelection(input: {
 	target: MissionSelectionTarget | undefined;

@@ -1,7 +1,7 @@
 import { cp, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createDefaultWorkflowSettings } from '../mission/workflow.js';
+import { createDefaultRepositoryWorkflowSettingsDocument } from '../../entities/Repository/RepositorySettingsDocument.js';
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(scriptDirectory, '../../..');
@@ -17,4 +17,4 @@ await cp(sourceDirectory, destinationDirectory, {
 	}
 });
 await mkdir(path.dirname(workflowDefinitionPath), { recursive: true });
-await writeFile(workflowDefinitionPath, `${JSON.stringify(createDefaultWorkflowSettings(), null, 2)}\n`, 'utf8');
+await writeFile(workflowDefinitionPath, `${JSON.stringify(createDefaultRepositoryWorkflowSettingsDocument(), null, 2)}\n`, 'utf8');

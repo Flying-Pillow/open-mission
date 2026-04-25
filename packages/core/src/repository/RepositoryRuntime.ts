@@ -104,7 +104,7 @@ import type {
 import type { AgentRunner } from '../agent/AgentRunner.js';
 import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
 import { refreshSystemStatus } from '../system/SystemStatus.js';
-import { toMission, type Mission } from '../entities/Mission/Mission.js';
+import { Mission } from '../entities/Mission/Mission.js';
 import { toAgentSession } from '../entities/AgentSession/AgentSession.js';
 import { Repository } from '../entities/Repository/Repository.js';
 import {
@@ -1632,7 +1632,7 @@ export class RepositoryRuntime {
 	}
 
 	private async toMissionStatusEntity(status: OperatorStatus): Promise<Mission> {
-		return toMission(await this.decorateMissionStatus(status, 'mission'));
+		return Mission.read(await this.decorateMissionStatus(status, 'mission'));
 	}
 
 	private buildSetupCommandFlow(

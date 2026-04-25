@@ -1,8 +1,7 @@
 import type { AirportProjectionSet, AirportState, PersistedAirportIntent } from './airport/types.js';
 import type { MissionAgentSessionRecord } from './daemon/protocol/contracts.js';
 import type { Repository } from './entities/Repository/Repository.js';
-import type { MissionDaemonSettings } from './lib/daemonConfig.js';
-import { MISSION_STAGE_IDS, type MissionStageId } from './workflow/stages.js';
+import type { RepositoryWorkflowSettingsDocument as WorkflowSettingsDocument } from './entities/Repository/RepositorySettingsDocument.js';
 import {
 	MISSION_AGENT_SESSION_LIFECYCLE_STATES,
 	MISSION_LIFECYCLE_STATES,
@@ -20,6 +19,7 @@ import {
 	type MissionWorkflowConfigurationSnapshot
 } from './workflow/engine/types.js';
 import {
+	MISSION_STAGE_IDS,
 	MISSION_ARTIFACT_KEYS,
 	MISSION_ARTIFACT_LABELS,
 	MISSION_ARTIFACTS,
@@ -33,12 +33,13 @@ import {
 	isMissionArtifactKey,
 	isMissionStageId,
 	isMissionStageProgress,
+	type MissionStageId,
 	type MissionArtifactKey,
 	type MissionTaskPairingDefinition,
 	type MissionStageProgress,
 	type MissionTaskStatusIntent,
 	type MissionWorkflowTaskStatus
-} from './workflow/manifest.js';
+} from './workflow/mission/manifest.js';
 
 export {
 	MISSION_AGENT_SESSION_LIFECYCLE_STATES,
@@ -490,7 +491,7 @@ export type RepositoryControlStatus = {
 	settingsPath: string;
 	worktreesPath: string;
 	currentBranch?: string;
-	settings: MissionDaemonSettings;
+	settings: WorkflowSettingsDocument;
 	isGitRepository: boolean;
 	initialized: boolean;
 	settingsPresent: boolean;
