@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type {
-    AirportHomeSnapshot,
-    GitHubIssueDetail,
-    RepositorySnapshot,
-    TrackedIssueSummary
-} from '@flying-pillow/mission-core/airport/runtime';
+    EntityCommandInvocation,
+    EntityFormInvocation,
+    EntityQueryInvocation,
+    EntityRemoteResult
+} from '@flying-pillow/mission-core/airport';
 import {
     entityCommandInvocationSchema,
     entityFormInvocationSchema,
@@ -12,269 +12,101 @@ import {
     executeEntityCommand,
     executeEntityForm,
     executeEntityQuery,
-    getRepositoryThroughEntityBoundary,
-    getRepositoryIssueThroughEntityBoundary,
-    listAirportRepositoriesThroughEntityBoundary,
-    listRepositoryIssuesThroughEntityBoundary,
-    startMissionFromBriefThroughEntityBoundary,
-    startMissionFromIssueThroughEntityBoundary,
     type EntityRemoteGateway
 } from './dispatch';
 
 function createGateway(): EntityRemoteGateway & {
-    getAirportHomeSnapshot: ReturnType<typeof vi.fn>;
-    readRepository: ReturnType<typeof vi.fn>;
-    listRepositoryIssues: ReturnType<typeof vi.fn>;
-    readRepositoryIssue: ReturnType<typeof vi.fn>;
-    startMissionFromIssue: ReturnType<typeof vi.fn>;
-    startMissionFromBrief: ReturnType<typeof vi.fn>;
+    executeEntityQuery: ReturnType<typeof vi.fn>;
+    executeEntityCommand: ReturnType<typeof vi.fn>;
 } {
-    const airportHome: AirportHomeSnapshot = {
-        repositories: [
-            {
-                repositoryId: 'repo-1',
-                repositoryRootPath: '/workspace/repo-1',
-                label: 'repo-1',
-                description: 'Repository 1'
-            }
-        ]
-    };
-    const issueList: TrackedIssueSummary[] = [
-        {
-            number: 42,
-            title: 'Issue 42',
-            url: 'https://example.test/issues/42',
-            labels: ['bug'],
-            assignees: ['octocat']
-        }
-    ];
-    const issueDetail: GitHubIssueDetail = {
-        number: 42,
-        title: 'Issue 42',
-        body: 'Detailed issue body',
-        url: 'https://example.test/issues/42',
-        labels: ['bug'],
-        assignees: ['octocat']
-    };
-    const repositorySnapshot: RepositorySnapshot = {
-        repository: airportHome.repositories[0],
-        operationalMode: 'repository',
-        missions: []
-    } as RepositorySnapshot;
-
     return {
-        getAirportHomeSnapshot: vi.fn(async () => airportHome),
-        readRepository: vi.fn(async () => repositorySnapshot),
-        listRepositoryIssues: vi.fn(async () => issueList),
-        readRepositoryIssue: vi.fn(async () => issueDetail),
-        startMissionFromIssue: vi.fn(async () => ({ missionId: 'mission-42' })),
-        startMissionFromBrief: vi.fn(async () => ({ missionId: 'mission-brief' }))
+        executeEntityQuery: vi.fn(async (input: EntityQueryInvocation): Promise<EntityRemoteResult> => ({
+            entity: input.entity,
+            method: input.method,
+            payload: input.payload ?? null
+        })),
+        executeEntityCommand: vi.fn(async (input: EntityCommandInvocation | EntityFormInvocation): Promise<EntityRemoteResult> => ({
+            entity: input.entity,
+            method: input.method,
+            payload: input.payload ?? null
+        }))
     };
 }
 
 describe('entity remote invocation schemas', () => {
-    it('accept reference-style query, command, and form invocations', () => {
+    it('accepts generic entity triplets without transport-side entity knowledge', () => {
         expect(() =>
             entityQueryInvocationSchema.parse({
-                reference: { entity: 'Airport' },
-                method: 'listRepositories',
-                args: {}
+                entity: 'Repository',
+                method: 'find',
+                payload: {}
             })
         ).not.toThrow();
+
         expect(() =>
             entityCommandInvocationSchema.parse({
-                reference: { entity: 'Repository', repositoryId: 'repo-1' },
+                entity: 'Repository',
                 method: 'startMissionFromIssue',
-                args: { issueNumber: 42 }
+                payload: { repositoryId: 'repo-1', issueNumber: 42 }
             })
         ).not.toThrow();
+
         expect(() =>
             entityFormInvocationSchema.parse({
-                reference: { entity: 'Repository', repositoryId: 'repo-1' },
+                entity: 'Repository',
                 method: 'startMissionFromBrief',
-                args: { title: 'Title', body: 'Body', type: 'feature' }
+                payload: { repositoryId: 'repo-1', title: 'Title', body: 'Body', type: 'feature' }
             })
         ).not.toThrow();
-    });
-
-    it('reject route-local query drift outside the stable entity-method surface', () => {
-        expect(() =>
-            entityQueryInvocationSchema.parse({
-                reference: { entity: 'Repository', repositoryId: 'repo-1' },
-                method: 'getRepositoryIssues',
-                args: {}
-            })
-        ).toThrow();
     });
 });
 
 describe('entity remote dispatch', () => {
-    it('routes airport and repository queries through the generic dispatcher', async () => {
+    it('forwards queries unchanged', async () => {
         const gateway = createGateway();
+        const invocation: EntityQueryInvocation = {
+            entity: 'Repository',
+            method: 'find',
+            payload: {}
+        };
 
-        await expect(
-            executeEntityQuery(gateway, {
-                reference: { entity: 'Airport' },
-                method: 'listRepositories',
-                args: {}
-            })
-        ).resolves.toEqual([
-            expect.objectContaining({ repositoryId: 'repo-1' })
-        ]);
-        await expect(
-            executeEntityQuery(gateway, {
-                reference: {
-                    entity: 'Repository',
-                    repositoryId: 'repo-1',
-                    repositoryRootPath: '/workspace/repo-1'
-                },
-                method: 'read',
-                args: {}
-            })
-        ).resolves.toEqual(
-            expect.objectContaining({
-                repository: expect.objectContaining({ repositoryId: 'repo-1' })
-            })
-        );
-        await expect(
-            executeEntityQuery(gateway, {
-                reference: {
-                    entity: 'Repository',
-                    repositoryId: 'repo-1',
-                    repositoryRootPath: '/workspace/repo-1'
-                },
-                method: 'listIssues',
-                args: {}
-            })
-        ).resolves.toEqual([
-            expect.objectContaining({ number: 42 })
-        ]);
-        await expect(
-            executeEntityQuery(gateway, {
-                reference: {
-                    entity: 'Repository',
-                    repositoryId: 'repo-1',
-                    repositoryRootPath: '/workspace/repo-1'
-                },
-                method: 'getIssue',
-                args: { issueNumber: 42 }
-            })
-        ).resolves.toEqual(expect.objectContaining({ number: 42 }));
-
-        expect(gateway.getAirportHomeSnapshot).toHaveBeenCalledTimes(1);
-        expect(gateway.readRepository).toHaveBeenCalledWith({
-            repositoryId: 'repo-1',
-            repositoryRootPath: '/workspace/repo-1'
+        await expect(executeEntityQuery(gateway, invocation)).resolves.toEqual({
+            entity: 'Repository',
+            method: 'find',
+            payload: {}
         });
-        expect(gateway.listRepositoryIssues).toHaveBeenCalledWith({
-            repositoryId: 'repo-1',
-            repositoryRootPath: '/workspace/repo-1'
-        });
-        expect(gateway.readRepositoryIssue).toHaveBeenCalledWith({
-            repositoryId: 'repo-1',
-            repositoryRootPath: '/workspace/repo-1',
-            issueNumber: 42
-        });
+        expect(gateway.executeEntityQuery).toHaveBeenCalledWith(invocation);
     });
 
-    it('routes repository commands and forms through the generic dispatcher', async () => {
+    it('forwards commands unchanged', async () => {
         const gateway = createGateway();
+        const invocation: EntityCommandInvocation = {
+            entity: 'Repository',
+            method: 'startMissionFromIssue',
+            payload: { repositoryId: 'repo-1', issueNumber: 42 }
+        };
 
-        await expect(
-            executeEntityCommand(gateway, {
-                reference: { entity: 'Repository', repositoryId: 'repo-1' },
-                method: 'startMissionFromBrief',
-                args: { title: 'Title', body: 'Body', type: 'feature' }
-            })
-        ).resolves.toEqual({
-            missionId: 'mission-brief',
-            redirectTo: '/repository/repo-1/missions/mission-brief'
+        await expect(executeEntityCommand(gateway, invocation)).resolves.toEqual({
+            entity: 'Repository',
+            method: 'startMissionFromIssue',
+            payload: { repositoryId: 'repo-1', issueNumber: 42 }
         });
-        await expect(
-            executeEntityCommand(gateway, {
-                reference: { entity: 'Repository', repositoryId: 'repo-1' },
-                method: 'startMissionFromIssue',
-                args: { issueNumber: 42 }
-            })
-        ).resolves.toEqual({
-            missionId: 'mission-42',
-            redirectTo: '/repository/repo-1/missions/mission-42'
-        });
-        await expect(
-            executeEntityForm(gateway, {
-                reference: { entity: 'Repository', repositoryId: 'repo-1' },
-                method: 'startMissionFromBrief',
-                args: { title: 'Title', body: 'Body', type: 'feature' }
-            })
-        ).resolves.toEqual({
-            missionId: 'mission-brief',
-            redirectTo: '/repository/repo-1/missions/mission-brief'
-        });
+        expect(gateway.executeEntityCommand).toHaveBeenCalledWith(invocation);
     });
 
-    it('fails explicitly when a mission mutation does not return a missionId', async () => {
+    it('forwards forms unchanged', async () => {
         const gateway = createGateway();
-        gateway.startMissionFromIssue.mockResolvedValueOnce({});
+        const invocation: EntityFormInvocation = {
+            entity: 'Repository',
+            method: 'startMissionFromBrief',
+            payload: { repositoryId: 'repo-1', title: 'Title', body: 'Body', type: 'feature' }
+        };
 
-        await expect(
-            executeEntityCommand(gateway, {
-                reference: { entity: 'Repository', repositoryId: 'repo-1' },
-                method: 'startMissionFromIssue',
-                args: { issueNumber: 42 }
-            })
-        ).rejects.toThrow("Entity method 'startMissionFromIssue' did not return a missionId.");
-    });
-});
-
-describe('transitional remote glue', () => {
-    it('keeps airport and repository legacy remotes transport-only', async () => {
-        const gateway = createGateway();
-
-        await expect(listAirportRepositoriesThroughEntityBoundary(gateway)).resolves.toEqual([
-            expect.objectContaining({ repositoryId: 'repo-1' })
-        ]);
-        await expect(
-            getRepositoryThroughEntityBoundary(gateway, {
-                repositoryId: 'repo-1',
-                repositoryRootPath: '/workspace/repo-1'
-            })
-        ).resolves.toEqual(
-            expect.objectContaining({
-                repository: expect.objectContaining({ repositoryId: 'repo-1' })
-            })
-        );
-        await expect(
-            listRepositoryIssuesThroughEntityBoundary(gateway, {
-                repositoryId: 'repo-1',
-                repositoryRootPath: '/workspace/repo-1'
-            })
-        ).resolves.toEqual([
-            expect.objectContaining({ number: 42 })
-        ]);
-        await expect(
-            getRepositoryIssueThroughEntityBoundary(gateway, {
-                repositoryId: 'repo-1',
-                repositoryRootPath: '/workspace/repo-1',
-                issueNumber: 42
-            })
-        ).resolves.toEqual(expect.objectContaining({ number: 42 }));
-        await expect(
-            startMissionFromIssueThroughEntityBoundary(gateway, {
-                repositoryId: 'repo-1',
-                issueNumber: 42
-            })
-        ).resolves.toEqual({
-            missionId: 'mission-42',
-            redirectTo: '/repository/repo-1/missions/mission-42'
+        await expect(executeEntityForm(gateway, invocation)).resolves.toEqual({
+            entity: 'Repository',
+            method: 'startMissionFromBrief',
+            payload: { repositoryId: 'repo-1', title: 'Title', body: 'Body', type: 'feature' }
         });
-        await expect(
-            startMissionFromBriefThroughEntityBoundary(gateway, {
-                repositoryId: 'repo-1',
-                brief: { title: 'Title', body: 'Body', type: 'feature' }
-            })
-        ).resolves.toEqual({
-            missionId: 'mission-brief',
-            redirectTo: '/repository/repo-1/missions/mission-brief'
-        });
+        expect(gateway.executeEntityCommand).toHaveBeenCalledWith(invocation);
     });
 });

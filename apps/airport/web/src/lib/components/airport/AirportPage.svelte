@@ -6,7 +6,9 @@
 
     const appContext = getAppContext();
     const airportHomeState = $derived(appContext.application.airportHomeState);
-    const airportHomeLoading = $derived(appContext.application.airportHomeLoading);
+    const airportHomeLoading = $derived(
+        appContext.application.airportHomeLoading,
+    );
     const airportHomeError = $derived(appContext.application.airportHomeError);
 </script>
 
@@ -27,14 +29,14 @@
             </p>
         </section>
     {:else}
-        <AirportHomeStatus />
+        <!-- <AirportHomeStatus /> -->
 
         <div
             class="mt-4 grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[1.05fr_0.95fr] xl:overflow-hidden"
         >
             <RepositoryList />
 
-            <AirportHomeAddRepository />
+            <!-- <AirportHomeAddRepository /> -->
         </div>
     {/if}
 </div>

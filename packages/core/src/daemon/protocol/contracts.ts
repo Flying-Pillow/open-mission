@@ -12,6 +12,7 @@ import type {
 	OperatorStatus,
 	TrackedIssueSummary
 } from '../../types.js';
+import type { SystemState } from '../../schemas/SystemState.js';
 import type { Mission } from '../../entities/Mission/Mission.js';
 import type { AgentSession } from '../../entities/AgentSession/AgentSession.js';
 import type { Repository } from '../../entities/Repository/Repository.js';
@@ -27,6 +28,12 @@ import type {
 	WorkflowSettingsUpdateResult,
 	WorkflowSettingsValidationError
 } from '../../settings/types.js';
+import type {
+	EntityCommandInvocation,
+	EntityFormInvocation,
+	EntityQueryInvocation,
+	EntityRemoteResult
+} from '../../airport/entityRemote.js';
 
 export type MissionAgentPrimitiveValue = string | number | boolean | null;
 
@@ -304,7 +311,7 @@ export type MissionAgentEvent =
 		state: MissionAgentSessionState;
 	};
 
-export const PROTOCOL_VERSION = 22;
+export const PROTOCOL_VERSION = 23;
 
 export type Method =
 	| 'ping'
@@ -314,6 +321,8 @@ export type Method =
 	| 'airport.client.connect'
 	| 'airport.client.observe'
 	| 'airport.pane.bind'
+	| 'entity.query'
+	| 'entity.command'
 	| 'control.status'
 	| 'control.settings.update'
 	| 'control.document.read'
@@ -364,6 +373,8 @@ export const METHOD_METADATA: Record<Method, MethodMetadata> = {
 	'airport.client.connect': { includeSurfacePath: true, workspaceRoute: 'none' },
 	'airport.client.observe': { includeSurfacePath: true, workspaceRoute: 'none' },
 	'airport.pane.bind': { includeSurfacePath: true, workspaceRoute: 'none' },
+	'entity.query': { includeSurfacePath: true, workspaceRoute: 'control' },
+	'entity.command': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.status': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.settings.update': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.document.read': { includeSurfacePath: true, workspaceRoute: 'control' },
@@ -459,6 +470,11 @@ export type ControlWorkflowSettingsGet = Record<string, never>;
 export type ControlStatus = {
 	includeMissions?: boolean;
 };
+
+export type EntityQueryRequest = EntityQueryInvocation;
+export type EntityCommandRequest = EntityCommandInvocation | EntityFormInvocation;
+export type EntityQueryResponse = EntityRemoteResult;
+export type EntityCommandResponse = EntityRemoteResult;
 
 export type ControlWorkflowSettingsInitialize = WorkflowSettingsInitializeRequest;
 
@@ -664,6 +680,7 @@ export type SuccessResponse = {
 	ok: true;
 	result:
 	| Ping
+	| SystemState
 	| SystemSnapshot
 	| OperatorStatus
 	| ControlDocumentResponse
@@ -672,6 +689,8 @@ export type SuccessResponse = {
 	| Repository[]
 	| GitHubVisibleRepository[]
 	| GitHubIssueDetail
+	| EntityQueryResponse
+	| EntityCommandResponse
 	| MissionGateResult
 	| WorkflowSettingsGetResult
 	| ControlWorkflowSettingsInitializeResponse

@@ -5,7 +5,7 @@ import {
     missionSessionTerminalQuerySchema,
     missionSessionTerminalRouteParamsSchema
 } from '@flying-pillow/mission-core';
-import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
+import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, params, url }) => {
@@ -16,7 +16,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
         repositoryRootPath: url.searchParams.get('repositoryRootPath') ?? undefined
     });
 
-    const gateway = new AirportWebGateway(locals);
+    const gateway = new DaemonGateway(locals);
     const repository = query.repositoryRootPath
         ? { repositoryRootPath: query.repositoryRootPath }
         : query.repositoryId
@@ -45,7 +45,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
     });
     const body = missionSessionTerminalInputSchema.parse(await request.json());
 
-    const gateway = new AirportWebGateway(locals);
+    const gateway = new DaemonGateway(locals);
     const repository = query.repositoryRootPath
         ? { repositoryRootPath: query.repositoryRootPath }
         : query.repositoryId

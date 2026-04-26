@@ -1,11 +1,6 @@
-/**
- * @file packages/core/src/lib/repoConfig.ts
- * @description Defines repo-scoped Mission control paths and local mission worktree roots.
- */
-
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { resolveGitHubRepositoryFromWorkspace } from '../platforms/GitHubPlatformAdapter.js';
+import { resolveGitHubRepositoryFromWorkspace } from '../../platforms/GitHubPlatformAdapter.js';
 
 export const MISSION_DIRECTORY = '.mission';
 export const DEFAULT_MISSION_WORKSPACE_ROOT = 'missions';

@@ -6,8 +6,8 @@ import {
 	getMissionCatalogPath,
 	getMissionDirectoryPath,
 	getMissionWorktreesPath
-} from '../../lib/repoConfig.js';
-import { getWorkflowSettingsDocumentPath } from '../../lib/daemonConfig.js';
+} from './RepositoryPaths.js';
+import { getRepositorySettingsPath } from '../../lib/daemonConfig.js';
 import { initializeRepository } from './initializeRepository.js';
 import { refreshSystemStatus } from '../../system/SystemStatus.js';
 import type { MissionPreparationStatus } from '../../types.js';
@@ -33,7 +33,7 @@ export class RepositoryPreparationService {
 
 			const proposalStore = new FilesystemAdapter(proposalWorktreePath);
 			proposalStore.stagePaths([
-				path.relative(proposalWorktreePath, initialization.workflowDocumentPath),
+				path.relative(proposalWorktreePath, initialization.settingsDocumentPath),
 				path.relative(proposalWorktreePath, initialization.workflowDirectoryPath)
 			], proposalWorktreePath, { force: true });
 			proposalStore.commit(this.buildCommitMessage(), proposalWorktreePath);
@@ -55,7 +55,7 @@ export class RepositoryPreparationService {
 				baseBranch,
 				pullRequestUrl,
 				controlDirectoryPath: getMissionDirectoryPath(this.store.getWorkspaceRoot()),
-				settingsPath: getWorkflowSettingsDocumentPath(this.store.getWorkspaceRoot()),
+				settingsPath: getRepositorySettingsPath(this.store.getWorkspaceRoot()),
 				worktreesPath: getMissionWorktreesPath(this.store.getWorkspaceRoot()),
 				missionsPath: getMissionCatalogPath(this.store.getWorkspaceRoot())
 			};
@@ -76,7 +76,8 @@ export class RepositoryPreparationService {
 			'This PR initializes the tracked Mission repository scaffolding.',
 			'',
 			`- Branch: \`${branchRef}\``,
-			'- Creates `.mission/workflow/workflow.json` as the unified repository workflow settings document.',
+			'- Creates `.mission/settings.json` as the repository settings document.',
+			'- Creates `.mission/workflow/workflow.json` as the repository workflow definition.',
 			'- Creates `.mission/workflow/templates/` as the repository-owned workflow preset.',
 			'- Establishes repo-scoped Mission control settings.',
 			'- Leaves branch-owned `.mission/missions/<mission-id>` content to mission branches.',

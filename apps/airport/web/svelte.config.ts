@@ -8,17 +8,6 @@ import { createDocsSourcePreprocessor } from "./src/lib/docs/source-normalizatio
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const docsRootDirectory = path.resolve(currentDirectory, "../../../docs");
-const workspacePackageRoots = {
-	"@flying-pillow/mission-core": path.resolve(currentDirectory, "../../../packages/core/src"),
-	"@flying-pillow/mission": path.resolve(currentDirectory, "../../../packages/mission/src")
-} as const;
-
-const workspacePackageAliases = Object.fromEntries(
-	Object.entries(workspacePackageRoots).flatMap(([packageName, packageRoot]) => [
-		[packageName, packageRoot],
-		[`${packageName}/*`, `${packageRoot}/*`]
-	])
-);
 
 const config: Config = {
 	compilerOptions: {
@@ -43,11 +32,6 @@ const config: Config = {
 			$lib: path.resolve(currentDirectory, "src/lib"),
 			$docs: docsRootDirectory,
 			"$docs/*": `${docsRootDirectory}/*`,
-			"@flying-pillow/mission-core/browser": path.resolve(
-				currentDirectory,
-				"../../../packages/core/src/browser.ts",
-			),
-			...workspacePackageAliases,
 		},
 	},
 };

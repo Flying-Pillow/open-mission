@@ -1,6 +1,5 @@
 import { getRequestEvent, query } from '$app/server';
 import { z } from 'zod/v4';
-import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
 import { repositoryRuntimeRouteParamsSchema } from '@flying-pillow/mission-core';
 
 const repositoryDataQuerySchema = z.object({
@@ -11,10 +10,11 @@ export const getRepositoryData = query(
     repositoryDataQuerySchema,
     async (input) => {
         const event = getRequestEvent();
+        const { DaemonGateway } = await import('$lib/server/daemon/daemon-gateway');
         const { repositoryId } = repositoryRuntimeRouteParamsSchema.parse({
             repositoryId: input.repositoryId
         });
-        const gateway = new AirportWebGateway(event.locals);
+        const gateway = new DaemonGateway(event.locals);
         const airportHome = await gateway.getAirportHomeSnapshot();
 
         return {

@@ -5,11 +5,8 @@ import {
     githubIssueDetailSchema,
     trackedIssueSummarySchema
 } from '@flying-pillow/mission-core/airport/runtime';
-import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
-import {
-    getRepositoryIssueThroughEntityBoundary,
-    listRepositoryIssuesThroughEntityBoundary
-} from '../../../api/entities/remote/dispatch';
+import { executeEntityQuery } from '../../../api/entities/remote/dispatch';
+import { EntityProxy } from '$lib/server/daemon/entity-proxy';
 
 const repositoryIssuesQuerySchema = z.object({
     repositoryId: z.string().trim().min(1),
@@ -24,18 +21,26 @@ const repositoryIssueQuerySchema = z.object({
 
 export const getRepositoryIssues = query(repositoryIssuesQuerySchema, async (input) => {
     return z.array(trackedIssueSummarySchema).parse(
-        await listRepositoryIssuesThroughEntityBoundary(
-            new AirportWebGateway(getRequestEvent().locals),
-            input
+        await executeEntityQuery(
+            new EntityProxy(getRequestEvent().locals),
+            {
+                entity: 'Repository',
+                method: 'listIssues',
+                payload: input
+            }
         )
     );
 });
 
 export const getRepositoryIssue = query(repositoryIssueQuerySchema, async (input) => {
     return githubIssueDetailSchema.parse(
-        await getRepositoryIssueThroughEntityBoundary(
-            new AirportWebGateway(getRequestEvent().locals),
-            input
+        await executeEntityQuery(
+            new EntityProxy(getRequestEvent().locals),
+            {
+                entity: 'Repository',
+                method: 'getIssue',
+                payload: input
+            }
         )
     );
 });

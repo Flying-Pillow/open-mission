@@ -1,17 +1,17 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import {
-	getWorkflowSettingsDocumentPath,
+	getRepositorySettingsPath,
 } from '../../lib/daemonConfig.js';
 import {
 	getMissionDirectoryPath,
 	getMissionWorktreesPath
-} from '../../lib/repoConfig.js';
+} from './RepositoryPaths.js';
 import { WorkflowSettingsStore } from '../../settings/index.js';
 
 export type RepositoryInitialization = {
 	controlDirectoryPath: string;
-	workflowDocumentPath: string;
+	settingsDocumentPath: string;
 	workflowDirectoryPath: string;
 	workflowDefinitionPath: string;
 	workflowTemplatesPath: string;
@@ -29,7 +29,7 @@ export async function initializeRepository(
 	// This is the low-level scaffolder used inside temporary proposal worktrees and tests.
 	// Operator-facing repository initialization is routed through RepositoryPreparationService.
 	const controlDirectoryPath = getMissionDirectoryPath(workspaceRoot);
-	const workflowDocumentPath = getWorkflowSettingsDocumentPath(workspaceRoot, {
+	const settingsDocumentPath = getRepositorySettingsPath(workspaceRoot, {
 		resolveWorkspaceRoot: false
 	});
 	const worktreesRoot = getMissionWorktreesPath(workspaceRoot);
@@ -47,7 +47,7 @@ export async function initializeRepository(
 
 	return {
 		controlDirectoryPath,
-		workflowDocumentPath,
+		settingsDocumentPath,
 		workflowDirectoryPath,
 		workflowDefinitionPath,
 		workflowTemplatesPath,

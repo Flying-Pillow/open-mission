@@ -32,10 +32,10 @@
     );
     const resolvedCountLabel = $derived(
         mode === "repositories"
-            ? (repositories.length === 1
+            ? repositories.length === 1
                 ? "1 repository registered"
-                : `${repositories.length} repositories registered`)
-            : (activeRepository?.missionCountLabel || "0 missions"),
+                : `${repositories.length} repositories registered`
+            : activeRepository?.missionCountLabel || "0 missions",
     );
     const resolvedEmptyMessage = $derived(
         mode === "repositories"

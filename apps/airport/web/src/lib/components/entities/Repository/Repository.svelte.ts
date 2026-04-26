@@ -2,14 +2,21 @@
 import type {
     GitHubIssueDetail,
     MissionRuntimeSnapshot,
+    Repository as RepositorySummary,
     RepositorySnapshot,
     TrackedIssueSummary
 } from '@flying-pillow/mission-core/airport/runtime';
 import {
     githubIssueDetailSchema,
+    repositorySnapshotSchema,
+    repositorySchema,
     trackedIssueSummarySchema
 } from '@flying-pillow/mission-core/airport/runtime';
+import {
+    repositoryMissionMutationStatusSchema
+} from '@flying-pillow/mission-core/entities/Repository/RepositoryRemote';
 import { z } from 'zod/v4';
+import { getApp } from '$lib/client/globals';
 import { cmd } from '../../../../routes/api/entities/remote/command.remote';
 import { qry } from '../../../../routes/api/entities/remote/query.remote';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
@@ -79,6 +86,18 @@ export class Repository implements EntityModel<RepositorySnapshot> {
 
     public get summary(): RepositorySnapshot['repository'] {
         return structuredClone($state.snapshot(this.data.repository));
+    }
+
+    public static async find(): Promise<Repository[]> {
+        const snapshots = z.array(repositorySnapshotSchema).parse(
+            await qry({
+                entity: 'Repository',
+                method: 'find',
+                payload: {}
+            })
+        );
+
+        return getApp().reconcileRepositories(snapshots);
     }
 
     public get selectedMissionId(): string | undefined {
@@ -163,49 +182,49 @@ export class Repository implements EntityModel<RepositorySnapshot> {
 
     public async listIssues(): Promise<TrackedIssueSummary[]> {
         return z.array(trackedIssueSummarySchema).parse(
-            await this.listIssuesQuery().run()
+            await this.listIssuesQuery()
         );
     }
 
     public listIssuesQuery() {
         return qry({
-            reference: {
-                entity: 'Repository',
+            entity: 'Repository',
+            method: 'listIssues',
+            payload: {
                 repositoryId: this.repositoryId,
                 repositoryRootPath: this.repositoryRootPath
-            },
-            method: 'listIssues',
-            args: {}
+            }
         });
     }
 
     public async getIssue(issueNumber: number): Promise<GitHubIssueDetail> {
         return githubIssueDetailSchema.parse(
             await qry({
-                reference: {
-                    entity: 'Repository',
-                    repositoryId: this.repositoryId,
-                    repositoryRootPath: this.repositoryRootPath
-                },
+                entity: 'Repository',
                 method: 'getIssue',
-                args: {
+                payload: {
+                    repositoryId: this.repositoryId,
+                    repositoryRootPath: this.repositoryRootPath,
                     issueNumber
                 }
-            }).run()
+            })
         );
     }
 
     public async startMissionFromIssue(issueNumber: number): Promise<{ missionId: string; redirectTo: string }> {
-        return await cmd({
-            reference: {
-                entity: 'Repository',
-                repositoryId: this.repositoryId
-            },
+        const result = repositoryMissionMutationStatusSchema.parse(await cmd({
+            entity: 'Repository',
             method: 'startMissionFromIssue',
-            args: {
+            payload: {
+                repositoryId: this.repositoryId,
                 issueNumber
             }
-        });
+        }));
+
+        return {
+            missionId: result.missionId,
+            redirectTo: `/repository/${encodeURIComponent(this.repositoryId)}/missions/${encodeURIComponent(result.missionId)}`
+        };
     }
 
     public async startMissionFromBrief(input: {
@@ -213,14 +232,19 @@ export class Repository implements EntityModel<RepositorySnapshot> {
         body: string;
         type: 'feature' | 'fix' | 'docs' | 'refactor' | 'task';
     }): Promise<{ missionId: string; redirectTo: string }> {
-        return await cmd({
-            reference: {
-                entity: 'Repository',
-                repositoryId: this.repositoryId
-            },
+        const result = repositoryMissionMutationStatusSchema.parse(await cmd({
+            entity: 'Repository',
             method: 'startMissionFromBrief',
-            args: input
-        });
+            payload: {
+                repositoryId: this.repositoryId,
+                ...input
+            }
+        }));
+
+        return {
+            missionId: result.missionId,
+            redirectTo: `/repository/${encodeURIComponent(this.repositoryId)}/missions/${encodeURIComponent(result.missionId)}`
+        };
     }
 
     private createSelectedMission(snapshot?: MissionRuntimeSnapshot): Mission | undefined {

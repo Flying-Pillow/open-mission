@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const logsDir = path.join(workspaceRoot, '.logs');
 const userArgs = process.argv.slice(2);
+const enableDaemon = process.env.MISSION_AIRPORT_ENABLE_DAEMON !== 'false';
 
 function runChecked(command, args, options = {}) {
 	const result = spawnSync(command, args, {
@@ -96,29 +97,25 @@ function shutdown(exitCode = 0, signal) {
 }
 
 runChecked('pnpm', ['run', 'mission:install:local:dev']);
-runChecked('pnpm', [
-	'--dir',
-	'./packages/mission',
-	'exec',
-	'node',
-	'--conditions=development',
-	'--import',
-	'tsx',
-	'./src/mission.ts',
-	'daemon:stop',
-	'--json'
-]);
+if (enableDaemon) {
+	runChecked('pnpm', [
+		'--dir',
+		'./packages/mission',
+		'exec',
+		'node',
+		'--conditions=development',
+		'--import',
+		'tsx',
+		'./src/mission.ts',
+		'daemon:stop',
+		'--json'
+	]);
+}
 
 const supervisedEnv = {
 	MISSION_DAEMON_SUPERVISED: '1'
 };
 
-const daemon = spawnManaged(
-	'pnpm',
-	['--dir', './packages/core', 'run', 'daemon:dev'],
-	supervisedEnv,
-	'daemon.log'
-);
 const web = spawnManaged(
 	'pnpm',
 	['--dir', './apps/airport/web', 'run', 'dev', '--', ...userArgs],
@@ -126,11 +123,23 @@ const web = spawnManaged(
 	'web.log'
 );
 
-process.stdout.write(
-	`Development logs: ${path.join(logsDir, 'daemon.log')} and ${path.join(logsDir, 'web.log')}\n`
-);
+if (enableDaemon) {
+	const daemon = spawnManaged(
+		'pnpm',
+		['--dir', './packages/core', 'run', 'daemon:dev'],
+		supervisedEnv,
+		'daemon.log'
+	);
+	children.add(daemon);
+	process.stdout.write(
+		`Development logs: ${path.join(logsDir, 'daemon.log')} and ${path.join(logsDir, 'web.log')}\n`
+	);
+} else {
+	process.stdout.write(
+		`Development log: ${path.join(logsDir, 'web.log')} (daemon startup disabled by MISSION_AIRPORT_ENABLE_DAEMON=false)\n`
+	);
+}
 
-children.add(daemon);
 children.add(web);
 
 for (const child of children) {

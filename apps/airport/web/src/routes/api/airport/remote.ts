@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { command, getRequestEvent, query } from '$app/server';
 import { z } from 'zod/v4';
 import {
@@ -12,17 +11,13 @@ import {
     missionRuntimeRouteParamsSchema,
     repositoryRuntimeRouteParamsSchema
 } from '@flying-pillow/mission-core';
-import { getMissionWorktreesPath } from '@flying-pillow/mission-core/node';
-import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
+import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import { clearGithubAuthSession } from '$lib/server/github-auth.server';
 import type { MissionControlSnapshot } from '$lib/types/mission-control';
 
 const airportRouteQuerySchema = z.object({});
 const addAirportRepositoryInputSchema = z.object({
-    repositoryPath: z.string().trim().min(1, 'Repository path is required.').refine(
-        (value) => path.isAbsolute(value),
-        'Repository path must be an absolute local checkout path on the daemon host.'
-    ),
+    repositoryPath: z.string().trim().min(1, 'Repository path is required.'),
     githubRepository: z.string().trim().min(1).optional()
 });
 const missionRouteQuerySchema = z.object({
@@ -69,7 +64,7 @@ export type MissionRouteData = z.infer<typeof missionRouteDataSchema>;
 
 export const getAirportRouteData = query(airportRouteQuerySchema, async () => {
     const event = getRequestEvent();
-    const gateway = new AirportWebGateway(event.locals);
+    const gateway = new DaemonGateway(event.locals);
     let githubRepositories: AirportRouteData['githubRepositories'] = [];
     let githubRepositoriesError: string | undefined;
 
@@ -88,8 +83,12 @@ export const getAirportRouteData = query(airportRouteQuerySchema, async () => {
 });
 
 export const addAirportRepository = command(addAirportRepositoryInputSchema, async (input) => {
+    const path = await import('node:path');
     const event = getRequestEvent();
-    const gateway = new AirportWebGateway(event.locals);
+    if (!path.isAbsolute(input.repositoryPath)) {
+        throw new Error('Repository path must be an absolute local checkout path on the daemon host.');
+    }
+    const gateway = new DaemonGateway(event.locals);
     const selectedGitHubRepository = input.githubRepository?.trim();
     const repository = selectedGitHubRepository
         ? await gateway.cloneGitHubRepository(selectedGitHubRepository, input.repositoryPath)
@@ -114,6 +113,8 @@ export const logoutAirportSession = command(z.object({}), async () => {
 });
 
 export const getMissionRouteData = query(missionRouteQuerySchema, async (input) => {
+    const path = await import('node:path');
+    const { getMissionWorktreesPath } = await import('@flying-pillow/mission-core/node');
     const event = getRequestEvent();
     const { repositoryId } = repositoryRuntimeRouteParamsSchema.parse({
         repositoryId: input.repositoryId
@@ -121,7 +122,7 @@ export const getMissionRouteData = query(missionRouteQuerySchema, async (input) 
     const { missionId } = missionRuntimeRouteParamsSchema.parse({
         missionId: input.missionId
     });
-    const gateway = new AirportWebGateway(event.locals);
+    const gateway = new DaemonGateway(event.locals);
     const airportHome = await gateway.getAirportHomeSnapshot();
     const repositorySurface = await gateway.getRepositorySurfaceSnapshot({
         repositoryId,

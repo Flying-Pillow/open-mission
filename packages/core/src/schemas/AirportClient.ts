@@ -1,0 +1,42 @@
+export type {
+    AgentCommand,
+    AgentPrompt,
+    AgentSession,
+    AirportHomeSnapshot,
+    AirportRuntimeEventEnvelope,
+    GitHubIssueDetail,
+    GitHubVisibleRepository,
+    Mission,
+    MissionReference,
+    MissionRuntimeMissionCommandInput,
+    MissionRuntimeSessionCommandInput,
+    MissionRuntimeSnapshot,
+    MissionRuntimeTaskCommandInput,
+    MissionSessionTerminalHandle,
+    MissionSessionTerminalSnapshot,
+    MissionSessionTerminalSocketClientMessage,
+    MissionSessionTerminalSocketServerMessage,
+    MissionTerminalSnapshot,
+    MissionTerminalSocketClientMessage,
+    MissionTerminalSocketServerMessage,
+    Repository,
+    RepositorySnapshot,
+    TrackedIssueSummary
+} from '../airport/runtime.js';
+
+export type {
+    AgentSessionContext,
+    ArtifactContext,
+    ContextGraph,
+    MissionResolvedSelection,
+    MissionSelectionTarget,
+    MissionStageId,
+    MissionTowerTreeNode,
+    OperatorActionDescriptor,
+    OperatorActionExecutionStep,
+    OperatorActionFlowStep,
+    OperatorActionListSnapshot,
+    OperatorActionQueryContext,
+    OperatorActionTargetContext,
+    OperatorStatus
+} from '../types.js';

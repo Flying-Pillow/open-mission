@@ -1,19 +1,17 @@
 import type {
-    MissionSessionTerminalSocketClientMessageDto,
-    MissionSessionTerminalSocketServerMessageDto,
-    MissionSessionTerminalSnapshotDto,
-    MissionTerminalSocketClientMessageDto,
-    MissionTerminalSocketServerMessageDto,
-    MissionTerminalSnapshotDto,
-} from '@flying-pillow/mission-core/airport/runtime';
-import {
-    missionSessionTerminalSnapshotSchema,
-    missionSessionTerminalSocketServerMessageSchema,
-    missionTerminalSnapshotSchema,
-    missionTerminalSocketServerMessageSchema,
     type MissionSessionTerminalSnapshot,
+    type MissionSessionTerminalSocketClientMessage,
+    type MissionSessionTerminalSocketServerMessage,
     type MissionTerminalSnapshot,
-} from '@flying-pillow/mission-core/airport/runtime';
+    type MissionTerminalSocketClientMessage,
+    type MissionTerminalSocketServerMessage,
+} from '@flying-pillow/mission-core/schemas';
+import {
+    parseMissionSessionTerminalSnapshot,
+    parseMissionSessionTerminalSocketServerMessage,
+    parseMissionTerminalSnapshot,
+    parseMissionTerminalSocketServerMessage
+} from '$lib/client/runtime/parsers';
 
 type TerminalSnapshotBase = {
     connected: boolean;
@@ -46,16 +44,16 @@ type TerminalServerMessage<TSnapshot extends TerminalSnapshotBase, TOutput exten
     };
 
 type TerminalClientMessage =
-    | MissionTerminalSocketClientMessageDto
-    | MissionSessionTerminalSocketClientMessageDto;
+    | MissionTerminalSocketClientMessage
+    | MissionSessionTerminalSocketClientMessage;
 
 type SharedTerminalSnapshot =
-    | MissionTerminalSnapshotDto
-    | MissionSessionTerminalSnapshotDto;
+    | MissionTerminalSnapshot
+    | MissionSessionTerminalSnapshot;
 
 type SharedTerminalServerMessage =
-    | MissionTerminalSocketServerMessageDto
-    | MissionSessionTerminalSocketServerMessageDto;
+    | MissionTerminalSocketServerMessage
+    | MissionSessionTerminalSocketServerMessage;
 
 type TerminalBrokerState<TSnapshot extends TerminalSnapshotBase> = {
     snapshot: TSnapshot | null;
@@ -137,7 +135,7 @@ export function subscribeMissionTerminalTransport(
                 );
             }
 
-            return missionTerminalSnapshotSchema.parse(await response.json());
+            return parseMissionTerminalSnapshot(await response.json());
         },
         createSocket: () => {
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -147,7 +145,7 @@ export function subscribeMissionTerminalTransport(
             );
             return new WebSocket(wsUrl);
         },
-        parseMessage: (value) => missionTerminalSocketServerMessageSchema.parse(value),
+        parseMessage: (value) => parseMissionTerminalSocketServerMessage(value),
     }, listener);
 }
 
@@ -176,7 +174,7 @@ export function subscribeMissionSessionTerminalTransport(
                 throw new Error(`Terminal snapshot request failed (${response.status}).`);
             }
 
-            return missionSessionTerminalSnapshotSchema.parse(await response.json());
+            return parseMissionSessionTerminalSnapshot(await response.json());
         },
         createSocket: () => {
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -186,7 +184,7 @@ export function subscribeMissionSessionTerminalTransport(
             );
             return new WebSocket(wsUrl);
         },
-        parseMessage: (value) => missionSessionTerminalSocketServerMessageSchema.parse(value),
+        parseMessage: (value) => parseMissionSessionTerminalSocketServerMessage(value),
     }, listener);
 }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultWorkflowSettings, validateWorkflowSettings } from '../workflow/mission/workflow.js';
+import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
+import { validateWorkflowSettings } from './validation.js';
 
 describe('workflow settings validation', () => {
 	it('reports invalid concurrency values', () => {

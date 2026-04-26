@@ -14,6 +14,14 @@ function resolveDaemonAutoStart(allowStart: boolean): boolean {
     return allowStart;
 }
 
+function resolveWebDaemonRuntimeMode(): 'source' | 'build' {
+    if (process.env['NODE_ENV'] !== 'production') {
+        return 'source';
+    }
+
+    return resolveAirportDaemonRuntimeMode(import.meta.url);
+}
+
 export async function openDaemonConnection(input: {
     surfacePath: string;
     allowStart: boolean;
@@ -24,7 +32,7 @@ export async function openDaemonConnection(input: {
 }> {
     const client = await connectAirportDaemon({
         surfacePath: input.surfacePath,
-        runtimeMode: resolveAirportDaemonRuntimeMode(import.meta.url),
+        runtimeMode: resolveWebDaemonRuntimeMode(),
         allowStart: resolveDaemonAutoStart(input.allowStart),
         ...(input.authToken ? { authToken: input.authToken } : {})
     });

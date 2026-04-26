@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import { MissionRuntime } from './Mission.js';
 import type { MissionWorkflowBindings } from './Mission.js';
 import { initializeRepository } from '../entities/Repository/initializeRepository.js';
-import { readMissionDaemonSettings } from '../lib/daemonConfig.js';
+import { readRepositorySettingsDocument } from '../lib/daemonConfig.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import type { MissionBrief, MissionDescriptor, MissionPreparationStatus } from '../types.js';
 
@@ -32,7 +32,7 @@ export class MissionPreparationService {
 			await this.store.materializeMissionWorktree(proposalWorktreePath, branchRef, baseBranch);
 
 			const proposalStore = new FilesystemAdapter(proposalWorktreePath);
-			const initialization = readMissionDaemonSettings(proposalWorktreePath)
+			const initialization = readRepositorySettingsDocument(proposalWorktreePath)
 				? undefined
 				: await initializeRepository(proposalWorktreePath, {
 					includeRuntimeDirectories: false
@@ -75,7 +75,7 @@ export class MissionPreparationService {
 				[
 					...(initialization
 						? [
-							path.relative(proposalWorktreePath, initialization.daemonSettingsPath),
+							path.relative(proposalWorktreePath, initialization.settingsDocumentPath),
 							path.relative(proposalWorktreePath, initialization.workflowDirectoryPath)
 						]
 						: []),

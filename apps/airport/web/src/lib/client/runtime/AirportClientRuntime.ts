@@ -2,7 +2,7 @@
 import type {
     AirportRuntimeEventEnvelope,
     MissionRuntimeSnapshot
-} from '@flying-pillow/mission-core/airport/runtime';
+} from '@flying-pillow/mission-core/schemas';
 import { Mission } from '$lib/components/entities/Mission/Mission.svelte.js';
 import { EntityRuntimeStore } from '$lib/client/runtime/EntityRuntimeStore';
 import { MissionCommandTransport } from '$lib/client/runtime/transport/MissionCommandTransport';

@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
-import { getMissionWorktreesPath } from '../lib/repoConfig.js';
+import { getMissionWorktreesPath } from '../entities/Repository/RepositoryPaths.js';
 import { FakeAgentRunner } from '../agent/testing/FakeAgentRunner.js';
 import type { MissionAgentSessionRecord } from '../daemon/protocol/contracts.js';
 import type { MissionStageStatus, MissionTowerTreeNode } from '../types.js';

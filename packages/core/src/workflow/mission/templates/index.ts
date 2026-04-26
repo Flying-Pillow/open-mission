@@ -6,7 +6,7 @@ import { renderTemplate } from '../../engine/templates/templateRenderer.js';
 import { renderMissionTitle } from './common.js';
 import { parseFrontmatterDocument } from '../../../lib/frontmatter.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../../../agent/runtimes/AgentRuntimeIds.js';
-import { getMissionWorkflowTemplatesPath } from '../../../lib/repoConfig.js';
+import { getMissionWorkflowTemplatesPath } from '../../../entities/Repository/RepositoryPaths.js';
 import type {
     MissionProductTemplate,
     MissionStageTemplateDefinitions,

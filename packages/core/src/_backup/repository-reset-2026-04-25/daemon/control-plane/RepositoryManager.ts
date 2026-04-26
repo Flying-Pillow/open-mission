@@ -1,34 +1,34 @@
 import * as path from 'node:path';
 import { performance } from 'node:perf_hooks';
-import type { MissionSelectionCandidate, OperatorStatus } from '../types.js';
-import { Repository } from '../entities/Repository/Repository.js';
+import type { MissionSelectionCandidate, OperatorStatus } from '../../types.js';
+import { Repository } from '../../entities/Repository/Repository.js';
 import {
     METHOD_METADATA,
     type ControlRepositoriesAdd,
     type Method,
     type Notification,
     type Request
-} from '../daemon/protocol/contracts.js';
-import { RepositoryRuntime } from './RepositoryRuntime.js';
-import type { AgentRunner } from '../agent/AgentRunner.js';
-import { listRegisteredRepositories, registerMissionRepo } from '../lib/config.js';
-import { resolveGitWorkspaceRoot } from '../lib/workspacePaths.js';
-import { resolveMissionWorkspaceContext } from '../lib/workspacePaths.js';
-import type { ControlSource } from '../daemon/control-plane/types.js';
+} from '../protocol/contracts.js';
+import { RepositoryDaemonController } from './RepositoryDaemonController.js';
+import type { AgentRunner } from '../../agent/AgentRunner.js';
+import { registerMissionRepo } from '../../lib/config.js';
+import { resolveGitWorkspaceRoot } from '../../lib/workspacePaths.js';
+import { resolveMissionWorkspaceContext } from '../../lib/workspacePaths.js';
+import type { ControlSource } from './types.js';
 
 export class RepositoryManager {
-    private readonly repositories = new Map<string, RepositoryRuntime>();
+    private readonly repositories = new Map<string, RepositoryDaemonController>();
 
     public constructor(
         private readonly runners: Map<string, AgentRunner>,
         private readonly emitEvent: (event: Notification) => void
     ) { }
 
-    public getRepository(repositoryRoot: string): RepositoryRuntime {
+    public getRepository(repositoryRoot: string): RepositoryDaemonController {
         const normalizedRepositoryRoot = path.resolve(repositoryRoot);
         let repository = this.repositories.get(normalizedRepositoryRoot);
         if (!repository) {
-            repository = new RepositoryRuntime(
+            repository = new RepositoryDaemonController(
                 normalizedRepositoryRoot,
                 this.runners,
                 this.emitEvent
@@ -124,7 +124,7 @@ export class RepositoryManager {
 
         if (request.method === 'control.status') {
             const statusStartedAt = performance.now();
-            const status = await primaryRepository.buildDiscoveryStatus(availableMissions);
+            const status = await primaryRepository.buildRepositoryDiscoveryStatus(availableMissions);
             const statusDurationMs = performance.now() - statusStartedAt;
             const totalDurationMs = performance.now() - totalStartedAt;
             process.stdout.write(
@@ -165,7 +165,7 @@ export class RepositoryManager {
     private async listRegisteredRepositories(repositoryRoot: string): Promise<Repository[]> {
         void repositoryRoot;
         const startedAt = performance.now();
-        const repositories = (await listRegisteredRepositories()).map((candidate) => Repository.fromCandidate(candidate));
+        const repositories = await Repository.find();
         const durationMs = performance.now() - startedAt;
         process.stdout.write(
             `${new Date().toISOString().slice(11, 19)} repositories.listRegistered count=${String(repositories.length)} duration=${durationMs.toFixed(1)}ms\n`

@@ -1,14 +1,16 @@
 // /apps/airport/web/src/lib/client/runtime/transport/MissionRuntimeTransport.ts: Mission transport adapter for runtime snapshot and daemon event contracts.
-import {
-    airportRuntimeEventEnvelopeSchema,
-    missionRuntimeSnapshotSchema,
-    type AirportRuntimeEventEnvelope,
-    type MissionRuntimeSnapshot
-} from '@flying-pillow/mission-core/airport/runtime';
+import type {
+    AirportRuntimeEventEnvelope,
+    MissionRuntimeSnapshot
+} from '@flying-pillow/mission-core/schemas';
 import {
     EntityRuntimeTransport,
     type RuntimeSubscription
 } from '$lib/client/runtime/transport/EntityRuntimeTransport';
+import {
+    parseAirportRuntimeEventEnvelope,
+    parseMissionRuntimeSnapshot
+} from '$lib/client/runtime/parsers';
 
 export class MissionRuntimeTransport extends EntityRuntimeTransport<
     string,
@@ -55,11 +57,11 @@ export class MissionRuntimeTransport extends EntityRuntimeTransport<
     }
 
     protected parseSnapshot(value: unknown): MissionRuntimeSnapshot {
-        return missionRuntimeSnapshotSchema.parse(value);
+        return parseMissionRuntimeSnapshot(value);
     }
 
     protected parseEvent(value: unknown): AirportRuntimeEventEnvelope {
-        return airportRuntimeEventEnvelopeSchema.parse(value);
+        return parseAirportRuntimeEventEnvelope(value);
     }
 
     protected getEntityLabel(): string {

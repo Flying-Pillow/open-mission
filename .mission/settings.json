@@ -1,9 +1,9 @@
 {
-  "missionWorkspaceRoot": "missions",
-  "trackingProvider": "github",
-  "instructionsPath": ".agents",
-  "skillsPath": ".agents/skills",
-  "agentRunner": "copilot-cli",
-  "defaultAgentMode": "interactive",
-  "towerTheme": "ocean"
+  "platform": "github",
+  "paths": {
+    "skills": ".agents/skills",
+    "instructions": ".agents",
+    "missions": ".mission/missions"
+  },
+  "agentRunner": "copilot-cli"
 }

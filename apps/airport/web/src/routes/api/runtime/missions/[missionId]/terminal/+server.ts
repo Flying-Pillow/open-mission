@@ -4,7 +4,7 @@ import {
     missionTerminalInputSchema
 } from '@flying-pillow/mission-core';
 import { z } from 'zod';
-import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
+import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import {
     isStaleMissionTerminalDaemonError,
     resolveMissionTerminalRuntimeError,
@@ -80,7 +80,7 @@ const missionTerminalQuerySchema = z.object({
 });
 
 async function readMissionTerminalSnapshot(locals: App.Locals, missionId: string, repositoryId?: string, repositoryRootPath?: string) {
-    const gateway = new AirportWebGateway(locals);
+    const gateway = new DaemonGateway(locals);
     const repository = repositoryRootPath
         ? { repositoryRootPath }
         : repositoryId
@@ -97,7 +97,7 @@ async function readMissionTerminalSnapshot(locals: App.Locals, missionId: string
         }
 
         await restartMissionTerminalDaemon({ locals });
-        return await new AirportWebGateway(locals).getMissionTerminalSnapshot({
+        return await new DaemonGateway(locals).getMissionTerminalSnapshot({
             missionId,
             ...(repository ? { surfacePath: repository.repositoryRootPath } : {})
         });
@@ -116,7 +116,7 @@ async function sendMissionTerminalInput(
         repositoryRootPath?: string;
     }
 ) {
-    const gateway = new AirportWebGateway(locals);
+    const gateway = new DaemonGateway(locals);
     const repository = input.repositoryRootPath
         ? { repositoryRootPath: input.repositoryRootPath }
         : input.repositoryId
@@ -133,7 +133,7 @@ async function sendMissionTerminalInput(
         }
 
         await restartMissionTerminalDaemon({ locals });
-        return await new AirportWebGateway(locals).sendMissionTerminalInput({
+        return await new DaemonGateway(locals).sendMissionTerminalInput({
             ...input,
             ...(repository ? { surfacePath: repository.repositoryRootPath } : {})
         });

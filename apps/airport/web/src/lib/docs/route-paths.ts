@@ -22,5 +22,7 @@ export function isDocsRoutePath(pathname: string): boolean {
 }
 
 export function allowsDaemonlessRouteAccess(pathname: string): boolean {
-	return isDocsRoutePath(pathname);
+	const normalizedPathname = normalizeRoutePath(pathname);
+
+	return isDocsRoutePath(normalizedPathname) || normalizedPathname === '/airport';
 }

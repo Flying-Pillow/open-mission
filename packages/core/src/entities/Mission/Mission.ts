@@ -219,4 +219,8 @@ export class Mission extends Entity<MissionData, string> {
 	}
 }
 
+export function toMission(status: OperatorStatus): Mission {
+	return Mission.read(status);
+}
+
 export type { MissionData as MissionSummary };

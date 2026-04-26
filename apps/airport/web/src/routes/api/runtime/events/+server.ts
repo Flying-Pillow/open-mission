@@ -1,7 +1,7 @@
 // /apps/airport/web/src/routes/api/runtime/events/+server.ts: Server-sent event stream that forwards existing daemon notifications for Airport web.
 import { randomUUID } from 'node:crypto';
 import { airportRuntimeEventsQuerySchema } from '@flying-pillow/mission-core';
-import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
+import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import type { RequestHandler } from './$types';
 
 function serializeSseEvent(input: {
@@ -23,7 +23,7 @@ export const GET: RequestHandler = async ({ locals, request, url }) => {
         missionId: url.searchParams.get('missionId') ?? undefined
     });
     const repositoryRootPath = url.searchParams.get('repositoryRootPath')?.trim() || undefined;
-    const gateway = new AirportWebGateway(locals);
+    const gateway = new DaemonGateway(locals);
     const encoder = new TextEncoder();
 
     let disposeSubscription: (() => void) | undefined;

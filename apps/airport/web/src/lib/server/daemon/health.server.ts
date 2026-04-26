@@ -1,5 +1,5 @@
 // /apps/airport/web/src/lib/server/daemon/health.server.ts: Tracks daemon availability and recovery state for the Airport web server.
-import type { SystemStatus } from '@flying-pillow/mission-core';
+import type { SystemState } from '@flying-pillow/mission-core/schemas';
 import { resolveRequestAuthToken, resolveSurfacePath } from './context.server';
 import { clearSharedDaemonClient } from './shared-client.server';
 import { openDaemonConnection } from './transport.server';
@@ -46,7 +46,7 @@ export async function readCachedDaemonSystemStatus(input: {
     authToken?: string;
     surfacePath?: string;
     timeoutMs?: number;
-} = {}): Promise<SystemStatus | undefined> {
+} = {}): Promise<SystemState | undefined> {
     const authToken = input.authToken?.trim() || resolveRequestAuthToken(input.locals);
     const surfacePath = input.surfacePath?.trim() || resolveSurfacePath();
     const timeoutMs = input.timeoutMs ?? 1_000;
@@ -58,7 +58,7 @@ export async function readCachedDaemonSystemStatus(input: {
             ...(authToken ? { authToken } : {})
         });
         try {
-            return await daemon.client.request<SystemStatus>('system.status', undefined, { timeoutMs });
+            return await daemon.client.request<SystemState>('system.status', undefined, { timeoutMs });
         } finally {
             daemon.dispose();
         }

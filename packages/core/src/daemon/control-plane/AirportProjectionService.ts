@@ -6,12 +6,13 @@ import type {
 	PaneBinding,
 	AirportPaneId
 } from '../../airport/types.js';
-import type { ContextGraph, SystemStatus } from '../../types.js';
+import type { SystemState } from '../../schemas/SystemState.js';
+import type { ContextGraph } from '../../types.js';
 
 export function deriveSystemAirportProjections(
 	domain: ContextGraph,
 	airportState: AirportState,
-	systemStatus?: SystemStatus
+	systemStatus?: SystemState
 ): AirportProjectionSet {
 	return {
 		tower: deriveTowerProjection(domain, airportState, systemStatus),
@@ -23,7 +24,7 @@ export function deriveSystemAirportProjections(
 function deriveTowerProjection(
 	domain: ContextGraph,
 	airportState: AirportState,
-	systemStatus?: SystemStatus
+	systemStatus?: SystemState
 ): AirportProjectionSet['tower'] {
 	const base = createPaneProjectionBase(airportState, 'tower');
 	const repositoryId = airportState.repositoryId ?? domain.selection.repositoryId;

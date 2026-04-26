@@ -1,7 +1,7 @@
 import type { AirportProjectionSet, AirportState, PersistedAirportIntent } from './airport/types.js';
 import type { MissionAgentSessionRecord } from './daemon/protocol/contracts.js';
 import type { Repository } from './entities/Repository/Repository.js';
-import type { RepositoryWorkflowSettingsDocument as WorkflowSettingsDocument } from './entities/Repository/RepositorySettingsDocument.js';
+import type { RepositorySettings } from './entities/Repository/RepositorySettings.js';
 import {
 	MISSION_AGENT_SESSION_LIFECYCLE_STATES,
 	MISSION_LIFECYCLE_STATES,
@@ -491,7 +491,7 @@ export type RepositoryControlStatus = {
 	settingsPath: string;
 	worktreesPath: string;
 	currentBranch?: string;
-	settings: WorkflowSettingsDocument;
+	settings: RepositorySettings;
 	isGitRepository: boolean;
 	initialized: boolean;
 	settingsPresent: boolean;
@@ -502,17 +502,6 @@ export type RepositoryControlStatus = {
 	availableMissionCount: number;
 	problems: string[];
 	warnings: string[];
-};
-
-export type SystemStatus = {
-	github: {
-		cliAvailable: boolean;
-		authenticated: boolean;
-		user?: string;
-		email?: string;
-		avatarUrl?: string;
-		detail?: string;
-	};
 };
 
 export type StageData = MissionStageStatus;

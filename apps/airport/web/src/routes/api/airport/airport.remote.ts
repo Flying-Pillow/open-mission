@@ -1,28 +1,22 @@
-import path from 'node:path';
 import { command, getRequestEvent, query } from '$app/server';
 import { z } from 'zod/v4';
 import {
     airportHomeSnapshotSchema,
     githubVisibleRepositorySchema,
-    missionRuntimeSnapshotSchema,
     repositorySchema,
     repositorySnapshotSchema
 } from '@flying-pillow/mission-core/airport/runtime';
+import { executeEntityQuery } from '../entities/remote/dispatch';
+import { EntityProxy } from '$lib/server/daemon/entity-proxy';
 import {
     missionRuntimeRouteParamsSchema,
     repositoryRuntimeRouteParamsSchema
 } from '@flying-pillow/mission-core';
-import { getMissionWorktreesPath } from '@flying-pillow/mission-core/node';
-import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
-import { clearGithubAuthSession } from '$lib/server/github-auth.server';
 import { missionControlSnapshotSchema } from '$lib/types/mission-control';
 
 const airportRouteQuerySchema = z.object({});
 const addAirportRepositoryInputSchema = z.object({
-    repositoryPath: z.string().trim().min(1, 'Repository path is required.').refine(
-        (value) => path.isAbsolute(value),
-        'Repository path must be an absolute local checkout path on the daemon host.'
-    ),
+    repositoryPath: z.string().trim().min(1, 'Repository path is required.'),
     githubRepository: z.string().trim().min(1).optional()
 });
 const missionRouteQuerySchema = z.object({
@@ -65,6 +59,9 @@ async function buildMissionSnapshotBundle(input: {
     repositoryId: string;
     missionId: string;
 }): Promise<MissionSnapshotBundle> {
+    const path = await import('node:path');
+    const { getMissionWorktreesPath } = await import('@flying-pillow/mission-core/node');
+    const { DaemonGateway } = await import('$lib/server/daemon/daemon-gateway');
     const event = getRequestEvent();
     const { repositoryId } = repositoryRuntimeRouteParamsSchema.parse({
         repositoryId: input.repositoryId
@@ -72,13 +69,17 @@ async function buildMissionSnapshotBundle(input: {
     const { missionId } = missionRuntimeRouteParamsSchema.parse({
         missionId: input.missionId
     });
-    const gateway = new AirportWebGateway(event.locals);
+    const gateway = new DaemonGateway(event.locals);
+    const entityProxy = new EntityProxy(event.locals);
     const { airport, entities } = gateway;
     const airportHome = await airport.getHomeSnapshot();
-    const repositorySnapshot = await entities.readRepository({
-        repositoryId,
-        selectedMissionId: missionId
-    });
+    const repositorySnapshot = repositorySnapshotSchema.parse(await executeEntityQuery(entityProxy, {
+        entity: 'Repository',
+        method: 'read',
+        payload: {
+            repositoryId
+        }
+    }));
     const missionWorktreePath = path.join(
         getMissionWorktreesPath(repositorySnapshot.repository.repositoryRootPath),
         missionId
@@ -90,7 +91,11 @@ async function buildMissionSnapshotBundle(input: {
 
     return missionSnapshotBundleSchema.parse({
         airportRepositories: airportHome.repositories,
-        repositorySnapshot,
+        repositorySnapshot: {
+            ...repositorySnapshot,
+            selectedMissionId: missionId,
+            selectedMission: missionControl.missionRuntime
+        },
         missionControl,
         missionWorktreePath,
         repositoryId,
@@ -100,22 +105,24 @@ async function buildMissionSnapshotBundle(input: {
 
 export const getAirportRouteData = query(airportRouteQuerySchema, async () => {
     const event = getRequestEvent();
-    const gateway = new AirportWebGateway(event.locals);
+    const { DaemonGateway } = await import('$lib/server/daemon/daemon-gateway');
+    const gateway = new DaemonGateway(event.locals);
 
     return airportRouteDataSchema.parse({
         loginHref: '/login?redirectTo=/airport',
-        airportHome: await gateway.airport.getHomeSnapshot()
+        airportHome: await gateway.getAirportHomeSnapshot()
     });
 });
 
 export const readVisibleGitHubRepositories = command(z.object({}), async () => {
     const event = getRequestEvent();
-    const gateway = new AirportWebGateway(event.locals);
+    const { DaemonGateway } = await import('$lib/server/daemon/daemon-gateway');
+    const gateway = new DaemonGateway(event.locals);
     let githubRepositories = [];
     let githubRepositoriesError: string | undefined;
 
     try {
-        githubRepositories = await gateway.airport.listVisibleGitHubRepositories();
+        githubRepositories = await gateway.listVisibleGitHubRepositories();
     } catch (error) {
         githubRepositoriesError = error instanceof Error ? error.message : String(error);
     }
@@ -127,13 +134,18 @@ export const readVisibleGitHubRepositories = command(z.object({}), async () => {
 });
 
 export const addAirportRepository = command(addAirportRepositoryInputSchema, async (input) => {
+    const path = await import('node:path');
     const event = getRequestEvent();
-    const gateway = new AirportWebGateway(event.locals);
+    const { DaemonGateway } = await import('$lib/server/daemon/daemon-gateway');
+    if (!path.isAbsolute(input.repositoryPath)) {
+        throw new Error('Repository path must be an absolute local checkout path on the daemon host.');
+    }
+    const gateway = new DaemonGateway(event.locals);
     const selectedGitHubRepository = input.githubRepository?.trim();
     const repository = selectedGitHubRepository
-        ? await gateway.airport.cloneGitHubRepository(selectedGitHubRepository, input.repositoryPath)
-        : await gateway.airport.inspectRepositoryPath(input.repositoryPath).then(
-            (inspectedRepository) => gateway.airport.addRepository(inspectedRepository.repositoryRootPath)
+        ? await gateway.cloneGitHubRepository(selectedGitHubRepository, input.repositoryPath)
+        : await gateway.inspectRepositoryPath(input.repositoryPath).then(
+            (inspectedRepository) => gateway.addRepository(inspectedRepository.repositoryRootPath)
         );
 
     return addAirportRepositoryResultSchema.parse({
@@ -144,6 +156,7 @@ export const addAirportRepository = command(addAirportRepositoryInputSchema, asy
 
 export const logoutAirportSession = command(z.object({}), async () => {
     const event = getRequestEvent();
+    const { clearGithubAuthSession } = await import('$lib/server/github-auth.server');
     await clearGithubAuthSession(event.cookies);
     event.locals.githubAuthToken = undefined;
 

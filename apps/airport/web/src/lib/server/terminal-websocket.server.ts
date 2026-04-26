@@ -18,7 +18,7 @@ import type { Duplex } from 'node:stream';
 import { WebSocketServer, WebSocket as NodeWebSocket } from 'ws';
 import { connectDedicatedAuthenticatedDaemonClient } from './daemon/connections.server';
 import { resolveMissionTerminalRuntimeError } from './mission-terminal-errors';
-import { AirportWebGateway } from './gateway/AirportWebGateway.server';
+import { DaemonGateway } from './daemon/daemon-gateway';
 
 const TERMINAL_WS_PATH_PATTERN = /^\/api\/runtime\/sessions\/([^/]+)\/terminal\/ws$/u;
 const MISSION_TERMINAL_WS_PATH_PATTERN = /^\/api\/runtime\/missions\/([^/]+)\/terminal\/ws$/u;
@@ -208,7 +208,7 @@ async function handleTerminalConnection(
     try {
         const repositoryRootPath = query.repositoryRootPath?.trim()
             || (query.repositoryId
-                ? (await new AirportWebGateway().resolveRepositoryCandidate({ repositoryId: query.repositoryId })).repositoryRootPath
+                ? (await new DaemonGateway().resolveRepositoryCandidate({ repositoryId: query.repositoryId })).repositoryRootPath
                 : undefined);
         daemon = await connectDedicatedAuthenticatedDaemonClient({
             allowStart: true,
@@ -381,7 +381,7 @@ async function handleMissionTerminalConnection(
     try {
         const repositoryRootPath = requestedRepositoryRootPath
             || (repositoryId
-                ? (await new AirportWebGateway().resolveRepositoryCandidate({ repositoryId })).repositoryRootPath
+                ? (await new DaemonGateway().resolveRepositoryCandidate({ repositoryId })).repositoryRootPath
                 : undefined);
         daemon = await connectDedicatedAuthenticatedDaemonClient({
             allowStart: true,

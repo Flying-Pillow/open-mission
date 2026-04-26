@@ -1,7 +1,15 @@
 export * from './Repository.js';
+export * from './Repositories.js';
 export * from './RepositorySchema.js';
-export * from './PlatformAdapter.js';
-export * from './RepositoryManager.js';
-export * from './RepositoryRuntime.js';
-export * from './RepositoryPreparationService.js';
-export * from './initializeRepository.js';
+export * from './RepositoryPaths.js';
+export * from './RepositorySettings.js';
+export {
+    RepositoryWorkflowAgentSchema,
+    RepositoryWorkflowIntegrationSchema,
+    RepositoryWorkflowPathsSchema,
+    RepositoryWorkflowDefinitionSchema,
+    RepositoryWorkflowSettingsSchema,
+    createDefaultRepositoryWorkflowSettings,
+    getRepositoryWorkflowSettingsPath,
+    type RepositoryWorkflowSettings
+} from './RepositoryWorkflowSettingsSchema.js';

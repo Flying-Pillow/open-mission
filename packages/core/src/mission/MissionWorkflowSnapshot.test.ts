@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
-import { getMissionWorktreesPath } from '../lib/repoConfig.js';
+import { getMissionWorktreesPath } from '../entities/Repository/RepositoryPaths.js';
 import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
 import { Factory } from './Factory.js';
 import type { MissionWorkflowBindings } from './Mission.js';

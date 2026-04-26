@@ -5,6 +5,11 @@ import {
     repositorySchema
 } from '../entities/Repository/RepositorySchema.js';
 
+export {
+    missionReferenceSchema,
+    repositorySchema
+};
+
 const missionTypeSchema = z.enum(['feature', 'fix', 'docs', 'refactor', 'task']);
 
 export const airportRuntimeEventTypeSchema = z.enum([

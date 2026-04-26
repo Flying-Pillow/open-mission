@@ -6,6 +6,7 @@ import {
 import { MISSION_STAGE_IDS, type MissionStageId } from './stages.js';
 
 export type { MissionStageId };
+export { MISSION_STAGE_IDS };
 
 export type MissionWorkflowTaskStatus = MissionTaskLifecycleState;
 export type MissionTaskStatusIntent = 'start' | 'done' | 'reopen';

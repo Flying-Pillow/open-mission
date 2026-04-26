@@ -1,10 +1,12 @@
 // /apps/airport/web/src/lib/client/context/app-context.svelte.ts: App-wide client context for daemon identity, repository shell state, and active Airport selection.
 import { createContext } from "svelte";
 import { app, type AirportApplication } from "$lib/client/Application.svelte.js";
+import type { Mission } from "$lib/components/entities/Mission/Mission.svelte.js";
+import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
 import type {
     AirportRuntimeEventEnvelope,
-} from "@flying-pillow/mission-core/airport/runtime";
-import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/types.js";
+    MissionTowerTreeNode,
+} from "@flying-pillow/mission-core/schemas";
 import type { SidebarRepositorySummary } from "$lib/components/entities/types";
 import type { RuntimeSubscription } from "$lib/client/runtime/transport/EntityRuntimeTransport";
 import type { AirportRouteData } from "../../../routes/api/airport/airport.remote";
@@ -46,7 +48,9 @@ export type AppContextValue = {
         repositories: SidebarRepositorySummary[];
         activeRepositoryId?: string;
         activeRepositoryRootPath?: string;
+        activeRepository?: RepositoryEntity;
         activeMissionId?: string;
+        activeMission?: Mission;
         activeMissionOutline?: ActiveMissionOutline;
         activeMissionSelectedNodeId?: string;
     };
@@ -114,7 +118,9 @@ export function createAppContext(
                 repositories: state.application.repositoriesState,
                 activeRepositoryId: state.application.activeRepositoryId,
                 activeRepositoryRootPath: state.application.activeRepositoryRootPath,
+                activeRepository: state.application.activeRepository,
                 activeMissionId: state.application.activeMissionId,
+                activeMission: state.application.activeMission,
                 activeMissionOutline: state.application.activeMissionOutline,
                 activeMissionSelectedNodeId: state.application.activeMissionSelectedNodeId,
             };

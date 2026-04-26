@@ -1,14 +1,12 @@
 import { z } from 'zod/v4';
-import type { OperatorActionListSnapshot } from '../../types.js';
-import type { EntityStateSnapshot } from '../Entity.js';
-
-export const repositorySchema = z.object({
-	repositoryId: z.string().trim().min(1),
-	repositoryRootPath: z.string().trim().min(1),
-	label: z.string().trim().min(1),
-	description: z.string(),
-	githubRepository: z.string().trim().min(1).optional()
-});
+export {
+	repositoryInputSchema,
+	repositorySchema,
+	repositoryWorkflowConfigurationSchema,
+	createDefaultRepositoryConfiguration,
+	type RepositoryData,
+	type RepositoryInput
+} from '../../schemas/Repository.js';
 
 export const missionReferenceSchema = z.object({
 	missionId: z.string().trim().min(1),
@@ -18,10 +16,8 @@ export const missionReferenceSchema = z.object({
 	issueId: z.number().int().positive().optional()
 });
 
-export type RepositoryData = z.infer<typeof repositorySchema>;
 export type MissionReference = z.infer<typeof missionReferenceSchema>;
 
-export type RepositoryStateSnapshot = EntityStateSnapshot<RepositoryData, OperatorActionListSnapshot> & {
-	repository: RepositoryData;
-	availableCommands?: OperatorActionListSnapshot;
+export type RepositoryStateSnapshot = {
+	repository: import('../../schemas/Repository.js').RepositoryData;
 };

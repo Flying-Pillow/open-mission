@@ -37,4 +37,4 @@ export type {
     MissionRuntimeTaskCommandInput,
     MissionRuntimeSnapshot,
     Repository
-} from '@flying-pillow/mission-core/airport/runtime';
+} from '@flying-pillow/mission-core/schemas';

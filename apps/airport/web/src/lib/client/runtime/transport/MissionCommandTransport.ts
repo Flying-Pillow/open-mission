@@ -2,25 +2,23 @@
 import type {
     AgentCommand as AgentCommand,
     AgentPrompt as AgentPrompt,
-    MissionRuntimeSnapshot
-} from '@flying-pillow/mission-core/airport/runtime';
-import {
-    missionRuntimeMissionCommandSchema,
-    missionRuntimeSnapshotSchema,
-    missionRuntimeSessionCommandSchema,
-    missionRuntimeTaskCommandSchema
-} from '@flying-pillow/mission-core/airport/runtime';
-import type {
+    MissionRuntimeSnapshot,
     OperatorActionExecutionStep,
     OperatorActionListSnapshot,
     OperatorActionQueryContext,
     OperatorStatus
-} from '@flying-pillow/mission-core/types.js';
+} from '@flying-pillow/mission-core/schemas';
 import type {
     MissionCommandGateway,
     MissionDocumentPayload
 } from '$lib/components/entities/Mission/Mission.svelte.js';
 import type { MissionFileTreeResponse } from '$lib/types/mission-file-tree';
+import {
+    parseMissionCommandPayload,
+    parseMissionRuntimeSnapshot,
+    parseMissionSessionCommandPayload,
+    parseMissionTaskCommandPayload
+} from '$lib/client/runtime/parsers';
 import {
     operatorStatusSchema,
     missionControlSnapshotSchema,
@@ -330,7 +328,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
             throw new Error('Mission task commands require missionId and taskId.');
         }
 
-        const payload = missionRuntimeTaskCommandSchema.parse(body);
+        const payload = parseMissionTaskCommandPayload(body);
         const response = await this.fetcher(
             `/api/runtime/missions/${encodeURIComponent(normalizedMissionId)}/tasks/${encodeURIComponent(normalizedTaskId)}${this.buildQuerySuffix()}`,
             {
@@ -347,7 +345,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
             throw new Error(`Mission task command '${payload.action}' failed for '${normalizedTaskId}' (${response.status}).`);
         }
 
-        return missionRuntimeSnapshotSchema.parse(await response.json());
+        return parseMissionRuntimeSnapshot(await response.json());
     }
 
     private async sendMissionCommand(
@@ -361,7 +359,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
             throw new Error('Mission commands require a missionId.');
         }
 
-        const payload = missionRuntimeMissionCommandSchema.parse(body);
+        const payload = parseMissionCommandPayload(body);
         const actionId = this.resolveMissionActionId(payload.action);
         const response = await this.fetcher(
             `/api/runtime/missions/${encodeURIComponent(normalizedMissionId)}/actions${this.buildQuerySuffix()}`,
@@ -379,7 +377,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
             throw new Error(`Mission command '${payload.action}' failed for '${normalizedMissionId}' (${response.status}).`);
         }
 
-        return missionRuntimeSnapshotSchema.parse(await response.json());
+        return parseMissionRuntimeSnapshot(await response.json());
     }
 
     private resolveMissionActionId(
@@ -452,7 +450,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
             throw new Error('Mission session commands require missionId and sessionId.');
         }
 
-        const payload = missionRuntimeSessionCommandSchema.parse(body);
+        const payload = parseMissionSessionCommandPayload(body);
         const response = await this.fetcher(
             `/api/runtime/missions/${encodeURIComponent(normalizedMissionId)}/sessions/${encodeURIComponent(normalizedSessionId)}${this.buildQuerySuffix()}`,
             {
@@ -469,7 +467,7 @@ export class MissionCommandTransport implements MissionCommandGateway {
             throw new Error(`Mission session command '${payload.action}' failed for '${normalizedSessionId}' (${response.status}).`);
         }
 
-        return missionRuntimeSnapshotSchema.parse(await response.json());
+        return parseMissionRuntimeSnapshot(await response.json());
     }
 
     private buildQuerySuffix(): string {

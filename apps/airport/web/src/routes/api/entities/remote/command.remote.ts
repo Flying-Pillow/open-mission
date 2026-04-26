@@ -1,7 +1,7 @@
 import { command, getRequestEvent } from '$app/server';
-import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
 import { entityCommandInvocationSchema, executeEntityCommand } from './dispatch';
+import { EntityProxy } from '$lib/server/daemon/entity-proxy';
 
-export const cmd = command(entityCommandInvocationSchema, async (input) =>
-    executeEntityCommand(new AirportWebGateway(getRequestEvent().locals), input)
-);
+export const cmd = command(entityCommandInvocationSchema, async (input) => {
+    return executeEntityCommand(new EntityProxy(getRequestEvent().locals), input);
+});

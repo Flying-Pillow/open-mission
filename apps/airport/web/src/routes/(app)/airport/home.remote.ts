@@ -1,13 +1,13 @@
 import { getRequestEvent, query } from '$app/server';
 import { z } from 'zod/v4';
-import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
 
 const airportHomeDataQuerySchema = z.object({});
 
 export const getAirportHomeData = query(
     airportHomeDataQuerySchema,
     async () => {
-        const gateway = new AirportWebGateway(getRequestEvent().locals);
+        const { DaemonGateway } = await import('$lib/server/daemon/daemon-gateway');
+        const gateway = new DaemonGateway(getRequestEvent().locals);
         let githubRepositories: Array<{
             fullName: string;
             ownerLogin?: string;

@@ -3,7 +3,7 @@ import { json } from '@sveltejs/kit';
 import {
     missionRuntimeRouteParamsSchema
 } from '@flying-pillow/mission-core';
-import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
+import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import {
     missionActionExecuteSchema,
     missionActionQuerySchema
@@ -19,7 +19,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
         taskId: url.searchParams.get('taskId') ?? undefined,
         sessionId: url.searchParams.get('sessionId') ?? undefined,
     });
-    const gateway = new AirportWebGateway(locals);
+    const gateway = new DaemonGateway(locals);
     const repository = query.repositoryRootPath
         ? { repositoryRootPath: query.repositoryRootPath }
         : query.repositoryId
@@ -44,7 +44,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
     const repositoryId = requestUrl.searchParams.get('repositoryId')?.trim();
     const repositoryRootPath = requestUrl.searchParams.get('repositoryRootPath')?.trim();
     const body = missionActionExecuteSchema.parse(await request.json());
-    const gateway = new AirportWebGateway(locals);
+    const gateway = new DaemonGateway(locals);
     const repository = repositoryRootPath
         ? { repositoryRootPath }
         : repositoryId

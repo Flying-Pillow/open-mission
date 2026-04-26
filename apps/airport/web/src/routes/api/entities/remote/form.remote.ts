@@ -1,7 +1,7 @@
 import { form, getRequestEvent } from '$app/server';
-import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
 import { entityFormInvocationSchema, executeEntityForm } from './dispatch';
+import { EntityProxy } from '$lib/server/daemon/entity-proxy';
 
-export const frm = form(entityFormInvocationSchema, async (input) =>
-    executeEntityForm(new AirportWebGateway(getRequestEvent().locals), input)
-);
+export const frm = form(entityFormInvocationSchema, async (input) => {
+    return executeEntityForm(new EntityProxy(getRequestEvent().locals), input);
+});

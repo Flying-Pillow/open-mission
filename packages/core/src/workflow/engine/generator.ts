@@ -2,7 +2,7 @@ import {
     renderMissionTaskTemplate,
     type MissionTaskTemplate
 } from '../mission/templates/index.js';
-import { getMissionControlRootFromMissionDir } from '../../lib/repoConfig.js';
+import { getMissionControlRootFromMissionDir } from '../../entities/Repository/RepositoryPaths.js';
 import type { MissionDescriptor } from '../../types.js';
 import type {
     MissionGeneratedTaskPayload,

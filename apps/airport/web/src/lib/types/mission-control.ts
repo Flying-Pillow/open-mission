@@ -1,4 +1,4 @@
-import { missionRuntimeSnapshotSchema } from '@flying-pillow/mission-core/airport/runtime';
+import type { MissionRuntimeSnapshot } from '@flying-pillow/mission-core/schemas';
 import { z } from 'zod';
 
 const nonEmptyStringSchema = z.string().trim().min(1);
@@ -331,7 +331,10 @@ export const operatorStatusSchema = z.object({
 });
 
 export const missionControlSnapshotSchema = z.object({
-    missionRuntime: missionRuntimeSnapshotSchema,
+    missionRuntime: z.custom<MissionRuntimeSnapshot>(
+        (value) => Boolean(value && typeof value === 'object'),
+        'Mission runtime snapshot is required.'
+    ),
     operatorStatus: operatorStatusSchema
 });
 

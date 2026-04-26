@@ -1,19 +1,19 @@
 // /packages/core/src/system/SystemStatus.ts: Resolves GitHub CLI authentication state and GitHub account identity for Mission surfaces.
 import { spawnSync } from 'node:child_process';
 import { getMissionGitHubCliBinary } from '../lib/config.js';
-import type { SystemStatus } from '../types.js';
+import { systemStateSchema, type SystemState } from '../schemas/SystemState.js';
 
 const GITHUB_CLI_TIMEOUT_MS = 1_500;
 const SYSTEM_STATUS_CACHE_TTL_MS = 10_000;
 
 type CachedSystemStatusEntry = {
 	checkedAt: number;
-	status: SystemStatus;
+	status: SystemState;
 };
 
 const cachedSystemStatusByKey = new Map<string, CachedSystemStatusEntry>();
 
-export function readSystemStatus(options: { cwd?: string; authToken?: string } = {}): SystemStatus {
+export function readSystemStatus(options: { cwd?: string; authToken?: string } = {}): SystemState {
 	const now = Date.now();
 	const authToken = options.authToken?.trim();
 	const cwd = options.cwd?.trim() || process.cwd();
@@ -31,7 +31,7 @@ export function readSystemStatus(options: { cwd?: string; authToken?: string } =
 	return refreshSystemStatus({ cwd, ...(authToken ? { authToken } : {}) });
 }
 
-export function refreshSystemStatus(options: { cwd?: string; authToken?: string } = {}): SystemStatus {
+export function refreshSystemStatus(options: { cwd?: string; authToken?: string } = {}): SystemState {
 	const authToken = options.authToken?.trim();
 	const cwd = options.cwd?.trim() || process.cwd();
 	const ghBinary = getMissionGitHubCliBinary() ?? 'gh';
@@ -48,7 +48,7 @@ export function refreshSystemStatus(options: { cwd?: string; authToken?: string 
 	return structuredClone(status);
 }
 
-export function peekCachedSystemStatus(options: { cwd?: string; authToken?: string } = {}): SystemStatus {
+export function peekCachedSystemStatus(options: { cwd?: string; authToken?: string } = {}): SystemState {
 	const authToken = options.authToken?.trim();
 	const cwd = options.cwd?.trim() || process.cwd();
 	const ghBinary = getMissionGitHubCliBinary() ?? 'gh';
@@ -61,7 +61,7 @@ export function peekCachedSystemStatus(options: { cwd?: string; authToken?: stri
 	return structuredClone(cachedSystemStatus?.status ?? buildUnknownSystemStatus());
 }
 
-function readCliBackedSystemStatus(input: { cwd: string; ghBinary: string }): SystemStatus {
+function readCliBackedSystemStatus(input: { cwd: string; ghBinary: string }): SystemState {
 	const authResult = spawnSync(input.ghBinary, ['auth', 'status'], {
 		cwd: input.cwd,
 		encoding: 'utf8',
@@ -78,7 +78,7 @@ function readCliBackedSystemStatus(input: { cwd: string; ghBinary: string }): Sy
 	const email = identity?.email;
 	const avatarUrl = identity?.avatarUrl;
 
-	return {
+	return systemStateSchema.parse({
 		github: {
 			cliAvailable: !(authResult.error && 'code' in authResult.error && authResult.error.code === 'ENOENT'),
 			authenticated,
@@ -93,14 +93,14 @@ function readCliBackedSystemStatus(input: { cwd: string; ghBinary: string }): Sy
 						? { detail: 'GitHub CLI authenticated.' }
 						: { detail: 'GitHub CLI authentication is required.' })
 		}
-	};
+	});
 }
 
 function readTokenBackedSystemStatus(input: {
 	cwd: string;
 	ghBinary: string;
 	authToken: string;
-}): SystemStatus {
+}): SystemState {
 	const authEnv = buildGitHubAuthEnv(input.authToken);
 	const authResult = spawnSync(input.ghBinary, ['api', 'user'], {
 		cwd: input.cwd,
@@ -126,7 +126,7 @@ function readTokenBackedSystemStatus(input: {
 	const email = identity?.email;
 	const avatarUrl = identity?.avatarUrl;
 
-	return {
+	return systemStateSchema.parse({
 		github: {
 			cliAvailable,
 			authenticated: authResult.status === 0,
@@ -141,7 +141,7 @@ function readTokenBackedSystemStatus(input: {
 						? { detail: `GitHub token authenticated${user ? ` as ${user}` : ''}.` }
 						: { detail: 'GitHub token is invalid or missing required scopes.' })
 		}
-	};
+	});
 }
 
 function readGitHubIdentity(input: {
@@ -200,21 +200,21 @@ function createSystemStatusCacheKey(input: {
 	return `${input.cwd}\u0000${input.ghBinary}\u0000${process.env['PATH'] ?? ''}\u0000${input.authToken ?? ''}`;
 }
 
-function cacheSystemStatus(cacheKey: string, status: SystemStatus): void {
+function cacheSystemStatus(cacheKey: string, status: SystemState): void {
 	cachedSystemStatusByKey.set(cacheKey, {
 		checkedAt: Date.now(),
 		status
 	});
 }
 
-function buildUnknownSystemStatus(): SystemStatus {
-	return {
+function buildUnknownSystemStatus(): SystemState {
+	return systemStateSchema.parse({
 		github: {
 			cliAvailable: false,
 			authenticated: false,
 			detail: 'GitHub status has not been checked by the daemon yet.'
 		}
-	};
+	});
 }
 
 function resolveGitHubCliFailureDetail(

@@ -5,21 +5,19 @@ import {
     missionFromIssueInputSchema,
     repositoryRuntimeRouteParamsSchema
 } from '@flying-pillow/mission-core/airport/runtime';
-import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
-import {
-    startMissionFromBriefThroughEntityBoundary,
-    startMissionFromIssueThroughEntityBoundary
-} from '../../../api/entities/remote/dispatch';
+import { executeEntityCommand } from '../../../api/entities/remote/dispatch';
+import { repositoryMissionMutationStatusSchema } from '@flying-pillow/mission-core/entities/Repository/RepositoryRemote';
+import { EntityProxy } from '$lib/server/daemon/entity-proxy';
 
-function resolveRepositoryContext(): {
-    gateway: AirportWebGateway;
+async function resolveRepositoryContext(): Promise<{
+    gateway: EntityProxy;
     repositoryId: string;
-} {
+}> {
     const event = getRequestEvent();
     const { repositoryId } = repositoryRuntimeRouteParamsSchema.parse(event.params);
 
     return {
-        gateway: new AirportWebGateway(event.locals),
+        gateway: new EntityProxy(event.locals),
         repositoryId
     };
 }
@@ -27,22 +25,39 @@ function resolveRepositoryContext(): {
 export const startMissionFromIssue = command(
     missionFromIssueInputSchema,
     async (input): Promise<{ missionId: string; redirectTo: string }> => {
-        const { gateway, repositoryId } = resolveRepositoryContext();
-        return await startMissionFromIssueThroughEntityBoundary(gateway, {
-            repositoryId,
-            issueNumber: input.issueNumber
-        });
+        const { gateway, repositoryId } = await resolveRepositoryContext();
+        const result = repositoryMissionMutationStatusSchema.parse(await executeEntityCommand(gateway, {
+            entity: 'Repository',
+            method: 'startMissionFromIssue',
+            payload: {
+                repositoryId,
+                issueNumber: input.issueNumber
+            }
+        }));
+
+        return {
+            missionId: result.missionId,
+            redirectTo: `/repository/${encodeURIComponent(repositoryId)}/missions/${encodeURIComponent(result.missionId)}`
+        };
     }
 );
 
 export const startMissionFromBrief = command(
     missionFromBriefInputSchema,
     async (input): Promise<{ missionId: string; redirectTo: string }> => {
-        const { gateway, repositoryId } = resolveRepositoryContext();
+        const { gateway, repositoryId } = await resolveRepositoryContext();
+        const result = repositoryMissionMutationStatusSchema.parse(await executeEntityCommand(gateway, {
+            entity: 'Repository',
+            method: 'startMissionFromBrief',
+            payload: {
+                repositoryId,
+                ...input
+            }
+        }));
 
-        return await startMissionFromBriefThroughEntityBoundary(gateway, {
-            repositoryId,
-            brief: input
-        });
+        return {
+            missionId: result.missionId,
+            redirectTo: `/repository/${encodeURIComponent(repositoryId)}/missions/${encodeURIComponent(result.missionId)}`
+        };
     }
 );

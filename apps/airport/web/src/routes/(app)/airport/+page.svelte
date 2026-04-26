@@ -1,29 +1,22 @@
-<!-- /apps/airport/web/src/routes/+page.svelte: Airport home route with repository management and daemon health summary. -->
+<!-- /apps/airport/web/src/routes/(app)/airport/+page.svelte: Minimal Airport route that only renders the shared header. -->
 <script lang="ts">
-    import Airport from "./Airport.svelte";
+    import type { PageData } from "./$types";
     import AirportHeader from "$lib/components/airport/airport-header.svelte";
-    import AirportSidebar from "$lib/components/airport/airport-sidebar.svelte";
-    import {
-        SidebarInset,
-        SidebarProvider,
-    } from "$lib/components/ui/sidebar/index.js";
+    import Airport from "$lib/components/airport/AirportPage.svelte";
+    import { SidebarProvider } from "$lib/components/ui/sidebar/index.js";
 </script>
 
 <svelte:head>
     <title>Flying-Pillow Mission</title>
     <meta
         name="description"
-        content="Airport repository management surface for the Flying-Pillow Mission workspace."
+        content="Minimal Airport route for daemon status and GitHub login state."
     />
 </svelte:head>
 
 <SidebarProvider>
-    <AirportSidebar variant="inset" />
-
-    <SidebarInset
-        class="min-h-svh xl:h-svh xl:min-h-0 xl:overflow-hidden md:peer-data-[variant=inset]:my-0"
-    >
+    <div class="min-h-svh bg-background">
         <AirportHeader />
         <Airport />
-    </SidebarInset>
+    </div>
 </SidebarProvider>
