@@ -2,7 +2,7 @@
 title: "SPEC: #29 - Architectural Reset: Strict OOD Entity Architecture For Airport And Daemon"
 artifact: "spec"
 createdAt: "2026-04-22T14:54:07.971Z"
-updatedAt: "2026-04-26T00:00:00.000+00:00"
+updatedAt: "2026-04-26T16:05:00.000+00:00"
 stage: "spec"
 ---
 
@@ -16,7 +16,9 @@ The daemon is the authority. It owns entity identity, entity state, entity behav
 
 The target architecture keeps the useful part of the reference application in `/repositories/Flying-Pillow/flying-pillow/apps/app`: client entities call a small generic remote boundary, and backend entities execute the real behavior. It deliberately does not copy the reference application's dynamic entity registry, metadata model system, generic UI/action metadata, autosave/history stack, or broad result-envelope machinery.
 
-The first implementation target is `Repository`. `Mission`, `Stage`, `Task`, `Artifact`, and `AgentSession` follow only after the Repository contract proves the architecture. This mission must prefer a small, strict, explicit foundation over a broad partially migrated system.
+The first implementation target is `Repository`. Repository has now proven the architecture: canonical schemas own payload and result contracts, daemon dispatch is explicit, source commands can return acknowledgements, and Airport web can call generic entity remotes through a client mirror.
+
+The next implementation target is `Mission`. Mission is the most important entity in the system because it is the runtime workflow aggregate. It owns mission lifecycle, workflow coordination, stage/task/artifact/session membership, and operator control over mission execution. Migrating Mission must not copy the older route-local runtime API into a new file name; it must complete the strict entity architecture for the workflow engine boundary.
 
 ## Architectural Decisions
 
@@ -190,7 +192,8 @@ All schemas required by both daemon and browser move under `packages/core/src/sc
 | `Repository.ts` | Repository data, input, identity payloads, mission references, repository snapshots, Repository method payloads, Repository method results |
 | `EntityRemote.ts` | Generic entity invocation schemas, query invocation schema, command invocation schema, form invocation schema if required, command acknowledgement schema |
 | `RuntimeEvents.ts` | SSE event type schema, event envelope schema, projection payload schemas |
-| `MissionRuntime.ts` or `Mission.ts` | Mission snapshot schemas required by Repository snapshots and Mission mirrors |
+| `Mission.ts` | Mission data, snapshot, method payload, method result, action, document, worktree, and acknowledgement schemas |
+| `MissionRuntime.ts` | Temporary source for existing runtime shapes during migration only; must be folded into `Mission.ts` or reduced to execution-internal schemas |
 | `SystemState.ts` | System state schemas |
 | `AirportClient.ts` | Airport-client-only public types that are genuinely schema-facing |
 
@@ -386,29 +389,329 @@ It must not own:
 
 ## Mission, Stage, Task, Artifact, And AgentSession Direction
 
-The broader entity set remains the target, but it is not implemented before Repository proves the strict foundation.
+Repository has proven the strict foundation. Mission is now the next required migration target. Stage, Task, Artifact, and AgentSession must be projected from Mission first, then promoted into their own daemon-callable entity contracts only where they own direct behavior.
 
 ### Mission
 
-`Mission` owns mission lifecycle, mission status, workflow coordination, stage membership, task membership, artifact membership, and agent-session membership.
+`Mission` owns mission identity, lifecycle, status projection, workflow coordination, stage membership, task membership, artifact membership, agent-session membership, mission-level operator actions, task launch/completion/reopen intent, agent-session control intent, mission document access, mission worktree inspection, and workflow action execution.
 
-Mission commands must migrate to source acknowledgement plus SSE projection. Today, broad `MissionRuntimeSnapshot` command responses are tolerated only as current-state evidence, not as target architecture.
+The historical code showed a transitional split:
+
+- `packages/core/src/entities/Mission/Mission.ts` is a first-class entity projection built from `OperatorStatus`, but it does not yet own daemon-callable behavior.
+- `packages/core/src/entities/Mission/MissionRemote.ts` owns daemon-callable behavior, runtime loading, runtime snapshot construction, and command result shaping.
+- `packages/core/src/entities/Mission/MissionRemoteContract.ts` owned Mission remote payload schemas from a deep entity path and must not be retained as a wrapper.
+- `packages/core/src/schemas/MissionRuntime.ts` owns Mission runtime snapshot, command, stage, task, artifact, and agent-session schemas.
+- `apps/airport/web/src/lib/components/entities/Mission/Mission.svelte.ts` is the browser Mission mirror, but it still expects command methods to return broad `MissionRuntimeSnapshot` values and still reaches route-local runtime APIs through its command gateway.
+
+The target migration collapses that split into a canonical entity contract without making the SvelteKit server or Airport components authoritative.
+
+### Mission Must Own
+
+- Mission identity and repository-scoped mission resolution.
+- Mission descriptor projection: title, issue, type, branch, directories, operational mode, and recommended action.
+- Mission workflow projection: lifecycle, active/current stage, stages, tasks, gates when exposed, and updated timestamp.
+- Mission artifact membership and mission document read/write behavior.
+- Mission agent-session membership and session control intent.
+- Mission action discovery and action execution as workflow-control behavior.
+- Mission worktree inspection when it is scoped to the mission dossier or mission worktree.
+- Conversion from workflow/runtime state into entity-shaped snapshots.
+- Source acknowledgements for mission, task, session, action, document-write, and worktree-affecting commands.
+
+### Mission Must Not Own
+
+- Repository registration, settings ownership, workflow preset ownership, issue discovery, or mission creation from issue/brief. Those remain Repository responsibilities.
+- Daemon request routing or protocol version policy.
+- SvelteKit request handling, cookie/session auth, or route composition.
+- Terminal socket transport, raw PTY streaming, EventSource plumbing, or browser subscription mechanics.
+- Provider-specific agent adapter behavior.
+- Workflow reducer rules as UI logic. Reducer/policy rules remain workflow-engine internals consumed by Mission.
+- Stage, Task, Artifact, or AgentSession direct behavior once those entities are promoted to first-class source entities.
+- `MissionRuntimeSnapshot` as a command response for unrelated global reconciliation.
+
+### Mission Data Properties
+
+| Property | Description |
+| --- | --- |
+| `missionId` | Stable mission identity |
+| `repositoryId` | Stable Repository identity when known |
+| `repositoryRootPath` | Canonical local checkout root used to resolve the mission |
+| `title` | Display title |
+| `issueId` | Optional source issue number |
+| `type` | Mission type such as feature, fix, docs, refactor, or task |
+| `operationalMode` | Active operation mode when projected |
+| `branchRef` | Mission branch reference |
+| `missionDir` | Dossier directory for mission artifacts |
+| `missionRootDir` | Canonical mission root directory |
+| `lifecycle` | Workflow lifecycle state |
+| `updatedAt` | Last authoritative workflow update timestamp |
+| `currentStageId` | Current or active stage id when known |
+| `recommendedAction` | Operator-facing recommended next action |
+
+### Mission Snapshot
+
+`MissionSnapshot` is the entity-shaped projection returned by Mission queries and SSE events.
+
+It contains:
+
+- `mission`
+- `workflow`
+- `stages`
+- `tasks`
+- `artifacts`
+- `agentSessions`
+- `actions` when explicitly queried or projected as a Mission action projection
+- `control` only when it is normalized as Mission-owned control data, not as a route bundle
+- `worktree` only when queried from Mission and validated by shared schemas
+
+The snapshot must not be a storage mirror of `.mission/missions/<mission-id>/mission.json`. `mission.json` remains the persisted workflow runtime document. `MissionSnapshot` is an entity projection for client mirrors and daemon callers.
+
+### Mission Query Methods
+
+| Method | Kind | Payload | Result |
+| --- | --- | --- | --- |
+| `read` | instance query | `MissionIdentityPayload` | `MissionSnapshot` |
+| `readControl` | instance query | `MissionIdentityPayload` | `MissionControlSnapshot` or normalized Mission control schema |
+| `listActions` | instance query | `MissionIdentityPayload & { context? }` | `MissionActionListSnapshot` |
+| `readDocument` | instance query | `MissionIdentityPayload & { path }` | `MissionDocumentSnapshot` |
+| `readWorktree` | instance query | `MissionIdentityPayload` | `MissionWorktreeSnapshot` |
+
+`read` is the canonical Mission entity read. `readControl`, `listActions`, `readDocument`, and `readWorktree` are allowed only because they are Mission-scoped source queries. They must move off route-local runtime fetches and into generic entity query remotes.
+
+### Mission Command Methods
+
+| Method | Kind | Payload | Result |
+| --- | --- | --- | --- |
+| `command` | instance command | `MissionIdentityPayload & { command }` | `MissionCommandAcknowledgement` |
+| `taskCommand` | instance command | `MissionIdentityPayload & { taskId, command }` | `MissionCommandAcknowledgement` |
+| `sessionCommand` | instance command | `MissionIdentityPayload & { sessionId, command }` | `MissionCommandAcknowledgement` |
+| `executeAction` | instance command | `MissionIdentityPayload & { actionId, steps?, terminalSessionName? }` | `MissionCommandAcknowledgement` with action id if needed |
+| `writeDocument` | instance command | `MissionIdentityPayload & { path, content }` | `MissionDocumentWriteAcknowledgement` or direct `MissionDocumentSnapshot` only when the edited document is the source result |
+
+Mission commands must migrate to source acknowledgement plus SSE projection. Broad `MissionRuntimeSnapshot` command responses are forbidden in the target architecture. A command may return direct source-local data only when that data is the source result of the command itself, such as a document write returning the saved document payload. It must not return the global Mission/workflow/task/session projection as a reconciliation shortcut.
+
+### Mission Command Acknowledgement
+
+```ts
+type MissionCommandAcknowledgement = {
+  ok: true;
+  entity: "Mission";
+  method: string;
+  id: string;
+  missionId: string;
+  taskId?: string;
+  sessionId?: string;
+  actionId?: string;
+};
+```
+
+The exact schema must be strict and method-aware. It may include source identifiers needed for optimistic UI state or route derivation. It must not include `status`, `sessions`, `workflow`, or other broad projection fields.
+
+### Mission Runtime Loading
+
+Mission instance resolution must be explicit, mirroring Repository instance resolution.
+
+Required behavior:
+
+- Parse `MissionIdentityPayload` before resolving the instance.
+- Resolve `repositoryRootPath` from payload or daemon surface context only at the daemon boundary.
+- Resolve the Mission runtime through a focused Mission factory/load collaborator.
+- Fail loudly when the mission cannot be resolved.
+- Dispose runtime resources after source method execution.
+- Parse method results before returning them to daemon dispatch.
+- Publish or forward Mission projection events after authoritative state changes.
+
+Forbidden behavior:
+
+- No arbitrary static `MissionRemote` wrapper as the contract owner.
+- No deep `entities/Mission/MissionRemoteContract` schema ownership.
+- No route handlers constructing Mission runtime snapshots by hand.
+- No `DaemonGateway.entities.readMissionControl` as the component-facing Mission API.
+- No client reconciliation that depends on command responses carrying a full runtime snapshot.
+
+### Mission Relationship To Stage, Task, Artifact, And AgentSession
+
+Mission is the aggregate root for workflow projection and invariant enforcement. Stage, Task, Artifact, and AgentSession are not route-local contexts or action-filter inputs; they are first-class child entities at the contract and client-mirror boundary.
+
+That means:
+
+- Mission snapshots include child snapshots so Airport can hydrate mirrored Stage, Task, Artifact, and AgentSession instances.
+- Stage, Task, Artifact, and AgentSession have stable typed entity references.
+- Stage, Task, Artifact, and AgentSession expose their own command discovery and command execution methods to Airport.
+- The daemon may implement those child entity methods by resolving the owning Mission aggregate internally, but the external contract boundary is the child entity.
+- UI components must never compose `{ stageId, taskId, artifactPath, sessionId }` action contexts just to discover actions.
+- Terminal streaming remains a runtime transport concern; AgentSession projection events identify session state, while socket/PTY routes carry stream bytes.
+
+The transitional `Mission.listActions(context)` shape is allowed only as a temporary bridge while the child entity command contracts are introduced. It is not the target architecture.
+
+## Child Entity Command Architecture
+
+The target operator command model is entity-owned.
+
+Every entity that can appear in an actionbar implements the same conceptual browser-facing capability:
+
+```ts
+type ActionableEntity = {
+  readonly entityName: string;
+  readonly entityId: string;
+  listCommands(): Promise<EntityCommandDescriptor[]>;
+  executeCommand(commandId: string, input?: unknown): Promise<void>;
+};
+```
+
+`EntityActionbar` receives an `ActionableEntity` and renders that entity's commands. It must not know about Mission, Stage, Task, Artifact, AgentSession, scopes, target ids, action contexts, workflow stages, artifact paths, or session ids. The entity is the boundary.
+
+### Entity References
+
+Child entity remotes use typed references instead of contextual filtering objects.
+
+```ts
+type EntityReference =
+  | { entity: "Mission"; missionId: string; repositoryRootPath?: string }
+  | { entity: "Stage"; missionId: string; stageId: string; repositoryRootPath?: string }
+  | { entity: "Task"; missionId: string; taskId: string; repositoryRootPath?: string }
+  | { entity: "Artifact"; missionId: string; artifactId: string; repositoryRootPath?: string }
+  | { entity: "AgentSession"; missionId: string; sessionId: string; repositoryRootPath?: string };
+```
+
+The current `{ entity, method, payload }` remote shape may be retained if references are encoded in strict method payloads. The target contract, however, is reference-shaped: the caller invokes behavior on a specific entity, not on a Mission-wide action list with filters.
+
+### Entity Commands
+
+`EntityCommandDescriptor` is the canonical UI command contract.
+
+```ts
+type EntityCommandDescriptor = {
+  commandId: string;
+  label: string;
+  disabled: boolean;
+  disabledReason?: string;
+  variant?: "default" | "destructive";
+  iconHint?: string;
+  confirmation?: {
+    required: boolean;
+    prompt?: string;
+  };
+  input?: EntityCommandInputDescriptor;
+};
+```
+
+Command descriptors are already scoped to the entity that returned them. No client filtering is required. If a command is not relevant to an entity, it is not returned by that entity's `listCommands` method. Disabled commands may be returned only when they explain meaningful state, such as why a ready task cannot start.
+
+### Stage Source Entity Boundary
+
+`Stage` owns stage identity, lifecycle, task membership, artifact membership, and stage-level workflow commands.
+
+Required methods:
+
+| Method | Kind | Payload | Result |
+| --- | --- | --- | --- |
+| `read` | query | `StageIdentityPayload` | `StageSnapshot` |
+| `listCommands` | query | `StageIdentityPayload` | `EntityCommandListSnapshot` |
+| `executeCommand` | command | `StageIdentityPayload & { commandId, input? }` | `EntityCommandAcknowledgement` |
+
+The initial stage commands include generated-task creation when the workflow policy exposes it. The Stage handler resolves the owning Mission aggregate internally and delegates policy enforcement to Mission/workflow collaborators.
+
+### Task Source Entity Boundary
+
+`Task` owns task identity, lifecycle, launch intent, completion, reopening, corrective rework, launch policy, and relationship to agent sessions.
+
+Required methods:
+
+| Method | Kind | Payload | Result |
+| --- | --- | --- | --- |
+| `read` | query | `TaskIdentityPayload` | `TaskSnapshot` |
+| `listCommands` | query | `TaskIdentityPayload` | `EntityCommandListSnapshot` |
+| `executeCommand` | command | `TaskIdentityPayload & { commandId, input? }` | `EntityCommandAcknowledgement` |
+
+The initial task commands are `start`, `complete`, `reopen`, `rework`, `sendBack`, `enableAutostart`, and `disableAutostart` where policy allows them. The Task command handler must not expose Mission-wide action filtering to Airport.
+
+### Artifact Source Entity Boundary
+
+`Artifact` owns artifact identity, file path metadata, stage/task association, document read behavior, document write behavior, and artifact-level review or correction commands when workflow policy exposes them.
+
+Required methods:
+
+| Method | Kind | Payload | Result |
+| --- | --- | --- | --- |
+| `read` | query | `ArtifactIdentityPayload` | `ArtifactSnapshot` or `ArtifactDocumentSnapshot` depending on method |
+| `readDocument` | query | `ArtifactIdentityPayload` | `ArtifactDocumentSnapshot` |
+| `writeDocument` | command | `ArtifactIdentityPayload & { content }` | `ArtifactDocumentSnapshot` |
+| `listCommands` | query | `ArtifactIdentityPayload` | `EntityCommandListSnapshot` |
+| `executeCommand` | command | `ArtifactIdentityPayload & { commandId, input? }` | `EntityCommandAcknowledgement` |
+
+Artifact identity must not be an untyped arbitrary file path in the UI. The schema may include a canonical path, but the entity reference must be stable and validated.
+
+### AgentSession Source Entity Boundary
+
+`AgentSession` owns session identity, lifecycle, prompt behavior, command behavior, cancellation, termination, completion, terminal attachment metadata, and session-level command discovery.
+
+Required methods:
+
+| Method | Kind | Payload | Result |
+| --- | --- | --- | --- |
+| `read` | query | `AgentSessionIdentityPayload` | `AgentSessionSnapshot` |
+| `listCommands` | query | `AgentSessionIdentityPayload` | `EntityCommandListSnapshot` |
+| `executeCommand` | command | `AgentSessionIdentityPayload & { commandId, input? }` | `EntityCommandAcknowledgement` |
+| `sendPrompt` | command | `AgentSessionIdentityPayload & { prompt }` | `EntityCommandAcknowledgement` |
+| `sendCommand` | command | `AgentSessionIdentityPayload & { command }` | `EntityCommandAcknowledgement` |
+
+Terminal input/output remains stream transport. Session command methods do not return terminal stream data.
+
+### Airport EntityActionbar
+
+The target Actionbar is entity-agnostic:
+
+- It accepts an `ActionableEntity`.
+- It calls `entity.listCommands()`.
+- It renders command descriptors.
+- It calls `entity.executeCommand(commandId, input)`.
+- It handles pending, confirmation, input collection, and local errors.
+- It refreshes or lets projection events reconcile after command execution.
+
+Forbidden Actionbar behavior:
+
+- No `scope` prop.
+- No `stageId`, `taskId`, `artifactPath`, or `sessionId` props.
+- No Mission-specific remote calls.
+- No local target filtering.
+- No ordering policy beyond preserving source order unless the descriptor explicitly carries presentation order.
+
+### Command Policy Ownership
+
+The workflow and Mission aggregate remain the internal source of truth for command policy. DRY means command eligibility rules are not duplicated across child entities. Child entity handlers resolve the owning Mission aggregate and ask focused collaborators for commands applicable to that entity reference.
+
+The clean layering is:
+
+- Child entity contract owns external identity and method shape.
+- Mission aggregate owns workflow invariants and mutation authority.
+- Shared command policy collaborators derive command descriptors from Mission state and an entity reference.
+- Airport mirrors expose entity-shaped methods to components.
+- EntityActionbar renders commands without domain knowledge.
+- Direct terminal streaming remains a runtime transport concern; AgentSession projection events should identify session state, while socket/PTY routes carry stream bytes.
 
 ### Stage
 
 `Stage` owns stage identity, lifecycle, task membership, and artifact membership.
 
+In the Mission migration slice, Stage is projected by Mission and mirrored in Airport as a child entity. It must not own independent daemon command methods until there is direct Stage behavior that cannot be expressed as Mission workflow control.
+
 ### Task
 
 `Task` owns task identity, lifecycle transitions, launch intent, completion, reopening, and relationship to agent sessions.
+
+In the Mission migration slice, task launch, complete, and reopen remain Mission commands because the workflow engine validates and applies them in the mission runtime document. The browser Task mirror may expose task-shaped methods, but those methods route through its owning Mission mirror and generic Mission command calls.
 
 ### Artifact
 
 `Artifact` owns artifact identity, path metadata, stage/task association, document read behavior, and document write behavior when editing is allowed.
 
+In the Mission migration slice, mission artifact reads and writes are Mission-scoped queries/commands. A later Artifact source entity may own direct document behavior if the system needs artifact-level daemon calls.
+
 ### AgentSession
 
 `AgentSession` owns session identity, lifecycle, prompt behavior, command behavior, cancellation, termination, completion, and terminal attachment metadata.
+
+In the Mission migration slice, session completion, cancellation, termination, prompts, and commands remain Mission commands because Mission coordinates them with workflow state. Terminal socket input/output remains runtime transport, not entity command response data.
 
 ## SSE Projection Contract
 
@@ -436,6 +739,22 @@ Initial required categories:
 - Artifact snapshot changed.
 - AgentSession snapshot changed.
 - Terminal/session output changed where streaming transport requires it.
+
+### Mission Projection Events
+
+Mission migration requires projection events that are specific enough for client mirrors to reconcile without command-response snapshots.
+
+Required Mission event payload categories:
+
+- `mission.snapshot.changed` carries a validated `MissionSnapshot`.
+- `mission.actions.changed` carries a validated action-list projection for one mission.
+- `stage.snapshot.changed` carries a validated Stage child projection when a narrower update is sufficient.
+- `task.snapshot.changed` carries a validated Task child projection when task lifecycle changes.
+- `artifact.snapshot.changed` carries a validated Artifact child projection when document or artifact metadata changes.
+- `agentSession.snapshot.changed` carries a validated AgentSession child projection when session lifecycle or metadata changes.
+- `agentSession.terminal.output` or the existing terminal stream events carry terminal bytes and terminal handles only.
+
+The event schema may keep a compact envelope, but `payload` must stop being untyped for entity projections. Entity projection payloads must be parsed with shared schemas before emission and before browser reconciliation.
 
 ## Airport Client Contract
 
@@ -568,13 +887,52 @@ All web imports must use stable public exports. Browser-reachable files must not
 
 ### Phase 7: Extend After Repository
 
-After Repository is stable:
+Repository is stable enough for Mission to proceed:
 
-1. Migrate `GitHubRepository` or fold it into Repository import/clone behavior.
-2. Migrate Mission commands to command acknowledgement plus SSE projection.
-3. Promote Stage, Task, Artifact, and AgentSession projection contracts.
-4. Replace remaining manual parsers with shared schemas.
-5. Remove obsolete runtime routes that duplicate entity remotes.
+1. Create canonical Mission schemas in `packages/core/src/schemas/Mission.ts`.
+2. Move Mission identity, snapshot, child projection, action, document, worktree, payload, result, and acknowledgement schemas out of deep entity remote files and route-local files.
+3. Refactor `Mission` so daemon-callable behavior is owned by the entity or focused Mission collaborators instead of `MissionRemote` as a parallel contract owner.
+4. Add explicit Mission query and command handlers to daemon entity dispatch.
+5. Convert Mission commands to acknowledgement or source-local result semantics.
+6. Route Mission read/control/action/document/worktree behavior through generic entity remotes where it is request-response behavior.
+7. Keep SSE and terminal/socket streams as runtime transports, but validate entity projection payloads through shared schemas.
+8. Update the Airport Mission mirror, Task mirror, Artifact mirror, AgentSession mirror, and application container to reconcile from Mission query snapshots and SSE projection events.
+9. Remove route-local Mission runtime APIs once their behavior is covered by Mission entity methods or streaming-only transports.
+10. Promote Stage, Task, Artifact, and AgentSession to direct daemon-callable entities only after Mission's aggregate boundary is stable.
+
+### Phase 8: Mission Entity Contract
+
+1. Add `missionEntityName`, `missionIdentityPayloadSchema`, `missionSnapshotSchema`, `missionCommandAcknowledgementSchema`, and method-specific payload/result schema maps to `packages/core/src/schemas/Mission.ts`.
+2. Make `packages/core/src/schemas/index.ts` export the Mission schema surface.
+3. Remove `packages/core/src/entities/Mission/MissionRemoteContract.ts` instead of keeping it as a compatibility wrapper.
+4. Move or alias existing `MissionRuntime` snapshot schemas only as an implementation step; the target public contract is `MissionSnapshot`, not `MissionRuntimeSnapshot`.
+5. Keep terminal socket schemas out of the Mission entity contract unless they describe AgentSession terminal metadata rather than stream transport.
+
+### Phase 9: Mission Daemon Authority
+
+1. Replace `MissionRemote` as the daemon-callable contract owner.
+2. Keep runtime loading/disposal in a focused collaborator used by Mission methods or Mission dispatch handlers.
+3. Implement explicit Mission handlers in `packages/core/src/daemon/entityRemote.ts` for `read`, `readControl`, `listActions`, `readDocument`, `readWorktree`, `command`, `taskCommand`, `sessionCommand`, `executeAction`, and `writeDocument`.
+4. Parse each payload before execution and each result after execution.
+5. Return acknowledgement schemas for mission, task, session, and action commands.
+6. Publish or forward validated projection events after state changes.
+7. Bump daemon `PROTOCOL_VERSION` when daemon RPC behavior or contracts change.
+
+### Phase 10: Airport Mission Mirror
+
+1. Update `Mission.svelte.ts` so command methods apply pending state and wait for SSE/query reconciliation instead of applying command-returned `MissionRuntimeSnapshot` values.
+2. Update `MissionCommandTransport.ts` and `MissionRuntimeTransport.ts` to import Mission schemas from `@flying-pillow/mission-core/schemas` and call only generic query/command remotes for request-response behavior.
+3. Replace `getMissionControl`, `getMissionActions`, `readMissionDocument`, `writeMissionDocument`, and `getMissionWorktree` route fetches with Mission entity query/command methods.
+4. Keep terminal and event streaming transports separate from entity source commands.
+5. Ensure components use Mission, Stage, Task, Artifact, and AgentSession mirrors rather than route remotes, fetches, or manual payload composition.
+
+### Phase 11: Remove Mission Transitional Layers
+
+1. Remove or reduce `packages/core/src/entities/Mission/MissionRemote.ts` after Mission entity methods and daemon dispatch own behavior.
+2. Remove Mission schema ownership from `packages/core/src/airport/runtime.ts`.
+3. Remove route-local Mission request-response APIs that duplicate entity remotes.
+4. Keep only streaming routes for SSE and terminal/socket output where request-response remotes are the wrong transport.
+5. Remove manual Mission parsers from Airport web once shared schemas cover the trust boundaries.
 
 ## File Matrix
 
@@ -585,6 +943,8 @@ After Repository is stable:
 | `packages/core/src/schemas/Repository.ts` | Canonical Repository schema and method contract owner |
 | `packages/core/src/schemas/EntityRemote.ts` | Canonical generic entity invocation contract owner |
 | `packages/core/src/schemas/RuntimeEvents.ts` | Canonical SSE event contract owner |
+| `packages/core/src/schemas/Mission.ts` | Canonical Mission schema and method contract owner |
+| `packages/core/src/schemas/MissionRuntime.ts` | Fold into Mission schema contract or reduce to execution-internal schemas |
 | `packages/core/src/schemas/index.ts` | Public schema barrel |
 | `packages/core/src/airport/runtime.ts` | Decompose and remove schema ownership |
 | `packages/core/src/airport/entityRemote.ts` | Remove or reduce after `schemas/EntityRemote.ts` owns the contract |
@@ -592,6 +952,8 @@ After Repository is stable:
 | `packages/core/src/entities/Repository/Repositories.ts` | Repository collection authority |
 | `packages/core/src/entities/Repository/RepositorySchema.ts` | Remove as wrapper layer |
 | `packages/core/src/entities/Repository/RepositoryRemote.ts` | Remove as contract owner |
+| `packages/core/src/entities/Mission/Mission.ts` | Mission domain authority and entity projection owner |
+| `packages/core/src/entities/Mission/MissionRemote.ts` | Remove as parallel daemon-callable contract owner after migration |
 | `packages/core/src/daemon/entityRemote.ts` | Replace dynamic dispatch with explicit dispatchers |
 | `packages/core/src/daemon/runDaemonMain.ts` | Import canonical schemas and route entity RPCs to explicit dispatch |
 | `packages/core/src/daemon/protocol/contracts.ts` | Align entity request/response types and bump protocol version |
@@ -608,9 +970,24 @@ After Repository is stable:
 | `apps/airport/web/src/lib/server/daemon/daemon-gateway.ts` | Reduce to non-entity infrastructure |
 | `apps/airport/web/src/lib/client/Application.svelte.ts` | Keep application container and remove legacy/commented architecture |
 | `apps/airport/web/src/lib/components/entities/Repository/Repository.svelte.ts` | Use canonical schemas and source acknowledgement command semantics |
+| `apps/airport/web/src/lib/components/entities/Mission/Mission.svelte.ts` | Use canonical Mission schemas, acknowledgement command semantics, and SSE/query reconciliation |
+| `apps/airport/web/src/lib/components/entities/Task/Task.svelte.ts` | Route task methods through owning Mission mirror until Task becomes a source entity |
+| `apps/airport/web/src/lib/components/entities/Artifact/Artifact.svelte.ts` | Route document methods through owning Mission mirror until Artifact becomes a source entity |
+| `apps/airport/web/src/lib/components/entities/AgentSession/AgentSession.svelte.ts` | Route session methods through owning Mission mirror until AgentSession becomes a source entity |
+| `apps/airport/web/src/lib/client/runtime/transport/MissionRuntimeTransport.ts` | Use generic Mission entity query for snapshots and keep SSE as projection transport |
+| `apps/airport/web/src/lib/client/runtime/transport/MissionCommandTransport.ts` | Use generic Mission entity commands and acknowledgement/source-local result schemas |
 | `apps/airport/web/src/routes/api/runtime/events/+server.ts` | Keep daemon-backed SSE bridge and validate shared event envelopes |
+| `apps/airport/web/src/routes/api/runtime/missions/[missionId]/+server.ts` | Remove or reduce after Mission `read` query owns request-response snapshot reads |
+| `apps/airport/web/src/routes/api/runtime/missions/[missionId]/control/+server.ts` | Remove or reduce after Mission `readControl` owns request-response control reads |
+| `apps/airport/web/src/routes/api/runtime/missions/[missionId]/actions/+server.ts` | Remove or reduce after Mission `listActions` owns request-response action reads |
+| `apps/airport/web/src/routes/api/runtime/missions/[missionId]/documents/+server.ts` | Remove or reduce after Mission document query/command methods own document IO |
+| `apps/airport/web/src/routes/api/runtime/missions/[missionId]/worktree/+server.ts` | Remove or reduce after Mission `readWorktree` owns request-response worktree reads |
+| `apps/airport/web/src/routes/api/runtime/missions/[missionId]/tasks/[taskId]/+server.ts` | Remove or reduce after Mission task commands own request-response task behavior |
+| `apps/airport/web/src/routes/api/runtime/missions/[missionId]/sessions/[sessionId]/+server.ts` | Remove or reduce after Mission session commands own request-response session behavior |
+| `apps/airport/web/src/routes/api/runtime/missions/[missionId]/terminal/+server.ts` | Keep only if it remains streaming/terminal transport rather than entity command behavior |
 | `apps/airport/web/src/routes/(app)/repository/[repositoryId]/issue.remote.ts` | Remove after Repository mirror owns issue methods |
 | `apps/airport/web/src/routes/(app)/repository/[repositoryId]/mission.remote.ts` | Remove after Repository mirror owns mission-start methods |
+| `apps/airport/web/src/routes/(app)/repository/[repositoryId]/missions/[missionId]/mission-page.remote.ts` | Remove after Mission and Repository mirrors own page snapshot assembly |
 | `apps/airport/web/src/routes/api/airport/remote.ts` | Remove after generic entity/SSE paths replace active behavior |
 | `apps/airport/web/src/routes/api/airport/airport.remote.ts` | Remove after generic entity/SSE paths replace active behavior |
 | `apps/airport/web/src/lib/client/runtime/parsers.ts` | Replace manual parsers with shared schemas or remove |
@@ -640,6 +1017,11 @@ Run after implementation:
 8. Browser-reachable files do not import `@flying-pillow/mission-core/node`.
 9. Browser-reachable files do not import deep `entities/*Remote*` paths.
 10. `packages/core/package.json` has no wildcard export.
+11. Mission `read` routes through generic entity query and returns a canonical `MissionSnapshot`.
+12. Mission task/session/mission/action commands return acknowledgements or source-local results, not broad runtime snapshots.
+13. Mission document and worktree request-response behavior routes through Mission entity methods.
+14. Mission projection events reconcile Mission, Stage, Task, Artifact, and AgentSession mirrors without command-returned projection snapshots.
+15. Terminal/session streaming still works through streaming transports and does not leak into command result contracts.
 
 ## Acceptance Criteria
 
@@ -651,5 +1033,11 @@ Run after implementation:
 - Cross-entity projections are delivered through SSE.
 - `airport/runtime.ts` no longer owns shared entity, method, or event schemas.
 - Route-specific Repository remotes are gone from the target architecture.
+- Mission schemas are canonical under `packages/core/src/schemas`.
+- Mission daemon calls are handled through explicit dispatch, not `MissionRemote` as a parallel contract owner.
+- Mission client mirror imports schemas from `@flying-pillow/mission-core/schemas`.
+- Mission commands return acknowledgements or source-local results instead of `MissionRuntimeSnapshot` reconciliation payloads.
+- Mission request-response routes are removed or reduced once generic entity remotes own reads, actions, documents, and worktree queries.
+- Stage, Task, Artifact, and AgentSession mirrors reconcile as Mission child projections until they become direct source entities.
 - Package exports are minimal and stable.
 - No fallback, compatibility, alias, or normalization layer remains in the target implementation.

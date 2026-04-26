@@ -1,7 +1,7 @@
 // /apps/airport/web/src/lib/client/runtime/transport/MissionRuntimeTransport.ts: Mission transport adapter for runtime snapshot and daemon event contracts.
 import type {
     AirportRuntimeEventEnvelope,
-    MissionRuntimeSnapshot
+    MissionSnapshot
 } from '@flying-pillow/mission-core/schemas';
 import type {
     EntityQueryInvocation,
@@ -12,9 +12,9 @@ import {
     type RuntimeSubscription
 } from '$lib/client/runtime/transport/EntityRuntimeTransport';
 import {
-    parseAirportRuntimeEventEnvelope,
-    parseMissionRuntimeSnapshot
+    parseAirportRuntimeEventEnvelope
 } from '$lib/client/runtime/parsers';
+import { missionSnapshotSchema } from '@flying-pillow/mission-core/schemas';
 import { qry } from '../../../../routes/api/entities/remote/query.remote';
 
 type EntityQueryExecutor = (input: EntityQueryInvocation) => Promise<EntityRemoteResult>;
@@ -22,7 +22,7 @@ const missionEntityName = 'Mission';
 
 export class MissionRuntimeTransport extends EntityRuntimeTransport<
     string,
-    MissionRuntimeSnapshot,
+    MissionSnapshot,
     AirportRuntimeEventEnvelope
 > {
     private readonly repositoryRootPath?: string;
@@ -36,16 +36,16 @@ export class MissionRuntimeTransport extends EntityRuntimeTransport<
     } = {}) {
         super(input);
         this.repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
-        this.queryRemote = input.queryRemote ?? qry;
+        this.queryRemote = input.queryRemote ?? ((queryInput) => qry(queryInput).run());
     }
 
-    public async getMissionRuntimeSnapshot(missionId: string): Promise<MissionRuntimeSnapshot> {
+    public async getMissionSnapshot(missionId: string): Promise<MissionSnapshot> {
         const normalizedMissionId = missionId.trim();
         if (!normalizedMissionId) {
             throw new Error('Mission runtime operation requires a non-empty id.');
         }
 
-        return parseMissionRuntimeSnapshot(await this.queryRemote({
+        return missionSnapshotSchema.parse(await this.queryRemote({
             entity: missionEntityName,
             method: 'read',
             payload: {
@@ -68,7 +68,7 @@ export class MissionRuntimeTransport extends EntityRuntimeTransport<
     }
 
     protected buildSnapshotUrl(missionId: string): string {
-        return `/api/runtime/missions/${encodeURIComponent(missionId)}${this.buildQuerySuffix()}`;
+        throw new Error(`Mission '${missionId}' snapshots are loaded through the Mission entity query remote.`);
     }
 
     protected buildEventsUrl(missionId: string): string {
@@ -79,8 +79,8 @@ export class MissionRuntimeTransport extends EntityRuntimeTransport<
         return `/api/runtime/events?${query.toString()}`;
     }
 
-    protected parseSnapshot(value: unknown): MissionRuntimeSnapshot {
-        return parseMissionRuntimeSnapshot(value);
+    protected parseSnapshot(value: unknown): MissionSnapshot {
+        return missionSnapshotSchema.parse(value);
     }
 
     protected parseEvent(value: unknown): AirportRuntimeEventEnvelope {
@@ -89,16 +89,5 @@ export class MissionRuntimeTransport extends EntityRuntimeTransport<
 
     protected getEntityLabel(): string {
         return 'Mission';
-    }
-
-    private buildQuerySuffix(): string {
-        if (!this.repositoryRootPath) {
-            return '';
-        }
-
-        const query = new URLSearchParams({
-            repositoryRootPath: this.repositoryRootPath
-        });
-        return `?${query.toString()}`;
     }
 }

@@ -1,13 +1,10 @@
 // /apps/airport/web/src/lib/components/entities/Task/Task.svelte.ts: OO browser entity for workflow tasks exposed by a mission snapshot.
 import type {
-    MissionRuntimeSnapshot,
-    Task as TaskRecord
+    MissionTaskSnapshot
 } from '@flying-pillow/mission-core/schemas';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
-export type TaskData = NonNullable<
-    NonNullable<MissionRuntimeSnapshot['status']['workflow']>['stages']
->[number]['tasks'][number] & TaskRecord;
+export type TaskData = MissionTaskSnapshot;
 
 export type TaskSnapshot = {
     stageId: string;

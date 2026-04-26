@@ -1,7 +1,7 @@
 // /apps/airport/web/src/lib/client/runtime/AirportClientRuntime.ts: Root browser runtime that composes mission runtime transport, entity cache, and live mission observation.
 import type {
     AirportRuntimeEventEnvelope,
-    MissionRuntimeSnapshot
+    MissionSnapshot
 } from '@flying-pillow/mission-core/schemas';
 import { Mission } from '$lib/components/entities/Mission/Mission.svelte.js';
 import { EntityRuntimeStore } from '$lib/client/runtime/EntityRuntimeStore';
@@ -14,7 +14,7 @@ type EventSourceFactory = (url: string) => EventSource;
 export class AirportClientRuntime {
     private readonly missionTransport: MissionRuntimeTransport;
     private readonly missionCommands: MissionCommandTransport;
-    private readonly missions: EntityRuntimeStore<string, MissionRuntimeSnapshot, Mission>;
+    private readonly missions: EntityRuntimeStore<string, MissionSnapshot, Mission>;
 
     public constructor(input: {
         fetch?: typeof fetch;
@@ -24,9 +24,9 @@ export class AirportClientRuntime {
         this.missionTransport = new MissionRuntimeTransport(input);
         this.missionCommands = new MissionCommandTransport(input);
         this.missions = new EntityRuntimeStore({
-            loadSnapshot: (missionId) => this.missionTransport.getMissionRuntimeSnapshot(missionId),
+            loadSnapshot: (missionId) => this.missionTransport.getMissionSnapshot(missionId),
             createEntity: (snapshot, loadSnapshot) => new Mission(snapshot, loadSnapshot, this.missionCommands),
-            selectId: (snapshot) => snapshot.missionId
+            selectId: (snapshot) => snapshot.mission.missionId
         });
     }
 
@@ -34,12 +34,12 @@ export class AirportClientRuntime {
         return this.missions.get(missionId);
     }
 
-    public hydrateMissionSnapshot(snapshot: MissionRuntimeSnapshot): Mission {
+    public hydrateMissionSnapshot(snapshot: MissionSnapshot): Mission {
         return this.missions.upsertSnapshot(snapshot);
     }
 
     public async refreshMission(missionId: string): Promise<Mission> {
-        const snapshot = await this.missionTransport.getMissionRuntimeSnapshot(missionId);
+        const snapshot = await this.missionTransport.getMissionSnapshot(missionId);
         return this.hydrateMissionSnapshot(snapshot);
     }
 

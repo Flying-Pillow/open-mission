@@ -1,10 +1,7 @@
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
+import type { MissionDocumentSnapshot } from '@flying-pillow/mission-core/schemas';
 
-export type ArtifactDocumentPayload = {
-    filePath: string;
-    content: string;
-    updatedAt?: string;
-};
+export type ArtifactDocumentPayload = MissionDocumentSnapshot;
 
 export type ArtifactSnapshot = {
     filePath: string;
@@ -14,8 +11,12 @@ export type ArtifactSnapshot = {
 };
 
 export type ArtifactOwner = {
-    readArtifact(filePath: string): Promise<ArtifactDocumentPayload>;
+    readArtifact(filePath: string, input?: ArtifactReadOptions): Promise<ArtifactDocumentPayload>;
     writeArtifact(filePath: string, content: string): Promise<ArtifactDocumentPayload>;
+};
+
+export type ArtifactReadOptions = {
+    executionContext?: 'event' | 'render';
 };
 
 export class Artifact implements EntityModel<ArtifactSnapshot> {
@@ -60,8 +61,8 @@ export class Artifact implements EntityModel<ArtifactSnapshot> {
         return this.snapshot.taskId;
     }
 
-    public async read(): Promise<ArtifactDocumentPayload> {
-        return this.owner.readArtifact(this.filePath);
+    public async read(input: ArtifactReadOptions = {}): Promise<ArtifactDocumentPayload> {
+        return this.owner.readArtifact(this.filePath, input);
     }
 
     public async write(content: string): Promise<ArtifactDocumentPayload> {

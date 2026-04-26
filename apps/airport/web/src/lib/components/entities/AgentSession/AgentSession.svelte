@@ -66,7 +66,9 @@
     let fitAddon: XtermFitAddon | null = null;
     let resizeObserver: ResizeObserver | null = null;
     let terminalTransport =
-        $state<SharedTerminalTransportSubscription<MissionSessionTerminalSnapshot> | null>(null);
+        $state<SharedTerminalTransportSubscription<MissionSessionTerminalSnapshot> | null>(
+            null,
+        );
     let pendingInput = "";
     let pendingTerminalResponseFragment = "";
     let lastRenderedScreen = "";
@@ -82,7 +84,9 @@
     const missionId = $derived(mission?.missionId ?? "");
     const repositoryId = $derived(activeRepository?.repositoryId ?? "");
     const repositoryRootPath = $derived(
-        mission?.missionWorktreePath ?? activeRepository?.repositoryRootPath ?? "",
+        mission?.missionWorktreePath ??
+            activeRepository?.repositoryRootPath ??
+            "",
     );
     const isPersistedTranscriptSnapshot = $derived(
         Boolean(terminalSnapshot?.dead && !terminalSnapshot?.connected),
@@ -178,16 +182,19 @@
 
         activeTransportKey = nextTransportKey;
         terminalTransport?.dispose();
-        terminalTransport = subscribeMissionSessionTerminalTransport({
-            missionId,
-            repositoryId,
-            repositoryRootPath,
-            sessionId: terminalSessionId,
-        }, (state) => {
-            terminalSnapshot = state.snapshot;
-            loading = state.loading;
-            error = state.error;
-        });
+        terminalTransport = subscribeMissionSessionTerminalTransport(
+            {
+                missionId,
+                repositoryId,
+                repositoryRootPath,
+                sessionId: terminalSessionId,
+            },
+            (state) => {
+                terminalSnapshot = state.snapshot;
+                loading = state.loading;
+                error = state.error;
+            },
+        );
     });
 
     $effect(() => {
@@ -529,7 +536,7 @@
             <div
                 class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
             >
-                No session resolves from the current mission-control selection.
+                No session resolves from the current mission selection.
             </div>
         {:else if !canAttachTerminal}
             <div

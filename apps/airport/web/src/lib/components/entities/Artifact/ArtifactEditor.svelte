@@ -221,10 +221,12 @@
 
         try {
             if (!artifact || !mission) {
-                throw new Error("Artifact loading is unavailable until the app context is synchronized.");
+                throw new Error(
+                    "Artifact loading is unavailable until the app context is synchronized.",
+                );
             }
 
-            const payload = await artifact.read();
+            const payload = await artifact.read({ executionContext: "render" });
             content = payload.content;
             originalContent = payload.content;
             saveStatus = "idle";
@@ -251,7 +253,9 @@
 
         try {
             if (!artifact || !mission) {
-                throw new Error("Artifact saving is unavailable until the app context is synchronized.");
+                throw new Error(
+                    "Artifact saving is unavailable until the app context is synchronized.",
+                );
             }
 
             const payload = await artifact.write(nextContent);
@@ -507,7 +511,6 @@
             second: "2-digit",
         }).format(date);
     }
-
 </script>
 
 <section
@@ -521,7 +524,7 @@
                 </h2>
                 <p class="mt-1 break-all text-xs text-muted-foreground">
                     {artifactPath ??
-                        "No artifact resolves from the current mission-control selection."}
+                        "No artifact resolves from the current mission selection."}
                 </p>
             </div>
 

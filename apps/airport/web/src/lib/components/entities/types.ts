@@ -2,7 +2,7 @@ import type {
     GitHubIssueDetail,
     AgentSession,
     AirportRuntimeEventEnvelope,
-    MissionRuntimeSnapshot,
+    MissionSnapshot,
     MissionReference,
     MissionSessionTerminalSnapshot,
     MissionTerminalSnapshot,
@@ -29,7 +29,7 @@ export type SidebarRepositorySummary = RepositorySummary & {
 };
 export type IssueSummary = TrackedIssueSummary;
 export type MissionSessionSummary = AgentSession;
-export type SelectedMissionSummary = MissionRuntimeSnapshot;
+export type SelectedMissionSummary = MissionSnapshot;
 export type SelectedIssueSummary = GitHubIssueDetail;
 export type RepositorySnapshotData = RepositorySnapshot;
 export type MissionRuntimeEventEnvelope = AirportRuntimeEventEnvelope;

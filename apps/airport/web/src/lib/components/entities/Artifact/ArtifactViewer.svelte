@@ -24,7 +24,7 @@
     const panelLabel = $derived(artifact?.label ?? "Resolved artifact");
     const artifactDocumentPromise = $derived(
         artifact && mission
-            ? artifact.read()
+            ? artifact.read({ executionContext: "render" })
             : null,
     );
 </script>

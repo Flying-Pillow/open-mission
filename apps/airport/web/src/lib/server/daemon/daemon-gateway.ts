@@ -6,43 +6,35 @@ import {
     type ControlDocumentResponse,
     DaemonApi,
     type Notification,
+    type RepositoryCandidate,
+    type MissionAgentSessionState,
+    RepositoryEntity,
     deriveRepositoryIdentity,
     listRegisteredRepositories,
     resolveGitWorkspaceRoot,
-    toMission,
     type MissionEntity,
 } from '@flying-pillow/mission-core/node';
 import {
-    type AgentCommand,
-    type AgentPrompt,
     type AgentSession,
     type AirportHomeSnapshot,
     type AirportRuntimeEventEnvelope,
     type MissionReference,
-    type MissionRuntimeSnapshot,
     type MissionSessionTerminalSnapshot,
     type MissionTerminalSnapshot,
-    type OperatorActionExecutionStep,
-    type OperatorActionListSnapshot,
-    type OperatorActionQueryContext,
-    type OperatorStatus,
     type Repository,
     agentSessionSchema,
     airportHomeSnapshotSchema,
     airportRuntimeEventEnvelopeSchema,
     missionReferenceSchema,
-    missionRuntimeSnapshotSchema,
     missionSessionTerminalSnapshotSchema,
     missionTerminalSnapshotSchema,
     repositorySchema
 } from '@flying-pillow/mission-core/schemas';
-import { operatorStatusSchema } from '../../types/mission-control.js';
 import {
     connectDedicatedAuthenticatedDaemonClient,
     connectSharedAuthenticatedDaemonClient
 } from './connections.server';
 const AIRPORT_WEB_TERMINAL_SCREEN_LIMIT = 40_000;
-const MISSION_STATUS_TIMEOUT_MS = 8_000;
 const AIRPORT_HOME_STATUS_TIMEOUT_MS = 8_000;
 const DAEMON_CONNECT_TIMEOUT_MS = 12_000;
 
@@ -54,184 +46,6 @@ export class DaemonGateway {
         inspectRepositoryPath: (repositoryPath: string) => this.inspectRepositoryPath(repositoryPath),
         addRepository: (repositoryPath: string) => this.addRepository(repositoryPath)
     };
-
-    public readonly entities = {
-        readMissionRuntime: (missionId: string, surfacePath?: string) => this.readMissionRuntime(missionId, surfacePath),
-        readMissionControl: (input: {
-            missionId: string;
-            surfacePath?: string;
-        }) => this.readMissionControl(input),
-        readMissionStatus: (missionId: string, surfacePath?: string) => this.readMissionStatus(missionId, surfacePath),
-        listMissionActions: (input: {
-            missionId: string;
-            context?: OperatorActionQueryContext;
-            surfacePath?: string;
-        }) => this.listMissionActions(input),
-        executeMissionAction: (input: {
-            missionId: string;
-            actionId: string;
-            steps?: OperatorActionExecutionStep[];
-            terminalSessionName?: string;
-            surfacePath?: string;
-        }) => this.executeMissionAction(input)
-    };
-
-    private async buildMissionRuntimeSnapshot(input: {
-        api: DaemonApi;
-        missionId: string;
-        mission?: MissionEntity;
-    }): Promise<MissionRuntimeSnapshot> {
-        const normalizedMissionId = input.missionId.trim();
-        const mission = input.mission
-            ?? await withTimeout(
-                input.api.mission.getMission({ missionId: normalizedMissionId }),
-                MISSION_STATUS_TIMEOUT_MS,
-                'Mission status request timed out.'
-            );
-        const sessions = await withTimeout(
-            input.api.mission.listSessions({ missionId: normalizedMissionId }),
-            2500,
-            'Mission session listing timed out.'
-        );
-
-        return missionRuntimeSnapshotSchema.parse({
-            missionId: normalizedMissionId,
-            status: this.toMissionStatusSummary(mission, normalizedMissionId),
-            sessions: sessions.map((session) => this.toMissionSessionSnapshot(session))
-        });
-    }
-
-    public async readMissionRuntime(missionId: string, surfacePath?: string): Promise<MissionRuntimeSnapshot> {
-        const normalizedMissionId = missionId.trim();
-        if (!normalizedMissionId) {
-            throw new Error('Mission runtime snapshot requires a missionId.');
-        }
-
-        const daemon = await this.connectSharedDaemonClient(surfacePath);
-        try {
-            const api = new DaemonApi(daemon.client);
-            return await this.buildMissionRuntimeSnapshot({
-                api,
-                missionId: normalizedMissionId
-            });
-        } finally {
-            daemon.dispose();
-        }
-    }
-
-    public async readMissionControl(input: {
-        missionId: string;
-        surfacePath?: string;
-    }): Promise<{
-        missionRuntime: MissionRuntimeSnapshot;
-        operatorStatus: OperatorStatus;
-    }> {
-        const missionId = input.missionId.trim();
-        if (!missionId) {
-            throw new Error('Mission control snapshot requires a missionId.');
-        }
-
-        const daemon = await this.connectSharedDaemonClient(input.surfacePath);
-        try {
-            const api = new DaemonApi(daemon.client);
-            const operatorStatus = await withTimeout(
-                api.mission.getOperatorStatus({ missionId }),
-                MISSION_STATUS_TIMEOUT_MS,
-                'Mission operator status request timed out.'
-            );
-
-            return {
-                missionRuntime: await this.buildMissionRuntimeSnapshot({
-                    api,
-                    missionId,
-                    mission: toMission(operatorStatusSchema.parse(operatorStatus))
-                }),
-                operatorStatus: operatorStatusSchema.parse(operatorStatus)
-            };
-        } finally {
-            daemon.dispose();
-        }
-    }
-
-    public async readMissionStatus(missionId: string, surfacePath?: string): Promise<OperatorStatus> {
-        const normalizedMissionId = missionId.trim();
-        if (!normalizedMissionId) {
-            throw new Error('Mission operator status requires a missionId.');
-        }
-
-        const daemon = await this.connectSharedDaemonClient(surfacePath);
-        try {
-            const api = new DaemonApi(daemon.client);
-            return operatorStatusSchema.parse(
-                await withTimeout(
-                    api.mission.getStatus({ missionId: normalizedMissionId }),
-                    MISSION_STATUS_TIMEOUT_MS,
-                    'Mission operator status request timed out.'
-                )
-            );
-        } finally {
-            daemon.dispose();
-        }
-    }
-
-    public async listMissionActions(input: {
-        missionId: string;
-        context?: OperatorActionQueryContext;
-        surfacePath?: string;
-    }): Promise<OperatorActionListSnapshot> {
-        const missionId = input.missionId.trim();
-        if (!missionId) {
-            throw new Error('Mission action snapshot requires a missionId.');
-        }
-
-        const daemon = await this.connectSharedDaemonClient(input.surfacePath);
-        try {
-            const api = new DaemonApi(daemon.client);
-            return await withTimeout(
-                api.mission.listAvailableActionsSnapshot(
-                    { missionId },
-                    input.context,
-                ),
-                8000,
-                'Mission action snapshot request timed out.'
-            );
-        } finally {
-            daemon.dispose();
-        }
-    }
-
-    public async executeMissionAction(input: {
-        missionId: string;
-        actionId: string;
-        steps?: OperatorActionExecutionStep[];
-        terminalSessionName?: string;
-        surfacePath?: string;
-    }): Promise<OperatorStatus> {
-        const missionId = input.missionId.trim();
-        const actionId = input.actionId.trim();
-        if (!missionId || !actionId) {
-            throw new Error('Mission action execution requires missionId and actionId.');
-        }
-
-        const daemon = await this.connectSharedDaemonClient(input.surfacePath);
-        try {
-            const api = new DaemonApi(daemon.client);
-            return await withTimeout(
-                api.mission.executeAction(
-                    { missionId },
-                    actionId,
-                    input.steps ?? [],
-                    input.terminalSessionName?.trim()
-                        ? { terminalSessionName: input.terminalSessionName.trim() }
-                        : {},
-                ),
-                2500,
-                `Mission action '${actionId}' timed out.`
-            );
-        } finally {
-            daemon.dispose();
-        }
-    }
 
     public async readControlDocument(filePath: string, surfacePath?: string): Promise<ControlDocumentResponse> {
         const normalizedPath = filePath.trim();
@@ -275,156 +89,6 @@ export class DaemonGateway {
         }
     }
 
-    public async executeMissionTaskCommand(input: {
-        missionId: string;
-        taskId: string;
-        action: 'start' | 'complete' | 'reopen';
-        terminalSessionName?: string;
-        surfacePath?: string;
-    }): Promise<MissionRuntimeSnapshot> {
-        const missionId = input.missionId.trim();
-        const taskId = input.taskId.trim();
-        if (!missionId || !taskId) {
-            throw new Error('Mission task command requires missionId and taskId.');
-        }
-
-        const actionId = this.resolveMissionTaskActionId(taskId, input.action);
-        const daemon = await this.connectSharedDaemonClient(input.surfacePath);
-        try {
-            const api = new DaemonApi(daemon.client);
-            const mission = await withTimeout(
-                api.mission.executeMissionAction(
-                    { missionId },
-                    actionId,
-                    [],
-                    input.action === 'start' && input.terminalSessionName?.trim()
-                        ? { terminalSessionName: input.terminalSessionName.trim() }
-                        : {}
-                ),
-                8000,
-                `Mission task command '${input.action}' timed out.`
-            );
-
-            return await this.buildMissionRuntimeSnapshot({
-                api,
-                missionId,
-                mission
-            });
-        } finally {
-            daemon.dispose();
-        }
-    }
-
-    public async executeMissionCommand(input: {
-        missionId: string;
-        action: 'pause' | 'resume' | 'panic' | 'clearPanic' | 'restartQueue' | 'deliver';
-        surfacePath?: string;
-    }): Promise<MissionRuntimeSnapshot> {
-        const missionId = input.missionId.trim();
-        if (!missionId) {
-            throw new Error('Mission command requires a missionId.');
-        }
-
-        const daemon = await this.connectSharedDaemonClient(input.surfacePath);
-        try {
-            const api = new DaemonApi(daemon.client);
-            const mission = await withTimeout(
-                api.mission.executeMissionAction({ missionId }, this.resolveMissionActionId(input.action)),
-                2500,
-                `Mission command '${input.action}' timed out.`
-            );
-
-            return await this.buildMissionRuntimeSnapshot({
-                api,
-                missionId,
-                mission
-            });
-        } finally {
-            daemon.dispose();
-        }
-    }
-
-    public async executeMissionSessionCommand(input: {
-        missionId: string;
-        sessionId: string;
-        surfacePath?: string;
-        action: 'complete';
-    } | {
-        missionId: string;
-        sessionId: string;
-        surfacePath?: string;
-        action: 'cancel' | 'terminate';
-        reason?: string;
-    } | {
-        missionId: string;
-        sessionId: string;
-        surfacePath?: string;
-        action: 'prompt';
-        prompt: AgentPrompt;
-    } | {
-        missionId: string;
-        sessionId: string;
-        surfacePath?: string;
-        action: 'command';
-        command: AgentCommand;
-    }): Promise<MissionRuntimeSnapshot> {
-        const missionId = input.missionId.trim();
-        const sessionId = input.sessionId.trim();
-        if (!missionId || !sessionId) {
-            throw new Error('Mission session command requires missionId and sessionId.');
-        }
-
-        const daemon = await this.connectSharedDaemonClient(input.surfacePath);
-        try {
-            const api = new DaemonApi(daemon.client);
-
-            switch (input.action) {
-                case 'complete':
-                    await withTimeout(
-                        api.mission.completeSession({ missionId }, sessionId),
-                        2500,
-                        'Mission session completion timed out.'
-                    );
-                    break;
-                case 'cancel':
-                    await withTimeout(
-                        api.mission.cancelSession({ missionId }, sessionId, input.reason?.trim()),
-                        2500,
-                        'Mission session cancel timed out.'
-                    );
-                    break;
-                case 'terminate':
-                    await withTimeout(
-                        api.mission.terminateSession({ missionId }, sessionId, input.reason?.trim()),
-                        2500,
-                        'Mission session terminate timed out.'
-                    );
-                    break;
-                case 'prompt':
-                    await withTimeout(
-                        api.mission.promptSession({ missionId }, sessionId, input.prompt),
-                        2500,
-                        'Mission session prompt timed out.'
-                    );
-                    break;
-                case 'command':
-                    await withTimeout(
-                        api.mission.commandSession({ missionId }, sessionId, input.command),
-                        2500,
-                        'Mission session command timed out.'
-                    );
-                    break;
-            }
-
-            return await this.buildMissionRuntimeSnapshot({
-                api,
-                missionId
-            });
-        } finally {
-            daemon.dispose();
-        }
-    }
-
     public async getAirportHomeSnapshot(): Promise<AirportHomeSnapshot> {
         if (this.locals?.appContext.daemon.running === false) {
             return this.createEmptyAirportHomeSnapshot();
@@ -440,6 +104,11 @@ export class DaemonGateway {
                 AIRPORT_HOME_STATUS_TIMEOUT_MS,
                 'Airport home status request timed out.'
             );
+            const repositories = await withTimeout(
+                api.control.listRegisteredRepositories(),
+                AIRPORT_HOME_STATUS_TIMEOUT_MS,
+                'Airport repository list request timed out.'
+            );
 
             return airportHomeSnapshotSchema.parse({
                 ...(status.operationalMode ? { operationalMode: status.operationalMode } : {}),
@@ -448,14 +117,12 @@ export class DaemonGateway {
                 ...(typeof status.control?.settingsComplete === 'boolean'
                     ? { settingsComplete: status.control.settingsComplete }
                     : {}),
-                repositories: registeredRepositories.map((repository) =>
-                    this.toRepositorySnapshot(repository)
-                )
+                repositories: repositories.map((repository) => this.toRepositorySnapshot(repository))
             });
         } catch {
             return airportHomeSnapshotSchema.parse({
                 repositories: registeredRepositories.map((repository) =>
-                    this.toRepositorySnapshot(repository)
+                    this.toRepositorySnapshotFromCandidate(repository)
                 )
             });
         } finally {
@@ -519,7 +186,7 @@ export class DaemonGateway {
         const missionId = input.missionId?.trim();
         const daemon = await this.connectDedicatedDaemonClient(input.surfacePath);
         await daemon.client.request<null>('event.subscribe', {
-            eventTypes: ['mission.actions.changed', 'mission.status', 'session.lifecycle'],
+            eventTypes: ['mission.actions.changed', 'mission.status', 'session.event', 'session.lifecycle'],
             ...(missionId ? { missionId } : {})
         });
         const subscription = daemon.client.onDidEvent((event) => {
@@ -751,47 +418,48 @@ export class DaemonGateway {
         }
     }
 
-    private resolveMissionTaskActionId(
-        taskId: string,
-        action: 'start' | 'complete' | 'reopen'
-    ): string {
-        switch (action) {
-            case 'start':
-                return `task.start.${taskId}`;
-            case 'complete':
-                return `task.done.${taskId}`;
-            case 'reopen':
-                return `task.reopen.${taskId}`;
-        }
-    }
-
-    private resolveMissionActionId(
-        action: 'pause' | 'resume' | 'panic' | 'clearPanic' | 'restartQueue' | 'deliver'
-    ): string {
-        switch (action) {
-            case 'pause':
-                return 'mission.pause';
-            case 'resume':
-                return 'mission.resume';
-            case 'panic':
-                return 'mission.panic';
-            case 'clearPanic':
-                return 'mission.clear-panic';
-            case 'restartQueue':
-                return 'mission.restart-queue';
-            case 'deliver':
-                return 'mission.deliver';
-        }
-    }
-
     private toRuntimeEventEnvelope(event: Notification): AirportRuntimeEventEnvelope {
         return airportRuntimeEventEnvelopeSchema.parse({
             eventId: randomUUID(),
             type: event.type,
             occurredAt: this.resolveOccurredAt(event),
             ...(this.resolveMissionId(event) ? { missionId: this.resolveMissionId(event) } : {}),
-            payload: event
+            payload: this.toRuntimeEventPayload(event)
         });
+    }
+
+    private toRuntimeEventPayload(event: Notification): unknown {
+        switch (event.type) {
+            case 'airport.state':
+                return { snapshot: event.snapshot };
+            case 'mission.actions.changed':
+                return {
+                    missionId: event.missionId,
+                    ...(event.revision ? { revision: event.revision } : {})
+                };
+            case 'mission.status':
+                return {
+                    missionId: event.missionId,
+                    status: this.toMissionStatusSummary(event.status, event.missionId)
+                };
+            case 'session.event':
+                return {
+                    missionId: event.missionId,
+                    sessionId: event.sessionId,
+                    session: this.toMissionSessionSnapshot(event.event.state)
+                };
+            case 'session.lifecycle':
+                return {
+                    missionId: event.missionId,
+                    sessionId: event.sessionId,
+                    phase: event.phase,
+                    lifecycleState: event.lifecycleState
+                };
+            case 'session.console':
+            case 'session.terminal':
+            case 'control.workflow.settings.updated':
+                return event;
+        }
     }
 
     private resolveOccurredAt(event: Notification): string {
@@ -834,11 +502,11 @@ export class DaemonGateway {
             case 'airport.state':
             case 'mission.actions.changed':
             case 'mission.status':
+            case 'session.event':
             case 'session.lifecycle':
                 return true;
             case 'session.console':
             case 'session.terminal':
-            case 'session.event':
             case 'control.workflow.settings.updated':
                 return false;
         }
@@ -869,7 +537,7 @@ export class DaemonGateway {
         };
     }
 
-    private toMissionSessionSnapshot(session: AgentSession): AgentSession {
+    private toMissionSessionSnapshot(session: AgentSession | MissionAgentSessionState): AgentSession {
         return agentSessionSchema.parse({
             sessionId: session.sessionId,
             runnerId: session.runnerId,
@@ -970,14 +638,16 @@ export class DaemonGateway {
         return repository;
     }
 
-    private toRepositorySnapshot(repository: Repository & { repositoryId?: string }): Repository {
-        return repositorySchema.parse({
-            repositoryId: repository.repositoryId,
-            repositoryRootPath: repository.repositoryRootPath,
+    private toRepositorySnapshot(repository: Repository): Repository {
+        return repositorySchema.parse(repository);
+    }
+
+    private toRepositorySnapshotFromCandidate(repository: RepositoryCandidate): Repository {
+        return RepositoryEntity.open(repository.repositoryRootPath, {
             label: repository.label,
             description: repository.description,
             ...(repository.githubRepository ? { githubRepository: repository.githubRepository } : {})
-        });
+        }).toSchema();
     }
 
     private toMissionReferenceSnapshot(candidate: MissionReference): MissionReference {

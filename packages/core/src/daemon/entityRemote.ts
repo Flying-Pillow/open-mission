@@ -5,12 +5,32 @@ import type {
 	EntityRemoteResult
 } from '../schemas/EntityRemote.js';
 import { GitHubRepository } from '../entities/GitHubRepository/GitHubRepository.js';
+import { MissionCommands } from '../entities/Mission/MissionCommands.js';
 import { Repository } from '../entities/Repository/Repository.js';
 import {
 	gitHubRepositoryClonePayloadSchema,
 	gitHubRepositoryEntityName,
 	gitHubRepositoryFindPayloadSchema
 } from '../schemas/GitHubRepository.js';
+import {
+	missionActionListSnapshotSchema,
+	missionCommandAcknowledgementSchema,
+	missionCommandPayloadSchema,
+	missionDocumentSnapshotSchema,
+	missionExecuteActionPayloadSchema,
+	missionEntityName,
+	missionListActionsPayloadSchema,
+	missionReadDocumentPayloadSchema,
+	missionReadPayloadSchema,
+	missionReadProjectionPayloadSchema,
+	missionReadWorktreePayloadSchema,
+	missionProjectionSnapshotSchema,
+	missionSessionCommandPayloadSchema,
+	missionSnapshotSchema,
+	missionTaskCommandPayloadSchema,
+	missionWorktreeSnapshotSchema,
+	missionWriteDocumentPayloadSchema
+} from '../schemas/Mission.js';
 import { githubVisibleRepositorySchema } from '../schemas/AirportClient.js';
 import {
 	githubIssueDetailSchema,
@@ -57,6 +77,8 @@ async function executeEntityQuery(
 	}
 ): Promise<EntityRemoteResult> {
 	switch (input.entity) {
+		case missionEntityName:
+			return executeMissionQuery(input, context);
 		case repositoryEntityName:
 			return executeRepositoryQuery(input, context);
 		case gitHubRepositoryEntityName:
@@ -74,12 +96,46 @@ async function executeEntityCommand(
 	}
 ): Promise<EntityRemoteResult> {
 	switch (input.entity) {
+		case missionEntityName:
+			return executeMissionCommand(input, context);
 		case repositoryEntityName:
 			return executeRepositoryCommand(input, context);
 		case gitHubRepositoryEntityName:
 			return executeGitHubRepositoryCommand(input, context);
 		default:
 			throw new Error(`Entity '${input.entity}' is not implemented in the daemon.`);
+	}
+}
+
+async function executeMissionQuery(
+	input: EntityQueryInvocation,
+	context: {
+		surfacePath: string;
+	}
+): Promise<EntityRemoteResult> {
+	switch (input.method) {
+		case 'read': {
+			const payload = missionReadPayloadSchema.parse(input.payload ?? {});
+			return missionSnapshotSchema.parse(await MissionCommands.read(payload, context));
+		}
+		case 'readProjection': {
+			const payload = missionReadProjectionPayloadSchema.parse(input.payload ?? {});
+			return missionProjectionSnapshotSchema.parse(await MissionCommands.readProjection(payload, context));
+		}
+		case 'listActions': {
+			const payload = missionListActionsPayloadSchema.parse(input.payload ?? {});
+			return missionActionListSnapshotSchema.parse(await MissionCommands.listActions(payload, context));
+		}
+		case 'readDocument': {
+			const payload = missionReadDocumentPayloadSchema.parse(input.payload ?? {});
+			return missionDocumentSnapshotSchema.parse(await MissionCommands.readDocument(payload, context));
+		}
+		case 'readWorktree': {
+			const payload = missionReadWorktreePayloadSchema.parse(input.payload ?? {});
+			return missionWorktreeSnapshotSchema.parse(await MissionCommands.readWorktree(payload, context));
+		}
+		default:
+			throw new Error(`Query method '${input.entity}.${input.method}' is not implemented in the daemon.`);
 	}
 }
 
@@ -111,6 +167,38 @@ async function executeRepositoryQuery(
 		}
 		default:
 			throw new Error(`Query method '${input.entity}.${input.method}' is not implemented in the daemon.`);
+	}
+}
+
+async function executeMissionCommand(
+	input: EntityCommandInvocation | EntityFormInvocation,
+	context: {
+		surfacePath: string;
+	}
+): Promise<EntityRemoteResult> {
+	switch (input.method) {
+		case 'command': {
+			const payload = missionCommandPayloadSchema.parse(input.payload ?? {});
+			return missionCommandAcknowledgementSchema.parse(await MissionCommands.command(payload, context));
+		}
+		case 'taskCommand': {
+			const payload = missionTaskCommandPayloadSchema.parse(input.payload ?? {});
+			return missionCommandAcknowledgementSchema.parse(await MissionCommands.taskCommand(payload, context));
+		}
+		case 'sessionCommand': {
+			const payload = missionSessionCommandPayloadSchema.parse(input.payload ?? {});
+			return missionCommandAcknowledgementSchema.parse(await MissionCommands.sessionCommand(payload, context));
+		}
+		case 'executeAction': {
+			const payload = missionExecuteActionPayloadSchema.parse(input.payload ?? {});
+			return missionCommandAcknowledgementSchema.parse(await MissionCommands.executeAction(payload, context));
+		}
+		case 'writeDocument': {
+			const payload = missionWriteDocumentPayloadSchema.parse(input.payload ?? {});
+			return missionDocumentSnapshotSchema.parse(await MissionCommands.writeDocument(payload, context));
+		}
+		default:
+			throw new Error(`Command method '${input.entity}.${input.method}' is not implemented in the daemon.`);
 	}
 }
 

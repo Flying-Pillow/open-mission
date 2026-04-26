@@ -1,8 +1,8 @@
 // /apps/airport/web/src/lib/components/entities/AgentSession/AgentSession.svelte.ts: OO browser entity for a mission agent session hydrated from validated runtime snapshots.
 import type {
-    AgentCommand as AgentCommand,
-    AgentPrompt as AgentPrompt,
-    AgentSession as AgentSessionSnapshot
+    MissionAgentCommand as AgentCommand,
+    MissionAgentPrompt as AgentPrompt,
+    MissionAgentSessionSnapshot as AgentSessionSnapshot
 } from '@flying-pillow/mission-core/schemas';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 

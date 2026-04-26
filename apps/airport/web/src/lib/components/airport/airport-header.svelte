@@ -3,53 +3,32 @@
     import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
     import PlugConnectedIcon from "@tabler/icons-svelte/icons/plug-connected";
     import PlugConnectedXIcon from "@tabler/icons-svelte/icons/plug-connected-x";
-    import * as Avatar from "$lib/components/ui/avatar/index.js";
+    import NavUser from "$lib/components/nav-user.svelte";
     import { Separator } from "$lib/components/ui/separator/index.js";
     import * as Sidebar from "$lib/components/ui/sidebar/index.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
 
     const app = getAppContext();
 
-    type GithubStatus = "connected" | "disconnected" | "unknown";
-
     const fallbackAvatar = asset("/logo.png");
     const missionRepositoryUrl = "https://github.com/Flying-Pillow/mission";
 
-    const headerIdentity = $derived.by(() => ({
-        name: app.user?.name ?? "Mission Operator",
-        avatar: app.user?.avatarUrl ?? fallbackAvatar,
-    }));
+    const headerUser = $derived.by(() =>
+        app.user
+            ? {
+                  name: app.user.name,
+                  ...(app.user.email ? { email: app.user.email } : {}),
+                  avatar: app.user.avatarUrl ?? fallbackAvatar,
+                  githubStatus: app.user.githubStatus ?? app.githubStatus,
+              }
+            : undefined,
+    );
 
     const daemonBadge = $derived.by(() => ({
         label: app.daemon.running ? "Daemon online" : "Daemon offline",
         detail: app.daemon.running ? "Connected" : app.daemon.message,
-        className: app.daemon.running
-            ? "border-emerald-200/80 bg-emerald-50 text-emerald-700"
-            : "border-amber-200/80 bg-amber-50 text-amber-700",
+        className: app.daemon.running ? "text-emerald-600" : "text-red-600",
     }));
-
-    const githubBadge = $derived.by(() => ({
-        label:
-            app.githubStatus === "connected"
-                ? "GitHub connected"
-                : app.githubStatus === "disconnected"
-                  ? "GitHub disconnected"
-                  : "GitHub unknown",
-        className:
-            app.githubStatus === "connected"
-                ? "border-sky-200/80 bg-sky-50 text-sky-700"
-                : "border-zinc-200/80 bg-zinc-50 text-zinc-700",
-    }));
-
-    const userInitials = $derived.by(
-        () =>
-            headerIdentity.name
-                .split(/[^A-Za-z0-9]+/u)
-                .filter((segment) => segment.length > 0)
-                .slice(0, 2)
-                .map((segment) => segment[0]?.toUpperCase() ?? "")
-                .join("") || "FP",
-    );
 </script>
 
 <header
@@ -71,23 +50,17 @@
         </div>
         <div class="ms-auto flex items-center gap-2">
             <div class="hidden items-center gap-2 lg:flex">
-                <div
-                    class={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${daemonBadge.className}`}
+                <span
+                    class={`inline-flex size-9 items-center justify-center rounded-full ${daemonBadge.className}`}
+                    aria-label={daemonBadge.label}
                     title={daemonBadge.detail}
                 >
                     {#if app.daemon.running}
-                        <PlugConnectedIcon class="size-3.5" />
+                        <PlugConnectedIcon class="size-4" />
                     {:else}
-                        <PlugConnectedXIcon class="size-3.5" />
+                        <PlugConnectedXIcon class="size-4" />
                     {/if}
-                    <span>{daemonBadge.label}</span>
-                </div>
-                <div
-                    class={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${githubBadge.className}`}
-                >
-                    <BrandGithubIcon class="size-3.5" />
-                    <span>{githubBadge.label}</span>
-                </div>
+                </span>
             </div>
             <a
                 href={missionRepositoryUrl}
@@ -99,45 +72,10 @@
             >
                 <BrandGithubIcon class="size-4" />
             </a>
-            {#if app.user}
-                <div
-                    class="flex items-center gap-3 rounded-full border bg-background/80 px-2.5 py-1.5"
-                >
-                    <Avatar.Root class="size-8 overflow-hidden rounded-full">
-                        <Avatar.Image
-                            src={headerIdentity.avatar}
-                            alt={headerIdentity.name}
-                        />
-                        <Avatar.Fallback
-                            class="rounded-full text-xs font-medium"
-                        >
-                            {userInitials}
-                        </Avatar.Fallback>
-                    </Avatar.Root>
-                    <div class="hidden min-w-0 sm:block">
-                        <p class="truncate text-sm font-medium text-foreground">
-                            {headerIdentity.name}
-                        </p>
-                        <p class="truncate text-xs text-muted-foreground">
-                            {githubBadge.label}
-                        </p>
-                    </div>
-                    <form method="POST" action="?/logout">
-                        <button
-                            type="submit"
-                            class="inline-flex h-9 items-center rounded-full border px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/60"
-                        >
-                            Log out
-                        </button>
-                    </form>
+            {#if headerUser}
+                <div class="w-56 max-w-[calc(100vw-8rem)]">
+                    <NavUser user={headerUser} contentSide="bottom" />
                 </div>
-            {:else}
-                <a
-                    href="/login?redirectTo=/airport"
-                    class="inline-flex h-10 items-center rounded-full border px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted/60"
-                >
-                    Sign in with GitHub
-                </a>
             {/if}
         </div>
     </div>

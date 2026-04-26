@@ -8,4 +8,5 @@ export * from './lib/config.js';
 export * from './lib/workspacePaths.js';
 export * from './daemon/daemonPaths.js';
 export * from './daemon/runtime/DaemonProcessControl.js';
+export { Repository as RepositoryEntity } from './entities/Repository/Repository.js';
 export { toMission, type Mission as MissionEntity } from './entities/Mission/Mission.js';

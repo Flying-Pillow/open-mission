@@ -1,5 +1,8 @@
 <script lang="ts">
+    import ActivityIcon from "@tabler/icons-svelte/icons/activity";
     import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
+    import FolderIcon from "@tabler/icons-svelte/icons/folder";
+    import PlugConnectedIcon from "@tabler/icons-svelte/icons/plug-connected";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
@@ -41,36 +44,33 @@
     const isGitHubConnected = $derived(githubStatusTone === "connected");
 </script>
 
-<section
-    class="relative overflow-hidden rounded-[2rem] border bg-card/80 p-6 backdrop-blur-sm"
->
+<section class="rounded-lg border bg-card p-5 shadow-sm">
     <div
-        class="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.12),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.14),transparent_30%)]"
-    ></div>
-    <div class="relative grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <div class="space-y-4">
+        class="grid gap-5 2xl:grid-cols-[minmax(0,1.15fr)_minmax(27rem,0.85fr)]"
+    >
+        <div class="min-w-0 space-y-4">
             <div class="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">Airport home</Badge>
+                <Badge variant="outline">Airport</Badge>
                 <Badge variant="secondary">{repositoryCountLabel}</Badge>
                 <Badge variant="outline">{githubRepositoryCountLabel}</Badge>
             </div>
 
-            <div class="max-w-2xl space-y-3">
+            <div class="max-w-3xl space-y-2">
                 <h1
-                    class="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl"
+                    class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl"
                 >
-                    Get your missions ready in a few clicks.
+                    Repository control, ready for mission work.
                 </h1>
-                <p class="text-sm leading-6 text-muted-foreground sm:text-base">
-                    Connect GitHub, add a local repository, and jump back into
-                    work without digging through setup screens.
+                <p class="text-sm leading-6 text-muted-foreground">
+                    Keep local repositories, GitHub access, and daemon health in
+                    one compact operations surface.
                 </p>
             </div>
 
             {#if selectedRepository}
-                <div class="rounded-3xl border bg-background/70 p-4 shadow-sm">
+                <div class="rounded-lg border bg-muted/35 p-4">
                     <p
-                        class="text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground"
+                        class="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground"
                     >
                         Current focus
                     </p>
@@ -91,13 +91,16 @@
             {/if}
         </div>
 
-        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
-            <div class="rounded-3xl border bg-background/75 p-4 shadow-sm">
-                <p
-                    class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
-                >
-                    Daemon
-                </p>
+        <div class="grid gap-3 sm:grid-cols-3 2xl:grid-cols-1">
+            <div class="rounded-lg border bg-background p-4 shadow-xs">
+                <div class="flex items-center justify-between gap-3">
+                    <p
+                        class="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground"
+                    >
+                        Daemon
+                    </p>
+                    <PlugConnectedIcon class="size-4 text-muted-foreground" />
+                </div>
                 <div class="mt-3 flex items-center gap-2">
                     <span
                         class={`inline-flex size-2.5 rounded-full ${daemonStatusTone === "connected" ? "bg-emerald-500" : "bg-rose-500"}`}
@@ -108,50 +111,67 @@
                             : "Unavailable"}
                     </p>
                 </div>
-                <p class="mt-2 text-sm text-muted-foreground">
+                <p class="mt-2 line-clamp-2 text-sm text-muted-foreground">
                     {daemonMessage}
                 </p>
             </div>
 
-            <div class="rounded-3xl border bg-background/75 p-4 shadow-sm">
-                <p
-                    class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
-                >
-                    GitHub
-                </p>
+            <div class="rounded-lg border bg-background p-4 shadow-xs">
+                <div class="flex items-center justify-between gap-3">
+                    <p
+                        class="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground"
+                    >
+                        GitHub
+                    </p>
+                    <BrandGithubIcon class="size-4 text-muted-foreground" />
+                </div>
                 <div class="mt-3 flex items-center gap-2">
                     <span
                         class={`inline-flex size-2.5 rounded-full ${githubStatusTone === "connected" ? "bg-emerald-500" : githubStatusTone === "disconnected" ? "bg-amber-500" : "bg-slate-400"}`}
                     ></span>
-                    <p class="text-sm font-medium text-foreground">
+                    <p
+                        class="min-w-0 truncate text-sm font-medium text-foreground"
+                    >
                         {githubAccountLabel}
                     </p>
                 </div>
                 <p class="mt-2 text-sm text-muted-foreground">
                     {isGitHubConnected
-                        ? "You're signed in and ready to pick a repository."
-                        : "Sign in with GitHub to browse your repos and add one faster."}
+                        ? "Signed in and ready to browse repositories."
+                        : "Sign in to browse repositories faster."}
                 </p>
-
-                <div class="mt-4">
-                    {#if !isGitHubConnected}
-                        <Button
-                            href={loginHref}
-                            size="lg"
-                            class="w-full justify-center"
-                        >
-                            <BrandGithubIcon class="size-4" />
-                            Login with GitHub
-                        </Button>
-                    {:else}
-                        <div
-                            class="rounded-2xl border bg-muted/30 px-4 py-3 text-sm text-muted-foreground"
-                        >
-                            GitHub is connected for this session.
-                        </div>
-                    {/if}
-                </div>
             </div>
+
+            <div class="rounded-lg border bg-background p-4 shadow-xs">
+                <div class="flex items-center justify-between gap-3">
+                    <p
+                        class="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground"
+                    >
+                        Registered
+                    </p>
+                    <FolderIcon class="size-4 text-muted-foreground" />
+                </div>
+                <div class="mt-3 flex items-center gap-2">
+                    <ActivityIcon class="size-4 text-primary" />
+                    <p class="text-sm font-medium text-foreground">
+                        {repositoryCountLabel}
+                    </p>
+                </div>
+                <p class="mt-2 text-sm text-muted-foreground">
+                    Local workspaces available to Airport.
+                </p>
+            </div>
+
+            {#if !isGitHubConnected}
+                <Button
+                    href={loginHref}
+                    size="lg"
+                    class="sm:col-span-3 2xl:col-span-1"
+                >
+                    <BrandGithubIcon class="size-4" />
+                    Login with GitHub
+                </Button>
+            {/if}
         </div>
     </div>
 </section>

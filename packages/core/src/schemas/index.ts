@@ -2,6 +2,7 @@ export * from './Repository.js';
 export * from './RepositorySettings.js';
 export * from './GitHubRepository.js';
 export * from './EntityRemote.js';
+export * from './Mission.js';
 export * from './MissionRuntime.js';
 export * from './RuntimeEvents.js';
 export * from './SystemState.js';

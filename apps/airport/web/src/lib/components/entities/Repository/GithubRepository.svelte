@@ -1,4 +1,6 @@
 <script lang="ts">
+    import ArrowRightIcon from "@tabler/icons-svelte/icons/arrow-right";
+    import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import type { GitHubVisibleRepositorySummary } from "$lib/components/entities/types";
     import { Badge } from "$lib/components/ui/badge/index.js";
@@ -53,14 +55,21 @@
 </script>
 
 <article
-    class="rounded-lg border bg-background/70 px-4 py-4 transition-colors hover:bg-background"
+    class="rounded-lg border bg-card px-4 py-4 shadow-xs transition-colors hover:bg-muted/20"
 >
     <div
         class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"
     >
         <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
-                <h3 class="truncate text-sm font-semibold text-foreground">
+                <span
+                    class="inline-flex size-7 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground"
+                >
+                    <BrandGithubIcon class="size-4" />
+                </span>
+                <h3
+                    class="min-w-0 truncate text-sm font-semibold text-foreground"
+                >
                     {repository.fullName}
                 </h3>
                 <Badge variant="outline">
@@ -89,6 +98,7 @@
                             {...props}
                         >
                             Use repository
+                            <ArrowRightIcon class="size-4" />
                         </Button>
                     {/snippet}
                 </Dialog.Trigger>
@@ -114,10 +124,7 @@
                         </Dialog.Description>
                     </Dialog.Header>
 
-                    <form
-                        class="grid gap-5"
-                        onsubmit={handleClone}
-                    >
+                    <form class="grid gap-5" onsubmit={handleClone}>
                         <input
                             type="hidden"
                             name="githubRepository"
@@ -246,9 +253,14 @@
                                         </Button>
                                     {/snippet}
                                 </Dialog.Close>
-                                        <Button type="submit" disabled={addRepositoryPending}>
-                                            {addRepositoryPending ? "Cloning repository..." : "Clone repository"}
-                                        </Button>
+                                <Button
+                                    type="submit"
+                                    disabled={addRepositoryPending}
+                                >
+                                    {addRepositoryPending
+                                        ? "Cloning repository..."
+                                        : "Clone repository"}
+                                </Button>
                             </div>
                         </Dialog.Footer>
                     </form>

@@ -227,6 +227,138 @@
                 "implementation/06-tighten-exports-and-remove-transitional-layers"
               ],
               "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/07-implement-github-repository-source-entity",
+              "title": "Implement GitHub Repository Source Entity",
+              "instruction": "Make the Airport GitHub repositories functionality use a first-class GitHubRepository source entity backed by the repository platform adapter boundary. GitHubRepository.find and GitHubRepository.clone must route through generic entity query/command remotes and explicit daemon handlers. Backend GitHubRepository delegates provider operations through RepositoryPlatformAdapter or its factory, not direct GitHub-specific implementation calls. Clone/import returns a local RepositorySnapshot after registration.",
+              "taskKind": "implementation",
+              "pairedTaskId": "implementation/07-implement-github-repository-source-entity-verify",
+              "dependsOn": [
+                "implementation/06-tighten-exports-and-remove-transitional-layers-verify"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/07-implement-github-repository-source-entity-verify",
+              "title": "Verify GitHub Repository Source Entity",
+              "instruction": "Verify explicit daemon handlers for GitHubRepository.find and GitHubRepository.clone, canonical schemas under @flying-pillow/mission-core/schemas, provider access through RepositoryPlatformAdapter, no direct Airport route/component GitHub CLI calls, and no control.github.repositories.list dependency in the active UI path. Append evidence to 03-IMPLEMENTATION/VERIFY.md.",
+              "taskKind": "verification",
+              "pairedTaskId": "implementation/07-implement-github-repository-source-entity",
+              "dependsOn": [
+                "implementation/07-implement-github-repository-source-entity"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/08-create-canonical-mission-schema-contracts",
+              "title": "Create Canonical Mission Schema Contracts",
+              "instruction": "Make packages/core/src/schemas/Mission.ts the canonical shared contract owner for the Mission entity. Mission identity, snapshot, child projection, action, document, worktree, command payload, query payload, result, and acknowledgement schemas must live under the canonical schema surface. Deep MissionRemoteContract stops being the target contract owner. Keep schemas strict and browser-safe.",
+              "taskKind": "implementation",
+              "pairedTaskId": "implementation/08-create-canonical-mission-schema-contracts-verify",
+              "dependsOn": [
+                "implementation/07-implement-github-repository-source-entity-verify"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/08-create-canonical-mission-schema-contracts-verify",
+              "title": "Verify Canonical Mission Schema Contracts",
+              "instruction": "Verify packages/core/src/schemas/Mission.ts owns Mission identity, snapshot, child projection, method payload, method result, and acknowledgement schemas. Confirm schemas are strict, schema barrel exports are browser-safe, Airport code imports Mission contracts from @flying-pillow/mission-core/schemas, and deep MissionRemoteContract is no longer the target schema owner. Record evidence in 03-IMPLEMENTATION/VERIFY.md.",
+              "taskKind": "verification",
+              "pairedTaskId": "implementation/08-create-canonical-mission-schema-contracts",
+              "dependsOn": [
+                "implementation/08-create-canonical-mission-schema-contracts"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/09-make-mission-daemon-authoritative",
+              "title": "Make Mission Daemon Authoritative",
+              "instruction": "Move daemon-callable Mission behavior behind the Mission entity boundary or focused Mission collaborators instead of keeping MissionRemote as a parallel contract owner. Mission must resolve repository-scoped mission instances explicitly, load and dispose runtime resources through a focused collaborator, execute source methods, return strict JSON-safe values, and parse source results before returning.",
+              "taskKind": "implementation",
+              "pairedTaskId": "implementation/09-make-mission-daemon-authoritative-verify",
+              "dependsOn": [
+                "implementation/08-create-canonical-mission-schema-contracts-verify"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/09-make-mission-daemon-authoritative-verify",
+              "title": "Verify Mission Daemon Authority",
+              "instruction": "Verify Mission source methods use canonical schemas, resolve mission instances explicitly, dispose runtime resources, fail loudly for missing missions and invalid payloads, and return acknowledgements or source-local results rather than global projection snapshots. Record focused test output and boundary notes in 03-IMPLEMENTATION/VERIFY.md.",
+              "taskKind": "verification",
+              "pairedTaskId": "implementation/09-make-mission-daemon-authoritative",
+              "dependsOn": [
+                "implementation/09-make-mission-daemon-authoritative"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/10-route-mission-through-explicit-dispatch",
+              "title": "Route Mission Through Explicit Dispatch",
+              "instruction": "Add explicit Mission query and command handlers to daemon generic entity dispatch. Mission read, readControl, listActions, readDocument, readWorktree, command, taskCommand, sessionCommand, executeAction, and writeDocument must route through known handlers that parse payloads before execution and results after execution. Bump PROTOCOL_VERSION when daemon RPC behavior changes.",
+              "taskKind": "implementation",
+              "pairedTaskId": "implementation/10-route-mission-through-explicit-dispatch-verify",
+              "dependsOn": [
+                "implementation/09-make-mission-daemon-authoritative-verify"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/10-route-mission-through-explicit-dispatch-verify",
+              "title": "Verify Mission Explicit Dispatch",
+              "instruction": "Verify daemon dispatch has explicit Mission query and command handlers, payload/result parsing is method-specific, missing context and unknown methods fail loudly, command results parse as acknowledgements or source-local results, and PROTOCOL_VERSION is bumped when required. Record dispatch test output and static handler coverage in 03-IMPLEMENTATION/VERIFY.md.",
+              "taskKind": "verification",
+              "pairedTaskId": "implementation/10-route-mission-through-explicit-dispatch",
+              "dependsOn": [
+                "implementation/10-route-mission-through-explicit-dispatch"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/11-clean-airport-mission-mirror",
+              "title": "Clean Airport Mission Mirror",
+              "instruction": "Make the Airport Mission mirror the component-facing owner of Mission request-response behavior through generic entity remotes. Mission read/control/action/document/worktree behavior must go through Mission entity methods and generic query/command remotes. Mission, Task, Artifact, and AgentSession mirrors expose domain-shaped methods while components stop composing backend payloads or calling route-local Mission APIs directly.",
+              "taskKind": "implementation",
+              "pairedTaskId": "implementation/11-clean-airport-mission-mirror-verify",
+              "dependsOn": [
+                "implementation/10-route-mission-through-explicit-dispatch-verify"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/11-clean-airport-mission-mirror-verify",
+              "title": "Verify Airport Mission Mirror",
+              "instruction": "Verify Airport components reach Mission behavior through Mission and child entity mirrors, Mission transports use generic entity query/command remotes, browser code imports canonical schemas only, and task/session/artifact methods route through the owning Mission mirror until those children become source entities. Record focused web tests and caller scans in 03-IMPLEMENTATION/VERIFY.md.",
+              "taskKind": "verification",
+              "pairedTaskId": "implementation/11-clean-airport-mission-mirror",
+              "dependsOn": [
+                "implementation/11-clean-airport-mission-mirror"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/12-wire-mission-projections-and-remove-runtime-routes",
+              "title": "Wire Mission Projections And Remove Runtime Routes",
+              "instruction": "Complete the Mission migration by separating Mission projection updates from command responses and removing request-response runtime routes that duplicate entity remotes. Mission, Stage, Task, Artifact, and AgentSession projection events must be validated with shared schemas and reconcile client mirrors. Terminal/session streaming remains only where streaming transport is required.",
+              "taskKind": "implementation",
+              "pairedTaskId": "implementation/12-wire-mission-projections-and-remove-runtime-routes-verify",
+              "dependsOn": [
+                "implementation/11-clean-airport-mission-mirror-verify"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/12-wire-mission-projections-and-remove-runtime-routes-verify",
+              "title": "Verify Mission Projections And Runtime Route Cleanup",
+              "instruction": "Verify Mission command responses are acknowledgements or source-local results, Mission projection events validate typed payloads, client mirrors reconcile Mission/Stage/Task/Artifact/AgentSession updates from SSE or query refreshes, duplicate request-response runtime routes are gone or reduced, and terminal/socket routes are retained only for stream transport. Record final Mission-migration validation in 03-IMPLEMENTATION/VERIFY.md.",
+              "taskKind": "verification",
+              "pairedTaskId": "implementation/12-wire-mission-projections-and-remove-runtime-routes",
+              "dependsOn": [
+                "implementation/12-wire-mission-projections-and-remove-runtime-routes"
+              ],
+              "agentRunner": "copilot-cli"
             }
           ]
         },
@@ -333,7 +465,19 @@
           "implementation/05-wire-sse-projection-ownership",
           "implementation/05-wire-sse-projection-ownership-verify",
           "implementation/06-tighten-exports-and-remove-transitional-layers",
-          "implementation/06-tighten-exports-and-remove-transitional-layers-verify"
+          "implementation/06-tighten-exports-and-remove-transitional-layers-verify",
+          "implementation/07-implement-github-repository-source-entity",
+          "implementation/07-implement-github-repository-source-entity-verify",
+          "implementation/08-create-canonical-mission-schema-contracts",
+          "implementation/08-create-canonical-mission-schema-contracts-verify",
+          "implementation/09-make-mission-daemon-authoritative",
+          "implementation/09-make-mission-daemon-authoritative-verify",
+          "implementation/10-route-mission-through-explicit-dispatch",
+          "implementation/10-route-mission-through-explicit-dispatch-verify",
+          "implementation/11-clean-airport-mission-mirror",
+          "implementation/11-clean-airport-mission-mirror-verify",
+          "implementation/12-wire-mission-projections-and-remove-runtime-routes",
+          "implementation/12-wire-mission-projections-and-remove-runtime-routes-verify"
         ],
         "readyTaskIds": [],
         "queuedTaskIds": [],
@@ -350,21 +494,33 @@
           "implementation/05-wire-sse-projection-ownership",
           "implementation/05-wire-sse-projection-ownership-verify",
           "implementation/06-tighten-exports-and-remove-transitional-layers",
-          "implementation/06-tighten-exports-and-remove-transitional-layers-verify"
+          "implementation/06-tighten-exports-and-remove-transitional-layers-verify",
+          "implementation/07-implement-github-repository-source-entity",
+          "implementation/07-implement-github-repository-source-entity-verify",
+          "implementation/08-create-canonical-mission-schema-contracts",
+          "implementation/08-create-canonical-mission-schema-contracts-verify",
+          "implementation/09-make-mission-daemon-authoritative",
+          "implementation/09-make-mission-daemon-authoritative-verify",
+          "implementation/10-route-mission-through-explicit-dispatch",
+          "implementation/10-route-mission-through-explicit-dispatch-verify",
+          "implementation/11-clean-airport-mission-mirror",
+          "implementation/11-clean-airport-mission-mirror-verify",
+          "implementation/12-wire-mission-projections-and-remove-runtime-routes",
+          "implementation/12-wire-mission-projections-and-remove-runtime-routes-verify"
         ]
       },
       {
         "stageId": "audit",
-        "lifecycle": "completed",
+        "lifecycle": "ready",
         "taskIds": [
           "audit/01-debrief"
         ],
-        "readyTaskIds": [],
+        "readyTaskIds": [
+          "audit/01-debrief"
+        ],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "completedTaskIds": [
-          "audit/01-debrief"
-        ]
+        "completedTaskIds": []
       },
       {
         "stageId": "delivery",
@@ -681,12 +837,264 @@
         "completedAt": "2026-04-26T11:36:00.000Z"
       },
       {
+        "taskId": "implementation/07-implement-github-repository-source-entity",
+        "stageId": "implementation",
+        "title": "Implement GitHub Repository Source Entity",
+        "instruction": "Make the Airport GitHub repositories functionality use a first-class GitHubRepository source entity backed by the repository platform adapter boundary. GitHubRepository.find and GitHubRepository.clone must route through generic entity query/command remotes and explicit daemon handlers. Backend GitHubRepository delegates provider operations through RepositoryPlatformAdapter or its factory, not direct GitHub-specific implementation calls. Clone/import returns a local RepositorySnapshot after registration.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/07-implement-github-repository-source-entity-verify",
+        "dependsOn": [
+          "implementation/06-tighten-exports-and-remove-transitional-layers-verify"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T11:45:00.000Z",
+        "updatedAt": "2026-04-26T12:15:00.000Z",
+        "completedAt": "2026-04-26T12:15:00.000Z"
+      },
+      {
+        "taskId": "implementation/07-implement-github-repository-source-entity-verify",
+        "stageId": "implementation",
+        "title": "Verify GitHub Repository Source Entity",
+        "instruction": "Verify explicit daemon handlers for GitHubRepository.find and GitHubRepository.clone, canonical schemas under @flying-pillow/mission-core/schemas, provider access through RepositoryPlatformAdapter, no direct Airport route/component GitHub CLI calls, and no control.github.repositories.list dependency in the active UI path. Append evidence to 03-IMPLEMENTATION/VERIFY.md.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/07-implement-github-repository-source-entity",
+        "dependsOn": [
+          "implementation/07-implement-github-repository-source-entity"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T11:45:00.000Z",
+        "updatedAt": "2026-04-26T12:15:00.000Z",
+        "completedAt": "2026-04-26T12:15:00.000Z"
+      },
+      {
+        "taskId": "implementation/08-create-canonical-mission-schema-contracts",
+        "stageId": "implementation",
+        "title": "Create Canonical Mission Schema Contracts",
+        "instruction": "Make packages/core/src/schemas/Mission.ts the canonical shared contract owner for the Mission entity. Mission identity, snapshot, child projection, action, document, worktree, command payload, query payload, result, and acknowledgement schemas must live under the canonical schema surface. Deep MissionRemoteContract stops being the target contract owner. Keep schemas strict and browser-safe.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/08-create-canonical-mission-schema-contracts-verify",
+        "dependsOn": [
+          "implementation/07-implement-github-repository-source-entity-verify"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T12:20:00.000Z",
+        "updatedAt": "2026-04-26T13:21:00.000Z",
+        "completedAt": "2026-04-26T13:21:00.000Z"
+      },
+      {
+        "taskId": "implementation/08-create-canonical-mission-schema-contracts-verify",
+        "stageId": "implementation",
+        "title": "Verify Canonical Mission Schema Contracts",
+        "instruction": "Verify packages/core/src/schemas/Mission.ts owns Mission identity, snapshot, child projection, method payload, method result, and acknowledgement schemas. Confirm schemas are strict, schema barrel exports are browser-safe, Airport code imports Mission contracts from @flying-pillow/mission-core/schemas, and deep MissionRemoteContract is no longer the target schema owner. Record evidence in 03-IMPLEMENTATION/VERIFY.md.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/08-create-canonical-mission-schema-contracts",
+        "dependsOn": [
+          "implementation/08-create-canonical-mission-schema-contracts"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T12:20:00.000Z",
+        "updatedAt": "2026-04-26T13:26:00.000Z",
+        "completedAt": "2026-04-26T13:26:00.000Z"
+      },
+      {
+        "taskId": "implementation/09-make-mission-daemon-authoritative",
+        "stageId": "implementation",
+        "title": "Make Mission Daemon Authoritative",
+        "instruction": "Move daemon-callable Mission behavior behind the Mission entity boundary or focused Mission collaborators instead of keeping MissionRemote as a parallel contract owner. Mission must resolve repository-scoped mission instances explicitly, load and dispose runtime resources through a focused collaborator, execute source methods, return strict JSON-safe values, and parse source results before returning.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/09-make-mission-daemon-authoritative-verify",
+        "dependsOn": [
+          "implementation/08-create-canonical-mission-schema-contracts-verify"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T12:20:00.000Z",
+        "updatedAt": "2026-04-26T13:32:03.000Z",
+        "completedAt": "2026-04-26T13:32:03.000Z"
+      },
+      {
+        "taskId": "implementation/09-make-mission-daemon-authoritative-verify",
+        "stageId": "implementation",
+        "title": "Verify Mission Daemon Authority",
+        "instruction": "Verify Mission source methods use canonical schemas, resolve mission instances explicitly, dispose runtime resources, fail loudly for missing missions and invalid payloads, and return acknowledgements or source-local results rather than global projection snapshots. Record focused test output and boundary notes in 03-IMPLEMENTATION/VERIFY.md.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/09-make-mission-daemon-authoritative",
+        "dependsOn": [
+          "implementation/09-make-mission-daemon-authoritative"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T12:20:00.000Z",
+        "updatedAt": "2026-04-26T13:36:30.000Z",
+        "completedAt": "2026-04-26T13:36:30.000Z"
+      },
+      {
+        "taskId": "implementation/10-route-mission-through-explicit-dispatch",
+        "stageId": "implementation",
+        "title": "Route Mission Through Explicit Dispatch",
+        "instruction": "Add explicit Mission query and command handlers to daemon generic entity dispatch. Mission read, readControl, listActions, readDocument, readWorktree, command, taskCommand, sessionCommand, executeAction, and writeDocument must route through known handlers that parse payloads before execution and results after execution. Bump PROTOCOL_VERSION when daemon RPC behavior changes.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/10-route-mission-through-explicit-dispatch-verify",
+        "dependsOn": [
+          "implementation/09-make-mission-daemon-authoritative-verify"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T12:20:00.000Z",
+        "updatedAt": "2026-04-26T13:43:00.000Z",
+        "completedAt": "2026-04-26T13:43:00.000Z"
+      },
+      {
+        "taskId": "implementation/10-route-mission-through-explicit-dispatch-verify",
+        "stageId": "implementation",
+        "title": "Verify Mission Explicit Dispatch",
+        "instruction": "Verify daemon dispatch has explicit Mission query and command handlers, payload/result parsing is method-specific, missing context and unknown methods fail loudly, command results parse as acknowledgements or source-local results, and PROTOCOL_VERSION is bumped when required. Record dispatch test output and static handler coverage in 03-IMPLEMENTATION/VERIFY.md.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/10-route-mission-through-explicit-dispatch",
+        "dependsOn": [
+          "implementation/10-route-mission-through-explicit-dispatch"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T12:20:00.000Z",
+        "updatedAt": "2026-04-26T14:11:30.000Z",
+        "completedAt": "2026-04-26T14:11:30.000Z"
+      },
+      {
+        "taskId": "implementation/11-clean-airport-mission-mirror",
+        "stageId": "implementation",
+        "title": "Clean Airport Mission Mirror",
+        "instruction": "Make the Airport Mission mirror the component-facing owner of Mission request-response behavior through generic entity remotes. Mission read/control/action/document/worktree behavior must go through Mission entity methods and generic query/command remotes. Mission, Task, Artifact, and AgentSession mirrors expose domain-shaped methods while components stop composing backend payloads or calling route-local Mission APIs directly.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/11-clean-airport-mission-mirror-verify",
+        "dependsOn": [
+          "implementation/10-route-mission-through-explicit-dispatch-verify"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T12:20:00.000Z",
+        "updatedAt": "2026-04-26T14:44:00.000Z",
+        "completedAt": "2026-04-26T14:44:00.000Z"
+      },
+      {
+        "taskId": "implementation/11-clean-airport-mission-mirror-verify",
+        "stageId": "implementation",
+        "title": "Verify Airport Mission Mirror",
+        "instruction": "Verify Airport components reach Mission behavior through Mission and child entity mirrors, Mission transports use generic entity query/command remotes, browser code imports canonical schemas only, and task/session/artifact methods route through the owning Mission mirror until those children become source entities. Record focused web tests and caller scans in 03-IMPLEMENTATION/VERIFY.md.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/11-clean-airport-mission-mirror",
+        "dependsOn": [
+          "implementation/11-clean-airport-mission-mirror"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T12:20:00.000Z",
+        "updatedAt": "2026-04-26T14:55:00.000Z",
+        "completedAt": "2026-04-26T14:55:00.000Z"
+      },
+      {
+        "taskId": "implementation/12-wire-mission-projections-and-remove-runtime-routes",
+        "stageId": "implementation",
+        "title": "Wire Mission Projections And Remove Runtime Routes",
+        "instruction": "Complete the Mission migration by separating Mission projection updates from command responses and removing request-response runtime routes that duplicate entity remotes. Mission, Stage, Task, Artifact, and AgentSession projection events must be validated with shared schemas and reconcile client mirrors. Terminal/session streaming remains only where streaming transport is required.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/12-wire-mission-projections-and-remove-runtime-routes-verify",
+        "dependsOn": [
+          "implementation/11-clean-airport-mission-mirror-verify"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T12:20:00.000Z",
+        "updatedAt": "2026-04-26T15:25:00.000Z",
+        "completedAt": "2026-04-26T15:25:00.000Z"
+      },
+      {
+        "taskId": "implementation/12-wire-mission-projections-and-remove-runtime-routes-verify",
+        "stageId": "implementation",
+        "title": "Verify Mission Projections And Runtime Route Cleanup",
+        "instruction": "Verify Mission command responses are acknowledgements or source-local results, Mission projection events validate typed payloads, client mirrors reconcile Mission/Stage/Task/Artifact/AgentSession updates from SSE or query refreshes, duplicate request-response runtime routes are gone or reduced, and terminal/socket routes are retained only for stream transport. Record final Mission-migration validation in 03-IMPLEMENTATION/VERIFY.md.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/12-wire-mission-projections-and-remove-runtime-routes",
+        "dependsOn": [
+          "implementation/12-wire-mission-projections-and-remove-runtime-routes"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T12:20:00.000Z",
+        "updatedAt": "2026-04-26T15:30:00.000Z",
+        "completedAt": "2026-04-26T15:30:00.000Z"
+      },
+      {
         "taskId": "audit/01-debrief",
         "stageId": "audit",
         "title": "Debrief",
         "instruction": "Run mission-level validation and update AUDIT.md.\n\nSeparate mission regressions from baseline failures. Record risks and smallest follow-ups.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
         "dependsOn": [],
-        "lifecycle": "completed",
+        "lifecycle": "ready",
         "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true
@@ -694,8 +1102,7 @@
         "agentRunner": "copilot",
         "retries": 0,
         "createdAt": "2026-04-26T11:37:00.000Z",
-        "updatedAt": "2026-04-26T11:44:00.000Z",
-        "completedAt": "2026-04-26T11:44:00.000Z"
+        "updatedAt": "2026-04-26T15:30:00.000Z"
       }
     ],
     "sessions": [
@@ -835,6 +1242,114 @@
         "completedAt": "2026-04-26T11:36:00.000Z"
       },
       {
+        "sessionId": "07-implement-github-repository-source-entity-copilot-cli-960cce78",
+        "taskId": "implementation/07-implement-github-repository-source-entity",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T11:45:00.000Z",
+        "updatedAt": "2026-04-26T12:15:00.000Z",
+        "completedAt": "2026-04-26T12:15:00.000Z"
+      },
+      {
+        "sessionId": "07-implement-github-repository-source-entity-verify-copilot-cli-960cce78",
+        "taskId": "implementation/07-implement-github-repository-source-entity-verify",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T12:15:00.000Z",
+        "updatedAt": "2026-04-26T12:15:00.000Z",
+        "completedAt": "2026-04-26T12:15:00.000Z"
+      },
+      {
+        "sessionId": "08-create-canonical-mission-schema-contracts-copilot-cli-960cce78",
+        "taskId": "implementation/08-create-canonical-mission-schema-contracts",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T13:21:00.000Z",
+        "updatedAt": "2026-04-26T13:21:00.000Z",
+        "completedAt": "2026-04-26T13:21:00.000Z"
+      },
+      {
+        "sessionId": "08-create-canonical-mission-schema-contracts-verify-copilot-cli-960cce78",
+        "taskId": "implementation/08-create-canonical-mission-schema-contracts-verify",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T13:26:00.000Z",
+        "updatedAt": "2026-04-26T13:26:00.000Z",
+        "completedAt": "2026-04-26T13:26:00.000Z"
+      },
+      {
+        "sessionId": "09-make-mission-daemon-authoritative-copilot-cli-960cce78",
+        "taskId": "implementation/09-make-mission-daemon-authoritative",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T13:32:03.000Z",
+        "updatedAt": "2026-04-26T13:32:03.000Z",
+        "completedAt": "2026-04-26T13:32:03.000Z"
+      },
+      {
+        "sessionId": "09-make-mission-daemon-authoritative-verify-copilot-cli-960cce78",
+        "taskId": "implementation/09-make-mission-daemon-authoritative-verify",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T13:36:30.000Z",
+        "updatedAt": "2026-04-26T13:36:30.000Z",
+        "completedAt": "2026-04-26T13:36:30.000Z"
+      },
+      {
+        "sessionId": "10-route-mission-through-explicit-dispatch-copilot-cli-960cce78",
+        "taskId": "implementation/10-route-mission-through-explicit-dispatch",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T13:43:00.000Z",
+        "updatedAt": "2026-04-26T13:43:00.000Z",
+        "completedAt": "2026-04-26T13:43:00.000Z"
+      },
+      {
+        "sessionId": "10-route-mission-through-explicit-dispatch-verify-copilot-cli-960cce78",
+        "taskId": "implementation/10-route-mission-through-explicit-dispatch-verify",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T14:11:30.000Z",
+        "updatedAt": "2026-04-26T14:11:30.000Z",
+        "completedAt": "2026-04-26T14:11:30.000Z"
+      },
+      {
+        "sessionId": "11-clean-airport-mission-mirror-copilot-cli-960cce78",
+        "taskId": "implementation/11-clean-airport-mission-mirror",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T14:11:30.000Z",
+        "updatedAt": "2026-04-26T14:33:00.000Z",
+        "completedAt": "2026-04-26T14:33:00.000Z"
+      },
+      {
+        "sessionId": "11-clean-airport-mission-mirror-verify-copilot-cli-960cce78",
+        "taskId": "implementation/11-clean-airport-mission-mirror-verify",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T14:55:00.000Z",
+        "updatedAt": "2026-04-26T14:55:00.000Z",
+        "completedAt": "2026-04-26T14:55:00.000Z"
+      },
+      {
+        "sessionId": "12-wire-mission-projections-and-remove-runtime-routes-copilot-cli-960cce78",
+        "taskId": "implementation/12-wire-mission-projections-and-remove-runtime-routes",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T15:25:00.000Z",
+        "updatedAt": "2026-04-26T15:25:00.000Z",
+        "completedAt": "2026-04-26T15:25:00.000Z"
+      },
+      {
+        "sessionId": "12-wire-mission-projections-and-remove-runtime-routes-verify-copilot-cli-960cce78",
+        "taskId": "implementation/12-wire-mission-projections-and-remove-runtime-routes-verify",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T15:25:00.000Z",
+        "updatedAt": "2026-04-26T15:30:00.000Z",
+        "completedAt": "2026-04-26T15:30:00.000Z"
+      },
+      {
         "sessionId": "01-debrief-copilot-cli-960cce78",
         "taskId": "audit/01-debrief",
         "runnerId": "copilot-cli",
@@ -851,7 +1366,7 @@
         "state": "passed",
         "stageId": "implementation",
         "reasons": [],
-        "updatedAt": "2026-04-26T11:36:00.000Z"
+        "updatedAt": "2026-04-26T15:30:00.000Z"
       },
       {
         "gateId": "verify",
@@ -859,28 +1374,30 @@
         "state": "passed",
         "stageId": "implementation",
         "reasons": [],
-        "updatedAt": "2026-04-26T11:36:00.000Z"
+        "updatedAt": "2026-04-26T15:30:00.000Z"
       },
       {
         "gateId": "audit",
         "intent": "audit",
-        "state": "passed",
+        "state": "blocked",
         "stageId": "audit",
-        "reasons": [],
-        "updatedAt": "2026-04-26T11:44:00.000Z"
+        "reasons": [
+          "Stage 'audit' is not completed."
+        ],
+        "updatedAt": "2026-04-26T15:30:00.000Z"
       },
       {
         "gateId": "deliver",
         "intent": "deliver",
-        "state": "pending",
+        "state": "blocked",
         "stageId": "delivery",
         "reasons": [
           "Stage 'delivery' is not completed."
         ],
-        "updatedAt": "2026-04-26T11:36:00.000Z"
+        "updatedAt": "2026-04-26T15:30:00.000Z"
       }
     ],
     "launchQueue": [],
-    "updatedAt": "2026-04-26T11:44:00.000Z"
+    "updatedAt": "2026-04-26T15:30:00.000Z"
   }
 }

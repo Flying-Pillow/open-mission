@@ -1,4 +1,5 @@
 <script lang="ts">
+    import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import GithubRepository from "$lib/components/entities/Repository/GithubRepository.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
@@ -30,10 +31,16 @@
 </script>
 
 <section
-    class="flex h-full min-h-0 flex-1 flex-col rounded-2xl border bg-background/50 p-4"
+    class="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-background"
 >
-    <div class="flex items-center justify-between gap-4">
-        <div>
+    <div class="flex items-start justify-between gap-4 border-b px-4 py-3">
+        <div class="min-w-0">
+            <div class="mb-1 flex items-center gap-2 text-muted-foreground">
+                <BrandGithubIcon class="size-4" />
+                <p class="text-xs font-medium uppercase tracking-[0.16em]">
+                    Browser
+                </p>
+            </div>
             <h3 class="text-base font-semibold text-foreground">
                 GitHub repository browser
             </h3>
@@ -49,17 +56,17 @@
         <p class="mt-3 text-sm text-rose-600">{githubRepositoriesError}</p>
     {/if}
 
-    <ScrollArea class="mt-4 min-h-0 flex-1 pr-3">
-        <div class="grid gap-3">
+    <ScrollArea class="min-h-0 flex-1">
+        <div class="grid gap-3 p-3">
             {#if githubRepositoriesLoading && repositories.length === 0}
                 <div
-                    class="rounded-2xl border border-dashed bg-muted/20 px-4 py-8 text-sm text-muted-foreground"
+                    class="rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-sm text-muted-foreground"
                 >
                     Loading GitHub repositories...
                 </div>
             {:else if repositories.length === 0}
                 <div
-                    class="rounded-2xl border border-dashed bg-muted/20 px-4 py-8 text-sm text-muted-foreground"
+                    class="rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-sm text-muted-foreground"
                 >
                     {emptyMessage}
                 </div>

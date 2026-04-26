@@ -1,9 +1,12 @@
-<!-- /apps/airport/web/src/routes/(app)/airport/+page.svelte: Minimal Airport route that only renders the shared header. -->
+<!-- /apps/airport/web/src/routes/(app)/airport/+page.svelte: Airport home route shell. -->
 <script lang="ts">
-    import type { PageData } from "./$types";
     import AirportHeader from "$lib/components/airport/airport-header.svelte";
-    import Airport from "$lib/components/airport/AirportPage.svelte";
-    import { SidebarProvider } from "$lib/components/ui/sidebar/index.js";
+    import AirportSidebar from "$lib/components/airport/airport-sidebar.svelte";
+    import Home from "./Home.svelte";
+    import {
+        SidebarInset,
+        SidebarProvider,
+    } from "$lib/components/ui/sidebar/index.js";
 </script>
 
 <svelte:head>
@@ -15,8 +18,12 @@
 </svelte:head>
 
 <SidebarProvider>
-    <div class="min-h-svh bg-background">
+    <AirportSidebar variant="inset" />
+
+    <SidebarInset
+        class="min-h-0 overflow-hidden h-svh md:peer-data-[variant=inset]:my-0"
+    >
         <AirportHeader />
-        <Airport />
-    </div>
+        <Home />
+    </SidebarInset>
 </SidebarProvider>

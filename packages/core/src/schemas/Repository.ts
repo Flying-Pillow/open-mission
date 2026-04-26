@@ -6,9 +6,9 @@ import {
 import { WorkflowGlobalSettingsSchema } from '../workflow/WorkflowSchema.js';
 import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
 import {
-    missionRuntimeSnapshotSchema,
     missionTypeSchema
 } from './MissionRuntime.js';
+import { missionSnapshotSchema } from './Mission.js';
 import { entityCommandAcknowledgementSchema } from './EntityRemote.js';
 
 export const repositoryWorkflowConfigurationSchema = WorkflowGlobalSettingsSchema;
@@ -113,7 +113,7 @@ export const repositorySnapshotSchema = z.object({
     githubRepository: z.string().trim().min(1).optional(),
     missions: z.array(missionReferenceSchema),
     selectedMissionId: z.string().trim().min(1).optional(),
-    selectedMission: missionRuntimeSnapshotSchema.optional(),
+    selectedMission: missionSnapshotSchema.optional(),
     selectedIssue: githubIssueDetailSchema.optional()
 }).strict();
 

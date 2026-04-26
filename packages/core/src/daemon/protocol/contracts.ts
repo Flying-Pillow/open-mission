@@ -311,7 +311,7 @@ export type MissionAgentEvent =
 		state: MissionAgentSessionState;
 	};
 
-export const PROTOCOL_VERSION = 24;
+export const PROTOCOL_VERSION = 26;
 
 export type Method =
 	| 'ping'

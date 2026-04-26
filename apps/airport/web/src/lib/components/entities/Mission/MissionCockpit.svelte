@@ -1,13 +1,17 @@
 <script lang="ts">
     import type { MissionTowerTreeNodeData as MissionTowerTreeNode } from "../types";
-    import type { MissionControlComputedState } from "$lib/components/entities/Mission/missionControl";
+
+    type MissionCockpitSelectionState = {
+        treeNodes: MissionTowerTreeNode[];
+        selectedNodeId?: string;
+    };
 
     let {
         selectionState,
         currentStageId,
         onSelectNode,
     }: {
-        selectionState: MissionControlComputedState;
+        selectionState: MissionCockpitSelectionState;
         currentStageId?: string;
         onSelectNode: (nodeId: string) => void;
     } = $props();

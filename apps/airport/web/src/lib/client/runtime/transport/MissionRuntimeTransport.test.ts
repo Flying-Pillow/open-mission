@@ -16,20 +16,33 @@ describe('MissionRuntimeTransport', () => {
 				});
 
 				return {
-					missionId: 'mission-29',
+					mission: {
+						missionId: 'mission-29',
+						title: 'Mission 29',
+						artifacts: [],
+						stages: [],
+						agentSessions: []
+					},
 					status: {
 						missionId: 'mission-29',
+						title: 'Mission 29',
 						workflow: {
 							stages: []
 						}
 					},
-					sessions: []
+					workflow: {
+						stages: []
+					},
+					stages: [],
+					tasks: [],
+					artifacts: [],
+					agentSessions: []
 				};
 			}
 		});
 
-		const snapshot = await transport.getMissionRuntimeSnapshot('mission-29');
+		const snapshot = await transport.getMissionSnapshot('mission-29');
 
-		expect(snapshot.missionId).toBe('mission-29');
+		expect(snapshot.mission.missionId).toBe('mission-29');
 	});
 });

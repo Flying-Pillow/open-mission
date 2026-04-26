@@ -1,14 +1,11 @@
 // /apps/airport/web/src/lib/components/entities/Stage/Stage.svelte.ts: OO browser entity for a mission workflow stage with task accessors.
 import type {
-    MissionRuntimeSnapshot,
-    Stage as StageSnapshotRecord
+    MissionStageSnapshot
 } from '@flying-pillow/mission-core/schemas';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 import type { Task } from '$lib/components/entities/Task/Task.svelte.js';
 
-export type StageSnapshot = NonNullable<
-    NonNullable<MissionRuntimeSnapshot['status']['workflow']>['stages']
->[number];
+export type StageSnapshot = MissionStageSnapshot;
 
 export class Stage implements EntityModel<StageSnapshot> {
     private snapshotState = $state<StageSnapshot | undefined>();

@@ -13,6 +13,8 @@
 	let {
 		user,
 		logoutAction = "?/logout",
+		contentSide,
+		contentAlign = "end",
 	}: {
 		user: {
 			name: string;
@@ -21,9 +23,14 @@
 			githubStatus?: "connected" | "disconnected" | "unknown";
 		};
 		logoutAction?: string;
+		contentSide?: "top" | "right" | "bottom" | "left";
+		contentAlign?: "start" | "center" | "end";
 	} = $props();
 
 	const sidebar = Sidebar.useSidebar();
+	const dropdownSide = $derived(
+		contentSide ?? (sidebar.isMobile ? "bottom" : "right"),
+	);
 	const userInitials = $derived.by(
 		() =>
 			user.name
@@ -70,8 +77,8 @@
 			</DropdownMenu.Trigger>
 			<DropdownMenu.Content
 				class="w-(--bits-dropdown-menu-anchor-width) min-w-56 rounded-lg"
-				side={sidebar.isMobile ? "bottom" : "right"}
-				align="end"
+				side={dropdownSide}
+				align={contentAlign}
 				sideOffset={4}
 			>
 				<DropdownMenu.Label class="p-0 font-normal">

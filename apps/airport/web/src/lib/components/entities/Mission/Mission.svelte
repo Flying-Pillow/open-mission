@@ -6,7 +6,10 @@
     import ChevronDownIcon from "@tabler/icons-svelte/icons/chevron-down";
     import ChevronUpIcon from "@tabler/icons-svelte/icons/chevron-up";
     import type { MissionRuntimeEventEnvelope as AirportRuntimeEventEnvelope } from "../types";
-    import type { OperatorStatusData as OperatorStatus } from "../types";
+    import {
+        missionAgentSessionSnapshotSchema,
+        missionStatusSnapshotSchema,
+    } from "@flying-pillow/mission-core/schemas";
     import type { AgentSession as AgentSessionModel } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { setScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
@@ -15,15 +18,9 @@
     import ArtifactViewer from "$lib/components/entities/Artifact/ArtifactViewer.svelte";
     import MissionActionbar from "$lib/components/entities/Mission/MissionActionbar.svelte";
     import MissionCockpit from "$lib/components/entities/Mission/MissionCockpit.svelte";
-    import MissionControlTree from "$lib/components/entities/Mission/MissionControlTree.svelte";
     import MissionFileTree from "$lib/components/entities/Mission/MissionFileTree.svelte";
     import MissionTerminal from "$lib/components/entities/Mission/MissionTerminal.svelte";
-    import {
-        computeMissionControlState,
-        createInitialSelectedNodeId,
-        type MissionControlComputedState,
-    } from "$lib/components/entities/Mission/missionControl";
-    import { operatorStatusSchema } from "$lib/types/mission-control";
+    import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/schemas";
     import { Button } from "$lib/components/ui/button/index.js";
     import {
         ResizableHandle,
@@ -32,8 +29,22 @@
     } from "$lib/components/ui/resizable";
     import * as Tabs from "$lib/components/ui/tabs/index.js";
     import type { MissionFileTreeNode } from "$lib/types/mission-file-tree";
-    import type { MissionControlSnapshot } from "$lib/types/mission-control";
     import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
+
+    type MissionSelectionState = {
+        treeNodes: MissionTowerTreeNode[];
+        visibleTreeNodes: MissionTowerTreeNode[];
+        selectedNodeId?: string;
+        resolvedSelection?: {
+            stageId?: string;
+            taskId?: string;
+        };
+        activeArtifact?: {
+            displayLabel?: string;
+        };
+        activeArtifactPath?: string;
+        activeSessionId?: string;
+    };
 
     const appContext = getAppContext();
     const repositoryId = page.params.repositoryId?.trim() ?? "";
@@ -55,63 +66,41 @@
     const activeMission = $derived(missionScope.mission);
     const missionLoading = $derived(missionScope.loading);
     const missionLoadError = $derived(missionScope.error);
-    const controlSnapshot = $derived(activeMission?.controlSnapshot);
+    const projectionSnapshot = $derived(activeMission?.projectionSnapshot);
     const repositorySummary = $derived(activeRepository?.summary);
-    const missionWorktreePath = $derived(activeMission?.missionWorktreePath ?? "");
-    const missionId = $derived(activeMission?.missionId ?? missionScope.missionId ?? "");
+    const missionWorktreePath = $derived(
+        activeMission?.missionWorktreePath ?? "",
+    );
+    const missionId = $derived(
+        activeMission?.missionId ?? missionScope.missionId ?? "",
+    );
 
-    let controlLoading = $state(false);
-    let controlError = $state<string | null>(null);
+    let projectionLoading = $state(false);
+    let projectionError = $state<string | null>(null);
     let runtimeError = $state<string | null>(null);
     let actionRefreshNonce = $state(0);
     let artifactPanelMode = $state<"view" | "edit">("view");
-    let leftTreeMode = $state<"control" | "files">("control");
     let rightPanelMode = $state<"terminal" | "agent">("terminal");
     let lastSelectedAgentSessionId = $state<string | null>(null);
     let selectedWorktreeNode = $state<MissionFileTreeNode | null>(null);
     let artifactPanelSourceKey = $state<string | null>(null);
-    let controlRefreshTimer: number | null = null;
+    let projectionRefreshTimer: number | null = null;
     let refreshQueued = false;
     let progressCollapsed = $state(false);
 
     const selectedNodeId = $derived.by(() => {
-        if (!controlSnapshot) {
+        if (!projectionSnapshot) {
             return undefined;
         }
 
-        const treeNodes = controlSnapshot.operatorStatus.tower?.treeNodes ?? [];
-        const requestedNodeId = appContext.airport.activeMissionSelectedNodeId;
-
-        if (
-            requestedNodeId &&
-            treeNodes.some((node) => node.id === requestedNodeId)
-        ) {
-            return requestedNodeId;
-        }
-
-        return createInitialSelectedNodeId(
-            controlSnapshot.operatorStatus,
-            requestedNodeId,
-        );
+        return appContext.airport.activeMissionSelectedNodeId;
     });
-    const selectionState = $derived.by((): MissionControlComputedState => {
-        if (!controlSnapshot) {
-            return {
-                treeNodes: [],
-                visibleTreeNodes: [],
-            };
-        }
-
-        return computeMissionControlState({
-            status: controlSnapshot.operatorStatus,
+    const selectionState = $derived.by((): MissionSelectionState => {
+        return {
+            treeNodes: [],
+            visibleTreeNodes: [],
             selectedNodeId,
-        });
-    });
-    const missionOutline = $derived({
-        title: controlSnapshot?.operatorStatus.title,
-        currentStageId: controlSnapshot?.operatorStatus.workflow?.currentStageId,
-        briefPath: controlSnapshot?.operatorStatus.productFiles?.brief,
-        treeNodes: controlSnapshot?.operatorStatus.tower?.treeNodes ?? [],
+        };
     });
     const activeArtifactPath = $derived(selectionState.activeArtifactPath);
     const selectedWorktreeFile = $derived(
@@ -121,7 +110,8 @@
         selectedWorktreeFile?.absolutePath ?? activeArtifactPath,
     );
     const displayArtifactLabel = $derived(
-        selectedWorktreeFile?.name ?? selectionState.activeArtifact?.displayLabel,
+        selectedWorktreeFile?.name ??
+            selectionState.activeArtifact?.displayLabel,
     );
     const displayArtifact = $derived.by((): ArtifactEntity | undefined => {
         if (!activeMission || !displayArtifactPath) {
@@ -132,7 +122,7 @@
             filePath: displayArtifactPath,
             ...(displayArtifactLabel ? { label: displayArtifactLabel } : {}),
             ...(displayStageId ? { stageId: displayStageId } : {}),
-            ...(displayTaskId ? { taskId: displayTaskId } : {})
+            ...(displayTaskId ? { taskId: displayTaskId } : {}),
         });
     });
     const displayStageId = $derived(
@@ -161,40 +151,61 @@
     const resolvedSession = $derived(
         selectionState.activeSessionId && activeMission
             ? activeMission.getSession(selectionState.activeSessionId)
-            : activeMission ? resolvePreferredTaskSession(
-                activeMission,
-                selectionState.resolvedSelection?.taskId,
-            ) : undefined,
+            : activeMission
+              ? resolvePreferredTaskSession(
+                    activeMission,
+                    selectionState.resolvedSelection?.taskId,
+                )
+              : undefined,
     );
 
-    const operatorStatus = $derived(
-        controlSnapshot?.operatorStatus as OperatorStatus | undefined,
+    const missionStatus = $derived(projectionSnapshot?.status);
+    const workflowLifecycle = $derived(
+        projectionSnapshot?.workflow?.lifecycle ??
+            activeMission?.workflowLifecycle,
     );
-    const workflowLifecycle = $derived(operatorStatus.workflow?.lifecycle);
-    const workflowUpdatedAt = $derived(operatorStatus.workflow?.updatedAt);
-    const currentStageId = $derived(operatorStatus.workflow?.currentStageId);
-    const missionTitle = $derived(operatorStatus?.title ?? activeMission?.missionId ?? missionScope.missionId);
+    const workflowUpdatedAt = $derived(
+        projectionSnapshot?.workflow?.updatedAt ??
+            activeMission?.workflowUpdatedAt,
+    );
+    const currentStageId = $derived(
+        projectionSnapshot?.workflow?.currentStageId,
+    );
+    const missionTitle = $derived(
+        missionStatus?.title ??
+            activeMission?.missionId ??
+            missionScope.missionId,
+    );
 
     onMount(async () => {
         try {
-            const mission = await appContext.application.openMissionRoute({
-                repositoryId,
+            const repository =
+                await appContext.application.openRepositoryRoute(repositoryId);
+            const mission = await appContext.refreshMission({
                 missionId: routeMissionId,
+                repositoryRootPath: repository.repositoryRootPath,
+            });
+            appContext.setActiveMission(routeMissionId);
+            const projectionSnapshot = await mission.getProjectionSnapshot();
+            mission.setRouteState({
+                projectionSnapshot,
+                worktreePath: repository.repositoryRootPath,
             });
             missionScope.mission = mission;
-            missionScope.repository = appContext.application.resolveRepository(repositoryId);
+            missionScope.repository = repository;
             missionScope.error = null;
         } catch (error) {
             missionScope.mission = undefined;
             missionScope.repository = undefined;
-            missionScope.error = error instanceof Error ? error.message : String(error);
+            missionScope.error =
+                error instanceof Error ? error.message : String(error);
         } finally {
             missionScope.loading = false;
         }
     });
 
     $effect(() => {
-        if (!controlSnapshot) {
+        if (!projectionSnapshot) {
             return;
         }
 
@@ -254,8 +265,8 @@
 
         return () => {
             subscription.dispose();
-            if (controlRefreshTimer !== null) {
-                window.clearTimeout(controlRefreshTimer);
+            if (projectionRefreshTimer !== null) {
+                window.clearTimeout(projectionRefreshTimer);
             }
         };
     });
@@ -264,74 +275,68 @@
         return stageId ? `Current stage ${stageId}` : "No active stage";
     }
 
-    async function refreshControlSnapshot(): Promise<void> {
+    async function refreshProjectionSnapshot(): Promise<void> {
         if (!missionWorktreePath || !activeMission) {
             return;
         }
 
-        if (controlLoading) {
+        if (projectionLoading) {
             refreshQueued = true;
             return;
         }
 
-        controlLoading = true;
-        controlError = null;
+        projectionLoading = true;
+        projectionError = null;
         try {
-            const nextSnapshot = await activeMission.getControlSnapshot();
+            const nextSnapshot = await activeMission.getProjectionSnapshot();
             activeMission.setRouteState({
-                controlSnapshot: nextSnapshot,
+                projectionSnapshot: nextSnapshot,
                 worktreePath: missionWorktreePath,
             });
             appContext.setActiveMissionOutline({
-                title: nextSnapshot.operatorStatus.title,
-                currentStageId: nextSnapshot.operatorStatus.workflow?.currentStageId,
-                briefPath: nextSnapshot.operatorStatus.productFiles?.brief,
-                treeNodes: nextSnapshot.operatorStatus.tower?.treeNodes ?? [],
+                title: nextSnapshot.status?.title,
+                currentStageId: nextSnapshot.workflow?.currentStageId,
+                treeNodes: [],
             });
         } catch (error) {
-            controlError =
+            projectionError =
                 error instanceof Error ? error.message : String(error);
         } finally {
-            controlLoading = false;
+            projectionLoading = false;
             if (refreshQueued) {
                 refreshQueued = false;
-                void refreshControlSnapshot();
+                void refreshProjectionSnapshot();
             }
         }
     }
 
-    function scheduleControlRefresh(): void {
-        if (controlRefreshTimer !== null) {
-            window.clearTimeout(controlRefreshTimer);
+    function scheduleProjectionRefresh(): void {
+        if (projectionRefreshTimer !== null) {
+            window.clearTimeout(projectionRefreshTimer);
         }
-        controlRefreshTimer = window.setTimeout(() => {
-            controlRefreshTimer = null;
-            void refreshControlSnapshot();
+        projectionRefreshTimer = window.setTimeout(() => {
+            projectionRefreshTimer = null;
+            void refreshProjectionSnapshot();
         }, 150);
     }
 
-    function applyMissionStatusEvent(
-        event: AirportRuntimeEventEnvelope,
-    ): void {
+    function applyMissionStatusEvent(event: AirportRuntimeEventEnvelope): void {
         if (!activeMission) {
             return;
         }
 
-        const payload = event.payload as {
-            status?: unknown;
-        };
-        if (!payload.status) {
+        if (event.type !== "mission.status") {
             return;
         }
 
-        const status = operatorStatusSchema.parse(payload.status);
+        const payload = event.payload as { status?: unknown };
+        const status = missionStatusSnapshotSchema.parse(payload.status);
 
-        activeMission.applyOperatorStatus(status);
+        activeMission.applyMissionStatus(status);
         appContext.setActiveMissionOutline({
             title: status.title,
             currentStageId: status.workflow?.currentStageId,
-            briefPath: status.productFiles?.brief,
-            treeNodes: status.tower?.treeNodes ?? [],
+            treeNodes: [],
         });
     }
 
@@ -344,7 +349,17 @@
                 return;
             case "mission.actions.changed":
                 actionRefreshNonce += 1;
-                scheduleControlRefresh();
+                scheduleProjectionRefresh();
+                return;
+            case "session.event":
+                activeMission?.applyAgentSessionSnapshot(
+                    missionAgentSessionSnapshotSchema.parse(
+                        (event.payload as { session?: unknown }).session,
+                    ),
+                );
+                return;
+            case "session.lifecycle":
+                scheduleProjectionRefresh();
                 return;
             default:
                 return;
@@ -352,7 +367,7 @@
     }
 
     async function handleMissionMutated(): Promise<void> {
-        await refreshControlSnapshot();
+        await refreshProjectionSnapshot();
     }
 
     function handleSelectNode(nodeId: string): void {
@@ -417,22 +432,22 @@
         >
             Loading mission snapshot...
         </section>
-    {:else if missionLoadError || !activeRepository || !activeMission || !controlSnapshot || !repositorySummary}
+    {:else if missionLoadError || !activeRepository || !activeMission || !projectionSnapshot || !repositorySummary}
         <section
             class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
         >
-            <h2 class="text-lg font-semibold text-foreground">Mission control</h2>
+            <h2 class="text-lg font-semibold text-foreground">Mission</h2>
             <p class="mt-3 text-sm text-rose-600">
                 {missionLoadError ?? "Mission snapshot could not be loaded."}
             </p>
         </section>
     {:else}
-        {#if controlError || runtimeError}
+        {#if projectionError || runtimeError}
             <section
                 class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
             >
-                {#if controlError}
-                    <p class="text-sm text-rose-600">{controlError}</p>
+                {#if projectionError}
+                    <p class="text-sm text-rose-600">{projectionError}</p>
                 {/if}
                 {#if runtimeError}
                     <p class="text-sm text-rose-600">{runtimeError}</p>
@@ -443,7 +458,9 @@
         <section
             class={`min-h-0 gap-4 rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm ${progressCollapsed ? "grid grid-rows-[auto]" : "grid grid-rows-[auto_minmax(0,1fr)]"}`}
         >
-            <header class={`space-y-4 ${progressCollapsed ? "" : "border-b pb-4"}`}>
+            <header
+                class={`space-y-4 ${progressCollapsed ? "" : "border-b pb-4"}`}
+            >
                 <div
                     class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between"
                 >
@@ -464,13 +481,20 @@
                                 <span>{activeMission.missionId}</span>
                                 <span>{workflowLifecycle ?? "unknown"}</span>
                                 <span>{currentStageLabel(currentStageId)}</span>
-                                <span>Updated {workflowUpdatedAt ?? "unknown"}</span>
-                                <span>{repositorySummary.repositoryRootPath}</span>
+                                <span
+                                    >Updated {workflowUpdatedAt ??
+                                        "unknown"}</span
+                                >
+                                <span
+                                    >{repositorySummary.repositoryRootPath}</span
+                                >
                             </div>
                         </div>
                     </div>
 
-                    <div class="flex items-start gap-2 self-start xl:justify-end">
+                    <div
+                        class="flex items-start gap-2 self-start xl:justify-end"
+                    >
                         <MissionActionbar
                             refreshNonce={actionRefreshNonce}
                             onActionExecuted={handleMissionMutated}
@@ -505,63 +529,30 @@
             </header>
 
             {#if !progressCollapsed}
-                <MissionCockpit {selectionState} {currentStageId} onSelectNode={handleSelectNode} />
+                <MissionCockpit
+                    {selectionState}
+                    {currentStageId}
+                    onSelectNode={handleSelectNode}
+                />
             {/if}
         </section>
 
         <ResizablePaneGroup
             direction="horizontal"
             class="min-h-0 flex-1 overflow-hidden"
-            autoSaveId={`mission-control:${missionId}`}
+            autoSaveId={`mission:${missionId}`}
         >
             <ResizablePane
                 defaultSize={24}
                 minSize={18}
                 class="flex h-full min-h-0 flex-col p-2"
             >
-                <Tabs.Root
-                    bind:value={leftTreeMode}
+                <MissionFileTree
+                    activePath={selectedWorktreeFile?.absolutePath}
+                    refreshNonce={actionRefreshNonce}
                     class="min-h-0 flex-1 overflow-hidden rounded-2xl border bg-card/70 backdrop-blur-sm"
-                >
-                    <div class="border-b px-3 py-2">
-                        <Tabs.List class="w-full">
-                            <Tabs.Trigger value="control"
-                                >Mission Control</Tabs.Trigger
-                            >
-                            <Tabs.Trigger value="files"
-                                >Mission Files</Tabs.Trigger
-                            >
-                        </Tabs.List>
-                    </div>
-
-                    {#if leftTreeMode === "control"}
-                        <Tabs.Content
-                            value="control"
-                            class="min-h-0 flex-1 overflow-hidden p-0"
-                        >
-                            <MissionControlTree
-                                outline={missionOutline}
-                                {missionId}
-                                activeNodeId={selectedNodeId}
-                                title="Mission control"
-                                class="h-full rounded-none border-0 bg-transparent"
-                                onSelectNode={handleSelectNode}
-                            />
-                        </Tabs.Content>
-                    {:else}
-                        <Tabs.Content
-                            value="files"
-                            class="min-h-0 flex-1 overflow-hidden p-0"
-                        >
-                            <MissionFileTree
-                                activePath={selectedWorktreeFile?.absolutePath}
-                                refreshNonce={actionRefreshNonce}
-                                class="h-full rounded-none border-0 bg-transparent"
-                                onSelectPath={handleSelectWorktreeNode}
-                            />
-                        </Tabs.Content>
-                    {/if}
-                </Tabs.Root>
+                    onSelectPath={handleSelectWorktreeNode}
+                />
             </ResizablePane>
 
             <ResizableHandle withHandle />
@@ -610,14 +601,19 @@
 
                     <div class="relative min-h-0 flex-1 overflow-hidden p-0">
                         {#if rightPanelMode === "terminal"}
-                            <div class="absolute inset-0 min-h-0 overflow-hidden">
+                            <div
+                                class="absolute inset-0 min-h-0 overflow-hidden"
+                            >
                                 <MissionTerminal />
                             </div>
                         {:else}
-                            <div class="absolute inset-0 min-h-0 overflow-hidden">
+                            <div
+                                class="absolute inset-0 min-h-0 overflow-hidden"
+                            >
                                 <AgentSession
                                     refreshNonce={actionRefreshNonce}
-                                    stageId={selectionState.resolvedSelection?.stageId}
+                                    stageId={selectionState.resolvedSelection
+                                        ?.stageId}
                                     session={resolvedSession}
                                     onActionExecuted={handleMissionMutated}
                                 />

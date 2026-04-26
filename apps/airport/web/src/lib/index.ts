@@ -29,12 +29,12 @@ export type {
     AgentSession,
     AirportHomeSnapshot,
     AirportRuntimeEventEnvelope,
-    Mission as MissionData,
-    MissionRuntimeMissionCommandInput,
-    MissionRuntimeSessionCommandInput,
+    MissionSnapshot as MissionData,
+    MissionMissionCommand,
+    MissionSessionCommand,
     MissionSessionTerminalHandle,
     MissionSessionTerminalSnapshot,
-    MissionRuntimeTaskCommandInput,
-    MissionRuntimeSnapshot,
+    MissionTaskCommand,
+    MissionSnapshot,
     Repository as RepositoryData
 } from '@flying-pillow/mission-core/schemas';

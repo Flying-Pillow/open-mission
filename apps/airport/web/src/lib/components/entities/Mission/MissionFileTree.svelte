@@ -59,7 +59,7 @@
                 }
 
                 const payload: MissionFileTreeResponse =
-                    await mission.getWorktree();
+                    await mission.getWorktree({ executionContext: "render" });
                 if (currentVersion !== requestVersion) {
                     return;
                 }

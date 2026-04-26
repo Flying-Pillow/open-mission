@@ -1,7 +1,7 @@
 // /apps/airport/web/src/lib/components/entities/Repository/Repository.svelte.ts: OO browser entity for repository data with remote issue and mission commands.
 import type {
     GitHubIssueDetail,
-    MissionRuntimeSnapshot,
+    MissionSnapshot,
     RepositorySnapshot,
     TrackedIssueSummary
 } from '@flying-pillow/mission-core/schemas';
@@ -18,7 +18,7 @@ import { qry } from '../../../../routes/api/entities/remote/query.remote';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 import { Mission } from '$lib/components/entities/Mission/Mission.svelte.js';
 
-export type RepositoryMissionResolver = (snapshot: MissionRuntimeSnapshot) => Mission;
+export type RepositoryMissionResolver = (snapshot: MissionSnapshot) => Mission;
 export type RepositorySnapshotLoader = (input: {
     repositoryId: string;
     repositoryRootPath?: string;
@@ -260,7 +260,7 @@ export class Repository implements EntityModel<RepositorySnapshot> {
         };
     }
 
-    private createSelectedMission(snapshot?: MissionRuntimeSnapshot): Mission | undefined {
+    private createSelectedMission(snapshot?: MissionSnapshot): Mission | undefined {
         if (!snapshot) {
             return undefined;
         }

@@ -9,12 +9,12 @@ import type {
     Mission,
     MissionRuntimeMissionCommandInput,
     MissionRuntimeSessionCommandInput,
-    MissionRuntimeSnapshot,
     MissionRuntimeTaskCommandInput,
     MissionSessionTerminalHandle,
     Stage,
     Task
 } from './MissionRuntime.js';
+import type { MissionSnapshot } from './Mission.js';
 import type {
     AirportRuntimeEventEnvelope,
     AirportRuntimeEventType
@@ -226,8 +226,8 @@ export type {
     MissionReference,
     MissionRuntimeMissionCommandInput,
     MissionRuntimeSessionCommandInput,
-    MissionRuntimeSnapshot,
     MissionRuntimeTaskCommandInput,
+    MissionSnapshot,
     MissionSessionTerminalHandle,
     Repository,
     RepositorySnapshot,

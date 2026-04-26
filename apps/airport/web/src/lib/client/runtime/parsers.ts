@@ -6,15 +6,13 @@ import type {
     MissionTerminalSnapshot,
     MissionTerminalSocketServerMessage,
     RepositorySnapshot,
-    TrackedIssueSummary,
-    MissionRuntimeSnapshot
+    TrackedIssueSummary
 } from '@flying-pillow/mission-core/schemas';
 import {
     airportRuntimeEventEnvelopeSchema,
     githubIssueDetailSchema,
     missionRuntimeMissionCommandSchema,
     missionRuntimeSessionCommandSchema,
-    missionRuntimeSnapshotSchema,
     missionRuntimeTaskCommandSchema,
     repositorySchema,
     repositorySnapshotSchema,
@@ -29,10 +27,6 @@ export function parseRepositorySummary(value: unknown): RepositorySnapshot['repo
 
 export function parseRepositorySnapshot(value: unknown): RepositorySnapshot {
     return repositorySnapshotSchema.parse(value);
-}
-
-export function parseMissionRuntimeSnapshot(value: unknown): MissionRuntimeSnapshot {
-    return missionRuntimeSnapshotSchema.parse(value);
 }
 
 export function parseAirportRuntimeEventEnvelope(value: unknown): AirportRuntimeEventEnvelope {
