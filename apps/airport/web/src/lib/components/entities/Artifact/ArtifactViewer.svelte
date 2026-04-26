@@ -1,11 +1,9 @@
 <script lang="ts">
     import type { Artifact } from "$lib/components/entities/Artifact/Artifact.svelte.js";
-    import ArtifactActionbar from "$lib/components/entities/Artifact/ArtifactActionbar.svelte";
     import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import PencilIcon from "@tabler/icons-svelte/icons/pencil";
     import { Button } from "$lib/components/ui/button/index.js";
     import MarkdownViewer from "$lib/components/viewers/markdown.svelte";
-    import TaskActionbar from "$lib/components/entities/Task/TaskActionbar.svelte";
 
     let {
         refreshNonce,
@@ -45,23 +43,6 @@
                 Edit
             </Button>
         {/if}
-
-        <div class="flex flex-wrap items-center gap-2">
-            <TaskActionbar
-                {refreshNonce}
-                stageId={artifact?.stageId}
-                taskId={artifact?.taskId}
-                {onActionExecuted}
-            />
-
-            <ArtifactActionbar
-                {refreshNonce}
-                stageId={artifact?.stageId}
-                taskId={artifact?.taskId}
-                artifactPath={artifact?.filePath}
-                {onActionExecuted}
-            />
-        </div>
     </header>
 
     <div class="min-h-0 overflow-auto p-2">

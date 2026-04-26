@@ -10,6 +10,7 @@ import type {
 const IGNORED_ENTRY_NAMES = new Set([
 	".git",
 	"node_modules",
+	".pnpm-store",
 	".svelte-kit",
 	".turbo",
 	"dist",

@@ -1,5 +1,6 @@
 // /apps/airport/web/src/lib/components/entities/Task/Task.svelte.ts: OO browser entity for workflow tasks exposed by a mission snapshot.
 import type {
+    EntityCommandDescriptor,
     MissionTaskSnapshot
 } from '@flying-pillow/mission-core/schemas';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
@@ -16,9 +17,8 @@ export type TaskStartOptions = {
 };
 
 export type TaskCommandOwner = {
-    startTask(taskId: string, options?: TaskStartOptions): Promise<void>;
-    completeTask(taskId: string): Promise<void>;
-    reopenTask(taskId: string): Promise<void>;
+    listTaskCommands(taskId: string, input?: { executionContext?: 'event' | 'render' }): Promise<{ commands: EntityCommandDescriptor[] }>;
+    executeTaskCommand(taskId: string, commandId: string, input?: unknown): Promise<void>;
 };
 
 export class Task implements EntityModel<TaskSnapshot> {
@@ -51,6 +51,14 @@ export class Task implements EntityModel<TaskSnapshot> {
         return this.taskId;
     }
 
+    public get entityName(): 'Task' {
+        return 'Task';
+    }
+
+    public get entityId(): string {
+        return this.taskId;
+    }
+
     public get stageId(): string {
         return this.snapshot.stageId;
     }
@@ -72,17 +80,26 @@ export class Task implements EntityModel<TaskSnapshot> {
     }
 
     public async start(options: TaskStartOptions = {}): Promise<this> {
-        await this.owner.startTask(this.taskId, options);
+        await this.executeCommand('task.start', options);
         return this;
     }
 
+    public async listCommands(input: { executionContext?: 'event' | 'render' } = {}): Promise<EntityCommandDescriptor[]> {
+        const snapshot = await this.owner.listTaskCommands(this.taskId, input);
+        return structuredClone(snapshot.commands);
+    }
+
+    public async executeCommand(commandId: string, input?: unknown): Promise<void> {
+        await this.owner.executeTaskCommand(this.taskId, commandId, input);
+    }
+
     public async complete(): Promise<this> {
-        await this.owner.completeTask(this.taskId);
+        await this.executeCommand('task.complete');
         return this;
     }
 
     public async reopen(): Promise<this> {
-        await this.owner.reopenTask(this.taskId);
+        await this.executeCommand('task.reopen');
         return this;
     }
 

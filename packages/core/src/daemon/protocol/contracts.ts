@@ -34,6 +34,27 @@ import type {
 	EntityQueryInvocation,
 	EntityRemoteResult
 } from '../../schemas/EntityRemote.js';
+import type {
+	AgentSessionEntityReference,
+	MissionAgentSessionSnapshot
+} from '../../schemas/AgentSession.js';
+import type {
+	ArtifactEntityReference,
+	MissionArtifactSnapshot
+} from '../../schemas/Artifact.js';
+import type {
+	MissionActionListSnapshot,
+	MissionEntityReference,
+	MissionSnapshot
+} from '../../schemas/Mission.js';
+import type {
+	MissionStageSnapshot,
+	StageEntityReference
+} from '../../schemas/Stage.js';
+import type {
+	MissionTaskSnapshot,
+	TaskEntityReference
+} from '../../schemas/Task.js';
 
 export type MissionAgentPrimitiveValue = string | number | boolean | null;
 
@@ -311,7 +332,7 @@ export type MissionAgentEvent =
 		state: MissionAgentSessionState;
 	};
 
-export const PROTOCOL_VERSION = 26;
+export const PROTOCOL_VERSION = 27;
 
 export type Method =
 	| 'ping'
@@ -608,12 +629,49 @@ export type Notification =
 		workspaceRoot: string;
 		missionId: string;
 		revision: string;
+		reference?: MissionEntityReference;
+		actions?: MissionActionListSnapshot;
+	}
+	| {
+		type: 'mission.snapshot.changed';
+		workspaceRoot: string;
+		missionId: string;
+		reference: MissionEntityReference;
+		snapshot: MissionSnapshot;
 	}
 	| {
 		type: 'mission.status';
 		workspaceRoot: string;
 		missionId: string;
 		status: Mission;
+	}
+	| {
+		type: 'stage.snapshot.changed';
+		workspaceRoot: string;
+		missionId: string;
+		reference: StageEntityReference;
+		snapshot: MissionStageSnapshot;
+	}
+	| {
+		type: 'task.snapshot.changed';
+		workspaceRoot: string;
+		missionId: string;
+		reference: TaskEntityReference;
+		snapshot: MissionTaskSnapshot;
+	}
+	| {
+		type: 'artifact.snapshot.changed';
+		workspaceRoot: string;
+		missionId: string;
+		reference: ArtifactEntityReference;
+		snapshot: MissionArtifactSnapshot;
+	}
+	| {
+		type: 'agentSession.snapshot.changed';
+		workspaceRoot: string;
+		missionId: string;
+		reference: AgentSessionEntityReference;
+		snapshot: MissionAgentSessionSnapshot;
 	}
 	| {
 		type: 'session.console';

@@ -186,7 +186,17 @@ export class DaemonGateway {
         const missionId = input.missionId?.trim();
         const daemon = await this.connectDedicatedDaemonClient(input.surfacePath);
         await daemon.client.request<null>('event.subscribe', {
-            eventTypes: ['mission.actions.changed', 'mission.status', 'session.event', 'session.lifecycle'],
+            eventTypes: [
+                'mission.snapshot.changed',
+                'mission.actions.changed',
+                'mission.status',
+                'stage.snapshot.changed',
+                'task.snapshot.changed',
+                'artifact.snapshot.changed',
+                'agentSession.snapshot.changed',
+                'session.event',
+                'session.lifecycle'
+            ],
             ...(missionId ? { missionId } : {})
         });
         const subscription = daemon.client.onDidEvent((event) => {
@@ -404,8 +414,13 @@ export class DaemonGateway {
         }
 
         switch (event.type) {
+            case 'mission.snapshot.changed':
             case 'mission.actions.changed':
             case 'mission.status':
+            case 'stage.snapshot.changed':
+            case 'task.snapshot.changed':
+            case 'artifact.snapshot.changed':
+            case 'agentSession.snapshot.changed':
             case 'session.console':
             case 'session.terminal':
             case 'session.event':
@@ -432,9 +447,20 @@ export class DaemonGateway {
         switch (event.type) {
             case 'airport.state':
                 return { snapshot: event.snapshot };
+            case 'mission.snapshot.changed':
+            case 'stage.snapshot.changed':
+            case 'task.snapshot.changed':
+            case 'artifact.snapshot.changed':
+            case 'agentSession.snapshot.changed':
+                return {
+                    reference: event.reference,
+                    snapshot: event.snapshot
+                };
             case 'mission.actions.changed':
                 return {
                     missionId: event.missionId,
+                    ...(event.reference ? { reference: event.reference } : {}),
+                    ...(event.actions ? { actions: event.actions } : {}),
                     ...(event.revision ? { revision: event.revision } : {})
                 };
             case 'mission.status':
@@ -468,8 +494,17 @@ export class DaemonGateway {
                 return event.snapshot.state.airport.substrate.lastObservedAt
                     ?? event.snapshot.state.airport.substrate.lastAppliedAt
                     ?? new Date().toISOString();
+            case 'mission.snapshot.changed':
+                return event.snapshot.workflow?.updatedAt
+                    ?? event.snapshot.status?.workflow?.updatedAt
+                    ?? new Date().toISOString();
             case 'mission.status':
                 return event.status.updatedAt ?? new Date().toISOString();
+            case 'stage.snapshot.changed':
+            case 'task.snapshot.changed':
+            case 'artifact.snapshot.changed':
+            case 'agentSession.snapshot.changed':
+                return new Date().toISOString();
             case 'session.console':
             case 'session.terminal':
                 return new Date().toISOString();
@@ -484,8 +519,13 @@ export class DaemonGateway {
 
     private resolveMissionId(event: Notification): string | undefined {
         switch (event.type) {
+            case 'mission.snapshot.changed':
             case 'mission.actions.changed':
             case 'mission.status':
+            case 'stage.snapshot.changed':
+            case 'task.snapshot.changed':
+            case 'artifact.snapshot.changed':
+            case 'agentSession.snapshot.changed':
             case 'session.console':
             case 'session.terminal':
             case 'session.event':
@@ -500,8 +540,13 @@ export class DaemonGateway {
     private shouldForwardRuntimeEvent(event: Notification): boolean {
         switch (event.type) {
             case 'airport.state':
+            case 'mission.snapshot.changed':
             case 'mission.actions.changed':
             case 'mission.status':
+            case 'stage.snapshot.changed':
+            case 'task.snapshot.changed':
+            case 'artifact.snapshot.changed':
+            case 'agentSession.snapshot.changed':
             case 'session.event':
             case 'session.lifecycle':
                 return true;

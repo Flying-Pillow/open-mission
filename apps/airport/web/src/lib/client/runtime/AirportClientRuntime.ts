@@ -5,6 +5,7 @@ import type {
 } from '@flying-pillow/mission-core/schemas';
 import { Mission } from '$lib/components/entities/Mission/Mission.svelte.js';
 import { EntityRuntimeStore } from '$lib/client/runtime/EntityRuntimeStore';
+import { ChildEntityCommandTransport } from '$lib/client/runtime/transport/ChildEntityCommandTransport';
 import { MissionCommandTransport } from '$lib/client/runtime/transport/MissionCommandTransport';
 import { MissionRuntimeTransport } from '$lib/client/runtime/transport/MissionRuntimeTransport';
 import type { RuntimeSubscription } from '$lib/client/runtime/transport/EntityRuntimeTransport';
@@ -14,6 +15,7 @@ type EventSourceFactory = (url: string) => EventSource;
 export class AirportClientRuntime {
     private readonly missionTransport: MissionRuntimeTransport;
     private readonly missionCommands: MissionCommandTransport;
+    private readonly childEntityCommands: ChildEntityCommandTransport;
     private readonly missions: EntityRuntimeStore<string, MissionSnapshot, Mission>;
 
     public constructor(input: {
@@ -23,9 +25,10 @@ export class AirportClientRuntime {
     } = {}) {
         this.missionTransport = new MissionRuntimeTransport(input);
         this.missionCommands = new MissionCommandTransport(input);
+        this.childEntityCommands = new ChildEntityCommandTransport(input);
         this.missions = new EntityRuntimeStore({
             loadSnapshot: (missionId) => this.missionTransport.getMissionSnapshot(missionId),
-            createEntity: (snapshot, loadSnapshot) => new Mission(snapshot, loadSnapshot, this.missionCommands),
+            createEntity: (snapshot, loadSnapshot) => new Mission(snapshot, loadSnapshot, this.missionCommands, this.childEntityCommands),
             selectId: (snapshot) => snapshot.mission.missionId
         });
     }

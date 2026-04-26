@@ -31,10 +31,8 @@ export type {
     AirportRuntimeEventEnvelope,
     MissionSnapshot as MissionData,
     MissionMissionCommand,
-    MissionSessionCommand,
     MissionSessionTerminalHandle,
     MissionSessionTerminalSnapshot,
-    MissionTaskCommand,
     MissionSnapshot,
     Repository as RepositoryData
 } from '@flying-pillow/mission-core/schemas';

@@ -1,28 +1,21 @@
 <script lang="ts">
-    import ScopedActionbar from "$lib/components/entities/Actionbar/ScopedActionbar.svelte";
-    import type { MissionStageIdData as MissionStageId } from "../types";
+    import EntityActionbar from "$lib/components/entities/Actionbar/EntityActionbar.svelte";
+    import type { AgentSession } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
 
     let {
         refreshNonce,
-        stageId,
-        taskId,
-        sessionId,
+        session,
         onActionExecuted,
     }: {
         refreshNonce: number;
-        stageId?: MissionStageId;
-        taskId?: string;
-        sessionId?: string;
+        session?: AgentSession;
         onActionExecuted: () => Promise<void>;
     } = $props();
 </script>
 
-<ScopedActionbar
+<EntityActionbar
     {refreshNonce}
-    {stageId}
-    {taskId}
-    {sessionId}
-    scope="session"
+    entity={session}
     defaultVariant="outline"
     buttonClass="shadow-sm"
     showEmptyState={false}

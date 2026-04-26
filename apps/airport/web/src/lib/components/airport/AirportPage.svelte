@@ -1,5 +1,5 @@
 <script lang="ts">
-    import AirportHomeAddRepository from "$lib/components/airport/home/airport-home-add-repository.svelte";
+    import GithubRepositoryList from "$lib/components/entities/Repository/GithubRepositoryList.svelte";
     import RepositoryList from "$lib/components/entities/Repository/RepositoryList.svelte";
 </script>
 
@@ -9,6 +9,8 @@
     >
         <RepositoryList />
 
-        <AirportHomeAddRepository />
+        <section class="flex min-h-[36rem] flex-col xl:h-full xl:min-h-0">
+            <GithubRepositoryList />
+        </section>
     </div>
 </div>

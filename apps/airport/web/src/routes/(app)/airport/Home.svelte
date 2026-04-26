@@ -1,8 +1,8 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { getAirportHomeData } from "./home.remote";
-    import AirportHomeAddRepository from "$lib/components/airport/home/airport-home-add-repository.svelte";
-    import AirportHomeStatus from "$lib/components/airport/home/airport-home-status.svelte";
+    import GithubRepositoryList from "$lib/components/entities/Repository/GithubRepositoryList.svelte";
+    import AirportHomeStatus from "$lib/components/airport/airport-status.svelte";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import type { AppContextServerValue } from "$lib/client/context/app-context.svelte";
     import RepositoryList from "$lib/components/entities/Repository/RepositoryList.svelte";
@@ -93,22 +93,7 @@
             appContext.syncServerContext(nextData.appContext);
         }
 
-        const nextSelectedRepository = nextData.airportHome.repositories.find(
-            (repository) =>
-                repository.repositoryRootPath ===
-                nextData.airportHome.selectedRepositoryRoot,
-        );
-
-        appContext.setRepositories(nextData.airportHome.repositories);
-        appContext.setActiveRepository(
-            nextSelectedRepository
-                ? {
-                      repositoryId: nextSelectedRepository.repositoryId,
-                      repositoryRootPath:
-                          nextSelectedRepository.repositoryRootPath,
-                  }
-                : undefined,
-        );
+        appContext.application.syncAirportRouteData(nextData);
         appContext.setActiveMission(undefined);
         appContext.setActiveMissionOutline(undefined);
         appContext.setActiveMissionSelectedNodeId(undefined);
@@ -158,7 +143,7 @@
                 description="Your saved local repositories, ready to open and work from."
             />
 
-            <AirportHomeAddRepository />
+            <GithubRepositoryList />
         </div>
     {/if}
 </div>

@@ -2,7 +2,7 @@
 title: "SPEC: #29 - Architectural Reset: Strict OOD Entity Architecture For Airport And Daemon"
 artifact: "spec"
 createdAt: "2026-04-22T14:54:07.971Z"
-updatedAt: "2026-04-26T16:05:00.000+00:00"
+updatedAt: "2026-04-26T16:25:00.000+00:00"
 stage: "spec"
 ---
 
@@ -560,6 +560,21 @@ type ActionableEntity = {
 
 `EntityActionbar` receives an `ActionableEntity` and renders that entity's commands. It must not know about Mission, Stage, Task, Artifact, AgentSession, scopes, target ids, action contexts, workflow stages, artifact paths, or session ids. The entity is the boundary.
 
+### Schema Ownership
+
+Stage, Task, Artifact, and AgentSession are first-class schema owners. Their public identity, reference, snapshot, command discovery, command execution, acknowledgement, and remote payload/result schemas must live in dedicated schema modules rather than being added as Mission-owned schema bulk.
+
+Required canonical schema modules:
+
+- `packages/core/src/schemas/Stage.ts`
+- `packages/core/src/schemas/Task.ts`
+- `packages/core/src/schemas/Artifact.ts`
+- `packages/core/src/schemas/AgentSession.ts`
+
+`packages/core/src/schemas/Mission.ts` may import and compose those schemas because Mission snapshots include child projections. Mission must not be the contract owner for child entity command surfaces. This is the distinction that keeps Mission as the aggregate/invariant authority without turning it into a schema dumping ground.
+
+`packages/core/src/schemas/EntityRemote.ts` owns only generic remote primitives such as entity invocation, command descriptor, command input descriptor, command list snapshot, and acknowledgement base schemas.
+
 ### Entity References
 
 Child entity remotes use typed references instead of contextual filtering objects.
@@ -693,25 +708,25 @@ The clean layering is:
 
 `Stage` owns stage identity, lifecycle, task membership, and artifact membership.
 
-In the Mission migration slice, Stage is projected by Mission and mirrored in Airport as a child entity. It must not own independent daemon command methods until there is direct Stage behavior that cannot be expressed as Mission workflow control.
+Stage is projected by Mission and may be implemented internally by resolving the owning Mission aggregate, but its public schema and remote contract live under the Stage entity. Stage command discovery and execution are Stage methods, not Mission action filters.
 
 ### Task
 
 `Task` owns task identity, lifecycle transitions, launch intent, completion, reopening, and relationship to agent sessions.
 
-In the Mission migration slice, task launch, complete, and reopen remain Mission commands because the workflow engine validates and applies them in the mission runtime document. The browser Task mirror may expose task-shaped methods, but those methods route through its owning Mission mirror and generic Mission command calls.
+Task command discovery and execution are Task methods. The Task handler may resolve Mission internally because the workflow engine validates and applies task transitions in the mission runtime document, but Airport and daemon callers address a Task entity contract directly.
 
 ### Artifact
 
 `Artifact` owns artifact identity, path metadata, stage/task association, document read behavior, and document write behavior when editing is allowed.
 
-In the Mission migration slice, mission artifact reads and writes are Mission-scoped queries/commands. A later Artifact source entity may own direct document behavior if the system needs artifact-level daemon calls.
+Artifact document reads, writes, and artifact-level commands are Artifact methods. The Artifact schema owns stable artifact identity and may expose canonical path metadata as data, but callers must not use an untyped file path as the entity boundary.
 
 ### AgentSession
 
 `AgentSession` owns session identity, lifecycle, prompt behavior, command behavior, cancellation, termination, completion, and terminal attachment metadata.
 
-In the Mission migration slice, session completion, cancellation, termination, prompts, and commands remain Mission commands because Mission coordinates them with workflow state. Terminal socket input/output remains runtime transport, not entity command response data.
+AgentSession command discovery, prompt sending, command sending, cancellation, termination, and completion are AgentSession methods. The handler may coordinate through Mission/runtime internals, but the public contract is AgentSession-owned. Terminal socket input/output remains runtime transport, not entity command response data.
 
 ## SSE Projection Contract
 

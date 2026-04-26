@@ -1,5 +1,6 @@
 // /apps/airport/web/src/lib/components/entities/AgentSession/AgentSession.svelte.ts: OO browser entity for a mission agent session hydrated from validated runtime snapshots.
 import type {
+    EntityCommandDescriptor,
     MissionAgentCommand as AgentCommand,
     MissionAgentPrompt as AgentPrompt,
     MissionAgentSessionSnapshot as AgentSessionSnapshot
@@ -7,9 +8,8 @@ import type {
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
 export type AgentSessionCommandOwner = {
-    completeSession(sessionId: string): Promise<void>;
-    cancelSession(sessionId: string, reason?: string): Promise<void>;
-    terminateSession(sessionId: string, reason?: string): Promise<void>;
+    listSessionCommands(sessionId: string, input?: { executionContext?: 'event' | 'render' }): Promise<{ commands: EntityCommandDescriptor[] }>;
+    executeSessionCommand(sessionId: string, commandId: string, input?: unknown): Promise<void>;
     sendSessionPrompt(sessionId: string, prompt: AgentPrompt): Promise<void>;
     sendSessionCommand(sessionId: string, command: AgentCommand): Promise<void>;
 };
@@ -41,6 +41,14 @@ export class AgentSession implements EntityModel<AgentSessionSnapshot> {
     }
 
     public get id(): string {
+        return this.sessionId;
+    }
+
+    public get entityName(): 'AgentSession' {
+        return 'AgentSession';
+    }
+
+    public get entityId(): string {
         return this.sessionId;
     }
 
@@ -100,23 +108,32 @@ export class AgentSession implements EntityModel<AgentSessionSnapshot> {
         return this;
     }
 
+    public async listCommands(input: { executionContext?: 'event' | 'render' } = {}): Promise<EntityCommandDescriptor[]> {
+        const snapshot = await this.owner.listSessionCommands(this.sessionId, input);
+        return structuredClone(snapshot.commands);
+    }
+
+    public async executeCommand(commandId: string, input?: unknown): Promise<void> {
+        await this.owner.executeSessionCommand(this.sessionId, commandId, input);
+    }
+
     public async sendCommand(command: AgentCommand): Promise<this> {
         await this.owner.sendSessionCommand(this.sessionId, command);
         return this;
     }
 
     public async done(): Promise<this> {
-        await this.owner.completeSession(this.sessionId);
+        await this.executeCommand('agentSession.complete');
         return this;
     }
 
     public async cancel(reason?: string): Promise<this> {
-        await this.owner.cancelSession(this.sessionId, reason);
+        await this.executeCommand('agentSession.cancel', reason?.trim() ? { reason: reason.trim() } : undefined);
         return this;
     }
 
     public async terminate(reason?: string): Promise<this> {
-        await this.owner.terminateSession(this.sessionId, reason);
+        await this.executeCommand('agentSession.terminate', reason?.trim() ? { reason: reason.trim() } : undefined);
         return this;
     }
 

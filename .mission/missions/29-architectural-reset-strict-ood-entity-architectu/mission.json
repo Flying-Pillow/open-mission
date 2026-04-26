@@ -359,6 +359,94 @@
                 "implementation/12-wire-mission-projections-and-remove-runtime-routes"
               ],
               "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/13-create-child-entity-command-contracts",
+              "title": "Create Child Entity Command Contracts",
+              "instruction": "Make Stage, Task, Artifact, and AgentSession first-class commandable entity contracts at the shared schema and daemon dispatch boundary. Introduce dedicated canonical schema modules for Stage, Task, Artifact, and AgentSession under packages/core/src/schemas/. Each child module owns that entity's identity payload, typed entity reference, snapshot or projection contract, command list snapshot, executeCommand payload/result schemas, acknowledgement schema, and remote payload/result schema maps. Introduce shared EntityCommandDescriptor and EntityCommandListSnapshot primitives in EntityRemote. Update Mission.ts to compose child schemas from the child modules instead of owning the child command contracts itself. Preserve Mission as internal aggregate authority while exposing child entity contracts externally.",
+              "taskKind": "implementation",
+              "pairedTaskId": "implementation/13-create-child-entity-command-contracts-verify",
+              "dependsOn": [
+                "implementation/12-wire-mission-projections-and-remove-runtime-routes-verify"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/13-create-child-entity-command-contracts-verify",
+              "title": "Verify Child Entity Command Contracts",
+              "instruction": "Verify Stage, Task, Artifact, and AgentSession have dedicated canonical schema modules under packages/core/src/schemas/. Each child module must own strict schemas for identity, typed reference, snapshot or projection where needed, listCommands, executeCommand, acknowledgements, remote payload/result maps, and command descriptors. Confirm schemas are exported through @flying-pillow/mission-core/schemas, browser-safe, and do not require Airport actionbar filtering context. Confirm Mission.ts composes child schemas from child modules instead of owning child command contracts itself. Record evidence in 03-IMPLEMENTATION/VERIFY.md.",
+              "taskKind": "verification",
+              "pairedTaskId": "implementation/13-create-child-entity-command-contracts",
+              "dependsOn": [
+                "implementation/13-create-child-entity-command-contracts"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/14-route-child-entity-commands-through-dispatch",
+              "title": "Route Child Entity Commands Through Dispatch",
+              "instruction": "Add explicit daemon handlers for Stage, Task, Artifact, and AgentSession command discovery and execution. Handlers resolve the owning Mission aggregate internally, parse payloads before execution, parse results after execution, and return entity command acknowledgements or direct source-local results without exposing Mission-wide action filtering as the public contract.",
+              "taskKind": "implementation",
+              "pairedTaskId": "implementation/14-route-child-entity-commands-through-dispatch-verify",
+              "dependsOn": [
+                "implementation/13-create-child-entity-command-contracts-verify"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/14-route-child-entity-commands-through-dispatch-verify",
+              "title": "Verify Child Entity Dispatch",
+              "instruction": "Verify daemon dispatch has explicit handlers for Stage, Task, Artifact, and AgentSession query and command methods. Confirm method-specific parsing, loud missing mission or child failures, entity-scoped command lists, and Mission as the internal aggregate authority. Record evidence in 03-IMPLEMENTATION/VERIFY.md.",
+              "taskKind": "verification",
+              "pairedTaskId": "implementation/14-route-child-entity-commands-through-dispatch",
+              "dependsOn": [
+                "implementation/14-route-child-entity-commands-through-dispatch"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/15-refactor-airport-actionbar-to-entity-commands",
+              "title": "Refactor Airport Actionbar To Entity Commands",
+              "instruction": "Replace scoped actionbar/context filtering with an entity-agnostic actionbar that consumes commandable entity mirrors. Stage, Task, Artifact, and AgentSession browser mirrors must expose listCommands and executeCommand; Actionbar receives an entity instance and renders returned commands. Remove scope, stageId, taskId, artifactPath, and sessionId actionbar props and remove local target filtering.",
+              "taskKind": "implementation",
+              "pairedTaskId": "implementation/15-refactor-airport-actionbar-to-entity-commands-verify",
+              "dependsOn": [
+                "implementation/14-route-child-entity-commands-through-dispatch-verify"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/15-refactor-airport-actionbar-to-entity-commands-verify",
+              "title": "Verify Entity Command Actionbar",
+              "instruction": "Verify Actionbar accepts commandable entities only, renders entity-returned commands without local domain filtering, and no active Airport component passes scope, taskId, artifactPath, or sessionId for action discovery. Confirm Task, Artifact, AgentSession, Stage, and Mission mirrors own their command access methods. Record evidence in 03-IMPLEMENTATION/VERIFY.md.",
+              "taskKind": "verification",
+              "pairedTaskId": "implementation/15-refactor-airport-actionbar-to-entity-commands",
+              "dependsOn": [
+                "implementation/15-refactor-airport-actionbar-to-entity-commands"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/16-wire-child-entity-projections",
+              "title": "Wire Child Entity Projections",
+              "instruction": "Complete the clean child-entity architecture by routing projection updates to Stage, Task, Artifact, and AgentSession mirrors by entity reference. Typed projection events identify Mission, Stage, Task, Artifact, and AgentSession references and validated snapshots; client mirrors reconcile targeted child updates without command response projections or Mission-wide action filtering.",
+              "taskKind": "implementation",
+              "pairedTaskId": "implementation/16-wire-child-entity-projections-verify",
+              "dependsOn": [
+                "implementation/15-refactor-airport-actionbar-to-entity-commands-verify"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/16-wire-child-entity-projections-verify",
+              "title": "Verify Child Entity Projections",
+              "instruction": "Verify RuntimeEvents schemas include typed child entity projection payloads, daemon forwarding validates those payloads, client mirrors reconcile Stage, Task, Artifact, and AgentSession updates by reference, command availability refreshes through entity mirrors, and terminal stream transport remains separate. Record evidence in 03-IMPLEMENTATION/VERIFY.md.",
+              "taskKind": "verification",
+              "pairedTaskId": "implementation/16-wire-child-entity-projections",
+              "dependsOn": [
+                "implementation/16-wire-child-entity-projections"
+              ],
+              "agentRunner": "copilot-cli"
             }
           ]
         },
@@ -477,7 +565,15 @@
           "implementation/11-clean-airport-mission-mirror",
           "implementation/11-clean-airport-mission-mirror-verify",
           "implementation/12-wire-mission-projections-and-remove-runtime-routes",
-          "implementation/12-wire-mission-projections-and-remove-runtime-routes-verify"
+          "implementation/12-wire-mission-projections-and-remove-runtime-routes-verify",
+          "implementation/13-create-child-entity-command-contracts",
+          "implementation/13-create-child-entity-command-contracts-verify",
+          "implementation/14-route-child-entity-commands-through-dispatch",
+          "implementation/14-route-child-entity-commands-through-dispatch-verify",
+          "implementation/15-refactor-airport-actionbar-to-entity-commands",
+          "implementation/15-refactor-airport-actionbar-to-entity-commands-verify",
+          "implementation/16-wire-child-entity-projections",
+          "implementation/16-wire-child-entity-projections-verify"
         ],
         "readyTaskIds": [],
         "queuedTaskIds": [],
@@ -506,7 +602,15 @@
           "implementation/11-clean-airport-mission-mirror",
           "implementation/11-clean-airport-mission-mirror-verify",
           "implementation/12-wire-mission-projections-and-remove-runtime-routes",
-          "implementation/12-wire-mission-projections-and-remove-runtime-routes-verify"
+          "implementation/12-wire-mission-projections-and-remove-runtime-routes-verify",
+          "implementation/13-create-child-entity-command-contracts",
+          "implementation/13-create-child-entity-command-contracts-verify",
+          "implementation/14-route-child-entity-commands-through-dispatch",
+          "implementation/14-route-child-entity-commands-through-dispatch-verify",
+          "implementation/15-refactor-airport-actionbar-to-entity-commands",
+          "implementation/15-refactor-airport-actionbar-to-entity-commands-verify",
+          "implementation/16-wire-child-entity-projections",
+          "implementation/16-wire-child-entity-projections-verify"
         ]
       },
       {
@@ -1093,7 +1197,9 @@
         "stageId": "audit",
         "title": "Debrief",
         "instruction": "Run mission-level validation and update AUDIT.md.\n\nSeparate mission regressions from baseline failures. Record risks and smallest follow-ups.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
-        "dependsOn": [],
+        "dependsOn": [
+          "implementation/16-wire-child-entity-projections-verify"
+        ],
         "lifecycle": "ready",
         "waitingOnTaskIds": [],
         "runtime": {
@@ -1102,7 +1208,183 @@
         "agentRunner": "copilot",
         "retries": 0,
         "createdAt": "2026-04-26T11:37:00.000Z",
-        "updatedAt": "2026-04-26T15:30:00.000Z"
+        "updatedAt": "2026-04-26T18:00:00.000Z"
+      },
+      {
+        "taskId": "implementation/13-create-child-entity-command-contracts",
+        "stageId": "implementation",
+        "title": "Create Child Entity Command Contracts",
+        "instruction": "Make Stage, Task, Artifact, and AgentSession first-class commandable entity contracts at the shared schema and daemon dispatch boundary. Introduce dedicated canonical schema modules for Stage, Task, Artifact, and AgentSession under packages/core/src/schemas/. Each child module owns that entity's identity payload, typed entity reference, snapshot or projection contract, command list snapshot, executeCommand payload/result schemas, acknowledgement schema, and remote payload/result schema maps. Introduce shared EntityCommandDescriptor and EntityCommandListSnapshot primitives in EntityRemote. Update Mission.ts to compose child schemas from the child modules instead of owning the child command contracts itself. Preserve Mission as internal aggregate authority while exposing child entity contracts externally.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/13-create-child-entity-command-contracts-verify",
+        "dependsOn": [
+          "implementation/12-wire-mission-projections-and-remove-runtime-routes-verify"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T16:05:00.000Z",
+        "updatedAt": "2026-04-26T16:40:00.000Z",
+        "startedAt": "2026-04-26T16:30:00.000Z",
+        "completedAt": "2026-04-26T16:40:00.000Z"
+      },
+      {
+        "taskId": "implementation/13-create-child-entity-command-contracts-verify",
+        "stageId": "implementation",
+        "title": "Verify Child Entity Command Contracts",
+        "instruction": "Verify Stage, Task, Artifact, and AgentSession have dedicated canonical schema modules under packages/core/src/schemas/. Each child module must own strict schemas for identity, typed reference, snapshot or projection where needed, listCommands, executeCommand, acknowledgements, remote payload/result maps, and command descriptors. Confirm schemas are exported through @flying-pillow/mission-core/schemas, browser-safe, and do not require Airport actionbar filtering context. Confirm Mission.ts composes child schemas from child modules instead of owning child command contracts itself. Record evidence in 03-IMPLEMENTATION/VERIFY.md.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/13-create-child-entity-command-contracts",
+        "dependsOn": [
+          "implementation/13-create-child-entity-command-contracts"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T16:05:00.000Z",
+        "updatedAt": "2026-04-26T16:50:00.000Z",
+        "startedAt": "2026-04-26T16:46:00.000Z",
+        "completedAt": "2026-04-26T16:50:00.000Z"
+      },
+      {
+        "taskId": "implementation/14-route-child-entity-commands-through-dispatch",
+        "stageId": "implementation",
+        "title": "Route Child Entity Commands Through Dispatch",
+        "instruction": "Add explicit daemon handlers for Stage, Task, Artifact, and AgentSession command discovery and execution, with command ownership on the child entities themselves. Create or update StageCommands, TaskCommands, ArtifactCommands, and AgentSessionCommands as the public command collaborators for their entities. The collaborators may resolve the owning Mission aggregate internally, but MissionCommands remains Mission-only.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/14-route-child-entity-commands-through-dispatch-verify",
+        "dependsOn": [
+          "implementation/13-create-child-entity-command-contracts-verify"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T16:05:00.000Z",
+        "updatedAt": "2026-04-26T17:00:00.000Z",
+        "startedAt": "2026-04-26T16:50:00.000Z",
+        "completedAt": "2026-04-26T17:00:00.000Z"
+      },
+      {
+        "taskId": "implementation/14-route-child-entity-commands-through-dispatch-verify",
+        "stageId": "implementation",
+        "title": "Verify Child Entity Dispatch",
+        "instruction": "Verify daemon dispatch has explicit handlers for Stage, Task, Artifact, and AgentSession query and command methods. Confirm method-specific parsing, loud missing mission or child failures, entity-scoped command lists, and Mission as the internal aggregate authority. Record evidence in 03-IMPLEMENTATION/VERIFY.md.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/14-route-child-entity-commands-through-dispatch",
+        "dependsOn": [
+          "implementation/14-route-child-entity-commands-through-dispatch"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T16:05:00.000Z",
+        "updatedAt": "2026-04-26T17:10:00.000Z",
+        "startedAt": "2026-04-26T17:00:00.000Z",
+        "completedAt": "2026-04-26T17:10:00.000Z"
+      },
+      {
+        "taskId": "implementation/15-refactor-airport-actionbar-to-entity-commands",
+        "stageId": "implementation",
+        "title": "Refactor Airport Actionbar To Entity Commands",
+        "instruction": "Replace scoped actionbar/context filtering with an entity-agnostic actionbar that consumes commandable entity mirrors. Stage, Task, Artifact, and AgentSession browser mirrors must expose listCommands and executeCommand; Actionbar receives an entity instance and renders returned commands. Remove scope, stageId, taskId, artifactPath, and sessionId actionbar props and remove local target filtering.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/15-refactor-airport-actionbar-to-entity-commands-verify",
+        "dependsOn": [
+          "implementation/14-route-child-entity-commands-through-dispatch-verify"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T16:05:00.000Z",
+        "updatedAt": "2026-04-26T17:20:00.000Z",
+        "startedAt": "2026-04-26T17:10:00.000Z",
+        "completedAt": "2026-04-26T17:20:00.000Z"
+      },
+      {
+        "taskId": "implementation/15-refactor-airport-actionbar-to-entity-commands-verify",
+        "stageId": "implementation",
+        "title": "Verify Entity Command Actionbar",
+        "instruction": "Verify Actionbar accepts commandable entities only, renders entity-returned commands without local domain filtering, and no active Airport component passes scope, taskId, artifactPath, or sessionId for action discovery. Confirm Task, Artifact, AgentSession, Stage, and Mission mirrors own their command access methods. Record evidence in 03-IMPLEMENTATION/VERIFY.md.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/15-refactor-airport-actionbar-to-entity-commands",
+        "dependsOn": [
+          "implementation/15-refactor-airport-actionbar-to-entity-commands"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T16:05:00.000Z",
+        "updatedAt": "2026-04-26T17:36:00.000Z",
+        "startedAt": "2026-04-26T17:31:00.000Z",
+        "completedAt": "2026-04-26T17:36:00.000Z"
+      },
+      {
+        "taskId": "implementation/16-wire-child-entity-projections",
+        "stageId": "implementation",
+        "title": "Wire Child Entity Projections",
+        "instruction": "Complete the clean child-entity architecture by routing projection updates to Stage, Task, Artifact, and AgentSession mirrors by entity reference. Typed projection events identify Mission, Stage, Task, Artifact, and AgentSession references and validated snapshots; client mirrors reconcile targeted child updates without command response projections or Mission-wide action filtering.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/16-wire-child-entity-projections-verify",
+        "dependsOn": [
+          "implementation/15-refactor-airport-actionbar-to-entity-commands-verify"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T16:05:00.000Z",
+        "updatedAt": "2026-04-26T17:50:00.000Z",
+        "startedAt": "2026-04-26T17:40:00.000Z",
+        "completedAt": "2026-04-26T17:50:00.000Z"
+      },
+      {
+        "taskId": "implementation/16-wire-child-entity-projections-verify",
+        "stageId": "implementation",
+        "title": "Verify Child Entity Projections",
+        "instruction": "Verify RuntimeEvents schemas include typed child entity projection payloads, daemon forwarding validates those payloads, client mirrors reconcile Stage, Task, Artifact, and AgentSession updates by reference, command availability refreshes through entity mirrors, and terminal stream transport remains separate. Record evidence in 03-IMPLEMENTATION/VERIFY.md.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/16-wire-child-entity-projections",
+        "dependsOn": [
+          "implementation/16-wire-child-entity-projections"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T16:05:00.000Z",
+        "updatedAt": "2026-04-26T18:00:00.000Z",
+        "startedAt": "2026-04-26T17:55:00.000Z",
+        "completedAt": "2026-04-26T18:00:00.000Z"
       }
     ],
     "sessions": [
@@ -1357,6 +1639,35 @@
         "launchedAt": "2026-04-26T11:37:00.000Z",
         "updatedAt": "2026-04-26T11:44:00.000Z",
         "completedAt": "2026-04-26T11:44:00.000Z"
+      },
+      {
+        "sessionId": "13-create-child-entity-command-contracts-copilot-cli-960cce78",
+        "taskId": "implementation/13-create-child-entity-command-contracts",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T16:10:00.000Z",
+        "updatedAt": "2026-04-26T16:20:00.000Z",
+        "completedAt": "2026-04-26T16:20:00.000Z",
+        "terminatedAt": "2026-04-26T16:05:14.623Z"
+      },
+      {
+        "sessionId": "13-create-child-entity-command-contracts-restart-copilot-cli-960cce78",
+        "taskId": "implementation/13-create-child-entity-command-contracts",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T16:30:00.000Z",
+        "updatedAt": "2026-04-26T16:40:00.000Z",
+        "completedAt": "2026-04-26T16:40:00.000Z",
+        "terminatedAt": "2026-04-26T16:18:53.079Z"
+      },
+      {
+        "sessionId": "13-create-child-entity-command-contracts-verify-copilot-cli-960cce78",
+        "taskId": "implementation/13-create-child-entity-command-contracts-verify",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T16:46:00.000Z",
+        "updatedAt": "2026-04-26T16:50:00.000Z",
+        "completedAt": "2026-04-26T16:50:00.000Z"
       }
     ],
     "gates": [
@@ -1366,7 +1677,7 @@
         "state": "passed",
         "stageId": "implementation",
         "reasons": [],
-        "updatedAt": "2026-04-26T15:30:00.000Z"
+        "updatedAt": "2026-04-26T18:00:00.000Z"
       },
       {
         "gateId": "verify",
@@ -1374,7 +1685,7 @@
         "state": "passed",
         "stageId": "implementation",
         "reasons": [],
-        "updatedAt": "2026-04-26T15:30:00.000Z"
+        "updatedAt": "2026-04-26T18:00:00.000Z"
       },
       {
         "gateId": "audit",
@@ -1384,7 +1695,7 @@
         "reasons": [
           "Stage 'audit' is not completed."
         ],
-        "updatedAt": "2026-04-26T15:30:00.000Z"
+        "updatedAt": "2026-04-26T18:00:00.000Z"
       },
       {
         "gateId": "deliver",
@@ -1394,10 +1705,10 @@
         "reasons": [
           "Stage 'delivery' is not completed."
         ],
-        "updatedAt": "2026-04-26T15:30:00.000Z"
+        "updatedAt": "2026-04-26T18:00:00.000Z"
       }
     ],
     "launchQueue": [],
-    "updatedAt": "2026-04-26T15:30:00.000Z"
+    "updatedAt": "2026-04-26T18:00:00.000Z"
   }
 }

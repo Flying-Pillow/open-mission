@@ -133,7 +133,7 @@ async function handleRequestLine(socket: net.Socket, line: string, startedAt: st
 	}
 }
 
-async function createResponse(request: Request, startedAt: string): Promise<Response> {
+export async function createResponse(request: Request, startedAt: string): Promise<Response> {
 	try {
 		switch (request.method) {
 			case 'ping': {
@@ -148,6 +148,25 @@ async function createResponse(request: Request, startedAt: string): Promise<Resp
 					id: request.id,
 					ok: true,
 					result,
+				};
+			}
+			case 'event.subscribe': {
+				return {
+					type: 'response',
+					id: request.id,
+					ok: true,
+					result: null,
+				};
+			}
+			case 'mission.terminal.state':
+			case 'mission.terminal.input':
+			case 'session.terminal.state':
+			case 'session.terminal.input': {
+				return {
+					type: 'response',
+					id: request.id,
+					ok: true,
+					result: null,
 				};
 			}
 			case 'system.status': {

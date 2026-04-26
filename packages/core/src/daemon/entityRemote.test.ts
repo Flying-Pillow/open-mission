@@ -4,9 +4,14 @@ import {
 	executeEntityCommandInDaemon,
 	executeEntityQueryInDaemon
 } from './entityRemote.js';
+import { AgentSessionCommands } from '../entities/AgentSession/AgentSessionCommands.js';
+import { ArtifactCommands } from '../entities/Artifact/ArtifactCommands.js';
 import { GitHubRepository } from '../entities/GitHubRepository/GitHubRepository.js';
 import { MissionCommands } from '../entities/Mission/MissionCommands.js';
+import type { MissionRuntimeHandle } from '../entities/Mission/MissionRuntimeAccess.js';
 import { Repository } from '../entities/Repository/Repository.js';
+import { StageCommands } from '../entities/Stage/StageCommands.js';
+import { TaskCommands } from '../entities/Task/TaskCommands.js';
 import { PROTOCOL_VERSION } from './protocol/contracts.js';
 import type {
 	MissionActionListSnapshot,
@@ -20,7 +25,7 @@ import { repositoryMissionStartAcknowledgementSchema } from '../schemas/Reposito
 
 describe('daemon entity dispatch', () => {
 	it('uses the bumped daemon protocol version', () => {
-		expect(PROTOCOL_VERSION).toBe(26);
+		expect(PROTOCOL_VERSION).toBe(27);
 	});
 
 	it('uses source acknowledgements for Repository mission-start commands', () => {
@@ -318,6 +323,220 @@ describe('daemon entity dispatch', () => {
 		}
 	});
 
+	it('dispatches child Mission entities through explicit handlers', async () => {
+		const querySpies = [
+			vi.spyOn(StageCommands, 'read').mockResolvedValue(createMissionStageSnapshot()),
+			vi.spyOn(StageCommands, 'listCommands').mockResolvedValue(createStageCommandListSnapshot()),
+			vi.spyOn(TaskCommands, 'read').mockResolvedValue(createMissionTaskSnapshot()),
+			vi.spyOn(TaskCommands, 'listCommands').mockResolvedValue(createTaskCommandListSnapshot()),
+			vi.spyOn(ArtifactCommands, 'read').mockResolvedValue(createMissionArtifactSnapshot()),
+			vi.spyOn(ArtifactCommands, 'readDocument').mockResolvedValue(createArtifactDocumentSnapshot()),
+			vi.spyOn(ArtifactCommands, 'listCommands').mockResolvedValue(createArtifactCommandListSnapshot()),
+			vi.spyOn(AgentSessionCommands, 'read').mockResolvedValue(createMissionAgentSessionSnapshot()),
+			vi.spyOn(AgentSessionCommands, 'listCommands').mockResolvedValue(createAgentSessionCommandListSnapshot())
+		];
+		const commandSpies = [
+			vi.spyOn(StageCommands, 'executeCommand').mockResolvedValue(createStageCommandAcknowledgement()),
+			vi.spyOn(TaskCommands, 'executeCommand').mockResolvedValue(createTaskCommandAcknowledgement()),
+			vi.spyOn(ArtifactCommands, 'writeDocument').mockResolvedValue(createArtifactDocumentSnapshot('Updated')),
+			vi.spyOn(ArtifactCommands, 'executeCommand').mockResolvedValue(createArtifactCommandAcknowledgement()),
+			vi.spyOn(AgentSessionCommands, 'executeCommand').mockResolvedValue(createAgentSessionCommandAcknowledgement('executeCommand')),
+			vi.spyOn(AgentSessionCommands, 'sendPrompt').mockResolvedValue(createAgentSessionCommandAcknowledgement('sendPrompt')),
+			vi.spyOn(AgentSessionCommands, 'sendCommand').mockResolvedValue(createAgentSessionCommandAcknowledgement('sendCommand'))
+		];
+
+		try {
+			await expect(executeEntityQueryInDaemon({
+				entity: 'Stage',
+				method: 'read',
+				payload: { missionId: 'mission-1', stageId: 'implementation' }
+			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ stageId: 'implementation' });
+
+			await expect(executeEntityQueryInDaemon({
+				entity: 'Stage',
+				method: 'listCommands',
+				payload: { missionId: 'mission-1', stageId: 'implementation' }
+			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ entity: 'Stage', stageId: 'implementation' });
+
+			await expect(executeEntityCommandInDaemon({
+				entity: 'Stage',
+				method: 'executeCommand',
+				payload: { missionId: 'mission-1', stageId: 'implementation', commandId: 'stage.generateTasks' }
+			}, { surfacePath: '/repo/root' })).resolves.toEqual(createStageCommandAcknowledgement());
+
+			await expect(executeEntityQueryInDaemon({
+				entity: 'Task',
+				method: 'read',
+				payload: { missionId: 'mission-1', taskId: 'implementation/01-task' }
+			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ taskId: 'implementation/01-task' });
+
+			await expect(executeEntityQueryInDaemon({
+				entity: 'Task',
+				method: 'listCommands',
+				payload: { missionId: 'mission-1', taskId: 'implementation/01-task' }
+			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ entity: 'Task', taskId: 'implementation/01-task' });
+
+			await expect(executeEntityCommandInDaemon({
+				entity: 'Task',
+				method: 'executeCommand',
+				payload: { missionId: 'mission-1', taskId: 'implementation/01-task', commandId: 'task.start' }
+			}, { surfacePath: '/repo/root' })).resolves.toEqual(createTaskCommandAcknowledgement());
+
+			await expect(executeEntityQueryInDaemon({
+				entity: 'Artifact',
+				method: 'read',
+				payload: { missionId: 'mission-1', artifactId: 'mission:brief' }
+			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ artifactId: 'mission:brief' });
+
+			await expect(executeEntityQueryInDaemon({
+				entity: 'Artifact',
+				method: 'readDocument',
+				payload: { missionId: 'mission-1', artifactId: 'mission:brief' }
+			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ content: 'Artifact document' });
+
+			await expect(executeEntityQueryInDaemon({
+				entity: 'Artifact',
+				method: 'listCommands',
+				payload: { missionId: 'mission-1', artifactId: 'mission:brief' }
+			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ entity: 'Artifact', artifactId: 'mission:brief' });
+
+			await expect(executeEntityCommandInDaemon({
+				entity: 'Artifact',
+				method: 'writeDocument',
+				payload: { missionId: 'mission-1', artifactId: 'mission:brief', content: 'Updated' }
+			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ content: 'Updated' });
+
+			await expect(executeEntityCommandInDaemon({
+				entity: 'Artifact',
+				method: 'executeCommand',
+				payload: { missionId: 'mission-1', artifactId: 'mission:brief', commandId: 'artifact.review' }
+			}, { surfacePath: '/repo/root' })).resolves.toEqual(createArtifactCommandAcknowledgement());
+
+			await expect(executeEntityQueryInDaemon({
+				entity: 'AgentSession',
+				method: 'read',
+				payload: { missionId: 'mission-1', sessionId: 'session-1' }
+			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ sessionId: 'session-1' });
+
+			await expect(executeEntityQueryInDaemon({
+				entity: 'AgentSession',
+				method: 'listCommands',
+				payload: { missionId: 'mission-1', sessionId: 'session-1' }
+			}, { surfacePath: '/repo/root' })).resolves.toMatchObject({ entity: 'AgentSession', sessionId: 'session-1' });
+
+			await expect(executeEntityCommandInDaemon({
+				entity: 'AgentSession',
+				method: 'executeCommand',
+				payload: { missionId: 'mission-1', sessionId: 'session-1', commandId: 'agentSession.cancel' }
+			}, { surfacePath: '/repo/root' })).resolves.toEqual(createAgentSessionCommandAcknowledgement('executeCommand'));
+
+			await expect(executeEntityCommandInDaemon({
+				entity: 'AgentSession',
+				method: 'sendPrompt',
+				payload: { missionId: 'mission-1', sessionId: 'session-1', prompt: { source: 'operator', text: 'Continue.' } }
+			}, { surfacePath: '/repo/root' })).resolves.toEqual(createAgentSessionCommandAcknowledgement('sendPrompt'));
+
+			await expect(executeEntityCommandInDaemon({
+				entity: 'AgentSession',
+				method: 'sendCommand',
+				payload: { missionId: 'mission-1', sessionId: 'session-1', command: { type: 'nudge' } }
+			}, { surfacePath: '/repo/root' })).resolves.toEqual(createAgentSessionCommandAcknowledgement('sendCommand'));
+
+			expect(querySpies.every((spy) => spy.mock.calls.length === 1)).toBe(true);
+			expect(commandSpies.every((spy) => spy.mock.calls.length === 1)).toBe(true);
+		} finally {
+			for (const spy of [...querySpies, ...commandSpies]) {
+				spy.mockRestore();
+			}
+		}
+	});
+
+	it('rejects invalid child entity payloads and results before returning', async () => {
+		await expect(executeEntityQueryInDaemon({
+			entity: 'Task',
+			method: 'read',
+			payload: { missionId: 'mission-1', taskId: 'implementation/01-task', context: { taskId: 'implementation/01-task' } }
+		}, {
+			surfacePath: process.cwd()
+		})).rejects.toBeInstanceOf(ZodError);
+
+		const readTaskSpy = vi.spyOn(TaskCommands, 'read').mockResolvedValue({ bad: true } as never);
+		try {
+			await expect(executeEntityQueryInDaemon({
+				entity: 'Task',
+				method: 'read',
+				payload: { missionId: 'mission-1', taskId: 'implementation/01-task' }
+			}, {
+				surfacePath: process.cwd()
+			})).rejects.toBeInstanceOf(ZodError);
+		} finally {
+			readTaskSpy.mockRestore();
+		}
+
+		const commandSpy = vi.spyOn(TaskCommands, 'executeCommand').mockResolvedValue({
+			ok: true,
+			entity: 'Task',
+			method: 'executeCommand',
+			id: 'implementation/01-task',
+			missionId: 'mission-1',
+			taskId: 'implementation/01-task',
+			commandId: 'task.start',
+			status: { missionId: 'mission-1' }
+		} as never);
+		try {
+			await expect(executeEntityCommandInDaemon({
+				entity: 'Task',
+				method: 'executeCommand',
+				payload: { missionId: 'mission-1', taskId: 'implementation/01-task', commandId: 'task.start' }
+			}, {
+				surfacePath: process.cwd()
+			})).rejects.toBeInstanceOf(ZodError);
+		} finally {
+			commandSpy.mockRestore();
+		}
+	});
+
+	it('fails loudly when child command collaborators cannot resolve the mission or child entity', async () => {
+		await expect(StageCommands.read({
+			missionId: 'missing-mission',
+			stageId: 'implementation'
+		}, {
+			surfacePath: '/repo/root',
+			loadRuntime: async () => undefined
+		})).rejects.toThrow("Mission 'missing-mission' could not be resolved.");
+
+		const emptyRuntime = createMissionRuntimeHandle({
+			...createMissionSnapshot().mission,
+			stages: [],
+			artifacts: [],
+			agentSessions: []
+		});
+		const context = {
+			surfacePath: '/repo/root',
+			loadRuntime: async () => emptyRuntime
+		};
+
+		await expect(StageCommands.read({
+			missionId: 'mission-1',
+			stageId: 'implementation'
+		}, context)).rejects.toThrow("Stage 'implementation' could not be resolved in Mission 'mission-1'.");
+
+		await expect(TaskCommands.read({
+			missionId: 'mission-1',
+			taskId: 'implementation/01-task'
+		}, context)).rejects.toThrow("Task 'implementation/01-task' could not be resolved in Mission 'mission-1'.");
+
+		await expect(ArtifactCommands.read({
+			missionId: 'mission-1',
+			artifactId: 'mission:brief'
+		}, context)).rejects.toThrow("Artifact 'mission:brief' could not be resolved in Mission 'mission-1'.");
+
+		await expect(AgentSessionCommands.read({
+			missionId: 'mission-1',
+			sessionId: 'session-1'
+		}, context)).rejects.toThrow("AgentSession 'session-1' could not be resolved in Mission 'mission-1'.");
+	});
+
 	it('fails loudly for unknown entities and methods', async () => {
 		await expect(executeEntityQueryInDaemon({
 			entity: 'UnknownEntity',
@@ -466,9 +685,34 @@ function createMissionSnapshot(): MissionSnapshot {
 		},
 		stages: [createMissionStageSnapshot()],
 		tasks: [createMissionTaskSnapshot()],
-		artifacts: [],
-		agentSessions: []
+		artifacts: [createMissionArtifactSnapshot()],
+		agentSessions: [createMissionAgentSessionSnapshot()]
 	};
+}
+
+function createMissionRuntimeHandle(snapshot: MissionSnapshot['mission']): MissionRuntimeHandle {
+	return {
+		clearMissionPanic: vi.fn(async () => undefined),
+		completeAgentSession: vi.fn(),
+		completeTask: vi.fn(async () => undefined),
+		dispose: vi.fn(),
+		executeAction: vi.fn(),
+		listAvailableActionsSnapshot: vi.fn(async () => ({ actions: [] })),
+		cancelAgentSession: vi.fn(),
+		deliver: vi.fn(),
+		panicStopMission: vi.fn(async () => undefined),
+		pauseMission: vi.fn(async () => undefined),
+		reopenTask: vi.fn(async () => undefined),
+		restartLaunchQueue: vi.fn(async () => undefined),
+		resumeMission: vi.fn(async () => undefined),
+		sendAgentSessionCommand: vi.fn(),
+		sendAgentSessionPrompt: vi.fn(),
+		startTask: vi.fn(async () => undefined),
+		terminateAgentSession: vi.fn(),
+		toEntity: vi.fn(async () => ({
+			toSnapshot: () => snapshot
+		}))
+	} as unknown as MissionRuntimeHandle;
 }
 
 function createMissionProjectionSnapshot(): MissionProjectionSnapshot {
@@ -555,5 +799,129 @@ function createMissionTaskSnapshot() {
 		waitingOnTaskIds: [],
 		agentRunner: 'copilot-cli',
 		retries: 0
+	};
+}
+
+function createMissionArtifactSnapshot() {
+	return {
+		artifactId: 'mission:brief',
+		kind: 'mission' as const,
+		label: 'Brief',
+		fileName: 'BRIEF.md',
+		filePath: '/repo/root/BRIEF.md',
+		relativePath: 'BRIEF.md'
+	};
+}
+
+function createMissionAgentSessionSnapshot() {
+	return {
+		sessionId: 'session-1',
+		runnerId: 'copilot-cli',
+		runnerLabel: 'Copilot CLI',
+		lifecycleState: 'running' as const,
+		createdAt: '2026-04-26T13:36:00.000Z',
+		lastUpdatedAt: '2026-04-26T13:37:00.000Z'
+	};
+}
+
+function createStageCommandListSnapshot() {
+	return {
+		entity: 'Stage' as const,
+		entityId: 'implementation',
+		missionId: 'mission-1',
+		stageId: 'implementation',
+		commands: [
+			{ commandId: 'stage.generateTasks', label: 'Generate Tasks', disabled: true, disabledReason: 'Stage already has tasks.' }
+		]
+	};
+}
+
+function createTaskCommandListSnapshot() {
+	return {
+		entity: 'Task' as const,
+		entityId: 'implementation/01-task',
+		missionId: 'mission-1',
+		taskId: 'implementation/01-task',
+		commands: [
+			{ commandId: 'task.start', label: 'Start Ready Task', disabled: false }
+		]
+	};
+}
+
+function createArtifactCommandListSnapshot() {
+	return {
+		entity: 'Artifact' as const,
+		entityId: 'mission:brief',
+		missionId: 'mission-1',
+		artifactId: 'mission:brief',
+		commands: []
+	};
+}
+
+function createAgentSessionCommandListSnapshot() {
+	return {
+		entity: 'AgentSession' as const,
+		entityId: 'session-1',
+		missionId: 'mission-1',
+		sessionId: 'session-1',
+		commands: [
+			{ commandId: 'agentSession.cancel', label: 'Cancel', disabled: false }
+		]
+	};
+}
+
+function createArtifactDocumentSnapshot(content = 'Artifact document') {
+	return {
+		filePath: '/repo/root/BRIEF.md',
+		content,
+		updatedAt: '2026-04-26T13:36:00.000Z'
+	};
+}
+
+function createStageCommandAcknowledgement() {
+	return {
+		ok: true as const,
+		entity: 'Stage' as const,
+		method: 'executeCommand' as const,
+		id: 'implementation',
+		missionId: 'mission-1',
+		stageId: 'implementation',
+		commandId: 'stage.generateTasks'
+	};
+}
+
+function createTaskCommandAcknowledgement() {
+	return {
+		ok: true as const,
+		entity: 'Task' as const,
+		method: 'executeCommand' as const,
+		id: 'implementation/01-task',
+		missionId: 'mission-1',
+		taskId: 'implementation/01-task',
+		commandId: 'task.start'
+	};
+}
+
+function createArtifactCommandAcknowledgement() {
+	return {
+		ok: true as const,
+		entity: 'Artifact' as const,
+		method: 'executeCommand' as const,
+		id: 'mission:brief',
+		missionId: 'mission-1',
+		artifactId: 'mission:brief',
+		commandId: 'artifact.review'
+	};
+}
+
+function createAgentSessionCommandAcknowledgement(method: 'executeCommand' | 'sendPrompt' | 'sendCommand') {
+	return {
+		ok: true as const,
+		entity: 'AgentSession' as const,
+		method,
+		id: 'session-1',
+		missionId: 'mission-1',
+		sessionId: 'session-1',
+		...(method === 'executeCommand' ? { commandId: 'agentSession.cancel' } : {})
 	};
 }

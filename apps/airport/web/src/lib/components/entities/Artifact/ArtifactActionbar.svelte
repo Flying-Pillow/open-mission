@@ -1,28 +1,21 @@
 <script lang="ts">
-    import ScopedActionbar from "$lib/components/entities/Actionbar/ScopedActionbar.svelte";
-    import type { MissionStageIdData as MissionStageId } from "../types";
+    import EntityActionbar from "$lib/components/entities/Actionbar/EntityActionbar.svelte";
+    import type { Artifact } from "$lib/components/entities/Artifact/Artifact.svelte.js";
 
     let {
         refreshNonce,
-        stageId,
-        taskId,
-        artifactPath,
+        artifact,
         onActionExecuted,
     }: {
         refreshNonce: number;
-        stageId?: MissionStageId;
-        taskId?: string;
-        artifactPath?: string;
+        artifact?: Artifact;
         onActionExecuted: () => Promise<void>;
     } = $props();
 </script>
 
-<ScopedActionbar
+<EntityActionbar
     {refreshNonce}
-    {stageId}
-    {taskId}
-    {artifactPath}
-    scope="artifact"
+    entity={artifact}
     defaultVariant="outline"
     buttonClass="shadow-sm"
     showEmptyState={false}

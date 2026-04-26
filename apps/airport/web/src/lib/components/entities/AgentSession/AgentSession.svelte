@@ -2,8 +2,6 @@
     import type { AgentSession } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
     import Anser from "anser/lib/index.js";
     import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
-    import AgentSessionActionbar from "$lib/components/entities/AgentSession/AgentSessionActionbar.svelte";
-    import type { MissionStageIdData as MissionStageId } from "../types";
     import { FitAddon } from "@xterm/addon-fit";
     import * as XtermModule from "@xterm/xterm";
     import sanitizeHtml from "sanitize-html";
@@ -44,12 +42,10 @@
 
     let {
         refreshNonce,
-        stageId,
         session,
         onActionExecuted,
     }: {
         refreshNonce: number;
-        stageId?: MissionStageId;
         session?: AgentSession;
         onActionExecuted: () => Promise<void>;
     } = $props();
@@ -510,14 +506,6 @@
                         "Select a task or session row to pin the runtime console."}
                 </p>
             </div>
-
-            <AgentSessionActionbar
-                {refreshNonce}
-                {stageId}
-                taskId={session?.taskId}
-                sessionId={session?.sessionId}
-                {onActionExecuted}
-            />
 
             <div class="text-right text-xs text-muted-foreground">
                 <p>{terminalStateLabel}</p>

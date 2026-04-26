@@ -1,5 +1,4 @@
 <script lang="ts">
-    import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { cn } from "$lib/utils.js";
@@ -11,25 +10,12 @@
     import RefreshIcon from "@tabler/icons-svelte/icons/refresh";
     import RocketIcon from "@tabler/icons-svelte/icons/rocket";
     import type { Icon } from "@tabler/icons-svelte";
-    import type {
-        MissionActionDescriptor,
-        MissionActionListSnapshot,
-        MissionActionQueryContext,
-        OperatorActionExecutionStep,
-    } from "@flying-pillow/mission-core/schemas";
-
-    type ActionTransportContext = MissionActionQueryContext & {
-        repositoryRootPath: string;
-        artifactPath?: string;
-    };
+    import type { EntityCommandDescriptor } from "@flying-pillow/mission-core/schemas";
+    import type { ActionableEntity } from "./ActionableEntity";
 
     let {
         refreshNonce,
-        scope,
-        stageId,
-        taskId,
-        artifactPath,
-        sessionId,
+        entity,
         label,
         onActionExecuted,
         class: className,
@@ -38,11 +24,7 @@
         showEmptyState = true,
     }: {
         refreshNonce: number;
-        scope: "mission" | "task" | "artifact" | "session";
-        stageId?: string;
-        taskId?: string;
-        artifactPath?: string;
-        sessionId?: string;
+        entity?: ActionableEntity;
         label?: string;
         onActionExecuted: () => Promise<void>;
         class?: string;
@@ -51,102 +33,42 @@
         showEmptyState?: boolean;
     } = $props();
 
-    let actionSnapshot = $state<MissionActionListSnapshot | null>(null);
+    let commands = $state<EntityCommandDescriptor[]>([]);
     let actionLoading = $state(false);
     let actionPending = $state<string | null>(null);
     let actionError = $state<string | null>(null);
-    let confirmationAction = $state<MissionActionDescriptor | null>(null);
+    let confirmationAction = $state<EntityCommandDescriptor | null>(null);
     let confirmationOpen = $state(false);
-    let loadedContextKey = $state<string | null>(null);
+    let loadedEntityKey = $state<string | null>(null);
     let lastRefreshNonce = $state<number | null>(null);
     let confirmationResolver: ((confirmed: boolean) => void) | null = null;
-    const missionScope = getScopedMissionContext();
-    const mission = $derived.by(() => {
-        const activeMission = missionScope.mission;
-        if (!activeMission) {
-            throw new Error(
-                "Mission actions require a scoped mission context.",
-            );
-        }
 
-        return activeMission;
-    });
-    const activeRepository = $derived.by(() => {
-        const repository = missionScope.repository;
-        if (!repository) {
-            throw new Error(
-                "Mission actions require a scoped repository context.",
-            );
-        }
-
-        return repository;
-    });
-    const missionId = $derived(mission.missionId);
-    const repositoryId = $derived(activeRepository.repositoryId);
-    const repositoryRootPath = $derived(
-        mission.missionWorktreePath || activeRepository.repositoryRootPath,
+    const entityKey = $derived(
+        entity ? `${entity.entityName}:${entity.entityId}` : null,
     );
-
-    const actionContext = $derived.by(
-        () =>
-            ({
-                repositoryId,
-                repositoryRootPath,
-                ...(stageId ? { stageId } : {}),
-                ...(taskId ? { taskId } : {}),
-                ...(artifactPath ? { artifactPath } : {}),
-                ...(sessionId ? { sessionId } : {}),
-            }) satisfies ActionTransportContext,
+    const availableCommands = $derived(
+        commands.filter((command) => !command.disabled),
     );
-    const actionContextKey = $derived(JSON.stringify(actionContext));
-    const availableActions = $derived.by(() => {
-        const snapshotActions = actionSnapshot?.actions ?? [];
-        return snapshotActions.filter((action) => !action.disabled);
-    });
 
     $effect(() => {
         if (lastRefreshNonce !== refreshNonce) {
-            loadedContextKey = null;
+            loadedEntityKey = null;
             lastRefreshNonce = refreshNonce;
         }
 
-        if (!missionId) {
-            actionSnapshot = null;
+        if (!entity || !entityKey) {
+            commands = [];
             actionLoading = false;
             actionError = null;
-            loadedContextKey = null;
+            loadedEntityKey = null;
             return;
         }
 
-        if (scope === "task" && !taskId) {
-            actionSnapshot = null;
-            actionLoading = false;
-            actionError = null;
-            loadedContextKey = null;
+        if (loadedEntityKey === entityKey) {
             return;
         }
 
-        if (scope === "artifact" && !artifactPath) {
-            actionSnapshot = null;
-            actionLoading = false;
-            actionError = null;
-            loadedContextKey = null;
-            return;
-        }
-
-        if (scope === "session" && !sessionId) {
-            actionSnapshot = null;
-            actionLoading = false;
-            actionError = null;
-            loadedContextKey = null;
-            return;
-        }
-
-        if (loadedContextKey === actionContextKey) {
-            return;
-        }
-
-        void loadActions(actionContextKey, actionContext);
+        void loadCommands(entity, entityKey);
     });
 
     $effect(() => {
@@ -159,76 +81,62 @@
     });
 
     function actionVariant(
-        action: MissionActionDescriptor,
+        action: EntityCommandDescriptor,
     ): "default" | "outline" | "secondary" | "destructive" {
-        if (
-            action.actionId.includes("panic") ||
-            action.actionId.includes("terminate")
-        ) {
+        if (action.variant === "destructive") {
+            return "destructive";
+        }
+
+        const commandId = action.commandId.toLowerCase();
+        if (commandId.includes("panic") || commandId.includes("terminate")) {
             return "destructive";
         }
 
         return defaultVariant;
     }
 
-    function getActionIcon(action: MissionActionDescriptor): Icon {
-        const actionId = action.actionId.toLowerCase();
+    function getActionIcon(action: EntityCommandDescriptor): Icon {
+        const commandId =
+            `${action.iconHint ?? action.commandId}`.toLowerCase();
 
-        if (actionId.includes("resume") || actionId.includes("start")) {
+        if (commandId.includes("resume") || commandId.includes("start")) {
             return PlayerPlayIcon;
         }
 
-        if (actionId.includes("pause")) {
+        if (commandId.includes("pause")) {
             return PlayerPauseIcon;
         }
 
-        if (actionId.includes("panic") || actionId.includes("terminate")) {
+        if (commandId.includes("panic") || commandId.includes("terminate")) {
             return AlertTriangleIcon;
         }
 
-        if (actionId.includes("restart") || actionId.includes("reopen")) {
+        if (commandId.includes("restart") || commandId.includes("reopen")) {
             return RefreshIcon;
         }
 
-        if (actionId.includes("deliver") || actionId.includes("launch")) {
+        if (commandId.includes("deliver") || commandId.includes("launch")) {
             return RocketIcon;
         }
 
-        if (actionId.includes("block") || actionId.includes("cancel")) {
+        if (commandId.includes("block") || commandId.includes("cancel")) {
             return HandStopIcon;
         }
 
         return CircleCheckIcon;
     }
 
-    async function loadActions(
-        contextKey: string,
-        context: ActionTransportContext,
+    async function loadCommands(
+        commandEntity: ActionableEntity,
+        key: string,
     ): Promise<void> {
         actionLoading = true;
         actionError = null;
         try {
-            if (!mission) {
-                throw new Error(
-                    "Mission actions are unavailable until the app context is synchronized.",
-                );
-            }
-
-            actionSnapshot = await mission.listAvailableActions(
-                {
-                    repositoryId: context.repositoryId,
-                    ...(context.stageId ? { stageId: context.stageId } : {}),
-                    ...(context.taskId ? { taskId: context.taskId } : {}),
-                    ...(context.artifactPath
-                        ? { artifactPath: context.artifactPath }
-                        : {}),
-                    ...(context.sessionId
-                        ? { sessionId: context.sessionId }
-                        : {}),
-                },
-                { executionContext: "render" },
-            );
-            loadedContextKey = contextKey;
+            commands = await commandEntity.listCommands({
+                executionContext: "render",
+            });
+            loadedEntityKey = key;
         } catch (loadError) {
             actionError =
                 loadError instanceof Error
@@ -240,9 +148,9 @@
     }
 
     async function executeAction(
-        action: MissionActionDescriptor,
+        action: EntityCommandDescriptor,
     ): Promise<void> {
-        if (actionPending || action.disabled) {
+        if (!entity || actionPending || action.disabled) {
             return;
         }
 
@@ -250,16 +158,25 @@
             return;
         }
 
-        await submitAction(action, []);
+        await submitAction(entity, action);
     }
 
     async function requestActionConfirmation(
-        action: MissionActionDescriptor,
+        action: EntityCommandDescriptor,
     ): Promise<boolean> {
+        if (!action.confirmation?.required) {
+            return true;
+        }
+
         if (confirmationResolver) {
             resolveActionConfirmation(false);
         }
-        return true;
+
+        confirmationAction = action;
+        confirmationOpen = true;
+        return new Promise((resolve) => {
+            confirmationResolver = resolve;
+        });
     }
 
     function resolveActionConfirmation(confirmed: boolean): void {
@@ -271,24 +188,14 @@
     }
 
     async function submitAction(
-        action: MissionActionDescriptor,
-        steps: OperatorActionExecutionStep[],
+        commandEntity: ActionableEntity,
+        action: EntityCommandDescriptor,
     ): Promise<boolean> {
-        actionPending = action.actionId;
+        actionPending = action.commandId;
         actionError = null;
         try {
-            if (!mission) {
-                throw new Error(
-                    "Mission actions are unavailable until the app context is synchronized.",
-                );
-            }
-
-            await mission.executeAction({
-                actionId: action.actionId,
-                ...(steps.length > 0 ? { steps } : {}),
-            });
-
-            loadedContextKey = null;
+            await commandEntity.executeCommand(action.commandId);
+            loadedEntityKey = null;
             await onActionExecuted();
             return true;
         } catch (executeError) {
@@ -309,9 +216,10 @@
         <AlertDialog.Header>
             <AlertDialog.Title>Confirm action</AlertDialog.Title>
             <AlertDialog.Description>
-                {confirmationAction
-                    ? `Execute '${confirmationAction.label}'?`
-                    : "Confirm this action to continue."}
+                {confirmationAction?.confirmation?.prompt ??
+                    (confirmationAction
+                        ? `Execute '${confirmationAction.label}'?`
+                        : "Confirm this action to continue.")}
             </AlertDialog.Description>
         </AlertDialog.Header>
         <AlertDialog.Footer>
@@ -338,16 +246,16 @@
             <Button variant="secondary" size="sm" disabled>{label}</Button>
         {/if}
 
-        {#if actionLoading && availableActions.length === 0 && showEmptyState}
+        {#if actionLoading && availableCommands.length === 0 && showEmptyState}
             <Button variant="outline" size="sm" disabled
                 >Loading actions...</Button
             >
-        {:else if availableActions.length === 0 && showEmptyState}
+        {:else if availableCommands.length === 0 && showEmptyState}
             <Button variant="outline" size="sm" disabled
                 >No actions available</Button
             >
         {:else}
-            {#each availableActions as action (action.actionId)}
+            {#each availableCommands as action (action.commandId)}
                 {@const Icon = getActionIcon(action)}
                 <Button
                     variant={actionVariant(action)}
@@ -361,7 +269,7 @@
                 >
                     <Icon class="size-4" data-icon="inline-start" />
                     <span>
-                        {actionPending === action.actionId
+                        {actionPending === action.commandId
                             ? `${action.label}...`
                             : action.label}
                     </span>

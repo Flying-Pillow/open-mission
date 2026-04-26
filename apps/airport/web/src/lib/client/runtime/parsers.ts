@@ -12,8 +12,6 @@ import {
     airportRuntimeEventEnvelopeSchema,
     githubIssueDetailSchema,
     missionRuntimeMissionCommandSchema,
-    missionRuntimeSessionCommandSchema,
-    missionRuntimeTaskCommandSchema,
     repositorySchema,
     repositorySnapshotSchema,
     trackedIssueSummarySchema
@@ -45,34 +43,12 @@ export function parseGitHubIssueDetail(value: unknown): GitHubIssueDetail {
     return githubIssueDetailSchema.parse(value);
 }
 
-export function parseMissionTaskCommandPayload(value: unknown): {
-    action: 'start' | 'complete' | 'reopen';
-    terminalSessionName?: string;
-} {
-    return missionRuntimeTaskCommandSchema.parse(value) as {
-        action: 'start' | 'complete' | 'reopen';
-        terminalSessionName?: string;
-    };
-}
-
 export function parseMissionCommandPayload(value: unknown): {
     action: 'pause' | 'resume' | 'panic' | 'clearPanic' | 'restartQueue' | 'deliver';
 } {
     return missionRuntimeMissionCommandSchema.parse(value) as {
         action: 'pause' | 'resume' | 'panic' | 'clearPanic' | 'restartQueue' | 'deliver';
     };
-}
-
-export function parseMissionSessionCommandPayload(value: unknown):
-    | { action: 'complete' }
-    | { action: 'cancel' | 'terminate'; reason?: string }
-    | { action: 'prompt'; prompt: unknown }
-    | { action: 'command'; command: unknown } {
-    return missionRuntimeSessionCommandSchema.parse(value) as
-        | { action: 'complete' }
-        | { action: 'cancel' | 'terminate'; reason?: string }
-        | { action: 'prompt'; prompt: unknown }
-        | { action: 'command'; command: unknown };
 }
 
 export function parseMissionTerminalSnapshot(value: unknown): MissionTerminalSnapshot {

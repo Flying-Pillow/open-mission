@@ -1,5 +1,6 @@
 // /apps/airport/web/src/lib/components/entities/Stage/Stage.svelte.ts: OO browser entity for a mission workflow stage with task accessors.
 import type {
+    EntityCommandDescriptor,
     MissionStageSnapshot
 } from '@flying-pillow/mission-core/schemas';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
@@ -7,16 +8,24 @@ import type { Task } from '$lib/components/entities/Task/Task.svelte.js';
 
 export type StageSnapshot = MissionStageSnapshot;
 
+export type StageCommandOwner = {
+    listStageCommands(stageId: string, input?: { executionContext?: 'event' | 'render' }): Promise<{ commands: EntityCommandDescriptor[] }>;
+    executeStageCommand(stageId: string, commandId: string, input?: unknown): Promise<void>;
+};
+
 export class Stage implements EntityModel<StageSnapshot> {
     private snapshotState = $state<StageSnapshot | undefined>();
     private readonly resolveTask: (taskId: string) => Task | undefined;
+    private readonly owner: StageCommandOwner;
 
     public constructor(
         snapshot: StageSnapshot,
-        resolveTask: (taskId: string) => Task | undefined
+        resolveTask: (taskId: string) => Task | undefined,
+        owner: StageCommandOwner
     ) {
         this.snapshot = snapshot;
         this.resolveTask = resolveTask;
+        this.owner = owner;
     }
 
     private get snapshot(): StageSnapshot {
@@ -40,6 +49,14 @@ export class Stage implements EntityModel<StageSnapshot> {
         return this.stageId;
     }
 
+    public get entityName(): 'Stage' {
+        return 'Stage';
+    }
+
+    public get entityId(): string {
+        return this.stageId;
+    }
+
     public get lifecycle(): string {
         return this.snapshot.lifecycle;
     }
@@ -56,6 +73,15 @@ export class Stage implements EntityModel<StageSnapshot> {
         return this.snapshot.tasks
             .map((task) => this.resolveTask(task.taskId))
             .filter((task): task is Task => task !== undefined);
+    }
+
+    public async listCommands(input: { executionContext?: 'event' | 'render' } = {}): Promise<EntityCommandDescriptor[]> {
+        const snapshot = await this.owner.listStageCommands(this.stageId, input);
+        return structuredClone(snapshot.commands);
+    }
+
+    public async executeCommand(commandId: string, input?: unknown): Promise<void> {
+        await this.owner.executeStageCommand(this.stageId, commandId, input);
     }
 
     public updateFromSnapshot(snapshot: StageSnapshot): this {

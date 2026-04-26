@@ -1,7 +1,5 @@
-// /apps/airport/web/src/lib/client/runtime/transport/MissionCommandTransport.ts: Snapshot-and-command transport for mission task and session operations.
+// /apps/airport/web/src/lib/client/runtime/transport/MissionCommandTransport.ts: Mission-only snapshot and command transport.
 import type {
-    MissionAgentCommand as AgentCommand,
-    MissionAgentPrompt as AgentPrompt,
     MissionActionQueryContext,
     MissionActionListSnapshot,
     MissionCommandAcknowledgement,
@@ -19,8 +17,6 @@ import {
     missionDocumentSnapshotSchema,
     missionMissionCommandSchema,
     missionProjectionSnapshotSchema,
-    missionSessionCommandSchema,
-    missionTaskCommandSchema,
     missionWorktreeSnapshotSchema
 } from '@flying-pillow/mission-core/schemas';
 import type {
@@ -67,37 +63,6 @@ export class MissionCommandTransport implements MissionCommandGateway {
         this.queryRemote = input.queryRemote ?? executeDefaultQueryRemote;
     }
 
-    public startTask(input: {
-        missionId: string;
-        taskId: string;
-        terminalSessionName?: string;
-    }): Promise<MissionCommandAcknowledgement> {
-        return this.sendTaskCommand(input.missionId, input.taskId, {
-            action: 'start',
-            ...(input.terminalSessionName?.trim()
-                ? { terminalSessionName: input.terminalSessionName.trim() }
-                : {})
-        });
-    }
-
-    public completeTask(input: {
-        missionId: string;
-        taskId: string;
-    }): Promise<MissionCommandAcknowledgement> {
-        return this.sendTaskCommand(input.missionId, input.taskId, {
-            action: 'complete'
-        });
-    }
-
-    public reopenTask(input: {
-        missionId: string;
-        taskId: string;
-    }): Promise<MissionCommandAcknowledgement> {
-        return this.sendTaskCommand(input.missionId, input.taskId, {
-            action: 'reopen'
-        });
-    }
-
     public pauseMission(input: { missionId: string }): Promise<MissionCommandAcknowledgement> {
         return this.sendMissionCommand(input.missionId, { action: 'pause' });
     }
@@ -120,59 +85,6 @@ export class MissionCommandTransport implements MissionCommandGateway {
 
     public deliverMission(input: { missionId: string }): Promise<MissionCommandAcknowledgement> {
         return this.sendMissionCommand(input.missionId, { action: 'deliver' });
-    }
-
-    public completeSession(input: {
-        missionId: string;
-        sessionId: string;
-    }): Promise<MissionCommandAcknowledgement> {
-        return this.sendSessionRequest(input.missionId, input.sessionId, {
-            action: 'complete'
-        });
-    }
-
-    public cancelSession(input: {
-        missionId: string;
-        sessionId: string;
-        reason?: string;
-    }): Promise<MissionCommandAcknowledgement> {
-        return this.sendSessionRequest(input.missionId, input.sessionId, {
-            action: 'cancel',
-            ...(input.reason?.trim() ? { reason: input.reason.trim() } : {})
-        });
-    }
-
-    public terminateSession(input: {
-        missionId: string;
-        sessionId: string;
-        reason?: string;
-    }): Promise<MissionCommandAcknowledgement> {
-        return this.sendSessionRequest(input.missionId, input.sessionId, {
-            action: 'terminate',
-            ...(input.reason?.trim() ? { reason: input.reason.trim() } : {})
-        });
-    }
-
-    public sendSessionPrompt(input: {
-        missionId: string;
-        sessionId: string;
-        prompt: AgentPrompt;
-    }): Promise<MissionCommandAcknowledgement> {
-        return this.sendSessionRequest(input.missionId, input.sessionId, {
-            action: 'prompt',
-            prompt: input.prompt
-        });
-    }
-
-    public sendSessionCommand(input: {
-        missionId: string;
-        sessionId: string;
-        command: AgentCommand;
-    }): Promise<MissionCommandAcknowledgement> {
-        return this.sendSessionRequest(input.missionId, input.sessionId, {
-            action: 'command',
-            command: input.command
-        });
     }
 
     public async getMissionProjection(input: {
@@ -296,33 +208,6 @@ export class MissionCommandTransport implements MissionCommandGateway {
         }, input.executionContext));
     }
 
-    private async sendTaskCommand(
-        missionId: string,
-        taskId: string,
-        body: {
-            action: 'start' | 'complete' | 'reopen';
-            terminalSessionName?: string;
-        }
-    ): Promise<MissionCommandAcknowledgement> {
-        const normalizedMissionId = missionId.trim();
-        const normalizedTaskId = taskId.trim();
-        if (!normalizedMissionId || !normalizedTaskId) {
-            throw new Error('Mission task commands require missionId and taskId.');
-        }
-
-        const payload = missionTaskCommandSchema.parse(body);
-
-        return missionCommandAcknowledgementSchema.parse(await this.commandRemote({
-            entity: missionEntityName,
-            method: 'taskCommand',
-            payload: {
-                ...this.buildMissionPayload(normalizedMissionId),
-                taskId: normalizedTaskId,
-                command: payload
-            }
-        }));
-    }
-
     private async sendMissionCommand(
         missionId: string,
         body: {
@@ -341,34 +226,6 @@ export class MissionCommandTransport implements MissionCommandGateway {
             method: 'command',
             payload: {
                 ...this.buildMissionPayload(normalizedMissionId),
-                command: payload
-            }
-        }));
-    }
-
-    private async sendSessionRequest(
-        missionId: string,
-        sessionId: string,
-        body:
-            | { action: 'complete' }
-            | { action: 'cancel' | 'terminate'; reason?: string }
-            | { action: 'prompt'; prompt: AgentPrompt }
-            | { action: 'command'; command: AgentCommand }
-    ): Promise<MissionCommandAcknowledgement> {
-        const normalizedMissionId = missionId.trim();
-        const normalizedSessionId = sessionId.trim();
-        if (!normalizedMissionId || !normalizedSessionId) {
-            throw new Error('Mission session commands require missionId and sessionId.');
-        }
-
-        const payload = missionSessionCommandSchema.parse(body);
-
-        return missionCommandAcknowledgementSchema.parse(await this.commandRemote({
-            entity: missionEntityName,
-            method: 'sessionCommand',
-            payload: {
-                ...this.buildMissionPayload(normalizedMissionId),
-                sessionId: normalizedSessionId,
                 command: payload
             }
         }));

@@ -7,8 +7,12 @@
     import ChevronUpIcon from "@tabler/icons-svelte/icons/chevron-up";
     import type { MissionRuntimeEventEnvelope as AirportRuntimeEventEnvelope } from "../types";
     import {
+        missionArtifactSnapshotSchema,
         missionAgentSessionSnapshotSchema,
+        missionSnapshotSchema,
+        missionStageSnapshotSchema,
         missionStatusSnapshotSchema,
+        missionTaskSnapshotSchema,
     } from "@flying-pillow/mission-core/schemas";
     import type { AgentSession as AgentSessionModel } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
@@ -16,8 +20,8 @@
     import AgentSession from "$lib/components/entities/AgentSession/AgentSession.svelte";
     import ArtifactEditor from "$lib/components/entities/Artifact/ArtifactEditor.svelte";
     import ArtifactViewer from "$lib/components/entities/Artifact/ArtifactViewer.svelte";
-    import MissionActionbar from "$lib/components/entities/Mission/MissionActionbar.svelte";
     import MissionCockpit from "$lib/components/entities/Mission/MissionCockpit.svelte";
+    import MissionControlTree from "$lib/components/entities/Mission/MissionControlTree.svelte";
     import MissionFileTree from "$lib/components/entities/Mission/MissionFileTree.svelte";
     import MissionTerminal from "$lib/components/entities/Mission/MissionTerminal.svelte";
     import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/schemas";
@@ -28,6 +32,7 @@
         ResizablePaneGroup,
     } from "$lib/components/ui/resizable";
     import * as Tabs from "$lib/components/ui/tabs/index.js";
+    import type { ActiveMissionOutline } from "$lib/client/context/app-context.svelte";
     import type { MissionFileTreeNode } from "$lib/types/mission-file-tree";
     import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
 
@@ -80,6 +85,7 @@
     let runtimeError = $state<string | null>(null);
     let actionRefreshNonce = $state(0);
     let artifactPanelMode = $state<"view" | "edit">("view");
+    let leftPanelMode = $state<"mission" | "files">("mission");
     let rightPanelMode = $state<"terminal" | "agent">("terminal");
     let lastSelectedAgentSessionId = $state<string | null>(null);
     let selectedWorktreeNode = $state<MissionFileTreeNode | null>(null);
@@ -88,18 +94,81 @@
     let refreshQueued = false;
     let progressCollapsed = $state(false);
 
+    const missionStatus = $derived(projectionSnapshot?.status);
+    const workflowLifecycle = $derived(
+        projectionSnapshot?.workflow?.lifecycle ??
+            activeMission?.workflowLifecycle,
+    );
+    const workflowUpdatedAt = $derived(
+        projectionSnapshot?.workflow?.updatedAt ??
+            activeMission?.workflowUpdatedAt,
+    );
+    const currentStageId = $derived(
+        projectionSnapshot?.workflow?.currentStageId,
+    );
+    const missionTitle = $derived(
+        missionStatus?.title ??
+            activeMission?.missionId ??
+            missionScope.missionId,
+    );
+    const missionTreeNodes = $derived(
+        activeMission ? buildMissionTreeNodes(activeMission) : [],
+    );
     const selectedNodeId = $derived.by(() => {
-        if (!projectionSnapshot) {
+        if (!projectionSnapshot || missionTreeNodes.length === 0) {
             return undefined;
         }
 
-        return appContext.airport.activeMissionSelectedNodeId;
+        const activeNodeId = appContext.airport.activeMissionSelectedNodeId;
+        return missionTreeNodes.some((node) => node.id === activeNodeId)
+            ? activeNodeId
+            : missionTreeNodes.find((node) => node.stageId === currentStageId)
+                  ?.id;
     });
+    const missionOutline = $derived<ActiveMissionOutline | undefined>(
+        activeMission
+            ? {
+                  title: missionTitle,
+                  currentStageId,
+                  briefPath: activeMission
+                      .listArtifacts()
+                      .find(
+                          (artifact) => artifact.artifactId === "mission:brief",
+                      )?.filePath,
+                  treeNodes: missionTreeNodes,
+              }
+            : undefined,
+    );
     const selectionState = $derived.by((): MissionSelectionState => {
+        const selectedNode = missionTreeNodes.find(
+            (node) => node.id === selectedNodeId,
+        );
+
         return {
-            treeNodes: [],
-            visibleTreeNodes: [],
+            treeNodes: missionTreeNodes,
+            visibleTreeNodes: missionTreeNodes,
             selectedNodeId,
+            ...(selectedNode?.stageId || selectedNode?.taskId
+                ? {
+                      resolvedSelection: {
+                          ...(selectedNode.stageId
+                              ? { stageId: selectedNode.stageId }
+                              : {}),
+                          ...(selectedNode.taskId
+                              ? { taskId: selectedNode.taskId }
+                              : {}),
+                      },
+                  }
+                : {}),
+            ...(selectedNode?.sourcePath
+                ? {
+                      activeArtifact: { displayLabel: selectedNode.label },
+                      activeArtifactPath: selectedNode.sourcePath,
+                  }
+                : {}),
+            ...(selectedNode?.sessionId
+                ? { activeSessionId: selectedNode.sessionId }
+                : {}),
         };
     });
     const activeArtifactPath = $derived(selectionState.activeArtifactPath);
@@ -157,24 +226,6 @@
                     selectionState.resolvedSelection?.taskId,
                 )
               : undefined,
-    );
-
-    const missionStatus = $derived(projectionSnapshot?.status);
-    const workflowLifecycle = $derived(
-        projectionSnapshot?.workflow?.lifecycle ??
-            activeMission?.workflowLifecycle,
-    );
-    const workflowUpdatedAt = $derived(
-        projectionSnapshot?.workflow?.updatedAt ??
-            activeMission?.workflowUpdatedAt,
-    );
-    const currentStageId = $derived(
-        projectionSnapshot?.workflow?.currentStageId,
-    );
-    const missionTitle = $derived(
-        missionStatus?.title ??
-            activeMission?.missionId ??
-            missionScope.missionId,
     );
 
     onMount(async () => {
@@ -296,7 +347,9 @@
             appContext.setActiveMissionOutline({
                 title: nextSnapshot.status?.title,
                 currentStageId: nextSnapshot.workflow?.currentStageId,
-                treeNodes: [],
+                treeNodes: activeMission
+                    ? buildMissionTreeNodes(activeMission)
+                    : [],
             });
         } catch (error) {
             projectionError =
@@ -336,7 +389,7 @@
         appContext.setActiveMissionOutline({
             title: status.title,
             currentStageId: status.workflow?.currentStageId,
-            treeNodes: [],
+            treeNodes: buildMissionTreeNodes(activeMission),
         });
     }
 
@@ -344,19 +397,55 @@
         event: AirportRuntimeEventEnvelope,
     ): void {
         switch (event.type) {
+            case "mission.snapshot.changed":
+                activeMission?.applyMissionSnapshot(
+                    missionSnapshotSchema.parse(event.payload.snapshot),
+                );
+                actionRefreshNonce += 1;
+                return;
             case "mission.status":
                 applyMissionStatusEvent(event);
                 return;
             case "mission.actions.changed":
                 actionRefreshNonce += 1;
+                if (event.payload.actions) {
+                    return;
+                }
                 scheduleProjectionRefresh();
+                return;
+            case "stage.snapshot.changed":
+                activeMission?.applyStageSnapshot(
+                    missionStageSnapshotSchema.parse(event.payload.snapshot),
+                );
+                actionRefreshNonce += 1;
+                return;
+            case "task.snapshot.changed":
+                activeMission?.applyTaskSnapshot(
+                    missionTaskSnapshotSchema.parse(event.payload.snapshot),
+                );
+                actionRefreshNonce += 1;
+                return;
+            case "artifact.snapshot.changed":
+                activeMission?.applyArtifactSnapshot(
+                    missionArtifactSnapshotSchema.parse(event.payload.snapshot),
+                );
+                actionRefreshNonce += 1;
+                return;
+            case "agentSession.snapshot.changed":
+                activeMission?.applyAgentSessionSnapshot(
+                    missionAgentSessionSnapshotSchema.parse(
+                        event.payload.snapshot,
+                    ),
+                );
+                actionRefreshNonce += 1;
                 return;
             case "session.event":
                 activeMission?.applyAgentSessionSnapshot(
                     missionAgentSessionSnapshotSchema.parse(
-                        (event.payload as { session?: unknown }).session,
+                        event.payload.session,
                     ),
                 );
+                actionRefreshNonce += 1;
                 return;
             case "session.lifecycle":
                 scheduleProjectionRefresh();
@@ -422,6 +511,150 @@
             sessions.find((session) => session.isTerminalBacked()) ??
             sessions[0]
         );
+    }
+
+    function buildMissionTreeNodes(
+        currentMission: MissionEntity,
+    ): MissionTowerTreeNode[] {
+        const stageColors = [
+            "#38bdf8",
+            "#34d399",
+            "#f59e0b",
+            "#f43f5e",
+            "#a78bfa",
+        ];
+        const nodes: MissionTowerTreeNode[] = [];
+
+        for (const artifact of currentMission.listArtifacts()) {
+            if (artifact.stageId || artifact.taskId) {
+                continue;
+            }
+            nodes.push({
+                id: `tree:mission-artifact:${artifact.artifactId}`,
+                label: artifact.label,
+                kind: "mission-artifact",
+                depth: 0,
+                color: "#8b949e",
+                statusLabel: "Mission artifact",
+                collapsible: false,
+                sourcePath: artifact.filePath,
+            });
+        }
+
+        currentMission.listStages().forEach((stage, stageIndex) => {
+            const stageSnapshot = stage.toSnapshot();
+            const stageColor = stageColors[stageIndex % stageColors.length];
+            const stageNodeId = toMissionTreeStageId(stage.stageId);
+            nodes.push({
+                id: `tree:stage:${stage.stageId}`,
+                label: stage.stageId,
+                kind: "stage",
+                depth: 0,
+                color: stageColor,
+                statusLabel: stage.lifecycle,
+                collapsible: true,
+                stageId: stageNodeId,
+            });
+
+            for (const artifact of stage.artifacts) {
+                nodes.push({
+                    id: `tree:stage-artifact:${artifact.artifactId}`,
+                    label: artifact.label,
+                    kind: "stage-artifact",
+                    depth: 1,
+                    color: stageColor,
+                    statusLabel: "Stage artifact",
+                    collapsible: false,
+                    sourcePath: artifact.filePath ?? artifact.relativePath,
+                    stageId: stageNodeId,
+                });
+            }
+
+            for (const task of currentMission.listTasksForStage(
+                stage.stageId,
+            )) {
+                const taskSnapshot = task.toSnapshot().task;
+                nodes.push({
+                    id: `tree:task:${task.taskId}`,
+                    label: task.title,
+                    kind: "task",
+                    depth: 1,
+                    color: stageColor,
+                    statusLabel: task.lifecycle,
+                    collapsible: true,
+                    sourcePath: taskSnapshot.filePath,
+                    stageId: stageNodeId,
+                    taskId: task.taskId,
+                });
+
+                for (const artifact of currentMission
+                    .listArtifacts()
+                    .filter((candidate) => candidate.taskId === task.taskId)) {
+                    nodes.push({
+                        id: `tree:task-artifact:${artifact.artifactId}`,
+                        label: artifact.label,
+                        kind: "task-artifact",
+                        depth: 2,
+                        color: stageColor,
+                        statusLabel: "Task artifact",
+                        collapsible: false,
+                        sourcePath: artifact.filePath,
+                        stageId: stageNodeId,
+                        taskId: task.taskId,
+                    });
+                }
+
+                for (const session of currentMission
+                    .listSessions()
+                    .filter((candidate) => candidate.taskId === task.taskId)) {
+                    nodes.push({
+                        id: `tree:session:${session.sessionId}`,
+                        label: session.currentTurnTitle ?? session.sessionId,
+                        kind: "session",
+                        depth: 2,
+                        color: stageColor,
+                        statusLabel: session.lifecycleState,
+                        collapsible: false,
+                        stageId: stageNodeId,
+                        taskId: task.taskId,
+                        sessionId: session.sessionId,
+                    });
+                }
+            }
+
+            for (const artifact of stageSnapshot.artifacts.filter(
+                (candidate) => !candidate.taskId,
+            )) {
+                if (
+                    nodes.some(
+                        (node) =>
+                            node.id ===
+                            `tree:stage-artifact:${artifact.artifactId}`,
+                    )
+                ) {
+                    continue;
+                }
+                nodes.push({
+                    id: `tree:stage-artifact:${artifact.artifactId}`,
+                    label: artifact.label,
+                    kind: "stage-artifact",
+                    depth: 1,
+                    color: stageColor,
+                    statusLabel: "Stage artifact",
+                    collapsible: false,
+                    sourcePath: artifact.filePath ?? artifact.relativePath,
+                    stageId: stageNodeId,
+                });
+            }
+        });
+
+        return nodes;
+    }
+
+    function toMissionTreeStageId(
+        stageId: string,
+    ): MissionTowerTreeNode["stageId"] {
+        return stageId as MissionTowerTreeNode["stageId"];
     }
 </script>
 
@@ -495,11 +728,6 @@
                     <div
                         class="flex items-start gap-2 self-start xl:justify-end"
                     >
-                        <MissionActionbar
-                            refreshNonce={actionRefreshNonce}
-                            onActionExecuted={handleMissionMutated}
-                        />
-
                         <Button
                             type="button"
                             variant="outline"
@@ -547,12 +775,47 @@
                 minSize={18}
                 class="flex h-full min-h-0 flex-col p-2"
             >
-                <MissionFileTree
-                    activePath={selectedWorktreeFile?.absolutePath}
-                    refreshNonce={actionRefreshNonce}
+                <Tabs.Root
+                    bind:value={leftPanelMode}
                     class="min-h-0 flex-1 overflow-hidden rounded-2xl border bg-card/70 backdrop-blur-sm"
-                    onSelectPath={handleSelectWorktreeNode}
-                />
+                >
+                    <div class="border-b px-3 py-2">
+                        <Tabs.List class="w-full">
+                            <Tabs.Trigger value="mission"
+                                >Mission Tree</Tabs.Trigger
+                            >
+                            <Tabs.Trigger value="files">Files</Tabs.Trigger>
+                        </Tabs.List>
+                    </div>
+
+                    <div class="relative min-h-0 flex-1 overflow-hidden p-0">
+                        {#if leftPanelMode === "mission"}
+                            <div
+                                class="absolute inset-0 min-h-0 overflow-hidden"
+                            >
+                                <MissionControlTree
+                                    outline={missionOutline}
+                                    {missionId}
+                                    activeNodeId={selectedNodeId}
+                                    title="Mission tree"
+                                    class="h-full rounded-none border-0 bg-transparent"
+                                    onSelectNode={handleSelectNode}
+                                />
+                            </div>
+                        {:else}
+                            <div
+                                class="absolute inset-0 min-h-0 overflow-hidden"
+                            >
+                                <MissionFileTree
+                                    activePath={selectedWorktreeFile?.absolutePath}
+                                    refreshNonce={actionRefreshNonce}
+                                    class="h-full rounded-none border-0 bg-transparent"
+                                    onSelectPath={handleSelectWorktreeNode}
+                                />
+                            </div>
+                        {/if}
+                    </div>
+                </Tabs.Root>
             </ResizablePane>
 
             <ResizableHandle withHandle />
@@ -612,8 +875,6 @@
                             >
                                 <AgentSession
                                     refreshNonce={actionRefreshNonce}
-                                    stageId={selectionState.resolvedSelection
-                                        ?.stageId}
                                     session={resolvedSession}
                                     onActionExecuted={handleMissionMutated}
                                 />

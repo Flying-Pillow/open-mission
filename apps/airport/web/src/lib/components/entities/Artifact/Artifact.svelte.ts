@@ -1,9 +1,10 @@
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
-import type { MissionDocumentSnapshot } from '@flying-pillow/mission-core/schemas';
+import type { EntityCommandDescriptor, MissionDocumentSnapshot } from '@flying-pillow/mission-core/schemas';
 
 export type ArtifactDocumentPayload = MissionDocumentSnapshot;
 
 export type ArtifactSnapshot = {
+    artifactId: string;
     filePath: string;
     label?: string;
     stageId?: string;
@@ -11,6 +12,8 @@ export type ArtifactSnapshot = {
 };
 
 export type ArtifactOwner = {
+    listArtifactCommands(artifactId: string, input?: { executionContext?: 'event' | 'render' }): Promise<{ commands: EntityCommandDescriptor[] }>;
+    executeArtifactCommand(artifactId: string, commandId: string, input?: unknown): Promise<void>;
     readArtifact(filePath: string, input?: ArtifactReadOptions): Promise<ArtifactDocumentPayload>;
     writeArtifact(filePath: string, content: string): Promise<ArtifactDocumentPayload>;
 };
@@ -42,7 +45,19 @@ export class Artifact implements EntityModel<ArtifactSnapshot> {
     }
 
     public get id(): string {
-        return this.filePath;
+        return this.artifactId;
+    }
+
+    public get entityName(): 'Artifact' {
+        return 'Artifact';
+    }
+
+    public get entityId(): string {
+        return this.artifactId;
+    }
+
+    public get artifactId(): string {
+        return this.snapshot.artifactId;
     }
 
     public get filePath(): string {
@@ -67,6 +82,15 @@ export class Artifact implements EntityModel<ArtifactSnapshot> {
 
     public async write(content: string): Promise<ArtifactDocumentPayload> {
         return this.owner.writeArtifact(this.filePath, content);
+    }
+
+    public async listCommands(input: { executionContext?: 'event' | 'render' } = {}): Promise<EntityCommandDescriptor[]> {
+        const snapshot = await this.owner.listArtifactCommands(this.artifactId, input);
+        return structuredClone(snapshot.commands);
+    }
+
+    public async executeCommand(commandId: string, input?: unknown): Promise<void> {
+        await this.owner.executeArtifactCommand(this.artifactId, commandId, input);
     }
 
     public updateFromSnapshot(snapshot: ArtifactSnapshot): this {

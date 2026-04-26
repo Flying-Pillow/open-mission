@@ -11,6 +11,7 @@
 	import * as Card from "$lib/components/ui/card";
 
 	const logoPath = asset("/logo.png");
+	const missionRepositoryUrl = "https://github.com/Flying-Pillow/mission";
 	const agentLogos = {
 		anthropic: asset("/agents/anthropic.svg"),
 		cursor: asset("/agents/cursor.svg"),
@@ -192,11 +193,14 @@
 
 			<div class="flex items-center gap-2">
 				<Button
-					href="/docs"
+					href={missionRepositoryUrl}
 					variant="ghost"
-					size="sm"
-					class="hidden sm:inline-flex">Docs</Button
+					size="icon-sm"
+					aria-label="Open the Mission GitHub repository"
+					title="Open on GitHub"
 				>
+					<BrandGithubIcon class="size-4" />
+				</Button>
 				<Button
 					href="/airport"
 					size="sm"

@@ -1,18 +1,21 @@
 <script lang="ts">
-    import ScopedActionbar from "$lib/components/entities/Actionbar/ScopedActionbar.svelte";
+    import EntityActionbar from "$lib/components/entities/Actionbar/EntityActionbar.svelte";
+    import type { Mission } from "$lib/components/entities/Mission/Mission.svelte.js";
 
     let {
         refreshNonce,
+        mission,
         onActionExecuted,
     }: {
         refreshNonce: number;
+        mission: Mission;
         onActionExecuted: () => Promise<void>;
     } = $props();
 </script>
 
-<ScopedActionbar
+<EntityActionbar
     {refreshNonce}
-    scope="mission"
+    entity={mission}
     class="xl:justify-end"
     buttonClass="shadow-sm"
     defaultVariant="outline"

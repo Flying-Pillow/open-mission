@@ -1,6 +1,7 @@
 <script lang="ts">
     import { page } from "$app/state";
     import ArrowRightIcon from "@tabler/icons-svelte/icons/arrow-right";
+    import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
     import FolderIcon from "@tabler/icons-svelte/icons/folder";
     import GitBranchIcon from "@tabler/icons-svelte/icons/git-branch";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
@@ -56,6 +57,15 @@
             ? "No repositories are registered yet. Add one from the form to start using Airport as a multi-repository control surface."
             : "No missions are available in this repository yet.",
     );
+
+    function getGitHubRepositoryUrl(
+        githubRepository: string | undefined,
+    ): string | undefined {
+        const normalizedRepository = githubRepository?.trim();
+        return normalizedRepository
+            ? `https://github.com/${normalizedRepository}`
+            : undefined;
+    }
 </script>
 
 <section
@@ -96,6 +106,9 @@
                     </div>
                 {:else}
                     {#each repositories as repository (repository.repositoryId)}
+                        {@const githubRepositoryUrl = getGitHubRepositoryUrl(
+                            repository.githubRepository,
+                        )}
                         <article
                             class="rounded-lg border bg-background px-4 py-4 shadow-xs transition-colors hover:bg-muted/20"
                         >
@@ -124,6 +137,19 @@
                                     </p>
                                 </div>
                                 <div class="flex items-center gap-2">
+                                    {#if githubRepositoryUrl}
+                                        <Button
+                                            href={githubRepositoryUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            variant="outline"
+                                            size="icon-sm"
+                                            aria-label={`Open ${repository.label} on GitHub`}
+                                            title="Open on GitHub"
+                                        >
+                                            <BrandGithubIcon class="size-4" />
+                                        </Button>
+                                    {/if}
                                     <Button
                                         href={`/repository/${encodeURIComponent(repository.repositoryId)}`}
                                         size="sm"

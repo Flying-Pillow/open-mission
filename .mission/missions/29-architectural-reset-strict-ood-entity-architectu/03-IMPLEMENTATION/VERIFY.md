@@ -2,7 +2,7 @@
 title: "VERIFY: #29 - Architectural Reset: Strict OOD Entity Architecture For Airport And Daemon"
 artifact: "verify"
 createdAt: "2026-04-22T14:54:07.971Z"
-updatedAt: "2026-04-26T15:30:00Z"
+updatedAt: "2026-04-26T18:00:00Z"
 stage: "implementation"
 ---
 
@@ -505,6 +505,226 @@ Task: `implementation/12-wire-mission-projections-and-remove-runtime-routes-veri
 
 - `packages/core/src/schemas/MissionRuntime.ts` still defines the legacy Mission runtime schema types for remaining internal runtime compatibility, but active Airport Mission paths no longer import the broad runtime snapshot contract.
 - Stage, Task, Artifact, and AgentSession remain Mission child projections instead of independent daemon-callable source entities; that promotion is outside this Mission migration verification.
+
+## 2026-04-26 - Task 13 Implement Child Entity Command Contracts
+
+Task: `implementation/13-create-child-entity-command-contracts`
+
+### Task 13 Focused Evidence
+
+- `packages/core/src/schemas/EntityRemote.ts` now owns canonical generic `EntityCommandDescriptor`, command input descriptor, confirmation, and `EntityCommandListSnapshot` schemas.
+- `packages/core/src/schemas/Stage.ts`, `Task.ts`, `Artifact.ts`, and `AgentSession.ts` now own first-class child entity names, strict identity payloads, typed entity references, snapshots or projections, `listCommands` result schemas, `executeCommand` payload schemas, command acknowledgement schemas, and remote payload/result schema maps.
+- `packages/core/src/schemas/Mission.ts` now composes Stage, Task, Artifact, and AgentSession snapshot schemas from the child modules instead of defining child command contracts inline.
+- Mission-owned AgentSession command wrappers are named `missionAgentSessionCommandSchema`, `missionAgentSessionCommandPayloadSchema`, `MissionAgentSessionCommand`, and `MissionAgentSessionCommandPayload`; the old `MissionSessionCommand` naming was removed from TypeScript/Svelte sources.
+- `packages/core/src/schemas/index.ts` exports the dedicated child modules through `@flying-pillow/mission-core/schemas`.
+- Artifact child identity is `artifactId` based; the focused tests reject the old untyped `artifactPath` action-context shape.
+- Task child command payloads reject local actionbar filtering context such as `{ context: { scope, taskId } }`.
+- `packages/core/src/schemas/EntityCommandContracts.test.ts` passed: 1 file / 8 tests.
+- `pnpm exec vitest run --config vitest.config.ts --project core packages/core/src/daemon/entityRemote.test.ts packages/core/src/schemas/EntityCommandContracts.test.ts packages/core/src/schemas/RuntimeEvents.test.ts` passed: 3 files / 24 tests.
+- `pnpm --filter @flying-pillow/mission-core build` passed.
+- Editor diagnostics reported no errors for `EntityRemote.ts`, `Mission.ts`, `Stage.ts`, `Task.ts`, `Artifact.ts`, `AgentSession.ts`, `EntityCommandContracts.test.ts`, or the schema barrel.
+
+### Task 13 Boundary Evidence
+
+- The child entity contracts are exported through the existing `@flying-pillow/mission-core/schemas` barrel via `export * from './Stage.js'`, `Task.js`, `Artifact.js`, `AgentSession.js`, and the generic `EntityRemote.js` primitives.
+- The new command list schemas are already scoped to the entity that returns them and do not carry Mission action filtering context.
+- Remote contract maps now name the target child methods for the next implementation slice: Stage/Task/Artifact/AgentSession `read`, `listCommands`, and `executeCommand`, plus Artifact `readDocument`/`writeDocument` and AgentSession `sendPrompt`/`sendCommand`.
+- `RuntimeEvents.ts` now imports the AgentSession snapshot schema from `AgentSession.ts`, keeping session projection ownership with the AgentSession schema module.
+- This slice adds contracts only; explicit daemon handlers remain deferred to task 14.
+
+### Task 13 Remaining Gaps Outside Scope
+
+- Daemon dispatch does not yet execute Stage, Task, Artifact, or AgentSession methods; task 14 owns the explicit handlers and Mission aggregate resolution.
+- Airport still uses the transitional scoped actionbar until task 15 replaces it with the entity-command actionbar.
+
+## 2026-04-26 - Task 13 Verify Child Entity Command Contracts
+
+Task: `implementation/13-create-child-entity-command-contracts-verify`
+
+### Task 13 Verification Evidence
+
+- `pnpm exec vitest run --config vitest.config.ts --project core packages/core/src/schemas/EntityCommandContracts.test.ts packages/core/src/schemas/RuntimeEvents.test.ts packages/core/src/daemon/entityRemote.test.ts` passed: 3 files / 24 tests.
+- `pnpm --filter @flying-pillow/mission-core build` passed, including the public `@flying-pillow/mission-core/schemas` barrel after exporting `Stage`, `Task`, `Artifact`, and `AgentSession` modules.
+- A structural schema-ownership check passed: `Stage.ts`, `Task.ts`, `Artifact.ts`, and `AgentSession.ts` each expose identity payload, entity reference, command list snapshot, execute command payload, and command acknowledgement schemas; `Mission.ts` does not define child snapshot schemas inline or expose the removed `MissionSessionCommand` naming.
+- Non-test schema scan passed for forbidden legacy action-context names: no `artifactPath`, `MissionSessionCommand`, `missionSessionCommand`, or actionbar-style `context: { scope/taskId/sessionId/artifactPath }` usage remains in child schema contracts.
+- Editor diagnostics reported no errors for `EntityRemote.ts`, `Stage.ts`, `Task.ts`, `Artifact.ts`, `AgentSession.ts`, `Mission.ts`, `EntityCommandContracts.test.ts`, or the schema barrel.
+- `git diff --check` passed for the Task 13 schema, runtime-event, Airport transport export rename, verification ledger, and mission event files.
+
+### Task 13 Verification Result
+
+- Passed. Child entity command contracts are first-class schema modules, exported from the shared schema barrel, validated by focused tests, and no longer require Airport actionbar filtering context at the contract boundary.
+
+## 2026-04-26 - Task 14 Route Child Entity Commands Through Dispatch
+
+Task: `implementation/14-route-child-entity-commands-through-dispatch`
+
+### Task 14 Focused Evidence
+
+- `StageCommands`, `TaskCommands`, `ArtifactCommands`, and `AgentSessionCommands` now own the public child entity command/query behavior for Stage, Task, Artifact, and AgentSession.
+- `MissionCommands` was reduced back to Mission-level operations; child public methods such as `readTask`, `listTaskCommands`, `executeArtifactCommand`, and `sendAgentSessionPrompt` are no longer declared on `MissionCommands`.
+- `MissionRuntimeAccess` contains the shared Mission aggregate loading, snapshot, document path, and child lookup helpers used by Mission-level and child-entity command collaborators. It is runtime access infrastructure, not a generic command bucket.
+- `entityRemote.ts` keeps explicit child entity switch handlers and now routes Stage/Task/Artifact/AgentSession methods to their matching command collaborators rather than through `MissionCommands`.
+- Focused daemon tests spy on the child command classes directly and verify method-specific payload parsing, result parsing, child dispatch, and invalid payload/result failures.
+- Protocol version remains bumped to `27` for the expanded daemon entity method surface.
+
+### Task 14 Repository Structure Check
+
+- `Repository` and `GitHubRepository` still mix source/entity behavior with command-like static methods (`find`, `add`, `resolve`, `clone`) and instance command methods (`startMissionFromIssue`, `startMissionFromBrief`).
+- They should receive the same command-collaborator treatment in a dedicated Repository/GitHubRepository slice so daemon dispatch calls `RepositoryCommands`/`GitHubRepositoryCommands` instead of the entity/source classes directly.
+- This Task 14 change does not refactor Repository/GitHubRepository because the requested implementation scope is child Mission entities; the structure check is recorded as follow-up architecture debt.
+
+### Task 14 Verification Evidence
+
+- `pnpm exec vitest run --config vitest.config.ts --project core packages/core/src/daemon/entityRemote.test.ts packages/core/src/schemas/EntityCommandContracts.test.ts packages/core/src/schemas/RuntimeEvents.test.ts` passed: 3 files / 27 tests.
+- `pnpm --filter @flying-pillow/mission-core build` passed.
+- Editor diagnostics reported no errors for `MissionCommands.ts`, `MissionRuntimeAccess.ts`, `StageCommands.ts`, `TaskCommands.ts`, `ArtifactCommands.ts`, `AgentSessionCommands.ts`, `entityRemote.ts`, or `entityRemote.test.ts`.
+- Structural scan passed: `MissionCommands.ts` no longer declares child entity public command methods.
+- `git diff --check` passed.
+
+## 2026-04-26 - Task 14 Verify Child Entity Dispatch
+
+Task: `implementation/14-route-child-entity-commands-through-dispatch-verify`
+
+### Task 14 Verification Run Evidence
+
+- Focused dispatch/schema/runtime-event test command passed: 3 files / 27 tests.
+- Core build passed with `pnpm --filter @flying-pillow/mission-core build`.
+- Mission metadata validation passed for `mission.json` and `mission.events.jsonl`.
+- `git diff --check` passed.
+- Editor diagnostics reported no errors for `MissionRuntimeAccess.ts` or `entityRemote.test.ts` after the verification fix.
+
+### Task 14 Static Handler Coverage
+
+- Static scan found no source-level `MissionCommandsSupport` artifact.
+- Static scan found no child entity public command declarations on `MissionCommands`.
+- Static scan confirmed `entityRemote.ts` imports and calls `StageCommands`, `TaskCommands`, `ArtifactCommands`, and `AgentSessionCommands` directly for the child query/command methods.
+
+### Task 14 Verification Fix
+
+- Added executable missing-mission and missing-child coverage for child command collaborators.
+- The new coverage exposed that `loadRequiredMissionRuntime` re-parsed child payloads through strict `MissionIdentityPayload`, rejecting valid child identity fields like `stageId` before runtime resolution.
+- Fixed `MissionRuntimeAccess` to extract and parse only `missionId` and `repositoryRootPath` for Mission runtime loading after child command collaborators validate their own payloads.
+
+### Task 14 Verification Result
+
+- Passed. Child entity daemon dispatch is explicit, routed through entity-owned command collaborators, result/payload validation is covered, missing Mission/child failures are loud, and Mission remains the internal aggregate authority rather than the public child command owner.
+
+## 2026-04-26 - Task 15 Refactor Airport Actionbar To Entity Commands
+
+Task: `implementation/15-refactor-airport-actionbar-to-entity-commands`
+
+### Task 15 Focused Evidence
+
+- Replaced the scoped actionbar component with `EntityActionbar.svelte`, which accepts an `ActionableEntity` and calls only `entity.listCommands()` and `entity.executeCommand(commandId)`.
+- `MissionActionbar`, `TaskActionbar`, `ArtifactActionbar`, and `AgentSessionActionbar` now pass entity mirrors directly to the shared actionbar instead of passing `scope`, `stageId`, `taskId`, `artifactPath`, or `sessionId` props.
+- `Task`, `Stage`, `Artifact`, `AgentSession`, and `Mission` browser mirrors now expose `entityName`, `entityId`, `listCommands`, and `executeCommand` behavior for the commandable entity boundary.
+- Removed Airport browser transport paths that sent child commands through `Mission.taskCommand` or `Mission.sessionCommand`; Task, Stage, Artifact, and AgentSession command discovery/execution now call their own entity remotes.
+- Artifact document read/write now uses `Artifact.readDocument` and `Artifact.writeDocument` remotes from the Artifact mirror instead of Mission document helpers.
+- Split the browser mirror dependency types so `MissionCommandGateway` remains Mission-level while child command transport is represented by a separate `MissionChildEntityCommandGateway` used to construct child mirrors.
+- Removed stale Airport parser/export surfaces for Mission-owned task/session command payloads.
+
+### Task 15 Validation Evidence
+
+- `pnpm --dir apps/airport/web test src/lib/client/runtime/transport/MissionCommandTransport.test.ts src/routes/api/entities/remote/dispatch.test.ts` passed: 2 files / 9 tests.
+- `pnpm --filter @flying-pillow/mission-core build` passed.
+- `pnpm exec vitest run --config vitest.config.ts --project core packages/core/src/daemon/entityRemote.test.ts packages/core/src/schemas/EntityCommandContracts.test.ts` passed: 2 files / 23 tests.
+- Editor diagnostics reported no errors for the touched actionbar, Mission mirror, child mirror, Airport runtime, transport, parser, index, and focused test files.
+- Svelte autofixer reported no hard issues for `EntityActionbar.svelte`, `MissionActionbar.svelte`, `TaskActionbar.svelte`, `ArtifactActionbar.svelte`, or `AgentSessionActionbar.svelte`; it only repeated existing cautionary suggestions about async state assignment inside the interactive actionbar effect.
+- Static scan found no `ScopedActionbar`, `scope=`, `stageId=`, `taskId=`, `artifactPath=`, or `sessionId=` actionbar target props under active entity components.
+- Static scan found no active Airport web usage of `taskCommand`, `sessionCommand`, `missionRuntimeTaskCommandSchema`, `missionRuntimeSessionCommandSchema`, `MissionTaskCommand`, or `MissionAgentSessionCommand` after excluding legitimate child entity command type names.
+- Static scan confirmed active actionbar wrappers pass `entity={mission}`, `entity={task}`, `entity={artifact}`, and `entity={session}` into `EntityActionbar`.
+- `git diff --check` passed.
+
+### Task 15 Remaining Gaps Outside Scope
+
+- Full `pnpm --dir apps/airport/web run check` remains blocked by unrelated existing SvelteKit/app-wide diagnostics in server Locals, stale Repository/Home surfaces, docs imports, and tests. The Task 15 touched files report clean editor diagnostics.
+
+## 2026-04-26 - Task 15 Verify Entity Command Actionbar
+
+Task: `implementation/15-refactor-airport-actionbar-to-entity-commands-verify`
+
+### Task 15 Verification Evidence
+
+- Cleaned the final Airport web transport boundary before verification: `MissionCommandTransport` is now Mission-only, `ChildEntityCommandTransport` implements `MissionChildEntityCommandGateway`, and `AirportClientRuntime` constructs separate objects for Mission commands and child entity commands.
+- Added focused coverage proving `MissionCommandTransport` exposes Mission methods only and does not expose `listTaskCommands`, `executeTaskCommand`, `readArtifactDocument`, or `sendAgentSessionPrompt`.
+- `pnpm --dir apps/airport/web test src/lib/client/runtime/transport/MissionCommandTransport.test.ts` passed: 1 file / 6 tests.
+- `pnpm --dir apps/airport/web test src/lib/client/runtime/transport/MissionCommandTransport.test.ts src/routes/api/entities/remote/dispatch.test.ts` passed: 2 files / 10 tests.
+- `pnpm --filter @flying-pillow/mission-core build` passed.
+- `pnpm exec vitest run --config vitest.config.ts --project core packages/core/src/schemas/EntityCommandContracts.test.ts packages/core/src/daemon/entityRemote.test.ts` passed: 2 files / 23 tests.
+- `git diff --check` passed.
+- Editor diagnostics reported no errors for `MissionCommandTransport.ts`, `ChildEntityCommandTransport.ts`, `AirportClientRuntime.ts`, `MissionCommandTransport.test.ts`, `EntityActionbar.svelte`, and the Mission/Stage/Task/Artifact/AgentSession browser mirrors.
+- Static scan found no `ScopedActionbar`, `scope=`, `stageId=`, `taskId=`, `artifactPath=`, or `sessionId=` target props under active entity components.
+- Static scan found no old Airport web `method: 'taskCommand'`, `method: 'sessionCommand'`, `missionRuntimeTaskCommandSchema`, `missionRuntimeSessionCommandSchema`, `MissionTaskCommand`, or `MissionAgentSessionCommand` usage.
+- Static scan confirmed active wrappers pass entity mirrors into `EntityActionbar`: `entity={mission}`, `entity={task}`, `entity={artifact}`, and `entity={session}`.
+- Static scan confirmed `Task`, `Stage`, `Artifact`, `AgentSession`, and `Mission` browser mirrors expose `entityName`, `entityId`, `listCommands`, and `executeCommand`.
+- Static scan confirmed Mission action listing remains isolated to the Mission mirror and is not used by active child actionbar components.
+- Browser check: started Airport web dev server at `http://localhost:5174/`; `/repository/github%3AFlying-Pillow%3Amission/missions/29-architectural-reset-strict-ood-entity-architectu` loaded the Mission panel and reached the Mission actionbar area (`Loading actions...`) through the entity-shaped panel path.
+
+### Task 15 Verification Notes
+
+- `/airport` is currently blocked by an unrelated missing import for `$lib/components/airport/home/airport-home-add-repository.svelte` in `Home.svelte`, caused by broader Airport home edits outside this task.
+- The direct Mission route reports unrelated runtime stream/terminal limitations from the current minimal daemon (`mission.terminal.state` not implemented and runtime event stream failure). These do not affect the verified actionbar component boundary or the clean Mission-vs-child transport split.
+
+### Task 15 Verification Result
+
+- Passed. The Airport actionbar boundary is entity-shaped, child command discovery/execution is owned by child mirrors and child remotes, the Mission transport object no longer implements child entity commands, and no active entity component composes scoped actionbar target contexts.
+
+## 2026-04-26 - Task 16 Wire Child Entity Projections
+
+Task: `implementation/16-wire-child-entity-projections`
+
+### Task 16 Focused Evidence
+
+- `RuntimeEvents.ts` now defines typed projection events for `mission.snapshot.changed`, `stage.snapshot.changed`, `task.snapshot.changed`, `artifact.snapshot.changed`, and `agentSession.snapshot.changed`.
+- Each typed projection payload carries a strict entity reference plus a schema-validated snapshot for the matching Mission, Stage, Task, Artifact, or AgentSession entity.
+- `mission.actions.changed` can carry a validated Mission action-list projection while retaining the existing revision-only shape for current daemon compatibility.
+- Daemon protocol `Notification` now includes first-class typed projection notification variants for Mission and child entity snapshots.
+- `DaemonGateway` subscribes to the typed projection notifications, forwards them through `airportRuntimeEventEnvelopeSchema.parse`, and continues to keep `session.console` and `session.terminal` out of projection forwarding.
+- The Airport Mission panel now reconciles typed Mission and child projection events directly into Mission, Stage, Task, Artifact, and AgentSession mirrors.
+- The Mission mirror exposes targeted `applyMissionSnapshot`, `applyStageSnapshot`, `applyTaskSnapshot`, and `applyArtifactSnapshot` reconciliation methods; `applyAgentSessionSnapshot` remains the AgentSession targeted path.
+- Child projection handling bumps the action refresh nonce so command availability is refreshed through entity mirrors instead of Mission-wide action filtering.
+
+### Task 16 Validation Evidence
+
+- `pnpm --filter @flying-pillow/mission-core build` passed.
+- `pnpm exec vitest run --config vitest.config.ts --project core packages/core/src/schemas/RuntimeEvents.test.ts packages/core/src/daemon/entityRemote.test.ts` passed: 2 files / 21 tests.
+- `pnpm --dir apps/airport/web test src/lib/server/daemon/daemon-gateway.test.ts src/lib/components/entities/Mission/MissionProjectionEvents.test.ts src/lib/client/runtime/transport/MissionRuntimeTransport.test.ts` passed: 3 files / 5 tests.
+- `git diff --check` passed.
+- Svelte autofixer reported no hard issues for `Mission.svelte`; only existing effect-state style suggestions were reported.
+- Static scan confirmed all new typed projection event names appear only in RuntimeEvents schemas/tests, daemon protocol/gateway, and Mission event reconciliation code.
+- Static scan confirmed `session.console` and `session.terminal` remain represented as runtime stream event types and are not forwarded as projection events by `DaemonGateway.shouldForwardRuntimeEvent`.
+
+### Task 16 Remaining Gaps Outside Scope
+
+- Full `pnpm --dir apps/airport/web check` remains blocked by unrelated existing app-wide diagnostics in server `App.Locals`, stale Repository/Home surfaces, docs imports, and older test event mocks.
+- The filtered Svelte check output after this change reported no `Mission.svelte` or `Mission.svelte.ts` errors; remaining touched-file diagnostics are pre-existing `daemon-gateway.ts` type issues around server Locals and legacy session-state typing.
+
+## 2026-04-26 - Task 16 Verify Child Entity Projections
+
+Task: `implementation/16-wire-child-entity-projections-verify`
+
+### Task 16 Verification Evidence
+
+- `pnpm --filter @flying-pillow/mission-core build` passed.
+- `pnpm exec vitest run --config vitest.config.ts --project core packages/core/src/schemas/RuntimeEvents.test.ts packages/core/src/daemon/entityRemote.test.ts` passed: 2 files / 21 tests.
+- `pnpm --dir apps/airport/web test src/lib/server/daemon/daemon-gateway.test.ts src/lib/components/entities/Mission/MissionProjectionEvents.test.ts src/lib/client/runtime/transport/MissionRuntimeTransport.test.ts` passed: 3 files / 5 tests.
+- `git diff --check` passed.
+- Static projection-event scan confirmed `mission.snapshot.changed`, `stage.snapshot.changed`, `task.snapshot.changed`, `artifact.snapshot.changed`, and `agentSession.snapshot.changed` are present in the RuntimeEvents schema, daemon protocol notifications, daemon gateway subscription/mapping/filtering, and Mission panel reconciliation switch.
+- Static terminal-stream scan confirmed `session.console` and `session.terminal` remain RuntimeEvents variants and `DaemonGateway.shouldForwardRuntimeEvent` returns `false` for terminal/console stream notifications.
+- Static targeted-reconciliation scan confirmed child projection event handlers call `applyStageSnapshot`, `applyTaskSnapshot`, `applyArtifactSnapshot`, and `applyAgentSessionSnapshot`; broad `scheduleProjectionRefresh()` remains limited to revision-only `mission.actions.changed` and `session.lifecycle` paths.
+- Static command-response scan found no child command response shortcut carrying broad `status` or projection fields through `ChildEntityCommandTransport`, `MissionCommandTransport`, or the child entity command collaborators.
+- Focused `pnpm --dir apps/airport/web check` filtering over Task 16 files still exits with the known app-wide baseline, but the filtered output only lists pre-existing `daemon-gateway.ts` diagnostics; it does not report `Mission.svelte` or projection event union errors.
+
+### Task 16 Browser Evidence
+
+- Started Airport web at `http://localhost:5174/` with `pnpm --dir apps/airport/web dev:host`.
+- `/airport` loaded and rendered the repository control surface with daemon status `Connected` and the registered `mission` repository visible.
+- The direct Mission route `/repository/github%3AFlying-Pillow%3Amission/missions/29-architectural-reset-strict-ood-entity-architectu` opened the Mission shell, repository sidebar, and Mission page title, but the panel remained at `Loading mission snapshot...` before the dev server was terminated externally with exit code 143.
+- A second clean dev-server retry reproduced the same Mission-route loading state and exit 143. No Task 16 projection-specific client exception was observed in the browser snapshot; the console showed existing browser-boundary warnings for Node modules externalized by Vite.
+
+### Task 16 Verification Result
+
+- Passed with browser smoke caveat. The executable schema/gateway/reconciliation tests and static scans verify typed child projection payloads, daemon validation/forwarding, targeted child mirror reconciliation by reference, action refresh through entity mirrors, and terminal stream separation. The interactive Mission-panel route could not complete a live snapshot load because the dev server process was terminated during the smoke check; that runtime smoke limitation is recorded as follow-up evidence rather than a Task 16 projection contract failure.
 
 ## Gaps
 

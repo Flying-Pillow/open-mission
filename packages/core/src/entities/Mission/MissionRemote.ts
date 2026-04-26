@@ -12,7 +12,7 @@ import type {
 	MissionReadWorktreePayload,
 	MissionProjectionSnapshot,
 	MissionSnapshot,
-	MissionSessionCommandPayload,
+	MissionAgentSessionCommandPayload,
 	MissionTaskCommandPayload,
 	MissionWorktreeSnapshot,
 	MissionWriteDocumentPayload
@@ -66,7 +66,7 @@ export class MissionRemote {
 	}
 
 	public static async sessionCommand(
-		input: MissionSessionCommandPayload,
+		input: MissionAgentSessionCommandPayload,
 		context: { surfacePath: string }
 	): Promise<MissionCommandAcknowledgement> {
 		return MissionCommands.sessionCommand(input, context);
