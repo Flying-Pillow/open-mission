@@ -2,7 +2,7 @@
 import { json } from '@sveltejs/kit';
 import {
     missionRuntimeRouteParamsSchema
-} from '@flying-pillow/mission-core';
+} from '@flying-pillow/mission-core/schemas';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import {
     missionActionExecuteSchema,

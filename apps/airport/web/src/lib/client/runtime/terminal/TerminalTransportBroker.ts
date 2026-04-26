@@ -1,10 +1,10 @@
 import type {
-    type MissionSessionTerminalSnapshot,
-    type MissionSessionTerminalSocketClientMessage,
-    type MissionSessionTerminalSocketServerMessage,
-    type MissionTerminalSnapshot,
-    type MissionTerminalSocketClientMessage,
-    type MissionTerminalSocketServerMessage,
+    MissionSessionTerminalSnapshot,
+    MissionSessionTerminalSocketClientMessage,
+    MissionSessionTerminalSocketServerMessage,
+    MissionTerminalSnapshot,
+    MissionTerminalSocketClientMessage,
+    MissionTerminalSocketServerMessage,
 } from '@flying-pillow/mission-core/schemas';
 import {
     parseMissionSessionTerminalSnapshot,
@@ -20,6 +20,11 @@ type TerminalSnapshotBase = {
     screen: string;
     chunk?: string;
     truncated?: boolean;
+    terminalHandle?: {
+        sessionName: string;
+        paneId: string;
+        sharedSessionName?: string;
+    };
 };
 
 type TerminalOutputBase = {
@@ -410,8 +415,9 @@ class TerminalTransportChannel<
             return;
         }
 
+        const outputMessage = message as Extract<TMessage, { type: 'output' }>;
         this.state = {
-            snapshot: mergeOutputIntoSnapshot(this.state.snapshot, message.output),
+            snapshot: mergeOutputIntoSnapshot(this.state.snapshot, outputMessage.output),
             loading: false,
             error: null,
         };
@@ -540,7 +546,7 @@ function getOrCreateTerminalChannel<
     return created;
 }
 
-function cloneSnapshot<TSnapshot extends SharedTerminalSnapshot>(
+function cloneSnapshot<TSnapshot extends TerminalSnapshotBase>(
     snapshot: TSnapshot,
 ): TSnapshot {
     return {
@@ -548,7 +554,7 @@ function cloneSnapshot<TSnapshot extends SharedTerminalSnapshot>(
         ...(snapshot.terminalHandle
             ? { terminalHandle: { ...snapshot.terminalHandle } }
             : {}),
-    };
+    } as TSnapshot;
 }
 
 function mergeOutputIntoSnapshot<
@@ -571,7 +577,7 @@ function mergeOutputIntoSnapshot<
         screen: nextScreen,
         chunk: output.chunk,
         ...(output.truncated ? { truncated: true } : {}),
-    };
+    } as TSnapshot;
 }
 
 function appendTerminalScreen(

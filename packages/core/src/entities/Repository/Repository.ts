@@ -1,46 +1,56 @@
 import * as path from 'node:path';
-import { findRegisteredRepositoryById, listRegisteredRepositories } from '../../lib/config.js';
+import {
+	findRegisteredRepositoryById,
+	listRegisteredRepositories,
+	registerMissionRepo
+} from '../../lib/config.js';
 import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import { readRepositorySettingsDocument } from '../../lib/daemonConfig.js';
 import { MissionPreparationService } from '../../mission/MissionPreparationService.js';
 import { GitHubPlatformAdapter } from '../../platforms/GitHubPlatformAdapter.js';
-import { repositorySnapshotSchema } from '../../airport/runtime.js';
-import type { RepositorySnapshot } from '../../airport/runtime.js';
-import type { MissionBrief } from '../../types.js';
+import type { MissionBrief, RepositoryCandidate } from '../../types.js';
 import { deriveRepositoryIdentity } from '../../lib/repositoryIdentity.js';
 import {
+	repositorySnapshotSchema,
 	repositorySchema,
 	repositoryInputSchema,
 	repositoryWorkflowConfigurationSchema,
 	createDefaultRepositoryConfiguration,
+	githubIssueDetailSchema,
+	trackedIssueSummarySchema,
+	type RepositorySnapshot,
 	type RepositoryData,
-	type RepositoryInput
-} from './RepositorySchema.js';
-import {
-	RepositorySettingsSchema,
-	type RepositorySettings
-} from './RepositorySettings.js';
-import type { WorkflowGlobalSettings } from '../../workflow/WorkflowSchema.js';
-import { createDefaultRepositorySettings } from './RepositorySettings.js';
-import { readMissionWorkflowDefinition } from '../../workflow/mission/preset.js';
-import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
-import { normalizeWorkflowSettings } from '../../settings/validation.js';
-import {
+	type RepositoryInput,
+	type GitHubIssueDetail,
+	type RepositoryMissionStartAcknowledgement,
+	type TrackedIssueSummary,
 	type RepositoryFindPayload,
 	type RepositoryGetIssuePayload,
 	type RepositoryListIssuesPayload,
 	type RepositoryReadPayload,
+	type RepositoryAddPayload,
 	type RepositoryStartMissionFromBriefPayload,
 	type RepositoryStartMissionFromIssuePayload,
 	repositoryFindPayloadSchema,
 	repositoryGetIssuePayloadSchema,
 	repositoryIdentityPayloadSchema,
 	repositoryListIssuesPayloadSchema,
-	repositoryMissionMutationStatusSchema,
+	repositoryMissionStartAcknowledgementSchema,
 	repositoryReadPayloadSchema,
+	repositoryAddPayloadSchema,
+	repositoryRegistrationInputSchema,
 	repositoryStartMissionFromBriefPayloadSchema,
 	repositoryStartMissionFromIssuePayloadSchema
-} from './RepositoryRemote.js';
+} from '../../schemas/Repository.js';
+import {
+	RepositorySettingsSchema,
+	type RepositorySettings
+} from '../../schemas/RepositorySettings.js';
+import type { WorkflowGlobalSettings } from '../../workflow/WorkflowSchema.js';
+import { createDefaultRepositorySettings } from '../../schemas/RepositorySettings.js';
+import { readMissionWorkflowDefinition } from '../../workflow/mission/preset.js';
+import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
+import { normalizeWorkflowSettings } from '../../settings/validation.js';
 
 export class Repository {
 	private snapshot: RepositoryData;
@@ -51,11 +61,7 @@ export class Repository {
 	): Promise<RepositorySnapshot[]> {
 		repositoryFindPayloadSchema.parse(input);
 		const repositories = (await listRegisteredRepositories()).map((candidate) =>
-			Repository.open(candidate.repositoryRootPath, {
-				label: candidate.label,
-				description: candidate.description,
-				...(candidate.githubRepository ? { githubRepository: candidate.githubRepository } : {})
-			})
+			Repository.openRegisteredRepository(candidate)
 		);
 
 		return await Promise.all(
@@ -68,15 +74,23 @@ export class Repository {
 		);
 	}
 
+	public static async add(
+		input: RepositoryAddPayload,
+		_context?: { authToken?: string }
+	): Promise<RepositorySnapshot> {
+		const payload = repositoryAddPayloadSchema.parse(input);
+		const repository = await Repository.registerLocalRepository(payload.repositoryPath);
+		return await repository.read({
+			repositoryId: repository.repositoryId,
+			repositoryRootPath: repository.repositoryRootPath
+		});
+	}
+
 	public static async resolve(input: unknown): Promise<Repository | undefined> {
 		const payload = repositoryIdentityPayloadSchema.parse(input);
 		const candidate = await findRegisteredRepositoryById(payload.repositoryId);
 		if (candidate) {
-			return Repository.open(candidate.repositoryRootPath, {
-				label: candidate.label,
-				description: candidate.description,
-				...(candidate.githubRepository ? { githubRepository: candidate.githubRepository } : {})
-			});
+			return Repository.openRegisteredRepository(candidate);
 		}
 
 		return payload.repositoryRootPath?.trim()
@@ -96,6 +110,30 @@ export class Repository {
 			repositoryRootPath,
 			...input
 		});
+	}
+
+	private static openRegisteredRepository(candidate: RepositoryCandidate): Repository {
+		return Repository.open(candidate.repositoryRootPath, {
+			label: candidate.label,
+			description: candidate.description,
+			...(candidate.githubRepository ? { githubRepository: candidate.githubRepository } : {})
+		});
+	}
+
+	private static async registerLocalRepository(repositoryPath: string): Promise<Repository> {
+		const { repositoryPath: trimmedRepositoryPath } = repositoryRegistrationInputSchema.parse({ repositoryPath });
+
+		await registerMissionRepo(trimmedRepositoryPath);
+		const normalizedRepositoryRootPath = Repository.open(trimmedRepositoryPath).repositoryRootPath;
+		const registeredRepository = (await listRegisteredRepositories()).find(
+			(candidate) => Repository.open(candidate.repositoryRootPath).repositoryRootPath === normalizedRepositoryRootPath
+		);
+
+		if (!registeredRepository) {
+			throw new Error(`Mission could not register repository '${repositoryPath}'.`);
+		}
+
+		return Repository.openRegisteredRepository(registeredRepository);
 	}
 
 	public constructor(snapshot: RepositoryData) {
@@ -174,12 +212,8 @@ export class Repository {
 		return structuredClone(this.snapshot);
 	}
 
-	public toJSON(): RepositoryData {
-		return this.toSchema();
-	}
-
 	public async read(input: RepositoryReadPayload): Promise<RepositorySnapshot> {
-		repositoryReadPayloadSchema.parse(input);
+		this.assertRepositoryIdentity(repositoryReadPayloadSchema.parse(input));
 		const store = new FilesystemAdapter(this.repositoryRootPath);
 		const settings = readRepositorySettingsDocument(this.repositoryRootPath);
 		const missions = await store.listMissions().catch(() => []);
@@ -205,36 +239,41 @@ export class Repository {
 	public async listIssues(
 		input: RepositoryListIssuesPayload,
 		context?: { authToken?: string }
-	): Promise<ReturnType<GitHubPlatformAdapter['listOpenIssues']>> {
-		repositoryListIssuesPayloadSchema.parse(input);
+	): Promise<TrackedIssueSummary[]> {
+		this.assertRepositoryIdentity(repositoryListIssuesPayloadSchema.parse(input));
 		const platform = this.tryCreateGitHubPlatformAdapter(context?.authToken);
-		return platform ? platform.listOpenIssues(25) : [];
+		return trackedIssueSummarySchema.array().parse(platform ? await platform.listOpenIssues(25) : []);
 	}
 
 	public async getIssue(
 		input: RepositoryGetIssuePayload,
 		context?: { authToken?: string }
-	) {
+	): Promise<GitHubIssueDetail> {
 		const payload = repositoryGetIssuePayloadSchema.parse(input);
-		return this.requireGitHubPlatformAdapter(context?.authToken)
-			.fetchIssueDetail(String(payload.issueNumber));
+		this.assertRepositoryIdentity(payload);
+		return githubIssueDetailSchema.parse(
+			await this.requireGitHubPlatformAdapter(context?.authToken)
+				.fetchIssueDetail(String(payload.issueNumber))
+		);
 	}
 
 	public async startMissionFromIssue(
 		input: RepositoryStartMissionFromIssuePayload,
 		context?: { authToken?: string }
-	) {
+	): Promise<RepositoryMissionStartAcknowledgement> {
 		const payload = repositoryStartMissionFromIssuePayloadSchema.parse(input);
+		this.assertRepositoryIdentity(payload);
 		const brief = await this.requireGitHubPlatformAdapter(context?.authToken)
 			.fetchIssue(String(payload.issueNumber));
-		return this.prepareMission(brief);
+		return this.prepareMission(brief, 'startMissionFromIssue');
 	}
 
 	public async startMissionFromBrief(
 		input: RepositoryStartMissionFromBriefPayload,
 		context?: { authToken?: string }
-	) {
+	): Promise<RepositoryMissionStartAcknowledgement> {
 		const payload = repositoryStartMissionFromBriefPayloadSchema.parse(input);
+		this.assertRepositoryIdentity(payload);
 		const platform = this.tryCreateGitHubPlatformAdapter(context?.authToken);
 		const brief = platform
 			? await platform.createIssue({
@@ -248,10 +287,13 @@ export class Repository {
 			}))
 			: payload;
 
-		return this.prepareMission(brief);
+		return this.prepareMission(brief, 'startMissionFromBrief');
 	}
 
-	private async prepareMission(brief: MissionBrief) {
+	private async prepareMission(
+		brief: MissionBrief,
+		method: 'startMissionFromIssue' | 'startMissionFromBrief'
+	): Promise<RepositoryMissionStartAcknowledgement> {
 		const settings = readRepositorySettingsDocument(this.repositoryRootPath) ?? createDefaultRepositorySettings();
 		const workflow = normalizeWorkflowSettings(
 			readMissionWorkflowDefinition(this.repositoryRootPath) ?? createDefaultWorkflowSettings()
@@ -274,8 +316,11 @@ export class Repository {
 			throw new Error('Mission preparation returned an unexpected result.');
 		}
 
-		return repositoryMissionMutationStatusSchema.parse({
-			missionId: preparation.missionId
+		return repositoryMissionStartAcknowledgementSchema.parse({
+			ok: true,
+			entity: 'Repository',
+			method,
+			id: preparation.missionId
 		});
 	}
 
@@ -298,6 +343,16 @@ export class Repository {
 			throw new Error(`Repository '${this.repositoryId}' does not have a GitHub remote configured.`);
 		}
 		return adapter;
+	}
+
+	private assertRepositoryIdentity(input: { repositoryId: string; repositoryRootPath?: string | undefined }): void {
+		if (input.repositoryId !== this.repositoryId) {
+			throw new Error(`Repository payload id '${input.repositoryId}' does not match '${this.repositoryId}'.`);
+		}
+
+		if (input.repositoryRootPath && path.resolve(input.repositoryRootPath) !== this.repositoryRootPath) {
+			throw new Error(`Repository payload root '${input.repositoryRootPath}' does not match '${this.repositoryRootPath}'.`);
+		}
 	}
 }
 

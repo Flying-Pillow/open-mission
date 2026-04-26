@@ -5,8 +5,8 @@
     import type { Mission as MissionEntity } from "$lib/components/entities/Mission/Mission.svelte.js";
     import ChevronDownIcon from "@tabler/icons-svelte/icons/chevron-down";
     import ChevronUpIcon from "@tabler/icons-svelte/icons/chevron-up";
-    import type { AirportRuntimeEventEnvelope } from "@flying-pillow/mission-core";
-    import type { OperatorStatus } from "@flying-pillow/mission-core/types.js";
+    import type { MissionRuntimeEventEnvelope as AirportRuntimeEventEnvelope } from "../types";
+    import type { OperatorStatusData as OperatorStatus } from "../types";
     import type { AgentSession as AgentSessionModel } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { setScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";

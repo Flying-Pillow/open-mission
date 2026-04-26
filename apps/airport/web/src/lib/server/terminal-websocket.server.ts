@@ -1,5 +1,9 @@
 import {
     DaemonApi,
+    type Notification,
+    type MissionAgentTerminalState
+} from '@flying-pillow/mission-core';
+import {
     missionTerminalOutputSchema,
     missionTerminalSnapshotSchema,
     missionTerminalSocketClientMessageSchema,
@@ -9,10 +13,8 @@ import {
     missionSessionTerminalSocketClientMessageSchema,
     missionSessionTerminalSocketServerMessageSchema,
     missionSessionTerminalRouteParamsSchema,
-    missionSessionTerminalQuerySchema,
-    type Notification,
-    type MissionAgentTerminalState
-} from '@flying-pillow/mission-core';
+    missionSessionTerminalQuerySchema
+} from '@flying-pillow/mission-core/schemas';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, WebSocket as NodeWebSocket } from 'ws';

@@ -3,8 +3,10 @@
     import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
     import Issue from "$lib/components/entities/Issue/Issue.svelte";
-    import type { SelectedIssueSummary } from "$lib/components/entities/types";
-    import type { TrackedIssueSummary } from "@flying-pillow/mission-core";
+    import type {
+        IssueSummary,
+        SelectedIssueSummary,
+    } from "$lib/components/entities/types";
 
     let {
         selectedIssue = $bindable<SelectedIssueSummary | null>(null),
@@ -28,7 +30,7 @@
     let remoteStartFromIssueError = $state<string | null>(null);
     const repositoryIssuesQuery = $derived(activeRepository.listIssuesQuery());
     const repositoryIssues = $derived(
-        (repositoryIssuesQuery.current as TrackedIssueSummary[] | undefined) ?? [],
+        (repositoryIssuesQuery.current as IssueSummary[] | undefined) ?? [],
     );
     const repositoryIssuesLoading = $derived(
         repositoryIssuesQuery.loading ?? false,

@@ -1,6 +1,6 @@
 // /apps/airport/web/src/routes/api/runtime/missions/[missionId]/+server.ts: Mission runtime snapshot endpoint backed by the thin Airport web gateway.
 import { json } from '@sveltejs/kit';
-import { missionRuntimeRouteParamsSchema } from '@flying-pillow/mission-core';
+import { missionRuntimeRouteParamsSchema } from '@flying-pillow/mission-core/schemas';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import type { RequestHandler } from './$types';
 

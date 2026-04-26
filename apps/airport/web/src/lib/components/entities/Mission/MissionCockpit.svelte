@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/types.js";
+    import type { MissionTowerTreeNodeData as MissionTowerTreeNode } from "../types";
     import type { MissionControlComputedState } from "$lib/components/entities/Mission/missionControl";
 
     let {

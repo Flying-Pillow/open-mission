@@ -3,7 +3,7 @@ import type {
     AgentCommand as AgentCommand,
     AgentPrompt as AgentPrompt,
     AgentSession as AgentSessionSnapshot
-} from '@flying-pillow/mission-core/airport/runtime';
+} from '@flying-pillow/mission-core/schemas';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
 export type AgentSessionCommandOwner = {

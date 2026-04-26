@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { error as kitError, json } from '@sveltejs/kit';
 import { getMissionWorktreesPath } from '@flying-pillow/mission-core/node';
-import { missionRuntimeRouteParamsSchema } from '@flying-pillow/mission-core';
+import { missionRuntimeRouteParamsSchema } from '@flying-pillow/mission-core/schemas';
 import { z } from 'zod';
 import { resolveSurfacePath } from '$lib/server/daemon/context.server';
 import type { RequestHandler } from './$types';

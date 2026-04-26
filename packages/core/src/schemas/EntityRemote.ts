@@ -1,0 +1,31 @@
+import { z } from 'zod/v4';
+
+export const entityNameSchema = z.string().trim().min(1);
+export const entityMethodSchema = z.string().trim().min(1);
+
+export const entityQueryInvocationSchema = z.object({
+    entity: entityNameSchema,
+    method: entityMethodSchema,
+    payload: z.unknown().optional()
+}).strict();
+
+export const entityCommandInvocationSchema = z.object({
+    entity: entityNameSchema,
+    method: entityMethodSchema,
+    payload: z.unknown().optional()
+}).strict();
+
+export const entityFormInvocationSchema = entityCommandInvocationSchema;
+
+export const entityCommandAcknowledgementSchema = z.object({
+    ok: z.literal(true),
+    entity: entityNameSchema,
+    method: entityMethodSchema,
+    id: z.string().trim().min(1).optional()
+}).strict();
+
+export type EntityQueryInvocation = z.infer<typeof entityQueryInvocationSchema>;
+export type EntityCommandInvocation = z.infer<typeof entityCommandInvocationSchema>;
+export type EntityFormInvocation = z.infer<typeof entityFormInvocationSchema>;
+export type EntityCommandAcknowledgement = z.infer<typeof entityCommandAcknowledgementSchema>;
+export type EntityRemoteResult = unknown;

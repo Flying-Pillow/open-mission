@@ -3,6 +3,46 @@ import { ZodError } from 'zod';
 import { MissionCommandTransport } from './MissionCommandTransport';
 
 describe('MissionCommandTransport', () => {
+    it('routes task commands through the mission entity remote', async () => {
+        const transport = new MissionCommandTransport({
+            repositoryRootPath: '/repo/root',
+            commandRemote: async (input) => {
+                expect(input).toEqual({
+                    entity: 'Mission',
+                    method: 'taskCommand',
+                    payload: {
+                        missionId: 'mission-29',
+                        repositoryRootPath: '/repo/root',
+                        taskId: 'task-1',
+                        command: {
+                            action: 'start',
+                            terminalSessionName: 'airport'
+                        }
+                    }
+                });
+
+                return {
+                    missionId: 'mission-29',
+                    status: {
+                        missionId: 'mission-29',
+                        workflow: {
+                            stages: []
+                        }
+                    },
+                    sessions: []
+                };
+            }
+        });
+
+        const snapshot = await transport.startTask({
+            missionId: 'mission-29',
+            taskId: 'task-1',
+            terminalSessionName: 'airport'
+        });
+
+        expect(snapshot.missionId).toBe('mission-29');
+    });
+
     it('throws a zod error when mission control returns a malformed operator status', async () => {
         const transport = new MissionCommandTransport({
             fetch: async () => new Response(JSON.stringify({

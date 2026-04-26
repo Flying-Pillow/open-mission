@@ -8,7 +8,7 @@ import {
 } from '../mission/templates/index.js';
 import { renderMissionArtifactTitle } from '../mission/templates/common.js';
 import { getMissionArtifactDefinition } from '../mission/manifest.js';
-import { getMissionControlRootFromMissionDir } from '../../entities/Repository/RepositoryPaths.js';
+import { getMissionControlRootFromMissionDir } from '../../lib/repositoryPaths.js';
 import {
 	type MissionWorkflowConfigurationSnapshot,
 	type MissionGeneratedTaskPayload,

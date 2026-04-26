@@ -1,7 +1,7 @@
 import type { AirportProjectionSet, AirportState, PersistedAirportIntent } from './airport/types.js';
 import type { MissionAgentSessionRecord } from './daemon/protocol/contracts.js';
 import type { Repository } from './entities/Repository/Repository.js';
-import type { RepositorySettings } from './entities/Repository/RepositorySettings.js';
+import type { RepositorySettings } from './schemas/RepositorySettings.js';
 import {
 	MISSION_AGENT_SESSION_LIFECYCLE_STATES,
 	MISSION_LIFECYCLE_STATES,

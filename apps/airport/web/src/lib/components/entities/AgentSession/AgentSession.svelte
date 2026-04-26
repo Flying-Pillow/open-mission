@@ -3,13 +3,11 @@
     import Anser from "anser/lib/index.js";
     import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import AgentSessionActionbar from "$lib/components/entities/AgentSession/AgentSessionActionbar.svelte";
-    import type { MissionStageId } from "@flying-pillow/mission-core/types.js";
+    import type { MissionStageIdData as MissionStageId } from "../types";
     import { FitAddon } from "@xterm/addon-fit";
     import * as XtermModule from "@xterm/xterm";
     import sanitizeHtml from "sanitize-html";
-    import {
-        type MissionSessionTerminalSnapshot,
-    } from "@flying-pillow/mission-core/airport/runtime";
+    import type { MissionSessionTerminalSnapshotData as MissionSessionTerminalSnapshot } from "../types";
     import {
         subscribeMissionSessionTerminalTransport,
         type SharedTerminalTransportSubscription,

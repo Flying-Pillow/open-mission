@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import { MissionRuntime } from './Mission.js';
 import type { MissionWorkflowBindings } from './Mission.js';
-import { initializeRepository } from '../entities/Repository/initializeRepository.js';
+import { RepositoryScaffoldingService } from '../lib/RepositoryScaffoldingService.js';
 import { readRepositorySettingsDocument } from '../lib/daemonConfig.js';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import type { MissionBrief, MissionDescriptor, MissionPreparationStatus } from '../types.js';
@@ -34,9 +34,7 @@ export class MissionPreparationService {
 			const proposalStore = new FilesystemAdapter(proposalWorktreePath);
 			const initialization = readRepositorySettingsDocument(proposalWorktreePath)
 				? undefined
-				: await initializeRepository(proposalWorktreePath, {
-					includeRuntimeDirectories: false
-				});
+				: await new RepositoryScaffoldingService(proposalWorktreePath).initialize();
 			const missionRootDir = proposalStore.getTrackedMissionDir(missionId, proposalWorktreePath);
 			const existingDescriptor = await proposalStore.readMissionDescriptor(missionRootDir);
 			if (existingDescriptor) {

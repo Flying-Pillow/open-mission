@@ -2,7 +2,7 @@ Branch: {{mission.branchRef}}
 
 ## Findings
 
-- TODO: Record simulator and end-to-end findings.
+- TODO: Record validation and end-to-end findings.
 
 ## Risks
 

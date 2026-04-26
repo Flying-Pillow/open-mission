@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FilesystemAdapter } from './FilesystemAdapter.js';
-import { resolveMissionWorkspaceRoot } from '../entities/Repository/RepositoryPaths.js';
+import { resolveMissionWorkspaceRoot } from './repositoryPaths.js';
 import { createDefaultWorkflowSettings, DEFAULT_WORKFLOW_VERSION } from '../workflow/mission/workflow.js';
 import { createMissionWorkflowConfigurationSnapshot } from '../workflow/engine/document.js';
 

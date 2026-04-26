@@ -163,7 +163,7 @@ async function createResponse(request: Request, startedAt: string): Promise<Resp
 				};
 			}
 			case 'entity.query': {
-				const { entityQueryInvocationSchema } = await import('../airport/entityRemote.js');
+				const { entityQueryInvocationSchema } = await import('../schemas/EntityRemote.js');
 				const authToken = request.authToken?.trim();
 				return {
 					type: 'response',
@@ -182,7 +182,7 @@ async function createResponse(request: Request, startedAt: string): Promise<Resp
 				const {
 					entityCommandInvocationSchema,
 					entityFormInvocationSchema
-				} = await import('../airport/entityRemote.js');
+				} = await import('../schemas/EntityRemote.js');
 				const commandInvocation = entityCommandInvocationSchema.safeParse(request.params);
 				const authToken = request.authToken?.trim();
 				return {

@@ -2,4 +2,12 @@
 fileName: 02-plan.md
 subject: Plan Implementation And Verification
 ---
-Read SPEC.md and turn it into an execution ledger. Create paired markdown task files under 03-IMPLEMENTATION/tasks for each implementation slice: one task for building the slice and a second verification task for testing or validating that same slice. Name the verification task with the "-verify.md" suffix, keep both tasks in 03-IMPLEMENTATION/tasks, and make the verification task depend on its implementation task. In each implementation task frontmatter set `taskKind: implementation` and `pairedTaskId` to the verification task id. In each verification task frontmatter set `taskKind: verification` and `pairedTaskId` to the implementation task id. The verification task must focus on tests and validation rather than feature creation. Do not create application code in this planning task. Do not modify delivery artifacts.
+Read SPEC.md and generate paired task markdown under 03-IMPLEMENTATION/tasks. Each slice gets one implementation task and one "-verify.md" task that depends on it. Set `taskKind` and `pairedTaskId` in frontmatter. Do not create production code, delivery artifacts, or workflow-engine structured runtime data.
+
+Implementation tasks must state objective, context, allowed files, forbidden files, expected change, compatibility policy, and validation gate.
+
+Verification tasks must state paired task, focused checks, failure signals, ignored baseline failures, and evidence location. They must not add features.
+
+Keep slices small and dependency ordered. Prefer one boundary or responsibility per task.
+
+Only create or update task markdown. The workflow engine owns structured runtime records.

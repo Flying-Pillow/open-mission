@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { missionRuntimeRouteParamsSchema } from '@flying-pillow/mission-core';
+import { missionRuntimeRouteParamsSchema } from '@flying-pillow/mission-core/schemas';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import type { MissionControlSnapshot } from '$lib/types/mission-control';
 import type { RequestHandler } from './$types';

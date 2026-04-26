@@ -1,11 +1,12 @@
 import type {
     AirportRuntimeEventEnvelope,
+    GitHubVisibleRepository,
     MissionRuntimeSnapshot,
-    Repository as RepositorySummary,
     RepositorySnapshot
-} from '@flying-pillow/mission-core/airport/runtime';
-import { repositorySnapshotSchema } from '@flying-pillow/mission-core/airport/runtime';
+} from '@flying-pillow/mission-core/schemas';
+import { repositorySnapshotSchema } from '@flying-pillow/mission-core/schemas';
 import type { ActiveMissionOutline } from '$lib/client/context/app-context.svelte';
+import { GithubRepository } from '$lib/components/entities/Repository/GithubRepository.svelte.js';
 import { Repository } from '$lib/components/entities/Repository/Repository.svelte.js';
 import type { Mission } from '$lib/components/entities/Mission/Mission.svelte.js';
 import { setApp } from '$lib/client/globals';
@@ -13,50 +14,27 @@ import { AirportClientRuntime } from '$lib/client/runtime/AirportClientRuntime';
 import type { RuntimeSubscription } from '$lib/client/runtime/transport/EntityRuntimeTransport';
 import { qry } from '../../routes/api/entities/remote/query.remote';
 import type { SidebarRepositorySummary } from '$lib/components/entities/types';
-// import {
-//     parseRepositorySnapshot,
-//     parseRepositorySummary,
-// } from '$lib/client/runtime/parsers';
-// import {
-//     addAirportRepository,
-//     getAirportRouteData,
-//     logoutAirportSession,
-//     readVisibleGitHubRepositories,
-//     readMissionSnapshotBundle,
-//     type AddAirportRepositoryResult,
-//     type AirportRouteData,
-//     type MissionSnapshotBundle
-// } from '../../routes/api/airport/airport.remote';
-// import type { SidebarRepositorySummary } from '$lib/components/entities/types';
-// import type { MissionControlSnapshot } from '$lib/types/mission-control';
 
 type EventSourceFactory = (url: string) => EventSource;
-type RemoteQueryValue<T> = T | { current?: T | null };
 
-// type AddRepositoryState = {
-//     error?: string;
-//     success?: boolean;
-//     repositoryPath?: string;
-//     githubRepository?: string;
-// };
+type AddRepositoryState = {
+    error?: string;
+    success?: boolean;
+    repositoryPath?: string;
+    githubRepository?: string;
+};
 
 export class AirportApplication {
     private readonly repositories = new Map<string, Repository>();
     private readonly runtimes = new Map<string, AirportClientRuntime>();
     private repositoryVersion = $state(0);
     #isInitialized = false;
-    // #repositoryLoadPromise: Promise<SidebarRepositorySummary[]> | null = null;
-    // #githubRepositoryLoadPromise: Promise<GitHubVisibleRepository[]> | null = null;
-    // public airportHomeState = $state<AirportRouteData | undefined>();
-    // public airportHomeLoading = $state(false);
-    // public airportHomeError = $state<string | undefined>();
-    // public githubRepositoriesState = $state<GitHubVisibleRepository[]>([]);
-    // public githubRepositoriesLoading = $state(false);
-    // public githubRepositoriesError = $state<string | undefined>();
-    // public repositoriesLoading = $state(false);
-    // public repositoriesError = $state<string | undefined>();
-    // public addRepositoryState = $state<AddRepositoryState | undefined>();
-    // public addRepositoryPending = $state(false);
+    #githubRepositoryLoadPromise: Promise<GitHubVisibleRepository[]> | null = null;
+    public githubRepositoriesState = $state<GitHubVisibleRepository[]>([]);
+    public githubRepositoriesLoading = $state(false);
+    public githubRepositoriesError = $state<string | undefined>();
+    public addRepositoryState = $state<AddRepositoryState | undefined>();
+    public addRepositoryPending = $state(false);
     public activeRepositoryId = $state<string | undefined>();
     public activeRepositoryRootPath = $state<string | undefined>();
     public activeMissionId = $state<string | undefined>();
@@ -76,6 +54,7 @@ export class AirportApplication {
         }
 
         await Repository.find();
+        await this.loadGitHubRepositories().catch(() => undefined);
         this.#isInitialized = true;
     }
 
@@ -138,9 +117,11 @@ export class AirportApplication {
     }
 
     public seedRepositoryFromSummary(summary: SidebarRepositorySummary): Repository {
+        const { missions, ...repository } = summary;
+
         return this.hydrateRepositoryData(repositorySnapshotSchema.parse({
-            repository: summary,
-            missions: summary.missions ?? []
+            repository,
+            missions: missions ?? []
         }));
     }
 
@@ -170,6 +151,82 @@ export class AirportApplication {
             this.repositories.set(repositoryId, repository);
         }
         this.repositoryVersion += 1;
+    }
+
+    public async loadGitHubRepositories(input: {
+        force?: boolean;
+    } = {}): Promise<GitHubVisibleRepository[]> {
+        if (!input.force) {
+            if (this.#githubRepositoryLoadPromise) {
+                return await this.#githubRepositoryLoadPromise;
+            }
+
+            if (this.githubRepositoriesState.length > 0 || this.githubRepositoriesError) {
+                return this.githubRepositoriesState;
+            }
+        }
+
+        this.githubRepositoriesLoading = true;
+        this.githubRepositoriesError = undefined;
+
+        const loadPromise = GithubRepository.find()
+            .then((repositories) => {
+                this.githubRepositoriesState = structuredClone(repositories);
+                return this.githubRepositoriesState;
+            })
+            .catch((error) => {
+                const message = error instanceof Error ? error.message : String(error);
+                this.githubRepositoriesState = [];
+                this.githubRepositoriesError = message;
+                throw error;
+            })
+            .finally(() => {
+                this.githubRepositoriesLoading = false;
+                if (this.#githubRepositoryLoadPromise === loadPromise) {
+                    this.#githubRepositoryLoadPromise = null;
+                }
+            });
+
+        this.#githubRepositoryLoadPromise = loadPromise;
+        return await loadPromise;
+    }
+
+    public async addRepository(input: {
+        repositoryPath: string;
+        githubRepository?: string;
+    }): Promise<Repository> {
+        this.addRepositoryPending = true;
+        this.addRepositoryState = {
+            repositoryPath: input.repositoryPath,
+            ...(input.githubRepository ? { githubRepository: input.githubRepository } : {})
+        };
+
+        try {
+            const repository = input.githubRepository
+                ? this.hydrateRepositoryData(await GithubRepository.clone({
+                    githubRepository: input.githubRepository,
+                    destinationPath: `${input.repositoryPath.replace(/\/+$/u, '') || '/'}/${input.githubRepository}`
+                }))
+                : await Repository.add(input.repositoryPath);
+
+            await Repository.find({ run: true });
+            this.addRepositoryState = {
+                success: true,
+                repositoryPath: repository.repositoryRootPath,
+                ...(input.githubRepository ? { githubRepository: input.githubRepository } : {})
+            };
+            return repository;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.addRepositoryState = {
+                error: message,
+                repositoryPath: input.repositoryPath,
+                ...(input.githubRepository ? { githubRepository: input.githubRepository } : {})
+            };
+            throw error;
+        } finally {
+            this.addRepositoryPending = false;
+        }
     }
 
     public async openRepositoryRoute(repositoryId: string): Promise<Repository> {
@@ -256,7 +313,7 @@ export class AirportApplication {
                         ? { repositoryRootPath: input.repositoryRootPath }
                         : {})
                 }
-            })
+            }).run()
         );
     }
 
@@ -345,86 +402,6 @@ export class AirportApplication {
     //         throw error;
     //     } finally {
     //         this.airportHomeLoading = false;
-    //     }
-    // }
-
-    // public syncAirportRouteData(
-    //     input: RemoteQueryValue<AirportRouteData> | undefined
-    // ): AirportRouteData {
-    //     const data = this.requireAirportRouteData(this.unwrapRemoteQueryValue(input));
-    //     this.airportHomeState = structuredClone(data);
-    //     this.applyAirportHomeSnapshot(data.airportHome);
-    //     return data;
-    // }
-
-    // public async loadGitHubRepositories(input: {
-    //     force?: boolean;
-    // } = {}): Promise<GitHubVisibleRepository[]> {
-    //     if (!input.force) {
-    //         if (this.#githubRepositoryLoadPromise) {
-    //             return await this.#githubRepositoryLoadPromise;
-    //         }
-
-    //         if (this.githubRepositoriesState.length > 0 || this.githubRepositoriesError) {
-    //             return this.githubRepositoriesState;
-    //         }
-    //     }
-
-    //     this.githubRepositoriesLoading = true;
-    //     this.githubRepositoriesError = undefined;
-
-    //     const loadPromise = readVisibleGitHubRepositories({})
-    //         .then((result) => {
-    //             this.githubRepositoriesState = structuredClone(result.githubRepositories);
-    //             this.githubRepositoriesError = result.githubRepositoriesError;
-    //             return this.githubRepositoriesState;
-    //         })
-    //         .catch((error) => {
-    //             const message = error instanceof Error ? error.message : String(error);
-    //             this.githubRepositoriesState = [];
-    //             this.githubRepositoriesError = message;
-    //             throw error;
-    //         })
-    //         .finally(() => {
-    //             this.githubRepositoriesLoading = false;
-    //             if (this.#githubRepositoryLoadPromise === loadPromise) {
-    //                 this.#githubRepositoryLoadPromise = null;
-    //             }
-    //         });
-
-    //     this.#githubRepositoryLoadPromise = loadPromise;
-    //     return await loadPromise;
-    // }
-
-    // public async addRepository(input: {
-    //     repositoryPath: string;
-    //     githubRepository?: string;
-    // }): Promise<AddAirportRepositoryResult> {
-    //     this.addRepositoryPending = true;
-    //     this.addRepositoryState = {
-    //         repositoryPath: input.repositoryPath,
-    //         ...(input.githubRepository ? { githubRepository: input.githubRepository } : {})
-    //     };
-
-    //     try {
-    //         const result = await addAirportRepository(input);
-    //         await this.loadRepositories({ force: true });
-    //         this.addRepositoryState = {
-    //             success: true,
-    //             repositoryPath: result.repositoryPath,
-    //             ...(result.githubRepository ? { githubRepository: result.githubRepository } : {})
-    //         };
-    //         return result;
-    //     } catch (error) {
-    //         const message = error instanceof Error ? error.message : String(error);
-    //         this.addRepositoryState = {
-    //             error: message,
-    //             repositoryPath: input.repositoryPath,
-    //             ...(input.githubRepository ? { githubRepository: input.githubRepository } : {})
-    //         };
-    //         throw error;
-    //     } finally {
-    //         this.addRepositoryPending = false;
     //     }
     // }
 

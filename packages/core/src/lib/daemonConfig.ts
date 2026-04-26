@@ -5,13 +5,13 @@ import {
     COPILOT_CLI_AGENT_RUNNER_ID,
     PI_AGENT_RUNNER_ID
 } from '../agent/runtimes/AgentRuntimeIds.js';
-import { getMissionDirectoryPath } from '../entities/Repository/RepositoryPaths.js';
+import { getMissionDirectoryPath } from './repositoryPaths.js';
 import { resolveGitWorkspaceRoot } from './workspacePaths.js';
 import {
     createDefaultRepositorySettings,
     RepositorySettingsSchema,
     type RepositorySettings
-} from '../entities/Repository/RepositorySettings.js';
+} from '../schemas/RepositorySettings.js';
 import type { RepositoryPlatformKind } from '../entities/Repository/PlatformAdapter.js';
 
 export const MISSION_AGENT_RUNNERS = [COPILOT_CLI_AGENT_RUNNER_ID, PI_AGENT_RUNNER_ID] as const;

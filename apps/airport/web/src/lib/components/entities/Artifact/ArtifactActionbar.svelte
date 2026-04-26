@@ -1,6 +1,6 @@
 <script lang="ts">
     import ScopedActionbar from "$lib/components/entities/Actionbar/ScopedActionbar.svelte";
-    import type { MissionStageId } from "@flying-pillow/mission-core/types.js";
+    import type { MissionStageIdData as MissionStageId } from "../types";
 
     let {
         refreshNonce,

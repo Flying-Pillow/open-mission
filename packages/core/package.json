@@ -23,19 +23,12 @@
       "import": "./build/index.js",
       "default": "./build/index.js"
     },
-    "./airport": {
-      "development": "./src/airport/index.ts",
-      "typescript": "./src/airport/index.ts",
-      "types": "./build/airport/index.d.ts",
-      "import": "./build/airport/index.js",
-      "default": "./build/airport/index.js"
-    },
-    "./airport/runtime": {
-      "development": "./src/airport/runtime.ts",
-      "typescript": "./src/airport/runtime.ts",
-      "types": "./build/airport/runtime.d.ts",
-      "import": "./build/airport/runtime.js",
-      "default": "./build/airport/runtime.js"
+    "./schemas": {
+      "development": "./src/schemas/index.ts",
+      "typescript": "./src/schemas/index.ts",
+      "types": "./build/schemas/index.d.ts",
+      "import": "./build/schemas/index.js",
+      "default": "./build/schemas/index.js"
     },
     "./browser": {
       "development": "./src/browser.ts",
@@ -57,12 +50,6 @@
       "types": "./build/daemon.d.ts",
       "import": "./build/daemon.js",
       "default": "./build/daemon.js"
-    },
-    "./*": {
-      "development": "./src/*",
-      "typescript": "./src/*",
-      "import": "./build/*",
-      "default": "./build/*"
     }
   },
   "files": [

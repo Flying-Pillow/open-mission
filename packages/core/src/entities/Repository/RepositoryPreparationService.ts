@@ -6,9 +6,9 @@ import {
 	getMissionCatalogPath,
 	getMissionDirectoryPath,
 	getMissionWorktreesPath
-} from './RepositoryPaths.js';
+} from '../../lib/repositoryPaths.js';
 import { getRepositorySettingsPath } from '../../lib/daemonConfig.js';
-import { initializeRepository } from './initializeRepository.js';
+import { RepositoryScaffoldingService } from '../../lib/RepositoryScaffoldingService.js';
 import { refreshSystemStatus } from '../../system/SystemStatus.js';
 import type { MissionPreparationStatus } from '../../types.js';
 import { GitHubPlatformAdapter } from '../../platforms/GitHubPlatformAdapter.js';
@@ -27,9 +27,7 @@ export class RepositoryPreparationService {
 
 		try {
 			await this.store.materializeLinkedWorktree(proposalWorktreePath, branchRef, baseBranch);
-			const initialization = await initializeRepository(proposalWorktreePath, {
-				includeRuntimeDirectories: false
-			});
+			const initialization = await new RepositoryScaffoldingService(proposalWorktreePath).initialize();
 
 			const proposalStore = new FilesystemAdapter(proposalWorktreePath);
 			proposalStore.stagePaths([

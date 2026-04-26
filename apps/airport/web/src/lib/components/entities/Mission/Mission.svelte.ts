@@ -5,13 +5,13 @@ import type {
     AgentSession as AgentSessionSnapshot,
     Artifact as ArtifactRecord,
     MissionRuntimeSnapshot
-} from '@flying-pillow/mission-core/airport/runtime';
+} from '@flying-pillow/mission-core/schemas';
 import type {
     OperatorActionExecutionStep,
     OperatorActionListSnapshot,
     OperatorActionQueryContext,
     OperatorStatus
-} from '@flying-pillow/mission-core/types.js';
+} from '@flying-pillow/mission-core/schemas';
 import { AgentSession } from '$lib/components/entities/AgentSession/AgentSession.svelte.js';
 import {
     Artifact,

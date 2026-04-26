@@ -15,7 +15,6 @@ import type {
 import type { WorkflowSettingsGetResult } from '../settings/types.js';
 import type {
 	GitHubIssueDetail,
-	GitHubVisibleRepository,
 	OperatorActionDescriptor,
 	OperatorActionListSnapshot,
 	OperatorActionExecutionStep,
@@ -29,7 +28,6 @@ import type { Repository } from '../entities/Repository/Repository.js';
 import type {
 	ControlStatus,
 	ControlGitHubIssueDetail,
-	ControlGitHubRepositoriesClone,
 	ControlRepositoriesAdd
 } from '../daemon/protocol/contracts.js';
 
@@ -119,18 +117,6 @@ export class DaemonControlApi {
 
 	public async listRegisteredRepositories(): Promise<Repository[]> {
 		return this.client.request<Repository[]>('control.repositories.list');
-	}
-
-	public async listVisibleGitHubRepositories(): Promise<GitHubVisibleRepository[]> {
-		return this.client.request<GitHubVisibleRepository[]>('control.github.repositories.list');
-	}
-
-	public async cloneGitHubRepository(
-		githubRepository: string,
-		destinationPath: string
-	): Promise<Repository> {
-		const params: ControlGitHubRepositoriesClone = { githubRepository, destinationPath };
-		return this.client.request<Repository>('control.github.repositories.clone', params);
 	}
 
 	public async getGitHubIssueDetail(issueNumber: number): Promise<GitHubIssueDetail> {

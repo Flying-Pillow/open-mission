@@ -2,7 +2,7 @@
 import type {
     MissionRuntimeSnapshot,
     Task as TaskRecord
-} from '@flying-pillow/mission-core/airport/runtime';
+} from '@flying-pillow/mission-core/schemas';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
 export type TaskData = NonNullable<

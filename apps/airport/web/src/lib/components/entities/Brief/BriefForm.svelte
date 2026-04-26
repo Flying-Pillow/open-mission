@@ -6,20 +6,17 @@
     import FileDescriptionIcon from "@tabler/icons-svelte/icons/file-description";
     import ListDetailsIcon from "@tabler/icons-svelte/icons/list-details";
     import SettingsIcon from "@tabler/icons-svelte/icons/settings";
-    import { missionFromBriefInputSchema } from "@flying-pillow/mission-core/airport/runtime";
-    import type { inferFlattenedErrors } from "zod";
+    import { missionFromBriefInputSchema } from "@flying-pillow/mission-core/schemas";
+    import type { inferFlattenedErrors, z } from "zod/v4";
     import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
     import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
 
-    type BriefInput = {
-        title: string;
-        body: string;
-        type: "feature" | "fix" | "docs" | "refactor" | "task";
-    };
-
-    type BriefErrors = inferFlattenedErrors<BriefInput>["fieldErrors"];
+    type BriefInput = z.infer<typeof missionFromBriefInputSchema>;
+    type BriefErrors = inferFlattenedErrors<
+        typeof missionFromBriefInputSchema
+    >["fieldErrors"];
 
     const repositoryScope = getScopedRepositoryContext();
 
@@ -37,7 +34,8 @@
         fieldErrors = {};
 
         if (!repository) {
-            submitError = "Repository context is unavailable until the repository route is loaded.";
+            submitError =
+                "Repository context is unavailable until the repository route is loaded.";
             return;
         }
 
@@ -57,7 +55,8 @@
             const result = await repository.startMissionFromBrief(parsed.data);
             await goto(result.redirectTo);
         } catch (error) {
-            submitError = error instanceof Error ? error.message : String(error);
+            submitError =
+                error instanceof Error ? error.message : String(error);
         } finally {
             submitPending = false;
         }
@@ -73,7 +72,10 @@
         not tied to a tracked issue.
     </p>
 
-    <form class="mt-4 flex min-h-0 flex-1 flex-col gap-3" onsubmit={handleSubmit}>
+    <form
+        class="mt-4 flex min-h-0 flex-1 flex-col gap-3"
+        onsubmit={handleSubmit}
+    >
         <div class="grid gap-2">
             <label class="text-sm font-medium text-foreground" for="brief-title"
                 >Title</label
@@ -92,7 +94,12 @@
             <label class="text-sm font-medium text-foreground" for="brief-type"
                 >Type</label
             >
-            <input id="brief-type" name="brief-type" type="hidden" value={briefType} />
+            <input
+                id="brief-type"
+                name="brief-type"
+                type="hidden"
+                value={briefType}
+            />
             <ToggleGroup.Root
                 type="single"
                 bind:value={briefType}
@@ -162,9 +169,7 @@
         {/if}
 
         <Button type="submit" disabled={submitPending}>
-            {submitPending
-                ? "Creating mission..."
-                : "Create mission"}
+            {submitPending ? "Creating mission..." : "Create mission"}
         </Button>
     </form>
 </section>

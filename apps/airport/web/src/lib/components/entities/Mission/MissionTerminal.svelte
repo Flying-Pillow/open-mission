@@ -1,9 +1,5 @@
 <script lang="ts">
-    import {
-        missionTerminalSnapshotSchema,
-        missionTerminalSocketServerMessageSchema,
-        type MissionTerminalSnapshot,
-    } from "@flying-pillow/mission-core/airport/runtime";
+    import type { MissionTerminalSnapshotData as MissionTerminalSnapshot } from "../types";
     import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import { FitAddon } from "@xterm/addon-fit";
     import * as XtermModule from "@xterm/xterm";

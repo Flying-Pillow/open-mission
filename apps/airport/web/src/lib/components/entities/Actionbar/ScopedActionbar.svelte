@@ -16,14 +16,14 @@
     import type { Icon } from "@tabler/icons-svelte";
     import { orderAvailableActions } from "@flying-pillow/mission-core/browser";
     import type {
-        MissionStageId,
-        OperatorActionDescriptor,
-        OperatorActionExecutionStep,
-        OperatorActionFlowStep,
-        OperatorActionListSnapshot,
-        OperatorActionQueryContext,
-        OperatorActionTargetContext,
-    } from "@flying-pillow/mission-core/types.js";
+        MissionStageIdData as MissionStageId,
+        OperatorActionDescriptorData as OperatorActionDescriptor,
+        OperatorActionExecutionStepData as OperatorActionExecutionStep,
+        OperatorActionFlowStepData as OperatorActionFlowStep,
+        OperatorActionListSnapshotData as OperatorActionListSnapshot,
+        OperatorActionQueryContextData as OperatorActionQueryContext,
+        OperatorActionTargetContextData as OperatorActionTargetContext,
+    } from "../types";
 
     type ActionTransportContext = OperatorActionQueryContext & {
         repositoryRootPath: string;

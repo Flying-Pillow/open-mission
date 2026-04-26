@@ -3,13 +3,29 @@ import type {
 	EntityFormInvocation,
 	EntityQueryInvocation,
 	EntityRemoteResult
-} from '../airport/entityRemote.js';
+} from '../schemas/EntityRemote.js';
+import { GitHubRepository } from '../entities/GitHubRepository/GitHubRepository.js';
 import { Repository } from '../entities/Repository/Repository.js';
 import {
+	gitHubRepositoryClonePayloadSchema,
+	gitHubRepositoryEntityName,
+	gitHubRepositoryFindPayloadSchema
+} from '../schemas/GitHubRepository.js';
+import { githubVisibleRepositorySchema } from '../schemas/AirportClient.js';
+import {
+	githubIssueDetailSchema,
 	repositoryEntityName,
-	repositoryRemoteCommandPayloadSchemas,
-	repositoryRemoteQueryPayloadSchemas
-} from '../entities/Repository/RepositoryRemote.js';
+	repositoryFindPayloadSchema,
+	repositoryAddPayloadSchema,
+	repositoryGetIssuePayloadSchema,
+	repositoryListIssuesPayloadSchema,
+	repositoryMissionStartAcknowledgementSchema,
+	repositoryReadPayloadSchema,
+	repositorySnapshotSchema,
+	repositoryStartMissionFromBriefPayloadSchema,
+	repositoryStartMissionFromIssuePayloadSchema,
+	trackedIssueSummarySchema
+} from '../schemas/Repository.js';
 
 export async function executeEntityQueryInDaemon(
 	input: EntityQueryInvocation,
@@ -17,10 +33,9 @@ export async function executeEntityQueryInDaemon(
 		surfacePath: string;
 		authToken?: string;
 	}
-	): Promise<EntityRemoteResult> {
-	void context.surfacePath;
-
-	return executeEntityInvocation(input, context, 'query');
+): Promise<EntityRemoteResult> {
+	assertDaemonContext(context);
+	return executeEntityQuery(input, context);
 }
 
 export async function executeEntityCommandInDaemon(
@@ -29,83 +44,150 @@ export async function executeEntityCommandInDaemon(
 		surfacePath: string;
 		authToken?: string;
 	}
-	): Promise<EntityRemoteResult> {
-	void context.surfacePath;
-
-	return executeEntityInvocation(input, context, 'command');
+): Promise<EntityRemoteResult> {
+	assertDaemonContext(context);
+	return executeEntityCommand(input, context);
 }
 
-const ENTITY_MODELS = {
-	[repositoryEntityName]: {
-		cls: Repository,
-		queryPayloadSchemas: repositoryRemoteQueryPayloadSchemas,
-		commandPayloadSchemas: repositoryRemoteCommandPayloadSchemas,
-		resolveInstance: (payload: unknown) => Repository.resolve(payload)
+async function executeEntityQuery(
+	input: EntityQueryInvocation,
+	context: {
+		surfacePath: string;
+		authToken?: string;
 	}
-} as const;
+): Promise<EntityRemoteResult> {
+	switch (input.entity) {
+		case repositoryEntityName:
+			return executeRepositoryQuery(input, context);
+		case gitHubRepositoryEntityName:
+			return executeGitHubRepositoryQuery(input, context);
+		default:
+			throw new Error(`Entity '${input.entity}' is not implemented in the daemon.`);
+	}
+}
 
-async function executeEntityInvocation(
-	input: EntityQueryInvocation | EntityCommandInvocation | EntityFormInvocation,
+async function executeEntityCommand(
+	input: EntityCommandInvocation | EntityFormInvocation,
+	context: {
+		surfacePath: string;
+		authToken?: string;
+	}
+): Promise<EntityRemoteResult> {
+	switch (input.entity) {
+		case repositoryEntityName:
+			return executeRepositoryCommand(input, context);
+		case gitHubRepositoryEntityName:
+			return executeGitHubRepositoryCommand(input, context);
+		default:
+			throw new Error(`Entity '${input.entity}' is not implemented in the daemon.`);
+	}
+}
+
+async function executeRepositoryQuery(
+	input: EntityQueryInvocation,
 	context: {
 		authToken?: string;
-	},
-	kind: 'query' | 'command'
+	}
 ): Promise<EntityRemoteResult> {
-	const entityModel = ENTITY_MODELS[input.entity as keyof typeof ENTITY_MODELS];
-	if (!entityModel) {
-		throw new Error(`Entity '${input.entity}' is not implemented in the daemon.`);
-	}
-
-	const payloadSchema = kind === 'query'
-		? entityModel.queryPayloadSchemas[input.method as keyof typeof entityModel.queryPayloadSchemas]
-		: entityModel.commandPayloadSchemas[input.method as keyof typeof entityModel.commandPayloadSchemas];
-	if (!payloadSchema) {
-		throw new Error(`${kind === 'query' ? 'Query' : 'Command'} method '${input.entity}.${input.method}' is not implemented in the daemon.`);
-	}
-
-	const payload = payloadSchema.parse(input.payload ?? {});
-	const staticMethod = (entityModel.cls as unknown as Record<string, unknown>)[input.method];
-	const instanceMethod = (entityModel.cls.prototype as unknown as Record<string, unknown>)[input.method];
-
-	if (typeof instanceMethod === 'function' && typeof staticMethod !== 'function') {
-		const instance = await entityModel.resolveInstance(payload);
-		if (!instance) {
-			throw new Error(`Entity '${input.entity}' could not be resolved for method '${input.method}'.`);
+	switch (input.method) {
+		case 'find': {
+			const payload = repositoryFindPayloadSchema.parse(input.payload ?? {});
+			return repositorySnapshotSchema.array().parse(await Repository.find(payload, context));
 		}
-		const callableInstanceMethod = (instance as unknown as Record<string, unknown>)[input.method];
-		if (typeof callableInstanceMethod !== 'function') {
-			throw new Error(`Instance method '${input.entity}.${input.method}' is not callable in the daemon.`);
+		case 'read': {
+			const payload = repositoryReadPayloadSchema.parse(input.payload ?? {});
+			const repository = await resolveRepositoryInstance(input, payload);
+			return repositorySnapshotSchema.parse(await repository.read(payload));
 		}
-		return normalizeEntityRemoteResult(
-			await callableInstanceMethod(payload, context)
-		);
-	}
-
-	if (typeof staticMethod === 'function') {
-		const callableStaticMethod = (entityModel.cls as unknown as Record<string, unknown>)[input.method];
-		if (typeof callableStaticMethod !== 'function') {
-			throw new Error(`Static method '${input.entity}.${input.method}' is not callable in the daemon.`);
+		case 'listIssues': {
+			const payload = repositoryListIssuesPayloadSchema.parse(input.payload ?? {});
+			const repository = await resolveRepositoryInstance(input, payload);
+			return trackedIssueSummarySchema.array().parse(await repository.listIssues(payload, context));
 		}
-		return normalizeEntityRemoteResult(
-			await callableStaticMethod(payload, context)
-		);
+		case 'getIssue': {
+			const payload = repositoryGetIssuePayloadSchema.parse(input.payload ?? {});
+			const repository = await resolveRepositoryInstance(input, payload);
+			return githubIssueDetailSchema.parse(await repository.getIssue(payload, context));
+		}
+		default:
+			throw new Error(`Query method '${input.entity}.${input.method}' is not implemented in the daemon.`);
 	}
-
-	throw new Error(`Method '${input.entity}.${input.method}' is not callable in the daemon.`);
 }
 
-function normalizeEntityRemoteResult(value: unknown): EntityRemoteResult {
-	if (value === undefined || value === null) {
-		return null;
+async function executeGitHubRepositoryQuery(
+	input: EntityQueryInvocation,
+	context: {
+		surfacePath: string;
+		authToken?: string;
+	}
+): Promise<EntityRemoteResult> {
+	switch (input.method) {
+		case 'find': {
+			const payload = gitHubRepositoryFindPayloadSchema.parse(input.payload ?? {});
+			return githubVisibleRepositorySchema.array().parse(await GitHubRepository.find(payload, context));
+		}
+		default:
+			throw new Error(`Query method '${input.entity}.${input.method}' is not implemented in the daemon.`);
+	}
+}
+
+async function executeRepositoryCommand(
+	input: EntityCommandInvocation | EntityFormInvocation,
+	context: {
+		authToken?: string;
+	}
+): Promise<EntityRemoteResult> {
+	switch (input.method) {
+		case 'add': {
+			const payload = repositoryAddPayloadSchema.parse(input.payload ?? {});
+			return repositorySnapshotSchema.parse(await Repository.add(payload, context));
+		}
+		case 'startMissionFromIssue': {
+			const payload = repositoryStartMissionFromIssuePayloadSchema.parse(input.payload ?? {});
+			const repository = await resolveRepositoryInstance(input, payload);
+			return repositoryMissionStartAcknowledgementSchema.parse(await repository.startMissionFromIssue(payload, context));
+		}
+		case 'startMissionFromBrief': {
+			const payload = repositoryStartMissionFromBriefPayloadSchema.parse(input.payload ?? {});
+			const repository = await resolveRepositoryInstance(input, payload);
+			return repositoryMissionStartAcknowledgementSchema.parse(await repository.startMissionFromBrief(payload, context));
+		}
+		default:
+			throw new Error(`Command method '${input.entity}.${input.method}' is not implemented in the daemon.`);
+	}
+}
+
+async function executeGitHubRepositoryCommand(
+	input: EntityCommandInvocation | EntityFormInvocation,
+	context: {
+		surfacePath: string;
+		authToken?: string;
+	}
+): Promise<EntityRemoteResult> {
+	switch (input.method) {
+		case 'clone': {
+			const payload = gitHubRepositoryClonePayloadSchema.parse(input.payload ?? {});
+			return repositorySnapshotSchema.parse(await GitHubRepository.clone(payload, context));
+		}
+		default:
+			throw new Error(`Command method '${input.entity}.${input.method}' is not implemented in the daemon.`);
+	}
+}
+
+function assertDaemonContext(context: { surfacePath: string }): void {
+	if (!context.surfacePath.trim()) {
+		throw new Error('Entity daemon dispatch requires a surfacePath context.');
+	}
+}
+
+async function resolveRepositoryInstance(
+	input: EntityQueryInvocation | EntityCommandInvocation | EntityFormInvocation,
+	payload: { repositoryId: string; repositoryRootPath?: string | undefined }
+): Promise<Repository> {
+	const repository = await Repository.resolve(payload);
+	if (!repository) {
+		throw new Error(`Entity '${input.entity}' could not be resolved for method '${input.method}'.`);
 	}
 
-	if (Array.isArray(value)) {
-		return value.map((item) => normalizeEntityRemoteResult(item));
-	}
-
-	if (typeof value === 'object' && typeof (value as { toJSON?: () => unknown }).toJSON === 'function') {
-		return normalizeEntityRemoteResult((value as { toJSON: () => unknown }).toJSON());
-	}
-
-	return value;
+	return repository;
 }

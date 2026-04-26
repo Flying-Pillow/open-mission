@@ -2,19 +2,15 @@
 import type {
     GitHubIssueDetail,
     MissionRuntimeSnapshot,
-    Repository as RepositorySummary,
     RepositorySnapshot,
     TrackedIssueSummary
-} from '@flying-pillow/mission-core/airport/runtime';
+} from '@flying-pillow/mission-core/schemas';
 import {
     githubIssueDetailSchema,
+    repositoryMissionStartAcknowledgementSchema,
     repositorySnapshotSchema,
-    repositorySchema,
     trackedIssueSummarySchema
-} from '@flying-pillow/mission-core/airport/runtime';
-import {
-    repositoryMissionMutationStatusSchema
-} from '@flying-pillow/mission-core/entities/Repository/RepositoryRemote';
+} from '@flying-pillow/mission-core/schemas';
 import { z } from 'zod/v4';
 import { getApp } from '$lib/client/globals';
 import { cmd } from '../../../../routes/api/entities/remote/command.remote';
@@ -88,16 +84,31 @@ export class Repository implements EntityModel<RepositorySnapshot> {
         return structuredClone($state.snapshot(this.data.repository));
     }
 
-    public static async find(): Promise<Repository[]> {
+    public static async find(input: {
+        run?: boolean;
+    } = {}): Promise<Repository[]> {
+        const repositoriesQuery = qry({
+            entity: 'Repository',
+            method: 'find',
+            payload: {}
+        });
         const snapshots = z.array(repositorySnapshotSchema).parse(
-            await qry({
-                entity: 'Repository',
-                method: 'find',
-                payload: {}
-            })
+            input.run ? await repositoriesQuery.run() : await repositoriesQuery
         );
 
         return getApp().reconcileRepositories(snapshots);
+    }
+
+    public static async add(repositoryPath: string): Promise<Repository> {
+        const snapshot = repositorySnapshotSchema.parse(await cmd({
+            entity: 'Repository',
+            method: 'add',
+            payload: {
+                repositoryPath
+            }
+        }));
+
+        return getApp().hydrateRepositoryData(snapshot);
     }
 
     public get selectedMissionId(): string | undefined {
@@ -182,7 +193,7 @@ export class Repository implements EntityModel<RepositorySnapshot> {
 
     public async listIssues(): Promise<TrackedIssueSummary[]> {
         return z.array(trackedIssueSummarySchema).parse(
-            await this.listIssuesQuery()
+            await this.listIssuesQuery().run()
         );
     }
 
@@ -207,23 +218,24 @@ export class Repository implements EntityModel<RepositorySnapshot> {
                     repositoryRootPath: this.repositoryRootPath,
                     issueNumber
                 }
-            })
+            }).run()
         );
     }
 
     public async startMissionFromIssue(issueNumber: number): Promise<{ missionId: string; redirectTo: string }> {
-        const result = repositoryMissionMutationStatusSchema.parse(await cmd({
+        const result = repositoryMissionStartAcknowledgementSchema.parse(await cmd({
             entity: 'Repository',
             method: 'startMissionFromIssue',
             payload: {
                 repositoryId: this.repositoryId,
+                repositoryRootPath: this.repositoryRootPath,
                 issueNumber
             }
         }));
 
         return {
-            missionId: result.missionId,
-            redirectTo: `/repository/${encodeURIComponent(this.repositoryId)}/missions/${encodeURIComponent(result.missionId)}`
+            missionId: result.id,
+            redirectTo: `/repository/${encodeURIComponent(this.repositoryId)}/missions/${encodeURIComponent(result.id)}`
         };
     }
 
@@ -232,18 +244,19 @@ export class Repository implements EntityModel<RepositorySnapshot> {
         body: string;
         type: 'feature' | 'fix' | 'docs' | 'refactor' | 'task';
     }): Promise<{ missionId: string; redirectTo: string }> {
-        const result = repositoryMissionMutationStatusSchema.parse(await cmd({
+        const result = repositoryMissionStartAcknowledgementSchema.parse(await cmd({
             entity: 'Repository',
             method: 'startMissionFromBrief',
             payload: {
                 repositoryId: this.repositoryId,
+                repositoryRootPath: this.repositoryRootPath,
                 ...input
             }
         }));
 
         return {
-            missionId: result.missionId,
-            redirectTo: `/repository/${encodeURIComponent(this.repositoryId)}/missions/${encodeURIComponent(result.missionId)}`
+            missionId: result.id,
+            redirectTo: `/repository/${encodeURIComponent(this.repositoryId)}/missions/${encodeURIComponent(result.id)}`
         };
     }
 

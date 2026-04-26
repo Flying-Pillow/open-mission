@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { getRepositorySettingsPath } from '../lib/daemonConfig.js';
-import { getMissionWorkflowDefinitionPath } from '../entities/Repository/RepositoryPaths.js';
+import { getMissionWorkflowDefinitionPath } from '../lib/repositoryPaths.js';
 import { WorkflowSettingsStore } from './WorkflowSettingsStore.js';
 
 describe('WorkflowSettingsStore', () => {

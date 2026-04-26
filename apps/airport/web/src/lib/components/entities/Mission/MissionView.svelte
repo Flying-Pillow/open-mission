@@ -1,7 +1,7 @@
 <script lang="ts">
     import ChevronDownIcon from "@tabler/icons-svelte/icons/chevron-down";
     import ChevronUpIcon from "@tabler/icons-svelte/icons/chevron-up";
-    import type { OperatorStatus } from "@flying-pillow/mission-core/types.js";
+    import type { OperatorStatusData as OperatorStatus } from "../types";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import MissionActionbar from "$lib/components/entities/Mission/MissionActionbar.svelte";
     import type { MissionControlComputedState } from "$lib/components/entities/Mission/missionControl";

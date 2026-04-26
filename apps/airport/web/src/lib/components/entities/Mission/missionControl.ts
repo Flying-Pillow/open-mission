@@ -7,7 +7,7 @@ import type {
     MissionSelectionTarget,
     MissionTowerTreeNode,
     OperatorStatus
-} from '@flying-pillow/mission-core/types.js';
+} from '@flying-pillow/mission-core/schemas';
 
 export type MissionControlComputedState = {
     domain?: ContextGraph;

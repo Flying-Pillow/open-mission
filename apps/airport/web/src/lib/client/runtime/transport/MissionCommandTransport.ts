@@ -9,6 +9,10 @@ import type {
     OperatorStatus
 } from '@flying-pillow/mission-core/schemas';
 import type {
+    EntityCommandInvocation,
+    EntityRemoteResult
+} from '@flying-pillow/mission-core/schemas';
+import type {
     MissionCommandGateway,
     MissionDocumentPayload
 } from '$lib/components/entities/Mission/Mission.svelte.js';
@@ -24,14 +28,24 @@ import {
     missionControlSnapshotSchema,
     type MissionControlSnapshot
 } from '$lib/types/mission-control';
+import { cmd } from '../../../../routes/api/entities/remote/command.remote';
+
+type EntityCommandExecutor = (input: EntityCommandInvocation) => Promise<EntityRemoteResult>;
+const missionEntityName = 'Mission';
 
 export class MissionCommandTransport implements MissionCommandGateway {
     private readonly fetcher: typeof fetch;
     private readonly repositoryRootPath?: string;
+    private readonly commandRemote: EntityCommandExecutor;
 
-    public constructor(input: { fetch?: typeof fetch; repositoryRootPath?: string } = {}) {
+    public constructor(input: {
+        fetch?: typeof fetch;
+        repositoryRootPath?: string;
+        commandRemote?: EntityCommandExecutor;
+    } = {}) {
         this.fetcher = input.fetch ?? fetch;
         this.repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
+        this.commandRemote = input.commandRemote ?? cmd;
     }
 
     public startTask(input: {
@@ -203,29 +217,18 @@ export class MissionCommandTransport implements MissionCommandGateway {
             throw new Error('Mission action commands require missionId and actionId.');
         }
 
-        const response = await this.fetcher(
-            this.buildActionsUrl(normalizedMissionId),
-            {
-                method: 'POST',
-                headers: {
-                    accept: 'application/json',
-                    'content-type': 'application/json'
-                },
-                body: JSON.stringify({
-                    actionId: normalizedActionId,
-                    ...(input.steps ? { steps: input.steps } : {}),
-                    ...(input.terminalSessionName?.trim()
-                        ? { terminalSessionName: input.terminalSessionName.trim() }
-                        : {})
-                })
+        return operatorStatusSchema.parse(await this.commandRemote({
+            entity: missionEntityName,
+            method: 'executeAction',
+            payload: {
+                ...this.buildMissionPayload(normalizedMissionId),
+                actionId: normalizedActionId,
+                ...(input.steps ? { steps: input.steps } : {}),
+                ...(input.terminalSessionName?.trim()
+                    ? { terminalSessionName: input.terminalSessionName.trim() }
+                    : {})
             }
-        );
-
-        if (!response.ok) {
-            throw new Error(`Mission action '${normalizedActionId}' failed for '${normalizedMissionId}' (${response.status}).`);
-        }
-
-        return operatorStatusSchema.parse(await response.json());
+        }));
     }
 
     public async readMissionDocument(input: {
@@ -329,23 +332,16 @@ export class MissionCommandTransport implements MissionCommandGateway {
         }
 
         const payload = parseMissionTaskCommandPayload(body);
-        const response = await this.fetcher(
-            `/api/runtime/missions/${encodeURIComponent(normalizedMissionId)}/tasks/${encodeURIComponent(normalizedTaskId)}${this.buildQuerySuffix()}`,
-            {
-                method: 'POST',
-                headers: {
-                    accept: 'application/json',
-                    'content-type': 'application/json'
-                },
-                body: JSON.stringify(payload)
+
+        return parseMissionRuntimeSnapshot(await this.commandRemote({
+            entity: missionEntityName,
+            method: 'taskCommand',
+            payload: {
+                ...this.buildMissionPayload(normalizedMissionId),
+                taskId: normalizedTaskId,
+                command: payload
             }
-        );
-
-        if (!response.ok) {
-            throw new Error(`Mission task command '${payload.action}' failed for '${normalizedTaskId}' (${response.status}).`);
-        }
-
-        return parseMissionRuntimeSnapshot(await response.json());
+        }));
     }
 
     private async sendMissionCommand(
@@ -360,43 +356,15 @@ export class MissionCommandTransport implements MissionCommandGateway {
         }
 
         const payload = parseMissionCommandPayload(body);
-        const actionId = this.resolveMissionActionId(payload.action);
-        const response = await this.fetcher(
-            `/api/runtime/missions/${encodeURIComponent(normalizedMissionId)}/actions${this.buildQuerySuffix()}`,
-            {
-                method: 'POST',
-                headers: {
-                    accept: 'application/json',
-                    'content-type': 'application/json'
-                },
-                body: JSON.stringify({ actionId })
+
+        return parseMissionRuntimeSnapshot(await this.commandRemote({
+            entity: missionEntityName,
+            method: 'command',
+            payload: {
+                ...this.buildMissionPayload(normalizedMissionId),
+                command: payload
             }
-        );
-
-        if (!response.ok) {
-            throw new Error(`Mission command '${payload.action}' failed for '${normalizedMissionId}' (${response.status}).`);
-        }
-
-        return parseMissionRuntimeSnapshot(await response.json());
-    }
-
-    private resolveMissionActionId(
-        action: 'pause' | 'resume' | 'panic' | 'clearPanic' | 'restartQueue' | 'deliver'
-    ): string {
-        switch (action) {
-            case 'pause':
-                return 'mission.pause';
-            case 'resume':
-                return 'mission.resume';
-            case 'panic':
-                return 'mission.panic';
-            case 'clearPanic':
-                return 'mission.clear-panic';
-            case 'restartQueue':
-                return 'mission.restart-queue';
-            case 'deliver':
-                return 'mission.deliver';
-        }
+        }));
     }
 
     private buildActionsUrl(
@@ -451,23 +419,28 @@ export class MissionCommandTransport implements MissionCommandGateway {
         }
 
         const payload = parseMissionSessionCommandPayload(body);
-        const response = await this.fetcher(
-            `/api/runtime/missions/${encodeURIComponent(normalizedMissionId)}/sessions/${encodeURIComponent(normalizedSessionId)}${this.buildQuerySuffix()}`,
-            {
-                method: 'POST',
-                headers: {
-                    accept: 'application/json',
-                    'content-type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            }
-        );
 
-        if (!response.ok) {
-            throw new Error(`Mission session command '${payload.action}' failed for '${normalizedSessionId}' (${response.status}).`);
+        return parseMissionRuntimeSnapshot(await this.commandRemote({
+            entity: missionEntityName,
+            method: 'sessionCommand',
+            payload: {
+                ...this.buildMissionPayload(normalizedMissionId),
+                sessionId: normalizedSessionId,
+                command: payload
+            }
+        }));
+    }
+
+    private buildMissionPayload(missionId: string): { missionId: string; repositoryRootPath?: string } {
+        const normalizedMissionId = missionId.trim();
+        if (!normalizedMissionId) {
+            throw new Error('Mission entity commands require a missionId.');
         }
 
-        return parseMissionRuntimeSnapshot(await response.json());
+        return {
+            missionId: normalizedMissionId,
+            ...(this.repositoryRootPath ? { repositoryRootPath: this.repositoryRootPath } : {})
+        };
     }
 
     private buildQuerySuffix(): string {

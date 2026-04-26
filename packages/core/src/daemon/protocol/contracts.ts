@@ -33,7 +33,7 @@ import type {
 	EntityFormInvocation,
 	EntityQueryInvocation,
 	EntityRemoteResult
-} from '../../airport/entityRemote.js';
+} from '../../schemas/EntityRemote.js';
 
 export type MissionAgentPrimitiveValue = string | number | boolean | null;
 
@@ -311,7 +311,7 @@ export type MissionAgentEvent =
 		state: MissionAgentSessionState;
 	};
 
-export const PROTOCOL_VERSION = 23;
+export const PROTOCOL_VERSION = 24;
 
 export type Method =
 	| 'ping'
@@ -332,8 +332,6 @@ export type Method =
 	| 'control.workflow.settings.update'
 	| 'control.repositories.list'
 	| 'control.repositories.add'
-	| 'control.github.repositories.list'
-	| 'control.github.repositories.clone'
 	| 'control.github.issue.detail'
 	| 'control.issues.list'
 	| 'control.action.list'
@@ -384,8 +382,6 @@ export const METHOD_METADATA: Record<Method, MethodMetadata> = {
 	'control.workflow.settings.update': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.repositories.list': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.repositories.add': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'control.github.repositories.list': { includeSurfacePath: true, workspaceRoute: 'control' },
-	'control.github.repositories.clone': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.github.issue.detail': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.issues.list': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'control.action.list': { includeSurfacePath: true, workspaceRoute: 'control' },
@@ -564,13 +560,6 @@ export type MissionAgentSessionCommandRequest = {
 };
 
 export type ControlRepositoriesList = Record<string, never>;
-
-export type ControlGitHubRepositoriesList = Record<string, never>;
-
-export type ControlGitHubRepositoriesClone = {
-	githubRepository: string;
-	destinationPath: string;
-};
 
 export type ControlGitHubIssueDetail = {
 	issueNumber: number;

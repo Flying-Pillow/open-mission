@@ -2,7 +2,7 @@
 import type {
     MissionRuntimeSnapshot,
     Stage as StageSnapshotRecord
-} from '@flying-pillow/mission-core/airport/runtime';
+} from '@flying-pillow/mission-core/schemas';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 import type { Task } from '$lib/components/entities/Task/Task.svelte.js';
 

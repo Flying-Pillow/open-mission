@@ -3,6 +3,10 @@ import type {
     AirportRuntimeEventEnvelope,
     MissionRuntimeSnapshot
 } from '@flying-pillow/mission-core/schemas';
+import type {
+    EntityQueryInvocation,
+    EntityRemoteResult
+} from '@flying-pillow/mission-core/schemas';
 import {
     EntityRuntimeTransport,
     type RuntimeSubscription
@@ -11,6 +15,10 @@ import {
     parseAirportRuntimeEventEnvelope,
     parseMissionRuntimeSnapshot
 } from '$lib/client/runtime/parsers';
+import { qry } from '../../../../routes/api/entities/remote/query.remote';
+
+type EntityQueryExecutor = (input: EntityQueryInvocation) => Promise<EntityRemoteResult>;
+const missionEntityName = 'Mission';
 
 export class MissionRuntimeTransport extends EntityRuntimeTransport<
     string,
@@ -18,18 +26,33 @@ export class MissionRuntimeTransport extends EntityRuntimeTransport<
     AirportRuntimeEventEnvelope
 > {
     private readonly repositoryRootPath?: string;
+    private readonly queryRemote: EntityQueryExecutor;
 
     public constructor(input: {
         fetch?: typeof fetch;
         createEventSource?: (url: string) => EventSource;
         repositoryRootPath?: string;
+        queryRemote?: EntityQueryExecutor;
     } = {}) {
         super(input);
         this.repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
+        this.queryRemote = input.queryRemote ?? qry;
     }
 
     public async getMissionRuntimeSnapshot(missionId: string): Promise<MissionRuntimeSnapshot> {
-        return this.getSnapshot(missionId);
+        const normalizedMissionId = missionId.trim();
+        if (!normalizedMissionId) {
+            throw new Error('Mission runtime operation requires a non-empty id.');
+        }
+
+        return parseMissionRuntimeSnapshot(await this.queryRemote({
+            entity: missionEntityName,
+            method: 'read',
+            payload: {
+                missionId: normalizedMissionId,
+                ...(this.repositoryRootPath ? { repositoryRootPath: this.repositoryRootPath } : {})
+            }
+        }));
     }
 
     public observeMissionRuntime(input: {

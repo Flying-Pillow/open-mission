@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getMissionCatalogPath, getMissionWorktreesPath } from '../entities/Repository/RepositoryPaths.js';
+import { getMissionCatalogPath, getMissionWorktreesPath } from './repositoryPaths.js';
 import type { MissionSelector } from '../types.js';
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));

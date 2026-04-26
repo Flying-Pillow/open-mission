@@ -22,7 +22,7 @@
     import * as Tabs from "$lib/components/ui/tabs/index.js";
     import type { MissionFileTreeNode } from "$lib/types/mission-file-tree";
     import type { MissionControlSnapshot } from "$lib/types/mission-control";
-    import type { AirportRuntimeEventEnvelope } from "@flying-pillow/mission-core";
+    import type { MissionRuntimeEventEnvelope as AirportRuntimeEventEnvelope } from "$lib/components/entities/types";
 
     const appContext = getAppContext();
     const routeRepositoryId = $derived(page.params.repositoryId?.trim() ?? "");

@@ -1,5 +1,5 @@
 import { error as kitError, json } from "@sveltejs/kit";
-import { missionRuntimeRouteParamsSchema } from "@flying-pillow/mission-core";
+import { missionRuntimeRouteParamsSchema } from "@flying-pillow/mission-core/schemas";
 import { z } from "zod";
 import { readMissionFileTree } from "$lib/server/filesystem/mission-file-tree.server";
 import type { RequestHandler } from "./$types";

@@ -1,7 +1,7 @@
 import { cp, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createDefaultRepositorySettings } from '../../entities/Repository/RepositorySettings.js';
+import { createDefaultRepositorySettings } from '../../schemas/RepositorySettings.js';
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(scriptDirectory, '../../..');

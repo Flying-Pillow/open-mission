@@ -1,12 +1,10 @@
 <script lang="ts">
-    import { goto } from "$app/navigation";
     import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
 
     const appContext = getAppContext();
-    const airportHomeState = $derived(appContext.application.airportHomeState);
     const daemonStatusTone = $derived(
         appContext.daemon.running ? "connected" : "disconnected",
     );
@@ -18,15 +16,11 @@
                 : "No authenticated GitHub account"),
     );
     const daemonMessage = $derived(appContext.daemon.message);
-    const loginHref = $derived(
-        airportHomeState?.loginHref ?? "/login?redirectTo=/airport",
-    );
+    const loginHref = "/login?redirectTo=/airport";
     const githubRepositories = $derived(
         appContext.application.githubRepositoriesState,
     );
-    const repositories = $derived(
-        airportHomeState?.airportHome.repositories ?? [],
-    );
+    const repositories = $derived(appContext.airport.repositories);
     const repositoryCountLabel = $derived(
         repositories.length === 1
             ? "1 repository registered"
@@ -41,21 +35,10 @@
         repositories.find(
             (repository) =>
                 repository.repositoryRootPath ===
-                airportHomeState?.airportHome.selectedRepositoryRoot,
+                appContext.airport.activeRepositoryRootPath,
         ),
     );
     const isGitHubConnected = $derived(githubStatusTone === "connected");
-    let logoutPending = $state(false);
-
-    async function handleLogout(): Promise<void> {
-        logoutPending = true;
-
-        try {
-            await goto(await appContext.application.logout());
-        } finally {
-            logoutPending = false;
-        }
-    }
 </script>
 
 <section
@@ -151,20 +134,7 @@
                 </p>
 
                 <div class="mt-4">
-                    {#if isGitHubConnected}
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="lg"
-                            class="w-full justify-center"
-                            disabled={logoutPending}
-                            onclick={() => {
-                                void handleLogout();
-                            }}
-                        >
-                            {logoutPending ? "Logging out..." : "Log out"}
-                        </Button>
-                    {:else}
+                    {#if !isGitHubConnected}
                         <Button
                             href={loginHref}
                             size="lg"
@@ -173,6 +143,12 @@
                             <BrandGithubIcon class="size-4" />
                             Login with GitHub
                         </Button>
+                    {:else}
+                        <div
+                            class="rounded-2xl border bg-muted/30 px-4 py-3 text-sm text-muted-foreground"
+                        >
+                            GitHub is connected for this session.
+                        </div>
                     {/if}
                 </div>
             </div>

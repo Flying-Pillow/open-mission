@@ -4,7 +4,7 @@ import {
 	resolveRepositorySettingsDocument,
 	writeRepositorySettingsDocument
 } from '../lib/daemonConfig.js';
-import type { RepositorySettings } from '../entities/Repository/RepositorySettings.js';
+import type { RepositorySettings } from '../schemas/RepositorySettings.js';
 import {
 	DEFAULT_WORKFLOW_VERSION,
 	createDefaultWorkflowSettings
@@ -19,7 +19,7 @@ import {
 	scaffoldMissionWorkflowPreset,
 	writeMissionWorkflowDefinition
 } from '../workflow/mission/preset.js';
-import { getMissionWorkflowDefinitionPath } from '../entities/Repository/RepositoryPaths.js';
+import { getMissionWorkflowDefinitionPath } from '../lib/repositoryPaths.js';
 import {
 	applyWorkflowSettingsPatch,
 	validateWorkflowSettingsPatch

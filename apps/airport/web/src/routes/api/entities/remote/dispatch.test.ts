@@ -4,7 +4,7 @@ import type {
     EntityFormInvocation,
     EntityQueryInvocation,
     EntityRemoteResult
-} from '@flying-pillow/mission-core/airport';
+} from '@flying-pillow/mission-core/schemas';
 import {
     entityCommandInvocationSchema,
     entityFormInvocationSchema,

@@ -3,7 +3,7 @@ import { z } from 'zod/v4';
 import {
     missionRuntimeRouteParamsSchema,
     repositoryRuntimeRouteParamsSchema,
-} from '@flying-pillow/mission-core';
+} from '@flying-pillow/mission-core/schemas';
 import type { MissionControlSnapshot } from '$lib/types/mission-control';
 
 const missionDataQuerySchema = z.object({

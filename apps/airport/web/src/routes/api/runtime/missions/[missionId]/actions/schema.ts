@@ -1,4 +1,4 @@
-import { isMissionStageId } from "@flying-pillow/mission-core/types.js";
+import { isMissionStageId } from "@flying-pillow/mission-core/schemas";
 import { z } from "zod";
 
 export const missionActionQuerySchema = z.object({

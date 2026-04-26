@@ -7,7 +7,7 @@ import {
 	getMissionWorkflowDefinitionPath,
 	getMissionWorkflowPath,
 	getMissionWorkflowTemplatesPath
-} from '../../entities/Repository/RepositoryPaths.js';
+} from '../../lib/repositoryPaths.js';
 import { createDefaultWorkflowSettings } from './workflow.js';
 
 const packagedTemplateDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), 'templates');

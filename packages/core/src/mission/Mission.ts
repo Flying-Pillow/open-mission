@@ -18,7 +18,7 @@ import type {
 import { toMission, type Mission } from '../entities/Mission/Mission.js';
 
 import type { MissionDefaultAgentMode } from '../lib/daemonConfig.js';
-import { initializeRepository } from '../entities/Repository/initializeRepository.js';
+import { RepositoryScaffoldingService } from '../lib/RepositoryScaffoldingService.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../agent/runtimes/AgentRuntimeIds.js';
 import { MissionSession } from './MissionSession.js';
 import { MissionTask } from './MissionTask.js';
@@ -138,9 +138,7 @@ export class MissionRuntime {
 
 	public async initialize(): Promise<this> {
 		const missionWorkspaceRoot = this.adapter.getMissionWorkspacePath(this.missionDir);
-		await initializeRepository(missionWorkspaceRoot, {
-			includeRuntimeDirectories: false
-		});
+		await new RepositoryScaffoldingService(missionWorkspaceRoot).initialize();
 		await this.adapter.initializeMissionEnvironment(this.missionDir);
 		await this.adapter.writeMissionDescriptor(this.missionDir, this.descriptor);
 		await this.workflowController.initialize();

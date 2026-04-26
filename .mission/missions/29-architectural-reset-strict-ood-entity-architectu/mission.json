@@ -97,7 +97,138 @@
           "stageId": "implementation",
           "artifactTasks": true,
           "templateSources": [],
-          "tasks": []
+          "tasks": [
+            {
+              "taskId": "implementation/01-create-canonical-schema-contracts",
+              "title": "Create Canonical Schema Contracts",
+              "instruction": "Implement the canonical shared schema surface required by SPEC.md. Move Repository-owned data, snapshot, method payload, method result, generic entity remote, command acknowledgement, and runtime event contract ownership under packages/core/src/schemas. Decompose packages/core/src/airport/runtime.ts so it is no longer the canonical schema surface. Keep the work strict: no passthrough payloads, no compatibility aliases, and no fallback parser layers.",
+              "taskKind": "implementation",
+              "pairedTaskId": "implementation/01-create-canonical-schema-contracts-verify",
+              "dependsOn": [],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/01-create-canonical-schema-contracts-verify",
+              "title": "Verify Canonical Schema Contracts",
+              "instruction": "Verify that shared schemas are canonical under packages/core/src/schemas and that Repository, EntityRemote, RuntimeEvents, and schema barrel exports are strict and browser-safe. Confirm airport/runtime no longer owns entity, method, or event schemas. Run focused schema, type, and package checks, and record any remaining gaps in 03-IMPLEMENTATION/VERIFY.md.",
+              "taskKind": "verification",
+              "pairedTaskId": "implementation/01-create-canonical-schema-contracts",
+              "dependsOn": [
+                "implementation/01-create-canonical-schema-contracts"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/02-make-repository-domain-authoritative",
+              "title": "Make Repository Domain Authoritative",
+              "instruction": "Refactor Repository around the canonical schemas. Repository.ts remains the daemon-authoritative entity for repository identity, snapshots, issue queries, add/register, and mission-start source commands. Repositories.ts remains the collection authority. Remove RepositorySchema.ts and RepositoryRemote.ts as contract owners, remove duplicate validation that obscures the boundary, and keep one strict validation point per daemon-callable method.",
+              "taskKind": "implementation",
+              "pairedTaskId": "implementation/02-make-repository-domain-authoritative-verify",
+              "dependsOn": [
+                "implementation/01-create-canonical-schema-contracts-verify"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/02-make-repository-domain-authoritative-verify",
+              "title": "Verify Repository Domain Authority",
+              "instruction": "Verify Repository and Repositories own only their intended domain and collection responsibilities. Confirm Repository methods import canonical schemas only, return schema-validated JSON-safe values, reject invalid payloads, and keep add/register plus mission-start behavior aligned with SPEC.md. Run focused Repository tests and record remaining gaps in 03-IMPLEMENTATION/VERIFY.md.",
+              "taskKind": "verification",
+              "pairedTaskId": "implementation/02-make-repository-domain-authoritative",
+              "dependsOn": [
+                "implementation/02-make-repository-domain-authoritative"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/03-replace-daemon-entity-dispatch",
+              "title": "Replace Daemon Entity Dispatch",
+              "instruction": "Replace dynamic daemon entity dispatch with explicit per-entity dispatchers, starting with Repository. Remove ENTITY_MODELS-style registry behavior, class/prototype probing, arbitrary method string execution, and generic result normalization. Each Repository query and command handler must parse payloads, resolve instances explicitly when required, execute the known method, parse the result, and fail loudly for unknown entities or methods. Bump PROTOCOL_VERSION for the changed daemon RPC contract.",
+              "taskKind": "implementation",
+              "pairedTaskId": "implementation/03-replace-daemon-entity-dispatch-verify",
+              "dependsOn": [
+                "implementation/02-make-repository-domain-authoritative-verify"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/03-replace-daemon-entity-dispatch-verify",
+              "title": "Verify Explicit Daemon Entity Dispatch",
+              "instruction": "Verify daemon entity dispatch is explicit and strict. Confirm unknown entities, unknown methods, invalid payloads, invalid results, missing instances, and missing daemon context fail loudly. Confirm Repository.find, Repository.add, Repository.read, listIssues, getIssue, startMissionFromIssue, and startMissionFromBrief route through explicit handlers. Run daemon protocol and entity dispatch tests and record remaining gaps in 03-IMPLEMENTATION/VERIFY.md.",
+              "taskKind": "verification",
+              "pairedTaskId": "implementation/03-replace-daemon-entity-dispatch",
+              "dependsOn": [
+                "implementation/03-replace-daemon-entity-dispatch"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/04-clean-airport-repository-mirror",
+              "title": "Clean Airport Repository Mirror",
+              "instruction": "Refactor the Airport Repository client mirror and generic remote gateways around the canonical schema surface. Browser Repository methods must import schemas from @flying-pillow/mission-core/schemas, call generic query and command remotes, parse source results, and expose component-facing methods. Remove deep entity remote imports, route-local Repository issue and mission remotes, manual payload composition from components, and command projection assumptions.",
+              "taskKind": "implementation",
+              "pairedTaskId": "implementation/04-clean-airport-repository-mirror-verify",
+              "dependsOn": [
+                "implementation/03-replace-daemon-entity-dispatch-verify"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/04-clean-airport-repository-mirror-verify",
+              "title": "Verify Airport Repository Mirror",
+              "instruction": "Verify Airport web reaches Repository behavior only through mirrored entity methods and generic remotes. Confirm browser-reachable code has no deep entities/*Remote* imports, no daemon/node imports, and no route-local issue or mission remotes for Repository behavior. Run focused web dispatch and Repository mirror tests and record remaining gaps in 03-IMPLEMENTATION/VERIFY.md.",
+              "taskKind": "verification",
+              "pairedTaskId": "implementation/04-clean-airport-repository-mirror",
+              "dependsOn": [
+                "implementation/04-clean-airport-repository-mirror"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/05-wire-sse-projection-ownership",
+              "title": "Wire SSE Projection Ownership",
+              "instruction": "Align command results and projection updates with SPEC.md. Commands must return source acknowledgement or source-local results, while cross-entity state changes are projected through daemon SSE event envelopes validated by shared RuntimeEvents schemas. Update the Repository mission-start flow and client reconciliation so mission, workflow, task, artifact, and session changes are not treated as command response projections.",
+              "taskKind": "implementation",
+              "pairedTaskId": "implementation/05-wire-sse-projection-ownership-verify",
+              "dependsOn": [
+                "implementation/04-clean-airport-repository-mirror-verify"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/05-wire-sse-projection-ownership-verify",
+              "title": "Verify SSE Projection Ownership",
+              "instruction": "Verify source commands no longer reconcile broad cross-entity projections. Confirm mission-start and task or mission side effects are represented by daemon SSE projection events and client mirror reconciliation. Check event envelope schema validation, command acknowledgement parsing, and manual Repository/Mission flows. Record remaining gaps in 03-IMPLEMENTATION/VERIFY.md.",
+              "taskKind": "verification",
+              "pairedTaskId": "implementation/05-wire-sse-projection-ownership",
+              "dependsOn": [
+                "implementation/05-wire-sse-projection-ownership"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/06-tighten-exports-and-remove-transitional-layers",
+              "title": "Tighten Exports And Remove Transitional Layers",
+              "instruction": "Complete the Repository-first architecture cleanup by tightening packages/core package exports to the minimal stable entrypoints, removing wildcard and deep remote exports, deleting transitional route-local remotes and compatibility shims, reducing DaemonGateway to non-entity infrastructure, and replacing remaining manual parsers with shared schemas where this mission's Repository-first scope requires it.",
+              "taskKind": "implementation",
+              "pairedTaskId": "implementation/06-tighten-exports-and-remove-transitional-layers-verify",
+              "dependsOn": [
+                "implementation/05-wire-sse-projection-ownership-verify"
+              ],
+              "agentRunner": "copilot-cli"
+            },
+            {
+              "taskId": "implementation/06-tighten-exports-and-remove-transitional-layers-verify",
+              "title": "Verify Exports And Removed Transitional Layers",
+              "instruction": "Verify the final Repository-first implementation has minimal stable package exports, no wildcard exports, no public deep entity remote exports, no airport/runtime schema dependency from browser code, no route-specific Repository remotes, and no fallback, compatibility, alias, or normalization layer left in the target path. Run package, web, build, and focused import-boundary checks, then record final evidence in 03-IMPLEMENTATION/VERIFY.md.",
+              "taskKind": "verification",
+              "pairedTaskId": "implementation/06-tighten-exports-and-remove-transitional-layers",
+              "dependsOn": [
+                "implementation/06-tighten-exports-and-remove-transitional-layers"
+              ],
+              "agentRunner": "copilot-cli"
+            }
+          ]
         },
         {
           "stageId": "audit",
@@ -148,7 +279,7 @@
   },
   "runtime": {
     "lifecycle": "running",
-    "activeStageId": "implementation",
+    "activeStageId": "audit",
     "pause": {
       "paused": false
     },
@@ -189,40 +320,51 @@
       },
       {
         "stageId": "implementation",
-        "lifecycle": "ready",
+        "lifecycle": "completed",
         "taskIds": [
-          "implementation/01-define-authoritative-backend-entity-vocabulary",
-          "implementation/01-define-authoritative-backend-entity-vocabulary-verify",
-          "implementation/02-introduce-generic-entity-remote-boundary",
-          "implementation/02-introduce-generic-entity-remote-boundary-verify",
-          "implementation/03-promote-app-context-to-singleton-entity-container",
-          "implementation/03-promote-app-context-to-singleton-entity-container-verify",
-          "implementation/04-move-transport-behavior-behind-frontend-entities",
-          "implementation/04-move-transport-behavior-behind-frontend-entities-verify",
-          "implementation/05-align-ui-components-with-entity-and-app-context-apis",
-          "implementation/05-align-ui-components-with-entity-and-app-context-apis-verify"
+          "implementation/01-create-canonical-schema-contracts",
+          "implementation/01-create-canonical-schema-contracts-verify",
+          "implementation/02-make-repository-domain-authoritative",
+          "implementation/02-make-repository-domain-authoritative-verify",
+          "implementation/03-replace-daemon-entity-dispatch",
+          "implementation/03-replace-daemon-entity-dispatch-verify",
+          "implementation/04-clean-airport-repository-mirror",
+          "implementation/04-clean-airport-repository-mirror-verify",
+          "implementation/05-wire-sse-projection-ownership",
+          "implementation/05-wire-sse-projection-ownership-verify",
+          "implementation/06-tighten-exports-and-remove-transitional-layers",
+          "implementation/06-tighten-exports-and-remove-transitional-layers-verify"
         ],
-        "readyTaskIds": [
-          "implementation/03-promote-app-context-to-singleton-entity-container-verify"
-        ],
+        "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
         "completedTaskIds": [
-          "implementation/01-define-authoritative-backend-entity-vocabulary",
-          "implementation/01-define-authoritative-backend-entity-vocabulary-verify",
-          "implementation/02-introduce-generic-entity-remote-boundary",
-          "implementation/02-introduce-generic-entity-remote-boundary-verify",
-          "implementation/03-promote-app-context-to-singleton-entity-container"
+          "implementation/01-create-canonical-schema-contracts",
+          "implementation/01-create-canonical-schema-contracts-verify",
+          "implementation/02-make-repository-domain-authoritative",
+          "implementation/02-make-repository-domain-authoritative-verify",
+          "implementation/03-replace-daemon-entity-dispatch",
+          "implementation/03-replace-daemon-entity-dispatch-verify",
+          "implementation/04-clean-airport-repository-mirror",
+          "implementation/04-clean-airport-repository-mirror-verify",
+          "implementation/05-wire-sse-projection-ownership",
+          "implementation/05-wire-sse-projection-ownership-verify",
+          "implementation/06-tighten-exports-and-remove-transitional-layers",
+          "implementation/06-tighten-exports-and-remove-transitional-layers-verify"
         ]
       },
       {
         "stageId": "audit",
-        "lifecycle": "pending",
-        "taskIds": [],
+        "lifecycle": "completed",
+        "taskIds": [
+          "audit/01-debrief"
+        ],
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "completedTaskIds": []
+        "completedTaskIds": [
+          "audit/01-debrief"
+        ]
       },
       {
         "stageId": "delivery",
@@ -289,10 +431,12 @@
         "completedAt": "2026-04-22T20:34:12.850Z"
       },
       {
-        "taskId": "implementation/01-define-authoritative-backend-entity-vocabulary",
+        "taskId": "implementation/01-create-canonical-schema-contracts",
         "stageId": "implementation",
-        "title": "Define Authoritative Backend Entity Vocabulary",
-        "instruction": "Define the authoritative backend entity vocabulary so `packages/core` and the daemon boundary speak in first-class `Repository`, `Mission`, `Stage`, `Task`, `Artifact`, and `AgentSession` contracts. This slice should cover `packages/core/src/repository/*`, `packages/core/src/mission/*`, `packages/core/src/airport/runtime.ts`, `packages/core/src/client/DaemonMissionApi.ts`, `packages/core/src/daemon/protocol/contracts.ts`, and `packages/core/src/index.ts`, replacing storage-shaped or workflow-document-shaped DTO leakage with explicit entity-shaped runtime contracts.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "title": "Create Canonical Schema Contracts",
+        "instruction": "Implement the canonical shared schema surface required by SPEC.md. Move Repository-owned data, snapshot, method payload, method result, generic entity remote, command acknowledgement, and runtime event contract ownership under packages/core/src/schemas. Decompose packages/core/src/airport/runtime.ts so it is no longer the canonical schema surface. Keep the work strict: no passthrough payloads, no compatibility aliases, and no fallback parser layers.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/01-create-canonical-schema-contracts-verify",
         "dependsOn": [],
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
@@ -301,17 +445,19 @@
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
-        "createdAt": "2026-04-22T21:10:09.508Z",
-        "updatedAt": "2026-04-22T22:49:10.781Z",
-        "completedAt": "2026-04-22T22:49:10.781Z"
+        "createdAt": "2026-04-26T00:00:00.000Z",
+        "updatedAt": "2026-04-26T10:15:33.135Z",
+        "completedAt": "2026-04-26T10:15:33.135Z"
       },
       {
-        "taskId": "implementation/01-define-authoritative-backend-entity-vocabulary-verify",
+        "taskId": "implementation/01-create-canonical-schema-contracts-verify",
         "stageId": "implementation",
-        "title": "Verify Authoritative Backend Entity Vocabulary",
-        "instruction": "Verify that `packages/core` and the daemon/client runtime surfaces now share one authoritative entity vocabulary after this slice. Confirm focused core, daemon, and contract tests cover repository and mission entity relationships, first-class stage or task or artifact or session projections, and explicit rejection of storage-shaped or route-local payload drift. Record any remaining gaps in `VERIFY.md`.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "title": "Verify Canonical Schema Contracts",
+        "instruction": "Verify that shared schemas are canonical under packages/core/src/schemas and that Repository, EntityRemote, RuntimeEvents, and schema barrel exports are strict and browser-safe. Confirm airport/runtime no longer owns entity, method, or event schemas. Run focused schema, type, and package checks, and record any remaining gaps in 03-IMPLEMENTATION/VERIFY.md.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/01-create-canonical-schema-contracts",
         "dependsOn": [
-          "implementation/01-define-authoritative-backend-entity-vocabulary"
+          "implementation/01-create-canonical-schema-contracts"
         ],
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
@@ -320,17 +466,19 @@
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
-        "createdAt": "2026-04-22T21:10:09.508Z",
-        "updatedAt": "2026-04-23T10:45:07.649Z",
-        "completedAt": "2026-04-23T10:45:07.649Z"
+        "createdAt": "2026-04-26T00:00:00.000Z",
+        "updatedAt": "2026-04-26T10:24:32.950Z",
+        "completedAt": "2026-04-26T10:24:32.950Z"
       },
       {
-        "taskId": "implementation/02-introduce-generic-entity-remote-boundary",
+        "taskId": "implementation/02-make-repository-domain-authoritative",
         "stageId": "implementation",
-        "title": "Introduce Generic Entity Remote Boundary",
-        "instruction": "Introduce the reference-style generic entity remote boundary for queries, commands, and forms so Airport transport converges on stable entity-method dispatch. This slice should add `apps/airport/web/src/routes/api/entities/remote/query.remote.ts`, `command.remote.ts`, and `form.remote.ts` if needed, keep `AirportWebGateway.server.ts` thin, and collapse or reduce `airport.remote.ts`, repository issue remotes, and mission remotes to transitional glue around the generic dispatch surface.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "title": "Make Repository Domain Authoritative",
+        "instruction": "Refactor Repository around the canonical schemas. Repository.ts remains the daemon-authoritative entity for repository identity, snapshots, issue queries, add/register, and mission-start source commands. Repositories.ts remains the collection authority. Remove RepositorySchema.ts and RepositoryRemote.ts as contract owners, remove duplicate validation that obscures the boundary, and keep one strict validation point per daemon-callable method.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/02-make-repository-domain-authoritative-verify",
         "dependsOn": [
-          "implementation/01-define-authoritative-backend-entity-vocabulary-verify"
+          "implementation/01-create-canonical-schema-contracts-verify"
         ],
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
@@ -339,40 +487,19 @@
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
-        "createdAt": "2026-04-22T21:10:09.508Z",
-        "updatedAt": "2026-04-23T18:20:04.883Z",
-        "reworkIterationCount": 3,
-        "reworkRequest": {
-          "requestId": "task.reworked:implementation/02-introduce-generic-entity-remote-boundary:2026-04-23T17:32:49.107Z",
-          "requestedAt": "2026-04-23T17:32:49.107Z",
-          "actor": "workflow",
-          "reasonCode": "verification.failed",
-          "summary": "Verification task 'Verify Generic Entity Remote Boundary' requested corrective rework for 'Introduce Generic Entity Remote Boundary'. Review the referenced verification evidence before restarting the implementation task.",
-          "iteration": 3,
-          "maxIterations": 3,
-          "sourceTaskId": "implementation/02-introduce-generic-entity-remote-boundary-verify",
-          "artifactRefs": [
-            {
-              "path": "03-IMPLEMENTATION/tasks/02-introduce-generic-entity-remote-boundary-verify.md",
-              "title": "Verify Generic Entity Remote Boundary"
-            },
-            {
-              "path": "03-IMPLEMENTATION/VERIFY.md",
-              "title": "VERIFY.md"
-            }
-          ],
-          "launchedAt": "2026-04-23T17:33:00.893Z",
-          "resolvedAt": "2026-04-23T18:20:04.883Z"
-        },
-        "completedAt": "2026-04-23T18:20:04.883Z"
+        "createdAt": "2026-04-26T00:00:00.000Z",
+        "updatedAt": "2026-04-26T11:02:00.000Z",
+        "completedAt": "2026-04-26T11:02:00.000Z"
       },
       {
-        "taskId": "implementation/02-introduce-generic-entity-remote-boundary-verify",
+        "taskId": "implementation/02-make-repository-domain-authoritative-verify",
         "stageId": "implementation",
-        "title": "Verify Generic Entity Remote Boundary",
-        "instruction": "Verify that Airport queries, commands, and forms now route through the generic entity remote boundary for this slice. Confirm focused remote, gateway, and integration tests cover entity-method dispatch, request validation, thin gateway translation, and any transitional remotes staying transport-only instead of reintroducing route-local orchestration. Record any remaining gaps in `VERIFY.md`.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "title": "Verify Repository Domain Authority",
+        "instruction": "Verify Repository and Repositories own only their intended domain and collection responsibilities. Confirm Repository methods import canonical schemas only, return schema-validated JSON-safe values, reject invalid payloads, and keep add/register plus mission-start behavior aligned with SPEC.md. Run focused Repository tests and record remaining gaps in 03-IMPLEMENTATION/VERIFY.md.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/02-make-repository-domain-authoritative",
         "dependsOn": [
-          "implementation/02-introduce-generic-entity-remote-boundary"
+          "implementation/02-make-repository-domain-authoritative"
         ],
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
@@ -381,139 +508,194 @@
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
-        "createdAt": "2026-04-22T21:10:09.508Z",
-        "updatedAt": "2026-04-23T18:46:52.229Z",
-        "reworkIterationCount": 1,
-        "reworkRequest": {
-          "requestId": "task.reworked:implementation/02-introduce-generic-entity-remote-boundary-verify:2026-04-23T14:30:12.875Z",
-          "requestedAt": "2026-04-23T14:30:12.875Z",
-          "actor": "human",
-          "reasonCode": "verification.failed",
-          "summary": "Check the VERIFY.md and rework so the next time we will verify the code is correct",
-          "iteration": 1,
-          "maxIterations": 3,
-          "artifactRefs": [],
-          "launchedAt": "2026-04-23T17:28:28.921Z",
-          "resolvedAt": "2026-04-23T17:31:36.838Z"
-        },
-        "completedAt": "2026-04-23T18:46:52.229Z"
+        "createdAt": "2026-04-26T00:00:00.000Z",
+        "updatedAt": "2026-04-26T11:03:00.000Z",
+        "completedAt": "2026-04-26T11:03:00.000Z"
       },
       {
-        "taskId": "implementation/03-promote-app-context-to-singleton-entity-container",
+        "taskId": "implementation/03-replace-daemon-entity-dispatch",
         "stageId": "implementation",
-        "title": "Promote App Context To Singleton Entity Container",
-        "instruction": "Convert Airport's application wiring so `Application.svelte.ts`, `app-context.svelte.ts`, and adjacent client runtime surfaces become one long-lived singleton application and session-wide container that own active `Repository`, `Mission`, `Stage`, `Task`, `Artifact`, and `AgentSession` instances. This slice should replace selection-bag behavior with explicit entity lifecycle, synchronization, and reuse across route transitions while keeping shell-only daemon and GitHub session state at the container boundary.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "title": "Replace Daemon Entity Dispatch",
+        "instruction": "Replace dynamic daemon entity dispatch with explicit per-entity dispatchers, starting with Repository. Remove ENTITY_MODELS-style registry behavior, class/prototype probing, arbitrary method string execution, and generic result normalization. Each Repository query and command handler must parse payloads, resolve instances explicitly when required, execute the known method, parse the result, and fail loudly for unknown entities or methods. Bump PROTOCOL_VERSION for the changed daemon RPC contract.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/03-replace-daemon-entity-dispatch-verify",
         "dependsOn": [
-          "implementation/02-introduce-generic-entity-remote-boundary-verify"
+          "implementation/02-make-repository-domain-authoritative-verify"
         ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T00:00:00.000Z",
+        "updatedAt": "2026-04-26T11:04:00.000Z",
+        "completedAt": "2026-04-26T11:04:00.000Z"
+      },
+      {
+        "taskId": "implementation/03-replace-daemon-entity-dispatch-verify",
+        "stageId": "implementation",
+        "title": "Verify Explicit Daemon Entity Dispatch",
+        "instruction": "Verify daemon entity dispatch is explicit and strict. Confirm unknown entities, unknown methods, invalid payloads, invalid results, missing instances, and missing daemon context fail loudly. Confirm Repository.find, Repository.add, Repository.read, listIssues, getIssue, startMissionFromIssue, and startMissionFromBrief route through explicit handlers. Run daemon protocol and entity dispatch tests and record remaining gaps in 03-IMPLEMENTATION/VERIFY.md.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/03-replace-daemon-entity-dispatch",
+        "dependsOn": [
+          "implementation/03-replace-daemon-entity-dispatch"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T00:00:00.000Z",
+        "updatedAt": "2026-04-26T11:06:00.000Z",
+        "completedAt": "2026-04-26T11:06:00.000Z"
+      },
+      {
+        "taskId": "implementation/04-clean-airport-repository-mirror",
+        "stageId": "implementation",
+        "title": "Clean Airport Repository Mirror",
+        "instruction": "Refactor the Airport Repository client mirror and generic remote gateways around the canonical schema surface. Browser Repository methods must import schemas from @flying-pillow/mission-core/schemas, call generic query and command remotes, parse source results, and expose component-facing methods. Remove deep entity remote imports, route-local Repository issue and mission remotes, manual payload composition from components, and command projection assumptions.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/04-clean-airport-repository-mirror-verify",
+        "dependsOn": [
+          "implementation/03-replace-daemon-entity-dispatch-verify"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T00:00:00.000Z",
+        "updatedAt": "2026-04-26T11:18:00.000Z",
+        "completedAt": "2026-04-26T11:18:00.000Z"
+      },
+      {
+        "taskId": "implementation/04-clean-airport-repository-mirror-verify",
+        "stageId": "implementation",
+        "title": "Verify Airport Repository Mirror",
+        "instruction": "Verify Airport web reaches Repository behavior only through mirrored entity methods and generic remotes. Confirm browser-reachable code has no deep entities/*Remote* imports, no daemon/node imports, and no route-local issue or mission remotes for Repository behavior. Run focused web dispatch and Repository mirror tests and record remaining gaps in 03-IMPLEMENTATION/VERIFY.md.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/04-clean-airport-repository-mirror",
+        "dependsOn": [
+          "implementation/04-clean-airport-repository-mirror"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T00:00:00.000Z",
+        "updatedAt": "2026-04-26T11:22:00.000Z",
+        "completedAt": "2026-04-26T11:22:00.000Z"
+      },
+      {
+        "taskId": "implementation/05-wire-sse-projection-ownership",
+        "stageId": "implementation",
+        "title": "Wire SSE Projection Ownership",
+        "instruction": "Align command results and projection updates with SPEC.md. Commands must return source acknowledgement or source-local results, while cross-entity state changes are projected through daemon SSE event envelopes validated by shared RuntimeEvents schemas. Update the Repository mission-start flow and client reconciliation so mission, workflow, task, artifact, and session changes are not treated as command response projections.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/05-wire-sse-projection-ownership-verify",
+        "dependsOn": [
+          "implementation/04-clean-airport-repository-mirror-verify"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T00:00:00.000Z",
+        "updatedAt": "2026-04-26T11:24:00.000Z",
+        "completedAt": "2026-04-26T11:24:00.000Z"
+      },
+      {
+        "taskId": "implementation/05-wire-sse-projection-ownership-verify",
+        "stageId": "implementation",
+        "title": "Verify SSE Projection Ownership",
+        "instruction": "Verify source commands no longer reconcile broad cross-entity projections. Confirm mission-start and task or mission side effects are represented by daemon SSE projection events and client mirror reconciliation. Check event envelope schema validation, command acknowledgement parsing, and manual Repository/Mission flows. Record remaining gaps in 03-IMPLEMENTATION/VERIFY.md.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/05-wire-sse-projection-ownership",
+        "dependsOn": [
+          "implementation/05-wire-sse-projection-ownership"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T00:00:00.000Z",
+        "updatedAt": "2026-04-26T11:26:00.000Z",
+        "completedAt": "2026-04-26T11:26:00.000Z"
+      },
+      {
+        "taskId": "implementation/06-tighten-exports-and-remove-transitional-layers",
+        "stageId": "implementation",
+        "title": "Tighten Exports And Remove Transitional Layers",
+        "instruction": "Complete the Repository-first architecture cleanup by tightening packages/core package exports to the minimal stable entrypoints, removing wildcard and deep remote exports, deleting transitional route-local remotes and compatibility shims, reducing DaemonGateway to non-entity infrastructure, and replacing remaining manual parsers with shared schemas where this mission's Repository-first scope requires it.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/06-tighten-exports-and-remove-transitional-layers-verify",
+        "dependsOn": [
+          "implementation/05-wire-sse-projection-ownership-verify"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T00:00:00.000Z",
+        "updatedAt": "2026-04-26T11:35:00.000Z",
+        "completedAt": "2026-04-26T11:35:00.000Z"
+      },
+      {
+        "taskId": "implementation/06-tighten-exports-and-remove-transitional-layers-verify",
+        "stageId": "implementation",
+        "title": "Verify Exports And Removed Transitional Layers",
+        "instruction": "Verify the final Repository-first implementation has minimal stable package exports, no wildcard exports, no public deep entity remote exports, no airport/runtime schema dependency from browser code, no route-specific Repository remotes, and no fallback, compatibility, alias, or normalization layer left in the target path. Run package, web, build, and focused import-boundary checks, then record final evidence in 03-IMPLEMENTATION/VERIFY.md.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/06-tighten-exports-and-remove-transitional-layers",
+        "dependsOn": [
+          "implementation/06-tighten-exports-and-remove-transitional-layers"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "createdAt": "2026-04-26T00:00:00.000Z",
+        "updatedAt": "2026-04-26T11:36:00.000Z",
+        "completedAt": "2026-04-26T11:36:00.000Z"
+      },
+      {
+        "taskId": "audit/01-debrief",
+        "stageId": "audit",
+        "title": "Debrief",
+        "instruction": "Run mission-level validation and update AUDIT.md.\n\nSeparate mission regressions from baseline failures. Record risks and smallest follow-ups.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
+        "dependsOn": [],
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true
         },
-        "agentRunner": "copilot-cli",
+        "agentRunner": "copilot",
         "retries": 0,
-        "createdAt": "2026-04-22T21:10:09.508Z",
-        "updatedAt": "2026-04-24T07:59:51.695Z",
-        "completedAt": "2026-04-24T07:59:51.695Z"
-      },
-      {
-        "taskId": "implementation/03-promote-app-context-to-singleton-entity-container-verify",
-        "stageId": "implementation",
-        "title": "Verify App Context Singleton Entity Container",
-        "instruction": "Verify that Airport now reuses one application and app-context container across route transitions for this slice. Confirm focused client-runtime and route-level tests cover entity instance ownership, selection synchronization, hydration or reconciliation behavior, and protection against components reconstructing transport collaborators or bypassing the singleton container. Record any remaining gaps in `VERIFY.md`.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
-        "dependsOn": [
-          "implementation/03-promote-app-context-to-singleton-entity-container"
-        ],
-        "lifecycle": "ready",
-        "waitingOnTaskIds": [],
-        "runtime": {
-          "autostart": false
-        },
-        "agentRunner": "copilot-cli",
-        "retries": 0,
-        "createdAt": "2026-04-22T21:10:09.508Z",
-        "updatedAt": "2026-04-23T17:32:49.107Z"
-      },
-      {
-        "taskId": "implementation/04-move-transport-behavior-behind-frontend-entities",
-        "stageId": "implementation",
-        "title": "Move Transport Behavior Behind Frontend Entities",
-        "instruction": "Move repository, mission, stage, task, artifact, and agent-session transport behavior behind shared frontend entity base behavior and concrete entity methods. This slice should establish `apps/airport/web/src/lib/client/entities/Entity.svelte.ts`, align `Repository.ts`, `Mission.ts`, `Stage.ts`, `Task.ts`, `AgentSession.ts`, and new `Artifact.ts`, and reduce `AirportClientRuntime.ts` plus the current transport helpers to implementation details hidden behind entity-owned query or command or form or streaming APIs.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
-        "dependsOn": [
-          "implementation/03-promote-app-context-to-singleton-entity-container-verify"
-        ],
-        "lifecycle": "pending",
-        "waitingOnTaskIds": [
-          "implementation/03-promote-app-context-to-singleton-entity-container-verify"
-        ],
-        "runtime": {
-          "autostart": false
-        },
-        "agentRunner": "copilot-cli",
-        "retries": 0,
-        "createdAt": "2026-04-22T21:10:09.508Z",
-        "updatedAt": "2026-04-23T17:32:49.107Z"
-      },
-      {
-        "taskId": "implementation/04-move-transport-behavior-behind-frontend-entities-verify",
-        "stageId": "implementation",
-        "title": "Verify Frontend Entity-Owned Transport Behavior",
-        "instruction": "Verify that frontend transport behavior is now owned by entity methods instead of ad hoc route or component orchestration for this slice. Confirm focused client-entity and runtime tests cover shared execution behavior, reconciliation, repository issue and mission actions, artifact document access, and session or terminal interactions without direct component imports of remotes or raw fetch helpers. Record any remaining gaps in `VERIFY.md`.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
-        "dependsOn": [
-          "implementation/04-move-transport-behavior-behind-frontend-entities"
-        ],
-        "lifecycle": "pending",
-        "waitingOnTaskIds": [
-          "implementation/04-move-transport-behavior-behind-frontend-entities"
-        ],
-        "runtime": {
-          "autostart": false
-        },
-        "agentRunner": "copilot-cli",
-        "retries": 0,
-        "createdAt": "2026-04-22T21:10:09.508Z",
-        "updatedAt": "2026-04-23T17:32:49.107Z"
-      },
-      {
-        "taskId": "implementation/05-align-ui-components-with-entity-and-app-context-apis",
-        "stageId": "implementation",
-        "title": "Align UI Components With Entity And App Context APIs",
-        "instruction": "Align mission-control, artifact, actionbar, terminal, and route components so they consume entity methods and `appContext` only. This slice should cover the repository and mission route pages, `BriefForm.svelte`, `IssueList.svelte`, `ScopedActionbar.svelte`, `MissionTerminal.svelte`, `AgentSession.svelte`, `ArtifactViewer.svelte`, `ArtifactEditor.svelte`, and any remaining runtime endpoints that must stay transport-only behind entity-owned observation APIs.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
-        "dependsOn": [
-          "implementation/04-move-transport-behavior-behind-frontend-entities-verify"
-        ],
-        "lifecycle": "pending",
-        "waitingOnTaskIds": [
-          "implementation/04-move-transport-behavior-behind-frontend-entities-verify"
-        ],
-        "runtime": {
-          "autostart": false
-        },
-        "agentRunner": "copilot-cli",
-        "retries": 0,
-        "createdAt": "2026-04-22T21:10:09.508Z",
-        "updatedAt": "2026-04-23T17:32:49.107Z"
-      },
-      {
-        "taskId": "implementation/05-align-ui-components-with-entity-and-app-context-apis-verify",
-        "stageId": "implementation",
-        "title": "Verify UI Components Use Entity And App Context APIs",
-        "instruction": "Verify that presentation components now consume only entity and app-context APIs for this slice. Confirm focused component, route, and runtime integration tests cover mission-control flows, issue-to-mission creation, scoped actions, terminal and session attachment behavior, and artifact viewing or editing without direct remote imports, manual command payload assembly, or component-level document fetch orchestration. Record any remaining gaps in `VERIFY.md`.\n\nUse the product artifacts in this mission folder as the canonical context boundary.",
-        "dependsOn": [
-          "implementation/05-align-ui-components-with-entity-and-app-context-apis"
-        ],
-        "lifecycle": "pending",
-        "waitingOnTaskIds": [
-          "implementation/05-align-ui-components-with-entity-and-app-context-apis"
-        ],
-        "runtime": {
-          "autostart": false
-        },
-        "agentRunner": "copilot-cli",
-        "retries": 0,
-        "createdAt": "2026-04-22T21:10:09.508Z",
-        "updatedAt": "2026-04-23T17:32:49.107Z"
+        "createdAt": "2026-04-26T11:37:00.000Z",
+        "updatedAt": "2026-04-26T11:44:00.000Z",
+        "completedAt": "2026-04-26T11:44:00.000Z"
       }
     ],
     "sessions": [
@@ -545,284 +727,160 @@
         "completedAt": "2026-04-22T20:34:12.850Z"
       },
       {
-        "sessionId": "01-define-authoritative-backend-entity-vocabulary-copilot-cli",
-        "taskId": "implementation/01-define-authoritative-backend-entity-vocabulary",
-        "runnerId": "copilot-cli",
-        "lifecycle": "terminated",
-        "launchedAt": "2026-04-22T21:59:52.038Z",
-        "updatedAt": "2026-04-22T22:09:33.189Z",
-        "terminatedAt": "2026-04-22T22:09:33.189Z"
-      },
-      {
-        "sessionId": "01-define-authoritative-backend-entity-vocabulary-copilot-cli-2aec7b78",
-        "taskId": "implementation/01-define-authoritative-backend-entity-vocabulary",
-        "runnerId": "copilot-cli",
-        "lifecycle": "terminated",
-        "launchedAt": "2026-04-22T22:10:06.095Z",
-        "updatedAt": "2026-04-22T22:18:49.585Z",
-        "terminatedAt": "2026-04-22T22:18:49.585Z"
-      },
-      {
-        "sessionId": "01-define-authoritative-backend-entity-vocabulary-copilot-cli-2ef39267",
-        "taskId": "implementation/01-define-authoritative-backend-entity-vocabulary",
-        "runnerId": "copilot-cli",
-        "lifecycle": "terminated",
-        "launchedAt": "2026-04-22T22:20:28.127Z",
-        "updatedAt": "2026-04-22T22:35:57.347Z",
-        "terminatedAt": "2026-04-22T22:35:57.347Z"
-      },
-      {
-        "sessionId": "01-define-authoritative-backend-entity-vocabulary-copilot-cli-d42c30ad",
-        "taskId": "implementation/01-define-authoritative-backend-entity-vocabulary",
+        "sessionId": "01-create-canonical-schema-contracts-copilot-cli-960cce78",
+        "taskId": "implementation/01-create-canonical-schema-contracts",
         "runnerId": "copilot-cli",
         "lifecycle": "completed",
-        "launchedAt": "2026-04-22T22:45:55.184Z",
-        "updatedAt": "2026-04-22T22:49:10.781Z",
-        "completedAt": "2026-04-22T22:49:10.781Z"
+        "launchedAt": "2026-04-26T10:15:33.135Z",
+        "updatedAt": "2026-04-26T10:15:33.135Z",
+        "completedAt": "2026-04-26T10:15:33.135Z"
       },
       {
-        "sessionId": "01-define-authoritative-backend-entity-vocabulary-verify-copilot-cli-ce77e17f",
-        "taskId": "implementation/01-define-authoritative-backend-entity-vocabulary-verify",
+        "sessionId": "01-create-canonical-schema-contracts-verify-copilot-cli-960cce78",
+        "taskId": "implementation/01-create-canonical-schema-contracts-verify",
         "runnerId": "copilot-cli",
         "lifecycle": "completed",
-        "launchedAt": "2026-04-23T10:41:43.249Z",
-        "updatedAt": "2026-04-23T10:45:07.649Z",
-        "completedAt": "2026-04-23T10:45:07.649Z"
+        "launchedAt": "2026-04-26T10:24:32.950Z",
+        "updatedAt": "2026-04-26T10:24:32.950Z",
+        "completedAt": "2026-04-26T10:24:32.950Z"
       },
       {
-        "sessionId": "02-introduce-generic-entity-remote-boundary-copilot-cli-3c96a462",
-        "taskId": "implementation/02-introduce-generic-entity-remote-boundary",
+        "sessionId": "02-make-repository-domain-authoritative-copilot-cli-960cce78",
+        "taskId": "implementation/02-make-repository-domain-authoritative",
         "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/02-introduce-generic-entity-remote-boundary-copilot-cli-3c96a462.ansi",
-        "lifecycle": "terminated",
-        "launchedAt": "2026-04-23T11:24:20.497Z",
-        "updatedAt": "2026-04-23T11:29:37.324Z",
-        "terminatedAt": "2026-04-23T11:29:37.324Z"
-      },
-      {
-        "sessionId": "02-introduce-generic-entity-remote-boundary-copilot-cli-70d7357b",
-        "taskId": "implementation/02-introduce-generic-entity-remote-boundary",
-        "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/02-introduce-generic-entity-remote-boundary-copilot-cli-70d7357b.ansi",
-        "lifecycle": "terminated",
-        "launchedAt": "2026-04-23T11:57:52.176Z",
-        "updatedAt": "2026-04-23T12:18:30.664Z",
-        "terminatedAt": "2026-04-23T12:18:30.664Z"
-      },
-      {
-        "sessionId": "02-introduce-generic-entity-remote-boundary-copilot-cli-8926f3e6",
-        "taskId": "implementation/02-introduce-generic-entity-remote-boundary",
-        "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/02-introduce-generic-entity-remote-boundary-copilot-cli-8926f3e6.ansi",
         "lifecycle": "completed",
-        "launchedAt": "2026-04-23T12:19:26.283Z",
-        "updatedAt": "2026-04-23T12:20:51.023Z",
-        "completedAt": "2026-04-23T12:20:51.023Z"
+        "launchedAt": "2026-04-26T11:02:00.000Z",
+        "updatedAt": "2026-04-26T11:02:00.000Z",
+        "completedAt": "2026-04-26T11:02:00.000Z"
       },
       {
-        "sessionId": "02-introduce-generic-entity-remote-boundary-verify-copilot-cli-16ea5373",
-        "taskId": "implementation/02-introduce-generic-entity-remote-boundary-verify",
+        "sessionId": "02-make-repository-domain-authoritative-verify-copilot-cli-960cce78",
+        "taskId": "implementation/02-make-repository-domain-authoritative-verify",
         "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/02-introduce-generic-entity-remote-boundary-verify-copilot-cli-16ea5373.ansi",
         "lifecycle": "completed",
-        "launchedAt": "2026-04-23T12:24:51.955Z",
-        "updatedAt": "2026-04-23T12:54:54.982Z",
-        "completedAt": "2026-04-23T12:54:54.982Z"
+        "launchedAt": "2026-04-26T11:03:00.000Z",
+        "updatedAt": "2026-04-26T11:03:00.000Z",
+        "completedAt": "2026-04-26T11:03:00.000Z"
       },
       {
-        "sessionId": "02-introduce-generic-entity-remote-boundary-copilot-cli-d9ec75fe",
-        "taskId": "implementation/02-introduce-generic-entity-remote-boundary",
+        "sessionId": "03-replace-daemon-entity-dispatch-copilot-cli-960cce78",
+        "taskId": "implementation/03-replace-daemon-entity-dispatch",
         "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/02-introduce-generic-entity-remote-boundary-copilot-cli-d9ec75fe.ansi",
-        "lifecycle": "terminated",
-        "launchedAt": "2026-04-23T13:45:50.698Z",
-        "updatedAt": "2026-04-23T13:48:07.527Z",
-        "terminatedAt": "2026-04-23T13:48:07.527Z"
-      },
-      {
-        "sessionId": "02-introduce-generic-entity-remote-boundary-copilot-cli-83e6ec3f",
-        "taskId": "implementation/02-introduce-generic-entity-remote-boundary",
-        "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/02-introduce-generic-entity-remote-boundary-copilot-cli-83e6ec3f.ansi",
         "lifecycle": "completed",
-        "launchedAt": "2026-04-23T13:59:04.951Z",
-        "updatedAt": "2026-04-23T14:00:48.217Z",
-        "completedAt": "2026-04-23T14:00:48.217Z"
+        "launchedAt": "2026-04-26T11:04:00.000Z",
+        "updatedAt": "2026-04-26T11:04:00.000Z",
+        "completedAt": "2026-04-26T11:04:00.000Z"
       },
       {
-        "sessionId": "02-introduce-generic-entity-remote-boundary-verify-copilot-cli-5ddab538",
-        "taskId": "implementation/02-introduce-generic-entity-remote-boundary-verify",
+        "sessionId": "03-replace-daemon-entity-dispatch-verify-copilot-cli-960cce78",
+        "taskId": "implementation/03-replace-daemon-entity-dispatch-verify",
         "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/02-introduce-generic-entity-remote-boundary-verify-copilot-cli-5ddab538.ansi",
         "lifecycle": "completed",
-        "launchedAt": "2026-04-23T14:21:48.043Z",
-        "updatedAt": "2026-04-23T14:28:33.584Z",
-        "completedAt": "2026-04-23T14:28:33.584Z"
+        "launchedAt": "2026-04-26T11:06:00.000Z",
+        "updatedAt": "2026-04-26T11:06:00.000Z",
+        "completedAt": "2026-04-26T11:06:00.000Z"
       },
       {
-        "sessionId": "02-introduce-generic-entity-remote-boundary-copilot-cli-81a2fc50",
-        "taskId": "implementation/02-introduce-generic-entity-remote-boundary",
+        "sessionId": "04-clean-airport-repository-mirror-copilot-cli-960cce78",
+        "taskId": "implementation/04-clean-airport-repository-mirror",
         "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/02-introduce-generic-entity-remote-boundary-copilot-cli-81a2fc50.ansi",
-        "lifecycle": "terminated",
-        "launchedAt": "2026-04-23T15:13:25.627Z",
-        "updatedAt": "2026-04-23T15:15:41.198Z",
-        "terminatedAt": "2026-04-23T15:15:41.198Z"
-      },
-      {
-        "sessionId": "02-introduce-generic-entity-remote-boundary-verify-copilot-cli-2ef06aaf",
-        "taskId": "implementation/02-introduce-generic-entity-remote-boundary-verify",
-        "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/02-introduce-generic-entity-remote-boundary-verify-copilot-cli-2ef06aaf.ansi",
         "lifecycle": "completed",
-        "launchedAt": "2026-04-23T17:28:28.921Z",
-        "updatedAt": "2026-04-23T17:31:36.838Z",
-        "completedAt": "2026-04-23T17:31:36.838Z"
+        "launchedAt": "2026-04-26T11:13:18.000Z",
+        "updatedAt": "2026-04-26T11:18:00.000Z",
+        "completedAt": "2026-04-26T11:18:00.000Z"
       },
       {
-        "sessionId": "02-introduce-generic-entity-remote-boundary-copilot-cli-f8be4c52",
-        "taskId": "implementation/02-introduce-generic-entity-remote-boundary",
+        "sessionId": "04-clean-airport-repository-mirror-verify-copilot-cli-960cce78",
+        "taskId": "implementation/04-clean-airport-repository-mirror-verify",
         "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/02-introduce-generic-entity-remote-boundary-copilot-cli-f8be4c52.ansi",
-        "lifecycle": "terminated",
-        "launchedAt": "2026-04-23T17:33:00.893Z",
-        "updatedAt": "2026-04-23T17:36:22.863Z",
-        "terminatedAt": "2026-04-23T17:36:22.863Z"
-      },
-      {
-        "sessionId": "02-introduce-generic-entity-remote-boundary-copilot-cli-ba2ac947",
-        "taskId": "implementation/02-introduce-generic-entity-remote-boundary",
-        "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/02-introduce-generic-entity-remote-boundary-copilot-cli-ba2ac947.ansi",
-        "lifecycle": "terminated",
-        "launchedAt": "2026-04-23T18:05:04.783Z",
-        "updatedAt": "2026-04-23T18:18:04.017Z",
-        "terminatedAt": "2026-04-23T18:18:04.017Z"
-      },
-      {
-        "sessionId": "02-introduce-generic-entity-remote-boundary-copilot-cli-b9a2d668",
-        "taskId": "implementation/02-introduce-generic-entity-remote-boundary",
-        "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/02-introduce-generic-entity-remote-boundary-copilot-cli-b9a2d668.ansi",
         "lifecycle": "completed",
-        "launchedAt": "2026-04-23T18:18:30.401Z",
-        "updatedAt": "2026-04-23T18:20:04.883Z",
-        "completedAt": "2026-04-23T18:20:04.883Z"
+        "launchedAt": "2026-04-26T11:19:00.000Z",
+        "updatedAt": "2026-04-26T11:22:00.000Z",
+        "completedAt": "2026-04-26T11:22:00.000Z"
       },
       {
-        "sessionId": "02-introduce-generic-entity-remote-boundary-verify-copilot-cli-cf320ff1",
-        "taskId": "implementation/02-introduce-generic-entity-remote-boundary-verify",
+        "sessionId": "05-wire-sse-projection-ownership-copilot-cli-960cce78",
+        "taskId": "implementation/05-wire-sse-projection-ownership",
         "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/02-introduce-generic-entity-remote-boundary-verify-copilot-cli-cf320ff1.ansi",
         "lifecycle": "completed",
-        "launchedAt": "2026-04-23T18:39:14.667Z",
-        "updatedAt": "2026-04-23T18:46:52.229Z",
-        "completedAt": "2026-04-23T18:46:52.229Z"
+        "launchedAt": "2026-04-26T11:22:30.000Z",
+        "updatedAt": "2026-04-26T11:24:00.000Z",
+        "completedAt": "2026-04-26T11:24:00.000Z"
       },
       {
-        "sessionId": "03-promote-app-context-to-singleton-entity-container-copilot-cli-c4fa7f8c",
-        "taskId": "implementation/03-promote-app-context-to-singleton-entity-container",
+        "sessionId": "05-wire-sse-projection-ownership-verify-copilot-cli-960cce78",
+        "taskId": "implementation/05-wire-sse-projection-ownership-verify",
         "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/03-promote-app-context-to-singleton-entity-container-copilot-cli-c4fa7f8c.ansi",
-        "lifecycle": "terminated",
-        "launchedAt": "2026-04-23T18:47:12.031Z",
-        "updatedAt": "2026-04-23T19:30:37.669Z",
-        "terminatedAt": "2026-04-23T19:30:37.669Z"
-      },
-      {
-        "sessionId": "03-promote-app-context-to-singleton-entity-container-copilot-cli-eb940ab5",
-        "taskId": "implementation/03-promote-app-context-to-singleton-entity-container",
-        "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/03-promote-app-context-to-singleton-entity-container-copilot-cli-eb940ab5.ansi",
-        "lifecycle": "terminated",
-        "launchedAt": "2026-04-23T19:30:38.020Z",
-        "updatedAt": "2026-04-23T19:51:41.368Z",
-        "terminatedAt": "2026-04-23T19:51:41.368Z"
-      },
-      {
-        "sessionId": "03-promote-app-context-to-singleton-entity-container-copilot-cli-43bea68e",
-        "taskId": "implementation/03-promote-app-context-to-singleton-entity-container",
-        "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/03-promote-app-context-to-singleton-entity-container-copilot-cli-43bea68e.ansi",
-        "lifecycle": "terminated",
-        "launchedAt": "2026-04-23T19:51:41.900Z",
-        "updatedAt": "2026-04-23T21:15:04.208Z",
-        "terminatedAt": "2026-04-23T21:15:04.208Z"
-      },
-      {
-        "sessionId": "03-promote-app-context-to-singleton-entity-container-copilot-cli-97048d76",
-        "taskId": "implementation/03-promote-app-context-to-singleton-entity-container",
-        "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/03-promote-app-context-to-singleton-entity-container-copilot-cli-97048d76.ansi",
-        "lifecycle": "terminated",
-        "launchedAt": "2026-04-23T21:15:04.760Z",
-        "updatedAt": "2026-04-24T02:37:25.736Z",
-        "terminatedAt": "2026-04-24T02:37:25.736Z"
-      },
-      {
-        "sessionId": "03-promote-app-context-to-singleton-entity-container-copilot-cli-f08ee60c",
-        "taskId": "implementation/03-promote-app-context-to-singleton-entity-container",
-        "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/03-promote-app-context-to-singleton-entity-container-copilot-cli-f08ee60c.ansi",
-        "lifecycle": "terminated",
-        "launchedAt": "2026-04-24T02:37:26.293Z",
-        "updatedAt": "2026-04-24T07:38:55.174Z",
-        "terminatedAt": "2026-04-24T07:38:55.174Z"
-      },
-      {
-        "sessionId": "03-promote-app-context-to-singleton-entity-container-copilot-cli-f7db38e7",
-        "taskId": "implementation/03-promote-app-context-to-singleton-entity-container",
-        "runnerId": "copilot-cli",
-        "sessionLogPath": "session-logs/03-promote-app-context-to-singleton-entity-container-copilot-cli-f7db38e7.ansi",
         "lifecycle": "completed",
-        "launchedAt": "2026-04-24T07:38:55.698Z",
-        "updatedAt": "2026-04-24T07:59:51.695Z",
-        "completedAt": "2026-04-24T07:59:51.695Z"
+        "launchedAt": "2026-04-26T11:24:30.000Z",
+        "updatedAt": "2026-04-26T11:26:00.000Z",
+        "completedAt": "2026-04-26T11:26:00.000Z"
+      },
+      {
+        "sessionId": "06-tighten-exports-and-remove-transitional-layers-copilot-cli-960cce78",
+        "taskId": "implementation/06-tighten-exports-and-remove-transitional-layers",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T11:27:00.000Z",
+        "updatedAt": "2026-04-26T11:35:00.000Z",
+        "completedAt": "2026-04-26T11:35:00.000Z"
+      },
+      {
+        "sessionId": "06-tighten-exports-and-remove-transitional-layers-verify-copilot-cli-960cce78",
+        "taskId": "implementation/06-tighten-exports-and-remove-transitional-layers-verify",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T11:35:00.000Z",
+        "updatedAt": "2026-04-26T11:36:00.000Z",
+        "completedAt": "2026-04-26T11:36:00.000Z"
+      },
+      {
+        "sessionId": "01-debrief-copilot-cli-960cce78",
+        "taskId": "audit/01-debrief",
+        "runnerId": "copilot-cli",
+        "lifecycle": "completed",
+        "launchedAt": "2026-04-26T11:37:00.000Z",
+        "updatedAt": "2026-04-26T11:44:00.000Z",
+        "completedAt": "2026-04-26T11:44:00.000Z"
       }
     ],
     "gates": [
       {
         "gateId": "implement",
         "intent": "implement",
-        "state": "blocked",
+        "state": "passed",
         "stageId": "implementation",
-        "reasons": [
-          "Stage 'implementation' is not completed."
-        ],
-        "updatedAt": "2026-04-24T07:59:51.695Z"
+        "reasons": [],
+        "updatedAt": "2026-04-26T11:36:00.000Z"
       },
       {
         "gateId": "verify",
         "intent": "verify",
-        "state": "blocked",
+        "state": "passed",
         "stageId": "implementation",
-        "reasons": [
-          "Stage 'implementation' is not completed."
-        ],
-        "updatedAt": "2026-04-24T07:59:51.695Z"
+        "reasons": [],
+        "updatedAt": "2026-04-26T11:36:00.000Z"
       },
       {
         "gateId": "audit",
         "intent": "audit",
-        "state": "blocked",
+        "state": "passed",
         "stageId": "audit",
-        "reasons": [
-          "Stage 'audit' is not completed."
-        ],
-        "updatedAt": "2026-04-24T07:59:51.695Z"
+        "reasons": [],
+        "updatedAt": "2026-04-26T11:44:00.000Z"
       },
       {
         "gateId": "deliver",
         "intent": "deliver",
-        "state": "blocked",
+        "state": "pending",
         "stageId": "delivery",
         "reasons": [
           "Stage 'delivery' is not completed."
         ],
-        "updatedAt": "2026-04-24T07:59:51.695Z"
+        "updatedAt": "2026-04-26T11:36:00.000Z"
       }
     ],
     "launchQueue": [],
-    "updatedAt": "2026-04-24T07:59:51.695Z"
+    "updatedAt": "2026-04-26T11:44:00.000Z"
   }
 }

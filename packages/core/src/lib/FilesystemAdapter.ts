@@ -7,7 +7,7 @@ import {
 	renderFrontmatterDocument,
 	type FrontmatterValue
 } from './frontmatter.js';
-import { getMissionCatalogPath, getMissionWorktreesPath } from '../entities/Repository/RepositoryPaths.js';
+import { getMissionCatalogPath, getMissionWorktreesPath } from './repositoryPaths.js';
 import { readRepositorySettingsDocument } from './daemonConfig.js';
 import {
 	MISSION_RUNTIME_FILE_NAME,

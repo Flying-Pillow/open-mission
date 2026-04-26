@@ -3,6 +3,7 @@
     import AirportHomeAddRepository from "$lib/components/airport/home/airport-home-add-repository.svelte";
     import AirportHomeStatus from "$lib/components/airport/home/airport-home-status.svelte";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import type { AppContextServerValue } from "$lib/client/context/app-context.svelte";
     import RepositoryList from "$lib/components/entities/Repository/RepositoryList.svelte";
     import type {
         GitHubVisibleRepositorySummary,
@@ -10,6 +11,7 @@
     } from "$lib/components/entities/types";
 
     type HomeData = {
+        appContext?: AppContextServerValue;
         loginHref: string;
         airportHome: {
             operationalMode?: string;
@@ -94,6 +96,9 @@
                 : {};
 
         return {
+            ...(record.appContext && typeof record.appContext === "object"
+                ? { appContext: record.appContext as AppContextServerValue }
+                : {}),
             loginHref:
                 typeof record.loginHref === "string" && record.loginHref.trim()
                     ? record.loginHref
@@ -133,6 +138,10 @@
     }
 
     function syncAppContext(nextData: HomeData): void {
+        if (nextData.appContext) {
+            appContext.syncServerContext(nextData.appContext);
+        }
+
         const nextSelectedRepository = nextData.airportHome.repositories.find(
             (repository) =>
                 repository.repositoryRootPath ===
@@ -144,7 +153,8 @@
             nextSelectedRepository
                 ? {
                       repositoryId: nextSelectedRepository.repositoryId,
-                      repositoryRootPath: nextSelectedRepository.repositoryRootPath,
+                      repositoryRootPath:
+                          nextSelectedRepository.repositoryRootPath,
                   }
                 : undefined,
         );
@@ -163,7 +173,8 @@
             syncAppContext(nextData);
         } catch (error) {
             data = null;
-            homeLoadError = error instanceof Error ? error.message : String(error);
+            homeLoadError =
+                error instanceof Error ? error.message : String(error);
         } finally {
             homeLoading = false;
         }

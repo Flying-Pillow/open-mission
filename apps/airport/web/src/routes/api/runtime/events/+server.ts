@@ -1,6 +1,6 @@
 // /apps/airport/web/src/routes/api/runtime/events/+server.ts: Server-sent event stream that forwards existing daemon notifications for Airport web.
 import { randomUUID } from 'node:crypto';
-import { airportRuntimeEventsQuerySchema } from '@flying-pillow/mission-core';
+import { airportRuntimeEventsQuerySchema } from '@flying-pillow/mission-core/schemas';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import type { RequestHandler } from './$types';
 

@@ -3,10 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
+    type ControlDocumentResponse,
     DaemonApi,
+    type Notification,
     deriveRepositoryIdentity,
     listRegisteredRepositories,
     resolveGitWorkspaceRoot,
+    toMission,
+    type MissionEntity,
 } from '@flying-pillow/mission-core/node';
 import {
     type AgentCommand,
@@ -14,30 +18,24 @@ import {
     type AgentSession,
     type AirportHomeSnapshot,
     type AirportRuntimeEventEnvelope,
-    type GitHubVisibleRepository,
     type MissionReference,
     type MissionRuntimeSnapshot,
     type MissionSessionTerminalSnapshot,
     type MissionTerminalSnapshot,
+    type OperatorActionExecutionStep,
+    type OperatorActionListSnapshot,
+    type OperatorActionQueryContext,
+    type OperatorStatus,
     type Repository,
     agentSessionSchema,
     airportHomeSnapshotSchema,
     airportRuntimeEventEnvelopeSchema,
-    githubVisibleRepositorySchema,
     missionReferenceSchema,
     missionRuntimeSnapshotSchema,
     missionSessionTerminalSnapshotSchema,
     missionTerminalSnapshotSchema,
     repositorySchema
-} from '@flying-pillow/mission-core/airport/runtime';
-import { toMission, type Mission as MissionEntity } from '@flying-pillow/mission-core/entities/Mission/Mission';
-import type {
-    OperatorActionExecutionStep,
-    OperatorActionListSnapshot,
-    OperatorActionQueryContext,
-    OperatorStatus
-} from '@flying-pillow/mission-core/types.js';
-import type { ControlDocumentResponse, Notification } from '@flying-pillow/mission-core/daemon/protocol/contracts';
+} from '@flying-pillow/mission-core/schemas';
 import { operatorStatusSchema } from '../../types/mission-control.js';
 import {
     connectDedicatedAuthenticatedDaemonClient,
@@ -47,17 +45,14 @@ const AIRPORT_WEB_TERMINAL_SCREEN_LIMIT = 40_000;
 const MISSION_STATUS_TIMEOUT_MS = 8_000;
 const AIRPORT_HOME_STATUS_TIMEOUT_MS = 8_000;
 const DAEMON_CONNECT_TIMEOUT_MS = 12_000;
-const GITHUB_REPOSITORY_LIST_TIMEOUT_MS = 15_000;
 
 export class DaemonGateway {
     public constructor(private readonly locals?: App.Locals) { }
 
     public readonly airport = {
         getHomeSnapshot: () => this.getAirportHomeSnapshot(),
-        listVisibleGitHubRepositories: (surfacePath?: string) => this.listVisibleGitHubRepositories(surfacePath),
         inspectRepositoryPath: (repositoryPath: string) => this.inspectRepositoryPath(repositoryPath),
-        addRepository: (repositoryPath: string) => this.addRepository(repositoryPath),
-        cloneGitHubRepository: (githubRepository: string, destinationPath: string) => this.cloneGitHubRepository(githubRepository, destinationPath)
+        addRepository: (repositoryPath: string) => this.addRepository(repositoryPath)
     };
 
     public readonly entities = {
@@ -489,49 +484,6 @@ export class DaemonGateway {
         }
     }
 
-    public async listVisibleGitHubRepositories(surfacePath?: string): Promise<GitHubVisibleRepository[]> {
-        const daemon = await this.connectSharedDaemonClient(surfacePath);
-        try {
-            const api = new DaemonApi(daemon.client);
-            const repositories = await withTimeout(
-                api.control.listVisibleGitHubRepositories(),
-                GITHUB_REPOSITORY_LIST_TIMEOUT_MS,
-                'GitHub repository listing timed out.'
-            );
-            return repositories.map((repository) => githubVisibleRepositorySchema.parse(repository));
-        } finally {
-            daemon.dispose();
-        }
-    }
-
-    public async cloneGitHubRepository(
-        githubRepository: string,
-        destinationPath: string
-    ): Promise<Repository> {
-        const normalizedGitHubRepository = githubRepository.trim();
-        const normalizedDestinationPath = destinationPath.trim();
-        if (!normalizedGitHubRepository) {
-            throw new Error('GitHub repository clone requires a githubRepository.');
-        }
-        if (!normalizedDestinationPath) {
-            throw new Error('GitHub repository clone requires a destinationPath.');
-        }
-
-        const daemon = await this.connectSharedDaemonClient();
-        try {
-            const api = new DaemonApi(daemon.client);
-            return this.toRepositorySnapshot(
-                await withTimeout(
-                    api.control.cloneGitHubRepository(normalizedGitHubRepository, normalizedDestinationPath),
-                    30_000,
-                    'GitHub repository clone timed out.'
-                )
-            );
-        } finally {
-            daemon.dispose();
-        }
-    }
-
     public async inspectRepositoryPath(repositoryPath: string): Promise<Repository> {
         const normalizedRepositoryPath = repositoryPath.trim();
         if (!normalizedRepositoryPath) {
@@ -571,6 +523,10 @@ export class DaemonGateway {
             ...(missionId ? { missionId } : {})
         });
         const subscription = daemon.client.onDidEvent((event) => {
+            if (!this.matchesMission(event, missionId) || !this.shouldForwardRuntimeEvent(event)) {
+                return;
+            }
+
             input.onEvent(this.toRuntimeEventEnvelope(event));
         });
 

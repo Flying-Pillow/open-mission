@@ -9,80 +9,53 @@ import type {
     TrackedIssueSummary,
     MissionRuntimeSnapshot
 } from '@flying-pillow/mission-core/schemas';
+import {
+    airportRuntimeEventEnvelopeSchema,
+    githubIssueDetailSchema,
+    missionRuntimeMissionCommandSchema,
+    missionRuntimeSessionCommandSchema,
+    missionRuntimeSnapshotSchema,
+    missionRuntimeTaskCommandSchema,
+    repositorySchema,
+    repositorySnapshotSchema,
+    trackedIssueSummarySchema
+} from '@flying-pillow/mission-core/schemas';
 
 type UnknownRecord = Record<string, unknown>;
 
 export function parseRepositorySummary(value: unknown): RepositorySnapshot['repository'] {
-    const candidate = requireRecord(value, 'Repository summary must be an object.');
-    requireString(candidate.repositoryId, 'Repository summary is missing repositoryId.');
-    requireString(candidate.repositoryRootPath, 'Repository summary is missing repositoryRootPath.');
-    requireString(candidate.label, 'Repository summary is missing label.');
-    return candidate as RepositorySnapshot['repository'];
+    return repositorySchema.parse(value);
 }
 
 export function parseRepositorySnapshot(value: unknown): RepositorySnapshot {
-    const candidate = requireRecord(value, 'Repository snapshot must be an object.');
-    parseRepositorySummary(candidate.repository);
-    if (!Array.isArray(candidate.missions)) {
-        throw new Error('Repository snapshot is missing missions.');
-    }
-    return candidate as RepositorySnapshot;
+    return repositorySnapshotSchema.parse(value);
 }
 
 export function parseMissionRuntimeSnapshot(value: unknown): MissionRuntimeSnapshot {
-    const candidate = requireRecord(value, 'Mission snapshot must be an object.');
-    requireString(candidate.missionId, 'Mission snapshot is missing missionId.');
-    requireRecord(candidate.status, 'Mission snapshot is missing status.');
-    if (!Array.isArray(candidate.sessions)) {
-        throw new Error('Mission snapshot is missing sessions.');
-    }
-    return candidate as MissionRuntimeSnapshot;
+    return missionRuntimeSnapshotSchema.parse(value);
 }
 
 export function parseAirportRuntimeEventEnvelope(value: unknown): AirportRuntimeEventEnvelope {
-    const candidate = requireRecord(value, 'Runtime event must be an object.');
-    requireString(candidate.eventId, 'Runtime event is missing eventId.');
-    requireString(candidate.type, 'Runtime event is missing type.');
-    requireString(candidate.occurredAt, 'Runtime event is missing occurredAt.');
-    return candidate as AirportRuntimeEventEnvelope;
+    return airportRuntimeEventEnvelopeSchema.parse(value);
 }
 
 export function parseTrackedIssueSummaryList(value: unknown): TrackedIssueSummary[] {
-    if (!Array.isArray(value)) {
-        throw new Error('Issue list must be an array.');
-    }
-
-    return value.map((entry) => parseTrackedIssueSummary(entry));
+    return trackedIssueSummarySchema.array().parse(value);
 }
 
 export function parseTrackedIssueSummary(value: unknown): TrackedIssueSummary {
-    const candidate = requireRecord(value, 'Issue summary must be an object.');
-    if (typeof candidate.number !== 'number') {
-        throw new Error('Issue summary is missing number.');
-    }
-    requireString(candidate.title, 'Issue summary is missing title.');
-    return candidate as TrackedIssueSummary;
+    return trackedIssueSummarySchema.parse(value);
 }
 
 export function parseGitHubIssueDetail(value: unknown): GitHubIssueDetail {
-    const candidate = requireRecord(value, 'Issue detail must be an object.');
-    if (typeof candidate.number !== 'number') {
-        throw new Error('Issue detail is missing number.');
-    }
-    requireString(candidate.title, 'Issue detail is missing title.');
-    return candidate as GitHubIssueDetail;
+    return githubIssueDetailSchema.parse(value);
 }
 
 export function parseMissionTaskCommandPayload(value: unknown): {
     action: 'start' | 'complete' | 'reopen';
     terminalSessionName?: string;
 } {
-    const candidate = requireRecord(value, 'Mission task command payload must be an object.');
-    if (candidate.action !== 'start' && candidate.action !== 'complete' && candidate.action !== 'reopen') {
-        throw new Error('Mission task command payload has an invalid action.');
-    }
-
-    return candidate as {
+    return missionRuntimeTaskCommandSchema.parse(value) as {
         action: 'start' | 'complete' | 'reopen';
         terminalSessionName?: string;
     };
@@ -91,19 +64,7 @@ export function parseMissionTaskCommandPayload(value: unknown): {
 export function parseMissionCommandPayload(value: unknown): {
     action: 'pause' | 'resume' | 'panic' | 'clearPanic' | 'restartQueue' | 'deliver';
 } {
-    const candidate = requireRecord(value, 'Mission command payload must be an object.');
-    if (
-        candidate.action !== 'pause'
-        && candidate.action !== 'resume'
-        && candidate.action !== 'panic'
-        && candidate.action !== 'clearPanic'
-        && candidate.action !== 'restartQueue'
-        && candidate.action !== 'deliver'
-    ) {
-        throw new Error('Mission command payload has an invalid action.');
-    }
-
-    return candidate as {
+    return missionRuntimeMissionCommandSchema.parse(value) as {
         action: 'pause' | 'resume' | 'panic' | 'clearPanic' | 'restartQueue' | 'deliver';
     };
 }
@@ -113,18 +74,7 @@ export function parseMissionSessionCommandPayload(value: unknown):
     | { action: 'cancel' | 'terminate'; reason?: string }
     | { action: 'prompt'; prompt: unknown }
     | { action: 'command'; command: unknown } {
-    const candidate = requireRecord(value, 'Mission session command payload must be an object.');
-    if (
-        candidate.action !== 'complete'
-        && candidate.action !== 'cancel'
-        && candidate.action !== 'terminate'
-        && candidate.action !== 'prompt'
-        && candidate.action !== 'command'
-    ) {
-        throw new Error('Mission session command payload has an invalid action.');
-    }
-
-    return candidate as
+    return missionRuntimeSessionCommandSchema.parse(value) as
         | { action: 'complete' }
         | { action: 'cancel' | 'terminate'; reason?: string }
         | { action: 'prompt'; prompt: unknown }

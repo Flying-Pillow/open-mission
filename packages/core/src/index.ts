@@ -4,8 +4,6 @@ export * from './client/DaemonAirportApi.js';
 export * from './client/DaemonControlApi.js';
 export * from './client/DaemonMissionApi.js';
 export * from './client/DaemonSystemApi.js';
-export * from './airport/index.js';
 export * from './lib/operatorActionTargeting.js';
-export * from './schemas/index.js';
 export * from './daemon/protocol/contracts.js';
 export * from './system/SystemStatus.js';
