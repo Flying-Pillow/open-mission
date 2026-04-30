@@ -3,11 +3,11 @@ import * as path from 'node:path';
 import type { AgentCommand, AgentPrompt } from '../agent/AgentRuntimeTypes.js';
 import { createConfiguredAgentRunners } from '../agent/runtimes/AgentRuntimeFactory.js';
 import type { EntityExecutionContext } from '../../../entities/Entity/Entity.js';
-import type { EntityCommandDescriptor } from '../../../entities/Entity/EntitySchema.js';
+import type { EntityCommandDescriptorType } from '../../../entities/Entity/EntitySchema.js';
 import type {
-    MissionAgentCommand,
-    MissionAgentPrompt,
-    MissionAgentSessionSnapshot
+    AgentSessionCommand,
+    AgentSessionPrompt,
+    AgentSessionSnapshot
 } from '../../../entities/AgentSession/AgentSessionSchema.js';
 import type { MissionArtifactSnapshot } from '../../../entities/Artifact/ArtifactSchema.js';
 import {
@@ -37,24 +37,37 @@ export type MissionLoader = (
 
 export type MissionHandle = Pick<
     Mission,
+    | 'command'
     | 'clearMissionPanic'
     | 'completeAgentSession'
     | 'completeTask'
     | 'dispose'
     | 'executeAction'
+    | 'executeOperatorAction'
+    | 'ensureTerminal'
     | 'listAvailableActionsSnapshot'
+    | 'listActions'
     | 'cancelAgentSession'
     | 'deliver'
     | 'panicStopMission'
     | 'pauseMission'
+    | 'read'
+    | 'readDocument'
+    | 'readProjection'
+    | 'readTerminal'
+    | 'readWorktree'
     | 'reopenTask'
     | 'restartLaunchQueue'
     | 'resumeMission'
     | 'sendAgentSessionCommand'
     | 'sendAgentSessionPrompt'
+    | 'sendTerminalInput'
     | 'startTask'
+    | 'sessionCommand'
+    | 'taskCommand'
     | 'terminateAgentSession'
     | 'toEntity'
+    | 'writeDocument'
 >;
 
 export const IGNORED_WORKTREE_ENTRY_NAMES = new Set([
@@ -132,7 +145,7 @@ export class MissionDaemonService {
             ...(input.repositoryRootPath ? { repositoryRootPath: input.repositoryRootPath } : {})
         });
         if (!context.surfacePath.trim()) {
-            throw new Error('Mission source methods require a surfacePath context.');
+            throw new Error('Mission entity methods require a surfacePath context.');
         }
 
         const mission = await this.loadMissionFromRegistry(payload, context, terminalSessionName);
@@ -239,7 +252,7 @@ export class MissionDaemonService {
         return artifact;
     }
 
-    public requireAgentSession(snapshot: MissionSnapshot, sessionId: string): MissionAgentSessionSnapshot {
+    public requireAgentSession(snapshot: MissionSnapshot, sessionId: string): AgentSessionSnapshot {
         const session = snapshot.agentSessions.find((candidate) => candidate.sessionId === sessionId);
         if (!session) {
             throw new Error(`AgentSession '${sessionId}' could not be resolved in Mission '${snapshot.mission.missionId}'.`);
@@ -273,7 +286,7 @@ export class MissionDaemonService {
         return reason.length > 0 ? reason : undefined;
     }
 
-    public normalizeAgentPrompt(input: MissionAgentPrompt): AgentPrompt {
+    public normalizeAgentPrompt(input: AgentSessionPrompt): AgentPrompt {
         return {
             source: input.source,
             text: input.text,
@@ -282,7 +295,7 @@ export class MissionDaemonService {
         };
     }
 
-    public normalizeAgentCommand(input: MissionAgentCommand): AgentCommand {
+    public normalizeAgentCommand(input: AgentSessionCommand): AgentCommand {
         return {
             type: input.type,
             ...(input.reason ? { reason: input.reason } : {}),
@@ -449,23 +462,36 @@ export class MissionDaemonService {
     private toRequestMissionHandle(mission: MissionHandle): MissionHandle {
         return {
             clearMissionPanic: mission.clearMissionPanic.bind(mission),
+            command: mission.command.bind(mission),
             completeAgentSession: mission.completeAgentSession.bind(mission),
             completeTask: mission.completeTask.bind(mission),
             dispose: () => undefined,
             executeAction: mission.executeAction.bind(mission),
+            executeOperatorAction: mission.executeOperatorAction.bind(mission),
+            ensureTerminal: mission.ensureTerminal.bind(mission),
             listAvailableActionsSnapshot: mission.listAvailableActionsSnapshot.bind(mission),
+            listActions: mission.listActions.bind(mission),
             cancelAgentSession: mission.cancelAgentSession.bind(mission),
             deliver: mission.deliver.bind(mission),
             panicStopMission: mission.panicStopMission.bind(mission),
             pauseMission: mission.pauseMission.bind(mission),
+            read: mission.read.bind(mission),
+            readDocument: mission.readDocument.bind(mission),
+            readProjection: mission.readProjection.bind(mission),
+            readTerminal: mission.readTerminal.bind(mission),
+            readWorktree: mission.readWorktree.bind(mission),
             reopenTask: mission.reopenTask.bind(mission),
             restartLaunchQueue: mission.restartLaunchQueue.bind(mission),
             resumeMission: mission.resumeMission.bind(mission),
             sendAgentSessionCommand: mission.sendAgentSessionCommand.bind(mission),
             sendAgentSessionPrompt: mission.sendAgentSessionPrompt.bind(mission),
+            sendTerminalInput: mission.sendTerminalInput.bind(mission),
             startTask: mission.startTask.bind(mission),
+            sessionCommand: mission.sessionCommand.bind(mission),
+            taskCommand: mission.taskCommand.bind(mission),
             terminateAgentSession: mission.terminateAgentSession.bind(mission),
-            toEntity: mission.toEntity.bind(mission)
+            toEntity: mission.toEntity.bind(mission),
+            writeDocument: mission.writeDocument.bind(mission)
         };
     }
 
@@ -544,7 +570,7 @@ function agentSessionCommandMappings(sessionId: string): EntityActionCommandMapp
 function toEntityCommandDescriptors(
     actions: OperatorActionDescriptor[],
     mappings: EntityActionCommandMapping[]
-): EntityCommandDescriptor[] {
+): EntityCommandDescriptorType[] {
     return mappings.flatMap((mapping) => {
         const action = actions.find((candidate) => candidate.id === mapping.actionId);
         if (!action) {

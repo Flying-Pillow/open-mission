@@ -1,4 +1,4 @@
-// /packages/core/src/airport/types.ts: Shared airport state and projection contracts for Mission surfaces.
+// /packages/core/src/airport/types.ts: Shared airport state and view contracts for Mission surfaces.
 export type AirportPaneId = 'tower' | 'briefingRoom' | 'runway';
 
 export type PaneTargetKind =
@@ -75,7 +75,7 @@ export interface PersistedAirportIntent {
 	};
 }
 
-export interface AirportPaneProjectionBase {
+export interface AirportPaneViewBase {
 	paneId: AirportPaneId;
 	binding: PaneBinding;
 	connectedClientIds: string[];
@@ -86,21 +86,21 @@ export interface AirportPaneProjectionBase {
 	terminalPane?: AirportPaneState;
 }
 
-export interface TowerGitHubAuthProjection {
+export interface TowerGitHubAuthView {
 	cliAvailable: boolean;
 	authenticated: boolean;
 	user?: string;
 	detail?: string;
 }
 
-export interface TowerProjection extends AirportPaneProjectionBase {
+export interface TowerView extends AirportPaneViewBase {
 	repositoryId?: string;
 	repositoryLabel: string;
 	emptyLabel: string;
-	github: TowerGitHubAuthProjection;
+	github: TowerGitHubAuthView;
 }
 
-export interface BriefingRoomProjection extends AirportPaneProjectionBase {
+export interface BriefingRoomView extends AirportPaneViewBase {
 	artifactId?: string;
 	artifactPath?: string;
 	resourceLabel?: string;
@@ -108,7 +108,7 @@ export interface BriefingRoomProjection extends AirportPaneProjectionBase {
 	emptyLabel: string;
 }
 
-export interface RunwayProjection extends AirportPaneProjectionBase {
+export interface RunwayView extends AirportPaneViewBase {
 	sessionId?: string;
 	taskId?: string;
 	missionId?: string;
@@ -118,15 +118,15 @@ export interface RunwayProjection extends AirportPaneProjectionBase {
 	emptyLabel: string;
 }
 
-export interface AirportProjectionSet {
-	tower: TowerProjection;
-	briefingRoom: BriefingRoomProjection;
-	runway: RunwayProjection;
+export interface AirportViewSet {
+	tower: TowerView;
+	briefingRoom: BriefingRoomView;
+	runway: RunwayView;
 }
 
 export interface AirportStatus {
 	state: AirportState;
-	projections: AirportProjectionSet;
+	views: AirportViewSet;
 }
 
 export interface ConnectAirportClientParams {

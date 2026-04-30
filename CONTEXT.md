@@ -16,8 +16,12 @@ _Avoid_: Mission, app, platform
 
 ### Repository Plane
 
+**Platform repository ref**:
+The hosted repository identifier used by a repository platform adapter, for example the GitHub ref `Flying-Pillow/mission`.
+_Avoid_: Repository, repository root
+
 **GitHub repository ref**:
-The hosted GitHub repository identifier, for example `Flying-Pillow/mission`.
+The GitHub-shaped Platform repository ref, for example `Flying-Pillow/mission`.
 _Avoid_: Repository, repository root
 
 **Repository**:

@@ -3,15 +3,15 @@ import { randomUUID } from 'node:crypto';
 import {
     DaemonApi,
     type Notification,
-    type MissionAgentSessionState,
+    type AgentSessionState,
     type MissionEntity,
 } from '@flying-pillow/mission-core/node';
 import { agentSessionSnapshotSchema, agentSessionTerminalSnapshotSchema } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import type { AgentSessionSnapshot as AgentSession, AgentSessionTerminalSnapshot as MissionSessionTerminalSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import { missionTerminalSnapshotSchema } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { MissionTerminalSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-import { repositorySnapshotSchema, repositorySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
-import type { RepositoryData as Repository } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import { RepositorySnapshotSchema, RepositorySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { RepositoryDataType as Repository } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import {
     airportRuntimeEventEnvelopeSchema,
     type AirportRuntimeEventEnvelope
@@ -182,7 +182,7 @@ export class DaemonGateway {
     private toRuntimeEventPayload(event: AddressedNotification): unknown {
         switch (event.type) {
             case 'airport.state':
-                return { snapshot: event.snapshot };
+                return { system: event.system };
             case 'mission.snapshot.changed':
             case 'stage.snapshot.changed':
             case 'task.snapshot.changed':
@@ -250,7 +250,7 @@ export class DaemonGateway {
         };
     }
 
-    private toMissionSessionSnapshot(session: AgentSession | MissionAgentSessionState): AgentSession {
+    private toMissionSessionSnapshot(session: AgentSession | AgentSessionState): AgentSession {
         return agentSessionSnapshotSchema.parse({
             sessionId: session.sessionId,
             runnerId: session.runnerId,
@@ -285,7 +285,7 @@ export class DaemonGateway {
         const daemon = await this.connectSharedDaemonClient();
         try {
             const api = new DaemonApi(daemon.client);
-            const snapshot = repositorySnapshotSchema.parse(
+            const snapshot = RepositorySnapshotSchema.parse(
                 await withTimeout(
                     api.entity.query({
                         entity: 'Repository',
@@ -309,7 +309,7 @@ export class DaemonGateway {
     }
 
     private toRepositorySnapshot(repository: Repository): Repository {
-        return repositorySchema.parse(repository);
+        return RepositorySchema.parse(repository);
     }
 
     private async connectSharedDaemonClient(surfacePath?: string) {

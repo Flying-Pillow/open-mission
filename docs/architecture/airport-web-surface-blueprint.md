@@ -98,7 +98,7 @@ Use SSE for daemon notifications that are already emitted today:
 - `session.event`
 - `session.lifecycle`
 
-This keeps mission, stage, task, and session state current in the browser without introducing a second subscription contract inside the daemon.
+This keeps mission, stage, task, and AgentSession state current in the browser without introducing a second subscription contract inside the daemon.
 
 ### 3. Live Terminal Transport
 

@@ -5,7 +5,7 @@ import type { Mission } from "$lib/components/entities/Mission/Mission.svelte.js
 import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
 import type { MissionTowerTreeNode } from '@flying-pillow/mission-core/types';
 import type { AirportRuntimeEventEnvelope } from "$lib/contracts/runtime-events";
-import type { SidebarRepositorySummary } from "$lib/components/entities/types";
+import type { SidebarRepositoryData } from "$lib/components/entities/types";
 import type { RuntimeSubscription } from "$lib/client/runtime/transport/EntityRuntimeTransport";
 
 export type GithubStatus = "connected" | "disconnected" | "unknown";
@@ -42,10 +42,14 @@ export type AppContextValue = {
     githubStatus: GithubStatus;
     user?: AppContextServerValue["user"];
     airport: {
-        repositories: SidebarRepositorySummary[];
+        repositories: SidebarRepositoryData[];
+        activeRepositoryLoading: boolean;
+        activeRepositoryError?: string;
         activeRepositoryId?: string;
         activeRepositoryRootPath?: string;
         activeRepository?: RepositoryEntity;
+        activeMissionLoading: boolean;
+        activeMissionError?: string;
         activeMissionId?: string;
         activeMission?: Mission;
         activeMissionOutline?: ActiveMissionOutline;
@@ -62,7 +66,7 @@ export type AppContextValue = {
         onUpdate?: (mission: Mission, event: AirportRuntimeEventEnvelope) => void;
         onError?: (error: Error) => void;
     }): RuntimeSubscription;
-    setRepositories(repositories: SidebarRepositorySummary[]): void;
+    setRepositories(repositories: SidebarRepositoryData[]): void;
     setActiveRepository(input?: {
         id?: string;
         repositoryRootPath?: string;
@@ -88,7 +92,7 @@ export function createAppContext(
         githubStatus: initialValue.githubStatus,
         user: initialValue.user,
         airport: {
-            repositories: [] as SidebarRepositorySummary[],
+            repositories: [] as SidebarRepositoryData[],
         },
     });
 
@@ -108,9 +112,13 @@ export function createAppContext(
         get airport() {
             return {
                 repositories: state.application.repositoriesState,
+                activeRepositoryLoading: state.application.activeRepositoryLoading,
+                activeRepositoryError: state.application.activeRepositoryError,
                 activeRepositoryId: state.application.activeRepositoryId,
                 activeRepositoryRootPath: state.application.activeRepositoryRootPath,
                 activeRepository: state.application.activeRepository,
+                activeMissionLoading: state.application.activeMissionLoading,
+                activeMissionError: state.application.activeMissionError,
                 activeMissionId: state.application.activeMissionId,
                 activeMission: state.application.activeMission,
                 activeMissionOutline: state.application.activeMissionOutline,

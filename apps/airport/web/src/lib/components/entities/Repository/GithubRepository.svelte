@@ -1,9 +1,9 @@
 <script lang="ts">
+    import type { RepositoryPlatformRepositoryType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import { goto } from "$app/navigation";
     import ArrowRightIcon from "@tabler/icons-svelte/icons/arrow-right";
     import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
-    import type { GitHubVisibleRepositorySummary } from "$lib/components/entities/types";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
@@ -13,7 +13,7 @@
     let {
         repository,
     }: {
-        repository: GitHubVisibleRepositorySummary;
+        repository: RepositoryPlatformRepositoryType;
     } = $props();
 
     const appContext = getAppContext();
@@ -28,7 +28,7 @@
         appContext.application.addRepositoryPending,
     );
     const cloneTargetPath = $derived(
-        `${repositoryPath.replace(/\/+$/u, "") || "/"}/${repository.fullName}`,
+        `${repositoryPath.replace(/\/+$/u, "") || "/"}/${repository.repositoryRef}`,
     );
     const repositoryDescription = $derived(
         repository.description?.trim() ||
@@ -51,7 +51,7 @@
     );
 
     const cloneState = $derived(
-        addRepositoryState?.githubRepository === repository.fullName
+        addRepositoryState?.platformRepositoryRef === repository.repositoryRef
             ? addRepositoryState
             : undefined,
     );
@@ -66,10 +66,10 @@
         try {
             const addedRepository = await appContext.application.addRepository({
                 repositoryPath,
-                githubRepository: repository.fullName,
+                platformRepositoryRef: repository.repositoryRef,
             });
             detailsOpen = false;
-            await goto(`/repository/${encodeURIComponent(addedRepository.id)}`);
+            await goto(`/airport/${encodeURIComponent(addedRepository.id)}`);
         } catch {
             return;
         }
@@ -92,7 +92,7 @@
                 <h3
                     class="min-w-0 truncate text-sm font-semibold text-foreground"
                 >
-                    {repository.fullName}
+                    {repository.repositoryRef}
                 </h3>
                 <Badge variant="outline">
                     {repository.visibility}
@@ -105,7 +105,7 @@
                 {repositoryDescription}
             </p>
             <div class="mt-2 flex flex-wrap gap-2">
-                {#each repository.topics.slice(0, 4) as topic (`${repository.fullName}:${topic}`)}
+                {#each repository.topics.slice(0, 4) as topic (`${repository.repositoryRef}:${topic}`)}
                     <Badge variant="secondary">{topic}</Badge>
                 {/each}
                 {#if repositoryLicense}
@@ -118,6 +118,19 @@
         </div>
 
         <div class="flex flex-wrap gap-2 lg:justify-end">
+            {#if repository.htmlUrl}
+                <Button
+                    href={repository.htmlUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    variant="outline"
+                    size="icon-sm"
+                    aria-label={`Open ${repository.repositoryRef} on GitHub`}
+                    title="Open on GitHub"
+                >
+                    <BrandGithubIcon class="size-4" />
+                </Button>
+            {/if}
             <Dialog.Root bind:open={detailsOpen}>
                 <Dialog.Trigger>
                     {#snippet child({ props })}
@@ -127,7 +140,7 @@
                             onclick={handleUseRepository}
                             {...props}
                         >
-                            Use repository
+                            Clone repository
                             <ArrowRightIcon class="size-4" />
                         </Button>
                     {/snippet}
@@ -147,7 +160,7 @@
                                 <Badge variant="secondary">Archived</Badge>
                             {/if}
                         </div>
-                        <Dialog.Title>{repository.fullName}</Dialog.Title>
+                        <Dialog.Title>{repository.repositoryRef}</Dialog.Title>
                         <Dialog.Description>
                             {repositoryDescription}
                         </Dialog.Description>
@@ -156,8 +169,8 @@
                     <form class="grid gap-5" onsubmit={handleClone}>
                         <input
                             type="hidden"
-                            name="githubRepository"
-                            value={repository.fullName}
+                            name="platformRepositoryRef"
+                            value={repository.repositoryRef}
                         />
 
                         <div class="grid gap-3 sm:grid-cols-2">
@@ -223,7 +236,7 @@
                             <p
                                 class="mt-2 text-base font-semibold text-foreground"
                             >
-                                {repository.fullName}
+                                {repository.repositoryRef}
                             </p>
                             <div class="mt-3 flex flex-wrap gap-2">
                                 {#if repository.ownerType}
@@ -244,7 +257,7 @@
                             </div>
                             {#if repository.topics.length > 0}
                                 <div class="mt-4 flex flex-wrap gap-2">
-                                    {#each repository.topics as topic (`${repository.fullName}:detail:${topic}`)}
+                                    {#each repository.topics as topic (`${repository.repositoryRef}:detail:${topic}`)}
                                         <Badge variant="secondary"
                                             >{topic}</Badge
                                         >

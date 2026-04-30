@@ -1,7 +1,7 @@
 import { Repository } from '../entities/Repository/Repository.js';
 import {
 	createDefaultRepositorySettings,
-	type RepositorySettings
+	type RepositorySettingsType
 } from '../entities/Repository/RepositorySchema.js';
 import {
 	DEFAULT_WORKFLOW_VERSION,
@@ -39,7 +39,7 @@ import {
 type WorkflowSettingsFileState = {
 	settingsPath: string;
 	revision: WorkflowSettingsFileRevision;
-	document: RepositorySettings | undefined;
+	document: RepositorySettingsType | undefined;
 	workflow: WorkflowGlobalSettings;
 	settingsInitialized: boolean;
 	workflowInitialized: boolean;
@@ -101,7 +101,7 @@ export class WorkflowSettingsStore {
 	}
 
 	private async persistSettings(
-		nextDocument: RepositorySettings,
+		nextDocument: RepositorySettingsType,
 		workflow: WorkflowGlobalSettings,
 		expectedRevision: string,
 		overwritePreset: boolean
@@ -117,7 +117,7 @@ export class WorkflowSettingsStore {
 		await writeMissionWorkflowDefinition(this.controlRoot, workflow);
 	}
 
-	private createInitializedDocument(currentDocument?: RepositorySettings): RepositorySettings {
+	private createInitializedDocument(currentDocument?: RepositorySettingsType): RepositorySettingsType {
 		if (currentDocument) {
 			return Repository.resolveSettingsDocument(currentDocument);
 		}
@@ -145,7 +145,7 @@ export class WorkflowSettingsStore {
 	private async readFileState(options: { allowUninitialized?: boolean } = {}): Promise<WorkflowSettingsFileState> {
 		const revision = await readWorkflowSettingsRevision(this.workflowPath);
 
-		let document: RepositorySettings | undefined;
+		let document: RepositorySettingsType | undefined;
 		try {
 			document = Repository.readSettingsDocument(this.controlRoot, {
 				resolveWorkspaceRoot: false

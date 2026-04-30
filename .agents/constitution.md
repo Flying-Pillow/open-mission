@@ -5,6 +5,8 @@
 
 ## Preamble
 
+We the maintainers of the Flying Pillow Mission system declare:
+
 Mission is a governed mission orchestration system, not a collection of convenience scripts or markdown.
 
 This repository exists to enforce repository-backed workflow law, provider-neutral agent runtime orchestration, and tower-style operator surfaces through explicit domain boundaries.
@@ -119,18 +121,16 @@ The core domain must not speak raw provider protocol shapes.
 
 ---
 
-## Article VIII: The CLI Is A Control Surface, Not The Domain
+## Article VIII: The Airport WEB/NATIVE Is A Control Surface, Not The Domain
 
-1. `mission` is an operator surface.
-2. Command handlers may parse input, invoke orchestrators, prompt the user, and present results.
-3. Command handlers must not become the permanent home of mission law, gate law, platform translation logic, or runtime lifecycle logic.
-4. If a CLI path becomes smart enough to own reusable business rules, that logic must be extracted into core classes or adapter modules.
+1. `airport` is an operator surface.
+2. It is an interrface to the daemon that controls all running missions
 
 ---
 
 ## Article IX: Presentation Surfaces Are Projections
 
-1. The VS Code extension, tower panels, graphs, and tree views are read-write presentation surfaces over governed state.
+1. The panels, graphs, and tree views are read-write presentation surfaces over governed state.
 2. Presentation layers must consume normalized domain state and adapter outputs.
 3. They must not embed provider-specific execution loops, mission legality rules, or storage authority.
 4. UI may visualize governance. UI may not replace governance.
@@ -178,6 +178,3 @@ Before new code is added, contributors must be able to answer yes to all of the 
 7. Can the behavior be validated deterministically?
 
 If the answer is no, the design is incomplete.
-
-
-

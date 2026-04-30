@@ -16,8 +16,8 @@ The daemon-wide composite snapshot is `MissionSystemSnapshot`:
 ```ts
 type MissionSystemSnapshot = {
   state: MissionSystemState;
-  airportProjections: AirportProjectionSet;
-  airportRegistryProjections: Record<string, AirportProjectionSet>;
+  airportViews: AirportViewSet;
+  airportRegistryViews: Record<string, AirportViewSet>;
 }
 ```
 
@@ -76,7 +76,7 @@ This means there are two airport views in the daemon snapshot:
 - the active airport that current surfaces are centered on
 - the broader registry of repository-scoped airport states known to the daemon
 
-That distinction matters because the active airport is only one projection over a potentially larger multi-repository control set.
+That distinction matters because the active airport is only one view over a potentially larger multi-repository control set.
 
 ## Mission-Local Runtime Data
 
@@ -118,21 +118,21 @@ The runtime section of `mission.json` contains:
 - panic state
 - stage projections
 - task runtime state
-- session runtime state
-- airport pane projections
+- AgentSession state
+- airport pane views
 - launch queue
 - last update timestamp
 
 This is persisted execution state.
 
-## Persisted State Versus Derived Projection
+## Persisted State Versus Derived View
 
-Mission deliberately mixes persisted facts with derived projections, but only inside the correct boundary:
+Mission deliberately mixes persisted facts with derived views, but only inside the correct boundary:
 
-| Scope | Persisted facts | Derived projections |
+| Scope | Persisted facts | Derived views |
 | --- | --- | --- |
-| Daemon system snapshot | Active and registry airport state, semantic context graph, version | Airport projections for active and registry airports |
-| Mission runtime data | Configuration snapshot, mission lifecycle, task state, session state, pause and panic state, launch queue | Stage projections and airport pane projections stored inside runtime after reducer derivation |
+| Daemon system snapshot | Active and registry airport state, semantic context graph, version | Airport views for active and registry airports |
+| Mission runtime data | Configuration snapshot, mission lifecycle, task state, AgentSession state, pause and panic state, launch queue | Stage projections and airport pane views stored inside runtime after reducer derivation |
 
 Two distinctions are especially important:
 
@@ -153,7 +153,7 @@ This is the practical division of responsibility:
 | --- | --- |
 | `.mission/settings.json` | Repository daemon and control defaults |
 | `.mission/workflow/workflow.json` + `.mission/workflow/templates/` | Repository workflow preset |
-| `MissionSystemSnapshot` | Live daemon-wide composite state and airport projections |
+| `MissionSystemSnapshot` | Live daemon-wide composite state and airport views |
 | `mission.json` | Mission-local persisted execution record |
 
 For an adopting team, this is the main schema rule to remember: repository control state, daemon control-plane state, and mission execution state are separate on purpose. Mission is safer when those layers remain explicit.

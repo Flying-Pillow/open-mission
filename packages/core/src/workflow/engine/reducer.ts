@@ -7,7 +7,7 @@ import {
     type MissionWorkflowRuntimeState,
     type MissionWorkflowSignal,
     type MissionTaskRuntimeState,
-    type MissionAgentSessionRuntimeState
+    type AgentSessionRuntimeState
 } from './types.js';
 import { createInitialMissionWorkflowRuntimeState } from './document.js';
 import {
@@ -660,9 +660,9 @@ function queueAutostartTasks(
 }
 
 function upsertSession(
-    sessions: MissionAgentSessionRuntimeState[],
-    session: MissionAgentSessionRuntimeState
-): MissionAgentSessionRuntimeState[] {
+    sessions: AgentSessionRuntimeState[],
+    session: AgentSessionRuntimeState
+): AgentSessionRuntimeState[] {
     const existingIndex = sessions.findIndex((candidate) => candidate.sessionId === session.sessionId);
     if (existingIndex < 0) {
         return [...sessions, session];
@@ -673,11 +673,11 @@ function upsertSession(
 }
 
 function updateSessionLifecycle(
-    sessions: MissionAgentSessionRuntimeState[],
+    sessions: AgentSessionRuntimeState[],
     sessionId: string,
-    lifecycle: MissionAgentSessionRuntimeState['lifecycle'],
+    lifecycle: AgentSessionRuntimeState['lifecycle'],
     occurredAt: string
-): MissionAgentSessionRuntimeState[] {
+): AgentSessionRuntimeState[] {
     return sessions.map((session) =>
         session.sessionId === sessionId
             ? {
@@ -693,7 +693,7 @@ function updateSessionLifecycle(
     );
 }
 
-function hasActiveSession(sessions: MissionAgentSessionRuntimeState[], sessionId: string): boolean {
+function hasActiveSession(sessions: AgentSessionRuntimeState[], sessionId: string): boolean {
     return sessions.some((session) => session.sessionId === sessionId && isActiveSessionLifecycle(session.lifecycle));
 }
 

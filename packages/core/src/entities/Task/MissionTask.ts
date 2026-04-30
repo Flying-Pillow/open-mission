@@ -5,7 +5,7 @@ import {
 	type MissionTaskState,
 	type MissionTaskStatusIntent
 } from '../../types.js';
-import type { MissionAgentSessionLaunchRequest } from '../../daemon/protocol/contracts.js';
+import type { AgentSessionLaunchRequest } from '../../daemon/protocol/contracts.js';
 import type { MissionTaskArtifactReference } from '../../workflow/engine/types.js';
 import { MissionSession } from '../AgentSession/MissionSession.js';
 
@@ -32,7 +32,7 @@ export type MissionTaskOwner = {
 	startTaskRuntimeSession(
 		task: MissionTaskState,
 		runner: AgentRunner,
-		request: MissionAgentSessionLaunchRequest
+		request: AgentSessionLaunchRequest
 	): Promise<AgentSessionSnapshot>;
 	recordStartedTaskSession(snapshot: AgentSessionSnapshot): Promise<MissionSession>;
 	recordTaskSessionLaunchFailure(taskId: string, error: unknown): Promise<void>;
@@ -102,7 +102,7 @@ export class MissionTask {
 	}
 
 	public async launchSession(
-		request: MissionAgentSessionLaunchRequest
+		request: AgentSessionLaunchRequest
 	): Promise<MissionSession> {
 		await this.prepareForSessionLaunch();
 		const runner = this.owner.requireAgentRunner(request.runnerId);

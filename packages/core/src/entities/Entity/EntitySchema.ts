@@ -2,22 +2,22 @@ import { z } from 'zod/v4';
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 
-export const entityTableSchema = z.string().trim().min(1).regex(/^[a-z][a-z0-9_]*$/);
-export const entityNameSchema = nonEmptyStringSchema;
-export const entityMethodNameSchema = nonEmptyStringSchema;
-export const entityObjectSchema = z.record(z.string(), z.unknown());
+export const EntityTableSchema = z.string().trim().min(1).regex(/^[a-z][a-z0-9_]*$/);
+export const EntityNameSchema = nonEmptyStringSchema;
+export const EntityMethodNameSchema = nonEmptyStringSchema;
+export const EntityObjectSchema = z.record(z.string(), z.unknown());
 
-export const entityIdSchema = nonEmptyStringSchema.refine((value) => {
+export const EntityIdSchema = nonEmptyStringSchema.refine((value) => {
     const separatorIndex = value.indexOf(':');
     if (separatorIndex <= 0 || separatorIndex === value.length - 1) {
         return false;
     }
-    return entityTableSchema.safeParse(value.slice(0, separatorIndex)).success;
+    return EntityTableSchema.safeParse(value.slice(0, separatorIndex)).success;
 }, {
     message: 'Entity ids must use the table:uniqueId shape.'
 });
 
-export const entityChannelSchema = nonEmptyStringSchema.refine((value) => {
+export const EntityChannelSchema = nonEmptyStringSchema.refine((value) => {
     const tableSeparatorIndex = value.indexOf(':');
     const eventSeparatorIndex = value.lastIndexOf('.');
     if (tableSeparatorIndex <= 0 || tableSeparatorIndex === value.length - 1) {
@@ -26,14 +26,14 @@ export const entityChannelSchema = nonEmptyStringSchema.refine((value) => {
     if (eventSeparatorIndex <= tableSeparatorIndex + 1 || eventSeparatorIndex === value.length - 1) {
         return false;
     }
-    return entityTableSchema.safeParse(value.slice(0, tableSeparatorIndex)).success;
+    return EntityTableSchema.safeParse(value.slice(0, tableSeparatorIndex)).success;
 }, {
     message: 'Entity channels must use the table:uniqueId.event shape.'
 });
 
-export const entityEventAddressSchema = z.object({
-    entityId: entityIdSchema,
-    channel: entityChannelSchema,
+export const EntityEventAddressSchema = z.object({
+    entityId: EntityIdSchema,
+    channel: EntityChannelSchema,
     eventName: nonEmptyStringSchema
 }).strict();
 
@@ -44,7 +44,7 @@ const entityClassSchema = z.custom<Function>((value) =>
     && typeof (value as { prototype?: unknown }).prototype === 'object'
 );
 
-export const entityCommandInputOptionSchema = z.object({
+export const EntityCommandInputOptionSchema = z.object({
     optionId: z.string().trim().min(1),
     label: z.string().trim().min(1),
     description: z.string().trim().min(1).optional(),
@@ -52,7 +52,7 @@ export const entityCommandInputOptionSchema = z.object({
     disabledReason: z.string().trim().min(1).optional()
 }).strict();
 
-export const entityCommandInputDescriptorSchema = z.discriminatedUnion('kind', [
+export const EntityCommandInputDescriptorSchema = z.discriminatedUnion('kind', [
     z.object({
         kind: z.literal('text'),
         label: z.string().trim().min(1).optional(),
@@ -65,7 +65,7 @@ export const entityCommandInputDescriptorSchema = z.discriminatedUnion('kind', [
         label: z.string().trim().min(1).optional(),
         required: z.boolean().optional(),
         multiple: z.boolean().optional(),
-        options: z.array(entityCommandInputOptionSchema).min(1)
+        options: z.array(EntityCommandInputOptionSchema).min(1)
     }).strict(),
     z.object({
         kind: z.literal('boolean'),
@@ -82,12 +82,12 @@ export const entityCommandInputDescriptorSchema = z.discriminatedUnion('kind', [
     }).strict()
 ]);
 
-export const entityCommandConfirmationSchema = z.object({
+export const EntityCommandConfirmationSchema = z.object({
     required: z.boolean(),
     prompt: z.string().trim().min(1).optional()
 }).strict();
 
-export const entityCommandDescriptorSchema = z.object({
+export const EntityCommandDescriptorSchema = z.object({
     commandId: z.string().trim().min(1),
     label: z.string().trim().min(1),
     description: z.string().trim().min(1).optional(),
@@ -95,60 +95,60 @@ export const entityCommandDescriptorSchema = z.object({
     disabledReason: z.string().trim().min(1).optional(),
     variant: z.enum(['default', 'destructive']).optional(),
     iconHint: z.string().trim().min(1).optional(),
-    confirmation: entityCommandConfirmationSchema.optional(),
-    input: entityCommandInputDescriptorSchema.optional(),
+    confirmation: EntityCommandConfirmationSchema.optional(),
+    input: EntityCommandInputDescriptorSchema.optional(),
     presentationOrder: z.number().int().optional()
 }).strict();
 
-export const entityMethodUiSchema = z.object({
+export const EntityMethodUiSchema = z.object({
     label: z.string().trim().min(1),
     description: z.string().trim().min(1).optional(),
     variant: z.enum(['default', 'destructive']).optional(),
     iconHint: z.string().trim().min(1).optional(),
-    confirmation: entityCommandConfirmationSchema.optional(),
-    input: entityCommandInputDescriptorSchema.optional(),
+    confirmation: EntityCommandConfirmationSchema.optional(),
+    input: EntityCommandInputDescriptorSchema.optional(),
     presentationOrder: z.number().int().optional()
 }).strict();
 
-export const entityMethodExecutionSchema = z.enum(['class', 'entity']);
-export const entityMethodKindSchema = z.enum(['query', 'mutation']);
+export const EntityMethodExecutionSchema = z.enum(['class', 'entity']);
+export const EntityMethodKindSchema = z.enum(['query', 'mutation']);
 
-export const entityPropertySchema = z.object({
+export const EntityPropertySchema = z.object({
     schema: zodSchema,
     readonly: z.boolean().optional()
 }).strict();
 
-export const entityEventSchema = z.object({
+export const EntityEventSchema = z.object({
     payload: zodSchema
 }).strict();
 
-export const entityMethodSchema = z.object({
-    kind: entityMethodKindSchema,
+export const EntityMethodSchema = z.object({
+    kind: EntityMethodKindSchema,
     payload: zodSchema,
     result: zodSchema,
-    execution: entityMethodExecutionSchema,
-    ui: entityMethodUiSchema.optional()
+    execution: EntityMethodExecutionSchema,
+    ui: EntityMethodUiSchema.optional()
 }).strict();
 
-export const entitySchema = z.object({
-    entity: entityNameSchema,
+export const EntityContractSchema = z.object({
+    entity: EntityNameSchema,
     entityClass: entityClassSchema,
-    properties: z.record(z.string(), entityPropertySchema).optional(),
-    methods: z.record(z.string(), entityMethodSchema),
-    events: z.record(z.string(), entityEventSchema).optional()
+    properties: z.record(z.string(), EntityPropertySchema).optional(),
+    methods: z.record(z.string(), EntityMethodSchema),
+    events: z.record(z.string(), EntityEventSchema).optional()
 }).strict();
 
-export const entityCommandAcknowledgementSchema = z.object({
+export const EntityCommandAcknowledgementSchema = z.object({
     ok: z.literal(true),
-    entity: entityNameSchema,
-    method: entityMethodNameSchema,
+    entity: EntityNameSchema,
+    method: EntityMethodNameSchema,
     id: z.string().trim().min(1).optional()
 }).strict();
 
-export const entityEventEnvelopeSchema = z.object({
+export const EntityEventEnvelopeSchema = z.object({
     eventId: nonEmptyStringSchema,
-    entityId: entityIdSchema,
-    channel: entityChannelSchema,
+    entityId: EntityIdSchema,
+    channel: EntityChannelSchema,
     eventName: nonEmptyStringSchema,
     type: nonEmptyStringSchema,
     occurredAt: nonEmptyStringSchema,
@@ -156,19 +156,19 @@ export const entityEventEnvelopeSchema = z.object({
     payload: z.unknown()
 }).strict();
 
-export type EntityId = z.infer<typeof entityIdSchema>;
-export type EntityChannel = z.infer<typeof entityChannelSchema>;
-export type EntityEventAddress = z.infer<typeof entityEventAddressSchema>;
-export type EntityCommandInputOption = z.infer<typeof entityCommandInputOptionSchema>;
-export type EntityCommandInputDescriptor = z.infer<typeof entityCommandInputDescriptorSchema>;
-export type EntityCommandConfirmation = z.infer<typeof entityCommandConfirmationSchema>;
-export type EntityCommandDescriptor = z.infer<typeof entityCommandDescriptorSchema>;
-export type EntityMethodUi = z.infer<typeof entityMethodUiSchema>;
-export type EntityMethodExecution = z.infer<typeof entityMethodExecutionSchema>;
-export type EntityMethodKind = z.infer<typeof entityMethodKindSchema>;
-export type EntityProperty = z.infer<typeof entityPropertySchema>;
-export type EntityEvent = z.infer<typeof entityEventSchema>;
-export type EntityMethod = z.infer<typeof entityMethodSchema>;
-export type EntitySchema = z.infer<typeof entitySchema>;
-export type EntityCommandAcknowledgement = z.infer<typeof entityCommandAcknowledgementSchema>;
-export type EntityEventEnvelope = z.infer<typeof entityEventEnvelopeSchema>;
+export type EntityIdType = z.infer<typeof EntityIdSchema>;
+export type EntityChannelType = z.infer<typeof EntityChannelSchema>;
+export type EntityEventAddressType = z.infer<typeof EntityEventAddressSchema>;
+export type EntityCommandInputOptionType = z.infer<typeof EntityCommandInputOptionSchema>;
+export type EntityCommandInputDescriptorType = z.infer<typeof EntityCommandInputDescriptorSchema>;
+export type EntityCommandConfirmationType = z.infer<typeof EntityCommandConfirmationSchema>;
+export type EntityCommandDescriptorType = z.infer<typeof EntityCommandDescriptorSchema>;
+export type EntityMethodUiType = z.infer<typeof EntityMethodUiSchema>;
+export type EntityMethodExecutionType = z.infer<typeof EntityMethodExecutionSchema>;
+export type EntityMethodKindType = z.infer<typeof EntityMethodKindSchema>;
+export type EntityPropertyType = z.infer<typeof EntityPropertySchema>;
+export type EntityEventType = z.infer<typeof EntityEventSchema>;
+export type EntityMethodType = z.infer<typeof EntityMethodSchema>;
+export type EntityContractType = z.infer<typeof EntityContractSchema>;
+export type EntityCommandAcknowledgementType = z.infer<typeof EntityCommandAcknowledgementSchema>;
+export type EntityEventEnvelopeType = z.infer<typeof EntityEventEnvelopeSchema>;

@@ -8,17 +8,17 @@ import { toAgentSession, type AgentSession } from './AgentSession.js';
 import type {
 	MissionAgentModelInfo,
 	MissionAgentScope,
-	MissionAgentSessionRecord,
-	MissionAgentSessionState,
+	AgentSessionRecord,
+	AgentSessionState,
 	MissionAgentTelemetrySnapshot
 } from '../../daemon/protocol/contracts.js';
 
 export type MissionSessionOwner = {
-	completeSessionRecord(sessionId: string): Promise<MissionAgentSessionRecord>;
-	cancelSessionRecord(sessionId: string, reason?: string): Promise<MissionAgentSessionRecord>;
-	terminateSessionRecord(sessionId: string, reason?: string): Promise<MissionAgentSessionRecord>;
-	sendSessionPrompt(sessionId: string, prompt: AgentPrompt): Promise<MissionAgentSessionRecord>;
-	sendSessionCommand(sessionId: string, command: AgentCommand): Promise<MissionAgentSessionRecord>;
+	completeSessionRecord(sessionId: string): Promise<AgentSessionRecord>;
+	cancelSessionRecord(sessionId: string, reason?: string): Promise<AgentSessionRecord>;
+	terminateSessionRecord(sessionId: string, reason?: string): Promise<AgentSessionRecord>;
+	sendSessionPrompt(sessionId: string, prompt: AgentPrompt): Promise<AgentSessionRecord>;
+	sendSessionCommand(sessionId: string, command: AgentCommand): Promise<AgentSessionRecord>;
 };
 
 type AgentSessionRuntimeRecord = {
@@ -29,7 +29,7 @@ type AgentSessionRuntimeRecord = {
 	terminalSessionName?: string | undefined;
 	terminalPaneId?: string | undefined;
 	taskId: string;
-	lifecycle: MissionAgentSessionRecord['lifecycleState'] | AgentSessionSnapshot['status'];
+	lifecycle: AgentSessionRecord['lifecycleState'] | AgentSessionSnapshot['status'];
 	launchedAt: string;
 	updatedAt: string;
 };
@@ -63,7 +63,7 @@ export class MissionSession {
 		task?: MissionTaskState;
 		missionId?: string;
 		missionDir?: string;
-	}): MissionAgentSessionRecord {
+	}): AgentSessionRecord {
 		const scope = input.task
 			? MissionSession.buildTaskScope(input.task, input.missionId, input.missionDir)
 			: undefined;
@@ -100,8 +100,8 @@ export class MissionSession {
 	public static createStateFromSnapshot(input: {
 		snapshot: AgentSessionSnapshot;
 		runnerLabel: string;
-		record?: MissionAgentSessionRecord;
-	}): MissionAgentSessionState {
+		record?: AgentSessionRecord;
+	}): AgentSessionState {
 		const { snapshot, runnerLabel, record } = input;
 		const transport = getTransportFields(snapshot);
 		return MissionSession.cloneState({
@@ -137,7 +137,7 @@ export class MissionSession {
 		});
 	}
 
-	public static cloneRecord(record: MissionAgentSessionRecord): MissionAgentSessionRecord {
+	public static cloneRecord(record: AgentSessionRecord): AgentSessionRecord {
 		const telemetry = MissionSession.cloneTelemetry(record.telemetry);
 		return {
 			sessionId: record.sessionId,
@@ -160,7 +160,7 @@ export class MissionSession {
 		};
 	}
 
-	public static cloneState(state: MissionAgentSessionState): MissionAgentSessionState {
+	public static cloneState(state: AgentSessionState): AgentSessionState {
 		const telemetry = MissionSession.cloneTelemetry(state.telemetry);
 		return {
 			runnerId: state.runnerId,
@@ -193,7 +193,7 @@ export class MissionSession {
 
 	public static toLifecycleState(
 		status: AgentSessionRuntimeRecord['lifecycle']
-	): MissionAgentSessionRecord['lifecycleState'] {
+	): AgentSessionRecord['lifecycleState'] {
 		switch (status) {
 			case 'awaiting-input':
 				return 'awaiting-input';
@@ -216,14 +216,14 @@ export class MissionSession {
 
 	public constructor(
 		private readonly owner: MissionSessionOwner,
-		private readonly record: MissionAgentSessionRecord
+		private readonly record: AgentSessionRecord
 	) { }
 
 	public get sessionId(): string {
 		return this.record.sessionId;
 	}
 
-	public toRecord(): MissionAgentSessionRecord {
+	public toRecord(): AgentSessionRecord {
 		return MissionSession.cloneRecord(this.record);
 	}
 
@@ -231,7 +231,7 @@ export class MissionSession {
 		return toAgentSession(this.record);
 	}
 
-	public toState(snapshot?: AgentSessionSnapshot): MissionAgentSessionState {
+	public toState(snapshot?: AgentSessionSnapshot): AgentSessionState {
 		if (!snapshot) {
 			return MissionSession.cloneState({
 				runnerId: this.record.runnerId,

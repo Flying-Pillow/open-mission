@@ -56,7 +56,7 @@ export const MISSION_AGENT_SESSION_LIFECYCLE_STATES = [
     'terminated'
 ] as const;
 
-export type MissionAgentSessionLifecycleState = (typeof MISSION_AGENT_SESSION_LIFECYCLE_STATES)[number];
+export type AgentSessionLifecycleState = (typeof MISSION_AGENT_SESSION_LIFECYCLE_STATES)[number];
 
 export type MissionGateIntent = 'implement' | 'verify' | 'audit' | 'deliver';
 export type MissionGateState = 'blocked' | 'passed';
@@ -184,7 +184,7 @@ export const MissionStageRuntimeProjectionSchema = z.object({
 
 export type MissionStageRuntimeProjection = z.infer<typeof MissionStageRuntimeProjectionSchema>;
 
-export const MissionAgentSessionRuntimeStateSchema = z.object({
+export const AgentSessionRuntimeStateSchema = z.object({
     sessionId: nonEmptyStringSchema,
     taskId: nonEmptyStringSchema,
     runnerId: nonEmptyStringSchema,
@@ -201,7 +201,7 @@ export const MissionAgentSessionRuntimeStateSchema = z.object({
     terminatedAt: nonEmptyStringSchema.optional()
 }).strict();
 
-export type MissionAgentSessionRuntimeState = z.infer<typeof MissionAgentSessionRuntimeStateSchema>;
+export type AgentSessionRuntimeState = z.infer<typeof AgentSessionRuntimeStateSchema>;
 
 export const MissionGateProjectionSchema = z.object({
     gateId: nonEmptyStringSchema,
@@ -244,7 +244,7 @@ export const MissionWorkflowRuntimeStateSchema = z.object({
     panic: MissionPanicStateSchema,
     stages: z.array(MissionStageRuntimeProjectionSchema),
     tasks: z.array(MissionTaskRuntimeStateSchema),
-    sessions: z.array(MissionAgentSessionRuntimeStateSchema),
+    sessions: z.array(AgentSessionRuntimeStateSchema),
     gates: z.array(MissionGateProjectionSchema),
     launchQueue: z.array(MissionTaskLaunchRequestSchema),
     updatedAt: nonEmptyStringSchema

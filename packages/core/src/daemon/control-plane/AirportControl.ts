@@ -1,25 +1,28 @@
+import path from 'node:path';
 import {
 	type AirportPaneOverrides,
 	type AirportFocusState,
-	type AirportPaneProjectionBase,
-	type AirportProjectionSet,
+	type AirportPaneViewBase,
+	type AirportViewSet,
 	type AirportState,
 	type AirportStatus,
-	type BriefingRoomProjection,
+	type BriefingRoomView,
 	type AirportSubstrateState,
 	type BindAirportPaneParams,
 	type ConnectAirportClientParams,
 	type PaneBinding,
 	type PaneMode,
 	type PaneTargetKind,
-	type RunwayProjection,
+	type RunwayView,
 	type AirportPaneId,
 	type PersistedAirportIntent,
-	type TowerProjection,
+	type TowerView,
 	type ObserveAirportClientParams
 } from '../../airport/types.js';
+import type { SystemState } from '../../system/SystemContract.js';
+import type { ContextGraph } from '../../types.js';
 
-type RepositoryLayoutControllerOptions = {
+type AirportControlOptions = {
 	airportId: string;
 	repositoryId: string;
 	repositoryRootPath?: string;
@@ -29,10 +32,22 @@ type RepositoryLayoutControllerOptions = {
 	initialSubstrateState?: AirportSubstrateState;
 };
 
-export class RepositoryLayoutController {
+export class AirportControl {
 	private state: AirportState;
 
-	public constructor(options: RepositoryLayoutControllerOptions) {
+	public static deriveSystemViews(
+		domain: ContextGraph,
+		airportState: AirportState,
+		systemStatus?: SystemState
+	): AirportViewSet {
+		return {
+			tower: deriveSystemTowerView(domain, airportState, systemStatus),
+			briefingRoom: deriveSystemBriefingRoomView(domain, airportState),
+			runway: deriveSystemRunwayView(domain, airportState)
+		};
+	}
+
+	public constructor(options: AirportControlOptions) {
 		const persistedIntent = normalizePersistedAirportIntent(options.persistedIntent);
 		const airportId = options.airportId.trim();
 		const repositoryId = options.repositoryId.trim();
@@ -105,14 +120,14 @@ export class RepositoryLayoutController {
 		return structuredClone(this.state);
 	}
 
-	public getProjections(): AirportProjectionSet {
-		return deriveAirportProjections(this.state);
+	public getViews(): AirportViewSet {
+		return deriveAirportViews(this.state);
 	}
 
 	public getStatus(): AirportStatus {
 		return {
 			state: this.getState(),
-			projections: this.getProjections()
+			views: this.getViews()
 		};
 	}
 
@@ -493,15 +508,15 @@ function isPaneMode(value: unknown): value is PaneMode {
 	return value === 'view' || value === 'control';
 }
 
-function deriveAirportProjections(state: AirportState): AirportProjectionSet {
+function deriveAirportViews(state: AirportState): AirportViewSet {
 	return {
-		tower: createTowerProjection(state),
-		briefingRoom: createBriefingRoomProjection(state),
-		runway: createRunwayProjection(state)
+		tower: createTowerView(state),
+		briefingRoom: createBriefingRoomView(state),
+		runway: createRunwayView(state)
 	};
 }
 
-function createPaneProjectionBase(state: AirportState, paneId: AirportPaneId): AirportPaneProjectionBase {
+function createPaneViewBase(state: AirportState, paneId: AirportPaneId): AirportPaneViewBase {
 	const binding = state.panes[paneId];
 	const terminalPane = state.substrate.panes[paneId];
 	return {
@@ -518,8 +533,8 @@ function createPaneProjectionBase(state: AirportState, paneId: AirportPaneId): A
 	};
 }
 
-function createTowerProjection(state: AirportState): TowerProjection {
-	const base = createPaneProjectionBase(state, 'tower');
+function createTowerView(state: AirportState): TowerView {
+	const base = createPaneViewBase(state, 'tower');
 	const binding = base.binding;
 	const repositoryId = state.repositoryId ?? (binding.targetKind === 'repository' ? binding.targetId : undefined);
 	const repositoryLabel = state.repositoryRootPath?.trim() || repositoryId || 'Repository';
@@ -535,8 +550,8 @@ function createTowerProjection(state: AirportState): TowerProjection {
 	};
 }
 
-function createBriefingRoomProjection(state: AirportState): BriefingRoomProjection {
-	const base = createPaneProjectionBase(state, 'briefingRoom');
+function createBriefingRoomView(state: AirportState): BriefingRoomView {
+	const base = createPaneViewBase(state, 'briefingRoom');
 	const binding = base.binding;
 	const artifactId = binding.targetKind === 'artifact' ? binding.targetId : undefined;
 	const launchPath = state.repositoryRootPath?.trim() || state.repositoryId?.trim();
@@ -550,8 +565,8 @@ function createBriefingRoomProjection(state: AirportState): BriefingRoomProjecti
 	};
 }
 
-function createRunwayProjection(state: AirportState): RunwayProjection {
-	const base = createPaneProjectionBase(state, 'runway');
+function createRunwayView(state: AirportState): RunwayView {
+	const base = createPaneViewBase(state, 'runway');
 	const binding = base.binding;
 	const sessionId = binding.targetKind === 'agentSession' ? binding.targetId : undefined;
 	return {
@@ -611,5 +626,96 @@ function createDefaultTerminalManagerSubstrateState(options: { sessionName: stri
 		layoutIntent: 'mission-control-v1',
 		attached: false,
 		panes: {}
+	};
+}
+
+function deriveSystemTowerView(
+	domain: ContextGraph,
+	airportState: AirportState,
+	systemStatus?: SystemState
+): AirportViewSet['tower'] {
+	const base = createPaneViewBase(airportState, 'tower');
+	const repositoryId = airportState.repositoryId ?? domain.selection.repositoryId;
+	const repositoryContext = repositoryId ? domain.repositories[repositoryId] : undefined;
+	const githubStatus = systemStatus?.github;
+	return {
+		...base,
+		...(repositoryId ? { repositoryId } : {}),
+		repositoryLabel: repositoryContext?.displayLabel
+			|| path.basename(airportState.repositoryRootPath || repositoryId || 'repository')
+			|| 'Repository',
+		subtitle: repositoryContext?.displayLabel
+			|| airportState.repositoryRootPath
+			|| 'Repository overview',
+		emptyLabel: 'Tower is ready.',
+		github: {
+			cliAvailable: githubStatus?.cliAvailable ?? false,
+			authenticated: githubStatus?.authenticated ?? false,
+			...(githubStatus?.user ? { user: githubStatus.user } : {}),
+			...(githubStatus?.detail ? { detail: githubStatus.detail } : {})
+		}
+	};
+}
+
+function deriveSystemBriefingRoomView(
+	domain: ContextGraph,
+	airportState: AirportState
+): AirportViewSet['briefingRoom'] {
+	const base = createPaneViewBase(airportState, 'briefingRoom');
+	const artifactId = base.binding.targetKind === 'artifact'
+		? base.binding.targetId
+		: undefined;
+	const artifactContext = artifactId ? domain.artifacts[artifactId] : undefined;
+	const directArtifactPath = artifactId && !artifactContext ? artifactId : undefined;
+	const missionContext = artifactContext?.missionId ? domain.missions[artifactContext.missionId] : undefined;
+	const repositoryContext = airportState.repositoryId ? domain.repositories[airportState.repositoryId] : undefined;
+	const launchPath = artifactContext?.filePath
+		|| directArtifactPath
+		|| missionContext?.workspacePath
+		|| repositoryContext?.rootPath
+		|| airportState.repositoryRootPath;
+	return {
+		...base,
+		subtitle: artifactContext?.displayLabel
+			|| artifactContext?.filePath
+			|| directArtifactPath
+			|| base.subtitle,
+		...(artifactId ? { artifactId } : {}),
+		...(artifactContext?.filePath
+			? { artifactPath: artifactContext.filePath }
+			: directArtifactPath
+				? { artifactPath: directArtifactPath }
+				: {}),
+		...(artifactContext?.displayLabel ? { resourceLabel: artifactContext.displayLabel } : {}),
+		...(launchPath ? { launchPath } : {}),
+		emptyLabel: artifactContext?.filePath || directArtifactPath
+			? 'Briefing Room is ready.'
+			: 'Briefing Room is waiting for an artifact binding.'
+	};
+}
+
+function deriveSystemRunwayView(
+	domain: ContextGraph,
+	airportState: AirportState
+): AirportViewSet['runway'] {
+	const base = createPaneViewBase(airportState, 'runway');
+	const sessionId = base.binding.targetKind === 'agentSession'
+		? base.binding.targetId
+		: undefined;
+	const sessionContext = sessionId ? domain.agentSessions[sessionId] : undefined;
+	const taskId = sessionContext?.taskId || (base.binding.targetKind === 'task' ? base.binding.targetId : undefined);
+	return {
+		...base,
+		subtitle: sessionContext?.promptTitle
+			|| sessionId
+			|| base.subtitle,
+		...(sessionId ? { sessionId, sessionLabel: sessionId } : {}),
+		...(taskId ? { taskId } : {}),
+		...(sessionContext?.missionId ? { missionId: sessionContext.missionId } : {}),
+		...(sessionContext?.workingDirectory ? { workingDirectory: sessionContext.workingDirectory } : {}),
+		statusLabel: sessionContext?.lifecycleState || (sessionId ? 'bound' : 'idle'),
+		emptyLabel: sessionId
+			? 'Runway is bound and waiting for the session surface.'
+			: 'Runway is idle.'
 	};
 }

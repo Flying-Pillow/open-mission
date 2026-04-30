@@ -5,7 +5,7 @@
     import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
-    import type { IssueSummary } from "$lib/components/entities/types";
+    import type { TrackedIssueSummaryType } from "$lib/components/entities/types";
 
     let {
         issue,
@@ -13,7 +13,7 @@
         onViewIssue,
         onStartIssueError,
     }: {
-        issue: IssueSummary;
+        issue: TrackedIssueSummaryType;
         issueLoadingNumber: number | null;
         onViewIssue: (issueNumber: number) => void;
         onStartIssueError?: (message: string | null) => void;
@@ -22,7 +22,9 @@
     const activeRepository = $derived.by(() => {
         const repository = repositoryScope.repository;
         if (!repository) {
-            throw new Error("Issue actions require a scoped repository context.");
+            throw new Error(
+                "Issue actions require a scoped repository context.",
+            );
         }
 
         return repository;
@@ -35,7 +37,9 @@
         onStartIssueError?.(null);
 
         try {
-            const result = await activeRepository.startMissionFromIssue(issue.number);
+            const result = await activeRepository.startMissionFromIssue(
+                issue.number,
+            );
             await goto(result.redirectTo);
         } catch (error) {
             onStartIssueError?.(

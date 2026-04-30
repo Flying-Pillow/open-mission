@@ -6,13 +6,14 @@ import {
     missionSnapshotSchema
 } from '../Mission/MissionSchema.js';
 import {
-    entityCommandAcknowledgementSchema,
-    entityIdSchema
+    EntityCommandAcknowledgementSchema,
+    EntityIdSchema
 } from '../Entity/EntitySchema.js';
 
-export const repositoryWorkflowConfigurationSchema = WorkflowGlobalSettingsSchema;
+export const RepositoryWorkflowConfigurationSchema = WorkflowGlobalSettingsSchema;
 
 export const repositoryEntityName = 'Repository' as const;
+export const RepositoryPlatformKindSchema = z.enum(['github']);
 
 const defaultMissionsRoot = 'missions';
 
@@ -54,11 +55,46 @@ export const RepositorySettingsSchema = z.object({
     airport: repositoryAirportIntentSchema.optional()
 }).strict();
 
-export type RepositorySettings = z.infer<typeof RepositorySettingsSchema>;
+export const RepositoryPlatformRepositorySchema = z.object({
+    platform: RepositoryPlatformKindSchema,
+    repositoryRef: z.string().trim().min(1),
+    name: z.string().trim().min(1),
+    description: z.string().nullable().optional(),
+    topics: z.array(z.string().trim().min(1)),
+    homepageUrl: z.string().trim().url().nullable().optional(),
+    license: z.object({
+        key: z.string().trim().min(1).optional(),
+        name: z.string().trim().min(1).optional(),
+        spdxId: z.string().trim().min(1).optional(),
+        url: z.string().trim().url().nullable().optional()
+    }).strict().nullable().optional(),
+    ownerLogin: z.string().trim().min(1).optional(),
+    ownerType: z.string().trim().min(1).optional(),
+    ownerUrl: z.string().trim().url().optional(),
+    htmlUrl: z.string().trim().url().optional(),
+    visibility: z.enum(['private', 'public', 'internal']),
+    defaultBranch: z.string().trim().min(1).optional(),
+    archived: z.boolean(),
+    starsCount: z.number().int().nonnegative().optional(),
+    forksCount: z.number().int().nonnegative().optional(),
+    watchersCount: z.number().int().nonnegative().optional(),
+    subscribersCount: z.number().int().nonnegative().optional(),
+    openIssuesCount: z.number().int().nonnegative().optional(),
+    openPullRequestsCount: z.number().int().nonnegative().optional(),
+    closedIssuesCount: z.number().int().nonnegative().optional(),
+    commitsCount: z.number().int().nonnegative().optional(),
+    releasesCount: z.number().int().nonnegative().optional(),
+    workflowRunsCount: z.number().int().nonnegative().optional(),
+    createdAt: z.string().trim().min(1).optional(),
+    updatedAt: z.string().trim().min(1).optional(),
+    pushedAt: z.string().trim().min(1).optional()
+}).strict();
+
+export type RepositorySettingsType = z.infer<typeof RepositorySettingsSchema>;
 export type MissionAgentRunner = 'copilot-cli' | 'pi';
 export type MissionDefaultAgentMode = 'interactive' | 'autonomous';
 
-const defaultRepositorySettings: RepositorySettings = {
+const defaultRepositorySettings: RepositorySettingsType = {
     missionsRoot: defaultMissionsRoot,
     trackingProvider: 'github',
     instructionsPath: '.agents',
@@ -66,33 +102,33 @@ const defaultRepositorySettings: RepositorySettings = {
     agentRunner: 'copilot-cli'
 };
 
-export function createDefaultRepositorySettings(): RepositorySettings {
+export function createDefaultRepositorySettings(): RepositorySettingsType {
     return structuredClone(defaultRepositorySettings);
 }
 
-export const repositoryInputSchema = z.object({
+export const RepositoryInputSchema = z.object({
     repositoryRootPath: z.string().trim().min(1),
-    githubRepository: z.string().trim().min(1).optional(),
+    platformRepositoryRef: z.string().trim().min(1).optional(),
     settings: RepositorySettingsSchema.optional(),
-    workflowConfiguration: repositoryWorkflowConfigurationSchema.optional(),
+    workflowConfiguration: RepositoryWorkflowConfigurationSchema.optional(),
     isInitialized: z.boolean().optional()
 }).strict();
 
-export const repositoryStorageSchema = z.object({
-    id: entityIdSchema,
+export const RepositoryStorageSchema = z.object({
+    id: EntityIdSchema,
     repositoryRootPath: z.string().trim().min(1),
     ownerId: z.string().trim().min(1),
     repoName: z.string().trim().min(1),
-    githubRepository: z.string().trim().min(1).optional(),
+    platformRepositoryRef: z.string().trim().min(1).optional(),
     settings: RepositorySettingsSchema,
-    workflowConfiguration: repositoryWorkflowConfigurationSchema,
+    workflowConfiguration: RepositoryWorkflowConfigurationSchema,
     isInitialized: z.boolean()
 }).strict();
 
-export const repositoryDataSchema = repositoryStorageSchema;
-export const repositorySchema = repositoryDataSchema;
+export const RepositoryDataSchema = RepositoryStorageSchema;
+export const RepositorySchema = RepositoryDataSchema;
 
-export const missionReferenceSchema = z.object({
+export const MissionReferenceSchema = z.object({
     missionId: z.string().trim().min(1),
     title: z.string().trim().min(1),
     branchRef: z.string().trim().min(1),
@@ -100,58 +136,63 @@ export const missionReferenceSchema = z.object({
     issueId: z.number().int().positive().optional()
 }).strict();
 
-export const repositoryIdentityPayloadSchema = z.object({
-    id: entityIdSchema,
+export const RepositoryIdentityPayloadSchema = z.object({
+    id: EntityIdSchema,
     repositoryRootPath: z.string().trim().min(1).optional()
 }).strict();
 
-export const repositoryFindPayloadSchema = z.object({}).strict();
+export const RepositoryFindPayloadSchema = z.object({}).strict();
 
-export const repositoryLocalAddInputSchema = z.object({
+export const RepositoryFindAvailablePayloadSchema = z.object({
+    platform: RepositoryPlatformKindSchema.optional()
+}).strict();
+
+export const RepositoryLocalAddInputSchema = z.object({
     repositoryPath: z.string().trim().min(1)
 }).strict();
 
-export const repositoryGitHubCheckoutInputSchema = z.object({
-    githubRepository: z.string().trim().min(1),
+export const RepositoryGitHubCheckoutInputSchema = z.object({
+    platform: z.literal('github'),
+    repositoryRef: z.string().trim().min(1),
     destinationPath: z.string().trim().min(1)
 }).strict();
 
-export const repositoryAddPayloadSchema = z.union([
-    repositoryLocalAddInputSchema,
-    repositoryGitHubCheckoutInputSchema
+export const RepositoryAddPayloadSchema = z.union([
+    RepositoryLocalAddInputSchema,
+    RepositoryGitHubCheckoutInputSchema
 ]);
 
-export const repositoryRemovePayloadSchema = repositoryIdentityPayloadSchema;
+export const RepositoryRemovePayloadSchema = RepositoryIdentityPayloadSchema;
 
-export const repositoryReadPayloadSchema = repositoryIdentityPayloadSchema;
+export const RepositoryReadPayloadSchema = RepositoryIdentityPayloadSchema;
 
-export const repositoryPreparePayloadSchema = repositoryIdentityPayloadSchema;
+export const RepositoryPreparePayloadSchema = RepositoryIdentityPayloadSchema;
 
-export const repositoryListIssuesPayloadSchema = repositoryIdentityPayloadSchema;
+export const RepositoryListIssuesPayloadSchema = RepositoryIdentityPayloadSchema;
 
-export const repositoryGetIssuePayloadSchema = repositoryIdentityPayloadSchema.extend({
+export const RepositoryGetIssuePayloadSchema = RepositoryIdentityPayloadSchema.extend({
     issueNumber: z.coerce.number().int().positive()
 }).strict();
 
-export const missionFromIssueInputSchema = z.object({
+export const MissionFromIssueInputSchema = z.object({
     issueNumber: z.coerce.number().int().positive()
 }).strict();
 
-export const missionFromBriefInputSchema = z.object({
+export const MissionFromBriefInputSchema = z.object({
     title: z.string().trim().min(1),
     body: z.string().trim().min(1),
     type: missionEntityTypeSchema
 }).strict();
 
-export const repositoryStartMissionFromIssuePayloadSchema = repositoryIdentityPayloadSchema.extend(
-    missionFromIssueInputSchema.shape
+export const RepositoryStartMissionFromIssuePayloadSchema = RepositoryIdentityPayloadSchema.extend(
+    MissionFromIssueInputSchema.shape
 ).strict();
 
-export const repositoryStartMissionFromBriefPayloadSchema = repositoryIdentityPayloadSchema.extend(
-    missionFromBriefInputSchema.shape
+export const RepositoryStartMissionFromBriefPayloadSchema = RepositoryIdentityPayloadSchema.extend(
+    MissionFromBriefInputSchema.shape
 ).strict();
 
-export const trackedIssueSummarySchema = z.object({
+export const TrackedIssueSummarySchema = z.object({
     number: z.number().int().positive(),
     title: z.string().trim().min(1),
     url: z.string().trim().min(1),
@@ -160,7 +201,7 @@ export const trackedIssueSummarySchema = z.object({
     assignees: z.array(z.string())
 }).strict();
 
-export const githubIssueDetailSchema = z.object({
+export const GitHubIssueDetailSchema = z.object({
     number: z.number().int().positive(),
     title: z.string().trim().min(1),
     body: z.string(),
@@ -170,37 +211,37 @@ export const githubIssueDetailSchema = z.object({
     assignees: z.array(z.string())
 }).strict();
 
-export const repositorySnapshotSchema = z.object({
-    repository: repositoryDataSchema,
+export const RepositorySnapshotSchema = z.object({
+    repository: RepositoryDataSchema,
     operationalMode: z.string().trim().min(1).optional(),
     controlRoot: z.string().trim().min(1).optional(),
     currentBranch: z.string().trim().min(1).optional(),
     settingsComplete: z.boolean().optional(),
-    githubRepository: z.string().trim().min(1).optional(),
-    missions: z.array(missionReferenceSchema),
+    platformRepositoryRef: z.string().trim().min(1).optional(),
+    missions: z.array(MissionReferenceSchema),
     selectedMissionId: z.string().trim().min(1).optional(),
     selectedMission: missionSnapshotSchema.optional(),
-    selectedIssue: githubIssueDetailSchema.optional()
+    selectedIssue: GitHubIssueDetailSchema.optional()
 }).strict();
 
-export const repositoryMissionStartMethodSchema = z.enum([
+export const RepositoryMissionStartMethodSchema = z.enum([
     'startMissionFromIssue',
     'startMissionFromBrief'
 ]);
 
-export const repositoryMissionStartAcknowledgementSchema = entityCommandAcknowledgementSchema.extend({
+export const RepositoryMissionStartAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
     entity: z.literal(repositoryEntityName),
-    method: repositoryMissionStartMethodSchema,
+    method: RepositoryMissionStartMethodSchema,
     id: z.string().trim().min(1)
 }).strict();
 
-export const repositoryRemoveAcknowledgementSchema = entityCommandAcknowledgementSchema.extend({
+export const RepositoryRemoveAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
     entity: z.literal(repositoryEntityName),
     method: z.literal('remove'),
     id: z.string().trim().min(1)
 }).strict();
 
-export const repositoryPrepareResultSchema = z.object({
+export const RepositoryPrepareResultSchema = z.object({
     kind: z.literal('repository-bootstrap'),
     state: z.literal('pull-request-opened'),
     branchRef: z.string().trim().min(1),
@@ -213,56 +254,61 @@ export const repositoryPrepareResultSchema = z.object({
 }).strict();
 
 export const repositoryRemoteQueryPayloadSchemas = {
-    find: repositoryFindPayloadSchema,
-    read: repositoryReadPayloadSchema,
-    listIssues: repositoryListIssuesPayloadSchema,
-    getIssue: repositoryGetIssuePayloadSchema
+    find: RepositoryFindPayloadSchema,
+    findAvailable: RepositoryFindAvailablePayloadSchema,
+    read: RepositoryReadPayloadSchema,
+    listIssues: RepositoryListIssuesPayloadSchema,
+    getIssue: RepositoryGetIssuePayloadSchema
 } as const;
 
 export const repositoryRemoteCommandPayloadSchemas = {
-    add: repositoryAddPayloadSchema,
-    remove: repositoryRemovePayloadSchema,
-    prepare: repositoryPreparePayloadSchema,
-    startMissionFromIssue: repositoryStartMissionFromIssuePayloadSchema,
-    startMissionFromBrief: repositoryStartMissionFromBriefPayloadSchema
+    add: RepositoryAddPayloadSchema,
+    remove: RepositoryRemovePayloadSchema,
+    prepare: RepositoryPreparePayloadSchema,
+    startMissionFromIssue: RepositoryStartMissionFromIssuePayloadSchema,
+    startMissionFromBrief: RepositoryStartMissionFromBriefPayloadSchema
 } as const;
 
 export const repositoryRemoteQueryResultSchemas = {
-    find: z.array(repositorySnapshotSchema),
-    read: repositorySnapshotSchema,
-    listIssues: z.array(trackedIssueSummarySchema),
-    getIssue: githubIssueDetailSchema
+    find: z.array(RepositorySnapshotSchema),
+    findAvailable: z.array(RepositoryPlatformRepositorySchema),
+    read: RepositorySnapshotSchema,
+    listIssues: z.array(TrackedIssueSummarySchema),
+    getIssue: GitHubIssueDetailSchema
 } as const;
 
 export const repositoryRemoteCommandResultSchemas = {
-    add: repositorySnapshotSchema,
-    remove: repositoryRemoveAcknowledgementSchema,
-    prepare: repositoryPrepareResultSchema,
-    startMissionFromIssue: repositoryMissionStartAcknowledgementSchema,
-    startMissionFromBrief: repositoryMissionStartAcknowledgementSchema
+    add: RepositorySnapshotSchema,
+    remove: RepositoryRemoveAcknowledgementSchema,
+    prepare: RepositoryPrepareResultSchema,
+    startMissionFromIssue: RepositoryMissionStartAcknowledgementSchema,
+    startMissionFromBrief: RepositoryMissionStartAcknowledgementSchema
 } as const;
 
-export type RepositoryInput = z.infer<typeof repositoryInputSchema>;
-export type RepositoryStorage = z.infer<typeof repositoryStorageSchema>;
-export type RepositoryData = z.infer<typeof repositoryDataSchema>;
-export type MissionReference = z.infer<typeof missionReferenceSchema>;
-export type RepositoryFindPayload = z.infer<typeof repositoryFindPayloadSchema>;
-export type RepositoryAddPayload = z.infer<typeof repositoryAddPayloadSchema>;
-export type RepositoryRemovePayload = z.infer<typeof repositoryRemovePayloadSchema>;
-export type RepositoryPreparePayload = z.infer<typeof repositoryPreparePayloadSchema>;
-export type RepositoryReadPayload = z.infer<typeof repositoryReadPayloadSchema>;
-export type RepositoryListIssuesPayload = z.infer<typeof repositoryListIssuesPayloadSchema>;
-export type RepositoryGetIssuePayload = z.infer<typeof repositoryGetIssuePayloadSchema>;
-export type RepositoryStartMissionFromIssuePayload = z.infer<typeof repositoryStartMissionFromIssuePayloadSchema>;
-export type RepositoryStartMissionFromBriefPayload = z.infer<typeof repositoryStartMissionFromBriefPayloadSchema>;
-export type RepositorySnapshot = z.infer<typeof repositorySnapshotSchema>;
-export type GitHubIssueDetail = z.infer<typeof githubIssueDetailSchema>;
-export type TrackedIssueSummary = z.infer<typeof trackedIssueSummarySchema>;
-export type RepositoryMissionStartAcknowledgement = z.infer<typeof repositoryMissionStartAcknowledgementSchema>;
-export type RepositoryRemoveAcknowledgement = z.infer<typeof repositoryRemoveAcknowledgementSchema>;
-export type RepositoryPrepareResult = z.infer<typeof repositoryPrepareResultSchema>;
+export type RepositoryInputType = z.infer<typeof RepositoryInputSchema>;
+export type RepositoryStorageType = z.infer<typeof RepositoryStorageSchema>;
+export type RepositoryDataType = z.infer<typeof RepositoryDataSchema>;
+export type RepositoryPlatformKindType = z.infer<typeof RepositoryPlatformKindSchema>;
+export type RepositoryPlatformRepositoryType = z.infer<typeof RepositoryPlatformRepositorySchema>;
+export type MissionReferenceType = z.infer<typeof MissionReferenceSchema>;
+export type RepositoryFindPayloadType = z.infer<typeof RepositoryFindPayloadSchema>;
+export type RepositoryFindAvailablePayloadType = z.infer<typeof RepositoryFindAvailablePayloadSchema>;
+export type RepositoryAddPayloadType = z.infer<typeof RepositoryAddPayloadSchema>;
+export type RepositoryRemovePayloadType = z.infer<typeof RepositoryRemovePayloadSchema>;
+export type RepositoryPreparePayloadType = z.infer<typeof RepositoryPreparePayloadSchema>;
+export type RepositoryReadPayloadType = z.infer<typeof RepositoryReadPayloadSchema>;
+export type RepositoryListIssuesPayloadType = z.infer<typeof RepositoryListIssuesPayloadSchema>;
+export type RepositoryGetIssuePayloadType = z.infer<typeof RepositoryGetIssuePayloadSchema>;
+export type RepositoryStartMissionFromIssuePayloadType = z.infer<typeof RepositoryStartMissionFromIssuePayloadSchema>;
+export type RepositoryStartMissionFromBriefPayloadType = z.infer<typeof RepositoryStartMissionFromBriefPayloadSchema>;
+export type RepositorySnapshotType = z.infer<typeof RepositorySnapshotSchema>;
+export type GitHubIssueDetailType = z.infer<typeof GitHubIssueDetailSchema>;
+export type TrackedIssueSummaryType = z.infer<typeof TrackedIssueSummarySchema>;
+export type RepositoryMissionStartAcknowledgementType = z.infer<typeof RepositoryMissionStartAcknowledgementSchema>;
+export type RepositoryRemoveAcknowledgementType = z.infer<typeof RepositoryRemoveAcknowledgementSchema>;
+export type RepositoryPrepareResultType = z.infer<typeof RepositoryPrepareResultSchema>;
 
-export function createDefaultRepositoryConfiguration(): Pick<RepositoryData, 'settings' | 'workflowConfiguration' | 'isInitialized'> {
+export function createDefaultRepositoryConfiguration(): Pick<RepositoryDataType, 'settings' | 'workflowConfiguration' | 'isInitialized'> {
     const settings = createDefaultRepositorySettings();
     return {
         settings,

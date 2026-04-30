@@ -16,7 +16,7 @@ import {
 	type MissionWorkflowRequest,
 	type MissionWorkflowRuntimeState,
 	type MissionTaskRuntimeState,
-	type MissionAgentSessionRuntimeState,
+	type AgentSessionRuntimeState,
 	type MissionStateData
 } from './types.js';
 import {
@@ -590,7 +590,7 @@ export class MissionWorkflowRequestExecutor {
 		}
 	}
 
-	private toSessionReference(session: MissionAgentSessionRuntimeState): AgentSessionReference {
+	private toSessionReference(session: AgentSessionRuntimeState): AgentSessionReference {
 		return {
 			runnerId: session.runnerId,
 			sessionId: session.sessionId,
@@ -724,7 +724,7 @@ export class MissionWorkflowRequestExecutor {
 	}
 
 	private createAttachFailureLifecycleEvent(
-		session: MissionAgentSessionRuntimeState
+		session: AgentSessionRuntimeState
 	): MissionWorkflowEvent | undefined {
 		void session;
 		// Reattach failures are not authoritative lifecycle facts.

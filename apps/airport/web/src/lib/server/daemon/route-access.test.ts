@@ -23,13 +23,13 @@ describe("shouldRenderDaemonRouteContent", () => {
 	it("continues gating non-doc routes until the daemon is running", () => {
 		expect(
 			shouldRenderDaemonRouteContent({
-				pathname: "/repository/example",
+				pathname: "/airport/example",
 				daemonRunning: false,
 			}),
 		).toBe(false);
 		expect(
 			shouldRenderDaemonRouteContent({
-				pathname: "/repository/example",
+				pathname: "/airport/example",
 				daemonRunning: true,
 			}),
 		).toBe(true);
@@ -40,7 +40,7 @@ describe("shouldRedirectUnavailableDaemonRoute", () => {
 	it("redirects daemon-gated application routes back to the landing page", () => {
 		expect(
 			shouldRedirectUnavailableDaemonRoute({
-				pathname: "/repository/example",
+				pathname: "/airport/example",
 				daemonRunning: false,
 			}),
 		).toBe(true);

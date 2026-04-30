@@ -1,7 +1,7 @@
-import type { GitHubIssueDetail, RepositorySnapshot, TrackedIssueSummary } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { GitHubIssueDetailType, RepositorySnapshotType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import type { AgentSessionTerminalSnapshot as MissionSessionTerminalSnapshot, AgentSessionTerminalSocketServerMessage as MissionSessionTerminalSocketServerMessage } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import type { MissionTerminalSnapshot, MissionTerminalSocketServerMessage } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-import { githubIssueDetailSchema, repositorySchema, repositorySnapshotSchema, trackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import { GitHubIssueDetailSchema, RepositorySchema, RepositorySnapshotSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import { missionMissionCommandSchema } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import {
     airportRuntimeEventEnvelopeSchema,
@@ -10,28 +10,28 @@ import {
 
 type UnknownRecord = Record<string, unknown>;
 
-export function parseRepositorySummary(value: unknown): RepositorySnapshot['repository'] {
-    return repositorySchema.parse(value);
+export function parseRepositorySummary(value: unknown): RepositorySnapshotType['repository'] {
+    return RepositorySchema.parse(value);
 }
 
-export function parseRepositorySnapshot(value: unknown): RepositorySnapshot {
-    return repositorySnapshotSchema.parse(value);
+export function parseRepositorySnapshot(value: unknown): RepositorySnapshotType {
+    return RepositorySnapshotSchema.parse(value);
 }
 
 export function parseAirportRuntimeEventEnvelope(value: unknown): AirportRuntimeEventEnvelope {
     return airportRuntimeEventEnvelopeSchema.parse(value) as AirportRuntimeEventEnvelope;
 }
 
-export function parseTrackedIssueSummaryList(value: unknown): TrackedIssueSummary[] {
-    return trackedIssueSummarySchema.array().parse(value);
+export function parseTrackedIssueSummaryList(value: unknown): TrackedIssueSummaryType[] {
+    return TrackedIssueSummarySchema.array().parse(value);
 }
 
-export function parseTrackedIssueSummary(value: unknown): TrackedIssueSummary {
-    return trackedIssueSummarySchema.parse(value);
+export function parseTrackedIssueSummary(value: unknown): TrackedIssueSummaryType {
+    return TrackedIssueSummarySchema.parse(value);
 }
 
-export function parseGitHubIssueDetail(value: unknown): GitHubIssueDetail {
-    return githubIssueDetailSchema.parse(value);
+export function parseGitHubIssueDetail(value: unknown): GitHubIssueDetailType {
+    return GitHubIssueDetailSchema.parse(value);
 }
 
 export function parseMissionCommandPayload(value: unknown): {

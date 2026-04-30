@@ -1,15 +1,22 @@
 import type { AgentSessionSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
-import type { EntityEventEnvelope } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
+import type { EntityEventEnvelopeType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 import type { MissionActionListSnapshot, MissionSnapshot, MissionStatusSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { MissionArtifactSnapshot } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
 import type { MissionStageSnapshot } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
 import type { MissionTaskSnapshot } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
+import type { SystemSnapshot } from '@flying-pillow/mission-core/types';
 
-export { entityEventEnvelopeSchema as airportRuntimeEventEnvelopeSchema } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
+export { EntityEventEnvelopeSchema as airportRuntimeEventEnvelopeSchema } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 
-type AirportRuntimeEventBase = Omit<EntityEventEnvelope, 'type' | 'payload'>;
+type AirportRuntimeEventBase = Omit<EntityEventEnvelopeType, 'type' | 'payload'>;
 
 export type AirportRuntimeEventEnvelope = AirportRuntimeEventBase & (
+    | {
+        type: 'airport.state';
+        payload: {
+            system: SystemSnapshot;
+        };
+    }
     | {
         type: 'mission.snapshot.changed';
         payload: {

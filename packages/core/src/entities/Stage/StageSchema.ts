@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 import {
-    entityCommandAcknowledgementSchema,
-    entityCommandDescriptorSchema
+    EntityCommandAcknowledgementSchema,
+    EntityCommandDescriptorSchema
 } from '../Entity/EntitySchema.js';
 import { missionArtifactSnapshotSchema } from '../Artifact/ArtifactSchema.js';
 import { missionTaskSnapshotSchema } from '../Task/TaskSchema.js';
@@ -30,12 +30,12 @@ export const missionStageSnapshotSchema = z.object({
     isCurrentStage: z.boolean(),
     artifacts: z.array(missionArtifactSnapshotSchema),
     tasks: z.array(missionTaskSnapshotSchema),
-    commands: z.array(entityCommandDescriptorSchema).optional()
+    commands: z.array(EntityCommandDescriptorSchema).optional()
 }).strict();
 
 export const stageSnapshotSchema = missionStageSnapshotSchema;
 
-export const stageCommandAcknowledgementSchema = entityCommandAcknowledgementSchema.extend({
+export const stageCommandAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
     entity: z.literal(missionStageEntityName),
     method: z.literal('executeCommand'),
     id: z.string().trim().min(1),

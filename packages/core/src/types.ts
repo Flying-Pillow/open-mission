@@ -1,14 +1,14 @@
-import type { AirportProjectionSet, AirportState, PersistedAirportIntent } from './airport/types.js';
-import type { MissionAgentSessionRecord } from './daemon/protocol/contracts.js';
+import type { AirportViewSet, AirportState, PersistedAirportIntent } from './airport/types.js';
+import type { AgentSessionRecord } from './daemon/protocol/contracts.js';
 import type { Repository } from './entities/Repository/Repository.js';
-import type { RepositorySettings } from './entities/Repository/RepositorySchema.js';
+import type { RepositorySettingsType } from './entities/Repository/RepositorySchema.js';
 import {
 	MISSION_AGENT_SESSION_LIFECYCLE_STATES,
 	MISSION_LIFECYCLE_STATES,
 	MISSION_STAGE_DERIVED_STATES,
 	MISSION_TASK_LIFECYCLE_STATES,
 	type MissionGateProjection,
-	type MissionAgentSessionLifecycleState,
+	type AgentSessionLifecycleState,
 	type MissionLifecycleState,
 	type MissionPanicState,
 	type MissionPauseState,
@@ -63,7 +63,7 @@ export {
 
 export type {
 	MissionArtifactKey,
-	MissionAgentSessionLifecycleState,
+	AgentSessionLifecycleState,
 	MissionLifecycleState,
 	MissionStageId,
 	MissionStageDerivedState,
@@ -274,7 +274,7 @@ export type MissionRecord = {
 	createdAt: string;
 	stage: MissionStageId;
 	deliveredAt?: string;
-	agentSessions: MissionAgentSessionRecord[];
+	agentSessions: AgentSessionRecord[];
 };
 
 export type MissionGateResult = {
@@ -334,42 +334,6 @@ export type RepositoryCandidate = {
 	description: string;
 	githubRepository?: string;
 };
-
-export type GitHubVisibleRepositorySummary = {
-	fullName: string;
-	name: string;
-	description?: string | null;
-	topics: string[];
-	homepageUrl?: string | null;
-	license?: {
-		key?: string;
-		name?: string;
-		spdxId?: string;
-		url?: string | null;
-	} | null;
-	ownerLogin?: string;
-	ownerType?: string;
-	ownerUrl?: string;
-	htmlUrl?: string;
-	visibility: 'private' | 'public' | 'internal';
-	defaultBranch?: string;
-	archived: boolean;
-	starsCount?: number;
-	forksCount?: number;
-	watchersCount?: number;
-	subscribersCount?: number;
-	openIssuesCount?: number;
-	openPullRequestsCount?: number;
-	closedIssuesCount?: number;
-	commitsCount?: number;
-	releasesCount?: number;
-	workflowRunsCount?: number;
-	createdAt?: string;
-	updatedAt?: string;
-	pushedAt?: string;
-};
-
-export type GitHubVisibleRepository = GitHubVisibleRepositorySummary;
 
 export type GitHubIssueDetail = {
 	number: number;
@@ -509,8 +473,8 @@ export type SystemState = {
 
 export type SystemSnapshot = {
 	state: SystemState;
-	airportProjections: AirportProjectionSet;
-	airportRegistryProjections: Record<string, AirportProjectionSet>;
+	airportViews: AirportViewSet;
+	airportRegistryViews: Record<string, AirportViewSet>;
 };
 
 export type RepositoryControlStatus = {
@@ -519,7 +483,7 @@ export type RepositoryControlStatus = {
 	settingsPath: string;
 	worktreesPath: string;
 	currentBranch?: string;
-	settings: RepositorySettings;
+	settings: RepositorySettingsType;
 	isGitRepository: boolean;
 	initialized: boolean;
 	settingsPresent: boolean;
@@ -603,7 +567,7 @@ export type OperatorStatus = {
 	activeTasks?: MissionTaskState[];
 	readyTasks?: MissionTaskState[];
 	stages?: MissionStageStatus[];
-	agentSessions?: MissionAgentSessionRecord[];
+	agentSessions?: AgentSessionRecord[];
 	tower?: MissionTowerProjection;
 	workflow?: {
 		lifecycle: MissionLifecycleState;

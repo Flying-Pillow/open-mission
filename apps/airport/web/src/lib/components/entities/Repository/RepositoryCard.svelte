@@ -31,8 +31,9 @@
         activeRepository.controlRoot ?? repositorySummary.repositoryRootPath,
     );
     const repositoryCurrentBranch = $derived(activeRepository.currentBranch);
-    const repositoryGithubRepository = $derived(
-        activeRepository.githubRepository ?? repositorySummary.githubRepository,
+    const repositoryPlatformRepositoryRef = $derived(
+        activeRepository.platformRepositoryRef ??
+            repositorySummary.platformRepositoryRef,
     );
     const repositorySettingsComplete = $derived(
         activeRepository.settingsComplete,
@@ -96,7 +97,7 @@
                 Tracking
             </p>
             <p class="mt-2 text-sm font-medium text-foreground">
-                {repositoryGithubRepository ?? "Not configured"}
+                {repositoryPlatformRepositoryRef ?? "Not configured"}
             </p>
         </div>
         <div class="rounded-xl border bg-background/70 px-4 py-3">

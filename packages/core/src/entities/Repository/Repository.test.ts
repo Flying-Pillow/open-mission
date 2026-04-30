@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Repository } from './Repository.js';
 import { createDefaultRepositorySettings } from './RepositorySchema.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
+import type { EntityExecutionContext } from '../Entity/Entity.js';
 
 describe('Repository', () => {
     it('opens a local repository with default configuration', () => {
@@ -18,7 +19,7 @@ describe('Repository', () => {
     it('opens a GitHub repository and updates only its own configuration', () => {
         const repository = Repository.create({
             repositoryRootPath: '/workspaces/mission',
-            githubRepository: 'Flying-Pillow/mission'
+            platformRepositoryRef: 'Flying-Pillow/mission'
         });
 
         const settings = createDefaultRepositorySettings();
@@ -29,7 +30,7 @@ describe('Repository', () => {
         expect(repository.ownerId).toBe('Flying-Pillow');
         expect(repository.repoName).toBe('mission');
         expect(repository.id).toBe('repository:github/Flying-Pillow/mission');
-        expect(repository.githubRepository).toBe('Flying-Pillow/mission');
+        expect(repository.platformRepositoryRef).toBe('Flying-Pillow/mission');
         expect(repository.settings.instructionsPath).toBe('.copilot');
         expect(repository.isInitialized).toBe(true);
     });
@@ -45,5 +46,20 @@ describe('Repository', () => {
             id: 'repository:other',
             repositoryRootPath: repository.repositoryRootPath
         })).rejects.toThrow(/does not match/u);
+    });
+
+    it('resolves identity from extended method payloads', async () => {
+        const repository = Repository.open('/tmp/mission-proof-of-concept');
+        const context = {
+            entityFactory: {
+                read: async () => repository
+            }
+        } as Pick<EntityExecutionContext, 'entityFactory'> as EntityExecutionContext;
+
+        await expect(Repository.resolve({
+            id: repository.id,
+            repositoryRootPath: repository.repositoryRootPath,
+            issueNumber: 29
+        }, context)).resolves.toBe(repository);
     });
 });

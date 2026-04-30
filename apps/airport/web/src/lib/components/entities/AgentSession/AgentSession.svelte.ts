@@ -1,5 +1,5 @@
 // /apps/airport/web/src/lib/components/entities/AgentSession/AgentSession.svelte.ts: OO browser entity for a mission agent session hydrated from validated runtime snapshots.
-import type { EntityCommandDescriptor } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
+import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 import type { MissionAgentCommand as AgentCommand, MissionAgentPrompt as AgentPrompt, MissionAgentSessionSnapshot as AgentSessionSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
@@ -98,7 +98,7 @@ export class AgentSession implements EntityModel<AgentSessionSnapshot> {
         return typeof this.sessionLogPath === 'string' && this.sessionLogPath.trim().length > 0;
     }
 
-    public get commands(): EntityCommandDescriptor[] {
+    public get commands(): EntityCommandDescriptorType[] {
         return structuredClone($state.snapshot(this.data.commands ?? []));
     }
 

@@ -25,5 +25,5 @@ export { Repository } from '$lib/components/entities/Repository/Repository.svelt
 export { EntityRegistry, type EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 export type { MissionAgentCommand as AgentCommand, MissionAgentPrompt as AgentPrompt, AgentSessionSnapshot as AgentSessionData, MissionAgentSessionTerminalHandle as MissionSessionTerminalHandle, AgentSessionTerminalSnapshot as MissionSessionTerminalSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 export type { MissionSnapshot as MissionData, MissionMissionCommand, MissionSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-export type { RepositoryData } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+export type { RepositoryDataType as RepositoryData } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 export type { AirportRuntimeEventEnvelope } from '$lib/contracts/runtime-events';

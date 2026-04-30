@@ -7,21 +7,21 @@ import {
 	type PaneBinding,
 	type AirportPaneId
 } from '../../airport/types.js';
-import { RepositoryLayoutController } from './RepositoryLayoutController.js';
+import { AirportControl } from './AirportControl.js';
 import {
 	ClientReportedSubstrateController,
 	type AirportSubstrateEffect
 } from './AirportTerminalSubstrate.js';
 
-type RepositoryLayoutRecord = {
+type RepositoryAirportRecord = {
 	repositoryId: string;
 	repositoryRootPath: string;
-	layoutController: RepositoryLayoutController;
+	airportControl: AirportControl;
 	substrateController: ClientReportedSubstrateController;
 };
 
-export class RepositoryLayoutRegistry {
-	private readonly layoutRegistry = new Map<string, RepositoryLayoutRecord>();
+export class RepositoryAirportRegistry {
+	private readonly airportRegistry = new Map<string, RepositoryAirportRecord>();
 	private readonly clientRepositoryIndex = new Map<string, string>();
 	private activeRepositoryId?: string;
 
@@ -29,78 +29,78 @@ export class RepositoryLayoutRegistry {
 		return this.activeRepositoryId;
 	}
 
-	public getActiveLayout(): RepositoryLayoutRecord {
+	public getActiveAirportRecord(): RepositoryAirportRecord {
 		if (!this.activeRepositoryId) {
 			throw new Error('Airport state is not scoped to a repository.');
 		}
-		const activeLayout = this.layoutRegistry.get(this.activeRepositoryId);
-		if (!activeLayout) {
+		const activeAirportRecord = this.airportRegistry.get(this.activeRepositoryId);
+		if (!activeAirportRecord) {
 			throw new Error(`Airport '${this.activeRepositoryId}' is not loaded.`);
 		}
-		return activeLayout;
+		return activeAirportRecord;
 	}
 
-	public listLayoutRecords(): Array<[string, RepositoryLayoutRecord]> {
-		return [...this.layoutRegistry.entries()].sort(([leftId], [rightId]) => leftId.localeCompare(rightId));
+	public listAirportRecords(): Array<[string, RepositoryAirportRecord]> {
+		return [...this.airportRegistry.entries()].sort(([leftId], [rightId]) => leftId.localeCompare(rightId));
 	}
 
 	public getRepositoryIdForClient(clientId: string): string | undefined {
 		return this.clientRepositoryIndex.get(clientId);
 	}
 
-	public async activateRepository(repositoryId: string, repositoryRootPath: string): Promise<RepositoryLayoutRecord> {
-		const layout = await this.ensureLayoutForRepository(repositoryId, repositoryRootPath);
+	public async activateRepository(repositoryId: string, repositoryRootPath: string): Promise<RepositoryAirportRecord> {
+		const airportRecord = await this.ensureAirportForRepository(repositoryId, repositoryRootPath);
 		this.activeRepositoryId = repositoryId;
-		const activeSessionName = layout.layoutController.getState().substrate.sessionName;
-		layout.layoutController.scopeToRepository({
+		const activeSessionName = airportRecord.airportControl.getState().substrate.sessionName;
+		airportRecord.airportControl.scopeToRepository({
 			repositoryId,
 			repositoryRootPath,
 			airportId: deriveRepositoryAirportIdentity(repositoryId, repositoryRootPath).airportId,
 			sessionName: activeSessionName
 		});
-		return layout;
+		return airportRecord;
 	}
 
-	public async resolveLayoutForRequest(clientId: string, repositoryId?: string, repositoryRootPath?: string): Promise<RepositoryLayoutRecord> {
+	public async resolveAirportForRequest(clientId: string, repositoryId?: string, repositoryRootPath?: string): Promise<RepositoryAirportRecord> {
 		if (repositoryId && repositoryRootPath) {
 			this.activeRepositoryId = repositoryId;
-			return this.ensureLayoutForRepository(repositoryId, repositoryRootPath);
+			return this.ensureAirportForRepository(repositoryId, repositoryRootPath);
 		}
 		const indexedRepositoryId = this.clientRepositoryIndex.get(clientId);
 		if (!indexedRepositoryId) {
 			throw new Error('Airport request requires a repository-scoped surface path, explicit repository id, or an already scoped client binding.');
 		}
-		const layout = this.layoutRegistry.get(indexedRepositoryId);
-		if (!layout) {
+		const airportRecord = this.airportRegistry.get(indexedRepositoryId);
+		if (!airportRecord) {
 			throw new Error(`Airport '${indexedRepositoryId}' is not loaded.`);
 		}
 		this.activeRepositoryId = indexedRepositoryId;
-		return layout;
+		return airportRecord;
 	}
 
 	public connectClient(repositoryId: string, params: ConnectAirportClientParams): void {
-		const layout = this.requireLayout(repositoryId);
+		const airportRecord = this.requireAirportRecord(repositoryId);
 		this.activeRepositoryId = repositoryId;
 		this.clientRepositoryIndex.set(params.clientId, repositoryId);
-		layout.layoutController.connectClient(params);
+		airportRecord.airportControl.connectClient(params);
 	}
 
 	public setTerminalSessionName(repositoryId: string, terminalSessionName: string): void {
-		const layout = this.requireLayout(repositoryId);
+		const airportRecord = this.requireAirportRecord(repositoryId);
 		const normalizedSessionName = terminalSessionName.trim();
 		if (!normalizedSessionName) {
 			return;
 		}
-		if (layout.layoutController.getState().substrate.sessionName === normalizedSessionName) {
+		if (airportRecord.airportControl.getState().substrate.sessionName === normalizedSessionName) {
 			return;
 		}
-		layout.substrateController = new ClientReportedSubstrateController({
+		airportRecord.substrateController = new ClientReportedSubstrateController({
 			sessionName: normalizedSessionName
 		});
-		layout.layoutController.scopeToRepository({
-			repositoryId: layout.repositoryId,
-			repositoryRootPath: layout.repositoryRootPath,
-			airportId: layout.layoutController.getState().airportId,
+		airportRecord.airportControl.scopeToRepository({
+			repositoryId: airportRecord.repositoryId,
+			repositoryRootPath: airportRecord.repositoryRootPath,
+			airportId: airportRecord.airportControl.getState().airportId,
 			sessionName: normalizedSessionName
 		});
 	}
@@ -110,27 +110,27 @@ export class RepositoryLayoutRegistry {
 		if (!repositoryId) {
 			return undefined;
 		}
-		const layout = this.layoutRegistry.get(repositoryId);
-		if (!layout) {
+		const airportRecord = this.airportRegistry.get(repositoryId);
+		if (!airportRecord) {
 			this.clientRepositoryIndex.delete(clientId);
 			return undefined;
 		}
-		layout.layoutController.disconnectClient(clientId);
+		airportRecord.airportControl.disconnectClient(clientId);
 		this.clientRepositoryIndex.delete(clientId);
 		return repositoryId;
 	}
 
-	public observeClient(repositoryId: string, params: Parameters<RepositoryLayoutController['observeClient']>[0]): void {
-		const layout = this.requireLayout(repositoryId);
+	public observeClient(repositoryId: string, params: Parameters<AirportControl['observeClient']>[0]): void {
+		const airportRecord = this.requireAirportRecord(repositoryId);
 		this.activeRepositoryId = repositoryId;
 		this.clientRepositoryIndex.set(params.clientId, repositoryId);
-		layout.layoutController.observeClient(params);
+		airportRecord.airportControl.observeClient(params);
 	}
 
 	public bindPane(repositoryId: string, params: BindAirportPaneParams): void {
-		const layout = this.requireLayout(repositoryId);
+		const airportRecord = this.requireAirportRecord(repositoryId);
 		this.activeRepositoryId = repositoryId;
-		layout.layoutController.bindPane(params);
+		airportRecord.airportControl.bindPane(params);
 	}
 
 	public applyDefaultBindings(
@@ -138,36 +138,36 @@ export class RepositoryLayoutRegistry {
 		bindings: Partial<Record<AirportPaneId, PaneBinding>>,
 		options: { focusIntent?: AirportPaneId } = {}
 	): void {
-		const layout = this.requireLayout(repositoryId);
+		const airportRecord = this.requireAirportRecord(repositoryId);
 		this.activeRepositoryId = repositoryId;
-		layout.layoutController.applyDefaultBindings(bindings, options);
+		airportRecord.airportControl.applyDefaultBindings(bindings, options);
 	}
 
 	public observeSubstrate(repositoryId: string, substrate: AirportSubstrateState): void {
-		const layout = this.requireLayout(repositoryId);
-		layout.layoutController.observeSubstrate(substrate);
+		const airportRecord = this.requireAirportRecord(repositoryId);
+		airportRecord.airportControl.observeSubstrate(substrate);
 	}
 
 	public async sampleSubstrate(repositoryId: string): Promise<AirportSubstrateState> {
-		const layout = this.requireLayout(repositoryId);
-		return layout.substrateController.observe(layout.layoutController.getState());
+		const airportRecord = this.requireAirportRecord(repositoryId);
+		return airportRecord.substrateController.observe(airportRecord.airportControl.getState());
 	}
 
 	public async applyEffects(repositoryId: string, effects: AirportSubstrateEffect[]): Promise<AirportSubstrateState> {
-		const layout = this.requireLayout(repositoryId);
-		return layout.substrateController.applyEffects(effects);
+		const airportRecord = this.requireAirportRecord(repositoryId);
+		return airportRecord.substrateController.applyEffects(effects);
 	}
 
-	private requireLayout(repositoryId: string): RepositoryLayoutRecord {
-		const layout = this.layoutRegistry.get(repositoryId);
-		if (!layout) {
+	private requireAirportRecord(repositoryId: string): RepositoryAirportRecord {
+		const airportRecord = this.airportRegistry.get(repositoryId);
+		if (!airportRecord) {
 			throw new Error(`Airport '${repositoryId}' is not loaded.`);
 		}
-		return layout;
+		return airportRecord;
 	}
 
-	private async ensureLayoutForRepository(repositoryId: string, repositoryRootPath: string): Promise<RepositoryLayoutRecord> {
-		const existing = this.layoutRegistry.get(repositoryId);
+	private async ensureAirportForRepository(repositoryId: string, repositoryRootPath: string): Promise<RepositoryAirportRecord> {
+		const existing = this.airportRegistry.get(repositoryId);
 		if (existing) {
 			return existing;
 		}
@@ -176,20 +176,20 @@ export class RepositoryLayoutRegistry {
 		const substrateController = new ClientReportedSubstrateController({
 			sessionName: identity.sessionName
 		});
-		const layoutController = new RepositoryLayoutController({
+		const airportControl = new AirportControl({
 			airportId: identity.airportId,
 			repositoryId,
 			repositoryRootPath,
 			terminalSessionName: identity.sessionName,
 			initialSubstrateState: substrateController.getState()
 		});
-		const record: RepositoryLayoutRecord = {
+		const record: RepositoryAirportRecord = {
 			repositoryId,
 			repositoryRootPath,
-			layoutController,
+			airportControl,
 			substrateController
 		};
-		this.layoutRegistry.set(repositoryId, record);
+		this.airportRegistry.set(repositoryId, record);
 		return record;
 	}
 }

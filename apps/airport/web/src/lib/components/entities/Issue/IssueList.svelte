@@ -1,19 +1,26 @@
 <script lang="ts">
+    import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
+    import PlusIcon from "@tabler/icons-svelte/icons/plus";
     import { Badge } from "$lib/components/ui/badge/index.js";
+    import BriefForm from "$lib/components/entities/Brief/BriefForm.svelte";
     import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
     import Issue from "$lib/components/entities/Issue/Issue.svelte";
+    import { Button } from "$lib/components/ui/button/index.js";
+    import * as Dialog from "$lib/components/ui/dialog/index.js";
     import type {
-        IssueSummary,
-        SelectedIssueSummary,
+        GitHubIssueDetailType,
+        TrackedIssueSummaryType,
     } from "$lib/components/entities/types";
 
     let {
-        selectedIssue = $bindable<SelectedIssueSummary | null>(null),
+        selectedIssue = $bindable<GitHubIssueDetailType | null>(null),
+        issuePreviewOpen = $bindable(false),
         issueError = $bindable<string | null>(null),
         issueLoadingNumber = $bindable<number | null>(null),
     }: {
-        selectedIssue?: SelectedIssueSummary | null;
+        selectedIssue?: GitHubIssueDetailType | null;
+        issuePreviewOpen?: boolean;
         issueError?: string | null;
         issueLoadingNumber?: number | null;
     } = $props();
@@ -28,9 +35,12 @@
     });
 
     let remoteStartFromIssueError = $state<string | null>(null);
+    let createMissionOpen = $state(false);
     const repositoryIssuesQuery = $derived(activeRepository.listIssuesQuery());
     const repositoryIssues = $derived(
-        (repositoryIssuesQuery.current as IssueSummary[] | undefined) ?? [],
+        (repositoryIssuesQuery.current as
+            | TrackedIssueSummaryType[]
+            | undefined) ?? [],
     );
     const repositoryIssuesLoading = $derived(
         repositoryIssuesQuery.loading ?? false,
@@ -50,6 +60,7 @@
 
         try {
             selectedIssue = await activeRepository.getIssue(issueNumber);
+            issuePreviewOpen = true;
         } catch (error) {
             issueError = error instanceof Error ? error.message : String(error);
         } finally {
@@ -63,50 +74,110 @@
 </script>
 
 <section
-    class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
+    class="flex h-full min-h-[24rem] w-full flex-col overflow-hidden rounded-lg border bg-card shadow-sm"
 >
-    <div class="flex items-center justify-between gap-4">
-        <div>
+    <div class="border-b bg-muted/25 px-5 py-4">
+        <div class="min-w-0 space-y-3">
+            <div class="flex items-center gap-2 text-muted-foreground">
+                <BrandGithubIcon class="size-4" />
+                <p class="text-xs font-medium uppercase tracking-[0.16em]">
+                    GitHub
+                </p>
+            </div>
             <h2 class="text-lg font-semibold text-foreground">
                 Start from issue
             </h2>
-            <p class="mt-1 text-sm text-muted-foreground">
-                Turn a tracked repository issue into a new mission with one
-                step.
-            </p>
+            <div
+                class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+            >
+                <div class="flex min-w-0 items-center gap-3">
+                    <p class="min-w-0 text-sm leading-6 text-muted-foreground">
+                        Turn a tracked repository issue into a new mission with
+                        one step.
+                    </p>
+                    <Badge variant="secondary">
+                        {repositoryIssuesLoading
+                            ? "Loading issues..."
+                            : repositoryIssues.length === 1
+                              ? "1 open issue"
+                              : `${repositoryIssues.length} open issues`}
+                    </Badge>
+                </div>
+                <Dialog.Root bind:open={createMissionOpen}>
+                    <Dialog.Trigger>
+                        {#snippet child({ props })}
+                            <Button type="button" size="sm" {...props}>
+                                <PlusIcon class="size-4" />
+                                New issue
+                            </Button>
+                        {/snippet}
+                    </Dialog.Trigger>
+                    <Dialog.Content
+                        class="min-h-[80dvh] overflow-hidden sm:max-w-3xl flex flex-col"
+                    >
+                        <div class="border-b bg-muted/25 px-5 py-4">
+                            <div class="min-w-0 space-y-3 pr-10">
+                                <div
+                                    class="flex items-center gap-2 text-muted-foreground"
+                                >
+                                    <PlusIcon class="size-4" />
+                                    <p
+                                        class="text-xs font-medium uppercase tracking-[0.16em]"
+                                    >
+                                        Workflow
+                                    </p>
+                                </div>
+                                <Dialog.Title
+                                    class="text-lg font-semibold text-foreground"
+                                >
+                                    Start from brief
+                                </Dialog.Title>
+                                <div class="flex min-w-0 items-center gap-3">
+                                    <Dialog.Description
+                                        class="min-w-0 text-sm leading-6 text-muted-foreground"
+                                    >
+                                        Create a new mission from an authored
+                                        brief when the work is not tied to a
+                                        tracked repository issue.
+                                    </Dialog.Description>
+                                </div>
+                            </div>
+                        </div>
+
+                        <BriefForm embedded />
+                    </Dialog.Content>
+                </Dialog.Root>
+            </div>
         </div>
-        <Badge variant="outline">
-            {repositoryIssuesLoading
-                ? "Loading issues..."
-                : repositoryIssues.length === 1
-                    ? "1 open issue"
-                    : `${repositoryIssues.length} open issues`}
-        </Badge>
     </div>
 
     {#if issueError || remoteStartFromIssueError || repositoryIssueLoadError}
-        <p class="mt-3 text-sm text-rose-600">
-            {issueError ?? remoteStartFromIssueError ?? repositoryIssueLoadError}
-        </p>
+        <div class="px-4 pt-4">
+            <p class="text-sm text-rose-600">
+                {issueError ??
+                    remoteStartFromIssueError ??
+                    repositoryIssueLoadError}
+            </p>
+        </div>
     {/if}
 
-    <ScrollArea class="mt-4 min-h-0 flex-1 pr-3">
-        <div class="grid gap-3">
+    <ScrollArea class="min-h-0 flex-1">
+        <div class="grid gap-3 p-4">
             {#if repositoryIssuesLoading}
                 <div
-                    class="rounded-xl border border-dashed bg-background/60 px-4 py-6 text-sm text-muted-foreground"
+                    class="rounded-lg border border-dashed bg-background px-4 py-8 text-sm text-muted-foreground"
                 >
                     Loading tracked issues for this repository...
                 </div>
             {:else if repositoryIssueLoadError}
                 <div
-                    class="rounded-xl border border-dashed bg-background/60 px-4 py-6 text-sm text-rose-600"
+                    class="rounded-lg border border-dashed bg-background px-4 py-8 text-sm text-rose-600"
                 >
                     {repositoryIssueLoadError}
                 </div>
             {:else if repositoryIssues.length === 0}
                 <div
-                    class="rounded-xl border border-dashed bg-background/60 px-4 py-6 text-sm text-muted-foreground"
+                    class="rounded-lg border border-dashed bg-background px-4 py-8 text-sm text-muted-foreground"
                 >
                     No tracked issues are available for this repository.
                 </div>

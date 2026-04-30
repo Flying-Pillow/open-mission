@@ -2,7 +2,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { getMissionGitHubCliBinary } from '../lib/config.js';
-import type { GitHubIssueDetail, GitHubVisibleRepository, MissionBrief, MissionType, TrackedIssueSummary } from '../types.js';
+import type { RepositoryPlatformRepositoryType } from '../entities/Repository/RepositorySchema.js';
+import type { GitHubIssueDetail, MissionBrief, MissionType, TrackedIssueSummary } from '../types.js';
 
 export type GitHubBranchSyncStatus = {
 	branchRef: string;
@@ -143,7 +144,7 @@ export class GitHubPlatformAdapter {
 		}));
 	}
 
-	public async listVisibleRepositories(): Promise<GitHubVisibleRepository[]> {
+	public async listRepositories(): Promise<RepositoryPlatformRepositoryType[]> {
 		const payload = await this.runJsonProcess<GitHubRepositoryPayload[][]>([
 			'api',
 			'user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member',
@@ -151,7 +152,7 @@ export class GitHubPlatformAdapter {
 			'--slurp'
 		]);
 
-		const repositories = new Map<string, GitHubVisibleRepository>();
+		const repositories = new Map<string, RepositoryPlatformRepositoryType>();
 		for (const page of payload) {
 			for (const repository of page) {
 				const fullName = repository.full_name?.trim();
@@ -159,7 +160,8 @@ export class GitHubPlatformAdapter {
 					continue;
 				}
 				repositories.set(fullName.toLowerCase(), {
-					fullName,
+					platform: 'github',
+					repositoryRef: fullName,
 					name: repository.name?.trim() || fullName.split('/').at(-1) || fullName,
 					description: repository.description ?? null,
 					topics: normalizeStringArray(repository.topics),
@@ -220,27 +222,27 @@ export class GitHubPlatformAdapter {
 		}
 
 		function optionalNonNegativeInteger<TKey extends string>(key: TKey, value: number | undefined): Partial<Record<TKey, number>> {
-			return Number.isInteger(value) && value >= 0 ? { [key]: value } as Record<TKey, number> : {};
+			return value !== undefined && Number.isInteger(value) && value >= 0 ? { [key]: value } as Record<TKey, number> : {};
 		}
-		return [...repositories.values()].sort((left, right) => left.fullName.localeCompare(right.fullName));
+		return [...repositories.values()].sort((left, right) => left.repositoryRef.localeCompare(right.repositoryRef));
 	}
 
 	public async cloneRepository(input: {
-		repository: string;
+		repositoryRef: string;
 		destinationPath: string;
 	}): Promise<string> {
-		const repository = input.repository.trim();
+		const repositoryRef = input.repositoryRef.trim();
 		const destinationPath = input.destinationPath.trim();
-		if (!repository) {
-			throw new Error('GitHub repository clone requires a repository name.');
+		if (!repositoryRef) {
+			throw new Error('GitHub repository clone requires a repository reference.');
 		}
 		if (!destinationPath) {
 			throw new Error('GitHub repository clone requires a destination path.');
 		}
 
-		const resolvedDestinationPath = resolveCloneDestinationPath(repository, destinationPath);
+		const resolvedDestinationPath = resolveCloneDestinationPath(repositoryRef, destinationPath);
 		await fs.mkdir(path.dirname(resolvedDestinationPath), { recursive: true });
-		await this.runTextProcess(['repo', 'clone', repository, resolvedDestinationPath]);
+		await this.runTextProcess(['repo', 'clone', repositoryRef, resolvedDestinationPath]);
 		return resolvedDestinationPath;
 	}
 

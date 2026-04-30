@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import { getMissionDaemonDirectory } from '../../lib/config.js';
 import { JsonFileAdapter } from '../../lib/formats/JsonFileAdapter.js';
-import { entityTableSchema } from './EntitySchema.js';
+import { EntityTableSchema } from './EntitySchema.js';
 import type { EntityStore } from './EntityStore.js';
 
 export class FilesystemEntityStore implements EntityStore {
@@ -42,6 +42,6 @@ export class FilesystemEntityStore implements EntityStore {
     }
 
     private getTablePath(table: string): string {
-        return path.join(this.rootPath, `${entityTableSchema.parse(table)}.json`);
+        return path.join(this.rootPath, `${EntityTableSchema.parse(table)}.json`);
     }
 }

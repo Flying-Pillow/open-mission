@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 import {
-    entityCommandAcknowledgementSchema,
-    entityCommandDescriptorSchema
+    EntityCommandAcknowledgementSchema,
+    EntityCommandDescriptorSchema
 } from '../Entity/EntitySchema.js';
 
 export const missionArtifactEntityName = 'Artifact' as const;
@@ -36,7 +36,7 @@ export const missionArtifactSnapshotSchema = z.object({
     taskId: z.string().trim().min(1).optional(),
     filePath: z.string().trim().min(1).optional(),
     relativePath: z.string().trim().min(1).optional(),
-    commands: z.array(entityCommandDescriptorSchema).optional()
+    commands: z.array(EntityCommandDescriptorSchema).optional()
 }).strict();
 
 export const artifactSnapshotSchema = missionArtifactSnapshotSchema;
@@ -47,7 +47,7 @@ export const artifactDocumentSnapshotSchema = z.object({
     updatedAt: z.string().trim().min(1).optional()
 }).strict();
 
-export const artifactCommandAcknowledgementSchema = entityCommandAcknowledgementSchema.extend({
+export const artifactCommandAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
     entity: z.literal(missionArtifactEntityName),
     method: z.literal('executeCommand'),
     id: z.string().trim().min(1),

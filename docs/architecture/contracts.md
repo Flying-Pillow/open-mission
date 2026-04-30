@@ -60,8 +60,8 @@ This is the daemon-wide live composite snapshot returned to surfaces.
 | `state.missionOperatorViews` | Mission dashboard projections used to populate stage rail and tree nodes |
 | `state.airport` | Active repository airport state |
 | `state.airports` | Registry of repository airports known to the daemon |
-| `airportProjections` | Active repository pane projections |
-| `airportRegistryProjections` | Projections for each known repository airport |
+| `airportViews` | Active repository pane views |
+| `airportRegistryViews` | Views for each known repository airport |
 
 ## `mission.json`
 

@@ -1,11 +1,11 @@
-import type { MissionAgentSessionRecord } from '../../daemon/protocol/contracts.js';
+import type { AgentSessionRecord } from '../../daemon/protocol/contracts.js';
 
 export type AgentSessionData = {
 	sessionId: string;
 	runnerId: string;
 	transportId?: string;
 	runnerLabel: string;
-	lifecycleState: MissionAgentSessionRecord['lifecycleState'];
+	lifecycleState: AgentSessionRecord['lifecycleState'];
 	terminalSessionName?: string;
 	terminalPaneId?: string;
 	terminalHandle?: {
@@ -21,7 +21,7 @@ export type AgentSessionData = {
 	failureMessage?: string;
 };
 
-export function toAgentSession(record: MissionAgentSessionRecord): AgentSessionData {
+export function toAgentSession(record: AgentSessionRecord): AgentSessionData {
 	return {
 		sessionId: record.sessionId,
 		runnerId: record.runnerId,

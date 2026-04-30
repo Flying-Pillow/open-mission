@@ -979,7 +979,7 @@ function buildTaskTerminalSessionName(
     taskId: string,
     agentSessionId: string
 ): string {
-    const repositoryId = Repository.deriveIdentity(workingDirectory).repositoryId;
+    const repositoryId = Repository.deriveIdentity(workingDirectory).id;
     return [
         repositoryId,
         Repository.slugIdentitySegment(missionId) || 'mission',

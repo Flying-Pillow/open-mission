@@ -1,7 +1,8 @@
-import type { EntitySchema } from '../Entity/EntitySchema.js';
+import type { EntityContractType } from '../Entity/EntitySchema.js';
 import { Mission } from './Mission.js';
 import {
     missionEntityName,
+    missionDataSchema,
     missionActionListSnapshotSchema,
     missionDocumentSnapshotSchema,
     missionWorktreeSnapshotSchema,
@@ -17,93 +18,102 @@ import {
     missionSendTerminalInputPayloadSchema,
     missionCommandPayloadSchema,
     missionTaskCommandPayloadSchema,
-    missionAgentSessionCommandPayloadSchema,
+    agentSessionCommandPayloadSchema,
     missionExecuteActionPayloadSchema,
     missionWriteDocumentPayloadSchema,
     missionTerminalSnapshotSchema,
     missionCommandAcknowledgementSchema
 } from './MissionSchema.js';
-export const missionEntityContract: EntitySchema = {
+export const missionEntityContract: EntityContractType = {
     entity: missionEntityName,
     entityClass: Mission,
+    properties: Object.fromEntries(
+        Object.entries(missionDataSchema.shape).map(([name, schema]) => [
+            name,
+            {
+                schema,
+                readonly: true
+            }
+        ])
+    ),
     methods: {
         read: {
             kind: 'query',
             payload: missionReadPayloadSchema,
             result: missionSnapshotSchema,
-            execution: 'class'
+            execution: 'entity'
         },
         readProjection: {
             kind: 'query',
             payload: missionReadProjectionPayloadSchema,
             result: missionProjectionSnapshotSchema,
-            execution: 'class'
+            execution: 'entity'
         },
         listActions: {
             kind: 'query',
             payload: missionListActionsPayloadSchema,
             result: missionActionListSnapshotSchema,
-            execution: 'class'
+            execution: 'entity'
         },
         readDocument: {
             kind: 'query',
             payload: missionReadDocumentPayloadSchema,
             result: missionDocumentSnapshotSchema,
-            execution: 'class'
+            execution: 'entity'
         },
         readWorktree: {
             kind: 'query',
             payload: missionReadWorktreePayloadSchema,
             result: missionWorktreeSnapshotSchema,
-            execution: 'class'
+            execution: 'entity'
         },
         readTerminal: {
             kind: 'query',
             payload: missionReadTerminalPayloadSchema,
             result: missionTerminalSnapshotSchema,
-            execution: 'class'
+            execution: 'entity'
         },
         command: {
             kind: 'mutation',
             payload: missionCommandPayloadSchema,
             result: missionCommandAcknowledgementSchema,
-            execution: 'class'
+            execution: 'entity'
         },
         taskCommand: {
             kind: 'mutation',
             payload: missionTaskCommandPayloadSchema,
             result: missionCommandAcknowledgementSchema,
-            execution: 'class'
+            execution: 'entity'
         },
         sessionCommand: {
             kind: 'mutation',
-            payload: missionAgentSessionCommandPayloadSchema,
+            payload: agentSessionCommandPayloadSchema,
             result: missionCommandAcknowledgementSchema,
-            execution: 'class'
+            execution: 'entity'
         },
         executeAction: {
             kind: 'mutation',
             payload: missionExecuteActionPayloadSchema,
             result: missionCommandAcknowledgementSchema,
-            execution: 'class'
+            execution: 'entity'
         },
         writeDocument: {
             kind: 'mutation',
             payload: missionWriteDocumentPayloadSchema,
             result: missionDocumentSnapshotSchema,
-            execution: 'class'
+            execution: 'entity'
         },
         ensureTerminal: {
             kind: 'mutation',
             payload: missionEnsureTerminalPayloadSchema,
             result: missionTerminalSnapshotSchema,
-            execution: 'class'
+            execution: 'entity'
         },
         sendTerminalInput: {
             kind: 'mutation',
             payload: missionSendTerminalInputPayloadSchema,
             result: missionTerminalSnapshotSchema,
-            execution: 'class'
+            execution: 'entity'
         }
     }
 };

@@ -8,40 +8,40 @@ import { defineConfig } from "vite-plus";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryDocsRoot = path.resolve(currentDirectory, "../../../docs");
-const missionCoreSourceRoot = path.resolve(currentDirectory, "../../../packages/core/src");
-const missionPackageSourceRoot = path.resolve(currentDirectory, "../../../packages/mission/src");
-const workspacePackageRoots = [
-	missionCoreSourceRoot,
-	missionPackageSourceRoot
-];
-
-const missionModuleAliases = {
-	"@flying-pillow/mission-core": missionCoreSourceRoot,
-	"@flying-pillow/mission": missionPackageSourceRoot
-} as const;
+const workspaceRoot = path.resolve(currentDirectory, "../../..");
+const useSourcePackages = process.env.NODE_ENV !== "production";
 
 type ViteHttpServer = HttpServer | HttpsServer;
 
 async function attachMissionTerminalWebSockets(
 	server: ViteHttpServer,
+	loadModule: () => Promise<TerminalWebSocketModule>,
 ): Promise<void> {
-	const { attachTerminalWebSocketServer } = await import(
-		"./src/lib/server/terminal-websocket.server"
-	);
+	const { attachTerminalWebSocketServer } = await loadModule();
 	attachTerminalWebSocketServer(server);
 }
+
+type TerminalWebSocketModule = {
+	attachTerminalWebSocketServer(server: ViteHttpServer): void;
+};
 
 function missionTerminalWebSocketPlugin() {
 	return {
 		name: "mission-terminal-websocket",
-		configureServer(server: { httpServer?: ViteHttpServer | null }) {
+		configureServer(server: { httpServer?: ViteHttpServer | null; ssrLoadModule(url: string): Promise<unknown> }) {
 			if (server.httpServer) {
-				void attachMissionTerminalWebSockets(server.httpServer);
+				void attachMissionTerminalWebSockets(
+					server.httpServer,
+					() => server.ssrLoadModule("/src/lib/server/terminal-websocket.server.ts") as Promise<TerminalWebSocketModule>
+				);
 			}
 		},
 		configurePreviewServer(server: { httpServer?: ViteHttpServer | null }) {
 			if (server.httpServer) {
-				void attachMissionTerminalWebSockets(server.httpServer);
+				void attachMissionTerminalWebSockets(
+					server.httpServer,
+					() => import("./src/lib/server/terminal-websocket.server.ts")
+				);
 			}
 		}
 	};
@@ -61,12 +61,13 @@ export default defineConfig({
 		]
 	},
 	resolve: {
-		alias: missionModuleAliases,
-		conditions: ["typescript", "development", "svelte", "browser", "module", "import", "default"]
+		conditions: useSourcePackages
+			? ["development", "typescript", "svelte", "browser", "module", "import", "default"]
+			: ["svelte", "browser", "module", "import", "default"]
 	},
 	server: {
 		fs: {
-			allow: [".", repositoryDocsRoot, ...workspacePackageRoots]
+			allow: [workspaceRoot, repositoryDocsRoot]
 		}
 	}
 });

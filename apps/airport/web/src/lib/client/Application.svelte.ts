@@ -1,9 +1,8 @@
-import { repositorySnapshotSchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
-import type { RepositorySnapshot } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import { RepositorySnapshotSchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { MissionReferenceType, RepositoryPlatformRepositoryType, RepositorySnapshotType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import type { MissionSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { AirportRuntimeEventEnvelope } from '$lib/contracts/runtime-events';
 import type { ActiveMissionOutline } from '$lib/client/context/app-context.svelte';
-import { GithubRepository } from '$lib/components/entities/Repository/GithubRepository.svelte.js';
 import { Repository } from '$lib/components/entities/Repository/Repository.svelte.js';
 import {
     getRepositoryDisplayDescription,
@@ -16,8 +15,7 @@ import type { RuntimeSubscription } from '$lib/client/runtime/transport/EntityRu
 import { qry } from '../../routes/api/entities/remote/query.remote';
 import type {
     AirportRepositoryListItem,
-    GitHubVisibleRepositorySummary,
-    SidebarRepositorySummary
+    SidebarRepositoryData
 } from '$lib/components/entities/types';
 
 type EventSourceFactory = (url: string) => EventSource;
@@ -26,23 +24,29 @@ type AddRepositoryState = {
     error?: string;
     success?: boolean;
     repositoryPath?: string;
-    githubRepository?: string;
+    platformRepositoryRef?: string;
 };
 
 export class AirportApplication {
     private readonly repositories = new Map<string, Repository>();
     private readonly runtimes = new Map<string, AirportClientRuntime>();
     private repositoryVersion = $state(0);
+    #activeRouteKey: string | undefined;
+    #routeSyncRequestId = 0;
     #isInitialized = false;
     #repositoryLoadPromise: Promise<Repository[]> | null = null;
-    #githubRepositoryLoadPromise: Promise<GitHubVisibleRepositorySummary[]> | null = null;
-    public githubRepositoriesState = $state<GitHubVisibleRepositorySummary[]>([]);
+    #githubRepositoryLoadPromise: Promise<RepositoryPlatformRepositoryType[]> | null = null;
+    public githubRepositoriesState = $state<RepositoryPlatformRepositoryType[]>([]);
     public githubRepositoriesLoading = $state(false);
     public githubRepositoriesError = $state<string | undefined>();
     public addRepositoryState = $state<AddRepositoryState | undefined>();
     public addRepositoryPending = $state(false);
+    public activeRepositoryLoading = $state(false);
+    public activeRepositoryError = $state<string | undefined>();
     public activeRepositoryId = $state<string | undefined>();
     public activeRepositoryRootPath = $state<string | undefined>();
+    public activeMissionLoading = $state(false);
+    public activeMissionError = $state<string | undefined>();
     public activeMissionId = $state<string | undefined>();
     public activeMissionOutline = $state<ActiveMissionOutline | undefined>();
     public activeMissionSelectedNodeId = $state<string | undefined>();
@@ -69,7 +73,7 @@ export class AirportApplication {
         }
     }
 
-    public get repositoriesState(): SidebarRepositorySummary[] {
+    public get repositoriesState(): SidebarRepositoryData[] {
         this.repositoryVersion;
         return [...this.repositories.values()].map((repository) => ({
             ...repository.summary,
@@ -80,24 +84,24 @@ export class AirportApplication {
     public get repositoryListItems(): AirportRepositoryListItem[] {
         const localRepositories = this.repositoriesState;
         const githubRepositories = this.githubRepositoriesState;
-        const localByGitHubRepository = new Map<string, SidebarRepositorySummary>();
+        const localByPlatformRepositoryRef = new Map<string, SidebarRepositoryData>();
 
         for (const repository of localRepositories) {
-            const githubRepository = repository.githubRepository?.trim().toLowerCase();
-            if (githubRepository) {
-                localByGitHubRepository.set(githubRepository, repository);
+            const platformRepositoryRef = repository.platformRepositoryRef?.trim().toLowerCase();
+            if (platformRepositoryRef) {
+                localByPlatformRepositoryRef.set(platformRepositoryRef, repository);
             }
         }
 
         const items = localRepositories.map((repository): AirportRepositoryListItem => {
-            const github = repository.githubRepository
-                ? githubRepositories.find((candidate) => candidate.fullName.toLowerCase() === repository.githubRepository?.toLowerCase())
+            const github = repository.platformRepositoryRef
+                ? githubRepositories.find((candidate) => candidate.repositoryRef.toLowerCase() === repository.platformRepositoryRef?.toLowerCase())
                 : undefined;
             return createRepositoryListItem({ local: repository, github });
         });
 
         for (const github of githubRepositories) {
-            if (localByGitHubRepository.has(github.fullName.toLowerCase())) {
+            if (localByPlatformRepositoryRef.has(github.repositoryRef.toLowerCase())) {
                 continue;
             }
             items.push(createRepositoryListItem({ github }));
@@ -120,7 +124,7 @@ export class AirportApplication {
     }
 
     public hydrateRepositoryData(
-        snapshot: RepositorySnapshot
+        snapshot: RepositorySnapshotType
     ): Repository {
         const id = snapshot.repository.id;
         const existing = this.repositories.get(id);
@@ -139,7 +143,7 @@ export class AirportApplication {
         return created;
     }
 
-    public reconcileRepositories(snapshots: RepositorySnapshot[]): Repository[] {
+    public reconcileRepositories(snapshots: RepositorySnapshotType[]): Repository[] {
         const nextRepositories = new Map<string, Repository>();
         const repositories = snapshots.map((snapshot) => {
             const repository = this.hydrateRepositoryData(snapshot);
@@ -156,10 +160,10 @@ export class AirportApplication {
         return repositories;
     }
 
-    public seedRepositoryFromSummary(summary: SidebarRepositorySummary): Repository {
+    public seedRepositoryFromSummary(summary: SidebarRepositoryData): Repository {
         const { missions, ...repository } = summary;
 
-        return this.hydrateRepositoryData(repositorySnapshotSchema.parse({
+        return this.hydrateRepositoryData(RepositorySnapshotSchema.parse({
             repository,
             missions: missions ?? []
         }));
@@ -179,7 +183,7 @@ export class AirportApplication {
         return this.repositories.get(repositoryId);
     }
 
-    public setRepositories(repositories: SidebarRepositorySummary[]): void {
+    public setRepositories(repositories: SidebarRepositoryData[]): void {
         const nextRepositories = new Map<string, Repository>();
         for (const summary of repositories) {
             const repository = this.seedRepositoryFromSummary(summary);
@@ -219,13 +223,14 @@ export class AirportApplication {
 
     public async loadGitHubRepositories(input: {
         force?: boolean;
-    } = {}): Promise<GitHubVisibleRepositorySummary[]> {
+    } = {}): Promise<RepositoryPlatformRepositoryType[]> {
         if (!input.force) {
             if (this.#githubRepositoryLoadPromise) {
                 return await this.#githubRepositoryLoadPromise;
             }
 
             if (this.githubRepositoriesState.length > 0 || this.githubRepositoriesError) {
+                void this.loadRepositories({ force: true }).catch(() => undefined);
                 return this.githubRepositoriesState;
             }
         }
@@ -233,9 +238,10 @@ export class AirportApplication {
         this.githubRepositoriesLoading = true;
         this.githubRepositoriesError = undefined;
 
-        const loadPromise = GithubRepository.find()
+        const loadPromise = Repository.findAvailable({ platform: 'github' })
             .then((repositories) => {
                 this.githubRepositoriesState = structuredClone(repositories);
+                void this.loadRepositories({ force: true }).catch(() => undefined);
                 return this.githubRepositoriesState;
             })
             .catch((error) => {
@@ -257,18 +263,19 @@ export class AirportApplication {
 
     public async addRepository(input: {
         repositoryPath: string;
-        githubRepository?: string;
+        platformRepositoryRef?: string;
     }): Promise<Repository> {
         this.addRepositoryPending = true;
         this.addRepositoryState = {
             repositoryPath: input.repositoryPath,
-            ...(input.githubRepository ? { githubRepository: input.githubRepository } : {})
+            ...(input.platformRepositoryRef ? { platformRepositoryRef: input.platformRepositoryRef } : {})
         };
 
         try {
-            const repository = input.githubRepository
-                ? this.hydrateRepositoryData(await GithubRepository.clone({
-                    githubRepository: input.githubRepository,
+            const repository = input.platformRepositoryRef
+                ? this.hydrateRepositoryData(await Repository.addPlatformRepository({
+                    platform: 'github',
+                    repositoryRef: input.platformRepositoryRef,
                     destinationPath: input.repositoryPath
                 }))
                 : await Repository.add(input.repositoryPath);
@@ -277,7 +284,7 @@ export class AirportApplication {
             this.addRepositoryState = {
                 success: true,
                 repositoryPath: repository.repositoryRootPath,
-                ...(input.githubRepository ? { githubRepository: input.githubRepository } : {})
+                ...(input.platformRepositoryRef ? { platformRepositoryRef: input.platformRepositoryRef } : {})
             };
             return repository;
         } catch (error) {
@@ -285,7 +292,7 @@ export class AirportApplication {
             this.addRepositoryState = {
                 error: message,
                 repositoryPath: input.repositoryPath,
-                ...(input.githubRepository ? { githubRepository: input.githubRepository } : {})
+                ...(input.platformRepositoryRef ? { platformRepositoryRef: input.platformRepositoryRef } : {})
             };
             throw error;
         } finally {
@@ -293,22 +300,26 @@ export class AirportApplication {
         }
     }
 
-    public async openRepositoryRoute(id: string): Promise<Repository> {
-        await this.initialize();
+    public syncPageState(input: {
+        pathname: string;
+        repositoryId?: string;
+        missionId?: string;
+    }): void {
+        const pathname = input.pathname.trim() || '/';
+        const repositoryId = input.repositoryId?.trim() || undefined;
+        const missionId = input.missionId?.trim() || undefined;
+        const routeKey = `${pathname}:${repositoryId ?? ''}:${missionId ?? ''}`;
+        if (routeKey === this.#activeRouteKey) {
+            return;
+        }
 
-        const repository = this.hydrateRepositoryData(
-            await this.loadRepositorySnapshot({ id })
-        );
-
-        this.setActiveRepositorySelection({
-            id: repository.id,
-            repositoryRootPath: repository.repositoryRootPath
-        });
-        this.setActiveMissionSelection(repository.selectedMission?.missionId);
-        this.setActiveMissionOutline(undefined);
-        this.setActiveMissionSelectedNodeId(undefined);
-
-        return repository;
+        this.#activeRouteKey = routeKey;
+        const requestId = ++this.#routeSyncRequestId;
+        void this.applyPageState({
+            pathname,
+            repositoryId,
+            missionId
+        }, requestId, routeKey);
     }
 
     public async refreshMission(input: {
@@ -347,6 +358,141 @@ export class AirportApplication {
         this.activeMissionSelectedNodeId = nodeId;
     }
 
+    private async applyPageState(input: {
+        pathname: string;
+        repositoryId?: string;
+        missionId?: string;
+    }, requestId: number, routeKey: string): Promise<void> {
+        if (!input.pathname.startsWith('/airport')) {
+            if (!this.isCurrentRouteSync(requestId, routeKey)) {
+                return;
+            }
+
+            this.resetActiveRouteState();
+            return;
+        }
+
+        await this.initialize();
+        if (!this.isCurrentRouteSync(requestId, routeKey)) {
+            return;
+        }
+
+        if (!input.repositoryId) {
+            this.resetActiveRouteState();
+            void this.loadRepositories({ force: true }).catch(() => undefined);
+            void this.loadGitHubRepositories({ force: true }).catch(() => undefined);
+            return;
+        }
+
+        this.activeRepositoryLoading = true;
+        this.activeRepositoryError = undefined;
+        this.activeMissionLoading = false;
+        this.activeMissionError = undefined;
+        this.setActiveMissionSelection(undefined);
+        this.setActiveMissionOutline(undefined);
+        this.setActiveMissionSelectedNodeId(undefined);
+
+        let repository: Repository;
+        try {
+            repository = await this.loadActiveRepository(input.repositoryId);
+        } catch (error) {
+            if (!this.isCurrentRouteSync(requestId, routeKey)) {
+                return;
+            }
+
+            this.resetActiveRouteState();
+            this.activeRepositoryError = error instanceof Error ? error.message : String(error);
+            return;
+        }
+
+        if (!this.isCurrentRouteSync(requestId, routeKey)) {
+            return;
+        }
+
+        this.setActiveRepositorySelection({
+            id: repository.id,
+            repositoryRootPath: repository.repositoryRootPath
+        });
+        this.activeRepositoryLoading = false;
+
+        if (!input.missionId) {
+            repository.applyData({
+                ...repository.toSnapshot(),
+                selectedMissionId: undefined,
+                selectedMission: undefined
+            });
+            this.activeMissionLoading = false;
+            this.activeMissionError = undefined;
+            return;
+        }
+
+        this.activeMissionLoading = true;
+        try {
+            const mission = await this.refreshMission({
+                missionId: input.missionId,
+                repositoryRootPath: repository.repositoryRootPath
+            });
+            const projectionSnapshot = await mission.getProjectionSnapshot();
+            mission.setRouteState({
+                projectionSnapshot,
+                worktreePath: repository.repositoryRootPath
+            });
+            repository.applyData({
+                ...repository.toSnapshot(),
+                selectedMissionId: mission.missionId,
+                selectedMission: mission.toSnapshot()
+            });
+            if (!this.isCurrentRouteSync(requestId, routeKey)) {
+                return;
+            }
+
+            this.setActiveMissionSelection(mission.missionId);
+            this.activeMissionError = undefined;
+        } catch (error) {
+            if (!this.isCurrentRouteSync(requestId, routeKey)) {
+                return;
+            }
+
+            repository.applyData({
+                ...repository.toSnapshot(),
+                selectedMissionId: undefined,
+                selectedMission: undefined
+            });
+            this.setActiveMissionSelection(undefined);
+            this.activeMissionError = error instanceof Error ? error.message : String(error);
+        } finally {
+            if (this.isCurrentRouteSync(requestId, routeKey)) {
+                this.activeMissionLoading = false;
+            }
+        }
+    }
+
+    private resetActiveRouteState(): void {
+        this.activeRepositoryLoading = false;
+        this.activeRepositoryError = undefined;
+        this.activeMissionLoading = false;
+        this.activeMissionError = undefined;
+        this.setActiveRepositorySelection(undefined);
+        this.setActiveMissionSelection(undefined);
+        this.setActiveMissionOutline(undefined);
+        this.setActiveMissionSelectedNodeId(undefined);
+    }
+
+    private isCurrentRouteSync(requestId: number, routeKey: string): boolean {
+        return this.#routeSyncRequestId === requestId && this.#activeRouteKey === routeKey;
+    }
+
+    private async loadActiveRepository(id: string): Promise<Repository> {
+        const repository = this.resolveRepository(id);
+        if (repository) {
+            return await repository.refresh();
+        }
+
+        return this.hydrateRepositoryData(
+            await this.loadRepositorySnapshot({ id })
+        );
+    }
+
     private getRuntime(repositoryRootPath?: string): AirportClientRuntime {
         const runtimeKey = repositoryRootPath?.trim() || '__default__';
         let runtime = this.runtimes.get(runtimeKey);
@@ -366,8 +512,8 @@ export class AirportApplication {
     private async loadRepositorySnapshot(input: {
         id: string;
         repositoryRootPath?: string;
-    }): Promise<RepositorySnapshot> {
-        return repositorySnapshotSchema.parse(
+    }): Promise<RepositorySnapshotType> {
+        return RepositorySnapshotSchema.parse(
             await qry({
                 entity: 'Repository',
                 method: 'read',
@@ -384,20 +530,20 @@ export class AirportApplication {
 }
 
 function createRepositoryListItem(input: {
-    local?: SidebarRepositorySummary;
-    github?: GitHubVisibleRepositorySummary;
+    local?: SidebarRepositoryData;
+    github?: RepositoryPlatformRepositoryType;
 }): AirportRepositoryListItem {
     const githubDescription = input.github?.description?.trim();
     const localDescription = input.local ? getRepositoryDisplayDescription(input.local) : undefined;
     return {
-        key: input.local?.id ?? `github:${input.github?.fullName ?? 'unknown'}`,
+        key: input.local?.id ?? `github:${input.github?.repositoryRef ?? 'unknown'}`,
         ...(input.local ? { local: input.local } : {}),
         ...(input.github ? { github: input.github } : {}),
-        displayName: input.github?.fullName ?? (input.local ? getRepositoryDisplayName(input.local) : 'Repository'),
+        displayName: input.github?.repositoryRef ?? (input.local ? getRepositoryDisplayName(input.local) : 'Repository'),
         displayDescription: githubDescription || localDescription || input.github?.htmlUrl || 'No description available',
         repositoryRootPath: input.local?.repositoryRootPath,
-        githubRepository: input.github?.fullName ?? input.local?.githubRepository,
-        missions: input.local?.missions ?? [],
+        platformRepositoryRef: input.github?.repositoryRef ?? input.local?.platformRepositoryRef,
+        missions: (input.local?.missions ?? []) as MissionReferenceType[],
         isLocal: input.local !== undefined
     };
 }

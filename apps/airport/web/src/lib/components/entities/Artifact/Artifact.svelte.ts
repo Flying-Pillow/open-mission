@@ -1,5 +1,5 @@
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
-import type { EntityCommandDescriptor } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
+import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 import type { MissionDocumentSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 
 export type ArtifactDocumentPayload = MissionDocumentSnapshot;
@@ -10,7 +10,7 @@ export type ArtifactSnapshot = {
     label?: string;
     stageId?: string;
     taskId?: string;
-    commands?: EntityCommandDescriptor[];
+    commands?: EntityCommandDescriptorType[];
 };
 
 export type ArtifactOwner = {
@@ -77,7 +77,7 @@ export class Artifact implements EntityModel<ArtifactSnapshot> {
         return this.snapshot.taskId;
     }
 
-    public get commands(): EntityCommandDescriptor[] {
+    public get commands(): EntityCommandDescriptorType[] {
         return structuredClone($state.snapshot(this.snapshot.commands ?? []));
     }
 

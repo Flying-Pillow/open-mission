@@ -266,7 +266,7 @@ const missionGateProjectionSchema = z.object({
 	updatedAt: nonEmptyStringSchema
 });
 
-const missionAgentSessionRecordSchema = z.object({
+const agentSessionRecordSchema = z.object({
 	sessionId: nonEmptyStringSchema,
 	runnerId: nonEmptyStringSchema,
 	transportId: nonEmptyStringSchema.optional(),
@@ -322,7 +322,7 @@ export const operatorStatusSchema = z.object({
 	activeTasks: z.array(missionTaskStateSchema).optional(),
 	readyTasks: z.array(missionTaskStateSchema).optional(),
 	stages: z.array(missionStageStatusSchema).optional(),
-	agentSessions: z.array(missionAgentSessionRecordSchema).optional(),
+	agentSessions: z.array(agentSessionRecordSchema).optional(),
 	tower: missionTowerProjectionSchema.optional(),
 	workflow: z.object({
 		lifecycle: missionLifecycleStateSchema,

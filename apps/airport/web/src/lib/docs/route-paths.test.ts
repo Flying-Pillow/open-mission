@@ -24,7 +24,7 @@ describe("isDocsRoutePath", () => {
 
 	it("does not match non-doc routes", () => {
 		expect(isDocsRoutePath("/")).toBe(false);
-		expect(isDocsRoutePath("/repository/example")).toBe(false);
+		expect(isDocsRoutePath("/airport/example")).toBe(false);
 		expect(isDocsRoutePath("/docs-guides")).toBe(false);
 	});
 });

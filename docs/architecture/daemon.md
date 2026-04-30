@@ -19,7 +19,7 @@ The daemon is the root runtime authority for Mission's live system behavior. It 
 | `MissionSystemController` | Live daemon-wide control-plane reducer | version, `MissionControl`, `RepositoryAirportRegistry` | `Daemon`, surfaces |
 | `MissionControl` | Semantic domain graph and selection state | `ContextGraph`, mission operator projections | `MissionSystemController` |
 | `RepositoryAirportRegistry` | Multi-repository airport loading and persistence | airport records, client-to-repository index, active repository id | `MissionSystemController` |
-| Projection service logic | Derives airport projections from domain graph and airport state | pure projection output | `MissionSystemController` |
+| `AirportControl` view logic | Derives airport views from airport state and daemon context | pure view output | `MissionSystemController` |
 
 ## Request Routing Model
 

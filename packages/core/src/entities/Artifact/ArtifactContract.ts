@@ -1,4 +1,4 @@
-import type { EntitySchema } from '../Entity/EntitySchema.js';
+import type { EntityContractType } from '../Entity/EntitySchema.js';
 import { ArtifactEntity } from './Artifact.js';
 import {
     missionArtifactEntityName,
@@ -10,7 +10,7 @@ import {
     artifactCommandAcknowledgementSchema
 } from './ArtifactSchema.js';
 
-export const artifactEntityContract: EntitySchema = {
+export const artifactEntityContract: EntityContractType = {
     entity: missionArtifactEntityName,
     entityClass: ArtifactEntity,
     methods: {

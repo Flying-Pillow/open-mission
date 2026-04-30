@@ -100,16 +100,27 @@ runChecked('pnpm', ['run', 'mission:install:local:dev']);
 
 const webEnv = enableDaemon ? {} : { MISSION_DAEMON_SUPERVISED: '1' };
 
+let daemon;
+if (enableDaemon) {
+	daemon = spawnManaged(
+		'pnpm',
+		['--filter', '@flying-pillow/mission-core', 'run', 'daemon:dev'],
+		{ MISSION_DAEMON_SUPERVISED: '1' },
+		'daemon.log'
+	);
+	children.add(daemon);
+}
+
 const web = spawnManaged(
 	'pnpm',
 	['--dir', './apps/airport/web', 'run', 'dev', '--', ...userArgs],
-	webEnv,
+	enableDaemon ? { MISSION_DAEMON_SUPERVISED: '1' } : webEnv,
 	'web.log'
 );
 
 if (enableDaemon) {
 	process.stdout.write(
-		`Development log: ${path.join(logsDir, 'web.log')} (Airport web will start or reuse the Mission daemon)\n`
+		`Development logs: ${path.join(logsDir, 'web.log')} and ${path.join(logsDir, 'daemon.log')} (Mission daemon supervised by nodemon)\n`
 	);
 } else {
 	process.stdout.write(

@@ -46,7 +46,7 @@ Mission may still use daemon-owned coordination helpers internally to expose IPC
 | `AgentRunner` | Abstract base class that owns shared Mission session mechanics and exposes subclass hooks | launch validation, managed snapshots, event fanout, reconciliation entry points | Shared runtime base |
 | runner subclass | Concrete executable or SDK adapter for one external agent family | transport handles, executable-specific parsing, provider control | Provider-specific |
 | `AgentSession` | Live adapter-backed session instance returned by the base/runtime boundary | session reference and control facade | Provider-specific instance |
-| `AgentSessionSnapshot` | Normalized session state exposed to the workflow engine and surfaces | no behavior, state only | Shared contract |
+| `AgentSessionSnapshot` | Normalized AgentSession state exposed to the workflow engine and surfaces | no behavior, state only | Shared contract |
 | `AgentSessionEvent` | Normalized runtime facts emitted by the runtime | append-only runtime observations | Shared contract |
 
 Whenever possible, adapters should prefer semantic signaling over brittle stdout scraping.
@@ -70,7 +70,7 @@ The base runner plus its subclass are not responsible for:
 - defining workflow policy
 - defining mission task semantics
 - inventing a second public orchestration layer of its own
-- owning Runway pane layout or Airport projection
+- owning Runway pane layout or Airport view state
 - exposing provider-native command sets as the public Mission contract
 
 ## Session Contract
@@ -138,7 +138,7 @@ The runtime architecture separates three concerns:
 | Concern | Primary component | Description |
 | --- | --- | --- |
 | Mission-facing control path | daemon-owned runtime routing | Shared control boundary used by workflow and external daemon clients |
-| Shared runtime lifecycle | `AgentRunner` | Abstract base class that normalizes Mission launch, session state, and event wiring |
+| Shared runtime lifecycle | `AgentRunner` | Abstract base class that normalizes Mission launch, AgentSession state, and event wiring |
 | Provider integration | runner subclass | Concrete adapter that translates Mission launch and reconciliation into executable behavior |
 | Live session instance | `AgentSession` | One running adapter-backed session object |
 | Shared runtime facts | `AgentSessionSnapshot`, `AgentSessionEvent` | The normalized state and event contract used across runtime boundaries |
@@ -171,7 +171,7 @@ Examples of disallowed coupling:
 
 - treating Runway focus, visibility, or client attachment as evidence that a session is alive
 - changing task eligibility because a pane exists or does not exist in the Airport layout
-- letting airport projection state redefine workflow lifecycle
+- letting airport view state redefine workflow lifecycle
 
 This keeps the boundary precise:
 
@@ -207,37 +207,37 @@ This diagram shows the intended responsibility split.
 
 ```mermaid
 sequenceDiagram
-	autonumber
-	participant Engine as Workflow Engine
-	participant Control as Runtime routing
-	participant Runner as AgentRunner
-	participant Adapter as Runner subclass
-	participant Session as AgentSession
-	participant Agent as External Coding Agent
+ autonumber
+ participant Engine as Workflow Engine
+ participant Control as Runtime routing
+ participant Runner as AgentRunner
+ participant Adapter as Runner subclass
+ participant Session as AgentSession
+ participant Agent as External Coding Agent
 
-	Engine->>Control: session.launch(request)
-	Control->>Runner: startSession(config)
-	Runner->>Adapter: subclass launch hook
-	Adapter->>Agent: start or resume executable session
-	Adapter-->>Runner: executable-backed session control
-	Runner-->>Control: AgentSession
-	Control->>Session: subscribe to events
-	Agent-->>Session: runtime updates
-	Session-->>Control: session.started / session.updated
-	Control-->>Engine: workflow event input
+ Engine->>Control: session.launch(request)
+ Control->>Runner: startSession(config)
+ Runner->>Adapter: subclass launch hook
+ Adapter->>Agent: start or resume executable session
+ Adapter-->>Runner: executable-backed session control
+ Runner-->>Control: AgentSession
+ Control->>Session: subscribe to events
+ Agent-->>Session: runtime updates
+ Session-->>Control: session.started / session.updated
+ Control-->>Engine: workflow event input
 
-	Engine->>Control: session.command(sessionId, interrupt)
-	Control->>Session: submitCommand(interrupt)
-	Session->>Agent: interrupt or equivalent
-	Agent-->>Session: updated state
-	Session-->>Control: session.updated(snapshot)
-	Control-->>Engine: workflow event input
+ Engine->>Control: session.command(sessionId, interrupt)
+ Control->>Session: submitCommand(interrupt)
+ Session->>Agent: interrupt or equivalent
+ Agent-->>Session: updated state
+ Session-->>Control: session.updated(snapshot)
+ Control-->>Engine: workflow event input
 
-	Control->>Runner: reconcileSession(reference)
-	Runner->>Adapter: subclass reconcile hook
-	Adapter-->>Runner: executable-backed session control
-	Runner-->>Control: AgentSession
-	Session-->>Control: session.attached(snapshot)
+ Control->>Runner: reconcileSession(reference)
+ Runner->>Adapter: subclass reconcile hook
+ Adapter-->>Runner: executable-backed session control
+ Runner-->>Control: AgentSession
+ Session-->>Control: session.attached(snapshot)
 ```
 
 The key point is that workflow requests and external daemon clients use the same daemon-owned runtime routing layer.
@@ -282,7 +282,7 @@ A contributor implementing a new runner subclass should satisfy the following mi
 
 ### Required Lifecycle Support
 
-Every runner must normalize live session state into this lifecycle vocabulary:
+Every runner must normalize live AgentSession state into this lifecycle vocabulary:
 
 - `starting`: launch accepted and bootstrapping has begun
 - `running`: the session is alive and progressing autonomously
@@ -302,7 +302,7 @@ Every runner and session implementation must be able to emit these normalized ev
 | --- | --- |
 | `session.started` | A live session has been created and has an initial normalized snapshot. |
 | `session.attached` | A persisted session reference has been successfully reconciled into a live session view. |
-| `session.updated` | Non-terminal session state changed and a fresh normalized snapshot is available. |
+| `session.updated` | Non-terminal AgentSession state changed and a fresh normalized snapshot is available. |
 | `session.awaiting-input` | The session is alive and explicitly needs Mission or operator input. |
 | `session.message` | Auditable runtime output is available on a normalized channel such as `stdout`, `stderr`, `system`, or `agent`. |
 | `session.completed` | The session reached a successful terminal outcome. |
@@ -343,7 +343,7 @@ Recovery after daemon restart is owned by the daemon-owned control path using `A
 1. Mission core owns intent and lifecycle truth.
 2. Runners translate provider protocol; they do not define workflow policy.
 3. Session control uses normalized Mission prompts and commands, not provider-native slash commands as the core contract.
-4. Runtime session state must be reconciled back through workflow events before it becomes mission truth.
+4. Runtime AgentSession state must be reconciled back through workflow events before it becomes mission truth.
 5. Workflow and external session control must share one daemon-owned execution path.
 
 ## Adjacent Components

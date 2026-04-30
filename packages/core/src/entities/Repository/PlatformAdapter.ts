@@ -1,16 +1,19 @@
 import type {
 	GitHubIssueDetail,
-	GitHubVisibleRepository,
 	MissionBrief,
 	TrackedIssueSummary
 } from '../../types.js';
+import type {
+	RepositoryPlatformKindType,
+	RepositoryPlatformRepositoryType
+} from './RepositorySchema.js';
 import {
 	GitHubPlatformAdapter,
 	resolveGitHubRepositoryFromWorkspace,
 	type GitHubBranchSyncStatus
 } from '../../platforms/GitHubPlatformAdapter.js';
 
-export type RepositoryPlatformKind = 'github';
+export type RepositoryPlatformKind = RepositoryPlatformKindType;
 export type RepositoryBranchSyncStatus = GitHubBranchSyncStatus;
 
 export type RepositoryPlatformAdapterInput = {
@@ -22,7 +25,7 @@ export type RepositoryPlatformAdapterInput = {
 };
 
 export type RepositoryPlatformCloneRequest = {
-	repository: string;
+	repositoryRef: string;
 	destinationPath: string;
 };
 
@@ -42,7 +45,7 @@ export interface RepositoryPlatformAdapter {
 	readonly platform?: RepositoryPlatformKind;
 	fetchIssue(issueId: string): Promise<MissionBrief>;
 	listOpenIssues(limit: number): Promise<TrackedIssueSummary[]>;
-	listVisibleRepositories(): Promise<GitHubVisibleRepository[]>;
+	listRepositories(): Promise<RepositoryPlatformRepositoryType[]>;
 	fetchIssueDetail(issueId: string): Promise<GitHubIssueDetail>;
 	cloneRepository(input: RepositoryPlatformCloneRequest): Promise<string>;
 	createIssue(input: RepositoryPlatformIssueCreateRequest): Promise<MissionBrief>;

@@ -1,5 +1,5 @@
 import type {
-    MissionAgentSessionRuntimeState,
+    AgentSessionRuntimeState,
     MissionTaskRuntimeState,
     MissionWorkflowConfigurationSnapshot,
     MissionWorkflowEvent,
@@ -50,7 +50,7 @@ export function getMissionWorkflowEventValidationErrors(
     const errors: string[] = [];
     const findTask = (taskId: string): MissionTaskRuntimeState | undefined =>
         runtime.tasks.find((task) => task.taskId === taskId);
-    const findSession = (sessionId: string): MissionAgentSessionRuntimeState | undefined =>
+    const findSession = (sessionId: string): AgentSessionRuntimeState | undefined =>
         runtime.sessions.find((session) => session.sessionId === sessionId);
     const eligibleStageId = resolveEligibleStageId(runtime, configuration);
 
@@ -233,7 +233,7 @@ export function getMissionWorkflowEventValidationErrors(
 
 function lifecycleForSessionEvent(
     eventType: 'session.completed' | 'session.failed' | 'session.cancelled' | 'session.terminated'
-): MissionAgentSessionRuntimeState['lifecycle'] {
+): AgentSessionRuntimeState['lifecycle'] {
     switch (eventType) {
         case 'session.completed':
             return 'completed';
@@ -267,11 +267,11 @@ function requireTask(
 }
 
 function requireSession(
-    session: MissionAgentSessionRuntimeState | undefined,
+    session: AgentSessionRuntimeState | undefined,
     sessionId: string,
     errors: string[],
     eventType: string
-): MissionAgentSessionRuntimeState | undefined {
+): AgentSessionRuntimeState | undefined {
     if (!session) {
         errors.push(`${eventType} references unknown session '${sessionId}'.`);
     }

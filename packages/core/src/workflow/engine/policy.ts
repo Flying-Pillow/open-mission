@@ -1,6 +1,6 @@
 import type {
     MissionTaskPendingLaunchContext,
-    MissionAgentSessionLifecycleState,
+    AgentSessionLifecycleState,
     MissionStageId,
     MissionTaskLifecycleState,
     MissionTaskRuntimeState,
@@ -10,7 +10,7 @@ import type {
 } from './types.js';
 import { DEFAULT_TASK_MAX_REWORK_ITERATIONS } from './types.js';
 
-export function isActiveSessionLifecycle(lifecycle: MissionAgentSessionLifecycleState): boolean {
+export function isActiveSessionLifecycle(lifecycle: AgentSessionLifecycleState): boolean {
     return lifecycle === 'starting' || lifecycle === 'running';
 }
 

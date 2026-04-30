@@ -21,11 +21,11 @@
     import type { Icon } from "@tabler/icons-svelte";
     import type { ComponentProps } from "svelte";
     import type {
-        MissionSummary,
-        SidebarRepositorySummary,
+        MissionReferenceType,
+        SidebarRepositoryData,
     } from "$lib/components/entities/types";
 
-    type SidebarRepositoryView = SidebarRepositorySummary & { id: string };
+    type SidebarRepositoryView = SidebarRepositoryData & { id: string };
 
     const logo = asset("/logo.png");
     const appContext = getAppContext();
@@ -50,19 +50,6 @@
 
     let { ...restProps }: ComponentProps<typeof Sidebar.Root> = $props();
 
-    const airportUser = $derived.by(() => {
-        if (!appContext?.user?.name) {
-            return undefined;
-        }
-
-        return {
-            name: appContext.user.name,
-            ...(appContext.user.email ? { email: appContext.user.email } : {}),
-            githubStatus: appContext.user.githubStatus,
-            avatar: appContext.user.avatarUrl ?? logo,
-        };
-    });
-
     const routeSegments = $derived(
         page.url.pathname.split("/").filter((segment) => segment.length > 0),
     );
@@ -70,12 +57,16 @@
         getAirportSidebarNavigation(page.url.pathname),
     );
     const activeRepositoryId = $derived(
-        routeSegments[0] === "repository"
+        routeSegments[0] === "airport"
             ? decodeURIComponent(routeSegments[1] ?? "")
             : undefined,
     );
-    const activeMissionId = $derived(appContext.airport.activeMissionId);
-    const showRepositoryNavigation = $derived(routeSegments[0] !== "airport");
+    const activeMissionId = $derived(
+        routeSegments[0] === "airport"
+            ? decodeURIComponent(routeSegments[2] ?? "")
+            : appContext.airport.activeMissionId,
+    );
+    const showRepositoryNavigation = $derived(routeSegments[0] === "airport");
 
     const sidebarRepositories = $derived.by(() => {
         const repositories = (appContext?.airport.repositories ??
@@ -88,11 +79,11 @@
                 displayName: getRepositoryDisplayName(repository),
                 displayDescription: getRepositoryDisplayDescription(repository),
                 icon: (isSelected ? DashboardIcon : FolderIcon) satisfies Icon,
-                href: `/repository/${encodeURIComponent(repository.id)}`,
+                href: `/airport/${encodeURIComponent(repository.id)}`,
                 missions: (repository.missions ?? []).map(
-                    (mission: MissionSummary) => ({
+                    (mission: MissionReferenceType) => ({
                         ...mission,
-                        href: `/repository/${encodeURIComponent(repository.id)}/missions/${encodeURIComponent(mission.missionId)}`,
+                        href: `/airport/${encodeURIComponent(repository.id)}/${encodeURIComponent(mission.missionId)}`,
                         isActive:
                             isSelected && mission.missionId === activeMissionId,
                     }),
@@ -233,9 +224,7 @@
         <NavSecondary items={bottomMenu} class="mt-auto" />
     </Sidebar.Content>
 
-    {#if airportUser}
-        <Sidebar.Footer>
-            <NavUser user={airportUser} />
-        </Sidebar.Footer>
-    {/if}
+    <Sidebar.Footer>
+        <NavUser />
+    </Sidebar.Footer>
 </Sidebar.Root>

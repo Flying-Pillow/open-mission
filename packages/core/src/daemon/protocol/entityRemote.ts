@@ -1,15 +1,15 @@
 import { z } from 'zod/v4';
-import { entityMethodNameSchema, entityNameSchema } from '../../entities/Entity/EntitySchema.js';
+import { EntityMethodNameSchema, EntityNameSchema } from '../../entities/Entity/EntitySchema.js';
 
 export const entityQueryInvocationSchema = z.object({
-    entity: entityNameSchema,
-    method: entityMethodNameSchema,
+    entity: EntityNameSchema,
+    method: EntityMethodNameSchema,
     payload: z.unknown().optional()
 }).strict();
 
 export const entityCommandInvocationSchema = z.object({
-    entity: entityNameSchema,
-    method: entityMethodNameSchema,
+    entity: EntityNameSchema,
+    method: EntityMethodNameSchema,
     payload: z.unknown().optional()
 }).strict();
 

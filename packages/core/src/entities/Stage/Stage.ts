@@ -47,7 +47,7 @@ export class StageEntity {
 		const mission = await service.loadRequiredMission(input, context);
 		try {
 			service.requireStage(await service.buildMissionSnapshot(mission, input.missionId), input.stageId);
-			await mission.executeAction(StageEntity.resolveActionId(input.commandId, input.stageId), []);
+			await mission.executeOperatorAction(StageEntity.resolveActionId(input.commandId, input.stageId), []);
 			return stageCommandAcknowledgementSchema.parse({
 				ok: true,
 				entity: 'Stage',

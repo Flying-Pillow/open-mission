@@ -22,15 +22,15 @@ import {
 	createEntityChannel,
 	createEntityId,
 	matchesEntityChannel,
-	type EntityId
+	type EntityIdType
 } from '../entities/Entity/Entity.js';
 import { DaemonLogger } from './runtime/DaemonLogger.js';
 import { MissionDaemon } from './MissionDaemon.js';
 
 type NotificationAddress = {
-	entityId: EntityId;
+	entityId: EntityIdType;
 	eventName: string;
-	missionEntityId?: EntityId;
+	missionEntityId?: EntityIdType;
 };
 
 type DaemonServices = {
@@ -326,8 +326,8 @@ function childAddress(
 function resolveNotificationOccurredAt(event: Notification): string {
 	switch (event.type) {
 		case 'airport.state':
-			return event.snapshot.state.airport.substrate.lastObservedAt
-				?? event.snapshot.state.airport.substrate.lastAppliedAt
+			return event.system.state.airport.substrate.lastObservedAt
+				?? event.system.state.airport.substrate.lastAppliedAt
 				?? new Date().toISOString();
 		case 'mission.snapshot.changed':
 			return event.snapshot.workflow?.updatedAt

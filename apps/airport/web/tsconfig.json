@@ -11,35 +11,10 @@
     "sourceMap": true,
     "strict": true,
     "moduleResolution": "bundler",
-    "paths": {
-      "$lib": [
-        "./src/lib"
-      ],
-      "$lib/*": [
-        "./src/lib/*"
-      ],
-      "$docs": [
-        "../../../docs"
-      ],
-      "$docs/*": [
-        "../../../docs/*"
-      ],
-      "$app/types": [
-        "./.svelte-kit/types/index.d.ts"
-      ],
-      "@flying-pillow/mission-core": [
-        "../../../packages/core/src"
-      ],
-      "@flying-pillow/mission-core/*": [
-        "../../../packages/core/src/*"
-      ],
-      "@flying-pillow/mission": [
-        "../../../packages/mission/src"
-      ],
-      "@flying-pillow/mission/*": [
-        "../../../packages/mission/src/*"
-      ]
-    }
+    "customConditions": [
+      "development",
+      "typescript"
+    ]
   },
   "include": [
     ".svelte-kit/ambient.d.ts",
@@ -58,8 +33,8 @@
     "tests/**/*.ts",
     "tests/**/*.svelte"
   ]
-  // Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
-  // except $lib which is handled by https://svelte.dev/docs/kit/configuration#files
+  // Path aliases are generated from https://svelte.dev/docs/kit/configuration#alias.
+  // Workspace package imports resolve through package.json exports and customConditions.
   //
   // To make changes to top-level options such as include and exclude, we recommend extending
   // the generated config; see https://svelte.dev/docs/kit/configuration#typescript

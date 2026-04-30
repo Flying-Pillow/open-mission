@@ -6,19 +6,24 @@
     import FileDescriptionIcon from "@tabler/icons-svelte/icons/file-description";
     import ListDetailsIcon from "@tabler/icons-svelte/icons/list-details";
     import SettingsIcon from "@tabler/icons-svelte/icons/settings";
-    import { missionFromBriefInputSchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+    import { MissionFromBriefInputSchema } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import type { inferFlattenedErrors, z } from "zod/v4";
     import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
     import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
 
-    type BriefInput = z.infer<typeof missionFromBriefInputSchema>;
+    type BriefInput = z.infer<typeof MissionFromBriefInputSchema>;
     type BriefErrors = inferFlattenedErrors<
-        typeof missionFromBriefInputSchema
+        typeof MissionFromBriefInputSchema
     >["fieldErrors"];
 
     const repositoryScope = getScopedRepositoryContext();
+    let {
+        embedded = false,
+    }: {
+        embedded?: boolean;
+    } = $props();
 
     let title = $state("");
     let briefBody = $state("");
@@ -39,7 +44,7 @@
             return;
         }
 
-        const parsed = missionFromBriefInputSchema.safeParse({
+        const parsed = MissionFromBriefInputSchema.safeParse({
             title,
             body: briefBody,
             type: briefType,
@@ -64,16 +69,20 @@
 </script>
 
 <section
-    class="flex min-h-0 flex-1 flex-col rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
+    class={embedded
+        ? "flex min-h-0 flex-1 flex-col"
+        : "flex min-h-0 flex-1 flex-col rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"}
 >
-    <h2 class="text-lg font-semibold text-foreground">Start from brief</h2>
-    <p class="mt-1 text-sm text-muted-foreground">
-        Create a new mission directly from an authored brief when the work is
-        not tied to a tracked issue.
-    </p>
+    {#if !embedded}
+        <h2 class="text-lg font-semibold text-foreground">Start from brief</h2>
+        <p class="mt-1 text-sm text-muted-foreground">
+            Create a new mission directly from an authored brief when the work
+            is not tied to a tracked issue.
+        </p>
+    {/if}
 
     <form
-        class="mt-4 flex min-h-0 flex-1 flex-col gap-3"
+        class={`${embedded ? "" : "mt-4 "}flex min-h-0 flex-1 flex-col gap-3`}
         onsubmit={handleSubmit}
     >
         <div class="grid gap-2">

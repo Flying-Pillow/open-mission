@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import type { EntityExecutionContext } from '../Entity/Entity.js';
 import type { AgentRunner } from '../../daemon/runtime/agent/AgentRunner.js';
 import type { AgentSessionSnapshot } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
-import type { MissionAgentSessionLaunchRequest } from '../../daemon/protocol/contracts.js';
+import type { AgentSessionLaunchRequest } from '../../daemon/protocol/contracts.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
 import { AgentSession } from '../AgentSession/AgentSession.js';
 import { buildTaskLaunchPrompt } from './taskLaunchPrompt.js';
@@ -81,7 +81,7 @@ export type TaskOwner = {
 	startTaskAgentSession(
 		task: MissionTaskState,
 		runner: AgentRunner,
-		request: MissionAgentSessionLaunchRequest
+		request: AgentSessionLaunchRequest
 	): Promise<AgentSessionSnapshot>;
 	recordStartedTaskSession(snapshot: AgentSessionSnapshot): Promise<AgentSession>;
 	recordTaskSessionLaunchFailure(taskId: string, error: unknown): Promise<void>;
@@ -310,7 +310,7 @@ export class Task {
 	}
 
 	public async launchSession(
-		request: MissionAgentSessionLaunchRequest
+		request: AgentSessionLaunchRequest
 	): Promise<AgentSession> {
 		await this.prepareForSessionLaunch();
 		const runner = this.owner.requireAgentRunner(request.runnerId);

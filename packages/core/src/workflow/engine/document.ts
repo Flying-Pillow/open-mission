@@ -1,6 +1,6 @@
 import {
     MISSION_WORKFLOW_RUNTIME_SCHEMA_VERSION,
-    type MissionAgentSessionRuntimeState,
+    type AgentSessionRuntimeState,
     type MissionStageId,
     type MissionWorkflowConfigurationSnapshot,
     type MissionWorkflowEvent,
@@ -111,9 +111,9 @@ export function ingestMissionWorkflowEvent(
     };
 }
 
-export function toMissionAgentSessionRuntimeState(
-    session: MissionAgentSessionRuntimeState
-): MissionAgentSessionRuntimeState {
+export function toAgentSessionRuntimeState(
+    session: AgentSessionRuntimeState
+): AgentSessionRuntimeState {
     return {
         sessionId: session.sessionId,
         taskId: session.taskId,

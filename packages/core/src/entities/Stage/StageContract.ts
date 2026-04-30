@@ -1,4 +1,4 @@
-import type { EntitySchema } from '../Entity/EntitySchema.js';
+import type { EntityContractType } from '../Entity/EntitySchema.js';
 import { StageEntity } from './Stage.js';
 import {
     missionStageEntityName,
@@ -8,7 +8,7 @@ import {
     stageCommandAcknowledgementSchema
 } from './StageSchema.js';
 
-export const stageEntityContract: EntitySchema = {
+export const stageEntityContract: EntityContractType = {
     entity: missionStageEntityName,
     entityClass: StageEntity,
     methods: {

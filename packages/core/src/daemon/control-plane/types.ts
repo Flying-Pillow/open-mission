@@ -1,4 +1,4 @@
-import type { MissionAgentSessionRecord } from '../protocol/contracts.js';
+import type { AgentSessionRecord } from '../protocol/contracts.js';
 import type {
 	ContextSelection,
 	RepositoryControlStatus,
@@ -50,7 +50,7 @@ export type ControlWorkspaceSource = {
 
 export type ControlDocumentPathField = 'agentRunner' | 'defaultAgentMode' | 'defaultModel' | 'missionsRoot' | 'instructionsPath' | 'skillsPath';
 
-export type ControlAgentSessions = MissionAgentSessionRecord[];
+export type ControlAgentSessions = AgentSessionRecord[];
 
 export type ControlTowerProjection = MissionTowerProjection;
 

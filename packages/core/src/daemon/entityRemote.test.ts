@@ -4,7 +4,6 @@ import {
 	executeEntityCommandInDaemon,
 	executeEntityQueryInDaemon
 } from './entityRemote.js';
-import { GitHubRepository } from '../entities/GitHubRepository/GitHubRepository.js';
 import { MissionDaemon, type MissionHandle } from './MissionDaemon.js';
 import { Repository } from '../entities/Repository/Repository.js';
 import { PROTOCOL_VERSION } from './protocol/transport.js';
@@ -12,7 +11,7 @@ import type {
 	MissionCommandAcknowledgement,
 	MissionSnapshot,
 } from '../entities/Mission/MissionSchema.js';
-import { repositoryMissionStartAcknowledgementSchema } from '../entities/Repository/RepositorySchema.js';
+import { RepositoryMissionStartAcknowledgementSchema } from '../entities/Repository/RepositorySchema.js';
 
 describe('daemon entity dispatch', () => {
 	it('uses the bumped daemon protocol version', () => {
@@ -20,7 +19,7 @@ describe('daemon entity dispatch', () => {
 	});
 
 	it('uses source acknowledgements for Repository mission-start commands', () => {
-		expect(repositoryMissionStartAcknowledgementSchema.parse({
+		expect(RepositoryMissionStartAcknowledgementSchema.parse({
 			ok: true,
 			entity: 'Repository',
 			method: 'startMissionFromIssue',
@@ -32,7 +31,7 @@ describe('daemon entity dispatch', () => {
 			id: 'mission-29'
 		});
 
-		expect(() => repositoryMissionStartAcknowledgementSchema.parse({
+		expect(() => RepositoryMissionStartAcknowledgementSchema.parse({
 			missionId: 'mission-29',
 			status: {
 				missionId: 'mission-29',
@@ -80,15 +79,16 @@ describe('daemon entity dispatch', () => {
 		}
 	});
 
-	it('dispatches GitHubRepository source methods through explicit handlers', async () => {
+	it('dispatches Repository platform-backed source methods through explicit handlers', async () => {
 		const repositorySnapshot = {
 			repository: Repository.open('/tmp/mission-proof-of-concept').toSchema(),
 			controlRoot: '/tmp/mission-proof-of-concept',
 			missions: []
 		};
-		const findSpy = vi.spyOn(GitHubRepository, 'find').mockResolvedValue([
+		const findSpy = vi.spyOn(Repository, 'findAvailable').mockResolvedValue([
 			{
-				fullName: 'Flying-Pillow/mission',
+				platform: 'github',
+				repositoryRef: 'Flying-Pillow/mission',
 				name: 'mission',
 				topics: [],
 				ownerLogin: 'Flying-Pillow',
@@ -96,19 +96,20 @@ describe('daemon entity dispatch', () => {
 				archived: false
 			}
 		]);
-		const cloneSpy = vi.spyOn(GitHubRepository, 'clone').mockResolvedValue(repositorySnapshot);
+		const addSpy = vi.spyOn(Repository, 'add').mockResolvedValue(repositorySnapshot);
 
 		try {
 			await expect(executeEntityQueryInDaemon({
-				entity: 'GitHubRepository',
-				method: 'find',
+				entity: 'Repository',
+				method: 'findAvailable',
 				payload: {}
 			}, {
 				surfacePath: '/repo/root',
 				authToken: 'token'
 			})).resolves.toEqual([
 				{
-					fullName: 'Flying-Pillow/mission',
+					platform: 'github',
+					repositoryRef: 'Flying-Pillow/mission',
 					name: 'mission',
 					topics: [],
 					ownerLogin: 'Flying-Pillow',
@@ -118,10 +119,11 @@ describe('daemon entity dispatch', () => {
 			]);
 
 			await expect(executeEntityCommandInDaemon({
-				entity: 'GitHubRepository',
-				method: 'clone',
+				entity: 'Repository',
+				method: 'add',
 				payload: {
-					githubRepository: 'Flying-Pillow/mission',
+					platform: 'github',
+					repositoryRef: 'Flying-Pillow/mission',
 					destinationPath: '/repositories/Flying-Pillow/mission'
 				}
 			}, {
@@ -130,13 +132,14 @@ describe('daemon entity dispatch', () => {
 			})).resolves.toMatchObject(repositorySnapshot);
 
 			expect(findSpy).toHaveBeenCalledWith({}, { surfacePath: '/repo/root', authToken: 'token' });
-			expect(cloneSpy).toHaveBeenCalledWith({
-				githubRepository: 'Flying-Pillow/mission',
+			expect(addSpy).toHaveBeenCalledWith({
+				platform: 'github',
+				repositoryRef: 'Flying-Pillow/mission',
 				destinationPath: '/repositories/Flying-Pillow/mission'
 			}, { surfacePath: '/repo/root', authToken: 'token' });
 		} finally {
 			findSpy.mockRestore();
-			cloneSpy.mockRestore();
+			addSpy.mockRestore();
 		}
 	});
 
@@ -299,7 +302,7 @@ describe('daemon entity dispatch', () => {
 		const mission = createMissionHandle({
 			...createMissionSnapshot().mission,
 			artifacts: [createMissionArtifactSnapshot()],
-			agentSessions: [createMissionAgentSessionSnapshot()]
+			agentSessions: [createAgentSessionSnapshot()]
 		});
 		const loadMission = vi.fn(async () => mission);
 		const context = {
@@ -566,7 +569,7 @@ function createMissionSnapshot(): MissionSnapshot {
 		stages: [createMissionStageSnapshot()],
 		tasks: [createMissionTaskSnapshot()],
 		artifacts: [createMissionArtifactSnapshot()],
-		agentSessions: [createMissionAgentSessionSnapshot()]
+		agentSessions: [createAgentSessionSnapshot()]
 	};
 }
 
@@ -645,7 +648,7 @@ function createMissionArtifactSnapshot() {
 	};
 }
 
-function createMissionAgentSessionSnapshot() {
+function createAgentSessionSnapshot() {
 	return {
 		sessionId: 'session-1',
 		runnerId: 'copilot-cli',

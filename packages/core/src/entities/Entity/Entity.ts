@@ -1,15 +1,15 @@
 import type {
-	EntityChannel,
-	EntityCommandDescriptor,
-	EntityId,
-	EntityMethod,
-	EntitySchema
+	EntityChannelType,
+	EntityCommandDescriptorType,
+	EntityIdType,
+	EntityMethodType,
+	EntityContractType
 } from './EntitySchema.js';
 import {
-	entityChannelSchema,
-	entityIdSchema,
-	entityTableSchema,
-	entityEventAddressSchema
+	EntityChannelSchema,
+	EntityIdSchema,
+	EntityTableSchema,
+	EntityEventAddressSchema
 } from './EntitySchema.js';
 import type {
 	EntityCommandInvocation,
@@ -24,9 +24,9 @@ import {
 } from './EntityFactory.js';
 
 export type {
-	EntityChannel,
-	EntityEventAddress,
-	EntityId
+	EntityChannelType,
+	EntityEventAddressType,
+	EntityIdType
 } from './EntitySchema.js';
 
 export type EntityMethodAvailability = {
@@ -52,7 +52,7 @@ export abstract class Entity<
 	public static readonly entityName: string;
 
 	public static async executeQuery(
-		contract: EntitySchema,
+		contract: EntityContractType,
 		input: EntityQueryInvocation,
 		context: EntityExecutionContext
 	): Promise<EntityRemoteResult> {
@@ -60,7 +60,7 @@ export abstract class Entity<
 	}
 
 	public static async executeCommand(
-		contract: EntitySchema,
+		contract: EntityContractType,
 		input: EntityCommandInvocation | EntityFormInvocation,
 		context: EntityExecutionContext
 	): Promise<EntityRemoteResult> {
@@ -68,10 +68,10 @@ export abstract class Entity<
 	}
 
 	public static async buildUiCommandDescriptors(
-		contract: EntitySchema,
+		contract: EntityContractType,
 		entity: object,
 		context: EntityExecutionContext
-	): Promise<EntityCommandDescriptor[]> {
+	): Promise<EntityCommandDescriptorType[]> {
 		const methods = contract.methods ?? {};
 		const descriptors = await Promise.all(
 			Object.entries(methods)
@@ -89,7 +89,7 @@ export abstract class Entity<
 						...(method.ui!.confirmation ? { confirmation: method.ui!.confirmation } : {}),
 						...(method.ui!.input ? { input: method.ui!.input } : {}),
 						...(method.ui!.presentationOrder !== undefined ? { presentationOrder: method.ui!.presentationOrder } : {})
-					} satisfies EntityCommandDescriptor;
+					} satisfies EntityCommandDescriptorType;
 				})
 		);
 
@@ -109,7 +109,7 @@ export abstract class Entity<
 
 	private static async executeMethod(
 		kind: 'Query' | 'Command',
-		contract: EntitySchema,
+		contract: EntityContractType,
 		input: EntityQueryInvocation | EntityCommandInvocation | EntityFormInvocation,
 		context: EntityExecutionContext
 	): Promise<EntityRemoteResult> {
@@ -123,9 +123,9 @@ export abstract class Entity<
 
 	private static resolveContractMethod(
 		kind: 'Query' | 'Command',
-		contract: EntitySchema,
+		contract: EntityContractType,
 		methodName: string
-	): EntityMethod {
+	): EntityMethodType {
 		const method = contract.methods?.[methodName];
 		if (!method) {
 			throw new Error(`${kind} method '${contract.entity}.${methodName}' is not implemented in the daemon.`);
@@ -140,8 +140,8 @@ export abstract class Entity<
 	}
 
 	private static async executeClassMethod(
-		contract: EntitySchema,
-		method: EntityMethod,
+		contract: EntityContractType,
+		method: EntityMethodType,
 		methodName: string,
 		payload: unknown,
 		context: EntityExecutionContext
@@ -160,7 +160,7 @@ export abstract class Entity<
 
 	private static async executeEntityClassMethod(
 		entity: string,
-		entityClass: EntitySchema['entityClass'],
+		entityClass: EntityContractType['entityClass'],
 		methodName: string,
 		payload: unknown,
 		context: EntityExecutionContext
@@ -175,7 +175,7 @@ export abstract class Entity<
 
 	private static async executeEntityInstanceMethod(
 		entity: string,
-		entityClass: EntitySchema['entityClass'],
+		entityClass: EntityContractType['entityClass'],
 		methodName: string,
 		payload: unknown,
 		context: EntityExecutionContext
@@ -298,37 +298,37 @@ export abstract class Entity<
 	}
 }
 
-export function createEntityId(table: string, uniqueId: string): EntityId {
-	const normalizedTable = entityTableSchema.parse(table);
-	const normalizedUniqueId = entityEventAddressSchema.shape.eventName.parse(uniqueId);
-	return entityIdSchema.parse(`${normalizedTable}:${normalizedUniqueId}`);
+export function createEntityId(table: string, uniqueId: string): EntityIdType {
+	const normalizedTable = EntityTableSchema.parse(table);
+	const normalizedUniqueId = EntityEventAddressSchema.shape.eventName.parse(uniqueId);
+	return EntityIdSchema.parse(`${normalizedTable}:${normalizedUniqueId}`);
 }
 
-export function createEntityChannel(entityId: EntityId | string, eventName: string): EntityChannel {
-	const normalizedEntityId = entityIdSchema.parse(entityId);
-	const normalizedEventName = entityEventAddressSchema.shape.eventName.parse(eventName);
-	return entityChannelSchema.parse(`${normalizedEntityId}.${normalizedEventName}`);
+export function createEntityChannel(entityId: EntityIdType | string, eventName: string): EntityChannelType {
+	const normalizedEntityId = EntityIdSchema.parse(entityId);
+	const normalizedEventName = EntityEventAddressSchema.shape.eventName.parse(eventName);
+	return EntityChannelSchema.parse(`${normalizedEntityId}.${normalizedEventName}`);
 }
 
-export function getEntityTable(entityId: EntityId | string): string {
-	const normalizedEntityId = entityIdSchema.parse(entityId);
+export function getEntityTable(entityId: EntityIdType | string): string {
+	const normalizedEntityId = EntityIdSchema.parse(entityId);
 	return normalizedEntityId.slice(0, normalizedEntityId.indexOf(':'));
 }
 
 export function createEntityMethodCommandId(entityName: string, methodName: string): string {
-	const normalizedEntityName = entityEventAddressSchema.shape.eventName.parse(entityName);
-	const normalizedMethodName = entityEventAddressSchema.shape.eventName.parse(methodName);
+	const normalizedEntityName = EntityEventAddressSchema.shape.eventName.parse(entityName);
+	const normalizedMethodName = EntityEventAddressSchema.shape.eventName.parse(methodName);
 	return `${normalizedEntityName.charAt(0).toLowerCase()}${normalizedEntityName.slice(1)}.${normalizedMethodName}`;
 }
 
 export function createEntityAvailabilityMethodName(methodName: string): string {
-	const normalizedMethodName = entityEventAddressSchema.shape.eventName.parse(methodName);
+	const normalizedMethodName = EntityEventAddressSchema.shape.eventName.parse(methodName);
 	return `can${normalizedMethodName.charAt(0).toUpperCase()}${normalizedMethodName.slice(1)}`;
 }
 
 export function matchesEntityChannel(channel: string, pattern: string): boolean {
-	const normalizedChannel = entityChannelSchema.parse(channel);
-	const normalizedPattern = entityEventAddressSchema.shape.eventName.parse(pattern);
+	const normalizedChannel = EntityChannelSchema.parse(channel);
+	const normalizedPattern = EntityEventAddressSchema.shape.eventName.parse(pattern);
 	if (normalizedPattern === '*') {
 		return true;
 	}

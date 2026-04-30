@@ -57,7 +57,7 @@ describe("handle", () => {
 
 		await expect(
 			handle({
-				event: createEvent("http://127.0.0.1:4175/repository/example"),
+				event: createEvent("http://127.0.0.1:4175/airport/example"),
 				resolve,
 			}),
 		).rejects.toMatchObject({
@@ -97,7 +97,7 @@ function createEvent(url: string) {
 		params: {},
 		platform: undefined,
 		route: { id: null },
-		setHeaders: () => {},
+		setHeaders: () => { },
 		isDataRequest: false,
 		isSubRequest: false,
 	} as unknown as RequestEvent;

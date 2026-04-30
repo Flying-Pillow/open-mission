@@ -1,30 +1,32 @@
-import type { EntitySchema } from '../Entity/EntitySchema.js';
+import type { EntityContractType } from '../Entity/EntitySchema.js';
 import { Repository } from './Repository.js';
 import {
-    githubIssueDetailSchema,
-    repositoryAddPayloadSchema,
-    repositoryDataSchema,
+    GitHubIssueDetailSchema,
+    RepositoryAddPayloadSchema,
+    RepositoryDataSchema,
+    RepositoryPlatformRepositorySchema,
     repositoryEntityName,
-    repositoryFindPayloadSchema,
-    repositoryGetIssuePayloadSchema,
-    repositoryListIssuesPayloadSchema,
-    repositoryMissionStartAcknowledgementSchema,
-    repositoryPreparePayloadSchema,
-    repositoryPrepareResultSchema,
-    repositoryRemoveAcknowledgementSchema,
-    repositoryRemovePayloadSchema,
-    repositoryReadPayloadSchema,
-    repositorySnapshotSchema,
-    repositoryStartMissionFromBriefPayloadSchema,
-    repositoryStartMissionFromIssuePayloadSchema,
-    trackedIssueSummarySchema
+    RepositoryFindPayloadSchema,
+    RepositoryFindAvailablePayloadSchema,
+    RepositoryGetIssuePayloadSchema,
+    RepositoryListIssuesPayloadSchema,
+    RepositoryMissionStartAcknowledgementSchema,
+    RepositoryPreparePayloadSchema,
+    RepositoryPrepareResultSchema,
+    RepositoryRemoveAcknowledgementSchema,
+    RepositoryRemovePayloadSchema,
+    RepositoryReadPayloadSchema,
+    RepositorySnapshotSchema,
+    RepositoryStartMissionFromBriefPayloadSchema,
+    RepositoryStartMissionFromIssuePayloadSchema,
+    TrackedIssueSummarySchema
 } from './RepositorySchema.js';
 
-export const repositoryContract: EntitySchema = {
+export const repositoryContract: EntityContractType = {
     entity: repositoryEntityName,
     entityClass: Repository,
     properties: Object.fromEntries(
-        Object.entries(repositoryDataSchema.shape).map(([name, schema]) => [
+        Object.entries(RepositoryDataSchema.shape).map(([name, schema]) => [
             name,
             {
                 schema,
@@ -35,32 +37,38 @@ export const repositoryContract: EntitySchema = {
     methods: {
         find: {
             kind: 'query',
-            payload: repositoryFindPayloadSchema,
-            result: repositorySnapshotSchema.array(),
+            payload: RepositoryFindPayloadSchema,
+            result: RepositorySnapshotSchema.array(),
+            execution: 'class'
+        },
+        findAvailable: {
+            kind: 'query',
+            payload: RepositoryFindAvailablePayloadSchema,
+            result: RepositoryPlatformRepositorySchema.array(),
             execution: 'class'
         },
         read: {
             kind: 'query',
-            payload: repositoryReadPayloadSchema,
-            result: repositorySnapshotSchema,
+            payload: RepositoryReadPayloadSchema,
+            result: RepositorySnapshotSchema,
             execution: 'entity'
         },
         listIssues: {
             kind: 'query',
-            payload: repositoryListIssuesPayloadSchema,
-            result: trackedIssueSummarySchema.array(),
+            payload: RepositoryListIssuesPayloadSchema,
+            result: TrackedIssueSummarySchema.array(),
             execution: 'entity'
         },
         getIssue: {
             kind: 'query',
-            payload: repositoryGetIssuePayloadSchema,
-            result: githubIssueDetailSchema,
+            payload: RepositoryGetIssuePayloadSchema,
+            result: GitHubIssueDetailSchema,
             execution: 'entity'
         },
         add: {
             kind: 'mutation',
-            payload: repositoryAddPayloadSchema,
-            result: repositorySnapshotSchema,
+            payload: RepositoryAddPayloadSchema,
+            result: RepositorySnapshotSchema,
             execution: 'class',
             ui: {
                 label: 'Add Repository',
@@ -70,8 +78,8 @@ export const repositoryContract: EntitySchema = {
         },
         remove: {
             kind: 'mutation',
-            payload: repositoryRemovePayloadSchema,
-            result: repositoryRemoveAcknowledgementSchema,
+            payload: RepositoryRemovePayloadSchema,
+            result: RepositoryRemoveAcknowledgementSchema,
             execution: 'entity',
             ui: {
                 label: 'Remove Repository',
@@ -82,8 +90,8 @@ export const repositoryContract: EntitySchema = {
         },
         prepare: {
             kind: 'mutation',
-            payload: repositoryPreparePayloadSchema,
-            result: repositoryPrepareResultSchema,
+            payload: RepositoryPreparePayloadSchema,
+            result: RepositoryPrepareResultSchema,
             execution: 'entity',
             ui: {
                 label: 'Prepare Repository',
@@ -93,8 +101,8 @@ export const repositoryContract: EntitySchema = {
         },
         startMissionFromIssue: {
             kind: 'mutation',
-            payload: repositoryStartMissionFromIssuePayloadSchema,
-            result: repositoryMissionStartAcknowledgementSchema,
+            payload: RepositoryStartMissionFromIssuePayloadSchema,
+            result: RepositoryMissionStartAcknowledgementSchema,
             execution: 'entity',
             ui: {
                 label: 'Start Mission From Issue',
@@ -104,8 +112,8 @@ export const repositoryContract: EntitySchema = {
         },
         startMissionFromBrief: {
             kind: 'mutation',
-            payload: repositoryStartMissionFromBriefPayloadSchema,
-            result: repositoryMissionStartAcknowledgementSchema,
+            payload: RepositoryStartMissionFromBriefPayloadSchema,
+            result: RepositoryMissionStartAcknowledgementSchema,
             execution: 'entity',
             ui: {
                 label: 'Start Mission From Brief',
@@ -116,7 +124,7 @@ export const repositoryContract: EntitySchema = {
     },
     events: {
         missionStarted: {
-            payload: repositoryMissionStartAcknowledgementSchema
+            payload: RepositoryMissionStartAcknowledgementSchema
         }
     }
 };

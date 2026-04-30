@@ -1,44 +1,47 @@
 <script lang="ts">
+    import type { GitHubIssueDetailType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import { page } from "$app/state";
-    import { onMount, type Component } from "svelte";
+    import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { setScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
-    import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
-    import BriefForm from "$lib/components/entities/Brief/BriefForm.svelte";
     import IssueList from "$lib/components/entities/Issue/IssueList.svelte";
     import IssuePreview from "$lib/components/entities/Issue/IssuePreview.svelte";
-    import MissionSummary from "$lib/components/entities/Mission/MissionSummary.svelte";
     import RepositoryList from "$lib/components/entities/Repository/RepositoryList.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
-    import type {
-        SelectedIssueSummary,
-        SidebarRepositorySummary,
-    } from "$lib/components/entities/types";
-
-    type RepositoryRouteSummary = SidebarRepositorySummary & { id: string };
+    import * as Dialog from "$lib/components/ui/dialog/index.js";
 
     const appContext = getAppContext();
-    const repositoryId = page.params.repositoryId?.trim() ?? "";
+    const repositoryId = $derived(page.params.repositoryId?.trim() ?? "");
     const repositoryScopeState = $state<{
         repositoryId?: string;
         repository?: RepositoryEntity;
         loading: boolean;
         error?: string | null;
     }>({
-        repositoryId: repositoryId || undefined,
         loading: true,
     });
     const repositoryScope = setScopedRepositoryContext(repositoryScopeState);
 
-    let selectedIssue = $state<SelectedIssueSummary | null>(null);
+    let selectedIssue = $state<GitHubIssueDetailType | null>(null);
+    let issuePreviewOpen = $state(false);
     let issueError = $state<string | null>(null);
     let issueLoadingNumber = $state<number | null>(null);
-    let MarkdownViewer = $state<Component<{ source: string }> | null>(null);
+
+    $effect(() => {
+        const activeRepository = appContext.airport.activeRepository;
+        repositoryScope.repositoryId = repositoryId || undefined;
+        repositoryScope.repository =
+            activeRepository?.id === repositoryId
+                ? activeRepository
+                : undefined;
+        repositoryScope.loading = appContext.airport.activeRepositoryLoading;
+        repositoryScope.error =
+            appContext.airport.activeRepositoryError ?? null;
+    });
 
     const activeRepository = $derived(repositoryScope.repository);
     const repositoryLoading = $derived(repositoryScope.loading);
     const repositoryError = $derived(repositoryScope.error);
-    const selectedMission = $derived(activeRepository?.selectedMission);
     const repositorySummary = $derived(activeRepository?.summary);
     const repositoryDisplayName = $derived(
         activeRepository?.displayName ?? "Repository",
@@ -53,9 +56,9 @@
         activeRepository?.controlRoot ?? repositorySummary?.repositoryRootPath,
     );
     const repositoryCurrentBranch = $derived(activeRepository?.currentBranch);
-    const repositoryGithubRepository = $derived(
-        activeRepository?.githubRepository ??
-            repositorySummary?.githubRepository,
+    const repositoryPlatformRepositoryRef = $derived(
+        activeRepository?.platformRepositoryRef ??
+            repositorySummary?.platformRepositoryRef,
     );
     const repositorySettingsComplete = $derived(
         activeRepository?.settingsComplete,
@@ -64,49 +67,8 @@
         activeRepository?.missionCountLabel ?? "0 missions",
     );
 
-    onMount(() => {
-        const repositories = appContext.airport
-            .repositories as RepositoryRouteSummary[];
-        const initialSummary = repositories.find(
-            (repository) => repository.id === repositoryId,
-        );
-
-        if (initialSummary) {
-            repositoryScope.repository =
-                appContext.application.seedRepositoryFromSummary(
-                    initialSummary,
-                );
-            repositoryScope.error = null;
-        }
-
-        void loadRepositorySurface();
-        void loadMarkdownViewer();
-    });
-
-    async function loadRepositorySurface(): Promise<void> {
-        try {
-            const repository =
-                await appContext.application.openRepositoryRoute(repositoryId);
-            repositoryScope.repository = repository;
-            repositoryScope.error = null;
-        } catch (error) {
-            if (!repositoryScope.repository) {
-                repositoryScope.repository = undefined;
-            }
-            repositoryScope.error =
-                error instanceof Error ? error.message : String(error);
-        } finally {
-            repositoryScope.loading = false;
-        }
-    }
-
-    async function loadMarkdownViewer(): Promise<void> {
-        MarkdownViewer = (
-            await import("$lib/components/viewers/markdown.svelte")
-        ).default;
-    }
-
     function closeIssuePreview(): void {
+        issuePreviewOpen = false;
         selectedIssue = null;
         issueError = null;
     }
@@ -189,7 +151,7 @@
                         Tracking
                     </p>
                     <p class="mt-2 text-sm font-medium text-foreground">
-                        {repositoryGithubRepository ?? "Not configured"}
+                        {repositoryPlatformRepositoryRef ?? "Not configured"}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-background/70 px-4 py-3">
@@ -209,54 +171,35 @@
 
         {#key activeRepository.id}
             <div
-                class="mt-4 grid min-h-0 flex-1 gap-4 overflow-hidden xl:grid-cols-2"
+                class="mt-4 grid min-h-0 flex-1 gap-4 overflow-hidden sm:grid-cols-2"
             >
-                <section
-                    class="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 overflow-hidden"
-                >
-                    <RepositoryList />
+                <section class="flex min-h-0 w-full overflow-hidden">
+                    <RepositoryList mode="missions" />
+                </section>
 
+                <section class="flex min-h-0 w-full overflow-hidden">
                     <IssueList
                         bind:selectedIssue
+                        bind:issuePreviewOpen
                         bind:issueError
                         bind:issueLoadingNumber
                     />
                 </section>
-
-                <section
-                    class="grid min-h-0 grid-rows-[minmax(0,1fr)] overflow-hidden"
-                >
-                    {#if selectedIssue}
-                        <IssuePreview
-                            {selectedIssue}
-                            onClose={closeIssuePreview}
-                        />
-                    {:else}
-                        <div class="flex min-h-0 h-full flex-col">
-                            {#if issueError}
-                                <section
-                                    class="mb-4 rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
-                                >
-                                    <h2
-                                        class="text-lg font-semibold text-foreground"
-                                    >
-                                        Issue viewer
-                                    </h2>
-                                    <p class="mt-3 text-sm text-rose-600">
-                                        {issueError}
-                                    </p>
-                                </section>
-                            {/if}
-
-                            {#if selectedMission}
-                                <MissionSummary />
-                            {:else}
-                                <BriefForm />
-                            {/if}
-                        </div>
-                    {/if}
-                </section>
             </div>
         {/key}
+
+        <Dialog.Root bind:open={issuePreviewOpen}>
+            <Dialog.Content
+                class="flex h-[100dvh] max-h-[100dvh] min-h-0 w-full max-w-[100vw] flex-col overflow-hidden sm:h-[80dvh] sm:max-h-[80dvh] sm:max-w-4xl"
+            >
+                {#if selectedIssue}
+                    <IssuePreview
+                        {selectedIssue}
+                        onClose={closeIssuePreview}
+                        embedded
+                    />
+                {/if}
+            </Dialog.Content>
+        </Dialog.Root>
     {/if}
 </div>

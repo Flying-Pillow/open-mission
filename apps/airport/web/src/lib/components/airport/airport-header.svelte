@@ -1,5 +1,4 @@
 <script lang="ts">
-    import { asset } from "$app/paths";
     import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
     import PlugConnectedIcon from "@tabler/icons-svelte/icons/plug-connected";
     import PlugConnectedXIcon from "@tabler/icons-svelte/icons/plug-connected-x";
@@ -10,19 +9,7 @@
 
     const app = getAppContext();
 
-    const fallbackAvatar = asset("/logo.png");
     const missionRepositoryUrl = "https://github.com/Flying-Pillow/mission";
-
-    const headerUser = $derived.by(() =>
-        app.user
-            ? {
-                  name: app.user.name,
-                  ...(app.user.email ? { email: app.user.email } : {}),
-                  avatar: app.user.avatarUrl ?? fallbackAvatar,
-                  githubStatus: app.user.githubStatus ?? app.githubStatus,
-              }
-            : undefined,
-    );
 
     const daemonBadge = $derived.by(() => ({
         label: app.daemon.running ? "Daemon online" : "Daemon offline",
@@ -72,11 +59,9 @@
             >
                 <BrandGithubIcon class="size-4" />
             </a>
-            {#if headerUser}
-                <div class="w-56 max-w-[calc(100vw-8rem)]">
-                    <NavUser user={headerUser} contentSide="bottom" />
-                </div>
-            {/if}
+            <div class="w-56 max-w-[calc(100vw-8rem)]">
+                <NavUser contentSide="bottom" />
+            </div>
         </div>
     </div>
 </header>

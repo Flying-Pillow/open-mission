@@ -7,7 +7,7 @@ import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.j
 import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import { Repository } from '../Repository/Repository.js';
 import { FakeAgentRunner } from '../../daemon/runtime/agent/testing/FakeAgentRunner.js';
-import type { MissionAgentSessionRecord } from '../../daemon/protocol/contracts.js';
+import type { AgentSessionRecord } from '../../daemon/protocol/contracts.js';
 import type { MissionStageStatus, MissionTowerTreeNode } from '../../types.js';
 import { Mission } from './Mission.js';
 import type { MissionWorkflowBindings } from './Mission.js';
@@ -290,7 +290,7 @@ describe('Mission', () => {
                     (action) => action.id === `task.launch.${taskId}`
                 )).toBe(false);
 
-                const nextStatus = await mission.executeAction(`task.start.${taskId}`, [], {
+                const nextStatus = await mission.executeOperatorAction(`task.start.${taskId}`, [], {
                     terminalSessionName: 'airport-terminal-session'
                 });
                 expect(await runner.listSessions()).toHaveLength(1);
@@ -355,7 +355,7 @@ describe('Mission', () => {
                     }
                 });
 
-                const nextStatus = await mission.executeAction(`task.rework.${taskId}`, [
+                const nextStatus = await mission.executeOperatorAction(`task.rework.${taskId}`, [
                     { kind: 'text', stepId: 'task.rework.instruction', value: 'The previous output missed the requested review criteria.' }
                 ]);
 
@@ -502,7 +502,7 @@ describe('Mission', () => {
                     ])
                 });
 
-                const nextStatus = await reloaded.executeAction('task.rework.from-verification.implementation/02-boundary-verify');
+                const nextStatus = await reloaded.executeOperatorAction('task.rework.from-verification.implementation/02-boundary-verify');
                 const implementationTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary');
                 const verificationTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary-verify');
 
@@ -642,7 +642,7 @@ describe('Mission', () => {
                     ])
                 });
 
-                const nextStatus = await reloaded.executeAction('task.rework.from-verification.implementation/02-boundary-verify');
+                const nextStatus = await reloaded.executeOperatorAction('task.rework.from-verification.implementation/02-boundary-verify');
                 const implementationTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary');
                 const verificationTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary-verify');
 
@@ -756,7 +756,7 @@ describe('Mission', () => {
                     throw new Error('Expected a ready task after workflow start.');
                 }
 
-                const runningStatus = await mission.executeAction(`task.start.${taskId}`);
+                const runningStatus = await mission.executeOperatorAction(`task.start.${taskId}`);
                 expect(runningStatus.stages?.flatMap((stage: MissionStageStatus) => stage.tasks).find((task: { taskId: string; status?: string }) => task.taskId === taskId)?.status).toBe('running');
                 expect(await runner.listSessions()).toHaveLength(1);
                 expect(runningStatus.agentSessions?.length ?? 0).toBe(1);
@@ -948,7 +948,7 @@ describe('Mission', () => {
 
                 try {
                     const status = await reloaded.status();
-                    const migratedSession = status.agentSessions?.find((session: MissionAgentSessionRecord) => session.sessionId === launched.sessionId);
+                    const migratedSession = status.agentSessions?.find((session: AgentSessionRecord) => session.sessionId === launched.sessionId);
                     expect(migratedSession).toMatchObject({
                         runnerId: 'copilot-cli',
                         transportId: 'terminal'
@@ -1005,7 +1005,7 @@ describe('Mission', () => {
                 };
 
                 const status = await mission.status();
-                expect(status.agentSessions?.find((session: MissionAgentSessionRecord) => session.sessionId === launched.sessionId)).toMatchObject({
+                expect(status.agentSessions?.find((session: AgentSessionRecord) => session.sessionId === launched.sessionId)).toMatchObject({
                     sessionId: launched.sessionId,
                     runnerId: runner.id,
                     lifecycleState: 'running'

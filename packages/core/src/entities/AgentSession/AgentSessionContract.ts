@@ -1,26 +1,26 @@
-import type { EntitySchema } from '../Entity/EntitySchema.js';
+import type { EntityContractType } from '../Entity/EntitySchema.js';
 import { AgentSession } from './AgentSession.js';
 import {
-    missionAgentSessionEntityName,
+    agentSessionEntityName,
     agentSessionIdentityPayloadSchema,
     agentSessionExecuteCommandPayloadSchema,
     agentSessionSendPromptPayloadSchema,
     agentSessionSendCommandPayloadSchema,
     agentSessionReadTerminalPayloadSchema,
     agentSessionSendTerminalInputPayloadSchema,
-    missionAgentSessionSnapshotSchema,
+    agentSessionSnapshotSchema,
     agentSessionTerminalSnapshotSchema,
     agentSessionCommandAcknowledgementSchema
 } from './AgentSessionSchema.js';
 
-export const agentSessionEntityContract: EntitySchema = {
-    entity: missionAgentSessionEntityName,
+export const agentSessionEntityContract: EntityContractType = {
+    entity: agentSessionEntityName,
     entityClass: AgentSession,
     methods: {
         read: {
             kind: 'query',
             payload: agentSessionIdentityPayloadSchema,
-            result: missionAgentSessionSnapshotSchema,
+            result: agentSessionSnapshotSchema,
             execution: 'class'
         },
         readTerminal: {

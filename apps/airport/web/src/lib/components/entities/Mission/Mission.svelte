@@ -1,17 +1,19 @@
 <script lang="ts">
     import { page } from "$app/state";
-    import { onMount } from "svelte";
     import type { Artifact as ArtifactEntity } from "$lib/components/entities/Artifact/Artifact.svelte.js";
     import type { Mission as MissionEntity } from "$lib/components/entities/Mission/Mission.svelte.js";
     import type { Task as TaskEntity } from "$lib/components/entities/Task/Task.svelte.js";
     import ChevronDownIcon from "@tabler/icons-svelte/icons/chevron-down";
     import ChevronUpIcon from "@tabler/icons-svelte/icons/chevron-up";
     import type { MissionRuntimeEventEnvelope as AirportRuntimeEventEnvelope } from "../types";
-    import { missionArtifactSnapshotSchema } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
-    import { missionAgentSessionSnapshotSchema } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
-    import { missionSnapshotSchema, missionStatusSnapshotSchema } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-    import { missionStageSnapshotSchema } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
-    import { missionTaskSnapshotSchema } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
+    import { missionArtifactSnapshotSchema } from "@flying-pillow/mission-core/entities/Artifact/ArtifactSchema";
+    import { agentSessionSnapshotSchema } from "@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema";
+    import {
+        missionSnapshotSchema,
+        missionStatusSnapshotSchema,
+    } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
+    import { missionStageSnapshotSchema } from "@flying-pillow/mission-core/entities/Stage/StageSchema";
+    import { missionTaskSnapshotSchema } from "@flying-pillow/mission-core/entities/Task/TaskSchema";
     import type { AgentSession as AgentSessionModel } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { setScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
@@ -23,7 +25,7 @@
     import MissionControlTree from "$lib/components/entities/Mission/MissionControlTree.svelte";
     import MissionFileTree from "$lib/components/entities/Mission/MissionFileTree.svelte";
     import MissionTerminal from "$lib/components/entities/Mission/MissionTerminal.svelte";
-    import type { MissionTowerTreeNode } from '@flying-pillow/mission-core/types';
+    import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/types";
     import { Button } from "$lib/components/ui/button/index.js";
     import {
         ResizableHandle,
@@ -52,8 +54,8 @@
     };
 
     const appContext = getAppContext();
-    const repositoryId = page.params.repositoryId?.trim() ?? "";
-    const routeMissionId = page.params.missionId?.trim() ?? "";
+    const repositoryId = $derived(page.params.repositoryId?.trim() ?? "");
+    const routeMissionId = $derived(page.params.missionId?.trim() ?? "");
     const missionScopeState = $state<{
         repositoryId?: string;
         missionId?: string;
@@ -62,8 +64,6 @@
         loading: boolean;
         error?: string | null;
     }>({
-        repositoryId: repositoryId || undefined,
-        missionId: routeMissionId || undefined,
         loading: true,
     });
     const missionScope = setScopedMissionContext(missionScopeState);
@@ -71,7 +71,7 @@
     const activeMission = $derived(missionScope.mission);
     const missionLoading = $derived(missionScope.loading);
     const missionLoadError = $derived(missionScope.error);
-    const projectionSnapshot = $derived(activeMission?.projectionSnapshot);
+    const missionView = $derived(activeMission?.projectionSnapshot);
     const repositorySummary = $derived(activeRepository?.summary);
     const missionWorktreePath = $derived(
         activeMission?.missionWorktreePath ?? "",
@@ -80,8 +80,8 @@
         activeMission?.missionId ?? missionScope.missionId ?? "",
     );
 
-    let projectionLoading = $state(false);
-    let projectionError = $state<string | null>(null);
+    let missionViewLoading = $state(false);
+    let missionViewError = $state<string | null>(null);
     let runtimeError = $state<string | null>(null);
     let actionRefreshNonce = $state(0);
     let artifactPanelMode = $state<"view" | "edit">("view");
@@ -90,29 +90,48 @@
     let selectedWorktreeNode = $state<MissionFileTreeNode | null>(null);
     let artifactPanelSourceKey = $state<string | null>(null);
     let displayArtifact = $state<ArtifactEntity | undefined>(undefined);
-    let projectionRefreshTimer: number | null = null;
+    let missionViewRefreshTimer: number | null = null;
     let refreshQueued = false;
     let progressCollapsed = $state(false);
 
-    const missionStatus = $derived(projectionSnapshot?.status);
+    $effect(() => {
+        const currentRepository = appContext.airport.activeRepository;
+        const currentMission = appContext.airport.activeMission;
+        missionScope.repositoryId = repositoryId || undefined;
+        missionScope.missionId = routeMissionId || undefined;
+        missionScope.repository =
+            currentRepository?.id === repositoryId
+                ? currentRepository
+                : undefined;
+        missionScope.mission =
+            currentRepository?.id === repositoryId &&
+            currentMission?.missionId === routeMissionId
+                ? currentMission
+                : undefined;
+        missionScope.loading =
+            appContext.airport.activeRepositoryLoading ||
+            appContext.airport.activeMissionLoading;
+        missionScope.error =
+            appContext.airport.activeMissionError ??
+            appContext.airport.activeRepositoryError ??
+            null;
+    });
+
+    const missionStatus = $derived(missionView?.status);
     const workflowLifecycle = $derived(
-        projectionSnapshot?.workflow?.lifecycle ??
-            activeMission?.workflowLifecycle,
+        missionView?.workflow?.lifecycle ?? activeMission?.workflowLifecycle,
     );
     const workflowUpdatedAt = $derived(
-        projectionSnapshot?.workflow?.updatedAt ??
-            activeMission?.workflowUpdatedAt,
+        missionView?.workflow?.updatedAt ?? activeMission?.workflowUpdatedAt,
     );
-    const currentStageId = $derived(
-        projectionSnapshot?.workflow?.currentStageId,
-    );
+    const currentStageId = $derived(missionView?.workflow?.currentStageId);
     const missionTitle = $derived(
         missionStatus?.title ??
             activeMission?.missionId ??
             missionScope.missionId,
     );
     const repositoryName = $derived(
-        repositorySummary?.githubRepository ??
+        repositorySummary?.platformRepositoryRef ??
             repositorySummary?.repoName ??
             "Repository",
     );
@@ -132,7 +151,7 @@
         activeMission ? buildMissionTreeNodes(activeMission) : [],
     );
     const selectedNodeId = $derived.by(() => {
-        if (!projectionSnapshot || missionTreeNodes.length === 0) {
+        if (!missionView || missionTreeNodes.length === 0) {
             return undefined;
         }
 
@@ -252,35 +271,8 @@
               : undefined,
     );
 
-    onMount(async () => {
-        try {
-            const repository =
-                await appContext.application.openRepositoryRoute(repositoryId);
-            const mission = await appContext.refreshMission({
-                missionId: routeMissionId,
-                repositoryRootPath: repository.repositoryRootPath,
-            });
-            appContext.setActiveMission(routeMissionId);
-            const projectionSnapshot = await mission.getProjectionSnapshot();
-            mission.setRouteState({
-                projectionSnapshot,
-                worktreePath: repository.repositoryRootPath,
-            });
-            missionScope.mission = mission;
-            missionScope.repository = repository;
-            missionScope.error = null;
-        } catch (error) {
-            missionScope.mission = undefined;
-            missionScope.repository = undefined;
-            missionScope.error =
-                error instanceof Error ? error.message : String(error);
-        } finally {
-            missionScope.loading = false;
-        }
-    });
-
     $effect(() => {
-        if (!projectionSnapshot) {
+        if (!missionView) {
             return;
         }
 
@@ -316,6 +308,14 @@
         if (appContext.airport.activeMissionSelectedNodeId !== selectedNodeId) {
             appContext.setActiveMissionSelectedNodeId(selectedNodeId);
         }
+    });
+
+    $effect(() => {
+        if (!missionOutline) {
+            return;
+        }
+
+        appContext.setActiveMissionOutline(missionOutline);
     });
 
     $effect(() => {
@@ -356,8 +356,8 @@
 
         return () => {
             subscription.dispose();
-            if (projectionRefreshTimer !== null) {
-                window.clearTimeout(projectionRefreshTimer);
+            if (missionViewRefreshTimer !== null) {
+                window.clearTimeout(missionViewRefreshTimer);
             }
         };
     });
@@ -386,50 +386,50 @@
         }
     }
 
-    async function refreshProjectionSnapshot(): Promise<void> {
+    async function refreshMissionView(): Promise<void> {
         if (!missionWorktreePath || !activeMission) {
             return;
         }
 
-        if (projectionLoading) {
+        if (missionViewLoading) {
             refreshQueued = true;
             return;
         }
 
-        projectionLoading = true;
-        projectionError = null;
+        missionViewLoading = true;
+        missionViewError = null;
         try {
-            const nextSnapshot = await activeMission.getProjectionSnapshot();
+            const nextView = await activeMission.getProjectionSnapshot();
             activeMission.setRouteState({
-                projectionSnapshot: nextSnapshot,
+                projectionSnapshot: nextView,
                 worktreePath: missionWorktreePath,
             });
             appContext.setActiveMissionOutline({
-                title: nextSnapshot.status?.title,
-                currentStageId: nextSnapshot.workflow?.currentStageId,
+                title: nextView.status?.title,
+                currentStageId: nextView.workflow?.currentStageId,
                 treeNodes: activeMission
                     ? buildMissionTreeNodes(activeMission)
                     : [],
             });
         } catch (error) {
-            projectionError =
+            missionViewError =
                 error instanceof Error ? error.message : String(error);
         } finally {
-            projectionLoading = false;
+            missionViewLoading = false;
             if (refreshQueued) {
                 refreshQueued = false;
-                void refreshProjectionSnapshot();
+                void refreshMissionView();
             }
         }
     }
 
-    function scheduleProjectionRefresh(): void {
-        if (projectionRefreshTimer !== null) {
-            window.clearTimeout(projectionRefreshTimer);
+    function scheduleMissionViewRefresh(): void {
+        if (missionViewRefreshTimer !== null) {
+            window.clearTimeout(missionViewRefreshTimer);
         }
-        projectionRefreshTimer = window.setTimeout(() => {
-            projectionRefreshTimer = null;
-            void refreshProjectionSnapshot();
+        missionViewRefreshTimer = window.setTimeout(() => {
+            missionViewRefreshTimer = null;
+            void refreshMissionView();
         }, 150);
     }
 
@@ -471,7 +471,7 @@
                 if (event.payload.actions) {
                     return;
                 }
-                scheduleProjectionRefresh();
+                scheduleMissionViewRefresh();
                 return;
             case "stage.snapshot.changed":
                 activeMission?.applyStageSnapshot(
@@ -493,22 +493,18 @@
                 return;
             case "agentSession.snapshot.changed":
                 activeMission?.applyAgentSessionSnapshot(
-                    missionAgentSessionSnapshotSchema.parse(
-                        event.payload.snapshot,
-                    ),
+                    agentSessionSnapshotSchema.parse(event.payload.snapshot),
                 );
                 actionRefreshNonce += 1;
                 return;
             case "session.event":
                 activeMission?.applyAgentSessionSnapshot(
-                    missionAgentSessionSnapshotSchema.parse(
-                        event.payload.session,
-                    ),
+                    agentSessionSnapshotSchema.parse(event.payload.session),
                 );
                 actionRefreshNonce += 1;
                 return;
             case "session.lifecycle":
-                scheduleProjectionRefresh();
+                scheduleMissionViewRefresh();
                 return;
             default:
                 return;
@@ -516,7 +512,7 @@
     }
 
     async function handleMissionMutated(): Promise<void> {
-        await refreshProjectionSnapshot();
+        await refreshMissionView();
     }
 
     function handleSelectNode(nodeId: string): void {
@@ -798,22 +794,22 @@
         >
             Loading mission snapshot...
         </section>
-    {:else if missionLoadError || !activeRepository || !activeMission || !projectionSnapshot || !repositorySummary}
+    {:else if missionLoadError || !activeRepository || !activeMission || !missionView || !repositorySummary}
         <section
             class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
         >
             <h2 class="text-lg font-semibold text-foreground">Mission</h2>
             <p class="mt-3 text-sm text-rose-600">
-                {missionLoadError ?? "Mission snapshot could not be loaded."}
+                {missionLoadError ?? "Mission view could not be loaded."}
             </p>
         </section>
     {:else}
-        {#if projectionError || runtimeError}
+        {#if missionViewError || runtimeError}
             <section
                 class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
             >
-                {#if projectionError}
-                    <p class="text-sm text-rose-600">{projectionError}</p>
+                {#if missionViewError}
+                    <p class="text-sm text-rose-600">{missionViewError}</p>
                 {/if}
                 {#if runtimeError}
                     <p class="text-sm text-rose-600">{runtimeError}</p>

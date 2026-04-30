@@ -10,7 +10,7 @@
     import RefreshIcon from "@tabler/icons-svelte/icons/refresh";
     import RocketIcon from "@tabler/icons-svelte/icons/rocket";
     import type { Icon } from "@tabler/icons-svelte";
-    import type { EntityCommandDescriptor } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
+    import type { EntityCommandDescriptorType } from "@flying-pillow/mission-core/entities/Entity/EntitySchema";
     import type { ActionableEntity } from "./ActionableEntity";
 
     let {
@@ -35,7 +35,7 @@
 
     let actionPending = $state<string | null>(null);
     let actionError = $state<string | null>(null);
-    let confirmationAction = $state<EntityCommandDescriptor | null>(null);
+    let confirmationAction = $state<EntityCommandDescriptorType | null>(null);
     let confirmationOpen = $state(false);
     let confirmationResolver: ((confirmed: boolean) => void) | null = null;
 
@@ -54,7 +54,7 @@
     });
 
     function actionVariant(
-        action: EntityCommandDescriptor,
+        action: EntityCommandDescriptorType,
     ): "default" | "outline" | "secondary" | "destructive" {
         if (action.variant === "destructive") {
             return "destructive";
@@ -68,7 +68,7 @@
         return defaultVariant;
     }
 
-    function getActionIcon(action: EntityCommandDescriptor): Icon {
+    function getActionIcon(action: EntityCommandDescriptorType): Icon {
         const commandId =
             `${action.iconHint ?? action.commandId}`.toLowerCase();
 
@@ -100,7 +100,7 @@
     }
 
     async function executeAction(
-        action: EntityCommandDescriptor,
+        action: EntityCommandDescriptorType,
     ): Promise<void> {
         if (!entity || actionPending || action.disabled) {
             return;
@@ -114,7 +114,7 @@
     }
 
     async function requestActionConfirmation(
-        action: EntityCommandDescriptor,
+        action: EntityCommandDescriptorType,
     ): Promise<boolean> {
         if (!action.confirmation?.required) {
             return true;
@@ -141,7 +141,7 @@
 
     async function submitAction(
         commandEntity: ActionableEntity,
-        action: EntityCommandDescriptor,
+        action: EntityCommandDescriptorType,
     ): Promise<boolean> {
         actionPending = action.commandId;
         actionError = null;

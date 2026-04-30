@@ -10,12 +10,12 @@ import type {
 	EntityRemoteResult
 } from './entityRemote.js';
 import type {
-	EntityEventAddress,
-	EntityId
+	EntityEventAddressType,
+	EntityIdType
 } from '../../entities/Entity/Entity.js';
 import type {
 	AgentSessionEntityReference,
-	MissionAgentSessionSnapshot
+	AgentSessionSnapshot
 } from '../../entities/AgentSession/AgentSessionSchema.js';
 import type {
 	ArtifactEntityReference,
@@ -206,7 +206,7 @@ export type MissionAgentTurnRequest = {
 	startFreshSession?: boolean;
 };
 
-export type MissionAgentSessionState = {
+export type AgentSessionState = {
 	runnerId: string;
 	transportId?: string;
 	runnerLabel: string;
@@ -224,7 +224,7 @@ export type MissionAgentSessionState = {
 	lastUpdatedAt: string;
 };
 
-export type MissionAgentSessionRecord = {
+export type AgentSessionRecord = {
 	sessionId: string;
 	runnerId: string;
 	transportId?: string;
@@ -244,7 +244,7 @@ export type MissionAgentSessionRecord = {
 	lastUpdatedAt: string;
 };
 
-export type MissionAgentSessionLaunchRequest = MissionAgentTurnRequest & {
+export type AgentSessionLaunchRequest = MissionAgentTurnRequest & {
 	runnerId: string;
 	terminalSessionName?: string;
 	transportId?: string;
@@ -256,80 +256,80 @@ export type MissionAgentSessionLaunchRequest = MissionAgentTurnRequest & {
 export type MissionAgentEvent =
 	| {
 		type: 'session-state-changed';
-		state: MissionAgentSessionState;
+		state: AgentSessionState;
 	}
 	| {
 		type: 'prompt-accepted';
 		prompt: string;
-		state: MissionAgentSessionState;
+		state: AgentSessionState;
 	}
 	| {
 		type: 'prompt-rejected';
 		prompt: string;
 		reason: string;
-		state: MissionAgentSessionState;
+		state: AgentSessionState;
 	}
 	| {
 		type: 'session-started';
-		state: MissionAgentSessionState;
+		state: AgentSessionState;
 	}
 	| {
 		type: 'session-resumed';
-		state: MissionAgentSessionState;
+		state: AgentSessionState;
 	}
 	| {
 		type: 'agent-message';
 		channel: 'stdout' | 'stderr' | 'system';
 		text: string;
-		state: MissionAgentSessionState;
+		state: AgentSessionState;
 	}
 	| {
 		type: 'permission-requested';
 		request: MissionAgentPermissionRequest;
-		state: MissionAgentSessionState;
+		state: AgentSessionState;
 	}
 	| {
 		type: 'tool-started';
 		toolName: string;
 		summary?: string;
-		state: MissionAgentSessionState;
+		state: AgentSessionState;
 	}
 	| {
 		type: 'tool-finished';
 		toolName: string;
 		summary?: string;
-		state: MissionAgentSessionState;
+		state: AgentSessionState;
 	}
 	| {
 		type: 'telemetry-updated';
 		telemetry: MissionAgentTelemetrySnapshot;
-		state: MissionAgentSessionState;
+		state: AgentSessionState;
 	}
 	| {
 		type: 'context-updated';
 		telemetry: MissionAgentTelemetrySnapshot;
-		state: MissionAgentSessionState;
+		state: AgentSessionState;
 	}
 	| {
 		type: 'cost-updated';
 		telemetry: MissionAgentTelemetrySnapshot;
-		state: MissionAgentSessionState;
+		state: AgentSessionState;
 	}
 	| {
 		type: 'session-completed';
 		exitCode: number;
-		state: MissionAgentSessionState;
+		state: AgentSessionState;
 	}
 	| {
 		type: 'session-failed';
 		errorMessage: string;
 		exitCode?: number;
-		state: MissionAgentSessionState;
+		state: AgentSessionState;
 	}
 	| {
 		type: 'session-cancelled';
 		reason?: string;
-		state: MissionAgentSessionState;
+		state: AgentSessionState;
 	};
 
 export type EntityQueryRequest = EntityQueryInvocation;
@@ -340,7 +340,7 @@ export type EntityCommandResponse = EntityRemoteResult;
 export type Notification =
 	| {
 		type: 'airport.state';
-		snapshot: SystemSnapshot;
+		system: SystemSnapshot;
 	}
 	| {
 		type: 'mission.actions.changed';
@@ -389,7 +389,7 @@ export type Notification =
 		workspaceRoot: string;
 		missionId: string;
 		reference: AgentSessionEntityReference;
-		snapshot: MissionAgentSessionSnapshot;
+		snapshot: AgentSessionSnapshot;
 	}
 	| {
 		type: 'mission.terminal';
@@ -429,9 +429,9 @@ export type Notification =
 		context: WorkflowSettingsUpdateRequest['context'];
 	};
 
-export type AddressedNotification = Notification & EntityEventAddress & {
+export type AddressedNotification = Notification & EntityEventAddressType & {
 	occurredAt: string;
-	missionEntityId?: EntityId;
+	missionEntityId?: EntityIdType;
 };
 
 export type EventSubscription = {

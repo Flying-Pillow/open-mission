@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 import type { Entity } from './Entity.js';
-import { entityTableSchema } from './EntitySchema.js';
+import { EntityTableSchema } from './EntitySchema.js';
 import { FilesystemEntityStore } from './FilesystemEntityStore.js';
 import type { EntityStore } from './EntityStore.js';
 
@@ -37,7 +37,7 @@ export class EntityFactory {
     >(definition: EntityFactoryDefinition<TEntity, TStorage>): this {
         const normalizedDefinition = {
             ...definition,
-            table: entityTableSchema.parse(definition.table)
+            table: EntityTableSchema.parse(definition.table)
         };
         this.definitionsByClass.set(definition.entityClass, normalizedDefinition);
         return this;

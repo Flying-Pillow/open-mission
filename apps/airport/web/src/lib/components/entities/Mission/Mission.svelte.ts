@@ -1,7 +1,7 @@
 // /apps/airport/web/src/lib/client/entities/Mission.svelte.ts: OO browser entity for a mission runtime snapshot and its live agent sessions.
-import type { AgentSessionCommandAcknowledgement, MissionAgentCommand as AgentCommand, MissionAgentPrompt as AgentPrompt, MissionAgentSessionSnapshot as AgentSessionSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { AgentSessionCommandAcknowledgement, AgentSessionCommand as AgentCommand, AgentSessionPrompt as AgentPrompt, AgentSessionSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import type { ArtifactCommandAcknowledgement, MissionArtifactSnapshot } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
-import type { EntityCommandDescriptor } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
+import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 import type { MissionActionListSnapshot, MissionActionDescriptor, MissionCommandAcknowledgement, MissionProjectionSnapshot, MissionSnapshot, MissionActionQueryContext, MissionStatusSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { MissionStageSnapshot, StageCommandAcknowledgement } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
 import type { MissionTaskSnapshot, TaskCommandAcknowledgement } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
@@ -265,7 +265,7 @@ export class Mission implements EntityModel<MissionSnapshot> {
         return this.worktreePathState;
     }
 
-    public get commands(): EntityCommandDescriptor[] {
+    public get commands(): EntityCommandDescriptorType[] {
         const commands = this.snapshot.mission.commands;
         if (commands) {
             return structuredClone($state.snapshot(commands));
@@ -879,7 +879,7 @@ function toArtifactSnapshot(artifact: MissionArtifactSnapshot): ArtifactSnapshot
     };
 }
 
-function toMissionCommandDescriptor(action: MissionActionDescriptor): EntityCommandDescriptor {
+function toMissionCommandDescriptor(action: MissionActionDescriptor): EntityCommandDescriptorType {
     return {
         commandId: action.actionId,
         label: action.label,

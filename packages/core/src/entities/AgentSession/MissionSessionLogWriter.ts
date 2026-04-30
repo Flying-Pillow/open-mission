@@ -1,9 +1,9 @@
 import { TerminalAgentTransport, type TerminalSessionSnapshot } from '../../daemon/runtime/agent/TerminalAgentTransport.js';
-import type { MissionAgentSessionRecord } from '../../daemon/protocol/contracts.js';
+import type { AgentSessionRecord } from '../../daemon/protocol/contracts.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 
 type SessionLogWriterState = {
-    session: MissionAgentSessionRecord;
+    session: AgentSessionRecord;
     buffer: string;
     bufferBytes: number;
     queue: Promise<void>;
@@ -29,7 +29,7 @@ export class MissionSessionLogWriter {
         });
     }
 
-    public reconcile(sessions: MissionAgentSessionRecord[]): void {
+    public reconcile(sessions: AgentSessionRecord[]): void {
         if (this.disposed) {
             return;
         }
@@ -56,7 +56,7 @@ export class MissionSessionLogWriter {
         }
     }
 
-    public update(session: MissionAgentSessionRecord): void {
+    public update(session: AgentSessionRecord): void {
         if (this.disposed) {
             return;
         }
@@ -107,7 +107,7 @@ export class MissionSessionLogWriter {
         this.scheduleFlush(writer);
     }
 
-    private ensureWriter(session: MissionAgentSessionRecord): SessionLogWriterState | undefined {
+    private ensureWriter(session: AgentSessionRecord): SessionLogWriterState | undefined {
         if (!session.terminalSessionName || session.transportId !== 'terminal') {
             return undefined;
         }

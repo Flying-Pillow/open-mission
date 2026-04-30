@@ -5,11 +5,10 @@ import type {
     EntityRemoteResult
 } from './protocol/entityRemote.js';
 import { Entity, type EntityExecutionContext } from '../entities/Entity/Entity.js';
-import type { EntitySchema } from '../entities/Entity/EntitySchema.js';
+import type { EntityContractType } from '../entities/Entity/EntitySchema.js';
 import { MissionDaemon } from './MissionDaemon.js';
 import { agentSessionEntityContract } from '../entities/AgentSession/AgentSessionContract.js';
 import { artifactEntityContract } from '../entities/Artifact/ArtifactContract.js';
-import { gitHubRepositoryEntityContract } from '../entities/GitHubRepository/GitHubRepositoryContract.js';
 import { missionEntityContract } from '../entities/Mission/MissionContract.js';
 import { repositoryContract } from '../entities/Repository/RepositoryContract.js';
 import { stageEntityContract } from '../entities/Stage/StageContract.js';
@@ -22,10 +21,9 @@ const entityContracts = [
     artifactEntityContract,
     agentSessionEntityContract,
     repositoryContract,
-    gitHubRepositoryEntityContract
-] as const satisfies readonly EntitySchema[];
+] as const satisfies readonly EntityContractType[];
 
-const entityContractsByName = new Map<string, EntitySchema>(
+const entityContractsByName = new Map<string, EntityContractType>(
     entityContracts.map((contract) => [contract.entity, contract])
 );
 
@@ -61,7 +59,7 @@ function withEntityServices(entity: string, context: EntityExecutionContext): En
     return missionOwnedEntities.has(entity) ? withMissionService(context) : context;
 }
 
-function resolveEntityContract(entity: string): EntitySchema {
+function resolveEntityContract(entity: string): EntityContractType {
     const contract = entityContractsByName.get(entity);
     if (!contract) {
         throw new Error(`Entity '${entity}' is not implemented in the daemon.`);

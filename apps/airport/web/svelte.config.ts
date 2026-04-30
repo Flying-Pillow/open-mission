@@ -8,8 +8,6 @@ import { createDocsSourcePreprocessor } from "./src/lib/docs/source-normalizatio
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const docsRootDirectory = path.resolve(currentDirectory, "../../../docs");
-const missionCoreSourceRoot = path.resolve(currentDirectory, "../../../packages/core/src");
-const missionPackageSourceRoot = path.resolve(currentDirectory, "../../../packages/mission/src");
 
 const config: Config = {
 	compilerOptions: {
@@ -34,10 +32,6 @@ const config: Config = {
 			$lib: path.resolve(currentDirectory, "src/lib"),
 			$docs: docsRootDirectory,
 			"$docs/*": `${docsRootDirectory}/*`,
-			"@flying-pillow/mission-core": missionCoreSourceRoot,
-			"@flying-pillow/mission-core/*": `${missionCoreSourceRoot}/*`,
-			"@flying-pillow/mission": missionPackageSourceRoot,
-			"@flying-pillow/mission/*": `${missionPackageSourceRoot}/*`,
 		},
 	},
 };

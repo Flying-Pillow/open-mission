@@ -16,7 +16,7 @@ Airport is the repository-scoped layout authority for Mission surfaces. It decid
 | `AirportControl` | Pure repository-scoped layout controller | `AirportState` |
 | `RepositoryAirportRegistry` | Multi-repository registry of airport controllers and substrate controllers | active repository id, airport records, client-to-repository index |
 | `TerminalManagerSubstrateController` | Observe and drive the terminal substrate | observed zellij pane state |
-| Projection helpers | Derive Tower, Briefing Room, and Runway projections | pure projection output |
+| `AirportControl` view logic | Derive Tower, Briefing Room, and Runway views | pure view output |
 
 ## Pane Model
 
@@ -47,7 +47,7 @@ Each pane has a `PaneBinding`:
 
 It does not carry workflow execution truth.
 
-It may react to workflow truth for projection purposes, but it must not feed pane-local state back into workflow decisions.
+It may react to workflow truth for view purposes, but it must not feed pane-local state back into workflow decisions.
 
 Examples:
 
@@ -65,7 +65,7 @@ flowchart TD
     Airport --> Effects[Planned substrate effects]
     Effects --> Zellij[zellij focus action]
     Zellij --> Substrate
-    Airport --> Projections[Gate projections for surfaces]
+    Airport --> Views[Pane views for surfaces]
 ```
 
 `planAirportSubstrateEffects(...)` only emits a focus effect when:
@@ -76,7 +76,7 @@ flowchart TD
 
 Semantic selection is a separate concern from focus intent:
 
-- mission or repository selection updates pane bindings and projections
+- mission or repository selection updates pane bindings and views
 - mission-mode task selection should resolve the task's canonical instruction and preferred session before panes bind
 - mission-mode stage selection should resolve the stage's canonical result artifact before panes bind
 - explicit airport focus observations update observed focus state; they do not reassert stale intent
@@ -107,7 +107,7 @@ That boundary is operational only. Real pane existence can matter to Airport rec
 
 ## Non-Responsibilities
 
-Airport does not own mission execution. It does not own task generation. It does not decide whether a session should start. It only projects and reconciles layout state.
+Airport does not own mission execution. It does not own task generation. It does not decide whether a session should start. It only derives views and reconciles layout state.
 
 Airport also does not arbitrate session truth. If a client and the daemon disagree about what is visible, the daemon wins. If Airport and workflow disagree about whether work is active, workflow plus normalized runtime facts win.
 
