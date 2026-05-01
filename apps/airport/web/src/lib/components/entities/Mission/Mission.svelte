@@ -6,14 +6,14 @@
     import ChevronDownIcon from "@tabler/icons-svelte/icons/chevron-down";
     import ChevronUpIcon from "@tabler/icons-svelte/icons/chevron-up";
     import type { MissionRuntimeEventEnvelope as AirportRuntimeEventEnvelope } from "../types";
-    import { missionArtifactSnapshotSchema } from "@flying-pillow/mission-core/entities/Artifact/ArtifactSchema";
-    import { agentSessionSnapshotSchema } from "@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema";
+    import { ArtifactDataSchema } from "@flying-pillow/mission-core/entities/Artifact/ArtifactSchema";
+    import { AgentSessionDataSchema } from "@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema";
     import {
-        missionSnapshotSchema,
-        missionStatusSnapshotSchema,
+        MissionSnapshotSchema,
+        MissionStatusSnapshotSchema,
     } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
-    import { missionStageSnapshotSchema } from "@flying-pillow/mission-core/entities/Stage/StageSchema";
-    import { missionTaskSnapshotSchema } from "@flying-pillow/mission-core/entities/Task/TaskSchema";
+    import { StageDataSchema } from "@flying-pillow/mission-core/entities/Stage/StageSchema";
+    import { TaskDataSchema } from "@flying-pillow/mission-core/entities/Task/TaskSchema";
     import type { AgentSession as AgentSessionModel } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { setScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
@@ -21,7 +21,7 @@
     import ArtifactEditor from "$lib/components/entities/Artifact/ArtifactEditor.svelte";
     import ArtifactViewer from "$lib/components/entities/Artifact/ArtifactViewer.svelte";
     import MissionCockpit from "$lib/components/entities/Mission/MissionCockpit.svelte";
-    import MissionActionbar from "$lib/components/entities/Mission/MissionActionbar.svelte";
+    import MissionCommandbar from "$lib/components/entities/Mission/MissionCommandbar.svelte";
     import MissionControlTree from "$lib/components/entities/Mission/MissionControlTree.svelte";
     import MissionFileTree from "$lib/components/entities/Mission/MissionFileTree.svelte";
     import MissionTerminal from "$lib/components/entities/Mission/MissionTerminal.svelte";
@@ -72,7 +72,6 @@
     const missionLoading = $derived(missionScope.loading);
     const missionLoadError = $derived(missionScope.error);
     const missionView = $derived(activeMission?.projectionSnapshot);
-    const repositorySummary = $derived(activeRepository?.summary);
     const missionWorktreePath = $derived(
         activeMission?.missionWorktreePath ?? "",
     );
@@ -83,7 +82,7 @@
     let missionViewLoading = $state(false);
     let missionViewError = $state<string | null>(null);
     let runtimeError = $state<string | null>(null);
-    let actionRefreshNonce = $state(0);
+    let commandRefreshNonce = $state(0);
     let artifactPanelMode = $state<"view" | "edit">("view");
     let leftPanelMode = $state<"mission" | "files">("mission");
     let rightPanelMode = $state<"terminal" | "agent">("terminal");
@@ -131,8 +130,8 @@
             missionScope.missionId,
     );
     const repositoryName = $derived(
-        repositorySummary?.platformRepositoryRef ??
-            repositorySummary?.repoName ??
+        activeRepository?.data.platformRepositoryRef ??
+            activeRepository?.data.repoName ??
             "Repository",
     );
     const missionIssueLabel = $derived.by(() => {
@@ -443,7 +442,7 @@
         }
 
         const payload = event.payload as { status?: unknown };
-        const status = missionStatusSnapshotSchema.parse(payload.status);
+        const status = MissionStatusSnapshotSchema.parse(payload.status);
 
         activeMission.applyMissionStatus(status);
         appContext.setActiveMissionOutline({
@@ -458,50 +457,53 @@
     ): void {
         switch (event.type) {
             case "mission.snapshot.changed":
+                const missionPayload = event.payload as { snapshot?: unknown };
                 activeMission?.applyMissionSnapshot(
-                    missionSnapshotSchema.parse(event.payload.snapshot),
+                    MissionSnapshotSchema.parse(missionPayload.snapshot),
                 );
-                actionRefreshNonce += 1;
+                commandRefreshNonce += 1;
                 return;
             case "mission.status":
                 applyMissionStatusEvent(event);
                 return;
-            case "mission.actions.changed":
-                actionRefreshNonce += 1;
-                if (event.payload.actions) {
-                    return;
-                }
-                scheduleMissionViewRefresh();
-                return;
             case "stage.snapshot.changed":
+                const stagePayload = event.payload as { snapshot?: unknown };
                 activeMission?.applyStageSnapshot(
-                    missionStageSnapshotSchema.parse(event.payload.snapshot),
+                    StageDataSchema.parse(stagePayload.snapshot),
                 );
-                actionRefreshNonce += 1;
+                commandRefreshNonce += 1;
                 return;
             case "task.snapshot.changed":
+                const taskPayload = event.payload as { snapshot?: unknown };
                 activeMission?.applyTaskSnapshot(
-                    missionTaskSnapshotSchema.parse(event.payload.snapshot),
+                    TaskDataSchema.parse(taskPayload.snapshot),
                 );
-                actionRefreshNonce += 1;
+                commandRefreshNonce += 1;
                 return;
             case "artifact.snapshot.changed":
+                const artifactPayload = event.payload as { snapshot?: unknown };
                 activeMission?.applyArtifactSnapshot(
-                    missionArtifactSnapshotSchema.parse(event.payload.snapshot),
+                    ArtifactDataSchema.parse(artifactPayload.snapshot),
                 );
-                actionRefreshNonce += 1;
+                commandRefreshNonce += 1;
                 return;
             case "agentSession.snapshot.changed":
+                const agentSessionPayload = event.payload as {
+                    snapshot?: unknown;
+                };
                 activeMission?.applyAgentSessionSnapshot(
-                    agentSessionSnapshotSchema.parse(event.payload.snapshot),
+                    AgentSessionDataSchema.parse(agentSessionPayload.snapshot),
                 );
-                actionRefreshNonce += 1;
+                commandRefreshNonce += 1;
                 return;
             case "session.event":
+                const sessionEventPayload = event.payload as {
+                    session?: unknown;
+                };
                 activeMission?.applyAgentSessionSnapshot(
-                    agentSessionSnapshotSchema.parse(event.payload.session),
+                    AgentSessionDataSchema.parse(sessionEventPayload.session),
                 );
-                actionRefreshNonce += 1;
+                commandRefreshNonce += 1;
                 return;
             case "session.lifecycle":
                 scheduleMissionViewRefresh();
@@ -637,7 +639,7 @@
     }
 
     function getAgentSessionUpdatedAt(session: AgentSessionModel): number {
-        const snapshot = session.toSnapshot();
+        const snapshot = session.toData();
         const timestamp = snapshot.lastUpdatedAt ?? snapshot.createdAt;
         return timestamp ? Date.parse(timestamp) || 0 : 0;
     }
@@ -671,7 +673,7 @@
         }
 
         currentMission.listStages().forEach((stage, stageIndex) => {
-            const stageSnapshot = stage.toSnapshot();
+            const stageSnapshot = stage.toData();
             const stageColor = stageColors[stageIndex % stageColors.length];
             const stageNodeId = toMissionTreeStageId(stage.stageId);
             nodes.push({
@@ -702,7 +704,7 @@
             for (const task of currentMission.listTasksForStage(
                 stage.stageId,
             )) {
-                const taskSnapshot = task.toSnapshot().task;
+                const taskSnapshot = task.toData().task;
                 nodes.push({
                     id: `tree:task:${task.taskId}`,
                     label: task.title,
@@ -752,7 +754,7 @@
             }
 
             for (const artifact of stageSnapshot.artifacts.filter(
-                (candidate) => !candidate.taskId,
+                (candidate: { taskId?: string }) => !candidate.taskId,
             )) {
                 if (
                     nodes.some(
@@ -794,7 +796,7 @@
         >
             Loading mission snapshot...
         </section>
-    {:else if missionLoadError || !activeRepository || !activeMission || !missionView || !repositorySummary}
+    {:else if missionLoadError || !activeRepository || !activeMission || !missionView}
         <section
             class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
         >
@@ -851,7 +853,8 @@
                                         "unknown"}</span
                                 >
                                 <span
-                                    >{repositorySummary.repositoryRootPath}</span
+                                    >{activeRepository.data
+                                        .repositoryRootPath}</span
                                 >
                             </div>
                         </div>
@@ -860,10 +863,10 @@
                     <div
                         class="flex items-start gap-2 self-start xl:justify-end"
                     >
-                        <MissionActionbar
-                            refreshNonce={actionRefreshNonce}
+                        <MissionCommandbar
+                            refreshNonce={commandRefreshNonce}
                             mission={activeMission}
-                            onActionExecuted={handleMissionMutated}
+                            onCommandExecuted={handleMissionMutated}
                         />
                         <Button
                             type="button"
@@ -944,7 +947,7 @@
                             >
                                 <MissionFileTree
                                     activePath={selectedWorktreeFile?.absolutePath}
-                                    refreshNonce={actionRefreshNonce}
+                                    refreshNonce={commandRefreshNonce}
                                     class="h-full rounded-none border-0 bg-transparent"
                                     onSelectPath={handleSelectWorktreeNode}
                                 />
@@ -968,11 +971,11 @@
                     />
                 {:else}
                     <ArtifactViewer
-                        refreshNonce={actionRefreshNonce}
+                        refreshNonce={commandRefreshNonce}
                         artifact={displayArtifact}
                         task={displayTask}
                         onEditRequested={handleEditArtifact}
-                        onActionExecuted={handleMissionMutated}
+                        onCommandExecuted={handleMissionMutated}
                     />
                 {/if}
             </ResizablePane>
@@ -1011,9 +1014,9 @@
                                 class="absolute inset-0 min-h-0 overflow-hidden"
                             >
                                 <AgentSession
-                                    refreshNonce={actionRefreshNonce}
+                                    refreshNonce={commandRefreshNonce}
                                     session={resolvedSession}
-                                    onActionExecuted={handleMissionMutated}
+                                    onCommandExecuted={handleMissionMutated}
                                 />
                             </div>
                         {/if}

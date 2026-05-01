@@ -3,10 +3,10 @@ import { createContext } from "svelte";
 import { app, type AirportApplication } from "$lib/client/Application.svelte.js";
 import type { Mission } from "$lib/components/entities/Mission/Mission.svelte.js";
 import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
+import type { MissionRuntimeEventEnvelopeType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { MissionTowerTreeNode } from '@flying-pillow/mission-core/types';
-import type { AirportRuntimeEventEnvelope } from "$lib/contracts/runtime-events";
 import type { SidebarRepositoryData } from "$lib/components/entities/types";
-import type { RuntimeSubscription } from "$lib/client/runtime/transport/EntityRuntimeTransport";
+import type { RuntimeSubscription } from "$lib/client/runtime/RuntimeSubscription";
 
 export type GithubStatus = "connected" | "disconnected" | "unknown";
 
@@ -63,7 +63,7 @@ export type AppContextValue = {
     observeMission(input: {
         missionId: string;
         repositoryRootPath?: string;
-        onUpdate?: (mission: Mission, event: AirportRuntimeEventEnvelope) => void;
+        onUpdate?: (mission: Mission, event: MissionRuntimeEventEnvelopeType) => void;
         onError?: (error: Error) => void;
     }): RuntimeSubscription;
     setRepositories(repositories: SidebarRepositoryData[]): void;

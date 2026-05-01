@@ -1,4 +1,4 @@
-import type { AirportViewSet, AirportState, PersistedAirportIntent } from './airport/types.js';
+import type { SystemState as RuntimeSystemState } from './system/SystemContract.js';
 import type { AgentSessionRecord } from './daemon/protocol/contracts.js';
 import type { Repository } from './entities/Repository/Repository.js';
 import type { RepositorySettingsType } from './entities/Repository/RepositorySchema.js';
@@ -455,27 +455,7 @@ export type ContextGraph = {
 	agentSessions: Record<string, AgentSessionContext>;
 };
 
-export type SystemState = {
-	version: number;
-	domain: ContextGraph;
-	missionOperatorViews: Record<string, MissionOperatorProjectionContext>;
-	airport: AirportState;
-	airports: {
-		activeRepositoryId?: string;
-		repositories: Record<string, {
-			repositoryId: string;
-			repositoryRootPath: string;
-			airport: AirportState;
-			persistedIntent: PersistedAirportIntent;
-		}>;
-	};
-};
-
-export type SystemSnapshot = {
-	state: SystemState;
-	airportViews: AirportViewSet;
-	airportRegistryViews: Record<string, AirportViewSet>;
-};
+export type SystemSnapshot = RuntimeSystemState;
 
 export type RepositoryControlStatus = {
 	controlRoot: string;

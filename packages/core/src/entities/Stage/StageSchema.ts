@@ -3,67 +3,79 @@ import {
     EntityCommandAcknowledgementSchema,
     EntityCommandDescriptorSchema
 } from '../Entity/EntitySchema.js';
-import { missionArtifactSnapshotSchema } from '../Artifact/ArtifactSchema.js';
-import { missionTaskSnapshotSchema } from '../Task/TaskSchema.js';
+import { ArtifactDataSchema } from '../Artifact/ArtifactSchema.js';
+import { TaskDataSchema } from '../Task/TaskSchema.js';
 
-export const missionStageEntityName = 'Stage' as const;
-export const stageEntityName = missionStageEntityName;
+export const stageEntityName = 'Stage' as const;
 
-export const stageIdentityPayloadSchema = z.object({
+export const StageIdSchema = z.string().trim().min(1);
+
+export const StageCommandIds = {
+    generateTasks: 'stage.generateTasks'
+} as const;
+
+export const StageCommandIdSchema = z.enum([
+    StageCommandIds.generateTasks
+]);
+
+export const StageLocatorSchema = z.object({
     missionId: z.string().trim().min(1),
     repositoryRootPath: z.string().trim().min(1).optional(),
-    stageId: z.string().trim().min(1)
+    stageId: StageIdSchema
 }).strict();
 
-export const stageEntityReferenceSchema = stageIdentityPayloadSchema.extend({
-    entity: z.literal(missionStageEntityName)
+export const StageEventSubjectSchema = StageLocatorSchema.extend({
+    entity: z.literal(stageEntityName)
 }).strict();
 
-export const stageExecuteCommandPayloadSchema = stageIdentityPayloadSchema.extend({
-    commandId: z.string().trim().min(1),
+export const StageExecuteCommandInputSchema = StageLocatorSchema.extend({
+    commandId: StageCommandIdSchema,
     input: z.unknown().optional()
 }).strict();
 
-export const missionStageSnapshotSchema = z.object({
-    stageId: z.string().trim().min(1),
+export const StageStorageSchema = z.object({
+    stageId: StageIdSchema,
     lifecycle: z.string().trim().min(1),
     isCurrentStage: z.boolean(),
-    artifacts: z.array(missionArtifactSnapshotSchema),
-    tasks: z.array(missionTaskSnapshotSchema),
+    artifacts: z.array(ArtifactDataSchema),
+    tasks: z.array(TaskDataSchema)
+}).strict();
+
+export const StageDataSchema = z.object({
+    ...StageStorageSchema.shape,
     commands: z.array(EntityCommandDescriptorSchema).optional()
 }).strict();
 
-export const stageSnapshotSchema = missionStageSnapshotSchema;
-
-export const stageCommandAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
-    entity: z.literal(missionStageEntityName),
+export const StageCommandAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
+    entity: z.literal(stageEntityName),
     method: z.literal('executeCommand'),
     id: z.string().trim().min(1),
     missionId: z.string().trim().min(1),
-    stageId: z.string().trim().min(1),
-    commandId: z.string().trim().min(1)
+    stageId: StageIdSchema,
+    commandId: StageCommandIdSchema
 }).strict();
 
-export const stageRemoteQueryPayloadSchemas = {
-    read: stageIdentityPayloadSchema
+export const stageRemoteQueryInputSchemas = {
+    read: StageLocatorSchema
 } as const;
 
-export const stageRemoteCommandPayloadSchemas = {
-    executeCommand: stageExecuteCommandPayloadSchema
+export const stageRemoteCommandInputSchemas = {
+    executeCommand: StageExecuteCommandInputSchema
 } as const;
 
 export const stageRemoteQueryResultSchemas = {
-    read: missionStageSnapshotSchema
+    read: StageDataSchema
 } as const;
 
 export const stageRemoteCommandResultSchemas = {
-    executeCommand: stageCommandAcknowledgementSchema
+    executeCommand: StageCommandAcknowledgementSchema
 } as const;
 
-export type StageIdentityPayload = z.infer<typeof stageIdentityPayloadSchema>;
-export type StageEntityReference = z.infer<typeof stageEntityReferenceSchema>;
-export type StageExecuteCommandPayload = z.infer<typeof stageExecuteCommandPayloadSchema>;
-export type MissionStageSnapshot = z.infer<typeof missionStageSnapshotSchema>;
-export type StageSnapshot = z.infer<typeof stageSnapshotSchema>;
-export type StageCommandAcknowledgement = z.infer<typeof stageCommandAcknowledgementSchema>;
+export type StageLocatorType = z.infer<typeof StageLocatorSchema>;
+export type StageEventSubjectType = z.infer<typeof StageEventSubjectSchema>;
+export type StageCommandIdType = z.infer<typeof StageCommandIdSchema>;
+export type StageExecuteCommandInputType = z.infer<typeof StageExecuteCommandInputSchema>;
+export type StageStorageType = z.infer<typeof StageStorageSchema>;
+export type StageDataType = z.infer<typeof StageDataSchema>;
+export type StageCommandAcknowledgementType = z.infer<typeof StageCommandAcknowledgementSchema>;
 

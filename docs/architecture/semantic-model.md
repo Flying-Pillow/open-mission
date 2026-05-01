@@ -23,7 +23,7 @@ The architecture stays coherent only if those layers are not collapsed.
 | Stage | `MissionStageId`, `MissionStageRuntimeProjection` | Structural phase boundary derived from task state | Workflow runtime |
 | Task | `MissionTaskRuntimeState`, `MissionTaskState`, `TaskContext` | Atomic unit of executable work | Workflow runtime |
 | Artifact | `MissionArtifactKey`, `ArtifactContext` | Mission output and operator-readable state | Workflow artifact materialization |
-| Agent session | `AgentSessionState`, `AgentSessionRecord`, `AgentSessionContext` | Live or historical execution of a task through a runner | Agent runtime + mission aggregate |
+| Agent session | `AgentSessionState`, `AgentSessionRecord`, `AgentSessionContext` | Live or recorded execution of a task through a runner | Agent runtime + mission aggregate |
 
 ## Mission Records Versus Projection Records
 

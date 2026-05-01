@@ -25,7 +25,7 @@ import {
 	type EntityIdType
 } from '../entities/Entity/Entity.js';
 import { DaemonLogger } from './runtime/DaemonLogger.js';
-import { MissionDaemon } from './MissionDaemon.js';
+import { MissionRegistry } from './MissionRegistry.js';
 
 type NotificationAddress = {
 	entityId: EntityIdType;
@@ -34,7 +34,7 @@ type NotificationAddress = {
 };
 
 type DaemonServices = {
-	missionDaemon: MissionDaemon;
+	missionRegistry: MissionRegistry;
 };
 import {
 	executeEntityCommandInDaemon,
@@ -52,7 +52,7 @@ export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): 
 	const manifestPath = getDaemonManifestPath();
 	const startedAt = new Date().toISOString();
 	const logger = new DaemonLogger();
-	const missionDaemon = new MissionDaemon({ logger });
+	const missionRegistry = new MissionRegistry({ logger });
 	const sockets = new Set<net.Socket>();
 	const subscriptionsBySocket = new Map<net.Socket, EventSubscription[]>();
 	let shuttingDown = false;
@@ -75,7 +75,7 @@ export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): 
 
 	await fs.mkdir(getDaemonRuntimePath(), { recursive: true });
 	logger.info('Mission daemon starting.', { pid: process.pid, socketPath });
-	await missionDaemon.hydrateDaemonMissions({ surfacePath: resolveSurfacePath(undefined) });
+	await missionRegistry.hydrateDaemonMissions({ surfacePath: resolveSurfacePath(undefined) });
 	logger.info('Mission daemon hydration completed.');
 	if (!isNamedPipePath(socketPath)) {
 		await fs.rm(socketPath, { force: true }).catch(() => undefined);
@@ -101,7 +101,7 @@ export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): 
 					continue;
 				}
 
-				void handleRequestLine(socket, line, startedAt, subscriptionsBySocket, { missionDaemon });
+				void handleRequestLine(socket, line, startedAt, subscriptionsBySocket, { missionRegistry });
 			}
 		});
 
@@ -164,7 +164,7 @@ export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): 
 		}
 		shuttingDown = true;
 		logger.info('Mission daemon shutting down.');
-		missionDaemon.dispose();
+		missionRegistry.dispose();
 		missionTerminalUpdates.dispose();
 		sessionTerminalUpdates.dispose();
 		for (const socket of sockets) {
@@ -264,13 +264,6 @@ function addressNotification(event: Notification): AddressedNotification {
 
 function resolveNotificationAddress(event: Notification): NotificationAddress {
 	switch (event.type) {
-		case 'airport.state':
-			return {
-				entityId: createEntityId('airport', 'state'),
-				eventName: 'changed'
-			};
-		case 'mission.actions.changed':
-			return missionAddress(event.missionId, 'actions.changed');
 		case 'mission.snapshot.changed':
 			return missionAddress(event.missionId, 'snapshot.changed');
 		case 'mission.status':
@@ -325,19 +318,14 @@ function childAddress(
 
 function resolveNotificationOccurredAt(event: Notification): string {
 	switch (event.type) {
-		case 'airport.state':
-			return event.system.state.airport.substrate.lastObservedAt
-				?? event.system.state.airport.substrate.lastAppliedAt
-				?? new Date().toISOString();
 		case 'mission.snapshot.changed':
 			return event.snapshot.workflow?.updatedAt
 				?? event.snapshot.status?.workflow?.updatedAt
 				?? new Date().toISOString();
 		case 'mission.status':
-			return event.status.updatedAt ?? new Date().toISOString();
+			return event.status.workflow?.updatedAt ?? new Date().toISOString();
 		case 'session.event':
-			return event.event.state.lastUpdatedAt;
-		case 'mission.actions.changed':
+			return event.session.lastUpdatedAt ?? new Date().toISOString();
 		case 'stage.snapshot.changed':
 		case 'task.snapshot.changed':
 		case 'artifact.snapshot.changed':
@@ -403,7 +391,7 @@ export async function createResponse(
 						entityQueryInvocationSchema.parse(request.params),
 						{
 							surfacePath: resolveSurfacePath(request.surfacePath),
-							...(services.missionDaemon ? { missionDaemon: services.missionDaemon } : {}),
+							...(services.missionRegistry ? { missionRegistry: services.missionRegistry } : {}),
 							...(authToken ? { authToken } : {})
 						}
 					)
@@ -426,7 +414,7 @@ export async function createResponse(
 							: entityFormInvocationSchema.parse(request.params),
 						{
 							surfacePath: resolveSurfacePath(request.surfacePath),
-							...(services.missionDaemon ? { missionDaemon: services.missionDaemon } : {}),
+							...(services.missionRegistry ? { missionRegistry: services.missionRegistry } : {}),
 							...(authToken ? { authToken } : {})
 						}
 					)

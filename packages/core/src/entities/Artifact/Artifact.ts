@@ -1,5 +1,6 @@
+import * as path from 'node:path';
 import type { FrontmatterValue } from '../../lib/frontmatter.js';
-import type { EntityExecutionContext } from '../Entity/Entity.js';
+import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import {
 	MISSION_ARTIFACTS,
@@ -11,26 +12,16 @@ import {
 } from '../../types.js';
 import { getMissionArtifactDefinition } from '../../workflow/mission/manifest.js';
 import {
-	artifactExecuteCommandPayloadSchema,
-	artifactDocumentSnapshotSchema,
-	artifactIdentityPayloadSchema,
-	artifactWriteDocumentPayloadSchema,
-	missionArtifactSnapshotSchema
+	ArtifactDocumentDataSchema,
+	ArtifactLocatorSchema,
+	ArtifactWriteDocumentInputSchema,
+	ArtifactDataSchema,
+	artifactEntityName,
+	type ArtifactDataType
 } from './ArtifactSchema.js';
+import type { MissionSnapshotType } from '../Mission/MissionSchema.js';
 
 export type ArtifactKind = 'mission' | 'stage' | 'task';
-
-export type Artifact = {
-	artifactId: string;
-	kind: ArtifactKind;
-	label: string;
-	fileName: string;
-	key?: MissionArtifactKey;
-	stageId?: MissionStageId;
-	taskId?: string;
-	filePath?: string;
-	relativePath?: string;
-};
 
 type ProductArtifactDefinition = {
 	kind: 'product';
@@ -51,7 +42,7 @@ type TaskArtifactDefinition = {
 	retries?: number;
 };
 
-class ArtifactRuntime {
+export class ArtifactRuntime {
 	public constructor(
 		private readonly missionDir: string,
 		private readonly definition: ProductArtifactDefinition | TaskArtifactDefinition
@@ -105,66 +96,78 @@ class ArtifactRuntime {
 	}
 }
 
-export const ArtifactRuntimeController = ArtifactRuntime;
+export class Artifact extends Entity<ArtifactDataType, string> {
+	public static override readonly entityName = artifactEntityName;
 
-export class ArtifactEntity {
+	public constructor(data: ArtifactDataType) {
+		super(ArtifactDataSchema.parse(data));
+	}
+
+	public get id(): string {
+		return this.data.artifactId;
+	}
+
 	public static async read(payload: unknown, context: EntityExecutionContext) {
-		const input = artifactIdentityPayloadSchema.parse(payload);
-		const service = await loadMissionDaemon(context);
+		const input = ArtifactLocatorSchema.parse(payload);
+		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			return missionArtifactSnapshotSchema.parse(service.requireArtifact(await service.buildMissionSnapshot(mission, input.missionId), input.artifactId));
+			return Artifact.requireData(await mission.buildMissionSnapshot(), input.artifactId);
 		} finally {
 			mission.dispose();
 		}
 	}
 
+	public static requireData(snapshot: MissionSnapshotType, artifactId: string) {
+		const artifact = snapshot.artifacts.find((candidate) => candidate.artifactId === artifactId);
+		if (!artifact) {
+			throw new Error(`Artifact '${artifactId}' could not be resolved in Mission '${snapshot.mission.missionId}'.`);
+		}
+		return ArtifactDataSchema.parse(artifact);
+	}
+
+	public static resolveDocumentPath(snapshot: MissionSnapshotType, artifactId: string): string {
+		const artifact = Artifact.requireData(snapshot, artifactId);
+		if (artifact.filePath) {
+			return artifact.filePath;
+		}
+		if (artifact.relativePath && snapshot.mission.missionRootDir) {
+			return path.join(snapshot.mission.missionRootDir, artifact.relativePath);
+		}
+		throw new Error(`Artifact '${artifactId}' does not have a readable document path.`);
+	}
+
 	public static async readDocument(payload: unknown, context: EntityExecutionContext) {
-		const input = artifactIdentityPayloadSchema.parse(payload);
-		const service = await loadMissionDaemon(context);
+		const input = ArtifactLocatorSchema.parse(payload);
+		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			const snapshot = await service.buildMissionSnapshot(mission, input.missionId);
-			const artifact = service.requireArtifact(snapshot, input.artifactId);
-			const filePath = service.requireArtifactFilePath(snapshot, artifact);
+			const filePath = Artifact.resolveDocumentPath(await mission.buildMissionSnapshot(), input.artifactId);
 			await service.assertMissionDocumentPath(filePath, 'read', service.resolveControlRoot(input, context));
-			return artifactDocumentSnapshotSchema.parse(await service.readMissionDocument(filePath));
+			return ArtifactDocumentDataSchema.parse(await service.readMissionDocument(filePath));
 		} finally {
 			mission.dispose();
 		}
 	}
 
 	public static async writeDocument(payload: unknown, context: EntityExecutionContext) {
-		const input = artifactWriteDocumentPayloadSchema.parse(payload);
-		const service = await loadMissionDaemon(context);
+		const input = ArtifactWriteDocumentInputSchema.parse(payload);
+		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			const snapshot = await service.buildMissionSnapshot(mission, input.missionId);
-			const artifact = service.requireArtifact(snapshot, input.artifactId);
-			const filePath = service.requireArtifactFilePath(snapshot, artifact);
+			const filePath = Artifact.resolveDocumentPath(await mission.buildMissionSnapshot(), input.artifactId);
 			await service.assertMissionDocumentPath(filePath, 'write', service.resolveControlRoot(input, context));
-			return artifactDocumentSnapshotSchema.parse(await service.writeMissionDocument(filePath, input.content));
+			return ArtifactDocumentDataSchema.parse(await service.writeMissionDocument(filePath, input.content));
 		} finally {
 			mission.dispose();
 		}
 	}
 
-	public static async executeCommand(payload: unknown, context: EntityExecutionContext) {
-		const input = artifactExecuteCommandPayloadSchema.parse(payload);
-		const service = await loadMissionDaemon(context);
-		const mission = await service.loadRequiredMission(input, context);
-		try {
-			service.requireArtifact(await service.buildMissionSnapshot(mission, input.missionId), input.artifactId);
-			throw new Error(`Artifact command '${input.commandId}' is not implemented in the daemon.`);
-		} finally {
-			mission.dispose();
-		}
-	}
 }
 
-async function loadMissionDaemon(context: EntityExecutionContext) {
-	const { requireMissionDaemon } = await import('../../daemon/MissionDaemon.js');
-	return requireMissionDaemon(context);
+async function loadMissionRegistry(context: EntityExecutionContext) {
+	const { requireMissionRegistry } = await import('../../daemon/MissionRegistry.js');
+	return requireMissionRegistry(context);
 }
 
 export function createMissionArtifact(input: {
@@ -172,12 +175,12 @@ export function createMissionArtifact(input: {
 	missionRootDir?: string;
 	filePath?: string;
 	stageId?: MissionStageId;
-}): Artifact {
+}): ArtifactDataType {
 	const definition = getMissionArtifactDefinition(input.artifactKey);
 	const relativePath = definition.stageId
 		? `${MISSION_STAGE_FOLDERS[definition.stageId]}/${definition.fileName}`
 		: definition.fileName;
-	return {
+	return ArtifactDataSchema.parse({
 		artifactId: definition.stageId
 			? `stage:${definition.stageId}:${definition.key}`
 			: `mission:${definition.key}`,
@@ -188,7 +191,7 @@ export function createMissionArtifact(input: {
 		...(input.stageId ?? definition.stageId ? { stageId: input.stageId ?? definition.stageId } : {}),
 		...(input.filePath ? { filePath: input.filePath } : {}),
 		...(input.filePath || input.missionRootDir ? { relativePath } : {})
-	};
+	});
 }
 
 export function createTaskArtifact(input: {
@@ -198,8 +201,8 @@ export function createTaskArtifact(input: {
 	label?: string;
 	filePath?: string;
 	relativePath?: string;
-}): Artifact {
-	return {
+}): ArtifactDataType {
+	return ArtifactDataSchema.parse({
 		artifactId: `task:${input.taskId}`,
 		kind: 'task',
 		label: input.label ?? input.fileName,
@@ -208,7 +211,7 @@ export function createTaskArtifact(input: {
 		taskId: input.taskId,
 		...(input.filePath ? { filePath: input.filePath } : {}),
 		...(input.relativePath ? { relativePath: input.relativePath } : {})
-	};
+	});
 }
 
 export async function collectArtifactFiles(input: {

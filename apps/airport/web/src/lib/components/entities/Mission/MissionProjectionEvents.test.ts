@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { Mission } from './Mission.svelte.js';
-import type { AgentSessionCommandAcknowledgement, MissionAgentSessionSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
-import type { ArtifactCommandAcknowledgement, MissionArtifactSnapshot } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
-import type { MissionActionListSnapshot, MissionCommandAcknowledgement, MissionSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-import type { MissionStageSnapshot, StageCommandAcknowledgement } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
-import type { MissionTaskSnapshot, TaskCommandAcknowledgement } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
-import type { MissionChildEntityCommandGateway, MissionCommandGateway } from './Mission.svelte.js';
+import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/daemon/protocol/entityRemote';
+import type { AgentSessionCommandAcknowledgementType as AgentSessionCommandAcknowledgement, AgentSessionDataType as MissionAgentSessionSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { ArtifactDataType as MissionArtifactSnapshot } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
+import type { MissionCommandAcknowledgementType as MissionCommandAcknowledgement, MissionSnapshotType as MissionSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import type { StageDataType as MissionStageSnapshot, StageCommandAcknowledgementType as StageCommandAcknowledgement } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
+import type { TaskDataType as MissionTaskSnapshot, TaskCommandAcknowledgementType as TaskCommandAcknowledgement } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
+import type { MissionGatewayDependencies } from './Mission.svelte.js';
 
 describe('Mission projection reconciliation', () => {
     it('reconciles targeted child entity snapshots without replacing unrelated mirrors', () => {
-        const mission = new Mission(createMissionSnapshot(), async () => createMissionSnapshot());
+        const mission = createMission();
         mission.setRouteState({
             projectionSnapshot: {
                 missionId: 'mission-29',
@@ -55,7 +56,7 @@ describe('Mission projection reconciliation', () => {
     });
 
     it('reconciles Stage snapshots as authoritative stage child projections', () => {
-        const mission = new Mission(createMissionSnapshot(), async () => createMissionSnapshot());
+        const mission = createMission();
 
         mission.applyStageSnapshot(createStageSnapshot({
             lifecycle: 'completed',
@@ -68,15 +69,14 @@ describe('Mission projection reconciliation', () => {
     });
 
     it('exposes Mission entity commands from the entity snapshot', () => {
-        const mission = new Mission(
+        const mission = createMission(
             {
                 ...createMissionSnapshot(),
                 mission: {
                     ...createMissionSnapshot().mission,
                     commands: [{ commandId: 'mission.pause', label: 'Pause Mission', disabled: false }]
                 }
-            },
-            async () => createMissionSnapshot()
+            }
         );
 
         expect(mission.commands).toEqual([
@@ -90,11 +90,9 @@ describe('Mission projection reconciliation', () => {
 
     it('reads a preselected placeholder artifact with the reconciled artifact id', async () => {
         const readArtifactDocumentCalls: string[] = [];
-        const mission = new Mission(
+        const mission = createMission(
             createMissionSnapshot(),
-            async () => createMissionSnapshot(),
-            createMissionCommandGateway({ missionId: 'mission-29', actions: [] }),
-            createChildEntityCommandGateway(readArtifactDocumentCalls)
+            createMissionGatewayDependencies(readArtifactDocumentCalls)
         );
         const placeholderArtifact = mission.resolveArtifact({
             filePath: 'PRD.md',
@@ -117,55 +115,101 @@ describe('Mission projection reconciliation', () => {
     });
 });
 
-function createMissionCommandGateway(actions: MissionActionListSnapshot): MissionCommandGateway {
+function createMission(
+    snapshot: MissionSnapshot = createMissionSnapshot(),
+    gatewayDependencies: MissionGatewayDependencies = createMissionGatewayDependencies([])
+): Mission {
+    return new Mission({
+        snapshot,
+        loadData: async () => createMissionSnapshot(),
+        gatewayDependencies
+    });
+}
+
+function createMissionGatewayDependencies(readArtifactDocumentCalls: string[]): MissionGatewayDependencies {
     return {
-        pauseMission: async () => createMissionAcknowledgement('command'),
-        resumeMission: async () => createMissionAcknowledgement('command'),
-        panicMission: async () => createMissionAcknowledgement('command'),
-        clearMissionPanic: async () => createMissionAcknowledgement('command'),
-        restartMissionQueue: async () => createMissionAcknowledgement('command'),
-        deliverMission: async () => createMissionAcknowledgement('command'),
-        getMissionProjection: async () => ({
-            missionId: 'mission-29'
-        }),
-        getMissionActions: async () => actions,
-        executeMissionAction: async () => createMissionAcknowledgement('executeAction'),
-        readMissionDocument: async () => ({
-            filePath: '/repo/root/README.md',
-            content: ''
-        }),
-        writeMissionDocument: async () => ({
-            filePath: '/repo/root/README.md',
-            content: ''
-        }),
-        getMissionWorktree: async () => ({
-            rootPath: '/repo/root',
-            fetchedAt: '2026-04-27T00:00:00.000Z',
-            tree: []
-        })
+        commandRemote: async (input) => handleCommandInvocation(input),
+        queryRemote: async (input) => handleQueryInvocation(input, readArtifactDocumentCalls)
     };
 }
 
-function createChildEntityCommandGateway(readArtifactDocumentCalls: string[]): MissionChildEntityCommandGateway {
-    return {
-        executeStageCommand: async () => createStageAcknowledgement(),
-        executeTaskCommand: async () => createTaskAcknowledgement(),
-        executeArtifactCommand: async () => createArtifactAcknowledgement(),
-        executeAgentSessionCommand: async () => createAgentSessionAcknowledgement('executeCommand'),
-        sendAgentSessionPrompt: async () => createAgentSessionAcknowledgement('sendPrompt'),
-        sendAgentSessionCommand: async () => createAgentSessionAcknowledgement('sendCommand'),
-        readArtifactDocument: async (input) => {
-            readArtifactDocumentCalls.push(input.artifactId);
-            return {
-                filePath: 'PRD.md',
-                content: '# PRD'
-            };
-        },
-        writeArtifactDocument: async () => ({
+async function handleCommandInvocation(input: EntityCommandInvocation): Promise<EntityRemoteResult> {
+    if (input.entity === 'Stage' && input.method === 'executeCommand') {
+        return createStageAcknowledgement();
+    }
+
+    if (input.entity === 'Task' && input.method === 'executeCommand') {
+        return createTaskAcknowledgement();
+    }
+
+    if (input.entity === 'Artifact' && input.method === 'writeDocument') {
+        return {
             filePath: 'PRD.md',
             content: '# PRD'
-        })
-    };
+        };
+    }
+
+    if (input.entity === 'AgentSession' && input.method === 'executeCommand') {
+        return createAgentSessionAcknowledgement('executeCommand');
+    }
+
+    if (input.entity === 'AgentSession' && input.method === 'sendPrompt') {
+        return createAgentSessionAcknowledgement('sendPrompt');
+    }
+
+    if (input.entity === 'AgentSession' && input.method === 'sendCommand') {
+        return createAgentSessionAcknowledgement('sendCommand');
+    }
+
+    if (input.entity === 'Mission' && input.method === 'command') {
+        return createMissionAcknowledgement('command');
+    }
+
+    if (input.entity === 'Mission' && input.method === 'writeDocument') {
+        return {
+            filePath: '/repo/root/README.md',
+            content: ''
+        };
+    }
+
+    throw new Error(`Unexpected command invocation: ${input.entity}.${input.method}`);
+}
+
+async function handleQueryInvocation(
+    input: EntityQueryInvocation,
+    readArtifactDocumentCalls: string[]
+): Promise<EntityRemoteResult> {
+    if (input.entity === 'Artifact' && input.method === 'readDocument') {
+        const payload = input.payload as { artifactId: string };
+        readArtifactDocumentCalls.push(payload.artifactId);
+        return {
+            filePath: 'PRD.md',
+            content: '# PRD'
+        };
+    }
+
+    if (input.entity === 'Mission' && input.method === 'readProjection') {
+        return {
+            missionId: 'mission-29'
+        };
+    }
+
+    if (input.entity === 'Mission' && input.method === 'readDocument') {
+        return {
+            filePath: '/repo/root/README.md',
+            content: ''
+        };
+    }
+
+    if (input.entity === 'Mission' && input.method === 'readWorktree') {
+        return {
+            rootPath: '/repo/root',
+            fetchedAt: '2026-04-27T00:00:00.000Z',
+            tree: []
+        };
+    }
+
+    throw new Error(`Unexpected query invocation: ${input.entity}.${input.method}`);
 }
 
 function createStageAcknowledgement(): StageCommandAcknowledgement {
@@ -189,18 +233,6 @@ function createTaskAcknowledgement(): TaskCommandAcknowledgement {
         missionId: 'mission-29',
         taskId: 'task-1',
         commandId: 'task.start'
-    };
-}
-
-function createArtifactAcknowledgement(): ArtifactCommandAcknowledgement {
-    return {
-        ok: true,
-        entity: 'Artifact',
-        method: 'executeCommand',
-        id: 'artifact-1',
-        missionId: 'mission-29',
-        artifactId: 'artifact-1',
-        commandId: 'artifact.review'
     };
 }
 
@@ -238,6 +270,10 @@ function createMissionSnapshot(): MissionSnapshot {
         mission: {
             missionId: 'mission-29',
             title: 'Mission 29',
+            type: 'task',
+            branchRef: 'mission-29',
+            missionDir: '/tmp/mission-29',
+            missionRootDir: '/tmp/mission-29/.mission/mission-29',
             artifacts: [createArtifactSnapshot('verify', 'VERIFY.md')],
             stages,
             agentSessions: [createSessionSnapshot('session-1', 'running')]

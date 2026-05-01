@@ -1,4 +1,4 @@
-import type { WorkflowGlobalSettings } from '../workflow/engine/types.js';
+import type { WorkflowDefinition } from '../workflow/engine/types.js';
 
 export type WorkflowSettingsRevisionToken = string;
 
@@ -30,7 +30,7 @@ export type WorkflowSettingsMetadata = {
 };
 
 export type WorkflowSettingsGetResult = {
-	workflow: WorkflowGlobalSettings;
+	workflow: WorkflowDefinition;
 	revision: WorkflowSettingsRevisionToken;
 	metadata: WorkflowSettingsMetadata;
 	warnings?: string[];

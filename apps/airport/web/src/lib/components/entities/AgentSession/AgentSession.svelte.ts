@@ -1,21 +1,21 @@
 // /apps/airport/web/src/lib/components/entities/AgentSession/AgentSession.svelte.ts: OO browser entity for a mission agent session hydrated from validated runtime snapshots.
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import type { MissionAgentCommand as AgentCommand, MissionAgentPrompt as AgentPrompt, MissionAgentSessionSnapshot as AgentSessionSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { AgentSessionCommandType as AgentCommand, AgentSessionPromptType as AgentPrompt, AgentSessionDataType as AgentSessionSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
-export type AgentSessionCommandOwner = {
-    executeSessionCommand(sessionId: string, commandId: string, input?: unknown): Promise<void>;
-    sendSessionPrompt(sessionId: string, prompt: AgentPrompt): Promise<void>;
-    sendSessionCommand(sessionId: string, command: AgentCommand): Promise<void>;
+export type AgentSessionDependencies = {
+    executeCommand(sessionId: string, commandId: string, input?: unknown): Promise<void>;
+    sendPrompt(sessionId: string, prompt: AgentPrompt): Promise<void>;
+    sendCommand(sessionId: string, command: AgentCommand): Promise<void>;
 };
 
 export class AgentSession implements EntityModel<AgentSessionSnapshot> {
     private dataState = $state<AgentSessionSnapshot | undefined>();
-    private readonly owner: AgentSessionCommandOwner;
+    private readonly dependencies: AgentSessionDependencies;
 
-    public constructor(data: AgentSessionSnapshot, owner: AgentSessionCommandOwner) {
+    public constructor(data: AgentSessionSnapshot, dependencies: AgentSessionDependencies) {
         this.data = data;
-        this.owner = owner;
+        this.dependencies = dependencies;
     }
 
     private get data(): AgentSessionSnapshot {
@@ -103,16 +103,16 @@ export class AgentSession implements EntityModel<AgentSessionSnapshot> {
     }
 
     public async sendPrompt(prompt: AgentPrompt): Promise<this> {
-        await this.owner.sendSessionPrompt(this.sessionId, prompt);
+        await this.dependencies.sendPrompt(this.sessionId, prompt);
         return this;
     }
 
     public async executeCommand(commandId: string, input?: unknown): Promise<void> {
-        await this.owner.executeSessionCommand(this.sessionId, commandId, input);
+        await this.dependencies.executeCommand(this.sessionId, commandId, input);
     }
 
     public async sendCommand(command: AgentCommand): Promise<this> {
-        await this.owner.sendSessionCommand(this.sessionId, command);
+        await this.dependencies.sendCommand(this.sessionId, command);
         return this;
     }
 
@@ -131,20 +131,20 @@ export class AgentSession implements EntityModel<AgentSessionSnapshot> {
         return this;
     }
 
-    public updateFromSnapshot(data: AgentSessionSnapshot): this {
+    public updateFromData(data: AgentSessionSnapshot): this {
         this.data = data;
         return this;
     }
 
     public update(data: AgentSessionSnapshot): this {
-        return this.updateFromSnapshot(data);
+        return this.updateFromData(data);
     }
 
-    public toSnapshot(): AgentSessionSnapshot {
+    public toData(): AgentSessionSnapshot {
         return structuredClone($state.snapshot(this.data));
     }
 
     public toJSON(): AgentSessionSnapshot {
-        return this.toSnapshot();
+        return this.toData();
     }
 }

@@ -171,7 +171,7 @@ describe('FilesystemAdapter', () => {
 		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-'));
 		try {
 			const adapter = new FilesystemAdapter('/tmp/repo');
-			await Mission.initializeRuntimeData({
+			await Mission.initializeStateData({
 				adapter,
 				missionDir,
 				missionId: 'mission-109-runtime-document',
@@ -197,7 +197,7 @@ describe('FilesystemAdapter', () => {
 			expect(task?.status).toBe('pending');
 			expect(task?.agent).toBe('planner');
 
-			const workflowDocument = await Mission.readRuntimeData(adapter, missionDir);
+			const workflowDocument = await Mission.readStateData(adapter, missionDir);
 			expect(workflowDocument?.runtime.tasks).toEqual([]);
 		} finally {
 			await fs.rm(missionDir, { recursive: true, force: true });
@@ -233,7 +233,7 @@ describe('FilesystemAdapter', () => {
 				'utf8'
 			);
 
-			await expect(Mission.readRuntimeData(adapter, missionDir)).rejects.toThrow(/eventLog/u);
+			await expect(Mission.readStateData(adapter, missionDir)).rejects.toThrow(/eventLog/u);
 			await expect(Mission.readEventLog(adapter, missionDir)).resolves.toEqual([]);
 		} finally {
 			await fs.rm(missionDir, { recursive: true, force: true });

@@ -1,4 +1,6 @@
 import { z } from 'zod/v4';
+import { StageIdSchema } from '../entities/Stage/StageSchema.js';
+import { TaskIdSchema } from '../entities/Task/TaskSchema.js';
 
 export type WorkflowSettingsValidationError = {
 	code: string;
@@ -31,18 +33,18 @@ export const WorkflowStageTaskLaunchPolicySchema = z.object({
 }).strict();
 
 export const WorkflowStageDefinitionSchema = z.object({
-	stageId: z.string().trim().min(1),
+	stageId: StageIdSchema,
 	displayName: z.string().trim().min(1),
 	taskLaunchPolicy: WorkflowStageTaskLaunchPolicySchema
 }).strict();
 
 export const WorkflowGeneratedTaskDefinitionSchema = z.object({
-	taskId: z.string().trim().min(1),
+	taskId: TaskIdSchema,
 	title: z.string().trim().min(1),
 	instruction: z.string().trim().min(1),
 	taskKind: z.enum(['implementation', 'verification']).optional(),
-	pairedTaskId: z.string().trim().min(1).optional(),
-	dependsOn: z.array(z.string().trim().min(1)),
+	pairedTaskId: TaskIdSchema.optional(),
+	dependsOn: z.array(TaskIdSchema),
 	agentRunner: z.string().trim().min(1).optional()
 }).strict();
 
@@ -52,7 +54,7 @@ export const WorkflowTaskTemplateSourceSchema = z.object({
 }).strict();
 
 export const WorkflowTaskGenerationRuleSchema = z.object({
-	stageId: z.string().trim().min(1),
+	stageId: StageIdSchema,
 	artifactTasks: z.boolean(),
 	templateSources: z.array(WorkflowTaskTemplateSourceSchema),
 	tasks: z.array(WorkflowGeneratedTaskDefinitionSchema)
@@ -61,19 +63,89 @@ export const WorkflowTaskGenerationRuleSchema = z.object({
 export const WorkflowGateDefinitionSchema = z.object({
 	gateId: z.string().trim().min(1),
 	intent: z.enum(['implement', 'verify', 'audit', 'deliver']),
-	stageId: z.string().trim().min(1).optional()
+	stageId: StageIdSchema.optional()
 }).strict();
 
-export const WorkflowGlobalSettingsSchema = z.object({
+export const WorkflowDefinitionSchema = z.object({
 	autostart: WorkflowMissionAutostartSettingsSchema,
 	humanInLoop: WorkflowHumanInLoopSettingsSchema,
 	panic: WorkflowPanicSettingsSchema,
 	execution: WorkflowExecutionSettingsSchema,
-	stageOrder: z.array(z.string().trim().min(1)),
-	stages: z.record(z.string().trim().min(1), WorkflowStageDefinitionSchema),
+	stageOrder: z.array(StageIdSchema),
+	stages: z.record(StageIdSchema, WorkflowStageDefinitionSchema),
 	taskGeneration: z.array(WorkflowTaskGenerationRuleSchema),
 	gates: z.array(WorkflowGateDefinitionSchema)
-}).strict();
+}).strict().superRefine((settings, context) => {
+	if (settings.stageOrder.length === 0) {
+		context.addIssue({
+			code: 'custom',
+			path: ['stageOrder'],
+			message: 'stageOrder must be a non-empty array.'
+		});
+	}
+
+	const stageOrderSet = new Set<string>();
+	for (const [index, stageId] of settings.stageOrder.entries()) {
+		if (stageOrderSet.has(stageId)) {
+			context.addIssue({
+				code: 'custom',
+				path: ['stageOrder', index],
+				message: `stageOrder contains duplicate stage '${stageId}'.`
+			});
+		}
+		stageOrderSet.add(stageId);
+	}
+
+	for (const stageId of Object.keys(settings.stages).sort()) {
+		if (!stageOrderSet.has(stageId)) {
+			context.addIssue({
+				code: 'custom',
+				path: ['stageOrder'],
+				message: `stageOrder is missing stage '${stageId}'.`
+			});
+		}
+	}
+
+	for (const [index, stageId] of settings.stageOrder.entries()) {
+		if (!Object.prototype.hasOwnProperty.call(settings.stages, stageId)) {
+			context.addIssue({
+				code: 'custom',
+				path: ['stageOrder', index],
+				message: `stageOrder references unknown stage '${stageId}'.`
+			});
+		}
+	}
+
+	for (const [stageId, definition] of Object.entries(settings.stages).sort(([left], [right]) => left.localeCompare(right))) {
+		if (definition.stageId !== stageId) {
+			context.addIssue({
+				code: 'custom',
+				path: ['stages', stageId, 'stageId'],
+				message: `Stage '${stageId}' must declare a matching stageId.`
+			});
+		}
+	}
+
+	for (const [index, gate] of settings.gates.entries()) {
+		if (gate.stageId && !Object.prototype.hasOwnProperty.call(settings.stages, gate.stageId)) {
+			context.addIssue({
+				code: 'custom',
+				path: ['gates', index, 'stageId'],
+				message: `Gate '${gate.gateId}' references unknown stage '${gate.stageId}'.`
+			});
+		}
+	}
+
+	for (const [index, rule] of settings.taskGeneration.entries()) {
+		if (!Object.prototype.hasOwnProperty.call(settings.stages, rule.stageId)) {
+			context.addIssue({
+				code: 'custom',
+				path: ['taskGeneration', index, 'stageId'],
+				message: `Task generation rule at index ${String(index)} references unknown stage '${rule.stageId}'.`
+			});
+		}
+	}
+});
 
 export const WorkflowRuntimeSettingsSchema = z.object({
 	agentRunner: z.enum(['copilot-cli', 'pi']),
@@ -92,7 +164,7 @@ export const WorkflowPathSettingsSchema = z.object({
 }).strict();
 
 export const WorkflowSettingsDocumentSchema = z.object({
-	workflow: WorkflowGlobalSettingsSchema,
+	workflow: WorkflowDefinitionSchema,
 	runtime: WorkflowRuntimeSettingsSchema,
 	integration: WorkflowIntegrationSettingsSchema,
 	paths: WorkflowPathSettingsSchema
@@ -108,7 +180,7 @@ export type WorkflowGeneratedTaskDefinition = z.infer<typeof WorkflowGeneratedTa
 export type WorkflowTaskTemplateSource = z.infer<typeof WorkflowTaskTemplateSourceSchema>;
 export type WorkflowTaskGenerationRule = z.infer<typeof WorkflowTaskGenerationRuleSchema>;
 export type WorkflowGateDefinition = z.infer<typeof WorkflowGateDefinitionSchema>;
-export type WorkflowGlobalSettings = z.infer<typeof WorkflowGlobalSettingsSchema>;
+export type WorkflowDefinition = z.infer<typeof WorkflowDefinitionSchema>;
 export type WorkflowRuntimeSettings = z.infer<typeof WorkflowRuntimeSettingsSchema>;
 export type WorkflowIntegrationSettings = z.infer<typeof WorkflowIntegrationSettingsSchema>;
 export type WorkflowPathSettings = z.infer<typeof WorkflowPathSettingsSchema>;

@@ -25,6 +25,36 @@ afterEach(async () => {
 });
 
 describe('Mission', () => {
+    it('builds mission snapshots and projections from the Mission instance', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner');
+
+        try {
+            const adapter = new FilesystemAdapter(workspaceRoot);
+            const mission = await Mission.create(adapter, {
+                brief: createBrief(200, 'Mission owned projections'),
+                branchRef: adapter.deriveMissionBranchName(200, 'Mission owned projections')
+            }, createWorkflowBindings(runner));
+
+            try {
+                await mission.startWorkflow();
+                const missionId = mission.getRecord().id;
+
+                const snapshot = await mission.buildMissionSnapshot();
+                const projection = await mission.buildMissionProjectionSnapshot();
+
+                expect(snapshot.mission.missionId).toBe(missionId);
+                expect(snapshot.mission.commands).toEqual(expect.any(Array));
+                expect(projection.missionId).toBe(missionId);
+                expect(snapshot.mission.commands?.length).toBeGreaterThan(0);
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
     it('launches task sessions and translates runtime events into compatibility events', async () => {
         const workspaceRoot = await createTempRepo();
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
@@ -266,8 +296,8 @@ describe('Mission', () => {
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(204, 'Mission task launch action'),
-                branchRef: adapter.deriveMissionBranchName(204, 'Mission task launch action')
+                brief: createBrief(204, 'Mission task launch command'),
+                branchRef: adapter.deriveMissionBranchName(204, 'Mission task launch command')
             }, createWorkflowBindings(runner));
 
             try {
@@ -278,21 +308,21 @@ describe('Mission', () => {
                     throw new Error('Expected a ready task after workflow start.');
                 }
 
-                const startAction = (await mission.listAvailableActions()).find(
-                    (action) => action.id === `task.start.${taskId}`
+                const startCommand = (await mission.listAvailableCommands()).find(
+                    (command) => command.owner.entity === 'Task' && command.owner.taskId === taskId && command.command.commandId === 'task.start'
                 );
-                expect(startAction).toMatchObject({
-                    action: '/task start',
-                    enabled: true,
-                    targetId: taskId
+                expect(startCommand?.command).toMatchObject({
+                    commandId: 'task.start',
+                    disabled: false
                 });
-                expect((await mission.listAvailableActions()).some(
-                    (action) => action.id === `task.launch.${taskId}`
+                expect((await mission.listAvailableCommands()).some(
+                    (command) => command.owner.entity === 'Task' && command.owner.taskId === taskId && command.command.commandId === 'task.launch'
                 )).toBe(false);
 
-                const nextStatus = await mission.executeOperatorAction(`task.start.${taskId}`, [], {
+                await mission.startTask(taskId, {
                     terminalSessionName: 'airport-terminal-session'
                 });
+                const nextStatus = await mission.status();
                 expect(await runner.listSessions()).toHaveLength(1);
                 expect(runner.getLastStartRequest()?.workingDirectory).toBe(startedStatus.missionDir);
                 expect(runner.getLastStartRequest()?.terminalSessionName).toBe('airport-terminal-session');
@@ -319,15 +349,15 @@ describe('Mission', () => {
         }
     });
 
-    it('exposes and executes task rework as an input-taking operator action', async () => {
+    it('exposes and executes task rework as an input-taking operator command', async () => {
         const workspaceRoot = await createTempRepo();
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(2041, 'Mission task rework action'),
-                branchRef: adapter.deriveMissionBranchName(2041, 'Mission task rework action')
+                brief: createBrief(2041, 'Mission task rework command'),
+                branchRef: adapter.deriveMissionBranchName(2041, 'Mission task rework command')
             }, createWorkflowBindings(runner));
 
             try {
@@ -339,25 +369,22 @@ describe('Mission', () => {
 
                 await mission.completeTask(taskId);
 
-                const reworkAction = (await mission.listAvailableActions()).find(
-                    (action) => action.id === `task.rework.${taskId}`
+                const reworkCommand = (await mission.listAvailableCommands()).find(
+                    (command) => command.owner.entity === 'Task' && command.owner.taskId === taskId && command.command.commandId === 'task.rework'
                 );
-                expect(reworkAction).toMatchObject({
-                    action: '/task rework',
-                    enabled: true,
-                    targetId: taskId,
-                    flow: {
-                        targetLabel: 'TASK',
-                        actionLabel: 'INSTRUCT',
-                        steps: [
-                            expect.objectContaining({ id: 'task.rework.instruction', kind: 'text' })
-                        ]
-                    }
+                expect(reworkCommand?.command).toMatchObject({
+                    commandId: 'task.rework',
+                    disabled: false,
+                    input: expect.objectContaining({ kind: 'text', required: true })
                 });
 
-                const nextStatus = await mission.executeOperatorAction(`task.rework.${taskId}`, [
-                    { kind: 'text', stepId: 'task.rework.instruction', value: 'The previous output missed the requested review criteria.' }
-                ]);
+                await mission.reworkTask(taskId, {
+                    actor: 'human',
+                    reasonCode: 'manual.instruction',
+                    summary: 'The previous output missed the requested review criteria.',
+                    artifactRefs: []
+                });
+                const nextStatus = await mission.status();
 
                 const workflowTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === taskId);
                 expect(workflowTask).toMatchObject({
@@ -389,8 +416,8 @@ describe('Mission', () => {
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(2042, 'Mission verification-triggered rework action'),
-                branchRef: adapter.deriveMissionBranchName(2042, 'Mission verification-triggered rework action')
+                brief: createBrief(2042, 'Mission verification-triggered rework command'),
+                branchRef: adapter.deriveMissionBranchName(2042, 'Mission verification-triggered rework command')
             }, createWorkflowBindings(runner));
 
             const missionId = mission.getRecord().id;
@@ -414,7 +441,7 @@ describe('Mission', () => {
                     agent: 'copilot-cli'
                 });
 
-                const persisted = await Mission.readRuntimeData(adapter, missionDir);
+                const persisted = await Mission.readStateData(adapter, missionDir);
                 if (!persisted) {
                     throw new Error('Expected a persisted mission runtime data.');
                 }
@@ -475,7 +502,7 @@ describe('Mission', () => {
                             completedTaskIds: []
                         }
                 );
-                await Mission.writeRuntimeData(adapter, missionDir, persisted);
+                await Mission.writeStateData(adapter, missionDir, persisted);
             } finally {
                 mission.dispose();
             }
@@ -486,23 +513,19 @@ describe('Mission', () => {
             }
 
             try {
-                const reworkAction = (await reloaded.listAvailableActions()).find(
-                    (action) => action.id === 'task.rework.from-verification.implementation/02-boundary-verify'
+                const reworkCommand = (await reloaded.listAvailableCommands()).find(
+                    (command) => command.owner.entity === 'Task'
+                        && command.owner.taskId === 'implementation/02-boundary-verify'
+                        && command.command.commandId === 'task.reworkFromVerification'
                 );
-                expect(reworkAction).toMatchObject({
-                    action: '/task rework',
-                    enabled: true,
-                    targetId: 'implementation/02-boundary',
-                    flow: {
-                        actionLabel: 'SEND BACK',
-                        steps: []
-                    },
-                    presentationTargets: expect.arrayContaining([
-                        expect.objectContaining({ scope: 'task', targetId: 'implementation/02-boundary-verify' })
-                    ])
+                expect(reworkCommand?.command).toMatchObject({
+                    commandId: 'task.reworkFromVerification',
+                    disabled: false,
+                    label: 'Send Back'
                 });
 
-                const nextStatus = await reloaded.executeOperatorAction('task.rework.from-verification.implementation/02-boundary-verify');
+                await reloaded.reworkTaskFromVerification('implementation/02-boundary-verify');
+                const nextStatus = await reloaded.status();
                 const implementationTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary');
                 const verificationTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary-verify');
 
@@ -533,8 +556,8 @@ describe('Mission', () => {
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(2043, 'Mission verification-triggered rework action from file metadata'),
-                branchRef: adapter.deriveMissionBranchName(2043, 'Mission verification-triggered rework action from file metadata')
+                brief: createBrief(2043, 'Mission verification-triggered rework command from file metadata'),
+                branchRef: adapter.deriveMissionBranchName(2043, 'Mission verification-triggered rework command from file metadata')
             }, createWorkflowBindings(runner));
 
             const missionId = mission.getRecord().id;
@@ -558,7 +581,7 @@ describe('Mission', () => {
                     agent: 'copilot-cli'
                 });
 
-                const persisted = await Mission.readRuntimeData(adapter, missionDir);
+                const persisted = await Mission.readStateData(adapter, missionDir);
                 if (!persisted) {
                     throw new Error('Expected a persisted mission runtime data.');
                 }
@@ -615,7 +638,7 @@ describe('Mission', () => {
                             completedTaskIds: []
                         }
                 );
-                await Mission.writeRuntimeData(adapter, missionDir, persisted);
+                await Mission.writeStateData(adapter, missionDir, persisted);
             } finally {
                 mission.dispose();
             }
@@ -626,23 +649,19 @@ describe('Mission', () => {
             }
 
             try {
-                const reworkAction = (await reloaded.listAvailableActions()).find(
-                    (action) => action.id === 'task.rework.from-verification.implementation/02-boundary-verify'
+                const reworkCommand = (await reloaded.listAvailableCommands()).find(
+                    (command) => command.owner.entity === 'Task'
+                        && command.owner.taskId === 'implementation/02-boundary-verify'
+                        && command.command.commandId === 'task.reworkFromVerification'
                 );
-                expect(reworkAction).toMatchObject({
-                    action: '/task rework',
-                    enabled: true,
-                    targetId: 'implementation/02-boundary',
-                    flow: {
-                        actionLabel: 'SEND BACK',
-                        steps: []
-                    },
-                    presentationTargets: expect.arrayContaining([
-                        expect.objectContaining({ scope: 'task', targetId: 'implementation/02-boundary-verify' })
-                    ])
+                expect(reworkCommand?.command).toMatchObject({
+                    commandId: 'task.reworkFromVerification',
+                    disabled: false,
+                    label: 'Send Back'
                 });
 
-                const nextStatus = await reloaded.executeOperatorAction('task.rework.from-verification.implementation/02-boundary-verify');
+                await reloaded.reworkTaskFromVerification('implementation/02-boundary-verify');
+                const nextStatus = await reloaded.status();
                 const implementationTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary');
                 const verificationTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary-verify');
 
@@ -738,15 +757,15 @@ describe('Mission', () => {
         }
     });
 
-    it('does not expose a separate launch action once a task is already running', async () => {
+    it('does not expose a separate launch command once a task is already running', async () => {
         const workspaceRoot = await createTempRepo();
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(205, 'Mission running task launch action'),
-                branchRef: adapter.deriveMissionBranchName(205, 'Mission running task launch action')
+                brief: createBrief(205, 'Mission running task launch command'),
+                branchRef: adapter.deriveMissionBranchName(205, 'Mission running task launch command')
             }, createWorkflowBindings(runner));
 
             try {
@@ -756,7 +775,8 @@ describe('Mission', () => {
                     throw new Error('Expected a ready task after workflow start.');
                 }
 
-                const runningStatus = await mission.executeOperatorAction(`task.start.${taskId}`);
+                await mission.startTask(taskId);
+                const runningStatus = await mission.status();
                 expect(runningStatus.stages?.flatMap((stage: MissionStageStatus) => stage.tasks).find((task: { taskId: string; status?: string }) => task.taskId === taskId)?.status).toBe('running');
                 expect(await runner.listSessions()).toHaveLength(1);
                 expect(runningStatus.agentSessions?.length ?? 0).toBe(1);
@@ -765,8 +785,8 @@ describe('Mission', () => {
                     runnerId: runner.id,
                     lifecycleState: 'running'
                 });
-                expect((await mission.listAvailableActions()).some(
-                    (action) => action.id === `task.launch.${taskId}`
+                expect((await mission.listAvailableCommands()).some(
+                    (command) => command.owner.entity === 'Task' && command.owner.taskId === taskId && command.command.commandId === 'task.launch'
                 )).toBe(false);
             } finally {
                 mission.dispose();
@@ -924,7 +944,7 @@ describe('Mission', () => {
                 });
                 mission.dispose();
 
-                const persisted = await Mission.readRuntimeData(adapter, missionDir);
+                const persisted = await Mission.readStateData(adapter, missionDir);
                 if (!persisted) {
                     throw new Error('Expected persisted mission runtime data.');
                 }
@@ -939,7 +959,7 @@ describe('Mission', () => {
                 for (const session of persisted.runtime.sessions) {
                     delete (session as { transportId?: string }).transportId;
                 }
-                await Mission.writeRuntimeData(adapter, missionDir, persisted);
+                await Mission.writeStateData(adapter, missionDir, persisted);
 
                 const reloaded = await Mission.load(adapter, { missionId }, createWorkflowBindings(runner));
                 if (!reloaded) {
@@ -954,7 +974,7 @@ describe('Mission', () => {
                         transportId: 'terminal'
                     });
 
-                    const persistedDocument = await Mission.readRuntimeData(adapter, missionDir);
+                    const persistedDocument = await Mission.readStateData(adapter, missionDir);
                     const persistedSession = persistedDocument?.runtime.sessions.find((session) => session.sessionId === launched.sessionId);
                     expect(persistedSession).toMatchObject({
                         runnerId: 'copilot-cli'
@@ -1036,7 +1056,7 @@ describe('Mission', () => {
                     throw new Error('Expected a ready task after workflow start.');
                 }
 
-                const persisted = await Mission.readRuntimeData(adapter, mission.getMissionDir());
+                const persisted = await Mission.readStateData(adapter, mission.getMissionDir());
                 if (!persisted) {
                     throw new Error('Expected a persisted mission runtime data.');
                 }
@@ -1051,7 +1071,7 @@ describe('Mission', () => {
                         }
                         : task
                 );
-                await Mission.writeRuntimeData(adapter, mission.getMissionDir(), persisted);
+                await Mission.writeStateData(adapter, mission.getMissionDir(), persisted);
 
                 const status = await mission.status();
                 expect(status.readyTasks?.some((task: { taskId: string }) => task.taskId === taskId)).toBe(true);
@@ -1064,33 +1084,33 @@ describe('Mission', () => {
         }
     });
 
-    it('refreshes mission action snapshots after pause and resume transitions', async () => {
+    it('refreshes mission command snapshots after pause and resume transitions', async () => {
         const workspaceRoot = await createTempRepo();
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(209, 'Mission action snapshot freshness'),
-                branchRef: adapter.deriveMissionBranchName(209, 'Mission action snapshot freshness')
+                brief: createBrief(209, 'Mission command snapshot freshness'),
+                branchRef: adapter.deriveMissionBranchName(209, 'Mission command snapshot freshness')
             }, createWorkflowBindings(runner));
 
             try {
                 await mission.startWorkflow();
 
-                const runningActions = await mission.listAvailableActionsSnapshot();
-                expect(runningActions.actions.find((action) => action.id === 'mission.pause')?.enabled).toBe(true);
-                expect(runningActions.actions.find((action) => action.id === 'mission.resume')?.enabled).toBe(false);
+                const runningCommands = await mission.listAvailableCommandSnapshot();
+                expect(findMissionCommand(runningCommands.commands, 'mission.pause')?.disabled).toBe(false);
+                expect(findMissionCommand(runningCommands.commands, 'mission.resume')?.disabled).toBe(true);
 
                 await mission.pauseMission();
-                const pausedActions = await mission.listAvailableActionsSnapshot();
-                expect(pausedActions.actions.find((action) => action.id === 'mission.resume')?.enabled).toBe(true);
-                expect(pausedActions.actions.find((action) => action.id === 'mission.pause')?.enabled).toBe(false);
+                const pausedCommands = await mission.listAvailableCommandSnapshot();
+                expect(findMissionCommand(pausedCommands.commands, 'mission.resume')?.disabled).toBe(false);
+                expect(findMissionCommand(pausedCommands.commands, 'mission.pause')?.disabled).toBe(true);
 
                 await mission.resumeMission();
-                const resumedActions = await mission.listAvailableActionsSnapshot();
-                expect(resumedActions.actions.find((action) => action.id === 'mission.pause')?.enabled).toBe(true);
-                expect(resumedActions.actions.find((action) => action.id === 'mission.resume')?.enabled).toBe(false);
+                const resumedCommands = await mission.listAvailableCommandSnapshot();
+                expect(findMissionCommand(resumedCommands.commands, 'mission.pause')?.disabled).toBe(false);
+                expect(findMissionCommand(resumedCommands.commands, 'mission.resume')?.disabled).toBe(true);
             } finally {
                 mission.dispose();
             }
@@ -1099,15 +1119,15 @@ describe('Mission', () => {
         }
     });
 
-    it('keeps session stop actions enabled while an agent is awaiting input', async () => {
+    it('keeps session stop commands enabled while an agent is awaiting input', async () => {
         const workspaceRoot = await createTempRepo();
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');
 
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(210, 'Mission awaiting-input session actions'),
-                branchRef: adapter.deriveMissionBranchName(210, 'Mission awaiting-input session actions')
+                brief: createBrief(210, 'Mission awaiting-input session commands'),
+                branchRef: adapter.deriveMissionBranchName(210, 'Mission awaiting-input session commands')
             }, createWorkflowBindings(runner));
 
             try {
@@ -1131,9 +1151,9 @@ describe('Mission', () => {
                 session.emitAwaitingInput();
                 await flushMicrotasks();
 
-                const actions = await mission.listAvailableActionsSnapshot();
-                expect(actions.actions.find((action) => action.id === `session.cancel.${launched.sessionId}`)?.enabled).toBe(true);
-                expect(actions.actions.find((action) => action.id === `session.terminate.${launched.sessionId}`)?.enabled).toBe(true);
+                const commands = await mission.listAvailableCommandSnapshot();
+                expect(findSessionCommand(commands.commands, launched.sessionId, 'agentSession.cancel')?.disabled).toBe(false);
+                expect(findSessionCommand(commands.commands, launched.sessionId, 'agentSession.terminate')?.disabled).toBe(false);
             } finally {
                 mission.dispose();
             }
@@ -1149,14 +1169,14 @@ describe('Mission', () => {
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(210, 'Mission delivered action availability'),
-                branchRef: adapter.deriveMissionBranchName(210, 'Mission delivered action availability')
+                brief: createBrief(210, 'Mission delivered command availability'),
+                branchRef: adapter.deriveMissionBranchName(210, 'Mission delivered command availability')
             }, createWorkflowBindings(runner));
 
             try {
                 await mission.startWorkflow();
 
-                const persisted = await Mission.readRuntimeData(adapter, mission.getMissionDir());
+                const persisted = await Mission.readStateData(adapter, mission.getMissionDir());
                 if (!persisted) {
                     throw new Error('Expected a persisted mission runtime data.');
                 }
@@ -1176,16 +1196,16 @@ describe('Mission', () => {
                     })),
                     updatedAt: '2026-04-20T16:00:00.000Z'
                 };
-                await Mission.writeRuntimeData(adapter, mission.getMissionDir(), persisted);
+                await Mission.writeStateData(adapter, mission.getMissionDir(), persisted);
 
                 const reloaded = await Mission.load(adapter, { missionId: mission.getRecord().id }, createWorkflowBindings(runner));
                 if (!reloaded) {
                     throw new Error('Expected mission to reload.');
                 }
 
-                const actions = await reloaded.listAvailableActionsSnapshot();
-                expect(actions.actions.find((action) => action.id === 'mission.deliver')).toMatchObject({
-                    enabled: false,
+                const commands = await reloaded.listAvailableCommandSnapshot();
+                expect(findMissionCommand(commands.commands, 'mission.deliver')).toMatchObject({
+                    disabled: true,
                     disabledReason: 'Mission already delivered.'
                 });
                 reloaded.dispose();
@@ -1204,14 +1224,14 @@ describe('Mission', () => {
         try {
             const adapter = new FilesystemAdapter(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(211, 'Mission panic action availability'),
-                branchRef: adapter.deriveMissionBranchName(211, 'Mission panic action availability')
+                brief: createBrief(211, 'Mission panic command availability'),
+                branchRef: adapter.deriveMissionBranchName(211, 'Mission panic command availability')
             }, createWorkflowBindings(runner));
 
             try {
                 await mission.startWorkflow();
 
-                const persisted = await Mission.readRuntimeData(adapter, mission.getMissionDir());
+                const persisted = await Mission.readStateData(adapter, mission.getMissionDir());
                 if (!persisted) {
                     throw new Error('Expected a persisted mission runtime data.');
                 }
@@ -1221,16 +1241,16 @@ describe('Mission', () => {
                     lifecycle: 'completed',
                     updatedAt: '2026-04-20T16:05:00.000Z'
                 };
-                await Mission.writeRuntimeData(adapter, mission.getMissionDir(), persisted);
+                await Mission.writeStateData(adapter, mission.getMissionDir(), persisted);
 
                 const reloaded = await Mission.load(adapter, { missionId: mission.getRecord().id }, createWorkflowBindings(runner));
                 if (!reloaded) {
                     throw new Error('Expected mission to reload.');
                 }
 
-                const actions = await reloaded.listAvailableActionsSnapshot();
-                expect(actions.actions.find((action) => action.id === 'mission.panic')).toMatchObject({
-                    enabled: false,
+                const commands = await reloaded.listAvailableCommandSnapshot();
+                expect(findMissionCommand(commands.commands, 'mission.panic')).toMatchObject({
+                    disabled: true,
                     disabledReason: 'Mission is already completed.'
                 });
                 reloaded.dispose();
@@ -1242,6 +1262,20 @@ describe('Mission', () => {
         }
     });
 });
+
+type TestOwnedCommand = Awaited<ReturnType<Mission['listAvailableCommands']>>[number];
+
+function findMissionCommand(commands: TestOwnedCommand[], commandId: string) {
+    return commands.find((command) => command.owner.entity === 'Mission' && command.command.commandId === commandId)?.command;
+}
+
+function findSessionCommand(commands: TestOwnedCommand[], sessionId: string, commandId: string) {
+    return commands.find((command) =>
+        command.owner.entity === 'AgentSession'
+        && command.owner.sessionId === sessionId
+        && command.command.commandId === commandId
+    )?.command;
+}
 
 function createWorkflowBindings(runner: FakeAgentRunner): MissionWorkflowBindings {
     const workflow = createDefaultWorkflowSettings();

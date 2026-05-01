@@ -1,80 +1,37 @@
 // /apps/airport/web/src/lib/components/entities/Repository/Repository.svelte.ts: OO browser entity for repository data with remote issue and mission commands.
-import type { MissionSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-import { GitHubIssueDetailSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformRepositorySchema, RepositorySnapshotSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
-import type { GitHubIssueDetailType, RepositorySnapshotType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { MissionCatalogEntryType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import { GitHubIssueDetailSchema, RepositoryDataSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformRepositorySchema, RepositoryStorageSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { GitHubIssueDetailType, RepositoryDataType, RepositoryStorageType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import { z } from 'zod/v4';
 import { getApp } from '$lib/client/globals';
 import { cmd } from '../../../../routes/api/entities/remote/command.remote';
 import { qry } from '../../../../routes/api/entities/remote/query.remote';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
-import { Mission } from '$lib/components/entities/Mission/Mission.svelte.js';
 
-type RepositorySummary = RepositorySnapshotType['repository'];
+type RepositorySummary = RepositoryStorageType;
 
-export type RepositoryMissionResolver = (snapshot: MissionSnapshot) => Mission;
-export type RepositorySnapshotLoader = (input: {
+export type RepositoryDataLoader = (input: {
     id: string;
     repositoryRootPath?: string;
-}) => Promise<RepositorySnapshotType>;
+}) => Promise<RepositoryDataType>;
 
-export class Repository implements EntityModel<RepositorySnapshotType> {
-    private dataState = $state<RepositorySnapshotType | undefined>();
-    private readonly loadSnapshot: RepositorySnapshotLoader;
-    private readonly resolveMission: RepositoryMissionResolver;
-    private selectedMissionState = $state<Mission | undefined>();
+export class Repository implements EntityModel<RepositoryDataType> {
+    public data = $state() as RepositoryDataType;
+    private readonly loadData: RepositoryDataLoader;
+    public missions = $state<MissionCatalogEntryType[]>([]);
 
     public constructor(
-        snapshot: RepositorySnapshotType,
+        data: RepositoryDataType,
         input: {
-            loadSnapshot: RepositorySnapshotLoader;
-            resolveMission: RepositoryMissionResolver;
+            loadData: RepositoryDataLoader;
         }
     ) {
-        this.data = snapshot;
-        this.loadSnapshot = input.loadSnapshot;
-        this.resolveMission = input.resolveMission;
-        this.selectedMissionModel = this.createSelectedMission(snapshot.selectedMission);
-    }
-
-    private get data(): RepositorySnapshotType {
-        const data = this.dataState;
-        if (!data) {
-            throw new Error('Repository data is not initialized.');
-        }
-
-        return data;
-    }
-
-    private set data(snapshot: RepositorySnapshotType) {
-        this.dataState = structuredClone(snapshot);
-    }
-
-    private get selectedMissionModel(): Mission | undefined {
-        return this.selectedMissionState;
-    }
-
-    private set selectedMissionModel(mission: Mission | undefined) {
-        this.selectedMissionState = mission;
+        this.data = structuredClone(data);
+        this.loadData = input.loadData;
     }
 
     public get id(): string {
-        return this.data.repository.id;
-    }
-
-    public get repositoryRootPath(): string {
-        return this.data.repository.repositoryRootPath;
-    }
-
-    public get displayName(): string {
-        return getRepositoryDisplayName(this.data.repository);
-    }
-
-    public get displayDescription(): string {
-        return getRepositoryDisplayDescription(this.data.repository);
-    }
-
-    public get summary(): RepositorySummary {
-        return structuredClone($state.snapshot(this.data.repository));
+        return this.data.id;
     }
 
     public static async find(input: {
@@ -85,15 +42,15 @@ export class Repository implements EntityModel<RepositorySnapshotType> {
             method: 'find',
             payload: {}
         });
-        const snapshots = z.array(RepositorySnapshotSchema).parse(
+        const repositoryData = z.array(RepositoryDataSchema).parse(
             input.run ? await repositoriesQuery.run() : await repositoriesQuery
         );
 
-        return getApp().reconcileRepositories(snapshots);
+        return getApp().reconcileRepositories(repositoryData);
     }
 
     public static async add(repositoryPath: string): Promise<Repository> {
-        const snapshot = RepositorySnapshotSchema.parse(await cmd({
+        const data = RepositoryDataSchema.parse(await cmd({
             entity: 'Repository',
             method: 'add',
             payload: {
@@ -101,7 +58,7 @@ export class Repository implements EntityModel<RepositorySnapshotType> {
             }
         }));
 
-        return getApp().hydrateRepositoryData(snapshot);
+        return getApp().hydrateRepositoryData(data);
     }
 
     public static async findAvailable(input: {
@@ -118,92 +75,46 @@ export class Repository implements EntityModel<RepositorySnapshotType> {
         platform: 'github';
         repositoryRef: string;
         destinationPath: string;
-    }): Promise<RepositorySnapshotType> {
-        return RepositorySnapshotSchema.parse(await cmd({
+    }): Promise<RepositoryDataType> {
+        return RepositoryDataSchema.parse(await cmd({
             entity: 'Repository',
             method: 'add',
             payload: input
         }));
     }
 
-    public get selectedMissionId(): string | undefined {
-        return this.data.selectedMissionId;
-    }
-
-    public get selectedMission(): Mission | undefined {
-        return this.selectedMissionModel;
-    }
-
-    public get missions(): RepositorySnapshotType['missions'] {
-        return structuredClone($state.snapshot(this.data.missions));
-    }
-
-    public get operationalMode(): string | undefined {
-        return this.data.operationalMode;
-    }
-
-    public get controlRoot(): string | undefined {
-        return this.data.controlRoot;
-    }
-
-    public get currentBranch(): string | undefined {
-        return this.data.currentBranch;
-    }
-
-    public get settingsComplete(): boolean | undefined {
-        return this.data.settingsComplete;
-    }
-
-    public get platformRepositoryRef(): string | undefined {
-        return this.data.platformRepositoryRef;
-    }
-
-    public get missionCountLabel(): string {
-        return this.data.missions.length === 1
-            ? '1 mission'
-            : `${this.data.missions.length} missions`;
-    }
-
-    public updateFromSnapshot(snapshot: RepositorySnapshotType): this {
-        this.data = snapshot;
-
-        if (!snapshot.selectedMission) {
-            this.selectedMissionModel = undefined;
-            return this;
-        }
-
-        const selectedMission = snapshot.selectedMission;
-        if (this.selectedMissionModel?.missionId === selectedMission.mission.missionId) {
-            this.selectedMissionModel.updateFromSnapshot(selectedMission);
-            return this;
-        }
-
-        this.selectedMissionModel = this.createSelectedMission(selectedMission);
+    public setMissionCatalog(missions: MissionCatalogEntryType[]): this {
+        this.missions = structuredClone(missions);
         return this;
     }
 
-    public applyData(snapshot: RepositorySnapshotType): this {
-        return this.updateFromSnapshot(snapshot);
+    public updateFromData(data: RepositoryDataType): this {
+        this.data = structuredClone(data);
+        return this;
+    }
+
+    public applyData(data: RepositoryDataType): this {
+        return this.updateFromData(data);
     }
 
     public async refresh(): Promise<this> {
-        return this.updateFromSnapshot(
-            await this.loadSnapshot({
-                id: this.id,
-                repositoryRootPath: this.repositoryRootPath
+        return this.updateFromData(
+            await this.loadData({
+                id: this.data.id,
+                repositoryRootPath: this.data.repositoryRootPath
             })
         );
     }
 
-    public applySummary(input: RepositorySnapshotType['repository']): this {
-        this.data = {
-            ...this.toSnapshot(),
-            repository: structuredClone(input)
-        };
+    public applySummary(input: RepositoryStorageType): this {
+        this.data = RepositoryDataSchema.parse({
+            ...this.toData(),
+            ...structuredClone(input)
+        });
         return this;
     }
 
-    public toSnapshot(): RepositorySnapshotType {
+    public toData(): RepositoryDataType {
         return structuredClone($state.snapshot(this.data));
     }
 
@@ -218,8 +129,8 @@ export class Repository implements EntityModel<RepositorySnapshotType> {
             entity: 'Repository',
             method: 'listIssues',
             payload: {
-                id: this.id,
-                repositoryRootPath: this.repositoryRootPath
+                id: this.data.id,
+                repositoryRootPath: this.data.repositoryRootPath
             }
         });
     }
@@ -230,8 +141,8 @@ export class Repository implements EntityModel<RepositorySnapshotType> {
                 entity: 'Repository',
                 method: 'getIssue',
                 payload: {
-                    id: this.id,
-                    repositoryRootPath: this.repositoryRootPath,
+                    id: this.data.id,
+                    repositoryRootPath: this.data.repositoryRootPath,
                     issueNumber
                 }
             }).run()
@@ -243,15 +154,15 @@ export class Repository implements EntityModel<RepositorySnapshotType> {
             entity: 'Repository',
             method: 'startMissionFromIssue',
             payload: {
-                id: this.id,
-                repositoryRootPath: this.repositoryRootPath,
+                id: this.data.id,
+                repositoryRootPath: this.data.repositoryRootPath,
                 issueNumber
             }
         }));
 
         return {
             missionId: result.id,
-            redirectTo: `/airport/${encodeURIComponent(this.id)}/${encodeURIComponent(result.id)}`
+            redirectTo: `/airport/${encodeURIComponent(this.data.id)}/${encodeURIComponent(result.id)}`
         };
     }
 
@@ -264,24 +175,16 @@ export class Repository implements EntityModel<RepositorySnapshotType> {
             entity: 'Repository',
             method: 'startMissionFromBrief',
             payload: {
-                id: this.id,
-                repositoryRootPath: this.repositoryRootPath,
+                id: this.data.id,
+                repositoryRootPath: this.data.repositoryRootPath,
                 ...input
             }
         }));
 
         return {
             missionId: result.id,
-            redirectTo: `/airport/${encodeURIComponent(this.id)}/${encodeURIComponent(result.id)}`
+            redirectTo: `/airport/${encodeURIComponent(this.data.id)}/${encodeURIComponent(result.id)}`
         };
-    }
-
-    private createSelectedMission(snapshot?: MissionSnapshot): Mission | undefined {
-        if (!snapshot) {
-            return undefined;
-        }
-
-        return this.resolveMission(snapshot);
     }
 }
 
@@ -291,4 +194,17 @@ export function getRepositoryDisplayName(repository: RepositorySummary): string 
 
 export function getRepositoryDisplayDescription(repository: RepositorySummary): string {
     return repository.platformRepositoryRef ?? repository.repositoryRootPath;
+}
+
+export function toRepositoryStorage(data: RepositoryDataType): RepositoryStorageType {
+    return RepositoryStorageSchema.parse({
+        id: data.id,
+        repositoryRootPath: data.repositoryRootPath,
+        ownerId: data.ownerId,
+        repoName: data.repoName,
+        ...(data.platformRepositoryRef ? { platformRepositoryRef: data.platformRepositoryRef } : {}),
+        settings: data.settings,
+        workflowConfiguration: data.workflowConfiguration,
+        isInitialized: data.isInitialized
+    });
 }

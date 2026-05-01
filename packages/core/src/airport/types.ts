@@ -118,17 +118,6 @@ export interface RunwayView extends AirportPaneViewBase {
 	emptyLabel: string;
 }
 
-export interface AirportViewSet {
-	tower: TowerView;
-	briefingRoom: BriefingRoomView;
-	runway: RunwayView;
-}
-
-export interface AirportStatus {
-	state: AirportState;
-	views: AirportViewSet;
-}
-
 export interface ConnectAirportClientParams {
 	clientId: string;
 	label?: string;

@@ -1,9 +1,9 @@
 import type { MissionDescriptor } from '../../types.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import {
-    missionEventRecordSchema,
-    missionStateDataSchema
-} from '../../entities/Mission/MissionSchema.js';
+    MissionWorkflowEventRecordSchema,
+    MissionStateDataSchema
+} from './types.js';
 import type {
     AgentLaunchConfig,
     AgentCommand,
@@ -24,13 +24,13 @@ import {
 } from './index.js';
 import { DEFAULT_WORKFLOW_VERSION } from '../mission/workflow.js';
 import type { MissionWorkflowRequestExecutor } from './requestExecutor.js';
-import type { WorkflowGlobalSettings } from './types.js';
+import type { WorkflowDefinition } from './types.js';
 
 export interface MissionWorkflowControllerOptions {
     adapter: FilesystemAdapter;
     descriptor: MissionDescriptor;
-    workflow: WorkflowGlobalSettings;
-    resolveWorkflow?: () => WorkflowGlobalSettings;
+    workflow: WorkflowDefinition;
+    resolveWorkflow?: () => WorkflowDefinition;
     requestExecutor: MissionWorkflowRequestExecutor;
     workflowVersion?: string;
 }
@@ -40,8 +40,8 @@ export class MissionWorkflowController {
     private readonly adapter: FilesystemAdapter;
     private readonly requestExecutor: MissionWorkflowRequestExecutor;
     private readonly workflowVersion: string;
-    private readonly workflow: WorkflowGlobalSettings;
-    private readonly resolveWorkflowOverride: (() => WorkflowGlobalSettings) | undefined;
+    private readonly workflow: WorkflowDefinition;
+    private readonly resolveWorkflowOverride: (() => WorkflowDefinition) | undefined;
     private document: MissionStateData | undefined;
     private mutationQueue: Promise<void> = Promise.resolve();
 
@@ -313,7 +313,7 @@ export class MissionWorkflowController {
         }
         await this.adapter.writeMissionStateDataFile(
             this.descriptor.missionDir,
-            missionStateDataSchema.parse(input.missionStateData)
+            MissionStateDataSchema.parse(input.missionStateData)
         );
         for (const eventRecord of input.appendMissionEventRecords ?? []) {
             await this.adapter.appendMissionEventRecordFile(
@@ -325,16 +325,16 @@ export class MissionWorkflowController {
 
     private async readRuntimeData(): Promise<MissionStateData | undefined> {
         const rawData = await this.adapter.readMissionStateDataFile(this.descriptor.missionDir);
-        return rawData === undefined ? undefined : missionStateDataSchema.parse(rawData);
+        return rawData === undefined ? undefined : MissionStateDataSchema.parse(rawData);
     }
 
     private async readEventLog(): Promise<MissionWorkflowEventRecord[]> {
-        return missionEventRecordSchema.array()
+        return MissionWorkflowEventRecordSchema.array()
             .parse(await this.adapter.readMissionEventLogFile(this.descriptor.missionDir))
             .map(parseMissionEventRecord);
     }
 
-    private resolveWorkflow(): WorkflowGlobalSettings {
+    private resolveWorkflow(): WorkflowDefinition {
         return this.resolveWorkflowOverride?.() ?? this.workflow;
     }
 
@@ -375,7 +375,7 @@ export class MissionWorkflowController {
 }
 
 function parseMissionEventRecord(value: unknown): MissionWorkflowEventRecord {
-    const parsed = missionEventRecordSchema.parse(value);
+    const parsed = MissionWorkflowEventRecordSchema.parse(value);
     return {
         eventId: parsed.eventId,
         type: parsed.type,

@@ -32,10 +32,10 @@ Mission is designed to recover by rebuilding live state from explicit persisted 
 
 ### Airport Recovery
 
-1. `RepositoryAirportRegistry` loads persisted airport intent from `.mission/settings.json`.
-2. `AirportControl` scopes itself to the repository with default or persisted pane bindings.
-3. `TerminalManagerSubstrateController.observe(...)` samples zellij panes.
-4. `MissionSystemController` plans focus effects and then folds observed substrate state back into airport state.
+1. Airport surfaces reconnect to the daemon and refresh `system.status` plus entity-backed mission state.
+2. Client-reported pane observations rebuild `AirportSubstrateState` for the connected surface.
+3. `planAirportSubstrateEffects(...)` derives focus effects only when an attached pane should be focused.
+4. No daemon-owned repository airport registry participates in recovery in the current runtime.
 
 ### Surface Recovery
 

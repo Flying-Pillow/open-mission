@@ -1,6 +1,6 @@
 // /apps/airport/web/src/lib/components/entities/Task/Task.svelte.ts: OO browser entity for workflow tasks exposed by a mission snapshot.
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import type { MissionTaskSnapshot } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
+import type { TaskDataType as MissionTaskSnapshot } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
 export type TaskData = MissionTaskSnapshot;
@@ -14,17 +14,17 @@ export type TaskStartOptions = {
     terminalSessionName?: string;
 };
 
-export type TaskCommandOwner = {
-    executeTaskCommand(taskId: string, commandId: string, input?: unknown): Promise<void>;
+export type TaskDependencies = {
+    executeCommand(taskId: string, commandId: string, input?: unknown): Promise<void>;
 };
 
 export class Task implements EntityModel<TaskSnapshot> {
     private snapshotState = $state<TaskSnapshot | undefined>();
-    private readonly owner: TaskCommandOwner;
+    private readonly dependencies: TaskDependencies;
 
-    public constructor(snapshot: TaskSnapshot, owner: TaskCommandOwner) {
+    public constructor(snapshot: TaskSnapshot, dependencies: TaskDependencies) {
         this.snapshot = snapshot;
-        this.owner = owner;
+        this.dependencies = dependencies;
     }
 
     private get snapshot(): TaskSnapshot {
@@ -86,7 +86,7 @@ export class Task implements EntityModel<TaskSnapshot> {
     }
 
     public async executeCommand(commandId: string, input?: unknown): Promise<void> {
-        await this.owner.executeTaskCommand(this.taskId, commandId, input);
+        await this.dependencies.executeCommand(this.taskId, commandId, input);
     }
 
     public async complete(): Promise<this> {
@@ -99,19 +99,19 @@ export class Task implements EntityModel<TaskSnapshot> {
         return this;
     }
 
-    public updateFromSnapshot(snapshot: TaskSnapshot): this {
+    public updateFromData(snapshot: TaskSnapshot): this {
         this.snapshot = snapshot;
         return this;
     }
 
     public update(data: TaskData, stageId = this.stageId): this {
-        return this.updateFromSnapshot({
+        return this.updateFromData({
             stageId,
             task: data
         });
     }
 
-    public toSnapshot(): TaskSnapshot {
+    public toData(): TaskSnapshot {
         return structuredClone($state.snapshot(this.snapshot));
     }
 
@@ -120,7 +120,7 @@ export class Task implements EntityModel<TaskSnapshot> {
     }
 
     public toStageSnapshot(): TaskSnapshot {
-        return this.toSnapshot();
+        return this.toData();
     }
 
     public withStage(stageId: string): this {

@@ -42,30 +42,6 @@
     const activeRepository = $derived(repositoryScope.repository);
     const repositoryLoading = $derived(repositoryScope.loading);
     const repositoryError = $derived(repositoryScope.error);
-    const repositorySummary = $derived(activeRepository?.summary);
-    const repositoryDisplayName = $derived(
-        activeRepository?.displayName ?? "Repository",
-    );
-    const repositoryDisplayDescription = $derived(
-        activeRepository?.displayDescription ?? "Repository unavailable",
-    );
-    const repositoryOperationalMode = $derived(
-        activeRepository?.operationalMode,
-    );
-    const repositoryControlRoot = $derived(
-        activeRepository?.controlRoot ?? repositorySummary?.repositoryRootPath,
-    );
-    const repositoryCurrentBranch = $derived(activeRepository?.currentBranch);
-    const repositoryPlatformRepositoryRef = $derived(
-        activeRepository?.platformRepositoryRef ??
-            repositorySummary?.platformRepositoryRef,
-    );
-    const repositorySettingsComplete = $derived(
-        activeRepository?.settingsComplete,
-    );
-    const resolvedMissionCountLabel = $derived(
-        activeRepository?.missionCountLabel ?? "0 missions",
-    );
 
     function closeIssuePreview(): void {
         issuePreviewOpen = false;
@@ -81,13 +57,13 @@
         >
             Loading repository surface...
         </section>
-    {:else if repositoryError || !activeRepository || !repositorySummary}
+    {:else if repositoryError || !activeRepository}
         <section
             class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
         >
             <h2 class="text-lg font-semibold text-foreground">Repository</h2>
             <p class="mt-3 text-sm text-rose-600">
-                {repositoryError ?? "Repository snapshot could not be loaded."}
+                {repositoryError ?? "Repository data could not be loaded."}
             </p>
         </section>
     {:else}
@@ -102,22 +78,26 @@
                         Repository
                     </p>
                     <h1 class="mt-2 text-2xl font-semibold text-foreground">
-                        {repositoryDisplayName}
+                        {activeRepository.data.platformRepositoryRef ??
+                            activeRepository.data.repoName}
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {repositoryDisplayDescription}
+                        {activeRepository.data.platformRepositoryRef ??
+                            activeRepository.data.repositoryRootPath}
                     </p>
                     <p class="mt-2 font-mono text-xs text-muted-foreground">
-                        {repositorySummary.repositoryRootPath}
+                        {activeRepository.data.repositoryRootPath}
                     </p>
                 </div>
                 <div class="flex flex-wrap justify-end gap-2">
                     <Badge variant="secondary"
-                        >{resolvedMissionCountLabel}</Badge
+                        >{activeRepository.missions.length === 1
+                            ? "1 mission"
+                            : `${activeRepository.missions.length} missions`}</Badge
                     >
-                    {#if repositoryOperationalMode}
+                    {#if activeRepository.data.operationalMode}
                         <Badge variant="outline"
-                            >{repositoryOperationalMode}</Badge
+                            >{activeRepository.data.operationalMode}</Badge
                         >
                     {/if}
                 </div>
@@ -131,7 +111,8 @@
                         Control root
                     </p>
                     <p class="mt-2 text-sm font-medium text-foreground">
-                        {repositoryControlRoot}
+                        {activeRepository.data.controlRoot ??
+                            activeRepository.data.repositoryRootPath}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-background/70 px-4 py-3">
@@ -141,7 +122,7 @@
                         Branch
                     </p>
                     <p class="mt-2 text-sm font-medium text-foreground">
-                        {repositoryCurrentBranch ?? "Unavailable"}
+                        {activeRepository.data.currentBranch ?? "Unavailable"}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-background/70 px-4 py-3">
@@ -151,7 +132,8 @@
                         Tracking
                     </p>
                     <p class="mt-2 text-sm font-medium text-foreground">
-                        {repositoryPlatformRepositoryRef ?? "Not configured"}
+                        {activeRepository.data.platformRepositoryRef ??
+                            "Not configured"}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-background/70 px-4 py-3">
@@ -161,7 +143,7 @@
                         Setup
                     </p>
                     <p class="mt-2 text-sm font-medium text-foreground">
-                        {repositorySettingsComplete === false
+                        {activeRepository.data.settingsComplete === false
                             ? "Incomplete"
                             : "Ready"}
                     </p>

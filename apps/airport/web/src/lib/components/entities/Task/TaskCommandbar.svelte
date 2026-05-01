@@ -1,23 +1,23 @@
 <script lang="ts">
-    import EntityActionbar from "$lib/components/entities/Actionbar/EntityActionbar.svelte";
+    import EntityCommandbar from "$lib/components/entities/Commandbar/EntityCommandbar.svelte";
     import type { Task } from "$lib/components/entities/Task/Task.svelte.js";
 
     let {
         refreshNonce,
         task,
-        onActionExecuted,
+        onCommandExecuted,
     }: {
         refreshNonce: number;
         task?: Task;
-        onActionExecuted: () => Promise<void>;
+        onCommandExecuted: () => Promise<void>;
     } = $props();
 </script>
 
-<EntityActionbar
+<EntityCommandbar
     {refreshNonce}
     entity={task}
     defaultVariant="default"
     buttonClass="shadow-sm shadow-primary/10"
     showEmptyState={false}
-    {onActionExecuted}
+    {onCommandExecuted}
 />

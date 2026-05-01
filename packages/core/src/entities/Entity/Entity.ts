@@ -17,7 +17,7 @@ import type {
 	EntityQueryInvocation,
 	EntityRemoteResult
 } from '../../daemon/protocol/entityRemote.js';
-import type { MissionDaemon } from '../../daemon/MissionDaemon.js';
+import type { MissionRegistry } from '../../daemon/MissionRegistry.js';
 import {
 	getDefaultEntityFactory,
 	type EntityFactory
@@ -39,7 +39,7 @@ export type EntityMethodAvailabilityResult = boolean | EntityMethodAvailability 
 export type EntityExecutionContext = {
 	surfacePath: string;
 	authToken?: string;
-	missionDaemon?: MissionDaemon;
+	missionRegistry?: MissionRegistry;
 	missionService?: unknown;
 	entityFactory?: EntityFactory;
 };

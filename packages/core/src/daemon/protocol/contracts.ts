@@ -1,7 +1,3 @@
-import type {
-	SystemSnapshot,
-} from '../../types.js';
-import type { Mission } from '../../entities/Mission/Mission.js';
 import type { WorkflowSettingsUpdateRequest } from '../../settings/types.js';
 import type {
 	EntityCommandInvocation,
@@ -14,25 +10,25 @@ import type {
 	EntityIdType
 } from '../../entities/Entity/Entity.js';
 import type {
-	AgentSessionEntityReference,
-	AgentSessionSnapshot
+	AgentSessionEventSubjectType,
+	AgentSessionDataType
 } from '../../entities/AgentSession/AgentSessionSchema.js';
 import type {
-	ArtifactEntityReference,
-	MissionArtifactSnapshot
+	ArtifactEventSubjectType,
+	ArtifactDataType
 } from '../../entities/Artifact/ArtifactSchema.js';
 import type {
-	MissionActionListSnapshot,
-	MissionEntityReference,
-	MissionSnapshot
+	MissionEventSubjectType,
+	MissionSnapshotType,
+	MissionStatusSnapshotType
 } from '../../entities/Mission/MissionSchema.js';
 import type {
-	MissionStageSnapshot,
-	StageEntityReference
+	StageDataType,
+	StageEventSubjectType
 } from '../../entities/Stage/StageSchema.js';
 import type {
-	MissionTaskSnapshot,
-	TaskEntityReference
+	TaskDataType,
+	TaskEventSubjectType
 } from '../../entities/Task/TaskSchema.js';
 
 export {
@@ -339,57 +335,45 @@ export type EntityCommandResponse = EntityRemoteResult;
 
 export type Notification =
 	| {
-		type: 'airport.state';
-		system: SystemSnapshot;
-	}
-	| {
-		type: 'mission.actions.changed';
-		workspaceRoot: string;
-		missionId: string;
-		revision: string;
-		reference?: MissionEntityReference;
-		actions?: MissionActionListSnapshot;
-	}
-	| {
 		type: 'mission.snapshot.changed';
 		workspaceRoot: string;
 		missionId: string;
-		reference: MissionEntityReference;
-		snapshot: MissionSnapshot;
+		reference: MissionEventSubjectType;
+		snapshot: MissionSnapshotType;
 	}
 	| {
 		type: 'mission.status';
 		workspaceRoot: string;
 		missionId: string;
-		status: Mission;
+		status: MissionStatusSnapshotType;
 	}
 	| {
 		type: 'stage.snapshot.changed';
 		workspaceRoot: string;
 		missionId: string;
-		reference: StageEntityReference;
-		snapshot: MissionStageSnapshot;
+		reference: StageEventSubjectType;
+		snapshot: StageDataType;
 	}
 	| {
 		type: 'task.snapshot.changed';
 		workspaceRoot: string;
 		missionId: string;
-		reference: TaskEntityReference;
-		snapshot: MissionTaskSnapshot;
+		reference: TaskEventSubjectType;
+		snapshot: TaskDataType;
 	}
 	| {
 		type: 'artifact.snapshot.changed';
 		workspaceRoot: string;
 		missionId: string;
-		reference: ArtifactEntityReference;
-		snapshot: MissionArtifactSnapshot;
+		reference: ArtifactEventSubjectType;
+		snapshot: ArtifactDataType;
 	}
 	| {
 		type: 'agentSession.snapshot.changed';
 		workspaceRoot: string;
 		missionId: string;
-		reference: AgentSessionEntityReference;
-		snapshot: AgentSessionSnapshot;
+		reference: AgentSessionEventSubjectType;
+		snapshot: AgentSessionDataType;
 	}
 	| {
 		type: 'mission.terminal';
@@ -413,7 +397,7 @@ export type Notification =
 		type: 'session.event';
 		missionId: string;
 		sessionId: string;
-		event: MissionAgentEvent;
+		session: AgentSessionDataType;
 	}
 	| {
 		type: 'session.lifecycle';

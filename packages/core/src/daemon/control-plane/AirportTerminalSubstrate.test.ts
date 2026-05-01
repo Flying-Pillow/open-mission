@@ -41,7 +41,7 @@ describe('ClientReportedSubstrateController', () => {
         expect(observed.observedFocusedTerminalPaneId).toBe(2);
     });
 
-    it('applies planned focus effects in memory', async () => {
+    it('does not apply focus effects when panes are detached', async () => {
         const controller = new ClientReportedSubstrateController({
             sessionName: 'mission-mission'
         });
@@ -58,7 +58,7 @@ describe('ClientReportedSubstrateController', () => {
 
         const applied = await controller.applyEffects(planAirportSubstrateEffects(airportState));
 
-        expect(applied.observedFocusedTerminalPaneId).toBe(2);
+        expect(applied.observedFocusedTerminalPaneId).toBeUndefined();
     });
 
     it('keeps detached panes stable when there are no connected clients', async () => {

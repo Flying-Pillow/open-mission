@@ -1,10 +1,10 @@
 <script lang="ts">
     import type { Artifact } from "$lib/components/entities/Artifact/Artifact.svelte.js";
-    import TaskActionbar from "$lib/components/entities/Task/TaskActionbar.svelte";
+    import TaskCommandbar from "$lib/components/entities/Task/TaskCommandbar.svelte";
     import type { Task } from "$lib/components/entities/Task/Task.svelte.js";
     import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import PencilIcon from "@tabler/icons-svelte/icons/pencil";
-    import { artifactDocumentSnapshotSchema } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
+    import { ArtifactDocumentDataSchema } from "@flying-pillow/mission-core/entities/Artifact/ArtifactSchema";
     import { Button } from "$lib/components/ui/button/index.js";
     import MarkdownViewer from "$lib/components/viewers/markdown.svelte";
     import { qry } from "../../../../routes/api/entities/remote/query.remote";
@@ -14,13 +14,13 @@
         artifact,
         task,
         onEditRequested,
-        onActionExecuted,
+        onCommandExecuted,
     }: {
         refreshNonce: number;
         artifact?: Artifact;
         task?: Task;
         onEditRequested: () => void;
-        onActionExecuted: () => Promise<void>;
+        onCommandExecuted: () => Promise<void>;
     } = $props();
     const missionScope = getScopedMissionContext();
     const mission = $derived(missionScope.mission);
@@ -60,7 +60,7 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
-            <TaskActionbar {refreshNonce} {task} {onActionExecuted} />
+            <TaskCommandbar {refreshNonce} {task} {onCommandExecuted} />
         </div>
 
         {#if artifact}
@@ -83,7 +83,7 @@
                         </div>
                     {:then artifactDocumentResult}
                         {@const artifactDocument =
-                            artifactDocumentSnapshotSchema.parse(
+                            ArtifactDocumentDataSchema.parse(
                                 artifactDocumentResult,
                             )}
                         <div class="bg-background/80">

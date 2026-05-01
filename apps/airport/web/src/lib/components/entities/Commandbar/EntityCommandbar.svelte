@@ -11,31 +11,31 @@
     import RocketIcon from "@tabler/icons-svelte/icons/rocket";
     import type { Icon } from "@tabler/icons-svelte";
     import type { EntityCommandDescriptorType } from "@flying-pillow/mission-core/entities/Entity/EntitySchema";
-    import type { ActionableEntity } from "./ActionableEntity";
+    import type { CommandableEntity } from "./CommandableEntity";
 
     let {
         refreshNonce,
         entity,
         label,
-        onActionExecuted,
+        onCommandExecuted,
         class: className,
         buttonClass = "",
         defaultVariant = "default",
         showEmptyState = true,
     }: {
         refreshNonce: number;
-        entity?: ActionableEntity;
+        entity?: CommandableEntity;
         label?: string;
-        onActionExecuted: () => Promise<void>;
+        onCommandExecuted: () => Promise<void>;
         class?: string;
         buttonClass?: string;
         defaultVariant?: "default" | "outline" | "secondary";
         showEmptyState?: boolean;
     } = $props();
 
-    let actionPending = $state<string | null>(null);
-    let actionError = $state<string | null>(null);
-    let confirmationAction = $state<EntityCommandDescriptorType | null>(null);
+    let commandPending = $state<string | null>(null);
+    let commandError = $state<string | null>(null);
+    let confirmationCommand = $state<EntityCommandDescriptorType | null>(null);
     let confirmationOpen = $state(false);
     let confirmationResolver: ((confirmed: boolean) => void) | null = null;
 
@@ -45,22 +45,27 @@
     );
 
     $effect(() => {
-        if (!confirmationOpen && confirmationResolver && confirmationAction) {
+        refreshNonce;
+        commandError = null;
+    });
+
+    $effect(() => {
+        if (!confirmationOpen && confirmationResolver && confirmationCommand) {
             const resolveConfirmation = confirmationResolver;
             confirmationResolver = null;
-            confirmationAction = null;
+            confirmationCommand = null;
             resolveConfirmation(false);
         }
     });
 
-    function actionVariant(
-        action: EntityCommandDescriptorType,
+    function commandVariant(
+        command: EntityCommandDescriptorType,
     ): "default" | "outline" | "secondary" | "destructive" {
-        if (action.variant === "destructive") {
+        if (command.variant === "destructive") {
             return "destructive";
         }
 
-        const commandId = action.commandId.toLowerCase();
+        const commandId = command.commandId.toLowerCase();
         if (commandId.includes("panic") || commandId.includes("terminate")) {
             return "destructive";
         }
@@ -68,9 +73,9 @@
         return defaultVariant;
     }
 
-    function getActionIcon(action: EntityCommandDescriptorType): Icon {
+    function getCommandIcon(command: EntityCommandDescriptorType): Icon {
         const commandId =
-            `${action.iconHint ?? action.commandId}`.toLowerCase();
+            `${command.iconHint ?? command.commandId}`.toLowerCase();
 
         if (commandId.includes("resume") || commandId.includes("start")) {
             return PlayerPlayIcon;
@@ -99,65 +104,65 @@
         return CircleCheckIcon;
     }
 
-    async function executeAction(
-        action: EntityCommandDescriptorType,
+    async function executeCommand(
+        command: EntityCommandDescriptorType,
     ): Promise<void> {
-        if (!entity || actionPending || action.disabled) {
+        if (!entity || commandPending || command.disabled) {
             return;
         }
 
-        if (!(await requestActionConfirmation(action))) {
+        if (!(await requestCommandConfirmation(command))) {
             return;
         }
 
-        await submitAction(entity, action);
+        await submitCommand(entity, command);
     }
 
-    async function requestActionConfirmation(
-        action: EntityCommandDescriptorType,
+    async function requestCommandConfirmation(
+        command: EntityCommandDescriptorType,
     ): Promise<boolean> {
-        if (!action.confirmation?.required) {
+        if (!command.confirmation?.required) {
             return true;
         }
 
         if (confirmationResolver) {
-            resolveActionConfirmation(false);
+            resolveCommandConfirmation(false);
         }
 
-        confirmationAction = action;
+        confirmationCommand = command;
         confirmationOpen = true;
         return new Promise((resolve) => {
             confirmationResolver = resolve;
         });
     }
 
-    function resolveActionConfirmation(confirmed: boolean): void {
+    function resolveCommandConfirmation(confirmed: boolean): void {
         const resolveConfirmation = confirmationResolver;
         confirmationResolver = null;
-        confirmationAction = null;
+        confirmationCommand = null;
         confirmationOpen = false;
         resolveConfirmation?.(confirmed);
     }
 
-    async function submitAction(
-        commandEntity: ActionableEntity,
-        action: EntityCommandDescriptorType,
+    async function submitCommand(
+        commandEntity: CommandableEntity,
+        command: EntityCommandDescriptorType,
     ): Promise<boolean> {
-        actionPending = action.commandId;
-        actionError = null;
+        commandPending = command.commandId;
+        commandError = null;
         try {
-            await commandEntity.executeCommand(action.commandId);
-            await onActionExecuted();
+            await commandEntity.executeCommand(command.commandId);
+            await onCommandExecuted();
             return true;
         } catch (executeError) {
             const message =
                 executeError instanceof Error
                     ? executeError.message
                     : String(executeError);
-            actionError = message;
+            commandError = message;
             return false;
         } finally {
-            actionPending = null;
+            commandPending = null;
         }
     }
 </script>
@@ -165,25 +170,25 @@
 <AlertDialog.Root bind:open={confirmationOpen}>
     <AlertDialog.Content>
         <AlertDialog.Header>
-            <AlertDialog.Title>Confirm action</AlertDialog.Title>
+            <AlertDialog.Title>Confirm command</AlertDialog.Title>
             <AlertDialog.Description>
-                {confirmationAction?.confirmation?.prompt ??
-                    (confirmationAction
-                        ? `Execute '${confirmationAction.label}'?`
-                        : "Confirm this action to continue.")}
+                {confirmationCommand?.confirmation?.prompt ??
+                    (confirmationCommand
+                        ? `Execute '${confirmationCommand.label}'?`
+                        : "Confirm this command to continue.")}
             </AlertDialog.Description>
         </AlertDialog.Header>
         <AlertDialog.Footer>
             <AlertDialog.Cancel
-                onclick={() => resolveActionConfirmation(false)}
+                onclick={() => resolveCommandConfirmation(false)}
             >
                 Cancel
             </AlertDialog.Cancel>
             <AlertDialog.Action
-                variant={confirmationAction
-                    ? actionVariant(confirmationAction)
+                variant={confirmationCommand
+                    ? commandVariant(confirmationCommand)
                     : "default"}
-                onclick={() => resolveActionConfirmation(true)}
+                onclick={() => resolveCommandConfirmation(true)}
             >
                 Continue
             </AlertDialog.Action>
@@ -199,33 +204,33 @@
 
         {#if availableCommands.length === 0 && showEmptyState}
             <Button variant="outline" size="sm" disabled
-                >No actions available</Button
+                >No commands available</Button
             >
         {:else}
-            {#each availableCommands as action (action.commandId)}
-                {@const Icon = getActionIcon(action)}
+            {#each availableCommands as command (command.commandId)}
+                {@const Icon = getCommandIcon(command)}
                 <Button
-                    variant={actionVariant(action)}
+                    variant={commandVariant(command)}
                     size="sm"
-                    disabled={actionPending !== null || action.disabled}
+                    disabled={commandPending !== null || command.disabled}
                     class={buttonClass}
-                    onclick={() => void executeAction(action)}
-                    title={action.disabledReason ||
-                        action.description ||
-                        action.label}
+                    onclick={() => void executeCommand(command)}
+                    title={command.disabledReason ||
+                        command.description ||
+                        command.label}
                 >
                     <Icon class="size-4" data-icon="inline-start" />
                     <span>
-                        {actionPending === action.commandId
-                            ? `${action.label}...`
-                            : action.label}
+                        {commandPending === command.commandId
+                            ? `${command.label}...`
+                            : command.label}
                     </span>
                 </Button>
             {/each}
         {/if}
     </div>
 
-    {#if actionError}
-        <p class="text-sm text-rose-600">{actionError}</p>
+    {#if commandError}
+        <p class="text-sm text-rose-600">{commandError}</p>
     {/if}
 </div>

@@ -1,6 +1,6 @@
 // /apps/airport/web/src/routes/api/runtime/sessions/[sessionId]/terminal/+server.ts: Session terminal snapshot/input relay for xterm.js over Airport web runtime routes.
 import { json } from '@sveltejs/kit';
-import { agentSessionTerminalInputSchema as missionSessionTerminalInputSchema, agentSessionTerminalQuerySchema as missionSessionTerminalQuerySchema, agentSessionTerminalRouteParamsSchema as missionSessionTerminalRouteParamsSchema } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import { AgentSessionTerminalInputSchema as missionSessionTerminalInputSchema, AgentSessionTerminalQuerySchema as missionSessionTerminalQuerySchema, AgentSessionTerminalRouteParamsSchema as missionSessionTerminalRouteParamsSchema } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import type { RequestHandler } from './$types';
 

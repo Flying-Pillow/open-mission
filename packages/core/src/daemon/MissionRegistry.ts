@@ -1,36 +1,26 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { AgentCommand, AgentPrompt } from '../agent/AgentRuntimeTypes.js';
-import { createConfiguredAgentRunners } from '../agent/runtimes/AgentRuntimeFactory.js';
-import type { EntityExecutionContext } from '../../../entities/Entity/Entity.js';
-import type { EntityCommandDescriptorType } from '../../../entities/Entity/EntitySchema.js';
+import type { AgentCommand, AgentPrompt } from './runtime/agent/AgentRuntimeTypes.js';
+import { createConfiguredAgentRunners } from './runtime/agent/runtimes/AgentRuntimeFactory.js';
+import type { EntityExecutionContext } from '../entities/Entity/Entity.js';
 import type {
-    AgentSessionCommand,
-    AgentSessionPrompt,
-    AgentSessionSnapshot
-} from '../../../entities/AgentSession/AgentSessionSchema.js';
-import type { MissionArtifactSnapshot } from '../../../entities/Artifact/ArtifactSchema.js';
+    AgentSessionCommandType,
+    AgentSessionPromptType
+} from '../entities/AgentSession/AgentSessionSchema.js';
 import {
-    missionActionListSnapshotSchema,
-    missionIdentityPayloadSchema,
-    missionSnapshotSchema,
-    type MissionActionListSnapshot,
-    type MissionDocumentSnapshot,
-    type MissionIdentityPayload,
-    type MissionSnapshot,
+    type MissionDocumentSnapshotType,
+    MissionLocatorSchema,
+    type MissionLocatorType,
     type MissionWorktreeNodeData
-} from '../../../entities/Mission/MissionSchema.js';
-import { Mission } from '../../../entities/Mission/Mission.js';
-import type { MissionStageSnapshot } from '../../../entities/Stage/StageSchema.js';
-import type { MissionTaskSnapshot } from '../../../entities/Task/TaskSchema.js';
-import { Repository } from '../../../entities/Repository/Repository.js';
-import { FilesystemAdapter } from '../../../lib/FilesystemAdapter.js';
-import { normalizeWorkflowSettings } from '../../../settings/validation.js';
-import type { OperatorActionDescriptor } from '../../../types.js';
-import { readMissionWorkflowDefinition } from '../../../workflow/mission/preset.js';
+} from '../entities/Mission/MissionSchema.js';
+import { Mission } from '../entities/Mission/Mission.js';
+import { Repository } from '../entities/Repository/Repository.js';
+import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
+import { parsePersistedWorkflowSettings } from '../settings/validation.js';
+import { readMissionWorkflowDefinition } from '../workflow/mission/preset.js';
 
 export type MissionLoader = (
-    input: MissionIdentityPayload,
+    input: MissionLocatorType,
     context: { surfacePath: string },
     terminalSessionName?: string
 ) => Promise<MissionHandle | undefined>;
@@ -42,13 +32,11 @@ export type MissionHandle = Pick<
     | 'completeAgentSession'
     | 'completeTask'
     | 'dispose'
-    | 'executeAction'
-    | 'executeOperatorAction'
     | 'ensureTerminal'
-    | 'listAvailableActionsSnapshot'
-    | 'listActions'
     | 'cancelAgentSession'
     | 'deliver'
+    | 'generateTasksForStage'
+    | 'buildMissionSnapshot'
     | 'panicStopMission'
     | 'pauseMission'
     | 'read'
@@ -59,10 +47,13 @@ export type MissionHandle = Pick<
     | 'reopenTask'
     | 'restartLaunchQueue'
     | 'resumeMission'
+    | 'reworkTask'
+    | 'reworkTaskFromVerification'
     | 'sendAgentSessionCommand'
     | 'sendAgentSessionPrompt'
     | 'sendTerminalInput'
     | 'startTask'
+    | 'setTaskAutostart'
     | 'sessionCommand'
     | 'taskCommand'
     | 'terminateAgentSession'
@@ -80,7 +71,7 @@ export const IGNORED_WORKTREE_ENTRY_NAMES = new Set([
     'build'
 ]);
 
-export class MissionDaemonService {
+export class MissionRegistry {
     private readonly missionLoads = new Map<string, Promise<MissionHandle | undefined>>();
     private readonly missionHandles = new Map<string, MissionHandle>();
 
@@ -93,8 +84,8 @@ export class MissionDaemonService {
 
     public async hydrateDaemonMissions(context: { surfacePath: string }): Promise<void> {
         const roots = new Set<string>([path.resolve(context.surfacePath)]);
-        for (const snapshot of await Repository.find({}, context)) {
-            roots.add(path.resolve(snapshot.repository.repositoryRootPath));
+        for (const repository of await Repository.find({}, context)) {
+            roots.add(path.resolve(repository.repositoryRootPath));
         }
 
         for (const controlRoot of roots) {
@@ -136,11 +127,11 @@ export class MissionDaemonService {
     }
 
     public async loadRequiredMission(
-        input: MissionIdentityPayload,
+        input: MissionLocatorType,
         context: { surfacePath: string },
         terminalSessionName?: string
     ): Promise<MissionHandle> {
-        const payload = missionIdentityPayloadSchema.parse({
+        const payload = MissionLocatorSchema.parse({
             missionId: input.missionId,
             ...(input.repositoryRootPath ? { repositoryRootPath: input.repositoryRootPath } : {})
         });
@@ -154,120 +145,6 @@ export class MissionDaemonService {
         }
 
         return this.toRequestMissionHandle(mission);
-    }
-
-    public async buildMissionSnapshot(mission: MissionHandle, missionId: string): Promise<MissionSnapshot> {
-        const entity = await mission.toEntity();
-        const snapshot = this.toMissionEntitySnapshot(entity);
-        const actions = (await mission.listAvailableActionsSnapshot()).actions;
-        const commandSnapshot = this.withEntityCommands(snapshot, actions);
-        return missionSnapshotSchema.parse({
-            mission: commandSnapshot,
-            status: {
-                missionId: commandSnapshot.missionId.trim() || missionId,
-                ...(commandSnapshot.title ? { title: commandSnapshot.title } : {}),
-                ...(commandSnapshot.issueId !== undefined ? { issueId: commandSnapshot.issueId } : {}),
-                ...(commandSnapshot.type ? { type: commandSnapshot.type } : {}),
-                ...(commandSnapshot.operationalMode ? { operationalMode: commandSnapshot.operationalMode } : {}),
-                ...(commandSnapshot.branchRef ? { branchRef: commandSnapshot.branchRef } : {}),
-                ...(commandSnapshot.missionDir ? { missionDir: commandSnapshot.missionDir } : {}),
-                ...(commandSnapshot.missionRootDir ? { missionRootDir: commandSnapshot.missionRootDir } : {}),
-                ...(commandSnapshot.artifacts.length > 0 ? { artifacts: commandSnapshot.artifacts } : {}),
-                ...(commandSnapshot.lifecycle || commandSnapshot.updatedAt || commandSnapshot.currentStageId || commandSnapshot.stages.length > 0
-                    ? {
-                        workflow: {
-                            ...(commandSnapshot.lifecycle ? { lifecycle: commandSnapshot.lifecycle } : {}),
-                            ...(commandSnapshot.updatedAt ? { updatedAt: commandSnapshot.updatedAt } : {}),
-                            ...(commandSnapshot.currentStageId ? { currentStageId: commandSnapshot.currentStageId } : {}),
-                            ...(commandSnapshot.stages.length > 0 ? { stages: commandSnapshot.stages } : {})
-                        }
-                    }
-                    : {}),
-                ...(commandSnapshot.recommendedAction ? { recommendedAction: commandSnapshot.recommendedAction } : {})
-            },
-            ...(commandSnapshot.lifecycle || commandSnapshot.updatedAt || commandSnapshot.currentStageId || commandSnapshot.stages.length > 0
-                ? {
-                    workflow: {
-                        ...(commandSnapshot.lifecycle ? { lifecycle: commandSnapshot.lifecycle } : {}),
-                        ...(commandSnapshot.updatedAt ? { updatedAt: commandSnapshot.updatedAt } : {}),
-                        ...(commandSnapshot.currentStageId ? { currentStageId: commandSnapshot.currentStageId } : {}),
-                        ...(commandSnapshot.stages.length > 0 ? { stages: commandSnapshot.stages } : {})
-                    }
-                }
-                : {}),
-            stages: commandSnapshot.stages,
-            tasks: commandSnapshot.stages.flatMap((stage) => stage.tasks),
-            artifacts: commandSnapshot.artifacts,
-            agentSessions: commandSnapshot.agentSessions
-        });
-    }
-
-    public async buildMissionActionListSnapshot(
-        mission: MissionHandle,
-        missionId: string
-    ): Promise<MissionActionListSnapshot> {
-        const snapshot = await mission.listAvailableActionsSnapshot();
-        return missionActionListSnapshotSchema.parse({
-            missionId,
-            actions: snapshot.actions.map(this.toMissionActionDescriptor)
-        });
-    }
-
-    public toMissionActionDescriptor(action: OperatorActionDescriptor): MissionActionListSnapshot['actions'][number] {
-        return {
-            actionId: action.id,
-            label: action.label,
-            ...(action.reason ? { description: action.reason } : {}),
-            kind: action.scope,
-            target: {
-                scope: action.scope,
-                ...(action.targetId ? { targetId: action.targetId } : {})
-            },
-            disabled: action.disabled,
-            ...(action.disabledReason ? { disabledReason: action.disabledReason } : {})
-        };
-    }
-
-    public requireStage(snapshot: MissionSnapshot, stageId: string): MissionStageSnapshot {
-        const stage = snapshot.stages.find((candidate) => candidate.stageId === stageId);
-        if (!stage) {
-            throw new Error(`Stage '${stageId}' could not be resolved in Mission '${snapshot.mission.missionId}'.`);
-        }
-        return stage;
-    }
-
-    public requireTask(snapshot: MissionSnapshot, taskId: string): MissionTaskSnapshot {
-        const task = snapshot.tasks.find((candidate) => candidate.taskId === taskId);
-        if (!task) {
-            throw new Error(`Task '${taskId}' could not be resolved in Mission '${snapshot.mission.missionId}'.`);
-        }
-        return task;
-    }
-
-    public requireArtifact(snapshot: MissionSnapshot, artifactId: string): MissionArtifactSnapshot {
-        const artifact = snapshot.artifacts.find((candidate) => candidate.artifactId === artifactId);
-        if (!artifact) {
-            throw new Error(`Artifact '${artifactId}' could not be resolved in Mission '${snapshot.mission.missionId}'.`);
-        }
-        return artifact;
-    }
-
-    public requireAgentSession(snapshot: MissionSnapshot, sessionId: string): AgentSessionSnapshot {
-        const session = snapshot.agentSessions.find((candidate) => candidate.sessionId === sessionId);
-        if (!session) {
-            throw new Error(`AgentSession '${sessionId}' could not be resolved in Mission '${snapshot.mission.missionId}'.`);
-        }
-        return session;
-    }
-
-    public requireArtifactFilePath(snapshot: MissionSnapshot, artifact: MissionArtifactSnapshot): string {
-        if (artifact.filePath) {
-            return artifact.filePath;
-        }
-        if (artifact.relativePath && snapshot.mission.missionRootDir) {
-            return path.join(snapshot.mission.missionRootDir, artifact.relativePath);
-        }
-        throw new Error(`Artifact '${artifact.artifactId}' does not have a readable document path.`);
     }
 
     public getTerminalSessionName(input: unknown): string | undefined {
@@ -286,7 +163,7 @@ export class MissionDaemonService {
         return reason.length > 0 ? reason : undefined;
     }
 
-    public normalizeAgentPrompt(input: AgentSessionPrompt): AgentPrompt {
+    public normalizeAgentPrompt(input: AgentSessionPromptType): AgentPrompt {
         return {
             source: input.source,
             text: input.text,
@@ -295,7 +172,7 @@ export class MissionDaemonService {
         };
     }
 
-    public normalizeAgentCommand(input: AgentSessionCommand): AgentCommand {
+    public normalizeAgentCommand(input: AgentSessionCommandType): AgentCommand {
         return {
             type: input.type,
             ...(input.reason ? { reason: input.reason } : {}),
@@ -303,11 +180,11 @@ export class MissionDaemonService {
         };
     }
 
-    public resolveControlRoot(payload: MissionIdentityPayload, context: { surfacePath: string }): string {
+    public resolveControlRoot(payload: MissionLocatorType, context: { surfacePath: string }): string {
         return path.resolve(payload.repositoryRootPath?.trim() || context.surfacePath);
     }
 
-    public async readMissionDocument(filePath: string): Promise<MissionDocumentSnapshot> {
+    public async readMissionDocument(filePath: string): Promise<MissionDocumentSnapshotType> {
         const content = await fs.readFile(filePath, 'utf8');
         const stats = await fs.stat(filePath);
         return {
@@ -317,7 +194,7 @@ export class MissionDaemonService {
         };
     }
 
-    public async writeMissionDocument(filePath: string, content: string): Promise<MissionDocumentSnapshot> {
+    public async writeMissionDocument(filePath: string, content: string): Promise<MissionDocumentSnapshotType> {
         await fs.writeFile(filePath, content, 'utf8');
         return this.readMissionDocument(filePath);
     }
@@ -375,7 +252,7 @@ export class MissionDaemonService {
     }
 
     private async loadMissionFromRegistry(
-        input: MissionIdentityPayload,
+        input: MissionLocatorType,
         context: { surfacePath: string },
         terminalSessionName?: string
     ): Promise<MissionHandle | undefined> {
@@ -412,7 +289,7 @@ export class MissionDaemonService {
     }
 
     private readonly loadMission = async (
-        input: MissionIdentityPayload,
+        input: MissionLocatorType,
         context: { surfacePath: string },
     ): Promise<Mission | undefined> => {
         const controlRoot = input.repositoryRootPath?.trim() || context.surfacePath;
@@ -421,16 +298,20 @@ export class MissionDaemonService {
         if (!workflowDocument) {
             throw new Error(`Repository workflow definition '${Repository.getMissionWorkflowDefinitionPath(controlRoot)}' is required.`);
         }
-        const workflow = normalizeWorkflowSettings(
-            workflowDocument
-        );
+        const workflow = parsePersistedWorkflowSettings(workflowDocument);
         const taskRunners = new Map(
             (await createConfiguredAgentRunners({
                 controlRoot
             })).map((runner) => [runner.id, runner] as const)
         );
 
-        return Mission.load(new FilesystemAdapter(controlRoot), { missionId: input.missionId }, {
+        const adapter = new FilesystemAdapter(controlRoot);
+        const resolved = await adapter.resolveKnownMission({ missionId: input.missionId });
+        if (!resolved) {
+            return undefined;
+        }
+
+        const mission = new Mission(adapter, resolved.missionDir, resolved.descriptor, {
             workflow,
             resolveWorkflow: () => workflow,
             taskRunners,
@@ -441,11 +322,9 @@ export class MissionDaemonService {
             ...(settings.defaultModel ? { defaultModel: settings.defaultModel } : {}),
             ...(settings.defaultAgentMode ? { defaultMode: settings.defaultAgentMode } : {})
         });
+        await mission.refresh();
+        return mission;
     };
-
-    private toMissionEntitySnapshot(entity: Mission): MissionSnapshot['mission'] {
-        return missionSnapshotSchema.shape.mission.parse(entity.toData());
-    }
 
     private async listKnownMissions(adapter: FilesystemAdapter) {
         const missions = [
@@ -466,13 +345,11 @@ export class MissionDaemonService {
             completeAgentSession: mission.completeAgentSession.bind(mission),
             completeTask: mission.completeTask.bind(mission),
             dispose: () => undefined,
-            executeAction: mission.executeAction.bind(mission),
-            executeOperatorAction: mission.executeOperatorAction.bind(mission),
             ensureTerminal: mission.ensureTerminal.bind(mission),
-            listAvailableActionsSnapshot: mission.listAvailableActionsSnapshot.bind(mission),
-            listActions: mission.listActions.bind(mission),
             cancelAgentSession: mission.cancelAgentSession.bind(mission),
             deliver: mission.deliver.bind(mission),
+            generateTasksForStage: mission.generateTasksForStage.bind(mission),
+            buildMissionSnapshot: mission.buildMissionSnapshot.bind(mission),
             panicStopMission: mission.panicStopMission.bind(mission),
             pauseMission: mission.pauseMission.bind(mission),
             read: mission.read.bind(mission),
@@ -483,10 +360,13 @@ export class MissionDaemonService {
             reopenTask: mission.reopenTask.bind(mission),
             restartLaunchQueue: mission.restartLaunchQueue.bind(mission),
             resumeMission: mission.resumeMission.bind(mission),
+            reworkTask: mission.reworkTask.bind(mission),
+            reworkTaskFromVerification: mission.reworkTaskFromVerification.bind(mission),
             sendAgentSessionCommand: mission.sendAgentSessionCommand.bind(mission),
             sendAgentSessionPrompt: mission.sendAgentSessionPrompt.bind(mission),
             sendTerminalInput: mission.sendTerminalInput.bind(mission),
             startTask: mission.startTask.bind(mission),
+            setTaskAutostart: mission.setTaskAutostart.bind(mission),
             sessionCommand: mission.sessionCommand.bind(mission),
             taskCommand: mission.taskCommand.bind(mission),
             terminateAgentSession: mission.terminateAgentSession.bind(mission),
@@ -495,104 +375,13 @@ export class MissionDaemonService {
         };
     }
 
-    private withEntityCommands(
-        snapshot: MissionSnapshot['mission'],
-        actions: OperatorActionDescriptor[]
-    ): MissionSnapshot['mission'] {
-        return {
-            ...snapshot,
-            commands: toEntityCommandDescriptors(actions, missionCommandMappings()),
-            artifacts: snapshot.artifacts.map((artifact) => ({
-                ...artifact,
-                commands: []
-            })),
-            stages: snapshot.stages.map((stage) => ({
-                ...stage,
-                commands: toEntityCommandDescriptors(actions, [{
-                    actionId: `generation.tasks.${stage.stageId}`,
-                    commandId: 'stage.generateTasks'
-                }]),
-                artifacts: stage.artifacts.map((artifact) => ({
-                    ...artifact,
-                    commands: []
-                })),
-                tasks: stage.tasks.map((task) => ({
-                    ...task,
-                    commands: toEntityCommandDescriptors(actions, taskCommandMappings(task.taskId))
-                }))
-            })),
-            agentSessions: (snapshot.agentSessions ?? []).map((session) => ({
-                ...session,
-                commands: toEntityCommandDescriptors(actions, agentSessionCommandMappings(session.sessionId))
-            }))
-        };
+}
+
+export function requireMissionRegistry(context: EntityExecutionContext): MissionRegistry {
+    if (!context.missionRegistry) {
+        throw new Error('Mission entity methods require a daemon-owned mission registry.');
     }
-}
-
-export function requireMissionDaemonService(context: EntityExecutionContext): MissionDaemonService {
-    if (!context.missionService) {
-        throw new Error('Mission entity methods require a daemon-owned mission service.');
-    }
-    return context.missionService as MissionDaemonService;
-}
-
-type EntityActionCommandMapping = {
-    actionId: string;
-    commandId: string;
-};
-
-function missionCommandMappings(): EntityActionCommandMapping[] {
-    return [
-        { actionId: 'mission.pause', commandId: 'mission.pause' },
-        { actionId: 'mission.resume', commandId: 'mission.resume' },
-        { actionId: 'mission.panic', commandId: 'mission.panic' },
-        { actionId: 'mission.clear-panic', commandId: 'mission.clearPanic' },
-        { actionId: 'mission.restart-queue', commandId: 'mission.restartQueue' },
-        { actionId: 'mission.deliver', commandId: 'mission.deliver' }
-    ];
-}
-
-function taskCommandMappings(taskId: string): EntityActionCommandMapping[] {
-    return [
-        { actionId: `task.start.${taskId}`, commandId: 'task.start' },
-        { actionId: `task.done.${taskId}`, commandId: 'task.complete' },
-        { actionId: `task.reopen.${taskId}`, commandId: 'task.reopen' }
-    ];
-}
-
-function agentSessionCommandMappings(sessionId: string): EntityActionCommandMapping[] {
-    return [
-        { actionId: `session.cancel.${sessionId}`, commandId: 'agentSession.cancel' },
-        { actionId: `session.terminate.${sessionId}`, commandId: 'agentSession.terminate' }
-    ];
-}
-
-function toEntityCommandDescriptors(
-    actions: OperatorActionDescriptor[],
-    mappings: EntityActionCommandMapping[]
-): EntityCommandDescriptorType[] {
-    return mappings.flatMap((mapping) => {
-        const action = actions.find((candidate) => candidate.id === mapping.actionId);
-        if (!action) {
-            return [];
-        }
-
-        return [{
-            commandId: mapping.commandId,
-            label: action.label,
-            ...(action.reason ? { description: action.reason } : {}),
-            disabled: action.disabled,
-            ...(action.disabledReason ? { disabledReason: action.disabledReason } : {}),
-            ...(action.ui?.requiresConfirmation
-                ? {
-                    confirmation: {
-                        required: true,
-                        ...(action.ui.confirmationPrompt ? { prompt: action.ui.confirmationPrompt } : {})
-                    }
-                }
-                : {})
-        }];
-    });
+    return context.missionRegistry;
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {

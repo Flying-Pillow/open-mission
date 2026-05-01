@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultWorkflowSettings } from '../workflow/mission/workflow.js';
-import { validateWorkflowSettings } from './validation.js';
+import { WorkflowSettingsError } from './types.js';
+import { parsePersistedWorkflowSettings, validateWorkflowSettings } from './validation.js';
 
 describe('workflow settings validation', () => {
 	it('reports invalid concurrency values', () => {
@@ -57,5 +58,11 @@ describe('workflow settings validation', () => {
 				expect.objectContaining({ path: '/taskGeneration/0/tasks/0/dependsOn/0' })
 			])
 		);
+	});
+
+	it('rejects partial persisted workflow definitions instead of normalizing them', () => {
+		expect(() => parsePersistedWorkflowSettings({
+			stageOrder: ['prd']
+		})).toThrow(WorkflowSettingsError);
 	});
 });

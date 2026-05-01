@@ -21,34 +21,22 @@ import type { MissionDefaultAgentMode } from '../Repository/RepositorySchema.js'
 import { Repository } from '../Repository/Repository.js';
 import { AgentSession } from '../AgentSession/AgentSession.js';
 import { AgentSessionLogWriter } from '../AgentSession/AgentSessionLogWriter.js';
-import { Task } from '../Task/Task.js';
-import { MISSION_ARTIFACT_KEYS, getMissionStageDefinition } from '../../workflow/mission/manifest.js';
 import {
-	MISSION_ARTIFACTS,
 	MISSION_STAGES,
-	MISSION_STAGE_FOLDERS,
-	type OperatorActionDescriptor,
-	type OperatorActionListSnapshot,
-	type MissionTowerProjection,
-	type MissionTowerStageRailItem,
-	type MissionTowerTreeNode,
-	type OperatorActionExecutionStep,
 	type MissionTaskUpdate,
 	type GateIntent,
 	type MissionBrief,
 	type MissionDescriptor as MissionDossierDescriptor,
 	type MissionGateResult,
-	type MissionArtifactKey,
 	type MissionRecord,
 	type MissionSelector,
 	type MissionStageId,
-	type MissionStageStatus,
 	type MissionTaskState,
 	type MissionType,
 	type OperatorStatus
 } from '../../types.js';
 import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
-import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
+import { DEFAULT_WORKFLOW_VERSION } from '../../workflow/mission/workflow.js';
 import {
 	MissionWorkflowController,
 	MissionWorkflowRequestExecutor,
@@ -60,61 +48,76 @@ import {
 	type MissionWorkflowEventRecord,
 	type MissionStateData,
 	type MissionTaskArtifactReference,
-	type WorkflowGlobalSettings
+	type WorkflowDefinition
 } from '../../workflow/engine/index.js';
 import { getMissionWorkflowEventValidationErrors } from '../../workflow/engine/validation.js';
 import type { AgentRunner } from '../../daemon/runtime/agent/AgentRunner.js';
 import type { AgentSessionEvent, AgentSessionSnapshot } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
-import { toAgentSession } from '../AgentSession/AgentSessionData.js';
+import { toAgentSession } from '../AgentSession/AgentSession.js';
+import { MISSION_ARTIFACT_KEYS, getMissionStageDefinition } from '../../workflow/mission/manifest.js';
 import {
-	collectArtifactFiles,
 	createMissionArtifact,
-	createTaskArtifact,
-	type Artifact
+	createTaskArtifact
 } from '../Artifact/Artifact.js';
-import { toTask, type TaskData } from '../Task/Task.js';
+import { Task, toTask } from '../Task/Task.js';
+import type { ArtifactDataType } from '../Artifact/ArtifactSchema.js';
+import type { TaskDataType } from '../Task/TaskSchema.js';
+import { TaskCommandIds } from '../Task/TaskSchema.js';
 import {
 	createStage,
 	isMissionDelivered,
-	resolveActiveStageTasks,
-	resolveReadyStageTasks,
-	type Stage
 } from '../Stage/Stage.js';
+import type { StageDataType } from '../Stage/StageSchema.js';
+import { StageCommandIds } from '../Stage/StageSchema.js';
+import { AgentSessionCommandIds } from '../AgentSession/AgentSessionSchema.js';
 import {
-	missionActionListSnapshotSchema,
-	agentSessionCommandPayloadSchema,
-	missionCommandAcknowledgementSchema,
-	missionCommandPayloadSchema,
-	missionDataSchema,
-	missionDocumentSnapshotSchema,
-	missionEnsureTerminalPayloadSchema,
-	missionEntityTypeSchema,
-	missionExecuteActionPayloadSchema,
+	MissionAgentSessionCommandInputSchema,
+	MissionCommandAcknowledgementSchema,
+	MissionCommandInputSchema,
+	MissionDataSchema,
+	MissionDocumentSnapshotSchema,
+	MissionEntityTypeSchema,
+	MissionFindSchema,
+	MissionCatalogEntrySchema,
 	missionEntityName,
-	missionListActionsPayloadSchema,
-	missionProjectionSnapshotSchema,
-	missionReadDocumentPayloadSchema,
-	missionReadPayloadSchema,
-	missionReadProjectionPayloadSchema,
-	missionReadTerminalPayloadSchema,
-	missionReadWorktreePayloadSchema,
-	missionSendTerminalInputPayloadSchema,
-	missionSnapshotSchema,
-	missionEventRecordSchema,
-	missionStateDataSchema,
-	missionTaskCommandPayloadSchema,
-	missionTerminalSnapshotSchema,
-	missionWorktreeSnapshotSchema,
-	missionWriteDocumentPayloadSchema,
-	type MissionCommandAcknowledgement,
-	type MissionData
+	MissionLocatorSchema,
+	MissionReadDocumentInputSchema,
+	MissionSendTerminalInputSchema,
+	MissionSnapshotSchema,
+	MissionTaskCommandInputSchema,
+	MissionTerminalSnapshotSchema,
+	MissionWorktreeSnapshotSchema,
+	MissionWriteDocumentInputSchema,
+	type MissionCommandAcknowledgementType,
+	type MissionDataType,
+	type MissionLocatorType
 } from './MissionSchema.js';
-
-type MissionIdentityPayload = { missionId: string };
+import {
+	MissionWorkflowEventRecordSchema,
+	MissionStateDataSchema
+} from '../../workflow/engine/types.js';
+import {
+	MissionCommandIds,
+	missionCommand,
+	ownedAgentSessionCommand,
+	ownedMissionCommand,
+	ownedStageCommand,
+	ownedTaskCommand,
+	type MissionAvailableCommandSnapshot,
+	type MissionOwnedCommandDescriptor
+} from './MissionCommandDescriptors.js';
+import {
+	buildMissionProjectionSnapshot,
+	buildMissionSnapshot
+} from './MissionProjection.js';
+import {
+	buildMissionStatusProjection,
+	resolveCurrentMissionStage
+} from './MissionStatusProjection.js';
 
 export type MissionWorkflowBindings = {
-	workflow: WorkflowGlobalSettings;
-	resolveWorkflow?: () => WorkflowGlobalSettings;
+	workflow: WorkflowDefinition;
+	resolveWorkflow?: () => WorkflowDefinition;
 	taskRunners: Map<string, AgentRunner>;
 	instructionsPath?: string;
 	skillsPath?: string;
@@ -122,63 +125,63 @@ export type MissionWorkflowBindings = {
 	defaultMode?: MissionDefaultAgentMode;
 };
 
-export class Mission extends Entity<MissionData, string> {
+export class Mission extends Entity<MissionDataType, string> {
 	public static override readonly entityName = missionEntityName;
 	private static readonly SESSION_RECONCILE_TIMEOUT_MS = 1_000;
+
+	public static async find(payload: unknown, context: EntityExecutionContext) {
+		const input = MissionFindSchema.parse(payload);
+		const repositoryRootPath = input.repositoryRootPath ?? context.surfacePath;
+		const store = new FilesystemAdapter(repositoryRootPath);
+		const missions = await store.listMissions().catch(() => []);
+
+		return MissionCatalogEntrySchema.array().parse(missions.map(({ descriptor }) => ({
+			missionId: descriptor.missionId,
+			title: descriptor.brief.title,
+			branchRef: descriptor.branchRef,
+			createdAt: descriptor.createdAt,
+			...(descriptor.brief.issueId !== undefined ? { issueId: descriptor.brief.issueId } : {})
+		})));
+	}
 
 	public static async resolve(payload: unknown, context?: EntityExecutionContext): Promise<Mission> {
 		if (!context) {
 			throw new Error('Mission entity resolution requires a daemon context.');
 		}
 		const inputRecord = isRecord(payload) ? payload : {};
-		const input = missionReadPayloadSchema.parse({
+		const input = MissionLocatorSchema.parse({
 			missionId: inputRecord['missionId'],
 			...(typeof inputRecord['repositoryRootPath'] === 'string' ? { repositoryRootPath: inputRecord['repositoryRootPath'] } : {})
 		});
-		const service = await Mission.loadMissionDaemon(context);
+		const service = await Mission.loadMissionRegistry(context);
 		return await service.loadRequiredMission(input, context) as Mission;
 	}
 
-	public async read(payload: unknown, context: EntityExecutionContext) {
-		const input = missionReadPayloadSchema.parse(payload);
-		const service = await Mission.loadMissionDaemon(context);
-		return missionSnapshotSchema.parse(await service.buildMissionSnapshot(this, input.missionId));
+	public async read(payload: unknown, _context: EntityExecutionContext) {
+		const input = MissionLocatorSchema.parse(payload);
+		this.assertResolvedMissionId(input.missionId);
+		return this.buildMissionSnapshot();
 	}
 
-	public async readProjection(payload: unknown, context: EntityExecutionContext) {
-		const input = missionReadProjectionPayloadSchema.parse(payload);
-		const service = await Mission.loadMissionDaemon(context);
-		const snapshot = await service.buildMissionSnapshot(this, input.missionId);
-		return missionProjectionSnapshotSchema.parse({
-			missionId: snapshot.mission.missionId,
-			...(snapshot.status ? { status: snapshot.status } : {}),
-			...(snapshot.workflow ? { workflow: snapshot.workflow } : {}),
-			actions: await service.buildMissionActionListSnapshot(this, input.missionId),
-			updatedAt: snapshot.mission.updatedAt
-		});
-	}
-
-	public async listActions(payload: unknown, context: EntityExecutionContext) {
-		const input = missionListActionsPayloadSchema.parse(payload);
-		const service = await Mission.loadMissionDaemon(context);
-		return missionActionListSnapshotSchema.parse({
-			...(await service.buildMissionActionListSnapshot(this, input.missionId)),
-			...(input.context ? { context: input.context } : {})
-		});
+	public async readProjection(payload: unknown, _context: EntityExecutionContext) {
+		const input = MissionLocatorSchema.parse(payload);
+		this.assertResolvedMissionId(input.missionId);
+		return this.buildMissionProjectionSnapshot();
 	}
 
 	public async readDocument(payload: unknown, context: EntityExecutionContext) {
-		const input = missionReadDocumentPayloadSchema.parse(payload);
-		const service = await Mission.loadMissionDaemon(context);
+		const input = MissionReadDocumentInputSchema.parse(payload);
+		const service = await Mission.loadMissionRegistry(context);
 		await service.assertMissionDocumentPath(input.path, 'read', service.resolveControlRoot(input, context));
-		return missionDocumentSnapshotSchema.parse(await service.readMissionDocument(input.path));
+		return MissionDocumentSnapshotSchema.parse(await service.readMissionDocument(input.path));
 	}
 
 	public async readWorktree(payload: unknown, context: EntityExecutionContext) {
-		const input = missionReadWorktreePayloadSchema.parse(payload);
-		const service = await Mission.loadMissionDaemon(context);
-		const rootPath = path.join(Repository.getMissionWorktreesPath(service.resolveControlRoot(input, context)), input.missionId);
-		return missionWorktreeSnapshotSchema.parse({
+		const input = MissionLocatorSchema.parse(payload);
+		const missionId = this.assertResolvedMissionId(input.missionId);
+		const service = await Mission.loadMissionRegistry(context);
+		const rootPath = path.join(Repository.getMissionWorktreesPath(service.resolveControlRoot(input, context)), missionId);
+		return MissionWorktreeSnapshotSchema.parse({
 			rootPath,
 			fetchedAt: new Date().toISOString(),
 			tree: await service.readDirectoryTree(rootPath, rootPath)
@@ -186,125 +189,138 @@ export class Mission extends Entity<MissionData, string> {
 	}
 
 	public async readTerminal(payload: unknown, context: EntityExecutionContext) {
-		const input = missionReadTerminalPayloadSchema.parse(payload);
+		const input = MissionLocatorSchema.parse(payload);
+		const missionId = this.assertResolvedMissionId(input.missionId);
 		const { readMissionTerminalState } = await import('../../daemon/MissionTerminal.js');
 		const state = await readMissionTerminalState({
 			surfacePath: context.surfacePath,
-			selector: { missionId: input.missionId }
+			selector: { missionId }
 		});
 		if (!state) {
-			throw new Error(`Mission terminal for '${input.missionId}' is not available.`);
+			throw new Error(`Mission terminal for '${missionId}' is not available.`);
 		}
-		return Mission.parseTerminalSnapshot(input.missionId, state);
+		return Mission.parseTerminalSnapshot(missionId, state);
 	}
 
 	public async command(payload: unknown, _context: EntityExecutionContext) {
-		const input = missionCommandPayloadSchema.parse(payload);
-		switch (input.command.action) {
-			case 'pause':
+		const input = MissionCommandInputSchema.parse(payload);
+		this.assertResolvedMissionId(input.missionId);
+		switch (input.commandId) {
+			case MissionCommandIds.pause:
 				await this.pauseMission();
 				break;
-			case 'resume':
+			case MissionCommandIds.resume:
 				await this.resumeMission();
 				break;
-			case 'panic':
+			case MissionCommandIds.panic:
 				await this.panicStopMission();
 				break;
-			case 'clearPanic':
+			case MissionCommandIds.clearPanic:
 				await this.clearMissionPanic();
 				break;
-			case 'restartQueue':
+			case MissionCommandIds.restartQueue:
 				await this.restartLaunchQueue();
 				break;
-			case 'deliver':
+			case MissionCommandIds.deliver:
 				await this.deliver();
 				break;
+			default:
+				throw new Error(`Mission command '${input.commandId}' is not implemented in the daemon.`);
 		}
 		return Mission.buildCommandAcknowledgement(input, 'command');
 	}
 
 	public async taskCommand(payload: unknown, _context: EntityExecutionContext) {
-		const input = missionTaskCommandPayloadSchema.parse(payload);
-		switch (input.command.action) {
-			case 'start':
+		const input = MissionTaskCommandInputSchema.parse(payload);
+		this.assertResolvedMissionId(input.missionId);
+		switch (input.commandId) {
+			case TaskCommandIds.start:
+				const terminalSessionName = getCommandStringInput(input.input, 'terminalSessionName');
 				await this.startTask(
 					input.taskId,
-					input.command.terminalSessionName?.trim()
-						? { terminalSessionName: input.command.terminalSessionName.trim() }
+					terminalSessionName
+						? { terminalSessionName }
 						: {}
 				);
 				break;
-			case 'complete':
+			case TaskCommandIds.complete:
 				await this.completeTask(input.taskId);
 				break;
-			case 'reopen':
+			case TaskCommandIds.reopen:
 				await this.reopenTask(input.taskId);
 				break;
+			case TaskCommandIds.rework:
+				await this.reworkTask(input.taskId, {
+					actor: 'human',
+					reasonCode: 'manual.instruction',
+					summary: requireCommandTextInput(input.input, input.commandId),
+					artifactRefs: []
+				});
+				break;
+			case TaskCommandIds.reworkFromVerification:
+				await this.reworkTaskFromVerification(input.taskId);
+				break;
+			case TaskCommandIds.enableAutostart:
+				await this.setTaskAutostart(input.taskId, true);
+				break;
+			case TaskCommandIds.disableAutostart:
+				await this.setTaskAutostart(input.taskId, false);
+				break;
+			default:
+				throw new Error(`Task command '${input.commandId}' is not implemented in the daemon.`);
 		}
 		return Mission.buildCommandAcknowledgement(input, 'taskCommand', { taskId: input.taskId });
 	}
 
 	public async sessionCommand(payload: unknown, context: EntityExecutionContext) {
-		const input = agentSessionCommandPayloadSchema.parse(payload);
-		const service = await Mission.loadMissionDaemon(context);
-		switch (input.command.action) {
-			case 'complete':
+		const input = MissionAgentSessionCommandInputSchema.parse(payload);
+		this.assertResolvedMissionId(input.missionId);
+		const service = await Mission.loadMissionRegistry(context);
+		switch (input.commandId) {
+			case AgentSessionCommandIds.complete:
 				await this.completeAgentSession(input.sessionId);
 				break;
-			case 'cancel':
-				await this.cancelAgentSession(input.sessionId, input.command.reason);
+			case AgentSessionCommandIds.cancel:
+				await this.cancelAgentSession(input.sessionId, service.getReason(input.input));
 				break;
-			case 'terminate':
-				await this.terminateAgentSession(input.sessionId, input.command.reason);
+			case AgentSessionCommandIds.terminate:
+				await this.terminateAgentSession(input.sessionId, service.getReason(input.input));
 				break;
-			case 'prompt':
-				await this.sendAgentSessionPrompt(input.sessionId, service.normalizeAgentPrompt(input.command.prompt));
-				break;
-			case 'command':
-				await this.sendAgentSessionCommand(input.sessionId, service.normalizeAgentCommand(input.command.command));
-				break;
+			default:
+				throw new Error(`AgentSession command '${input.commandId}' is not implemented in the daemon.`);
 		}
 		return Mission.buildCommandAcknowledgement(input, 'sessionCommand', { sessionId: input.sessionId });
 	}
 
-	public async executeAction(payload: unknown, _context: EntityExecutionContext) {
-		const input = missionExecuteActionPayloadSchema.parse(payload);
-		await this.executeOperatorAction(
-			input.actionId,
-			(input.steps ?? []) as OperatorActionExecutionStep[],
-			input.terminalSessionName?.trim()
-				? { terminalSessionName: input.terminalSessionName.trim() }
-				: {}
-		);
-		return Mission.buildCommandAcknowledgement(input, 'executeAction', { actionId: input.actionId });
-	}
-
 	public async writeDocument(payload: unknown, context: EntityExecutionContext) {
-		const input = missionWriteDocumentPayloadSchema.parse(payload);
-		const service = await Mission.loadMissionDaemon(context);
+		const input = MissionWriteDocumentInputSchema.parse(payload);
+		this.assertResolvedMissionId(input.missionId);
+		const service = await Mission.loadMissionRegistry(context);
 		await service.assertMissionDocumentPath(input.path, 'write', service.resolveControlRoot(input, context));
-		return missionDocumentSnapshotSchema.parse(await service.writeMissionDocument(input.path, input.content));
+		return MissionDocumentSnapshotSchema.parse(await service.writeMissionDocument(input.path, input.content));
 	}
 
 	public async ensureTerminal(payload: unknown, context: EntityExecutionContext) {
-		const input = missionEnsureTerminalPayloadSchema.parse(payload);
+		const input = MissionLocatorSchema.parse(payload);
+		const missionId = this.assertResolvedMissionId(input.missionId);
 		const { ensureMissionTerminalState } = await import('../../daemon/MissionTerminal.js');
 		const state = await ensureMissionTerminalState({
 			surfacePath: context.surfacePath,
-			selector: { missionId: input.missionId }
+			selector: { missionId }
 		});
 		if (!state) {
-			throw new Error(`Mission terminal for '${input.missionId}' is not available.`);
+			throw new Error(`Mission terminal for '${missionId}' is not available.`);
 		}
-		return Mission.parseTerminalSnapshot(input.missionId, state);
+		return Mission.parseTerminalSnapshot(missionId, state);
 	}
 
 	public async sendTerminalInput(payload: unknown, context: EntityExecutionContext) {
-		const input = missionSendTerminalInputPayloadSchema.parse(payload);
+		const input = MissionSendTerminalInputSchema.parse(payload);
+		const missionId = this.assertResolvedMissionId(input.missionId);
 		const { sendMissionTerminalInput } = await import('../../daemon/MissionTerminal.js');
 		const state = await sendMissionTerminalInput({
 			surfacePath: context.surfacePath,
-			selector: { missionId: input.missionId },
+			selector: { missionId },
 			terminalInput: {
 				...(input.data !== undefined ? { data: input.data } : {}),
 				...(input.literal !== undefined ? { literal: input.literal } : {}),
@@ -313,26 +329,26 @@ export class Mission extends Entity<MissionData, string> {
 			}
 		});
 		if (!state) {
-			throw new Error(`Mission terminal for '${input.missionId}' is not available.`);
+			throw new Error(`Mission terminal for '${missionId}' is not available.`);
 		}
-		return Mission.parseTerminalSnapshot(input.missionId, state);
+		return Mission.parseTerminalSnapshot(missionId, state);
 	}
 
-	private static async loadMissionDaemon(context: EntityExecutionContext) {
-		const { requireMissionDaemon } = await import('../../daemon/MissionDaemon.js');
-		return requireMissionDaemon(context);
+	private static async loadMissionRegistry(context: EntityExecutionContext) {
+		const { requireMissionRegistry } = await import('../../daemon/MissionRegistry.js');
+		return requireMissionRegistry(context);
 	}
 
 	private static buildCommandAcknowledgement(
-		payload: MissionIdentityPayload,
-		method: MissionCommandAcknowledgement['method'],
+		payload: MissionLocatorType,
+		method: MissionCommandAcknowledgementType['method'],
 		identifiers: {
 			taskId?: string;
 			sessionId?: string;
 			actionId?: string;
 		} = {}
-	): MissionCommandAcknowledgement {
-		return missionCommandAcknowledgementSchema.parse({
+	): MissionCommandAcknowledgementType {
+		return MissionCommandAcknowledgementSchema.parse({
 			ok: true,
 			entity: 'Mission',
 			method,
@@ -343,7 +359,7 @@ export class Mission extends Entity<MissionData, string> {
 	}
 
 	private static parseTerminalSnapshot(missionId: string, state: MissionAgentTerminalState) {
-		return missionTerminalSnapshotSchema.parse({
+		return MissionTerminalSnapshotSchema.parse({
 			missionId,
 			connected: state.connected,
 			dead: state.dead,
@@ -362,10 +378,10 @@ export class Mission extends Entity<MissionData, string> {
 	private descriptor: MissionDossierDescriptor;
 	private sessionRecords: AgentSessionRecord[] = [];
 	private lastKnownStatus: OperatorStatus | undefined;
-	private lastKnownActionSnapshot: OperatorActionListSnapshot | undefined;
+	private lastKnownCommandSnapshot: MissionAvailableCommandSnapshot | undefined;
 	private readonly workflowRequestExecutor: MissionWorkflowRequestExecutor;
 	private readonly workflowController: MissionWorkflowController;
-	private readonly workflowResolver: () => WorkflowGlobalSettings;
+	private readonly workflowResolver: () => WorkflowDefinition;
 	private readonly sessionLogWriter: AgentSessionLogWriter;
 	private readonly agentSessionEventSubscription: MissionAgentDisposable;
 	private agentSessionLifecycleIngestionQueue: Promise<void> = Promise.resolve();
@@ -374,12 +390,12 @@ export class Mission extends Entity<MissionData, string> {
 	public readonly onDidAgentConsoleEvent = this.agentConsoleEventEmitter.event;
 	public readonly onDidAgentEvent = this.agentEventEmitter.event;
 
-	private constructor(
+	public constructor(
 		private readonly adapter: FilesystemAdapter,
 		private readonly missionDir: string,
 		descriptor: MissionDossierDescriptor,
 		workflowBindings: MissionWorkflowBindings,
-		initialData?: MissionData
+		initialData?: MissionDataType
 	) {
 		super(Mission.cloneData(initialData ?? Mission.createDataFromDescriptor(adapter, missionDir, descriptor)));
 		this.descriptor = descriptor;
@@ -413,29 +429,20 @@ export class Mission extends Entity<MissionData, string> {
 		});
 	}
 
-	public static hydrate(
-		adapter: FilesystemAdapter,
-		missionDir: string,
-		descriptor: MissionDossierDescriptor,
-		workflowBindings: MissionWorkflowBindings = createDefaultMissionWorkflowBindings()
-	): Mission {
-		return new Mission(adapter, missionDir, descriptor, workflowBindings);
-	}
-
 	public static async create(
 		adapter: FilesystemAdapter,
 		input: {
 			brief: MissionBrief;
 			branchRef: string;
 		},
-		workflowBindings: MissionWorkflowBindings = createDefaultMissionWorkflowBindings()
+		workflowBindings: MissionWorkflowBindings
 	): Promise<Mission> {
 		const existing = await adapter.resolveMission({
 			...(input.brief.issueId !== undefined ? { issueId: input.brief.issueId } : {}),
 			branchRef: input.branchRef
 		});
 		if (existing) {
-			const mission = Mission.hydrate(adapter, existing.missionDir, existing.descriptor, workflowBindings);
+			const mission = new Mission(adapter, existing.missionDir, existing.descriptor, workflowBindings);
 			await mission.refresh();
 			return mission;
 		}
@@ -453,21 +460,21 @@ export class Mission extends Entity<MissionData, string> {
 			createdAt
 		};
 
-		const mission = Mission.hydrate(adapter, missionDir, descriptor, workflowBindings);
+		const mission = new Mission(adapter, missionDir, descriptor, workflowBindings);
 		return mission.initialize();
 	}
 
 	public static async load(
 		adapter: FilesystemAdapter,
 		selector: MissionSelector = {},
-		workflowBindings: MissionWorkflowBindings = createDefaultMissionWorkflowBindings()
+		workflowBindings: MissionWorkflowBindings
 	): Promise<Mission | undefined> {
 		const resolved = await adapter.resolveKnownMission(selector);
 		if (!resolved) {
 			return undefined;
 		}
 
-		const mission = Mission.hydrate(adapter, resolved.missionDir, resolved.descriptor, workflowBindings);
+		const mission = new Mission(adapter, resolved.missionDir, resolved.descriptor, workflowBindings);
 		await mission.refresh();
 		return mission;
 	}
@@ -509,7 +516,7 @@ export class Mission extends Entity<MissionData, string> {
 		this.descriptor = nextDescriptor;
 		const document = await this.workflowController.refresh();
 		this.syncAgentSessions(document);
-		this.lastKnownActionSnapshot = undefined;
+		this.lastKnownCommandSnapshot = undefined;
 		this.lastKnownStatus = await this.buildStatus(document);
 		return this;
 	}
@@ -528,7 +535,7 @@ export class Mission extends Entity<MissionData, string> {
 			reconcileSessions: this.hasActiveAgentSessions()
 		});
 		this.syncAgentSessions(document);
-		this.lastKnownActionSnapshot = undefined;
+		this.lastKnownCommandSnapshot = undefined;
 		this.lastKnownStatus = await this.buildStatus(document);
 		return this.lastKnownStatus;
 	}
@@ -538,18 +545,18 @@ export class Mission extends Entity<MissionData, string> {
 		return this;
 	}
 
-	public async listAvailableActions(): Promise<OperatorActionDescriptor[]> {
-		return (await this.listAvailableActionsSnapshot()).actions;
+	public async listAvailableCommands(): Promise<MissionOwnedCommandDescriptor[]> {
+		return (await this.listAvailableCommandSnapshot()).commands;
 	}
 
-	public async listAvailableActionsSnapshot(): Promise<OperatorActionListSnapshot> {
+	public async listAvailableCommandSnapshot(): Promise<MissionAvailableCommandSnapshot> {
 		await this.agentSessionLifecycleIngestionQueue;
 		if (
-			this.lastKnownActionSnapshot
+			this.lastKnownCommandSnapshot
 			&& this.lastKnownStatus?.workflow?.lifecycle !== 'draft'
 			&& !this.hasActiveAgentSessions()
 		) {
-			return this.lastKnownActionSnapshot;
+			return this.lastKnownCommandSnapshot;
 		}
 
 		const document = await this.readLiveWorkflowDocument({
@@ -558,11 +565,39 @@ export class Mission extends Entity<MissionData, string> {
 		this.syncAgentSessions(document);
 		this.lastKnownStatus = await this.buildStatus(document);
 		const snapshot = {
-			actions: await this.buildActionList(document),
-			revision: this.buildActionRevision(document)
+			commands: await this.buildCommandList(document),
+			revision: this.buildCommandRevision(document)
 		};
-		this.lastKnownActionSnapshot = snapshot;
+		this.lastKnownCommandSnapshot = snapshot;
 		return snapshot;
+	}
+
+	public async buildMissionSnapshot() {
+		const missionId = this.descriptor.missionId;
+		const entity = await this.toEntity();
+		const commands = (await this.listAvailableCommandSnapshot()).commands;
+		return buildMissionSnapshot({
+			missionId,
+			mission: MissionSnapshotSchema.shape.mission.parse(entity.toData()),
+			commands
+		});
+	}
+
+	public async buildMissionProjectionSnapshot() {
+		const snapshot = await this.buildMissionSnapshot();
+		return buildMissionProjectionSnapshot({
+			snapshot
+		});
+	}
+
+	private assertResolvedMissionId(missionId: string): string {
+		if (missionId !== this.descriptor.missionId) {
+			throw new Error(
+				`Mission payload '${missionId}' does not match resolved Mission instance '${this.descriptor.missionId}'.`
+			);
+		}
+
+		return this.descriptor.missionId;
 	}
 
 	public async startWorkflow(): Promise<OperatorStatus> {
@@ -742,131 +777,6 @@ export class Mission extends Entity<MissionData, string> {
 		return this.getRecord();
 	}
 
-	public async executeOperatorAction(
-		actionId: string,
-		steps: OperatorActionExecutionStep[] = [],
-		options: { terminalSessionName?: string } = {}
-	): Promise<OperatorStatus> {
-		if (actionId === MISSION_ACTION_IDS.pause) {
-			if (steps.length > 0) {
-				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
-			}
-			await this.pauseMission();
-			return this.status();
-		}
-		if (actionId === MISSION_ACTION_IDS.resume) {
-			if (steps.length > 0) {
-				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
-			}
-			await this.resumeMission();
-			return this.status();
-		}
-		if (actionId === MISSION_ACTION_IDS.panic) {
-			if (steps.length > 0) {
-				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
-			}
-			await this.panicStopMission();
-			return this.status();
-		}
-		if (actionId === MISSION_ACTION_IDS.clearPanic) {
-			if (steps.length > 0) {
-				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
-			}
-			await this.clearMissionPanic();
-			return this.status();
-		}
-		if (actionId === MISSION_ACTION_IDS.restartQueue) {
-			if (steps.length > 0) {
-				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
-			}
-			await this.restartLaunchQueue();
-			return this.status();
-		}
-		if (actionId === MISSION_ACTION_IDS.deliver) {
-			if (steps.length > 0) {
-				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
-			}
-			await this.deliver();
-			return this.status();
-		}
-		if (actionId.startsWith('generation.tasks.')) {
-			if (steps.length > 0) {
-				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
-			}
-			await this.generateTasksForStage(actionId.slice('generation.tasks.'.length) as MissionStageId);
-			return this.status();
-		}
-		if (actionId.startsWith('task.start.')) {
-			if (steps.length > 0) {
-				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
-			}
-			await this.startTask(actionId.slice('task.start.'.length), options);
-			return this.status();
-		}
-		if (actionId.startsWith('task.done.')) {
-			if (steps.length > 0) {
-				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
-			}
-			await this.completeTask(actionId.slice('task.done.'.length));
-			return this.status();
-		}
-		if (actionId.startsWith('task.reopen.')) {
-			if (steps.length > 0) {
-				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
-			}
-			await this.reopenTask(actionId.slice('task.reopen.'.length));
-			return this.status();
-		}
-		if (actionId.startsWith('task.rework.from-verification.')) {
-			if (steps.length > 0) {
-				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
-			}
-			await this.reworkTaskFromVerification(actionId.slice('task.rework.from-verification.'.length));
-			return this.status();
-		}
-		if (actionId.startsWith('task.rework.')) {
-			const taskId = actionId.slice('task.rework.'.length);
-			const summary = requireTextActionStep(steps, 'task.rework.instruction').value.trim();
-			await this.reworkTask(taskId, {
-				actor: 'human',
-				reasonCode: 'manual.instruction',
-				summary,
-				artifactRefs: []
-			});
-			return this.status();
-		}
-		if (actionId.startsWith('task.autostart.enable.')) {
-			if (steps.length > 0) {
-				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
-			}
-			await this.setTaskAutostart(actionId.slice('task.autostart.enable.'.length), true);
-			return this.status();
-		}
-		if (actionId.startsWith('task.autostart.disable.')) {
-			if (steps.length > 0) {
-				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
-			}
-			await this.setTaskAutostart(actionId.slice('task.autostart.disable.'.length), false);
-			return this.status();
-		}
-		if (actionId.startsWith('session.cancel.')) {
-			if (steps.length > 0) {
-				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
-			}
-			await this.cancelAgentSession(actionId.slice('session.cancel.'.length));
-			return this.status();
-		}
-		if (actionId.startsWith('session.terminate.')) {
-			if (steps.length > 0) {
-				throw new Error(`Mission action '${actionId}' does not accept input steps.`);
-			}
-			await this.terminateAgentSession(actionId.slice('session.terminate.'.length));
-			return this.status();
-		}
-
-		throw new Error(`Unknown mission action '${actionId}'.`);
-	}
-
 	public async updateTaskState(taskId: string, changes: MissionTaskUpdate): Promise<MissionTaskState> {
 		const task = await this.requireTask(taskId);
 		if (changes.status === 'ready' || changes.status === 'queued' || changes.status === 'running') {
@@ -948,7 +858,7 @@ export class Mission extends Entity<MissionData, string> {
 
 	public async generateTasksForStage(stageId: MissionStageId): Promise<void> {
 		const document = await this.workflowController.getDocument();
-		const eligibleStageId = this.resolveCurrentStageFromWorkflow(document);
+		const eligibleStageId = resolveCurrentMissionStage(document);
 		if (eligibleStageId !== stageId) {
 			throw new Error(`Tasks can only be generated for the eligible stage '${eligibleStageId}'.`);
 		}
@@ -974,129 +884,18 @@ export class Mission extends Entity<MissionData, string> {
 
 	private async buildStatus(document?: MissionStateData): Promise<OperatorStatus> {
 		const persistedDocument = document ?? await this.workflowController.getPersistedDocument();
-		if (!persistedDocument) {
-			return this.buildDraftStatus();
-		}
-		const hydratedWorkflowTasks = await this.hydrateRuntimeTasksForActions(persistedDocument.runtime.tasks);
-		const stages = await this.buildWorkflowStageStatuses(persistedDocument);
-		const projectedTasksById = new Map(stages.flatMap((stage) => stage.tasks).map((task) => [task.taskId, task]));
-		const currentStageId = this.resolveCurrentStageFromWorkflow(persistedDocument);
-		const currentStage = stages.find((stage) => stage.stage === currentStageId) ?? stages[0];
-		const activeTasks = resolveActiveStageTasks(currentStage);
-		const readyTasks = resolveReadyStageTasks(currentStage);
-		const productFiles = await collectArtifactFiles({ adapter: this.adapter, missionDir: this.missionDir });
-		const sessions = this.getAgentSessions();
-		const tower = this.buildTowerProjection(persistedDocument.configuration, stages, sessions, productFiles);
-
-		return {
-			found: true,
-			missionId: this.descriptor.missionId,
-			title: this.descriptor.brief.title,
-			...(this.descriptor.brief.issueId !== undefined ? { issueId: this.descriptor.brief.issueId } : {}),
-			type: this.descriptor.brief.type,
-			stage: currentStageId,
-			branchRef: this.descriptor.branchRef,
-			missionDir: this.adapter.getMissionWorkspacePath(this.missionDir),
-			missionRootDir: this.missionDir,
-			productFiles,
-			...(activeTasks.length > 0 ? { activeTasks } : {}),
-			...(readyTasks.length > 0 ? { readyTasks } : {}),
-			stages,
-			agentSessions: sessions,
-			tower,
-			workflow: {
-				lifecycle: persistedDocument.runtime.lifecycle,
-				pause: { ...persistedDocument.runtime.pause },
-				panic: { ...persistedDocument.runtime.panic },
-				...(currentStageId ? { currentStageId } : {}),
-				configuration: persistedDocument.configuration,
-				stages: persistedDocument.runtime.stages.map((stage) => ({
-					...stage,
-					taskIds: [...stage.taskIds],
-					readyTaskIds: [...stage.readyTaskIds],
-					queuedTaskIds: [...stage.queuedTaskIds],
-					runningTaskIds: [...stage.runningTaskIds],
-					completedTaskIds: [...stage.completedTaskIds]
-				})),
-				tasks: hydratedWorkflowTasks.map((task) => ({
-					...task,
-					title: projectedTasksById.get(task.taskId)?.subject ?? task.title,
-					dependsOn: [...task.dependsOn],
-					waitingOnTaskIds: [...task.waitingOnTaskIds],
-					runtime: { ...task.runtime }
-				})),
-				gates: persistedDocument.runtime.gates.map((gateProjection) => ({
-					...gateProjection,
-					reasons: [...gateProjection.reasons]
-				})),
-				updatedAt: persistedDocument.runtime.updatedAt
-			},
-			recommendedAction: this.buildRecommendedAction(currentStageId, activeTasks, readyTasks)
-		};
-	}
-
-	private async buildDraftStatus(): Promise<OperatorStatus> {
-		const workflow = this.workflowResolver();
-		const configuration = createMissionWorkflowConfigurationSnapshot({
-			createdAt: this.descriptor.createdAt,
-			workflowVersion: DEFAULT_WORKFLOW_VERSION,
-			workflow
+		return buildMissionStatusProjection({
+			adapter: this.adapter,
+			missionDir: this.missionDir,
+			descriptor: this.descriptor,
+			workflow: this.workflowResolver(),
+			...(persistedDocument ? { document: persistedDocument } : {}),
+			sessions: this.getAgentSessions(),
+			hydrateRuntimeTasksForActions: (tasks) => this.hydrateRuntimeTasksForActions(tasks)
 		});
-		const runtime = createDraftMissionWorkflowRuntimeState(configuration, this.descriptor.createdAt);
-		const stages: MissionStageStatus[] = MISSION_STAGES.map((stageId) => ({
-			stage: stageId,
-			folderName: MISSION_STAGE_FOLDERS[stageId],
-			status: 'pending',
-			taskCount: 0,
-			completedTaskCount: 0,
-			activeTaskIds: [],
-			readyTaskIds: [],
-			tasks: []
-		}));
-		const currentStageId = (workflow.stageOrder[0] as MissionStageId | undefined) ?? 'prd';
-		const productFiles = await collectArtifactFiles({ adapter: this.adapter, missionDir: this.missionDir });
-		const tower = this.buildTowerProjection(configuration, stages, [], productFiles);
-
-		return {
-			found: true,
-			missionId: this.descriptor.missionId,
-			title: this.descriptor.brief.title,
-			...(this.descriptor.brief.issueId !== undefined ? { issueId: this.descriptor.brief.issueId } : {}),
-			type: this.descriptor.brief.type,
-			stage: currentStageId,
-			branchRef: this.descriptor.branchRef,
-			missionDir: this.adapter.getMissionWorkspacePath(this.missionDir),
-			missionRootDir: this.missionDir,
-			productFiles,
-			stages,
-			agentSessions: [],
-			tower,
-			workflow: {
-				lifecycle: runtime.lifecycle,
-				pause: { ...runtime.pause },
-				panic: { ...runtime.panic },
-				currentStageId,
-				configuration,
-				stages: runtime.stages.map((stage) => ({
-					...stage,
-					taskIds: [...stage.taskIds],
-					readyTaskIds: [...stage.readyTaskIds],
-					queuedTaskIds: [...stage.queuedTaskIds],
-					runningTaskIds: [...stage.runningTaskIds],
-					completedTaskIds: [...stage.completedTaskIds]
-				})),
-				tasks: [],
-				gates: runtime.gates.map((gateProjection) => ({
-					...gateProjection,
-					reasons: [...gateProjection.reasons]
-				})),
-				updatedAt: runtime.updatedAt
-			},
-			recommendedAction: 'Mission is still draft. Start the workflow to capture repository settings and initialize tasks.'
-		};
 	}
 
-	private async buildActionList(document?: MissionStateData): Promise<OperatorActionDescriptor[]> {
+	private async buildCommandList(document?: MissionStateData): Promise<MissionOwnedCommandDescriptor[]> {
 		if (!document) {
 			const workflow = this.workflowResolver();
 			const configuration = createMissionWorkflowConfigurationSnapshot({
@@ -1105,287 +904,22 @@ export class Mission extends Entity<MissionData, string> {
 				workflow
 			});
 			const runtime = createDraftMissionWorkflowRuntimeState(configuration, this.descriptor.createdAt);
-			return this.buildAvailableActions(configuration, runtime, []);
+			return this.buildAvailableCommands(configuration, runtime, []);
 		}
 
-		return this.buildAvailableActions(
+		return this.buildAvailableCommands(
 			document.configuration,
 			document.runtime,
 			this.getAgentSessions()
 		);
 	}
 
-	private buildActionRevision(document?: MissionStateData): string {
+	private buildCommandRevision(document?: MissionStateData): string {
 		const runtimeUpdatedAt = document?.runtime.updatedAt?.trim();
 		if (runtimeUpdatedAt) {
 			return `mission:${this.descriptor.missionId}:${runtimeUpdatedAt}`;
 		}
 		return `mission:${this.descriptor.missionId}:${this.descriptor.createdAt}`;
-	}
-
-	private async buildWorkflowStageStatuses(
-		document: MissionStateData
-	): Promise<MissionStageStatus[]> {
-		return Promise.all(MISSION_STAGES.map(async (stageId) => {
-			const runtimeStage = document.runtime.stages.find((stage) => stage.stageId === stageId);
-			const runtimeTasks = document.runtime.tasks.filter((task) => task.stageId === stageId);
-			const runtimeTasksById = new Map(runtimeTasks.map((task, index) => [task.taskId, { task, index }]));
-			const fileTasks = await this.adapter.listTaskStates(this.missionDir, stageId).catch(() => []);
-			const fileTaskIds = new Set(fileTasks.map((task) => task.taskId));
-			const tasks: MissionTaskState[] = [];
-
-			for (const fileTask of fileTasks) {
-				const runtimeTaskEntry = runtimeTasksById.get(fileTask.taskId);
-				if (runtimeTaskEntry) {
-					tasks.push(Task.fromWorkflowState({
-						task: runtimeTaskEntry.task,
-						index: runtimeTaskEntry.index,
-						missionDir: this.missionDir,
-						fileTask
-					}));
-					continue;
-				}
-				tasks.push({
-					...fileTask,
-					waitingOn: [...fileTask.waitingOn],
-					status: 'pending'
-				});
-			}
-
-			for (const [taskId, runtimeTaskEntry] of runtimeTasksById.entries()) {
-				if (fileTaskIds.has(taskId)) {
-					continue;
-				}
-				tasks.push(Task.fromWorkflowState({
-					task: runtimeTaskEntry.task,
-					index: runtimeTaskEntry.index,
-					missionDir: this.missionDir
-				}));
-			}
-
-			tasks.sort((left, right) => left.sequence - right.sequence || left.taskId.localeCompare(right.taskId));
-			return {
-				stage: stageId,
-				folderName: MISSION_STAGE_FOLDERS[stageId],
-				status: runtimeStage?.lifecycle ?? 'pending',
-				taskCount: tasks.length,
-				completedTaskCount: tasks.filter((task) => task.status === 'completed').length,
-				activeTaskIds: tasks
-					.filter((task) => task.status === 'queued' || task.status === 'running')
-					.map((task) => task.taskId),
-				readyTaskIds: tasks.filter((task) => Task.isReady(task)).map((task) => task.taskId),
-				tasks
-			};
-		}));
-	}
-
-	private buildTowerProjection(
-		configuration: MissionStateData['configuration'],
-		stages: MissionStageStatus[],
-		sessions: AgentSessionRecord[],
-		productFiles: Partial<Record<MissionArtifactKey, string>>
-	): MissionTowerProjection {
-		return {
-			stageRail: stages.map((stage) => this.toTowerStageRailItem(stage, configuration)),
-			treeNodes: this.buildTowerTreeNodes(configuration, stages, sessions, productFiles)
-		};
-	}
-
-	private toTowerStageRailItem(
-		stage: MissionStageStatus,
-		configuration: MissionStateData['configuration']
-	): MissionTowerStageRailItem {
-		return {
-			id: stage.stage,
-			label: this.resolveTowerStageLabel(stage.stage, configuration),
-			state: this.toTowerStageRailState(stage.status),
-			subtitle: `${String(stage.completedTaskCount)}/${String(stage.taskCount)}`
-		};
-	}
-
-	private buildTowerTreeNodes(
-		configuration: MissionStateData['configuration'],
-		stages: MissionStageStatus[],
-		sessions: AgentSessionRecord[],
-		productFiles: Partial<Record<MissionArtifactKey, string>>
-	): MissionTowerTreeNode[] {
-		const nodes: MissionTowerTreeNode[] = [];
-		const missionArtifactPath = productFiles.brief;
-		if (missionArtifactPath) {
-			nodes.push({
-				id: 'tree:mission-artifact:brief',
-				label: MISSION_ARTIFACTS.brief,
-				kind: 'mission-artifact',
-				depth: 0,
-				color: this.progressTone('pending'),
-				statusLabel: 'Mission artifact',
-				collapsible: false,
-				sourcePath: missionArtifactPath
-			});
-		}
-		for (const stage of stages) {
-			const stageArtifactPath = this.resolveStageArtifactPath(stage.stage, productFiles);
-			const stageStatusLabel = this.toStatusLabel(stage.status);
-			nodes.push({
-				id: `tree:stage:${stage.stage}`,
-				label: this.resolveTowerStageLabel(stage.stage, configuration),
-				kind: 'stage',
-				depth: 0,
-				color: this.progressTone(stage.status),
-				statusLabel: stageStatusLabel,
-				collapsible: Boolean(stageArtifactPath) || stage.tasks.length > 0,
-				stageId: stage.stage
-			});
-
-			for (const task of stage.tasks) {
-				const taskColor = this.progressTone(task.status);
-				const taskStatusLabel = this.toStatusLabel(task.status);
-				nodes.push({
-					id: `tree:task:${task.taskId}`,
-					label: `${String(task.sequence)} ${task.subject}`,
-					kind: 'task',
-					depth: 1,
-					color: taskColor,
-					statusLabel: taskStatusLabel,
-					collapsible: Boolean(task.filePath) || sessions.some((session) => session.taskId === task.taskId),
-					stageId: stage.stage,
-					taskId: task.taskId
-				});
-
-				const taskSessions = sessions
-					.filter((session) => session.taskId === task.taskId)
-					.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
-				for (const session of taskSessions) {
-					nodes.push({
-						id: `tree:session:${session.sessionId}`,
-						label: `${session.runnerId} ${session.sessionId.slice(-4)}`,
-						kind: 'session',
-						depth: 2,
-						color: this.sessionTone(session.lifecycleState, taskColor),
-						statusLabel: this.toStatusLabel(session.lifecycleState),
-						collapsible: false,
-						stageId: stage.stage,
-						taskId: task.taskId,
-						sessionId: session.sessionId
-					});
-				}
-
-				if (task.filePath) {
-					nodes.push({
-						id: `tree:task-artifact:${task.taskId}`,
-						label: task.fileName,
-						kind: 'task-artifact',
-						depth: 2,
-						color: taskColor,
-						statusLabel: taskStatusLabel,
-						collapsible: false,
-						sourcePath: task.filePath,
-						stageId: stage.stage,
-						taskId: task.taskId
-					});
-				}
-			}
-
-			if (stageArtifactPath) {
-				nodes.push({
-					id: `tree:stage-artifact:${stage.stage}`,
-					label: path.basename(stageArtifactPath),
-					kind: 'stage-artifact',
-					depth: 1,
-					color: this.progressTone(stage.status),
-					statusLabel: stageStatusLabel,
-					collapsible: false,
-					sourcePath: stageArtifactPath,
-					stageId: stage.stage
-				});
-			}
-		}
-		return nodes;
-	}
-
-	private resolveTowerStageLabel(
-		stageId: MissionStageId,
-		configuration: MissionStateData['configuration']
-	): string {
-		const configuredLabel = configuration.workflow.stages[stageId]?.displayName?.trim();
-		if (configuredLabel) {
-			return configuredLabel.toUpperCase();
-		}
-		return stageId.toUpperCase();
-	}
-
-	private resolveStageArtifactPath(
-		stageId: MissionStageId,
-		productFiles: Partial<Record<MissionArtifactKey, string>>
-	): string | undefined {
-		for (const artifactKey of getMissionStageDefinition(stageId).artifacts) {
-			const filePath = productFiles[artifactKey];
-			if (filePath) {
-				return filePath;
-			}
-		}
-		return undefined;
-	}
-
-	private toTowerStageRailState(status: MissionStageStatus['status']): MissionTowerStageRailItem['state'] {
-		return status;
-	}
-
-	private progressTone(status: MissionStageStatus['status'] | MissionTaskState['status']): string {
-		if (status === 'completed') {
-			return '#3fb950';
-		}
-		if (status === 'active' || status === 'queued' || status === 'running') {
-			return '#58a6ff';
-		}
-		if (status === 'ready') {
-			return '#79c0ff';
-		}
-		if (status === 'failed') {
-			return '#f85149';
-		}
-		if (status === 'cancelled') {
-			return '#ffa657';
-		}
-		return '#8b949e';
-	}
-
-	private sessionTone(state: string, fallbackColor: string): string {
-		if (state === 'starting') {
-			return '#79c0ff';
-		}
-		if (state === 'running') {
-			return '#58a6ff';
-		}
-		if (state === 'terminated') {
-			return '#9be9a8';
-		}
-		if (state === 'failed') {
-			return '#f85149';
-		}
-		if (state === 'cancelled') {
-			return '#d29922';
-		}
-		if (state === 'completed') {
-			return '#3fb950';
-		}
-		return fallbackColor;
-	}
-
-	private toStatusLabel(state: string): string {
-		const normalized = state.trim();
-		return normalized.length > 0 ? normalized.replace(/[_-]+/g, ' ') : 'unknown';
-	}
-
-	private resolveCurrentStageFromWorkflow(document: MissionStateData): MissionStageId {
-		return ((
-			(document.runtime.activeStageId as MissionStageId | undefined) ??
-			(document.runtime.stages.find((stage) => stage.lifecycle !== 'completed')?.stageId as MissionStageId | undefined) ??
-			(document.configuration.workflow.stageOrder[
-				document.configuration.workflow.stageOrder.length - 1
-			] as MissionStageId | undefined) ??
-			'prd'
-		) as MissionStageId);
 	}
 
 	private createWorkflowEvent(
@@ -1401,13 +935,13 @@ export class Mission extends Entity<MissionData, string> {
 		} as MissionWorkflowEvent;
 	}
 
-	private async buildAvailableActions(
+	private async buildAvailableCommands(
 		configuration: MissionStateData['configuration'],
 		runtime: MissionStateData['runtime'],
 		sessions: AgentSessionRecord[]
-	): Promise<OperatorActionDescriptor[]> {
+	): Promise<MissionOwnedCommandDescriptor[]> {
 		const runtimeTasksForActions = await this.hydrateRuntimeTasksForActions(runtime.tasks);
-		return buildMissionAvailableActions({
+		return buildMissionAvailableCommands({
 			missionId: this.descriptor.missionId,
 			configuration,
 			runtime: {
@@ -1443,38 +977,6 @@ export class Mission extends Entity<MissionData, string> {
 			};
 		});
 	}
-
-	private buildRecommendedAction(
-		stage: MissionStageId,
-		activeTasks: MissionTaskState[],
-		readyTasks: MissionTaskState[]
-	): string {
-		if (isMissionDelivered(this.lastKnownStatus?.stages ?? [])) {
-			return 'Mission delivered.';
-		}
-
-		if (activeTasks.length > 0) {
-			const leadTask = activeTasks[0];
-			return activeTasks.length === 1
-				? `Continue ${leadTask?.relativePath}; Mission tracks workflow state in mission.json.`
-				: `Continue ${leadTask?.relativePath} and ${String(activeTasks.length - 1)} other active task(s); Mission tracks workflow state in mission.json.`;
-		}
-
-		if (readyTasks.length > 0) {
-			const leadTask = readyTasks[0];
-			return readyTasks.length === 1
-				? `Activate the ready task through Mission controls, then continue ${leadTask?.relativePath}.`
-				: `Activate one or more ready tasks through Mission controls, starting with ${leadTask?.relativePath}.`;
-		}
-
-		if (stage === 'delivery') {
-			return 'Complete DELIVERY.md and deliver the mission.';
-		}
-
-		return `Review tasks/${MISSION_STAGE_FOLDERS[stage]} and add the next task file.`;
-	}
-
-
 
 	private async requireWorkflowTask(
 		taskId: string
@@ -1950,7 +1452,7 @@ export class Mission extends Entity<MissionData, string> {
 
 	private invalidateCachedMissionSnapshots(): void {
 		this.lastKnownStatus = undefined;
-		this.lastKnownActionSnapshot = undefined;
+		this.lastKnownCommandSnapshot = undefined;
 	}
 
 	private async queueTask(taskId: string, options: { runnerId?: string; prompt?: string; workingDirectory?: string; terminalSessionName?: string } = {}): Promise<void> {
@@ -2037,7 +1539,7 @@ export class Mission extends Entity<MissionData, string> {
 		missionDir: string
 	): Promise<MissionStateData | undefined> {
 		const rawData = await adapter.readMissionStateDataFile(missionDir);
-		return rawData === undefined ? undefined : missionStateDataSchema.parse(rawData);
+		return rawData === undefined ? undefined : MissionStateDataSchema.parse(rawData);
 	}
 
 	public static async writeStateData(
@@ -2045,7 +1547,7 @@ export class Mission extends Entity<MissionData, string> {
 		missionDir: string,
 		data: MissionStateData
 	): Promise<void> {
-		await adapter.writeMissionStateDataFile(missionDir, missionStateDataSchema.parse(data));
+		await adapter.writeMissionStateDataFile(missionDir, MissionStateDataSchema.parse(data));
 	}
 
 	public static async appendEventRecord(
@@ -2063,7 +1565,7 @@ export class Mission extends Entity<MissionData, string> {
 		adapter: FilesystemAdapter,
 		missionDir: string
 	): Promise<MissionWorkflowEventRecord[]> {
-		return missionEventRecordSchema.array()
+		return MissionWorkflowEventRecordSchema.array()
 			.parse(await adapter.readMissionEventLogFile(missionDir))
 			.map(Mission.parseEventRecord);
 	}
@@ -2082,13 +1584,6 @@ export class Mission extends Entity<MissionData, string> {
 		});
 		await Mission.writeStateData(input.adapter, input.missionDir, data);
 		return data;
-	}
-
-	public static fromStatus(status: OperatorStatus): Mission {
-		const data = Mission.createDataFromStatus(status);
-		const missionDir = data.missionRootDir;
-		const adapter = new FilesystemAdapter(missionDir);
-		return new Mission(adapter, missionDir, Mission.createDescriptorFromData(data), createDefaultMissionWorkflowBindings(), data);
 	}
 
 	public get id(): string {
@@ -2123,7 +1618,7 @@ export class Mission extends Entity<MissionData, string> {
 		return this.data.missionRootDir;
 	}
 
-	public get lifecycle(): MissionData['lifecycle'] {
+	public get lifecycle(): MissionDataType['lifecycle'] {
 		return this.data.lifecycle;
 	}
 
@@ -2131,19 +1626,19 @@ export class Mission extends Entity<MissionData, string> {
 		return this.data.updatedAt;
 	}
 
-	public get currentStageId(): MissionData['currentStageId'] {
+	public get currentStageId(): MissionDataType['currentStageId'] {
 		return this.data.currentStageId;
 	}
 
-	public get artifacts(): MissionData['artifacts'] {
+	public get artifacts(): MissionDataType['artifacts'] {
 		return this.data.artifacts.map((artifact) => structuredClone(artifact));
 	}
 
-	public get stages(): MissionData['stages'] {
+	public get stages(): MissionDataType['stages'] {
 		return this.data.stages.map((stage) => structuredClone(stage));
 	}
 
-	public get agentSessions(): MissionData['agentSessions'] {
+	public get agentSessions(): MissionDataType['agentSessions'] {
 		return this.data.agentSessions.map((session) => structuredClone(session));
 	}
 
@@ -2151,17 +1646,17 @@ export class Mission extends Entity<MissionData, string> {
 		return this.data.recommendedAction;
 	}
 
-	public findStage(stageId: MissionStageId): MissionData['stages'][number] | undefined {
+	public findStage(stageId: MissionStageId): MissionDataType['stages'][number] | undefined {
 		const stage = this.data.stages.find((candidate) => candidate.stageId === stageId);
 		return stage ? structuredClone(stage) : undefined;
 	}
 
-	public findArtifact(artifactId: string): MissionData['artifacts'][number] | undefined {
+	public findArtifact(artifactId: string): MissionDataType['artifacts'][number] | undefined {
 		const artifact = this.data.artifacts.find((candidate) => candidate.artifactId === artifactId);
 		return artifact ? structuredClone(artifact) : undefined;
 	}
 
-	public findTask(taskId: string): MissionData['stages'][number]['tasks'][number] | undefined {
+	public findTask(taskId: string): MissionDataType['stages'][number]['tasks'][number] | undefined {
 		for (const stage of this.data.stages) {
 			const task = stage.tasks.find((candidate) => candidate.taskId === taskId);
 			if (task) {
@@ -2179,7 +1674,7 @@ export class Mission extends Entity<MissionData, string> {
 		return this.currentStageId === stageId;
 	}
 
-	private static createDataFromStatus(status: OperatorStatus): MissionData {
+	private static createDataFromStatus(status: OperatorStatus): MissionDataType {
 		const missionId = status.missionId?.trim();
 		if (!missionId) {
 			throw new Error('Mission entity construction requires an OperatorStatus with missionId.');
@@ -2188,7 +1683,7 @@ export class Mission extends Entity<MissionData, string> {
 		const missionRootDir = requireTrimmedString(status.missionRootDir, 'Mission status missionRootDir');
 		const productFiles = status.productFiles ?? {};
 		const currentStageId = requireTrimmedString(status.workflow?.currentStageId, 'Mission status workflow.currentStageId') as MissionStageId;
-		const artifacts: Artifact[] = [];
+		const artifacts: ArtifactDataType[] = [];
 
 		for (const artifactKey of MISSION_ARTIFACT_KEYS) {
 			const filePath = productFiles[artifactKey];
@@ -2203,7 +1698,7 @@ export class Mission extends Entity<MissionData, string> {
 			}));
 		}
 
-		const stages: Stage[] = requireArray(status.stages, 'Mission status stages').map((stage) => {
+		const stages: StageDataType[] = requireArray(status.stages, 'Mission status stages').map((stage) => {
 			const stageArtifacts = getMissionStageDefinition(stage.stage).artifacts
 				.map((artifactKey) => productFiles[artifactKey]
 					? createMissionArtifact({
@@ -2213,8 +1708,8 @@ export class Mission extends Entity<MissionData, string> {
 						...(missionRootDir ? { missionRootDir } : {})
 					})
 					: undefined)
-				.filter((artifact): artifact is Artifact => artifact !== undefined);
-			const tasks: TaskData[] = stage.tasks.map((task) => {
+				.filter((artifact): artifact is ArtifactDataType => artifact !== undefined);
+			const tasks: TaskDataType[] = stage.tasks.map((task) => {
 				const entity = toTask(task);
 				if (task.filePath) {
 					artifacts.push(createTaskArtifact({
@@ -2236,7 +1731,7 @@ export class Mission extends Entity<MissionData, string> {
 			});
 		});
 
-		return missionDataSchema.parse({
+		return MissionDataSchema.parse({
 			missionId,
 			title: requireTrimmedString(status.title, 'Mission status title'),
 			...(status.issueId !== undefined ? { issueId: status.issueId } : {}),
@@ -2255,8 +1750,8 @@ export class Mission extends Entity<MissionData, string> {
 		});
 	}
 
-	private static cloneData(data: MissionData): MissionData {
-		return missionDataSchema.parse({
+	private static cloneData(data: MissionDataType): MissionDataType {
+		return MissionDataSchema.parse({
 			...data,
 			artifacts: data.artifacts.map((artifact) => structuredClone(artifact)),
 			stages: data.stages.map((stage) => structuredClone(stage)),
@@ -2268,8 +1763,8 @@ export class Mission extends Entity<MissionData, string> {
 		adapter: FilesystemAdapter,
 		missionDir: string,
 		descriptor: MissionDossierDescriptor
-	): MissionData {
-		return missionDataSchema.parse({
+	): MissionDataType {
+		return MissionDataSchema.parse({
 			missionId: descriptor.missionId,
 			title: descriptor.brief.title,
 			...(descriptor.brief.issueId !== undefined ? { issueId: descriptor.brief.issueId } : {}),
@@ -2283,23 +1778,8 @@ export class Mission extends Entity<MissionData, string> {
 		});
 	}
 
-	private static createDescriptorFromData(data: MissionData): MissionDossierDescriptor {
-		return {
-			missionId: data.missionId,
-			missionDir: data.missionRootDir,
-			brief: {
-				...(data.issueId !== undefined ? { issueId: data.issueId } : {}),
-				title: data.title,
-				type: data.type,
-				body: ''
-			},
-			branchRef: data.branchRef,
-			createdAt: requireTrimmedString(data.updatedAt, 'Mission data updatedAt')
-		};
-	}
-
 	private static parseEventRecord(value: unknown): MissionWorkflowEventRecord {
-		const parsed = missionEventRecordSchema.parse(value);
+		const parsed = MissionWorkflowEventRecordSchema.parse(value);
 		return {
 			eventId: parsed.eventId,
 			type: parsed.type,
@@ -2312,110 +1792,81 @@ export class Mission extends Entity<MissionData, string> {
 }
 
 
-type MissionAvailableActionsInput = {
+type MissionAvailableCommandsInput = {
 	missionId: string;
 	configuration: MissionStateData['configuration'];
 	runtime: MissionStateData['runtime'];
 	sessions: AgentSessionRecord[];
 };
 
-const MISSION_ACTION_IDS = {
-	pause: 'mission.pause',
-	resume: 'mission.resume',
-	panic: 'mission.panic',
-	clearPanic: 'mission.clear-panic',
-	restartQueue: 'mission.restart-queue',
-	deliver: 'mission.deliver'
-} as const;
 
-function buildMissionAvailableActions(input: MissionAvailableActionsInput): OperatorActionDescriptor[] {
-	const currentStageId = resolveCurrentStageId(input);
+function buildMissionAvailableCommands(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor[] {
 	const eligibleStageId = resolveEligibleStageId(input);
-	const actions: OperatorActionDescriptor[] = [
-		buildPauseMissionAction(input, currentStageId),
-		buildResumeMissionAction(input, currentStageId),
-		buildPanicStopAction(input, currentStageId),
-		buildClearPanicAction(input, currentStageId),
-		buildRestartLaunchQueueAction(input, currentStageId),
-		buildDeliverMissionAction(input, currentStageId)
+	const commands: MissionOwnedCommandDescriptor[] = [
+		buildPauseMissionCommand(input),
+		buildResumeMissionCommand(input),
+		buildPanicStopCommand(input),
+		buildClearPanicCommand(input),
+		buildRestartLaunchQueueCommand(input),
+		buildDeliverMissionCommand(input)
 	];
 
 	if (eligibleStageId) {
-		const generationAction = buildGenerationAction(input, eligibleStageId);
-		if (generationAction) {
-			actions.push(generationAction);
+		const generationCommand = buildGenerationCommand(input, eligibleStageId);
+		if (generationCommand) {
+			commands.push(generationCommand);
 		}
 	}
 
 	for (const task of getOrderedTasks(input)) {
-		actions.push(buildTaskStartAction(input, task));
-		actions.push(buildTaskDoneAction(input, task));
-		actions.push(buildTaskReopenAction(input, task));
-		actions.push(buildTaskReworkAction(input, task));
-		actions.push(...buildTaskLaunchPolicyActions(input, task));
+		commands.push(buildTaskStartCommand(input, task));
+		commands.push(buildTaskDoneCommand(input, task));
+		commands.push(buildTaskReopenCommand(input, task));
+		commands.push(buildTaskReworkCommand(input, task));
+		commands.push(...buildTaskLaunchPolicyCommands(input, task));
 	}
 
 	for (const session of getOrderedSessions(input)) {
-		const sessionTask = input.runtime.tasks.find((task) => task.taskId === session.taskId);
-		const stageId = sessionTask?.stageId as MissionStageId | undefined;
-		actions.push(buildSessionCancelAction(session, stageId));
-		actions.push(buildSessionTerminateAction(session, stageId));
+		commands.push(buildSessionCancelCommand(session));
+		commands.push(buildSessionTerminateCommand(session));
 	}
 
-	return actions;
+	return commands;
 }
 
 function buildAvailability(
 	enabled: boolean,
 	reason?: string
-): Pick<OperatorActionDescriptor, 'enabled' | 'disabled' | 'disabledReason' | 'reason'> {
+): { disabled: boolean; disabledReason?: string; description?: string } {
 	if (enabled) {
-		return { enabled: true, disabled: false, disabledReason: '' };
+		return { disabled: false };
 	}
-	const disabledReason = reason ?? 'Action is unavailable.';
-	return { enabled: false, disabled: true, disabledReason, reason: disabledReason };
+	const disabledReason = reason ?? 'Command is unavailable.';
+	return { disabled: true, disabledReason, description: disabledReason };
 }
 
-function buildPauseMissionAction(
-	input: MissionAvailableActionsInput,
-	currentStageId: MissionStageId | undefined
-): OperatorActionDescriptor {
+function buildPauseMissionCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
 	const enabled = input.runtime.lifecycle === 'running';
-	return {
-		id: MISSION_ACTION_IDS.pause,
+	return ownedMissionCommand(missionCommand({
+		commandId: MissionCommandIds.pause,
 		label: 'Pause Mission',
-		action: '/mission pause',
-		scope: 'mission',
 		...buildAvailability(enabled, describePauseUnavailable(input)),
-		ui: { toolbarLabel: 'PAUSE', requiresConfirmation: false },
-		flow: { targetLabel: 'MISSION', actionLabel: 'PAUSE', steps: [] },
-		presentationTargets: buildMissionPresentationTargets(currentStageId)
-	};
+		requiresConfirmation: false
+	}));
 }
 
-function buildResumeMissionAction(
-	input: MissionAvailableActionsInput,
-	currentStageId: MissionStageId | undefined
-): OperatorActionDescriptor {
+function buildResumeMissionCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
 	const errors = getValidationErrors(input, { type: 'mission.resumed' });
 	const enabled = input.runtime.lifecycle === 'paused' && !input.runtime.panic.active && errors.length === 0;
-	return {
-		id: MISSION_ACTION_IDS.resume,
+	return ownedMissionCommand(missionCommand({
+		commandId: MissionCommandIds.resume,
 		label: 'Resume Mission',
-		action: '/mission resume',
-		scope: 'mission',
 		...buildAvailability(enabled, describeResumeUnavailable(input, errors)),
-		ui: { toolbarLabel: 'RESUME', requiresConfirmation: false },
-		flow: { targetLabel: 'MISSION', actionLabel: 'RESUME', steps: [] },
-		presentationTargets: buildMissionPresentationTargets(currentStageId),
-		ordering: { group: 'recovery' }
-	};
+		requiresConfirmation: false
+	}));
 }
 
-function buildPanicStopAction(
-	input: MissionAvailableActionsInput,
-	currentStageId: MissionStageId | undefined
-): OperatorActionDescriptor {
+function buildPanicStopCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
 	const errors = getValidationErrors(input, { type: 'mission.panic.requested' });
 	const enabled =
 		input.runtime.lifecycle !== 'draft'
@@ -2423,94 +1874,56 @@ function buildPanicStopAction(
 		&& input.runtime.lifecycle !== 'delivered'
 		&& !input.runtime.panic.active
 		&& errors.length === 0;
-	return {
-		id: MISSION_ACTION_IDS.panic,
+	return ownedMissionCommand(missionCommand({
+		commandId: MissionCommandIds.panic,
 		label: 'Panic Stop',
-		action: '/mission panic',
-		scope: 'mission',
 		...buildAvailability(enabled, describePanicUnavailable(input, errors)),
-		ui: {
-			toolbarLabel: 'PANIC',
-			requiresConfirmation: true,
-			confirmationPrompt: 'Panic stop the mission and interrupt active work?'
-		},
-		flow: { targetLabel: 'MISSION', actionLabel: 'PANIC STOP', steps: [] },
-		presentationTargets: buildMissionPresentationTargets(currentStageId)
-	};
+		requiresConfirmation: true,
+		confirmationPrompt: 'Stop all active mission work immediately?',
+		variant: 'destructive'
+	}));
 }
 
-function buildClearPanicAction(
-	input: MissionAvailableActionsInput,
-	currentStageId: MissionStageId | undefined
-): OperatorActionDescriptor {
+function buildClearPanicCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
 	const errors = getValidationErrors(input, { type: 'mission.panic.cleared' });
 	const enabled = input.runtime.panic.active && input.runtime.lifecycle === 'panicked' && errors.length === 0;
-	return {
-		id: MISSION_ACTION_IDS.clearPanic,
+	return ownedMissionCommand(missionCommand({
+		commandId: MissionCommandIds.clearPanic,
 		label: 'Clear Panic',
-		action: '/mission clear-panic',
-		scope: 'mission',
 		...buildAvailability(enabled, describeClearPanicUnavailable(input, errors)),
-		ui: {
-			toolbarLabel: 'CLEAR PANIC',
-			requiresConfirmation: true,
-			confirmationPrompt: 'Clear the mission panic state?'
-		},
-		flow: { targetLabel: 'MISSION', actionLabel: 'CLEAR PANIC', steps: [] },
-		presentationTargets: buildMissionPresentationTargets(currentStageId),
-		ordering: { group: 'recovery' }
-	};
+		requiresConfirmation: true,
+		confirmationPrompt: 'Clear the mission panic state?'
+	}));
 }
 
-function buildRestartLaunchQueueAction(
-	input: MissionAvailableActionsInput,
-	currentStageId: MissionStageId | undefined
-): OperatorActionDescriptor {
+function buildRestartLaunchQueueCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
 	const errors = getValidationErrors(input, { type: 'mission.launch-queue.restarted' });
 	const enabled = errors.length === 0;
-	return {
-		id: MISSION_ACTION_IDS.restartQueue,
+	return ownedMissionCommand(missionCommand({
+		commandId: MissionCommandIds.restartQueue,
 		label: 'Restart Launch Queue',
-		action: '/mission restart-queue',
-		scope: 'mission',
 		...buildAvailability(enabled, describeRestartLaunchQueueUnavailable(input, errors)),
-		ui: {
-			toolbarLabel: 'RESTART QUEUE',
-			requiresConfirmation: true,
-			confirmationPrompt: 'Clear stale launch requests and retry queued tasks now?'
-		},
-		flow: { targetLabel: 'MISSION', actionLabel: 'RESTART QUEUE', steps: [] },
-		presentationTargets: buildMissionPresentationTargets(currentStageId),
-		ordering: { group: 'recovery' }
-	};
+		requiresConfirmation: true,
+		confirmationPrompt: 'Clear stale launch requests and retry queued tasks now?'
+	}));
 }
 
-function buildDeliverMissionAction(
-	input: MissionAvailableActionsInput,
-	currentStageId: MissionStageId | undefined
-): OperatorActionDescriptor {
+function buildDeliverMissionCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
 	const errors = getValidationErrors(input, { type: 'mission.delivered' });
 	const delivered = isRuntimeDelivered(input.runtime);
-	return {
-		id: MISSION_ACTION_IDS.deliver,
+	return ownedMissionCommand(missionCommand({
+		commandId: MissionCommandIds.deliver,
 		label: 'Deliver Mission',
-		action: '/mission deliver',
-		scope: 'mission',
 		...buildAvailability(!delivered && errors.length === 0, delivered ? 'Mission already delivered.' : errors[0]),
-		ui: {
-			toolbarLabel: 'DELIVER',
-			requiresConfirmation: true,
-			confirmationPrompt: 'Deliver this mission now?'
-		},
-		flow: { targetLabel: 'MISSION', actionLabel: 'DELIVER', steps: [] },
-		presentationTargets: buildMissionPresentationTargets(currentStageId)
-	};
+		requiresConfirmation: true,
+		confirmationPrompt: 'Deliver this mission now?'
+	}));
 }
 
-function buildGenerationAction(
-	input: MissionAvailableActionsInput,
+function buildGenerationCommand(
+	input: MissionAvailableCommandsInput,
 	stageId: MissionStageId
-): OperatorActionDescriptor | undefined {
+): MissionOwnedCommandDescriptor | undefined {
 	const generationRule = input.configuration.workflow.taskGeneration.find((candidate) => candidate.stageId === stageId);
 	if (
 		!generationRule
@@ -2525,76 +1938,51 @@ function buildGenerationAction(
 		return undefined;
 	}
 	const displayName = input.configuration.workflow.stages[stageId]?.displayName ?? stageId;
-	return {
-		id: `generation.tasks.${stageId}`,
+	return ownedStageCommand(stageId, missionCommand({
+		commandId: StageCommandIds.generateTasks,
 		label: `Generate ${displayName} Tasks`,
-		action: '/generate',
-		scope: 'generation',
-		targetId: stageId,
 		...buildAvailability(true),
-		ui: { toolbarLabel: 'GENERATE TASKS', requiresConfirmation: false },
-		flow: { targetLabel: displayName.toUpperCase(), actionLabel: 'GENERATE TASKS', steps: [] },
-		presentationTargets: [{ scope: 'stage', targetId: stageId }, { scope: 'mission' }],
-		metadata: { stageId }
-	};
+		requiresConfirmation: false
+	}));
 }
 
-function buildTaskStartAction(input: MissionAvailableActionsInput, task: MissionStateData['runtime']['tasks'][number]): OperatorActionDescriptor {
+function buildTaskStartCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptor {
 	const errors = getValidationErrors(input, { type: 'task.queued', taskId: task.taskId });
 	const enabled = task.lifecycle === 'ready' && errors.length === 0;
-	return {
-		id: `task.start.${task.taskId}`,
+	return ownedTaskCommand(task.taskId, missionCommand({
+		commandId: TaskCommandIds.start,
 		label: 'Start Ready Task',
-		action: '/task start',
-		scope: 'task',
-		targetId: task.taskId,
 		...buildAvailability(enabled, describeTaskStartUnavailable(input, task, errors)),
-		ui: { toolbarLabel: 'START TASK', requiresConfirmation: false },
-		flow: { targetLabel: 'TASK', actionLabel: 'START', steps: [] },
-		presentationTargets: buildTaskPresentationTargets(task.taskId, task.stageId as MissionStageId),
-		metadata: {
-			stageId: task.stageId as MissionStageId,
-			autostart: task.runtime.autostart
-		}
-	};
+		requiresConfirmation: false
+	}));
 }
 
-function buildTaskDoneAction(input: MissionAvailableActionsInput, task: MissionStateData['runtime']['tasks'][number]): OperatorActionDescriptor {
+function buildTaskDoneCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptor {
 	const errors = getValidationErrors(input, { type: 'task.completed', taskId: task.taskId });
-	return {
-		id: `task.done.${task.taskId}`,
+	return ownedTaskCommand(task.taskId, missionCommand({
+		commandId: TaskCommandIds.complete,
 		label: 'Mark Task Done',
-		action: '/task done',
-		scope: 'task',
-		targetId: task.taskId,
 		...buildAvailability(errors.length === 0, errors[0]),
-		ui: { toolbarLabel: 'DONE', requiresConfirmation: true, confirmationPrompt: 'Mark this task done?' },
-		flow: { targetLabel: 'TASK', actionLabel: 'DONE', steps: [] },
-		presentationTargets: buildTaskPresentationTargets(task.taskId, task.stageId as MissionStageId),
-		metadata: { stageId: task.stageId as MissionStageId }
-	};
+		requiresConfirmation: true,
+		confirmationPrompt: 'Mark this task done?'
+	}));
 }
 
-function buildTaskReopenAction(input: MissionAvailableActionsInput, task: MissionStateData['runtime']['tasks'][number]): OperatorActionDescriptor {
+function buildTaskReopenCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptor {
 	const errors = getValidationErrors(input, { type: 'task.reopened', taskId: task.taskId });
-	return {
-		id: `task.reopen.${task.taskId}`,
+	return ownedTaskCommand(task.taskId, missionCommand({
+		commandId: TaskCommandIds.reopen,
 		label: 'Reopen Task',
-		action: '/task reopen',
-		scope: 'task',
-		targetId: task.taskId,
 		...buildAvailability(errors.length === 0, errors[0]),
-		ui: { toolbarLabel: 'REOPEN', requiresConfirmation: true, confirmationPrompt: 'Reopen this task and invalidate downstream stage progress?' },
-		flow: { targetLabel: 'TASK', actionLabel: 'REOPEN', steps: [] },
-		presentationTargets: buildTaskPresentationTargets(task.taskId, task.stageId as MissionStageId),
-		metadata: { stageId: task.stageId as MissionStageId }
-	};
+		requiresConfirmation: true,
+		confirmationPrompt: 'Reopen this task and invalidate downstream stage progress?'
+	}));
 }
 
-function buildTaskReworkAction(input: MissionAvailableActionsInput, task: MissionStateData['runtime']['tasks'][number]): OperatorActionDescriptor {
-	const verificationAction = buildVerificationDerivedTaskReworkAction(input, task);
-	if (verificationAction) {
-		return verificationAction;
+function buildTaskReworkCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptor {
+	const verificationCommand = buildVerificationDerivedTaskReworkCommand(input, task);
+	if (verificationCommand) {
+		return verificationCommand;
 	}
 
 	const errors = getValidationErrors(input, {
@@ -2605,39 +1993,26 @@ function buildTaskReworkAction(input: MissionAvailableActionsInput, task: Missio
 		summary: 'Manual corrective rework requested.',
 		artifactRefs: []
 	});
-	return {
-		id: `task.rework.${task.taskId}`,
+	return ownedTaskCommand(task.taskId, missionCommand({
+		commandId: TaskCommandIds.rework,
 		label: 'Instruct',
-		action: '/task rework',
-		scope: 'task',
-		targetId: task.taskId,
 		...buildAvailability(errors.length === 0, errors[0]),
-		ui: { toolbarLabel: 'INSTRUCT', requiresConfirmation: true, confirmationPrompt: 'Restart this task with corrective guidance?' },
-		flow: {
-			targetLabel: 'TASK',
-			actionLabel: 'INSTRUCT',
-			steps: [
-				{
-					kind: 'text',
-					id: 'task.rework.instruction',
-					label: 'Instruction',
-					title: 'Describe what the next attempt must do differently',
-					helperText: 'This guidance is recorded as rework context and appended to the next launch prompt.',
-					placeholder: 'Explain what was wrong and how the next attempt should correct it.',
-					inputMode: 'expanded',
-					format: 'markdown'
-				}
-			]
-		},
-		presentationTargets: buildTaskPresentationTargets(task.taskId, task.stageId as MissionStageId),
-		metadata: { stageId: task.stageId as MissionStageId }
-	};
+		requiresConfirmation: true,
+		confirmationPrompt: 'Restart this task with corrective guidance?',
+		input: {
+			kind: 'text',
+			label: 'Instruction',
+			placeholder: 'Explain what was wrong and how the next attempt should correct it.',
+			required: true,
+			multiline: true
+		}
+	}));
 }
 
-function buildVerificationDerivedTaskReworkAction(
-	input: MissionAvailableActionsInput,
+function buildVerificationDerivedTaskReworkCommand(
+	input: MissionAvailableCommandsInput,
 	task: MissionStateData['runtime']['tasks'][number]
-): OperatorActionDescriptor | undefined {
+): MissionOwnedCommandDescriptor | undefined {
 	const targetTask = resolveVerificationReworkTargetTask(input.runtime.tasks, task);
 	if (!targetTask) {
 		return undefined;
@@ -2653,27 +2028,17 @@ function buildVerificationDerivedTaskReworkAction(
 		artifactRefs: []
 	});
 
-	return {
-		id: `task.rework.from-verification.${task.taskId}`,
+	return ownedTaskCommand(task.taskId, missionCommand({
+		commandId: TaskCommandIds.reworkFromVerification,
 		label: 'Send Back',
-		action: '/task rework',
-		scope: 'task',
-		targetId: targetTask.taskId,
 		...buildAvailability(errors.length === 0, errors[0]),
-		ui: {
-			toolbarLabel: 'SEND BACK',
-			requiresConfirmation: true,
-			confirmationPrompt: `Send '${targetTask.title}' back for fixes using the evidence captured by verification task '${task.title}'?`
-		},
-		flow: { targetLabel: 'TASK', actionLabel: 'SEND BACK', steps: [] },
-		presentationTargets: [{ scope: 'task', targetId: task.taskId }, { scope: 'stage', targetId: task.stageId as MissionStageId }],
-		metadata: { stageId: task.stageId as MissionStageId },
-		ordering: { group: 'recovery' }
-	};
+		requiresConfirmation: true,
+		confirmationPrompt: `Send '${targetTask.title}' back for fixes using the evidence captured by verification task '${task.title}'?`
+	}));
 }
 
-function buildTaskLaunchPolicyActions(input: MissionAvailableActionsInput, task: MissionStateData['runtime']['tasks'][number]): OperatorActionDescriptor[] {
-	const actions: OperatorActionDescriptor[] = [];
+function buildTaskLaunchPolicyCommands(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptor[] {
+	const commands: MissionOwnedCommandDescriptor[] = [];
 	const changeErrors = (autostart: boolean) => getValidationErrors(input, {
 		type: 'task.launch-policy.changed',
 		taskId: task.taskId,
@@ -2682,65 +2047,46 @@ function buildTaskLaunchPolicyActions(input: MissionAvailableActionsInput, task:
 
 	if (task.runtime.autostart) {
 		const errors = changeErrors(false);
-		actions.push({
-			id: `task.autostart.disable.${task.taskId}`,
+		commands.push(ownedTaskCommand(task.taskId, missionCommand({
+			commandId: TaskCommandIds.disableAutostart,
 			label: 'Disable Autostart',
-			action: '/task autostart off',
-			scope: 'task',
-			targetId: task.taskId,
 			...buildAvailability(errors.length === 0, errors[0]),
-			ui: { toolbarLabel: 'AUTOSTART OFF', requiresConfirmation: false },
-			flow: { targetLabel: 'TASK', actionLabel: 'DISABLE AUTOSTART', steps: [] },
-			presentationTargets: buildTaskPresentationTargets(task.taskId, task.stageId as MissionStageId),
-			metadata: { stageId: task.stageId as MissionStageId, autostart: false }
-		});
+			requiresConfirmation: false
+		})));
 	} else {
 		const errors = changeErrors(true);
-		actions.push({
-			id: `task.autostart.enable.${task.taskId}`,
+		commands.push(ownedTaskCommand(task.taskId, missionCommand({
+			commandId: TaskCommandIds.enableAutostart,
 			label: 'Enable Autostart',
-			action: '/task autostart on',
-			scope: 'task',
-			targetId: task.taskId,
 			...buildAvailability(errors.length === 0, errors[0]),
-			ui: { toolbarLabel: 'AUTOSTART ON', requiresConfirmation: false },
-			flow: { targetLabel: 'TASK', actionLabel: 'ENABLE AUTOSTART', steps: [] },
-			presentationTargets: buildTaskPresentationTargets(task.taskId, task.stageId as MissionStageId),
-			metadata: { stageId: task.stageId as MissionStageId, autostart: true }
-		});
+			requiresConfirmation: false
+		})));
 	}
 
-	return actions;
+	return commands;
 }
 
-function buildSessionCancelAction(session: AgentSessionRecord, stageId: MissionStageId | undefined): OperatorActionDescriptor {
+function buildSessionCancelCommand(session: AgentSessionRecord): MissionOwnedCommandDescriptor {
 	const enabled = session.lifecycleState === 'starting' || session.lifecycleState === 'running' || session.lifecycleState === 'awaiting-input';
-	return {
-		id: `session.cancel.${session.sessionId}`,
+	return ownedAgentSessionCommand(session.sessionId, missionCommand({
+		commandId: AgentSessionCommandIds.cancel,
 		label: 'Stop Running Agent',
-		action: '/session cancel',
-		scope: 'session',
-		targetId: session.sessionId,
 		...buildAvailability(enabled, 'Session is not active.'),
-		ui: { toolbarLabel: 'STOP AGENT', requiresConfirmation: true, confirmationPrompt: 'Stop the running agent session?' },
-		flow: { targetLabel: 'SESSION', actionLabel: 'CANCEL', steps: [] },
-		presentationTargets: buildSessionPresentationTargets(session.sessionId, stageId)
-	};
+		requiresConfirmation: true,
+		confirmationPrompt: 'Stop the running agent session?'
+	}));
 }
 
-function buildSessionTerminateAction(session: AgentSessionRecord, stageId: MissionStageId | undefined): OperatorActionDescriptor {
+function buildSessionTerminateCommand(session: AgentSessionRecord): MissionOwnedCommandDescriptor {
 	const enabled = session.lifecycleState === 'starting' || session.lifecycleState === 'running' || session.lifecycleState === 'awaiting-input';
-	return {
-		id: `session.terminate.${session.sessionId}`,
+	return ownedAgentSessionCommand(session.sessionId, missionCommand({
+		commandId: AgentSessionCommandIds.terminate,
 		label: 'Force Stop Agent',
-		action: '/session terminate',
-		scope: 'session',
-		targetId: session.sessionId,
 		...buildAvailability(enabled, 'Session is not active.'),
-		ui: { toolbarLabel: 'FORCE STOP', requiresConfirmation: true, confirmationPrompt: 'Force stop this agent session?' },
-		flow: { targetLabel: 'SESSION', actionLabel: 'TERMINATE', steps: [] },
-		presentationTargets: buildSessionPresentationTargets(session.sessionId, stageId)
-	};
+		requiresConfirmation: true,
+		confirmationPrompt: 'Force stop this agent session?',
+		variant: 'destructive'
+	}));
 }
 
 function cloneMissionAgentConsoleState(
@@ -2773,14 +2119,6 @@ function createEmptyMissionAgentConsoleState(
 	};
 }
 
-function buildMissionPresentationTargets(currentStageId: MissionStageId | undefined) {
-	return currentStageId ? [{ scope: 'mission' as const }, { scope: 'stage' as const, targetId: currentStageId }] : [{ scope: 'mission' as const }];
-}
-
-function buildTaskPresentationTargets(taskId: string, stageId: MissionStageId) {
-	return [{ scope: 'task' as const, targetId: taskId }, { scope: 'stage' as const, targetId: stageId }];
-}
-
 function resolveVerificationReworkTargetTask(
 	tasks: Array<{ taskId: string; stageId: string; title: string; taskKind?: 'implementation' | 'verification' | undefined; pairedTaskId?: string | undefined }>,
 	task: { taskId: string; stageId: string; title: string; taskKind?: 'implementation' | 'verification' | undefined; pairedTaskId?: string | undefined }
@@ -2792,11 +2130,7 @@ function resolveVerificationReworkTargetTask(
 	return tasks.find((candidate) => candidate.taskId === task.pairedTaskId && candidate.taskKind === 'implementation');
 }
 
-function buildSessionPresentationTargets(sessionId: string, stageId: MissionStageId | undefined) {
-	return [{ scope: 'session' as const, targetId: sessionId }, ...(stageId ? [{ scope: 'stage' as const, targetId: stageId }] : [])];
-}
-
-function describePauseUnavailable(input: MissionAvailableActionsInput): string {
+function describePauseUnavailable(input: MissionAvailableCommandsInput): string {
 	switch (input.runtime.lifecycle) {
 		case 'paused': return 'Mission is already paused.';
 		case 'panicked': return 'Mission is panicked.';
@@ -2824,7 +2158,7 @@ function promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<
 	});
 }
 
-function describeResumeUnavailable(input: MissionAvailableActionsInput, errors: string[]): string {
+function describeResumeUnavailable(input: MissionAvailableCommandsInput, errors: string[]): string {
 	if (input.runtime.panic.active) {
 		return 'Clear panic before resuming the mission.';
 	}
@@ -2834,7 +2168,7 @@ function describeResumeUnavailable(input: MissionAvailableActionsInput, errors: 
 	return errors[0] ?? 'Mission cannot be resumed.';
 }
 
-function describePanicUnavailable(input: MissionAvailableActionsInput, errors: string[]): string {
+function describePanicUnavailable(input: MissionAvailableCommandsInput, errors: string[]): string {
 	if (input.runtime.panic.active) {
 		return 'Mission is already in panic state.';
 	}
@@ -2850,14 +2184,14 @@ function describePanicUnavailable(input: MissionAvailableActionsInput, errors: s
 	return errors[0] ?? 'Mission cannot enter panic state.';
 }
 
-function describeClearPanicUnavailable(input: MissionAvailableActionsInput, errors: string[]): string {
+function describeClearPanicUnavailable(input: MissionAvailableCommandsInput, errors: string[]): string {
 	if (!input.runtime.panic.active) {
 		return 'Mission is not panicked.';
 	}
 	return errors[0] ?? 'Panic cannot be cleared right now.';
 }
 
-function describeRestartLaunchQueueUnavailable(input: MissionAvailableActionsInput, errors: string[]): string {
+function describeRestartLaunchQueueUnavailable(input: MissionAvailableCommandsInput, errors: string[]): string {
 	if (input.runtime.panic.active || input.runtime.lifecycle === 'panicked') {
 		return 'Clear panic before restarting the launch queue.';
 	}
@@ -2873,7 +2207,7 @@ function describeRestartLaunchQueueUnavailable(input: MissionAvailableActionsInp
 	return errors[0] ?? 'Launch queue cannot be restarted right now.';
 }
 
-function describeTaskStartUnavailable(input: MissionAvailableActionsInput, task: MissionStateData['runtime']['tasks'][number], errors: string[]): string {
+function describeTaskStartUnavailable(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number], errors: string[]): string {
 	if (input.runtime.lifecycle === 'panicked' || input.runtime.panic.active) {
 		return 'Clear panic before starting new work.';
 	}
@@ -2901,7 +2235,7 @@ function isActiveAgentSession(lifecycleState: MissionAgentLifecycleState): boole
 }
 
 function getValidationErrors(
-	input: MissionAvailableActionsInput,
+	input: MissionAvailableCommandsInput,
 	event:
 		| { type: 'mission.resumed' }
 		| { type: 'mission.panic.requested' }
@@ -2916,29 +2250,28 @@ function getValidationErrors(
 ): string[] {
 	return getMissionWorkflowEventValidationErrors(
 		input.runtime,
-		{ eventId: `${input.missionId}:action`, occurredAt: input.runtime.updatedAt, source: 'human', ...event } as MissionWorkflowEvent,
+		{ eventId: `${input.missionId}:command`, occurredAt: input.runtime.updatedAt, source: 'human', ...event } as MissionWorkflowEvent,
 		input.configuration
 	);
 }
 
-function requireTextActionStep(
-	steps: OperatorActionExecutionStep[],
-	stepId: string
-): Extract<OperatorActionExecutionStep, { kind: 'text' }> {
-	const step = steps.find((candidate): candidate is Extract<OperatorActionExecutionStep, { kind: 'text' }> =>
-		candidate.kind === 'text' && candidate.stepId === stepId
-	);
-	if (!step) {
-		throw new Error(`Mission action requires text step '${stepId}'.`);
-	}
-	if (!step.value.trim()) {
-		throw new Error(`Mission action requires a non-empty text value for step '${stepId}'.`);
-	}
-	return step;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getCommandStringInput(input: unknown, key: string): string | undefined {
+	if (!isRecord(input) || typeof input[key] !== 'string') {
+		return undefined;
+	}
+	const value = input[key].trim();
+	return value.length > 0 ? value : undefined;
+}
+
+function requireCommandTextInput(input: unknown, commandId: string): string {
+	if (typeof input !== 'string' || !input.trim()) {
+		throw new Error(`Mission command '${commandId}' requires non-empty text input.`);
+	}
+	return input.trim();
 }
 
 function requireTrimmedString(value: string | undefined, fieldName: string): string {
@@ -2957,10 +2290,10 @@ function requireArray<T>(value: T[] | undefined, fieldName: string): T[] {
 }
 
 function missionEntityTypeSchemaFromStatus(value: MissionType | undefined): MissionType {
-	return missionEntityTypeSchema.parse(value);
+	return MissionEntityTypeSchema.parse(value);
 }
 
-function getOrderedTasks(input: MissionAvailableActionsInput) {
+function getOrderedTasks(input: MissionAvailableCommandsInput) {
 	return [...input.runtime.tasks].sort((left, right) => {
 		const leftStageIndex = input.configuration.workflow.stageOrder.indexOf(left.stageId);
 		const rightStageIndex = input.configuration.workflow.stageOrder.indexOf(right.stageId);
@@ -2971,11 +2304,11 @@ function getOrderedTasks(input: MissionAvailableActionsInput) {
 	});
 }
 
-function getOrderedSessions(input: MissionAvailableActionsInput) {
+function getOrderedSessions(input: MissionAvailableCommandsInput) {
 	return [...input.sessions].sort((left, right) => left.sessionId.localeCompare(right.sessionId));
 }
 
-function resolveEligibleStageId(input: MissionAvailableActionsInput): MissionStageId | undefined {
+function resolveEligibleStageId(input: MissionAvailableCommandsInput): MissionStageId | undefined {
 	for (const stageId of input.configuration.workflow.stageOrder) {
 		const stageTasks = input.runtime.tasks.filter((task) => task.stageId === stageId);
 		const completed = stageTasks.length > 0 && stageTasks.every((task) => task.lifecycle === 'completed');
@@ -2986,43 +2319,7 @@ function resolveEligibleStageId(input: MissionAvailableActionsInput): MissionSta
 	return input.configuration.workflow.stageOrder[input.configuration.workflow.stageOrder.length - 1] as MissionStageId | undefined;
 }
 
-function resolveCurrentStageId(input: MissionAvailableActionsInput): MissionStageId | undefined {
-	return (input.runtime.activeStageId as MissionStageId | undefined)
-		?? (input.runtime.stages.find((stage) => stage.lifecycle !== 'completed')?.stageId as MissionStageId | undefined)
-		?? (input.configuration.workflow.stageOrder[input.configuration.workflow.stageOrder.length - 1] as MissionStageId | undefined);
-}
-
 function isRuntimeDelivered(runtime: MissionStateData['runtime']): boolean {
 	return runtime.stages.some((stage) => stage.stageId === 'delivery' && stage.lifecycle === 'completed');
 }
 
-export function toMission(status: OperatorStatus): Mission {
-	return Mission.fromStatus(status);
-}
-
-function createDefaultMissionWorkflowBindings(): MissionWorkflowBindings {
-	const workflow = disableWorkflowAutostart(createDefaultWorkflowSettings());
-	return {
-		workflow,
-		resolveWorkflow: () => workflow,
-		taskRunners: new Map()
-	};
-}
-
-function disableWorkflowAutostart(workflow: ReturnType<typeof createDefaultWorkflowSettings>) {
-	return {
-		...workflow,
-		stages: Object.fromEntries(
-			Object.entries(workflow.stages).map(([stageId, stage]) => [
-				stageId,
-				{
-					...stage,
-					taskLaunchPolicy: {
-						...stage.taskLaunchPolicy,
-						defaultAutostart: false
-					}
-				}
-			])
-		)
-	};
-}

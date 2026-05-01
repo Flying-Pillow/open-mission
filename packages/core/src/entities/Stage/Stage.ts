@@ -1,54 +1,78 @@
-import type { EntityExecutionContext } from '../Entity/Entity.js';
+import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import type { MissionStageId, MissionStageStatus } from '../../types.js';
-import type { Artifact } from '../Artifact/Artifact.js';
-import type { TaskData } from '../Task/Task.js';
 import { Task } from '../Task/Task.js';
 import type { MissionTaskState } from '../../types.js';
 import {
-	missionStageSnapshotSchema,
-	stageCommandAcknowledgementSchema,
-	stageExecuteCommandPayloadSchema,
-	stageIdentityPayloadSchema
+	StageDataSchema,
+	StageCommandAcknowledgementSchema,
+	StageExecuteCommandInputSchema,
+	StageLocatorSchema,
+	StageCommandIds,
+	stageEntityName,
+	type StageDataType
 } from './StageSchema.js';
+import type { MissionSnapshotType } from '../Mission/MissionSchema.js';
 
-export type Stage = {
-	stageId: MissionStageId;
-	lifecycle: MissionStageStatus['status'];
-	isCurrentStage: boolean;
-	artifacts: Artifact[];
-	tasks: TaskData[];
-};
-
-export function createStage(input: Stage): Stage {
-	return {
-		stageId: input.stageId,
-		lifecycle: input.lifecycle,
-		isCurrentStage: input.isCurrentStage,
+export function createStage(input: StageDataType): StageDataType {
+	return StageDataSchema.parse({
+		...input,
 		artifacts: input.artifacts.map((artifact) => structuredClone(artifact)),
 		tasks: input.tasks.map((task) => structuredClone(task))
-	};
+	});
 }
 
-export class StageEntity {
+export class Stage extends Entity<StageDataType, string> {
+	public static override readonly entityName = stageEntityName;
+
+	public constructor(data: StageDataType) {
+		super(StageDataSchema.parse(data));
+	}
+
+	public get id(): string {
+		return this.data.stageId;
+	}
+
 	public static async read(payload: unknown, context: EntityExecutionContext) {
-		const input = stageIdentityPayloadSchema.parse(payload);
-		const service = await loadMissionDaemon(context);
+		const input = StageLocatorSchema.parse(payload);
+		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			return missionStageSnapshotSchema.parse(service.requireStage(await service.buildMissionSnapshot(mission, input.missionId), input.stageId));
+			return Stage.requireData(await mission.buildMissionSnapshot(), input.stageId);
 		} finally {
 			mission.dispose();
 		}
 	}
 
-	public static async executeCommand(payload: unknown, context: EntityExecutionContext) {
-		const input = stageExecuteCommandPayloadSchema.parse(payload);
-		const service = await loadMissionDaemon(context);
+	public static requireData(snapshot: MissionSnapshotType, stageId: string) {
+		const stage = snapshot.stages.find((candidate) => candidate.stageId === stageId);
+		if (!stage) {
+			throw new Error(`Stage '${stageId}' could not be resolved in Mission '${snapshot.mission.missionId}'.`);
+		}
+		return StageDataSchema.parse(stage);
+	}
+
+	public static async resolve(payload: unknown, context: EntityExecutionContext): Promise<Stage> {
+		const input = StageExecuteCommandInputSchema.parse(payload);
+		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			service.requireStage(await service.buildMissionSnapshot(mission, input.missionId), input.stageId);
-			await mission.executeOperatorAction(StageEntity.resolveActionId(input.commandId, input.stageId), []);
-			return stageCommandAcknowledgementSchema.parse({
+			return new Stage(Stage.requireData(await mission.buildMissionSnapshot(), input.stageId));
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public async executeCommand(payload: unknown, context: EntityExecutionContext) {
+		const input = StageExecuteCommandInputSchema.parse(payload);
+		const service = await loadMissionRegistry(context);
+		const mission = await service.loadRequiredMission(input, context);
+		try {
+			Stage.requireData(await mission.buildMissionSnapshot(), input.stageId);
+			if (input.commandId !== StageCommandIds.generateTasks) {
+				throw new Error(`Stage command '${input.commandId}' is not implemented in the daemon.`);
+			}
+			await mission.generateTasksForStage(input.stageId as MissionStageId);
+			return StageCommandAcknowledgementSchema.parse({
 				ok: true,
 				entity: 'Stage',
 				method: 'executeCommand',
@@ -62,17 +86,11 @@ export class StageEntity {
 		}
 	}
 
-	private static resolveActionId(commandId: string, stageId: string): string {
-		if (commandId === 'stage.generateTasks') {
-			return `generation.tasks.${stageId}`;
-		}
-		throw new Error(`Stage command '${commandId}' is not implemented in the daemon.`);
-	}
 }
 
-async function loadMissionDaemon(context: EntityExecutionContext) {
-	const { requireMissionDaemon } = await import('../../daemon/MissionDaemon.js');
-	return requireMissionDaemon(context);
+async function loadMissionRegistry(context: EntityExecutionContext) {
+	const { requireMissionRegistry } = await import('../../daemon/MissionRegistry.js');
+	return requireMissionRegistry(context);
 }
 
 export function isMissionDelivered(stages: MissionStageStatus[]): boolean {

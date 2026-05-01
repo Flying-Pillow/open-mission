@@ -6,28 +6,28 @@ import type {
 } from './protocol/entityRemote.js';
 import { Entity, type EntityExecutionContext } from '../entities/Entity/Entity.js';
 import type { EntityContractType } from '../entities/Entity/EntitySchema.js';
-import { MissionDaemon } from './MissionDaemon.js';
-import { agentSessionEntityContract } from '../entities/AgentSession/AgentSessionContract.js';
-import { artifactEntityContract } from '../entities/Artifact/ArtifactContract.js';
-import { missionEntityContract } from '../entities/Mission/MissionContract.js';
-import { repositoryContract } from '../entities/Repository/RepositoryContract.js';
-import { stageEntityContract } from '../entities/Stage/StageContract.js';
-import { taskEntityContract } from '../entities/Task/TaskContract.js';
+import { MissionRegistry } from './MissionRegistry.js';
+import { AgentSessionContract } from '../entities/AgentSession/AgentSessionContract.js';
+import { ArtifactContract } from '../entities/Artifact/ArtifactContract.js';
+import { MissionContract } from '../entities/Mission/MissionContract.js';
+import { RepositoryContract } from '../entities/Repository/RepositoryContract.js';
+import { StageContract } from '../entities/Stage/StageContract.js';
+import { TaskContract } from '../entities/Task/TaskContract.js';
 
 const entityContracts = [
-    missionEntityContract,
-    stageEntityContract,
-    taskEntityContract,
-    artifactEntityContract,
-    agentSessionEntityContract,
-    repositoryContract,
+    MissionContract,
+    StageContract,
+    TaskContract,
+    ArtifactContract,
+    AgentSessionContract,
+    RepositoryContract,
 ] as const satisfies readonly EntityContractType[];
 
 const entityContractsByName = new Map<string, EntityContractType>(
     entityContracts.map((contract) => [contract.entity, contract])
 );
 
-const missionDaemon = new MissionDaemon();
+const missionRegistry = new MissionRegistry();
 const missionOwnedEntities = new Set(['Mission', 'Stage', 'Task', 'Artifact', 'AgentSession']);
 
 export async function executeEntityQueryInDaemon(
@@ -48,15 +48,15 @@ export async function executeEntityCommandInDaemon(
     return result;
 }
 
-function withMissionService(context: EntityExecutionContext): EntityExecutionContext {
+function withMissionRegistry(context: EntityExecutionContext): EntityExecutionContext {
     return {
         ...context,
-        missionDaemon: context.missionDaemon ?? missionDaemon
+        missionRegistry: context.missionRegistry ?? missionRegistry
     };
 }
 
 function withEntityServices(entity: string, context: EntityExecutionContext): EntityExecutionContext {
-    return missionOwnedEntities.has(entity) ? withMissionService(context) : context;
+    return missionOwnedEntities.has(entity) ? withMissionRegistry(context) : context;
 }
 
 function resolveEntityContract(entity: string): EntityContractType {
@@ -72,7 +72,7 @@ async function hydrateStartedRepositoryMission(
     context: EntityExecutionContext,
     result: EntityRemoteResult
 ): Promise<void> {
-    if (!context.missionDaemon || input.entity !== 'Repository') {
+    if (!context.missionRegistry || input.entity !== 'Repository') {
         return;
     }
     if (input.method !== 'startMissionFromIssue' && input.method !== 'startMissionFromBrief') {
@@ -86,7 +86,7 @@ async function hydrateStartedRepositoryMission(
     const repositoryRootPath = typeof payload['repositoryRootPath'] === 'string' && payload['repositoryRootPath'].trim()
         ? payload['repositoryRootPath'].trim()
         : context.surfacePath;
-    await context.missionDaemon.loadRequiredMission(
+    await context.missionRegistry.loadRequiredMission(
         {
             missionId: result['id'].trim(),
             repositoryRootPath

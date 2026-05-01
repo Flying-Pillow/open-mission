@@ -1,6 +1,6 @@
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import type { MissionDocumentSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import type { MissionDocumentSnapshotType as MissionDocumentSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 
 export type ArtifactDocumentPayload = MissionDocumentSnapshot;
 
@@ -13,10 +13,9 @@ export type ArtifactSnapshot = {
     commands?: EntityCommandDescriptorType[];
 };
 
-export type ArtifactOwner = {
-    executeArtifactCommand(artifactId: string, commandId: string, input?: unknown): Promise<void>;
-    readArtifact(filePath: string, input?: ArtifactReadOptions): Promise<ArtifactDocumentPayload>;
-    writeArtifact(filePath: string, content: string): Promise<ArtifactDocumentPayload>;
+export type ArtifactDependencies = {
+    readDocument(filePath: string, input?: ArtifactReadOptions): Promise<ArtifactDocumentPayload>;
+    writeDocument(filePath: string, content: string): Promise<ArtifactDocumentPayload>;
 };
 
 export type ArtifactReadOptions = {
@@ -25,11 +24,11 @@ export type ArtifactReadOptions = {
 
 export class Artifact implements EntityModel<ArtifactSnapshot> {
     private snapshotState = $state<ArtifactSnapshot | undefined>();
-    private readonly owner: ArtifactOwner;
+    private readonly dependencies: ArtifactDependencies;
 
-    public constructor(snapshot: ArtifactSnapshot, owner: ArtifactOwner) {
+    public constructor(snapshot: ArtifactSnapshot, dependencies: ArtifactDependencies) {
         this.snapshot = snapshot;
-        this.owner = owner;
+        this.dependencies = dependencies;
     }
 
     private get snapshot(): ArtifactSnapshot {
@@ -82,28 +81,24 @@ export class Artifact implements EntityModel<ArtifactSnapshot> {
     }
 
     public async read(input: ArtifactReadOptions = {}): Promise<ArtifactDocumentPayload> {
-        return this.owner.readArtifact(this.filePath, input);
+        return this.dependencies.readDocument(this.filePath, input);
     }
 
     public async write(content: string): Promise<ArtifactDocumentPayload> {
-        return this.owner.writeArtifact(this.filePath, content);
+        return this.dependencies.writeDocument(this.filePath, content);
     }
 
-    public async executeCommand(commandId: string, input?: unknown): Promise<void> {
-        await this.owner.executeArtifactCommand(this.artifactId, commandId, input);
-    }
-
-    public updateFromSnapshot(snapshot: ArtifactSnapshot): this {
+    public updateFromData(snapshot: ArtifactSnapshot): this {
         this.snapshot = snapshot;
         return this;
     }
 
-    public toSnapshot(): ArtifactSnapshot {
+    public toData(): ArtifactSnapshot {
         return structuredClone($state.snapshot(this.snapshot));
     }
 
     public toJSON(): ArtifactSnapshot {
-        return this.toSnapshot();
+        return this.toData();
     }
 }
 

@@ -1,17 +1,29 @@
-import { RepositorySnapshotSchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
-import type { MissionReferenceType, RepositoryPlatformRepositoryType, RepositorySnapshotType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
-import type { MissionSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-import type { AirportRuntimeEventEnvelope } from '$lib/contracts/runtime-events';
+import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/daemon/protocol/entityRemote';
+import {
+    MissionCatalogEntrySchema,
+    MissionRuntimeEventEnvelopeSchema,
+    MissionSnapshotSchema,
+    type MissionCatalogEntryType,
+    type MissionRuntimeEventEnvelopeType,
+    type MissionSnapshotType as MissionSnapshot
+} from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import { RepositoryDataSchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { RepositoryPlatformRepositoryType, RepositoryDataType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import type { ActiveMissionOutline } from '$lib/client/context/app-context.svelte';
 import { Repository } from '$lib/components/entities/Repository/Repository.svelte.js';
 import {
     getRepositoryDisplayDescription,
-    getRepositoryDisplayName
+    getRepositoryDisplayName,
+    toRepositoryStorage
 } from '$lib/components/entities/Repository/Repository.svelte.js';
-import type { Mission } from '$lib/components/entities/Mission/Mission.svelte.js';
+import {
+    Mission,
+    type MissionGatewayDependencies
+} from '$lib/components/entities/Mission/Mission.svelte.js';
 import { setApp } from '$lib/client/globals';
-import { AirportClientRuntime } from '$lib/client/runtime/AirportClientRuntime';
-import type { RuntimeSubscription } from '$lib/client/runtime/transport/EntityRuntimeTransport';
+import { EntityRuntimeStore } from '$lib/client/runtime/EntityRuntimeStore';
+import type { RuntimeSubscription } from '$lib/client/runtime/RuntimeSubscription';
+import { cmd } from '../../routes/api/entities/remote/command.remote';
 import { qry } from '../../routes/api/entities/remote/query.remote';
 import type {
     AirportRepositoryListItem,
@@ -19,6 +31,8 @@ import type {
 } from '$lib/components/entities/types';
 
 type EventSourceFactory = (url: string) => EventSource;
+type EntityQueryExecutionContext = 'event' | 'render';
+type EntityCommandExecutor = (input: EntityCommandInvocation) => Promise<EntityRemoteResult>;
 
 type AddRepositoryState = {
     error?: string;
@@ -27,10 +41,25 @@ type AddRepositoryState = {
     platformRepositoryRef?: string;
 };
 
+const missionEntityName = 'Mission';
+
+async function executeDefaultQueryRemote(
+    input: EntityQueryInvocation,
+    context: EntityQueryExecutionContext = 'event'
+): Promise<EntityRemoteResult> {
+    const remoteQuery = qry(input);
+    if (context === 'render') {
+        return await remoteQuery;
+    }
+
+    return await remoteQuery.run();
+}
+
 export class AirportApplication {
     private readonly repositories = new Map<string, Repository>();
-    private readonly runtimes = new Map<string, AirportClientRuntime>();
+    private readonly missionStores = new Map<string, EntityRuntimeStore<string, MissionSnapshot, Mission>>();
     private repositoryVersion = $state(0);
+    private activeMissionState = $state<Mission | undefined>();
     #activeRouteKey: string | undefined;
     #routeSyncRequestId = 0;
     #isInitialized = false;
@@ -76,7 +105,7 @@ export class AirportApplication {
     public get repositoriesState(): SidebarRepositoryData[] {
         this.repositoryVersion;
         return [...this.repositories.values()].map((repository) => ({
-            ...repository.summary,
+            ...toRepositoryStorage(repository.data),
             missions: repository.missions
         }));
     }
@@ -120,33 +149,32 @@ export class AirportApplication {
     }
 
     public get activeMission(): Mission | undefined {
-        return this.activeRepository?.selectedMission;
+        return this.activeMissionState;
     }
 
     public hydrateRepositoryData(
-        snapshot: RepositorySnapshotType
+        data: RepositoryDataType
     ): Repository {
-        const id = snapshot.repository.id;
+        const id = data.id;
         const existing = this.repositories.get(id);
         if (existing) {
-            existing.applyData(snapshot);
+            existing.applyData(data);
             this.repositoryVersion += 1;
             return existing;
         }
 
-        const created = new Repository(snapshot, {
-            loadSnapshot: (input) => this.loadRepositorySnapshot(input),
-            resolveMission: (missionSnapshot) => this.hydrateMissionSnapshot(missionSnapshot)
+        const created = new Repository(data, {
+            loadData: (input) => this.loadRepositoryData(input)
         });
         this.repositories.set(id, created);
         this.repositoryVersion += 1;
         return created;
     }
 
-    public reconcileRepositories(snapshots: RepositorySnapshotType[]): Repository[] {
+    public reconcileRepositories(repositoryData: RepositoryDataType[]): Repository[] {
         const nextRepositories = new Map<string, Repository>();
-        const repositories = snapshots.map((snapshot) => {
-            const repository = this.hydrateRepositoryData(snapshot);
+        const repositories = repositoryData.map((data) => {
+            const repository = this.hydrateRepositoryData(data);
             nextRepositories.set(repository.id, repository);
             return repository;
         });
@@ -162,20 +190,19 @@ export class AirportApplication {
 
     public seedRepositoryFromSummary(summary: SidebarRepositoryData): Repository {
         const { missions, ...repository } = summary;
+        const hydrated = this.hydrateRepositoryData(RepositoryDataSchema.parse(repository));
+        hydrated.setMissionCatalog(missions ?? []);
 
-        return this.hydrateRepositoryData(RepositorySnapshotSchema.parse({
-            repository,
-            missions: missions ?? []
-        }));
+        return hydrated;
     }
 
-    public hydrateMissionSnapshot(
-        snapshot: MissionSnapshot,
+    public hydrateMissionData(
+        data: MissionSnapshot,
         input: {
             repositoryRootPath?: string;
         } = {}
     ) {
-        return this.getRuntime(input.repositoryRootPath).hydrateMissionSnapshot(snapshot);
+        return this.getMissionStore(input.repositoryRootPath).upsertData(data);
     }
 
     public resolveRepository(repositoryId: string): Repository | undefined {
@@ -211,6 +238,10 @@ export class AirportApplication {
         }
 
         const loadPromise = Repository.find({ run: true })
+            .then(async (repositories) => {
+                await Promise.all(repositories.map((repository) => this.loadMissionCatalog(repository)));
+                return repositories;
+            })
             .finally(() => {
                 if (this.#repositoryLoadPromise === loadPromise) {
                     this.#repositoryLoadPromise = null;
@@ -283,7 +314,7 @@ export class AirportApplication {
             await this.loadRepositories({ force: true });
             this.addRepositoryState = {
                 success: true,
-                repositoryPath: repository.repositoryRootPath,
+                repositoryPath: repository.data.repositoryRootPath,
                 ...(input.platformRepositoryRef ? { platformRepositoryRef: input.platformRepositoryRef } : {})
             };
             return repository;
@@ -326,16 +357,55 @@ export class AirportApplication {
         missionId: string;
         repositoryRootPath?: string;
     }) {
-        return await this.getRuntime(input.repositoryRootPath).refreshMission(input.missionId);
+        return await this.getMissionStore(input.repositoryRootPath).refresh(input.missionId);
     }
 
     public observeMission(input: {
         missionId: string;
         repositoryRootPath?: string;
-        onUpdate?: (mission: ReturnType<AirportClientRuntime['hydrateMissionSnapshot']>, event: AirportRuntimeEventEnvelope) => void;
+        onUpdate?: (mission: Mission, event: MissionRuntimeEventEnvelopeType) => void;
         onError?: (error: Error) => void;
     }): RuntimeSubscription {
-        return this.getRuntime(input.repositoryRootPath).observeMission(input);
+        const missionId = input.missionId.trim();
+        if (!missionId) {
+            throw new Error('Mission runtime operation requires a non-empty id.');
+        }
+
+        const repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
+        const query = new URLSearchParams({ missionId });
+        if (repositoryRootPath) {
+            query.set('repositoryRootPath', repositoryRootPath);
+        }
+
+        const eventSource = (this.input.createEventSource ?? ((url) => new EventSource(url)))(`/api/runtime/events?${query.toString()}`);
+        const handleRuntimeEvent = (event: Event) => {
+            const messageEvent = event as MessageEvent<string>;
+            void (async () => {
+                try {
+                    const payload = JSON.parse(messageEvent.data);
+                    const runtimeEvent = MissionRuntimeEventEnvelopeSchema.parse(payload);
+                    const mission = await this.getMissionStore(repositoryRootPath).get(missionId);
+                    input.onUpdate?.(mission, runtimeEvent);
+                } catch (error) {
+                    input.onError?.(error instanceof Error ? error : new Error(String(error)));
+                }
+            })();
+        };
+
+        const handleError = () => {
+            input.onError?.(new Error(`Mission runtime event stream failed for '${missionId}'.`));
+        };
+
+        eventSource.addEventListener('runtime', handleRuntimeEvent as EventListener);
+        eventSource.addEventListener('error', handleError as EventListener);
+
+        return {
+            dispose: () => {
+                eventSource.removeEventListener('runtime', handleRuntimeEvent as EventListener);
+                eventSource.removeEventListener('error', handleError as EventListener);
+                eventSource.close();
+            }
+        };
     }
 
     public setActiveRepositorySelection(input?: {
@@ -411,16 +481,15 @@ export class AirportApplication {
 
         this.setActiveRepositorySelection({
             id: repository.id,
-            repositoryRootPath: repository.repositoryRootPath
+            repositoryRootPath: repository.data.repositoryRootPath
         });
         this.activeRepositoryLoading = false;
 
         if (!input.missionId) {
             repository.applyData({
-                ...repository.toSnapshot(),
-                selectedMissionId: undefined,
-                selectedMission: undefined
+                ...repository.toData()
             });
+            this.activeMissionState = undefined;
             this.activeMissionLoading = false;
             this.activeMissionError = undefined;
             return;
@@ -430,18 +499,14 @@ export class AirportApplication {
         try {
             const mission = await this.refreshMission({
                 missionId: input.missionId,
-                repositoryRootPath: repository.repositoryRootPath
+                repositoryRootPath: repository.data.repositoryRootPath
             });
             const projectionSnapshot = await mission.getProjectionSnapshot();
             mission.setRouteState({
                 projectionSnapshot,
-                worktreePath: repository.repositoryRootPath
+                worktreePath: repository.data.repositoryRootPath
             });
-            repository.applyData({
-                ...repository.toSnapshot(),
-                selectedMissionId: mission.missionId,
-                selectedMission: mission.toSnapshot()
-            });
+            this.activeMissionState = mission;
             if (!this.isCurrentRouteSync(requestId, routeKey)) {
                 return;
             }
@@ -453,11 +518,7 @@ export class AirportApplication {
                 return;
             }
 
-            repository.applyData({
-                ...repository.toSnapshot(),
-                selectedMissionId: undefined,
-                selectedMission: undefined
-            });
+            this.activeMissionState = undefined;
             this.setActiveMissionSelection(undefined);
             this.activeMissionError = error instanceof Error ? error.message : String(error);
         } finally {
@@ -474,6 +535,7 @@ export class AirportApplication {
         this.activeMissionError = undefined;
         this.setActiveRepositorySelection(undefined);
         this.setActiveMissionSelection(undefined);
+        this.activeMissionState = undefined;
         this.setActiveMissionOutline(undefined);
         this.setActiveMissionSelectedNodeId(undefined);
     }
@@ -489,31 +551,59 @@ export class AirportApplication {
         }
 
         return this.hydrateRepositoryData(
-            await this.loadRepositorySnapshot({ id })
+            await this.loadRepositoryData({ id })
         );
     }
 
-    private getRuntime(repositoryRootPath?: string): AirportClientRuntime {
+    private getMissionStore(repositoryRootPath?: string): EntityRuntimeStore<string, MissionSnapshot, Mission> {
         const runtimeKey = repositoryRootPath?.trim() || '__default__';
-        let runtime = this.runtimes.get(runtimeKey);
-        if (!runtime) {
-            runtime = new AirportClientRuntime({
-                ...this.input,
-                ...(repositoryRootPath?.trim()
-                    ? { repositoryRootPath: repositoryRootPath.trim() }
-                    : {})
+        let store = this.missionStores.get(runtimeKey);
+        if (!store) {
+            const normalizedRepositoryRootPath = repositoryRootPath?.trim() || undefined;
+            store = new EntityRuntimeStore({
+                loadData: (missionId) => this.loadMissionData(missionId, normalizedRepositoryRootPath),
+                createEntity: (data, loadData) => new Mission({
+                    snapshot: data,
+                    loadData,
+                    gatewayDependencies: this.createMissionGatewayDependencies(normalizedRepositoryRootPath)
+                }),
+                selectId: (data) => data.mission.missionId
             });
-            this.runtimes.set(runtimeKey, runtime);
+            this.missionStores.set(runtimeKey, store);
         }
 
-        return runtime;
+        return store;
     }
 
-    private async loadRepositorySnapshot(input: {
+    private createMissionGatewayDependencies(repositoryRootPath?: string): MissionGatewayDependencies {
+        return {
+            ...(repositoryRootPath ? { repositoryRootPath } : {}),
+            commandRemote: cmd as EntityCommandExecutor,
+            queryRemote: executeDefaultQueryRemote
+        };
+    }
+
+    private async loadMissionData(missionId: string, repositoryRootPath?: string): Promise<MissionSnapshot> {
+        const normalizedMissionId = missionId.trim();
+        if (!normalizedMissionId) {
+            throw new Error('Mission runtime operation requires a non-empty id.');
+        }
+
+        return MissionSnapshotSchema.parse(await executeDefaultQueryRemote({
+            entity: missionEntityName,
+            method: 'read',
+            payload: {
+                missionId: normalizedMissionId,
+                ...(repositoryRootPath?.trim() ? { repositoryRootPath: repositoryRootPath.trim() } : {})
+            }
+        }));
+    }
+
+    private async loadRepositoryData(input: {
         id: string;
         repositoryRootPath?: string;
-    }): Promise<RepositorySnapshotType> {
-        return RepositorySnapshotSchema.parse(
+    }): Promise<RepositoryDataType> {
+        return RepositoryDataSchema.parse(
             await qry({
                 entity: 'Repository',
                 method: 'read',
@@ -525,6 +615,19 @@ export class AirportApplication {
                 }
             }).run()
         );
+    }
+
+    private async loadMissionCatalog(repository: Repository): Promise<MissionCatalogEntryType[]> {
+        const missions = MissionCatalogEntrySchema.array().parse(await executeDefaultQueryRemote({
+            entity: missionEntityName,
+            method: 'find',
+            payload: {
+                repositoryRootPath: repository.data.repositoryRootPath
+            }
+        }));
+        repository.setMissionCatalog(missions);
+        this.repositoryVersion += 1;
+        return missions;
     }
 
 }
@@ -543,7 +646,7 @@ function createRepositoryListItem(input: {
         displayDescription: githubDescription || localDescription || input.github?.htmlUrl || 'No description available',
         repositoryRootPath: input.local?.repositoryRootPath,
         platformRepositoryRef: input.github?.repositoryRef ?? input.local?.platformRepositoryRef,
-        missions: (input.local?.missions ?? []) as MissionReferenceType[],
+        missions: (input.local?.missions ?? []) as MissionCatalogEntryType[],
         isLocal: input.local !== undefined
     };
 }

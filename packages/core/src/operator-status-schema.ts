@@ -145,7 +145,7 @@ const workflowGateDefinitionSchema = z.object({
 
 const missionWorkflowConfigurationSnapshotSchema = z.object({
 	createdAt: nonEmptyStringSchema,
-	source: z.literal('global-settings'),
+	source: z.literal('workflow-definition'),
 	workflowVersion: nonEmptyStringSchema,
 	workflow: z.object({
 		autostart: z.object({

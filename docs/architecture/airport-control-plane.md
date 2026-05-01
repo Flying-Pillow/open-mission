@@ -13,10 +13,10 @@ Airport is the repository-scoped layout authority for Mission surfaces. It decid
 
 | Component | Responsibility | Owned state |
 | --- | --- | --- |
-| `AirportControl` | Pure repository-scoped layout controller | `AirportState` |
-| `RepositoryAirportRegistry` | Multi-repository registry of airport controllers and substrate controllers | active repository id, airport records, client-to-repository index |
-| `TerminalManagerSubstrateController` | Observe and drive the terminal substrate | observed zellij pane state |
-| `AirportControl` view logic | Derive Tower, Briefing Room, and Runway views | pure view output |
+| `airport/types.ts` contracts | Shared airport pane, client, and substrate state contracts | `AirportState`, pane bindings |
+| `AirportTerminalSubstrate` helpers | Derive client-reported substrate observations and focus effects | `AirportSubstrateState` |
+| Airport terminal surfaces | Surface-local layout and focus state for Tower, Briefing Room, and Runway | panel-local UI state |
+| Daemon protocol | `system.status` plus entity remote requests | daemon snapshots and entity results |
 
 ## Pane Model
 

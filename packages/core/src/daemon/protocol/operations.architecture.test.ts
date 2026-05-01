@@ -21,15 +21,10 @@ const removedProtocolMethods = [
     'control.repositories.add',
     'control.github.issue.detail',
     'control.issues.list',
-    'control.action.list',
-    'control.action.describe',
-    'control.action.execute',
     'mission.from-brief',
     'mission.from-issue',
     'mission.operator-status',
     'mission.status',
-    'mission.action.list',
-    'mission.action.execute',
     'mission.gate.evaluate',
     'mission.terminal.ensure',
     'mission.terminal.state',
@@ -55,6 +50,7 @@ describe('daemon protocol architecture boundaries', () => {
         expect(operationsSource).toContain("| 'entity.query'");
         expect(operationsSource).toContain("| 'entity.command'");
         expect(removedProtocolMethods.filter((method) => operationsSource.includes(method))).toEqual([]);
+        expect(operationsSource).not.toMatch(/\b(?:control|mission)\.action\./);
     });
 
     it('does not export removed daemon facade clients', () => {

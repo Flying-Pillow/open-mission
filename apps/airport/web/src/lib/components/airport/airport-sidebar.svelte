@@ -21,7 +21,7 @@
     import type { Icon } from "@tabler/icons-svelte";
     import type { ComponentProps } from "svelte";
     import type {
-        MissionReferenceType,
+        MissionCatalogEntryType,
         SidebarRepositoryData,
     } from "$lib/components/entities/types";
 
@@ -81,7 +81,7 @@
                 icon: (isSelected ? DashboardIcon : FolderIcon) satisfies Icon,
                 href: `/airport/${encodeURIComponent(repository.id)}`,
                 missions: (repository.missions ?? []).map(
-                    (mission: MissionReferenceType) => ({
+                    (mission: MissionCatalogEntryType) => ({
                         ...mission,
                         href: `/airport/${encodeURIComponent(repository.id)}/${encodeURIComponent(mission.missionId)}`,
                         isActive:

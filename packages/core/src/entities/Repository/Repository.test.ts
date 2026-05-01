@@ -52,9 +52,11 @@ describe('Repository', () => {
         const repository = Repository.open('/tmp/mission-proof-of-concept');
         const context = {
             entityFactory: {
+                has: () => true,
+                register: () => undefined,
                 read: async () => repository
             }
-        } as Pick<EntityExecutionContext, 'entityFactory'> as EntityExecutionContext;
+        } as unknown as EntityExecutionContext;
 
         await expect(Repository.resolve({
             id: repository.id,

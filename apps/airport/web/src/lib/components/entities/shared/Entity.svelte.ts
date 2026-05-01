@@ -1,12 +1,12 @@
 import type { EntityModel } from './EntityModel.svelte.js';
 
-export abstract class Entity<TSnapshot, TId extends string = string>
-	implements EntityModel<TSnapshot, TId> {
+export abstract class Entity<TData, TId extends string = string>
+	implements EntityModel<TData, TId> {
 	public abstract get id(): TId;
-	public abstract updateFromSnapshot(snapshot: TSnapshot): this;
-	public abstract toSnapshot(): TSnapshot;
+	public abstract updateFromData(data: TData): this;
+	public abstract toData(): TData;
 
-	public toJSON(): TSnapshot {
-		return this.toSnapshot();
+	public toJSON(): TData {
+		return this.toData();
 	}
 }

@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { WorkflowGlobalSettings } from '../engine/types.js';
+import type { WorkflowDefinition } from '../engine/types.js';
 import { Repository } from '../../entities/Repository/Repository.js';
 import { createDefaultWorkflowSettings } from './workflow.js';
 
@@ -56,8 +56,8 @@ export function readMissionWorkflowDefinition(controlRoot: string): unknown | un
 
 export async function writeMissionWorkflowDefinition(
 	controlRoot: string,
-	workflow: WorkflowGlobalSettings
-): Promise<WorkflowGlobalSettings> {
+	workflow: WorkflowDefinition
+): Promise<WorkflowDefinition> {
 	const workflowPath = Repository.getMissionWorkflowDefinitionPath(controlRoot);
 	const temporaryPath = `${workflowPath}.${process.pid.toString(36)}.${Date.now().toString(36)}.tmp`;
 	await fsp.mkdir(path.dirname(workflowPath), { recursive: true });

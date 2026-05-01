@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { missionTerminalInputSchema } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import { MissionTerminalInputSchema } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import { z } from 'zod';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import { resolveMissionTerminalRuntimeError } from '$lib/server/mission-terminal-errors';
@@ -40,7 +40,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
     const query = missionTerminalQuerySchema.parse({
         repositoryId: requestUrl.searchParams.get('repositoryId') ?? undefined
     });
-    const body = missionTerminalInputSchema.parse(await request.json());
+    const body = MissionTerminalInputSchema.parse(await request.json());
 
     try {
         const snapshot = await sendMissionTerminalInput(locals, {

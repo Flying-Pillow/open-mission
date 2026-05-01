@@ -1,24 +1,24 @@
 <script lang="ts">
-    import EntityActionbar from "$lib/components/entities/Actionbar/EntityActionbar.svelte";
+    import EntityCommandbar from "$lib/components/entities/Commandbar/EntityCommandbar.svelte";
     import type { Mission } from "$lib/components/entities/Mission/Mission.svelte.js";
 
     let {
         refreshNonce,
         mission,
-        onActionExecuted,
+        onCommandExecuted,
     }: {
         refreshNonce: number;
         mission: Mission;
-        onActionExecuted: () => Promise<void>;
+        onCommandExecuted: () => Promise<void>;
     } = $props();
 </script>
 
-<EntityActionbar
+<EntityCommandbar
     {refreshNonce}
     entity={mission}
     class="xl:justify-end"
     buttonClass="shadow-sm"
     defaultVariant="outline"
     showEmptyState={true}
-    {onActionExecuted}
+    {onCommandExecuted}
 />

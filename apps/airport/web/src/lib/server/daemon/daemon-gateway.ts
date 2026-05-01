@@ -3,19 +3,24 @@ import { randomUUID } from 'node:crypto';
 import {
     DaemonApi,
     type Notification,
-    type AgentSessionState,
-    type MissionEntity,
 } from '@flying-pillow/mission-core/node';
-import { agentSessionSnapshotSchema, agentSessionTerminalSnapshotSchema } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
-import type { AgentSessionSnapshot as AgentSession, AgentSessionTerminalSnapshot as MissionSessionTerminalSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
-import { missionTerminalSnapshotSchema } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-import type { MissionTerminalSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-import { RepositorySnapshotSchema, RepositorySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
-import type { RepositoryDataType as Repository } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import {
-    airportRuntimeEventEnvelopeSchema,
-    type AirportRuntimeEventEnvelope
-} from '../../contracts/runtime-events';
+    createAllRuntimeEventSubscriptionChannels,
+    createMissionRuntimeEventSubscriptionChannels
+} from '@flying-pillow/mission-core/entities/Mission/MissionContract';
+import {
+    AgentSessionTerminalSnapshotSchema,
+    type AgentSessionDataType,
+    type AgentSessionTerminalSnapshotType,
+} from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import {
+    MissionRuntimeEventEnvelopeSchema,
+    MissionTerminalSnapshotSchema,
+    type MissionRuntimeEventEnvelopeType,
+    type MissionTerminalSnapshotType,
+} from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import { RepositoryDataSchema, RepositoryStorageSchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { RepositoryStorageType as Repository } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import {
     connectDedicatedAuthenticatedDaemonClient,
     connectSharedAuthenticatedDaemonClient
@@ -37,12 +42,14 @@ export class DaemonGateway {
     public async openEventSubscription(input: {
         missionId?: string;
         surfacePath?: string;
-        onEvent: (event: AirportRuntimeEventEnvelope) => void;
+        onEvent: (event: MissionRuntimeEventEnvelopeType) => void;
     }): Promise<{ dispose(): void }> {
         const missionId = input.missionId?.trim();
         const daemon = await this.connectDedicatedDaemonClient(input.surfacePath);
         await daemon.client.request<null>('event.subscribe', {
-            channels: missionId ? missionRuntimeEventChannels(missionId) : allRuntimeEventChannels()
+            channels: missionId
+                ? createMissionRuntimeEventSubscriptionChannels(missionId)
+                : createAllRuntimeEventSubscriptionChannels()
         });
         const subscription = daemon.client.onDidEvent((event) => {
             input.onEvent(this.toRuntimeEventEnvelope(toAddressedNotification(event)));
@@ -60,25 +67,18 @@ export class DaemonGateway {
         missionId: string;
         sessionId: string;
         surfacePath?: string;
-    }): Promise<MissionSessionTerminalSnapshot> {
-        const daemon = await this.connectSharedDaemonClient(input.surfacePath);
-        try {
-            const api = new DaemonApi(daemon.client);
-            return agentSessionTerminalSnapshotSchema.parse(await withTimeout(
-                api.entity.query({
-                    entity: 'AgentSession',
-                    method: 'readTerminal',
-                    payload: {
-                        missionId: input.missionId,
-                        sessionId: input.sessionId
-                    }
-                }),
-                2500,
-                'Mission terminal snapshot request timed out.'
-            ));
-        } finally {
-            daemon.dispose();
-        }
+    }): Promise<AgentSessionTerminalSnapshotType> {
+        return this.queryEntity({
+            surfacePath: input.surfacePath,
+            entity: 'AgentSession',
+            method: 'readTerminal',
+            payload: {
+                missionId: input.missionId,
+                sessionId: input.sessionId,
+            },
+            parse: (value) => AgentSessionTerminalSnapshotSchema.parse(value),
+            timeoutMessage: 'Mission terminal snapshot request timed out.',
+        });
     }
 
     public async sendMissionSessionTerminalInput(input: {
@@ -89,50 +89,36 @@ export class DaemonGateway {
         cols?: number;
         rows?: number;
         surfacePath?: string;
-    }): Promise<MissionSessionTerminalSnapshot> {
-        const daemon = await this.connectSharedDaemonClient(input.surfacePath);
-        try {
-            const api = new DaemonApi(daemon.client);
-            return agentSessionTerminalSnapshotSchema.parse(await withTimeout(
-                api.entity.command({
-                    entity: 'AgentSession',
-                    method: 'sendTerminalInput',
-                    payload: {
-                        missionId: input.missionId,
-                        sessionId: input.sessionId,
-                        ...(input.data !== undefined ? { data: input.data } : {}),
-                        ...(input.literal !== undefined ? { literal: input.literal } : {}),
-                        ...(input.cols !== undefined ? { cols: input.cols } : {}),
-                        ...(input.rows !== undefined ? { rows: input.rows } : {})
-                    }
-                }),
-                2500,
-                'Mission terminal input request timed out.'
-            ));
-        } finally {
-            daemon.dispose();
-        }
+    }): Promise<AgentSessionTerminalSnapshotType> {
+        return this.commandEntity({
+            surfacePath: input.surfacePath,
+            entity: 'AgentSession',
+            method: 'sendTerminalInput',
+            payload: {
+                missionId: input.missionId,
+                sessionId: input.sessionId,
+                ...(input.data !== undefined ? { data: input.data } : {}),
+                ...(input.literal !== undefined ? { literal: input.literal } : {}),
+                ...(input.cols !== undefined ? { cols: input.cols } : {}),
+                ...(input.rows !== undefined ? { rows: input.rows } : {}),
+            },
+            parse: (value) => AgentSessionTerminalSnapshotSchema.parse(value),
+            timeoutMessage: 'Mission terminal input request timed out.',
+        });
     }
 
     public async getMissionTerminalSnapshot(input: {
         missionId: string;
         surfacePath?: string;
-    }): Promise<MissionTerminalSnapshot> {
-        const daemon = await this.connectSharedDaemonClient(input.surfacePath);
-        try {
-            const api = new DaemonApi(daemon.client);
-            return missionTerminalSnapshotSchema.parse(await withTimeout(
-                api.entity.command({
-                    entity: 'Mission',
-                    method: 'ensureTerminal',
-                    payload: { missionId: input.missionId }
-                }),
-                2500,
-                'Mission terminal snapshot request timed out.'
-            ));
-        } finally {
-            daemon.dispose();
-        }
+    }): Promise<MissionTerminalSnapshotType> {
+        return this.commandEntity({
+            surfacePath: input.surfacePath,
+            entity: 'Mission',
+            method: 'ensureTerminal',
+            payload: { missionId: input.missionId },
+            parse: (value) => MissionTerminalSnapshotSchema.parse(value),
+            timeoutMessage: 'Mission terminal snapshot request timed out.',
+        });
     }
 
     public async sendMissionTerminalInput(input: {
@@ -142,32 +128,25 @@ export class DaemonGateway {
         cols?: number;
         rows?: number;
         surfacePath?: string;
-    }): Promise<MissionTerminalSnapshot> {
-        const daemon = await this.connectSharedDaemonClient(input.surfacePath);
-        try {
-            const api = new DaemonApi(daemon.client);
-            return missionTerminalSnapshotSchema.parse(await withTimeout(
-                api.entity.command({
-                    entity: 'Mission',
-                    method: 'sendTerminalInput',
-                    payload: {
-                        missionId: input.missionId,
-                        ...(input.data !== undefined ? { data: input.data } : {}),
-                        ...(input.literal !== undefined ? { literal: input.literal } : {}),
-                        ...(input.cols !== undefined ? { cols: input.cols } : {}),
-                        ...(input.rows !== undefined ? { rows: input.rows } : {})
-                    }
-                }),
-                2500,
-                'Mission terminal input request timed out.'
-            ));
-        } finally {
-            daemon.dispose();
-        }
+    }): Promise<MissionTerminalSnapshotType> {
+        return this.commandEntity({
+            surfacePath: input.surfacePath,
+            entity: 'Mission',
+            method: 'sendTerminalInput',
+            payload: {
+                missionId: input.missionId,
+                ...(input.data !== undefined ? { data: input.data } : {}),
+                ...(input.literal !== undefined ? { literal: input.literal } : {}),
+                ...(input.cols !== undefined ? { cols: input.cols } : {}),
+                ...(input.rows !== undefined ? { rows: input.rows } : {}),
+            },
+            parse: (value) => MissionTerminalSnapshotSchema.parse(value),
+            timeoutMessage: 'Mission terminal input request timed out.',
+        });
     }
 
-    private toRuntimeEventEnvelope(event: AddressedNotification): AirportRuntimeEventEnvelope {
-        return airportRuntimeEventEnvelopeSchema.parse({
+    private toRuntimeEventEnvelope(event: AddressedNotification): MissionRuntimeEventEnvelopeType {
+        return MissionRuntimeEventEnvelopeSchema.parse({
             eventId: randomUUID(),
             entityId: event.entityId,
             channel: event.channel,
@@ -176,13 +155,11 @@ export class DaemonGateway {
             occurredAt: event.occurredAt,
             ...(notificationMissionId(event) ? { missionId: notificationMissionId(event) } : {}),
             payload: this.toRuntimeEventPayload(event)
-        }) as AirportRuntimeEventEnvelope;
+        });
     }
 
     private toRuntimeEventPayload(event: AddressedNotification): unknown {
         switch (event.type) {
-            case 'airport.state':
-                return { system: event.system };
             case 'mission.snapshot.changed':
             case 'stage.snapshot.changed':
             case 'task.snapshot.changed':
@@ -192,28 +169,12 @@ export class DaemonGateway {
                     reference: event.reference,
                     snapshot: event.snapshot
                 };
-            case 'mission.actions.changed':
-                return {
-                    missionId: event.missionId,
-                    ...(event.reference ? { reference: event.reference } : {}),
-                    ...(event.actions ? { actions: event.actions } : {}),
-                    ...(event.revision ? { revision: event.revision } : {})
-                };
             case 'mission.status':
-                return {
-                    missionId: event.missionId,
-                    status: this.toMissionStatusSummary(event.status, event.missionId)
-                };
+                return event.status;
             case 'session.event':
-                return {
-                    missionId: event.missionId,
-                    sessionId: event.sessionId,
-                    session: this.toMissionSessionSnapshot(event.event.state)
-                };
+                return event.session;
             case 'session.lifecycle':
                 return {
-                    missionId: event.missionId,
-                    sessionId: event.sessionId,
                     phase: event.phase,
                     lifecycleState: event.lifecycleState
                 };
@@ -225,55 +186,6 @@ export class DaemonGateway {
         }
     }
 
-    private toMissionStatusSummary(mission: MissionEntity, missionId: string) {
-        return {
-            missionId: mission.missionId.trim() || missionId,
-            ...(mission.title ? { title: mission.title } : {}),
-            ...(mission.issueId !== undefined ? { issueId: mission.issueId } : {}),
-            ...(mission.type ? { type: mission.type } : {}),
-            ...(mission.operationalMode ? { operationalMode: mission.operationalMode } : {}),
-            ...(mission.branchRef ? { branchRef: mission.branchRef } : {}),
-            ...(mission.missionDir ? { missionDir: mission.missionDir } : {}),
-            ...(mission.missionRootDir ? { missionRootDir: mission.missionRootDir } : {}),
-            ...(mission.artifacts.length > 0 ? { artifacts: structuredClone(mission.artifacts) } : {}),
-            ...(mission.lifecycle || mission.updatedAt || mission.currentStageId || mission.stages.length > 0
-                ? {
-                    workflow: {
-                        ...(mission.lifecycle ? { lifecycle: mission.lifecycle } : {}),
-                        ...(mission.updatedAt ? { updatedAt: mission.updatedAt } : {}),
-                        ...(mission.currentStageId ? { currentStageId: mission.currentStageId } : {}),
-                        stages: mission.stages.map((stage) => structuredClone(stage))
-                    }
-                }
-                : {}),
-            ...(mission.recommendedAction ? { recommendedAction: mission.recommendedAction } : {})
-        };
-    }
-
-    private toMissionSessionSnapshot(session: AgentSession | AgentSessionState): AgentSession {
-        return agentSessionSnapshotSchema.parse({
-            sessionId: session.sessionId,
-            runnerId: session.runnerId,
-            ...(session.transportId ? { transportId: session.transportId } : {}),
-            runnerLabel: session.runnerLabel,
-            ...(session.sessionLogPath ? { sessionLogPath: session.sessionLogPath } : {}),
-            lifecycleState: session.lifecycleState,
-            ...(session.terminalSessionName ? { terminalSessionName: session.terminalSessionName } : {}),
-            ...(session.terminalPaneId ? { terminalPaneId: session.terminalPaneId } : {}),
-            ...(session.terminalSessionName && session.terminalPaneId
-                ? {
-                    terminalHandle: {
-                        sessionName: session.terminalSessionName,
-                        paneId: session.terminalPaneId
-                    }
-                }
-                : {}),
-            ...(session.workingDirectory ? { workingDirectory: session.workingDirectory } : {}),
-            ...(session.currentTurnTitle ? { currentTurnTitle: session.currentTurnTitle } : {}),
-            ...('taskId' in session && session.taskId ? { taskId: session.taskId } : {})
-        });
-    }
-
     public async resolveRepositoryCandidate(input: {
         id: string;
     }): Promise<Repository> {
@@ -282,34 +194,78 @@ export class DaemonGateway {
             throw new Error('Repository access requires an id.');
         }
 
-        const daemon = await this.connectSharedDaemonClient();
         try {
-            const api = new DaemonApi(daemon.client);
-            const snapshot = RepositorySnapshotSchema.parse(
-                await withTimeout(
-                    api.entity.query({
-                        entity: 'Repository',
-                        method: 'read',
-                        payload: { id }
-                    }),
-                    2500,
-                    `Repository '${id}' read timed out.`
-                )
-            );
+            const data = await this.queryEntity({
+                entity: 'Repository',
+                method: 'read',
+                payload: { id },
+                parse: (value) => RepositoryDataSchema.parse(value),
+                timeoutMessage: `Repository '${id}' read timed out.`,
+            });
 
-            return this.toRepositorySnapshot(snapshot.repository);
+            return RepositoryStorageSchema.parse({
+                id: data.id,
+                repositoryRootPath: data.repositoryRootPath,
+                ownerId: data.ownerId,
+                repoName: data.repoName,
+                ...(data.platformRepositoryRef ? { platformRepositoryRef: data.platformRepositoryRef } : {}),
+                settings: data.settings,
+                workflowConfiguration: data.workflowConfiguration,
+                isInitialized: data.isInitialized,
+            });
         } catch (error) {
             if (error instanceof Error && /not found/i.test(error.message)) {
                 throw new Error(`Repository '${id}' could not be resolved in Airport.`);
             }
             throw error;
-        } finally {
-            daemon.dispose();
         }
     }
 
-    private toRepositorySnapshot(repository: Repository): Repository {
-        return RepositorySchema.parse(repository);
+    private async queryEntity<T>(input: {
+        surfacePath?: string;
+        entity: string;
+        method: string;
+        payload: Record<string, unknown>;
+        parse: (value: unknown) => T;
+        timeoutMessage: string;
+    }): Promise<T> {
+        return this.withSharedApi(input.surfacePath, async (api) => input.parse(await withTimeout(
+            api.entity.query({
+                entity: input.entity,
+                method: input.method,
+                payload: input.payload,
+            }),
+            2500,
+            input.timeoutMessage,
+        )));
+    }
+
+    private async commandEntity<T>(input: {
+        surfacePath?: string;
+        entity: string;
+        method: string;
+        payload: Record<string, unknown>;
+        parse: (value: unknown) => T;
+        timeoutMessage: string;
+    }): Promise<T> {
+        return this.withSharedApi(input.surfacePath, async (api) => input.parse(await withTimeout(
+            api.entity.command({
+                entity: input.entity,
+                method: input.method,
+                payload: input.payload,
+            }),
+            2500,
+            input.timeoutMessage,
+        )));
+    }
+
+    private async withSharedApi<T>(surfacePath: string | undefined, execute: (api: DaemonApi) => Promise<T>): Promise<T> {
+        const daemon = await this.connectSharedDaemonClient(surfacePath);
+        try {
+            return await execute(new DaemonApi(daemon.client));
+        } finally {
+            daemon.dispose();
+        }
     }
 
     private async connectSharedDaemonClient(surfacePath?: string) {
@@ -336,44 +292,6 @@ export class DaemonGateway {
         );
     }
 
-}
-
-function clipTerminalScreen(screen: string): { screen: string; truncated: boolean } {
-    if (screen.length <= AIRPORT_WEB_TERMINAL_SCREEN_LIMIT) {
-        return { screen, truncated: false };
-    }
-
-    return {
-        screen: screen.slice(-AIRPORT_WEB_TERMINAL_SCREEN_LIMIT),
-        truncated: true
-    };
-}
-
-function missionRuntimeEventChannels(missionId: string): string[] {
-    return [
-        `mission:${missionId}.snapshot.changed`,
-        `mission:${missionId}.actions.changed`,
-        `mission:${missionId}.status`,
-        `stage:${missionId}/*.*`,
-        `task:${missionId}/*.*`,
-        `artifact:${missionId}/*.*`,
-        `agent_session:${missionId}/*.snapshot.changed`,
-        `agent_session:${missionId}/*.event`,
-        `agent_session:${missionId}/*.lifecycle`
-    ];
-}
-
-function allRuntimeEventChannels(): string[] {
-    return [
-        'airport:state.changed',
-        'mission:*',
-        'stage:*',
-        'task:*',
-        'artifact:*',
-        'agent_session:*.snapshot.changed',
-        'agent_session:*.event',
-        'agent_session:*.lifecycle'
-    ];
 }
 
 function notificationMissionId(event: AddressedNotification): string | undefined {

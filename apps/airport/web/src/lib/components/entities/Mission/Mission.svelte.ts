@@ -1,11 +1,37 @@
 // /apps/airport/web/src/lib/client/entities/Mission.svelte.ts: OO browser entity for a mission runtime snapshot and its live agent sessions.
-import type { AgentSessionCommandAcknowledgement, AgentSessionCommand as AgentCommand, AgentSessionPrompt as AgentPrompt, AgentSessionSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
-import type { ArtifactCommandAcknowledgement, MissionArtifactSnapshot } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
+import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/daemon/protocol/entityRemote';
+import {
+    AgentSessionCommandAcknowledgementSchema,
+    type AgentSessionCommandAcknowledgementType as AgentSessionCommandAcknowledgement,
+    type AgentSessionCommandType as AgentCommand,
+    type AgentSessionPromptType as AgentPrompt,
+    type AgentSessionDataType as AgentSessionSnapshot
+} from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import {
+    ArtifactDocumentDataSchema,
+    type ArtifactDataType as MissionArtifactSnapshot
+} from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import type { MissionActionListSnapshot, MissionActionDescriptor, MissionCommandAcknowledgement, MissionProjectionSnapshot, MissionSnapshot, MissionActionQueryContext, MissionStatusSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-import type { MissionStageSnapshot, StageCommandAcknowledgement } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
-import type { MissionTaskSnapshot, TaskCommandAcknowledgement } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
-import type { OperatorActionExecutionStep } from '@flying-pillow/mission-core/types';
+import {
+    MissionCommandAcknowledgementSchema,
+    MissionDocumentSnapshotSchema,
+    MissionProjectionSnapshotSchema,
+    MissionWorktreeSnapshotSchema,
+    type MissionCommandAcknowledgementType as MissionCommandAcknowledgement,
+    type MissionProjectionSnapshotType as MissionProjectionSnapshot,
+    type MissionSnapshotType as MissionSnapshot,
+    type MissionStatusSnapshotType as MissionStatusSnapshot
+} from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import {
+    StageCommandAcknowledgementSchema,
+    type StageDataType as MissionStageSnapshot,
+    type StageCommandAcknowledgementType as StageCommandAcknowledgement
+} from '@flying-pillow/mission-core/entities/Stage/StageSchema';
+import {
+    TaskCommandAcknowledgementSchema,
+    type TaskDataType as MissionTaskSnapshot,
+    type TaskCommandAcknowledgementType as TaskCommandAcknowledgement
+} from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import { AgentSession } from '$lib/components/entities/AgentSession/AgentSession.svelte.js';
 import {
     Artifact,
@@ -20,44 +46,31 @@ import {
     type TaskSnapshot
 } from '$lib/components/entities/Task/Task.svelte.js';
 
-export type MissionSnapshotLoader = (missionId: string) => Promise<MissionSnapshot>;
+export type MissionDataLoader = (missionId: string) => Promise<MissionSnapshot>;
 type MissionQueryExecutionContext = 'event' | 'render';
 export type MissionDocumentPayload = ArtifactDocumentPayload;
+type EntityCommandExecutor = (input: EntityCommandInvocation) => Promise<EntityRemoteResult>;
+type EntityQueryExecutor = (
+    input: EntityQueryInvocation,
+    context?: MissionQueryExecutionContext
+) => Promise<EntityRemoteResult>;
 
-export type MissionCommandGateway = {
-    pauseMission(input: {
+export type MissionGatewayDependencies = {
+    repositoryRootPath?: string;
+    commandRemote: EntityCommandExecutor;
+    queryRemote: EntityQueryExecutor;
+};
+
+type MissionCommandGateway = {
+    executeMissionCommand(input: {
         missionId: string;
-    }): Promise<MissionCommandAcknowledgement>;
-    resumeMission(input: {
-        missionId: string;
-    }): Promise<MissionCommandAcknowledgement>;
-    panicMission(input: {
-        missionId: string;
-    }): Promise<MissionCommandAcknowledgement>;
-    clearMissionPanic(input: {
-        missionId: string;
-    }): Promise<MissionCommandAcknowledgement>;
-    restartMissionQueue(input: {
-        missionId: string;
-    }): Promise<MissionCommandAcknowledgement>;
-    deliverMission(input: {
-        missionId: string;
+        commandId: string;
+        input?: unknown;
     }): Promise<MissionCommandAcknowledgement>;
     getMissionProjection(input: {
         missionId: string;
         executionContext?: MissionQueryExecutionContext;
     }): Promise<MissionProjectionSnapshot>;
-    getMissionActions(input: {
-        missionId: string;
-        context?: MissionActionQueryContext;
-        executionContext?: MissionQueryExecutionContext;
-    }): Promise<MissionActionListSnapshot>;
-    executeMissionAction(input: {
-        missionId: string;
-        actionId: string;
-        steps?: OperatorActionExecutionStep[];
-        terminalSessionName?: string;
-    }): Promise<MissionCommandAcknowledgement>;
     readMissionDocument(input: {
         missionId: string;
         path: string;
@@ -74,7 +87,7 @@ export type MissionCommandGateway = {
     }): Promise<MissionFileTreeResponse>;
 };
 
-export type MissionChildEntityCommandGateway = {
+type MissionChildEntityCommandGateway = {
     executeStageCommand(input: {
         missionId: string;
         stageId: string;
@@ -87,12 +100,6 @@ export type MissionChildEntityCommandGateway = {
         commandId: string;
         input?: unknown;
     }): Promise<TaskCommandAcknowledgement>;
-    executeArtifactCommand(input: {
-        missionId: string;
-        artifactId: string;
-        commandId: string;
-        input?: unknown;
-    }): Promise<ArtifactCommandAcknowledgement>;
     executeAgentSessionCommand(input: {
         missionId: string;
         sessionId: string;
@@ -121,74 +128,186 @@ export type MissionChildEntityCommandGateway = {
     }): Promise<MissionDocumentPayload>;
 };
 
-const unavailableMissionCommands: MissionCommandGateway = {
-    pauseMission: async () => {
-        throw new Error('Mission commands are unavailable in this client context.');
-    },
-    resumeMission: async () => {
-        throw new Error('Mission commands are unavailable in this client context.');
-    },
-    panicMission: async () => {
-        throw new Error('Mission commands are unavailable in this client context.');
-    },
-    clearMissionPanic: async () => {
-        throw new Error('Mission commands are unavailable in this client context.');
-    },
-    restartMissionQueue: async () => {
-        throw new Error('Mission commands are unavailable in this client context.');
-    },
-    deliverMission: async () => {
-        throw new Error('Mission commands are unavailable in this client context.');
-    },
-    getMissionProjection: async () => {
-        throw new Error('Mission projection queries are unavailable in this client context.');
-    },
-    getMissionActions: async () => {
-        throw new Error('Mission action queries are unavailable in this client context.');
-    },
-    executeMissionAction: async () => {
-        throw new Error('Mission action commands are unavailable in this client context.');
-    },
-    readMissionDocument: async () => {
-        throw new Error('Mission document queries are unavailable in this client context.');
-    },
-    writeMissionDocument: async () => {
-        throw new Error('Mission document commands are unavailable in this client context.');
-    },
-    getMissionWorktree: async () => {
-        throw new Error('Mission worktree queries are unavailable in this client context.');
-    }
+export type MissionDependencies = {
+    snapshot: MissionSnapshot;
+    loadData: MissionDataLoader;
+    gatewayDependencies: MissionGatewayDependencies;
 };
 
-const unavailableChildEntityCommands: MissionChildEntityCommandGateway = {
-    executeStageCommand: async () => {
-        throw new Error('Stage commands are unavailable in this client context.');
-    },
-    executeTaskCommand: async () => {
-        throw new Error('Task commands are unavailable in this client context.');
-    },
-    executeArtifactCommand: async () => {
-        throw new Error('Artifact commands are unavailable in this client context.');
-    },
-    executeAgentSessionCommand: async () => {
-        throw new Error('AgentSession commands are unavailable in this client context.');
-    },
-    sendAgentSessionPrompt: async () => {
-        throw new Error('AgentSession prompt commands are unavailable in this client context.');
-    },
-    sendAgentSessionCommand: async () => {
-        throw new Error('AgentSession terminal commands are unavailable in this client context.');
-    },
-    readArtifactDocument: async () => {
-        throw new Error('Artifact document queries are unavailable in this client context.');
-    },
-    writeArtifactDocument: async () => {
-        throw new Error('Artifact document commands are unavailable in this client context.');
-    }
-};
+const missionEntityName = 'Mission';
+const stageEntityName = 'Stage';
+const taskEntityName = 'Task';
+const artifactEntityName = 'Artifact';
+const agentSessionEntityName = 'AgentSession';
+
+function createMissionCommandGateway(input: MissionGatewayDependencies): MissionCommandGateway {
+    const repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
+    const { commandRemote, queryRemote } = input;
+
+    return {
+        executeMissionCommand: async ({ missionId, commandId, input: commandInput }) => sendMissionCommand(commandRemote, {
+            missionId,
+            commandId,
+            ...(commandInput !== undefined ? { input: commandInput } : {})
+        }, repositoryRootPath),
+        getMissionProjection: async ({ missionId, executionContext }) => {
+            const normalizedMissionId = requireMissionId(missionId, 'Mission projection queries require a missionId.');
+            return MissionProjectionSnapshotSchema.parse(await queryRemote({
+                entity: missionEntityName,
+                method: 'readProjection',
+                payload: buildMissionPayload(normalizedMissionId, repositoryRootPath)
+            }, executionContext));
+        },
+        readMissionDocument: async ({ missionId, path, executionContext }) => {
+            const normalizedMissionId = requireMissionId(missionId, 'Mission document queries require missionId and path.');
+            const normalizedPath = path.trim();
+            if (!normalizedPath) {
+                throw new Error('Mission document queries require missionId and path.');
+            }
+
+            return MissionDocumentSnapshotSchema.parse(await queryRemote({
+                entity: missionEntityName,
+                method: 'readDocument',
+                payload: {
+                    ...buildMissionPayload(normalizedMissionId, repositoryRootPath),
+                    path: normalizedPath
+                }
+            }, executionContext));
+        },
+        writeMissionDocument: async ({ missionId, path, content }) => {
+            const normalizedMissionId = requireMissionId(missionId, 'Mission document commands require missionId and path.');
+            const normalizedPath = path.trim();
+            if (!normalizedPath) {
+                throw new Error('Mission document commands require missionId and path.');
+            }
+
+            return MissionDocumentSnapshotSchema.parse(await commandRemote({
+                entity: missionEntityName,
+                method: 'writeDocument',
+                payload: {
+                    ...buildMissionPayload(normalizedMissionId, repositoryRootPath),
+                    path: normalizedPath,
+                    content
+                }
+            }));
+        },
+        getMissionWorktree: async ({ missionId, executionContext }) => {
+            const normalizedMissionId = requireMissionId(missionId, 'Mission worktree queries require a missionId.');
+            return MissionWorktreeSnapshotSchema.parse(await queryRemote({
+                entity: missionEntityName,
+                method: 'readWorktree',
+                payload: buildMissionPayload(normalizedMissionId, repositoryRootPath)
+            }, executionContext));
+        }
+    };
+}
+
+function createMissionChildEntityCommandGateway(input: MissionGatewayDependencies): MissionChildEntityCommandGateway {
+    const repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
+    const { commandRemote, queryRemote } = input;
+
+    return {
+        executeStageCommand: async ({ missionId, stageId, commandId, input: commandInput }) => {
+            const normalizedMissionId = requireMissionId(missionId, 'Stage commands require missionId, stageId, and commandId.');
+            const normalizedStageId = requireNonEmptyValue(stageId, 'Stage commands require missionId, stageId, and commandId.');
+            const normalizedCommandId = requireNonEmptyValue(commandId, 'Stage commands require missionId, stageId, and commandId.');
+            return StageCommandAcknowledgementSchema.parse(await commandRemote({
+                entity: stageEntityName,
+                method: 'executeCommand',
+                payload: {
+                    ...buildMissionPayload(normalizedMissionId, repositoryRootPath),
+                    stageId: normalizedStageId,
+                    commandId: normalizedCommandId,
+                    ...(commandInput !== undefined ? { input: commandInput } : {})
+                }
+            }));
+        },
+        executeTaskCommand: async ({ missionId, taskId, commandId, input: commandInput }) => {
+            const normalizedMissionId = requireMissionId(missionId, 'Task commands require missionId, taskId, and commandId.');
+            const normalizedTaskId = requireNonEmptyValue(taskId, 'Task commands require missionId, taskId, and commandId.');
+            const normalizedCommandId = requireNonEmptyValue(commandId, 'Task commands require missionId, taskId, and commandId.');
+            return TaskCommandAcknowledgementSchema.parse(await commandRemote({
+                entity: taskEntityName,
+                method: 'executeCommand',
+                payload: {
+                    ...buildMissionPayload(normalizedMissionId, repositoryRootPath),
+                    taskId: normalizedTaskId,
+                    commandId: normalizedCommandId,
+                    ...(commandInput !== undefined ? { input: commandInput } : {})
+                }
+            }));
+        },
+        executeAgentSessionCommand: async ({ missionId, sessionId, commandId, input: commandInput }) => {
+            const normalizedMissionId = requireMissionId(missionId, 'AgentSession commands require missionId, sessionId, and commandId.');
+            const normalizedSessionId = requireNonEmptyValue(sessionId, 'AgentSession commands require missionId, sessionId, and commandId.');
+            const normalizedCommandId = requireNonEmptyValue(commandId, 'AgentSession commands require missionId, sessionId, and commandId.');
+            return AgentSessionCommandAcknowledgementSchema.parse(await commandRemote({
+                entity: agentSessionEntityName,
+                method: 'executeCommand',
+                payload: {
+                    ...buildMissionPayload(normalizedMissionId, repositoryRootPath),
+                    sessionId: normalizedSessionId,
+                    commandId: normalizedCommandId,
+                    ...(commandInput !== undefined ? { input: commandInput } : {})
+                }
+            }));
+        },
+        sendAgentSessionPrompt: async ({ missionId, sessionId, prompt }) => {
+            const normalizedMissionId = requireMissionId(missionId, 'AgentSession prompt commands require missionId and sessionId.');
+            const normalizedSessionId = requireNonEmptyValue(sessionId, 'AgentSession prompt commands require missionId and sessionId.');
+            return AgentSessionCommandAcknowledgementSchema.parse(await commandRemote({
+                entity: agentSessionEntityName,
+                method: 'sendPrompt',
+                payload: {
+                    ...buildMissionPayload(normalizedMissionId, repositoryRootPath),
+                    sessionId: normalizedSessionId,
+                    prompt
+                }
+            }));
+        },
+        sendAgentSessionCommand: async ({ missionId, sessionId, command }) => {
+            const normalizedMissionId = requireMissionId(missionId, 'AgentSession terminal commands require missionId and sessionId.');
+            const normalizedSessionId = requireNonEmptyValue(sessionId, 'AgentSession terminal commands require missionId and sessionId.');
+            return AgentSessionCommandAcknowledgementSchema.parse(await commandRemote({
+                entity: agentSessionEntityName,
+                method: 'sendCommand',
+                payload: {
+                    ...buildMissionPayload(normalizedMissionId, repositoryRootPath),
+                    sessionId: normalizedSessionId,
+                    command
+                }
+            }));
+        },
+        readArtifactDocument: async ({ missionId, artifactId, executionContext }) => {
+            const normalizedMissionId = requireMissionId(missionId, 'Artifact document queries require missionId and artifactId.');
+            const normalizedArtifactId = requireNonEmptyValue(artifactId, 'Artifact document queries require missionId and artifactId.');
+            return ArtifactDocumentDataSchema.parse(await queryRemote({
+                entity: artifactEntityName,
+                method: 'readDocument',
+                payload: {
+                    ...buildMissionPayload(normalizedMissionId, repositoryRootPath),
+                    artifactId: normalizedArtifactId
+                }
+            }, executionContext));
+        },
+        writeArtifactDocument: async ({ missionId, artifactId, content }) => {
+            const normalizedMissionId = requireMissionId(missionId, 'Artifact document commands require missionId and artifactId.');
+            const normalizedArtifactId = requireNonEmptyValue(artifactId, 'Artifact document commands require missionId and artifactId.');
+            return ArtifactDocumentDataSchema.parse(await commandRemote({
+                entity: artifactEntityName,
+                method: 'writeDocument',
+                payload: {
+                    ...buildMissionPayload(normalizedMissionId, repositoryRootPath),
+                    artifactId: normalizedArtifactId,
+                    content
+                }
+            }));
+        }
+    };
+}
 
 export class Mission implements EntityModel<MissionSnapshot> {
-    private readonly loadSnapshot: MissionSnapshotLoader;
+    private readonly loadData: MissionDataLoader;
     private readonly commandGateway: MissionCommandGateway;
     private readonly childCommands: MissionChildEntityCommandGateway;
     private snapshotState = $state<MissionSnapshot | undefined>();
@@ -199,20 +318,15 @@ export class Mission implements EntityModel<MissionSnapshot> {
     private readonly tasks = new EntityRegistry<string, TaskSnapshot, Task>();
     private readonly artifacts = new EntityRegistry<string, ArtifactSnapshot, Artifact>();
 
-    public constructor(
-        snapshot: MissionSnapshot,
-        loadSnapshot: MissionSnapshotLoader,
-        commandGateway: MissionCommandGateway = unavailableMissionCommands,
-        childCommands: MissionChildEntityCommandGateway = unavailableChildEntityCommands
-    ) {
-        this.snapshot = snapshot;
-        this.loadSnapshot = loadSnapshot;
-        this.commandGateway = commandGateway;
-        this.childCommands = childCommands;
-        this.applySessionSnapshots(snapshot.agentSessions);
-        this.applyTaskSnapshots(snapshot);
-        this.applyStageSnapshots(snapshot);
-        this.applyArtifactSnapshots(snapshot);
+    public constructor(input: MissionDependencies) {
+        this.snapshot = input.snapshot;
+        this.loadData = input.loadData;
+        this.commandGateway = createMissionCommandGateway(input.gatewayDependencies);
+        this.childCommands = createMissionChildEntityCommandGateway(input.gatewayDependencies);
+        this.applySessionSnapshots(input.snapshot.agentSessions);
+        this.applyTaskSnapshots(input.snapshot);
+        this.applyStageSnapshots(input.snapshot);
+        this.applyArtifactSnapshots(input.snapshot);
     }
 
     private get snapshot(): MissionSnapshot {
@@ -271,13 +385,7 @@ export class Mission implements EntityModel<MissionSnapshot> {
             return structuredClone($state.snapshot(commands));
         }
 
-        const projectionSnapshot = this.projectionSnapshotState
-            ? $state.snapshot(this.projectionSnapshotState)
-            : undefined;
-        const actions = projectionSnapshot?.actions ?? this.snapshot.actions;
-        return (actions?.actions ?? [])
-            .filter(isMissionScopedAction)
-            .map(toMissionCommandDescriptor);
+        return [];
     }
 
     public setRouteState(input: {
@@ -295,27 +403,27 @@ export class Mission implements EntityModel<MissionSnapshot> {
     }
 
     public async pause(): Promise<this> {
-        return this.runCommandAndRefresh(this.commandGateway.pauseMission({ missionId: this.missionId }));
+        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: 'mission.pause' }));
     }
 
     public async resume(): Promise<this> {
-        return this.runCommandAndRefresh(this.commandGateway.resumeMission({ missionId: this.missionId }));
+        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: 'mission.resume' }));
     }
 
     public async panic(): Promise<this> {
-        return this.runCommandAndRefresh(this.commandGateway.panicMission({ missionId: this.missionId }));
+        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: 'mission.panic' }));
     }
 
     public async clearPanic(): Promise<this> {
-        return this.runCommandAndRefresh(this.commandGateway.clearMissionPanic({ missionId: this.missionId }));
+        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: 'mission.clearPanic' }));
     }
 
     public async restartQueue(): Promise<this> {
-        return this.runCommandAndRefresh(this.commandGateway.restartMissionQueue({ missionId: this.missionId }));
+        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: 'mission.restartQueue' }));
     }
 
     public async deliver(): Promise<this> {
-        return this.runCommandAndRefresh(this.commandGateway.deliverMission({ missionId: this.missionId }));
+        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: 'mission.deliver' }));
     }
 
     public async getProjectionSnapshot(input: {
@@ -329,39 +437,13 @@ export class Mission implements EntityModel<MissionSnapshot> {
         return snapshot;
     }
 
-    public async listAvailableActions(
-        context?: MissionActionQueryContext,
-        input: { executionContext?: MissionQueryExecutionContext } = {}
-    ): Promise<MissionActionListSnapshot> {
-        return this.commandGateway.getMissionActions({
+    public async executeCommand(commandId: string, input?: unknown): Promise<void> {
+        await this.commandGateway.executeMissionCommand({
             missionId: this.missionId,
-            ...(context ? { context } : {}),
-            ...(input.executionContext ? { executionContext: input.executionContext } : {})
-        });
-    }
-
-    public async executeAction(input: {
-        actionId: string;
-        steps?: OperatorActionExecutionStep[];
-        terminalSessionName?: string;
-    }): Promise<void> {
-        await this.commandGateway.executeMissionAction({
-            missionId: this.missionId,
-            actionId: input.actionId,
-            ...(input.steps ? { steps: input.steps } : {}),
-            ...(input.terminalSessionName?.trim()
-                ? { terminalSessionName: input.terminalSessionName.trim() }
-                : {})
+            commandId,
+            ...(input !== undefined ? { input } : {})
         });
         await this.refresh();
-    }
-
-    public async executeCommand(commandId: string, input?: unknown): Promise<void> {
-        const steps = Array.isArray(input) ? input as OperatorActionExecutionStep[] : undefined;
-        await this.executeAction({
-            actionId: commandId,
-            ...(steps ? { steps } : {})
-        });
     }
 
     public async readDocument(path: string, input: {
@@ -447,11 +529,11 @@ export class Mission implements EntityModel<MissionSnapshot> {
     }
 
     public async refresh(): Promise<this> {
-        this.applySnapshot(await this.loadSnapshot(this.missionId));
+        this.applySnapshot(await this.loadData(this.missionId));
         return this;
     }
 
-    public updateFromSnapshot(snapshot: MissionSnapshot): this {
+    public updateFromData(snapshot: MissionSnapshot): this {
         this.snapshot = snapshot;
         this.applySessionSnapshots(snapshot.agentSessions);
         this.applyTaskSnapshots(snapshot);
@@ -478,7 +560,7 @@ export class Mission implements EntityModel<MissionSnapshot> {
 
     public applyStageSnapshot(snapshot: MissionStageSnapshot): this {
         const nextStages = upsertById(
-            this.stages.values().map((stage) => stage.toSnapshot()),
+            this.stages.values().map((stage) => stage.toData()),
             snapshot,
             (stage) => stage.stageId
         );
@@ -524,7 +606,7 @@ export class Mission implements EntityModel<MissionSnapshot> {
         const nextSessions = [
             ...this.sessions
                 .values()
-                .map((session) => session.toSnapshot())
+                .map((session) => session.toData())
                 .filter((session) => session.sessionId !== snapshot.sessionId),
             snapshot
         ];
@@ -534,18 +616,18 @@ export class Mission implements EntityModel<MissionSnapshot> {
     }
 
     public applySnapshot(snapshot: MissionSnapshot): this {
-        return this.updateFromSnapshot(snapshot);
+        return this.updateFromData(snapshot);
     }
 
-    public toSnapshot(): MissionSnapshot {
+    public toData(): MissionSnapshot {
         return {
             ...structuredClone($state.snapshot(this.snapshot)),
-            agentSessions: this.listSessions().map((session) => session.toSnapshot())
+            agentSessions: this.listSessions().map((session) => session.toData())
         };
     }
 
     public toJSON(): MissionSnapshot {
-        return this.toSnapshot();
+        return this.toData();
     }
 
     private applySessionSnapshots(sessionSnapshots: AgentSessionSnapshot[]): void {
@@ -553,7 +635,7 @@ export class Mission implements EntityModel<MissionSnapshot> {
             sessionSnapshots,
             (sessionSnapshot) => sessionSnapshot.sessionId,
             (sessionSnapshot) => new AgentSession(sessionSnapshot, {
-                executeSessionCommand: async (sessionId, commandId, input) => {
+                executeCommand: async (sessionId, commandId, input) => {
                     await this.childCommands.executeAgentSessionCommand({
                         missionId: this.missionId,
                         sessionId,
@@ -562,7 +644,7 @@ export class Mission implements EntityModel<MissionSnapshot> {
                     });
                     await this.refresh();
                 },
-                sendSessionPrompt: async (sessionId, prompt) => {
+                sendPrompt: async (sessionId, prompt) => {
                     await this.childCommands.sendAgentSessionPrompt({
                         missionId: this.missionId,
                         sessionId,
@@ -570,7 +652,7 @@ export class Mission implements EntityModel<MissionSnapshot> {
                     });
                     await this.refresh();
                 },
-                sendSessionCommand: async (sessionId, command) => {
+                sendCommand: async (sessionId, command) => {
                     await this.childCommands.sendAgentSessionCommand({
                         missionId: this.missionId,
                         sessionId,
@@ -598,7 +680,7 @@ export class Mission implements EntityModel<MissionSnapshot> {
             taskSnapshots,
             (taskSnapshot) => taskSnapshot.task.taskId,
             (taskSnapshot) => new Task(taskSnapshot, {
-                executeTaskCommand: async (taskId, commandId, input) => {
+                executeCommand: async (taskId, commandId, input) => {
                     await this.childCommands.executeTaskCommand({
                         missionId: this.missionId,
                         taskId,
@@ -615,7 +697,7 @@ export class Mission implements EntityModel<MissionSnapshot> {
         const taskSnapshots = [
             ...this.tasks
                 .values()
-                .map((task) => task.toSnapshot())
+                .map((task) => task.toData())
                 .filter((task) => task.stageId !== stage.stageId),
             ...stage.tasks.map((task) => ({
                 stageId: stage.stageId,
@@ -632,7 +714,7 @@ export class Mission implements EntityModel<MissionSnapshot> {
             task
         };
         const taskSnapshots = upsertById(
-            this.tasks.values().map((knownTask) => knownTask.toSnapshot()),
+            this.tasks.values().map((knownTask) => knownTask.toData()),
             nextTaskSnapshot,
             (snapshot) => snapshot.task.taskId
         );
@@ -645,7 +727,7 @@ export class Mission implements EntityModel<MissionSnapshot> {
             taskSnapshots,
             (taskSnapshot) => taskSnapshot.task.taskId,
             (taskSnapshot) => new Task(taskSnapshot, {
-                executeTaskCommand: async (taskId, commandId, input) => {
+                executeCommand: async (taskId, commandId, input) => {
                     await this.childCommands.executeTaskCommand({
                         missionId: this.missionId,
                         taskId,
@@ -666,8 +748,9 @@ export class Mission implements EntityModel<MissionSnapshot> {
         this.stages.reconcile(
             stages,
             (stage) => stage.stageId,
-            (stage) => new Stage(stage, (taskId) => this.tasks.get(taskId), {
-                executeStageCommand: async (stageId, commandId, input) => {
+            (stage) => new Stage(stage, {
+                resolveTask: (taskId) => this.tasks.get(taskId),
+                executeCommand: async (stageId, commandId, input) => {
                     await this.childCommands.executeStageCommand({
                         missionId: this.missionId,
                         stageId,
@@ -694,7 +777,7 @@ export class Mission implements EntityModel<MissionSnapshot> {
         const artifactSnapshots = [
             ...this.artifacts
                 .values()
-                .map((artifact) => artifact.toSnapshot())
+                .map((artifact) => artifact.toData())
                 .filter((artifact) => artifact.stageId !== stage.stageId),
             ...stage.artifacts.map(toArtifactSnapshot)
         ];
@@ -705,7 +788,7 @@ export class Mission implements EntityModel<MissionSnapshot> {
     private applyArtifactProjectionSnapshot(snapshot: MissionArtifactSnapshot): void {
         const artifactSnapshot = toArtifactSnapshot(snapshot);
         const artifactSnapshots = upsertById(
-            this.artifacts.values().map((artifact) => artifact.toSnapshot()),
+            this.artifacts.values().map((artifact) => artifact.toData()),
             artifactSnapshot,
             (artifact) => artifact.artifactId
         );
@@ -803,16 +886,7 @@ export class Mission implements EntityModel<MissionSnapshot> {
 
     private createArtifactEntity(snapshot: ArtifactSnapshot): Artifact {
         return new Artifact(snapshot, {
-            executeArtifactCommand: async (artifactId, commandId, input) => {
-                await this.childCommands.executeArtifactCommand({
-                    missionId: this.missionId,
-                    artifactId,
-                    commandId,
-                    ...(input !== undefined ? { input } : {})
-                });
-                await this.refresh();
-            },
-            readArtifact: async (filePath, input) => {
+            readDocument: async (filePath, input) => {
                 const artifactId = this.getArtifact(filePath)?.artifactId ?? snapshot.artifactId;
                 return this.childCommands.readArtifactDocument({
                     missionId: this.missionId,
@@ -820,7 +894,7 @@ export class Mission implements EntityModel<MissionSnapshot> {
                     ...(input?.executionContext ? { executionContext: input.executionContext } : {})
                 });
             },
-            writeArtifact: async (filePath, content) => {
+            writeDocument: async (filePath, content) => {
                 const artifactId = this.getArtifact(filePath)?.artifactId ?? snapshot.artifactId;
                 return this.childCommands.writeArtifactDocument({
                     missionId: this.missionId,
@@ -838,10 +912,10 @@ export class Mission implements EntityModel<MissionSnapshot> {
     }
 }
 
-function upsertById<T>(snapshots: T[], snapshot: T, selectId: (snapshot: T) => string): T[] {
+function upsertById<T>(dataItems: T[], snapshot: T, selectId: (snapshot: T) => string): T[] {
     const nextId = selectId(snapshot);
     let replaced = false;
-    const nextSnapshots = snapshots.map((candidate) => {
+    const nextSnapshots = dataItems.map((candidate) => {
         if (selectId(candidate) !== nextId) {
             return candidate;
         }
@@ -868,6 +942,49 @@ function toArtifactIdentitySnapshot(input: {
     };
 }
 
+function requireMissionId(missionId: string, message: string): string {
+    return requireNonEmptyValue(missionId, message);
+}
+
+function requireNonEmptyValue(value: string, message: string): string {
+    const normalizedValue = value.trim();
+    if (!normalizedValue) {
+        throw new Error(message);
+    }
+
+    return normalizedValue;
+}
+
+function buildMissionPayload(missionId: string, repositoryRootPath?: string): { missionId: string; repositoryRootPath?: string } {
+    return {
+        missionId,
+        ...(repositoryRootPath ? { repositoryRootPath } : {})
+    };
+}
+
+function sendMissionCommand(
+    commandRemote: EntityCommandExecutor,
+    input: {
+        missionId: string;
+        commandId: string;
+        input?: unknown;
+    },
+    repositoryRootPath?: string
+): Promise<MissionCommandAcknowledgement> {
+    const normalizedMissionId = requireMissionId(input.missionId, 'Mission commands require a missionId and commandId.');
+    const normalizedCommandId = requireNonEmptyValue(input.commandId, 'Mission commands require a missionId and commandId.');
+
+    return MissionCommandAcknowledgementSchema.parseAsync(commandRemote({
+        entity: missionEntityName,
+        method: 'command',
+        payload: {
+            ...buildMissionPayload(normalizedMissionId, repositoryRootPath),
+            commandId: normalizedCommandId,
+            ...(input.input !== undefined ? { input: input.input } : {})
+        }
+    }));
+}
+
 function toArtifactSnapshot(artifact: MissionArtifactSnapshot): ArtifactSnapshot {
     return {
         artifactId: artifact.artifactId,
@@ -879,24 +996,3 @@ function toArtifactSnapshot(artifact: MissionArtifactSnapshot): ArtifactSnapshot
     };
 }
 
-function toMissionCommandDescriptor(action: MissionActionDescriptor): EntityCommandDescriptorType {
-    return {
-        commandId: action.actionId,
-        label: action.label,
-        ...(action.description ? { description: action.description } : {}),
-        disabled: action.disabled ?? false,
-        ...(action.disabledReason ? { disabledReason: action.disabledReason } : {})
-    };
-}
-
-function isMissionScopedAction(action: MissionActionDescriptor): boolean {
-    const target = action.target;
-    const targetScope = typeof target === 'object'
-        && target !== null
-        && !Array.isArray(target)
-        && typeof target['scope'] === 'string'
-        ? target['scope']
-        : undefined;
-
-    return (targetScope ?? action.kind) === 'mission';
-}

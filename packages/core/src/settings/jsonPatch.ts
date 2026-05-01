@@ -1,4 +1,4 @@
-import type { WorkflowGlobalSettings } from '../workflow/engine/types.js';
+import type { WorkflowDefinition } from '../workflow/engine/types.js';
 import { WorkflowSettingsError, type JsonPatchOperation } from './types.js';
 
 const ALLOWED_PATH_PREFIXES = [
@@ -44,11 +44,11 @@ export function validateWorkflowSettingsPatch(patch: JsonPatchOperation[]): void
 }
 
 export function applyWorkflowSettingsPatch(
-	current: WorkflowGlobalSettings,
+	current: WorkflowDefinition,
 	patch: JsonPatchOperation[]
-): WorkflowGlobalSettings {
+): WorkflowDefinition {
 	validateWorkflowSettingsPatch(patch);
-	const draft = structuredClone(current) as unknown as WorkflowGlobalSettings;
+	const draft = structuredClone(current) as unknown as WorkflowDefinition;
 
 	for (const operation of patch) {
 		applyOperation(draft as unknown as JsonContainer, operation);

@@ -1,6 +1,6 @@
 <script lang="ts">
-    import AgentSessionActionbar from "$lib/components/entities/AgentSession/AgentSessionActionbar.svelte";
-    import type { AgentSession } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
+    import AgentSessionCommandbar from "$lib/components/entities/AgentSession/AgentSessionCommandbar.svelte";
+    import type { AgentSession as AgentSessionEntity } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
     import Anser from "anser/lib/index.js";
     import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import { FitAddon } from "@xterm/addon-fit";
@@ -44,11 +44,11 @@
     let {
         refreshNonce,
         session,
-        onActionExecuted,
+        onCommandExecuted,
     }: {
         refreshNonce: number;
-        session?: AgentSession;
-        onActionExecuted: () => Promise<void>;
+        session?: AgentSessionEntity;
+        onCommandExecuted: () => Promise<void>;
     } = $props();
     const missionScope = getScopedMissionContext();
 
@@ -82,7 +82,7 @@
     const repositoryId = $derived(activeRepository?.id ?? "");
     const repositoryRootPath = $derived(
         mission?.missionWorktreePath ??
-            activeRepository?.repositoryRootPath ??
+            activeRepository?.data.repositoryRootPath ??
             "",
     );
     const isPersistedTranscriptSnapshot = $derived(
@@ -511,10 +511,10 @@
                 {/if}
             </div>
 
-            <AgentSessionActionbar
+            <AgentSessionCommandbar
                 {refreshNonce}
                 {session}
-                {onActionExecuted}
+                {onCommandExecuted}
             />
         </div>
         {#if error}

@@ -3,9 +3,8 @@ import type {
 	AgentPrompt,
 	AgentSessionSnapshot
 } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
-import type { EntityExecutionContext } from '../Entity/Entity.js';
+import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import type { MissionTaskState } from '../../types.js';
-import { toAgentSession, type AgentSessionData } from './AgentSessionData.js';
 import type {
 	MissionAgentModelInfo,
 	MissionAgentScope,
@@ -15,16 +14,19 @@ import type {
 	MissionAgentTelemetrySnapshot
 } from '../../daemon/protocol/contracts.js';
 import {
-	agentSessionCommandAcknowledgementSchema,
-	agentSessionExecuteCommandPayloadSchema,
-	agentSessionIdentityPayloadSchema,
-	agentSessionReadTerminalPayloadSchema,
-	agentSessionSendCommandPayloadSchema,
-	agentSessionSendPromptPayloadSchema,
-	agentSessionSendTerminalInputPayloadSchema,
-	agentSessionTerminalSnapshotSchema,
-	agentSessionSnapshotSchema
+	AgentSessionCommandAcknowledgementSchema,
+	AgentSessionExecuteCommandInputSchema,
+	AgentSessionLocatorSchema,
+	AgentSessionSendCommandInputSchema,
+	AgentSessionSendPromptInputSchema,
+	AgentSessionSendTerminalInputSchema,
+	AgentSessionTerminalSnapshotSchema,
+	AgentSessionDataSchema,
+	AgentSessionCommandIds,
+	agentSessionEntityName,
+	type AgentSessionDataType
 } from './AgentSessionSchema.js';
+import type { MissionSnapshotType } from '../Mission/MissionSchema.js';
 
 export type AgentSessionOwner = {
 	completeSessionRecord(sessionId: string): Promise<AgentSessionRecord>;
@@ -47,20 +49,71 @@ type AgentSessionLaunchRecord = {
 	updatedAt: string;
 };
 
-export class AgentSession {
+export function toAgentSession(record: AgentSessionRecord): AgentSessionDataType {
+	return AgentSessionDataSchema.parse({
+		sessionId: record.sessionId,
+		runnerId: record.runnerId,
+		...(record.transportId ? { transportId: record.transportId } : {}),
+		...(record.sessionLogPath ? { sessionLogPath: record.sessionLogPath } : {}),
+		runnerLabel: record.runnerLabel,
+		lifecycleState: record.lifecycleState,
+		...(record.terminalSessionName ? { terminalSessionName: record.terminalSessionName } : {}),
+		...(record.terminalPaneId ? { terminalPaneId: record.terminalPaneId } : {}),
+		...(record.terminalSessionName && record.terminalPaneId
+			? {
+				terminalHandle: {
+					sessionName: record.terminalSessionName,
+					paneId: record.terminalPaneId
+				}
+			}
+			: {}),
+		...(record.taskId ? { taskId: record.taskId } : {}),
+		...(record.assignmentLabel ? { assignmentLabel: record.assignmentLabel } : {}),
+		...(record.workingDirectory ? { workingDirectory: record.workingDirectory } : {}),
+		...(record.currentTurnTitle ? { currentTurnTitle: record.currentTurnTitle } : {}),
+		...(record.scope ? { scope: record.scope } : {}),
+		...(record.telemetry ? { telemetry: record.telemetry } : {}),
+		createdAt: record.createdAt,
+		lastUpdatedAt: record.lastUpdatedAt,
+		...(record.failureMessage ? { failureMessage: record.failureMessage } : {})
+	});
+}
+
+export class AgentSession extends Entity<AgentSessionDataType, string> {
+	public static override readonly entityName = agentSessionEntityName;
+
 	public static async read(payload: unknown, context: EntityExecutionContext) {
-		const input = agentSessionIdentityPayloadSchema.parse(payload);
-		const service = await loadMissionDaemon(context);
+		const input = AgentSessionLocatorSchema.parse(payload);
+		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			return agentSessionSnapshotSchema.parse(service.requireAgentSession(await service.buildMissionSnapshot(mission, input.missionId), input.sessionId));
+			return AgentSession.requireData(await mission.buildMissionSnapshot(), input.sessionId);
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public static requireData(snapshot: MissionSnapshotType, sessionId: string) {
+		const session = snapshot.agentSessions.find((candidate) => candidate.sessionId === sessionId);
+		if (!session) {
+			throw new Error(`AgentSession '${sessionId}' could not be resolved in Mission '${snapshot.mission.missionId}'.`);
+		}
+		return AgentSessionDataSchema.parse(session);
+	}
+
+	public static async resolve(payload: unknown, context: EntityExecutionContext): Promise<AgentSession> {
+		const input = AgentSessionExecuteCommandInputSchema.parse(payload);
+		const service = await loadMissionRegistry(context);
+		const mission = await service.loadRequiredMission(input, context);
+		try {
+			return new AgentSession(AgentSession.requireData(await mission.buildMissionSnapshot(), input.sessionId));
 		} finally {
 			mission.dispose();
 		}
 	}
 
 	public static async readTerminal(payload: unknown, context: EntityExecutionContext) {
-		const input = agentSessionReadTerminalPayloadSchema.parse(payload);
+		const input = AgentSessionLocatorSchema.parse(payload);
 		const { readAgentSessionTerminalState } = await import('../../daemon/AgentSessionTerminal.js');
 		const state = await readAgentSessionTerminalState({
 			surfacePath: context.surfacePath,
@@ -70,7 +123,7 @@ export class AgentSession {
 		if (!state) {
 			throw new Error(`AgentSession terminal for '${input.sessionId}' is not available.`);
 		}
-		return agentSessionTerminalSnapshotSchema.parse({
+		return AgentSessionTerminalSnapshotSchema.parse({
 			missionId: input.missionId,
 			sessionId: input.sessionId,
 			connected: state.connected,
@@ -83,28 +136,29 @@ export class AgentSession {
 		});
 	}
 
-	public static async executeCommand(payload: unknown, context: EntityExecutionContext) {
-		const input = agentSessionExecuteCommandPayloadSchema.parse(payload);
-		const service = await loadMissionDaemon(context);
+
+	public async executeCommand(payload: unknown, context: EntityExecutionContext) {
+		const input = AgentSessionExecuteCommandInputSchema.parse(payload);
+		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			service.requireAgentSession(await service.buildMissionSnapshot(mission, input.missionId), input.sessionId);
+			AgentSession.requireData(await mission.buildMissionSnapshot(), input.sessionId);
 			switch (input.commandId) {
-				case 'agentSession.complete':
+				case AgentSessionCommandIds.complete:
 					await mission.completeAgentSession(input.sessionId);
 					break;
-				case 'agentSession.cancel':
+				case AgentSessionCommandIds.cancel:
 					await mission.cancelAgentSession(input.sessionId, service.getReason(input.input));
 					break;
-				case 'agentSession.terminate':
+				case AgentSessionCommandIds.terminate:
 					await mission.terminateAgentSession(input.sessionId, service.getReason(input.input));
 					break;
 				default:
 					throw new Error(`AgentSession command '${input.commandId}' is not implemented in the daemon.`);
 			}
-			return agentSessionCommandAcknowledgementSchema.parse({
+			return AgentSessionCommandAcknowledgementSchema.parse({
 				ok: true,
-				entity: 'AgentSession',
+				entity: agentSessionEntityName,
 				method: 'executeCommand',
 				id: input.sessionId,
 				missionId: input.missionId,
@@ -117,13 +171,13 @@ export class AgentSession {
 	}
 
 	public static async sendPrompt(payload: unknown, context: EntityExecutionContext) {
-		const input = agentSessionSendPromptPayloadSchema.parse(payload);
-		const service = await loadMissionDaemon(context);
+		const input = AgentSessionSendPromptInputSchema.parse(payload);
+		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			service.requireAgentSession(await service.buildMissionSnapshot(mission, input.missionId), input.sessionId);
+			AgentSession.requireData(await mission.buildMissionSnapshot(), input.sessionId);
 			await mission.sendAgentSessionPrompt(input.sessionId, service.normalizeAgentPrompt(input.prompt));
-			return agentSessionCommandAcknowledgementSchema.parse({
+			return AgentSessionCommandAcknowledgementSchema.parse({
 				ok: true,
 				entity: 'AgentSession',
 				method: 'sendPrompt',
@@ -137,13 +191,13 @@ export class AgentSession {
 	}
 
 	public static async sendCommand(payload: unknown, context: EntityExecutionContext) {
-		const input = agentSessionSendCommandPayloadSchema.parse(payload);
-		const service = await loadMissionDaemon(context);
+		const input = AgentSessionSendCommandInputSchema.parse(payload);
+		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			service.requireAgentSession(await service.buildMissionSnapshot(mission, input.missionId), input.sessionId);
+			AgentSession.requireData(await mission.buildMissionSnapshot(), input.sessionId);
 			await mission.sendAgentSessionCommand(input.sessionId, service.normalizeAgentCommand(input.command));
-			return agentSessionCommandAcknowledgementSchema.parse({
+			return AgentSessionCommandAcknowledgementSchema.parse({
 				ok: true,
 				entity: 'AgentSession',
 				method: 'sendCommand',
@@ -157,7 +211,7 @@ export class AgentSession {
 	}
 
 	public static async sendTerminalInput(payload: unknown, context: EntityExecutionContext) {
-		const input = agentSessionSendTerminalInputPayloadSchema.parse(payload);
+		const input = AgentSessionSendTerminalInputSchema.parse(payload);
 		const { sendAgentSessionTerminalInput } = await import('../../daemon/AgentSessionTerminal.js');
 		const state = await sendAgentSessionTerminalInput({
 			surfacePath: context.surfacePath,
@@ -173,7 +227,7 @@ export class AgentSession {
 		if (!state) {
 			throw new Error(`AgentSession terminal for '${input.sessionId}' is not available.`);
 		}
-		return agentSessionTerminalSnapshotSchema.parse({
+		return AgentSessionTerminalSnapshotSchema.parse({
 			missionId: input.missionId,
 			sessionId: input.sessionId,
 			connected: state.connected,
@@ -398,71 +452,103 @@ export class AgentSession {
 		}
 	}
 
-	public constructor(
-		private readonly owner: AgentSessionOwner,
-		private readonly record: AgentSessionRecord
-	) { }
+	private readonly owner: AgentSessionOwner | undefined;
+	private readonly record: AgentSessionRecord | undefined;
+
+	public constructor(data: AgentSessionDataType);
+	public constructor(owner: AgentSessionOwner, record: AgentSessionRecord);
+	public constructor(ownerOrData: AgentSessionOwner | AgentSessionDataType, record?: AgentSessionRecord) {
+		if (record) {
+			super(toAgentSession(record));
+			this.owner = ownerOrData as AgentSessionOwner;
+			this.record = AgentSession.cloneRecord(record);
+			return;
+		}
+
+		super(AgentSessionDataSchema.parse(ownerOrData));
+		this.owner = undefined;
+		this.record = undefined;
+	}
+
+	public get id(): string {
+		return this.sessionId;
+	}
 
 	public get sessionId(): string {
-		return this.record.sessionId;
+		return this.record?.sessionId ?? this.toData().sessionId;
 	}
 
 	public toRecord(): AgentSessionRecord {
-		return AgentSession.cloneRecord(this.record);
+		return AgentSession.cloneRecord(this.requireRecord());
 	}
 
-	public toEntity(): AgentSessionData {
-		return toAgentSession(this.record);
+	public toEntity(): AgentSessionDataType {
+		return toAgentSession(this.requireRecord());
 	}
 
 	public toState(snapshot?: AgentSessionSnapshot): AgentSessionState {
+		const record = this.requireRecord();
 		if (!snapshot) {
 			return AgentSession.cloneState({
-				runnerId: this.record.runnerId,
-				...(this.record.transportId ? { transportId: this.record.transportId } : {}),
-				runnerLabel: this.record.runnerLabel,
-				sessionId: this.record.sessionId,
-				...(this.record.terminalSessionName ? { terminalSessionName: this.record.terminalSessionName } : {}),
-				...(this.record.terminalPaneId ? { terminalPaneId: this.record.terminalPaneId } : {}),
-				lifecycleState: this.record.lifecycleState,
-				lastUpdatedAt: this.record.lastUpdatedAt,
-				...(this.record.workingDirectory ? { workingDirectory: this.record.workingDirectory } : {}),
-				...(this.record.currentTurnTitle ? { currentTurnTitle: this.record.currentTurnTitle } : {}),
-				...(this.record.scope ? { scope: this.record.scope } : {}),
-				...(this.record.failureMessage ? { failureMessage: this.record.failureMessage } : {})
+				runnerId: record.runnerId,
+				...(record.transportId ? { transportId: record.transportId } : {}),
+				runnerLabel: record.runnerLabel,
+				sessionId: record.sessionId,
+				...(record.terminalSessionName ? { terminalSessionName: record.terminalSessionName } : {}),
+				...(record.terminalPaneId ? { terminalPaneId: record.terminalPaneId } : {}),
+				lifecycleState: record.lifecycleState,
+				lastUpdatedAt: record.lastUpdatedAt,
+				...(record.workingDirectory ? { workingDirectory: record.workingDirectory } : {}),
+				...(record.currentTurnTitle ? { currentTurnTitle: record.currentTurnTitle } : {}),
+				...(record.scope ? { scope: record.scope } : {}),
+				...(record.failureMessage ? { failureMessage: record.failureMessage } : {})
 			});
 		}
 
 		return AgentSession.createStateFromSnapshot({
 			snapshot,
-			runnerLabel: this.record.runnerLabel,
-			record: this.record
+			runnerLabel: record.runnerLabel,
+			record
 		});
 	}
 
 	public async sendPrompt(prompt: AgentPrompt): Promise<AgentSession> {
-		const nextRecord = await this.owner.sendSessionPrompt(this.record.sessionId, prompt);
-		return new AgentSession(this.owner, nextRecord);
+		const nextRecord = await this.requireOwner().sendSessionPrompt(this.sessionId, prompt);
+		return new AgentSession(this.requireOwner(), nextRecord);
 	}
 
 	public async sendCommand(command: AgentCommand): Promise<AgentSession> {
-		const nextRecord = await this.owner.sendSessionCommand(this.record.sessionId, command);
-		return new AgentSession(this.owner, nextRecord);
+		const nextRecord = await this.requireOwner().sendSessionCommand(this.sessionId, command);
+		return new AgentSession(this.requireOwner(), nextRecord);
 	}
 
 	public async done(): Promise<AgentSession> {
-		const nextRecord = await this.owner.completeSessionRecord(this.record.sessionId);
-		return new AgentSession(this.owner, nextRecord);
+		const nextRecord = await this.requireOwner().completeSessionRecord(this.sessionId);
+		return new AgentSession(this.requireOwner(), nextRecord);
 	}
 
 	public async cancel(reason?: string): Promise<AgentSession> {
-		const nextRecord = await this.owner.cancelSessionRecord(this.record.sessionId, reason);
-		return new AgentSession(this.owner, nextRecord);
+		const nextRecord = await this.requireOwner().cancelSessionRecord(this.sessionId, reason);
+		return new AgentSession(this.requireOwner(), nextRecord);
 	}
 
 	public async terminate(reason?: string): Promise<AgentSession> {
-		const nextRecord = await this.owner.terminateSessionRecord(this.record.sessionId, reason);
-		return new AgentSession(this.owner, nextRecord);
+		const nextRecord = await this.requireOwner().terminateSessionRecord(this.sessionId, reason);
+		return new AgentSession(this.requireOwner(), nextRecord);
+	}
+
+	private requireOwner(): AgentSessionOwner {
+		if (!this.owner) {
+			throw new Error(`AgentSession '${this.sessionId}' is not attached to a Mission owner.`);
+		}
+		return this.owner;
+	}
+
+	private requireRecord(): AgentSessionRecord {
+		if (!this.record) {
+			throw new Error(`AgentSession '${this.sessionId}' is not attached to a Mission session record.`);
+		}
+		return this.record;
 	}
 
 	private static cloneModel(model: MissionAgentModelInfo | undefined): MissionAgentModelInfo | undefined {
@@ -571,7 +657,7 @@ function getTransportFields(snapshot: AgentSessionSnapshot | undefined): {
 	};
 }
 
-async function loadMissionDaemon(context: EntityExecutionContext) {
-	const { requireMissionDaemon } = await import('../../daemon/MissionDaemon.js');
-	return requireMissionDaemon(context);
+async function loadMissionRegistry(context: EntityExecutionContext) {
+	const { requireMissionRegistry } = await import('../../daemon/MissionRegistry.js');
+	return requireMissionRegistry(context);
 }

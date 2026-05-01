@@ -1,18 +1,17 @@
 import type {
     GitHubIssueDetailType,
-    MissionReferenceType,
-    RepositoryDataType,
+    RepositoryStorageType,
     RepositoryPlatformRepositoryType,
-    RepositorySnapshotType,
+    RepositoryDataType,
     TrackedIssueSummaryType
 } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
-import type { AgentSessionSnapshot, AgentSessionTerminalSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
-import type { MissionSnapshot, MissionTerminalSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import type { MissionCatalogEntryType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import type { AgentSessionDataType, AgentSessionTerminalSnapshotType } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { MissionRuntimeEventEnvelopeType, MissionSnapshotType, MissionTerminalSnapshotType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { MissionStageId, MissionTowerTreeNode, OperatorActionDescriptor, OperatorActionExecutionStep, OperatorActionFlowStep, OperatorActionListSnapshot, OperatorActionQueryContext, OperatorActionTargetContext, OperatorStatus } from '@flying-pillow/mission-core/types';
-import type { AirportRuntimeEventEnvelope } from "$lib/contracts/runtime-events";
 
-export type SidebarRepositoryData = RepositoryDataType & {
-    missions?: MissionReferenceType[];
+export type SidebarRepositoryData = RepositoryStorageType & {
+    missions?: MissionCatalogEntryType[];
 };
 export type AirportRepositoryListItem = {
     key: string;
@@ -22,13 +21,13 @@ export type AirportRepositoryListItem = {
     displayDescription: string;
     repositoryRootPath?: string;
     platformRepositoryRef?: string;
-    missions: MissionReferenceType[];
+    missions: MissionCatalogEntryType[];
     isLocal: boolean;
 };
-export type MissionSessionSummary = AgentSessionSnapshot;
-export type MissionRuntimeEventEnvelope = AirportRuntimeEventEnvelope;
-export type MissionSessionTerminalSnapshotData = AgentSessionTerminalSnapshot;
-export type MissionTerminalSnapshotData = MissionTerminalSnapshot;
+export type MissionSessionSummary = AgentSessionDataType;
+export type MissionRuntimeEventEnvelope = MissionRuntimeEventEnvelopeType;
+export type MissionSessionTerminalSnapshotData = AgentSessionTerminalSnapshotType;
+export type MissionTerminalSnapshotData = MissionTerminalSnapshotType;
 export type MissionStageIdData = MissionStageId;
 export type MissionTowerTreeNodeData = MissionTowerTreeNode;
 export type OperatorActionDescriptorData = OperatorActionDescriptor;
@@ -41,11 +40,11 @@ export type OperatorStatusData = OperatorStatus;
 
 export type {
     GitHubIssueDetailType,
-    MissionReferenceType,
-    RepositoryDataType,
+    MissionCatalogEntryType,
+    RepositoryStorageType,
     RepositoryPlatformRepositoryType,
-    RepositorySnapshotType,
+    RepositoryDataType,
     TrackedIssueSummaryType,
-    AgentSessionSnapshot,
-    MissionSnapshot
+    AgentSessionDataType,
+    MissionSnapshotType
 };

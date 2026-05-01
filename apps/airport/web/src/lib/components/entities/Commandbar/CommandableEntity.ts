@@ -1,6 +1,6 @@
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 
-export type ActionableEntity = {
+export type CommandableEntity = {
     readonly entityName: string;
     readonly entityId: string;
     readonly commands: EntityCommandDescriptorType[];

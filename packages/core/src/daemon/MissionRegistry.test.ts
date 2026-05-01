@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
 import type { MissionDescriptor } from '../types.js';
-import { MissionDaemon } from './MissionDaemon.js';
+import { MissionRegistry } from './MissionRegistry.js';
 
 const temporaryWorkspaceRoots = new Set<string>();
 
@@ -17,7 +17,7 @@ afterEach(async () => {
 	);
 });
 
-describe('MissionDaemon', () => {
+describe('MissionRegistry', () => {
 	it('continues startup hydration when a persisted mission fails strict loading', async () => {
 		const workspaceRoot = await createTempWorkspace();
 		const adapter = new FilesystemAdapter(workspaceRoot);
@@ -32,7 +32,7 @@ describe('MissionDaemon', () => {
 		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
 		try {
-			await expect(new MissionDaemon({ loadMission }).hydrateRepositoryMissions({
+			await expect(new MissionRegistry({ loadMission }).hydrateRepositoryMissions({
 				surfacePath: workspaceRoot
 			})).resolves.toBeUndefined();
 

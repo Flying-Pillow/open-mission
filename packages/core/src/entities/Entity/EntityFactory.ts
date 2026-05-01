@@ -8,7 +8,7 @@ export { FilesystemEntityStore } from './FilesystemEntityStore.js';
 export type { EntityStore } from './EntityStore.js';
 
 export type EntityConstructor<
-    TEntity extends Entity<TStorage, string>,
+    TEntity extends Entity<object, string>,
     TStorage extends object
 > = {
     readonly entityName: string;
@@ -16,7 +16,7 @@ export type EntityConstructor<
 };
 
 export type EntityFactoryDefinition<
-    TEntity extends Entity<TStorage, string>,
+    TEntity extends Entity<object, string>,
     TStorage extends object
 > = {
     entityName: string;
@@ -32,7 +32,7 @@ export class EntityFactory {
     public constructor(private readonly store: EntityStore = new FilesystemEntityStore()) { }
 
     public register<
-        TEntity extends Entity<TStorage, string>,
+        TEntity extends Entity<object, string>,
         TStorage extends object
     >(definition: EntityFactoryDefinition<TEntity, TStorage>): this {
         const normalizedDefinition = {
@@ -48,7 +48,7 @@ export class EntityFactory {
     }
 
     public async create<
-        TEntity extends Entity<TStorage, string>,
+        TEntity extends Entity<object, string>,
         TStorage extends object
     >(entityClass: EntityConstructor<TEntity, TStorage>, record: TStorage): Promise<TEntity> {
         const definition = this.requireDefinition(entityClass);
@@ -58,14 +58,14 @@ export class EntityFactory {
     }
 
     public async save<
-        TEntity extends Entity<TStorage, string>,
+        TEntity extends Entity<object, string>,
         TStorage extends object
     >(entityClass: EntityConstructor<TEntity, TStorage>, record: TStorage): Promise<TEntity> {
         return this.create(entityClass, record);
     }
 
     public async read<
-        TEntity extends Entity<TStorage, string>,
+        TEntity extends Entity<object, string>,
         TStorage extends object
     >(entityClass: EntityConstructor<TEntity, TStorage>, id: string): Promise<TEntity | undefined> {
         const definition = this.requireDefinition(entityClass);
@@ -74,7 +74,7 @@ export class EntityFactory {
     }
 
     public async find<
-        TEntity extends Entity<TStorage, string>,
+        TEntity extends Entity<object, string>,
         TStorage extends object
     >(entityClass: EntityConstructor<TEntity, TStorage>): Promise<TEntity[]> {
         const definition = this.requireDefinition(entityClass);
@@ -82,7 +82,7 @@ export class EntityFactory {
     }
 
     public async remove<
-        TEntity extends Entity<TStorage, string>,
+        TEntity extends Entity<object, string>,
         TStorage extends object
     >(entityClass: EntityConstructor<TEntity, TStorage>, id: string): Promise<void> {
         const definition = this.requireDefinition(entityClass);
@@ -90,7 +90,7 @@ export class EntityFactory {
     }
 
     public hydrate<
-        TEntity extends Entity<TStorage, string>,
+        TEntity extends Entity<object, string>,
         TStorage extends object
     >(entityClass: EntityConstructor<TEntity, TStorage>, record: unknown): TEntity {
         const definition = this.requireDefinition(entityClass);
@@ -98,7 +98,7 @@ export class EntityFactory {
     }
 
     private requireDefinition<
-        TEntity extends Entity<TStorage, string>,
+        TEntity extends Entity<object, string>,
         TStorage extends object
     >(entityClass: EntityConstructor<TEntity, TStorage>): EntityFactoryDefinition<TEntity, TStorage> {
         const definition = this.definitionsByClass.get(entityClass);

@@ -133,6 +133,9 @@ export const EntityMethodSchema = z.object({
 export const EntityContractSchema = z.object({
     entity: EntityNameSchema,
     entityClass: entityClassSchema,
+    inputSchema: zodSchema.optional(),
+    storageSchema: zodSchema.optional(),
+    dataSchema: zodSchema.optional(),
     properties: z.record(z.string(), EntityPropertySchema).optional(),
     methods: z.record(z.string(), EntityMethodSchema),
     events: z.record(z.string(), EntityEventSchema).optional()

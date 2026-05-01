@@ -82,6 +82,14 @@ _Avoid_: agent session context version, artifact version, surface protocol versi
 A deliberate, separately decided replacement of one Mission runtime data layout with another. It is not an implicit fallback parser, load-time normalizer, or hidden compatibility shim.
 _Avoid_: surface migration, per-field fallback, ad hoc compatibility shim
 
+**Running Mission instance**:
+The daemon-owned in-memory authoritative Mission Entity for one Mission. It owns Mission lifecycle behavior, child-entity coordination, workflow-definition application, and Mission read projection while the Mission is live, and it can run without any Airport surface connected.
+_Avoid_: UI session mission, workflow controller, mission projection, surface-owned mission state
+
+**Mission workflow definition**:
+The repository-owned validated workflow law that a Running Mission instance applies for stage order, task generation, gate rules, artifact expectations, and execution constraints. Different repositories may use different Mission workflow definitions without introducing different Mission classes or alternate Mission instance models.
+_Avoid_: workflow implementation, mission subclass, fallback settings blob, surface workflow
+
 **Mission stage**:
 A derived Mission phase whose status comes from the progress of its Mission tasks.
 _Avoid_: folder, independent state, milestone
@@ -329,9 +337,11 @@ _Avoid_: workflow projection, stage projection
 ## Relationships
 
 - The **Mission system** coordinates one or more **Missions**.
+- A live **Mission** is executed by exactly one **Running Mission instance** in the daemon.
 - A **Repository** may have one **GitHub repository ref**.
 - A **Repository** has exactly one **Repository root**.
 - **Repository control state** belongs to exactly one **Repository**.
+- A **Repository** may define one **Mission workflow definition** used by its **Running Mission instances**.
 - A **Mission** has exactly one **Mission branch ref**.
 - A **Remote mission branch ref** corresponds to one **Mission branch ref** on a remote Git host.
 - A **Mission worktree** is materialized from one **Mission branch ref**.

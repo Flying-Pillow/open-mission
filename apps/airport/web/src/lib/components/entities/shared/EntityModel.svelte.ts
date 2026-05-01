@@ -1,14 +1,14 @@
 // /apps/airport/web/src/lib/components/entities/shared/EntityModel.svelte.ts: Shared contracts and reconciliation registry for OO client entities.
-export interface EntityModel<TSnapshot, TId extends string = string> {
+export interface EntityModel<TData, TId extends string = string> {
     readonly id: TId;
-    updateFromSnapshot(snapshot: TSnapshot): this;
-    toSnapshot(): TSnapshot;
+    updateFromData(data: TData): this;
+    toData(): TData;
 }
 
 export class EntityRegistry<
     TId extends string,
-    TSnapshot,
-    TEntity extends EntityModel<TSnapshot, TId>
+    TData,
+    TEntity extends EntityModel<TData, TId>
 > {
     private entities = new Map<TId, TEntity>();
     private version = $state(0);
@@ -24,26 +24,26 @@ export class EntityRegistry<
     }
 
     public reconcile(
-        snapshots: TSnapshot[],
-        selectId: (snapshot: TSnapshot) => TId,
-        factory: (snapshot: TSnapshot) => TEntity
+        dataItems: TData[],
+        selectId: (data: TData) => TId,
+        factory: (data: TData) => TEntity
     ): this {
         const previousEntities = this.entities;
         const nextEntities = new Map<TId, TEntity>();
         const nextIds = new Set<TId>();
-        let changed = previousEntities.size !== snapshots.length;
+        let changed = previousEntities.size !== dataItems.length;
 
-        for (const snapshot of snapshots) {
-            const id = selectId(snapshot);
+        for (const data of dataItems) {
+            const id = selectId(data);
             nextIds.add(id);
             const existing = previousEntities.get(id);
             if (existing) {
-                existing.updateFromSnapshot(snapshot);
+                existing.updateFromData(data);
                 nextEntities.set(id, existing);
                 continue;
             }
 
-            nextEntities.set(id, factory(snapshot));
+            nextEntities.set(id, factory(data));
             changed = true;
         }
 

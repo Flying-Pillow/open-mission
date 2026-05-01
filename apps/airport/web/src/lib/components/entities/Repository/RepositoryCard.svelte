@@ -1,9 +1,5 @@
 <script lang="ts">
     import { getAppContext } from "$lib/client/context/app-context.svelte";
-    import {
-        getRepositoryDisplayDescription,
-        getRepositoryDisplayName,
-    } from "$lib/components/entities/Repository/Repository.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
 
     const appContext = getAppContext();
@@ -17,30 +13,6 @@
 
         return currentRepository;
     });
-    const repositorySummary = $derived(activeRepository.summary);
-    const repositoryDisplayName = $derived(
-        getRepositoryDisplayName(repositorySummary),
-    );
-    const repositoryDisplayDescription = $derived(
-        getRepositoryDisplayDescription(repositorySummary),
-    );
-    const repositoryOperationalMode = $derived(
-        activeRepository.operationalMode,
-    );
-    const repositoryControlRoot = $derived(
-        activeRepository.controlRoot ?? repositorySummary.repositoryRootPath,
-    );
-    const repositoryCurrentBranch = $derived(activeRepository.currentBranch);
-    const repositoryPlatformRepositoryRef = $derived(
-        activeRepository.platformRepositoryRef ??
-            repositorySummary.platformRepositoryRef,
-    );
-    const repositorySettingsComplete = $derived(
-        activeRepository.settingsComplete,
-    );
-    const resolvedMissionCountLabel = $derived(
-        activeRepository.missionCountLabel ?? "0 missions",
-    );
 </script>
 
 <section class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm">
@@ -52,19 +24,27 @@
                 Repository
             </p>
             <h1 class="mt-2 text-2xl font-semibold text-foreground">
-                {repositoryDisplayName}
+                {activeRepository.data.platformRepositoryRef ??
+                    activeRepository.data.repoName}
             </h1>
             <p class="mt-1 text-sm text-muted-foreground">
-                {repositoryDisplayDescription}
+                {activeRepository.data.platformRepositoryRef ??
+                    activeRepository.data.repositoryRootPath}
             </p>
             <p class="mt-2 font-mono text-xs text-muted-foreground">
-                {repositorySummary?.repositoryRootPath}
+                {activeRepository.data.repositoryRootPath}
             </p>
         </div>
         <div class="flex flex-wrap justify-end gap-2">
-            <Badge variant="secondary">{resolvedMissionCountLabel}</Badge>
-            {#if repositoryOperationalMode}
-                <Badge variant="outline">{repositoryOperationalMode}</Badge>
+            <Badge variant="secondary"
+                >{activeRepository.missions.length === 1
+                    ? "1 mission"
+                    : `${activeRepository.missions.length} missions`}</Badge
+            >
+            {#if activeRepository.data.operationalMode}
+                <Badge variant="outline"
+                    >{activeRepository.data.operationalMode}</Badge
+                >
             {/if}
         </div>
     </div>
@@ -77,7 +57,8 @@
                 Control root
             </p>
             <p class="mt-2 text-sm font-medium text-foreground">
-                {repositoryControlRoot}
+                {activeRepository.data.controlRoot ??
+                    activeRepository.data.repositoryRootPath}
             </p>
         </div>
         <div class="rounded-xl border bg-background/70 px-4 py-3">
@@ -87,7 +68,7 @@
                 Branch
             </p>
             <p class="mt-2 text-sm font-medium text-foreground">
-                {repositoryCurrentBranch ?? "Unavailable"}
+                {activeRepository.data.currentBranch ?? "Unavailable"}
             </p>
         </div>
         <div class="rounded-xl border bg-background/70 px-4 py-3">
@@ -97,7 +78,8 @@
                 Tracking
             </p>
             <p class="mt-2 text-sm font-medium text-foreground">
-                {repositoryPlatformRepositoryRef ?? "Not configured"}
+                {activeRepository.data.platformRepositoryRef ??
+                    "Not configured"}
             </p>
         </div>
         <div class="rounded-xl border bg-background/70 px-4 py-3">
@@ -107,7 +89,9 @@
                 Setup
             </p>
             <p class="mt-2 text-sm font-medium text-foreground">
-                {repositorySettingsComplete === false ? "Incomplete" : "Ready"}
+                {activeRepository.data.settingsComplete === false
+                    ? "Incomplete"
+                    : "Ready"}
             </p>
         </div>
     </div>

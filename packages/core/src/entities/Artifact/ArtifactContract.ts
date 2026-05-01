@@ -1,42 +1,50 @@
+import { z } from 'zod/v4';
 import type { EntityContractType } from '../Entity/EntitySchema.js';
-import { ArtifactEntity } from './Artifact.js';
+import { Artifact } from './Artifact.js';
 import {
-    missionArtifactEntityName,
-    artifactIdentityPayloadSchema,
-    artifactExecuteCommandPayloadSchema,
-    artifactWriteDocumentPayloadSchema,
-    missionArtifactSnapshotSchema,
-    artifactDocumentSnapshotSchema,
-    artifactCommandAcknowledgementSchema
+    artifactEntityName,
+    ArtifactLocatorSchema,
+    ArtifactWriteDocumentInputSchema,
+    ArtifactEventSubjectSchema,
+    ArtifactStorageSchema,
+    ArtifactDataSchema,
+    ArtifactDocumentDataSchema
 } from './ArtifactSchema.js';
 
-export const artifactEntityContract: EntityContractType = {
-    entity: missionArtifactEntityName,
-    entityClass: ArtifactEntity,
+const ArtifactSnapshotChangedEventSchema = z.object({
+    reference: ArtifactEventSubjectSchema,
+    snapshot: ArtifactDataSchema
+}).strict();
+
+export const ArtifactContract: EntityContractType = {
+    entity: artifactEntityName,
+    entityClass: Artifact,
+    inputSchema: ArtifactLocatorSchema,
+    storageSchema: ArtifactStorageSchema,
+    dataSchema: ArtifactDataSchema,
     methods: {
         read: {
             kind: 'query',
-            payload: artifactIdentityPayloadSchema,
-            result: missionArtifactSnapshotSchema,
+            payload: ArtifactLocatorSchema,
+            result: ArtifactDataSchema,
             execution: 'class'
         },
         readDocument: {
             kind: 'query',
-            payload: artifactIdentityPayloadSchema,
-            result: artifactDocumentSnapshotSchema,
+            payload: ArtifactLocatorSchema,
+            result: ArtifactDocumentDataSchema,
             execution: 'class'
         },
         writeDocument: {
             kind: 'mutation',
-            payload: artifactWriteDocumentPayloadSchema,
-            result: artifactDocumentSnapshotSchema,
+            payload: ArtifactWriteDocumentInputSchema,
+            result: ArtifactDocumentDataSchema,
             execution: 'class'
-        },
-        executeCommand: {
-            kind: 'mutation',
-            payload: artifactExecuteCommandPayloadSchema,
-            result: artifactCommandAcknowledgementSchema,
-            execution: 'class'
+        }
+    },
+    events: {
+        'snapshot.changed': {
+            payload: ArtifactSnapshotChangedEventSchema
         }
     }
 };

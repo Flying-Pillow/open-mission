@@ -121,7 +121,11 @@
                     : repositories.length === 1
                       ? "1 repository available"
                       : `${repositories.length} repositories available`
-            : activeRepository?.missionCountLabel || "0 missions",
+            : activeRepository
+              ? activeRepository.missions.length === 1
+                  ? "1 mission"
+                  : `${activeRepository.missions.length} missions`
+              : "0 missions",
     );
     const resolvedEmptyMessage = $derived(
         mode === "repositories"

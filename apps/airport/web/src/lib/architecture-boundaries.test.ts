@@ -13,7 +13,7 @@ const forbiddenWebPatterns = [
     /session\.terminal\./,
     /getAirportHomeSnapshot\b/,
     /getAirportRouteData\b/,
-    /getRepositorySnapshotBundle\b/,
+    /getRepositoryDataBundle\b/,
     /airport-home/,
     /EntityContract\.js/,
     /entities\/[A-Za-z]+\/[A-Za-z]+Contract\.js/

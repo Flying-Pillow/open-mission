@@ -1,34 +1,37 @@
 import type { EntityContractType } from '../Entity/EntitySchema.js';
 import { Mission } from './Mission.js';
+import { AgentSessionContract } from '../AgentSession/AgentSessionContract.js';
+import { ArtifactContract } from '../Artifact/ArtifactContract.js';
+import { createEntityChannel, createEntityId } from '../Entity/Entity.js';
+import { StageContract } from '../Stage/StageContract.js';
+import { TaskContract } from '../Task/TaskContract.js';
 import {
     missionEntityName,
-    missionDataSchema,
-    missionActionListSnapshotSchema,
-    missionDocumentSnapshotSchema,
-    missionWorktreeSnapshotSchema,
-    missionSnapshotSchema,
-    missionProjectionSnapshotSchema,
-    missionReadPayloadSchema,
-    missionReadProjectionPayloadSchema,
-    missionListActionsPayloadSchema,
-    missionReadDocumentPayloadSchema,
-    missionReadWorktreePayloadSchema,
-    missionReadTerminalPayloadSchema,
-    missionEnsureTerminalPayloadSchema,
-    missionSendTerminalInputPayloadSchema,
-    missionCommandPayloadSchema,
-    missionTaskCommandPayloadSchema,
-    agentSessionCommandPayloadSchema,
-    missionExecuteActionPayloadSchema,
-    missionWriteDocumentPayloadSchema,
-    missionTerminalSnapshotSchema,
-    missionCommandAcknowledgementSchema
+    MissionDataSchema,
+    MissionFindSchema,
+    MissionCatalogEntrySchema,
+    MissionDocumentSnapshotSchema,
+    MissionWorktreeSnapshotSchema,
+    MissionSnapshotSchema,
+    MissionProjectionSnapshotSchema,
+    MissionReadDocumentInputSchema,
+    MissionLocatorSchema,
+    MissionSendTerminalInputSchema,
+    MissionCommandInputSchema,
+    MissionTaskCommandInputSchema,
+    MissionAgentSessionCommandInputSchema,
+    MissionWriteDocumentInputSchema,
+    MissionTerminalSnapshotSchema,
+    MissionCommandAcknowledgementSchema,
+    MissionStatusSnapshotSchema,
+    MissionSnapshotChangedEventSchema
 } from './MissionSchema.js';
-export const missionEntityContract: EntityContractType = {
+
+export const MissionContract: EntityContractType = {
     entity: missionEntityName,
     entityClass: Mission,
     properties: Object.fromEntries(
-        Object.entries(missionDataSchema.shape).map(([name, schema]) => [
+        Object.entries(MissionDataSchema.shape).map(([name, schema]) => [
             name,
             {
                 schema,
@@ -37,83 +40,118 @@ export const missionEntityContract: EntityContractType = {
         ])
     ),
     methods: {
+        find: {
+            kind: 'query',
+            payload: MissionFindSchema,
+            result: MissionCatalogEntrySchema.array(),
+            execution: 'class'
+        },
         read: {
             kind: 'query',
-            payload: missionReadPayloadSchema,
-            result: missionSnapshotSchema,
+            payload: MissionLocatorSchema,
+            result: MissionSnapshotSchema,
             execution: 'entity'
         },
         readProjection: {
             kind: 'query',
-            payload: missionReadProjectionPayloadSchema,
-            result: missionProjectionSnapshotSchema,
-            execution: 'entity'
-        },
-        listActions: {
-            kind: 'query',
-            payload: missionListActionsPayloadSchema,
-            result: missionActionListSnapshotSchema,
+            payload: MissionLocatorSchema,
+            result: MissionProjectionSnapshotSchema,
             execution: 'entity'
         },
         readDocument: {
             kind: 'query',
-            payload: missionReadDocumentPayloadSchema,
-            result: missionDocumentSnapshotSchema,
+            payload: MissionReadDocumentInputSchema,
+            result: MissionDocumentSnapshotSchema,
             execution: 'entity'
         },
         readWorktree: {
             kind: 'query',
-            payload: missionReadWorktreePayloadSchema,
-            result: missionWorktreeSnapshotSchema,
+            payload: MissionLocatorSchema,
+            result: MissionWorktreeSnapshotSchema,
             execution: 'entity'
         },
         readTerminal: {
             kind: 'query',
-            payload: missionReadTerminalPayloadSchema,
-            result: missionTerminalSnapshotSchema,
+            payload: MissionLocatorSchema,
+            result: MissionTerminalSnapshotSchema,
             execution: 'entity'
         },
         command: {
             kind: 'mutation',
-            payload: missionCommandPayloadSchema,
-            result: missionCommandAcknowledgementSchema,
+            payload: MissionCommandInputSchema,
+            result: MissionCommandAcknowledgementSchema,
             execution: 'entity'
         },
         taskCommand: {
             kind: 'mutation',
-            payload: missionTaskCommandPayloadSchema,
-            result: missionCommandAcknowledgementSchema,
+            payload: MissionTaskCommandInputSchema,
+            result: MissionCommandAcknowledgementSchema,
             execution: 'entity'
         },
         sessionCommand: {
             kind: 'mutation',
-            payload: agentSessionCommandPayloadSchema,
-            result: missionCommandAcknowledgementSchema,
-            execution: 'entity'
-        },
-        executeAction: {
-            kind: 'mutation',
-            payload: missionExecuteActionPayloadSchema,
-            result: missionCommandAcknowledgementSchema,
+            payload: MissionAgentSessionCommandInputSchema,
+            result: MissionCommandAcknowledgementSchema,
             execution: 'entity'
         },
         writeDocument: {
             kind: 'mutation',
-            payload: missionWriteDocumentPayloadSchema,
-            result: missionDocumentSnapshotSchema,
+            payload: MissionWriteDocumentInputSchema,
+            result: MissionDocumentSnapshotSchema,
             execution: 'entity'
         },
         ensureTerminal: {
             kind: 'mutation',
-            payload: missionEnsureTerminalPayloadSchema,
-            result: missionTerminalSnapshotSchema,
+            payload: MissionLocatorSchema,
+            result: MissionTerminalSnapshotSchema,
             execution: 'entity'
         },
         sendTerminalInput: {
             kind: 'mutation',
-            payload: missionSendTerminalInputPayloadSchema,
-            result: missionTerminalSnapshotSchema,
+            payload: MissionSendTerminalInputSchema,
+            result: MissionTerminalSnapshotSchema,
             execution: 'entity'
+        }
+    },
+    events: {
+        'snapshot.changed': {
+            payload: MissionSnapshotChangedEventSchema
+        },
+        status: {
+            payload: MissionStatusSnapshotSchema
         }
     }
 };
+
+export function createMissionRuntimeEventSubscriptionChannels(missionId: string): string[] {
+    const normalizedMissionId = missionId.trim();
+    if (!normalizedMissionId) {
+        throw new Error('Mission runtime event subscriptions require a missionId.');
+    }
+
+    return [
+        ...Object.keys(MissionContract.events ?? {}).map((eventName) =>
+            createEntityChannel(createEntityId('mission', normalizedMissionId), eventName)
+        ),
+        ...createEntityContractChannelPatterns('stage', `${normalizedMissionId}/*`, StageContract),
+        ...createEntityContractChannelPatterns('task', `${normalizedMissionId}/*`, TaskContract),
+        ...createEntityContractChannelPatterns('artifact', `${normalizedMissionId}/*`, ArtifactContract),
+        ...createEntityContractChannelPatterns('agent_session', `${normalizedMissionId}/*`, AgentSessionContract)
+    ];
+}
+
+export function createAllRuntimeEventSubscriptionChannels(): string[] {
+    return [
+        ...createEntityContractChannelPatterns('mission', '*', MissionContract),
+        ...createEntityContractChannelPatterns('stage', '*', StageContract),
+        ...createEntityContractChannelPatterns('task', '*', TaskContract),
+        ...createEntityContractChannelPatterns('artifact', '*', ArtifactContract),
+        ...createEntityContractChannelPatterns('agent_session', '*', AgentSessionContract)
+    ];
+}
+
+function createEntityContractChannelPatterns(table: string, uniqueId: string, contract: EntityContractType): string[] {
+    return Object.keys(contract.events ?? {}).map((eventName) =>
+        createEntityChannel(createEntityId(table, uniqueId), eventName)
+    );
+}

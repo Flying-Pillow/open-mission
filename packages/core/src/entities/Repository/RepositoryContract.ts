@@ -2,29 +2,30 @@ import type { EntityContractType } from '../Entity/EntitySchema.js';
 import { Repository } from './Repository.js';
 import {
     GitHubIssueDetailSchema,
-    RepositoryAddPayloadSchema,
+    RepositoryAddSchema,
     RepositoryDataSchema,
+    RepositoryInputSchema,
+    RepositoryStorageSchema,
     RepositoryPlatformRepositorySchema,
     repositoryEntityName,
-    RepositoryFindPayloadSchema,
-    RepositoryFindAvailablePayloadSchema,
-    RepositoryGetIssuePayloadSchema,
-    RepositoryListIssuesPayloadSchema,
+    RepositoryFindSchema,
+    RepositoryFindAvailableSchema,
+    RepositoryGetIssueSchema,
+    RepositoryLocatorSchema,
     RepositoryMissionStartAcknowledgementSchema,
-    RepositoryPreparePayloadSchema,
     RepositoryPrepareResultSchema,
     RepositoryRemoveAcknowledgementSchema,
-    RepositoryRemovePayloadSchema,
-    RepositoryReadPayloadSchema,
-    RepositorySnapshotSchema,
-    RepositoryStartMissionFromBriefPayloadSchema,
-    RepositoryStartMissionFromIssuePayloadSchema,
+    RepositoryStartMissionFromBriefSchema,
+    RepositoryStartMissionFromIssueSchema,
     TrackedIssueSummarySchema
 } from './RepositorySchema.js';
 
-export const repositoryContract: EntityContractType = {
+export const RepositoryContract: EntityContractType = {
     entity: repositoryEntityName,
     entityClass: Repository,
+    inputSchema: RepositoryInputSchema,
+    storageSchema: RepositoryStorageSchema,
+    dataSchema: RepositoryDataSchema,
     properties: Object.fromEntries(
         Object.entries(RepositoryDataSchema.shape).map(([name, schema]) => [
             name,
@@ -37,38 +38,38 @@ export const repositoryContract: EntityContractType = {
     methods: {
         find: {
             kind: 'query',
-            payload: RepositoryFindPayloadSchema,
-            result: RepositorySnapshotSchema.array(),
+            payload: RepositoryFindSchema,
+            result: RepositoryDataSchema.array(),
             execution: 'class'
         },
         findAvailable: {
             kind: 'query',
-            payload: RepositoryFindAvailablePayloadSchema,
+            payload: RepositoryFindAvailableSchema,
             result: RepositoryPlatformRepositorySchema.array(),
             execution: 'class'
         },
         read: {
             kind: 'query',
-            payload: RepositoryReadPayloadSchema,
-            result: RepositorySnapshotSchema,
+            payload: RepositoryLocatorSchema,
+            result: RepositoryDataSchema,
             execution: 'entity'
         },
         listIssues: {
             kind: 'query',
-            payload: RepositoryListIssuesPayloadSchema,
+            payload: RepositoryLocatorSchema,
             result: TrackedIssueSummarySchema.array(),
             execution: 'entity'
         },
         getIssue: {
             kind: 'query',
-            payload: RepositoryGetIssuePayloadSchema,
+            payload: RepositoryGetIssueSchema,
             result: GitHubIssueDetailSchema,
             execution: 'entity'
         },
         add: {
             kind: 'mutation',
-            payload: RepositoryAddPayloadSchema,
-            result: RepositorySnapshotSchema,
+            payload: RepositoryAddSchema,
+            result: RepositoryDataSchema,
             execution: 'class',
             ui: {
                 label: 'Add Repository',
@@ -78,7 +79,7 @@ export const repositoryContract: EntityContractType = {
         },
         remove: {
             kind: 'mutation',
-            payload: RepositoryRemovePayloadSchema,
+            payload: RepositoryLocatorSchema,
             result: RepositoryRemoveAcknowledgementSchema,
             execution: 'entity',
             ui: {
@@ -90,7 +91,7 @@ export const repositoryContract: EntityContractType = {
         },
         prepare: {
             kind: 'mutation',
-            payload: RepositoryPreparePayloadSchema,
+            payload: RepositoryLocatorSchema,
             result: RepositoryPrepareResultSchema,
             execution: 'entity',
             ui: {
@@ -101,7 +102,7 @@ export const repositoryContract: EntityContractType = {
         },
         startMissionFromIssue: {
             kind: 'mutation',
-            payload: RepositoryStartMissionFromIssuePayloadSchema,
+            payload: RepositoryStartMissionFromIssueSchema,
             result: RepositoryMissionStartAcknowledgementSchema,
             execution: 'entity',
             ui: {
@@ -112,7 +113,7 @@ export const repositoryContract: EntityContractType = {
         },
         startMissionFromBrief: {
             kind: 'mutation',
-            payload: RepositoryStartMissionFromBriefPayloadSchema,
+            payload: RepositoryStartMissionFromBriefSchema,
             result: RepositoryMissionStartAcknowledgementSchema,
             execution: 'entity',
             ui: {

@@ -1,28 +1,23 @@
 // /apps/airport/web/src/lib/components/entities/Stage/Stage.svelte.ts: OO browser entity for a mission workflow stage with task accessors.
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import type { MissionStageSnapshot } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
+import type { StageDataType as MissionStageSnapshot } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 import type { Task } from '$lib/components/entities/Task/Task.svelte.js';
 
 export type StageSnapshot = MissionStageSnapshot;
 
-export type StageCommandOwner = {
-    executeStageCommand(stageId: string, commandId: string, input?: unknown): Promise<void>;
+export type StageDependencies = {
+    resolveTask(taskId: string): Task | undefined;
+    executeCommand(stageId: string, commandId: string, input?: unknown): Promise<void>;
 };
 
 export class Stage implements EntityModel<StageSnapshot> {
     private snapshotState = $state<StageSnapshot | undefined>();
-    private readonly resolveTask: (taskId: string) => Task | undefined;
-    private readonly owner: StageCommandOwner;
+    private readonly dependencies: StageDependencies;
 
-    public constructor(
-        snapshot: StageSnapshot,
-        resolveTask: (taskId: string) => Task | undefined,
-        owner: StageCommandOwner
-    ) {
+    public constructor(snapshot: StageSnapshot, dependencies: StageDependencies) {
         this.snapshot = snapshot;
-        this.resolveTask = resolveTask;
-        this.owner = owner;
+        this.dependencies = dependencies;
     }
 
     private get snapshot(): StageSnapshot {
@@ -72,24 +67,24 @@ export class Stage implements EntityModel<StageSnapshot> {
 
     public listTasks(): Task[] {
         return this.snapshot.tasks
-            .map((task) => this.resolveTask(task.taskId))
+            .map((task) => this.dependencies.resolveTask(task.taskId))
             .filter((task): task is Task => task !== undefined);
     }
 
     public async executeCommand(commandId: string, input?: unknown): Promise<void> {
-        await this.owner.executeStageCommand(this.stageId, commandId, input);
+        await this.dependencies.executeCommand(this.stageId, commandId, input);
     }
 
-    public updateFromSnapshot(snapshot: StageSnapshot): this {
+    public updateFromData(snapshot: StageSnapshot): this {
         this.snapshot = snapshot;
         return this;
     }
 
-    public toSnapshot(): StageSnapshot {
+    public toData(): StageSnapshot {
         return structuredClone($state.snapshot(this.snapshot));
     }
 
     public toJSON(): StageSnapshot {
-        return this.toSnapshot();
+        return this.toData();
     }
 }

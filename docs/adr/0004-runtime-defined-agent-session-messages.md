@@ -10,7 +10,7 @@ Daemon-owned context messages may update Agent session context before optional d
 
 Mission must distinguish daemon-accepted context mutation, runtime delivery attempt, runtime output observation, and operator/system interpretation of that output. Agent runtime responses are observations in the Agent session log unless a future daemon-validated state model explicitly promotes them.
 
-This preserves the terminal as the live CLI surface while keeping Mission authoritative over context, auditability, permissions, and structured operator actions.
+This preserves the terminal as the live CLI surface while keeping Mission authoritative over context, auditability, permissions, and structured operator commands.
 
 External agent prompt fields always submit Agent session messages, including plain text operator prompts. Raw terminal input is reserved for direct interaction inside the terminal pane.
 

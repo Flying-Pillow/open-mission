@@ -7,10 +7,11 @@ import {
 	DEFAULT_WORKFLOW_VERSION,
 	createDefaultWorkflowSettings
 } from '../workflow/mission/workflow.js';
-import type { WorkflowGlobalSettings } from '../workflow/WorkflowSchema.js';
+import type { WorkflowDefinition } from '../workflow/WorkflowSchema.js';
 import {
 	assertValidWorkflowSettings,
-	normalizeWorkflowSettings
+	normalizeWorkflowSettings,
+	parsePersistedWorkflowSettings
 } from './validation.js';
 import {
 	readMissionWorkflowDefinition,
@@ -40,7 +41,7 @@ type WorkflowSettingsFileState = {
 	settingsPath: string;
 	revision: WorkflowSettingsFileRevision;
 	document: RepositorySettingsType | undefined;
-	workflow: WorkflowGlobalSettings;
+	workflow: WorkflowDefinition;
 	settingsInitialized: boolean;
 	workflowInitialized: boolean;
 };
@@ -86,12 +87,11 @@ export class WorkflowSettingsStore {
 
 		const currentWorkflow = state.workflow;
 		const patchedWorkflow = applyWorkflowSettingsPatch(currentWorkflow, request.patch);
-		const normalizedWorkflow = normalizeWorkflowSettings(patchedWorkflow);
-		assertValidWorkflowSettings(normalizedWorkflow);
+		const persistedWorkflow = parsePersistedWorkflowSettings(patchedWorkflow);
 
 		const nextDocument = this.createInitializedDocument(state.document);
 
-		await this.persistSettings(nextDocument, normalizedWorkflow, request.expectedRevision, false);
+		await this.persistSettings(nextDocument, persistedWorkflow, request.expectedRevision, false);
 		const result = await this.get();
 		return {
 			...result,
@@ -102,7 +102,7 @@ export class WorkflowSettingsStore {
 
 	private async persistSettings(
 		nextDocument: RepositorySettingsType,
-		workflow: WorkflowGlobalSettings,
+		workflow: WorkflowDefinition,
 		expectedRevision: string,
 		overwritePreset: boolean
 	): Promise<void> {
@@ -172,7 +172,9 @@ export class WorkflowSettingsStore {
 		const workflowSource = persistedWorkflow
 			? persistedWorkflow
 			: createDefaultWorkflowSettings();
-		const workflow = normalizeWorkflowSettings(workflowSource);
+		const workflow = persistedWorkflow
+			? parsePersistedWorkflowSettings(workflowSource)
+			: normalizeWorkflowSettings(workflowSource);
 
 		if (!revision.exists) {
 			return {

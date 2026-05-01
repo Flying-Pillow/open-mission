@@ -45,7 +45,7 @@ Mission may still use daemon-owned coordination helpers internally to expose IPC
 | daemon-owned runtime routing | resolve runner subclasses, invoke launches, expose workflow and external session control | daemon-local request routing and recovery hooks | Daemon/runtime |
 | `AgentRunner` | Abstract base class that owns shared Mission session mechanics and exposes subclass hooks | launch validation, managed snapshots, event fanout, reconciliation entry points | Shared runtime base |
 | runner subclass | Concrete executable or SDK adapter for one external agent family | transport handles, executable-specific parsing, provider control | Provider-specific |
-| `AgentSession` | Live adapter-backed session instance returned by the base/runtime boundary | session reference and control facade | Provider-specific instance |
+| `AgentSession` | Live adapter-backed session instance returned by the base/runtime boundary | session reference and runtime controls | Provider-specific instance |
 | `AgentSessionSnapshot` | Normalized AgentSession state exposed to the workflow engine and surfaces | no behavior, state only | Shared contract |
 | `AgentSessionEvent` | Normalized runtime facts emitted by the runtime | append-only runtime observations | Shared contract |
 

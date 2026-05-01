@@ -23,7 +23,7 @@
         const repository = repositoryScope.repository;
         if (!repository) {
             throw new Error(
-                "Issue actions require a scoped repository context.",
+                "Issue commands require a scoped repository context.",
             );
         }
 

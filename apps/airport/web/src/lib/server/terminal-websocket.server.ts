@@ -2,10 +2,22 @@ import {
     type Notification as DaemonNotification,
     type MissionAgentTerminalState
 } from '@flying-pillow/mission-core/node';
-import { missionTerminalOutputSchema, missionTerminalSnapshotSchema, missionTerminalSocketClientMessageSchema, missionTerminalSocketServerMessageSchema } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-import type { MissionTerminalSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-import { agentSessionTerminalOutputSchema as missionSessionTerminalOutputSchema, agentSessionTerminalSnapshotSchema as missionSessionTerminalSnapshotSchema, agentSessionTerminalSocketClientMessageSchema as missionSessionTerminalSocketClientMessageSchema, agentSessionTerminalSocketServerMessageSchema as missionSessionTerminalSocketServerMessageSchema, agentSessionTerminalRouteParamsSchema as missionSessionTerminalRouteParamsSchema, agentSessionTerminalQuerySchema as missionSessionTerminalQuerySchema } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
-import type { AgentSessionTerminalSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import {
+    MissionTerminalOutputSchema,
+    MissionTerminalSnapshotSchema,
+    MissionTerminalSocketClientMessageSchema,
+    MissionTerminalSocketServerMessageSchema,
+    type MissionTerminalSnapshotType as MissionTerminalSnapshot
+} from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import {
+    AgentSessionTerminalOutputSchema as MissionSessionTerminalOutputSchema,
+    AgentSessionTerminalSnapshotSchema as MissionSessionTerminalSnapshotSchema,
+    AgentSessionTerminalSocketClientMessageSchema as MissionSessionTerminalSocketClientMessageSchema,
+    AgentSessionTerminalSocketServerMessageSchema as MissionSessionTerminalSocketServerMessageSchema,
+    AgentSessionTerminalRouteParamsSchema as MissionSessionTerminalRouteParamsSchema,
+    AgentSessionTerminalQuerySchema as MissionSessionTerminalQuerySchema,
+    type AgentSessionTerminalSnapshotType as AgentSessionTerminalSnapshot
+} from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, WebSocket as NodeWebSocket } from 'ws';
@@ -60,7 +72,7 @@ function resolveTerminalContext(request: IncomingMessage): { kind: 'mission'; mi
     if (sessionMatch?.[1]) {
         return {
             kind: 'session',
-            sessionId: missionSessionTerminalRouteParamsSchema.parse({ sessionId: decodeURIComponent(sessionMatch[1]) }).sessionId
+            sessionId: MissionSessionTerminalRouteParamsSchema.parse({ sessionId: decodeURIComponent(sessionMatch[1]) }).sessionId
         };
     }
 
@@ -81,8 +93,8 @@ async function handleTerminalConnection(
     sessionId: string
 ): Promise<void> {
     const requestUrl = new URL(request.url ?? '/', 'http://localhost');
-    const query = missionSessionTerminalQuerySchema.extend({
-        repositoryId: missionSessionTerminalQuerySchema.shape.missionId.optional()
+    const query = MissionSessionTerminalQuerySchema.extend({
+        repositoryId: MissionSessionTerminalQuerySchema.shape.missionId.optional()
     }).parse({
         missionId: requestUrl.searchParams.get('missionId'),
         repositoryId: requestUrl.searchParams.get('repositoryId') ?? undefined
@@ -112,7 +124,7 @@ async function handleTerminalConnection(
 
     const sendSnapshot = (state: AgentSessionTerminalSnapshot, type: 'snapshot' | 'disconnected' = 'snapshot') => {
         const terminalScreen = clipTerminalScreen(state.screen);
-        const snapshot = missionSessionTerminalSnapshotSchema.parse({
+        const snapshot = MissionSessionTerminalSnapshotSchema.parse({
             missionId: query.missionId,
             sessionId,
             connected: state.connected,
@@ -122,11 +134,11 @@ async function handleTerminalConnection(
             ...(state.truncated || terminalScreen.truncated ? { truncated: true } : {}),
             ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
         });
-        send(missionSessionTerminalSocketServerMessageSchema.parse({ type, snapshot }));
+        send(MissionSessionTerminalSocketServerMessageSchema.parse({ type, snapshot }));
     };
 
     const sendOutput = (state: MissionAgentTerminalState) => {
-        const output = missionSessionTerminalOutputSchema.parse({
+        const output = MissionSessionTerminalOutputSchema.parse({
             missionId: query.missionId,
             sessionId,
             chunk: state.chunk ?? '',
@@ -135,11 +147,11 @@ async function handleTerminalConnection(
             ...(state.truncated ? { truncated: true } : {}),
             ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
         });
-        send(missionSessionTerminalSocketServerMessageSchema.parse({ type: 'output', output }));
+        send(MissionSessionTerminalSocketServerMessageSchema.parse({ type: 'output', output }));
     };
 
     const sendError = (message: string) => {
-        send(missionSessionTerminalSocketServerMessageSchema.parse({
+        send(MissionSessionTerminalSocketServerMessageSchema.parse({
             type: 'error',
             message
         }));
@@ -147,8 +159,8 @@ async function handleTerminalConnection(
 
     const processRawMessage = async (rawMessage: Buffer) => {
         try {
-            const message = missionSessionTerminalSocketClientMessageSchema.parse(JSON.parse(rawMessage.toString()));
-            const nextState = missionSessionTerminalSnapshotSchema.parse(await daemon?.client.request('entity.command', {
+            const message = MissionSessionTerminalSocketClientMessageSchema.parse(JSON.parse(rawMessage.toString()));
+            const nextState = MissionSessionTerminalSnapshotSchema.parse(await daemon?.client.request('entity.command', {
                 entity: 'AgentSession',
                 method: 'sendTerminalInput',
                 payload: {
@@ -196,7 +208,7 @@ async function handleTerminalConnection(
             channels: [`agent_session:${query.missionId}/${sessionId}.terminal`]
         });
 
-        const initialState = missionSessionTerminalSnapshotSchema.parse(await daemon.client.request('entity.query', {
+        const initialState = MissionSessionTerminalSnapshotSchema.parse(await daemon.client.request('entity.query', {
             entity: 'AgentSession',
             method: 'readTerminal',
             payload: {
@@ -218,7 +230,7 @@ async function handleTerminalConnection(
             }
 
             const state = event.state;
-            const snapshot = missionSessionTerminalSnapshotSchema.parse({
+            const snapshot = MissionSessionTerminalSnapshotSchema.parse({
                 missionId: query.missionId,
                 sessionId,
                 connected: state.connected,
@@ -292,7 +304,7 @@ async function handleMissionTerminalConnection(
 
     const sendSnapshot = (state: MissionTerminalSnapshot, type: 'snapshot' | 'disconnected' = 'snapshot') => {
         const terminalScreen = clipTerminalScreen(state.screen);
-        const snapshot = missionTerminalSnapshotSchema.parse({
+        const snapshot = MissionTerminalSnapshotSchema.parse({
             missionId,
             connected: state.connected,
             dead: state.dead,
@@ -301,11 +313,11 @@ async function handleMissionTerminalConnection(
             ...(state.truncated || terminalScreen.truncated ? { truncated: true } : {}),
             ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
         });
-        send(missionTerminalSocketServerMessageSchema.parse({ type, snapshot }));
+        send(MissionTerminalSocketServerMessageSchema.parse({ type, snapshot }));
     };
 
     const sendOutput = (state: MissionTerminalSnapshot & { chunk?: string }) => {
-        const output = missionTerminalOutputSchema.parse({
+        const output = MissionTerminalOutputSchema.parse({
             missionId,
             chunk: state.chunk ?? '',
             dead: state.dead,
@@ -313,11 +325,11 @@ async function handleMissionTerminalConnection(
             ...(state.truncated ? { truncated: true } : {}),
             ...(state.terminalHandle ? { terminalHandle: state.terminalHandle } : {})
         });
-        send(missionTerminalSocketServerMessageSchema.parse({ type: 'output', output }));
+        send(MissionTerminalSocketServerMessageSchema.parse({ type: 'output', output }));
     };
 
     const sendError = (message: string) => {
-        send(missionTerminalSocketServerMessageSchema.parse({
+        send(MissionTerminalSocketServerMessageSchema.parse({
             type: 'error',
             message
         }));
@@ -344,8 +356,8 @@ async function handleMissionTerminalConnection(
 
     const processRawMessage = async (rawMessage: Buffer) => {
         try {
-            const message = missionTerminalSocketClientMessageSchema.parse(JSON.parse(rawMessage.toString()));
-            const nextState = missionTerminalSnapshotSchema.parse(await daemon?.client.request('entity.command', {
+            const message = MissionTerminalSocketClientMessageSchema.parse(JSON.parse(rawMessage.toString()));
+            const nextState = MissionTerminalSnapshotSchema.parse(await daemon?.client.request('entity.command', {
                 entity: 'Mission',
                 method: 'sendTerminalInput',
                 payload: {
@@ -389,7 +401,7 @@ async function handleMissionTerminalConnection(
         await daemon.client.request<null>('event.subscribe', {
             channels: [`mission:${missionId}.terminal`]
         });
-        const initialState = missionTerminalSnapshotSchema.parse(await daemon.client.request('entity.command', {
+        const initialState = MissionTerminalSnapshotSchema.parse(await daemon.client.request('entity.command', {
             entity: 'Mission',
             method: 'ensureTerminal',
             payload: { missionId }
@@ -413,7 +425,7 @@ async function handleMissionTerminalConnection(
                 return;
             }
 
-            sendMissionState(missionTerminalSnapshotSchema.parse({
+            sendMissionState(MissionTerminalSnapshotSchema.parse({
                 missionId,
                 connected: event.state.connected,
                 dead: event.state.dead,

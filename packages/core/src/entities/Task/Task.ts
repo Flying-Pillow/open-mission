@@ -2,7 +2,7 @@ import type {
 	MissionTaskArtifactReference
 } from '../../workflow/engine/types.js';
 import * as path from 'node:path';
-import type { EntityExecutionContext } from '../Entity/Entity.js';
+import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import type { AgentRunner } from '../../daemon/runtime/agent/AgentRunner.js';
 import type { AgentSessionSnapshot } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
 import type { AgentSessionLaunchRequest } from '../../daemon/protocol/contracts.js';
@@ -12,36 +12,24 @@ import { buildTaskLaunchPrompt } from './taskLaunchPrompt.js';
 import {
 	evaluateMissionTaskStatusIntent,
 	MISSION_STAGE_FOLDERS,
-	MissionStageId,
-	MissionTaskState,
+	type MissionStageId,
+	type MissionTaskState,
 	type MissionTaskStatusIntent
 } from '../../types.js';
 import type { MissionStateData } from '../../workflow/engine/index.js';
 import {
-	missionTaskSnapshotSchema,
-	taskCommandAcknowledgementSchema,
-	taskExecuteCommandPayloadSchema,
-	taskIdentityPayloadSchema
+	TaskDataSchema,
+	TaskCommandAcknowledgementSchema,
+	TaskExecuteCommandInputSchema,
+	TaskLocatorSchema,
+	TaskCommandIds,
+	taskEntityName,
+	type TaskDataType
 } from './TaskSchema.js';
+import type { MissionSnapshotType } from '../Mission/MissionSchema.js';
 
-export type TaskData = {
-	taskId: string;
-	stageId: MissionStageId;
-	sequence: number;
-	title: string;
-	instruction: string;
-	lifecycle: MissionTaskState['status'];
-	dependsOn: string[];
-	waitingOnTaskIds: string[];
-	agentRunner: string;
-	retries: number;
-	fileName?: string;
-	filePath?: string;
-	relativePath?: string;
-};
-
-export function toTask(task: MissionTaskState): TaskData {
-	return {
+export function toTask(task: MissionTaskState): TaskDataType {
+	return TaskDataSchema.parse({
 		taskId: task.taskId,
 		stageId: task.stage,
 		sequence: task.sequence,
@@ -55,7 +43,7 @@ export function toTask(task: MissionTaskState): TaskData {
 		...(task.fileName ? { fileName: task.fileName } : {}),
 		...(task.filePath ? { filePath: task.filePath } : {}),
 		...(task.relativePath ? { relativePath: task.relativePath } : {})
-	};
+	});
 }
 
 export type TaskLaunchPolicy = {
@@ -98,47 +86,34 @@ export type TaskVerificationReworkRequest = {
 	};
 };
 
-export class Task {
+export class Task extends Entity<TaskDataType, string> {
+	public static override readonly entityName = taskEntityName;
+
 	public static async read(payload: unknown, context: EntityExecutionContext) {
-		const input = taskIdentityPayloadSchema.parse(payload);
-		const service = await loadMissionDaemon(context);
+		const input = TaskLocatorSchema.parse(payload);
+		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			return missionTaskSnapshotSchema.parse(service.requireTask(await service.buildMissionSnapshot(mission, input.missionId), input.taskId));
+			return Task.requireData(await mission.buildMissionSnapshot(), input.taskId);
 		} finally {
 			mission.dispose();
 		}
 	}
 
-	public static async executeCommand(payload: unknown, context: EntityExecutionContext) {
-		const input = taskExecuteCommandPayloadSchema.parse(payload);
-		const service = await loadMissionDaemon(context);
-		const terminalSessionName = service.getTerminalSessionName(input.input);
-		const mission = await service.loadRequiredMission(input, context, terminalSessionName);
+	public static requireData(snapshot: MissionSnapshotType, taskId: string) {
+		const task = snapshot.tasks.find((candidate) => candidate.taskId === taskId);
+		if (!task) {
+			throw new Error(`Task '${taskId}' could not be resolved in Mission '${snapshot.mission.missionId}'.`);
+		}
+		return TaskDataSchema.parse(task);
+	}
+
+	public static async resolve(payload: unknown, context: EntityExecutionContext): Promise<Task> {
+		const input = TaskExecuteCommandInputSchema.parse(payload);
+		const service = await loadMissionRegistry(context);
+		const mission = await service.loadRequiredMission(input, context);
 		try {
-			service.requireTask(await service.buildMissionSnapshot(mission, input.missionId), input.taskId);
-			switch (input.commandId) {
-				case 'task.start':
-					await mission.startTask(input.taskId, terminalSessionName ? { terminalSessionName } : {});
-					break;
-				case 'task.complete':
-					await mission.completeTask(input.taskId);
-					break;
-				case 'task.reopen':
-					await mission.reopenTask(input.taskId);
-					break;
-				default:
-					throw new Error(`Task command '${input.commandId}' is not implemented in the daemon.`);
-			}
-			return taskCommandAcknowledgementSchema.parse({
-				ok: true,
-				entity: 'Task',
-				method: 'executeCommand',
-				id: input.taskId,
-				missionId: input.missionId,
-				taskId: input.taskId,
-				commandId: input.commandId
-			});
+			return new Task(Task.requireData(await mission.buildMissionSnapshot(), input.taskId));
 		} finally {
 			mission.dispose();
 		}
@@ -231,24 +206,42 @@ export class Task {
 		};
 	}
 
-	public constructor(
-		private readonly owner: TaskOwner,
-		private state: MissionTaskState
-	) { }
+	private readonly owner: TaskOwner | undefined;
+	private state: MissionTaskState | undefined;
+
+	public constructor(data: TaskDataType);
+	public constructor(owner: TaskOwner, state: MissionTaskState);
+	public constructor(ownerOrData: TaskOwner | TaskDataType, state?: MissionTaskState) {
+		if (state) {
+			super(toTask(state));
+			this.owner = ownerOrData as TaskOwner;
+			this.state = state;
+			return;
+		}
+
+		super(TaskDataSchema.parse(ownerOrData));
+		this.owner = undefined;
+		this.state = undefined;
+	}
+
+	public get id(): string {
+		return this.taskId;
+	}
 
 	public get taskId(): string {
-		return this.state.taskId;
+		return this.state?.taskId ?? this.toData().taskId;
 	}
 
 	public toState(): MissionTaskState {
-		return structuredClone(this.state);
+		return structuredClone(this.requireState());
 	}
 
 	public async start(options: { runnerId?: string; prompt?: string; workingDirectory?: string; terminalSessionName?: string } = {}): Promise<MissionTaskState> {
 		await this.refresh();
 		this.assertCanTransition('start');
-		if (this.state.status === 'ready') {
-			await this.owner.queueTask(this.state.taskId, options);
+		const state = this.requireState();
+		if (state.status === 'ready') {
+			await this.requireOwner().queueTask(state.taskId, options);
 		}
 		await this.refresh();
 		return this.toState();
@@ -273,7 +266,7 @@ export class Task {
 	public async complete(): Promise<MissionTaskState> {
 		await this.refresh();
 		this.assertCanTransition('done');
-		await this.owner.completeTask(this.state.taskId);
+		await this.requireOwner().completeTask(this.requireState().taskId);
 		await this.refresh();
 		return this.toState();
 	}
@@ -281,7 +274,7 @@ export class Task {
 	public async reopen(): Promise<MissionTaskState> {
 		await this.refresh();
 		this.assertCanTransition('reopen');
-		await this.owner.reopenTask(this.state.taskId);
+		await this.requireOwner().reopenTask(this.requireState().taskId);
 		await this.refresh();
 		return this.toState();
 	}
@@ -296,13 +289,13 @@ export class Task {
 	}): Promise<MissionTaskState> {
 		await this.refresh();
 		this.assertCanTransition('reopen');
-		await this.owner.reworkTask(this.state.taskId, input);
+		await this.requireOwner().reworkTask(this.requireState().taskId, input);
 		await this.refresh();
 		return this.toState();
 	}
 
 	public async setAutostart(autostart: boolean): Promise<MissionTaskState> {
-		await this.owner.updateTaskLaunchPolicy(this.state.taskId, {
+		await this.requireOwner().updateTaskLaunchPolicy(this.requireState().taskId, {
 			autostart
 		});
 		await this.refresh();
@@ -313,7 +306,9 @@ export class Task {
 		request: AgentSessionLaunchRequest
 	): Promise<AgentSession> {
 		await this.prepareForSessionLaunch();
-		const runner = this.owner.requireAgentRunner(request.runnerId);
+		const owner = this.requireOwner();
+		const state = this.requireState();
+		const runner = owner.requireAgentRunner(request.runnerId);
 		const availability = await runner.isAvailable();
 		if (!availability.available) {
 			throw new Error(availability.reason ?? `${runner.displayName} is unavailable.`);
@@ -324,13 +319,13 @@ export class Task {
 				? request
 				: {
 					...request,
-					prompt: buildTaskLaunchPrompt(this.state, request.workingDirectory)
+					prompt: buildTaskLaunchPrompt(state, request.workingDirectory)
 				};
-			const snapshot = await this.owner.startTaskAgentSession(this.state, runner, launchRequest);
-			return this.owner.recordStartedTaskSession(snapshot);
+			const snapshot = await owner.startTaskAgentSession(state, runner, launchRequest);
+			return owner.recordStartedTaskSession(snapshot);
 		} catch (error) {
 			try {
-				await this.owner.recordTaskSessionLaunchFailure(this.state.taskId, error);
+				await owner.recordTaskSessionLaunchFailure(state.taskId, error);
 			} catch {
 				// Preserve the original launch failure when the failure-record side effect cannot be applied.
 			}
@@ -338,24 +333,78 @@ export class Task {
 		}
 	}
 
+	public async executeCommand(payload: unknown, context: EntityExecutionContext) {
+		const input = TaskExecuteCommandInputSchema.parse(payload);
+		const service = await loadMissionRegistry(context);
+		const terminalSessionName = service.getTerminalSessionName(input.input);
+		const mission = await service.loadRequiredMission(input, context, terminalSessionName);
+		try {
+			Task.requireData(await mission.buildMissionSnapshot(), input.taskId);
+			switch (input.commandId) {
+				case TaskCommandIds.start:
+					await mission.startTask(input.taskId, terminalSessionName ? { terminalSessionName } : {});
+					break;
+				case TaskCommandIds.complete:
+					await mission.completeTask(input.taskId);
+					break;
+				case TaskCommandIds.reopen:
+					await mission.reopenTask(input.taskId);
+					break;
+				case TaskCommandIds.rework:
+					await mission.reworkTask(input.taskId, {
+						actor: 'human',
+						reasonCode: 'manual.instruction',
+						summary: requireTextInput(input.input, input.commandId),
+						artifactRefs: []
+					});
+					break;
+				case TaskCommandIds.reworkFromVerification:
+					await mission.reworkTaskFromVerification(input.taskId);
+					break;
+				case TaskCommandIds.enableAutostart:
+					await mission.setTaskAutostart(input.taskId, true);
+					break;
+				case TaskCommandIds.disableAutostart:
+					await mission.setTaskAutostart(input.taskId, false);
+					break;
+				default:
+					throw new Error(`Task command '${input.commandId}' is not implemented in the daemon.`);
+			}
+			return TaskCommandAcknowledgementSchema.parse({
+				ok: true,
+				entity: 'Task',
+				method: 'executeCommand',
+				id: input.taskId,
+				missionId: input.missionId,
+				taskId: input.taskId,
+				commandId: input.commandId
+			});
+		} finally {
+			mission.dispose();
+		}
+	}
+
 	private assertCanTransition(intent: MissionTaskStatusIntent): void {
+		const state = this.requireState();
+		const owner = this.requireOwner();
 		const evaluation = evaluateMissionTaskStatusIntent(intent, {
-			currentStatus: this.state.status,
-			waitingOn: this.state.waitingOn,
-			delivered: this.owner.isMissionDelivered()
+			currentStatus: state.status,
+			waitingOn: state.waitingOn,
+			delivered: owner.isMissionDelivered()
 		});
 		if (!evaluation.enabled) {
 			throw new Error(
 				evaluation.reason
-					? `Task '${this.state.taskId}' cannot transition: ${evaluation.reason}`
-					: `Task '${this.state.taskId}' cannot transition via '${intent}'.`
+					? `Task '${state.taskId}' cannot transition: ${evaluation.reason}`
+					: `Task '${state.taskId}' cannot transition via '${intent}'.`
 			);
 		}
 	}
 
 	private async prepareForSessionLaunch(): Promise<void> {
 		await this.refresh();
-		if (this.state.status === 'queued' || this.state.status === 'running') {
+		const state = this.requireState();
+		if (state.status === 'queued' || state.status === 'running') {
 			return;
 		}
 
@@ -363,7 +412,23 @@ export class Task {
 	}
 
 	private async refresh(): Promise<void> {
-		this.state = await this.owner.refreshTaskState(this.state.taskId);
+		const state = this.requireState();
+		this.state = await this.requireOwner().refreshTaskState(state.taskId);
+		this.updateFromData(toTask(this.state));
+	}
+
+	private requireOwner(): TaskOwner {
+		if (!this.owner) {
+			throw new Error(`Task '${this.taskId}' is not attached to a Mission owner.`);
+		}
+		return this.owner;
+	}
+
+	private requireState(): MissionTaskState {
+		if (!this.state) {
+			throw new Error(`Task '${this.taskId}' is not attached to Mission runtime state.`);
+		}
+		return this.state;
 	}
 
 	private static resolveWorkflowSubject(
@@ -406,9 +471,16 @@ export class Task {
 	}
 }
 
-async function loadMissionDaemon(context: EntityExecutionContext) {
-	const { requireMissionDaemon } = await import('../../daemon/MissionDaemon.js');
-	return requireMissionDaemon(context);
+function requireTextInput(input: unknown, commandId: string): string {
+	if (typeof input !== 'string' || !input.trim()) {
+		throw new Error(`Task command '${commandId}' requires non-empty text input.`);
+	}
+	return input.trim();
+}
+
+async function loadMissionRegistry(context: EntityExecutionContext) {
+	const { requireMissionRegistry } = await import('../../daemon/MissionRegistry.js');
+	return requireMissionRegistry(context);
 }
 
 function stripMarkdownExtension(fileName: string): string {

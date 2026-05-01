@@ -8,4 +8,4 @@ export * from './daemon/runtime/DaemonProcessControl.js';
 export * from './entities/Entity/Entity.js';
 export * from './system/SystemContract.js';
 export { Repository as RepositoryEntity, type RepositoryIdentity, type RepositoryScaffolding } from './entities/Repository/Repository.js';
-export { toMission, type Mission as MissionEntity } from './entities/Mission/Mission.js';
+export { Mission as MissionEntity } from './entities/Mission/Mission.js';

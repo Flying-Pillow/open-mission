@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 import {
-    WorkflowGlobalSettingsSchema,
+    WorkflowDefinitionSchema,
 } from '../WorkflowSchema.js';
 
 export type MissionStageId = string;
@@ -218,7 +218,7 @@ export type {
     WorkflowExecutionSettings,
     WorkflowGateDefinition,
     WorkflowGeneratedTaskDefinition,
-    WorkflowGlobalSettings,
+    WorkflowDefinition,
     WorkflowHumanInLoopSettings,
     WorkflowMissionAutostartSettings,
     WorkflowPanicSettings,
@@ -230,9 +230,9 @@ export type {
 
 export const MissionWorkflowConfigurationSnapshotSchema = z.object({
     createdAt: nonEmptyStringSchema,
-    source: z.literal('global-settings'),
+    source: z.literal('workflow-definition'),
     workflowVersion: nonEmptyStringSchema,
-    workflow: WorkflowGlobalSettingsSchema
+    workflow: WorkflowDefinitionSchema
 }).strict();
 
 export type MissionWorkflowConfigurationSnapshot = z.infer<typeof MissionWorkflowConfigurationSnapshotSchema>;

@@ -9,7 +9,7 @@ import {
     type MissionStateData,
     type MissionWorkflowSignal,
     type MissionWorkflowRuntimeState,
-    type WorkflowGlobalSettings
+    type WorkflowDefinition
 } from './types.js';
 import { reduceMissionWorkflowEvent } from './reducer.js';
 import { ensureMissionWorkflowEventAccepted } from './validation.js';
@@ -24,11 +24,11 @@ export interface MissionWorkflowIngestResult {
 export function createMissionWorkflowConfigurationSnapshot(input: {
     createdAt?: string;
     workflowVersion: string;
-    workflow: WorkflowGlobalSettings;
+    workflow: WorkflowDefinition;
 }): MissionWorkflowConfigurationSnapshot {
     return {
         createdAt: input.createdAt ?? new Date().toISOString(),
-        source: 'global-settings',
+        source: 'workflow-definition',
         workflowVersion: input.workflowVersion,
         workflow: structuredClone(input.workflow)
     };
