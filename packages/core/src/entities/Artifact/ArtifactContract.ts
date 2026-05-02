@@ -1,20 +1,14 @@
-import { z } from 'zod/v4';
 import type { EntityContractType } from '../Entity/EntitySchema.js';
 import { Artifact } from './Artifact.js';
 import {
     artifactEntityName,
     ArtifactLocatorSchema,
     ArtifactWriteDocumentInputSchema,
-    ArtifactEventSubjectSchema,
     ArtifactStorageSchema,
     ArtifactDataSchema,
-    ArtifactDocumentDataSchema
+    ArtifactDocumentDataSchema,
+    ArtifactSnapshotChangedEventSchema
 } from './ArtifactSchema.js';
-
-const ArtifactSnapshotChangedEventSchema = z.object({
-    reference: ArtifactEventSubjectSchema,
-    snapshot: ArtifactDataSchema
-}).strict();
 
 export const ArtifactContract: EntityContractType = {
     entity: artifactEntityName,

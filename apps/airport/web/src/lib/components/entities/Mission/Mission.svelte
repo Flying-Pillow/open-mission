@@ -5,7 +5,7 @@
     import type { Task as TaskEntity } from "$lib/components/entities/Task/Task.svelte.js";
     import ChevronDownIcon from "@tabler/icons-svelte/icons/chevron-down";
     import ChevronUpIcon from "@tabler/icons-svelte/icons/chevron-up";
-    import type { MissionRuntimeEventEnvelope as AirportRuntimeEventEnvelope } from "../types";
+    import type { MissionRuntimeEventEnvelopeType } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
     import { ArtifactDataSchema } from "@flying-pillow/mission-core/entities/Artifact/ArtifactSchema";
     import { AgentSessionDataSchema } from "@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema";
     import {
@@ -432,7 +432,9 @@
         }, 150);
     }
 
-    function applyMissionStatusEvent(event: AirportRuntimeEventEnvelope): void {
+    function applyMissionStatusEvent(
+        event: MissionRuntimeEventEnvelopeType,
+    ): void {
         if (!activeMission) {
             return;
         }
@@ -453,7 +455,7 @@
     }
 
     function handleMissionRuntimeEvent(
-        event: AirportRuntimeEventEnvelope,
+        event: MissionRuntimeEventEnvelopeType,
     ): void {
         switch (event.type) {
             case "mission.snapshot.changed":

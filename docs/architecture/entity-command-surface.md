@@ -59,7 +59,7 @@ The generic contract shape currently supports `properties`, but these Mission-ow
 | Contract | `packages/core/src/entities/Mission/MissionContract.ts` |
 | Entity name | `Mission` |
 | Contract queries | `read`, `readProjection`, `readDocument`, `readWorktree`, `readTerminal` |
-| Contract mutations | `command`, `taskCommand`, `sessionCommand`, `writeDocument`, `ensureTerminal`, `sendTerminalInput` |
+| Contract mutations | `command`, `writeDocument`, `ensureTerminal`, `sendTerminalInput` |
 | Contract events | `snapshot.changed`, `status` |
 | Command owners | Mission, Stage, Task, AgentSession through `MissionCommandDescriptors.ts` |
 
@@ -70,7 +70,7 @@ Important public behavior methods include:
 | Method group | Methods |
 | --- | --- |
 | Lifecycle | `resolve`, `create`, `load`, `initialize`, `refresh`, `dispose` |
-| Remote command entry points | `command`, `taskCommand`, `sessionCommand` |
+| Remote command entry points | `command` |
 | Mission commands | `pauseMission`, `resumeMission`, `panicStopMission`, `clearMissionPanic`, `restartLaunchQueue`, `deliver` |
 | Task commands | `startTask`, `completeTask`, `reopenTask`, `reworkTask`, `reworkTaskFromVerification`, `setTaskAutostart` |
 | Stage commands | `generateTasksForStage` |

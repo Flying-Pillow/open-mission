@@ -18,8 +18,6 @@ import {
     MissionLocatorSchema,
     MissionSendTerminalInputSchema,
     MissionCommandInputSchema,
-    MissionTaskCommandInputSchema,
-    MissionAgentSessionCommandInputSchema,
     MissionWriteDocumentInputSchema,
     MissionTerminalSnapshotSchema,
     MissionCommandAcknowledgementSchema,
@@ -79,18 +77,6 @@ export const MissionContract: EntityContractType = {
         command: {
             kind: 'mutation',
             payload: MissionCommandInputSchema,
-            result: MissionCommandAcknowledgementSchema,
-            execution: 'entity'
-        },
-        taskCommand: {
-            kind: 'mutation',
-            payload: MissionTaskCommandInputSchema,
-            result: MissionCommandAcknowledgementSchema,
-            execution: 'entity'
-        },
-        sessionCommand: {
-            kind: 'mutation',
-            payload: MissionAgentSessionCommandInputSchema,
             result: MissionCommandAcknowledgementSchema,
             execution: 'entity'
         },

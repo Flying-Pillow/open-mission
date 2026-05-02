@@ -8,8 +8,6 @@ import { cmd } from '../../../../routes/api/entities/remote/command.remote';
 import { qry } from '../../../../routes/api/entities/remote/query.remote';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
-type RepositorySummary = RepositoryStorageType;
-
 export type RepositoryDataLoader = (input: {
     id: string;
     repositoryRootPath?: string;
@@ -188,11 +186,11 @@ export class Repository implements EntityModel<RepositoryDataType> {
     }
 }
 
-export function getRepositoryDisplayName(repository: RepositorySummary): string {
+export function getRepositoryDisplayName(repository: RepositoryStorageType): string {
     return repository.platformRepositoryRef ?? repository.repoName;
 }
 
-export function getRepositoryDisplayDescription(repository: RepositorySummary): string {
+export function getRepositoryDisplayDescription(repository: RepositoryStorageType): string {
     return repository.platformRepositoryRef ?? repository.repositoryRootPath;
 }
 

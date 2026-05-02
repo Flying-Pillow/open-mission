@@ -13,11 +13,8 @@ import {
 	type GitHubBranchSyncStatus
 } from '../../platforms/GitHubPlatformAdapter.js';
 
-export type RepositoryPlatformKind = RepositoryPlatformKindType;
-export type RepositoryBranchSyncStatus = GitHubBranchSyncStatus;
-
 export type RepositoryPlatformAdapterInput = {
-	platform: RepositoryPlatformKind;
+	platform: RepositoryPlatformKindType;
 	workspaceRoot: string;
 	repository?: string;
 	authToken?: string;
@@ -42,7 +39,7 @@ export type RepositoryPlatformIssueCreateRequest = {
 };
 
 export interface RepositoryPlatformAdapter {
-	readonly platform?: RepositoryPlatformKind;
+	readonly platform?: RepositoryPlatformKindType;
 	fetchIssue(issueId: string): Promise<MissionBrief>;
 	listOpenIssues(limit: number): Promise<TrackedIssueSummary[]>;
 	listRepositories(): Promise<RepositoryPlatformRepositoryType[]>;
@@ -56,7 +53,7 @@ export interface RepositoryPlatformAdapter {
 }
 
 export function resolveRepositoryPlatformRepository(
-	platform: RepositoryPlatformKind,
+	platform: RepositoryPlatformKindType,
 	workspaceRoot: string
 ): string | undefined {
 	switch (platform) {

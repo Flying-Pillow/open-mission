@@ -7,19 +7,25 @@ import {
 import {
     AgentSessionEventSubjectSchema,
     AgentSessionTerminalHandleSchema,
-    AgentSessionDataSchema
+    AgentSessionDataSchema,
+    AgentSessionSnapshotChangedEventSchema,
+    AgentSessionEventSchema,
+    AgentSessionLifecycleEventSchema
 } from '../AgentSession/AgentSessionSchema.js';
 import {
     ArtifactEventSubjectSchema,
-    ArtifactDataSchema
+    ArtifactDataSchema,
+    ArtifactSnapshotChangedEventSchema
 } from '../Artifact/ArtifactSchema.js';
 import {
     StageDataSchema,
-    StageEventSubjectSchema
+    StageEventSubjectSchema,
+    StageSnapshotChangedEventSchema
 } from '../Stage/StageSchema.js';
 import {
     TaskDataSchema,
-    TaskEventSubjectSchema
+    TaskEventSubjectSchema,
+    TaskSnapshotChangedEventSchema
 } from '../Task/TaskSchema.js';
 export const missionEntityName = 'Mission' as const;
 
@@ -226,33 +232,6 @@ export const MissionSnapshotChangedEventSchema = z.object({
     snapshot: MissionSnapshotSchema
 }).strict();
 
-export const StageSnapshotChangedEventSchema = z.object({
-    reference: StageEventSubjectSchema,
-    snapshot: StageDataSchema
-}).strict();
-
-export const TaskSnapshotChangedEventSchema = z.object({
-    reference: TaskEventSubjectSchema,
-    snapshot: TaskDataSchema
-}).strict();
-
-export const ArtifactSnapshotChangedEventSchema = z.object({
-    reference: ArtifactEventSubjectSchema,
-    snapshot: ArtifactDataSchema
-}).strict();
-
-export const AgentSessionSnapshotChangedEventSchema = z.object({
-    reference: AgentSessionEventSubjectSchema,
-    snapshot: AgentSessionDataSchema
-}).strict();
-
-export const AgentSessionEventSchema = AgentSessionDataSchema;
-
-export const AgentSessionLifecycleEventSchema = z.object({
-    phase: z.enum(['spawned', 'active', 'terminated']),
-    lifecycleState: AgentSessionDataSchema.shape.lifecycleState
-}).strict();
-
 const MissionRuntimeEventEnvelopeBaseSchema = EntityEventEnvelopeSchema.omit({
     type: true,
     payload: true
@@ -305,26 +284,12 @@ export const MissionCommandInputSchema = MissionLocatorSchema.extend({
     ...MissionCommandInvocationSchema.shape
 }).strict();
 
-export const MissionTaskCommandInputSchema = MissionLocatorSchema.extend({
-    taskId: z.string().trim().min(1),
-    ...MissionCommandInvocationSchema.shape
-}).strict();
-
-export const MissionAgentSessionCommandInputSchema = MissionLocatorSchema.extend({
-    sessionId: z.string().trim().min(1),
-    ...MissionCommandInvocationSchema.shape
-}).strict();
-
 export const MissionWriteDocumentInputSchema = MissionLocatorSchema.extend({
     path: z.string().trim().min(1),
     content: z.string()
 }).strict();
 
-export const MissionCommandMethodSchema = z.enum([
-    'command',
-    'taskCommand',
-    'sessionCommand'
-]);
+export const MissionCommandMethodSchema = z.enum(['command']);
 
 export const MissionCommandAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
     entity: z.literal(missionEntityName),
@@ -354,8 +319,6 @@ export const missionRemoteQueryInputSchemas = {
 
 export const missionRemoteCommandInputSchemas = {
     command: MissionCommandInputSchema,
-    taskCommand: MissionTaskCommandInputSchema,
-    sessionCommand: MissionAgentSessionCommandInputSchema,
     writeDocument: MissionWriteDocumentInputSchema,
     ensureTerminal: MissionLocatorSchema,
     sendTerminalInput: MissionSendTerminalInputSchema
@@ -372,8 +335,6 @@ export const missionRemoteQueryResultSchemas = {
 
 export const missionRemoteCommandResultSchemas = {
     command: MissionCommandAcknowledgementSchema,
-    taskCommand: MissionCommandAcknowledgementSchema,
-    sessionCommand: MissionCommandAcknowledgementSchema,
     writeDocument: z.union([
         MissionDocumentWriteAcknowledgementSchema,
         MissionDocumentSnapshotSchema
@@ -390,8 +351,6 @@ export type MissionCatalogEntryType = z.infer<typeof MissionCatalogEntrySchema>;
 export type MissionReadDocumentInputType = z.infer<typeof MissionReadDocumentInputSchema>;
 export type MissionSendTerminalInputType = z.infer<typeof MissionSendTerminalInputSchema>;
 export type MissionCommandInputType = z.infer<typeof MissionCommandInputSchema>;
-export type MissionTaskCommandInputType = z.infer<typeof MissionTaskCommandInputSchema>;
-export type MissionAgentSessionCommandInputType = z.infer<typeof MissionAgentSessionCommandInputSchema>;
 export type MissionWriteDocumentInputType = z.infer<typeof MissionWriteDocumentInputSchema>;
 export type MissionSnapshotType = z.infer<typeof MissionSnapshotSchema>;
 export type MissionProjectionSnapshotType = z.infer<typeof MissionProjectionSnapshotSchema>;

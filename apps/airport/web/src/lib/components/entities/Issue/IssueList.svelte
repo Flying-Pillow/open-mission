@@ -11,7 +11,7 @@
     import type {
         GitHubIssueDetailType,
         TrackedIssueSummaryType,
-    } from "$lib/components/entities/types";
+    } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
 
     let {
         selectedIssue = $bindable<GitHubIssueDetailType | null>(null),

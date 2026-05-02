@@ -49,6 +49,8 @@ export const TaskStorageSchema = z.object({
     sequence: z.number().int().positive(),
     title: z.string().trim().min(1),
     instruction: z.string(),
+    taskKind: z.enum(['implementation', 'verification']).optional(),
+    pairedTaskId: z.string().trim().min(1).optional(),
     lifecycle: z.string().trim().min(1),
     dependsOn: z.array(z.string().trim().min(1)),
     waitingOnTaskIds: z.array(z.string().trim().min(1)),
@@ -71,6 +73,11 @@ export const TaskCommandAcknowledgementSchema = EntityCommandAcknowledgementSche
     missionId: z.string().trim().min(1),
     taskId: TaskIdSchema,
     commandId: TaskCommandIdSchema
+}).strict();
+
+export const TaskSnapshotChangedEventSchema = z.object({
+    reference: TaskEventSubjectSchema,
+    snapshot: TaskDataSchema
 }).strict();
 
 export const taskRemoteQueryInputSchemas = {
@@ -96,4 +103,5 @@ export type TaskExecuteCommandInputType = z.infer<typeof TaskExecuteCommandInput
 export type TaskStorageType = z.infer<typeof TaskStorageSchema>;
 export type TaskDataType = z.infer<typeof TaskDataSchema>;
 export type TaskCommandAcknowledgementType = z.infer<typeof TaskCommandAcknowledgementSchema>;
+export type TaskSnapshotChangedEventType = z.infer<typeof TaskSnapshotChangedEventSchema>;
 

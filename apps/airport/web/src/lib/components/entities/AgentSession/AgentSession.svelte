@@ -6,7 +6,7 @@
     import { FitAddon } from "@xterm/addon-fit";
     import * as XtermModule from "@xterm/xterm";
     import { sanitizeBrowserHtml } from "$lib/client/runtime/html-sanitizer";
-    import type { MissionSessionTerminalSnapshotData as MissionSessionTerminalSnapshot } from "../types";
+    import type { AgentSessionTerminalSnapshotType } from "@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema";
     import {
         subscribeMissionSessionTerminalTransport,
         type SharedTerminalTransportSubscription,
@@ -53,7 +53,9 @@
     const missionScope = getScopedMissionContext();
 
     let container = $state<HTMLDivElement | null>(null);
-    let terminalSnapshot = $state<MissionSessionTerminalSnapshot | null>(null);
+    let terminalSnapshot = $state<AgentSessionTerminalSnapshotType | null>(
+        null,
+    );
     let loading = $state(false);
     let error = $state<string | null>(null);
     let sendingInput = $state(false);
@@ -63,7 +65,7 @@
     let fitAddon: XtermFitAddon | null = null;
     let resizeObserver: ResizeObserver | null = null;
     let terminalTransport =
-        $state<SharedTerminalTransportSubscription<MissionSessionTerminalSnapshot> | null>(
+        $state<SharedTerminalTransportSubscription<AgentSessionTerminalSnapshotType> | null>(
             null,
         );
     let pendingInput = "";

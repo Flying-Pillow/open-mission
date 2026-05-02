@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Mission } from './Mission.svelte.js';
 import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/daemon/protocol/entityRemote';
-import type { AgentSessionCommandAcknowledgementType as AgentSessionCommandAcknowledgement, AgentSessionDataType as MissionAgentSessionSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
-import type { ArtifactDataType as MissionArtifactSnapshot } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
-import type { MissionCommandAcknowledgementType as MissionCommandAcknowledgement, MissionSnapshotType as MissionSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-import type { StageDataType as MissionStageSnapshot, StageCommandAcknowledgementType as StageCommandAcknowledgement } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
-import type { TaskDataType as MissionTaskSnapshot, TaskCommandAcknowledgementType as TaskCommandAcknowledgement } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
+import type { AgentSessionCommandAcknowledgementType, AgentSessionDataType } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { ArtifactDataType } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
+import type { MissionCommandAcknowledgementType, MissionSnapshotType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import type { StageDataType, StageCommandAcknowledgementType } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
+import type { TaskDataType, TaskCommandAcknowledgementType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import type { MissionGatewayDependencies } from './Mission.svelte.js';
 
 describe('Mission projection reconciliation', () => {
@@ -116,7 +116,7 @@ describe('Mission projection reconciliation', () => {
 });
 
 function createMission(
-    snapshot: MissionSnapshot = createMissionSnapshot(),
+    snapshot: MissionSnapshotType = createMissionSnapshot(),
     gatewayDependencies: MissionGatewayDependencies = createMissionGatewayDependencies([])
 ): Mission {
     return new Mission({
@@ -212,7 +212,7 @@ async function handleQueryInvocation(
     throw new Error(`Unexpected query invocation: ${input.entity}.${input.method}`);
 }
 
-function createStageAcknowledgement(): StageCommandAcknowledgement {
+function createStageAcknowledgement(): StageCommandAcknowledgementType {
     return {
         ok: true,
         entity: 'Stage',
@@ -224,7 +224,7 @@ function createStageAcknowledgement(): StageCommandAcknowledgement {
     };
 }
 
-function createTaskAcknowledgement(): TaskCommandAcknowledgement {
+function createTaskAcknowledgement(): TaskCommandAcknowledgementType {
     return {
         ok: true,
         entity: 'Task',
@@ -236,7 +236,7 @@ function createTaskAcknowledgement(): TaskCommandAcknowledgement {
     };
 }
 
-function createAgentSessionAcknowledgement(method: AgentSessionCommandAcknowledgement['method']): AgentSessionCommandAcknowledgement {
+function createAgentSessionAcknowledgement(method: AgentSessionCommandAcknowledgementType['method']): AgentSessionCommandAcknowledgementType {
     return {
         ok: true,
         entity: 'AgentSession',
@@ -248,7 +248,7 @@ function createAgentSessionAcknowledgement(method: AgentSessionCommandAcknowledg
     };
 }
 
-function createMissionAcknowledgement(method: MissionCommandAcknowledgement['method']): MissionCommandAcknowledgement {
+function createMissionAcknowledgement(method: MissionCommandAcknowledgementType['method']): MissionCommandAcknowledgementType {
     return {
         ok: true,
         entity: 'Mission',
@@ -258,7 +258,7 @@ function createMissionAcknowledgement(method: MissionCommandAcknowledgement['met
     };
 }
 
-function createMissionSnapshot(): MissionSnapshot {
+function createMissionSnapshot(): MissionSnapshotType {
     const stages = [createStageSnapshot({
         lifecycle: 'running',
         tasks: [
@@ -302,8 +302,8 @@ function createMissionSnapshot(): MissionSnapshot {
 
 function createStageSnapshot(input: {
     lifecycle: string;
-    tasks: MissionTaskSnapshot[];
-}): MissionStageSnapshot {
+    tasks: TaskDataType[];
+}): StageDataType {
     return {
         stageId: 'implementation',
         lifecycle: input.lifecycle,
@@ -313,7 +313,7 @@ function createStageSnapshot(input: {
     };
 }
 
-function createTaskSnapshot(taskId: string, lifecycle: string): MissionTaskSnapshot {
+function createTaskSnapshot(taskId: string, lifecycle: string): TaskDataType {
     return {
         taskId,
         stageId: 'implementation',
@@ -328,7 +328,7 @@ function createTaskSnapshot(taskId: string, lifecycle: string): MissionTaskSnaps
     };
 }
 
-function createArtifactSnapshot(artifactId: string, label: string): MissionArtifactSnapshot {
+function createArtifactSnapshot(artifactId: string, label: string): ArtifactDataType {
     return {
         artifactId,
         kind: 'mission',
@@ -340,8 +340,8 @@ function createArtifactSnapshot(artifactId: string, label: string): MissionArtif
 
 function createSessionSnapshot(
     sessionId: string,
-    lifecycleState: MissionAgentSessionSnapshot['lifecycleState']
-): MissionAgentSessionSnapshot {
+    lifecycleState: AgentSessionDataType['lifecycleState']
+): AgentSessionDataType {
     return {
         sessionId,
         runnerId: 'copilot-cli',

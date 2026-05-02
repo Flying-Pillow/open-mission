@@ -54,8 +54,6 @@ export type MissionHandle = Pick<
     | 'sendTerminalInput'
     | 'startTask'
     | 'setTaskAutostart'
-    | 'sessionCommand'
-    | 'taskCommand'
     | 'terminateAgentSession'
     | 'toEntity'
     | 'writeDocument'
@@ -367,8 +365,6 @@ export class MissionRegistry {
             sendTerminalInput: mission.sendTerminalInput.bind(mission),
             startTask: mission.startTask.bind(mission),
             setTaskAutostart: mission.setTaskAutostart.bind(mission),
-            sessionCommand: mission.sessionCommand.bind(mission),
-            taskCommand: mission.taskCommand.bind(mission),
             terminateAgentSession: mission.terminateAgentSession.bind(mission),
             toEntity: mission.toEntity.bind(mission),
             writeDocument: mission.writeDocument.bind(mission)

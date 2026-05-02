@@ -1,20 +1,14 @@
-import { z } from 'zod/v4';
 import type { EntityContractType } from '../Entity/EntitySchema.js';
 import { Task } from './Task.js';
 import {
     taskEntityName,
     TaskLocatorSchema,
     TaskExecuteCommandInputSchema,
-    TaskEventSubjectSchema,
     TaskStorageSchema,
     TaskDataSchema,
-    TaskCommandAcknowledgementSchema
+    TaskCommandAcknowledgementSchema,
+    TaskSnapshotChangedEventSchema
 } from './TaskSchema.js';
-
-const TaskSnapshotChangedEventSchema = z.object({
-    reference: TaskEventSubjectSchema,
-    snapshot: TaskDataSchema
-}).strict();
 
 export const TaskContract: EntityContractType = {
     entity: taskEntityName,

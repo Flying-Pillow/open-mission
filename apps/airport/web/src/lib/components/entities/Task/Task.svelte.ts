@@ -1,13 +1,11 @@
 // /apps/airport/web/src/lib/components/entities/Task/Task.svelte.ts: OO browser entity for workflow tasks exposed by a mission snapshot.
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import type { TaskDataType as MissionTaskSnapshot } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
+import type { TaskDataType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
-
-export type TaskData = MissionTaskSnapshot;
 
 export type TaskSnapshot = {
     stageId: string;
-    task: TaskData;
+    task: TaskDataType;
 };
 
 export type TaskStartOptions = {
@@ -104,7 +102,7 @@ export class Task implements EntityModel<TaskSnapshot> {
         return this;
     }
 
-    public update(data: TaskData, stageId = this.stageId): this {
+    public update(data: TaskDataType, stageId = this.stageId): this {
         return this.updateFromData({
             stageId,
             task: data
@@ -115,7 +113,7 @@ export class Task implements EntityModel<TaskSnapshot> {
         return structuredClone($state.snapshot(this.snapshot));
     }
 
-    public toJSON(): TaskData {
+    public toJSON(): TaskDataType {
         return structuredClone($state.snapshot(this.snapshot.task));
     }
 

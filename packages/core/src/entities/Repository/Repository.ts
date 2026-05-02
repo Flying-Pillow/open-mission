@@ -24,6 +24,7 @@ import {
 	createDefaultRepositoryConfiguration,
 	GitHubIssueDetailSchema,
 	TrackedIssueSummarySchema,
+	type RepositoryPlatformKindType,
 	type RepositoryPlatformRepositoryType,
 	type RepositoryDataType,
 	type RepositoryStorageType,
@@ -59,7 +60,6 @@ import type { WorkflowDefinition } from '../../workflow/WorkflowSchema.js';
 import { parsePersistedWorkflowSettings } from '../../settings/validation.js';
 import {
 	createRepositoryPlatformAdapter,
-	type RepositoryPlatformKind
 } from './PlatformAdapter.js';
 
 export type RepositoryIdentity = {
@@ -346,7 +346,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	public static readPlatform(
 		repositoryRootPath = process.cwd(),
 		options: { resolveWorkspaceRoot?: boolean } = {}
-	): RepositoryPlatformKind | undefined {
+	): RepositoryPlatformKindType | undefined {
 		const settingsPath = Repository.getSettingsDocumentPath(repositoryRootPath, options);
 		try {
 			const content = fs.readFileSync(settingsPath, 'utf8').trim();
@@ -868,7 +868,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		const { ownerId, repoName } = Repository.deriveRepositoryNames(normalizedRepositoryRootPath, platformRepositoryRef);
 		const defaults = createDefaultRepositoryConfiguration();
 
-			return RepositoryStorageSchema.parse({
+		return RepositoryStorageSchema.parse({
 			id: platformRepositoryRef ? Repository.buildGitHubRepositoryId(platformRepositoryRef) : identity.id,
 			repositoryRootPath: normalizedRepositoryRootPath,
 			ownerId,
@@ -960,7 +960,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 				entityName: repositoryEntityName,
 				table: 'repository',
 				entityClass: Repository,
-											storageSchema: RepositoryStorageSchema,
+				storageSchema: RepositoryStorageSchema,
 				getId: (record) => record.id
 			});
 		}

@@ -40,6 +40,11 @@ export const ArtifactDocumentDataSchema = z.object({
     updatedAt: z.string().trim().min(1).optional()
 }).strict();
 
+export const ArtifactSnapshotChangedEventSchema = z.object({
+    reference: ArtifactEventSubjectSchema,
+    snapshot: ArtifactDataSchema
+}).strict();
+
 export const artifactRemoteQueryInputSchemas = {
     read: ArtifactLocatorSchema,
     readDocument: ArtifactLocatorSchema
@@ -64,4 +69,5 @@ export type ArtifactWriteDocumentInputType = z.infer<typeof ArtifactWriteDocumen
 export type ArtifactStorageType = z.infer<typeof ArtifactStorageSchema>;
 export type ArtifactDataType = z.infer<typeof ArtifactDataSchema>;
 export type ArtifactDocumentDataType = z.infer<typeof ArtifactDocumentDataSchema>;
+export type ArtifactSnapshotChangedEventType = z.infer<typeof ArtifactSnapshotChangedEventSchema>;
 

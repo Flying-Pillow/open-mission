@@ -268,21 +268,7 @@ describe('daemon entity dispatch', () => {
 			payload: { missionId: 'mission-1', commandId: 'mission.pause' }
 		}, context)).resolves.toEqual(createMissionAcknowledgement('command'));
 
-		await expect(executeEntityCommandInDaemon({
-			entity: 'Mission',
-			method: 'taskCommand',
-			payload: { missionId: 'mission-1', taskId: 'implementation/01-task', commandId: 'task.complete' }
-		}, context)).resolves.toEqual(createMissionAcknowledgement('taskCommand', { taskId: 'implementation/01-task' }));
-
-		await expect(executeEntityCommandInDaemon({
-			entity: 'Mission',
-			method: 'sessionCommand',
-			payload: { missionId: 'mission-1', sessionId: 'session-1', commandId: 'agentSession.complete' }
-		}, context)).resolves.toEqual(createMissionAcknowledgement('sessionCommand', { sessionId: 'session-1' }));
-
 		expect(mission.command).toHaveBeenCalledOnce();
-		expect(mission.taskCommand).toHaveBeenCalledOnce();
-		expect(mission.sessionCommand).toHaveBeenCalledOnce();
 		expect(loadMission).toHaveBeenCalledTimes(1);
 		expect(mission.dispose).not.toHaveBeenCalled();
 	});
@@ -599,10 +585,8 @@ function createMissionHandle(snapshot: MissionSnapshotType['mission']): MissionH
 		sendAgentSessionCommand: vi.fn(),
 		sendAgentSessionPrompt: vi.fn(),
 		sendTerminalInput: vi.fn(),
-		sessionCommand: vi.fn(async () => createMissionAcknowledgement('sessionCommand', { sessionId: 'session-1' })),
 		startTask: vi.fn(async () => undefined),
 		setTaskAutostart: vi.fn(async () => undefined),
-		taskCommand: vi.fn(async () => createMissionAcknowledgement('taskCommand', { taskId: 'implementation/01-task' })),
 		terminateAgentSession: vi.fn(),
 		writeDocument: vi.fn(),
 		toEntity: vi.fn(async () => ({
@@ -612,16 +596,14 @@ function createMissionHandle(snapshot: MissionSnapshotType['mission']): MissionH
 }
 
 function createMissionAcknowledgement(
-	method: 'command' | 'taskCommand' | 'sessionCommand',
-	identifiers: { taskId?: string; sessionId?: string } = {}
+	method: 'command'
 ): MissionCommandAcknowledgementType {
 	return {
 		ok: true as const,
 		entity: 'Mission' as const,
 		method,
 		id: 'mission-1',
-		missionId: 'mission-1',
-		...identifiers
+		missionId: 'mission-1'
 	};
 }
 

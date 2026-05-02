@@ -1,4 +1,3 @@
-import { z } from 'zod/v4';
 import type { EntityContractType } from '../Entity/EntitySchema.js';
 import { AgentSession } from './AgentSession.js';
 import {
@@ -8,24 +7,14 @@ import {
     AgentSessionSendPromptInputSchema,
     AgentSessionSendCommandInputSchema,
     AgentSessionSendTerminalInputSchema,
-    AgentSessionEventSubjectSchema,
     AgentSessionStorageSchema,
     AgentSessionDataSchema,
     AgentSessionTerminalSnapshotSchema,
-    AgentSessionCommandAcknowledgementSchema
+    AgentSessionCommandAcknowledgementSchema,
+    AgentSessionSnapshotChangedEventSchema,
+    AgentSessionEventSchema,
+    AgentSessionLifecycleEventSchema
 } from './AgentSessionSchema.js';
-
-const AgentSessionSnapshotChangedEventSchema = z.object({
-    reference: AgentSessionEventSubjectSchema,
-    snapshot: AgentSessionDataSchema
-}).strict();
-
-const AgentSessionEventSchema = AgentSessionDataSchema;
-
-const AgentSessionLifecycleEventSchema = z.object({
-    phase: z.enum(['spawned', 'active', 'terminated']),
-    lifecycleState: AgentSessionDataSchema.shape.lifecycleState
-}).strict();
 
 export const AgentSessionContract: EntityContractType = {
     entity: agentSessionEntityName,

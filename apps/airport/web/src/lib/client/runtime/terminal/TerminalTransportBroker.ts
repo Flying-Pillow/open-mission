@@ -1,16 +1,16 @@
 import {
     AgentSessionTerminalSnapshotSchema,
     AgentSessionTerminalSocketServerMessageSchema,
-    type AgentSessionTerminalSnapshotType as MissionSessionTerminalSnapshot,
-    type AgentSessionTerminalSocketClientMessageType as MissionSessionTerminalSocketClientMessage,
-    type AgentSessionTerminalSocketServerMessageType as MissionSessionTerminalSocketServerMessage
+    type AgentSessionTerminalSnapshotType,
+    type AgentSessionTerminalSocketClientMessageType,
+    type AgentSessionTerminalSocketServerMessageType
 } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import {
     MissionTerminalSnapshotSchema,
     MissionTerminalSocketServerMessageSchema,
-    type MissionTerminalSnapshotType as MissionTerminalSnapshot,
-    type MissionTerminalSocketClientMessageType as MissionTerminalSocketClientMessage,
-    type MissionTerminalSocketServerMessageType as MissionTerminalSocketServerMessage
+    type MissionTerminalSnapshotType,
+    type MissionTerminalSocketClientMessageType,
+    type MissionTerminalSocketServerMessageType
 } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 
 type TerminalSnapshotBase = {
@@ -49,16 +49,16 @@ type TerminalServerMessage<TSnapshot extends TerminalSnapshotBase, TOutput exten
     };
 
 type TerminalClientMessage =
-    | MissionTerminalSocketClientMessage
-    | MissionSessionTerminalSocketClientMessage;
+    | MissionTerminalSocketClientMessageType
+    | AgentSessionTerminalSocketClientMessageType;
 
 type SharedTerminalSnapshot =
-    | MissionTerminalSnapshot
-    | MissionSessionTerminalSnapshot;
+    | MissionTerminalSnapshotType
+    | AgentSessionTerminalSnapshotType;
 
 type SharedTerminalServerMessage =
-    | MissionTerminalSocketServerMessage
-    | MissionSessionTerminalSocketServerMessage;
+    | MissionTerminalSocketServerMessageType
+    | AgentSessionTerminalSocketServerMessageType;
 
 type TerminalBrokerState<TSnapshot extends TerminalSnapshotBase> = {
     snapshot: TSnapshot | null;
@@ -116,8 +116,8 @@ export function subscribeMissionTerminalTransport(
         missionId: string;
         repositoryId: string;
     },
-    listener: TerminalBrokerListener<MissionTerminalSnapshot>,
-): SharedTerminalTransportSubscription<MissionTerminalSnapshot> {
+    listener: TerminalBrokerListener<MissionTerminalSnapshotType>,
+): SharedTerminalTransportSubscription<MissionTerminalSnapshotType> {
     const missionId = input.missionId.trim();
     const repositoryId = input.repositoryId.trim();
     const transportKey = [missionId, repositoryId].join(':');
@@ -159,8 +159,8 @@ export function subscribeMissionSessionTerminalTransport(
         repositoryId: string;
         sessionId: string;
     },
-    listener: TerminalBrokerListener<MissionSessionTerminalSnapshot>,
-): SharedTerminalTransportSubscription<MissionSessionTerminalSnapshot> {
+    listener: TerminalBrokerListener<AgentSessionTerminalSnapshotType>,
+): SharedTerminalTransportSubscription<AgentSessionTerminalSnapshotType> {
     const missionId = input.missionId.trim();
     const repositoryId = input.repositoryId.trim();
     const sessionId = input.sessionId.trim();

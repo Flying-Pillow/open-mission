@@ -20,10 +20,8 @@
     } from "$lib/components/entities/Repository/Repository.svelte.js";
     import type { Icon } from "@tabler/icons-svelte";
     import type { ComponentProps } from "svelte";
-    import type {
-        MissionCatalogEntryType,
-        SidebarRepositoryData,
-    } from "$lib/components/entities/types";
+    import type { MissionCatalogEntryType } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
+    import type { SidebarRepositoryData } from "$lib/components/entities/types";
 
     type SidebarRepositoryView = SidebarRepositoryData & { id: string };
 

@@ -5,7 +5,7 @@ import {
     MissionSnapshotSchema,
     type MissionCatalogEntryType,
     type MissionRuntimeEventEnvelopeType,
-    type MissionSnapshotType as MissionSnapshot
+    type MissionSnapshotType
 } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import { RepositoryDataSchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import type { RepositoryPlatformRepositoryType, RepositoryDataType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
@@ -57,7 +57,7 @@ async function executeDefaultQueryRemote(
 
 export class AirportApplication {
     private readonly repositories = new Map<string, Repository>();
-    private readonly missionStores = new Map<string, EntityRuntimeStore<string, MissionSnapshot, Mission>>();
+    private readonly missionStores = new Map<string, EntityRuntimeStore<string, MissionSnapshotType, Mission>>();
     private repositoryVersion = $state(0);
     private activeMissionState = $state<Mission | undefined>();
     #activeRouteKey: string | undefined;
@@ -197,7 +197,7 @@ export class AirportApplication {
     }
 
     public hydrateMissionData(
-        data: MissionSnapshot,
+        data: MissionSnapshotType,
         input: {
             repositoryRootPath?: string;
         } = {}
@@ -555,7 +555,7 @@ export class AirportApplication {
         );
     }
 
-    private getMissionStore(repositoryRootPath?: string): EntityRuntimeStore<string, MissionSnapshot, Mission> {
+    private getMissionStore(repositoryRootPath?: string): EntityRuntimeStore<string, MissionSnapshotType, Mission> {
         const runtimeKey = repositoryRootPath?.trim() || '__default__';
         let store = this.missionStores.get(runtimeKey);
         if (!store) {
@@ -583,7 +583,7 @@ export class AirportApplication {
         };
     }
 
-    private async loadMissionData(missionId: string, repositoryRootPath?: string): Promise<MissionSnapshot> {
+    private async loadMissionData(missionId: string, repositoryRootPath?: string): Promise<MissionSnapshotType> {
         const normalizedMissionId = missionId.trim();
         if (!normalizedMissionId) {
             throw new Error('Mission runtime operation requires a non-empty id.');

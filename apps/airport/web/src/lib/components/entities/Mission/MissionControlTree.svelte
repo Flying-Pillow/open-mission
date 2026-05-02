@@ -9,7 +9,7 @@
     import type { ActiveMissionOutline } from "$lib/client/context/app-context.svelte";
     import * as TreeView from "$lib/components/ui/tree-view/index.js";
     import { cn } from "$lib/utils.js";
-    import type { MissionTowerTreeNodeData as MissionTowerTreeNode } from "../types";
+    import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/types";
 
     type MissionSidebarTask = {
         node: MissionTowerTreeNode;

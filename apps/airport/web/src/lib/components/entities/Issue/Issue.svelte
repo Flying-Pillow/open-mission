@@ -5,7 +5,7 @@
     import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
-    import type { TrackedIssueSummaryType } from "$lib/components/entities/types";
+    import type { TrackedIssueSummaryType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
 
     let {
         issue,

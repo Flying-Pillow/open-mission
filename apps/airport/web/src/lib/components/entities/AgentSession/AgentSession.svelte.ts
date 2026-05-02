@@ -1,24 +1,24 @@
 // /apps/airport/web/src/lib/components/entities/AgentSession/AgentSession.svelte.ts: OO browser entity for a mission agent session hydrated from validated runtime snapshots.
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import type { AgentSessionCommandType as AgentCommand, AgentSessionPromptType as AgentPrompt, AgentSessionDataType as AgentSessionSnapshot } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { AgentSessionCommandType, AgentSessionPromptType, AgentSessionDataType } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
 export type AgentSessionDependencies = {
     executeCommand(sessionId: string, commandId: string, input?: unknown): Promise<void>;
-    sendPrompt(sessionId: string, prompt: AgentPrompt): Promise<void>;
-    sendCommand(sessionId: string, command: AgentCommand): Promise<void>;
+    sendPrompt(sessionId: string, prompt: AgentSessionPromptType): Promise<void>;
+    sendCommand(sessionId: string, command: AgentSessionCommandType): Promise<void>;
 };
 
-export class AgentSession implements EntityModel<AgentSessionSnapshot> {
-    private dataState = $state<AgentSessionSnapshot | undefined>();
+export class AgentSession implements EntityModel<AgentSessionDataType> {
+    private dataState = $state<AgentSessionDataType | undefined>();
     private readonly dependencies: AgentSessionDependencies;
 
-    public constructor(data: AgentSessionSnapshot, dependencies: AgentSessionDependencies) {
+    public constructor(data: AgentSessionDataType, dependencies: AgentSessionDependencies) {
         this.data = data;
         this.dependencies = dependencies;
     }
 
-    private get data(): AgentSessionSnapshot {
+    private get data(): AgentSessionDataType {
         const data = this.dataState;
         if (!data) {
             throw new Error('Agent session snapshot is not initialized.');
@@ -27,7 +27,7 @@ export class AgentSession implements EntityModel<AgentSessionSnapshot> {
         return data;
     }
 
-    private set data(data: AgentSessionSnapshot) {
+    private set data(data: AgentSessionDataType) {
         this.dataState = structuredClone(data);
     }
 
@@ -51,7 +51,7 @@ export class AgentSession implements EntityModel<AgentSessionSnapshot> {
         return this.data.taskId;
     }
 
-    public get lifecycleState(): AgentSessionSnapshot['lifecycleState'] {
+    public get lifecycleState(): AgentSessionDataType['lifecycleState'] {
         return this.data.lifecycleState;
     }
 
@@ -79,7 +79,7 @@ export class AgentSession implements EntityModel<AgentSessionSnapshot> {
         return this.data.terminalPaneId;
     }
 
-    public get terminalHandle(): AgentSessionSnapshot['terminalHandle'] {
+    public get terminalHandle(): AgentSessionDataType['terminalHandle'] {
         return this.data.terminalHandle;
     }
 
@@ -102,7 +102,7 @@ export class AgentSession implements EntityModel<AgentSessionSnapshot> {
         return structuredClone($state.snapshot(this.data.commands ?? []));
     }
 
-    public async sendPrompt(prompt: AgentPrompt): Promise<this> {
+    public async sendPrompt(prompt: AgentSessionPromptType): Promise<this> {
         await this.dependencies.sendPrompt(this.sessionId, prompt);
         return this;
     }
@@ -111,7 +111,7 @@ export class AgentSession implements EntityModel<AgentSessionSnapshot> {
         await this.dependencies.executeCommand(this.sessionId, commandId, input);
     }
 
-    public async sendCommand(command: AgentCommand): Promise<this> {
+    public async sendCommand(command: AgentSessionCommandType): Promise<this> {
         await this.dependencies.sendCommand(this.sessionId, command);
         return this;
     }
@@ -131,20 +131,20 @@ export class AgentSession implements EntityModel<AgentSessionSnapshot> {
         return this;
     }
 
-    public updateFromData(data: AgentSessionSnapshot): this {
+    public updateFromData(data: AgentSessionDataType): this {
         this.data = data;
         return this;
     }
 
-    public update(data: AgentSessionSnapshot): this {
+    public update(data: AgentSessionDataType): this {
         return this.updateFromData(data);
     }
 
-    public toData(): AgentSessionSnapshot {
+    public toData(): AgentSessionDataType {
         return structuredClone($state.snapshot(this.data));
     }
 
-    public toJSON(): AgentSessionSnapshot {
+    public toJSON(): AgentSessionDataType {
         return this.toData();
     }
 }

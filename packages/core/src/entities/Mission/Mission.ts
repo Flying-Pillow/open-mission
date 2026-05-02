@@ -71,7 +71,6 @@ import type { StageDataType } from '../Stage/StageSchema.js';
 import { StageCommandIds } from '../Stage/StageSchema.js';
 import { AgentSessionCommandIds } from '../AgentSession/AgentSessionSchema.js';
 import {
-	MissionAgentSessionCommandInputSchema,
 	MissionCommandAcknowledgementSchema,
 	MissionCommandInputSchema,
 	MissionDataSchema,
@@ -84,7 +83,6 @@ import {
 	MissionReadDocumentInputSchema,
 	MissionSendTerminalInputSchema,
 	MissionSnapshotSchema,
-	MissionTaskCommandInputSchema,
 	MissionTerminalSnapshotSchema,
 	MissionWorktreeSnapshotSchema,
 	MissionWriteDocumentInputSchema,
@@ -154,7 +152,7 @@ export class Mission extends Entity<MissionDataType, string> {
 			...(typeof inputRecord['repositoryRootPath'] === 'string' ? { repositoryRootPath: inputRecord['repositoryRootPath'] } : {})
 		});
 		const service = await Mission.loadMissionRegistry(context);
-		return await service.loadRequiredMission(input, context) as Mission;
+		return await service.loadRequiredMission(input, context) as unknown as Mission;
 	}
 
 	public async read(payload: unknown, _context: EntityExecutionContext) {
@@ -228,68 +226,6 @@ export class Mission extends Entity<MissionDataType, string> {
 				throw new Error(`Mission command '${input.commandId}' is not implemented in the daemon.`);
 		}
 		return Mission.buildCommandAcknowledgement(input, 'command');
-	}
-
-	public async taskCommand(payload: unknown, _context: EntityExecutionContext) {
-		const input = MissionTaskCommandInputSchema.parse(payload);
-		this.assertResolvedMissionId(input.missionId);
-		switch (input.commandId) {
-			case TaskCommandIds.start:
-				const terminalSessionName = getCommandStringInput(input.input, 'terminalSessionName');
-				await this.startTask(
-					input.taskId,
-					terminalSessionName
-						? { terminalSessionName }
-						: {}
-				);
-				break;
-			case TaskCommandIds.complete:
-				await this.completeTask(input.taskId);
-				break;
-			case TaskCommandIds.reopen:
-				await this.reopenTask(input.taskId);
-				break;
-			case TaskCommandIds.rework:
-				await this.reworkTask(input.taskId, {
-					actor: 'human',
-					reasonCode: 'manual.instruction',
-					summary: requireCommandTextInput(input.input, input.commandId),
-					artifactRefs: []
-				});
-				break;
-			case TaskCommandIds.reworkFromVerification:
-				await this.reworkTaskFromVerification(input.taskId);
-				break;
-			case TaskCommandIds.enableAutostart:
-				await this.setTaskAutostart(input.taskId, true);
-				break;
-			case TaskCommandIds.disableAutostart:
-				await this.setTaskAutostart(input.taskId, false);
-				break;
-			default:
-				throw new Error(`Task command '${input.commandId}' is not implemented in the daemon.`);
-		}
-		return Mission.buildCommandAcknowledgement(input, 'taskCommand', { taskId: input.taskId });
-	}
-
-	public async sessionCommand(payload: unknown, context: EntityExecutionContext) {
-		const input = MissionAgentSessionCommandInputSchema.parse(payload);
-		this.assertResolvedMissionId(input.missionId);
-		const service = await Mission.loadMissionRegistry(context);
-		switch (input.commandId) {
-			case AgentSessionCommandIds.complete:
-				await this.completeAgentSession(input.sessionId);
-				break;
-			case AgentSessionCommandIds.cancel:
-				await this.cancelAgentSession(input.sessionId, service.getReason(input.input));
-				break;
-			case AgentSessionCommandIds.terminate:
-				await this.terminateAgentSession(input.sessionId, service.getReason(input.input));
-				break;
-			default:
-				throw new Error(`AgentSession command '${input.commandId}' is not implemented in the daemon.`);
-		}
-		return Mission.buildCommandAcknowledgement(input, 'sessionCommand', { sessionId: input.sessionId });
 	}
 
 	public async writeDocument(payload: unknown, context: EntityExecutionContext) {
@@ -2257,21 +2193,6 @@ function getValidationErrors(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function getCommandStringInput(input: unknown, key: string): string | undefined {
-	if (!isRecord(input) || typeof input[key] !== 'string') {
-		return undefined;
-	}
-	const value = input[key].trim();
-	return value.length > 0 ? value : undefined;
-}
-
-function requireCommandTextInput(input: unknown, commandId: string): string {
-	if (typeof input !== 'string' || !input.trim()) {
-		throw new Error(`Mission command '${commandId}' requires non-empty text input.`);
-	}
-	return input.trim();
 }
 
 function requireTrimmedString(value: string | undefined, fieldName: string): string {

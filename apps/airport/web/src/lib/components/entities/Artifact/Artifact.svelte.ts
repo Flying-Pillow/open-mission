@@ -1,8 +1,6 @@
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import type { MissionDocumentSnapshotType as MissionDocumentSnapshot } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-
-export type ArtifactDocumentPayload = MissionDocumentSnapshot;
+import type { ArtifactDocumentDataType } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
 
 export type ArtifactSnapshot = {
     artifactId: string;
@@ -14,8 +12,8 @@ export type ArtifactSnapshot = {
 };
 
 export type ArtifactDependencies = {
-    readDocument(filePath: string, input?: ArtifactReadOptions): Promise<ArtifactDocumentPayload>;
-    writeDocument(filePath: string, content: string): Promise<ArtifactDocumentPayload>;
+    readDocument(filePath: string, input?: ArtifactReadOptions): Promise<ArtifactDocumentDataType>;
+    writeDocument(filePath: string, content: string): Promise<ArtifactDocumentDataType>;
 };
 
 export type ArtifactReadOptions = {
@@ -80,11 +78,11 @@ export class Artifact implements EntityModel<ArtifactSnapshot> {
         return structuredClone($state.snapshot(this.snapshot.commands ?? []));
     }
 
-    public async read(input: ArtifactReadOptions = {}): Promise<ArtifactDocumentPayload> {
+    public async read(input: ArtifactReadOptions = {}): Promise<ArtifactDocumentDataType> {
         return this.dependencies.readDocument(this.filePath, input);
     }
 
-    public async write(content: string): Promise<ArtifactDocumentPayload> {
+    public async write(content: string): Promise<ArtifactDocumentDataType> {
         return this.dependencies.writeDocument(this.filePath, content);
     }
 

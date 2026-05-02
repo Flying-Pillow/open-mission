@@ -20,7 +20,7 @@ import {
     type MissionTerminalSnapshotType,
 } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import { RepositoryDataSchema, RepositoryStorageSchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
-import type { RepositoryStorageType as Repository } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { RepositoryStorageType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import {
     connectDedicatedAuthenticatedDaemonClient,
     connectSharedAuthenticatedDaemonClient
@@ -188,7 +188,7 @@ export class DaemonGateway {
 
     public async resolveRepositoryCandidate(input: {
         id: string;
-    }): Promise<Repository> {
+    }): Promise<RepositoryStorageType> {
         const id = input.id.trim();
         if (!id) {
             throw new Error('Repository access requires an id.');
