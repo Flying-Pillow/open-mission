@@ -519,7 +519,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 	public canStartMissionFromIssue() {
 		if (!this.platformRepositoryRef) {
-			return this.unavailable('Repository does not have a GitHub repository ref.');
+			return this.unavailable('Repository does not have a platform repository ref.');
 		}
 		if (!this.isInitialized) {
 			return this.unavailable('Repository control state is not initialized.');
@@ -535,7 +535,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 	public canPrepare() {
 		if (!this.platformRepositoryRef) {
-			return this.unavailable('Repository does not have a GitHub repository ref.');
+			return this.unavailable('Repository does not have a platform repository ref.');
 		}
 		if (this.isInitialized) {
 			return this.unavailable('Repository control state is already initialized.');
@@ -554,7 +554,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		this.assertRepositoryIdentity(RepositoryLocatorSchema.parse(input));
 		const platformRepositoryRef = this.platformRepositoryRef?.trim();
 		if (!platformRepositoryRef) {
-			throw new Error(`Repository '${this.id}' does not have a GitHub remote configured.`);
+			throw new Error(`Repository '${this.id}' does not have a platform repository ref configured.`);
 		}
 
 		const store = new FilesystemAdapter(this.repositoryRootPath);
@@ -849,7 +849,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	private requireRepositoryPlatformAdapter(authToken?: string) {
 		const adapter = this.tryCreateRepositoryPlatformAdapter(authToken);
 		if (!adapter) {
-			throw new Error(`Repository '${this.id}' does not have a GitHub remote configured.`);
+			throw new Error(`Repository '${this.id}' does not have a platform repository ref configured.`);
 		}
 		return adapter;
 	}

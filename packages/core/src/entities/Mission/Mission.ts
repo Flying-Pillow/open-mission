@@ -16,7 +16,6 @@ import type {
 	AgentCommand,
 	AgentPrompt
 } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
-import type { MissionDefaultAgentMode } from '../Repository/RepositorySchema.js';
 import { Repository } from '../Repository/Repository.js';
 import { AgentSession } from '../AgentSession/AgentSession.js';
 import { AgentSessionLogWriter } from '../AgentSession/AgentSessionLogWriter.js';
@@ -78,6 +77,7 @@ import {
 	MissionTerminalSnapshotSchema,
 	MissionWorktreeSnapshotSchema,
 	MissionWriteDocumentInputSchema,
+	type MissionDefaultAgentModeType,
 	type MissionCommandAcknowledgementType,
 	type MissionDataType,
 	type MissionLocatorType
@@ -108,7 +108,7 @@ export type MissionWorkflowBindings = {
 	instructionsPath?: string;
 	skillsPath?: string;
 	defaultModel?: string;
-	defaultMode?: MissionDefaultAgentMode;
+	defaultMode?: MissionDefaultAgentModeType;
 };
 
 export class Mission extends Entity<MissionDataType, string> {

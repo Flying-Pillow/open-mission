@@ -1,17 +1,26 @@
 import type {
-	GitHubIssueDetail,
 	MissionBrief,
 	TrackedIssueSummary
 } from '../../types.js';
 import type {
 	RepositoryPlatformKindType,
-	RepositoryPlatformRepositoryType
+	RepositoryPlatformRepositoryType,
+	RepositoryIssueDetailType
 } from './RepositorySchema.js';
 import {
 	GitHubPlatformAdapter,
-	resolveGitHubRepositoryFromWorkspace,
-	type GitHubBranchSyncStatus
+	resolveGitHubRepositoryFromWorkspace
 } from '../../platforms/GitHubPlatformAdapter.js';
+
+export type RepositoryBranchSyncStatus = {
+	branchRef: string;
+	trackingRef?: string;
+	status: 'up-to-date' | 'behind' | 'ahead' | 'diverged' | 'untracked';
+	aheadCount: number;
+	behindCount: number;
+	localHead?: string;
+	remoteHead?: string;
+};
 
 export type RepositoryPlatformAdapterInput = {
 	platform: RepositoryPlatformKindType;
@@ -43,12 +52,12 @@ export interface RepositoryPlatformAdapter {
 	fetchIssue(issueId: string): Promise<MissionBrief>;
 	listOpenIssues(limit: number): Promise<TrackedIssueSummary[]>;
 	listRepositories(): Promise<RepositoryPlatformRepositoryType[]>;
-	fetchIssueDetail(issueId: string): Promise<GitHubIssueDetail>;
+	fetchIssueDetail(issueId: string): Promise<RepositoryIssueDetailType>;
 	cloneRepository(input: RepositoryPlatformCloneRequest): Promise<string>;
 	createIssue(input: RepositoryPlatformIssueCreateRequest): Promise<MissionBrief>;
 	createPullRequest(input: RepositoryPlatformPullRequestRequest): Promise<string>;
 	fetchRemote(remoteName?: string): void;
-	getBranchSyncStatus(branchRef: string, remoteName?: string): GitHubBranchSyncStatus;
+	getBranchSyncStatus(branchRef: string, remoteName?: string): RepositoryBranchSyncStatus;
 	pullBranch(branchRef: string, remoteName?: string): void;
 }
 

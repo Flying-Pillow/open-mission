@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { GitHubIssueDetailType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
+    import type { RepositoryIssueDetailType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import ExternalLinkIcon from "@tabler/icons-svelte/icons/external-link";
     import PlayerPlayIcon from "@tabler/icons-svelte/icons/player-play";
     import XIcon from "@tabler/icons-svelte/icons/x";

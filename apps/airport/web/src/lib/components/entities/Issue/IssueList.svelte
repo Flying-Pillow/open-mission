@@ -9,7 +9,7 @@
     import { Button } from "$lib/components/ui/button/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import type {
-        GitHubIssueDetailType,
+        RepositoryIssueDetailType,
         TrackedIssueSummaryType,
     } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
 

@@ -34,7 +34,11 @@ _Avoid_: workspace root, mission worktree root
 
 **Repository control state**:
 Durable repository-scoped Mission system state stored under `.mission/`.
-_Avoid_: settings, config, workspace state
+_Avoid_: workspace state, editor state, surface state
+
+**Repository settings document**:
+The `.mission/settings.json` file that stores operator-editable Repository control state values such as Mission worktree root, instruction paths, skills paths, and default Agent runtime preferences.
+_Avoid_: config blob, workspace settings, surface preferences
 
 **Mission branch ref**:
 The Git branch ref assigned to a Mission, for example `mission/29-architectural-reset-strict-ood-entity-architectu`.
@@ -203,6 +207,10 @@ _Avoid_: database model, table schema
 **Entity data schema**:
 The hydrated Entity shape returned to clients, including storage fields and computed, linked, or projected fields.
 _Avoid_: view model, response model
+
+**Entity command view**:
+A first-class Entity query result that advertises currently available Entity commands for one target Entity id. It is not Entity data and must not be stored inside an Entity data schema.
+_Avoid_: commands data, command snapshot, command alias
 
 **Entity data change event**:
 A daemon notification that carries the current Entity data after an Entity changed. It is named `data.changed` and uses a `data` payload when the payload is the Entity data schema itself.

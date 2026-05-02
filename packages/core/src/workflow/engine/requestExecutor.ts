@@ -1,5 +1,5 @@
 import type { MissionDescriptor, MissionStageId, MissionTaskState } from '../../types.js';
-import type { MissionDefaultAgentMode } from '../../entities/Repository/RepositorySchema.js';
+import type { MissionDefaultAgentModeType } from '../../entities/Mission/MissionSchema.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import {
@@ -49,7 +49,7 @@ export interface MissionWorkflowRequestExecutorOptions {
 	instructionsPath?: string;
 	skillsPath?: string;
 	defaultModel?: string;
-	defaultMode?: MissionDefaultAgentMode;
+	defaultMode?: MissionDefaultAgentModeType;
 	workingDirectoryResolver?: (task: MissionTaskRuntimeState, descriptor: MissionDescriptor) => string;
 }
 
@@ -59,7 +59,7 @@ export class MissionWorkflowRequestExecutor {
 	private readonly sessionTaskIds = new Map<AgentSessionId, string>();
 	private readonly runtimeListeners = new Set<RuntimeEventListener>();
 	private readonly defaultModel: string | undefined;
-	private readonly defaultMode: MissionDefaultAgentMode | undefined;
+	private readonly defaultMode: MissionDefaultAgentModeType | undefined;
 	private readonly workingDirectoryResolver: (task: MissionTaskRuntimeState, descriptor: MissionDescriptor) => string;
 
 	public constructor(private readonly options: MissionWorkflowRequestExecutorOptions) {

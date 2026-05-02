@@ -1,8 +1,8 @@
 # Entity Commands As Canonical Operator Surface
 
-Entity commands are the canonical operator surface for Mission, Stage, Task, Artifact, AgentSession, and future command-capable Entities. A command is identified by `commandId` and may carry typed `input`.
+Entity commands are the canonical operator surface for Repository, Mission, Stage, Task, Artifact, AgentSession, and future command-capable Entities. A command is identified by `commandId` and may carry typed `input`.
 
-Airport is a control surface and proxy. It renders `EntityCommandDescriptor` values, gathers any command input or confirmation, and forwards the descriptor `commandId` through the SvelteKit gateway to daemon `entity.command`. Airport may keep helper methods for documents, worktrees, terminals, prompt delivery, and event streams where those helpers represent distinct transport behavior, but it must not invent Mission behavior or a second command vocabulary.
+Airport is a control surface and proxy. It renders `EntityCommandDescriptor` values from Entity command views, gathers any command input or confirmation, and forwards the descriptor `commandId` through the SvelteKit gateway to daemon `entity.command`. Airport may keep helper methods for artifacts, worktrees, terminals, prompt delivery, and event streams where those helpers represent distinct transport behavior, but it must not invent Mission behavior or a second command vocabulary.
 
 The daemon request surface is intentionally small: `ping`, `event.subscribe`, `system.status`, `entity.query`, and `entity.command`. Entity behavior belongs behind Entity contracts.
 
@@ -14,7 +14,7 @@ Command acknowledgements mean the command was accepted and attempted at the auth
 
 Consequences:
 
-- Command payloads use `{ missionId, commandId, input? }` plus the target id needed by the addressed Entity.
+- Command payloads use the target Entity locator, the advertised `commandId`, and optional typed `input` needed by the owning Entity contract.
 - Airport command UI uses Commandbar naming.
 - Entity command views advertise available commands; Entity data schemas must not contain command descriptors.
 - Callers send back the advertised `commandId` with the target Entity locator and typed input required by the owning Entity contract.

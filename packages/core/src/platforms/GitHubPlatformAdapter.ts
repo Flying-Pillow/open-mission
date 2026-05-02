@@ -2,8 +2,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { getMissionGitHubCliBinary } from '../lib/config.js';
-import type { RepositoryPlatformRepositoryType } from '../entities/Repository/RepositorySchema.js';
-import type { GitHubIssueDetail, MissionBrief, MissionType, TrackedIssueSummary } from '../types.js';
+import type { RepositoryIssueDetailType, RepositoryPlatformRepositoryType } from '../entities/Repository/RepositorySchema.js';
+import type { MissionBrief, MissionType, TrackedIssueSummary } from '../types.js';
 
 export type GitHubBranchSyncStatus = {
 	branchRef: string;
@@ -104,7 +104,7 @@ export class GitHubPlatformAdapter {
 		return this.mapIssuePayloadToBrief(payload);
 	}
 
-	public async fetchIssueDetail(issueId: string): Promise<GitHubIssueDetail> {
+	public async fetchIssueDetail(issueId: string): Promise<RepositoryIssueDetailType> {
 		const payload = await this.runJsonProcess<GitHubIssuePayload>([
 			'issue',
 			'view',
@@ -396,7 +396,7 @@ export class GitHubPlatformAdapter {
 		} satisfies MissionBrief;
 	}
 
-	private mapIssuePayloadToDetail(payload: GitHubIssuePayload): GitHubIssueDetail {
+	private mapIssuePayloadToDetail(payload: GitHubIssuePayload): RepositoryIssueDetailType {
 		return {
 			number: payload.number,
 			title: payload.title,
