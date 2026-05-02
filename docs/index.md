@@ -89,7 +89,20 @@ Mission exists to solve the problems that show up as soon as AI coding becomes r
 
 Mission fixes that by separating intake, planning, implementation, verification, audit, and delivery into explicit artifacts, explicit tasks, and explicit runtime state.
 
-If you want the shortest explanation of why that operating model matters, read [AI Technical Debt and Mission](core-workflows/ai-technical-debt.md).
+One visible failure mode is AI slop: codebases that accumulate software entropy because each fast local change ignores the shape of the whole system and leaves behind more shallow structure, weaker seams, and harder future edits.
+
+<div class="mission-video-embed">
+ <a class="mission-video-link" href="https://www.youtube.com/watch?v=3MP8D-mdheA" target="_blank" rel="noopener noreferrer">
+  <span class="mission-video-link__poster" style="background-image: linear-gradient(180deg, rgba(23, 8, 26, 0.1), rgba(23, 8, 26, 0.38)), url('https://img.youtube.com/vi/3MP8D-mdheA/hqdefault.jpg');"></span>
+  <span class="mission-video-link__body">
+   <span class="mission-video-link__eyebrow">Source Talk</span>
+   <span class="mission-video-link__title">How To De-Slop A Codebase Ruined By AI (with one skill)</span>
+    <span class="mission-video-link__text">Matt Pocock shows the codebase-level version of AI debt: entropy compounds when agents work without shared vocabulary, deep modules, clear seams, and human architectural judgment.</span>
+  </span>
+ </a>
+</div>
+
+If you want the broader argument for why Mission is built this way, read [AI Technical Debt and Mission](core-workflows/ai-technical-debt.md), which now pairs IBM's framing of AI debt with this codebase-level AI slop example.
 
 ## What Using Mission Feels Like
 

@@ -16,7 +16,8 @@ Consequences:
 
 - Command payloads use `{ missionId, commandId, input? }` plus the target id needed by the addressed Entity.
 - Airport command UI uses Commandbar naming.
-- Entity data advertises commands; callers send back the advertised `commandId`.
+- Entity command views advertise available commands; Entity data schemas must not contain command descriptors.
+- Callers send back the advertised `commandId` with the target Entity locator and typed input required by the owning Entity contract.
 - Child Entity command ids and input schemas should move into the owning child Entity schema/contract files.
 - Artifact exposes `command` only for real Artifact-owned commands such as body update; it must not expose ad hoc mutation method names like `writeBody`.
 - Runtime inputs such as AgentSession prompt delivery, Agent runtime messages, and raw terminal input must be documented either as typed Entity commands or as explicit non-command input channels.

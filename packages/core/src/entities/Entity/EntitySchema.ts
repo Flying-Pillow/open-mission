@@ -7,6 +7,13 @@ export const EntityNameSchema = nonEmptyStringSchema;
 export const EntityMethodNameSchema = nonEmptyStringSchema;
 export const EntityObjectSchema = z.record(z.string(), z.unknown());
 
+export interface EntityStore {
+    read(table: string, id: string): Promise<unknown | undefined>;
+    list(table: string): Promise<unknown[]>;
+    write(table: string, id: string, record: unknown): Promise<void>;
+    delete(table: string, id: string): Promise<void>;
+}
+
 export const EntityIdSchema = nonEmptyStringSchema.refine((value) => {
     const separatorIndex = value.indexOf(':');
     if (separatorIndex <= 0 || separatorIndex === value.length - 1) {
@@ -100,6 +107,11 @@ export const EntityCommandDescriptorSchema = z.object({
     presentationOrder: z.number().int().optional()
 }).strict();
 
+export const EntityCommandViewSchema = z.object({
+    id: EntityIdSchema,
+    commands: z.array(EntityCommandDescriptorSchema)
+}).strict();
+
 export const EntityMethodUiSchema = z.object({
     label: z.string().trim().min(1),
     description: z.string().trim().min(1).optional(),
@@ -166,6 +178,7 @@ export type EntityCommandInputOptionType = z.infer<typeof EntityCommandInputOpti
 export type EntityCommandInputDescriptorType = z.infer<typeof EntityCommandInputDescriptorSchema>;
 export type EntityCommandConfirmationType = z.infer<typeof EntityCommandConfirmationSchema>;
 export type EntityCommandDescriptorType = z.infer<typeof EntityCommandDescriptorSchema>;
+export type EntityCommandViewType = z.infer<typeof EntityCommandViewSchema>;
 export type EntityMethodUiType = z.infer<typeof EntityMethodUiSchema>;
 export type EntityMethodExecutionType = z.infer<typeof EntityMethodExecutionSchema>;
 export type EntityMethodKindType = z.infer<typeof EntityMethodKindSchema>;

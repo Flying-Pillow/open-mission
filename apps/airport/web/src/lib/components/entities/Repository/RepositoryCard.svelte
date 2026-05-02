@@ -57,8 +57,7 @@
                 Control root
             </p>
             <p class="mt-2 text-sm font-medium text-foreground">
-                {activeRepository.data.controlRoot ??
-                    activeRepository.data.repositoryRootPath}
+                {activeRepository.data.repositoryRootPath}
             </p>
         </div>
         <div class="rounded-xl border bg-background/70 px-4 py-3">
@@ -89,7 +88,7 @@
                 Setup
             </p>
             <p class="mt-2 text-sm font-medium text-foreground">
-                {activeRepository.data.settingsComplete === false
+                {!activeRepository.data.isInitialized
                     ? "Incomplete"
                     : "Ready"}
             </p>

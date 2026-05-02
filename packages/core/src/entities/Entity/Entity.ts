@@ -75,7 +75,7 @@ export abstract class Entity<
 		const methods = contract.methods ?? {};
 		const descriptors = await Promise.all(
 			Object.entries(methods)
-				.filter(([, method]) => method.ui)
+				.filter(([, method]) => method.ui && method.kind === 'mutation' && method.execution === 'entity')
 				.map(async ([methodName, method]) => {
 					const availability = await Entity.resolveMethodAvailability(entity, methodName, context);
 					return {
@@ -250,6 +250,13 @@ export abstract class Entity<
 
 	public availabilityMethodNameFor(methodName: string): string {
 		return createEntityAvailabilityMethodName(methodName);
+	}
+
+	public async availableCommands(
+		contract: EntityContractType,
+		context: EntityExecutionContext
+	): Promise<EntityCommandDescriptorType[]> {
+		return Entity.buildUiCommandDescriptors(contract, this, context);
 	}
 
 	protected available(): EntityMethodAvailability {

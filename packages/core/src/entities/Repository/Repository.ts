@@ -4,6 +4,7 @@ import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
+import { EntityCommandViewSchema, type EntityCommandViewType } from '../Entity/EntitySchema.js';
 import type { Mission, MissionWorkflowBindings } from '../Mission/Mission.js';
 import {
 	getMissionGitHubCliBinary,
@@ -516,12 +517,30 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return RepositoryStorageSchema.parse(this.toData());
 	}
 
-	public canStartMissionFromIssue(): boolean {
-		return this.platformRepositoryRef !== undefined;
+	public canStartMissionFromIssue() {
+		if (!this.platformRepositoryRef) {
+			return this.unavailable('Repository does not have a GitHub repository ref.');
+		}
+		if (!this.isInitialized) {
+			return this.unavailable('Repository control state is not initialized.');
+		}
+		return this.available();
 	}
 
-	public canStartMissionFromBrief(): boolean {
-		return true;
+	public canStartMissionFromBrief() {
+		return !this.isInitialized
+			? this.unavailable('Repository control state is not initialized.')
+			: this.available();
+	}
+
+	public canPrepare() {
+		if (!this.platformRepositoryRef) {
+			return this.unavailable('Repository does not have a GitHub repository ref.');
+		}
+		if (this.isInitialized) {
+			return this.unavailable('Repository control state is already initialized.');
+		}
+		return this.available();
 	}
 
 	public canRemove(): boolean {
@@ -606,11 +625,25 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		this.data = RepositoryDataSchema.parse({
 			...this.toStorage(),
 			operationalMode: settings ? 'repository' : 'setup',
-			controlRoot: this.repositoryRootPath,
 			...(currentBranch ? { currentBranch } : {}),
-			settingsComplete: settings !== undefined
+			isInitialized: settings !== undefined
 		});
 		return this.toData();
+	}
+
+	public async commands(input: RepositoryLocatorType, context?: EntityExecutionContext): Promise<EntityCommandViewType> {
+		await this.read(input);
+		const { RepositoryContract } = await import('./RepositoryContract.js');
+		return EntityCommandViewSchema.parse({
+			id: this.id,
+			commands: await this.availableCommands(RepositoryContract, {
+				surfacePath: this.repositoryRootPath,
+				...(context?.authToken ? { authToken: context.authToken } : {}),
+				...(context?.missionRegistry ? { missionRegistry: context.missionRegistry } : {}),
+				...(context?.missionService ? { missionService: context.missionService } : {}),
+				...(context?.entityFactory ? { entityFactory: context.entityFactory } : {})
+			})
+		});
 	}
 
 	public async listIssues(

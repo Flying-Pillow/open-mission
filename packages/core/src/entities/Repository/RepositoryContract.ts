@@ -1,4 +1,4 @@
-import type { EntityContractType } from '../Entity/EntitySchema.js';
+import { EntityCommandViewSchema, type EntityContractType } from '../Entity/EntitySchema.js';
 import { Repository } from './Repository.js';
 import {
     GitHubIssueDetailSchema,
@@ -52,6 +52,12 @@ export const RepositoryContract: EntityContractType = {
             kind: 'query',
             payload: RepositoryLocatorSchema,
             result: RepositoryDataSchema,
+            execution: 'entity'
+        },
+        commands: {
+            kind: 'query',
+            payload: RepositoryLocatorSchema,
+            result: EntityCommandViewSchema,
             execution: 'entity'
         },
         listIssues: {

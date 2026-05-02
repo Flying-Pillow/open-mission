@@ -6,14 +6,14 @@ import { z } from 'zod/v4';
 import { getApp } from '$lib/client/globals';
 import { cmd } from '../../../../routes/api/entities/remote/command.remote';
 import { qry } from '../../../../routes/api/entities/remote/query.remote';
-import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
+import { Entity } from '$lib/components/entities/shared/Entity.svelte.js';
 
 export type RepositoryDataLoader = (input: {
     id: string;
     repositoryRootPath?: string;
 }) => Promise<RepositoryDataType>;
 
-export class Repository implements EntityModel<RepositoryDataType> {
+export class Repository extends Entity<RepositoryDataType> {
     public data = $state() as RepositoryDataType;
     private readonly loadData: RepositoryDataLoader;
     public missions = $state<MissionCatalogEntryType[]>([]);
@@ -24,12 +24,24 @@ export class Repository implements EntityModel<RepositoryDataType> {
             loadData: RepositoryDataLoader;
         }
     ) {
+        super();
         this.data = structuredClone(data);
         this.loadData = input.loadData;
     }
 
+    public get entityName(): string {
+        return 'Repository';
+    }
+
     public get id(): string {
         return this.data.id;
+    }
+
+    protected get entityLocator(): Record<string, unknown> {
+        return {
+            id: this.data.id,
+            repositoryRootPath: this.data.repositoryRootPath
+        };
     }
 
     public static async find(input: {
@@ -148,15 +160,10 @@ export class Repository implements EntityModel<RepositoryDataType> {
     }
 
     public async startMissionFromIssue(issueNumber: number): Promise<{ missionId: string; redirectTo: string }> {
-        const result = RepositoryMissionStartAcknowledgementSchema.parse(await cmd({
-            entity: 'Repository',
-            method: 'startMissionFromIssue',
-            payload: {
-                id: this.data.id,
-                repositoryRootPath: this.data.repositoryRootPath,
-                issueNumber
-            }
-        }));
+        const result = RepositoryMissionStartAcknowledgementSchema.parse(await this.executeCommand(
+            this.commandIdFor('startMissionFromIssue'),
+            { issueNumber }
+        ));
 
         return {
             missionId: result.id,
@@ -169,15 +176,10 @@ export class Repository implements EntityModel<RepositoryDataType> {
         body: string;
         type: 'feature' | 'fix' | 'docs' | 'refactor' | 'task';
     }): Promise<{ missionId: string; redirectTo: string }> {
-        const result = RepositoryMissionStartAcknowledgementSchema.parse(await cmd({
-            entity: 'Repository',
-            method: 'startMissionFromBrief',
-            payload: {
-                id: this.data.id,
-                repositoryRootPath: this.data.repositoryRootPath,
-                ...input
-            }
-        }));
+        const result = RepositoryMissionStartAcknowledgementSchema.parse(await this.executeCommand(
+            this.commandIdFor('startMissionFromBrief'),
+            input
+        ));
 
         return {
             missionId: result.id,

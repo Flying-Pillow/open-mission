@@ -1,8 +1,7 @@
 import * as path from 'node:path';
 import { getMissionDaemonDirectory } from '../../lib/config.js';
 import { JsonFileAdapter } from '../../lib/formats/JsonFileAdapter.js';
-import { EntityTableSchema } from './EntitySchema.js';
-import type { EntityStore } from './EntityStore.js';
+import { EntityTableSchema, type EntityStore } from './EntitySchema.js';
 
 export class FilesystemEntityStore implements EntityStore {
     public constructor(

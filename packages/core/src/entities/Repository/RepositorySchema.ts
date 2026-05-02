@@ -162,10 +162,7 @@ export const GitHubIssueDetailSchema = z.object({
 
 export const RepositoryDataSchema = RepositoryStorageSchema.extend({
     operationalMode: z.string().trim().min(1).optional(),
-    controlRoot: z.string().trim().min(1).optional(),
-    currentBranch: z.string().trim().min(1).optional(),
-    settingsComplete: z.boolean().optional(),
-    selectedIssue: GitHubIssueDetailSchema.optional()
+    currentBranch: z.string().trim().min(1).optional()
 }).strict();
 
 export const RepositoryMissionStartMethodSchema = z.enum([

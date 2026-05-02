@@ -64,4 +64,48 @@ describe('Repository', () => {
             issueNumber: 29
         }, context)).resolves.toBe(repository);
     });
+
+    it('hydrates instance command descriptors from contract metadata and availability rules', async () => {
+        const repository = Repository.create({
+            repositoryRootPath: '/tmp/mission-proof-of-concept',
+            platformRepositoryRef: 'Flying-Pillow/mission'
+        });
+
+        const view = await repository.commands({
+            id: repository.id,
+            repositoryRootPath: repository.repositoryRootPath
+        });
+
+        expect(view.commands.map((command) => command.commandId)).toEqual([
+            'repository.prepare',
+            'repository.startMissionFromIssue',
+            'repository.startMissionFromBrief',
+            'repository.remove'
+        ]);
+        expect(view.commands.find((command) => command.commandId === 'repository.prepare')).toMatchObject({
+            disabled: false
+        });
+        expect(view.commands.find((command) => command.commandId === 'repository.startMissionFromBrief')).toMatchObject({
+            disabled: true,
+            disabledReason: 'Repository control state is not initialized.'
+        });
+    });
+
+    it('marks prepare unavailable after Repository control state is initialized', async () => {
+        const repository = Repository.create({
+            repositoryRootPath: '/tmp/mission-proof-of-concept',
+            platformRepositoryRef: 'Flying-Pillow/mission',
+            isInitialized: true
+        });
+
+        const view = await repository.commands({
+            id: repository.id,
+            repositoryRootPath: repository.repositoryRootPath
+        });
+
+        expect(view.commands.find((command) => command.commandId === 'repository.prepare')).toMatchObject({
+            disabled: true,
+            disabledReason: 'Repository control state is already initialized.'
+        });
+    });
 });

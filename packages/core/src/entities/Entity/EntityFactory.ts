@@ -1,11 +1,10 @@
 import { z } from 'zod/v4';
 import type { Entity } from './Entity.js';
-import { EntityTableSchema } from './EntitySchema.js';
+import { EntityTableSchema, type EntityStore } from './EntitySchema.js';
 import { FilesystemEntityStore } from './FilesystemEntityStore.js';
-import type { EntityStore } from './EntityStore.js';
 
 export { FilesystemEntityStore } from './FilesystemEntityStore.js';
-export type { EntityStore } from './EntityStore.js';
+export type { EntityStore } from './EntitySchema.js';
 
 export type EntityConstructor<
     TEntity extends Entity<object, string>,
