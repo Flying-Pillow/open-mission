@@ -296,7 +296,6 @@ const repositoryControlStatusSchema = z.object({
 	isGitRepository: z.boolean(),
 	initialized: z.boolean(),
 	settingsPresent: z.boolean(),
-	settingsComplete: z.boolean(),
 	trackingProvider: z.literal('github').optional(),
 	githubRepository: nonEmptyStringSchema.optional(),
 	issuesConfigured: z.boolean(),

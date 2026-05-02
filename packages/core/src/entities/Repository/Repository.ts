@@ -626,7 +626,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			...this.toStorage(),
 			operationalMode: settings ? 'repository' : 'setup',
 			...(currentBranch ? { currentBranch } : {}),
-			isInitialized: settings !== undefined
+			isInitialized: this.isInitialized || settings !== undefined
 		});
 		return this.toData();
 	}

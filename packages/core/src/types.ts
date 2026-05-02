@@ -467,7 +467,6 @@ export type RepositoryControlStatus = {
 	isGitRepository: boolean;
 	initialized: boolean;
 	settingsPresent: boolean;
-	settingsComplete: boolean;
 	trackingProvider?: 'github';
 	githubRepository?: string;
 	issuesConfigured: boolean;

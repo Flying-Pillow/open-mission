@@ -54,10 +54,7 @@ describe('daemon entity dispatch', () => {
 	});
 
 	it('dispatches Repository.add through an explicit command handler', async () => {
-		const snapshot = {
-			...Repository.open('/tmp/mission-proof-of-concept').toStorage(),
-			controlRoot: '/tmp/mission-proof-of-concept'
-		};
+		const snapshot = Repository.open('/tmp/mission-proof-of-concept').toData();
 		const addSpy = vi.spyOn(Repository, 'add').mockResolvedValue(snapshot);
 
 		try {
@@ -79,10 +76,7 @@ describe('daemon entity dispatch', () => {
 	});
 
 	it('dispatches Repository platform-backed source methods through explicit handlers', async () => {
-		const repositorySnapshot = {
-			...Repository.open('/tmp/mission-proof-of-concept').toStorage(),
-			controlRoot: '/tmp/mission-proof-of-concept'
-		};
+		const repositorySnapshot = Repository.open('/tmp/mission-proof-of-concept').toData();
 		const findSpy = vi.spyOn(Repository, 'findAvailable').mockResolvedValue([
 			{
 				platform: 'github',
@@ -142,10 +136,7 @@ describe('daemon entity dispatch', () => {
 	});
 
 	it('dispatches Repository instance methods through explicit handlers', async () => {
-		const snapshot = {
-			...Repository.open('/tmp/mission-proof-of-concept').toStorage(),
-			controlRoot: '/tmp/mission-proof-of-concept'
-		};
+		const snapshot = Repository.open('/tmp/mission-proof-of-concept').toData();
 		const repository = {
 			read: vi.fn().mockResolvedValue(snapshot),
 			listIssues: vi.fn().mockResolvedValue([]),
