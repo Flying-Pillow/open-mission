@@ -466,7 +466,9 @@
         "stageId": "audit",
         "title": "Touchdown",
         "instruction": "Prepare the final delivery motion. Confirm AUDIT.md is complete, summarize the final airport-control-plane replay status, and write DELIVERY.md as the final delivery artifact for the mission.",
-        "dependsOn": [],
+        "dependsOn": [
+          "audit/01-debrief"
+        ],
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {

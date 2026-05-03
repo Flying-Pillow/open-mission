@@ -3,5 +3,6 @@
   "trackingProvider": "github",
   "instructionsPath": ".agents",
   "skillsPath": ".agents/skills",
-  "agentRunner": "copilot-cli"
+  "agentRunner": "copilot-cli",
+  "defaultAgentMode": "interactive"
 }
