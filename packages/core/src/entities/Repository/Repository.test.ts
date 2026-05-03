@@ -39,6 +39,68 @@ describe('Repository', () => {
         expect(repository.isInitialized).toBe(true);
     });
 
+    it('starts a mission when repo-native setup exists but persisted Entity state is stale', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-start-stale-'));
+        const repositoryRootPath = path.join(tempRoot, 'example');
+        const settingsPath = path.join(repositoryRootPath, '.mission', 'settings.json');
+        const repository = Repository.create({
+            repositoryRootPath,
+            platformRepositoryRef: 'Flying-Pillow/example',
+            isInitialized: false
+        });
+        const issueBrief = {
+            issueId: 1,
+            title: 'Issue 1',
+            body: 'Issue body',
+            type: 'fix' as const
+        };
+        const repositoryInternals = repository as unknown as {
+            requireRepositoryPlatformAdapter(authToken?: string): {
+                fetchIssue(issueId: string): Promise<typeof issueBrief>;
+            };
+            prepareMission(
+                brief: typeof issueBrief,
+                method: 'startMissionFromIssue' | 'startMissionFromBrief'
+            ): Promise<unknown>;
+        };
+        const fetchIssue = vi.fn().mockResolvedValue(issueBrief);
+        const requireRepositoryPlatformAdapterSpy = vi
+            .spyOn(repositoryInternals, 'requireRepositoryPlatformAdapter')
+            .mockReturnValue({ fetchIssue });
+        const prepareMissionSpy = vi
+            .spyOn(repositoryInternals, 'prepareMission')
+            .mockResolvedValue({
+                ok: true,
+                entity: 'Repository',
+                method: 'startMissionFromIssue',
+                id: 'mission-1'
+            });
+
+        try {
+            await fsp.mkdir(path.dirname(settingsPath), { recursive: true });
+            await fsp.writeFile(settingsPath, JSON.stringify(createDefaultRepositorySettings()), 'utf8');
+
+            await expect(repository.startMissionFromIssue({
+                id: repository.id,
+                repositoryRootPath,
+                issueNumber: 1
+            })).resolves.toMatchObject({
+                ok: true,
+                entity: 'Repository',
+                method: 'startMissionFromIssue',
+                id: 'mission-1'
+            });
+
+            expect(repository.isInitialized).toBe(true);
+            expect(fetchIssue).toHaveBeenCalledWith('1');
+            expect(prepareMissionSpy).toHaveBeenCalledWith(issueBrief, 'startMissionFromIssue');
+        } finally {
+            requireRepositoryPlatformAdapterSpy.mockRestore();
+            prepareMissionSpy.mockRestore();
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
     it('rejects extra fields in daemon-callable static payloads', async () => {
         await expect(Repository.find({ unexpected: true } as never)).rejects.toThrow();
     });
