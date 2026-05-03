@@ -1,0 +1,13 @@
+# Mission Workflow Definition Seam
+
+Mission keeps one authoritative Mission class and one running Mission instance model even when repositories use different workflow definitions. Workflow variability belongs to repository-owned validated Mission workflow definitions, not to alternate Mission subclasses, alternate daemon projection paths, or transport-specific Mission models.
+
+The Mission workflow definition is repository law stored under `.mission/workflow/workflow.json`. It describes stage order, task generation rules, gate rules, artifact expectations, and execution constraints that a running Mission instance applies while remaining the same Mission Entity. A repository may change its workflow law through deliberate configuration changes, but those changes do not introduce a different Mission class.
+
+The running Mission instance is the daemon-owned in-memory authoritative aggregate for one live Mission. It owns Mission lifecycle behavior, child-entity coordination, workflow-definition application, gate evaluation, and Mission read projection. Workflow-engine modules may remain as private collaborators beneath Mission while the recut is underway, but they act on behalf of Mission rather than beside it.
+
+Persisted workflow definitions must be validated explicitly. Repository initialization or scaffolding may create a default Mission workflow definition, but load-time interpretation of persisted workflow law must not repair partial documents through fallback parsing, compatibility aliases, or hidden default merging. Invalid persisted workflow definitions must fail clearly so repository workflow law remains explicit.
+
+This decision deepens the Mission interface by keeping the invariant Mission behavior in one place while moving workflow variability behind a single validated seam. It also protects locality: changing workflow law should not require new Mission implementations, new daemon-owned projection builders, or duplicate surface-specific behavior paths.
+
+This decision complements the thick-entity decision. `Mission.ts` remains the behavior owner, `MissionSchema.ts` remains the schema owner, and `MissionContract.ts` remains the metadata owner. The workflow-definition seam is a private input to Mission authority, not a replacement for it.

@@ -4,6 +4,11 @@ Branch: {{mission.branchRef}}
 
 - TODO: State the exact product outcome this mission must achieve.
 
+## Operating Context
+
+- TODO: Name the affected surface.
+- TODO: Name the authoritative inputs, records, or artifacts.
+
 ## Problem Statement
 
 - TODO: Describe the user or system problem in concrete terms.
@@ -14,7 +19,14 @@ Branch: {{mission.branchRef}}
 
 ## Constraints
 
-- TODO: Record architecture, runtime, and delivery constraints.
+- TODO: Record design, execution, and delivery constraints.
+- TODO: Record known unrelated failing checks.
+- TODO: Record whether compatibility, fallback, migration, or cleanup is allowed.
+
+## Verification Expectations
+
+- TODO: List the smallest checks that prove the outcome.
+- TODO: List unrelated checks that may fail.
 
 ## Non-Goals
 

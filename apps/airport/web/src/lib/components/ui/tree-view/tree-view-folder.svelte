@@ -1,6 +1,5 @@
 <script lang="ts">
-    import FolderIcon from "@tabler/icons-svelte/icons/folder";
-    import FolderOpenIcon from "@tabler/icons-svelte/icons/folder-open";
+    import Icon from "@iconify/svelte";
     import { Checkbox } from "$lib/components/ui/checkbox/index.js";
     import * as Collapsible from "$lib/components/ui/collapsible/index.js";
     import { cn } from "$lib/utils.js";
@@ -63,9 +62,9 @@
                 {#if icon}
                     {@render icon({ name, open })}
                 {:else if open}
-                    <FolderOpenIcon class="size-5 flex-none" />
+                    <Icon icon="lucide:folder-open" class="size-5 flex-none" />
                 {:else}
-                    <FolderIcon class="size-5 flex-none" />
+                    <Icon icon="lucide:folder" class="size-5 flex-none" />
                 {/if}
                 <span class="min-w-0 flex-1 break-words text-left">{name}</span>
             </Collapsible.Trigger>

@@ -1,5 +1,5 @@
 // /apps/airport/web/src/lib/server/daemon/connections.server.ts: Public daemon connection entrypoints for Airport web gateway code.
-import type { DaemonClient } from '@flying-pillow/mission-core';
+import type { DaemonClient } from '@flying-pillow/mission-core/client/DaemonClient';
 import { resolveRequestAuthToken, resolveSurfacePath } from './context.server';
 import {
     DaemonUnavailableError,

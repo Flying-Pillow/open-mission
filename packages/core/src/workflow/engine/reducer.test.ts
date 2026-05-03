@@ -6,7 +6,7 @@ import {
 import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../mission/workflow.js';
 import { reduceMissionWorkflowEvent } from './reducer.js';
 import { validateMissionWorkflowEvent } from './validation.js';
-import type { MissionWorkflowEvent } from './types.js';
+import { AgentSessionRuntimeStateSchema, type MissionWorkflowEvent } from './types.js';
 
 function createWorkflowSettingsWithoutTaskAutostart() {
     const workflow = createDefaultWorkflowSettings();
@@ -57,8 +57,10 @@ describe('workflow reducer delivery completion', () => {
             taskId: 'implementation/01',
             runnerId: 'copilot-cli',
             transportId: 'terminal',
-            terminalSessionName: 'airport-terminal-session',
-            terminalPaneId: 'terminal_44'
+            terminalHandle: {
+                sessionName: 'airport-terminal-session',
+                paneId: 'terminal_44'
+            }
         };
 
         validateMissionWorkflowEvent(runtime, event, configuration);
@@ -66,9 +68,15 @@ describe('workflow reducer delivery completion', () => {
 
         expect(runtime.sessions).toContainEqual(expect.objectContaining({
             sessionId: 'session-1',
-            terminalSessionName: 'airport-terminal-session',
-            terminalPaneId: 'terminal_44'
+            terminalHandle: {
+                sessionName: 'airport-terminal-session',
+                paneId: 'terminal_44'
+            }
         }));
+        expect(() => AgentSessionRuntimeStateSchema.parse({
+            ...runtime.sessions[0],
+            terminalSessionName: 'airport-terminal-session'
+        })).toThrow();
     });
 
     it('queues and emits session launch requests for ready autostart tasks', () => {
@@ -314,6 +322,215 @@ describe('workflow reducer delivery completion', () => {
             type: 'session.launch',
             payload: { taskId: 'prd/01' }
         }));
+    });
+
+    it('accepts launch-failed after restart when prior task sessions are only historical', () => {
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow: createDefaultWorkflowSettings()
+        });
+
+        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime.lifecycle = 'running';
+        runtime.pause = { paused: false };
+        runtime.tasks = [{
+            taskId: 'audit/01',
+            stageId: 'audit',
+            title: 'Audit task',
+            instruction: 'Run audit.',
+            dependsOn: [],
+            lifecycle: 'queued',
+            waitingOnTaskIds: [],
+            runtime: { autostart: true },
+            retries: 0,
+            createdAt: '2026-04-10T15:51:25.000Z',
+            updatedAt: '2026-04-10T15:51:25.000Z'
+        }];
+        runtime.sessions = [{
+            sessionId: 'session-1',
+            taskId: 'audit/01',
+            runnerId: 'copilot-cli',
+            lifecycle: 'terminated',
+            launchedAt: '2026-04-10T15:51:30.000Z',
+            updatedAt: '2026-04-10T15:51:40.000Z'
+        }];
+        runtime.launchQueue = [{
+            requestId: 'task.launch:audit/01:stale',
+            taskId: 'audit/01',
+            requestedAt: '2026-04-10T15:51:25.000Z',
+            requestedBy: 'human',
+            dispatchedAt: '2026-04-10T15:51:40.000Z'
+        }];
+
+        const event: MissionWorkflowEvent = {
+            eventId: 'session.launch-failed:audit/01',
+            type: 'session.launch-failed',
+            occurredAt: '2026-04-10T15:52:00.000Z',
+            source: 'daemon',
+            taskId: 'audit/01',
+            reason: 'launch failed after restart'
+        };
+
+        validateMissionWorkflowEvent(runtime, event, configuration);
+        const result = reduceMissionWorkflowEvent(runtime, event, configuration);
+
+        expect(result.nextState.tasks.find((task) => task.taskId === 'audit/01')?.lifecycle).toBe('failed');
+        expect(result.nextState.launchQueue).toEqual([]);
+        expect(result.nextState.sessions).toContainEqual(expect.objectContaining({
+            sessionId: 'session-1',
+            lifecycle: 'terminated'
+        }));
+    });
+
+    it('treats duplicate terminal session lifecycle events as idempotent', () => {
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow: createDefaultWorkflowSettings()
+        });
+
+        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime.lifecycle = 'running';
+        runtime.pause = { paused: false };
+        runtime.tasks = [{
+            taskId: 'prd/01',
+            stageId: 'prd',
+            title: 'Spec',
+            instruction: 'Draft spec.',
+            dependsOn: [],
+            lifecycle: 'ready',
+            waitingOnTaskIds: [],
+            runtime: { autostart: true },
+            retries: 0,
+            createdAt: '2026-04-10T15:51:25.000Z',
+            updatedAt: '2026-04-10T15:51:25.000Z'
+        }];
+        runtime.sessions = [{
+            sessionId: 'session-1',
+            taskId: 'prd/01',
+            runnerId: 'copilot-cli',
+            lifecycle: 'terminated',
+            launchedAt: '2026-04-10T15:52:00.000Z',
+            updatedAt: '2026-04-10T15:53:00.000Z',
+            terminatedAt: '2026-04-10T15:53:00.000Z'
+        }];
+
+        const event: MissionWorkflowEvent = {
+            eventId: 'runtime:session-1:session.terminated:duplicate',
+            type: 'session.terminated',
+            occurredAt: '2026-04-10T15:54:00.000Z',
+            source: 'daemon',
+            sessionId: 'session-1',
+            taskId: 'prd/01'
+        };
+
+        validateMissionWorkflowEvent(runtime, event, configuration);
+        const result = reduceMissionWorkflowEvent(runtime, event, configuration);
+
+        expect(result.nextState.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('ready');
+        expect(result.nextState.launchQueue).toEqual([]);
+        expect(result.requests).toEqual([]);
+    });
+
+    it('does not autostart tasks interrupted by session termination', () => {
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow: createDefaultWorkflowSettings()
+        });
+
+        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime.lifecycle = 'running';
+        runtime.pause = { paused: false };
+        runtime.tasks = [{
+            taskId: 'prd/01',
+            stageId: 'prd',
+            title: 'PRD',
+            instruction: 'Draft PRD.',
+            dependsOn: [],
+            lifecycle: 'running',
+            waitingOnTaskIds: [],
+            runtime: { autostart: true },
+            retries: 0,
+            createdAt: '2026-04-10T15:51:25.000Z',
+            updatedAt: '2026-04-10T15:52:00.000Z'
+        }];
+        runtime.sessions = [{
+            sessionId: 'session-1',
+            taskId: 'prd/01',
+            runnerId: 'copilot-cli',
+            lifecycle: 'running',
+            launchedAt: '2026-04-10T15:52:00.000Z',
+            updatedAt: '2026-04-10T15:52:00.000Z'
+        }];
+
+        const event: MissionWorkflowEvent = {
+            eventId: 'runtime:session-1:session.terminated',
+            type: 'session.terminated',
+            occurredAt: '2026-04-10T15:53:00.000Z',
+            source: 'daemon',
+            sessionId: 'session-1',
+            taskId: 'prd/01'
+        };
+
+        validateMissionWorkflowEvent(runtime, event, configuration);
+        const result = reduceMissionWorkflowEvent(runtime, event, configuration);
+
+        const interruptedTask = result.nextState.tasks.find((task) => task.taskId === 'prd/01');
+        expect(interruptedTask?.lifecycle).toBe('ready');
+        expect(interruptedTask?.runtime.autostart).toBe(false);
+        expect(result.nextState.launchQueue).toEqual([]);
+        expect(result.requests).toEqual([]);
+
+        const followUp = reduceMissionWorkflowEvent(result.nextState, {
+            eventId: 'mission.launch-queue.restarted:noop',
+            type: 'mission.launch-queue.restarted',
+            occurredAt: '2026-04-10T15:54:00.000Z',
+            source: 'human'
+        }, configuration);
+
+        expect(followUp.nextState.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('ready');
+        expect(followUp.nextState.launchQueue).toEqual([]);
+        expect(followUp.requests).toEqual([]);
+    });
+
+    it('accepts panic clear after panic was already converted to a paused checkpoint', () => {
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow: createDefaultWorkflowSettings()
+        });
+
+        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime.lifecycle = 'paused';
+        runtime.pause = {
+            paused: true,
+            reason: 'panic',
+            requestedAt: '2026-04-10T15:52:00.000Z'
+        };
+        runtime.panic = {
+            active: false,
+            requestedAt: '2026-04-10T15:51:00.000Z',
+            requestedBy: 'human',
+            terminateSessions: true,
+            clearLaunchQueue: true,
+            haltMission: true
+        };
+
+        const event: MissionWorkflowEvent = {
+            eventId: 'mission.panic.cleared:duplicate',
+            type: 'mission.panic.cleared',
+            occurredAt: '2026-04-10T15:53:00.000Z',
+            source: 'human'
+        };
+
+        validateMissionWorkflowEvent(runtime, event, configuration);
+        const result = reduceMissionWorkflowEvent(runtime, event, configuration);
+
+        expect(result.nextState.lifecycle).toBe('paused');
+        expect(result.nextState.pause.reason).toBe('panic');
+        expect(result.nextState.panic.active).toBe(false);
     });
 
     it('tracks the reducer-owned active stage id as work advances', () => {

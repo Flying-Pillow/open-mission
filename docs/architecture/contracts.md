@@ -9,33 +9,33 @@ nav_order: 9
 
 # Contracts And State Surfaces
 
-Mission exposes two public contract families:
+Mission exposes three public contract families:
 
 1. daemon IPC methods and event messages
-2. persisted state documents consumed by the daemon and workflow engine
+2. Entity remote contracts for queries, commands, and event payloads
+3. persisted state documents consumed by the daemon and workflow engine
 
 ## IPC Namespaces
 
 The daemon protocol is context-first rather than object-wrapper-first.
 
-| Namespace | Current methods | Meaning |
-| --- | --- | --- |
-| `ping` | `ping` | Protocol compatibility and daemon health |
-| `airport.*` | `airport.status`, `airport.client.connect`, `airport.client.observe`, `airport.pane.bind` | Repository airport status and layout control |
-| `control.*` | `control.status`, `control.settings.update`, `control.document.*`, `control.workflow.settings.*`, `control.repositories.*`, `control.issues.list`, `control.action.*` | Repository-scoped control plane operations |
-| `mission.*` | `mission.from-brief`, `mission.from-issue`, `mission.status`, `mission.action.*`, `mission.gate.evaluate` | Mission creation and mission aggregate operations |
-| `task.*` | `task.launch` | Task-scoped runtime launch |
-| `session.*` | `session.list`, `session.console.state`, `session.prompt`, `session.command`, `session.cancel`, `session.terminate` | Live session control through the daemon-owned agent control path |
+| Method | Meaning |
+| --- | --- |
+| `ping` | Protocol compatibility and daemon health |
+| `event.subscribe` | Subscribe to daemon-published Entity and runtime event channels |
+| `system.status` | Read daemon-wide status |
+| `entity.query` | Execute a schema-validated Entity query through an Entity contract |
+| `entity.command` | Execute a schema-validated Entity command or mutation through an Entity contract |
+
+All Entity behavior is expressed through Entity contracts and the small system/event method set above.
 
 ## Client Surface
 
-| Client class | Responsibility |
+| Client surface | Responsibility |
 | --- | --- |
 | `DaemonClient` | Low-level IPC connection, request correlation, event subscription |
-| `DaemonApi` | Namespaced facade over airport, control, and mission APIs |
-| `DaemonAirportApi` | Airport-focused convenience methods |
-| `DaemonControlApi` | Control-plane methods |
-| `DaemonMissionApi` | Mission, task, and session methods |
+| `DaemonApi` | Small typed wrapper over `ping`, `event.subscribe`, `system.status`, `entity.query`, and `entity.command` |
+| Entity contracts | Define payload/result schemas and execution metadata for `Mission`, `Stage`, `Task`, `Artifact`, `AgentSession`, and `Repository` |
 
 ## Airport Web Gateway Rule
 
@@ -47,7 +47,7 @@ That means:
 - browser event streams must forward existing daemon notifications
 - browser terminal relay contracts must wrap the existing terminal runtime and terminal-manager behavior already present in the repository
 
-The web gateway must not silently invent a second daemon API family.
+The web gateway must not silently invent a second daemon API family. For Entity work, the browser-facing route forwards `{ entity, method, payload }` to daemon `entity.query` or `entity.command` and lets the daemon-side Entity contract validate the payload and result.
 
 ## `MissionSystemSnapshot`
 
@@ -60,8 +60,8 @@ This is the daemon-wide live composite snapshot returned to surfaces.
 | `state.missionOperatorViews` | Mission dashboard projections used to populate stage rail and tree nodes |
 | `state.airport` | Active repository airport state |
 | `state.airports` | Registry of repository airports known to the daemon |
-| `airportProjections` | Active repository pane projections |
-| `airportRegistryProjections` | Projections for each known repository airport |
+| `airportViews` | Active repository pane views |
+| `airportRegistryViews` | Views for each known repository airport |
 
 ## `mission.json`
 
@@ -71,9 +71,10 @@ This is the daemon-wide live composite snapshot returned to surfaces.
 | --- | --- |
 | `configuration` | Frozen workflow settings snapshot used for the mission |
 | `runtime` | Current lifecycle, stage, task, session, gate, pause, and panic state |
-| `eventLog` | Append-only workflow event history |
 
-`mission.json` stores normalized workflow-facing session truth.
+The append-only workflow event history is persisted as the Mission runtime event log beside `mission.json`; it is not an inline `eventLog` field in Mission runtime data.
+
+`mission.json` stores schema-validated workflow-facing session truth.
 
 It does not store provider-native control protocol.
 
@@ -95,65 +96,29 @@ The repository workflow preset is split into:
 
 This means repository control settings, repository workflow content, and mission execution remain explicit as separate persisted contracts.
 
-## Operator Action Contracts
+## Entity Command Contracts
 
-Mission uses operator action descriptors rather than hard-coding all surface flows. `OperatorActionDescriptor` can carry:
+Mission command contracts are command-native:
 
-- scope and target ids
-- enablement and disabled reasons
-- optional flow descriptors for multi-step actions
-- UI metadata for confirmation or presentation targeting
+- Entity snapshots advertise `EntityCommandDescriptor` values.
+- `commandId` is the canonical operation identifier end to end.
+- Airport renders and forwards command descriptors without translating command identity.
+- Mission and child Entities validate and execute commands through their Entity contracts.
+- Command payloads carry `commandId` and optional `input` as the only semantic operation identifier.
 
-These descriptors are the contract between daemon-side action availability and Tower-side command flow UX.
-
-### Action Ordering And Filtering Ownership
-
-`OperatorActionDescriptor[]` is not just a bag of invokable operations. It is an ordered daemon response.
-
-The action model is:
-
-- the daemon constructs the full action set for the current mission or control scope
-- the daemon applies lifecycle and policy rules to determine whether each action is enabled
-- the daemon filters actions by the current target context such as session, task, stage, or mission
-- the daemon orders the remaining actions according to workflow semantics, for example blocker resolution first and then closest target affinity
-- Tower renders that ordered list as command rows, toolbar items, and typed slash resolution
-
-This means ownership is intentionally split as follows:
-
-- **Daemon responsibilities:** action construction, enablement, disabled reasons, context filtering, and presentation ordering
-- **Tower responsibilities:** projecting daemon actions into UI controls, preserving daemon order, local focus state, and optional text-query narrowing of the already ordered list
-
-Tower must not introduce its own business ranking such as command-specific sorting or local "most likely next action" heuristics. If Mission needs smarter next-action ordering, that policy belongs in the daemon action builder.
-
-### Action Versus Command
-
-Mission uses the terms `action` and `command` in different layers. They should not be treated as synonyms.
-
-- **Action** means a daemon-defined operator operation. It is canonical, rule-checked, context-scoped, and identified by `OperatorActionDescriptor.id`.
-- **Action text** means the slash-text alias attached to an action in `OperatorActionDescriptor.action`, for example `/mission resume` or `/launch`.
-- **Command** in Tower means an operator-facing interaction form: typed slash input, a picker row, or a toolbar entry derived from an action.
-- **Session command** means the payload sent to a live agent through `session.command`. That is runtime session control, not an operator action descriptor.
-
-The intended architecture is:
-
-- the daemon constructs actions
-- Tower renders actions as commands
-- operator input resolves back to an action by matching action text
-- session commands remain a separate daemon-routed runtime contract backed by shared runner and session control
-
-If a behavior only exists as Tower-side command handling and not as a daemon action, that is a layering bug.
+Use [entity-command-surface.md](./entity-command-surface.html) as the current reference for Mission, Stage, Task, Artifact, and AgentSession command contracts and command-flow diagrams.
 
 ## Command Acceptance Semantics
 
 The daemon-side contract for operator commands is intentionally narrow:
 
-1. A validated command is accepted at one authority boundary only: mission-domain authority or Airport authority.
-2. Accepted commands do not mutate authoritative state directly. They are translated into workflow or airport events, and only those events change state through the relevant reducer.
-3. Command completion is split in two parts: acceptance happens at validation and event-request creation time, while asynchronous side effects complete later and are reported through subsequent emitted events.
+1. A validated command is accepted at one authority boundary only: the Entity contract for that command.
+2. Mission-tree commands are executed by the authoritative Entity or delegated to the Running Mission aggregate when the behavior changes aggregate workflow state.
+3. Command completion is split in two parts: request-response acknowledgement means the command was accepted and attempted, while asynchronous side effects complete later and are reported through subsequent emitted events or follow-up reads.
 4. Invalid commands must return explicit error responses and must not emit state-changing events.
-5. Commands must be idempotent or carry a client-generated `requestId` so retries and duplicate submissions can be ignored or coalesced safely.
+5. Commands that can be retried across process boundaries should become idempotent or carry a client-generated `requestId` so duplicate submissions can be ignored or coalesced safely.
 
-This keeps the request-response layer small while preserving reducer authority over all durable state.
+This keeps the request-response layer small while preserving Entity authority over command validation and behavior.
 
 ## Observation Reconciliation Rule
 

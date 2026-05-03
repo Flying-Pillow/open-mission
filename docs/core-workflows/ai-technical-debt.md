@@ -14,14 +14,27 @@ Traditional debt tends to show up as tangled code, weak tests, or deferred clean
 In his presentation [The Elephant in the Room: AI Technical Debt](https://www.youtube.com/watch?v=DgXV8QSlI4U), IBM Distinguished Engineer Jeff Crume describes the pattern as "Ready, Fire, Aim." Teams ship AI-assisted workflows for immediate speed, then pay later through instability, leakage, and loss of control.
 
 <div class="mission-video-embed">
-	<a class="mission-video-link" href="https://www.youtube.com/watch?v=DgXV8QSlI4U" target="_blank" rel="noopener noreferrer">
-		<span class="mission-video-link__poster" style="background-image: linear-gradient(180deg, rgba(23, 8, 26, 0.1), rgba(23, 8, 26, 0.38)), url('https://img.youtube.com/vi/DgXV8QSlI4U/hqdefault.jpg');"></span>
-		<span class="mission-video-link__body">
-			<span class="mission-video-link__eyebrow">Source Talk</span>
-			<span class="mission-video-link__title">The Elephant in the Room: AI Technical Debt</span>
-			<span class="mission-video-link__text">Open the presentation on YouTube. Some YouTube embeds are blocked by player policy in local previews and privacy-restricted contexts.</span>
-		</span>
-	</a>
+ <a class="mission-video-link" href="https://www.youtube.com/watch?v=DgXV8QSlI4U" target="_blank" rel="noopener noreferrer">
+  <span class="mission-video-link__poster" style="background-image: linear-gradient(180deg, rgba(23, 8, 26, 0.1), rgba(23, 8, 26, 0.38)), url('https://img.youtube.com/vi/DgXV8QSlI4U/hqdefault.jpg');"></span>
+  <span class="mission-video-link__body">
+   <span class="mission-video-link__eyebrow">Source Talk</span>
+   <span class="mission-video-link__title">The Elephant in the Room: AI Technical Debt</span>
+   <span class="mission-video-link__text">Open the presentation on YouTube. Some YouTube embeds are blocked by player policy in local previews and privacy-restricted contexts.</span>
+  </span>
+ </a>
+</div>
+
+That governance problem also shows up one level lower, inside the codebase itself. In [How To De-Slop A Codebase Ruined By AI (with one skill)](https://www.youtube.com/watch?v=3MP8D-mdheA), Matt Pocock describes the mechanism directly: AI accelerates software entropy. Each change that does not account for the whole codebase adds more weirdness, weaker locality, and a bigger ball of mud. His proposed cure is not another vague prompt. It is software design discipline: shared vocabulary, deeper modules, explicit seams, better adapters, and a human acting as the strategic programmer above the agent.
+
+<div class="mission-video-embed">
+ <a class="mission-video-link" href="https://www.youtube.com/watch?v=3MP8D-mdheA" target="_blank" rel="noopener noreferrer">
+  <span class="mission-video-link__poster" style="background-image: linear-gradient(180deg, rgba(23, 8, 26, 0.1), rgba(23, 8, 26, 0.38)), url('https://img.youtube.com/vi/3MP8D-mdheA/hqdefault.jpg');"></span>
+  <span class="mission-video-link__body">
+   <span class="mission-video-link__eyebrow">Source Talk</span>
+   <span class="mission-video-link__title">How To De-Slop A Codebase Ruined By AI (with one skill)</span>
+   <span class="mission-video-link__text">Open the presentation on YouTube. It is a practical example of how AI debt becomes repository-level slop when agents outpace architecture, testing, and human review.</span>
+  </span>
+ </a>
 </div>
 
 Mission is built to invert that pattern. It treats coding agents as probabilistic workers inside a deterministic operating system. The model stays non-deterministic. The delivery harness does not.
@@ -41,6 +54,8 @@ PRD -> SPEC -> IMPLEMENTATION -> AUDIT -> DELIVERY
 - A human operator or the workflow engine approves progression before implementation is unlocked.
 
 Mission forces the system to aim before it fires.
+
+That is also how Mission treats AI slop. Slop is not just ugly code. It is the visible symptom of missing control over planning, boundaries, naming, seams, and verification. The fix is not better vibes in the prompt. The fix is stronger operating constraints around the agent plus a shared system vocabulary the agent can be held to.
 
 ## 2. Execution and Rollback Debt
 

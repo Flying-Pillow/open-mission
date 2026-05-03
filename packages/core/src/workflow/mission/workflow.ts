@@ -1,8 +1,8 @@
-import type { WorkflowGlobalSettings } from '../engine/types.js';
+import type { WorkflowDefinition } from '../engine/types.js';
 
 export const DEFAULT_WORKFLOW_VERSION = 'mission-workflow-v1';
 
-export function createDefaultWorkflowSettings(): WorkflowGlobalSettings {
+export function createDefaultWorkflowSettings(): WorkflowDefinition {
     return {
         autostart: {
             mission: true

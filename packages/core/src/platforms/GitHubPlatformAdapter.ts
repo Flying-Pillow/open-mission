@@ -2,7 +2,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { getMissionGitHubCliBinary } from '../lib/config.js';
-import type { GitHubIssueDetail, GitHubVisibleRepository, MissionBrief, MissionType, TrackedIssueSummary } from '../types.js';
+import type { RepositoryIssueDetailType, RepositoryPlatformRepositoryType } from '../entities/Repository/RepositorySchema.js';
+import type { MissionBrief, MissionType, TrackedIssueSummary } from '../types.js';
 
 export type GitHubBranchSyncStatus = {
 	branchRef: string;
@@ -14,11 +15,11 @@ export type GitHubBranchSyncStatus = {
 	remoteHead?: string;
 };
 
-export function resolveGitHubRepositoryFromWorkspace(workspaceRoot: string): string | undefined {
-	const remoteNames = runGitLines(workspaceRoot, ['remote']);
+export function resolveGitHubRepositoryFromRepositoryRoot(repositoryRootPath: string): string | undefined {
+	const remoteNames = runGitLines(repositoryRootPath, ['remote']);
 	const orderedRemoteNames = ['origin', ...remoteNames.filter((name) => name !== 'origin')];
 	for (const remoteName of orderedRemoteNames) {
-		const remoteUrl = runGitOutput(workspaceRoot, ['remote', 'get-url', remoteName]);
+		const remoteUrl = runGitOutput(repositoryRootPath, ['remote', 'get-url', remoteName]);
 		const repository = parseGitHubRepositoryFromRemote(remoteUrl);
 		if (repository) {
 			return repository;
@@ -38,12 +39,34 @@ type GitHubIssuePayload = {
 };
 
 type GitHubRepositoryPayload = {
+	name?: string;
 	full_name?: string;
+	description?: string | null;
+	topics?: string[];
+	homepage?: string | null;
+	license?: {
+		key?: string;
+		name?: string;
+		spdx_id?: string;
+		url?: string | null;
+	} | null;
 	html_url?: string;
+	visibility?: string;
 	private?: boolean;
 	archived?: boolean;
+	default_branch?: string;
+	stargazers_count?: number;
+	forks_count?: number;
+	watchers_count?: number;
+	subscribers_count?: number;
+	open_issues_count?: number;
+	created_at?: string;
+	updated_at?: string;
+	pushed_at?: string;
 	owner?: {
 		login?: string;
+		type?: string;
+		html_url?: string;
 	};
 };
 
@@ -63,7 +86,7 @@ function mapLabelsToMissionType(labels: string[]): MissionType | undefined {
 
 export class GitHubPlatformAdapter {
 	public constructor(
-		private readonly workspaceRoot: string,
+		private readonly repositoryRootPath: string,
 		private readonly repository?: string,
 		private readonly options: { authToken?: string; ghBinary?: string } = {}
 	) { }
@@ -81,7 +104,7 @@ export class GitHubPlatformAdapter {
 		return this.mapIssuePayloadToBrief(payload);
 	}
 
-	public async fetchIssueDetail(issueId: string): Promise<GitHubIssueDetail> {
+	public async fetchIssueDetail(issueId: string): Promise<RepositoryIssueDetailType> {
 		const payload = await this.runJsonProcess<GitHubIssuePayload>([
 			'issue',
 			'view',
@@ -121,7 +144,7 @@ export class GitHubPlatformAdapter {
 		}));
 	}
 
-	public async listVisibleRepositories(): Promise<GitHubVisibleRepository[]> {
+	public async listRepositories(): Promise<RepositoryPlatformRepositoryType[]> {
 		const payload = await this.runJsonProcess<GitHubRepositoryPayload[][]>([
 			'api',
 			'user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member',
@@ -129,7 +152,7 @@ export class GitHubPlatformAdapter {
 			'--slurp'
 		]);
 
-		const repositories = new Map<string, GitHubVisibleRepository>();
+		const repositories = new Map<string, RepositoryPlatformRepositoryType>();
 		for (const page of payload) {
 			for (const repository of page) {
 				const fullName = repository.full_name?.trim();
@@ -137,38 +160,89 @@ export class GitHubPlatformAdapter {
 					continue;
 				}
 				repositories.set(fullName.toLowerCase(), {
-					fullName,
+					platform: 'github',
+					repositoryRef: fullName,
+					name: repository.name?.trim() || fullName.split('/').at(-1) || fullName,
+					description: repository.description ?? null,
+					topics: normalizeStringArray(repository.topics),
+					...(repository.homepage?.trim()
+						? { homepageUrl: repository.homepage.trim() }
+						: {}),
+					...(repository.license
+						? {
+							license: {
+								...(repository.license.key?.trim() ? { key: repository.license.key.trim() } : {}),
+								...(repository.license.name?.trim() ? { name: repository.license.name.trim() } : {}),
+								...(repository.license.spdx_id?.trim() ? { spdxId: repository.license.spdx_id.trim() } : {}),
+								...(repository.license.url?.trim() ? { url: repository.license.url.trim() } : {})
+							}
+						}
+						: {}),
 					...(repository.owner?.login?.trim()
 						? { ownerLogin: repository.owner.login.trim() }
+						: {}),
+					...(repository.owner?.type?.trim()
+						? { ownerType: repository.owner.type.trim() }
+						: {}),
+					...(repository.owner?.html_url?.trim()
+						? { ownerUrl: repository.owner.html_url.trim() }
 						: {}),
 					...(repository.html_url?.trim()
 						? { htmlUrl: repository.html_url.trim() }
 						: {}),
-					visibility: repository.private ? 'private' : 'public',
-					archived: Boolean(repository.archived)
+					visibility: normalizeGitHubVisibility(repository.visibility, repository.private),
+					...(repository.default_branch?.trim() ? { defaultBranch: repository.default_branch.trim() } : {}),
+					archived: Boolean(repository.archived),
+					...optionalNonNegativeInteger('starsCount', repository.stargazers_count),
+					...optionalNonNegativeInteger('forksCount', repository.forks_count),
+					...optionalNonNegativeInteger('watchersCount', repository.watchers_count),
+					...optionalNonNegativeInteger('subscribersCount', repository.subscribers_count),
+					...optionalNonNegativeInteger('openIssuesCount', repository.open_issues_count),
+					...(repository.created_at?.trim() ? { createdAt: repository.created_at.trim() } : {}),
+					...(repository.updated_at?.trim() ? { updatedAt: repository.updated_at.trim() } : {}),
+					...(repository.pushed_at?.trim() ? { pushedAt: repository.pushed_at.trim() } : {})
 				});
 			}
 		}
 
-		return [...repositories.values()].sort((left, right) => left.fullName.localeCompare(right.fullName));
+
+		function normalizeStringArray(value: string[] | undefined): string[] {
+			return [...new Set((value ?? [])
+				.map((item) => item.trim())
+				.filter(Boolean))]
+				.sort((left, right) => left.localeCompare(right));
+		}
+
+		function normalizeGitHubVisibility(value: string | undefined, isPrivate: boolean | undefined): 'private' | 'public' | 'internal' {
+			const normalizedValue = value?.trim().toLowerCase();
+			if (normalizedValue === 'private' || normalizedValue === 'public' || normalizedValue === 'internal') {
+				return normalizedValue;
+			}
+			return isPrivate ? 'private' : 'public';
+		}
+
+		function optionalNonNegativeInteger<TKey extends string>(key: TKey, value: number | undefined): Partial<Record<TKey, number>> {
+			return value !== undefined && Number.isInteger(value) && value >= 0 ? { [key]: value } as Record<TKey, number> : {};
+		}
+		return [...repositories.values()].sort((left, right) => left.repositoryRef.localeCompare(right.repositoryRef));
 	}
 
 	public async cloneRepository(input: {
-		repository: string;
+		repositoryRef: string;
 		destinationPath: string;
 	}): Promise<string> {
-		const repository = input.repository.trim();
+		const repositoryRef = input.repositoryRef.trim();
 		const destinationPath = input.destinationPath.trim();
-		if (!repository) {
-			throw new Error('GitHub repository clone requires a repository name.');
+		if (!repositoryRef) {
+			throw new Error('GitHub repository clone requires a repository reference.');
 		}
 		if (!destinationPath) {
 			throw new Error('GitHub repository clone requires a destination path.');
 		}
 
-		const resolvedDestinationPath = resolveCloneDestinationPath(repository, destinationPath);
+		const resolvedDestinationPath = resolveCloneDestinationPath(repositoryRef, destinationPath);
 		await fs.mkdir(path.dirname(resolvedDestinationPath), { recursive: true });
-		await this.runTextProcess(['repo', 'clone', repository, resolvedDestinationPath]);
+		await this.runTextProcess(['repo', 'clone', repositoryRef, resolvedDestinationPath]);
 		return resolvedDestinationPath;
 	}
 
@@ -222,6 +296,7 @@ export class GitHubPlatformAdapter {
 		pullRequest: string;
 		method?: 'merge' | 'squash' | 'rebase';
 		deleteBranch?: boolean;
+		auto?: boolean;
 	}): Promise<void> {
 		const strategy = input.method ?? 'merge';
 		await this.runTextProcess([
@@ -229,6 +304,7 @@ export class GitHubPlatformAdapter {
 			'merge',
 			input.pullRequest,
 			`--${strategy}`,
+			...(input.auto === true ? ['--auto'] : []),
 			...(input.deleteBranch === false ? [] : ['--delete-branch']),
 			...(this.repository ? ['--repo', this.repository] : [])
 		]);
@@ -240,7 +316,7 @@ export class GitHubPlatformAdapter {
 			throw new Error('GitHub remote fetch requires a remote name.');
 		}
 
-		assertGit(this.workspaceRoot, ['fetch', '--prune', normalizedRemoteName]);
+		assertGit(this.repositoryRootPath, ['fetch', '--prune', normalizedRemoteName]);
 	}
 
 	public getBranchSyncStatus(branchRef: string, remoteName = 'origin'): GitHubBranchSyncStatus {
@@ -254,7 +330,7 @@ export class GitHubPlatformAdapter {
 		}
 
 		const trackingRef = `refs/remotes/${normalizedRemoteName}/${normalizedBranchRef}`;
-		const remoteHead = runGitOutput(this.workspaceRoot, ['rev-parse', '--verify', trackingRef]);
+		const remoteHead = runGitOutput(this.repositoryRootPath, ['rev-parse', '--verify', trackingRef]);
 		if (!remoteHead) {
 			return {
 				branchRef: normalizedBranchRef,
@@ -265,12 +341,12 @@ export class GitHubPlatformAdapter {
 			};
 		}
 
-		const localHead = runGitOutput(this.workspaceRoot, ['rev-parse', 'HEAD']);
+		const localHead = runGitOutput(this.repositoryRootPath, ['rev-parse', 'HEAD']);
 		if (!localHead) {
 			throw new Error(`GitHub branch sync status could not resolve HEAD for '${normalizedBranchRef}'.`);
 		}
 
-		const counts = runGitOutput(this.workspaceRoot, ['rev-list', '--left-right', '--count', `HEAD...${trackingRef}`]);
+		const counts = runGitOutput(this.repositoryRootPath, ['rev-list', '--left-right', '--count', `HEAD...${trackingRef}`]);
 		const [aheadRaw, behindRaw] = counts.split(/\s+/u).filter(Boolean);
 		const aheadCount = Number.parseInt(aheadRaw ?? '0', 10);
 		const behindCount = Number.parseInt(behindRaw ?? '0', 10);
@@ -303,7 +379,7 @@ export class GitHubPlatformAdapter {
 			throw new Error('GitHub branch pull requires a remote name.');
 		}
 
-		assertGit(this.workspaceRoot, ['pull', '--ff-only', normalizedRemoteName, normalizedBranchRef]);
+		assertGit(this.repositoryRootPath, ['pull', '--ff-only', normalizedRemoteName, normalizedBranchRef]);
 	}
 
 	private mapIssuePayloadToBrief(payload: GitHubIssuePayload): MissionBrief {
@@ -322,7 +398,7 @@ export class GitHubPlatformAdapter {
 		} satisfies MissionBrief;
 	}
 
-	private mapIssuePayloadToDetail(payload: GitHubIssuePayload): GitHubIssueDetail {
+	private mapIssuePayloadToDetail(payload: GitHubIssuePayload): RepositoryIssueDetailType {
 		return {
 			number: payload.number,
 			title: payload.title,
@@ -341,7 +417,7 @@ export class GitHubPlatformAdapter {
 	private async runJsonProcess<T>(args: string[]): Promise<T> {
 		return new Promise<T>((resolve, reject) => {
 			const child = spawn(this.resolveGhBinary(), args, {
-				cwd: this.workspaceRoot,
+				cwd: this.repositoryRootPath,
 				env: this.buildProcessEnv(),
 				stdio: ['ignore', 'pipe', 'pipe']
 			});
@@ -383,7 +459,7 @@ export class GitHubPlatformAdapter {
 	private async runTextProcess(args: string[]): Promise<string> {
 		return new Promise<string>((resolve, reject) => {
 			const child = spawn(this.resolveGhBinary(), args, {
-				cwd: this.workspaceRoot,
+				cwd: this.repositoryRootPath,
 				env: this.buildProcessEnv(),
 				stdio: ['ignore', 'pipe', 'pipe']
 			});
@@ -432,8 +508,8 @@ export class GitHubPlatformAdapter {
 	}
 }
 
-function runGitLines(workspaceRoot: string, args: string[]): string[] {
-	const output = runGitOutput(workspaceRoot, args);
+function runGitLines(repositoryRootPath: string, args: string[]): string[] {
+	const output = runGitOutput(repositoryRootPath, args);
 	if (!output) {
 		return [];
 	}
@@ -443,18 +519,18 @@ function runGitLines(workspaceRoot: string, args: string[]): string[] {
 		.filter(Boolean);
 }
 
-function runGitOutput(workspaceRoot: string, args: string[]): string {
+function runGitOutput(repositoryRootPath: string, args: string[]): string {
 	const result = spawnSync('git', args, {
-		cwd: workspaceRoot,
+		cwd: repositoryRootPath,
 		encoding: 'utf8',
 		stdio: ['ignore', 'pipe', 'ignore']
 	});
 	return result.status === 0 ? result.stdout.trim() : '';
 }
 
-function assertGit(workspaceRoot: string, args: string[]): void {
+function assertGit(repositoryRootPath: string, args: string[]): void {
 	const result = spawnSync('git', args, {
-		cwd: workspaceRoot,
+		cwd: repositoryRootPath,
 		encoding: 'utf8',
 		stdio: ['ignore', 'pipe', 'pipe']
 	});

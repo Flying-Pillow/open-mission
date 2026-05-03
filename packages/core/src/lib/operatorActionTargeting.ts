@@ -56,6 +56,8 @@ export function matchesOperatorActionTargetContext(
 	switch (command.scope) {
 		case 'session':
 			return matchesTargetScope(command, context, 'session');
+		case 'artifact':
+			return matchesTargetScope(command, context, 'artifact');
 		case 'task':
 			return matchesTargetScope(command, context, 'task');
 		case 'generation':
@@ -69,7 +71,7 @@ export function matchesOperatorActionTargetContext(
 function matchesTargetScope(
 	command: OperatorActionDescriptor,
 	context: OperatorActionTargetContext,
-	scope: 'repository' | 'session' | 'task' | 'stage'
+	scope: 'repository' | 'session' | 'artifact' | 'task' | 'stage'
 ): boolean {
 	const contextTargetId = getContextTargetId(context, scope);
 	if (!contextTargetId) {
@@ -148,6 +150,10 @@ function getTargetIdsForScope(
 		return [command.targetId];
 	}
 
+	if (scope === 'artifact' && command.scope === 'artifact' && command.targetId) {
+		return [command.targetId];
+	}
+
 	if (scope === 'session' && command.scope === 'session' && command.targetId) {
 		return [command.targetId];
 	}
@@ -174,6 +180,9 @@ function getContextAffinityRank(
 	const affinityChain: Array<[OperatorActionPresentationScope, string | undefined]> = [];
 	if (context.sessionId) {
 		affinityChain.push(['session', context.sessionId]);
+	}
+	if (context.artifactPath) {
+		affinityChain.push(['artifact', context.artifactPath]);
 	}
 	if (context.taskId) {
 		affinityChain.push(['task', context.taskId]);
@@ -216,11 +225,12 @@ function matchesAffinityScope(
 function getScopeRank(scope: OperatorActionDescriptor['scope']): number {
 	switch (scope) {
 		case 'session': return 0;
-		case 'task': return 1;
-		case 'generation': return 2;
-		case 'mission': return 3;
+		case 'artifact': return 1;
+		case 'task': return 2;
+		case 'generation': return 3;
+		case 'mission': return 4;
 	}
-	return 4;
+	return 5;
 }
 
 function compareNumber(left: number, right: number): number {
@@ -229,13 +239,15 @@ function compareNumber(left: number, right: number): number {
 
 function getContextTargetId(
 	context: OperatorActionTargetContext,
-	scope: 'repository' | 'session' | 'task' | 'stage'
+	scope: 'repository' | 'session' | 'artifact' | 'task' | 'stage'
 ): string | undefined {
 	switch (scope) {
 		case 'repository':
 			return context.repositoryId;
 		case 'session':
 			return context.sessionId;
+		case 'artifact':
+			return context.artifactPath;
 		case 'task':
 			return context.taskId;
 		case 'stage':

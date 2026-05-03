@@ -1,19 +1,14 @@
 <script lang="ts">
-    import type { AgentSession } from "$lib/client/entities/AgentSession";
-    import Anser from "anser";
-    import AgentSessionActionbar from "$lib/components/entities/AgentSession/AgentSessionActionbar.svelte";
-    import type { MissionStageId } from "@flying-pillow/mission-core/types.js";
+    import AgentSessionCommandbar from "$lib/components/entities/AgentSession/AgentSessionCommandbar.svelte";
+    import type { AgentSession as AgentSessionEntity } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
+    import Anser from "anser/lib/index.js";
+    import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import { FitAddon } from "@xterm/addon-fit";
     import * as XtermModule from "@xterm/xterm";
-    import sanitizeHtml from "sanitize-html";
+    import { sanitizeBrowserHtml } from "$lib/client/runtime/html-sanitizer";
+    import type { AgentSessionTerminalSnapshotType } from "@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema";
     import {
-        missionSessionTerminalSnapshotDtoSchema,
-        missionSessionTerminalSocketServerMessageSchema,
-        type MissionSessionTerminalSnapshotDto,
-        type MissionSessionTerminalSocketServerMessageDto,
-    } from "@flying-pillow/mission-core/airport/runtime";
-    import {
-        subscribeSharedTerminalTransport,
+        subscribeMissionSessionTerminalTransport,
         type SharedTerminalTransportSubscription,
     } from "$lib/client/runtime/terminal/TerminalTransportBroker";
     import "@xterm/xterm/css/xterm.css";
@@ -47,64 +42,54 @@
     }
 
     let {
-        missionId,
-        repositoryId,
-        repositoryRootPath,
         refreshNonce,
-        stageId,
         session,
-        active = true,
-        onActionExecuted,
+        onCommandExecuted,
     }: {
-        missionId: string;
-        repositoryId: string;
-        repositoryRootPath: string;
         refreshNonce: number;
-        stageId?: MissionStageId;
-        session?: AgentSession;
-        active?: boolean;
-        onActionExecuted: () => Promise<void>;
+        session?: AgentSessionEntity;
+        onCommandExecuted: () => Promise<void>;
     } = $props();
+    const missionScope = getScopedMissionContext();
 
     let container = $state<HTMLDivElement | null>(null);
-    let terminalSnapshot = $state<MissionSessionTerminalSnapshotDto | null>(
+    let terminalSnapshot = $state<AgentSessionTerminalSnapshotType | null>(
         null,
     );
     let loading = $state(false);
     let error = $state<string | null>(null);
     let sendingInput = $state(false);
-    let activeTransportKey: string | null = null;
+    let activeTransportKey = $state<string | null>(null);
 
     let terminal: XtermTerminal | null = null;
     let fitAddon: XtermFitAddon | null = null;
     let resizeObserver: ResizeObserver | null = null;
-    let terminalTransport: SharedTerminalTransportSubscription<MissionSessionTerminalSnapshotDto> | null =
-        null;
+    let terminalTransport =
+        $state<SharedTerminalTransportSubscription<AgentSessionTerminalSnapshotType> | null>(
+            null,
+        );
     let pendingInput = "";
     let pendingTerminalResponseFragment = "";
     let lastRenderedScreen = "";
     let pendingResize: { cols: number; rows: number } | null = null;
-    let renderWriteToken = 0;
 
+    const MAX_TERMINAL_SNAPSHOT_LENGTH = 40_000;
     type TerminalResizeEvent = { cols: number; rows: number };
 
-    const canAttachTerminal = $derived(
-        Boolean(
-            session?.isTerminalBacked() ||
-                (session?.isRunning() && session?.hasPersistedTerminalLog()),
-        ),
-    );
-    const canShowTerminal = $derived(
-        Boolean(
-            session?.isTerminalBacked() || session?.hasPersistedTerminalLog(),
-        ),
-    );
-    const canSendTerminalInput = $derived(
-        Boolean(active && session?.isRunning() && canAttachTerminal),
-    );
+    const canAttachTerminal = $derived(Boolean(session?.isTerminalBacked()));
     const terminalSessionId = $derived(session?.sessionId ?? null);
+    const mission = $derived(missionScope.mission);
+    const activeRepository = $derived(missionScope.repository);
+    const missionId = $derived(mission?.missionId ?? "");
+    const repositoryId = $derived(activeRepository?.id ?? "");
+    const repositoryRootPath = $derived(
+        mission?.missionWorktreePath ??
+            activeRepository?.data.repositoryRootPath ??
+            "",
+    );
     const isPersistedTranscriptSnapshot = $derived(
-        Boolean(terminalSnapshot?.dead && !terminalSnapshot?.connected),
+        Boolean(session && !session.isRunning()) ||
+            Boolean(terminalSnapshot?.dead && !terminalSnapshot?.connected),
     );
     const persistedTranscriptHtml = $derived.by(() =>
         renderPersistedTranscriptHtml(terminalSnapshot?.screen ?? ""),
@@ -113,15 +98,8 @@
         if (!session) {
             return "No session";
         }
-        if (!canShowTerminal) {
+        if (!canAttachTerminal) {
             return "Not terminal-backed";
-        }
-        if (
-            !session.isRunning() &&
-            !canAttachTerminal &&
-            session.hasPersistedTerminalLog()
-        ) {
-            return "Transcript";
         }
         if (loading && !terminalSnapshot) {
             return "Connecting";
@@ -168,62 +146,48 @@
     });
 
     $effect(() => {
-        const transportKey =
-            terminalSessionId && canShowTerminal
-                ? `session:${terminalSessionId}:${missionId}:${repositoryRootPath}:${repositoryId}`
-                : null;
+        return () => {
+            terminalTransport?.dispose();
+            terminalTransport = null;
+        };
+    });
 
-        if (activeTransportKey === transportKey) {
-            return;
-        }
-
-        terminalTransport?.dispose();
-        terminalTransport = null;
-
-        if (!terminalSessionId || !canShowTerminal) {
+    $effect(() => {
+        if (
+            !terminalSessionId ||
+            !canAttachTerminal ||
+            !missionId ||
+            !repositoryId ||
+            !repositoryRootPath
+        ) {
             activeTransportKey = null;
             terminalSnapshot = null;
             error = null;
             loading = false;
+            terminalTransport?.dispose();
+            terminalTransport = null;
             return;
         }
 
-        if (!transportKey) {
+        const nextTransportKey = [
+            missionId,
+            repositoryId,
+            repositoryRootPath,
+            terminalSessionId,
+        ].join(":");
+
+        if (activeTransportKey === nextTransportKey) {
             return;
         }
 
-        const resolvedTransportKey: string = transportKey;
-        activeTransportKey = resolvedTransportKey;
-        terminalTransport = subscribeSharedTerminalTransport(
+        activeTransportKey = nextTransportKey;
+        terminalTransport?.dispose();
+        terminalTransport = subscribeMissionSessionTerminalTransport(
             {
-                key: resolvedTransportKey,
-                loadSnapshot: async () => {
-                    const response = await fetch(
-                        `/api/runtime/sessions/${encodeURIComponent(terminalSessionId)}/terminal?missionId=${encodeURIComponent(missionId)}&repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
-                    );
-                    if (!response.ok) {
-                        throw new Error(
-                            `Terminal snapshot request failed (${response.status}).`,
-                        );
-                    }
-
-                    return missionSessionTerminalSnapshotDtoSchema.parse(
-                        await response.json(),
-                    );
-                },
-                createSocket: () => {
-                    const wsProtocol =
-                        window.location.protocol === "https:" ? "wss:" : "ws:";
-                    const wsUrl = new URL(
-                        `/api/runtime/sessions/${encodeURIComponent(terminalSessionId)}/terminal/ws?missionId=${encodeURIComponent(missionId)}&repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
-                        `${wsProtocol}//${window.location.host}`,
-                    );
-                    return new WebSocket(wsUrl);
-                },
-                parseMessage: (value: unknown) =>
-                    missionSessionTerminalSocketServerMessageSchema.parse(
-                        value,
-                    ),
+                missionId,
+                repositoryId,
+                repositoryRootPath,
+                sessionId: terminalSessionId,
             },
             (state) => {
                 terminalSnapshot = state.snapshot;
@@ -231,14 +195,6 @@
                 error = state.error;
             },
         );
-
-        return () => {
-            if (activeTransportKey === transportKey) {
-                activeTransportKey = null;
-            }
-            terminalTransport?.dispose();
-            terminalTransport = null;
-        };
     });
 
     $effect(() => {
@@ -246,7 +202,6 @@
         const chunk = terminalSnapshot?.chunk;
         if (
             !terminal ||
-            !active ||
             typeof screen !== "string" ||
             isPersistedTranscriptSnapshot
         ) {
@@ -267,7 +222,6 @@
 
         if (typeof chunk === "string" && chunk.length > 0) {
             lastRenderedScreen = preparedScreen;
-            renderWriteToken += 1;
             terminal.write(chunk);
             return;
         }
@@ -277,27 +231,24 @@
         if (nextRender.startsWith(previousRender)) {
             const appendedOutput = nextRender.slice(previousRender.length);
             lastRenderedScreen = preparedScreen;
-            renderWriteToken += 1;
             terminal.write(appendedOutput);
             return;
         }
 
         lastRenderedScreen = preparedScreen;
         terminal.reset();
-        renderWriteToken += 1;
         terminal.write(nextRender);
     });
 
     $effect(() => {
-        if (!terminal || !active) {
+        if (!terminal) {
             return;
         }
-
         fitAddon?.fit();
     });
 
     async function flushPendingInput(): Promise<void> {
-        if (!session || !canSendTerminalInput || pendingInput.length === 0) {
+        if (!session || !canAttachTerminal || pendingInput.length === 0) {
             return;
         }
         if (!terminalTransport) {
@@ -306,7 +257,7 @@
 
         sendingInput = true;
         try {
-            while (pendingInput.length > 0 && terminalTransport) {
+            while (pendingInput.length > 0) {
                 const data = pendingInput;
                 pendingInput = "";
                 await terminalTransport.sendInput(data);
@@ -364,12 +315,7 @@
         terminal.open(target);
         fitAddon.fit();
         terminal.onResize(({ cols, rows }: TerminalResizeEvent) => {
-            if (
-                !session ||
-                !canSendTerminalInput ||
-                !active ||
-                terminalSnapshot?.dead
-            ) {
+            if (!session || !canAttachTerminal || terminalSnapshot?.dead) {
                 return;
             }
             if (
@@ -382,12 +328,7 @@
             void flushPendingResize();
         });
         terminal.onData((data: string) => {
-            if (
-                !session ||
-                !canSendTerminalInput ||
-                !active ||
-                terminalSnapshot?.dead
-            ) {
+            if (!session || !canAttachTerminal || terminalSnapshot?.dead) {
                 return;
             }
             const sanitizedData = sanitizeTerminalInputData(data);
@@ -407,7 +348,7 @@
     }
 
     async function flushPendingResize(): Promise<void> {
-        if (!session || !canSendTerminalInput || !pendingResize) {
+        if (!session || !canAttachTerminal || !pendingResize) {
             return;
         }
         if (!terminalTransport) {
@@ -462,27 +403,23 @@
             .replace(/\n{3,}/g, "\n\n")
             .trim();
 
-        return sanitizeHtml(
+        return sanitizeBrowserHtml(
             Anser.ansiToHtml(Anser.escapeForHtml(normalizedTranscript), {
                 use_classes: false,
             }),
             {
-                allowedTags: sanitizeHtml.defaults.allowedTags.concat([
-                    "span",
-                    "br",
-                ]),
+                allowedTags: ["br", "span"],
                 allowedAttributes: {
-                    ...sanitizeHtml.defaults.allowedAttributes,
                     span: ["style"],
                 },
                 allowedStyles: {
-                    span: {
-                        color: [/^.*$/],
-                        "background-color": [/^.*$/],
-                        "font-weight": [/^.*$/],
-                        "font-style": [/^.*$/],
-                        "text-decoration": [/^.*$/],
-                    },
+                    span: [
+                        "background-color",
+                        "color",
+                        "font-style",
+                        "font-weight",
+                        "text-decoration",
+                    ],
                 },
             },
         );
@@ -542,6 +479,18 @@
 
         return sanitizedData;
     }
+
+    function appendTerminalScreen(
+        currentScreen: string,
+        chunk: string,
+        truncated: boolean,
+    ): string {
+        const nextScreen = `${currentScreen}${chunk}`;
+        if (truncated || nextScreen.length > MAX_TERMINAL_SNAPSHOT_LENGTH) {
+            return nextScreen.slice(-MAX_TERMINAL_SNAPSHOT_LENGTH);
+        }
+        return nextScreen;
+    }
 </script>
 
 <section class="flex h-full min-h-0 flex-col overflow-hidden">
@@ -558,23 +507,18 @@
                 </p>
             </div>
 
-            <AgentSessionActionbar
-                {missionId}
-                {repositoryId}
-                {repositoryRootPath}
-                {refreshNonce}
-                {stageId}
-                taskId={session?.taskId}
-                sessionId={session?.sessionId}
-                {onActionExecuted}
-            />
-
             <div class="text-right text-xs text-muted-foreground">
                 <p>{terminalStateLabel}</p>
                 {#if session}
                     <p class="mt-1">{session.lifecycleState}</p>
                 {/if}
             </div>
+
+            <AgentSessionCommandbar
+                {refreshNonce}
+                {session}
+                {onCommandExecuted}
+            />
         </div>
         {#if error}
             <p class="text-sm text-rose-600">{error}</p>
@@ -586,9 +530,9 @@
             <div
                 class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
             >
-                No session resolves from the current mission-control selection.
+                No session resolves from the current mission selection.
             </div>
-        {:else if !canShowTerminal}
+        {:else if !canAttachTerminal}
             <div
                 class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
             >

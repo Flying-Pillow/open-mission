@@ -78,6 +78,44 @@ describe('orderAvailableActions', () => {
 		]);
 	});
 
+	it('prioritizes artifact actions between session and task when artifact context is present', () => {
+		const actions: OperatorActionDescriptor[] = [
+			createAction({
+				id: 'task.start.t1',
+				action: '/task start',
+				scope: 'task',
+				targetId: 't1',
+				presentationTargets: [{ scope: 'task', targetId: 't1' }]
+			}),
+			createAction({
+				id: 'artifact.publish.instructions',
+				action: '/artifact publish',
+				scope: 'artifact',
+				targetId: '/mission/tasks/t1.md',
+				presentationTargets: [{ scope: 'artifact', targetId: '/mission/tasks/t1.md' }]
+			}),
+			createAction({
+				id: 'session.cancel.s1',
+				action: '/session cancel',
+				scope: 'session',
+				targetId: 's1',
+				presentationTargets: [{ scope: 'session', targetId: 's1' }]
+			})
+		];
+
+		const ordered = orderAvailableActions(actions, {
+			sessionId: 's1',
+			artifactPath: '/mission/tasks/t1.md',
+			taskId: 't1'
+		});
+
+		expect(ordered.map((action) => action.id)).toEqual([
+			'session.cancel.s1',
+			'artifact.publish.instructions',
+			'task.start.t1'
+		]);
+	});
+
 	it('excludes repository-targeted actions when no repository is selected', () => {
 		const actions: OperatorActionDescriptor[] = [
 			createAction({
@@ -99,6 +137,32 @@ describe('orderAvailableActions', () => {
 		]);
 		expect(resolveAvailableActionsForTargetContext(actions, { repositoryId: '/repo/a' })).toEqual([
 			expect.objectContaining({ id: 'control.setup.edit' }),
+			expect.objectContaining({ id: 'mission.pause' })
+		]);
+	});
+
+	it('filters artifact-scoped actions by artifact path', () => {
+		const actions: OperatorActionDescriptor[] = [
+			createAction({
+				id: 'artifact.publish.instructions',
+				action: '/artifact publish',
+				scope: 'artifact',
+				targetId: '/mission/tasks/t1.md',
+				presentationTargets: [{ scope: 'artifact', targetId: '/mission/tasks/t1.md' }]
+			}),
+			createAction({
+				id: 'mission.pause',
+				action: '/mission pause',
+				scope: 'mission',
+				presentationTargets: [{ scope: 'mission' }]
+			})
+		];
+
+		expect(resolveAvailableActionsForTargetContext(actions, { artifactPath: '/mission/tasks/t1.md' })).toEqual([
+			expect.objectContaining({ id: 'artifact.publish.instructions' }),
+			expect.objectContaining({ id: 'mission.pause' })
+		]);
+		expect(resolveAvailableActionsForTargetContext(actions, { artifactPath: '/mission/tasks/other.md' })).toEqual([
 			expect.objectContaining({ id: 'mission.pause' })
 		]);
 	});

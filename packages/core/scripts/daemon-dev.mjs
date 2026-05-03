@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const runtimeFactoryModulePath = path.join(packageRoot, 'src', 'agent', 'runtimes', 'AgentRuntimeFactory.ts');
+const runtimeFactoryModulePath = path.join(packageRoot, 'src', 'daemon', 'runtime', 'agent', 'runtimes', 'AgentRuntimeFactory.ts');
 
 const child = spawn(
 	'pnpm',

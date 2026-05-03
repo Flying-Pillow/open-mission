@@ -2,24 +2,15 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { resolveGitHubRepositoryFromWorkspace } from '../platforms/GitHubPlatformAdapter.js';
-import { resolveGitWorkspaceRoot } from './workspacePaths.js';
-import { deriveRepositoryIdentity } from './repositoryIdentity.js';
-import type { RepositoryCandidate } from '../types.js';
 
-export const MISSION_USER_CONFIG_DIRECTORY = 'mission';
-export const MISSION_USER_CONFIG_FILE = 'config.json';
-
-export type MissionRegisteredRepository = {
-	repositoryId: string;
-	repositoryRootPath: string;
-};
+export const MISSION_CONFIG_DIRECTORY = 'mission';
+export const MISSION_CONFIG_FILE = 'config.json';
 
 export type MissionConfig = {
 	version: 1;
-	missionWorkspaceRoot?: string;
+	missionsRoot: string;
+	repositoriesRoot: string;
 	ghBinary?: string;
-	registeredRepositories?: MissionRegisteredRepository[];
 };
 
 export function getMissionConfigDirectory(): string {
@@ -30,28 +21,40 @@ export function getMissionConfigDirectory(): string {
 
 	const xdgConfigHome = process.env['XDG_CONFIG_HOME']?.trim();
 	return xdgConfigHome
-		? path.join(xdgConfigHome, MISSION_USER_CONFIG_DIRECTORY)
-		: path.join(os.homedir(), '.config', MISSION_USER_CONFIG_DIRECTORY);
+		? path.join(xdgConfigHome, MISSION_CONFIG_DIRECTORY)
+		: path.join(os.homedir(), '.config', MISSION_CONFIG_DIRECTORY);
 }
 
 export function getMissionConfigPath(): string {
-	return path.join(getMissionConfigDirectory(), MISSION_USER_CONFIG_FILE);
+	return path.join(getMissionConfigDirectory(), MISSION_CONFIG_FILE);
 }
 
-export function getMissionRuntimeDirectory(): string {
+export function getMissionDaemonDirectory(): string {
 	return path.join(getMissionConfigDirectory(), 'runtime');
 }
 
+export function getMissionManagedDependenciesRoot(): string {
+	return path.join(getMissionConfigDirectory(), 'dependencies');
+}
+
 export function getDefaultMissionConfig(overrides: Partial<MissionConfig> = {}): MissionConfig {
-	const missionWorkspaceRoot = normalizeOptionalString(overrides.missionWorkspaceRoot);
+	const missionsRoot = normalizeOptionalString(overrides.missionsRoot);
+	const repositoriesRoot = normalizeOptionalString(overrides.repositoriesRoot);
 	const ghBinary = normalizeOptionalString(overrides.ghBinary);
-	const registeredRepositories = normalizeRegisteredRepositories(overrides.registeredRepositories);
 	return {
 		version: 1,
-		missionWorkspaceRoot: missionWorkspaceRoot ?? 'missions',
-		...(ghBinary ? { ghBinary } : {}),
-		...(registeredRepositories ? { registeredRepositories } : {})
+		missionsRoot: missionsRoot ?? defaultRootPath('MISSIONS_PATH', 'missions'),
+		repositoriesRoot: repositoriesRoot ?? defaultRootPath('REPOSITORIES_PATH', 'repositories'),
+		...(ghBinary ? { ghBinary } : {})
 	};
+}
+
+export function resolveMissionsRoot(config: MissionConfig = getDefaultMissionConfig()): string {
+	return path.resolve(config.missionsRoot);
+}
+
+export function resolveRepositoriesRoot(config: MissionConfig = getDefaultMissionConfig()): string {
+	return path.resolve(config.repositoriesRoot);
 }
 
 export function getMissionGitHubCliBinary(): string | undefined {
@@ -90,52 +93,6 @@ export async function writeMissionConfig(config: Partial<MissionConfig>): Promis
 	return nextConfig;
 }
 
-export async function registerMissionRepo(workspacePath: string): Promise<MissionConfig> {
-	const controlRoot = resolveGitWorkspaceRoot(workspacePath);
-	if (!controlRoot) {
-		throw new Error(`Mission could not resolve a Git repository from '${workspacePath}'.`);
-	}
-	const repositoryIdentity = deriveRepositoryIdentity(controlRoot);
-
-	const config = await ensureMissionConfig();
-	const currentEntries = normalizeRegisteredRepositories(config.registeredRepositories) ?? [];
-	if (
-		currentEntries.some(
-			(entry) => entry.repositoryId === repositoryIdentity.repositoryId || entry.repositoryRootPath === controlRoot
-		)
-	) {
-		return config;
-	}
-
-	const nextConfig = await writeMissionConfig({
-		...config,
-		registeredRepositories: [
-			...currentEntries,
-			{
-				repositoryId: repositoryIdentity.repositoryId,
-				repositoryRootPath: repositoryIdentity.repositoryRootPath
-			}
-		]
-	});
-	return nextConfig;
-}
-
-export async function listRegisteredRepositories(): Promise<RepositoryCandidate[]> {
-	const config = await ensureMissionConfig();
-	return (normalizeRegisteredRepositories(config.registeredRepositories) ?? [])
-		.map((entry) => buildRepositoryCandidate(entry))
-		.filter((entry): entry is RepositoryCandidate => entry !== undefined)
-		.sort((left, right) => left.label.localeCompare(right.label));
-}
-
-export async function findRegisteredRepositoryById(repositoryId: string): Promise<RepositoryCandidate | undefined> {
-	const normalizedRepositoryId = repositoryId.trim();
-	if (!normalizedRepositoryId) {
-		return undefined;
-	}
-	return (await listRegisteredRepositories()).find((candidate) => candidate.repositoryId === normalizedRepositoryId);
-}
-
 function loadMissionConfig(): {
 	config: MissionConfig | undefined;
 	needsRewrite: boolean;
@@ -165,75 +122,21 @@ function normalizeResolvedConfig(rawConfig: unknown): MissionConfig | undefined 
 		return undefined;
 	}
 	const candidate = rawConfig as Record<string, unknown>;
+	if (typeof candidate['missionsRoot'] !== 'string' || typeof candidate['repositoriesRoot'] !== 'string') {
+		return undefined;
+	}
 	return getDefaultMissionConfig({
-		...(typeof candidate['missionWorkspaceRoot'] === 'string'
-			? { missionWorkspaceRoot: candidate['missionWorkspaceRoot'] }
-			: {}),
+		missionsRoot: candidate['missionsRoot'],
+		repositoriesRoot: candidate['repositoriesRoot'],
 		...(typeof candidate['ghBinary'] === 'string'
 			? { ghBinary: candidate['ghBinary'] }
-			: {}),
-		...(Array.isArray(candidate['registeredRepositories'])
-			? { registeredRepositories: candidate['registeredRepositories'] as MissionRegisteredRepository[] }
 			: {})
 	});
 }
 
-function normalizeRegisteredRepositories(
-	value: MissionRegisteredRepository[] | undefined
-): MissionRegisteredRepository[] | undefined {
-	if (!Array.isArray(value)) {
-		return undefined;
-	}
-	const normalizedEntries = value
-		.map((record) => {
-			const recordCandidate = record as Partial<MissionRegisteredRepository> & {
-				checkoutPath?: string;
-			};
-			const repositoryRootPath = normalizeOptionalString(recordCandidate.repositoryRootPath)
-				?? normalizeOptionalString(recordCandidate.checkoutPath);
-			if (!repositoryRootPath) {
-				return undefined;
-			}
-			const resolvedRepositoryRootPath = path.resolve(repositoryRootPath);
-			if (!fs.existsSync(resolvedRepositoryRootPath)) {
-				return undefined;
-			}
-			const controlRoot = resolveGitWorkspaceRoot(resolvedRepositoryRootPath);
-			if (!controlRoot) {
-				return undefined;
-			}
-			const repositoryIdentity = deriveRepositoryIdentity(controlRoot);
-			return {
-				repositoryId: repositoryIdentity.repositoryId,
-				repositoryRootPath: repositoryIdentity.repositoryRootPath
-			};
-		})
-		.filter((entry): entry is MissionRegisteredRepository => entry !== undefined);
-	const deduplicated = normalizedEntries.filter(
-		(entry, index, entries) => entries.findIndex((candidate) => candidate.repositoryRootPath === entry.repositoryRootPath) === index
-	);
-	return deduplicated.length > 0 ? deduplicated : undefined;
-}
-
-function buildRepositoryCandidate(
-	repository: MissionRegisteredRepository
-): RepositoryCandidate | undefined {
-	const controlRoot = resolveGitWorkspaceRoot(repository.repositoryRootPath);
-	if (!controlRoot) {
-		return undefined;
-	}
-	if (!fs.existsSync(controlRoot)) {
-		return undefined;
-	}
-	const githubRepository = resolveGitHubRepositoryFromWorkspace(controlRoot);
-	const label = githubRepository ? githubRepository.split('/').pop() ?? path.basename(controlRoot) : path.basename(controlRoot);
-	return {
-		repositoryId: repository.repositoryId,
-		repositoryRootPath: repository.repositoryRootPath,
-		label,
-		description: githubRepository ?? controlRoot,
-		...(githubRepository ? { githubRepository } : {})
-	};
+function defaultRootPath(environmentVariableName: string, directoryName: string): string {
+	const configuredRoot = normalizeOptionalString(process.env[environmentVariableName]);
+	return configuredRoot ?? path.join(os.homedir(), directoryName);
 }
 
 function normalizeOptionalString(value: string | undefined): string | undefined {
@@ -248,7 +151,7 @@ function resolveConfiguredMissionConfigDirectory(): string | undefined {
 	}
 
 	const resolvedPath = path.resolve(configuredPath);
-	return path.basename(resolvedPath) === MISSION_USER_CONFIG_DIRECTORY
+	return path.basename(resolvedPath) === MISSION_CONFIG_DIRECTORY
 		? resolvedPath
-		: path.join(resolvedPath, MISSION_USER_CONFIG_DIRECTORY);
+		: path.join(resolvedPath, MISSION_CONFIG_DIRECTORY);
 }

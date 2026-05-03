@@ -1,11 +1,13 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import { FilesystemAdapter } from './FilesystemAdapter.js';
-import { resolveMissionWorkspaceRoot } from './repoConfig.js';
+import { Repository } from '../entities/Repository/Repository.js';
 import { createDefaultWorkflowSettings, DEFAULT_WORKFLOW_VERSION } from '../workflow/mission/workflow.js';
-import { createMissionWorkflowConfigurationSnapshot } from '../workflow/engine/document.js';
+import { createMissionStateData, createMissionWorkflowConfigurationSnapshot } from '../workflow/engine/document.js';
+import { Mission } from '../entities/Mission/Mission.js';
 
 describe('FilesystemAdapter', () => {
 	it('derives mission branch names with a normalized title slug', () => {
@@ -20,7 +22,7 @@ describe('FilesystemAdapter', () => {
 		const missionDir = adapter.getTrackedMissionDir('mission-101', '/tmp/repo');
 
 		expect(missionDir).toBe(path.join('/tmp/repo', '.mission', 'missions', 'mission-101'));
-		expect(adapter.getMissionRuntimeRecordPath(missionDir)).toBe(
+		expect(adapter.getMissionStateDataPath(missionDir)).toBe(
 			path.join('/tmp/repo', '.mission', 'missions', 'mission-101', 'mission.json')
 		);
 		expect(adapter.getMissionStagePath(missionDir, 'prd')).toBe(
@@ -29,6 +31,22 @@ describe('FilesystemAdapter', () => {
 		expect(adapter.getMissionStagePath(missionDir, 'spec')).toBe(
 			path.join('/tmp/repo', '.mission', 'missions', 'mission-101', '02-SPEC')
 		);
+	});
+
+	it('appends mission session logs through recorded relative log paths', async () => {
+		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-session-log-'));
+		try {
+			const adapter = new FilesystemAdapter('/tmp/repo');
+			const sessionLogPath = adapter.getMissionSessionLogRelativePath('session-1');
+
+			expect(sessionLogPath).toBe('session-logs/session-1.log');
+			await adapter.ensureMissionSessionLogFile(missionDir, sessionLogPath);
+			await adapter.appendMissionSessionLogChunk(missionDir, sessionLogPath, '\u001b[32mready\u001b[0m\n');
+
+			await expect(adapter.readMissionSessionLog(missionDir, sessionLogPath)).resolves.toBe('\u001b[32mready\u001b[0m\n');
+		} finally {
+			await fs.rm(missionDir, { recursive: true, force: true });
+		}
 	});
 
 	it('nests mission worktrees under the full GitHub repository path', async () => {
@@ -52,9 +70,35 @@ describe('FilesystemAdapter', () => {
 
 			const adapter = new FilesystemAdapter(workspaceRoot);
 			expect(adapter.getMissionWorktreePath('mission-101')).toBe(
-				path.join(resolveMissionWorkspaceRoot(), 'Flying-Pillow', 'connect-four', 'mission-101')
+				path.join(Repository.resolveMissionsRoot(), 'Flying-Pillow', 'connect-four', 'mission-101')
 			);
 		} finally {
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		}
+	});
+
+	it('prunes stale registered worktrees before materializing a Mission worktree', async () => {
+		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-stale-worktree-'));
+		const worktreePath = path.join(workspaceRoot, '..', 'mission-worktree');
+
+		try {
+			git(workspaceRoot, ['init']);
+			git(workspaceRoot, ['config', 'user.email', 'mission@example.test']);
+			git(workspaceRoot, ['config', 'user.name', 'Mission Test']);
+			await fs.writeFile(path.join(workspaceRoot, 'README.md'), 'initial\n', 'utf8');
+			git(workspaceRoot, ['add', 'README.md']);
+			git(workspaceRoot, ['commit', '-m', 'initial']);
+			git(workspaceRoot, ['branch', '-M', 'main']);
+			git(workspaceRoot, ['worktree', 'add', '-b', 'mission/1-initial-setup', worktreePath, 'main']);
+			await fs.rm(worktreePath, { recursive: true, force: true });
+
+			const adapter = new FilesystemAdapter(workspaceRoot);
+			await expect(adapter.materializeMissionWorktree(worktreePath, 'mission/1-initial-setup'))
+				.resolves.toBe('mission/1-initial-setup');
+			expect(git(workspaceRoot, ['-C', worktreePath, 'branch', '--show-current']))
+				.toBe('mission/1-initial-setup');
+		} finally {
+			await fs.rm(worktreePath, { recursive: true, force: true }).catch(() => undefined);
 			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}
 	});
@@ -70,6 +114,43 @@ describe('FilesystemAdapter', () => {
 		expect(adapter.deriveDraftMissionBranchName('Filesystem mission model')).toMatch(
 			/^mission\/draft-\d{14}-filesystem-mission-model$/u
 		);
+	});
+
+	it('commits with a daemon fallback author identity when Git config is clean', async () => {
+		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-git-identity-'));
+		const isolatedHome = path.join(workspaceRoot, 'home');
+		const previousHome = process.env['HOME'];
+		const previousAuthorName = process.env['GIT_AUTHOR_NAME'];
+		const previousAuthorEmail = process.env['GIT_AUTHOR_EMAIL'];
+		const previousCommitterName = process.env['GIT_COMMITTER_NAME'];
+		const previousCommitterEmail = process.env['GIT_COMMITTER_EMAIL'];
+
+		try {
+			await fs.mkdir(isolatedHome, { recursive: true });
+			process.env['HOME'] = isolatedHome;
+			delete process.env['GIT_AUTHOR_NAME'];
+			delete process.env['GIT_AUTHOR_EMAIL'];
+			delete process.env['GIT_COMMITTER_NAME'];
+			delete process.env['GIT_COMMITTER_EMAIL'];
+
+			git(workspaceRoot, ['init']);
+			await fs.writeFile(path.join(workspaceRoot, 'README.md'), 'prepared\n', 'utf8');
+
+			const adapter = new FilesystemAdapter(workspaceRoot);
+			adapter.stagePaths(['README.md']);
+			expect(() => adapter.commit('prepare repository')).not.toThrow();
+
+			expect(git(workspaceRoot, ['log', '-1', '--format=%an <%ae>|%cn <%ce>'])).toBe(
+				'Mission Daemon <mission-daemon@localhost>|Mission Daemon <mission-daemon@localhost>'
+			);
+		} finally {
+			restoreEnv('HOME', previousHome);
+			restoreEnv('GIT_AUTHOR_NAME', previousAuthorName);
+			restoreEnv('GIT_AUTHOR_EMAIL', previousAuthorEmail);
+			restoreEnv('GIT_COMMITTER_NAME', previousCommitterName);
+			restoreEnv('GIT_COMMITTER_EMAIL', previousCommitterEmail);
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		}
 	});
 
 	it('persists and rehydrates the mission descriptor through BRIEF.md', async () => {
@@ -154,7 +235,8 @@ describe('FilesystemAdapter', () => {
 		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-'));
 		try {
 			const adapter = new FilesystemAdapter('/tmp/repo');
-			await adapter.initializeMissionRuntimeRecord({
+			await Mission.initializeStateData({
+				adapter,
 				missionDir,
 				missionId: 'mission-109-runtime-document',
 				configuration: createMissionWorkflowConfigurationSnapshot({
@@ -179,8 +261,44 @@ describe('FilesystemAdapter', () => {
 			expect(task?.status).toBe('pending');
 			expect(task?.agent).toBe('planner');
 
-			const workflowDocument = await adapter.readMissionRuntimeRecord(missionDir);
+			const workflowDocument = await Mission.readStateData(adapter, missionDir);
 			expect(workflowDocument?.runtime.tasks).toEqual([]);
+		} finally {
+			await fs.rm(missionDir, { recursive: true, force: true });
+		}
+	});
+
+	it('rejects inline legacy event logs in mission runtime data', async () => {
+		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-'));
+		try {
+			const adapter = new FilesystemAdapter('/tmp/repo');
+			const configuration = createMissionWorkflowConfigurationSnapshot({
+				createdAt: '2026-04-01T00:00:00.000Z',
+				workflowVersion: DEFAULT_WORKFLOW_VERSION,
+				workflow: createDefaultWorkflowSettings()
+			});
+			const data = createMissionStateData({
+				missionId: 'mission-inline-event-log',
+				configuration,
+				createdAt: configuration.createdAt
+			});
+			await fs.writeFile(
+				adapter.getMissionStateDataPath(missionDir),
+				`${JSON.stringify({
+					...data,
+					eventLog: [{
+						eventId: 'mission.created:legacy',
+						type: 'mission.created',
+						occurredAt: configuration.createdAt,
+						source: 'human',
+						payload: {}
+					}]
+				}, null, 2)}\n`,
+				'utf8'
+			);
+
+			await expect(Mission.readStateData(adapter, missionDir)).rejects.toThrow(/eventLog/u);
+			await expect(Mission.readEventLog(adapter, missionDir)).resolves.toEqual([]);
 		} finally {
 			await fs.rm(missionDir, { recursive: true, force: true });
 		}
@@ -262,3 +380,22 @@ describe('FilesystemAdapter', () => {
 		}
 	});
 });
+
+function restoreEnv(key: string, value: string | undefined): void {
+	if (value === undefined) {
+		delete process.env[key];
+		return;
+	}
+	process.env[key] = value;
+}
+
+function git(cwd: string, args: string[]): string {
+	const result = spawnSync('git', args, {
+		cwd,
+		encoding: 'utf8'
+	});
+	if (result.status !== 0) {
+		throw new Error([result.stdout, result.stderr].filter(Boolean).join('\n'));
+	}
+	return result.stdout.trim();
+}

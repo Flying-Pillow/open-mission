@@ -1,9 +1,12 @@
+import fs from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const logsDir = path.join(workspaceRoot, '.logs');
 const userArgs = process.argv.slice(2);
+const enableDaemon = process.env.MISSION_AIRPORT_ENABLE_DAEMON !== 'false';
 
 function runChecked(command, args, options = {}) {
 	const result = spawnSync(command, args, {
@@ -22,10 +25,32 @@ function runChecked(command, args, options = {}) {
 	}
 }
 
-function spawnManaged(command, args, extraEnv = {}) {
+function prepareLogFile(fileName) {
+	fs.mkdirSync(logsDir, { recursive: true });
+	const filePath = path.join(logsDir, fileName);
+	fs.writeFileSync(filePath, '');
+	return {
+		filePath,
+		stream: fs.createWriteStream(filePath, { flags: 'a' })
+	};
+}
+
+function pipeChildOutput(child, output, target) {
+	if (!output) {
+		return;
+	}
+
+	output.on('data', (chunk) => {
+		target.stream.write(chunk);
+		process[target.output].write(chunk);
+	});
+}
+
+function spawnManaged(command, args, extraEnv = {}, logFileName) {
+	const logTarget = logFileName ? prepareLogFile(logFileName) : undefined;
 	const child = spawn(command, args, {
 		cwd: workspaceRoot,
-		stdio: 'inherit',
+		stdio: ['inherit', 'pipe', 'pipe'],
 		env: {
 			...process.env,
 			...extraEnv
@@ -33,8 +58,17 @@ function spawnManaged(command, args, extraEnv = {}) {
 	});
 
 	child.on('error', (error) => {
+		logTarget?.stream.end();
 		throw error;
 	});
+
+	if (logTarget) {
+		pipeChildOutput(child.stdout, child.stdout, { stream: logTarget.stream, output: 'stdout' });
+		pipeChildOutput(child.stderr, child.stderr, { stream: logTarget.stream, output: 'stderr' });
+		child.on('exit', () => {
+			logTarget.stream.end();
+		});
+	}
 
 	return child;
 }
@@ -63,31 +97,37 @@ function shutdown(exitCode = 0, signal) {
 }
 
 runChecked('pnpm', ['run', 'mission:install:local:dev']);
-runChecked('pnpm', [
-	'--dir',
-	'./packages/mission',
-	'exec',
-	'node',
-	'--conditions=development',
-	'--import',
-	'tsx',
-	'./src/mission.ts',
-	'daemon:stop',
-	'--json'
-]);
 
-const supervisedEnv = {
-	MISSION_DAEMON_SUPERVISED: '1'
-};
+const webEnv = enableDaemon ? {} : { MISSION_DAEMON_SUPERVISED: '1' };
 
-const daemon = spawnManaged('pnpm', ['--dir', './packages/core', 'run', 'daemon:dev'], supervisedEnv);
+let daemon;
+if (enableDaemon) {
+	daemon = spawnManaged(
+		'pnpm',
+		['--filter', '@flying-pillow/mission-core', 'run', 'daemon:dev'],
+		{ MISSION_DAEMON_SUPERVISED: '1' },
+		'daemon.log'
+	);
+	children.add(daemon);
+}
+
 const web = spawnManaged(
 	'pnpm',
 	['--dir', './apps/airport/web', 'run', 'dev', '--', ...userArgs],
-	supervisedEnv
+	enableDaemon ? { MISSION_DAEMON_SUPERVISED: '1' } : webEnv,
+	'web.log'
 );
 
-children.add(daemon);
+if (enableDaemon) {
+	process.stdout.write(
+		`Development logs: ${path.join(logsDir, 'web.log')} and ${path.join(logsDir, 'daemon.log')} (Mission daemon supervised by nodemon)\n`
+	);
+} else {
+	process.stdout.write(
+		`Development log: ${path.join(logsDir, 'web.log')} (daemon startup disabled by MISSION_AIRPORT_ENABLE_DAEMON=false)\n`
+	);
+}
+
 children.add(web);
 
 for (const child of children) {

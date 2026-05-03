@@ -1,19 +1,16 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
 	ensureMissionConfig,
 	getMissionGitHubCliBinary,
-	getMissionRuntimeDirectory,
+	getMissionDaemonDirectory,
+	getMissionManagedDependenciesRoot,
 	getMissionConfigPath,
-	listRegisteredRepositories,
-	registerMissionRepo,
 	readMissionConfig,
 	writeMissionConfig
 } from './config.js';
-import { deriveRepositoryIdentity } from './repositoryIdentity.js';
 
 describe('config', () => {
 	beforeEach(() => {
@@ -29,60 +26,67 @@ describe('config', () => {
 		delete process.env['MISSION_CONFIG_PATH'];
 	});
 
-	it('scaffolds a default user config in XDG config home', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+	it('scaffolds a default config in XDG config home', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
 
 		const config = await ensureMissionConfig();
 
 		expect(getMissionConfigPath()).toBe(path.join(process.env['XDG_CONFIG_HOME'], 'mission', 'config.json'));
 		expect(config).toMatchObject({
 			version: 1,
-			missionWorkspaceRoot: 'missions'
+			missionsRoot: path.join(os.homedir(), 'missions'),
+			repositoriesRoot: path.join(os.homedir(), 'repositories')
 		});
 	});
 
-	it('derives a Mission-managed runtime directory next to the user config', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+	it('derives Mission-managed directories next to the config', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
 
-		expect(getMissionRuntimeDirectory()).toBe(path.join(process.env['XDG_CONFIG_HOME'], 'mission', 'runtime'));
+		expect(getMissionDaemonDirectory()).toBe(path.join(process.env['XDG_CONFIG_HOME'], 'mission', 'runtime'));
+		expect(getMissionManagedDependenciesRoot()).toBe(path.join(process.env['XDG_CONFIG_HOME'], 'mission', 'dependencies'));
 	});
 
 	it('prefers MISSION_CONFIG_PATH when present and resolves the Mission config beneath it', () => {
 		process.env['MISSION_CONFIG_PATH'] = '/config';
 
 		expect(getMissionConfigPath()).toBe('/config/mission/config.json');
-		expect(getMissionRuntimeDirectory()).toBe('/config/mission/runtime');
+		expect(getMissionDaemonDirectory()).toBe('/config/mission/runtime');
+		expect(getMissionManagedDependenciesRoot()).toBe('/config/mission/dependencies');
 	});
 
 	it('accepts MISSION_CONFIG_PATH values that already point at the Mission config directory', () => {
 		process.env['MISSION_CONFIG_PATH'] = '/config/mission';
 
 		expect(getMissionConfigPath()).toBe('/config/mission/config.json');
-		expect(getMissionRuntimeDirectory()).toBe('/config/mission/runtime');
+		expect(getMissionDaemonDirectory()).toBe('/config/mission/runtime');
+		expect(getMissionManagedDependenciesRoot()).toBe('/config/mission/dependencies');
 	});
 
-	it('persists user-level overrides', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+	it('persists config overrides', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
 
 		await writeMissionConfig({
-			missionWorkspaceRoot: '/tmp/missions',
+			missionsRoot: '/tmp/missions',
+			repositoriesRoot: '/tmp/repositories',
 			ghBinary: '/opt/gh/bin/gh'
 		});
 
 		expect(readMissionConfig()).toMatchObject({
-			missionWorkspaceRoot: '/tmp/missions',
+			missionsRoot: '/tmp/missions',
+			repositoriesRoot: '/tmp/repositories',
 			ghBinary: '/opt/gh/bin/gh'
 		});
 	});
 
-	it('drops legacy terminalBinary values from existing user config', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+	it('drops legacy terminalBinary values from existing config', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
 		await fs.mkdir(path.dirname(getMissionConfigPath()), { recursive: true });
 		await fs.writeFile(
 			getMissionConfigPath(),
 			JSON.stringify({
 				version: 1,
-				missionWorkspaceRoot: '/tmp/missions',
+				missionsRoot: '/tmp/missions',
+				repositoriesRoot: '/tmp/repositories',
 				terminalBinary: '/usr/local/bin/zellij',
 				ghBinary: '/opt/gh/bin/gh'
 			}, null, 2),
@@ -91,13 +95,14 @@ describe('config', () => {
 
 		expect(readMissionConfig()).toEqual({
 			version: 1,
-			missionWorkspaceRoot: '/tmp/missions',
+			missionsRoot: '/tmp/missions',
+			repositoriesRoot: '/tmp/repositories',
 			ghBinary: '/opt/gh/bin/gh'
 		});
 	});
 
 	it('resolves the configured GitHub CLI binary when Mission install has configured one', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
 		const binaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-gh-binary-'));
 		const ghBinaryPath = path.join(binaryDirectory, 'gh');
 		await fs.writeFile(ghBinaryPath, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
@@ -112,7 +117,7 @@ describe('config', () => {
 	});
 
 	it('ignores a configured GitHub CLI path when the binary no longer exists', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
 
 		await writeMissionConfig({
 			ghBinary: '/tmp/mission-fake-gh-does-not-exist/gh'
@@ -121,8 +126,8 @@ describe('config', () => {
 		expect(getMissionGitHubCliBinary()).toBeUndefined();
 	});
 
-	it('does not read legacy repos-map config', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+	it('rejects legacy repos-map config', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
 		await fs.mkdir(path.dirname(getMissionConfigPath()), { recursive: true });
 		await fs.writeFile(
 			getMissionConfigPath(),
@@ -137,120 +142,18 @@ describe('config', () => {
 			'utf8'
 		);
 
-		expect(readMissionConfig()).toEqual({
-			version: 1,
-			missionWorkspaceRoot: 'missions'
-		});
+		expect(readMissionConfig()).toBeUndefined();
 	});
 
-	it('registers a repository checkout in user config', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
-		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-registered-repo-'));
-
-		try {
-			runGit(workspaceRoot, ['init']);
-			runGit(workspaceRoot, ['config', 'user.email', 'mission@example.com']);
-			runGit(workspaceRoot, ['config', 'user.name', 'Mission Test']);
-			await fs.writeFile(path.join(workspaceRoot, 'README.md'), '# Mission Test\n', 'utf8');
-			runGit(workspaceRoot, ['add', 'README.md']);
-			runGit(workspaceRoot, ['commit', '-m', 'init']);
-			runGit(workspaceRoot, ['remote', 'add', 'origin', 'https://github.com/Flying-Pillow/mission.git']);
-
-			await registerMissionRepo(workspaceRoot);
-			const repositoryIdentity = deriveRepositoryIdentity(workspaceRoot);
-
-			expect(readMissionConfig()).toMatchObject({
-				registeredRepositories: [
-					{
-						repositoryId: repositoryIdentity.repositoryId,
-						repositoryRootPath: workspaceRoot
-					}
-				]
-			});
-		} finally {
-			await fs.rm(workspaceRoot, { recursive: true, force: true });
-		}
-	});
-
-	it('lists registered repositories from config', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
-		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-registered-repo-'));
-
-		try {
-			runGit(workspaceRoot, ['init']);
-			runGit(workspaceRoot, ['config', 'user.email', 'mission@example.com']);
-			runGit(workspaceRoot, ['config', 'user.name', 'Mission Test']);
-			await fs.writeFile(path.join(workspaceRoot, 'README.md'), '# Mission Test\n', 'utf8');
-			runGit(workspaceRoot, ['add', 'README.md']);
-			runGit(workspaceRoot, ['commit', '-m', 'init']);
-			runGit(workspaceRoot, ['remote', 'add', 'origin', 'https://github.com/Flying-Pillow/mission.git']);
-
-			await registerMissionRepo(workspaceRoot);
-			const repositories = await listRegisteredRepositories();
-			const repositoryIdentity = deriveRepositoryIdentity(workspaceRoot);
-
-			expect(repositories).toEqual([
-				{
-					repositoryId: repositoryIdentity.repositoryId,
-					repositoryRootPath: workspaceRoot,
-					label: 'mission',
-					description: 'Flying-Pillow/mission',
-					githubRepository: 'Flying-Pillow/mission'
-				}
-			]);
-		} finally {
-			await fs.rm(workspaceRoot, { recursive: true, force: true });
-		}
-	});
-
-	it('canonicalizes linked worktree registrations to the shared control root', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
-		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-registered-repo-'));
-		const worktreeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-registered-worktree-'));
-		const worktreePath = path.join(worktreeRoot, 'linked');
-
-		try {
-			runGit(workspaceRoot, ['init']);
-			runGit(workspaceRoot, ['config', 'user.email', 'mission@example.com']);
-			runGit(workspaceRoot, ['config', 'user.name', 'Mission Test']);
-			await fs.writeFile(path.join(workspaceRoot, 'README.md'), '# Mission Test\n', 'utf8');
-			runGit(workspaceRoot, ['add', 'README.md']);
-			runGit(workspaceRoot, ['commit', '-m', 'init']);
-			runGit(workspaceRoot, ['worktree', 'add', worktreePath, '-b', 'mission/test-canonicalize']);
-
-			await writeMissionConfig({
-				registeredRepositories: [
-					{
-						repositoryId: 'stale-id',
-						repositoryRootPath: worktreePath
-					}
-				]
-			});
-			const repositoryIdentity = deriveRepositoryIdentity(workspaceRoot);
-
-			expect(readMissionConfig()).toMatchObject({
-				registeredRepositories: [
-					{
-						repositoryId: repositoryIdentity.repositoryId,
-						repositoryRootPath: workspaceRoot
-					}
-				]
-			});
-		} finally {
-			runGit(workspaceRoot, ['worktree', 'remove', '--force', worktreePath]);
-			await fs.rm(worktreeRoot, { recursive: true, force: true });
-			await fs.rm(workspaceRoot, { recursive: true, force: true });
-		}
-	});
-
-	it('rewrites stale registered repositories out of user config', async () => {
-		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-user-config-'));
+	it('rewrites stale repository registry entries out of config', async () => {
+		process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-config-'));
 		await fs.mkdir(path.dirname(getMissionConfigPath()), { recursive: true });
 		await fs.writeFile(
 			getMissionConfigPath(),
 			JSON.stringify({
 				version: 1,
-				missionWorkspaceRoot: 'missions',
+				missionsRoot: '/tmp/missions',
+				repositoriesRoot: '/tmp/repositories',
 				terminalBinary: 'zellij',
 				registeredRepositories: [
 					{
@@ -265,20 +168,11 @@ describe('config', () => {
 
 		expect(config).toEqual({
 			version: 1,
-			missionWorkspaceRoot: 'missions'
+			missionsRoot: '/tmp/missions',
+			repositoriesRoot: '/tmp/repositories'
 		});
 		expect(readMissionConfig()).toEqual(config);
 		expect(await fs.readFile(getMissionConfigPath(), 'utf8')).not.toContain('mission-stale-repository');
 		expect(await fs.readFile(getMissionConfigPath(), 'utf8')).not.toContain('terminalBinary');
 	});
 });
-
-function runGit(workspaceRoot: string, args: string[]): void {
-	const result = spawnSync('git', args, {
-		cwd: workspaceRoot,
-		encoding: 'utf8'
-	});
-	if (result.status !== 0) {
-		throw new Error(result.stderr.trim() || `git ${args.join(' ')} failed.`);
-	}
-}

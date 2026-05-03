@@ -2,7 +2,7 @@ import {
     renderMissionTaskTemplate,
     type MissionTaskTemplate
 } from '../mission/templates/index.js';
-import { getMissionControlRootFromMissionDir } from '../../lib/repoConfig.js';
+import { Repository } from '../../entities/Repository/Repository.js';
 import type { MissionDescriptor } from '../../types.js';
 import type {
     MissionGeneratedTaskPayload,
@@ -34,7 +34,7 @@ export async function generateMissionWorkflowTasks(input: {
             renderMissionTaskTemplate(
                 { templatePath: templateSource.path },
                 {
-                    controlRoot: getMissionControlRootFromMissionDir(input.descriptor.missionDir),
+                    controlRoot: Repository.getMissionControlRootFromMissionDir(input.descriptor.missionDir),
                     brief: input.descriptor.brief,
                     branchRef: input.descriptor.branchRef
                 }

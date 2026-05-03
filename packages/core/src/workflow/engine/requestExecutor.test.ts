@@ -7,10 +7,10 @@ import {
 } from './document.js';
 import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../mission/workflow.js';
 import { MissionWorkflowRequestExecutor } from './requestExecutor.js';
-import { FakeAgentRunner } from '../../agent/testing/FakeAgentRunner.js';
+import { FakeAgentRunner } from '../../daemon/runtime/agent/testing/FakeAgentRunner.js';
 import type { MissionTaskRuntimeState, MissionWorkflowRequest } from './types.js';
-import type { AgentSessionReference } from '../../agent/AgentRuntimeTypes.js';
-import type { AgentSession } from '../../agent/AgentSession.js';
+import type { AgentSessionReference } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
+import type { AgentSession } from '../../daemon/runtime/agent/AgentSession.js';
 
 function createDescriptor(): MissionDescriptor {
 	return {
@@ -647,7 +647,10 @@ describe('MissionWorkflowRequestExecutor', () => {
 			taskId: task.taskId,
 			runnerId: 'fake-runner',
 			transportId: 'terminal',
-			terminalSessionName: 'stale-running-session',
+			terminalHandle: {
+				sessionName: 'stale-running-session',
+				paneId: 'pty'
+			},
 			lifecycle: 'running',
 			launchedAt: '2026-04-10T21:15:00.000Z',
 			updatedAt: '2026-04-10T21:15:00.000Z'
@@ -657,8 +660,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 			schemaVersion: 1,
 			missionId: 'mission-17',
 			configuration,
-			runtime,
-			eventLog: []
+			runtime
 		});
 
 		expect(events).toEqual([]);
@@ -689,7 +691,10 @@ describe('MissionWorkflowRequestExecutor', () => {
 			taskId: task.taskId,
 			runnerId: 'fake-runner',
 			transportId: 'terminal',
-			terminalSessionName: 'terminated-session',
+			terminalHandle: {
+				sessionName: 'terminated-session',
+				paneId: 'pty'
+			},
 			lifecycle: 'terminated',
 			launchedAt: '2026-04-10T21:15:00.000Z',
 			updatedAt: '2026-04-10T21:15:00.000Z',
@@ -700,9 +705,28 @@ describe('MissionWorkflowRequestExecutor', () => {
 			schemaVersion: 1,
 			missionId: 'mission-17',
 			configuration,
-			runtime,
-			eventLog: []
+			runtime
 		})).resolves.toEqual([]);
+	});
+
+	it('treats workflow termination of an unattached session as a terminal lifecycle event', async () => {
+		const executor = new MissionWorkflowRequestExecutor({
+			adapter: {} as FilesystemAdapter,
+			runners: new Map()
+		});
+
+		const events = await executor.terminateRuntimeSession(
+			'detached-session',
+			'terminated by panic',
+			'spec/01'
+		);
+
+		expect(events).toHaveLength(1);
+		expect(events[0]).toMatchObject({
+			type: 'session.terminated',
+			sessionId: 'detached-session',
+			taskId: 'spec/01'
+		});
 	});
 
 	it('reconciles detached terminal snapshots even when runtime snapshot taskId is unknown', async () => {
@@ -724,7 +748,10 @@ describe('MissionWorkflowRequestExecutor', () => {
 			taskId: task.taskId,
 			runnerId: 'fake-runner',
 			transportId: 'terminal',
-			terminalSessionName: 'detached-session',
+			terminalHandle: {
+				sessionName: 'detached-session',
+				paneId: 'pty'
+			},
 			lifecycle: 'running',
 			launchedAt: '2026-04-10T21:15:00.000Z',
 			updatedAt: '2026-04-10T21:15:00.000Z'
@@ -734,8 +761,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 			schemaVersion: 1,
 			missionId: 'mission-17',
 			configuration,
-			runtime,
-			eventLog: []
+			runtime
 		});
 
 		expect(events).toContainEqual(expect.objectContaining({

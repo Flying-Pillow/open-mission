@@ -366,7 +366,6 @@ export interface MissionDaemonSettings {
   defaultAgentMode?: 'interactive' | 'autonomous';
   defaultModel?: string;
   defaultAgentMetadata?: Record<string, string | number | boolean | null>;
-  towerTheme?: string;
   trackingProvider?: 'github';
   instructionsPath?: string;
   skillsPath?: string;

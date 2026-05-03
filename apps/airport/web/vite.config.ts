@@ -5,41 +5,43 @@ import type { Server as HttpsServer } from "node:https";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite-plus";
-import { attachTerminalWebSocketServer } from "./src/lib/server/terminal-websocket.server";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryDocsRoot = path.resolve(currentDirectory, "../../../docs");
-
-const workspacePackageRoots = {
-	"@flying-pillow/mission-core": path.resolve(currentDirectory, "../../../packages/core/src"),
-	"@flying-pillow/mission": path.resolve(currentDirectory, "../../../packages/mission/src")
-} as const;
-
-type WorkspacePackageAlias = {
-	find: string;
-	replacement: string;
-};
-
-const workspacePackageAliases: WorkspacePackageAlias[] = Object.entries(workspacePackageRoots).map(
-	([packageName, packageRoot]) => ({
-		find: packageName,
-		replacement: packageRoot
-	})
-);
+const workspaceRoot = path.resolve(currentDirectory, "../../..");
+const useSourcePackages = process.env.NODE_ENV !== "production";
 
 type ViteHttpServer = HttpServer | HttpsServer;
+
+async function attachMissionTerminalWebSockets(
+	server: ViteHttpServer,
+	loadModule: () => Promise<TerminalWebSocketModule>,
+): Promise<void> {
+	const { attachTerminalWebSocketServer } = await loadModule();
+	attachTerminalWebSocketServer(server);
+}
+
+type TerminalWebSocketModule = {
+	attachTerminalWebSocketServer(server: ViteHttpServer): void;
+};
 
 function missionTerminalWebSocketPlugin() {
 	return {
 		name: "mission-terminal-websocket",
-		configureServer(server: { httpServer?: ViteHttpServer | null }) {
+		configureServer(server: { httpServer?: ViteHttpServer | null; ssrLoadModule(url: string): Promise<unknown> }) {
 			if (server.httpServer) {
-				attachTerminalWebSocketServer(server.httpServer);
+				void attachMissionTerminalWebSockets(
+					server.httpServer,
+					() => server.ssrLoadModule("/src/lib/server/terminal-websocket.server.ts") as Promise<TerminalWebSocketModule>
+				);
 			}
 		},
 		configurePreviewServer(server: { httpServer?: ViteHttpServer | null }) {
 			if (server.httpServer) {
-				attachTerminalWebSocketServer(server.httpServer);
+				void attachMissionTerminalWebSockets(
+					server.httpServer,
+					() => import("./src/lib/server/terminal-websocket.server.ts")
+				);
 			}
 		}
 	};
@@ -52,18 +54,20 @@ export default defineConfig({
 		sveltekit(),
 		missionTerminalWebSocketPlugin()
 	],
-	resolve: {
-		alias: workspacePackageAliases
-	},
 	ssr: {
 		noExternal: [
 			"@flying-pillow/mission-core",
 			"@flying-pillow/mission"
 		]
 	},
+	resolve: {
+		conditions: useSourcePackages
+			? ["development", "typescript", "svelte", "browser", "module", "import", "default"]
+			: ["svelte", "browser", "module", "import", "default"]
+	},
 	server: {
 		fs: {
-			allow: [".", repositoryDocsRoot, ...Object.values(workspacePackageRoots)]
+			allow: [workspaceRoot, repositoryDocsRoot]
 		}
 	}
 });

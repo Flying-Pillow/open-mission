@@ -7,8 +7,8 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Repository } from '../entities/Repository/Repository.js';
 import type { MissionSelector } from '../types.js';
-import { getMissionCatalogPath, getMissionWorktreesPath } from './repoConfig.js';
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 
@@ -50,7 +50,7 @@ export function resolveMissionWorkspaceContext(
             };
         }
     }
-    const worktreesRoot = path.resolve(getMissionWorktreesPath(workspaceRoot));
+    const worktreesRoot = path.resolve(Repository.getMissionWorktreesPath(workspaceRoot));
     const relativeToWorktrees = path.relative(worktreesRoot, absoluteStartPath);
     if (
         relativeToWorktrees.length > 0
@@ -60,7 +60,7 @@ export function resolveMissionWorkspaceContext(
         const [missionId] = relativeToWorktrees.split(path.sep).filter(Boolean);
         if (missionId) {
             const missionDir = path.join(worktreesRoot, missionId);
-            const missionRootDir = path.join(getMissionCatalogPath(missionDir), missionId);
+            const missionRootDir = path.join(Repository.getMissionCatalogPath(missionDir), missionId);
             return {
                 kind: 'mission-worktree',
                 workspaceRoot,
@@ -95,7 +95,7 @@ function resolveGitCheckoutRoot(startPath = process.cwd()): string | undefined {
 }
 
 function resolveMissionCheckoutContext(checkoutRoot: string): { missionId: string; missionRootDir: string } | undefined {
-    const missionsRoot = getMissionCatalogPath(checkoutRoot);
+    const missionsRoot = Repository.getMissionCatalogPath(checkoutRoot);
     try {
         const entries = fs.readdirSync(missionsRoot, { withFileTypes: true })
             .filter((entry) => entry.isDirectory());

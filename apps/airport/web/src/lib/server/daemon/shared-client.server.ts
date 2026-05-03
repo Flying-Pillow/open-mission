@@ -1,5 +1,5 @@
 // /apps/airport/web/src/lib/server/daemon/shared-client.server.ts: Reuses short-lived daemon connections across SvelteKit request handlers.
-import type { DaemonClient } from '@flying-pillow/mission-core';
+import type { DaemonClient } from '@flying-pillow/mission-core/client/DaemonClient';
 import { openDaemonConnection } from './transport.server';
 
 const DAEMON_CLIENT_IDLE_TIMEOUT_MS = 15_000;

@@ -1,30 +1,92 @@
 <!-- /apps/airport/web/src/lib/components/entities/Brief/BriefForm.svelte: Brief creation form with mission type selector and body input. -->
 <script lang="ts">
-    import DashboardIcon from "@tabler/icons-svelte/icons/dashboard";
-    import DatabaseIcon from "@tabler/icons-svelte/icons/database";
-    import FileDescriptionIcon from "@tabler/icons-svelte/icons/file-description";
-    import ListDetailsIcon from "@tabler/icons-svelte/icons/list-details";
-    import SettingsIcon from "@tabler/icons-svelte/icons/settings";
+    import { goto } from "$app/navigation";
+    import Icon from "@iconify/svelte";
+    import { MissionFromBriefInputSchema } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
+    import type { inferFlattenedErrors, z } from "zod/v4";
+    import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
     import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
-    import { startMissionFromBrief } from "../../../../routes/repository/[repositoryId]/mission.remote";
 
-    let briefType = $state<string>("feature");
+    type BriefInput = z.infer<typeof MissionFromBriefInputSchema>;
+    type BriefErrors = inferFlattenedErrors<
+        typeof MissionFromBriefInputSchema
+    >["fieldErrors"];
+
+    const repositoryScope = getScopedRepositoryContext();
+    let {
+        embedded = false,
+    }: {
+        embedded?: boolean;
+    } = $props();
+
+    let title = $state("");
+    let briefBody = $state("");
+    let briefType = $state<BriefInput["type"]>("feature");
+    let submitPending = $state(false);
+    let submitError = $state<string | null>(null);
+    let fieldErrors = $state<BriefErrors>({});
+    const repository = $derived(repositoryScope.repository);
+    const canStartMission = $derived(Boolean(repository?.data.isInitialized));
+
+    async function handleSubmit(event: SubmitEvent): Promise<void> {
+        event.preventDefault();
+        submitError = null;
+        fieldErrors = {};
+
+        if (!repository) {
+            submitError =
+                "Repository context is unavailable until the repository route is loaded.";
+            return;
+        }
+
+        if (!canStartMission) {
+            submitError =
+                "Complete Repository setup before starting regular missions.";
+            return;
+        }
+
+        const parsed = MissionFromBriefInputSchema.safeParse({
+            title,
+            body: briefBody,
+            type: briefType,
+        });
+
+        if (!parsed.success) {
+            fieldErrors = parsed.error.flatten().fieldErrors as BriefErrors;
+            return;
+        }
+
+        submitPending = true;
+        try {
+            const result = await repository.startMissionFromBrief(parsed.data);
+            await goto(result.redirectTo);
+        } catch (error) {
+            submitError =
+                error instanceof Error ? error.message : String(error);
+        } finally {
+            submitPending = false;
+        }
+    }
 </script>
 
 <section
-    class="flex min-h-0 flex-1 flex-col rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
+    class={embedded
+        ? "flex min-h-0 flex-1 flex-col"
+        : "flex min-h-0 flex-1 flex-col rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"}
 >
-    <h2 class="text-lg font-semibold text-foreground">Start from brief</h2>
-    <p class="mt-1 text-sm text-muted-foreground">
-        Create a new mission directly from an authored brief when the work is
-        not tied to a tracked issue.
-    </p>
+    {#if !embedded}
+        <h2 class="text-lg font-semibold text-foreground">Start from brief</h2>
+        <p class="mt-1 text-sm text-muted-foreground">
+            Create a new mission directly from an authored brief when the work
+            is not tied to a tracked issue.
+        </p>
+    {/if}
 
     <form
-        {...startMissionFromBrief}
-        class="mt-4 flex min-h-0 flex-1 flex-col gap-3"
+        class={`${embedded ? "" : "mt-4 "}flex min-h-0 flex-1 flex-col gap-3`}
+        onsubmit={handleSubmit}
     >
         <div class="grid gap-2">
             <label class="text-sm font-medium text-foreground" for="brief-title"
@@ -32,11 +94,11 @@
             >
             <Input
                 id="brief-title"
-                {...startMissionFromBrief.fields.title.as("text")}
+                bind:value={title}
                 placeholder="Improve repository mission selection"
             />
-            {#each startMissionFromBrief.fields.title.issues() as issue (`title:${issue.message}`)}
-                <p class="text-sm text-rose-600">{issue.message}</p>
+            {#each fieldErrors.title ?? [] as issue (`title:${issue}`)}
+                <p class="text-sm text-rose-600">{issue}</p>
             {/each}
         </div>
 
@@ -46,7 +108,9 @@
             >
             <input
                 id="brief-type"
-                {...startMissionFromBrief.fields.type.as("hidden", briefType)}
+                name="brief-type"
+                type="hidden"
+                value={briefType}
             />
             <ToggleGroup.Root
                 type="single"
@@ -60,40 +124,49 @@
                     value="feature"
                     class="justify-start gap-2 data-[state=on]:border-sky-300/70 data-[state=on]:bg-sky-500/10 data-[state=on]:text-sky-700"
                 >
-                    <DashboardIcon class="size-4 text-sky-500" />
+                    <Icon
+                        icon="lucide:layout-dashboard"
+                        class="size-4 text-sky-500"
+                    />
                     Feature
                 </ToggleGroup.Item>
                 <ToggleGroup.Item
                     value="fix"
                     class="justify-start gap-2 data-[state=on]:border-rose-300/70 data-[state=on]:bg-rose-500/10 data-[state=on]:text-rose-700"
                 >
-                    <SettingsIcon class="size-4 text-rose-500" />
+                    <Icon icon="lucide:settings" class="size-4 text-rose-500" />
                     Fix
                 </ToggleGroup.Item>
                 <ToggleGroup.Item
                     value="docs"
                     class="justify-start gap-2 data-[state=on]:border-amber-300/70 data-[state=on]:bg-amber-500/10 data-[state=on]:text-amber-700"
                 >
-                    <FileDescriptionIcon class="size-4 text-amber-500" />
+                    <Icon
+                        icon="lucide:file-text"
+                        class="size-4 text-amber-500"
+                    />
                     Docs
                 </ToggleGroup.Item>
                 <ToggleGroup.Item
                     value="refactor"
                     class="justify-start gap-2 data-[state=on]:border-violet-300/70 data-[state=on]:bg-violet-500/10 data-[state=on]:text-violet-700"
                 >
-                    <DatabaseIcon class="size-4 text-violet-500" />
+                    <Icon
+                        icon="lucide:database"
+                        class="size-4 text-violet-500"
+                    />
                     Refactor
                 </ToggleGroup.Item>
                 <ToggleGroup.Item
                     value="task"
                     class="justify-start gap-2 data-[state=on]:border-emerald-300/70 data-[state=on]:bg-emerald-500/10 data-[state=on]:text-emerald-700"
                 >
-                    <ListDetailsIcon class="size-4 text-emerald-500" />
+                    <Icon icon="lucide:list" class="size-4 text-emerald-500" />
                     Task
                 </ToggleGroup.Item>
             </ToggleGroup.Root>
-            {#each startMissionFromBrief.fields.type.issues() as issue (`type:${issue.message}`)}
-                <p class="text-sm text-rose-600">{issue.message}</p>
+            {#each fieldErrors.type ?? [] as issue (`type:${issue}`)}
+                <p class="text-sm text-rose-600">{issue}</p>
             {/each}
         </div>
 
@@ -103,23 +176,25 @@
             >
             <textarea
                 id="brief-body"
-                {...startMissionFromBrief.fields.body.as("text")}
+                bind:value={briefBody}
                 class="min-h-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm resize-none"
                 placeholder="Describe the mission intent, scope, and expected outcome."
             ></textarea>
-            {#each startMissionFromBrief.fields.body.issues() as issue (`body:${issue.message}`)}
-                <p class="text-sm text-rose-600">{issue.message}</p>
+            {#each fieldErrors.body ?? [] as issue (`body:${issue}`)}
+                <p class="text-sm text-rose-600">{issue}</p>
             {/each}
         </div>
 
-        {#each startMissionFromBrief.fields.allIssues() as issue (`all:${issue.message}`)}
-            <p class="text-sm text-rose-600">{issue.message}</p>
-        {/each}
+        {#if submitError}
+            <p class="text-sm text-rose-600">{submitError}</p>
+        {/if}
 
-        <Button type="submit" disabled={!!startMissionFromBrief.pending}>
-            {startMissionFromBrief.pending
+        <Button type="submit" disabled={submitPending || !canStartMission}>
+            {submitPending
                 ? "Creating mission..."
-                : "Create mission"}
+                : canStartMission
+                  ? "Create mission"
+                  : "Setup required"}
         </Button>
     </form>
 </section>

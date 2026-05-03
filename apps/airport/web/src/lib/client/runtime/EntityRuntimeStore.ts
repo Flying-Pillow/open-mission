@@ -1,20 +1,20 @@
 // /apps/airport/web/src/lib/client/runtime/EntityRuntimeStore.ts: Generic runtime store for loading, caching, and refreshing entity models by identity.
-import type { EntityModel } from '$lib/client/entities/EntityModel';
+import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
 export class EntityRuntimeStore<
     TId extends string,
-    TSnapshot,
-    TEntity extends EntityModel<TSnapshot, TId>
+    TData,
+    TEntity extends EntityModel<TData, TId>
 > {
     private readonly entities = new Map<TId, TEntity>();
 
     public constructor(private readonly input: {
-        loadSnapshot: (id: TId) => Promise<TSnapshot>;
+        loadData: (id: TId) => Promise<TData>;
         createEntity: (
-            snapshot: TSnapshot,
-            loadSnapshot: (id: TId) => Promise<TSnapshot>
+            data: TData,
+            loadData: (id: TId) => Promise<TData>
         ) => TEntity;
-        selectId: (snapshot: TSnapshot) => TId;
+        selectId: (data: TData) => TId;
     }) {}
 
     public async get(id: TId): Promise<TEntity> {
@@ -23,24 +23,24 @@ export class EntityRuntimeStore<
             return existing;
         }
 
-        const snapshot = await this.input.loadSnapshot(id);
-        return this.upsertSnapshot(snapshot);
+        const data = await this.input.loadData(id);
+        return this.upsertData(data);
     }
 
     public async refresh(id: TId): Promise<TEntity> {
-        const snapshot = await this.input.loadSnapshot(id);
-        return this.upsertSnapshot(snapshot);
+        const data = await this.input.loadData(id);
+        return this.upsertData(data);
     }
 
-    public upsertSnapshot(snapshot: TSnapshot): TEntity {
-        const id = this.input.selectId(snapshot);
+    public upsertData(data: TData): TEntity {
+        const id = this.input.selectId(data);
         const existing = this.entities.get(id);
         if (existing) {
-            existing.updateFromSnapshot(snapshot);
+            existing.updateFromData(data);
             return existing;
         }
 
-        const created = this.input.createEntity(snapshot, this.input.loadSnapshot);
+        const created = this.input.createEntity(data, this.input.loadData);
         this.entities.set(id, created);
         return created;
     }

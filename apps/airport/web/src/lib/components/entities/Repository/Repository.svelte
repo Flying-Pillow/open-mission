@@ -1,94 +1,158 @@
 <script lang="ts">
-    import { Badge } from "$lib/components/ui/badge/index.js";
-    import type { RepositorySummary } from "$lib/components/entities/types";
+    import type { RepositoryIssueDetailType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
+    import { page } from "$app/state";
+    import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { setScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
+    import IssueList from "$lib/components/entities/Issue/IssueList.svelte";
+    import IssuePreview from "$lib/components/entities/Issue/IssuePreview.svelte";
+    import MissionList from "$lib/components/entities/Mission/MissionList.svelte";
+    import RepositoryPanel from "$lib/components/entities/Repository/RepositoryPanel.svelte";
+    import RepositorySetup from "$lib/components/entities/Repository/RepositorySetup.svelte";
+    import * as Dialog from "$lib/components/ui/dialog/index.js";
+    import type { AirportRepositoryListItem } from "$lib/components/entities/types";
 
-    let {
-        repository,
-        operationalMode,
-        controlRoot,
-        currentBranch,
-        settingsComplete,
-        githubRepository,
-        missionCountLabel,
-    }: {
-        repository: RepositorySummary;
-        operationalMode?: string;
-        controlRoot?: string;
-        currentBranch?: string;
-        settingsComplete?: boolean;
-        githubRepository?: string;
-        missionCountLabel: string;
-    } = $props();
+    const appContext = getAppContext();
+    const repositoryId = $derived(page.params.repositoryId?.trim() ?? "");
+    const repositoryScopeState = $state<{
+        repositoryId?: string;
+        repository?: RepositoryEntity;
+        loading: boolean;
+        error?: string | null;
+    }>({
+        loading: true,
+    });
+    const repositoryScope = setScopedRepositoryContext(repositoryScopeState);
+
+    let selectedIssue = $state<RepositoryIssueDetailType | null>(null);
+    let issuePreviewOpen = $state(false);
+    let issueError = $state<string | null>(null);
+    let issueLoadingNumber = $state<number | null>(null);
+
+    $effect(() => {
+        const activeRepository = appContext.airport.activeRepository;
+        repositoryScope.repositoryId = repositoryId || undefined;
+        repositoryScope.repository =
+            activeRepository?.id === repositoryId
+                ? activeRepository
+                : undefined;
+        repositoryScope.loading = appContext.airport.activeRepositoryLoading;
+        repositoryScope.error =
+            appContext.airport.activeRepositoryError ?? null;
+    });
+
+    const activeRepository = $derived(repositoryScope.repository);
+    const repositoryLoading = $derived(repositoryScope.loading);
+    const repositoryError = $derived(repositoryScope.error);
+    const activeRepositoryPanelItem = $derived.by(
+        (): AirportRepositoryListItem | undefined => {
+            if (!activeRepository) {
+                return undefined;
+            }
+
+            const listedRepository =
+                appContext.application.repositoryListItems.find(
+                    (repository) => repository.key === activeRepository.id,
+                );
+            if (listedRepository) {
+                return listedRepository;
+            }
+
+            const platformRepositoryRef =
+                activeRepository.data.platformRepositoryRef ?? undefined;
+            return {
+                key: activeRepository.id,
+                local: {
+                    ...activeRepository.data,
+                    missions: activeRepository.missions,
+                },
+                displayName:
+                    platformRepositoryRef ?? activeRepository.data.repoName,
+                displayDescription:
+                    platformRepositoryRef ??
+                    activeRepository.data.repositoryRootPath,
+                repositoryRootPath: activeRepository.data.repositoryRootPath,
+                ...(platformRepositoryRef ? { platformRepositoryRef } : {}),
+                missions: activeRepository.missions,
+                isLocal: true,
+            };
+        },
+    );
+
+    function closeIssuePreview(): void {
+        issuePreviewOpen = false;
+        selectedIssue = null;
+        issueError = null;
+    }
+
+    async function refreshRepositories(): Promise<void> {
+        await appContext.application.loadRepositories({ force: true });
+    }
 </script>
 
-<section class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm">
-    <div class="flex items-start justify-between gap-4">
-        <div>
-            <p
-                class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
-            >
-                Repository
+<div class="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-2">
+    {#if repositoryLoading && !activeRepository}
+        <section
+            class="rounded-2xl border bg-card/70 px-5 py-4 text-sm text-muted-foreground backdrop-blur-sm"
+        >
+            Loading repository surface...
+        </section>
+    {:else if repositoryError || !activeRepository}
+        <section
+            class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
+        >
+            <h2 class="text-lg font-semibold text-foreground">Repository</h2>
+            <p class="mt-3 text-sm text-rose-600">
+                {repositoryError ?? "Repository data could not be loaded."}
             </p>
-            <h1 class="mt-2 text-2xl font-semibold text-foreground">
-                {repository.label}
-            </h1>
-            <p class="mt-1 text-sm text-muted-foreground">
-                {repository.description}
-            </p>
-            <p class="mt-2 font-mono text-xs text-muted-foreground">
-                {repository.repositoryRootPath}
-            </p>
-        </div>
-        <div class="flex flex-wrap justify-end gap-2">
-            <Badge variant="secondary">{missionCountLabel}</Badge>
-            {#if operationalMode}
-                <Badge variant="outline">{operationalMode}</Badge>
-            {/if}
-        </div>
-    </div>
+        </section>
+    {:else}
+        {#if activeRepositoryPanelItem}
+            <RepositoryPanel
+                repository={activeRepositoryPanelItem}
+                localRepository={activeRepository}
+                onCommandExecuted={refreshRepositories}
+            />
+        {/if}
 
-    <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div class="rounded-xl border bg-background/70 px-4 py-3">
-            <p
-                class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
+        {#if !activeRepository.data.isInitialized}
+            <RepositorySetup
+                repository={activeRepository}
+                onSetupSubmitted={refreshRepositories}
+            />
+        {:else}
+            {#key activeRepository.id}
+                <div
+                    class="mt-4 grid min-h-0 flex-1 gap-4 overflow-hidden sm:grid-cols-2"
+                >
+                    <section class="flex min-h-0 w-full overflow-hidden">
+                        <MissionList />
+                    </section>
+
+                    <section class="flex min-h-0 w-full overflow-hidden">
+                        <IssueList
+                            bind:selectedIssue
+                            bind:issuePreviewOpen
+                            bind:issueError
+                            bind:issueLoadingNumber
+                        />
+                    </section>
+                </div>
+            {/key}
+        {/if}
+
+        <Dialog.Root bind:open={issuePreviewOpen}>
+            <Dialog.Content
+                class="flex h-[100dvh] max-h-[100dvh] min-h-0 w-full max-w-[100vw] flex-col overflow-hidden sm:h-[80dvh] sm:max-h-[80dvh] sm:max-w-4xl"
             >
-                Control root
-            </p>
-            <p class="mt-2 text-sm font-medium text-foreground">
-                {controlRoot ?? repository.repositoryRootPath}
-            </p>
-        </div>
-        <div class="rounded-xl border bg-background/70 px-4 py-3">
-            <p
-                class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
-            >
-                Branch
-            </p>
-            <p class="mt-2 text-sm font-medium text-foreground">
-                {currentBranch ?? "Unavailable"}
-            </p>
-        </div>
-        <div class="rounded-xl border bg-background/70 px-4 py-3">
-            <p
-                class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
-            >
-                Tracking
-            </p>
-            <p class="mt-2 text-sm font-medium text-foreground">
-                {githubRepository ??
-                    repository.githubRepository ??
-                    "Not configured"}
-            </p>
-        </div>
-        <div class="rounded-xl border bg-background/70 px-4 py-3">
-            <p
-                class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
-            >
-                Setup
-            </p>
-            <p class="mt-2 text-sm font-medium text-foreground">
-                {settingsComplete === false ? "Incomplete" : "Ready"}
-            </p>
-        </div>
-    </div>
-</section>
+                {#if selectedIssue}
+                    <IssuePreview
+                        {selectedIssue}
+                        onClose={closeIssuePreview}
+                        embedded
+                    />
+                {/if}
+            </Dialog.Content>
+        </Dialog.Root>
+    {/if}
+</div>

@@ -1,15 +1,9 @@
 <script lang="ts">
-    import CalendarIcon from "@tabler/icons-svelte/icons/calendar";
-    import DatabaseIcon from "@tabler/icons-svelte/icons/database";
-    import DashboardIcon from "@tabler/icons-svelte/icons/dashboard";
-    import FileDescriptionIcon from "@tabler/icons-svelte/icons/file-description";
-    import LoaderIcon from "@tabler/icons-svelte/icons/loader";
-    import OctagonIcon from "@tabler/icons-svelte/icons/octagon";
-    import type { Icon } from "@tabler/icons-svelte";
+    import Icon from "@iconify/svelte";
     import type { ActiveMissionOutline } from "$lib/client/context/app-context.svelte";
     import * as TreeView from "$lib/components/ui/tree-view/index.js";
     import { cn } from "$lib/utils.js";
-    import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/types.js";
+    import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/types";
 
     type MissionSidebarTask = {
         node: MissionTowerTreeNode;
@@ -36,14 +30,12 @@
         outline,
         missionId,
         activeNodeId,
-        title = "Mission files",
         class: className,
         onSelectNode,
     }: {
         outline?: ActiveMissionOutline;
         missionId?: string;
         activeNodeId?: string;
-        title?: string;
         class?: string;
         onSelectNode: (nodeId: string) => void;
     } = $props();
@@ -168,8 +160,42 @@
         return basename(node.sourcePath) ?? node.label;
     }
 
+    function statusColor(statusLabel: string | undefined): string | undefined {
+        switch (normalizeStatusLabel(statusLabel)) {
+            case "active":
+            case "running":
+                return "#0ea5e9";
+            case "ready":
+            case "queued":
+            case "starting":
+            case "awaiting input":
+                return "#f59e0b";
+            case "completed":
+            case "delivered":
+                return "#10b981";
+            case "failed":
+            case "panicked":
+                return "#ef4444";
+            case "cancelled":
+            case "terminated":
+            case "paused":
+                return "#94a3b8";
+            case "pending":
+            case "draft":
+            case "mission artifact":
+            case "stage artifact":
+            case "task artifact":
+                return "#8b949e";
+            default:
+                return undefined;
+        }
+    }
+
     function nodeColor(node: MissionTowerTreeNode): string | undefined {
-        const color = node.color?.trim();
+        const normalizedStatus = normalizeStatusLabel(node.statusLabel);
+        const color = normalizedStatus
+            ? (statusColor(node.statusLabel) ?? "#8b949e")
+            : node.color?.trim();
         return color && color.length > 0 ? color : undefined;
     }
 
@@ -178,18 +204,18 @@
         return color ? `color: ${color};` : undefined;
     }
 
-    function sessionIcon(node: MissionTowerTreeNode): Icon {
+    function sessionIcon(node: MissionTowerTreeNode): string {
         const status = normalizeStatusLabel(node.statusLabel);
 
         if (status === "terminated") {
-            return OctagonIcon;
+            return "lucide:octagon";
         }
 
         if (status === "running") {
-            return LoaderIcon;
+            return "lucide:loader-circle";
         }
 
-        return DatabaseIcon;
+        return "lucide:database";
     }
 
     function sessionIconClass(node: MissionTowerTreeNode): string {
@@ -292,17 +318,10 @@
 
 <section
     class={cn(
-        "grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-2xl border bg-card/70 backdrop-blur-sm",
+        "grid h-full min-h-0 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-2xl border bg-card/70 backdrop-blur-sm",
         className,
     )}
 >
-    <header class="space-y-1 border-b px-3 py-2">
-        <h2 class="text-sm font-semibold text-foreground">{title}</h2>
-        <p class="text-xs text-muted-foreground">
-            {missionOutline?.title ?? missionId ?? "Mission outline"}
-        </p>
-    </header>
-
     <div class="min-h-0 overflow-auto p-2">
         {#if missionOutline}
             <TreeView.Root class="gap-1">
@@ -315,7 +334,10 @@
                         onclick={() => onSelectNode(artifact.node.id)}
                     >
                         {#snippet icon()}
-                            <FileDescriptionIcon class="size-4 shrink-0" />
+                            <Icon
+                                icon="lucide:file-text"
+                                class="size-4 shrink-0"
+                            />
                         {/snippet}
                     </TreeView.File>
                 {/each}
@@ -336,7 +358,10 @@
                             }
                         >
                             {#snippet icon({ open })}
-                                <CalendarIcon class="size-4 shrink-0" />
+                                <Icon
+                                    icon="lucide:calendar"
+                                    class="size-4 shrink-0"
+                                />
                             {/snippet}
 
                             {#each stage.tasks as task (task.node.id)}
@@ -359,7 +384,8 @@
                                         }
                                     >
                                         {#snippet icon({ open })}
-                                            <DashboardIcon
+                                            <Icon
+                                                icon="lucide:layout-dashboard"
                                                 class="size-4 shrink-0"
                                             />
                                         {/snippet}
@@ -375,7 +401,8 @@
                                                     onSelectNode(artifact.id)}
                                             >
                                                 {#snippet icon()}
-                                                    <FileDescriptionIcon
+                                                    <Icon
+                                                        icon="lucide:file-text"
                                                         class="size-4 shrink-0"
                                                     />
                                                 {/snippet}
@@ -385,7 +412,7 @@
                                         {#each task.sessions as session (session.id)}
                                             {@const selected =
                                                 activeNodeId === session.id}
-                                            {@const SessionIcon =
+                                            {@const sessionIconName =
                                                 sessionIcon(session)}
                                             <TreeView.File
                                                 name={nodeLabel(session)}
@@ -395,7 +422,8 @@
                                                     onSelectNode(session.id)}
                                             >
                                                 {#snippet icon()}
-                                                    <SessionIcon
+                                                    <Icon
+                                                        icon={sessionIconName}
                                                         class={cn(
                                                             "size-4 shrink-0",
                                                             sessionIconClass(
@@ -416,7 +444,8 @@
                                             onSelectNode(task.node.id)}
                                     >
                                         {#snippet icon()}
-                                            <DashboardIcon
+                                            <Icon
+                                                icon="lucide:layout-dashboard"
                                                 class="size-4 shrink-0"
                                             />
                                         {/snippet}
@@ -433,7 +462,8 @@
                                     onclick={() => onSelectNode(artifact.id)}
                                 >
                                     {#snippet icon()}
-                                        <FileDescriptionIcon
+                                        <Icon
+                                            icon="lucide:file-text"
                                             class="size-4 shrink-0"
                                         />
                                     {/snippet}
@@ -448,7 +478,10 @@
                             onclick={() => onSelectNode(stage.node.id)}
                         >
                             {#snippet icon()}
-                                <CalendarIcon class="size-4 shrink-0" />
+                                <Icon
+                                    icon="lucide:calendar"
+                                    class="size-4 shrink-0"
+                                />
                             {/snippet}
                         </TreeView.File>
                     {/if}
@@ -458,8 +491,7 @@
             <div
                 class="rounded-xl border border-dashed bg-background/60 px-4 py-8 text-sm text-muted-foreground"
             >
-                Mission files will appear once the workflow projection is
-                available.
+                Mission files will appear once the control view is available.
             </div>
         {/if}
     </div>

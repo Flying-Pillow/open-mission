@@ -19,6 +19,8 @@ type GitHubOAuthSessionRecord = {
     accessToken: string;
     githubUserId?: string;
     githubLogin?: string;
+    githubEmail?: string;
+    githubAvatarUrl?: string;
     tokenType?: string;
     scope?: string;
     refreshToken?: string;
@@ -32,6 +34,17 @@ type GitHubOAuthSessionRecord = {
 type GitHubAuthenticatedUser = {
     id?: number | string;
     login?: string;
+    email?: string;
+    avatar_url?: string;
+};
+
+export type GitHubSessionContext = {
+    authenticated: boolean;
+    user?: {
+        name: string;
+        email?: string;
+        avatarUrl?: string;
+    };
 };
 
 type GitHubOAuthStateRecord = {
@@ -119,6 +132,30 @@ export function getGitHubDeviceConfigurationError(): string | undefined {
 export async function readGithubAuthToken(cookies: Cookies): Promise<string | undefined> {
     const session = await readGithubAuthSession(cookies);
     return session?.accessToken;
+}
+
+export async function readGithubSessionContext(cookies: Cookies): Promise<GitHubSessionContext> {
+    const session = await readGithubAuthSession(cookies);
+    if (!session) {
+        return { authenticated: false };
+    }
+
+    const name = session.githubLogin?.trim();
+    const email = session.githubEmail?.trim();
+    const avatarUrl = session.githubAvatarUrl?.trim();
+
+    return {
+        authenticated: true,
+        ...(name
+            ? {
+                user: {
+                    name,
+                    ...(email ? { email } : {}),
+                    ...(avatarUrl ? { avatarUrl } : {})
+                }
+            }
+            : {})
+    };
 }
 
 export async function clearGithubAuthSession(cookies: Cookies): Promise<void> {
@@ -564,12 +601,16 @@ async function buildGithubAuthSessionRecord(
     const githubUser = await readGitHubAuthenticatedUser(tokenResponse.access_token.trim());
     const githubUserId = normalizeOptionalString(githubUser?.id);
     const githubLogin = normalizeOptionalString(githubUser?.login);
+    const githubEmail = normalizeOptionalString(githubUser?.email);
+    const githubAvatarUrl = normalizeOptionalString(githubUser?.avatar_url);
 
     return {
         sessionId: randomBytes(24).toString('hex'),
         accessToken: tokenResponse.access_token.trim(),
         ...(githubUserId ? { githubUserId } : {}),
         ...(githubLogin ? { githubLogin } : {}),
+        ...(githubEmail ? { githubEmail } : {}),
+        ...(githubAvatarUrl ? { githubAvatarUrl } : {}),
         ...(tokenResponse.token_type ? { tokenType: tokenResponse.token_type.trim() } : {}),
         ...(tokenResponse.scope ? { scope: tokenResponse.scope.trim() } : {}),
         ...(tokenResponse.refresh_token ? { refreshToken: tokenResponse.refresh_token.trim() } : {}),
@@ -714,6 +755,8 @@ async function readGithubAuthSessionRecord(sessionId: string): Promise<GitHubOAu
             accessToken: parsed.accessToken.trim(),
             ...(normalizeOptionalString(parsed.githubUserId) ? { githubUserId: normalizeOptionalString(parsed.githubUserId) } : {}),
             ...(normalizeOptionalString(parsed.githubLogin) ? { githubLogin: normalizeOptionalString(parsed.githubLogin) } : {}),
+            ...(normalizeOptionalString(parsed.githubEmail) ? { githubEmail: normalizeOptionalString(parsed.githubEmail) } : {}),
+            ...(normalizeOptionalString(parsed.githubAvatarUrl) ? { githubAvatarUrl: normalizeOptionalString(parsed.githubAvatarUrl) } : {}),
             ...(typeof parsed.tokenType === 'string' && parsed.tokenType.trim()
                 ? { tokenType: parsed.tokenType.trim() }
                 : {}),

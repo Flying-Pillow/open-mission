@@ -14,11 +14,11 @@ This page defines the target implementation blueprint for `apps/airport/web`.
 It is intentionally constrained by the current repository implementation:
 
 - no new daemon IPC methods
-- no daemon-side contract changes
+- no web-only daemon protocol family
 - no daemon-side business entities for the web surface
 - the web server acts as transport gateway and session relay, not as a second domain authority
 
-The deprecated terminal surface remains the behavioral reference for operator capability. The web surface must preserve the same authority model while moving interaction into a browser-native client.
+The web surface preserves the Mission authority model while moving interaction into a browser-native client.
 
 ## Core Constraints
 
@@ -38,7 +38,7 @@ This means the web surface is not a direct daemon client and not a second missio
 | --- | --- | --- |
 | browser client | object model, local interaction state, view composition, optimistic UI staging where safe | daemon truth, workflow truth, terminal runtime authority |
 | SvelteKit server | auth forwarding, daemon request proxying, daemon event fanout, terminal relay infrastructure | mission or repository business semantics |
-| daemon | mission state, airport state, action availability, session lifecycle, normalized runtime events | browser routing, browser component state |
+| daemon | mission state, airport state, Entity command descriptors, session lifecycle, normalized runtime events | browser routing, browser component state |
 | terminal runtime | live terminal pane hosting and pane control through existing transport | workflow truth, web-specific business rules |
 
 The SvelteKit server is allowed to have infrastructure classes. It is not allowed to become a duplicate mission domain model.
@@ -50,10 +50,10 @@ The browser client should use a lightweight OO model in the style of the Flying 
 The intended classes are:
 
 - `AirportClientRuntime`: root browser runtime, connection registry, event bus, and object cache
-- `Repository`: repository-scoped airport and control-plane facade in the browser
-- `Mission`: mission-scoped object with stage, task, action, and session accessors
+- `Repository`: repository-scoped browser object for airport state, settings, and repository commands
+- `Mission`: mission-scoped object with stage, task, command, and session accessors
 - `Stage`: mission stage object with derived status and task collection behavior
-- `Task`: task object with command methods such as start, complete, block, reopen, and launch session
+- `Task`: task object with command methods such as start, complete, rework, reopen, and launch session
 - `AgentSession`: live session object that owns terminal attachment state, lifecycle view, and input commands
 
 The object model rule is the same one used in Flying Pillow:
@@ -72,33 +72,33 @@ The web surface should use three transport forms, each for one clear reason.
 
 Use SvelteKit server routes or remote functions as thin request-response proxies for:
 
-- `airport.status`
-- `control.status`
-- `control.action.*`
-- `mission.status`
-- `mission.action.*`
-- `mission.gate.evaluate`
-- `session.list`
-- `session.console.state`
-- `session.prompt`
-- `session.command`
-- `session.cancel`
-- `session.terminate`
+- `entity.query`
+- `entity.command`
+- `system.status`
 
-These endpoints return validated DTOs only. They do not contain mission-domain policy.
+These endpoints return validated DTOs only. They do not contain mission-domain policy. Mission, Stage, Task, Artifact, AgentSession, and Repository behavior is reached through the relevant Entity contract.
+
+Remote functions are infrastructure, not component dependencies. Svelte components must not import or call `cmd`, `qry`, route remote modules, or daemon proxy helpers directly. Components call browser Entity instances, Entity class methods, or the `AirportApplication` runtime; those objects own the remote invocation and DTO validation.
+
+Browser Entity methods must choose the SvelteKit remote query execution form at the Entity boundary:
+
+- Render-time reads that are awaited from markup, for example inside `{#await ...}`, pass `executionContext: 'render'` and await the query object directly behind the Entity method.
+- Event, effect, refresh, command, and application-runtime reads run outside render and must call `.run()` behind the Entity method.
+- Commands are event-style operations and stay behind Entity command methods.
+
+The practical rule is: presentation components never decide between direct query await and `.run()`. They state intent by calling an Entity method such as `artifact.read({ executionContext: 'render' })`, `repository.setup(settings)`, or `repository.refreshCommands()`, and the Entity layer applies the remote-function rule.
+
+Commandbars are render-only controls over command descriptors that have already been supplied by an Entity or application cache. A commandbar may execute a command from an event handler, but it must not query available commands during render or component effects. Mission-scoped commandbars read from the Mission control-view command snapshot, and repository/class commandbars read descriptors cached by `Repository` or `AirportApplication` methods. This avoids one remote command-descriptor query per rendered row.
 
 ### 2. Live Daemon Event Transport
 
 Use SSE for daemon notifications that are already emitted today:
 
-- `airport.state`
-- `mission.status`
-- `mission.actions.changed`
-- `session.console`
+- Entity snapshot and status events
 - `session.event`
 - `session.lifecycle`
 
-This keeps mission, stage, task, and session state current in the browser without introducing a second subscription contract inside the daemon.
+This keeps mission, stage, task, and AgentSession state current in the browser without introducing a second subscription contract inside the daemon.
 
 ### 3. Live Terminal Transport
 
@@ -277,7 +277,7 @@ The target module split inside `apps/airport/web` should be:
 - `src/routes/api/runtime/terminal/+server.ts`: terminal relay endpoint or upgrade handler
 - `src/routes/api/runtime/*.remote.ts` or `+server.ts`: thin request-response proxies for commands and snapshots
 
-The deprecated terminal surface remains the behavioral reference for Tower, Briefing Room, and Runway UX decomposition, but not the implementation stack.
+Tower, Briefing Room, and Runway UX decomposition maps to browser components and browser Entity objects; the implementation stack remains SvelteKit plus the daemon gateway.
 
 ## Compatibility Review Against Current Code
 
@@ -288,7 +288,7 @@ This blueprint was checked against the current repository code and is intentiona
 | daemon remains authority | yes | preserved |
 | live mission and airport updates | yes, through daemon notifications | forward through SSE |
 | live session lifecycle updates | yes, through daemon notifications | forward through SSE |
-| session control commands | yes, through existing `session.*` methods | proxy unchanged |
+| session control commands | yes, through AgentSession Entity commands and explicit runtime input channels | proxy through the daemon gateway |
 | terminal-backed agent hosting | yes, through `TerminalAgentTransport` and shared session panes | relay through SvelteKit infrastructure |
 | daemon contract changes | not required for this blueprint | none introduced |
 

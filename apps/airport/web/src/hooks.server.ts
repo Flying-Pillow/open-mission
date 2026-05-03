@@ -2,21 +2,19 @@
 import { redirect, type Handle } from '@sveltejs/kit';
 import type { AppContextServerValue } from '$lib/client/context/app-context.svelte';
 import {
-    readGithubAuthToken
+    readGithubAuthToken,
+    readGithubSessionContext
 } from '$lib/server/github-auth.server';
 import { shouldRedirectUnavailableDaemonRoute } from '$lib/server/daemon/route-access';
 import {
     getDaemonRuntimeState,
-    readCachedDaemonSystemStatus,
     type DaemonRuntimeState,
 } from '$lib/server/daemon/health.server';
 import { resolveSurfacePath } from '$lib/server/daemon/context.server';
-import type { SystemStatus } from '@flying-pillow/mission-core';
 
 type GithubStatus = 'connected' | 'disconnected' | 'unknown';
 
 const DAEMON_STATE_REQUEST_TIMEOUT_MS = 1_500;
-const GITHUB_STATE_REQUEST_TIMEOUT_MS = 1_000;
 
 function resolveCanonicalOrigin(requestUrl: URL): string | undefined {
     const configuredCallbackUrl = process.env['GITHUB_OAUTH_CALLBACK_URL']?.trim();
@@ -39,24 +37,28 @@ async function ensureDaemonState(): Promise<DaemonRuntimeState> {
     });
 }
 
-function resolveGithubStatus(systemStatus?: SystemStatus): GithubStatus {
-    if (systemStatus?.github.authenticated) {
+function resolveGithubStatus(authenticated: boolean): GithubStatus {
+    if (authenticated) {
         return 'connected';
     }
-    if (systemStatus?.github.cliAvailable) {
-        return 'disconnected';
-    }
-    return 'unknown';
+    return 'disconnected';
 }
 
-function resolveGitHubContext(systemStatus?: SystemStatus): {
+function resolveGitHubContext(input: {
+    authenticated: boolean;
+    user?: {
+        name: string;
+        email?: string;
+        avatarUrl?: string;
+    };
+}): {
     githubStatus: GithubStatus;
     user?: AppContextServerValue['user'];
 } {
-    const githubStatus = resolveGithubStatus(systemStatus);
-    const githubUser = systemStatus?.github.user?.trim();
-    const githubEmail = systemStatus?.github.email?.trim();
-    const githubAvatarUrl = systemStatus?.github.avatarUrl?.trim();
+    const githubStatus = resolveGithubStatus(input.authenticated);
+    const githubUser = input.user?.name?.trim();
+    const githubEmail = input.user?.email?.trim();
+    const githubAvatarUrl = input.user?.avatarUrl?.trim();
 
     return {
         githubStatus,
@@ -81,14 +83,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 
     const daemonState = await ensureDaemonState();
     const githubAuthToken = await readGithubAuthToken(event.cookies);
-    const daemonSystemStatus = daemonState.running
-        ? await readCachedDaemonSystemStatus({
-            surfacePath: resolveSurfacePath(),
-            ...(githubAuthToken ? { authToken: githubAuthToken } : {}),
-            timeoutMs: GITHUB_STATE_REQUEST_TIMEOUT_MS,
-        })
-        : undefined;
-    const githubContext = resolveGitHubContext(daemonSystemStatus);
+    const githubSession = await readGithubSessionContext(event.cookies);
+    const githubContext = resolveGitHubContext(githubSession);
 
     event.locals.githubAuthToken = githubAuthToken;
     event.locals.appContext = {

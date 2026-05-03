@@ -2,14 +2,14 @@
 	import * as Sidebar from "$lib/components/ui/sidebar/index.js";
 	import type { WithoutChildren } from "$lib/utils.js";
 	import type { ComponentProps } from "svelte";
-	import type { Icon } from "@tabler/icons-svelte";
+	import Icon from "@iconify/svelte";
 
 	let {
 		items,
 		...restProps
-	}: { items: { title: string; url: string; icon: Icon }[] } & WithoutChildren<
-		ComponentProps<typeof Sidebar.Group>
-	> = $props();
+	}: {
+		items: { title: string; url: string; icon: string }[];
+	} & WithoutChildren<ComponentProps<typeof Sidebar.Group>> = $props();
 </script>
 
 <Sidebar.Group {...restProps}>
@@ -20,7 +20,7 @@
 					<Sidebar.MenuButton>
 						{#snippet child({ props })}
 							<a href={item.url} {...props}>
-								<item.icon />
+								<Icon icon={item.icon} />
 								<span>{item.title}</span>
 							</a>
 						{/snippet}

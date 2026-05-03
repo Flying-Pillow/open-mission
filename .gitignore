@@ -22,12 +22,6 @@ apps/airport/native/resources/runtime/
 # local test repositories
 .test
 
-# Generated source-adjacent outputs from local TypeScript builds
-**/*.d.ts
-**/*.d.ts.map
-**/*.js
-**/*.js.map
-
 # TypeScript
 *.tsbuildinfo
 

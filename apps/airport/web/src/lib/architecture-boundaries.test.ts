@@ -1,0 +1,74 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+
+const srcRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const sourceExtensions = new Set(['.ts', '.svelte']);
+const forbiddenWebPatterns = [
+    /api\.control\b/,
+    /api\.mission\b/,
+    /api\.airport\b/,
+    /mission\.terminal\./,
+    /session\.terminal\./,
+    /getAirportHomeSnapshot\b/,
+    /getAirportRouteData\b/,
+    /getRepositoryDataBundle\b/,
+    /airport-home/,
+    /EntityContract\.js/,
+    /entities\/[A-Za-z]+\/[A-Za-z]+Contract\.js/
+];
+
+const serverOnlyPathPatterns = [
+    /\.server\.ts$/,
+    /\/server\//,
+    /\/routes\/api\//,
+    /\+server\.ts$/,
+    /\+page\.server\.ts$/,
+    /\+layout\.server\.ts$/,
+    /\.test\.ts$/
+];
+
+describe('Airport web architecture boundaries', () => {
+    it('does not import daemon-only core modules from browser-capable source files', () => {
+        const offenders = listSourceFiles(srcRoot)
+            .filter((filePath) => !isServerOnlyPath(filePath))
+            .filter((filePath) => fs.readFileSync(filePath, 'utf8').includes('@flying-pillow/mission-core/node'))
+            .map(toRelativeSourcePath);
+
+        expect(offenders).toEqual([]);
+    });
+
+    it('does not use legacy control or contract surfaces', () => {
+        const offenders = listSourceFiles(srcRoot)
+            .filter((filePath) => !filePath.endsWith('.test.ts'))
+            .flatMap((filePath) => {
+                const source = fs.readFileSync(filePath, 'utf8');
+                return forbiddenWebPatterns.some((pattern) => pattern.test(source))
+                    ? [toRelativeSourcePath(filePath)]
+                    : [];
+            });
+
+        expect(offenders).toEqual([]);
+    });
+});
+
+function listSourceFiles(directory: string): string[] {
+    return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+        const entryPath = path.join(directory, entry.name);
+        if (entry.isDirectory()) {
+            return listSourceFiles(entryPath);
+        }
+
+        return sourceExtensions.has(path.extname(entry.name)) ? [entryPath] : [];
+    });
+}
+
+function isServerOnlyPath(filePath: string): boolean {
+    const normalizedPath = toRelativeSourcePath(filePath);
+    return serverOnlyPathPatterns.some((pattern) => pattern.test(normalizedPath));
+}
+
+function toRelativeSourcePath(filePath: string): string {
+    return path.relative(srcRoot, filePath).split(path.sep).join('/');
+}

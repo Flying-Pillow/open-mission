@@ -1,73 +1,46 @@
 <script lang="ts">
-    import PencilIcon from "@tabler/icons-svelte/icons/pencil";
+    import type { Artifact } from "$lib/components/entities/Artifact/Artifact.svelte.js";
+    import TaskCommandbar from "$lib/components/entities/Task/TaskCommandbar.svelte";
+    import type { Task } from "$lib/components/entities/Task/Task.svelte.js";
+    import Icon from "@iconify/svelte";
     import { Button } from "$lib/components/ui/button/index.js";
     import MarkdownViewer from "$lib/components/viewers/markdown.svelte";
-    import TaskActionbar from "$lib/components/entities/Task/TaskActionbar.svelte";
-    import type { MissionStageId } from "@flying-pillow/mission-core/types.js";
+    import {
+        isArtifactTextEditable,
+        resolveArtifactViewerKind,
+    } from "./ArtifactPresentation.js";
 
     let {
-        missionId,
-        repositoryId,
-        repositoryRootPath,
         refreshNonce,
-        artifactPath,
-        artifactLabel,
-        stageId,
-        taskId,
+        artifact,
+        task,
         onEditRequested,
-        onActionExecuted,
+        onCommandExecuted,
     }: {
-        missionId: string;
-        repositoryId: string;
-        repositoryRootPath: string;
         refreshNonce: number;
-        artifactPath?: string;
-        artifactLabel?: string;
-        stageId?: MissionStageId;
-        taskId?: string;
+        artifact?: Artifact;
+        task?: Task;
         onEditRequested: () => void;
-        onActionExecuted: () => Promise<void>;
+        onCommandExecuted: () => Promise<void>;
     } = $props();
 
-    const panelLabel = $derived(
-        artifactLabel ?? basename(artifactPath) ?? "Resolved artifact",
+    const panelLabel = $derived(artifact?.label ?? "Resolved artifact");
+    const artifactBodyLocation = $derived(artifact?.bodyLocationLabel);
+    const viewerKind = $derived(
+        resolveArtifactViewerKind(artifactBodyLocation),
     );
-    const artifactDocumentPromise = $derived(
-        artifactPath
-            ? loadArtifactDocument(missionId, repositoryRootPath, artifactPath)
-            : null,
+    const canEditArtifact = $derived(
+        isArtifactTextEditable(artifactBodyLocation),
     );
-
-    async function loadArtifactDocument(
-        missionId: string,
-        repositoryRootPath: string,
-        path: string,
-    ): Promise<{ content: string }> {
-        const searchParams = new URLSearchParams({
-            path,
-            repositoryRootPath,
-        });
-        const response = await fetch(
-            `/api/runtime/missions/${encodeURIComponent(missionId)}/documents?${searchParams.toString()}`,
+    const artifactBodyKey = $derived(
+        artifact ? `${artifact.id}:${refreshNonce}` : "none",
+    );
+    const canReadArtifactBody = $derived.by(() => {
+        refreshNonce;
+        return Boolean(
+            artifact && viewerKind !== "unsupported" && viewerKind !== "image",
         );
-        if (!response.ok) {
-            throw new Error(`Artifact load failed (${response.status}).`);
-        }
-
-        const payload = (await response.json()) as {
-            content: string;
-            updatedAt?: string;
-        };
-        return { content: payload.content };
-    }
-
-    function basename(filePath: string | undefined): string | undefined {
-        if (!filePath) {
-            return undefined;
-        }
-        const normalized = filePath.replace(/\\/g, "/");
-        return normalized.split("/").pop() ?? normalized;
-    }
+    });
 </script>
 
 <section
@@ -80,52 +53,80 @@
             </h2>
         </div>
 
-        {#if artifactPath}
+        <div class="flex flex-wrap items-center gap-2">
+            <TaskCommandbar {refreshNonce} {task} {onCommandExecuted} />
+        </div>
+
+        {#if artifact && canEditArtifact}
             <Button variant="outline" size="sm" onclick={onEditRequested}>
-                <PencilIcon />
+                <Icon icon="lucide:pencil" />
                 Edit
             </Button>
         {/if}
-
-        <TaskActionbar
-            {missionId}
-            {repositoryId}
-            {repositoryRootPath}
-            {refreshNonce}
-            {stageId}
-            {taskId}
-            {onActionExecuted}
-        />
     </header>
 
     <div class="min-h-0 overflow-auto p-2">
-        {#if artifactPath}
-            {#if artifactDocumentPromise}
-                {#await artifactDocumentPromise}
-                    <div
-                        class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
-                    >
-                        Loading artifact content...
-                    </div>
-                {:then artifactDocument}
-                    <div class="bg-background/80">
-                        <MarkdownViewer source={artifactDocument.content} />
-                    </div>
-                {:catch loadError}
-                    <div
-                        class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-rose-600"
-                    >
-                        {loadError instanceof Error
-                            ? loadError.message
-                            : String(loadError)}
-                    </div>
-                {/await}
+        {#if artifact}
+            {#if canReadArtifactBody}
+                {#key artifactBodyKey}
+                    {#await artifact.read({ executionContext: "render" })}
+                        <div
+                            class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
+                        >
+                            Loading artifact...
+                        </div>
+                    {:then artifactBodyResult}
+                        {@const artifactBody = artifactBodyResult}
+                        {#if viewerKind === "markdown"}
+                            {#if typeof artifactBody.body !== "string"}
+                                <div
+                                    class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-rose-600"
+                                >
+                                    This artifact body is not text.
+                                </div>
+                            {:else}
+                                <div class="bg-background/80">
+                                    <MarkdownViewer
+                                        source={artifactBody.body}
+                                    />
+                                </div>
+                            {/if}
+                        {:else if typeof artifactBody.body !== "string"}
+                            <div
+                                class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-rose-600"
+                            >
+                                This artifact body is not text.
+                            </div>
+                        {:else}
+                            <pre
+                                class="min-h-[24rem] overflow-auto rounded border bg-background/80 p-4 font-mono text-sm leading-6 text-foreground whitespace-pre-wrap">{artifactBody.body}</pre>
+                        {/if}
+                    {:catch loadError}
+                        <div
+                            class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-rose-600"
+                        >
+                            {loadError instanceof Error
+                                ? loadError.message
+                                : String(loadError)}
+                        </div>
+                    {/await}
+                {/key}
+            {:else}
+                <div
+                    class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
+                >
+                    {#if viewerKind === "image"}
+                        Image preview is selected for this artifact.
+                    {:else}
+                        Preview is unavailable for this artifact.
+                    {/if}
+                </div>
             {/if}
         {:else}
             <div
                 class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
             >
-                Select a stage, task, or artifact row to resolve the document
+                Select a stage, task, or artifact row to resolve the artifact
                 that belongs in the operator viewer pane.
             </div>
         {/if}

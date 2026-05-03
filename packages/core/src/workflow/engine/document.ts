@@ -1,21 +1,21 @@
 import {
     MISSION_WORKFLOW_RUNTIME_SCHEMA_VERSION,
-    type MissionAgentSessionRuntimeState,
+    type AgentSessionRuntimeState,
     type MissionStageId,
     type MissionWorkflowConfigurationSnapshot,
     type MissionWorkflowEvent,
     type MissionWorkflowEventRecord,
     type MissionWorkflowRequest,
-    type MissionRuntimeRecord,
+    type MissionStateData,
     type MissionWorkflowSignal,
     type MissionWorkflowRuntimeState,
-    type WorkflowGlobalSettings
+    type WorkflowDefinition
 } from './types.js';
 import { reduceMissionWorkflowEvent } from './reducer.js';
 import { ensureMissionWorkflowEventAccepted } from './validation.js';
 
 export interface MissionWorkflowIngestResult {
-    document: MissionRuntimeRecord;
+    document: MissionStateData;
     eventRecord: MissionWorkflowEventRecord;
     signals: MissionWorkflowSignal[];
     requests: MissionWorkflowRequest[];
@@ -24,11 +24,11 @@ export interface MissionWorkflowIngestResult {
 export function createMissionWorkflowConfigurationSnapshot(input: {
     createdAt?: string;
     workflowVersion: string;
-    workflow: WorkflowGlobalSettings;
+    workflow: WorkflowDefinition;
 }): MissionWorkflowConfigurationSnapshot {
     return {
         createdAt: input.createdAt ?? new Date().toISOString(),
-        source: 'global-settings',
+        source: 'workflow-definition',
         workflowVersion: input.workflowVersion,
         workflow: structuredClone(input.workflow)
     };
@@ -76,12 +76,12 @@ export function createInitialMissionWorkflowRuntimeState(
     return createDraftMissionWorkflowRuntimeState(configuration, createdAt);
 }
 
-export function createMissionRuntimeRecord(input: {
+export function createMissionStateData(input: {
     missionId: string;
     configuration: MissionWorkflowConfigurationSnapshot;
     runtime?: MissionWorkflowRuntimeState;
     createdAt?: string;
-}): MissionRuntimeRecord {
+}): MissionStateData {
     const createdAt = input.createdAt ?? input.configuration.createdAt;
     return {
         schemaVersion: MISSION_WORKFLOW_RUNTIME_SCHEMA_VERSION,
@@ -94,12 +94,12 @@ export function createMissionRuntimeRecord(input: {
 }
 
 export function ingestMissionWorkflowEvent(
-    document: MissionRuntimeRecord,
+    document: MissionStateData,
     event: MissionWorkflowEvent
 ): MissionWorkflowIngestResult {
     ensureMissionWorkflowEventAccepted(document, event);
     const reduction = reduceMissionWorkflowEvent(document.runtime, event, document.configuration);
-    const nextDocument: MissionRuntimeRecord = {
+    const nextDocument: MissionStateData = {
         ...document,
         runtime: reduction.nextState
     };
@@ -111,17 +111,16 @@ export function ingestMissionWorkflowEvent(
     };
 }
 
-export function toMissionAgentSessionRuntimeState(
-    session: MissionAgentSessionRuntimeState
-): MissionAgentSessionRuntimeState {
+export function toAgentSessionRuntimeState(
+    session: AgentSessionRuntimeState
+): AgentSessionRuntimeState {
     return {
         sessionId: session.sessionId,
         taskId: session.taskId,
         runnerId: session.runnerId,
         ...(session.transportId ? { transportId: session.transportId } : {}),
         ...(session.sessionLogPath ? { sessionLogPath: session.sessionLogPath } : {}),
-        ...(session.terminalSessionName ? { terminalSessionName: session.terminalSessionName } : {}),
-        ...(session.terminalPaneId ? { terminalPaneId: session.terminalPaneId } : {}),
+        ...(session.terminalHandle ? { terminalHandle: { ...session.terminalHandle } } : {}),
         lifecycle: session.lifecycle,
         launchedAt: session.launchedAt,
         updatedAt: session.updatedAt,

@@ -7,6 +7,14 @@
                 "Mission Daemon"
             ],
             "stopAll": true
+        },
+        {
+            "name": "Airport Web Full Stack",
+            "configurations": [
+                "Airport Web Server",
+                "Airport Web Client"
+            ],
+            "stopAll": true
         }
     ],
     "configurations": [
@@ -30,6 +38,40 @@
             ],
             "console": "integratedTerminal",
             "internalConsoleOptions": "neverOpen"
+        },
+        {
+            "name": "Airport Web Server",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/apps/airport/web",
+            "runtimeExecutable": "pnpm",
+            "runtimeArgs": [
+                "run",
+                "dev"
+            ],
+            "env": {
+                "NODE_OPTIONS": "--inspect"
+            },
+            "autoAttachChildProcesses": true,
+            "skipFiles": [
+                "<node_internals>/**",
+                "**/node_modules/**"
+            ],
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen"
+        },
+        {
+            "name": "Airport Web Client",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:5174",
+            "webRoot": "${workspaceFolder}/apps/airport/web",
+            "sourceMapPathOverrides": {
+                "/@vite/client": "${workspaceFolder}/node_modules/vite/dist/client/client.mjs",
+                "/src/*": "${webRoot}/src/*",
+                "/@fs/*": "*",
+                "/*": "${webRoot}/*"
+            }
         }
     ]
 }

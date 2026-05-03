@@ -1,4 +1,0 @@
-
-> @flying-pillow/mission-core@0.1.0-alpha.0 build /mission/packages/core
-> rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./build/workflow/engine/copyTemplateFiles.js
-

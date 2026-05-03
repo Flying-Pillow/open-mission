@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { mode } from "mode-watcher";
 	import { renderMermaidDiagrams } from "../../utils/mermaid.ts";
 	import { tick } from "svelte";
 	import type { Snippet } from "svelte";
@@ -26,7 +27,11 @@
 	});
 </script>
 
-<article bind:this={articleElement} class="markdown markdown-body">
+<article
+	bind:this={articleElement}
+	class="markdown markdown-body"
+	data-theme={mode.current}
+>
 	{@render children()}
 </article>
 

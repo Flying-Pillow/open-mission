@@ -1,9 +1,9 @@
 ---
-agent: "copilot-cli"
+agent: "copilot"
 ---
 
 # Debrief
 
-Run the repo-wide end-to-end validation required for the mission. Record the simulator run results, residual risks, and release readiness in AUDIT.md.
+Run mission-level validation and update AUDIT.md.
 
-Use the product artifacts in this mission folder as the canonical context boundary.
+Separate mission regressions from baseline failures. Record risks and smallest follow-ups.

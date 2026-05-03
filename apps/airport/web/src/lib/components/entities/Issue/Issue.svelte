@@ -1,34 +1,50 @@
 <script lang="ts">
     import { goto } from "$app/navigation";
-    import EyeIcon from "@tabler/icons-svelte/icons/eye";
-    import PlayerPlayIcon from "@tabler/icons-svelte/icons/player-play";
+    import Icon from "@iconify/svelte";
+    import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
-    import type { Repository } from "$lib/client/entities/Repository";
-    import type { IssueSummary } from "$lib/components/entities/types";
+    import type { TrackedIssueSummaryType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
 
     let {
-        repository,
         issue,
         issueLoadingNumber,
         onViewIssue,
         onStartIssueError,
     }: {
-        repository: Repository;
-        issue: IssueSummary;
+        issue: TrackedIssueSummaryType;
         issueLoadingNumber: number | null;
         onViewIssue: (issueNumber: number) => void;
         onStartIssueError?: (message: string | null) => void;
     } = $props();
+    const repositoryScope = getScopedRepositoryContext();
+    const activeRepository = $derived.by(() => {
+        const repository = repositoryScope.repository;
+        if (!repository) {
+            throw new Error(
+                "Issue commands require a scoped repository context.",
+            );
+        }
+
+        return repository;
+    });
 
     let missionCreationPending = $state(false);
+    const canStartMission = $derived(activeRepository.data.isInitialized);
 
     async function startFromIssue(): Promise<void> {
         missionCreationPending = true;
         onStartIssueError?.(null);
 
         try {
-            const result = await repository.startMissionFromIssue(issue.number);
+            if (!canStartMission) {
+                throw new Error(
+                    "Complete Repository setup before starting regular missions.",
+                );
+            }
+            const result = await activeRepository.startMissionFromIssue(
+                issue.number,
+            );
             await goto(result.redirectTo);
         } catch (error) {
             onStartIssueError?.(
@@ -65,7 +81,7 @@
                 onclick={() => onViewIssue(issue.number)}
                 disabled={issueLoadingNumber === issue.number}
             >
-                <EyeIcon class="size-4" />
+                <Icon icon="lucide:eye" class="size-4" />
                 {issueLoadingNumber === issue.number
                     ? "Loading..."
                     : "View issue"}
@@ -73,9 +89,12 @@
             <Button
                 type="button"
                 onclick={() => void startFromIssue()}
-                disabled={missionCreationPending}
+                disabled={missionCreationPending || !canStartMission}
+                title={canStartMission
+                    ? "Start mission"
+                    : "Repository setup required"}
             >
-                <PlayerPlayIcon class="size-4" />
+                <Icon icon="lucide:play" class="size-4" />
                 {missionCreationPending ? "Starting..." : "Start mission"}
             </Button>
         </div>

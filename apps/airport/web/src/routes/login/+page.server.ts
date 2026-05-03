@@ -15,9 +15,14 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     const deviceConfigurationError = getGitHubDeviceConfigurationError();
     const deviceAvailable = hasGitHubDeviceConfiguration();
     const githubStatus = locals.appContext.githubStatus;
+    const appContext = {
+        githubStatus: locals.appContext.githubStatus,
+        user: locals.appContext.user,
+    };
 
     if (githubStatus !== 'connected') {
         return {
+            appContext,
             redirectTo,
             error: authError,
             device: {
@@ -36,6 +41,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     }
 
     return {
+        appContext,
         redirectTo,
         error: authError,
         device: {

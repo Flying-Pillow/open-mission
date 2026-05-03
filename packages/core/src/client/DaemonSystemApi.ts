@@ -1,10 +1,10 @@
-import type { SystemStatus } from '../types.js';
+import type { SystemState } from '../system/SystemContract.js';
 import { DaemonClient } from './DaemonClient.js';
 
 export class DaemonSystemApi {
 	public constructor(private readonly client: DaemonClient) { }
 
-	public async getStatus(options: { timeoutMs?: number } = {}): Promise<SystemStatus> {
-		return this.client.request<SystemStatus>('system.status', undefined, options);
+	public async getStatus(options: { timeoutMs?: number } = {}): Promise<SystemState> {
+		return this.client.request<SystemState>('system.status', undefined, options);
 	}
 }

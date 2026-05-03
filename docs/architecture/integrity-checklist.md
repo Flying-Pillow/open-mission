@@ -37,4 +37,4 @@ These are architecture regressions, not cosmetic issues:
 - Airport must not persist state into `mission.json`.
 - Workflow code must not start treating zellij pane ids as mission runtime truth.
 - Provider adapters must not become the authority for mission lifecycle transitions.
-- Repository registration in Mission config must not become the canonical source of repository workflow policy.
+- Mission config must not become the canonical source of repository workflow policy.

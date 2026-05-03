@@ -1,10 +1,11 @@
 export * from './index.js';
-export * from './repository/initializeRepository.js';
-export * from './lib/daemonConfig.js';
 export * from './lib/connectAirportDaemon.js';
-export * from './lib/repositoryIdentity.js';
-export * from './lib/repoConfig.js';
 export * from './lib/config.js';
 export * from './lib/workspacePaths.js';
 export * from './daemon/daemonPaths.js';
+export * from './daemon/protocol/contracts.js';
 export * from './daemon/runtime/DaemonProcessControl.js';
+export * from './entities/Entity/Entity.js';
+export * from './system/SystemContract.js';
+export { Repository as RepositoryEntity, type RepositoryIdentity, type RepositoryScaffolding } from './entities/Repository/Repository.js';
+export { Mission as MissionEntity } from './entities/Mission/Mission.js';

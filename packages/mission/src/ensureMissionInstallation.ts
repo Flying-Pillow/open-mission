@@ -17,10 +17,11 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import {
 	ensureMissionConfig,
-	getMissionRuntimeDirectory,
+	getMissionManagedDependenciesRoot,
 	getMissionConfigPath,
 	readMissionConfig,
-	resolveMissionWorkspaceRoot,
+	resolveMissionsRoot,
+	resolveRepositoriesRoot,
 	type MissionConfig,
 	writeMissionConfig
 } from '@flying-pillow/mission-core/node';
@@ -53,9 +54,15 @@ export async function ensureMissionInstallation(options: {
 		intro('Mission setup');
 	}
 
-	const missionWorkspaceRoot = await ensureWorkspaceRoot(config, options.interactive);
-	if (missionWorkspaceRoot !== config.missionWorkspaceRoot) {
-		config = { ...config, missionWorkspaceRoot };
+	const missionsRoot = await ensureMissionsRoot(config, options.interactive);
+	if (missionsRoot !== config.missionsRoot) {
+		config = { ...config, missionsRoot };
+		changed = true;
+	}
+
+	const repositoriesRoot = await ensureRepositoriesRoot(config, options.interactive);
+	if (repositoriesRoot !== config.repositoriesRoot) {
+		config = { ...config, repositoriesRoot };
 		changed = true;
 	}
 
@@ -80,8 +87,9 @@ export async function ensureMissionInstallation(options: {
 		note(
 			[
 				`config: ${getMissionConfigPath()}`,
-				`missions: ${resolveMissionWorkspaceRoot(config.missionWorkspaceRoot)}`,
-				`runtime: ${getMissionRuntimeDirectory()}`,
+				`missionsRoot: ${resolveMissionsRoot(config)}`,
+				`repositoriesRoot: ${resolveRepositoriesRoot(config)}`,
+				`managedDependenciesRoot: ${getMissionManagedDependenciesRoot()}`,
 				`gh: ${config.ghBinary ?? 'gh'}`
 			].join('\n'),
 			'Mission setup'
@@ -96,42 +104,43 @@ export function getMissionInstallationOutput(config: MissionConfig) {
 	return {
 		configPath: getMissionConfigPath(),
 		config,
-		missionsPath: resolveMissionWorkspaceRoot(config.missionWorkspaceRoot),
-		runtimePath: getMissionRuntimeDirectory()
+		missionsRoot: resolveMissionsRoot(config),
+		repositoriesRoot: resolveRepositoriesRoot(config),
+		managedDependenciesRoot: getMissionManagedDependenciesRoot()
 	};
 }
 
-async function ensureWorkspaceRoot(config: MissionConfig, interactive: boolean): Promise<string> {
-	const configuredRoot = config.missionWorkspaceRoot ?? 'missions';
-	const resolvedRoot = resolveMissionWorkspaceRoot(configuredRoot);
+async function ensureMissionsRoot(config: MissionConfig, interactive: boolean): Promise<string> {
+	const configuredRoot = config.missionsRoot;
+	const resolvedRoot = resolveMissionsRoot(config);
 	try {
 		await mkdir(resolvedRoot, { recursive: true });
 		return configuredRoot;
 	} catch (error) {
 		if (!interactive) {
 			throw new Error(
-				`Mission could not create '${resolvedRoot}'. Run 'mission install' to choose a different mission workspace root.`
+				`Mission could not create '${resolvedRoot}'. Run 'mission install' to choose a different missions root.`
 			);
 		}
 		note(
 			`${resolvedRoot}\n${error instanceof Error ? error.message : String(error)}`,
-			'Mission workspace root'
+			'Missions root'
 		);
 		const answer = await text({
-			message: 'Choose a mission workspace root',
+			message: 'Choose a missions root',
 			placeholder: configuredRoot,
 			defaultValue: configuredRoot,
 			validate(value: unknown) {
 				const candidate = String(value ?? '').trim();
 				if (!candidate) {
-					return 'Mission workspace root is required.';
+					return 'Missions root is required.';
 				}
 				try {
-					const resolvedCandidate = resolveMissionWorkspaceRoot(candidate);
+					const resolvedCandidate = path.resolve(candidate);
 					accessSync(path.dirname(resolvedCandidate), constants.W_OK);
 					return;
 				} catch {
-					return 'Mission needs a writable parent directory for the workspace root.';
+					return 'Mission needs a writable parent directory for the missions root.';
 				}
 			}
 		});
@@ -215,9 +224,51 @@ async function ensureBinary(input: {
 	return String(answer).trim();
 }
 
+async function ensureRepositoriesRoot(config: MissionConfig, interactive: boolean): Promise<string> {
+	const configuredRoot = config.repositoriesRoot;
+	const resolvedRoot = resolveRepositoriesRoot(config);
+	try {
+		await mkdir(resolvedRoot, { recursive: true });
+		return configuredRoot;
+	} catch (error) {
+		if (!interactive) {
+			throw new Error(
+				`Mission could not create '${resolvedRoot}'. Run 'mission install' to choose a different repositories root.`
+			);
+		}
+		note(
+			`${resolvedRoot}\n${error instanceof Error ? error.message : String(error)}`,
+			'Repositories root'
+		);
+		const answer = await text({
+			message: 'Choose a repositories root',
+			placeholder: configuredRoot,
+			defaultValue: configuredRoot,
+			validate(value: unknown) {
+				const candidate = String(value ?? '').trim();
+				if (!candidate) {
+					return 'Repositories root is required.';
+				}
+				try {
+					const resolvedCandidate = path.resolve(candidate);
+					accessSync(path.dirname(resolvedCandidate), constants.W_OK);
+					return;
+				} catch {
+					return 'Mission needs a writable parent directory for the repositories root.';
+				}
+			}
+		});
+		if (isCancel(answer)) {
+			cancel('Mission setup cancelled.');
+			throw new Error('Mission setup cancelled.');
+		}
+		return String(answer).trim();
+	}
+}
+
 function isManagedDependencyPath(candidatePath: string, id: ManagedDependencyId): boolean {
 	const normalizedCandidate = path.resolve(candidatePath);
-	const dependencyRoot = path.resolve(path.join(getMissionRuntimeDirectory(), id));
+	const dependencyRoot = path.resolve(path.join(getMissionManagedDependenciesRoot(), id));
 	return normalizedCandidate === dependencyRoot || normalizedCandidate.startsWith(`${dependencyRoot}${path.sep}`);
 }
 
@@ -324,7 +375,7 @@ function getManagedDependency(id: ManagedDependencyId): ManagedDependency {
 }
 
 function resolveManagedDependencyRoot(dependency: ManagedDependency): string {
-	return path.join(getMissionRuntimeDirectory(), dependency.id, dependency.releaseTag);
+	return path.join(getMissionManagedDependenciesRoot(), dependency.id, dependency.releaseTag);
 }
 
 function isManagedDependencyUsable(executablePath: string): boolean {

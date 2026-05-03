@@ -1,14 +1,14 @@
-import type { AirportProjectionSet, AirportState, PersistedAirportIntent } from './airport/types.js';
-import type { MissionAgentSessionRecord } from './daemon/protocol/contracts.js';
-import type { MissionDaemonSettings } from './lib/daemonConfig.js';
-import { MISSION_STAGE_IDS, type MissionStageId } from './workflow/stages.js';
+import type { SystemState as RuntimeSystemState } from './system/SystemContract.js';
+import type { AgentSessionRecord } from './daemon/protocol/contracts.js';
+import type { Repository } from './entities/Repository/Repository.js';
+import type { RepositorySettingsType } from './entities/Repository/RepositorySchema.js';
 import {
 	MISSION_AGENT_SESSION_LIFECYCLE_STATES,
 	MISSION_LIFECYCLE_STATES,
 	MISSION_STAGE_DERIVED_STATES,
 	MISSION_TASK_LIFECYCLE_STATES,
 	type MissionGateProjection,
-	type MissionAgentSessionLifecycleState,
+	type AgentSessionLifecycleState,
 	type MissionLifecycleState,
 	type MissionPanicState,
 	type MissionPauseState,
@@ -19,6 +19,7 @@ import {
 	type MissionWorkflowConfigurationSnapshot
 } from './workflow/engine/types.js';
 import {
+	MISSION_STAGE_IDS,
 	MISSION_ARTIFACT_KEYS,
 	MISSION_ARTIFACT_LABELS,
 	MISSION_ARTIFACTS,
@@ -32,12 +33,13 @@ import {
 	isMissionArtifactKey,
 	isMissionStageId,
 	isMissionStageProgress,
+	type MissionStageId,
 	type MissionArtifactKey,
 	type MissionTaskPairingDefinition,
 	type MissionStageProgress,
 	type MissionTaskStatusIntent,
 	type MissionWorkflowTaskStatus
-} from './workflow/manifest.js';
+} from './workflow/mission/manifest.js';
 
 export {
 	MISSION_AGENT_SESSION_LIFECYCLE_STATES,
@@ -61,7 +63,7 @@ export {
 
 export type {
 	MissionArtifactKey,
-	MissionAgentSessionLifecycleState,
+	AgentSessionLifecycleState,
 	MissionLifecycleState,
 	MissionStageId,
 	MissionStageDerivedState,
@@ -96,7 +98,7 @@ export type MissionType = 'feature' | 'fix' | 'docs' | 'refactor' | 'task';
 export type MissionTaskStatus = MissionTaskLifecycleState;
 export type MissionTaskAgent = string;
 
-export type OperatorActionScope = 'mission' | 'task' | 'session' | 'generation';
+export type OperatorActionScope = 'mission' | 'task' | 'artifact' | 'session' | 'generation';
 export type OperatorActionFlowSelectionMode = 'single' | 'multiple';
 export type OperatorActionFlowTextMode = 'compact' | 'expanded';
 export type OperatorActionFlowTextFormat = 'plain' | 'markdown';
@@ -144,7 +146,7 @@ export type OperatorActionUiMetadata = {
 	confirmationPrompt?: string;
 };
 
-export type OperatorActionPresentationScope = 'repository' | 'mission' | 'stage' | 'task' | 'session';
+export type OperatorActionPresentationScope = 'repository' | 'mission' | 'stage' | 'task' | 'artifact' | 'session';
 
 export type OperatorActionPresentationTarget = {
 	scope: OperatorActionPresentationScope;
@@ -155,6 +157,7 @@ export type OperatorActionTargetContext = {
 	repositoryId?: string;
 	stageId?: MissionStageId;
 	taskId?: string;
+	artifactPath?: string;
 	sessionId?: string;
 };
 
@@ -271,7 +274,7 @@ export type MissionRecord = {
 	createdAt: string;
 	stage: MissionStageId;
 	deliveredAt?: string;
-	agentSessions: MissionAgentSessionRecord[];
+	agentSessions: AgentSessionRecord[];
 };
 
 export type MissionGateResult = {
@@ -332,14 +335,6 @@ export type RepositoryCandidate = {
 	githubRepository?: string;
 };
 
-export type GitHubVisibleRepository = {
-	fullName: string;
-	ownerLogin?: string;
-	htmlUrl?: string;
-	visibility: 'private' | 'public';
-	archived: boolean;
-};
-
 export type GitHubIssueDetail = {
 	number: number;
 	title: string;
@@ -381,7 +376,7 @@ export type ContextSelection = {
 	missionId?: string;
 	stageId?: MissionStageId;
 	taskId?: string;
-	artifactId?: string;
+	artifact?: string;
 	agentSessionId?: string;
 };
 
@@ -404,7 +399,7 @@ export type MissionContext = {
 	currentStage?: MissionStageId;
 	lifecycleState?: MissionLifecycleState;
 	taskIds: string[];
-	artifactIds: string[];
+	artifacts: string[];
 	sessionIds: string[];
 };
 
@@ -422,12 +417,12 @@ export type TaskContext = {
 	instructionSummary: string;
 	lifecycleState: MissionTaskStatus;
 	dependencyIds: string[];
-	primaryArtifactId?: string;
+	primaryArtifact?: string;
 	agentSessionIds?: string[];
 };
 
 export type ArtifactContext = {
-	artifactId: string;
+	id: string;
 	missionId?: string;
 	repositoryId?: string;
 	ownerTaskId?: string;
@@ -445,8 +440,7 @@ export type AgentSessionContext = {
 	lifecycleState: string;
 	promptTitle?: string;
 	transportId?: string;
-	terminalSessionName?: string;
-	terminalPaneId?: string;
+	terminalHandle?: AgentSessionRecord['terminalHandle'];
 	createdAt?: string;
 	lastUpdatedAt?: string;
 };
@@ -460,27 +454,7 @@ export type ContextGraph = {
 	agentSessions: Record<string, AgentSessionContext>;
 };
 
-export type SystemState = {
-	version: number;
-	domain: ContextGraph;
-	missionOperatorViews: Record<string, MissionOperatorProjectionContext>;
-	airport: AirportState;
-	airports: {
-		activeRepositoryId?: string;
-		repositories: Record<string, {
-			repositoryId: string;
-			repositoryRootPath: string;
-			airport: AirportState;
-			persistedIntent: PersistedAirportIntent;
-		}>;
-	};
-};
-
-export type SystemSnapshot = {
-	state: SystemState;
-	airportProjections: AirportProjectionSet;
-	airportRegistryProjections: Record<string, AirportProjectionSet>;
-};
+export type SystemSnapshot = RuntimeSystemState;
 
 export type RepositoryControlStatus = {
 	controlRoot: string;
@@ -488,28 +462,16 @@ export type RepositoryControlStatus = {
 	settingsPath: string;
 	worktreesPath: string;
 	currentBranch?: string;
-	settings: MissionDaemonSettings;
+	settings: RepositorySettingsType;
 	isGitRepository: boolean;
 	initialized: boolean;
 	settingsPresent: boolean;
-	settingsComplete: boolean;
 	trackingProvider?: 'github';
 	githubRepository?: string;
 	issuesConfigured: boolean;
 	availableMissionCount: number;
 	problems: string[];
 	warnings: string[];
-};
-
-export type SystemStatus = {
-	github: {
-		cliAvailable: boolean;
-		authenticated: boolean;
-		user?: string;
-		email?: string;
-		avatarUrl?: string;
-		detail?: string;
-	};
 };
 
 export type StageData = MissionStageStatus;
@@ -552,11 +514,11 @@ export type MissionResolvedSelection = {
 	missionId?: string;
 	stageId?: MissionStageId;
 	taskId?: string;
-	activeMissionArtifactId?: string;
+	activeMissionArtifact?: string;
 	activeMissionArtifactPath?: string;
-	activeInstructionArtifactId?: string;
+	activeInstructionArtifact?: string;
 	activeInstructionPath?: string;
-	activeStageResultArtifactId?: string;
+	activeStageResultArtifact?: string;
 	activeStageResultPath?: string;
 	activeAgentSessionId?: string;
 };
@@ -583,7 +545,7 @@ export type OperatorStatus = {
 	activeTasks?: MissionTaskState[];
 	readyTasks?: MissionTaskState[];
 	stages?: MissionStageStatus[];
-	agentSessions?: MissionAgentSessionRecord[];
+	agentSessions?: AgentSessionRecord[];
 	tower?: MissionTowerProjection;
 	workflow?: {
 		lifecycle: MissionLifecycleState;
@@ -598,7 +560,7 @@ export type OperatorStatus = {
 	};
 	recommendedAction?: string;
 	availableMissions?: MissionSelectionCandidate[];
-	availableRepositories?: RepositoryCandidate[];
+	availableRepositories?: Repository[];
 	preparation?: MissionPreparationStatus;
 };
 

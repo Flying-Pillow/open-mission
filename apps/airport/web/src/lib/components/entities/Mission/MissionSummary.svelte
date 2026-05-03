@@ -1,18 +1,27 @@
 <script lang="ts">
-    import type { Mission } from "$lib/client/entities/Mission";
-    import type { Stage } from "$lib/client/entities/Stage";
+    import { maybeGetScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import type { Mission } from "$lib/components/entities/Mission/Mission.svelte.js";
+    import type { Stage } from "$lib/components/entities/Stage/Stage.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
 
-    let {
-        selectedMissionId,
-        selectedMission,
-    }: {
-        selectedMissionId?: string;
-        selectedMission?: Mission;
-    } = $props();
+    const missionScope = maybeGetScopedMissionContext();
+    const appContext = getAppContext();
+    const mission = $derived.by(() => {
+        const resolvedMission =
+            missionScope?.mission ?? appContext.airport.activeMission;
+        if (!resolvedMission) {
+            throw new Error(
+                "Mission summary requires a scoped or active mission.",
+            );
+        }
 
-    const stages = $derived(selectedMission?.listStages() ?? []);
+        return resolvedMission;
+    });
+    const missionId = $derived(mission.missionId);
+
+    const stages = $derived<Stage[]>(mission.listStages());
     const completedStageCount = $derived(
         stages.filter((stage) => stage.lifecycle === "completed").length,
     );
@@ -21,9 +30,9 @@
             ? 0
             : Math.round((completedStageCount / stages.length) * 100),
     );
-    let missionActionPending = $state<string | null>(null);
-    let itemActionPending = $state<string | null>(null);
-    let actionError = $state<string | null>(null);
+    let missionCommandPending = $state<string | null>(null);
+    let itemCommandPending = $state<string | null>(null);
+    let commandError = $state<string | null>(null);
 
     function stageTone(stage: Stage): string {
         switch (stage.lifecycle) {
@@ -38,35 +47,35 @@
         }
     }
 
-    async function runMissionAction(
-        actionId: string,
+    async function runMissionCommand(
+        commandId: string,
         run: () => Promise<unknown>,
     ): Promise<void> {
-        actionError = null;
-        missionActionPending = actionId;
+        commandError = null;
+        missionCommandPending = commandId;
         try {
             await run();
         } catch (error) {
-            actionError =
+            commandError =
                 error instanceof Error ? error.message : String(error);
         } finally {
-            missionActionPending = null;
+            missionCommandPending = null;
         }
     }
 
-    async function runItemAction(
-        actionId: string,
+    async function runItemCommand(
+        commandId: string,
         run: () => Promise<unknown>,
     ): Promise<void> {
-        actionError = null;
-        itemActionPending = actionId;
+        commandError = null;
+        itemCommandPending = commandId;
         try {
             await run();
         } catch (error) {
-            actionError =
+            commandError =
                 error instanceof Error ? error.message : String(error);
         } finally {
-            itemActionPending = null;
+            itemCommandPending = null;
         }
     }
 </script>
@@ -76,22 +85,20 @@
 >
     <div class="flex items-center justify-between gap-4">
         <h2 class="text-lg font-semibold text-foreground">Selected mission</h2>
-        {#if selectedMissionId}
-            <Badge variant="secondary">{selectedMissionId}</Badge>
+        {#if missionId}
+            <Badge variant="secondary">{missionId}</Badge>
         {/if}
     </div>
 
-    {#if selectedMission}
+    {#if mission}
         <div class="mt-4 space-y-4">
             <header class="rounded-xl border bg-background/70 p-4">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <p class="text-sm font-semibold text-foreground">
-                        Lifecycle: {selectedMission.workflowLifecycle ??
-                            "unknown"}
+                        Lifecycle: {mission.workflowLifecycle ?? "unknown"}
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        Updated: {selectedMission.workflowUpdatedAt ??
-                            "Unknown"}
+                        Updated: {mission.workflowUpdatedAt ?? "Unknown"}
                     </p>
                 </div>
                 <div class="mt-3 h-2 rounded-full bg-muted">
@@ -109,86 +116,26 @@
                     <span>{progressPercent}%</span>
                 </div>
                 <div class="mt-4 flex flex-wrap gap-2">
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={missionActionPending !== null}
-                        onclick={() =>
-                            runMissionAction("pause", () =>
-                                selectedMission.pause(),
-                            )}
-                    >
-                        {missionActionPending === "pause"
-                            ? "Pausing..."
-                            : "Pause"}
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={missionActionPending !== null}
-                        onclick={() =>
-                            runMissionAction("resume", () =>
-                                selectedMission.resume(),
-                            )}
-                    >
-                        {missionActionPending === "resume"
-                            ? "Resuming..."
-                            : "Resume"}
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={missionActionPending !== null}
-                        onclick={() =>
-                            runMissionAction("panic", () =>
-                                selectedMission.panic(),
-                            )}
-                    >
-                        {missionActionPending === "panic"
-                            ? "Stopping..."
-                            : "Panic"}
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={missionActionPending !== null}
-                        onclick={() =>
-                            runMissionAction("clearPanic", () =>
-                                selectedMission.clearPanic(),
-                            )}
-                    >
-                        {missionActionPending === "clearPanic"
-                            ? "Clearing..."
-                            : "Clear panic"}
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={missionActionPending !== null}
-                        onclick={() =>
-                            runMissionAction("restartQueue", () =>
-                                selectedMission.restartQueue(),
-                            )}
-                    >
-                        {missionActionPending === "restartQueue"
-                            ? "Restarting..."
-                            : "Restart queue"}
-                    </Button>
-                    <Button
-                        size="sm"
-                        disabled={missionActionPending !== null}
-                        onclick={() =>
-                            runMissionAction("deliver", () =>
-                                selectedMission.deliver(),
-                            )}
-                    >
-                        {missionActionPending === "deliver"
-                            ? "Delivering..."
-                            : "Deliver"}
-                    </Button>
+                    {#each mission.commands as command (command.commandId)}
+                        <Button
+                            size="sm"
+                            variant={command.variant ?? "outline"}
+                            disabled={missionCommandPending !== null ||
+                                command.disabled}
+                            title={command.disabledReason}
+                            onclick={() =>
+                                runMissionCommand(command.commandId, () =>
+                                    mission.executeCommand(command.commandId),
+                                )}
+                        >
+                            {missionCommandPending === command.commandId
+                                ? `${command.label}...`
+                                : command.label}
+                        </Button>
+                    {/each}
                 </div>
-                {#if actionError}
-                    <p class="mt-3 text-sm text-rose-600">{actionError}</p>
+                {#if commandError}
+                    <p class="mt-3 text-sm text-rose-600">{commandError}</p>
                 {/if}
                 <div class="mt-4 flex gap-2 overflow-x-auto pb-1">
                     {#each stages as stage (stage.stageId)}
@@ -283,54 +230,31 @@
                                                 <div
                                                     class="mt-2 flex flex-wrap gap-2"
                                                 >
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        disabled={itemActionPending !==
-                                                            null}
-                                                        onclick={() =>
-                                                            runItemAction(
-                                                                `task:start:${task.taskId}`,
-                                                                () =>
-                                                                    task.start(),
-                                                            )}
-                                                        >{itemActionPending ===
-                                                        `task:start:${task.taskId}`
-                                                            ? "Starting..."
-                                                            : "Start"}</Button
-                                                    >
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        disabled={itemActionPending !==
-                                                            null}
-                                                        onclick={() =>
-                                                            runItemAction(
-                                                                `task:complete:${task.taskId}`,
-                                                                () =>
-                                                                    task.complete(),
-                                                            )}
-                                                        >{itemActionPending ===
-                                                        `task:complete:${task.taskId}`
-                                                            ? "Completing..."
-                                                            : "Complete"}</Button
-                                                    >
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        disabled={itemActionPending !==
-                                                            null}
-                                                        onclick={() =>
-                                                            runItemAction(
-                                                                `task:reopen:${task.taskId}`,
-                                                                () =>
-                                                                    task.reopen(),
-                                                            )}
-                                                        >{itemActionPending ===
-                                                        `task:reopen:${task.taskId}`
-                                                            ? "Reopening..."
-                                                            : "Reopen"}</Button
-                                                    >
+                                                    {#each task.commands as command (command.commandId)}
+                                                        {@const pendingCommandId = `${task.taskId}:${command.commandId}`}
+                                                        <Button
+                                                            size="sm"
+                                                            variant={command.variant ??
+                                                                "outline"}
+                                                            disabled={itemCommandPending !==
+                                                                null ||
+                                                                command.disabled}
+                                                            title={command.disabledReason}
+                                                            onclick={() =>
+                                                                runItemCommand(
+                                                                    pendingCommandId,
+                                                                    () =>
+                                                                        task.executeCommand(
+                                                                            command.commandId,
+                                                                        ),
+                                                                )}
+                                                        >
+                                                            {itemCommandPending ===
+                                                            pendingCommandId
+                                                                ? `${command.label}...`
+                                                                : command.label}
+                                                        </Button>
+                                                    {/each}
                                                 </div>
                                                 <p
                                                     class="mt-1 font-mono text-xs text-muted-foreground"
@@ -353,13 +277,13 @@
                 >
                     Agent sessions
                 </p>
-                {#if selectedMission.listSessions().length === 0}
+                {#if mission.listSessions().length === 0}
                     <p class="mt-2 text-sm text-muted-foreground">
                         No live agent sessions are attached to this mission yet.
                     </p>
                 {:else}
                     <div class="mt-3 grid gap-2">
-                        {#each selectedMission.listSessions() as session (session.sessionId)}
+                        {#each mission.listSessions() as session (session.sessionId)}
                             <div
                                 class="rounded-lg border bg-background px-3 py-2"
                             >
@@ -383,48 +307,30 @@
                                     </p>
                                 {/if}
                                 <div class="mt-2 flex flex-wrap gap-2">
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={itemActionPending !== null}
-                                        onclick={() =>
-                                            runItemAction(
-                                                `session:done:${session.sessionId}`,
-                                                () => session.done(),
-                                            )}
-                                        >{itemActionPending ===
-                                        `session:done:${session.sessionId}`
-                                            ? "Completing..."
-                                            : "Done"}</Button
-                                    >
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={itemActionPending !== null}
-                                        onclick={() =>
-                                            runItemAction(
-                                                `session:cancel:${session.sessionId}`,
-                                                () => session.cancel(),
-                                            )}
-                                        >{itemActionPending ===
-                                        `session:cancel:${session.sessionId}`
-                                            ? "Cancelling..."
-                                            : "Cancel"}</Button
-                                    >
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={itemActionPending !== null}
-                                        onclick={() =>
-                                            runItemAction(
-                                                `session:terminate:${session.sessionId}`,
-                                                () => session.terminate(),
-                                            )}
-                                        >{itemActionPending ===
-                                        `session:terminate:${session.sessionId}`
-                                            ? "Terminating..."
-                                            : "Terminate"}</Button
-                                    >
+                                    {#each session.commands as command (command.commandId)}
+                                        {@const pendingCommandId = `${session.sessionId}:${command.commandId}`}
+                                        <Button
+                                            size="sm"
+                                            variant={command.variant ??
+                                                "outline"}
+                                            disabled={itemCommandPending !==
+                                                null || command.disabled}
+                                            title={command.disabledReason}
+                                            onclick={() =>
+                                                runItemCommand(
+                                                    pendingCommandId,
+                                                    () =>
+                                                        session.executeCommand(
+                                                            command.commandId,
+                                                        ),
+                                                )}
+                                        >
+                                            {itemCommandPending ===
+                                            pendingCommandId
+                                                ? `${command.label}...`
+                                                : command.label}
+                                        </Button>
+                                    {/each}
                                 </div>
                             </div>
                         {/each}

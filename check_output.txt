@@ -1,6 +1,0 @@
-
-> @flying-pillow/mission-airport-web@0.0.1 check /Users/ronb/mission/apps/airport/web
-> svelte-kit sync && svelte-check --tsconfig ./tsconfig.json
-
-Error: Debug Failure. False expression: parameter should have errors when reporting errors
- ELIFECYCLE  Command failed with exit code 1.

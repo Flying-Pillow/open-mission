@@ -7,8 +7,7 @@ import {
 	renderFrontmatterDocument,
 	type FrontmatterValue
 } from './frontmatter.js';
-import { getMissionCatalogPath, getMissionWorktreesPath } from './repoConfig.js';
-import { readMissionDaemonSettings } from './daemonConfig.js';
+import { Repository } from '../entities/Repository/Repository.js';
 import {
 	MISSION_RUNTIME_FILE_NAME,
 	MISSION_RUNTIME_EVENT_LOG_FILE_NAME,
@@ -25,15 +24,32 @@ import { renderMissionBriefBody } from '../workflow/mission/templates/index.js';
 import {
 	getMissionArtifactDefinition,
 	getMissionStageDefinition
-} from '../workflow/manifest.js';
-import {
-	createMissionRuntimeRecord,
-	type MissionWorkflowEventRecord,
-	type MissionWorkflowConfigurationSnapshot,
-	type MissionRuntimeRecord,
-	MISSION_WORKFLOW_RUNTIME_SCHEMA_VERSION
-} from '../workflow/engine/index.js';
-import { DEFAULT_AGENT_RUNNER_ID } from '../agent/runtimes/AgentRuntimeIds.js';
+} from '../workflow/mission/manifest.js';
+import { DEFAULT_AGENT_RUNNER_ID } from '../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
+
+export const IGNORED_WORKTREE_ENTRY_NAMES = new Set([
+	'.git',
+	'node_modules',
+	'.pnpm-store',
+	'.svelte-kit',
+	'.turbo',
+	'dist',
+	'build'
+]);
+
+export type FileBodyResult = {
+	filePath: string;
+	body: string;
+	updatedAt?: string;
+};
+
+export type FilesystemTreeNode = {
+	name: string;
+	relativePath: string;
+	absolutePath: string;
+	kind: 'directory' | 'file';
+	children?: FilesystemTreeNode[];
+};
 
 export class ArtifactFormatError extends Error {
 	public constructor(message: string) {
@@ -77,6 +93,13 @@ export type ResolvedMission = {
 	descriptor: MissionDescriptor;
 };
 
+export type GitWorktreeStatus = {
+	clean: boolean;
+	stagedCount: number;
+	unstagedCount: number;
+	untrackedCount: number;
+};
+
 export type MissionSessionLogMetadataRecord = {
 	[key: string]: unknown;
 };
@@ -89,15 +112,15 @@ export class FilesystemAdapter {
 	}
 
 	public getMissionsPath(): string {
-		const missionWorkspaceRoot = readMissionDaemonSettings(this.workspaceRoot)?.missionWorkspaceRoot;
-		return getMissionWorktreesPath(
+		const missionsRoot = Repository.readSettingsDocument(this.workspaceRoot)?.missionsRoot;
+		return Repository.getMissionWorktreesPath(
 			this.workspaceRoot,
-			missionWorkspaceRoot ? { missionWorkspaceRoot } : {}
+			missionsRoot ? { missionsRoot } : {}
 		);
 	}
 
 	public getTrackedMissionsPath(checkoutRoot = this.workspaceRoot): string {
-		return getMissionCatalogPath(checkoutRoot);
+		return Repository.getMissionCatalogPath(checkoutRoot);
 	}
 
 	public getTrackedMissionDir(missionId: string, checkoutRoot = this.workspaceRoot): string {
@@ -197,22 +220,24 @@ export class FilesystemAdapter {
 
 		const branchExists = this.runGit(['rev-parse', '--verify', `refs/heads/${normalizedBranch}`]);
 		const remoteBranchExists = this.runGit(['rev-parse', '--verify', `refs/remotes/origin/${normalizedBranch}`]);
+		const addArgs = branchExists
+			? ['worktree', 'add', worktreePath, normalizedBranch]
+			: remoteBranchExists
+				? ['worktree', 'add', '-b', normalizedBranch, worktreePath, `origin/${normalizedBranch}`]
+				: ['worktree', 'add', '-b', normalizedBranch, worktreePath, normalizedBaseRef];
 		try {
-			if (branchExists) {
-				this.assertGit(['worktree', 'add', worktreePath, normalizedBranch]);
-			} else if (remoteBranchExists) {
-				this.assertGit(['worktree', 'add', '-b', normalizedBranch, worktreePath, `origin/${normalizedBranch}`]);
-			} else {
-				this.assertGit(['worktree', 'add', '-b', normalizedBranch, worktreePath, normalizedBaseRef]);
-			}
+			this.assertGit(addArgs);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			if (message.includes('already checked out')) {
+			if (message.includes('missing but already registered worktree')) {
+				this.assertGit(['worktree', 'add', '-f', ...addArgs.slice(2)]);
+			} else if (message.includes('already checked out')) {
 				throw new Error(
 					`Mission branch '${normalizedBranch}' is already checked out in another worktree. Switch that worktree away before adopting it as a mission.`
 				);
+			} else {
+				throw error;
 			}
-			throw error;
 		}
 
 		const nextBranch = this.getCurrentBranch(worktreePath);
@@ -309,6 +334,33 @@ export class FilesystemAdapter {
 
 	public isWorktreeClean(cwd = this.workspaceRoot): boolean {
 		return this.runGit(['status', '--porcelain'], cwd) === '';
+	}
+
+	public getWorktreeStatus(cwd = this.workspaceRoot): GitWorktreeStatus {
+		const output = this.runGit(['status', '--porcelain=v1'], cwd);
+		const status = {
+			clean: output === '',
+			stagedCount: 0,
+			unstagedCount: 0,
+			untrackedCount: 0
+		};
+
+		for (const line of output.split('\n').map((entry) => entry.trimEnd()).filter(Boolean)) {
+			const indexStatus = line[0] ?? ' ';
+			const worktreeStatus = line[1] ?? ' ';
+			if (indexStatus === '?' && worktreeStatus === '?') {
+				status.untrackedCount += 1;
+				continue;
+			}
+			if (indexStatus !== ' ') {
+				status.stagedCount += 1;
+			}
+			if (worktreeStatus !== ' ') {
+				status.unstagedCount += 1;
+			}
+		}
+
+		return status;
 	}
 
 	public pullDefaultBranch(branchRef = this.getDefaultBranch(), cwd = this.workspaceRoot): void {
@@ -479,11 +531,11 @@ export class FilesystemAdapter {
 		});
 	}
 
-	public getMissionRuntimeRecordPath(missionDir: string): string {
+	public getMissionStateDataPath(missionDir: string): string {
 		return path.join(missionDir, MISSION_RUNTIME_FILE_NAME);
 	}
 
-	public getMissionRuntimeEventLogPath(missionDir: string): string {
+	public getMissionEventLogPath(missionDir: string): string {
 		return path.join(missionDir, MISSION_RUNTIME_EVENT_LOG_FILE_NAME);
 	}
 
@@ -492,7 +544,7 @@ export class FilesystemAdapter {
 	}
 
 	public getMissionSessionLogRelativePath(sessionId: string): string {
-		return path.posix.join('session-logs', `${encodeURIComponent(sessionId)}.ansi`);
+		return path.posix.join('session-logs', `${encodeURIComponent(sessionId)}.log`);
 	}
 
 	public getMissionSessionMetadataRelativePath(sessionId: string): string {
@@ -500,7 +552,11 @@ export class FilesystemAdapter {
 	}
 
 	public getMissionSessionLogPath(missionDir: string, sessionId: string): string {
-		return path.join(this.getMissionSessionLogDirectoryPath(missionDir), `${encodeURIComponent(sessionId)}.ansi`);
+		return path.join(this.getMissionSessionLogDirectoryPath(missionDir), `${encodeURIComponent(sessionId)}.log`);
+	}
+
+	public getMissionSessionLogPathFromRelativePath(missionDir: string, sessionLogPath: string): string | undefined {
+		return this.resolveMissionSessionLogPath(missionDir, sessionLogPath);
 	}
 
 	public getMissionSessionMetadataPath(missionDir: string, sessionId: string): string {
@@ -516,64 +572,40 @@ export class FilesystemAdapter {
 		return resolvedLogPath;
 	}
 
-	public async readMissionRuntimeRecord(
+	public async readMissionStateDataFile(
 		missionDir: string
-	): Promise<MissionRuntimeRecord | undefined> {
-		const filePath = this.getMissionRuntimeRecordPath(missionDir);
+	): Promise<unknown | undefined> {
+		const filePath = this.getMissionStateDataPath(missionDir);
 		try {
 			const content = await fs.readFile(filePath, 'utf8');
-			const parsed = this.parseMissionRuntimeRecord(JSON.parse(content) as unknown, filePath);
-			if (parsed.legacyEventLog.length > 0) {
-				await this.migrateLegacyMissionRuntimeEventLog(missionDir, parsed.record, parsed.legacyEventLog);
-			}
-			return parsed.record;
+			return JSON.parse(content) as unknown;
 		} catch (error) {
 			if (this.isMissingFileError(error)) {
 				return undefined;
 			}
 			if (error instanceof SyntaxError) {
-				throw new ArtifactFormatError(`Mission runtime record '${filePath}' is not valid JSON.`);
+				throw new ArtifactFormatError(`Mission runtime data '${filePath}' is not valid JSON.`);
 			}
 			throw error;
 		}
 	}
 
-	public async writeMissionRuntimeRecord(
+	public async writeMissionStateDataFile(
 		missionDir: string,
-		record: MissionRuntimeRecord
+		data: unknown
 	): Promise<void> {
-		const filePath = this.getMissionRuntimeRecordPath(missionDir);
+		const filePath = this.getMissionStateDataPath(missionDir);
 		await fs.mkdir(path.dirname(filePath), { recursive: true });
 		const temporaryPath = `${filePath}.${process.pid.toString(36)}.${randomUUID()}.tmp`;
-		const { eventLog: _legacyEventLog, ...persistedRecord } = record;
-		const normalizedRecord: MissionRuntimeRecord = {
-			...persistedRecord,
-			runtime: {
-				...persistedRecord.runtime,
-				sessions: persistedRecord.runtime.sessions.map((session) => ({
-					sessionId: session.sessionId,
-					taskId: session.taskId,
-					runnerId: session.runnerId,
-					...(session.sessionLogPath ? { sessionLogPath: session.sessionLogPath } : {}),
-					lifecycle: session.lifecycle,
-					launchedAt: session.launchedAt,
-					updatedAt: session.updatedAt,
-					...(session.completedAt ? { completedAt: session.completedAt } : {}),
-					...(session.failedAt ? { failedAt: session.failedAt } : {}),
-					...(session.cancelledAt ? { cancelledAt: session.cancelledAt } : {}),
-					...(session.terminatedAt ? { terminatedAt: session.terminatedAt } : {})
-				}))
-			}
-		};
-		await fs.writeFile(temporaryPath, `${JSON.stringify(normalizedRecord, null, 2)}\n`, 'utf8');
+		await fs.writeFile(temporaryPath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
 		await fs.rename(temporaryPath, filePath);
 	}
 
-	public async appendMissionRuntimeEventRecord(
+	public async appendMissionEventRecordFile(
 		missionDir: string,
-		eventRecord: MissionWorkflowEventRecord
+		eventRecord: unknown
 	): Promise<void> {
-		const filePath = this.getMissionRuntimeEventLogPath(missionDir);
+		const filePath = this.getMissionEventLogPath(missionDir);
 		await fs.mkdir(path.dirname(filePath), { recursive: true });
 		await fs.appendFile(filePath, `${JSON.stringify(eventRecord)}\n`, 'utf8');
 	}
@@ -610,15 +642,30 @@ export class FilesystemAdapter {
 
 	public async appendMissionSessionLogChunk(
 		missionDir: string,
-		sessionId: string,
+		sessionLogPath: string,
 		chunk: string
 	): Promise<void> {
 		if (chunk.length === 0) {
 			return;
 		}
-		const filePath = this.getMissionSessionLogPath(missionDir, sessionId);
+		const filePath = this.getMissionSessionLogPathFromRelativePath(missionDir, sessionLogPath);
+		if (!filePath) {
+			return;
+		}
 		await fs.mkdir(path.dirname(filePath), { recursive: true });
 		await fs.appendFile(filePath, chunk, 'utf8');
+	}
+
+	public async ensureMissionSessionLogFile(
+		missionDir: string,
+		sessionLogPath: string
+	): Promise<void> {
+		const filePath = this.getMissionSessionLogPathFromRelativePath(missionDir, sessionLogPath);
+		if (!filePath) {
+			return;
+		}
+		await fs.mkdir(path.dirname(filePath), { recursive: true });
+		await fs.appendFile(filePath, '', 'utf8');
 	}
 
 	public async readMissionSessionLog(
@@ -639,17 +686,17 @@ export class FilesystemAdapter {
 		}
 	}
 
-	public async readMissionRuntimeEventLog(
+	public async readMissionEventLogFile(
 		missionDir: string
-	): Promise<MissionWorkflowEventRecord[]> {
-		const filePath = this.getMissionRuntimeEventLogPath(missionDir);
+	): Promise<unknown[]> {
+		const filePath = this.getMissionEventLogPath(missionDir);
 		try {
 			const content = await fs.readFile(filePath, 'utf8');
 			return content
 				.split(/\r?\n/u)
 				.map((line) => line.trim())
 				.filter((line) => line.length > 0)
-				.map((line) => this.parseMissionWorkflowEventRecord(JSON.parse(line) as unknown, filePath));
+				.map((line) => JSON.parse(line) as unknown);
 		} catch (error) {
 			if (this.isMissingFileError(error)) {
 				return [];
@@ -661,19 +708,70 @@ export class FilesystemAdapter {
 		}
 	}
 
-	public async initializeMissionRuntimeRecord(input: {
-		missionDir: string;
-		missionId: string;
-		configuration: MissionWorkflowConfigurationSnapshot;
-		createdAt?: string;
-	}): Promise<MissionRuntimeRecord> {
-		const record = createMissionRuntimeRecord({
-			missionId: input.missionId,
-			configuration: input.configuration,
-			...(input.createdAt ? { createdAt: input.createdAt } : {})
-		});
-		await this.writeMissionRuntimeRecord(input.missionDir, record);
-		return record;
+	public async readFileBody(filePath: string): Promise<FileBodyResult> {
+		const body = await fs.readFile(filePath, 'utf8');
+		const stats = await fs.stat(filePath);
+		return {
+			filePath,
+			body,
+			updatedAt: stats.mtime.toISOString()
+		};
+	}
+
+	public async writeFileBody(filePath: string, body: string): Promise<FileBodyResult> {
+		await fs.writeFile(filePath, body, 'utf8');
+		return this.readFileBody(filePath);
+	}
+
+	public async assertFilePath(
+		filePath: string,
+		intent: 'read' | 'write'
+	): Promise<void> {
+		const normalizedPath = filePath.trim();
+		if (!normalizedPath) {
+			throw new Error('File path must not be empty.');
+		}
+
+		const candidatePath = path.resolve(normalizedPath);
+		const canonicalPath = await this.resolveCanonicalDocumentPath(candidatePath, intent);
+		const roots = await Promise.all([
+			this.canonicalizeAllowedRoot(this.workspaceRoot),
+			this.canonicalizeAllowedRoot(this.getMissionsPath())
+		]);
+
+		if (!roots.some((rootPath) => rootPath && this.isPathInsideRoot(rootPath, canonicalPath))) {
+			throw new Error(`File '${normalizedPath}' is outside the active repository root.`);
+		}
+	}
+
+	public async readDirectoryTree(directoryPath: string, rootPath: string): Promise<FilesystemTreeNode[]> {
+		const entries = await fs.readdir(directoryPath, { withFileTypes: true });
+		const nodes = await Promise.all(
+			entries
+				.filter((entry) => !IGNORED_WORKTREE_ENTRY_NAMES.has(entry.name))
+				.map(async (entry) => {
+					const absolutePath = path.join(directoryPath, entry.name);
+					const relativePath = path.relative(rootPath, absolutePath) || entry.name;
+					if (entry.isDirectory()) {
+						return {
+							name: entry.name,
+							relativePath,
+							absolutePath,
+							kind: 'directory' as const,
+							children: await this.readDirectoryTree(absolutePath, rootPath)
+						};
+					}
+
+					return {
+						name: entry.name,
+						relativePath,
+						absolutePath,
+						kind: 'file' as const
+					};
+				})
+		);
+
+		return nodes.sort(compareMissionWorktreeNodes);
 	}
 
 	public async artifactExists(missionDir: string, artifact: MissionArtifactKey): Promise<boolean> {
@@ -795,114 +893,6 @@ export class FilesystemAdapter {
 
 	private getTaskPath(missionDir: string, stage: MissionStageId, fileName: string): string {
 		return path.join(this.getStageTasksPath(missionDir, stage), fileName);
-	}
-
-	private parseMissionRuntimeRecord(
-		rawDocument: unknown,
-		filePath: string
-	): { record: MissionRuntimeRecord; legacyEventLog: MissionWorkflowEventRecord[] } {
-		if (!rawDocument || typeof rawDocument !== 'object' || Array.isArray(rawDocument)) {
-			throw new ArtifactFormatError(`Mission runtime record '${filePath}' must be a JSON object.`);
-		}
-
-		const candidateDocument = rawDocument as {
-			schemaVersion?: unknown;
-			missionId?: unknown;
-			configuration?: unknown;
-			runtime?: unknown;
-			eventLog?: unknown;
-		};
-
-		if (candidateDocument.schemaVersion !== MISSION_WORKFLOW_RUNTIME_SCHEMA_VERSION) {
-			throw new ArtifactTypeError(
-				`Mission runtime record '${filePath}' has unsupported schema version '${String(candidateDocument.schemaVersion)}'.`
-			);
-		}
-		if (typeof candidateDocument.missionId !== 'string' || candidateDocument.missionId.trim().length === 0) {
-			throw new ArtifactTypeError(`Mission runtime record '${filePath}' is missing missionId.`);
-		}
-		if (!candidateDocument.configuration || typeof candidateDocument.configuration !== 'object' || Array.isArray(candidateDocument.configuration)) {
-			throw new ArtifactTypeError(`Mission runtime record '${filePath}' is missing configuration.`);
-		}
-		if (!candidateDocument.runtime || typeof candidateDocument.runtime !== 'object' || Array.isArray(candidateDocument.runtime)) {
-			throw new ArtifactTypeError(`Mission runtime record '${filePath}' is missing runtime.`);
-		}
-		if (candidateDocument.eventLog !== undefined && !Array.isArray(candidateDocument.eventLog)) {
-			throw new ArtifactTypeError(`Mission runtime record '${filePath}' must contain an eventLog array when provided.`);
-		}
-
-		const legacyEventLog = Array.isArray(candidateDocument.eventLog)
-			? candidateDocument.eventLog.map((event) => this.parseMissionWorkflowEventRecord(event, filePath))
-			: [];
-		const { eventLog: _legacyEventLog, ...record } = candidateDocument;
-		return {
-			record: record as MissionRuntimeRecord,
-			legacyEventLog
-		};
-	}
-
-	private parseMissionWorkflowEventRecord(rawEvent: unknown, filePath: string): MissionWorkflowEventRecord {
-		if (!rawEvent || typeof rawEvent !== 'object' || Array.isArray(rawEvent)) {
-			throw new ArtifactTypeError(`Mission workflow event record in '${filePath}' must be a JSON object.`);
-		}
-		const candidateEvent = rawEvent as {
-			eventId?: unknown;
-			type?: unknown;
-			occurredAt?: unknown;
-			source?: unknown;
-			causedByRequestId?: unknown;
-			payload?: unknown;
-		};
-		if (typeof candidateEvent.eventId !== 'string' || candidateEvent.eventId.trim().length === 0) {
-			throw new ArtifactTypeError(`Mission workflow event record in '${filePath}' is missing eventId.`);
-		}
-		if (typeof candidateEvent.type !== 'string' || candidateEvent.type.trim().length === 0) {
-			throw new ArtifactTypeError(`Mission workflow event record in '${filePath}' is missing type.`);
-		}
-		if (typeof candidateEvent.occurredAt !== 'string' || candidateEvent.occurredAt.trim().length === 0) {
-			throw new ArtifactTypeError(`Mission workflow event record in '${filePath}' is missing occurredAt.`);
-		}
-		if (
-			candidateEvent.source !== 'system'
-			&& candidateEvent.source !== 'human'
-			&& candidateEvent.source !== 'agent'
-			&& candidateEvent.source !== 'daemon'
-		) {
-			throw new ArtifactTypeError(`Mission workflow event record in '${filePath}' has invalid source '${String(candidateEvent.source)}'.`);
-		}
-		if (!candidateEvent.payload || typeof candidateEvent.payload !== 'object' || Array.isArray(candidateEvent.payload)) {
-			throw new ArtifactTypeError(`Mission workflow event record in '${filePath}' is missing payload.`);
-		}
-		return {
-			eventId: candidateEvent.eventId,
-			type: candidateEvent.type,
-			occurredAt: candidateEvent.occurredAt,
-			source: candidateEvent.source,
-			...(typeof candidateEvent.causedByRequestId === 'string' && candidateEvent.causedByRequestId.trim().length > 0
-				? { causedByRequestId: candidateEvent.causedByRequestId }
-				: {}),
-			payload: candidateEvent.payload as Record<string, unknown>
-		};
-	}
-
-	private async migrateLegacyMissionRuntimeEventLog(
-		missionDir: string,
-		record: MissionRuntimeRecord,
-		legacyEventLog: MissionWorkflowEventRecord[]
-	): Promise<void> {
-		const eventLogPath = this.getMissionRuntimeEventLogPath(missionDir);
-		const hasExistingEventLog = await fs.access(eventLogPath).then(
-			() => true,
-			() => false
-		);
-		if (!hasExistingEventLog && legacyEventLog.length > 0) {
-			await fs.writeFile(
-				eventLogPath,
-				`${legacyEventLog.map((event) => JSON.stringify(event)).join('\n')}\n`,
-				'utf8'
-			);
-		}
-		await this.writeMissionRuntimeRecord(missionDir, record);
 	}
 
 	private async listTaskFileNames(missionDir: string, stage: MissionStageId): Promise<string[]> {
@@ -1333,7 +1323,8 @@ export class FilesystemAdapter {
 	private assertGit(args: string[], cwd = this.workspaceRoot): string {
 		const result = spawnSync('git', args, {
 			cwd,
-			encoding: 'utf8'
+			encoding: 'utf8',
+			env: this.createGitEnvironment()
 		});
 
 		if (result.status !== 0) {
@@ -1346,7 +1337,58 @@ export class FilesystemAdapter {
 		return result.stdout.trim();
 	}
 
+	private createGitEnvironment(): NodeJS.ProcessEnv {
+		return {
+			...process.env,
+			GIT_AUTHOR_NAME: process.env['GIT_AUTHOR_NAME'] ?? 'Mission Daemon',
+			GIT_AUTHOR_EMAIL: process.env['GIT_AUTHOR_EMAIL'] ?? 'mission-daemon@localhost',
+			GIT_COMMITTER_NAME: process.env['GIT_COMMITTER_NAME'] ?? process.env['GIT_AUTHOR_NAME'] ?? 'Mission Daemon',
+			GIT_COMMITTER_EMAIL: process.env['GIT_COMMITTER_EMAIL'] ?? process.env['GIT_AUTHOR_EMAIL'] ?? 'mission-daemon@localhost'
+		};
+	}
+
 	private isMissingFileError(error: unknown): boolean {
 		return error instanceof Error && 'code' in error && error.code === 'ENOENT';
 	}
+
+	private async canonicalizeAllowedRoot(rootPath: string): Promise<string | undefined> {
+		try {
+			return await fs.realpath(rootPath);
+		} catch (error) {
+			if (this.isMissingFileError(error)) {
+				return rootPath;
+			}
+
+			throw error;
+		}
+	}
+
+	private async resolveCanonicalDocumentPath(
+		candidatePath: string,
+		intent: 'read' | 'write'
+	): Promise<string> {
+		try {
+			return await fs.realpath(candidatePath);
+		} catch (error) {
+			if (!this.isMissingFileError(error) || intent === 'read') {
+				throw error;
+			}
+
+			const parentDirectory = await fs.realpath(path.dirname(candidatePath));
+			return path.join(parentDirectory, path.basename(candidatePath));
+		}
+	}
+
+	private isPathInsideRoot(rootPath: string, candidatePath: string): boolean {
+		const relativePath = path.relative(rootPath, candidatePath);
+		return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+	}
+}
+
+function compareMissionWorktreeNodes(left: FilesystemTreeNode, right: FilesystemTreeNode): number {
+	if (left.kind !== right.kind) {
+		return left.kind === 'directory' ? -1 : 1;
+	}
+
+	return left.name.localeCompare(right.name, undefined, { numeric: true });
 }

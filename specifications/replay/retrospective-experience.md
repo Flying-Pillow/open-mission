@@ -39,7 +39,7 @@ That pattern is exactly the kind of drift Mission should help surface and correc
 
 ### Evidence
 
-- The brief for issue `#11` is about repository adoption, first-mission bootstrap, shared versus local usage, repo switching semantics, and the mission dossier model.
+- The brief for issue `#11` is about repository adoption, Repository setup, shared versus local usage, repo switching semantics, and the mission dossier model.
 - The PRD preserves that broader scope.
 - The initial SPEC draft leaned too heavily toward the mission-folder location and nested dossier-path correction.
 - The session also triggered conversation compaction, which is another signal that the current working set had grown dense enough that the original intake focus was at risk of being displaced by recent local detail.
@@ -213,7 +213,7 @@ If it belongs to a later replay mission, it must not be added to the current mis
 Mission `11` was corrected so its implementation ledger now covers only repository-adoption-layout work:
 
 - repository adoption layout
-- first-mission bootstrap
+- Repository setup
 - repository modes and routing
 - consumer, spec, and test alignment for mission `11`
 

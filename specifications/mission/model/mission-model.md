@@ -71,7 +71,7 @@ It is not airport layout truth, pane routing truth, or focus truth.
 
 ### Repository Bootstrap State
 
-Mission control remains repository-bound, but first-mission bootstrap may happen inside the newly created mission worktree rather than in the original local checkout.
+Mission control remains repository-bound. When `.mission/settings.json` is absent after clone or registration, Repository setup creates the first control state in a setup branch and pull request before regular missions can start.
 
 ```text
 .mission/

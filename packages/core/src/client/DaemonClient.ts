@@ -2,15 +2,17 @@ import * as net from 'node:net';
 import {
 	MissionAgentEventEmitter,
 	type MissionAgentDisposable
-} from '../agent/events.js';
-import { METHOD_METADATA } from '../daemon/protocol/contracts.js';
+} from '../daemon/runtime/agent/events.js';
+import { METHOD_METADATA } from '../daemon/protocol/operations.js';
+import type {
+	AddressedNotification
+} from '../daemon/protocol/contracts.js';
 import type {
 	Message,
 	Method,
-	Notification,
 	Response,
 	Request
-} from '../daemon/protocol/contracts.js';
+} from '../daemon/protocol/transport.js';
 import {
 	readDaemonManifest,
 	resolveDaemonSocketPath
@@ -27,7 +29,7 @@ export class DaemonClient implements MissionAgentDisposable {
 	private buffer = '';
 	private nextRequestId = 0;
 	private readonly pendingRequests = new Map<string, PendingRequest>();
-	private readonly eventEmitter = new MissionAgentEventEmitter<Notification>();
+	private readonly eventEmitter = new MissionAgentEventEmitter<AddressedNotification>();
 	private surfacePath = '';
 	private authToken = '';
 

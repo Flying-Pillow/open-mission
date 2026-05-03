@@ -59,13 +59,13 @@ Tower keeps local state for interaction only:
 - collapse and expansion state in the mission tree
 - picker text, overlays, and command flow steps
 
-Tower may use `command` language for its picker, command panel, and typed slash input, but those are UI interaction forms. The underlying business object should still be a daemon-provided operator action.
+Tower may use `command` language for its picker, command panel, and typed slash input, but those are UI interaction forms. The underlying business object is still a daemon-provided Entity command.
 
-Tower must preserve daemon action order. It may narrow a visible list by local text query, but it must not re-rank actions, apply local availability policy, or invent a separate next-action heuristic.
+Tower must preserve daemon command order. It may narrow a visible list by local text query, but it must not re-rank commands, apply local availability policy, or invent a separate next-command heuristic.
 
 The Airport terminal app does not own:
 
-- repository registration
+- repository discovery
 - mission runtime state
 - airport bindings
 - session lifecycle
@@ -114,10 +114,10 @@ This is a UI architecture rule, not a business rule exception. The daemon still 
 
 | Surface concern | Daemon dependency |
 | --- | --- |
-| Repository view | `control.status`, `control.repositories.*`, `control.action.*` |
-| Mission view | `mission.status`, `mission.action.*`, `mission.gate.evaluate` |
-| Session control | `task.launch`, `session.*` |
-| Layout projection | `airport.client.connect`, `airport.client.observe`, `airport.status` |
+| Repository view | `entity.query` / `entity.command` through the `Repository` contract |
+| Mission view | `entity.query` / `entity.command` through `Mission`, `Stage`, `Task`, `Artifact`, and `AgentSession` contracts |
+| Session control | AgentSession Entity methods plus explicit terminal/input relay methods where raw runtime input is required |
+| Layout projection | `system.status`, Entity events, and Airport substrate observation paths |
 
 ## Gate Attachment Model
 
@@ -125,16 +125,16 @@ Each terminal surface starts with an injected `AIRPORT_PANE_ID` and claims exact
 
 ## Runtime Constraint
 
-The historical Airport terminal implementation depended on a separate terminal-specific runtime path. That dependency belongs to the deprecated terminal surface, not to the active pnpm + Node 24 Airport host.
+The active pnpm + Node 24 Airport host uses the shared daemon protocol, Entity contracts, and terminal runtime substrate.
 
 ## Non-Responsibilities
 
 No Airport terminal surface must become the source of truth for mission routing, task lifecycle, or pane ownership. If a surface and the daemon disagree, the daemon wins.
 
-That rule also applies to available actions: ordering, filtering, and enablement are daemon-owned semantics, not UI policy.
+That rule also applies to available commands: ordering, filtering, and enablement are daemon-owned Entity semantics, not UI policy.
 
 The same rule applies to cross-client synchronization:
 
-- Tower may immediately refresh actions when daemon revisions change
+- Tower may immediately refresh commands when daemon revisions change
 - Tower may react to mission or airport events to stay visually current
 - Tower must not treat local selection, focus, or pane attachment as evidence that workflow state changed

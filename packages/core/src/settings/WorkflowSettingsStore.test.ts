@@ -2,8 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { getMissionDaemonSettingsPath } from '../lib/daemonConfig.js';
-import { getMissionWorkflowDefinitionPath } from '../lib/repoConfig.js';
+import { Repository } from '../entities/Repository/Repository.js';
 import { WorkflowSettingsStore } from './WorkflowSettingsStore.js';
 
 describe('WorkflowSettingsStore', () => {
@@ -13,15 +12,23 @@ describe('WorkflowSettingsStore', () => {
 		try {
 			const store = new WorkflowSettingsStore(workspaceRoot);
 			const initialized = await store.initialize();
-			const settingsPath = getMissionDaemonSettingsPath(workspaceRoot);
-			const workflowPath = getMissionWorkflowDefinitionPath(workspaceRoot);
-			const content = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as { workflow?: unknown };
-			const persistedWorkflow = JSON.parse(await fs.readFile(workflowPath, 'utf8')) as { stageOrder?: unknown };
+			const settingsPath = Repository.getSettingsDocumentPath(workspaceRoot);
+			const workflowPath = Repository.getMissionWorkflowDefinitionPath(workspaceRoot);
+			const content = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as {
+				agentRunner?: unknown;
+				trackingProvider?: unknown;
+				missionsRoot?: unknown;
+			};
+			const persistedWorkflow = JSON.parse(await fs.readFile(workflowPath, 'utf8')) as {
+				stageOrder?: unknown;
+			};
 
 			expect(initialized.metadata.initialized).toBe(true);
 			expect(initialized.metadata.sourcePath).toBe(workflowPath);
 			expect(initialized.workflow.stageOrder).toEqual(['prd', 'spec', 'implementation', 'audit', 'delivery']);
-			expect(content.workflow).toBeUndefined();
+			expect(content.agentRunner).toBe('copilot-cli');
+			expect(content.trackingProvider).toBe('github');
+			expect(content.missionsRoot).toBe('missions');
 			expect(persistedWorkflow.stageOrder).toEqual(['prd', 'spec', 'implementation', 'audit', 'delivery']);
 		} finally {
 			await fs.rm(workspaceRoot, { recursive: true, force: true });
@@ -51,7 +58,7 @@ describe('WorkflowSettingsStore', () => {
 
 			expect(updated.workflow.execution.maxParallelTasks).toBe(2);
 
-			const workflowPath = getMissionWorkflowDefinitionPath(workspaceRoot);
+			const workflowPath = Repository.getMissionWorkflowDefinitionPath(workspaceRoot);
 			const rawWorkflow = JSON.parse(await fs.readFile(workflowPath, 'utf8')) as Record<string, unknown>;
 			rawWorkflow['execution'] = {
 				execution: {

@@ -1,12 +1,5 @@
 <script lang="ts">
-    import ArrowRightIcon from "@tabler/icons-svelte/icons/arrow-right";
-    import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
-    import CheckIcon from "@tabler/icons-svelte/icons/check";
-    import CopyIcon from "@tabler/icons-svelte/icons/copy";
-    import DeviceMobileIcon from "@tabler/icons-svelte/icons/device-mobile";
-    import MailIcon from "@tabler/icons-svelte/icons/mail";
-    import ShieldHalfIcon from "@tabler/icons-svelte/icons/shield-half";
-    import SparklesIcon from "@tabler/icons-svelte/icons/sparkles";
+    import Icon from "@iconify/svelte";
     import * as Avatar from "$lib/components/ui/avatar/index.js";
     import * as Badge from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
@@ -221,7 +214,7 @@
                     variant="outline"
                     class="rounded-full px-3 py-1 text-xs font-medium"
                 >
-                    <BrandGithubIcon class="size-3.5" />
+                    <Icon icon="lucide:github" class="size-3.5" />
                     GitHub only
                 </Badge.Badge>
                 <Badge.Badge
@@ -251,7 +244,10 @@
         <Card.Content class="grid gap-6 px-8 pb-8 pt-6">
             <div class="grid gap-4 sm:grid-cols-3">
                 <div class="rounded-2xl border bg-background/70 p-4">
-                    <ShieldHalfIcon class="mb-3 size-5 text-primary" />
+                    <Icon
+                        icon="lucide:shield-check"
+                        class="mb-3 size-5 text-primary"
+                    />
                     <p class="font-medium">Safe sign-in</p>
                     <p class="mt-1 text-sm text-muted-foreground">
                         GitHub handles the sign-in, and Mission keeps you signed
@@ -259,7 +255,10 @@
                     </p>
                 </div>
                 <div class="rounded-2xl border bg-background/70 p-4">
-                    <BrandGithubIcon class="mb-3 size-5 text-primary" />
+                    <Icon
+                        icon="lucide:github"
+                        class="mb-3 size-5 text-primary"
+                    />
                     <p class="font-medium">Your account</p>
                     <p class="mt-1 text-sm text-muted-foreground">
                         After sign-in, Mission shows which GitHub account you
@@ -267,7 +266,10 @@
                     </p>
                 </div>
                 <div class="rounded-2xl border bg-background/70 p-4">
-                    <SparklesIcon class="mb-3 size-5 text-primary" />
+                    <Icon
+                        icon="lucide:sparkles"
+                        class="mb-3 size-5 text-primary"
+                    />
                     <p class="font-medium">Easy to change</p>
                     <p class="mt-1 text-sm text-muted-foreground">
                         You can sign out at any time and connect a different
@@ -280,16 +282,22 @@
                 <p class="text-sm font-medium">Before you continue</p>
                 <ul class="mt-3 space-y-2 text-sm text-muted-foreground">
                     <li class="flex items-start gap-2">
-                        <CheckIcon class="mt-0.5 size-4 text-primary" />A
-                        sign-in code will appear automatically on this page.
+                        <Icon
+                            icon="lucide:check"
+                            class="mt-0.5 size-4 text-primary"
+                        />A sign-in code will appear automatically on this page.
                     </li>
                     <li class="flex items-start gap-2">
-                        <CheckIcon class="mt-0.5 size-4 text-primary" />Open the
-                        sign-in page and enter that code.
+                        <Icon
+                            icon="lucide:check"
+                            class="mt-0.5 size-4 text-primary"
+                        />Open the sign-in page and enter that code.
                     </li>
                     <li class="flex items-start gap-2">
-                        <CheckIcon class="mt-0.5 size-4 text-primary" />Once you
-                        finish, Mission continues here automatically.
+                        <Icon
+                            icon="lucide:check"
+                            class="mt-0.5 size-4 text-primary"
+                        />Once you finish, Mission continues here automatically.
                     </li>
                 </ul>
             </div>
@@ -302,7 +310,7 @@
                 <Card.Title
                     class="flex items-center gap-3 text-2xl font-semibold"
                 >
-                    <BrandGithubIcon class="size-6" />
+                    <Icon icon="lucide:github" class="size-6" />
                     Signed in with GitHub
                 </Card.Title>
                 <Card.Description class="pt-1 text-sm leading-6">
@@ -337,7 +345,7 @@
                             <div
                                 class="mt-5 inline-flex items-center gap-2 rounded-full border bg-muted/40 px-4 py-2 text-sm text-muted-foreground"
                             >
-                                <MailIcon class="size-4" />
+                                <Icon icon="lucide:mail" class="size-4" />
                                 {user.email}
                             </div>
                         {/if}
@@ -362,7 +370,7 @@
                         class="w-full rounded-2xl"
                     >
                         Continue to Mission
-                        <ArrowRightIcon class="size-4" />
+                        <Icon icon="lucide:arrow-right" class="size-4" />
                     </Button>
 
                     <form
@@ -391,7 +399,7 @@
                 <Card.Title
                     class="flex items-center gap-3 text-2xl font-semibold"
                 >
-                    <BrandGithubIcon class="size-6" />
+                    <Icon icon="lucide:github" class="size-6" />
                     Sign in with GitHub
                 </Card.Title>
                 <Card.Description class="pt-1 text-sm leading-6">
@@ -473,7 +481,7 @@
                                     void copyDeviceCode();
                                 }}
                             >
-                                <CopyIcon class="size-4" />
+                                <Icon icon="lucide:copy" class="size-4" />
                                 {deviceCodeCopied ? "Copied" : "Copy code"}
                             </Button>
                         </div>
@@ -492,7 +500,10 @@
                                 class="w-full rounded-2xl"
                             >
                                 Open sign-in page
-                                <ArrowRightIcon class="size-4" />
+                                <Icon
+                                    icon="lucide:arrow-right"
+                                    class="size-4"
+                                />
                             </Button>
                             <Button
                                 type="button"

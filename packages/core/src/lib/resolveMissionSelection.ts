@@ -8,7 +8,7 @@ import type {
 	MissionStageId,
 	TaskContext,
 } from '../types.js';
-import { getMissionStageDefinition } from '../workflow/manifest.js';
+import { getMissionStageDefinition } from '../workflow/mission/manifest.js';
 
 export function resolveMissionSelection(input: {
 	target: MissionSelectionTarget | undefined;
@@ -42,8 +42,8 @@ export function resolveMissionSelectionFromContext(input: {
 	domain: ContextGraph;
 }): MissionResolvedSelection | undefined {
 	const { selection, domain } = input;
-	if (selection.artifactId) {
-		const artifact = domain.artifacts[selection.artifactId];
+	if (selection.artifact) {
+		const artifact = domain.artifacts[selection.artifact];
 		if (artifact?.ownerTaskId) {
 			const missionId = selection.missionId?.trim();
 			return resolveMissionSelection({
@@ -127,7 +127,7 @@ function resolveMissionArtifactTarget(
 	const resolvedMissionId = missionId ?? artifact?.missionId;
 	return {
 		...(resolvedMissionId ? { missionId: resolvedMissionId } : {}),
-		...(artifact ? { activeMissionArtifactId: artifact.artifactId, activeMissionArtifactPath: artifact.filePath } : {})
+		...(artifact ? { activeMissionArtifact: artifact.id, activeMissionArtifactPath: artifact.filePath } : {})
 	};
 }
 
@@ -146,7 +146,7 @@ function resolveSessionTarget(
 		...(resolvedMissionId ? { missionId: resolvedMissionId } : {}),
 		...(task?.stageId ?? target.stageId ? { stageId: (task?.stageId ?? target.stageId)! } : {}),
 		...(taskId ? { taskId } : {}),
-		...(instruction ? { activeInstructionArtifactId: instruction.artifactId, activeInstructionPath: instruction.filePath } : {}),
+		...(instruction ? { activeInstructionArtifact: instruction.id, activeInstructionPath: instruction.filePath } : {}),
 		...(explicitSessionId ? { activeAgentSessionId: explicitSessionId } : {})
 	};
 }
@@ -168,7 +168,7 @@ function resolveTaskTarget(
 		...(resolvedMissionId ? { missionId: resolvedMissionId } : {}),
 		...(task?.stageId ?? target.stageId ? { stageId: (task?.stageId ?? target.stageId)! } : {}),
 		taskId,
-		...(instruction ? { activeInstructionArtifactId: instruction.artifactId, activeInstructionPath: instruction.filePath } : {}),
+		...(instruction ? { activeInstructionArtifact: instruction.id, activeInstructionPath: instruction.filePath } : {}),
 		...(preferredSession?.sessionId ? { activeAgentSessionId: preferredSession.sessionId } : {})
 	};
 }
@@ -183,17 +183,21 @@ function resolveStageTarget(
 		return missionId ? { missionId } : undefined;
 	}
 	const stageArtifact = resolveStageResultArtifact(stageId, domain, missionId, target.sourcePath);
+	const preferredTask = resolvePreferredStageTask(stageId, missionId, domain);
 	const preferredSession = resolvePreferredStageSession(stageId, missionId, domain);
 	return {
 		...(missionId
 			? { missionId }
 			: stageArtifact?.missionId
 				? { missionId: stageArtifact.missionId }
-				: preferredSession?.missionId
-					? { missionId: preferredSession.missionId }
-					: {}),
+				: preferredTask?.missionId
+					? { missionId: preferredTask.missionId }
+					: preferredSession?.missionId
+						? { missionId: preferredSession.missionId }
+						: {}),
 		stageId,
-		...(stageArtifact ? { activeStageResultArtifactId: stageArtifact.artifactId, activeStageResultPath: stageArtifact.filePath } : {}),
+		...(preferredTask?.taskId ? { taskId: preferredTask.taskId } : {}),
+		...(stageArtifact ? { activeStageResultArtifact: stageArtifact.id, activeStageResultPath: stageArtifact.filePath } : {}),
 		...(preferredSession?.sessionId ? { activeAgentSessionId: preferredSession.sessionId } : {})
 	};
 }
@@ -212,8 +216,8 @@ function resolveTaskInstructionArtifact(
 			return explicitArtifact;
 		}
 	}
-	if (task?.primaryArtifactId) {
-		const primaryArtifact = domain.artifacts[task.primaryArtifactId];
+	if (task?.primaryArtifact) {
+		const primaryArtifact = domain.artifacts[task.primaryArtifact];
 		if (primaryArtifact) {
 			return primaryArtifact;
 		}
@@ -287,6 +291,23 @@ function resolvePreferredTaskSession(
 		.map((sessionId) => domain.agentSessions[sessionId])
 		.filter((session): session is AgentSessionContext => Boolean(session));
 	return sessions.sort(comparePreferredAgentSessions)[0];
+}
+
+function resolvePreferredStageTask(
+	stageId: MissionStageId,
+	missionId: string | undefined,
+	domain: ContextGraph
+): TaskContext | undefined {
+	const orderedTaskIds = missionId ? domain.missions[missionId]?.taskIds : undefined;
+	const tasks = (orderedTaskIds?.length
+		? orderedTaskIds.map((taskId) => domain.tasks[taskId])
+		: Object.values(domain.tasks))
+		.filter((task): task is TaskContext => Boolean(task))
+		.filter((task) => task.stageId === stageId && (!missionId || !task.missionId || task.missionId === missionId));
+
+	return tasks.find((task) => task.lifecycleState === 'running')
+		?? tasks.find((task) => task.lifecycleState === 'ready' || task.lifecycleState === 'queued')
+		?? tasks.at(-1);
 }
 
 function resolvePreferredStageSession(

@@ -13,7 +13,7 @@ Mission is designed to recover by rebuilding live state from explicit persisted 
 
 | Concern | Survives process restart | Recovery source |
 | --- | --- | --- |
-| Repository registration | Yes | Mission config |
+| Repository discovery roots | Yes | Mission config |
 | Repository workflow settings | Yes | `.mission/settings.json` |
 | Airport pane intent | Yes | `.mission/settings.json` |
 | Mission execution state | Yes | `mission.json` |
@@ -26,16 +26,16 @@ Mission is designed to recover by rebuilding live state from explicit persisted 
 ### Mission Recovery
 
 1. `MissionWorkflowController.refresh()` reads `mission.json`.
-2. The document is normalized if persisted session identities need adjustment.
+2. The Mission runtime data must pass strict schema validation; invalid data is rejected instead of normalized.
 3. The controller ensures eligible generated tasks exist for the next incomplete stage.
 4. `reconcileSessions()` asks the runtime executor to compare live runtime sessions against mission runtime state.
 
 ### Airport Recovery
 
-1. `RepositoryAirportRegistry` loads persisted airport intent from `.mission/settings.json`.
-2. `AirportControl` scopes itself to the repository with default or persisted pane bindings.
-3. `TerminalManagerSubstrateController.observe(...)` samples zellij panes.
-4. `MissionSystemController` plans focus effects and then folds observed substrate state back into airport state.
+1. Airport surfaces reconnect to the daemon and refresh `system.status` plus entity-backed mission state.
+2. Client-reported pane observations rebuild `AirportSubstrateState` for the connected surface.
+3. `planAirportSubstrateEffects(...)` derives focus effects only when an attached pane should be focused.
+4. No daemon-owned repository airport registry participates in recovery in the current runtime.
 
 ### Surface Recovery
 

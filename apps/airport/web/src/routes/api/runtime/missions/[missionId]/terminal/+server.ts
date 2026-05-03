@@ -1,16 +1,13 @@
 import { json } from '@sveltejs/kit';
-import {
-    missionRuntimeRouteParamsSchema,
-    missionTerminalInputSchema
-} from '@flying-pillow/mission-core';
+import { MissionTerminalInputSchema } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import { z } from 'zod';
-import { AirportWebGateway } from '$lib/server/gateway/AirportWebGateway.server';
-import {
-    isStaleMissionTerminalDaemonError,
-    resolveMissionTerminalRuntimeError,
-    restartMissionTerminalDaemon
-} from '$lib/server/mission-terminal-errors';
+import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
+import { resolveMissionTerminalRuntimeError } from '$lib/server/mission-terminal-errors';
 import type { RequestHandler } from './$types';
+
+const missionRuntimeRouteParamsSchema = z.object({
+    missionId: z.string().trim().min(1)
+}).strict();
 
 export const GET: RequestHandler = async ({ locals, params, url }) => {
     const { missionId } = missionRuntimeRouteParamsSchema.parse(params);
@@ -20,7 +17,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
     });
 
     try {
-        const snapshot = await readMissionTerminalSnapshot(locals, missionId, query.repositoryId, query.repositoryRootPath);
+        const snapshot = await readMissionTerminalSnapshot(locals, missionId, query);
 
         return json(snapshot, {
             headers: {
@@ -45,7 +42,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
         repositoryId: requestUrl.searchParams.get('repositoryId') ?? undefined,
         repositoryRootPath: requestUrl.searchParams.get('repositoryRootPath') ?? undefined
     });
-    const body = missionTerminalInputSchema.parse(await request.json());
+    const body = MissionTerminalInputSchema.parse(await request.json());
 
     try {
         const snapshot = await sendMissionTerminalInput(locals, {
@@ -79,30 +76,18 @@ const missionTerminalQuerySchema = z.object({
     repositoryRootPath: z.string().trim().min(1).optional()
 });
 
-async function readMissionTerminalSnapshot(locals: App.Locals, missionId: string, repositoryId?: string, repositoryRootPath?: string) {
-    const gateway = new AirportWebGateway(locals);
-    const repository = repositoryRootPath
-        ? { repositoryRootPath }
-        : repositoryId
-            ? await gateway.resolveRepositoryCandidate({ repositoryId })
-            : undefined;
-    try {
-        return await gateway.getMissionTerminalSnapshot({
-            missionId,
-            ...(repository ? { surfacePath: repository.repositoryRootPath } : {})
-        });
-    } catch (error) {
-        if (!isStaleMissionTerminalDaemonError(error)) {
-            throw error;
-        }
-
-        await restartMissionTerminalDaemon({ locals });
-        return await new AirportWebGateway(locals).getMissionTerminalSnapshot({
-            missionId,
-            ...(repository ? { surfacePath: repository.repositoryRootPath } : {})
-        });
-    }
+async function readMissionTerminalSnapshot(locals: App.Locals, missionId: string, query: z.infer<typeof missionTerminalQuerySchema>) {
+    const gateway = new DaemonGateway(locals);
+    const repository = !query.repositoryRootPath && query.repositoryId
+        ? await gateway.resolveRepositoryCandidate({ id: query.repositoryId })
+        : undefined;
+    const surfacePath = query.repositoryRootPath ?? repository?.repositoryRootPath;
+    return await gateway.getMissionTerminalSnapshot({
+        missionId,
+        ...(surfacePath ? { surfacePath } : {})
+    });
 }
+
 
 async function sendMissionTerminalInput(
     locals: App.Locals,
@@ -116,26 +101,13 @@ async function sendMissionTerminalInput(
         repositoryRootPath?: string;
     }
 ) {
-    const gateway = new AirportWebGateway(locals);
-    const repository = input.repositoryRootPath
-        ? { repositoryRootPath: input.repositoryRootPath }
-        : input.repositoryId
-            ? await gateway.resolveRepositoryCandidate({ repositoryId: input.repositoryId })
-            : undefined;
-    try {
-        return await gateway.sendMissionTerminalInput({
-            ...input,
-            ...(repository ? { surfacePath: repository.repositoryRootPath } : {})
-        });
-    } catch (error) {
-        if (!isStaleMissionTerminalDaemonError(error)) {
-            throw error;
-        }
-
-        await restartMissionTerminalDaemon({ locals });
-        return await new AirportWebGateway(locals).sendMissionTerminalInput({
-            ...input,
-            ...(repository ? { surfacePath: repository.repositoryRootPath } : {})
-        });
-    }
+    const gateway = new DaemonGateway(locals);
+    const repository = !input.repositoryRootPath && input.repositoryId
+        ? await gateway.resolveRepositoryCandidate({ id: input.repositoryId })
+        : undefined;
+    const surfacePath = input.repositoryRootPath ?? repository?.repositoryRootPath;
+    return await gateway.sendMissionTerminalInput({
+        ...input,
+        ...(surfacePath ? { surfacePath } : {})
+    });
 }

@@ -20,7 +20,7 @@ describe('resolveMissionSelection', () => {
 			missionId: 'mission-1',
 			stageId: 'prd',
 			taskId: 'task-1',
-			activeInstructionArtifactId: 'mission-1:task:task-1',
+			activeInstructionArtifact: 'mission-1:task:task-1',
 			activeInstructionPath: '/repo/.mission/missions/mission-1/01-PRD/tasks/01-prd-from-brief.md',
 			activeAgentSessionId: 'session-new'
 		});
@@ -68,7 +68,7 @@ describe('resolveMissionSelection', () => {
 			missionId: 'mission-1',
 			stageId: 'prd',
 			taskId: 'task-1',
-			activeInstructionArtifactId: 'mission-1:task:task-1',
+			activeInstructionArtifact: 'mission-1:task:task-1',
 			activeInstructionPath: '/repo/.mission/missions/mission-1/01-PRD/tasks/01-prd-from-brief.md',
 			activeAgentSessionId: 'session-old'
 		});
@@ -89,7 +89,8 @@ describe('resolveMissionSelection', () => {
 		expect(resolved).toEqual({
 			missionId: 'mission-1',
 			stageId: 'prd',
-			activeStageResultArtifactId: 'mission-1:prd',
+			taskId: 'task-1',
+			activeStageResultArtifact: 'mission-1:prd',
 			activeStageResultPath: '/repo/.mission/missions/mission-1/01-PRD/PRD.md',
 			activeAgentSessionId: 'session-new'
 		});
@@ -113,8 +114,71 @@ describe('resolveMissionSelection', () => {
 		expect(resolved).toEqual({
 			missionId: 'mission-1',
 			stageId: 'prd',
-			activeStageResultArtifactId: 'mission-1:prd',
+			taskId: 'task-1',
+			activeStageResultArtifact: 'mission-1:prd',
 			activeStageResultPath: '/repo/.mission/missions/mission-1/01-PRD/PRD.md',
+			activeAgentSessionId: 'session-new'
+		});
+	});
+
+	it('resolves stage artifact selection to the last task when every stage task is done', () => {
+		const domain = createDomain();
+		domain.missions['mission-1']!.taskIds = ['task-1', 'task-2'];
+		domain.tasks['task-1']!.lifecycleState = 'completed';
+		domain.tasks['task-2'] = {
+			taskId: 'task-2',
+			missionId: 'mission-1',
+			stageId: 'prd',
+			subject: 'Review PRD',
+			instructionSummary: 'Review the PRD.',
+			lifecycleState: 'completed',
+			dependencyIds: [],
+			primaryArtifact: 'mission-1:task:task-2',
+			agentSessionIds: []
+		};
+		domain.artifacts['mission-1:task:task-2'] = {
+			id: 'mission-1:task:task-2',
+			missionId: 'mission-1',
+			ownerTaskId: 'task-2',
+			filePath: '/repo/.mission/missions/mission-1/01-PRD/tasks/02-review-prd.md',
+			logicalKind: 'task-instruction',
+			displayLabel: '02-review-prd.md'
+		};
+
+		const resolved = resolveMissionSelection({
+			target: {
+				kind: 'stage-artifact',
+				stageId: 'prd',
+				sourcePath: '/repo/.mission/missions/mission-1/01-PRD/PRD.md'
+			},
+			domain,
+			missionId: 'mission-1'
+		});
+
+		expect(resolved?.taskId).toBe('task-2');
+		expect(resolved?.activeStageResultPath).toBe('/repo/.mission/missions/mission-1/01-PRD/PRD.md');
+	});
+
+	it('resolves task artifact selection to that artifact and the preferred task session', () => {
+		const domain = createDomain();
+
+		const resolved = resolveMissionSelection({
+			target: {
+				kind: 'task-artifact',
+				stageId: 'prd',
+				taskId: 'task-1',
+				sourcePath: '/repo/.mission/missions/mission-1/01-PRD/tasks/02-prd-appendix.md'
+			},
+			domain,
+			missionId: 'mission-1'
+		});
+
+		expect(resolved).toEqual({
+			missionId: 'mission-1',
+			stageId: 'prd',
+			taskId: 'task-1',
+			activeInstructionArtifact: 'mission-1:task:task-1:alternate',
+			activeInstructionPath: '/repo/.mission/missions/mission-1/01-PRD/tasks/02-prd-appendix.md',
 			activeAgentSessionId: 'session-new'
 		});
 	});
@@ -133,7 +197,7 @@ describe('resolveMissionSelection', () => {
 
 		expect(resolved).toEqual({
 			missionId: 'mission-1',
-			activeMissionArtifactId: 'mission-1:brief',
+			activeMissionArtifact: 'mission-1:brief',
 			activeMissionArtifactPath: '/repo/.mission/missions/mission-1/BRIEF.md'
 		});
 	});
@@ -150,7 +214,7 @@ describe('resolveMissionSelection', () => {
 			domain
 		});
 
-		expect(resolved?.activeInstructionArtifactId).toBe('mission-1:task:task-1');
+		expect(resolved?.activeInstructionArtifact).toBe('mission-1:task:task-1');
 		expect(resolved?.activeAgentSessionId).toBe('session-new');
 	});
 
@@ -163,12 +227,12 @@ describe('resolveMissionSelection', () => {
 				stageId: 'prd',
 				taskId: 'task-1',
 				agentSessionId: 'session-old',
-				artifactId: 'mission-1:task:task-1:alternate'
+				artifact: 'mission-1:task:task-1:alternate'
 			},
 			domain
 		});
 
-		expect(resolved?.activeInstructionArtifactId).toBe('mission-1:task:task-1:alternate');
+		expect(resolved?.activeInstructionArtifact).toBe('mission-1:task:task-1:alternate');
 		expect(resolved?.activeInstructionPath).toBe('/repo/.mission/missions/mission-1/01-PRD/tasks/02-prd-appendix.md');
 	});
 });
@@ -191,7 +255,7 @@ function createDomain(): ContextGraph {
 				briefSummary: 'Mission 1',
 				workspacePath: '/repo/.mission/missions/mission-1',
 				taskIds: ['task-1'],
-				artifactIds: ['mission-1:brief', 'mission-1:prd', 'mission-1:spec', 'mission-1:task:task-1'],
+				artifacts: ['mission-1:brief', 'mission-1:prd', 'mission-1:spec', 'mission-1:task:task-1'],
 				sessionIds: ['session-old', 'session-new']
 			}
 		},
@@ -204,34 +268,34 @@ function createDomain(): ContextGraph {
 				instructionSummary: 'Create the PRD from the brief.',
 				lifecycleState: 'running',
 				dependencyIds: [],
-				primaryArtifactId: 'mission-1:task:task-1',
+				primaryArtifact: 'mission-1:task:task-1',
 				agentSessionIds: ['session-old', 'session-new']
 			}
 		},
 		artifacts: {
 			'mission-1:brief': {
-				artifactId: 'mission-1:brief',
+				id: 'mission-1:brief',
 				missionId: 'mission-1',
 				filePath: '/repo/.mission/missions/mission-1/BRIEF.md',
 				logicalKind: 'brief',
 				displayLabel: 'BRIEF.md'
 			},
 			'mission-1:prd': {
-				artifactId: 'mission-1:prd',
+				id: 'mission-1:prd',
 				missionId: 'mission-1',
 				filePath: '/repo/.mission/missions/mission-1/01-PRD/PRD.md',
 				logicalKind: 'prd',
 				displayLabel: 'PRD.md'
 			},
 			'mission-1:spec': {
-				artifactId: 'mission-1:spec',
+				id: 'mission-1:spec',
 				missionId: 'mission-1',
 				filePath: '/repo/.mission/missions/mission-1/02-SPEC/SPEC.md',
 				logicalKind: 'spec',
 				displayLabel: 'SPEC.md'
 			},
 			'mission-1:task:task-1': {
-				artifactId: 'mission-1:task:task-1',
+				id: 'mission-1:task:task-1',
 				missionId: 'mission-1',
 				ownerTaskId: 'task-1',
 				filePath: '/repo/.mission/missions/mission-1/01-PRD/tasks/01-prd-from-brief.md',
@@ -239,7 +303,7 @@ function createDomain(): ContextGraph {
 				displayLabel: '01-prd-from-brief.md'
 			},
 			'mission-1:task:task-1:alternate': {
-				artifactId: 'mission-1:task:task-1:alternate',
+				id: 'mission-1:task:task-1:alternate',
 				missionId: 'mission-1',
 				ownerTaskId: 'task-1',
 				filePath: '/repo/.mission/missions/mission-1/01-PRD/tasks/02-prd-appendix.md',

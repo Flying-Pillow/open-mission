@@ -2,12 +2,13 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { Manifest } from './protocol/contracts.js';
+import type { Manifest } from './protocol/transport.js';
 
 const MISSION_RUNTIME_DIRECTORY = 'mission';
 const MISSION_DAEMON_MANIFEST_FILE = 'daemon.json';
 const MISSION_DAEMON_SESSIONS_DIRECTORY = 'sessions';
 const MISSION_DAEMON_SOCKET_FILE = 'daemon.sock';
+const MISSION_DAEMON_LOG_FILE = 'daemon.log';
 const MISSION_DAEMON_STDOUT_FILE = 'daemon.stdout.log';
 
 export function getDaemonRuntimePath(): string {
@@ -19,6 +20,10 @@ export function getDaemonManifestPath(): string {
 }
 
 export function getDaemonLogPath(): string {
+	return path.join(getDaemonRuntimePath(), MISSION_DAEMON_LOG_FILE);
+}
+
+export function getDaemonStdoutLogPath(): string {
 	return path.join(getDaemonRuntimePath(), MISSION_DAEMON_STDOUT_FILE);
 }
 

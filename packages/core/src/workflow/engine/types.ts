@@ -1,3 +1,9 @@
+import { z } from 'zod/v4';
+import { AgentSessionTerminalHandleSchema, type AgentSessionTerminalHandleType } from '../../entities/AgentSession/AgentSessionSchema.js';
+import {
+    WorkflowDefinitionSchema,
+} from '../WorkflowSchema.js';
+
 export type MissionStageId = string;
 
 export const MISSION_LIFECYCLE_STATES = [
@@ -51,232 +57,206 @@ export const MISSION_AGENT_SESSION_LIFECYCLE_STATES = [
     'terminated'
 ] as const;
 
-export type MissionAgentSessionLifecycleState = (typeof MISSION_AGENT_SESSION_LIFECYCLE_STATES)[number];
+export type AgentSessionLifecycleState = (typeof MISSION_AGENT_SESSION_LIFECYCLE_STATES)[number];
 
 export type MissionGateIntent = 'implement' | 'verify' | 'audit' | 'deliver';
 export type MissionGateState = 'blocked' | 'passed';
 
-export interface MissionTaskRuntimeSettings {
-    autostart: boolean;
-    maxReworkIterations?: number;
-}
+const nonEmptyStringSchema = z.string().trim().min(1);
+const unknownRecordSchema = z.record(z.string(), z.unknown());
 
-export interface MissionTaskArtifactReference {
-    path: string;
-    title?: string;
-}
+export const MissionTaskRuntimeSettingsSchema = z.object({
+    autostart: z.boolean(),
+    maxReworkIterations: z.number().int().min(0).optional()
+}).strict();
 
-export interface MissionTaskReworkRequest {
-    requestId: string;
-    requestedAt: string;
-    actor: 'human' | 'system' | 'workflow';
-    reasonCode: string;
-    summary: string;
-    iteration: number;
-    maxIterations: number;
-    sourceTaskId?: string;
-    sourceSessionId?: string;
-    launchedAt?: string;
-    resolvedAt?: string;
-    artifactRefs: MissionTaskArtifactReference[];
-}
+export type MissionTaskRuntimeSettings = z.infer<typeof MissionTaskRuntimeSettingsSchema>;
 
-export interface MissionTaskPendingLaunchContext {
-    source: 'rework';
-    requestId: string;
-    createdAt: string;
-    actor: 'human' | 'system' | 'workflow';
-    reasonCode: string;
-    summary: string;
-    sourceTaskId?: string;
-    artifactRefs: MissionTaskArtifactReference[];
-}
+export const MissionTaskArtifactReferenceSchema = z.object({
+    path: nonEmptyStringSchema,
+    title: nonEmptyStringSchema.optional()
+}).strict();
 
-export interface MissionTaskRuntimeState {
-    taskId: string;
-    stageId: MissionStageId;
-    title: string;
-    instruction: string;
-    taskKind?: 'implementation' | 'verification';
-    pairedTaskId?: string;
-    dependsOn: string[];
-    lifecycle: MissionTaskLifecycleState;
-    waitingOnTaskIds: string[];
-    runtime: MissionTaskRuntimeSettings;
-    agentRunner?: string;
-    retries: number;
-    reworkIterationCount?: number;
-    reworkRequest?: MissionTaskReworkRequest;
-    pendingLaunchContext?: MissionTaskPendingLaunchContext;
-    createdAt: string;
-    updatedAt: string;
-    completedAt?: string;
-    failedAt?: string;
-    cancelledAt?: string;
-}
+export type MissionTaskArtifactReference = z.infer<typeof MissionTaskArtifactReferenceSchema>;
 
-export interface MissionPauseState {
-    paused: boolean;
-    reason?: MissionPauseReason;
-    targetType?: 'mission' | 'task' | 'session';
-    targetId?: string;
-    requestedAt?: string;
-}
+export const MissionTaskReworkRequestSchema = z.object({
+    requestId: nonEmptyStringSchema,
+    requestedAt: nonEmptyStringSchema,
+    actor: z.enum(['human', 'system', 'workflow']),
+    reasonCode: nonEmptyStringSchema,
+    summary: nonEmptyStringSchema,
+    iteration: z.number().int().min(0),
+    maxIterations: z.number().int().min(0),
+    sourceTaskId: nonEmptyStringSchema.optional(),
+    sourceSessionId: nonEmptyStringSchema.optional(),
+    launchedAt: nonEmptyStringSchema.optional(),
+    resolvedAt: nonEmptyStringSchema.optional(),
+    artifactRefs: z.array(MissionTaskArtifactReferenceSchema)
+}).strict();
 
-export interface MissionPanicState {
-    active: boolean;
-    requestedAt?: string;
-    requestedBy?: 'human' | 'system';
-    terminateSessions: boolean;
-    clearLaunchQueue: boolean;
-    haltMission: boolean;
-}
+export type MissionTaskReworkRequest = z.infer<typeof MissionTaskReworkRequestSchema>;
 
-export interface MissionTaskLaunchRequest {
-    requestId: string;
-    taskId: string;
-    requestedAt: string;
-    requestedBy: 'system' | 'human' | 'daemon';
-    causedByEventId?: string;
-    runnerId?: string;
-    prompt?: string;
-    workingDirectory?: string;
-    terminalSessionName?: string;
-    dispatchedAt?: string;
-}
+export const MissionTaskPendingLaunchContextSchema = z.object({
+    source: z.literal('rework'),
+    requestId: nonEmptyStringSchema,
+    createdAt: nonEmptyStringSchema,
+    actor: z.enum(['human', 'system', 'workflow']),
+    reasonCode: nonEmptyStringSchema,
+    summary: nonEmptyStringSchema,
+    sourceTaskId: nonEmptyStringSchema.optional(),
+    artifactRefs: z.array(MissionTaskArtifactReferenceSchema)
+}).strict();
 
-export interface MissionStageRuntimeProjection {
-    stageId: MissionStageId;
-    lifecycle: MissionStageDerivedState;
-    taskIds: string[];
-    readyTaskIds: string[];
-    queuedTaskIds: string[];
-    runningTaskIds: string[];
-    completedTaskIds: string[];
-    enteredAt?: string;
-    completedAt?: string;
-}
+export type MissionTaskPendingLaunchContext = z.infer<typeof MissionTaskPendingLaunchContextSchema>;
 
-export interface MissionAgentSessionRuntimeState {
-    sessionId: string;
-    taskId: string;
-    runnerId: string;
-    transportId?: string;
-    sessionLogPath?: string;
-    terminalSessionName?: string;
-    terminalPaneId?: string;
-    lifecycle: MissionAgentSessionLifecycleState;
-    launchedAt: string;
-    updatedAt: string;
-    completedAt?: string;
-    failedAt?: string;
-    cancelledAt?: string;
-    terminatedAt?: string;
-}
+export const MissionTaskRuntimeStateSchema = z.object({
+    taskId: nonEmptyStringSchema,
+    stageId: nonEmptyStringSchema,
+    title: nonEmptyStringSchema,
+    instruction: nonEmptyStringSchema,
+    taskKind: z.enum(['implementation', 'verification']).optional(),
+    pairedTaskId: nonEmptyStringSchema.optional(),
+    dependsOn: z.array(nonEmptyStringSchema),
+    lifecycle: z.enum(MISSION_TASK_LIFECYCLE_STATES),
+    waitingOnTaskIds: z.array(nonEmptyStringSchema),
+    runtime: MissionTaskRuntimeSettingsSchema,
+    agentRunner: nonEmptyStringSchema.optional(),
+    retries: z.number().int().min(0),
+    reworkIterationCount: z.number().int().min(0).optional(),
+    reworkRequest: MissionTaskReworkRequestSchema.optional(),
+    pendingLaunchContext: MissionTaskPendingLaunchContextSchema.optional(),
+    createdAt: nonEmptyStringSchema,
+    startedAt: nonEmptyStringSchema.optional(),
+    updatedAt: nonEmptyStringSchema,
+    completedAt: nonEmptyStringSchema.optional(),
+    failedAt: nonEmptyStringSchema.optional(),
+    cancelledAt: nonEmptyStringSchema.optional()
+}).strict();
 
-export interface MissionGateProjection {
-    gateId: string;
-    intent: MissionGateIntent;
-    state: MissionGateState;
-    stageId?: MissionStageId;
-    reasons: string[];
-    updatedAt: string;
-}
+export type MissionTaskRuntimeState = z.infer<typeof MissionTaskRuntimeStateSchema>;
 
-export interface WorkflowMissionAutostartSettings {
-    mission: boolean;
-}
+export const MissionPauseStateSchema = z.object({
+    paused: z.boolean(),
+    reason: z.enum(['human-requested', 'panic', 'checkpoint', 'agent-failure', 'system']).optional(),
+    targetType: z.enum(['mission', 'task', 'session']).optional(),
+    targetId: nonEmptyStringSchema.optional(),
+    requestedAt: nonEmptyStringSchema.optional()
+}).strict();
 
-export interface WorkflowHumanInLoopSettings {
-    enabled: boolean;
-    pauseOnMissionStart: boolean;
-}
+export type MissionPauseState = z.infer<typeof MissionPauseStateSchema>;
 
-export interface WorkflowPanicSettings {
-    terminateSessions: boolean;
-    clearLaunchQueue: boolean;
-    haltMission: boolean;
-}
+export const MissionPanicStateSchema = z.object({
+    active: z.boolean(),
+    requestedAt: nonEmptyStringSchema.optional(),
+    requestedBy: z.enum(['human', 'system']).optional(),
+    terminateSessions: z.boolean(),
+    clearLaunchQueue: z.boolean(),
+    haltMission: z.boolean()
+}).strict();
 
-export interface WorkflowExecutionSettings {
-    maxParallelTasks: number;
-    maxParallelSessions: number;
-}
+export type MissionPanicState = z.infer<typeof MissionPanicStateSchema>;
 
-export interface WorkflowStageTaskLaunchPolicy {
-    defaultAutostart: boolean;
-}
+export const MissionTaskLaunchRequestSchema = z.object({
+    requestId: nonEmptyStringSchema,
+    taskId: nonEmptyStringSchema,
+    requestedAt: nonEmptyStringSchema,
+    requestedBy: z.enum(['system', 'human', 'daemon']),
+    causedByEventId: nonEmptyStringSchema.optional(),
+    runnerId: nonEmptyStringSchema.optional(),
+    prompt: z.string().optional(),
+    workingDirectory: nonEmptyStringSchema.optional(),
+    terminalSessionName: nonEmptyStringSchema.optional(),
+    dispatchedAt: nonEmptyStringSchema.optional()
+}).strict();
 
-export interface WorkflowStageDefinition {
-    stageId: MissionStageId;
-    displayName: string;
-    taskLaunchPolicy: WorkflowStageTaskLaunchPolicy;
-}
+export type MissionTaskLaunchRequest = z.infer<typeof MissionTaskLaunchRequestSchema>;
 
-export interface WorkflowGeneratedTaskDefinition {
-    taskId: string;
-    title: string;
-    instruction: string;
-    taskKind?: 'implementation' | 'verification';
-    pairedTaskId?: string;
-    dependsOn: string[];
-    agentRunner?: string;
-}
+export const MissionStageRuntimeProjectionSchema = z.object({
+    stageId: nonEmptyStringSchema,
+    lifecycle: z.enum(MISSION_STAGE_DERIVED_STATES),
+    taskIds: z.array(nonEmptyStringSchema),
+    readyTaskIds: z.array(nonEmptyStringSchema),
+    queuedTaskIds: z.array(nonEmptyStringSchema),
+    runningTaskIds: z.array(nonEmptyStringSchema),
+    completedTaskIds: z.array(nonEmptyStringSchema),
+    enteredAt: nonEmptyStringSchema.optional(),
+    completedAt: nonEmptyStringSchema.optional()
+}).strict();
 
-export interface WorkflowTaskTemplateSource {
-    templateId: string;
-    path: string;
-}
+export type MissionStageRuntimeProjection = z.infer<typeof MissionStageRuntimeProjectionSchema>;
 
-export interface WorkflowTaskGenerationRule {
-    stageId: MissionStageId;
-    artifactTasks: boolean;
-    templateSources: WorkflowTaskTemplateSource[];
-    tasks: WorkflowGeneratedTaskDefinition[];
-}
+export const AgentSessionRuntimeStateSchema = z.object({
+    sessionId: nonEmptyStringSchema,
+    taskId: nonEmptyStringSchema,
+    runnerId: nonEmptyStringSchema,
+    transportId: nonEmptyStringSchema.optional(),
+    sessionLogPath: nonEmptyStringSchema.optional(),
+    terminalHandle: AgentSessionTerminalHandleSchema.optional(),
+    lifecycle: z.enum(MISSION_AGENT_SESSION_LIFECYCLE_STATES),
+    launchedAt: nonEmptyStringSchema,
+    updatedAt: nonEmptyStringSchema,
+    completedAt: nonEmptyStringSchema.optional(),
+    failedAt: nonEmptyStringSchema.optional(),
+    cancelledAt: nonEmptyStringSchema.optional(),
+    terminatedAt: nonEmptyStringSchema.optional()
+}).strict();
 
-export interface WorkflowGateDefinition {
-    gateId: string;
-    intent: MissionGateIntent;
-    stageId?: MissionStageId;
-}
+export type AgentSessionRuntimeState = z.infer<typeof AgentSessionRuntimeStateSchema>;
 
-export interface WorkflowGlobalSettings {
-    autostart: WorkflowMissionAutostartSettings;
-    humanInLoop: WorkflowHumanInLoopSettings;
-    panic: WorkflowPanicSettings;
-    execution: WorkflowExecutionSettings;
-    stageOrder: MissionStageId[];
-    stages: Record<MissionStageId, WorkflowStageDefinition>;
-    taskGeneration: WorkflowTaskGenerationRule[];
-    gates: WorkflowGateDefinition[];
-}
+export const MissionGateProjectionSchema = z.object({
+    gateId: nonEmptyStringSchema,
+    intent: z.enum(['implement', 'verify', 'audit', 'deliver']),
+    state: z.enum(['blocked', 'passed']),
+    stageId: nonEmptyStringSchema.optional(),
+    reasons: z.array(z.string()),
+    updatedAt: nonEmptyStringSchema
+}).strict();
 
-export interface MissionWorkflowConfigurationSnapshot {
-    createdAt: string;
-    source: 'global-settings';
-    workflowVersion: string;
-    workflow: WorkflowGlobalSettings;
-}
+export type MissionGateProjection = z.infer<typeof MissionGateProjectionSchema>;
 
-export interface MissionWorkflowRuntimeState {
-    lifecycle: MissionLifecycleState;
-    activeStageId?: MissionStageId;
-    pause: MissionPauseState;
-    panic: MissionPanicState;
-    stages: MissionStageRuntimeProjection[];
-    tasks: MissionTaskRuntimeState[];
-    sessions: MissionAgentSessionRuntimeState[];
-    gates: MissionGateProjection[];
-    launchQueue: MissionTaskLaunchRequest[];
-    updatedAt: string;
-}
+export type {
+    WorkflowExecutionSettings,
+    WorkflowGateDefinition,
+    WorkflowGeneratedTaskDefinition,
+    WorkflowDefinition,
+    WorkflowHumanInLoopSettings,
+    WorkflowMissionAutostartSettings,
+    WorkflowPanicSettings,
+    WorkflowStageDefinition,
+    WorkflowStageTaskLaunchPolicy,
+    WorkflowTaskGenerationRule,
+    WorkflowTaskTemplateSource
+} from '../WorkflowSchema.js';
+
+export const MissionWorkflowConfigurationSnapshotSchema = z.object({
+    createdAt: nonEmptyStringSchema,
+    source: z.literal('workflow-definition'),
+    workflowVersion: nonEmptyStringSchema,
+    workflow: WorkflowDefinitionSchema
+}).strict();
+
+export type MissionWorkflowConfigurationSnapshot = z.infer<typeof MissionWorkflowConfigurationSnapshotSchema>;
+
+export const MissionWorkflowRuntimeStateSchema = z.object({
+    lifecycle: z.enum(MISSION_LIFECYCLE_STATES),
+    activeStageId: nonEmptyStringSchema.optional(),
+    pause: MissionPauseStateSchema,
+    panic: MissionPanicStateSchema,
+    stages: z.array(MissionStageRuntimeProjectionSchema),
+    tasks: z.array(MissionTaskRuntimeStateSchema),
+    sessions: z.array(AgentSessionRuntimeStateSchema),
+    gates: z.array(MissionGateProjectionSchema),
+    launchQueue: z.array(MissionTaskLaunchRequestSchema),
+    updatedAt: nonEmptyStringSchema
+}).strict();
+
+export type MissionWorkflowRuntimeState = z.infer<typeof MissionWorkflowRuntimeStateSchema>;
 
 export interface MissionWorkflowEventBase {
     eventId: string;
     type: string;
     occurredAt: string;
-    source: 'system' | 'human' | 'agent' | 'daemon';
+    source: 'system' | 'human' | 'agent' | 'daemon' | 'copilot';
     causedByRequestId?: string;
 }
 
@@ -379,8 +359,7 @@ export interface AgentSessionStartedEvent extends MissionWorkflowEventBase {
     runnerId: string;
     transportId?: string;
     sessionLogPath?: string;
-    terminalSessionName?: string;
-    terminalPaneId?: string;
+    terminalHandle?: AgentSessionTerminalHandleType;
 }
 
 export interface AgentSessionLaunchFailedEvent extends MissionWorkflowEventBase {
@@ -436,14 +415,16 @@ export type MissionWorkflowEvent =
     | AgentSessionCancelledEvent
     | AgentSessionTerminatedEvent;
 
-export interface MissionWorkflowEventRecord {
-    eventId: string;
-    type: string;
-    occurredAt: string;
-    source: 'system' | 'human' | 'agent' | 'daemon';
-    causedByRequestId?: string;
-    payload: Record<string, unknown>;
-}
+export const MissionWorkflowEventRecordSchema = z.object({
+    eventId: nonEmptyStringSchema,
+    type: nonEmptyStringSchema,
+    occurredAt: nonEmptyStringSchema,
+    source: z.enum(['system', 'human', 'agent', 'daemon', 'copilot']),
+    causedByRequestId: nonEmptyStringSchema.optional(),
+    payload: unknownRecordSchema
+}).strict();
+
+export type MissionWorkflowEventRecord = z.infer<typeof MissionWorkflowEventRecordSchema>;
 
 export interface MissionWorkflowSignal {
     signalId: string;
@@ -485,12 +466,13 @@ export interface MissionWorkflowReducer {
     ): MissionWorkflowReducerResult;
 }
 
-export interface MissionRuntimeRecord {
-    schemaVersion: number;
-    missionId: string;
-    configuration: MissionWorkflowConfigurationSnapshot;
-    runtime: MissionWorkflowRuntimeState;
-    eventLog?: MissionWorkflowEventRecord[];
-}
-
 export const MISSION_WORKFLOW_RUNTIME_SCHEMA_VERSION = 1;
+
+export const MissionStateDataSchema = z.object({
+    schemaVersion: z.literal(MISSION_WORKFLOW_RUNTIME_SCHEMA_VERSION),
+    missionId: nonEmptyStringSchema,
+    configuration: MissionWorkflowConfigurationSnapshotSchema,
+    runtime: MissionWorkflowRuntimeStateSchema
+}).strict();
+
+export type MissionStateData = z.infer<typeof MissionStateDataSchema>;

@@ -7,7 +7,7 @@ import {
     type MissionWorkflowRuntimeState,
     type MissionWorkflowSignal,
     type MissionTaskRuntimeState,
-    type MissionAgentSessionRuntimeState
+    type AgentSessionRuntimeState
 } from './types.js';
 import { createInitialMissionWorkflowRuntimeState } from './document.js';
 import {
@@ -46,8 +46,9 @@ class MissionWorkflowReductionCycle {
     }
 
     public reduce(): MissionWorkflowReducerResult {
+        const suppressAutostart = isInactiveSessionLifecycleEvent(this.state, this.event);
         new MissionWorkflowTransitionEngine(this.state, this.event, this.configuration).apply();
-        new MissionWorkflowDerivationEngine(this.state, this.event, this.configuration, this.signals, this.requests).derive();
+        new MissionWorkflowDerivationEngine(this.state, this.event, this.configuration, this.signals, this.requests, suppressAutostart).derive();
         return {
             nextState: this.state,
             signals: this.signals,
@@ -253,6 +254,7 @@ class MissionWorkflowTransitionEngine {
                         ? {
                             ...task,
                             lifecycle: 'running',
+                            startedAt: task.startedAt ?? event.occurredAt,
                             updatedAt: event.occurredAt
                         }
                         : task
@@ -380,8 +382,7 @@ class MissionWorkflowTransitionEngine {
                     runnerId: event.runnerId,
                     ...(event.transportId ? { transportId: event.transportId } : {}),
                     ...(event.sessionLogPath ? { sessionLogPath: event.sessionLogPath } : {}),
-                    ...(event.terminalSessionName ? { terminalSessionName: event.terminalSessionName } : {}),
-                    ...(event.terminalPaneId ? { terminalPaneId: event.terminalPaneId } : {}),
+                    ...(event.terminalHandle ? { terminalHandle: { ...event.terminalHandle } } : {}),
                     lifecycle: 'running',
                     launchedAt: event.occurredAt,
                     updatedAt: event.occurredAt
@@ -405,8 +406,12 @@ class MissionWorkflowTransitionEngine {
             case 'session.completed':
                 this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'completed', event.occurredAt);
                 return;
-            case 'session.failed':
+            case 'session.failed': {
+                const wasActive = hasActiveSession(this.state.sessions, event.sessionId);
                 this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'failed', event.occurredAt);
+                if (!wasActive) {
+                    return;
+                }
                 this.state.tasks = this.state.tasks.map((task) =>
                     task.taskId === event.taskId
                         ? {
@@ -418,22 +423,33 @@ class MissionWorkflowTransitionEngine {
                         : task
                 );
                 return;
-            case 'session.cancelled':
+            }
+            case 'session.cancelled': {
+                const wasActive = hasActiveSession(this.state.sessions, event.sessionId);
                 this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'cancelled', event.occurredAt);
+                if (!wasActive) {
+                    return;
+                }
                 this.state.tasks = this.state.tasks.map((task) =>
                     task.taskId === event.taskId
                         ? resetInterruptedTask(task, event.occurredAt)
                         : task
                 );
                 return;
-            case 'session.terminated':
+            }
+            case 'session.terminated': {
+                const wasActive = hasActiveSession(this.state.sessions, event.sessionId);
                 this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'terminated', event.occurredAt);
+                if (!wasActive) {
+                    return;
+                }
                 this.state.tasks = this.state.tasks.map((task) =>
                     task.taskId === event.taskId
                         ? resetInterruptedTask(task, event.occurredAt)
                         : task
                 );
                 return;
+            }
         }
     }
 }
@@ -444,14 +460,17 @@ class MissionWorkflowDerivationEngine {
         private readonly event: MissionWorkflowEvent,
         private readonly configuration: MissionWorkflowConfigurationSnapshot,
         private readonly signals: MissionWorkflowSignal[],
-        private readonly requests: MissionWorkflowRequest[]
+        private readonly requests: MissionWorkflowRequest[],
+        private readonly suppressAutostart: boolean
     ) { }
 
     public derive(): void {
         const event = this.event;
         enforceLifecycleInvariants(this.state, this.configuration, event.occurredAt);
         applyDerivedWorkflowProjectionState(this.state, this.configuration, event.occurredAt);
-        queueAutostartTasks(this.state, event, this.configuration, this.requests);
+        if (!this.suppressAutostart) {
+            queueAutostartTasks(this.state, event, this.configuration, this.requests);
+        }
         applyDerivedWorkflowProjectionState(this.state, this.configuration, event.occurredAt);
 
         if (this.state.lifecycle !== 'delivered' && isMissionCompleted(this.state, this.configuration)) {
@@ -640,9 +659,9 @@ function queueAutostartTasks(
 }
 
 function upsertSession(
-    sessions: MissionAgentSessionRuntimeState[],
-    session: MissionAgentSessionRuntimeState
-): MissionAgentSessionRuntimeState[] {
+    sessions: AgentSessionRuntimeState[],
+    session: AgentSessionRuntimeState
+): AgentSessionRuntimeState[] {
     const existingIndex = sessions.findIndex((candidate) => candidate.sessionId === session.sessionId);
     if (existingIndex < 0) {
         return [...sessions, session];
@@ -653,11 +672,11 @@ function upsertSession(
 }
 
 function updateSessionLifecycle(
-    sessions: MissionAgentSessionRuntimeState[],
+    sessions: AgentSessionRuntimeState[],
     sessionId: string,
-    lifecycle: MissionAgentSessionRuntimeState['lifecycle'],
+    lifecycle: AgentSessionRuntimeState['lifecycle'],
     occurredAt: string
-): MissionAgentSessionRuntimeState[] {
+): AgentSessionRuntimeState[] {
     return sessions.map((session) =>
         session.sessionId === sessionId
             ? {
@@ -673,6 +692,25 @@ function updateSessionLifecycle(
     );
 }
 
+function hasActiveSession(sessions: AgentSessionRuntimeState[], sessionId: string): boolean {
+    return sessions.some((session) => session.sessionId === sessionId && isActiveSessionLifecycle(session.lifecycle));
+}
+
+function isInactiveSessionLifecycleEvent(
+    state: MissionWorkflowRuntimeState,
+    event: MissionWorkflowEvent
+): boolean {
+    switch (event.type) {
+        case 'session.cancelled':
+        case 'session.terminated':
+            return true;
+        case 'session.failed':
+            return !hasActiveSession(state.sessions, event.sessionId);
+        default:
+            return false;
+    }
+}
+
 function applyDerivedWorkflowProjectionState(
     state: MissionWorkflowRuntimeState,
     configuration: MissionWorkflowConfigurationSnapshot,
@@ -686,7 +724,14 @@ function applyDerivedWorkflowProjectionState(
 }
 
 function resetInterruptedTask(task: MissionTaskRuntimeState, occurredAt: string): MissionTaskRuntimeState {
-    return resetLifecycleState(task, occurredAt);
+    const resetTask = resetLifecycleState(task, occurredAt);
+    return {
+        ...resetTask,
+        runtime: {
+            ...resetTask.runtime,
+            autostart: false
+        }
+    };
 }
 
 function resetLifecycleState(task: MissionTaskRuntimeState, occurredAt: string): MissionTaskRuntimeState {

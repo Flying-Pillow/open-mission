@@ -1,14 +1,10 @@
 <script lang="ts">
-    import {
-        missionTerminalSnapshotDtoSchema,
-        missionTerminalSocketServerMessageSchema,
-        type MissionTerminalSnapshotDto,
-        type MissionTerminalSocketServerMessageDto,
-    } from "@flying-pillow/mission-core/airport/runtime";
+    import type { MissionTerminalSnapshotType } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
+    import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import { FitAddon } from "@xterm/addon-fit";
     import * as XtermModule from "@xterm/xterm";
     import {
-        subscribeSharedTerminalTransport,
+        subscribeMissionTerminalTransport,
         type SharedTerminalTransportSubscription,
     } from "$lib/client/runtime/terminal/TerminalTransportBroker";
     import "@xterm/xterm/css/xterm.css";
@@ -42,36 +38,37 @@
     }
 
     type TerminalResizeEvent = { cols: number; rows: number };
-
-    let {
-        missionId,
-        repositoryId,
-        repositoryRootPath,
-        active = true,
-    }: {
-        missionId: string;
-        repositoryId: string;
-        repositoryRootPath: string;
-        active?: boolean;
-    } = $props();
+    const missionScope = getScopedMissionContext();
+    const mission = $derived(missionScope.mission);
+    const activeRepository = $derived(missionScope.repository);
+    const missionId = $derived(mission?.missionId ?? "");
+    const repositoryId = $derived(activeRepository?.id ?? "");
+    const repositoryRootPath = $derived(
+        mission?.missionWorktreePath ??
+            activeRepository?.data.repositoryRootPath ??
+            "",
+    );
 
     let container = $state<HTMLDivElement | null>(null);
-    let terminalSnapshot = $state<MissionTerminalSnapshotDto | null>(null);
+    let terminalSnapshot = $state<MissionTerminalSnapshotType | null>(null);
     let loading = $state(false);
     let error = $state<string | null>(null);
     let sendingInput = $state(false);
-    let activeTransportKey: string | null = null;
+    let activeTransportKey = $state<string | null>(null);
 
     let terminal: XtermTerminal | null = null;
     let fitAddon: XtermFitAddon | null = null;
     let resizeObserver: ResizeObserver | null = null;
-    let terminalTransport: SharedTerminalTransportSubscription<MissionTerminalSnapshotDto> | null =
-        null;
+    let terminalTransport =
+        $state<SharedTerminalTransportSubscription<MissionTerminalSnapshotType> | null>(
+            null,
+        );
     let pendingInput = "";
     let pendingTerminalResponseFragment = "";
     let lastRenderedScreen = "";
     let pendingResize: { cols: number; rows: number } | null = null;
-    let renderWriteToken = 0;
+
+    const MAX_TERMINAL_SNAPSHOT_LENGTH = 40_000;
 
     const terminalStateLabel = $derived.by(() => {
         if (loading && !terminalSnapshot) {
@@ -107,60 +104,48 @@
     });
 
     $effect(() => {
+        return () => {
+            terminalTransport?.dispose();
+            terminalTransport = null;
+        };
+    });
+
+    $effect(() => {
         const normalizedMissionId = missionId?.trim();
-        const transportKey = normalizedMissionId
-            ? `mission:${normalizedMissionId}:${repositoryRootPath}:${repositoryId}`
-            : null;
+        const normalizedRepositoryId = repositoryId?.trim();
+        const normalizedRepositoryRootPath = repositoryRootPath?.trim();
 
-        if (activeTransportKey === transportKey) {
-            return;
-        }
-
-        terminalTransport?.dispose();
-        terminalTransport = null;
-        if (!normalizedMissionId) {
+        if (
+            !normalizedMissionId ||
+            !normalizedRepositoryId ||
+            !normalizedRepositoryRootPath
+        ) {
             activeTransportKey = null;
             terminalSnapshot = null;
             error = null;
             loading = false;
+            terminalTransport?.dispose();
+            terminalTransport = null;
             return;
         }
 
-        if (!transportKey) {
+        const nextTransportKey = [
+            normalizedMissionId,
+            normalizedRepositoryId,
+            normalizedRepositoryRootPath,
+        ].join(":");
+
+        if (activeTransportKey === nextTransportKey) {
             return;
         }
 
-        const resolvedTransportKey: string = transportKey;
-        activeTransportKey = resolvedTransportKey;
-        terminalTransport = subscribeSharedTerminalTransport(
+        activeTransportKey = nextTransportKey;
+        terminalTransport?.dispose();
+        terminalTransport = subscribeMissionTerminalTransport(
             {
-                key: resolvedTransportKey,
-                loadSnapshot: async () => {
-                    const response = await fetch(
-                        `/api/runtime/missions/${encodeURIComponent(normalizedMissionId)}/terminal?repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
-                    );
-                    if (!response.ok) {
-                        throw new Error(
-                            `Terminal snapshot request failed (${response.status}).`,
-                        );
-                    }
-
-                    return missionTerminalSnapshotDtoSchema.parse(
-                        await response.json(),
-                    );
-                },
-                createSocket: () => {
-                    const wsProtocol =
-                        window.location.protocol === "https:" ? "wss:" : "ws:";
-                    const wsUrl = new URL(
-                        `/api/runtime/missions/${encodeURIComponent(normalizedMissionId)}/terminal/ws?repositoryId=${encodeURIComponent(repositoryId)}&repositoryRootPath=${encodeURIComponent(repositoryRootPath)}`,
-                        `${wsProtocol}//${window.location.host}`,
-                    );
-                    return new WebSocket(wsUrl);
-                },
-                parseMessage: (value: unknown) =>
-                    missionTerminalSocketServerMessageSchema.parse(value),
-                retryOnDisconnected: true,
+                missionId: normalizedMissionId,
+                repositoryId: normalizedRepositoryId,
+                repositoryRootPath: normalizedRepositoryRootPath,
             },
             (state) => {
                 terminalSnapshot = state.snapshot;
@@ -168,66 +153,33 @@
                 error = state.error;
             },
         );
-
-        return () => {
-            if (activeTransportKey === transportKey) {
-                activeTransportKey = null;
-            }
-            terminalTransport?.dispose();
-            terminalTransport = null;
-        };
     });
 
     $effect(() => {
         const screen = terminalSnapshot?.screen ?? "";
-        const chunk = terminalSnapshot?.chunk;
-        if (!terminal || !active || typeof screen !== "string") {
+        if (
+            !terminal ||
+            typeof screen !== "string" ||
+            screen === lastRenderedScreen
+        ) {
             return;
         }
 
-        if ((!chunk || chunk.length === 0) && screen === lastRenderedScreen) {
-            return;
-        }
-
-        const writeToken = ++renderWriteToken;
-
-        if (typeof chunk === "string" && chunk.length > 0) {
+        if (
+            lastRenderedScreen.length > 0 &&
+            screen.startsWith(lastRenderedScreen)
+        ) {
+            const appendedScreen = screen.slice(lastRenderedScreen.length);
             lastRenderedScreen = screen;
-            terminal.write(chunk, () => {
-                if (renderWriteToken !== writeToken) {
-                    return;
-                }
-            });
-            return;
-        }
-
-        const nextRender = normalizeScreen(screen);
-        const previousRender = normalizeScreen(lastRenderedScreen);
-        if (nextRender.startsWith(previousRender)) {
-            const appendedOutput = nextRender.slice(previousRender.length);
-            lastRenderedScreen = screen;
-            terminal.write(appendedOutput, () => {
-                if (renderWriteToken !== writeToken) {
-                    return;
-                }
-            });
+            if (appendedScreen.length > 0) {
+                terminal.write(normalizeScreen(appendedScreen));
+            }
             return;
         }
 
         lastRenderedScreen = screen;
         terminal.reset();
-        terminal.write(nextRender, () => {
-            if (renderWriteToken !== writeToken) {
-                return;
-            }
-        });
-    });
-
-    $effect(() => {
-        if (!terminal || !active) {
-            return;
-        }
-
+        terminal.write(normalizeScreen(screen));
         fitAddon?.fit();
     });
 
@@ -241,7 +193,7 @@
 
         sendingInput = true;
         try {
-            while (pendingInput.length > 0 && terminalTransport) {
+            while (pendingInput.length > 0) {
                 const data = pendingInput;
                 pendingInput = "";
                 await terminalTransport.sendInput(data);
@@ -299,7 +251,7 @@
         terminal.open(target);
         fitAddon.fit();
         terminal.onResize(({ cols, rows }: TerminalResizeEvent) => {
-            if (!active || terminalSnapshot?.dead) {
+            if (terminalSnapshot?.dead) {
                 return;
             }
             if (
@@ -312,7 +264,7 @@
             void flushPendingResize();
         });
         terminal.onData((data: string) => {
-            if (!active || terminalSnapshot?.dead) {
+            if (terminalSnapshot?.dead) {
                 return;
             }
             const sanitizedData = sanitizeTerminalInputData(data);
@@ -407,6 +359,18 @@
         }
 
         return sanitizedData;
+    }
+
+    function appendTerminalScreen(
+        currentScreen: string,
+        chunk: string,
+        truncated: boolean,
+    ): string {
+        const nextScreen = `${currentScreen}${chunk}`;
+        if (truncated || nextScreen.length > MAX_TERMINAL_SNAPSHOT_LENGTH) {
+            return nextScreen.slice(-MAX_TERMINAL_SNAPSHOT_LENGTH);
+        }
+        return nextScreen;
     }
 </script>
 

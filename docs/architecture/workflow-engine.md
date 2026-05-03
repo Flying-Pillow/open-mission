@@ -7,7 +7,7 @@ nav_order: 5
 
 # Workflow Engine
 
-The workflow engine is the mission-local execution authority. Its job is to reduce workflow events into a durable runtime record, emit side-effect requests, and reconcile runtime session facts back into mission state.
+The workflow engine is the mission-local execution authority. Its job is to reduce workflow events into a durable runtime data, emit side-effect requests, and reconcile runtime session facts back into mission state.
 
 The engine owns workflow semantics, not workflow content. The active workflow preset is repository-owned state under `.mission/workflow/`, including the serializable workflow definition and the stage/task template corpus that task generation consumes in production.
 
@@ -15,8 +15,8 @@ The engine owns workflow semantics, not workflow content. The active workflow pr
 
 | Component | Responsibility | Owned state | Persisted state |
 | --- | --- | --- | --- |
-| `MissionWorkflowController` | Loads, initializes, persists, and replays machine-derived requests around the mission runtime record | cached `MissionRuntimeRecord` | `mission.json` |
-| reducer ingestion logic | Applies one event to the current runtime record and yields requests | none, pure transformation | none |
+| `MissionWorkflowController` | Loads, initializes, persists, and replays machine-derived requests around the mission runtime data | cached `MissionRuntimeData` | `mission.json` |
+| reducer ingestion logic | Applies one event to the current runtime data and yields requests | none, pure transformation | none |
 | workflow policy helpers | Own stage eligibility, completion, generation, reopen, and mission completion rules | none, pure derivation | none |
 | `MissionWorkflowRequestExecutor` | Executes request side effects such as task generation and session launch | daemon-owned agent control dependency, buffered runtime events | none directly |
 | Task generation helpers | Turn workflow config and templates into task records | generation result in memory | task files + artifact files |
@@ -32,7 +32,7 @@ Repository initialization scaffolds the workflow preset into:
 
 That preset is part of repository policy, not a hidden package implementation detail.
 
-- `workflow.json` is the repository-owned workflow definition the engine loads and snapshots into each mission runtime record.
+- `workflow.json` is the repository-owned workflow definition the engine loads and snapshots into each mission runtime data.
 - `templates/` contains the repository-owned stage and task templates the executor renders when materializing artifacts and generated tasks.
 - the packaged build still includes the default preset assets so Mission can scaffold new repositories, but once a repository is initialized the repo copy is the live source of truth.
 
@@ -40,7 +40,7 @@ Execution settings are reducer-owned policy, not documentation-only decoration: 
 
 Task auto-launch is also reducer-owned policy. A task may auto-queue only after the derived projection marks it `ready`, which means it is in the active stage and every `dependsOn` task is already `completed`. Tasks with unresolved dependencies stay `pending`, expose `waitingOnTaskIds`, and are not eligible for auto-launch yet.
 
-## Runtime Record Structure
+## Runtime Data Structure
 
 The authoritative mission execution document is:
 
@@ -52,11 +52,12 @@ Its top-level shape is:
 
 | Field | Meaning |
 | --- | --- |
-| `schemaVersion` | Runtime record schema version |
+| `schemaVersion` | Runtime data schema version |
 | `missionId` | Mission identity |
 | `configuration` | Snapshotted workflow configuration |
 | `runtime` | Current workflow runtime state |
-| `eventLog` | Append-only workflow event history |
+
+The append-only workflow event history is stored as the Mission runtime event log beside `mission.json`, not as an inline `eventLog` field in Mission runtime data.
 
 ## Runtime State Contents
 
@@ -67,8 +68,8 @@ Its top-level shape is:
 | `pause` | Human or system pause state |
 | `panic` | Panic-stop configuration and active panic state |
 | `stages` | Derived stage projections |
-| `tasks` | Authoritative task runtime records |
-| `sessions` | Workflow-tracked session runtime records |
+| `tasks` | Authoritative task runtime data entries |
+| `sessions` | Workflow-tracked session runtime data entries |
 | `gates` | Workflow gate projections such as implement, verify, audit, deliver |
 | `launchQueue` | Pending task launch requests |
 | `updatedAt` | Last workflow update timestamp |
@@ -136,7 +137,7 @@ The engine now single-sources generation eligibility in the workflow policy laye
 3. no tasks for that stage already exist in runtime state
 4. the workflow configuration includes generation templates for that stage
 
-The reducer emits that request during normal event ingestion, and the controller may replay the same machine-derived request during refresh to recover from missed side effects or older persisted records. Stage progression and task generation stay coupled to the persisted configuration snapshot in `mission.json`, but the rules now live in one place.
+The reducer emits that request during normal event ingestion, and the controller may replay the same machine-derived request during refresh to recover from missed side effects in otherwise valid Mission runtime data. Stage progression and task generation stay coupled to the persisted configuration snapshot in `mission.json`, but the rules now live in one place.
 
 Task rendering is repository-local at execution time. The executor materializes stage artifacts and generated tasks from `.mission/workflow/templates/`, not from hard-coded package-relative source files, so repository owners can evolve the preset after initialization.
 

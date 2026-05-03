@@ -1,29 +1,19 @@
 <script lang="ts">
-    import { asset } from "$app/paths";
-    import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
-    import * as Avatar from "$lib/components/ui/avatar/index.js";
+    import Icon from "@iconify/svelte";
+    import NavUser from "$lib/components/nav-user.svelte";
     import { Separator } from "$lib/components/ui/separator/index.js";
     import * as Sidebar from "$lib/components/ui/sidebar/index.js";
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
 
-    const appContext = getAppContext();
-    const fallbackAvatar = asset("/logo.png");
+    const app = getAppContext();
+
     const missionRepositoryUrl = "https://github.com/Flying-Pillow/mission";
 
-    const headerIdentity = $derived.by(() => ({
-        name: appContext.user?.name ?? "Mission Operator",
-        avatar: appContext.user?.avatarUrl ?? fallbackAvatar,
+    const daemonBadge = $derived.by(() => ({
+        label: app.daemon.running ? "Daemon online" : "Daemon offline",
+        detail: app.daemon.running ? "Connected" : app.daemon.message,
+        className: app.daemon.running ? "text-emerald-600" : "text-red-600",
     }));
-
-    const userInitials = $derived.by(
-        () =>
-            headerIdentity.name
-                .split(/[^A-Za-z0-9]+/u)
-                .filter((segment) => segment.length > 0)
-                .slice(0, 2)
-                .map((segment) => segment[0]?.toUpperCase() ?? "")
-                .join("") || "FP",
-    );
 </script>
 
 <header
@@ -44,6 +34,19 @@
             <h1 class="truncate text-sm font-semibold sm:text-base">Mission</h1>
         </div>
         <div class="ms-auto flex items-center gap-2">
+            <div class="hidden items-center gap-2 lg:flex">
+                <span
+                    class={`inline-flex size-9 items-center justify-center rounded-full ${daemonBadge.className}`}
+                    aria-label={daemonBadge.label}
+                    title={daemonBadge.detail}
+                >
+                    {#if app.daemon.running}
+                        <Icon icon="lucide:plug" class="size-4" />
+                    {:else}
+                        <Icon icon="lucide:unplug" class="size-4" />
+                    {/if}
+                </span>
+            </div>
             <a
                 href={missionRepositoryUrl}
                 target="_blank"
@@ -52,25 +55,10 @@
                 title="Open Mission on GitHub"
                 class="text-muted-foreground hover:text-foreground inline-flex size-9 items-center justify-center rounded-full border border-transparent transition-colors hover:border-border hover:bg-muted/60"
             >
-                <BrandGithubIcon class="size-4" />
+                <Icon icon="lucide:github" class="size-4" />
             </a>
-            <div
-                class="flex items-center gap-3 rounded-full border bg-background/80 px-2.5 py-1.5"
-            >
-                <Avatar.Root class="size-8 overflow-hidden rounded-full">
-                    <Avatar.Image
-                        src={headerIdentity.avatar}
-                        alt={headerIdentity.name}
-                    />
-                    <Avatar.Fallback class="rounded-full text-xs font-medium">
-                        {userInitials}
-                    </Avatar.Fallback>
-                </Avatar.Root>
-                <span
-                    class="hidden text-sm font-medium text-foreground sm:inline"
-                >
-                    {headerIdentity.name}
-                </span>
+            <div class="w-56 max-w-[calc(100vw-8rem)]">
+                <NavUser contentSide="bottom" />
             </div>
         </div>
     </div>

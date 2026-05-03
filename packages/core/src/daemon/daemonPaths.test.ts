@@ -7,6 +7,7 @@ import {
 	getDaemonManifestPath,
 	getDaemonRuntimePath,
 	getDaemonSessionStatePath,
+	getDaemonStdoutLogPath,
 	isNamedPipePath,
 	resolveDaemonSocketPath
 } from './daemonPaths.js';
@@ -18,12 +19,14 @@ describe('daemonPaths', () => {
 		try {
 			const runtimePath = getDaemonRuntimePath();
 			const logPath = getDaemonLogPath();
+			const stdoutLogPath = getDaemonStdoutLogPath();
 			const manifestPath = getDaemonManifestPath();
 			const sessionPath = getDaemonSessionStatePath(workspaceRoot, 'mission-123');
 			const socketPath = resolveDaemonSocketPath();
 
 			expect(runtimePath.startsWith(workspaceRoot)).toBe(false);
-			expect(logPath).toBe(path.join(runtimePath, 'daemon.stdout.log'));
+			expect(logPath).toBe(path.join(runtimePath, 'daemon.log'));
+			expect(stdoutLogPath).toBe(path.join(runtimePath, 'daemon.stdout.log'));
 			expect(manifestPath).toBe(path.join(runtimePath, 'daemon.json'));
 			expect(sessionPath.startsWith(path.join(runtimePath, 'workspaces'))).toBe(true);
 			expect(sessionPath.endsWith(path.join('sessions', 'mission-123.json'))).toBe(true);

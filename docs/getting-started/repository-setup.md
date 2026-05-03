@@ -28,7 +28,7 @@ That path model stays the same in both shared tracked mode and local-only contri
 In the current control surface, repository discovery includes actions for:
 
 - registering a repository
-- switching between registered repositories
+- switching between available repositories
 - editing repository setup
 - browsing open GitHub issues once issue intake is configured
 
@@ -93,7 +93,7 @@ That separation matters because Mission treats these as different concerns:
 
 This is why repository setup does not create `mission.json`. That file only appears when a real mission has been prepared.
 
-That separation does not mean the repository must already be initialized on the current checkout before the first mission can begin. In the current repository-adoption model, `/init` prepares the first mission worktree and creates `.mission/settings.json` and `.mission/workflow/` there so the scaffold can be reviewed and merged without directly mutating the original checkout first.
+That separation also means a cloned repository can enter setup before any mission exists. In the current repository-adoption model, Airport shows Repository setup when `.mission/settings.json` is missing. Submitting that screen creates a setup branch, writes `.mission/settings.json` and `.mission/workflow/`, opens a pull request, and attempts auto-merge. Regular missions stay disabled until the setup state is available in the local checkout.
 
 ## GitHub And Review-Oriented Teams
 

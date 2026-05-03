@@ -1,60 +1,61 @@
 import type { MissionDescriptor } from '../../types.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import {
+    MissionWorkflowEventRecordSchema,
+    MissionStateDataSchema
+} from './types.js';
 import type {
-	AgentLaunchConfig,
+    AgentLaunchConfig,
     AgentCommand,
     AgentPrompt,
     AgentSessionReference,
     AgentSessionSnapshot
-} from '../../agent/AgentRuntimeTypes.js';
+} from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
 import {
     buildWorkflowTaskGenerationRequests,
     createMissionWorkflowConfigurationSnapshot,
-    createMissionRuntimeRecord,
-    deriveMissionWorkflowProjectionState,
+    createMissionStateData,
     ingestMissionWorkflowEvent,
-    normalizeGeneratedTaskDependencies,
     type MissionWorkflowConfigurationSnapshot,
     type MissionWorkflowEvent,
+    type MissionWorkflowEventRecord,
     type MissionWorkflowRequest,
-    type MissionRuntimeRecord
+    type MissionStateData
 } from './index.js';
 import { DEFAULT_WORKFLOW_VERSION } from '../mission/workflow.js';
 import type { MissionWorkflowRequestExecutor } from './requestExecutor.js';
-import type { WorkflowGlobalSettings } from './types.js';
+import type { WorkflowDefinition } from './types.js';
 
 export interface MissionWorkflowControllerOptions {
     adapter: FilesystemAdapter;
     descriptor: MissionDescriptor;
-    workflow: WorkflowGlobalSettings;
-    resolveWorkflow?: () => WorkflowGlobalSettings;
+    workflow: WorkflowDefinition;
+    resolveWorkflow?: () => WorkflowDefinition;
     requestExecutor: MissionWorkflowRequestExecutor;
     workflowVersion?: string;
 }
 
 export class MissionWorkflowController {
-    private readonly adapter: FilesystemAdapter;
     private readonly descriptor: MissionDescriptor;
+    private readonly adapter: FilesystemAdapter;
     private readonly requestExecutor: MissionWorkflowRequestExecutor;
     private readonly workflowVersion: string;
-    private readonly workflow: WorkflowGlobalSettings;
-    private readonly resolveWorkflowOverride: (() => WorkflowGlobalSettings) | undefined;
-    private document: MissionRuntimeRecord | undefined;
+    private readonly workflow: WorkflowDefinition;
+    private readonly resolveWorkflowOverride: (() => WorkflowDefinition) | undefined;
+    private document: MissionStateData | undefined;
+    private mutationQueue: Promise<void> = Promise.resolve();
 
     public constructor(options: MissionWorkflowControllerOptions) {
-        this.adapter = options.adapter;
         this.descriptor = options.descriptor;
+        this.adapter = options.adapter;
         this.workflow = options.workflow;
         this.resolveWorkflowOverride = options.resolveWorkflow;
         this.requestExecutor = options.requestExecutor;
         this.workflowVersion = options.workflowVersion ?? DEFAULT_WORKFLOW_VERSION;
     }
 
-    public async initialize(): Promise<MissionRuntimeRecord | undefined> {
-        let document = await this.adapter.readMissionRuntimeRecord(this.descriptor.missionDir);
-        if (document) {
-            document = await this.normalizePersistedDocument(document);
-        }
+    public async initialize(): Promise<MissionStateData | undefined> {
+        let document = await this.readRuntimeData();
         if (!document) {
             if (!this.resolveWorkflow().autostart.mission) {
                 this.document = undefined;
@@ -70,9 +71,9 @@ export class MissionWorkflowController {
         return document;
     }
 
-    public async refresh(): Promise<MissionRuntimeRecord | undefined> {
-        const persisted = await this.adapter.readMissionRuntimeRecord(this.descriptor.missionDir);
-        const document = persisted ? await this.normalizePersistedDocument(persisted) : undefined;
+    public async refresh(): Promise<MissionStateData | undefined> {
+        const persisted = await this.readRuntimeData();
+        const document = persisted;
         if (!document) {
             this.document = undefined;
             return undefined;
@@ -83,25 +84,25 @@ export class MissionWorkflowController {
         return synchronized;
     }
 
-    public async getDocument(): Promise<MissionRuntimeRecord> {
+    public async getDocument(): Promise<MissionStateData> {
         if (this.document) {
             return this.document;
         }
         const document = await this.refresh();
         if (!document) {
-            throw new Error(`Mission workflow document is missing for mission '${this.descriptor.missionId}'.`);
+            throw new Error(`Mission runtime data is missing for mission '${this.descriptor.missionId}'.`);
         }
         return document;
     }
 
-    public async getPersistedDocument(): Promise<MissionRuntimeRecord | undefined> {
+    public async getPersistedDocument(): Promise<MissionStateData | undefined> {
         if (this.document) {
             return this.document;
         }
         return this.refresh();
     }
 
-    public async reconcileSessions(): Promise<MissionRuntimeRecord> {
+    public async reconcileSessions(): Promise<MissionStateData> {
         const document = await this.getDocument();
         const emittedEvents = await this.requestExecutor.reconcileSessions(document);
         let nextDocument = document;
@@ -120,46 +121,46 @@ export class MissionWorkflowController {
         return this.requestExecutor.getRuntimeSession(sessionId);
     }
 
-	public async attachRuntimeSession(reference: AgentSessionReference): Promise<AgentSessionSnapshot> {
-		return this.requestExecutor.attachSession(reference);
-	}
+    public async attachRuntimeSession(reference: AgentSessionReference): Promise<AgentSessionSnapshot> {
+        return this.requestExecutor.attachSession(reference);
+    }
 
-        public async startRuntimeSession(config: AgentLaunchConfig): Promise<AgentSessionSnapshot> {
-		return this.requestExecutor.startSession(config);
+    public async startRuntimeSession(config: AgentLaunchConfig): Promise<AgentSessionSnapshot> {
+        return this.requestExecutor.startSession(config);
     }
 
     public async cancelRuntimeSession(
         sessionId: string,
         reason?: string,
         fallbackTaskId?: string
-    ): Promise<MissionRuntimeRecord> {
+    ): Promise<MissionStateData> {
         return this.ingestEmittedEvents(
             await this.requestExecutor.cancelRuntimeSession(sessionId, reason, fallbackTaskId)
         );
     }
 
-    public async promptRuntimeSession(sessionId: string, prompt: AgentPrompt): Promise<MissionRuntimeRecord> {
-		return this.ingestEmittedEvents(await this.requestExecutor.promptRuntimeSession(sessionId, prompt));
-	}
+    public async promptRuntimeSession(sessionId: string, prompt: AgentPrompt): Promise<MissionStateData> {
+        return this.ingestEmittedEvents(await this.requestExecutor.promptRuntimeSession(sessionId, prompt));
+    }
 
     public async completeRuntimeSession(
         sessionId: string,
         fallbackTaskId?: string
-    ): Promise<MissionRuntimeRecord> {
+    ): Promise<MissionStateData> {
         return this.ingestEmittedEvents(
             await this.requestExecutor.completeRuntimeSession(sessionId, fallbackTaskId)
         );
     }
 
-    public async commandRuntimeSession(sessionId: string, command: AgentCommand): Promise<MissionRuntimeRecord> {
-		return this.ingestEmittedEvents(await this.requestExecutor.commandRuntimeSession(sessionId, command));
-	}
+    public async commandRuntimeSession(sessionId: string, command: AgentCommand): Promise<MissionStateData> {
+        return this.ingestEmittedEvents(await this.requestExecutor.commandRuntimeSession(sessionId, command));
+    }
 
     public async terminateRuntimeSession(
         sessionId: string,
         reason?: string,
         fallbackTaskId?: string
-    ): Promise<MissionRuntimeRecord> {
+    ): Promise<MissionStateData> {
         return this.ingestEmittedEvents(
             await this.requestExecutor.terminateRuntimeSession(sessionId, reason, fallbackTaskId)
         );
@@ -169,9 +170,9 @@ export class MissionWorkflowController {
         occurredAt?: string;
         source?: MissionWorkflowEvent['source'];
         startMission?: boolean;
-    }): Promise<MissionRuntimeRecord> {
+    }): Promise<MissionStateData> {
         const occurredAt = input?.occurredAt ?? new Date().toISOString();
-        let document = await this.adapter.readMissionRuntimeRecord(this.descriptor.missionDir);
+        let document = await this.readRuntimeData();
         if (!document) {
             const configuration = createMissionWorkflowConfigurationSnapshot({
                 createdAt: occurredAt,
@@ -179,7 +180,7 @@ export class MissionWorkflowController {
                 workflow: this.resolveWorkflow()
             });
             const created = ingestMissionWorkflowEvent(
-                createMissionRuntimeRecord({
+                createMissionStateData({
                     missionId: this.descriptor.missionId,
                     configuration,
                     createdAt: occurredAt
@@ -192,8 +193,11 @@ export class MissionWorkflowController {
                 }
             );
             document = created.document;
-            await this.adapter.writeMissionRuntimeRecord(this.descriptor.missionDir, document);
-            await this.adapter.appendMissionRuntimeEventRecord(this.descriptor.missionDir, created.eventRecord);
+            await this.writeRuntimeData({
+                transactionId: created.eventRecord.eventId,
+                missionStateData: document,
+                appendMissionEventRecords: [created.eventRecord]
+            });
             this.document = document;
 
             const emittedEvents = await this.executeRequests(document, created.requests);
@@ -225,22 +229,33 @@ export class MissionWorkflowController {
         return this.document?.configuration;
     }
 
-    public async applyEvent(event: MissionWorkflowEvent): Promise<MissionRuntimeRecord> {
+    public async applyEvent(event: MissionWorkflowEvent): Promise<MissionStateData> {
+        return this.runExclusiveMutation(() => this.applyEventUnlocked(event));
+    }
+
+    private async applyEventUnlocked(event: MissionWorkflowEvent): Promise<MissionStateData> {
         const document = await this.requireDocument();
+        const existingEventRecords = await this.readEventLog().catch(() => []);
+        if (existingEventRecords.some((eventRecord) => eventRecord.eventId === event.eventId)) {
+            return document;
+        }
         const ingested = ingestMissionWorkflowEvent(document, event);
-        await this.adapter.writeMissionRuntimeRecord(this.descriptor.missionDir, ingested.document);
-        await this.adapter.appendMissionRuntimeEventRecord(this.descriptor.missionDir, ingested.eventRecord);
+        await this.writeRuntimeData({
+            transactionId: ingested.eventRecord.eventId,
+            missionStateData: ingested.document,
+            appendMissionEventRecords: [ingested.eventRecord]
+        });
         let nextDocument = ingested.document;
         this.document = ingested.document;
         const emittedEvents = await this.executeRequests(nextDocument, ingested.requests);
         for (const emittedEvent of emittedEvents) {
-            nextDocument = await this.applyEvent(emittedEvent);
+            nextDocument = await this.applyEventUnlocked(emittedEvent);
         }
         this.document = nextDocument;
         return nextDocument;
     }
 
-    public async generateTasksForStage(stageId: string): Promise<MissionRuntimeRecord> {
+    public async generateTasksForStage(stageId: string): Promise<MissionStateData> {
         const document = await this.getDocument();
         const emittedEvents = await this.executeRequests(document, [{
             requestId: `tasks.request-generation:manual:${stageId}:${new Date().toISOString()}`,
@@ -251,7 +266,7 @@ export class MissionWorkflowController {
     }
 
     private async executeRequests(
-        document: MissionRuntimeRecord,
+        document: MissionStateData,
         requests: MissionWorkflowRequest[]
     ): Promise<MissionWorkflowEvent[]> {
         if (requests.length === 0) {
@@ -266,7 +281,7 @@ export class MissionWorkflowController {
         });
     }
 
-    private async ingestEmittedEvents(events: MissionWorkflowEvent[]): Promise<MissionRuntimeRecord> {
+    private async ingestEmittedEvents(events: MissionWorkflowEvent[]): Promise<MissionStateData> {
         let nextDocument = await this.getDocument();
         for (const emittedEvent of events) {
             nextDocument = await this.applyEvent(emittedEvent);
@@ -275,80 +290,71 @@ export class MissionWorkflowController {
         return nextDocument;
     }
 
-    private async requireDocument(): Promise<MissionRuntimeRecord> {
+    private async requireDocument(): Promise<MissionStateData> {
         if (this.document) {
             return this.document;
         }
-        const persisted = await this.adapter.readMissionRuntimeRecord(this.descriptor.missionDir);
-        const document = persisted ? await this.normalizePersistedDocument(persisted) : undefined;
+        const persisted = await this.readRuntimeData();
+        const document = persisted;
         if (!document) {
-            throw new Error(`Mission runtime record is missing for mission '${this.descriptor.missionId}'.`);
+            throw new Error(`Mission runtime data is missing for mission '${this.descriptor.missionId}'.`);
         }
         this.document = document;
         return document;
     }
 
-    private async normalizePersistedDocument(document: MissionRuntimeRecord): Promise<MissionRuntimeRecord> {
-        let changed = false;
-        const configuration = normalizePersistedConfiguration(document.configuration, this.resolveWorkflow(), this.workflowVersion);
-        if (configuration !== document.configuration) {
-            changed = true;
+    private async writeRuntimeData(input: {
+        transactionId: string;
+        missionStateData: MissionStateData;
+        appendMissionEventRecords?: MissionWorkflowEventRecord[];
+    }): Promise<void> {
+        if (input.missionStateData.missionId !== this.descriptor.missionId) {
+            throw new Error(`Mission write '${input.transactionId}' targets Mission '${input.missionStateData.missionId}' but controller owns Mission '${this.descriptor.missionId}'.`);
         }
-        const sessions = document.runtime.sessions.map((session) => {
-            const normalized = this.requestExecutor.normalizePersistedSessionIdentity(session);
-            if (normalized !== session) {
-                changed = true;
-            }
-            return normalized;
-        });
-        const normalizedSourceDocument = configuration === document.configuration
-            ? document
-            : {
-                ...document,
-                configuration
-            };
-        const tasks = normalizePersistedRuntimeTasks(normalizedSourceDocument);
-        if (tasks.some((task, index) => task !== document.runtime.tasks[index])) {
-            changed = true;
-        }
-
-        if (!changed) {
-            return document;
-        }
-
-        const normalizedRuntime = {
-            ...document.runtime,
-            sessions,
-            tasks
-        };
-        const derivedProjection = deriveMissionWorkflowProjectionState(
-            normalizedRuntime,
-            configuration,
-            normalizedRuntime.updatedAt
+        await this.adapter.writeMissionStateDataFile(
+            this.descriptor.missionDir,
+            MissionStateDataSchema.parse(input.missionStateData)
         );
-
-        const normalizedDocument: MissionRuntimeRecord = {
-            ...document,
-            configuration,
-            runtime: {
-                ...normalizedRuntime,
-                ...(derivedProjection.activeStageId ? { activeStageId: derivedProjection.activeStageId } : {}),
-                tasks: derivedProjection.tasks,
-                stages: derivedProjection.stages,
-                gates: derivedProjection.gates
-            }
-        };
-        await this.adapter.writeMissionRuntimeRecord(this.descriptor.missionDir, normalizedDocument);
-        return normalizedDocument;
+        for (const eventRecord of input.appendMissionEventRecords ?? []) {
+            await this.adapter.appendMissionEventRecordFile(
+                this.descriptor.missionDir,
+                parseMissionEventRecord(eventRecord)
+            );
+        }
     }
 
-    private resolveWorkflow(): WorkflowGlobalSettings {
+    private async readRuntimeData(): Promise<MissionStateData | undefined> {
+        const rawData = await this.adapter.readMissionStateDataFile(this.descriptor.missionDir);
+        return rawData === undefined ? undefined : MissionStateDataSchema.parse(rawData);
+    }
+
+    private async readEventLog(): Promise<MissionWorkflowEventRecord[]> {
+        return MissionWorkflowEventRecordSchema.array()
+            .parse(await this.adapter.readMissionEventLogFile(this.descriptor.missionDir))
+            .map(parseMissionEventRecord);
+    }
+
+    private resolveWorkflow(): WorkflowDefinition {
         return this.resolveWorkflowOverride?.() ?? this.workflow;
     }
 
+    private async runExclusiveMutation<T>(operation: () => Promise<T>): Promise<T> {
+        const previous = this.mutationQueue;
+        let release!: () => void;
+        this.mutationQueue = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        await previous.catch(() => undefined);
+        try {
+            return await operation();
+        } finally {
+            release();
+        }
+    }
+
     private async reconcileDerivedRequests(
-        document: MissionRuntimeRecord
-    ): Promise<MissionRuntimeRecord> {
+        document: MissionStateData
+    ): Promise<MissionStateData> {
         const requests = buildWorkflowTaskGenerationRequests(
             document.runtime,
             document.configuration,
@@ -368,80 +374,15 @@ export class MissionWorkflowController {
     }
 }
 
-function normalizePersistedConfiguration(
-    configuration: MissionWorkflowConfigurationSnapshot,
-    workflowDefaults: WorkflowGlobalSettings,
-    workflowVersion: string
-): MissionWorkflowConfigurationSnapshot {
-    let changed = configuration.workflowVersion !== workflowVersion;
-    const defaultRulesByStageId = new Map(
-        workflowDefaults.taskGeneration.map((rule) => [rule.stageId, rule])
-    );
-    const normalizedTaskGeneration = configuration.workflow.taskGeneration.map((rule) => {
-        if (typeof rule.artifactTasks === 'boolean') {
-            return rule;
-        }
-
-        changed = true;
-        const defaultRule = defaultRulesByStageId.get(rule.stageId);
-        return {
-            ...rule,
-            artifactTasks: defaultRule?.artifactTasks ?? false
-        };
-    });
-
-    if (!changed) {
-        return configuration;
-    }
-
+function parseMissionEventRecord(value: unknown): MissionWorkflowEventRecord {
+    const parsed = MissionWorkflowEventRecordSchema.parse(value);
     return {
-        ...configuration,
-        workflowVersion,
-        workflow: {
-            ...configuration.workflow,
-            taskGeneration: normalizedTaskGeneration
-        }
+        eventId: parsed.eventId,
+        type: parsed.type,
+        occurredAt: parsed.occurredAt,
+        source: parsed.source,
+        ...(parsed.causedByRequestId ? { causedByRequestId: parsed.causedByRequestId } : {}),
+        payload: parsed.payload
     };
 }
 
-function normalizePersistedRuntimeTasks(document: MissionRuntimeRecord): MissionRuntimeRecord['runtime']['tasks'] {
-    const normalizedDependsOnByTaskId = new Map<string, string[]>();
-    const tasksByStage = new Map<string, MissionRuntimeRecord['runtime']['tasks']>();
-
-    for (const task of document.runtime.tasks) {
-        const existing = tasksByStage.get(task.stageId);
-        if (existing) {
-            existing.push(task);
-            continue;
-        }
-        tasksByStage.set(task.stageId, [task]);
-    }
-
-    for (const stageTasks of tasksByStage.values()) {
-        const normalizedStageTasks = normalizeGeneratedTaskDependencies(stageTasks.map((task) => ({
-            taskId: task.taskId,
-            title: task.title,
-            instruction: task.instruction,
-            dependsOn: [...task.dependsOn],
-            ...(task.agentRunner ? { agentRunner: task.agentRunner } : {})
-        })));
-        for (const normalizedTask of normalizedStageTasks) {
-            normalizedDependsOnByTaskId.set(normalizedTask.taskId, normalizedTask.dependsOn);
-        }
-    }
-
-    return document.runtime.tasks.map((task) => {
-        const normalizedDependsOn = normalizedDependsOnByTaskId.get(task.taskId) ?? task.dependsOn;
-        if (sameStringArray(normalizedDependsOn, task.dependsOn)) {
-            return task;
-        }
-        return {
-            ...task,
-            dependsOn: normalizedDependsOn
-        };
-    });
-}
-
-function sameStringArray(left: string[], right: string[]): boolean {
-    return left.length === right.length && left.every((value, index) => value === right[index]);
-}

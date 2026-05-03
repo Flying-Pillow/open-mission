@@ -1,4 +1,5 @@
-import type { WorkflowGlobalSettings } from '../workflow/engine/types.js';
+import type { WorkflowDefinition } from '../workflow/engine/types.js';
+import type { RepositorySettingsType } from '../entities/Repository/RepositorySchema.js';
 
 export type WorkflowSettingsRevisionToken = string;
 
@@ -7,6 +8,7 @@ export type WorkflowSettingsErrorCode =
 	| 'SETTINGS_VALIDATION_FAILED'
 	| 'SETTINGS_CONFLICT'
 	| 'SETTINGS_FILE_INVALID'
+	| 'SETTINGS_NOT_INITIALIZED'
 	| 'SETTINGS_CONFIRMATION_REQUIRED';
 
 export type WorkflowSettingsValidationError = {
@@ -29,13 +31,14 @@ export type WorkflowSettingsMetadata = {
 };
 
 export type WorkflowSettingsGetResult = {
-	workflow: WorkflowGlobalSettings;
+	workflow: WorkflowDefinition;
 	revision: WorkflowSettingsRevisionToken;
 	metadata: WorkflowSettingsMetadata;
 	warnings?: string[];
 };
 
 export type WorkflowSettingsInitializeRequest = {
+	settings?: RepositorySettingsType;
 	force?: boolean;
 	confirmReinitialize?: boolean;
 };

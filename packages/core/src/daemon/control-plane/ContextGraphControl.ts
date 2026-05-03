@@ -76,31 +76,31 @@ function deriveContextGraph(
 	const artifacts = {
 		...Object.fromEntries(
 			Object.entries(missionStatus?.productFiles ?? {}).map(([artifactKey, artifactPath]) => {
-				const artifactId = buildArtifactId(repositoryId, missionStatus?.missionId, artifactKey);
+				const id = buildArtifactSelection(repositoryId, missionStatus?.missionId, artifactKey);
 				const artifactContext: ArtifactContext = {
-					artifactId,
+					id,
 					...(missionStatus?.missionId ? { missionId: missionStatus.missionId } : { repositoryId }),
 					filePath: artifactPath,
 					logicalKind: artifactKey,
 					displayLabel: path.basename(artifactPath)
 				};
-				return [artifactId, artifactContext] as const;
+				return [id, artifactContext] as const;
 			})
 		),
 		...Object.fromEntries(
 			tasks
 				.filter((task) => typeof task.filePath === 'string' && task.filePath.trim().length > 0)
 				.map((task) => {
-					const artifactId = buildTaskArtifactId(repositoryId, missionStatus?.missionId, task.taskId);
+					const id = buildTaskArtifactSelection(repositoryId, missionStatus?.missionId, task.taskId);
 					const artifactContext: ArtifactContext = {
-						artifactId,
+						id,
 						...(missionStatus?.missionId ? { missionId: missionStatus.missionId } : { repositoryId }),
 						ownerTaskId: task.taskId,
 						filePath: task.filePath,
 						logicalKind: 'task-instruction',
 						displayLabel: path.basename(task.filePath)
 					};
-					return [artifactId, artifactContext] as const;
+					return [id, artifactContext] as const;
 				})
 		)
 	};
@@ -108,8 +108,8 @@ function deriveContextGraph(
 		const sessionIds = (missionStatus?.agentSessions ?? [])
 			.filter((session) => session.taskId === task.taskId)
 			.map((session) => session.sessionId);
-		const primaryArtifactId = task.filePath?.trim()
-			? buildTaskArtifactId(repositoryId, missionStatus?.missionId, task.taskId)
+		const primaryArtifact = task.filePath?.trim()
+			? buildTaskArtifactSelection(repositoryId, missionStatus?.missionId, task.taskId)
 			: undefined;
 		const taskContext: TaskContext = {
 			taskId: task.taskId,
@@ -119,7 +119,7 @@ function deriveContextGraph(
 			instructionSummary: task.instruction,
 			lifecycleState: task.status,
 			dependencyIds: [...task.dependsOn],
-			...(primaryArtifactId ? { primaryArtifactId } : {}),
+			...(primaryArtifact ? { primaryArtifact } : {}),
 			...(sessionIds.length > 0 ? { agentSessionIds: sessionIds } : {})
 		};
 		return [task.taskId, taskContext] as const;
@@ -135,8 +135,7 @@ function deriveContextGraph(
 				...(session.workingDirectory ? { workingDirectory: session.workingDirectory } : {}),
 				...(session.currentTurnTitle ? { promptTitle: session.currentTurnTitle } : {}),
 				...(session.transportId ? { transportId: session.transportId } : {}),
-				...(session.terminalSessionName ? { terminalSessionName: session.terminalSessionName } : {}),
-				...(session.terminalPaneId ? { terminalPaneId: session.terminalPaneId } : {}),
+				...(session.terminalHandle ? { terminalHandle: { ...session.terminalHandle } } : {}),
 				...(session.createdAt ? { createdAt: session.createdAt } : {}),
 				...(session.lastUpdatedAt ? { lastUpdatedAt: session.lastUpdatedAt } : {})
 			};
@@ -191,7 +190,7 @@ function deriveContextGraph(
 				...(isActiveMission && missionStatus?.stage ? { currentStage: missionStatus.stage } : {}),
 				...(isActiveMission && missionStatus?.workflow?.lifecycle ? { lifecycleState: missionStatus.workflow.lifecycle } : {}),
 				taskIds: isActiveMission ? tasks.map((task) => task.taskId) : [],
-				artifactIds: isActiveMission ? Object.keys(artifacts) : [],
+				artifacts: isActiveMission ? Object.keys(artifacts) : [],
 				sessionIds: isActiveMission ? Object.keys(agentSessions) : []
 			};
 			return [missionId, missionContext] as const;
@@ -233,11 +232,11 @@ function resolveContextSelection(input: {
 	agentSessions: Record<string, AgentSessionContext>;
 }): ContextSelection {
 	const heuristicTaskId = pickSelectedTaskId(input.missionStatus);
-	const heuristicArtifactId = pickSelectedArtifactId(input.repositoryId, input.missionStatus);
+	const heuristicArtifact = pickSelectedArtifact(input.repositoryId, input.missionStatus);
 	const heuristicSessionId = pickSelectedSessionId(input.missionStatus);
 	const missionId = resolveSelectedMissionId(input.missionStatus, input.previousSelection, input.missions);
 	const taskId = resolveSelectedTaskId(input.previousSelection, input.tasks, missionId, heuristicTaskId);
-	const artifactId = resolveSelectedArtifactId(input.previousSelection, input.artifacts, missionId, heuristicArtifactId);
+	const artifact = resolveSelectedArtifact(input.previousSelection, input.artifacts, missionId, heuristicArtifact);
 	const agentSessionId = resolveSelectedSessionId(input.previousSelection, input.agentSessions, missionId, heuristicSessionId);
 	const stageId = resolveSelectedStageId(input.missionStatus, input.previousSelection, input.tasks, input.agentSessions, missionId, taskId, agentSessionId);
 	return {
@@ -245,7 +244,7 @@ function resolveContextSelection(input: {
 		...(missionId ? { missionId } : {}),
 		...(stageId ? { stageId } : {}),
 		...(taskId ? { taskId } : {}),
-		...(artifactId ? { artifactId } : {}),
+		...(artifact ? { artifact } : {}),
 		...(agentSessionId ? { agentSessionId } : {})
 	};
 }
@@ -289,21 +288,21 @@ function resolveSelectedTaskId(
 	return undefined;
 }
 
-function resolveSelectedArtifactId(
+function resolveSelectedArtifact(
 	previousSelection: ContextSelection,
 	artifacts: Record<string, ArtifactContext>,
 	missionId: string | undefined,
-	heuristicArtifactId: string | undefined
+	heuristicArtifact: string | undefined
 ): string | undefined {
-	const previousArtifactId = previousSelection.artifactId;
-	if (previousArtifactId && isArtifactSelectionValid(previousArtifactId, missionId, artifacts)) {
-		return previousArtifactId;
+	const previousArtifact = previousSelection.artifact;
+	if (previousArtifact && isArtifactSelectionValid(previousArtifact, missionId, artifacts)) {
+		return previousArtifact;
 	}
 	if (hasExplicitNonArtifactSelection(previousSelection)) {
 		return undefined;
 	}
-	if (heuristicArtifactId && isArtifactSelectionValid(heuristicArtifactId, missionId, artifacts)) {
-		return heuristicArtifactId;
+	if (heuristicArtifact && isArtifactSelectionValid(heuristicArtifact, missionId, artifacts)) {
+		return heuristicArtifact;
 	}
 	return undefined;
 }
@@ -375,11 +374,11 @@ function isTaskSelectionValid(
 }
 
 function isArtifactSelectionValid(
-	artifactId: string,
+	id: string,
 	missionId: string | undefined,
 	artifacts: Record<string, ArtifactContext>
 ): boolean {
-	const artifact = artifacts[artifactId];
+	const artifact = artifacts[id];
 	if (!artifact) {
 		return false;
 	}
@@ -417,7 +416,7 @@ function isStageSelectionValid(
 }
 
 function hasExplicitNonTaskSelection(selection: ContextSelection): boolean {
-	return Boolean(selection.stageId || selection.artifactId || selection.agentSessionId);
+	return Boolean(selection.stageId || selection.artifact || selection.agentSessionId);
 }
 
 function hasExplicitNonArtifactSelection(selection: ContextSelection): boolean {
@@ -425,7 +424,7 @@ function hasExplicitNonArtifactSelection(selection: ContextSelection): boolean {
 }
 
 function hasExplicitNonSessionSelection(selection: ContextSelection): boolean {
-	return Boolean(selection.stageId || selection.taskId || selection.artifactId);
+	return Boolean(selection.stageId || selection.taskId || selection.artifact);
 }
 
 function dedupeTasks(missionStatus: ControlSource['missionStatus'] | undefined) {
@@ -444,12 +443,12 @@ function dedupeTasks(missionStatus: ControlSource['missionStatus'] | undefined) 
 	});
 }
 
-function buildArtifactId(repositoryId: string, missionId: string | undefined, artifactKey: string): string {
+function buildArtifactSelection(repositoryId: string, missionId: string | undefined, artifactKey: string): string {
 	const missionScope = missionId?.trim() || repositoryId;
 	return `${missionScope}:${artifactKey}`;
 }
 
-function buildTaskArtifactId(repositoryId: string, missionId: string | undefined, taskId: string): string {
+function buildTaskArtifactSelection(repositoryId: string, missionId: string | undefined, taskId: string): string {
 	const missionScope = missionId?.trim() || repositoryId;
 	return `${missionScope}:task:${taskId}`;
 }
@@ -460,12 +459,12 @@ function pickSelectedTaskId(missionStatus: ControlSource['missionStatus'] | unde
 		|| missionStatus?.stages?.flatMap((stage) => stage.tasks)[0]?.taskId;
 }
 
-function pickSelectedArtifactId(
+function pickSelectedArtifact(
 	repositoryId: string,
 	missionStatus: ControlSource['missionStatus'] | undefined
 ): string | undefined {
 	const artifactKey = Object.keys(missionStatus?.productFiles ?? {})[0];
-	return artifactKey ? buildArtifactId(repositoryId, missionStatus?.missionId, artifactKey) : undefined;
+	return artifactKey ? buildArtifactSelection(repositoryId, missionStatus?.missionId, artifactKey) : undefined;
 }
 
 function pickSelectedSessionId(missionStatus: ControlSource['missionStatus'] | undefined): string | undefined {

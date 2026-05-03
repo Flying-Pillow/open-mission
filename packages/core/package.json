@@ -23,26 +23,26 @@
       "import": "./build/index.js",
       "default": "./build/index.js"
     },
-    "./airport": {
-      "development": "./src/airport/index.ts",
-      "typescript": "./src/airport/index.ts",
-      "types": "./build/airport/index.d.ts",
-      "import": "./build/airport/index.js",
-      "default": "./build/airport/index.js"
-    },
-    "./airport/runtime": {
-      "development": "./src/airport/runtime.ts",
-      "typescript": "./src/airport/runtime.ts",
-      "types": "./build/airport/runtime.d.ts",
-      "import": "./build/airport/runtime.js",
-      "default": "./build/airport/runtime.js"
-    },
     "./browser": {
       "development": "./src/browser.ts",
       "typescript": "./src/browser.ts",
       "types": "./build/browser.d.ts",
       "import": "./build/browser.js",
       "default": "./build/browser.js"
+    },
+    "./entities": {
+      "development": "./src/entities/index.ts",
+      "typescript": "./src/entities/index.ts",
+      "types": "./build/entities/index.d.ts",
+      "import": "./build/entities/index.js",
+      "default": "./build/entities/index.js"
+    },
+    "./protocol/entity-remote": {
+      "development": "./src/daemon/protocol/entityRemote.ts",
+      "typescript": "./src/daemon/protocol/entityRemote.ts",
+      "types": "./build/daemon/protocol/entityRemote.d.ts",
+      "import": "./build/daemon/protocol/entityRemote.js",
+      "default": "./build/daemon/protocol/entityRemote.js"
     },
     "./node": {
       "development": "./src/node.ts",
@@ -59,9 +59,11 @@
       "default": "./build/daemon.js"
     },
     "./*": {
-      "development": "./src/*",
-      "typescript": "./src/*",
-      "default": "./build/*"
+      "development": "./src/*.ts",
+      "typescript": "./src/*.ts",
+      "types": "./build/*.d.ts",
+      "import": "./build/*.js",
+      "default": "./build/*.js"
     }
   },
   "files": [

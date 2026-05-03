@@ -1,7 +1,5 @@
 <script lang="ts">
-    import FileIcon from "@tabler/icons-svelte/icons/file";
-    import FolderIcon from "@tabler/icons-svelte/icons/folder";
-    import FolderOpenIcon from "@tabler/icons-svelte/icons/folder-open";
+    import Icon from "@iconify/svelte";
     import MissionFileTreeNodes from "$lib/components/entities/Mission/MissionFileTreeNodes.svelte";
     import * as TreeView from "$lib/components/ui/tree-view/index.js";
     import { cn } from "$lib/utils.js";
@@ -65,11 +63,15 @@
         >
             {#snippet icon({ open })}
                 {#if open}
-                    <FolderOpenIcon
+                    <Icon
+                        icon="lucide:folder-open"
                         class="size-4 shrink-0 text-muted-foreground"
                     />
                 {:else}
-                    <FolderIcon class="size-4 shrink-0 text-muted-foreground" />
+                    <Icon
+                        icon="lucide:folder"
+                        class="size-4 shrink-0 text-muted-foreground"
+                    />
                 {/if}
             {/snippet}
             {#if node.children}
@@ -88,7 +90,10 @@
             onclick={() => selectNode(node)}
         >
             {#snippet icon()}
-                <FileIcon class="size-4 shrink-0 text-muted-foreground" />
+                <Icon
+                    icon="lucide:file"
+                    class="size-4 shrink-0 text-muted-foreground"
+                />
             {/snippet}
         </TreeView.File>
     {/if}

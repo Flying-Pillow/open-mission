@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import MissionFileTreeNodes from "$lib/components/entities/Mission/MissionFileTreeNodes.svelte";
     import * as TreeView from "$lib/components/ui/tree-view/index.js";
     import { cn } from "$lib/utils.js";
@@ -8,29 +9,26 @@
     } from "$lib/types/mission-file-tree";
 
     let {
-        missionId,
-        repositoryRootPath,
         activePath,
         refreshNonce = 0,
-        title = "Worktree files",
         class: className,
         onSelectPath,
     }: {
-        missionId: string;
-        repositoryRootPath: string;
         activePath?: string;
         refreshNonce?: number;
-        title?: string;
         class?: string;
         onSelectPath?: (node: MissionFileTreeNode) => void;
     } = $props();
+    const missionScope = getScopedMissionContext();
 
     let branchOverrides = $state<Record<string, boolean>>({});
     let tree = $state<MissionFileTreeNode[]>([]);
-    let rootPath = $state<string | undefined>(undefined);
     let error = $state<string | null>(null);
     let loading = $state(true);
     let requestVersion = 0;
+    const mission = $derived(missionScope.mission);
+    const missionId = $derived(mission?.missionId ?? "");
+    const repositoryRootPath = $derived(mission?.missionWorktreePath ?? "");
 
     $effect(() => {
         const normalizedMissionId = missionId?.trim();
@@ -39,7 +37,6 @@
 
         if (!normalizedMissionId || !normalizedRepositoryRootPath) {
             tree = [];
-            rootPath = undefined;
             error = null;
             loading = false;
             return;
@@ -49,29 +46,21 @@
         loading = true;
         error = null;
 
-        const query = new URLSearchParams({
-            repositoryRootPath: normalizedRepositoryRootPath,
-        });
-
         void (async () => {
             try {
-                const response = await fetch(
-                    `/api/runtime/missions/${encodeURIComponent(normalizedMissionId)}/worktree?${query.toString()}`,
-                );
-                if (!response.ok) {
+                if (!mission) {
                     throw new Error(
-                        `Worktree file tree load failed (${response.status}).`,
+                        "Mission worktree is unavailable until the app context is synchronized.",
                     );
                 }
 
-                const payload =
-                    (await response.json()) as MissionFileTreeResponse;
+                const payload: MissionFileTreeResponse =
+                    await mission.getWorktree({ executionContext: "render" });
                 if (currentVersion !== requestVersion) {
                     return;
                 }
 
                 tree = payload.tree;
-                rootPath = payload.rootPath;
             } catch (loadError) {
                 if (currentVersion !== requestVersion) {
                     return;
@@ -82,7 +71,6 @@
                         ? loadError.message
                         : String(loadError);
                 tree = [];
-                rootPath = undefined;
             } finally {
                 if (currentVersion === requestVersion) {
                     loading = false;
@@ -94,17 +82,10 @@
 
 <section
     class={cn(
-        "grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-2xl border bg-card/70 backdrop-blur-sm",
+        "grid h-full min-h-0 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-2xl border bg-card/70 backdrop-blur-sm",
         className,
     )}
 >
-    <header class="space-y-1 border-b px-3 py-2">
-        <h2 class="text-sm font-semibold text-foreground">{title}</h2>
-        <p class="truncate text-xs text-muted-foreground">
-            {rootPath ?? repositoryRootPath}
-        </p>
-    </header>
-
     <div class="min-h-0 overflow-auto p-2">
         {#if loading}
             <div

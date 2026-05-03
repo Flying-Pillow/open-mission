@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import path from "node:path";
-import { getMissionWorktreesPath } from "@flying-pillow/mission-core/node";
+import { RepositoryEntity } from "@flying-pillow/mission-core/node";
 import { resolveSurfacePath } from "$lib/server/daemon/context.server";
 import type {
 	MissionFileTreeNode,
@@ -10,6 +10,7 @@ import type {
 const IGNORED_ENTRY_NAMES = new Set([
 	".git",
 	"node_modules",
+	".pnpm-store",
 	".svelte-kit",
 	".turbo",
 	"dist",
@@ -28,7 +29,7 @@ export async function readMissionFileTree(input: {
 	const controlRoot = path.resolve(
 		input.repositoryRootPath?.trim() || resolveSurfacePath(),
 	);
-	const worktreeRoot = path.join(getMissionWorktreesPath(controlRoot), missionId);
+	const worktreeRoot = path.join(RepositoryEntity.getMissionWorktreesPath(controlRoot), missionId);
 	const tree = await readDirectoryTree(worktreeRoot, worktreeRoot);
 
 	return {

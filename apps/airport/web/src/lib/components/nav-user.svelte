@@ -1,32 +1,47 @@
 <!-- /apps/airport/web/src/lib/components/nav-user.svelte: GitHub-backed user menu with theme toggle and OAuth logout action. -->
 <script lang="ts">
+	import { page } from "$app/state";
+	import { asset } from "$app/paths";
 	import { mode, toggleMode } from "mode-watcher";
-	import DotsVerticalIcon from "@tabler/icons-svelte/icons/dots-vertical";
-	import LogoutIcon from "@tabler/icons-svelte/icons/logout";
-	import MoonStarsIcon from "@tabler/icons-svelte/icons/moon-stars";
-	import SunIcon from "@tabler/icons-svelte/icons/sun";
-	import BrandGithubIcon from "@tabler/icons-svelte/icons/brand-github";
+	import Icon from "@iconify/svelte";
 	import * as Avatar from "$lib/components/ui/avatar/index.js";
 	import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
 	import * as Sidebar from "$lib/components/ui/sidebar/index.js";
+	import { getAppContext } from "$lib/client/context/app-context.svelte";
 
 	let {
-		user,
-		logoutAction = "?/logout",
+		logoutAction = "/login?/clearGithubToken",
+		contentSide,
+		contentAlign = "end",
 	}: {
-		user: {
-			name: string;
-			email?: string;
-			avatar: string;
-			githubStatus?: "connected" | "disconnected" | "unknown";
-		};
 		logoutAction?: string;
+		contentSide?: "top" | "right" | "bottom" | "left";
+		contentAlign?: "start" | "center" | "end";
 	} = $props();
 
+	const appContext = getAppContext();
 	const sidebar = Sidebar.useSidebar();
+	const fallbackAvatar = asset("/logo.png");
+	const redirectTo = $derived(`${page.url.pathname}${page.url.search}`);
+	const loginHref = $derived(
+		`/login?redirectTo=${encodeURIComponent(redirectTo)}`,
+	);
+	const githubStatus = $derived(
+		appContext.user?.githubStatus ?? appContext.githubStatus,
+	);
+	const isGithubConnected = $derived(githubStatus === "connected");
+	const displayName = $derived(
+		appContext.user?.name?.trim() ||
+			(isGithubConnected ? "GitHub" : "Not signed in"),
+	);
+	const displayEmail = $derived(appContext.user?.email?.trim());
+	const avatar = $derived(appContext.user?.avatarUrl ?? fallbackAvatar);
+	const dropdownSide = $derived(
+		contentSide ?? (sidebar.isMobile ? "bottom" : "right"),
+	);
 	const userInitials = $derived.by(
 		() =>
-			user.name
+			displayName
 				.split(/[^A-Za-z0-9]+/u)
 				.filter((segment) => segment.length > 0)
 				.slice(0, 2)
@@ -46,7 +61,7 @@
 						class="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
 					>
 						<Avatar.Root class="size-8 rounded-lg grayscale">
-							<Avatar.Image src={user.avatar} alt={user.name} />
+							<Avatar.Image src={avatar} alt={displayName} />
 							<Avatar.Fallback class="rounded-lg"
 								>{userInitials}</Avatar.Fallback
 							>
@@ -54,24 +69,28 @@
 						<div
 							class="grid flex-1 text-start text-sm leading-tight"
 						>
-							<span class="truncate font-medium">{user.name}</span
+							<span class="truncate font-medium"
+								>{displayName}</span
 							>
-							{#if user.email}
+							{#if displayEmail}
 								<span
 									class="text-muted-foreground truncate text-xs"
 								>
-									{user.email}
+									{displayEmail}
 								</span>
 							{/if}
 						</div>
-						<DotsVerticalIcon class="ms-auto size-4" />
+						<Icon
+							icon="lucide:ellipsis-vertical"
+							class="ms-auto size-4"
+						/>
 					</Sidebar.MenuButton>
 				{/snippet}
 			</DropdownMenu.Trigger>
 			<DropdownMenu.Content
 				class="w-(--bits-dropdown-menu-anchor-width) min-w-56 rounded-lg"
-				side={sidebar.isMobile ? "bottom" : "right"}
-				align="end"
+				side={dropdownSide}
+				align={contentAlign}
 				sideOffset={4}
 			>
 				<DropdownMenu.Label class="p-0 font-normal">
@@ -79,7 +98,7 @@
 						class="flex items-center gap-2 px-1 py-1.5 text-start text-sm"
 					>
 						<Avatar.Root class="size-8 rounded-lg">
-							<Avatar.Image src={user.avatar} alt={user.name} />
+							<Avatar.Image src={avatar} alt={displayName} />
 							<Avatar.Fallback class="rounded-lg"
 								>{userInitials}</Avatar.Fallback
 							>
@@ -87,23 +106,21 @@
 						<div
 							class="grid flex-1 text-start text-sm leading-tight"
 						>
-							<span class="truncate font-medium">{user.name}</span
+							<span class="truncate font-medium"
+								>{displayName}</span
 							>
-							{#if user.email}
+							{#if displayEmail}
 								<span
 									class="text-muted-foreground truncate text-xs"
 								>
-									{user.email}
+									{displayEmail}
 								</span>
 							{/if}
 							<div
 								class="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground"
 							>
-								<BrandGithubIcon class="size-3" />
-								<span
-									>GitHub {user.githubStatus ??
-										"unknown"}</span
-								>
+								<Icon icon="lucide:github" class="size-3" />
+								<span>GitHub {githubStatus}</span>
 							</div>
 						</div>
 					</div>
@@ -112,24 +129,39 @@
 				<DropdownMenu.Group>
 					<DropdownMenu.Item onclick={toggleMode}>
 						{#if mode.current === "dark"}
-							<SunIcon />
+							<Icon icon="lucide:sun" />
 							Light mode
 						{:else}
-							<MoonStarsIcon />
+							<Icon icon="lucide:moon" />
 							Dark mode
 						{/if}
 					</DropdownMenu.Item>
 				</DropdownMenu.Group>
 				<DropdownMenu.Separator />
-				<form method="POST" action={logoutAction} class="w-full">
-					<button
-						type="submit"
-						class="focus:bg-destructive/10 dark:focus:bg-destructive/20 text-destructive focus:text-destructive flex w-full cursor-default items-center gap-2.5 rounded-xl px-3 py-2 text-sm outline-hidden"
+				{#if isGithubConnected}
+					<form method="POST" action={logoutAction} class="w-full">
+						<input
+							type="hidden"
+							name="redirect_to"
+							value={redirectTo}
+						/>
+						<button
+							type="submit"
+							class="focus:bg-destructive/10 dark:focus:bg-destructive/20 text-destructive focus:text-destructive flex w-full cursor-default items-center gap-2.5 rounded-xl px-3 py-2 text-sm outline-hidden"
+						>
+							<Icon icon="lucide:log-out" class="size-4" />
+							Log out
+						</button>
+					</form>
+				{:else}
+					<a
+						href={loginHref}
+						class="focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-2.5 rounded-xl px-3 py-2 text-sm outline-hidden select-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0"
 					>
-						<LogoutIcon class="size-4" />
-						Log out
-					</button>
-				</form>
+						<Icon icon="lucide:log-in" />
+						Log in with GitHub
+					</a>
+				{/if}
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
 	</Sidebar.MenuItem>

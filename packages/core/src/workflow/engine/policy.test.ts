@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	createMissionWorkflowConfigurationSnapshot,
-	createMissionRuntimeRecord,
+	createMissionStateData,
 	resolvePendingTaskGenerationStageId
 } from './index.js';
 import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../mission/workflow.js';
@@ -14,7 +14,7 @@ describe('resolvePendingTaskGenerationStageId', () => {
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow
 		});
-		const document = createMissionRuntimeRecord({
+		const document = createMissionStateData({
 			missionId: 'mission-doom',
 			configuration,
 			createdAt: configuration.createdAt
@@ -41,7 +41,7 @@ describe('resolvePendingTaskGenerationStageId', () => {
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow
 		});
-		const document = createMissionRuntimeRecord({
+		const document = createMissionStateData({
 			missionId: 'mission-implementation',
 			configuration,
 			createdAt: configuration.createdAt

@@ -6,11 +6,11 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { DaemonClient } from '../../client/DaemonClient.js';
-import type { Ping } from '../protocol/contracts.js';
+import type { Ping } from '../protocol/transport.js';
 import {
-	getDaemonLogPath,
 	getDaemonManifestPath,
 	getDaemonRuntimePath,
+	getDaemonStdoutLogPath,
 	readDaemonManifest
 } from '../daemonPaths.js';
 
@@ -175,8 +175,8 @@ export function resolveDefaultRuntimeFactoryModulePath(
 	runtimeMode: DaemonRuntimeMode
 ): string | undefined {
 	const packageRoot = resolveCorePackageRoot();
-	const sourcePath = path.join(packageRoot, 'src', 'agent', 'runtimes', 'AgentRuntimeFactory.ts');
-	const buildPath = path.join(packageRoot, 'build', 'agent', 'runtimes', 'AgentRuntimeFactory.js');
+	const sourcePath = path.join(packageRoot, 'src', 'daemon', 'runtime', 'agent', 'runtimes', 'AgentRuntimeFactory.ts');
+	const buildPath = path.join(packageRoot, 'build', 'daemon', 'runtime', 'agent', 'runtimes', 'AgentRuntimeFactory.js');
 
 	if (runtimeMode === 'source' && fsSync.existsSync(sourcePath)) {
 		return sourcePath;
@@ -221,7 +221,7 @@ async function spawnDaemonRunner(options: {
 			: {})
 	};
 	await fs.mkdir(getDaemonRuntimePath(), { recursive: true });
-	const daemonLogPath = getDaemonLogPath();
+	const daemonLogPath = getDaemonStdoutLogPath();
 	const daemonLogFd = fsSync.openSync(daemonLogPath, 'a');
 	const stdio: [number | 'ignore', number, number] = ['ignore', daemonLogFd, daemonLogFd];
 

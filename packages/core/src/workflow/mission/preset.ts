@@ -2,12 +2,8 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { WorkflowGlobalSettings } from '../engine/types.js';
-import {
-	getMissionWorkflowDefinitionPath,
-	getMissionWorkflowPath,
-	getMissionWorkflowTemplatesPath
-} from '../../lib/repoConfig.js';
+import type { WorkflowDefinition } from '../engine/types.js';
+import { Repository } from '../../entities/Repository/Repository.js';
 import { createDefaultWorkflowSettings } from './workflow.js';
 
 const packagedTemplateDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), 'templates');
@@ -22,9 +18,9 @@ export async function scaffoldMissionWorkflowPreset(
 	controlRoot: string,
 	options: { overwrite?: boolean } = {}
 ): Promise<MissionWorkflowPresetScaffold> {
-	const workflowDirectoryPath = getMissionWorkflowPath(controlRoot);
-	const workflowDefinitionPath = getMissionWorkflowDefinitionPath(controlRoot);
-	const workflowTemplatesPath = getMissionWorkflowTemplatesPath(controlRoot);
+	const workflowDirectoryPath = Repository.getMissionWorkflowPath(controlRoot);
+	const workflowDefinitionPath = Repository.getMissionWorkflowDefinitionPath(controlRoot);
+	const workflowTemplatesPath = Repository.getMissionWorkflowTemplatesPath(controlRoot);
 
 	await fsp.mkdir(workflowDirectoryPath, { recursive: true });
 	await fsp.mkdir(workflowTemplatesPath, { recursive: true });
@@ -46,7 +42,7 @@ export async function scaffoldMissionWorkflowPreset(
 }
 
 export function readMissionWorkflowDefinition(controlRoot: string): unknown | undefined {
-	const workflowPath = getMissionWorkflowDefinitionPath(controlRoot);
+	const workflowPath = Repository.getMissionWorkflowDefinitionPath(controlRoot);
 	try {
 		const content = fs.readFileSync(workflowPath, 'utf8').trim();
 		if (!content) {
@@ -60,9 +56,9 @@ export function readMissionWorkflowDefinition(controlRoot: string): unknown | un
 
 export async function writeMissionWorkflowDefinition(
 	controlRoot: string,
-	workflow: WorkflowGlobalSettings
-): Promise<WorkflowGlobalSettings> {
-	const workflowPath = getMissionWorkflowDefinitionPath(controlRoot);
+	workflow: WorkflowDefinition
+): Promise<WorkflowDefinition> {
+	const workflowPath = Repository.getMissionWorkflowDefinitionPath(controlRoot);
 	const temporaryPath = `${workflowPath}.${process.pid.toString(36)}.${Date.now().toString(36)}.tmp`;
 	await fsp.mkdir(path.dirname(workflowPath), { recursive: true });
 	await fsp.writeFile(temporaryPath, `${JSON.stringify(workflow, null, 2)}\n`, 'utf8');

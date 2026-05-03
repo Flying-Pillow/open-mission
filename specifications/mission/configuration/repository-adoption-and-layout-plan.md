@@ -7,12 +7,12 @@ nav_order: 3
 
 # Repository Adoption And Layout Plan
 
-This plan translates the repository layout and first-mission bootstrap architecture into implementation work.
+This plan translates the repository layout and Repository setup architecture into implementation work.
 
 It is specifically about:
 
 - moving tracked mission dossiers under `.mission/missions/`
-- allowing first-mission bootstrap inside the newly created mission worktree
+- showing Repository setup after clone when `.mission/settings.json` is absent
 - supporting repositories that use Mission locally without requiring the original checkout to be modified first
 - keeping a minimal machine-local registered-repository list in config.json
 - exposing registered repositories to Tower so repository mode can switch with `/repo` and register new checkouts with `/add-repo`
@@ -25,9 +25,9 @@ The rewrite must follow these rules.
 2. Mission must not move repo control into user-scoped config.
 3. The canonical tracked mission dossier path is `.mission/missions/<mission-id>/`.
 4. The mission dossier root itself owns `BRIEF.md`, `mission.json`, and staged workflow artifacts; there is no nested `mission-control/` filesystem layer.
-5. The original local checkout must not need to be dirtied before the first mission can begin.
-6. First-mission bootstrap must be able to initialize `.mission/settings.json` inside the newly created mission worktree.
-7. The first mission branch may contain both repo bootstrap content and first mission dossier content in one commit series.
+5. The original local checkout must not need to be dirtied immediately after clone.
+6. Repository setup must initialize `.mission/settings.json` from daemon-owned Repository behavior.
+7. The setup branch contains Repository control state; mission branches contain mission dossier content.
 8. Mission must support local contributor mode where `.mission/` is gitignored by repository policy.
 9. Mission lifecycle must not be derived from folder placement.
 10. No compatibility shim, fallback, alias, or dual-path support should preserve the old top-level `missions/` layout or the nested `mission-control/` dossier layout.
@@ -41,8 +41,8 @@ At the end of this work, the system should have:
 
 1. one canonical tracked repository namespace under `.mission/`
 2. one canonical tracked mission dossier path under `.mission/missions/<mission-id>/`
-3. one first-mission flow that can bootstrap a repo from the mission branch worktree
-4. zero requirement for a standalone repository bootstrap PR before mission start
+3. one Repository setup flow that creates settings and workflow scaffolding through a pull request
+4. zero requirement for a first issue or preparation Mission before Repository setup
 5. clear support for both shared Mission mode and local contributor mode
 6. one minimal machine-local registered-repository list in config.json
 7. one canonical repo-level switch command `/repo`
@@ -66,31 +66,31 @@ Implementation tasks:
 3. Update tests that construct mission directories manually.
 4. Rewrite docs that still describe top-level `missions/` storage.
 
-### Phase 2: First-Mission Bootstrap In Worktree
+### Phase 2: Repository Setup Pull Request
 
 Required output:
 
-- issue-driven mission start no longer requires a standalone repository bootstrap PR
-- first mission preparation can initialize `.mission/settings.json` inside the new mission worktree
+- cloned repositories without `.mission/settings.json` display Repository setup before mission start
+- Repository setup initializes `.mission/settings.json` and workflow scaffolding in a setup branch
 
 Implementation tasks:
 
-1. Replace the mandatory bootstrap gate before mission preparation.
-2. Extend mission preparation to initialize repo control in the new worktree when absent.
-3. Commit repo control bootstrap and initial mission dossier together on the mission branch.
-4. Keep the original checkout untouched until the user explicitly updates it.
+1. Replace issue-backed preparation with a setup screen for Repository settings.
+2. Add a Repository setup command that writes repo control state in a setup worktree.
+3. Commit and push setup scaffolding, then open a pull request with best-effort auto-merge.
+4. Keep the original checkout untouched until the setup pull request is merged and pulled.
 
 ### Phase 3: Surface Semantics
 
 Required output:
 
 - Tower and CLI can distinguish between not-yet-pulled local checkout state and mission-startable repository state
-- uninitialized repos are still startable for first mission creation
+- uninitialized repos are selectable but regular mission start stays disabled until setup completes locally
 
 Implementation tasks:
 
 1. Redefine repo initialization status exposed to surfaces.
-2. Replace blocking setup messaging with first-mission bootstrap affordances.
+2. Replace blocking setup messaging with the Repository setup screen.
 3. Ensure mission worktree relaunch and mission discovery keep working after the path cutover.
 
 ### Phase 4: Local Contributor Mode
@@ -143,7 +143,7 @@ The main risks are:
 - duplicate mission detection before default-branch bootstrap is merged or pulled
 - UI confusion between local checkout state and repo branch state
 - stale implementation assumptions that `mission-control/` is a required mission subdirectory
-- stale assumptions that `.mission/settings.json` must already exist in the original checkout
+- stale assumptions that `.mission/settings.json` must already exist immediately after clone
 - accidental leakage of local-only `.mission/` state into shared workflows without explicit intent
 - ambiguous repo labels when multiple registered repos share the same short name
 
@@ -153,6 +153,6 @@ This work is complete when:
 
 - docs consistently describe `.mission/missions/<mission-id>/` as the tracked mission root
 - docs and code agree that `mission.json` and staged artifacts live directly under that mission root
-- first mission start works from a repo whose original checkout does not yet contain `.mission/settings.json`
-- the first mission branch can bootstrap Mission and create the mission dossier in the same flow
+- cloned repositories without `.mission/settings.json` show Repository setup instead of mission start
+- Repository setup creates settings and workflow scaffolding through a pushed pull request with best-effort auto-merge
 - Mission can still operate in a repo where `.mission/` is gitignored for local-only use

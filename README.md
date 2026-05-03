@@ -58,7 +58,7 @@ Mission is designed to be lightweight and frictionless to install in any existin
 
 Mission now uses pnpm workspaces at the repository root and launches the Airport product through the native Tauri host.
 
-On Linux, `mission install` provisions the Mission-managed GitHub CLI automatically when it is missing, then records the resolved binary path in the Mission user config.
+On Linux, `mission install` provisions the Mission-managed GitHub CLI automatically when it is missing, then records the resolved binary path in Mission config.
 
 ### Native TypeScript preview
 

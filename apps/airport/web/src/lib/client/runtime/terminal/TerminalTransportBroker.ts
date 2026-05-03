@@ -1,11 +1,17 @@
-import type {
-    MissionSessionTerminalSocketClientMessageDto,
-    MissionSessionTerminalSocketServerMessageDto,
-    MissionSessionTerminalSnapshotDto,
-    MissionTerminalSocketClientMessageDto,
-    MissionTerminalSocketServerMessageDto,
-    MissionTerminalSnapshotDto,
-} from '@flying-pillow/mission-core/airport/runtime';
+import {
+    AgentSessionTerminalSnapshotSchema,
+    AgentSessionTerminalSocketServerMessageSchema,
+    type AgentSessionTerminalSnapshotType,
+    type AgentSessionTerminalSocketClientMessageType,
+    type AgentSessionTerminalSocketServerMessageType
+} from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import {
+    MissionTerminalSnapshotSchema,
+    MissionTerminalSocketServerMessageSchema,
+    type MissionTerminalSnapshotType,
+    type MissionTerminalSocketClientMessageType,
+    type MissionTerminalSocketServerMessageType
+} from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 
 type TerminalSnapshotBase = {
     connected: boolean;
@@ -14,6 +20,11 @@ type TerminalSnapshotBase = {
     screen: string;
     chunk?: string;
     truncated?: boolean;
+    terminalHandle?: {
+        sessionName: string;
+        paneId: string;
+        sharedSessionName?: string;
+    };
 };
 
 type TerminalOutputBase = {
@@ -38,16 +49,16 @@ type TerminalServerMessage<TSnapshot extends TerminalSnapshotBase, TOutput exten
     };
 
 type TerminalClientMessage =
-    | MissionTerminalSocketClientMessageDto
-    | MissionSessionTerminalSocketClientMessageDto;
+    | MissionTerminalSocketClientMessageType
+    | AgentSessionTerminalSocketClientMessageType;
 
 type SharedTerminalSnapshot =
-    | MissionTerminalSnapshotDto
-    | MissionSessionTerminalSnapshotDto;
+    | MissionTerminalSnapshotType
+    | AgentSessionTerminalSnapshotType;
 
 type SharedTerminalServerMessage =
-    | MissionTerminalSocketServerMessageDto
-    | MissionSessionTerminalSocketServerMessageDto;
+    | MissionTerminalSocketServerMessageType
+    | AgentSessionTerminalSocketServerMessageType;
 
 type TerminalBrokerState<TSnapshot extends TerminalSnapshotBase> = {
     snapshot: TSnapshot | null;
@@ -61,7 +72,7 @@ type TerminalBrokerConfig<
     TMessage extends TerminalServerMessage<TSnapshot, TOutput>,
 > = {
     key: string;
-    loadSnapshot: () => Promise<TSnapshot | null>;
+    loadData: () => Promise<TSnapshot | null>;
     createSocket: () => WebSocket;
     parseMessage: (value: unknown) => TMessage;
     connectionTimeoutMs?: number;
@@ -98,6 +109,108 @@ export function subscribeSharedTerminalTransport<
 ): SharedTerminalTransportSubscription<TSnapshot> {
     const channel = getOrCreateTerminalChannel(config);
     return channel.subscribe(listener);
+}
+
+export function subscribeMissionTerminalTransport(
+    input: {
+        missionId: string;
+        repositoryId: string;
+        repositoryRootPath?: string;
+    },
+    listener: TerminalBrokerListener<MissionTerminalSnapshotType>,
+): SharedTerminalTransportSubscription<MissionTerminalSnapshotType> {
+    const missionId = input.missionId.trim();
+    const repositoryId = input.repositoryId.trim();
+    const repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
+    const transportKey = [missionId, repositoryId, repositoryRootPath ?? ''].join(':');
+    const query = buildTerminalQuery({ repositoryId, repositoryRootPath });
+
+    return subscribeSharedTerminalTransport({
+        key: `mission-terminal:${transportKey}`,
+        loadData: async () => {
+            const response = await fetch(
+                `/api/runtime/missions/${encodeURIComponent(missionId)}/terminal?${query}`,
+            );
+            if (!response.ok) {
+                const errorBody = await response.json().catch(() => null) as {
+                    message?: string;
+                } | null;
+                throw new Error(
+                    errorBody?.message?.trim()
+                    || `Terminal data request failed (${response.status}).`,
+                );
+            }
+
+            return MissionTerminalSnapshotSchema.parse(await response.json());
+        },
+        createSocket: () => {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = new URL(
+                `/api/runtime/missions/${encodeURIComponent(missionId)}/terminal/ws?${query}`,
+                `${wsProtocol}//${window.location.host}`,
+            );
+            return new WebSocket(wsUrl);
+        },
+        parseMessage: (value) => MissionTerminalSocketServerMessageSchema.parse(value),
+        retryOnDisconnected: true,
+    }, listener);
+}
+
+export function subscribeMissionSessionTerminalTransport(
+    input: {
+        missionId: string;
+        repositoryId: string;
+        repositoryRootPath?: string;
+        sessionId: string;
+    },
+    listener: TerminalBrokerListener<AgentSessionTerminalSnapshotType>,
+): SharedTerminalTransportSubscription<AgentSessionTerminalSnapshotType> {
+    const missionId = input.missionId.trim();
+    const repositoryId = input.repositoryId.trim();
+    const repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
+    const sessionId = input.sessionId.trim();
+    const transportKey = [missionId, repositoryId, repositoryRootPath ?? '', sessionId].join(':');
+    const query = buildTerminalQuery({ missionId, repositoryId, repositoryRootPath });
+
+    return subscribeSharedTerminalTransport({
+        key: `mission-session-terminal:${transportKey}`,
+        loadData: async () => {
+            const response = await fetch(
+                `/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal?${query}`,
+            );
+            if (!response.ok) {
+                throw new Error(`Terminal data request failed (${response.status}).`);
+            }
+
+            return AgentSessionTerminalSnapshotSchema.parse(await response.json());
+        },
+        createSocket: () => {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = new URL(
+                `/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal/ws?${query}`,
+                `${wsProtocol}//${window.location.host}`,
+            );
+            return new WebSocket(wsUrl);
+        },
+        parseMessage: (value) => AgentSessionTerminalSocketServerMessageSchema.parse(value),
+        retryOnDisconnected: true,
+    }, listener);
+}
+
+function buildTerminalQuery(input: {
+    missionId?: string;
+    repositoryId: string;
+    repositoryRootPath?: string;
+}): string {
+    const query = new URLSearchParams();
+    if (input.missionId?.trim()) {
+        query.set('missionId', input.missionId.trim());
+    }
+    query.set('repositoryId', input.repositoryId.trim());
+    if (input.repositoryRootPath?.trim()) {
+        query.set('repositoryRootPath', input.repositoryRootPath.trim());
+    }
+    return query.toString();
 }
 
 class TerminalTransportChannel<
@@ -162,6 +275,17 @@ class TerminalTransportChannel<
     }
 
     private async ensureActive(): Promise<void> {
+        if (this.socket?.readyState === WebSocket.OPEN || this.socket?.readyState === WebSocket.CONNECTING) {
+            return;
+        }
+
+        if (this.state.snapshot?.connected && !this.state.snapshot.dead) {
+            if (!this.socket) {
+                this.openSocket();
+            }
+            return;
+        }
+
         if (!this.bootstrapPromise) {
             this.bootstrapPromise = this.bootstrap();
         }
@@ -185,7 +309,7 @@ class TerminalTransportChannel<
         this.notify();
 
         try {
-            const snapshot = await this.config.loadSnapshot();
+            const snapshot = await this.config.loadData();
             this.state = {
                 snapshot: snapshot ? cloneSnapshot(snapshot) : null,
                 loading: false,
@@ -322,8 +446,9 @@ class TerminalTransportChannel<
             return;
         }
 
+        const outputMessage = message as Extract<TMessage, { type: 'output' }>;
         this.state = {
-            snapshot: mergeOutputIntoSnapshot(this.state.snapshot, message.output),
+            snapshot: mergeOutputIntoSnapshot(this.state.snapshot, outputMessage.output),
             loading: false,
             error: null,
         };
@@ -452,7 +577,7 @@ function getOrCreateTerminalChannel<
     return created;
 }
 
-function cloneSnapshot<TSnapshot extends SharedTerminalSnapshot>(
+function cloneSnapshot<TSnapshot extends TerminalSnapshotBase>(
     snapshot: TSnapshot,
 ): TSnapshot {
     return {
@@ -460,7 +585,7 @@ function cloneSnapshot<TSnapshot extends SharedTerminalSnapshot>(
         ...(snapshot.terminalHandle
             ? { terminalHandle: { ...snapshot.terminalHandle } }
             : {}),
-    };
+    } as TSnapshot;
 }
 
 function mergeOutputIntoSnapshot<
@@ -483,7 +608,7 @@ function mergeOutputIntoSnapshot<
         screen: nextScreen,
         chunk: output.chunk,
         ...(output.truncated ? { truncated: true } : {}),
-    };
+    } as TSnapshot;
 }
 
 function appendTerminalScreen(

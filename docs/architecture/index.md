@@ -15,15 +15,16 @@ It documents the system as it exists in the repository today across:
 
 - the repository-owned control state under `.mission/`
 - the daemon-owned control plane and system snapshot
-- the mission-local workflow engine and runtime record
+- the mission-local workflow engine and runtime data
 - the provider-neutral agent runtime contract
 - the repository-scoped airport layout authority
 - the Airport terminal surfaces and their client relationship to the daemon
 - the Airport web blueprint and its gateway relationship to the daemon and terminal runtime
+- the Entity command surface across Mission, child Entities, Airport, and daemon dispatch
 - the published Mission CLI package and its distribution boundary
 - the public IPC and package export surfaces
 
-This is not a speculative redesign document. When older specs, older notes, and current code differ, this section resolves against the current implementation while calling out meaningful drift in [discrepancies.md](./discrepancies.html).
+This architecture section resolves against the repository code, daemon behavior, persisted state, and routed surfaces that exist today.
 
 <div class="mission-status-grid">
  <div class="mission-status-card mission-status-card--current">
@@ -41,7 +42,7 @@ This is not a speculative redesign document. When older specs, older notes, and 
 1. Start with [system-context.md](./system-context.html) for the end-to-end topology.
 2. Read [repository-and-dossier.md](./repository-and-dossier.html) and [semantic-model.md](./semantic-model.html) for the repository, mission, stage, task, artifact, and session model.
 3. Read [daemon.md](./daemon.html), [workflow-engine.md](./workflow-engine.html), [agent-runtime.md](./agent-runtime.html), and [airport-control-plane.md](./airport-control-plane.html) for the main authorities.
-4. Read [airport-terminal-surface.md](./airport-terminal-surface.html), [airport-web-surface-blueprint.md](./airport-web-surface-blueprint.html), and [contracts.md](./contracts.html) for Airport surface and protocol boundaries.
+4. Read [airport-terminal-surface.md](./airport-terminal-surface.html), [airport-web-surface-blueprint.md](./airport-web-surface-blueprint.html), [contracts.md](./contracts.html), and [entity-command-surface.md](./entity-command-surface.html) for Airport surface, protocol boundaries, and Entity command flows. ADR 0015 records the command-only vocabulary decision behind that surface.
 5. Use [recovery-and-reconciliation.md](./recovery-and-reconciliation.html), [package-map.md](./package-map.html), and [integrity-checklist.md](./integrity-checklist.html) as operational reference pages.
 
 ## System Context
@@ -54,20 +55,18 @@ flowchart LR
  BrowserSurface[Airport web surface] -->|HTTP, SSE, terminal relay| Gateway[SvelteKit gateway]
  Gateway --> Daemon
  Gateway --> Zellij
- Daemon --> System[MissionSystemController]
- System --> Airport[Repository airport registry\nAirportControl]
- System --> Domain[MissionControl\nContextGraph]
- Daemon --> Workspace[WorkspaceManager\nMissionWorkspace]
- Workspace --> Mission[Mission aggregate]
+ Daemon --> Registry[MissionRegistry]
+ Daemon --> Status[system.status\nentity remote]
+ Registry --> Mission[Mission aggregate]
  Mission --> Workflow[MissionWorkflowController\nReducer + request executor]
  Workflow --> Runtime[daemon-owned agent control\nAgentRunner + AgentSession]
  Workflow --> Dossier[(.mission/missions/<mission-id>/mission.json)]
- Workspace --> Settings[(.mission/settings.json)]
- Workspace --> WorkflowPreset[(.mission/workflow/*)]
- Workspace --> Briefs[(.mission/missions/<mission-id>/*)]
- Airport --> Zellij[zellij substrate]
+ Mission --> Settings[(.mission/settings.json)]
+ Mission --> WorkflowPreset[(.mission/workflow/*)]
+ Mission --> Briefs[(.mission/missions/<mission-id>/*)]
+ Daemon --> Zellij[zellij substrate observations]
  Runtime --> Providers[Copilot CLI / Copilot SDK / transport]
- Workspace --> Config[(~/.config/mission/config.json)]
+ Daemon --> Config[(~/.config/mission/config.json)]
  Runtime --> DaemonRuntime[(XDG runtime or tmp daemon state)]
 ```
 
@@ -77,9 +76,9 @@ flowchart LR
 | --- | --- | --- |
 | Repository adoption and settings | `initializeMissionRepository(...)`, `WorkflowSettingsStore`, `.mission/settings.json`, `.mission/workflow/` | Airport terminal surfaces, Airport control, task markdown |
 | Mission execution truth | `MissionWorkflowController` + `mission.json` | Terminal local state, airport state |
-| Semantic selection graph | `MissionControl` inside `MissionSystemController` | `mission.json`, zellij |
-| Layout bindings and focus intent | `AirportControl` and `RepositoryAirportRegistry` | surface-local routing, workflow engine |
-| Live terminal panes | `TerminalManagerSubstrateController` observing and driving zellij | Workflow reducer |
+| Semantic selection graph | Mission entity and daemon-owned entity projections | `mission.json`, terminal panes |
+| Layout bindings and focus intent | Airport surfaces plus client-reported substrate observations | workflow engine |
+| Live terminal panes | `MissionTerminal` and `AgentSessionTerminal` observers | Workflow reducer |
 | Agent execution | daemon-owned agent control path + `AgentRunner` / `AgentSession` implementations | Airport terminal surfaces, Airport control |
 | Client protocol | `DaemonClient` / `DaemonApi` + daemon request handlers | Direct file editing from local surfaces |
 

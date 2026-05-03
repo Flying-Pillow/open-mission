@@ -13,9 +13,9 @@ It establishes one authoritative settings boundary in core, with daemon-owned in
 
 ## Problem
 
-The file may first be created inside a newly prepared mission worktree during first-mission bootstrap.
+The file may first be created inside a Repository setup branch created from the Airport setup screen.
 
-The original local checkout does not need to contain `.mission/settings.json` before a first mission can begin.
+The original local checkout does not need to contain `.mission/settings.json` immediately after clone, but regular missions cannot begin until Repository setup has made the settings document available to the usable checkout.
 
 Current control settings support is focused on scalar daemon preferences such as runner, mode, model, and paths.
 
@@ -318,7 +318,7 @@ Add coverage at three levels.
 
 ## Acceptance Criteria
 
-1. A repository can initialize workflow settings through daemon API even when `.mission/settings.json` is missing.
+1. A repository can initialize workflow settings through daemon-owned Repository setup even when `.mission/settings.json` is missing.
 2. CLI and Tower can both read and update repository workflow settings in control mode.
 3. All updates are daemon-validated and atomically persisted.
 4. Concurrent updates are protected by revision checks.

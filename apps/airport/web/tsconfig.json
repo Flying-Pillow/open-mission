@@ -10,10 +10,31 @@
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
-    "moduleResolution": "bundler"
-  }
-  // Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
-  // except $lib which is handled by https://svelte.dev/docs/kit/configuration#files
+    "moduleResolution": "bundler",
+    "customConditions": [
+      "development",
+      "typescript"
+    ]
+  },
+  "include": [
+    ".svelte-kit/ambient.d.ts",
+    ".svelte-kit/non-ambient.d.ts",
+    ".svelte-kit/types/**/$types.d.ts",
+    "vite.config.js",
+    "vite.config.ts",
+    "src/**/*.js",
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "src/**/*.svelte",
+    "test/**/*.js",
+    "test/**/*.ts",
+    "test/**/*.svelte",
+    "tests/**/*.js",
+    "tests/**/*.ts",
+    "tests/**/*.svelte"
+  ]
+  // Path aliases are generated from https://svelte.dev/docs/kit/configuration#alias.
+  // Workspace package imports resolve through package.json exports and customConditions.
   //
   // To make changes to top-level options such as include and exclude, we recommend extending
   // the generated config; see https://svelte.dev/docs/kit/configuration#typescript

@@ -1,22 +1,35 @@
 import type {
-    GitHubVisibleRepositoryDto,
-    GitHubIssueDetailDto,
-    MissionAgentSessionDto,
-    MissionRuntimeSnapshotDto,
-    MissionSelectionCandidateDto,
-    RepositoryCandidateDto,
-    RepositorySurfaceSnapshotDto,
-    TrackedIssueSummaryDto,
-} from "@flying-pillow/mission-core/airport/runtime";
+    RepositoryIssueDetailType,
+    RepositoryStorageType,
+    RepositoryPlatformRepositoryType,
+    RepositoryDataType,
+    TrackedIssueSummaryType
+} from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { MissionCatalogEntryType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import type { AgentSessionDataType } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { MissionSnapshotType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 
-export type RepositorySummary = RepositoryCandidateDto;
-export type GitHubVisibleRepositorySummary = GitHubVisibleRepositoryDto;
-export type MissionSummary = MissionSelectionCandidateDto;
-export type SidebarRepositorySummary = RepositorySummary & {
-    missions?: MissionSummary[];
+export type SidebarRepositoryData = RepositoryStorageType & {
+    missions?: MissionCatalogEntryType[];
 };
-export type IssueSummary = TrackedIssueSummaryDto;
-export type MissionSessionSummary = MissionAgentSessionDto;
-export type SelectedMissionSummary = MissionRuntimeSnapshotDto;
-export type SelectedIssueSummary = GitHubIssueDetailDto;
-export type RepositorySurfaceData = RepositorySurfaceSnapshotDto;
+export type AirportRepositoryListItem = {
+    key: string;
+    local?: SidebarRepositoryData;
+    github?: RepositoryPlatformRepositoryType;
+    displayName: string;
+    displayDescription: string;
+    repositoryRootPath?: string;
+    platformRepositoryRef?: string;
+    missions: MissionCatalogEntryType[];
+    isLocal: boolean;
+};
+export type {
+    RepositoryIssueDetailType,
+    MissionCatalogEntryType,
+    RepositoryStorageType,
+    RepositoryPlatformRepositoryType,
+    RepositoryDataType,
+    TrackedIssueSummaryType,
+    AgentSessionDataType,
+    MissionSnapshotType
+};
