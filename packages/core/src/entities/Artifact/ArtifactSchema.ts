@@ -1,7 +1,6 @@
 import { z } from 'zod/v4';
 import {
     EntityCommandAcknowledgementSchema,
-    EntityCommandDescriptorSchema,
     EntityIdSchema
 } from '../Entity/EntitySchema.js';
 
@@ -47,8 +46,7 @@ export const ArtifactStorageSchema = z.object({
 }).strict();
 
 export const ArtifactDataSchema = z.object({
-    ...ArtifactStorageSchema.shape,
-    commands: z.array(EntityCommandDescriptorSchema).optional()
+    ...ArtifactStorageSchema.shape
 }).strict();
 
 export const ArtifactCommandAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({

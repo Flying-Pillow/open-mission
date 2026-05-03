@@ -619,6 +619,7 @@ export class Mission implements EntityModel<MissionSnapshotType> {
             sessionSnapshots,
             (sessionSnapshot) => sessionSnapshot.sessionId,
             (sessionSnapshot) => new AgentSession(sessionSnapshot, {
+                resolveCommands: (sessionId) => this.resolveCommandsForOwner({ entity: 'AgentSession', sessionId }),
                 executeCommand: async (sessionId, commandId, input) => {
                     await this.childCommands.executeAgentSessionCommand({
                         missionId: this.missionId,

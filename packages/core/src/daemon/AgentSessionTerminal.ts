@@ -160,7 +160,11 @@ async function createAgentSessionTerminalState(record: AgentSessionTerminalRecor
         dead: true,
         exitCode: null,
         screen: transcript,
-        terminalHandle: record.terminalHandle
+        terminalHandle: {
+            sessionName: record.terminalHandle.sessionName,
+            paneId: record.terminalHandle.paneId,
+            ...(record.terminalHandle.sharedSessionName ? { sharedSessionName: record.terminalHandle.sharedSessionName } : {})
+        }
     };
 }
 

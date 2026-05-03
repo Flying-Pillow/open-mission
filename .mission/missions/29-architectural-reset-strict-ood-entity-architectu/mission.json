@@ -3,7 +3,7 @@
   "missionId": "29-architectural-reset-strict-ood-entity-architectu",
   "configuration": {
     "createdAt": "2026-04-22T14:54:07.971Z",
-    "source": "global-settings",
+    "source": "workflow-definition",
     "workflowVersion": "mission-workflow-v1",
     "workflow": {
       "autostart": {

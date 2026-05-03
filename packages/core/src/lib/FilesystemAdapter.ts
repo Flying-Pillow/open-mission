@@ -1321,7 +1321,8 @@ export class FilesystemAdapter {
 	private assertGit(args: string[], cwd = this.workspaceRoot): string {
 		const result = spawnSync('git', args, {
 			cwd,
-			encoding: 'utf8'
+			encoding: 'utf8',
+			env: this.createGitEnvironment()
 		});
 
 		if (result.status !== 0) {
@@ -1332,6 +1333,16 @@ export class FilesystemAdapter {
 		}
 
 		return result.stdout.trim();
+	}
+
+	private createGitEnvironment(): NodeJS.ProcessEnv {
+		return {
+			...process.env,
+			GIT_AUTHOR_NAME: process.env['GIT_AUTHOR_NAME'] ?? 'Mission Daemon',
+			GIT_AUTHOR_EMAIL: process.env['GIT_AUTHOR_EMAIL'] ?? 'mission-daemon@localhost',
+			GIT_COMMITTER_NAME: process.env['GIT_COMMITTER_NAME'] ?? process.env['GIT_AUTHOR_NAME'] ?? 'Mission Daemon',
+			GIT_COMMITTER_EMAIL: process.env['GIT_COMMITTER_EMAIL'] ?? process.env['GIT_AUTHOR_EMAIL'] ?? 'mission-daemon@localhost'
+		};
 	}
 
 	private isMissingFileError(error: unknown): boolean {

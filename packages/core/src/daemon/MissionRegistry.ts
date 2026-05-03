@@ -85,9 +85,13 @@ export class MissionRegistry {
         await Promise.all(
             missions.map(async (mission) => {
                 try {
+                    const missionControlRoot = adapter.getMissionWorkspacePath(mission.missionDir);
                     await this.loadMissionFromRegistry(
-                        { missionId: mission.descriptor.missionId },
-                        { surfacePath: controlRoot }
+                        {
+                            missionId: mission.descriptor.missionId,
+                            repositoryRootPath: missionControlRoot
+                        },
+                        { surfacePath: missionControlRoot }
                     );
                 } catch (error) {
                     const message = `Mission daemon could not hydrate mission '${mission.descriptor.missionId}' at '${mission.missionDir}': ${error instanceof Error ? error.message : String(error)}`;

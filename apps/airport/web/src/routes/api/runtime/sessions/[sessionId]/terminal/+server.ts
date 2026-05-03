@@ -8,17 +8,19 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
     const { sessionId } = missionSessionTerminalRouteParamsSchema.parse(params);
     const query = missionSessionTerminalQueryWithRepositorySchema.parse({
         missionId: url.searchParams.get('missionId'),
-        repositoryId: url.searchParams.get('repositoryId') ?? undefined
+        repositoryId: url.searchParams.get('repositoryId') ?? undefined,
+        repositoryRootPath: url.searchParams.get('repositoryRootPath') ?? undefined
     });
 
     const gateway = new DaemonGateway(locals);
-    const repository = query.repositoryId
+    const repository = !query.repositoryRootPath && query.repositoryId
         ? await gateway.resolveRepositoryCandidate({ id: query.repositoryId })
         : undefined;
+    const surfacePath = query.repositoryRootPath ?? repository?.repositoryRootPath;
     const snapshot = await gateway.getMissionSessionTerminalSnapshot({
         missionId: query.missionId,
         sessionId,
-        ...(repository ? { surfacePath: repository.repositoryRootPath } : {})
+        ...(surfacePath ? { surfacePath } : {})
     });
 
     return json(snapshot, {
@@ -33,14 +35,16 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
     const requestUrl = new URL(request.url);
     const query = missionSessionTerminalQueryWithRepositorySchema.parse({
         missionId: requestUrl.searchParams.get('missionId'),
-        repositoryId: requestUrl.searchParams.get('repositoryId') ?? undefined
+        repositoryId: requestUrl.searchParams.get('repositoryId') ?? undefined,
+        repositoryRootPath: requestUrl.searchParams.get('repositoryRootPath') ?? undefined
     });
     const body = missionSessionTerminalInputSchema.parse(await request.json());
 
     const gateway = new DaemonGateway(locals);
-    const repository = query.repositoryId
+    const repository = !query.repositoryRootPath && query.repositoryId
         ? await gateway.resolveRepositoryCandidate({ id: query.repositoryId })
         : undefined;
+    const surfacePath = query.repositoryRootPath ?? repository?.repositoryRootPath;
     const snapshot = await gateway.sendMissionSessionTerminalInput({
         missionId: body.missionId,
         sessionId,
@@ -48,7 +52,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
         ...(body.literal !== undefined ? { literal: body.literal } : {}),
         ...(body.cols !== undefined ? { cols: body.cols } : {}),
         ...(body.rows !== undefined ? { rows: body.rows } : {}),
-        ...(repository ? { surfacePath: repository.repositoryRootPath } : {})
+        ...(surfacePath ? { surfacePath } : {})
     });
 
     return json(snapshot, {
@@ -59,5 +63,6 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 };
 
 const missionSessionTerminalQueryWithRepositorySchema = missionSessionTerminalQuerySchema.extend({
-    repositoryId: missionSessionTerminalQuerySchema.shape.missionId.optional()
+    repositoryId: missionSessionTerminalQuerySchema.shape.missionId.optional(),
+    repositoryRootPath: missionSessionTerminalQuerySchema.shape.missionId.optional()
 });

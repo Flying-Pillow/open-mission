@@ -5,14 +5,13 @@ import { getMissionWorkflowEventValidationErrors } from '../../workflow/engine/v
 import { AgentSessionCommandIds } from '../AgentSession/AgentSessionSchema.js';
 import { StageCommandIds } from '../Stage/StageSchema.js';
 import { TaskCommandIds } from '../Task/TaskSchema.js';
-import { MissionCommandIds } from './MissionSchema.js';
+import { MissionCommandIds, type MissionOwnedCommandDescriptorType } from './MissionSchema.js';
 import {
     missionCommand,
     ownedAgentSessionCommand,
     ownedMissionCommand,
     ownedStageCommand,
-    ownedTaskCommand,
-    type MissionOwnedCommandDescriptor
+    ownedTaskCommand
 } from './MissionCommandDescriptors.js';
 
 export type MissionAvailableCommandsInput = {
@@ -22,9 +21,9 @@ export type MissionAvailableCommandsInput = {
     sessions: AgentSessionRecord[];
 };
 
-export function buildMissionAvailableCommands(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor[] {
+export function buildMissionAvailableCommands(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptorType[] {
     const eligibleStageId = resolveEligibleStageId(input);
-    const commands: MissionOwnedCommandDescriptor[] = [
+    const commands: MissionOwnedCommandDescriptorType[] = [
         buildPauseMissionCommand(input),
         buildResumeMissionCommand(input),
         buildPanicStopCommand(input),
@@ -67,7 +66,7 @@ function buildAvailability(
     return { disabled: true, disabledReason, description: disabledReason };
 }
 
-function buildPauseMissionCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
+function buildPauseMissionCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptorType {
     const enabled = input.runtime.lifecycle === 'running';
     return ownedMissionCommand(missionCommand({
         commandId: MissionCommandIds.pause,
@@ -77,7 +76,7 @@ function buildPauseMissionCommand(input: MissionAvailableCommandsInput): Mission
     }));
 }
 
-function buildResumeMissionCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
+function buildResumeMissionCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptorType {
     const errors = getValidationErrors(input, { type: 'mission.resumed' });
     const enabled = input.runtime.lifecycle === 'paused' && !input.runtime.panic.active && errors.length === 0;
     return ownedMissionCommand(missionCommand({
@@ -88,7 +87,7 @@ function buildResumeMissionCommand(input: MissionAvailableCommandsInput): Missio
     }));
 }
 
-function buildPanicStopCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
+function buildPanicStopCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptorType {
     const errors = getValidationErrors(input, { type: 'mission.panic.requested' });
     const enabled = input.runtime.lifecycle !== 'draft'
         && input.runtime.lifecycle !== 'completed'
@@ -105,7 +104,7 @@ function buildPanicStopCommand(input: MissionAvailableCommandsInput): MissionOwn
     }));
 }
 
-function buildClearPanicCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
+function buildClearPanicCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptorType {
     const errors = getValidationErrors(input, { type: 'mission.panic.cleared' });
     const enabled = input.runtime.panic.active && input.runtime.lifecycle === 'panicked' && errors.length === 0;
     return ownedMissionCommand(missionCommand({
@@ -117,7 +116,7 @@ function buildClearPanicCommand(input: MissionAvailableCommandsInput): MissionOw
     }));
 }
 
-function buildRestartLaunchQueueCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
+function buildRestartLaunchQueueCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptorType {
     const errors = getValidationErrors(input, { type: 'mission.launch-queue.restarted' });
     const enabled = errors.length === 0;
     return ownedMissionCommand(missionCommand({
@@ -129,7 +128,7 @@ function buildRestartLaunchQueueCommand(input: MissionAvailableCommandsInput): M
     }));
 }
 
-function buildDeliverMissionCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptor {
+function buildDeliverMissionCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptorType {
     const errors = getValidationErrors(input, { type: 'mission.delivered' });
     const delivered = isRuntimeDelivered(input.runtime);
     return ownedMissionCommand(missionCommand({
@@ -141,7 +140,7 @@ function buildDeliverMissionCommand(input: MissionAvailableCommandsInput): Missi
     }));
 }
 
-function buildGenerationCommand(input: MissionAvailableCommandsInput, stageId: MissionStageId): MissionOwnedCommandDescriptor | undefined {
+function buildGenerationCommand(input: MissionAvailableCommandsInput, stageId: MissionStageId): MissionOwnedCommandDescriptorType | undefined {
     const generationRule = input.configuration.workflow.taskGeneration.find((candidate) => candidate.stageId === stageId);
     if (!generationRule || (!generationRule.artifactTasks && generationRule.templateSources.length === 0 && generationRule.tasks.length === 0)) {
         return undefined;
@@ -158,7 +157,7 @@ function buildGenerationCommand(input: MissionAvailableCommandsInput, stageId: M
     }));
 }
 
-function buildTaskStartCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptor {
+function buildTaskStartCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptorType {
     const errors = getValidationErrors(input, { type: 'task.queued', taskId: task.taskId });
     const enabled = task.lifecycle === 'ready' && errors.length === 0;
     return ownedTaskCommand(task.taskId, missionCommand({
@@ -169,7 +168,7 @@ function buildTaskStartCommand(input: MissionAvailableCommandsInput, task: Missi
     }));
 }
 
-function buildTaskDoneCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptor {
+function buildTaskDoneCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptorType {
     const errors = getValidationErrors(input, { type: 'task.completed', taskId: task.taskId });
     return ownedTaskCommand(task.taskId, missionCommand({
         commandId: TaskCommandIds.complete,
@@ -180,7 +179,7 @@ function buildTaskDoneCommand(input: MissionAvailableCommandsInput, task: Missio
     }));
 }
 
-function buildTaskReopenCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptor {
+function buildTaskReopenCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptorType {
     const errors = getValidationErrors(input, { type: 'task.reopened', taskId: task.taskId });
     return ownedTaskCommand(task.taskId, missionCommand({
         commandId: TaskCommandIds.reopen,
@@ -191,7 +190,7 @@ function buildTaskReopenCommand(input: MissionAvailableCommandsInput, task: Miss
     }));
 }
 
-function buildTaskReworkCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptor {
+function buildTaskReworkCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptorType {
     const verificationCommand = buildVerificationDerivedTaskReworkCommand(input, task);
     if (verificationCommand) {
         return verificationCommand;
@@ -220,7 +219,7 @@ function buildTaskReworkCommand(input: MissionAvailableCommandsInput, task: Miss
     }));
 }
 
-function buildVerificationDerivedTaskReworkCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptor | undefined {
+function buildVerificationDerivedTaskReworkCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptorType | undefined {
     const targetTask = resolveVerificationReworkTargetTask(input.runtime.tasks, task);
     if (!targetTask) {
         return undefined;
@@ -243,8 +242,8 @@ function buildVerificationDerivedTaskReworkCommand(input: MissionAvailableComman
     }));
 }
 
-function buildTaskLaunchPolicyCommands(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptor[] {
-    const commands: MissionOwnedCommandDescriptor[] = [];
+function buildTaskLaunchPolicyCommands(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptorType[] {
+    const commands: MissionOwnedCommandDescriptorType[] = [];
     const changeErrors = (autostart: boolean) => getValidationErrors(input, {
         type: 'task.launch-policy.changed',
         taskId: task.taskId,
@@ -270,7 +269,7 @@ function buildTaskLaunchPolicyCommands(input: MissionAvailableCommandsInput, tas
     return commands;
 }
 
-function buildSessionCancelCommand(session: AgentSessionRecord): MissionOwnedCommandDescriptor {
+function buildSessionCancelCommand(session: AgentSessionRecord): MissionOwnedCommandDescriptorType {
     const enabled = isActiveAgentSession(session.lifecycleState);
     return ownedAgentSessionCommand(session.sessionId, missionCommand({
         commandId: AgentSessionCommandIds.cancel,
@@ -281,7 +280,7 @@ function buildSessionCancelCommand(session: AgentSessionRecord): MissionOwnedCom
     }));
 }
 
-function buildSessionTerminateCommand(session: AgentSessionRecord): MissionOwnedCommandDescriptor {
+function buildSessionTerminateCommand(session: AgentSessionRecord): MissionOwnedCommandDescriptorType {
     const enabled = isActiveAgentSession(session.lifecycleState);
     return ownedAgentSessionCommand(session.sessionId, missionCommand({
         commandId: AgentSessionCommandIds.terminate,

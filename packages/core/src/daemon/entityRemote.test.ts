@@ -191,6 +191,20 @@ describe('daemon entity dispatch', () => {
 				entity: 'Repository',
 				method: 'startMissionFromBrief',
 				id: 'mission-2'
+			}),
+			prepare: vi.fn().mockResolvedValue({
+				ok: true,
+				entity: 'Repository',
+				method: 'prepare',
+				id: 'mission-preparation',
+				kind: 'mission-preparation',
+				state: 'branch-prepared',
+				branchRef: 'mission/1-prepare-repo-for-mission',
+				baseBranch: 'main',
+				worktreePath: '/missions/Flying-Pillow/example/1-prepare-repo-for-mission',
+				missionRootDir: '/missions/Flying-Pillow/example/1-prepare-repo-for-mission/.mission/missions/mission-preparation',
+				issueId: 1,
+				issueUrl: 'https://github.com/Flying-Pillow/example/issues/1'
 			})
 		} as unknown as Repository;
 		const resolveSpy = vi.spyOn(Repository, 'resolve').mockResolvedValue(repository);
@@ -245,6 +259,18 @@ describe('daemon entity dispatch', () => {
 				id: 'mission-2'
 			});
 
+			await expect(executeEntityCommandInDaemon({
+				entity: 'Repository',
+				method: 'prepare',
+				payload: identity
+			}, { surfacePath: process.cwd() })).resolves.toMatchObject({
+				ok: true,
+				entity: 'Repository',
+				method: 'prepare',
+				id: 'mission-preparation',
+				worktreePath: '/missions/Flying-Pillow/example/1-prepare-repo-for-mission'
+			});
+
 			expect(resolveSpy).toHaveBeenNthCalledWith(1, identity, { surfacePath: process.cwd() });
 			expect(resolveSpy).toHaveBeenNthCalledWith(2, identity, { surfacePath: process.cwd() });
 			expect(resolveSpy).toHaveBeenNthCalledWith(3, { ...identity, issueNumber: 1 }, { surfacePath: process.cwd() });
@@ -255,12 +281,64 @@ describe('daemon entity dispatch', () => {
 				body: 'Mission body',
 				type: 'feature'
 			}, { surfacePath: process.cwd() });
-			expect(resolveSpy).toHaveBeenCalledTimes(5);
+			expect(resolveSpy).toHaveBeenNthCalledWith(6, identity, { surfacePath: process.cwd() });
+			expect(resolveSpy).toHaveBeenCalledTimes(6);
 			expect(repository.read).toHaveBeenCalledOnce();
 			expect(repository.listIssues).toHaveBeenCalledOnce();
 			expect(repository.getIssue).toHaveBeenCalledOnce();
 			expect(repository.startMissionFromIssue).toHaveBeenCalledOnce();
 			expect(repository.startMissionFromBrief).toHaveBeenCalledOnce();
+			expect(repository.prepare).toHaveBeenCalledOnce();
+		} finally {
+			resolveSpy.mockRestore();
+		}
+	});
+
+	it('hydrates Repository.prepare results from the prepared Mission worktree', async () => {
+		const repository = {
+			prepare: vi.fn().mockResolvedValue({
+				ok: true,
+				entity: 'Repository',
+				method: 'prepare',
+				id: 'mission-preparation',
+				kind: 'mission-preparation',
+				state: 'branch-prepared',
+				branchRef: 'mission/1-prepare-repo-for-mission',
+				baseBranch: 'main',
+				worktreePath: '/missions/Flying-Pillow/example/1-prepare-repo-for-mission',
+				missionRootDir: '/missions/Flying-Pillow/example/1-prepare-repo-for-mission/.mission/missions/mission-preparation',
+				issueId: 1,
+				issueUrl: 'https://github.com/Flying-Pillow/example/issues/1'
+			})
+		} as unknown as Repository;
+		const resolveSpy = vi.spyOn(Repository, 'resolve').mockResolvedValue(repository);
+		const loadMission = vi.fn(async () => createMissionHandle(createMissionSnapshot().mission));
+		const context = {
+			surfacePath: '/repositories/Flying-Pillow/example',
+			missionRegistry: new MissionRegistry({ loadMission })
+		};
+
+		try {
+			await expect(executeEntityCommandInDaemon({
+				entity: 'Repository',
+				method: 'prepare',
+				payload: {
+					id: 'repository:github/Flying-Pillow/example',
+					repositoryRootPath: '/repositories/Flying-Pillow/example'
+				}
+			}, context)).resolves.toMatchObject({
+				id: 'mission-preparation',
+				worktreePath: '/missions/Flying-Pillow/example/1-prepare-repo-for-mission'
+			});
+
+			expect(loadMission).toHaveBeenCalledWith(
+				{
+					missionId: 'mission-preparation',
+					repositoryRootPath: '/missions/Flying-Pillow/example/1-prepare-repo-for-mission'
+				},
+				{ surfacePath: '/missions/Flying-Pillow/example/1-prepare-repo-for-mission' },
+				undefined
+			);
 		} finally {
 			resolveSpy.mockRestore();
 		}

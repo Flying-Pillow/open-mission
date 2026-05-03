@@ -94,10 +94,12 @@ async function handleTerminalConnection(
 ): Promise<void> {
     const requestUrl = new URL(request.url ?? '/', 'http://localhost');
     const query = AgentSessionTerminalQuerySchema.extend({
-        repositoryId: AgentSessionTerminalQuerySchema.shape.missionId.optional()
+        repositoryId: AgentSessionTerminalQuerySchema.shape.missionId.optional(),
+        repositoryRootPath: AgentSessionTerminalQuerySchema.shape.missionId.optional()
     }).parse({
         missionId: requestUrl.searchParams.get('missionId'),
-        repositoryId: requestUrl.searchParams.get('repositoryId') ?? undefined
+        repositoryId: requestUrl.searchParams.get('repositoryId') ?? undefined,
+        repositoryRootPath: requestUrl.searchParams.get('repositoryRootPath') ?? undefined
     });
 
     let daemon: Awaited<ReturnType<typeof connectDedicatedAuthenticatedDaemonClient>> | undefined;
@@ -197,9 +199,9 @@ async function handleTerminalConnection(
     });
 
     try {
-        const repositoryRootPath = query.repositoryId
+        const repositoryRootPath = query.repositoryRootPath ?? (query.repositoryId
             ? (await new DaemonGateway().resolveRepositoryCandidate({ id: query.repositoryId })).repositoryRootPath
-            : undefined;
+            : undefined);
         daemon = await connectDedicatedAuthenticatedDaemonClient({
             allowStart: true,
             ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {})
@@ -277,6 +279,7 @@ async function handleMissionTerminalConnection(
 ): Promise<void> {
     const requestUrl = new URL(request.url ?? '/', 'http://localhost');
     const repositoryId = requestUrl.searchParams.get('repositoryId')?.trim();
+    const queryRepositoryRootPath = requestUrl.searchParams.get('repositoryRootPath')?.trim() || undefined;
     let daemon: Awaited<ReturnType<typeof connectDedicatedAuthenticatedDaemonClient>> | undefined;
     let closed = false;
     let subscription: { dispose(): void } | undefined;
@@ -391,9 +394,9 @@ async function handleMissionTerminalConnection(
     });
 
     try {
-        repositoryRootPath = repositoryId
+        repositoryRootPath = queryRepositoryRootPath ?? (repositoryId
             ? (await new DaemonGateway().resolveRepositoryCandidate({ id: repositoryId })).repositoryRootPath
-            : undefined;
+            : undefined);
         daemon = await connectDedicatedAuthenticatedDaemonClient({
             allowStart: true,
             ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {})

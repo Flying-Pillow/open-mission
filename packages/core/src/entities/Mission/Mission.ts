@@ -16,7 +16,6 @@ import type {
 	AgentCommand,
 	AgentPrompt
 } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
-import { Repository } from '../Repository/Repository.js';
 import { AgentSession } from '../AgentSession/AgentSession.js';
 import { AgentSessionLogWriter } from '../AgentSession/AgentSessionLogWriter.js';
 import {
@@ -77,16 +76,14 @@ import {
 	type MissionDefaultAgentModeType,
 	type MissionCommandAcknowledgementType,
 	type MissionDataType,
-	type MissionLocatorType
+	type MissionLocatorType,
+	type MissionCommandViewSnapshotType,
+	type MissionOwnedCommandDescriptorType
 } from './MissionSchema.js';
 import {
 	MissionWorkflowEventRecordSchema,
 	MissionStateDataSchema
 } from '../../workflow/engine/types.js';
-import {
-	type MissionAvailableCommandSnapshot,
-	type MissionOwnedCommandDescriptor
-} from './MissionCommandDescriptors.js';
 import { buildMissionAvailableCommands } from './MissionAvailableCommands.js';
 import {
 	buildMissionControlViewSnapshot,
@@ -117,11 +114,12 @@ export class Mission extends Entity<MissionDataType, string> {
 		const store = new FilesystemAdapter(repositoryRootPath);
 		const missions = await store.listMissions().catch(() => []);
 
-		return MissionCatalogEntrySchema.array().parse(missions.map(({ descriptor }) => ({
+		return MissionCatalogEntrySchema.array().parse(missions.map(({ missionDir, descriptor }) => ({
 			missionId: descriptor.missionId,
 			title: descriptor.brief.title,
 			branchRef: descriptor.branchRef,
 			createdAt: descriptor.createdAt,
+			repositoryRootPath: store.getMissionWorkspacePath(missionDir),
 			...(descriptor.brief.issueId !== undefined ? { issueId: descriptor.brief.issueId } : {})
 		})));
 	}
@@ -306,7 +304,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	private descriptor: MissionDossierDescriptor;
 	private sessionRecords: AgentSessionRecord[] = [];
 	private lastKnownStatus: OperatorStatus | undefined;
-	private lastKnownCommandSnapshot: MissionAvailableCommandSnapshot | undefined;
+	private lastKnownCommandSnapshot: MissionCommandViewSnapshotType | undefined;
 	private readonly workflowRequestExecutor: MissionWorkflowRequestExecutor;
 	private readonly workflowController: MissionWorkflowController;
 	private readonly workflowResolver: () => WorkflowDefinition;
@@ -408,8 +406,6 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	public async initialize(): Promise<this> {
-		const missionWorktreeRoot = this.adapter.getMissionWorkspacePath(this.missionDir);
-		await Repository.initializeScaffolding(missionWorktreeRoot);
 		await this.adapter.initializeMissionEnvironment(this.missionDir);
 		await this.adapter.writeMissionDescriptor(this.missionDir, this.descriptor);
 		await this.workflowController.initialize();
@@ -473,11 +469,11 @@ export class Mission extends Entity<MissionDataType, string> {
 		return this;
 	}
 
-	public async listAvailableCommands(): Promise<MissionOwnedCommandDescriptor[]> {
+	public async listAvailableCommands(): Promise<MissionOwnedCommandDescriptorType[]> {
 		return (await this.listAvailableCommandSnapshot()).commands;
 	}
 
-	public async listAvailableCommandSnapshot(): Promise<MissionAvailableCommandSnapshot> {
+	public async listAvailableCommandSnapshot(): Promise<MissionCommandViewSnapshotType> {
 		await this.agentSessionLifecycleIngestionQueue;
 		if (
 			this.lastKnownCommandSnapshot
@@ -823,7 +819,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		});
 	}
 
-	private async buildCommandList(document?: MissionStateData): Promise<MissionOwnedCommandDescriptor[]> {
+	private async buildCommandList(document?: MissionStateData): Promise<MissionOwnedCommandDescriptorType[]> {
 		if (!document) {
 			const workflow = this.workflowResolver();
 			const configuration = createMissionWorkflowConfigurationSnapshot({
@@ -867,7 +863,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		configuration: MissionStateData['configuration'],
 		runtime: MissionStateData['runtime'],
 		sessions: AgentSessionRecord[]
-	): Promise<MissionOwnedCommandDescriptor[]> {
+	): Promise<MissionOwnedCommandDescriptorType[]> {
 		const runtimeTasksForActions = await this.hydrateRuntimeTasksForActions(runtime.tasks);
 		return buildMissionAvailableCommands({
 			missionId: this.descriptor.missionId,

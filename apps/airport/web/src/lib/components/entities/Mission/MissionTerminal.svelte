@@ -43,6 +43,11 @@
     const activeRepository = $derived(missionScope.repository);
     const missionId = $derived(mission?.missionId ?? "");
     const repositoryId = $derived(activeRepository?.id ?? "");
+    const repositoryRootPath = $derived(
+        mission?.missionWorktreePath ??
+            activeRepository?.data.repositoryRootPath ??
+            "",
+    );
 
     let container = $state<HTMLDivElement | null>(null);
     let terminalSnapshot = $state<MissionTerminalSnapshotType | null>(null);
@@ -108,8 +113,13 @@
     $effect(() => {
         const normalizedMissionId = missionId?.trim();
         const normalizedRepositoryId = repositoryId?.trim();
+        const normalizedRepositoryRootPath = repositoryRootPath?.trim();
 
-        if (!normalizedMissionId || !normalizedRepositoryId) {
+        if (
+            !normalizedMissionId ||
+            !normalizedRepositoryId ||
+            !normalizedRepositoryRootPath
+        ) {
             activeTransportKey = null;
             terminalSnapshot = null;
             error = null;
@@ -122,6 +132,7 @@
         const nextTransportKey = [
             normalizedMissionId,
             normalizedRepositoryId,
+            normalizedRepositoryRootPath,
         ].join(":");
 
         if (activeTransportKey === nextTransportKey) {
@@ -134,6 +145,7 @@
             {
                 missionId: normalizedMissionId,
                 repositoryId: normalizedRepositoryId,
+                repositoryRootPath: normalizedRepositoryRootPath,
             },
             (state) => {
                 terminalSnapshot = state.snapshot;

@@ -141,8 +141,16 @@ export class Task extends Entity<TaskDataType, string> {
 		runners: ReadonlyMap<string, AgentRunner>
 	): string | undefined {
 		const taskRunnerId = typeof task.agent === 'string' && task.agent.trim() ? task.agent.trim() : undefined;
-		return (taskRunnerId && runners.has(taskRunnerId) ? taskRunnerId : undefined)
-			?? (runners.size === 1 ? runners.keys().next().value : undefined)
+		if (taskRunnerId) {
+			if (!runners.has(taskRunnerId)) {
+				if (taskRunnerId === DEFAULT_AGENT_RUNNER_ID && runners.size === 1) {
+					return runners.keys().next().value;
+				}
+				throw new Error(`Task '${task.taskId}' specifies unregistered agent runner '${taskRunnerId}'.`);
+			}
+			return taskRunnerId;
+		}
+		return (runners.size === 1 ? runners.keys().next().value : undefined)
 			?? (runners.has(DEFAULT_AGENT_RUNNER_ID) ? DEFAULT_AGENT_RUNNER_ID : undefined);
 	}
 

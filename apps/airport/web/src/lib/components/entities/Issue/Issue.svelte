@@ -30,12 +30,18 @@
     });
 
     let missionCreationPending = $state(false);
+    const canStartMission = $derived(activeRepository.data.isInitialized);
 
     async function startFromIssue(): Promise<void> {
         missionCreationPending = true;
         onStartIssueError?.(null);
 
         try {
+            if (!canStartMission) {
+                throw new Error(
+                    "Prepare this Repository for Mission before starting regular missions.",
+                );
+            }
             const result = await activeRepository.startMissionFromIssue(
                 issue.number,
             );
@@ -83,7 +89,10 @@
             <Button
                 type="button"
                 onclick={() => void startFromIssue()}
-                disabled={missionCreationPending}
+                disabled={missionCreationPending || !canStartMission}
+                title={canStartMission
+                    ? "Start mission"
+                    : "Prepare repo for Mission first"}
             >
                 <Icon icon="lucide:play" class="size-4" />
                 {missionCreationPending ? "Starting..." : "Start mission"}

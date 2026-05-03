@@ -532,7 +532,10 @@ function createScenarioExecutor(input: {
                             taskId,
                             runnerId: 'fake-runner',
                             transportId: 'terminal',
-                            terminalSessionName: sessionId
+                            terminalHandle: {
+                                sessionName: sessionId,
+                                paneId: 'pty'
+                            }
                         });
                         break;
                     }

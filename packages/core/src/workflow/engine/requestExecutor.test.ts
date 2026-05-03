@@ -647,7 +647,10 @@ describe('MissionWorkflowRequestExecutor', () => {
 			taskId: task.taskId,
 			runnerId: 'fake-runner',
 			transportId: 'terminal',
-			terminalSessionName: 'stale-running-session',
+			terminalHandle: {
+				sessionName: 'stale-running-session',
+				paneId: 'pty'
+			},
 			lifecycle: 'running',
 			launchedAt: '2026-04-10T21:15:00.000Z',
 			updatedAt: '2026-04-10T21:15:00.000Z'
@@ -688,7 +691,10 @@ describe('MissionWorkflowRequestExecutor', () => {
 			taskId: task.taskId,
 			runnerId: 'fake-runner',
 			transportId: 'terminal',
-			terminalSessionName: 'terminated-session',
+			terminalHandle: {
+				sessionName: 'terminated-session',
+				paneId: 'pty'
+			},
 			lifecycle: 'terminated',
 			launchedAt: '2026-04-10T21:15:00.000Z',
 			updatedAt: '2026-04-10T21:15:00.000Z',
@@ -742,7 +748,10 @@ describe('MissionWorkflowRequestExecutor', () => {
 			taskId: task.taskId,
 			runnerId: 'fake-runner',
 			transportId: 'terminal',
-			terminalSessionName: 'detached-session',
+			terminalHandle: {
+				sessionName: 'detached-session',
+				paneId: 'pty'
+			},
 			lifecycle: 'running',
 			launchedAt: '2026-04-10T21:15:00.000Z',
 			updatedAt: '2026-04-10T21:15:00.000Z'

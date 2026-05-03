@@ -1,12 +1,7 @@
 import type { EntityCommandDescriptorType } from '../Entity/EntitySchema.js';
 import type {
-	MissionCommandViewSnapshotType,
 	MissionOwnedCommandDescriptorType
 } from './MissionSchema.js';
-
-export type MissionOwnedCommandDescriptor = MissionOwnedCommandDescriptorType;
-
-export type MissionAvailableCommandSnapshot = MissionCommandViewSnapshotType;
 
 export function missionCommand(input: {
 	commandId: string;
@@ -40,18 +35,18 @@ export function missionCommand(input: {
 	};
 }
 
-export function ownedMissionCommand(command: EntityCommandDescriptorType): MissionOwnedCommandDescriptor {
+export function ownedMissionCommand(command: EntityCommandDescriptorType): MissionOwnedCommandDescriptorType {
 	return { owner: { entity: 'Mission' }, command };
 }
 
-export function ownedStageCommand(stageId: string, command: EntityCommandDescriptorType): MissionOwnedCommandDescriptor {
+export function ownedStageCommand(stageId: string, command: EntityCommandDescriptorType): MissionOwnedCommandDescriptorType {
 	return { owner: { entity: 'Stage', stageId }, command };
 }
 
-export function ownedTaskCommand(taskId: string, command: EntityCommandDescriptorType): MissionOwnedCommandDescriptor {
+export function ownedTaskCommand(taskId: string, command: EntityCommandDescriptorType): MissionOwnedCommandDescriptorType {
 	return { owner: { entity: 'Task', taskId }, command };
 }
 
-export function ownedAgentSessionCommand(sessionId: string, command: EntityCommandDescriptorType): MissionOwnedCommandDescriptor {
+export function ownedAgentSessionCommand(sessionId: string, command: EntityCommandDescriptorType): MissionOwnedCommandDescriptorType {
 	return { owner: { entity: 'AgentSession', sessionId }, command };
 }

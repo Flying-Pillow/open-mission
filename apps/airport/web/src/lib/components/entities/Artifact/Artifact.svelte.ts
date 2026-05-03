@@ -4,6 +4,7 @@ import type {
     ArtifactBodyType,
     ArtifactDataType
 } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
+import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 
 export type ArtifactDependencies = {
     body(id: string, input?: ArtifactReadOptions): Promise<ArtifactBodyType>;
@@ -76,8 +77,8 @@ export class Artifact implements EntityModel<ArtifactDataType> {
         return this.data.taskId;
     }
 
-    public get commands(): ArtifactDataType['commands'] {
-        return structuredClone($state.snapshot(this.data.commands ?? []));
+    public get commands(): EntityCommandDescriptorType[] {
+        return [];
     }
 
     public async read(input: ArtifactReadOptions = {}): Promise<ArtifactBodyType> {

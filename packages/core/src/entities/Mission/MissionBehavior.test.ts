@@ -9,7 +9,10 @@ import { Repository } from '../Repository/Repository.js';
 import { FakeAgentRunner } from '../../daemon/runtime/agent/testing/FakeAgentRunner.js';
 import type { AgentSessionRecord } from '../../daemon/protocol/contracts.js';
 import type { MissionStageStatus, MissionTowerTreeNode } from '../../types.js';
+import { AgentSessionCommandIds } from '../AgentSession/AgentSessionSchema.js';
+import { TaskCommandIds } from '../Task/TaskSchema.js';
 import { Mission } from './Mission.js';
+import { MissionCommandIds } from './MissionSchema.js';
 import type { MissionWorkflowBindings } from './Mission.js';
 
 const temporaryWorkspaceRoots = new Set<string>();
@@ -309,10 +312,10 @@ describe('Mission', () => {
                 }
 
                 const startCommand = (await mission.listAvailableCommands()).find(
-                    (command) => command.owner.entity === 'Task' && command.owner.taskId === taskId && command.command.commandId === 'task.start'
+                    (command) => command.owner.entity === 'Task' && command.owner.taskId === taskId && command.command.commandId === TaskCommandIds.start
                 );
                 expect(startCommand?.command).toMatchObject({
-                    commandId: 'task.start',
+                    commandId: TaskCommandIds.start,
                     disabled: false
                 });
                 expect((await mission.listAvailableCommands()).some(
@@ -1099,18 +1102,18 @@ describe('Mission', () => {
                 await mission.startWorkflow();
 
                 const runningCommands = await mission.listAvailableCommandSnapshot();
-                expect(findMissionCommand(runningCommands.commands, 'mission.pause')?.disabled).toBe(false);
-                expect(findMissionCommand(runningCommands.commands, 'mission.resume')?.disabled).toBe(true);
+                expect(findMissionCommand(runningCommands.commands, MissionCommandIds.pause)?.disabled).toBe(false);
+                expect(findMissionCommand(runningCommands.commands, MissionCommandIds.resume)?.disabled).toBe(true);
 
                 await mission.pauseMission();
                 const pausedCommands = await mission.listAvailableCommandSnapshot();
-                expect(findMissionCommand(pausedCommands.commands, 'mission.resume')?.disabled).toBe(false);
-                expect(findMissionCommand(pausedCommands.commands, 'mission.pause')?.disabled).toBe(true);
+                expect(findMissionCommand(pausedCommands.commands, MissionCommandIds.resume)?.disabled).toBe(false);
+                expect(findMissionCommand(pausedCommands.commands, MissionCommandIds.pause)?.disabled).toBe(true);
 
                 await mission.resumeMission();
                 const resumedCommands = await mission.listAvailableCommandSnapshot();
-                expect(findMissionCommand(resumedCommands.commands, 'mission.pause')?.disabled).toBe(false);
-                expect(findMissionCommand(resumedCommands.commands, 'mission.resume')?.disabled).toBe(true);
+                expect(findMissionCommand(resumedCommands.commands, MissionCommandIds.pause)?.disabled).toBe(false);
+                expect(findMissionCommand(resumedCommands.commands, MissionCommandIds.resume)?.disabled).toBe(true);
             } finally {
                 mission.dispose();
             }
@@ -1152,8 +1155,8 @@ describe('Mission', () => {
                 await flushMicrotasks();
 
                 const commands = await mission.listAvailableCommandSnapshot();
-                expect(findSessionCommand(commands.commands, launched.sessionId, 'agentSession.cancel')?.disabled).toBe(false);
-                expect(findSessionCommand(commands.commands, launched.sessionId, 'agentSession.terminate')?.disabled).toBe(false);
+                expect(findSessionCommand(commands.commands, launched.sessionId, AgentSessionCommandIds.cancel)?.disabled).toBe(false);
+                expect(findSessionCommand(commands.commands, launched.sessionId, AgentSessionCommandIds.terminate)?.disabled).toBe(false);
             } finally {
                 mission.dispose();
             }

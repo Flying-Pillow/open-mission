@@ -121,9 +121,14 @@ export const RepositoryContract: EntityContractType = {
             result: RepositoryPrepareResultSchema,
             execution: 'entity',
             ui: {
-                label: 'Prepare Repository',
-                variant: 'ghost',
+                label: 'Prepare repo for Mission',
+                description: 'Create the first preparation issue and Mission worktree for this Repository.',
+                variant: 'default',
                 icon: 'git-pull-request-create',
+                confirmation: {
+                    required: true,
+                    prompt: 'Create a preparation issue and Mission worktree for this Repository?'
+                },
                 presentationOrder: 5
             }
         },

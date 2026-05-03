@@ -115,18 +115,21 @@ export function subscribeMissionTerminalTransport(
     input: {
         missionId: string;
         repositoryId: string;
+        repositoryRootPath?: string;
     },
     listener: TerminalBrokerListener<MissionTerminalSnapshotType>,
 ): SharedTerminalTransportSubscription<MissionTerminalSnapshotType> {
     const missionId = input.missionId.trim();
     const repositoryId = input.repositoryId.trim();
-    const transportKey = [missionId, repositoryId].join(':');
+    const repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
+    const transportKey = [missionId, repositoryId, repositoryRootPath ?? ''].join(':');
+    const query = buildTerminalQuery({ repositoryId, repositoryRootPath });
 
     return subscribeSharedTerminalTransport({
         key: `mission-terminal:${transportKey}`,
         loadData: async () => {
             const response = await fetch(
-                `/api/runtime/missions/${encodeURIComponent(missionId)}/terminal?repositoryId=${encodeURIComponent(repositoryId)}`,
+                `/api/runtime/missions/${encodeURIComponent(missionId)}/terminal?${query}`,
             );
             if (!response.ok) {
                 const errorBody = await response.json().catch(() => null) as {
@@ -143,7 +146,7 @@ export function subscribeMissionTerminalTransport(
         createSocket: () => {
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = new URL(
-                `/api/runtime/missions/${encodeURIComponent(missionId)}/terminal/ws?repositoryId=${encodeURIComponent(repositoryId)}`,
+                `/api/runtime/missions/${encodeURIComponent(missionId)}/terminal/ws?${query}`,
                 `${wsProtocol}//${window.location.host}`,
             );
             return new WebSocket(wsUrl);
@@ -157,20 +160,23 @@ export function subscribeMissionSessionTerminalTransport(
     input: {
         missionId: string;
         repositoryId: string;
+        repositoryRootPath?: string;
         sessionId: string;
     },
     listener: TerminalBrokerListener<AgentSessionTerminalSnapshotType>,
 ): SharedTerminalTransportSubscription<AgentSessionTerminalSnapshotType> {
     const missionId = input.missionId.trim();
     const repositoryId = input.repositoryId.trim();
+    const repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
     const sessionId = input.sessionId.trim();
-    const transportKey = [missionId, repositoryId, sessionId].join(':');
+    const transportKey = [missionId, repositoryId, repositoryRootPath ?? '', sessionId].join(':');
+    const query = buildTerminalQuery({ missionId, repositoryId, repositoryRootPath });
 
     return subscribeSharedTerminalTransport({
         key: `mission-session-terminal:${transportKey}`,
         loadData: async () => {
             const response = await fetch(
-                `/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal?missionId=${encodeURIComponent(missionId)}&repositoryId=${encodeURIComponent(repositoryId)}`,
+                `/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal?${query}`,
             );
             if (!response.ok) {
                 throw new Error(`Terminal data request failed (${response.status}).`);
@@ -181,7 +187,7 @@ export function subscribeMissionSessionTerminalTransport(
         createSocket: () => {
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = new URL(
-                `/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal/ws?missionId=${encodeURIComponent(missionId)}&repositoryId=${encodeURIComponent(repositoryId)}`,
+                `/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal/ws?${query}`,
                 `${wsProtocol}//${window.location.host}`,
             );
             return new WebSocket(wsUrl);
@@ -189,6 +195,22 @@ export function subscribeMissionSessionTerminalTransport(
         parseMessage: (value) => AgentSessionTerminalSocketServerMessageSchema.parse(value),
         retryOnDisconnected: true,
     }, listener);
+}
+
+function buildTerminalQuery(input: {
+    missionId?: string;
+    repositoryId: string;
+    repositoryRootPath?: string;
+}): string {
+    const query = new URLSearchParams();
+    if (input.missionId?.trim()) {
+        query.set('missionId', input.missionId.trim());
+    }
+    query.set('repositoryId', input.repositoryId.trim());
+    if (input.repositoryRootPath?.trim()) {
+        query.set('repositoryRootPath', input.repositoryRootPath.trim());
+    }
+    return query.toString();
 }
 
 class TerminalTransportChannel<

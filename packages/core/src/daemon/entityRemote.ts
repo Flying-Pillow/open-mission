@@ -75,7 +75,7 @@ async function hydrateStartedRepositoryMission(
     if (!context.missionRegistry || input.entity !== 'Repository') {
         return;
     }
-    if (input.method !== 'startMissionFromIssue' && input.method !== 'startMissionFromBrief') {
+    if (input.method !== 'prepare' && input.method !== 'startMissionFromIssue' && input.method !== 'startMissionFromBrief') {
         return;
     }
     if (!isRecord(result) || typeof result['id'] !== 'string' || !result['id'].trim()) {
@@ -83,9 +83,11 @@ async function hydrateStartedRepositoryMission(
     }
 
     const payload = isRecord(input.payload) ? input.payload : {};
-    const repositoryRootPath = typeof payload['repositoryRootPath'] === 'string' && payload['repositoryRootPath'].trim()
-        ? payload['repositoryRootPath'].trim()
-        : context.surfacePath;
+    const repositoryRootPath = typeof result['worktreePath'] === 'string' && result['worktreePath'].trim()
+        ? result['worktreePath'].trim()
+        : typeof payload['repositoryRootPath'] === 'string' && payload['repositoryRootPath'].trim()
+            ? payload['repositoryRootPath'].trim()
+            : context.surfacePath;
     await context.missionRegistry.loadRequiredMission(
         {
             missionId: result['id'].trim(),

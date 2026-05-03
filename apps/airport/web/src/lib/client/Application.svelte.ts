@@ -513,14 +513,19 @@ export class AirportApplication {
 
         this.activeMissionLoading = true;
         try {
+            if (repository.missions.length === 0) {
+                await this.loadMissionCatalog(repository);
+            }
+            const missionCatalogEntry = repository.missions.find((mission) => mission.missionId === input.missionId);
+            const missionRepositoryRootPath = missionCatalogEntry?.repositoryRootPath ?? repository.data.repositoryRootPath;
             const mission = await this.refreshMission({
                 missionId: input.missionId,
-                repositoryRootPath: repository.data.repositoryRootPath
+                repositoryRootPath: missionRepositoryRootPath
             });
             const controlViewSnapshot = await mission.getControlViewSnapshot();
             mission.setRouteState({
                 controlViewSnapshot,
-                worktreePath: repository.data.repositoryRootPath
+                worktreePath: missionRepositoryRootPath
             });
             this.activeMissionState = mission;
             if (!this.isCurrentRouteSync(requestId, routeKey)) {

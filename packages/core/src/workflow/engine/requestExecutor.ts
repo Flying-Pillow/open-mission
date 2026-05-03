@@ -1,5 +1,6 @@
 import type { MissionDescriptor, MissionStageId, MissionTaskState } from '../../types.js';
 import type { MissionDefaultAgentModeType } from '../../entities/Mission/MissionSchema.js';
+import type { AgentSessionTerminalHandleType } from '../../entities/AgentSession/AgentSessionSchema.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
 import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
 import {
@@ -9,6 +10,7 @@ import {
 import { renderMissionArtifactTitle } from '../mission/templates/common.js';
 import { getMissionArtifactDefinition } from '../mission/manifest.js';
 import { Repository } from '../../entities/Repository/Repository.js';
+import { RepositoryPreparationOperation } from '../mission/RepositoryPreparationOperation.js';
 import {
 	type MissionWorkflowConfigurationSnapshot,
 	type MissionGeneratedTaskPayload,
@@ -61,10 +63,12 @@ export class MissionWorkflowRequestExecutor {
 	private readonly defaultModel: string | undefined;
 	private readonly defaultMode: MissionDefaultAgentModeType | undefined;
 	private readonly workingDirectoryResolver: (task: MissionTaskRuntimeState, descriptor: MissionDescriptor) => string;
+	private readonly repositoryPreparationOperation: RepositoryPreparationOperation;
 
 	public constructor(private readonly options: MissionWorkflowRequestExecutorOptions) {
 		this.defaultModel = options.defaultModel;
 		this.defaultMode = options.defaultMode;
+		this.repositoryPreparationOperation = new RepositoryPreparationOperation(options.adapter);
 		this.workingDirectoryResolver =
 			options.workingDirectoryResolver ?? ((_task, descriptor) => descriptor.missionDir);
 	}
@@ -99,6 +103,7 @@ export class MissionWorkflowRequestExecutor {
 		requests: MissionWorkflowRequest[];
 	}): Promise<MissionWorkflowEvent[]> {
 		const events: MissionWorkflowEvent[] = [];
+		await this.repositoryPreparationOperation.execute({ descriptor: input.descriptor });
 
 		for (const request of input.requests) {
 			switch (request.type) {
@@ -152,11 +157,16 @@ export class MissionWorkflowRequestExecutor {
 					const requestedRunnerId =
 						typeof request.payload['runnerId'] === 'string' ? request.payload['runnerId'].trim() : undefined;
 					const configuredRunnerId = typeof task.agentRunner === 'string' ? task.agentRunner.trim() : undefined;
-					const runnerId =
-						(requestedRunnerId && this.options.runners.has(requestedRunnerId) ? requestedRunnerId : undefined)
-						?? (configuredRunnerId && this.options.runners.has(configuredRunnerId) ? configuredRunnerId : undefined)
-						?? (this.options.runners.size === 1 ? this.options.runners.keys().next().value : undefined)
-						?? (this.options.runners.has(DEFAULT_AGENT_RUNNER_ID) ? DEFAULT_AGENT_RUNNER_ID : undefined);
+					const runnerId = requestedRunnerId
+						? (this.options.runners.has(requestedRunnerId) ? requestedRunnerId : undefined)
+						: configuredRunnerId
+							? (this.options.runners.has(configuredRunnerId)
+								? configuredRunnerId
+								: configuredRunnerId === DEFAULT_AGENT_RUNNER_ID && this.options.runners.size === 1
+									? this.options.runners.keys().next().value
+									: undefined)
+							: (this.options.runners.size === 1 ? this.options.runners.keys().next().value : undefined)
+							?? (this.options.runners.has(DEFAULT_AGENT_RUNNER_ID) ? DEFAULT_AGENT_RUNNER_ID : undefined);
 					if (!runnerId) {
 						events.push({
 							eventId: `${request.requestId}:launch-failed`,
@@ -749,10 +759,7 @@ function toAgentCommand(value: string): AgentCommand | undefined {
 	}
 }
 
-function toTransportEventFields(snapshot: AgentSessionSnapshot): {
-	transportId?: string;
-	terminalHandle?: AgentSessionRuntimeState['terminalHandle'];
-} {
+function toTransportEventFields(snapshot: AgentSessionSnapshot): { transportId: string; terminalHandle: AgentSessionTerminalHandleType } | Record<string, never> {
 	if (snapshot.transport?.kind !== 'terminal') {
 		return {};
 	}

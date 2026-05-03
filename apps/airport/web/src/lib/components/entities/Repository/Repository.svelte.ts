@@ -193,6 +193,7 @@ export class Repository extends Entity<RepositoryDataType> {
         body: string;
         type: 'feature' | 'fix' | 'docs' | 'refactor' | 'task';
     }): Promise<{ missionId: string; redirectTo: string }> {
+        this.assertCanStartMission();
         const result = RepositoryMissionStartAcknowledgementSchema.parse(await this.executeCommand(
             this.commandIdFor('startMissionFromBrief'),
             input
@@ -202,6 +203,12 @@ export class Repository extends Entity<RepositoryDataType> {
             missionId: result.id,
             redirectTo: `/airport/${encodeURIComponent(this.data.id)}/${encodeURIComponent(result.id)}`
         };
+    }
+
+    private assertCanStartMission(): void {
+        if (!this.data.isInitialized) {
+            throw new Error('Prepare this Repository for Mission before starting regular missions.');
+        }
     }
 }
 

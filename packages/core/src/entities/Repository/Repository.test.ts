@@ -53,8 +53,11 @@ describe('Repository', () => {
     });
 
     it('rejects cloning a platform repository that is already checked out', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-already-cloned-'));
+        const repositoryRootPath = path.join(tempRoot, 'already-cloned');
+        git(tempRoot, ['init', repositoryRootPath]);
         const repository = Repository.create({
-            repositoryRootPath: '/repositories/Flying-Pillow/already-cloned',
+            repositoryRootPath,
             platformRepositoryRef: 'Flying-Pillow/already-cloned'
         });
         const read = vi.fn().mockResolvedValue(repository);
@@ -67,18 +70,59 @@ describe('Repository', () => {
             }
         } as unknown as EntityExecutionContext;
 
-        await expect(Repository.add({
-            platform: 'github',
-            repositoryRef: 'Flying-Pillow/already-cloned',
-            destinationPath: '/repositories/Flying-Pillow/already-cloned'
-        }, context)).rejects.toThrow("Repository 'Flying-Pillow/already-cloned' is already checked out at '/repositories/Flying-Pillow/already-cloned'.");
+        try {
+            await expect(Repository.add({
+                platform: 'github',
+                repositoryRef: 'Flying-Pillow/already-cloned',
+                destinationPath: repositoryRootPath
+            }, context)).rejects.toThrow(`Repository 'Flying-Pillow/already-cloned' is already checked out at '${repositoryRootPath}'.`);
 
-        expect(read).toHaveBeenCalledWith(Repository, 'repository:github/Flying-Pillow/already-cloned');
+            expect(read).toHaveBeenCalledWith(Repository, 'repository:github/Flying-Pillow/already-cloned');
+        } finally {
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('allows cloning when a persisted Repository record points at a missing root', async () => {
+        const repository = Repository.create({
+            repositoryRootPath: '/repositories/Flying-Pillow/missing-repository',
+            platformRepositoryRef: 'Flying-Pillow/missing-repository'
+        });
+        const read = vi.fn().mockResolvedValue(repository);
+        const remove = vi.fn().mockResolvedValue(undefined);
+        const context = {
+            surfacePath: '/repositories',
+            entityFactory: {
+                has: () => true,
+                register: () => undefined,
+                read,
+                remove
+            }
+        } as unknown as EntityExecutionContext;
+
+        const view = await Repository.classCommands({
+            commandInput: {
+                platform: 'github',
+                repositoryRef: 'Flying-Pillow/missing-repository',
+                destinationPath: '/repositories/Flying-Pillow/missing-repository'
+            }
+        }, context);
+
+        expect(view.commands).toEqual([
+            expect.objectContaining({
+                commandId: 'repository.add',
+                disabled: false
+            })
+        ]);
+        expect(remove).toHaveBeenCalledWith(Repository, repository.id);
     });
 
     it('hydrates class command descriptors from contract metadata and availability rules', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-class-commands-'));
+        const repositoryRootPath = path.join(tempRoot, 'already-cloned');
+        git(tempRoot, ['init', repositoryRootPath]);
         const repository = Repository.create({
-            repositoryRootPath: '/repositories/Flying-Pillow/already-cloned',
+            repositoryRootPath,
             platformRepositoryRef: 'Flying-Pillow/already-cloned'
         });
         const context = {
@@ -90,23 +134,27 @@ describe('Repository', () => {
             }
         } as unknown as EntityExecutionContext;
 
-        const view = await Repository.classCommands({
-            commandInput: {
-                platform: 'github',
-                repositoryRef: 'Flying-Pillow/already-cloned',
-                destinationPath: '/repositories/Flying-Pillow/already-cloned'
-            }
-        }, context);
+        try {
+            const view = await Repository.classCommands({
+                commandInput: {
+                    platform: 'github',
+                    repositoryRef: 'Flying-Pillow/already-cloned',
+                    destinationPath: repositoryRootPath
+                }
+            }, context);
 
-        expect(view.entity).toBe('Repository');
-        expect(view.commands).toEqual([
-            expect.objectContaining({
-                commandId: 'repository.add',
-                label: 'Clone Repository',
-                disabled: true,
-                disabledReason: "Repository 'Flying-Pillow/already-cloned' is already checked out at '/repositories/Flying-Pillow/already-cloned'."
-            })
-        ]);
+            expect(view.entity).toBe('Repository');
+            expect(view.commands).toEqual([
+                expect.objectContaining({
+                    commandId: 'repository.add',
+                    label: 'Clone Repository',
+                    disabled: true,
+                    disabledReason: `Repository 'Flying-Pillow/already-cloned' is already checked out at '${repositoryRootPath}'.`
+                })
+            ]);
+        } finally {
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
     });
 
     it('resolves identity from extended method payloads', async () => {

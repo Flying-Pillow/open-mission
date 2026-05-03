@@ -116,83 +116,23 @@
                     <span>{progressPercent}%</span>
                 </div>
                 <div class="mt-4 flex flex-wrap gap-2">
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={missionCommandPending !== null}
-                        onclick={() =>
-                            runMissionCommand("mission.pause", () =>
-                                mission.pause(),
-                            )}
-                    >
-                        {missionCommandPending === "mission.pause"
-                            ? "Pausing..."
-                            : "Pause"}
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={missionCommandPending !== null}
-                        onclick={() =>
-                            runMissionCommand("mission.resume", () =>
-                                mission.resume(),
-                            )}
-                    >
-                        {missionCommandPending === "mission.resume"
-                            ? "Resuming..."
-                            : "Resume"}
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={missionCommandPending !== null}
-                        onclick={() =>
-                            runMissionCommand("mission.panic", () =>
-                                mission.panic(),
-                            )}
-                    >
-                        {missionCommandPending === "mission.panic"
-                            ? "Stopping..."
-                            : "Panic"}
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={missionCommandPending !== null}
-                        onclick={() =>
-                            runMissionCommand("mission.clearPanic", () =>
-                                mission.clearPanic(),
-                            )}
-                    >
-                        {missionCommandPending === "mission.clearPanic"
-                            ? "Clearing..."
-                            : "Clear panic"}
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={missionCommandPending !== null}
-                        onclick={() =>
-                            runMissionCommand("mission.restartQueue", () =>
-                                mission.restartQueue(),
-                            )}
-                    >
-                        {missionCommandPending === "mission.restartQueue"
-                            ? "Restarting..."
-                            : "Restart queue"}
-                    </Button>
-                    <Button
-                        size="sm"
-                        disabled={missionCommandPending !== null}
-                        onclick={() =>
-                            runMissionCommand("mission.deliver", () =>
-                                mission.deliver(),
-                            )}
-                    >
-                        {missionCommandPending === "mission.deliver"
-                            ? "Delivering..."
-                            : "Deliver"}
-                    </Button>
+                    {#each mission.commands as command (command.commandId)}
+                        <Button
+                            size="sm"
+                            variant={command.variant ?? "outline"}
+                            disabled={missionCommandPending !== null ||
+                                command.disabled}
+                            title={command.disabledReason}
+                            onclick={() =>
+                                runMissionCommand(command.commandId, () =>
+                                    mission.executeCommand(command.commandId),
+                                )}
+                        >
+                            {missionCommandPending === command.commandId
+                                ? `${command.label}...`
+                                : command.label}
+                        </Button>
+                    {/each}
                 </div>
                 {#if commandError}
                     <p class="mt-3 text-sm text-rose-600">{commandError}</p>
@@ -290,54 +230,31 @@
                                                 <div
                                                     class="mt-2 flex flex-wrap gap-2"
                                                 >
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        disabled={itemCommandPending !==
-                                                            null}
-                                                        onclick={() =>
-                                                            runItemCommand(
-                                                                `task:start:${task.taskId}`,
-                                                                () =>
-                                                                    task.start(),
-                                                            )}
-                                                        >{itemCommandPending ===
-                                                        `task:start:${task.taskId}`
-                                                            ? "Starting..."
-                                                            : "Start"}</Button
-                                                    >
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        disabled={itemCommandPending !==
-                                                            null}
-                                                        onclick={() =>
-                                                            runItemCommand(
-                                                                `task:complete:${task.taskId}`,
-                                                                () =>
-                                                                    task.complete(),
-                                                            )}
-                                                        >{itemCommandPending ===
-                                                        `task:complete:${task.taskId}`
-                                                            ? "Completing..."
-                                                            : "Complete"}</Button
-                                                    >
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        disabled={itemCommandPending !==
-                                                            null}
-                                                        onclick={() =>
-                                                            runItemCommand(
-                                                                `task:reopen:${task.taskId}`,
-                                                                () =>
-                                                                    task.reopen(),
-                                                            )}
-                                                        >{itemCommandPending ===
-                                                        `task:reopen:${task.taskId}`
-                                                            ? "Reopening..."
-                                                            : "Reopen"}</Button
-                                                    >
+                                                    {#each task.commands as command (command.commandId)}
+                                                        {@const pendingCommandId = `${task.taskId}:${command.commandId}`}
+                                                        <Button
+                                                            size="sm"
+                                                            variant={command.variant ??
+                                                                "outline"}
+                                                            disabled={itemCommandPending !==
+                                                                null ||
+                                                                command.disabled}
+                                                            title={command.disabledReason}
+                                                            onclick={() =>
+                                                                runItemCommand(
+                                                                    pendingCommandId,
+                                                                    () =>
+                                                                        task.executeCommand(
+                                                                            command.commandId,
+                                                                        ),
+                                                                )}
+                                                        >
+                                                            {itemCommandPending ===
+                                                            pendingCommandId
+                                                                ? `${command.label}...`
+                                                                : command.label}
+                                                        </Button>
+                                                    {/each}
                                                 </div>
                                                 <p
                                                     class="mt-1 font-mono text-xs text-muted-foreground"
@@ -390,48 +307,30 @@
                                     </p>
                                 {/if}
                                 <div class="mt-2 flex flex-wrap gap-2">
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={itemCommandPending !== null}
-                                        onclick={() =>
-                                            runItemCommand(
-                                                `session:done:${session.sessionId}`,
-                                                () => session.done(),
-                                            )}
-                                        >{itemCommandPending ===
-                                        `session:done:${session.sessionId}`
-                                            ? "Completing..."
-                                            : "Done"}</Button
-                                    >
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={itemCommandPending !== null}
-                                        onclick={() =>
-                                            runItemCommand(
-                                                `session:cancel:${session.sessionId}`,
-                                                () => session.cancel(),
-                                            )}
-                                        >{itemCommandPending ===
-                                        `session:cancel:${session.sessionId}`
-                                            ? "Cancelling..."
-                                            : "Cancel"}</Button
-                                    >
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={itemCommandPending !== null}
-                                        onclick={() =>
-                                            runItemCommand(
-                                                `session:terminate:${session.sessionId}`,
-                                                () => session.terminate(),
-                                            )}
-                                        >{itemCommandPending ===
-                                        `session:terminate:${session.sessionId}`
-                                            ? "Terminating..."
-                                            : "Terminate"}</Button
-                                    >
+                                    {#each session.commands as command (command.commandId)}
+                                        {@const pendingCommandId = `${session.sessionId}:${command.commandId}`}
+                                        <Button
+                                            size="sm"
+                                            variant={command.variant ??
+                                                "outline"}
+                                            disabled={itemCommandPending !==
+                                                null || command.disabled}
+                                            title={command.disabledReason}
+                                            onclick={() =>
+                                                runItemCommand(
+                                                    pendingCommandId,
+                                                    () =>
+                                                        session.executeCommand(
+                                                            command.commandId,
+                                                        ),
+                                                )}
+                                        >
+                                            {itemCommandPending ===
+                                            pendingCommandId
+                                                ? `${command.label}...`
+                                                : command.label}
+                                        </Button>
+                                    {/each}
                                 </div>
                             </div>
                         {/each}

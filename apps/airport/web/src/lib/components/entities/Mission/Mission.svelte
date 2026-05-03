@@ -75,6 +75,9 @@
     const missionWorktreePath = $derived(
         activeMission?.missionWorktreePath ?? "",
     );
+    const missionSurfacePath = $derived(
+        missionWorktreePath || activeRepository?.data.repositoryRootPath || "",
+    );
     const missionId = $derived(
         activeMission?.missionId ?? missionScope.missionId ?? "",
     );
@@ -822,10 +825,7 @@
                                     >Updated {workflowUpdatedAt ??
                                         "unknown"}</span
                                 >
-                                <span
-                                    >{activeRepository.data
-                                        .repositoryRootPath}</span
-                                >
+                                <span>{missionSurfacePath}</span>
                             </div>
                         </div>
                     </div>

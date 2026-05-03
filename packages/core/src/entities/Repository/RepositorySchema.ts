@@ -219,16 +219,18 @@ export const RepositoryRemoveAcknowledgementSchema = EntityCommandAcknowledgemen
     id: z.string().trim().min(1)
 }).strict();
 
-export const RepositoryPrepareResultSchema = z.object({
-    kind: z.literal('repository-bootstrap'),
-    state: z.literal('pull-request-opened'),
+export const RepositoryPrepareResultSchema = EntityCommandAcknowledgementSchema.extend({
+    entity: z.literal(repositoryEntityName),
+    method: z.literal('prepare'),
+    id: z.string().trim().min(1),
+    kind: z.literal('mission-preparation'),
+    state: z.literal('branch-prepared'),
     branchRef: z.string().trim().min(1),
     baseBranch: z.string().trim().min(1),
-    pullRequestUrl: z.string().trim().min(1),
-    controlDirectoryPath: z.string().trim().min(1),
-    settingsPath: z.string().trim().min(1),
-    worktreesPath: z.string().trim().min(1),
-    missionsPath: z.string().trim().min(1)
+    worktreePath: z.string().trim().min(1),
+    missionRootDir: z.string().trim().min(1),
+    issueId: z.number().int().positive().optional(),
+    issueUrl: z.string().trim().min(1).optional()
 }).strict();
 
 export type RepositoryInputType = z.infer<typeof RepositoryInputSchema>;

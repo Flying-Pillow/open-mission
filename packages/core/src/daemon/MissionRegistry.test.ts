@@ -42,6 +42,41 @@ describe('MissionRegistry', () => {
 			consoleError.mockRestore();
 		}
 	});
+
+	it('hydrates discovered Mission worktrees from the worktree control root', async () => {
+		const repositoryRoot = await createTempWorkspace();
+		const repositoryAdapter = new FilesystemAdapter(repositoryRoot);
+		const missionWorktreeRoot = repositoryAdapter.getMissionWorktreePath('1-prepare-repo-for-mission');
+		const missionAdapter = new FilesystemAdapter(missionWorktreeRoot);
+		const missionDir = missionAdapter.getTrackedMissionDir('1-prepare-repo-for-mission', missionWorktreeRoot);
+		await fs.mkdir(path.join(missionWorktreeRoot, '.mission'), { recursive: true });
+		await fs.writeFile(
+			path.join(missionWorktreeRoot, '.mission', 'settings.json'),
+			`${JSON.stringify({
+				missionsRoot: path.join(repositoryRoot, 'mission-worktrees'),
+				trackingProvider: 'github',
+				instructionsPath: '.agents',
+				skillsPath: '.agents/skills',
+				agentRunner: 'copilot-cli'
+			}, null, 2)}\n`,
+			'utf8'
+		);
+		await missionAdapter.writeMissionDescriptor(missionDir, createDescriptor('1-prepare-repo-for-mission'));
+		const loadMission = vi.fn(async () => undefined);
+
+		await expect(new MissionRegistry({ loadMission }).hydrateRepositoryMissions({
+			surfacePath: repositoryRoot
+		})).resolves.toBeUndefined();
+
+		expect(loadMission).toHaveBeenCalledWith(
+			{
+				missionId: '1-prepare-repo-for-mission',
+				repositoryRootPath: missionWorktreeRoot
+			},
+			{ surfacePath: missionWorktreeRoot },
+			undefined
+		);
+	});
 });
 
 async function createTempWorkspace(): Promise<string> {

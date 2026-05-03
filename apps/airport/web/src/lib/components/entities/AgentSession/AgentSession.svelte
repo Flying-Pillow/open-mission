@@ -186,6 +186,7 @@
             {
                 missionId,
                 repositoryId,
+                repositoryRootPath,
                 sessionId: terminalSessionId,
             },
             (state) => {

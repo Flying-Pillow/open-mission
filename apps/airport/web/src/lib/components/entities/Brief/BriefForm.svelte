@@ -28,6 +28,7 @@
     let submitError = $state<string | null>(null);
     let fieldErrors = $state<BriefErrors>({});
     const repository = $derived(repositoryScope.repository);
+    const canStartMission = $derived(Boolean(repository?.data.isInitialized));
 
     async function handleSubmit(event: SubmitEvent): Promise<void> {
         event.preventDefault();
@@ -37,6 +38,12 @@
         if (!repository) {
             submitError =
                 "Repository context is unavailable until the repository route is loaded.";
+            return;
+        }
+
+        if (!canStartMission) {
+            submitError =
+                "Prepare this Repository for Mission before starting regular missions.";
             return;
         }
 
@@ -182,8 +189,12 @@
             <p class="text-sm text-rose-600">{submitError}</p>
         {/if}
 
-        <Button type="submit" disabled={submitPending}>
-            {submitPending ? "Creating mission..." : "Create mission"}
+        <Button type="submit" disabled={submitPending || !canStartMission}>
+            {submitPending
+                ? "Creating mission..."
+                : canStartMission
+                  ? "Create mission"
+                  : "Prepare first"}
         </Button>
     </form>
 </section>

@@ -3,6 +3,7 @@
     import Icon from "@iconify/svelte";
     import type { AirportRepositoryListItem } from "$lib/components/entities/types";
     import type { Repository } from "$lib/components/entities/Repository/Repository.svelte.js";
+    import { Badge } from "$lib/components/ui/badge/index.js";
     import RepositoryCommandbar from "$lib/components/entities/Repository/RepositoryCommandbar.svelte";
     import RepositorySyncStatus from "$lib/components/entities/Repository/RepositorySyncStatus.svelte";
     import { cn } from "$lib/utils.js";
@@ -25,6 +26,9 @@
         repository.platformRepositoryRef ?? repository.displayName,
     );
     const repositoryName = $derived(repositoryRef.trim() || "Repository");
+    const requiresPreparation = $derived(
+        Boolean(localRepository && !localRepository.data.isInitialized),
+    );
     const platformRepositoryUrl = $derived(
         repository.platformRepositoryRef?.trim()
             ? `https://github.com/${repository.platformRepositoryRef.trim()}`
@@ -108,6 +112,11 @@
                 >
                     {repositoryName}
                 </h3>
+                {#if requiresPreparation}
+                    <Badge variant="secondary" class="shrink-0">
+                        Setup required
+                    </Badge>
+                {/if}
             </div>
         </div>
         <RepositoryCommandbar
@@ -192,6 +201,23 @@
             <RepositorySyncStatus repository={localRepository} />
         </div>
     </div>
+
+    {#if requiresPreparation}
+        <div
+            class="border-t border-dashed bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:bg-amber-950/20 dark:text-amber-100"
+        >
+            <div class="flex min-w-0 items-start gap-2">
+                <Icon
+                    icon="lucide:route"
+                    class="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-300"
+                />
+                <p class="min-w-0 leading-5">
+                    This Repository needs a preparation Mission before regular
+                    SPEC-driven work can start.
+                </p>
+            </div>
+        </div>
+    {/if}
 {/snippet}
 
 {#if interactive && repository.isLocal}

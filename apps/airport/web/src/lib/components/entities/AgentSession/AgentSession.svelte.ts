@@ -1,9 +1,10 @@
 // /apps/airport/web/src/lib/components/entities/AgentSession/AgentSession.svelte.ts: OO browser entity for a mission agent session hydrated from validated runtime snapshots.
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import type { AgentSessionCommandType, AgentSessionPromptType, AgentSessionDataType } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import { AgentSessionCommandIds, type AgentSessionCommandType, type AgentSessionPromptType, type AgentSessionDataType } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
 export type AgentSessionDependencies = {
+    resolveCommands(sessionId: string): EntityCommandDescriptorType[];
     executeCommand(sessionId: string, commandId: string, input?: unknown): Promise<void>;
     sendPrompt(sessionId: string, prompt: AgentSessionPromptType): Promise<void>;
     sendCommand(sessionId: string, command: AgentSessionCommandType): Promise<void>;
@@ -99,7 +100,7 @@ export class AgentSession implements EntityModel<AgentSessionDataType> {
     }
 
     public get commands(): EntityCommandDescriptorType[] {
-        return structuredClone($state.snapshot(this.data.commands ?? []));
+        return this.dependencies.resolveCommands(this.sessionId);
     }
 
     public async sendPrompt(prompt: AgentSessionPromptType): Promise<this> {
@@ -117,17 +118,17 @@ export class AgentSession implements EntityModel<AgentSessionDataType> {
     }
 
     public async done(): Promise<this> {
-        await this.executeCommand('agentSession.complete');
+        await this.executeCommand(AgentSessionCommandIds.complete);
         return this;
     }
 
     public async cancel(reason?: string): Promise<this> {
-        await this.executeCommand('agentSession.cancel', reason?.trim() ? { reason: reason.trim() } : undefined);
+        await this.executeCommand(AgentSessionCommandIds.cancel, reason?.trim() ? { reason: reason.trim() } : undefined);
         return this;
     }
 
     public async terminate(reason?: string): Promise<this> {
-        await this.executeCommand('agentSession.terminate', reason?.trim() ? { reason: reason.trim() } : undefined);
+        await this.executeCommand(AgentSessionCommandIds.terminate, reason?.trim() ? { reason: reason.trim() } : undefined);
         return this;
     }
 

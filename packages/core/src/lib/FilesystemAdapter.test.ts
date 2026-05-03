@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import { FilesystemAdapter } from './FilesystemAdapter.js';
 import { Repository } from '../entities/Repository/Repository.js';
@@ -87,6 +88,43 @@ describe('FilesystemAdapter', () => {
 		expect(adapter.deriveDraftMissionBranchName('Filesystem mission model')).toMatch(
 			/^mission\/draft-\d{14}-filesystem-mission-model$/u
 		);
+	});
+
+	it('commits with a daemon fallback author identity when Git config is clean', async () => {
+		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-git-identity-'));
+		const isolatedHome = path.join(workspaceRoot, 'home');
+		const previousHome = process.env['HOME'];
+		const previousAuthorName = process.env['GIT_AUTHOR_NAME'];
+		const previousAuthorEmail = process.env['GIT_AUTHOR_EMAIL'];
+		const previousCommitterName = process.env['GIT_COMMITTER_NAME'];
+		const previousCommitterEmail = process.env['GIT_COMMITTER_EMAIL'];
+
+		try {
+			await fs.mkdir(isolatedHome, { recursive: true });
+			process.env['HOME'] = isolatedHome;
+			delete process.env['GIT_AUTHOR_NAME'];
+			delete process.env['GIT_AUTHOR_EMAIL'];
+			delete process.env['GIT_COMMITTER_NAME'];
+			delete process.env['GIT_COMMITTER_EMAIL'];
+
+			git(workspaceRoot, ['init']);
+			await fs.writeFile(path.join(workspaceRoot, 'README.md'), 'prepared\n', 'utf8');
+
+			const adapter = new FilesystemAdapter(workspaceRoot);
+			adapter.stagePaths(['README.md']);
+			expect(() => adapter.commit('prepare repository')).not.toThrow();
+
+			expect(git(workspaceRoot, ['log', '-1', '--format=%an <%ae>|%cn <%ce>'])).toBe(
+				'Mission Daemon <mission-daemon@localhost>|Mission Daemon <mission-daemon@localhost>'
+			);
+		} finally {
+			restoreEnv('HOME', previousHome);
+			restoreEnv('GIT_AUTHOR_NAME', previousAuthorName);
+			restoreEnv('GIT_AUTHOR_EMAIL', previousAuthorEmail);
+			restoreEnv('GIT_COMMITTER_NAME', previousCommitterName);
+			restoreEnv('GIT_COMMITTER_EMAIL', previousCommitterEmail);
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		}
 	});
 
 	it('persists and rehydrates the mission descriptor through BRIEF.md', async () => {
@@ -316,3 +354,22 @@ describe('FilesystemAdapter', () => {
 		}
 	});
 });
+
+function restoreEnv(key: string, value: string | undefined): void {
+	if (value === undefined) {
+		delete process.env[key];
+		return;
+	}
+	process.env[key] = value;
+}
+
+function git(cwd: string, args: string[]): string {
+	const result = spawnSync('git', args, {
+		cwd,
+		encoding: 'utf8'
+	});
+	if (result.status !== 0) {
+		throw new Error([result.stdout, result.stderr].filter(Boolean).join('\n'));
+	}
+	return result.stdout.trim();
+}

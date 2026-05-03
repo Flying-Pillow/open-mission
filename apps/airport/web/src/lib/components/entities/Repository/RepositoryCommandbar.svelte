@@ -1,7 +1,9 @@
 <script lang="ts">
+    import { goto } from "$app/navigation";
     import EntityCommandbar from "$lib/components/entities/Commandbar/EntityCommandbar.svelte";
     import type { Repository } from "$lib/components/entities/Repository/Repository.svelte.js";
     import type { EntityCommandDescriptorType } from "@flying-pillow/mission-core/entities/Entity/EntitySchema";
+    import { RepositoryPrepareResultSchema } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
 
     let {
         repository,
@@ -62,6 +64,18 @@
 
         if (command.commandId === "repository.remove") {
             refreshNonce += 1;
+            return;
+        }
+
+        if (command.commandId === "repository.prepare" && repository) {
+            const preparation = RepositoryPrepareResultSchema.parse(result);
+            await repository.refresh();
+            await repository.refreshCommands();
+            refreshNonce += 1;
+            await onCommandExecuted();
+            await goto(
+                `/airport/${encodeURIComponent(repository.id)}/${encodeURIComponent(preparation.id)}`,
+            );
             return;
         }
 

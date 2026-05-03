@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Mission } from './Mission.svelte.js';
 import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/daemon/protocol/entityRemote';
-import type { AgentSessionCommandAcknowledgementType, AgentSessionDataType } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import { AgentSessionCommandIds, type AgentSessionCommandAcknowledgementType, type AgentSessionDataType } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import { ArtifactCommandIds, type ArtifactDataType } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
-import type { MissionCommandAcknowledgementType, MissionSnapshotType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import { MissionCommandIds, type MissionCommandAcknowledgementType, type MissionSnapshotType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { StageDataType, StageCommandAcknowledgementType } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
-import type { TaskDataType, TaskCommandAcknowledgementType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
+import { TaskCommandIds, type TaskDataType, type TaskCommandAcknowledgementType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import type { MissionGatewayDependencies } from './Mission.svelte.js';
 
 describe('Mission control view reconciliation', () => {
@@ -68,20 +68,23 @@ describe('Mission control view reconciliation', () => {
         expect(mission.getTask('task-2')).toBeUndefined();
     });
 
-    it('exposes Mission entity commands from the entity snapshot', () => {
+    it('exposes Mission entity commands from the aggregate command view', () => {
         const mission = createMission(
             {
                 ...createMissionSnapshot(),
-                mission: {
-                    ...createMissionSnapshot().mission,
-                    commands: [{ commandId: 'mission.pause', label: 'Pause Mission', disabled: false }]
+                commandView: {
+                    revision: 'commands-1',
+                    commands: [{
+                        owner: { entity: 'Mission' },
+                        command: { commandId: MissionCommandIds.pause, label: 'Pause Mission', disabled: false }
+                    }]
                 }
             }
         );
 
         expect(mission.commands).toEqual([
             {
-                commandId: 'mission.pause',
+                commandId: MissionCommandIds.pause,
                 label: 'Pause Mission',
                 disabled: false
             }
@@ -272,7 +275,7 @@ function createTaskAcknowledgement(): TaskCommandAcknowledgementType {
         id: 'task-1',
         missionId: 'mission-29',
         taskId: 'task-1',
-        commandId: 'task.start'
+        commandId: TaskCommandIds.start
     };
 }
 
@@ -284,7 +287,7 @@ function createAgentSessionAcknowledgement(method: AgentSessionCommandAcknowledg
         id: 'session-1',
         missionId: 'mission-29',
         sessionId: 'session-1',
-        ...(method === 'command' ? { commandId: 'agentSession.cancel' } : {})
+        ...(method === 'command' ? { commandId: AgentSessionCommandIds.cancel } : {})
     };
 }
 
@@ -318,6 +321,10 @@ function createMissionSnapshot(): MissionSnapshotType {
             artifacts: [createArtifactData('verify', 'VERIFY.md')],
             stages,
             agentSessions: [createSessionSnapshot('session-1', 'running')]
+        },
+        commandView: {
+            revision: 'commands-1',
+            commands: []
         },
         status: {
             missionId: 'mission-29',

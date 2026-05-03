@@ -1,8 +1,9 @@
 <script lang="ts">
     import type { RepositoryIssueDetailType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import Icon from "@iconify/svelte";
-    import { enhance } from "$app/forms";
+    import { goto } from "$app/navigation";
     import { onMount, type Component } from "svelte";
+    import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
@@ -17,12 +18,44 @@
     } = $props();
 
     let MarkdownViewer = $state<Component<{ source: string }> | null>(null);
+    const repositoryScope = getScopedRepositoryContext();
+    const activeRepository = $derived(repositoryScope.repository);
+    const canStartMission = $derived(
+        Boolean(activeRepository?.data.isInitialized),
+    );
+    let missionCreationPending = $state(false);
+    let startError = $state<string | null>(null);
 
     onMount(async () => {
         MarkdownViewer = (
             await import("$lib/components/viewers/markdown.svelte")
         ).default;
     });
+
+    async function startFromIssue(): Promise<void> {
+        startError = null;
+        if (!activeRepository) {
+            startError =
+                "Repository context is unavailable until the repository route is loaded.";
+            return;
+        }
+        if (!canStartMission) {
+            startError =
+                "Prepare this Repository for Mission before starting regular missions.";
+            return;
+        }
+        missionCreationPending = true;
+        try {
+            const result = await activeRepository.startMissionFromIssue(
+                selectedIssue.number,
+            );
+            await goto(result.redirectTo);
+        } catch (error) {
+            startError = error instanceof Error ? error.message : String(error);
+        } finally {
+            missionCreationPending = false;
+        }
+    }
 </script>
 
 <section
@@ -70,17 +103,19 @@
                             Open on GitHub
                         </Button>
                     {/if}
-                    <form method="POST" action="?/startFromIssue" use:enhance>
-                        <input
-                            type="hidden"
-                            name="issueNumber"
-                            value={selectedIssue.number}
-                        />
-                        <Button type="submit">
-                            <Icon icon="lucide:play" class="size-4" />
-                            Start mission
-                        </Button>
-                    </form>
+                    <Button
+                        type="button"
+                        onclick={() => void startFromIssue()}
+                        disabled={missionCreationPending || !canStartMission}
+                        title={canStartMission
+                            ? "Start mission"
+                            : "Prepare repo for Mission first"}
+                    >
+                        <Icon icon="lucide:play" class="size-4" />
+                        {missionCreationPending
+                            ? "Starting..."
+                            : "Start mission"}
+                    </Button>
                     <Button
                         type="button"
                         variant="ghost"
@@ -97,6 +132,11 @@
     </div>
 
     <ScrollArea class="min-h-0 flex-1 overflow-hidden bg-background/70">
+        {#if startError}
+            <div class="border-b px-4 py-3 text-sm text-rose-600">
+                {startError}
+            </div>
+        {/if}
         <div class="px-4 py-4">
             {#if MarkdownViewer}
                 <MarkdownViewer source={selectedIssue.body} />

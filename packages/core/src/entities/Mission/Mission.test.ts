@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { MissionContract } from './MissionContract.js';
-import { MissionDataSchema, MissionSnapshotSchema } from './MissionSchema.js';
+import { MissionCommandIds, MissionDataSchema, MissionSnapshotSchema } from './MissionSchema.js';
 import { AgentSessionDataSchema } from '../AgentSession/AgentSessionSchema.js';
 import { ArtifactDataSchema } from '../Artifact/ArtifactSchema.js';
 import { StageDataSchema } from '../Stage/StageSchema.js';
-import { TaskDataSchema } from '../Task/TaskSchema.js';
+import { TaskCommandIds, TaskDataSchema } from '../Task/TaskSchema.js';
 
 const artifact = ArtifactDataSchema.parse({
     id: 'artifact:mission-1/mission:brief',
@@ -94,16 +94,50 @@ describe('Mission schemas', () => {
         })).toThrow();
     });
 
+    it('rejects command descriptors embedded in Entity data', () => {
+        expect(() => MissionDataSchema.parse({
+            ...missionData,
+            commands: [{ commandId: MissionCommandIds.pause, label: 'Pause Mission', disabled: false }]
+        })).toThrow();
+
+        expect(() => MissionDataSchema.parse({
+            ...missionData,
+            stages: [{
+                ...stage,
+                commands: [{ commandId: 'stage.generateTasks', label: 'Generate Tasks', disabled: false }]
+            }]
+        })).toThrow();
+
+        expect(() => MissionDataSchema.parse({
+            ...missionData,
+            stages: [{
+                ...stage,
+                tasks: [{
+                    ...task,
+                    commands: [{ commandId: TaskCommandIds.start, label: 'Start Task', disabled: false }]
+                }]
+            }]
+        })).toThrow();
+    });
+
     it('keeps Mission read as an aggregate snapshot contract', () => {
         const snapshot = MissionSnapshotSchema.parse({
             mission: missionData,
+            commandView: {
+                revision: 'commands-1',
+                commands: [{
+                    owner: { entity: 'Mission' },
+                    command: { commandId: MissionCommandIds.pause, label: 'Pause Mission', disabled: false }
+                }]
+            },
             stages: [stage],
             tasks: [task],
             artifacts: [artifact],
             agentSessions: [agentSession]
         });
 
-        expect(MissionContract.methods?.read?.result).toBe(MissionSnapshotSchema);
+        expect(MissionContract.methods?.['read']?.result).toBe(MissionSnapshotSchema);
+        expect(snapshot.commandView?.commands[0]?.command.commandId).toBe(MissionCommandIds.pause);
         expect(snapshot.mission.missionId).toBe('mission-1');
     });
 });

@@ -1,7 +1,6 @@
 import { z } from 'zod/v4';
 import {
     EntityCommandAcknowledgementSchema,
-    EntityCommandDescriptorSchema,
     EntityCommandInputDescriptorSchema,
     EntityIdSchema
 } from '../Entity/EntitySchema.js';
@@ -259,8 +258,7 @@ export const AgentSessionStorageSchema = z.object({
 }).strict();
 
 export const AgentSessionDataSchema = z.object({
-    ...AgentSessionStorageSchema.shape,
-    commands: z.array(EntityCommandDescriptorSchema).optional()
+    ...AgentSessionStorageSchema.shape
 }).strict();
 
 export const AgentSessionCommandAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({

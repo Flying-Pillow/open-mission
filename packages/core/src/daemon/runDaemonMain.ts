@@ -474,27 +474,62 @@ function notifyEntityMutation(
 	if (!services.notify || !isRecord(result)) {
 		return;
 	}
-	if (result['ok'] !== true || typeof result['id'] !== 'string' || !result['id'].trim()) {
+	const entityId = resolveMutationNotificationEntityId(input.entity, result);
+	if (result['ok'] !== true || !entityId) {
 		return;
 	}
 
-	if (input.method !== 'remove') {
+	try {
+		if (input.method !== 'remove') {
+			services.notify({
+				type: 'entity.changed',
+				workspaceRoot: resolveSurfacePath(request.surfacePath),
+				entity: input.entity,
+				id: entityId,
+				method: input.method
+			});
+			return;
+		}
+
 		services.notify({
-			type: 'entity.changed',
+			type: 'entity.deleted',
 			workspaceRoot: resolveSurfacePath(request.surfacePath),
 			entity: input.entity,
-			id: EntityIdSchema.parse(result['id']),
-			method: input.method
+			id: entityId
 		});
-		return;
+	} catch {
+		// Mutation notifications are best-effort; command success must stay authoritative.
+	}
+}
+
+export function resolveMutationNotificationEntityId(entity: string, result: Record<string, unknown>): EntityIdType | undefined {
+	const resultId = typeof result['id'] === 'string' ? result['id'].trim() : undefined;
+	if (resultId) {
+		const parsed = EntityIdSchema.safeParse(resultId);
+		if (parsed.success) {
+			return parsed.data;
+		}
 	}
 
-	services.notify({
-		type: 'entity.deleted',
-		workspaceRoot: resolveSurfacePath(request.surfacePath),
-		entity: input.entity,
-		id: EntityIdSchema.parse(result['id'])
-	});
+	const missionId = typeof result['missionId'] === 'string' ? result['missionId'].trim() : undefined;
+	switch (entity) {
+		case 'Mission':
+			return resultId ? createEntityId('mission', resultId) : undefined;
+		case 'Stage': {
+			const stageId = typeof result['stageId'] === 'string' ? result['stageId'].trim() : undefined;
+			return missionId && stageId ? createEntityId('stage', `${missionId}/${stageId}`) : undefined;
+		}
+		case 'Task': {
+			const taskId = typeof result['taskId'] === 'string' ? result['taskId'].trim() : undefined;
+			return missionId && taskId ? createEntityId('task', `${missionId}/${taskId}`) : undefined;
+		}
+		case 'AgentSession': {
+			const sessionId = typeof result['sessionId'] === 'string' ? result['sessionId'].trim() : undefined;
+			return missionId && sessionId ? createEntityId('agent_session', `${missionId}/${sessionId}`) : undefined;
+		}
+		default:
+			return undefined;
+	}
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {

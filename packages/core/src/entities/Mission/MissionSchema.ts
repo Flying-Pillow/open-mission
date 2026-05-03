@@ -145,6 +145,7 @@ export const MissionCatalogEntrySchema = z.object({
     title: z.string().trim().min(1),
     branchRef: z.string().trim().min(1),
     createdAt: z.string().trim().min(1),
+    repositoryRootPath: z.string().trim().min(1).optional(),
     issueId: z.number().int().positive().optional()
 }).strict();
 
