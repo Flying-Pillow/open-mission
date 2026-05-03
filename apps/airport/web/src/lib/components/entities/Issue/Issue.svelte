@@ -39,7 +39,7 @@
         try {
             if (!canStartMission) {
                 throw new Error(
-                    "Prepare this Repository for Mission before starting regular missions.",
+                    "Complete Repository setup before starting regular missions.",
                 );
             }
             const result = await activeRepository.startMissionFromIssue(
@@ -92,7 +92,7 @@
                 disabled={missionCreationPending || !canStartMission}
                 title={canStartMission
                     ? "Start mission"
-                    : "Prepare repo for Mission first"}
+                    : "Repository setup required"}
             >
                 <Icon icon="lucide:play" class="size-4" />
                 {missionCreationPending ? "Starting..." : "Start mission"}

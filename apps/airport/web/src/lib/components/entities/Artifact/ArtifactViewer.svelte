@@ -2,16 +2,13 @@
     import type { Artifact } from "$lib/components/entities/Artifact/Artifact.svelte.js";
     import TaskCommandbar from "$lib/components/entities/Task/TaskCommandbar.svelte";
     import type { Task } from "$lib/components/entities/Task/Task.svelte.js";
-    import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import Icon from "@iconify/svelte";
-    import { ArtifactBodySchema } from "@flying-pillow/mission-core/entities/Artifact/ArtifactSchema";
     import { Button } from "$lib/components/ui/button/index.js";
     import MarkdownViewer from "$lib/components/viewers/markdown.svelte";
     import {
         isArtifactTextEditable,
         resolveArtifactViewerKind,
     } from "./ArtifactPresentation.js";
-    import { qry } from "../../../../routes/api/entities/remote/query.remote";
 
     let {
         refreshNonce,
@@ -26,8 +23,6 @@
         onEditRequested: () => void;
         onCommandExecuted: () => Promise<void>;
     } = $props();
-    const missionScope = getScopedMissionContext();
-    const mission = $derived(missionScope.mission);
 
     const panelLabel = $derived(artifact?.label ?? "Resolved artifact");
     const artifactBodyLocation = $derived(artifact?.bodyLocationLabel);
@@ -40,28 +35,11 @@
     const artifactBodyKey = $derived(
         artifact ? `${artifact.id}:${refreshNonce}` : "none",
     );
-    const artifactBodyQueryInput = $derived.by(() => {
+    const canReadArtifactBody = $derived.by(() => {
         refreshNonce;
-        if (
-            !artifact ||
-            !mission ||
-            viewerKind === "unsupported" ||
-            viewerKind === "image"
-        ) {
-            return null;
-        }
-
-        return {
-            entity: "Artifact",
-            method: "body",
-            payload: {
-                missionId: mission.missionId,
-                id: artifact.id,
-                ...(mission.missionWorktreePath
-                    ? { repositoryRootPath: mission.missionWorktreePath }
-                    : {}),
-            },
-        };
+        return Boolean(
+            artifact && viewerKind !== "unsupported" && viewerKind !== "image",
+        );
     });
 </script>
 
@@ -89,17 +67,16 @@
 
     <div class="min-h-0 overflow-auto p-2">
         {#if artifact}
-            {#if artifactBodyQueryInput}
+            {#if canReadArtifactBody}
                 {#key artifactBodyKey}
-                    {#await qry(artifactBodyQueryInput)}
+                    {#await artifact.read({ executionContext: "render" })}
                         <div
                             class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
                         >
                             Loading artifact...
                         </div>
                     {:then artifactBodyResult}
-                        {@const artifactBody =
-                            ArtifactBodySchema.parse(artifactBodyResult)}
+                        {@const artifactBody = artifactBodyResult}
                         {#if viewerKind === "markdown"}
                             {#if typeof artifactBody.body !== "string"}
                                 <div

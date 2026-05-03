@@ -38,8 +38,9 @@ import {
 	type RepositoryGetIssueType,
 	type RepositoryLocatorType,
 	type RepositoryAddType,
-	type RepositoryPrepareResultType,
 	type RepositoryRemoveAcknowledgementType,
+	type RepositorySetupResultType,
+	type RepositorySetupType,
 	type RepositorySyncCommandAcknowledgementType,
 	type RepositorySyncStatusType,
 	type RepositorySettingsType,
@@ -53,9 +54,10 @@ import {
 	RepositoryGetIssueSchema,
 	RepositoryLocatorSchema,
 	RepositoryMissionStartAcknowledgementSchema,
-	RepositoryPrepareResultSchema,
 	RepositoryAddSchema,
 	RepositoryRemoveAcknowledgementSchema,
+	RepositorySetupResultSchema,
+	RepositorySetupSchema,
 	RepositorySyncCommandAcknowledgementSchema,
 	RepositorySyncStatusSchema,
 	RepositoryLocalAddInputSchema,
@@ -65,11 +67,8 @@ import {
 import type { WorkflowDefinition } from '../../workflow/WorkflowSchema.js';
 import { parsePersistedWorkflowSettings } from '../../settings/validation.js';
 import {
-	REPOSITORY_PREPARATION_ISSUE_TITLE,
-	renderRepositoryPreparationIssueBody
-} from '../../workflow/mission/repositoryPreparationIssue.js';
-import {
 	createRepositoryPlatformAdapter,
+	type RepositoryPlatformAdapter,
 } from './PlatformAdapter.js';
 
 export type RepositoryIdentity = {
@@ -482,7 +481,10 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return nextDocument;
 	}
 
-	public static async initializeScaffolding(repositoryRootPath: string): Promise<RepositoryScaffolding> {
+	public static async initializeScaffolding(
+		repositoryRootPath: string,
+		options: { settings?: RepositorySettingsType } = {}
+	): Promise<RepositoryScaffolding> {
 		const { WorkflowSettingsStore } = await import('../../settings/index.js');
 		const controlDirectoryPath = Repository.getMissionDirectoryPath(repositoryRootPath);
 		const settingsDocumentPath = Repository.getSettingsDocumentPath(repositoryRootPath, {
@@ -491,7 +493,9 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		const worktreesRoot = Repository.getMissionWorktreesPath(repositoryRootPath);
 
 		await fsp.mkdir(controlDirectoryPath, { recursive: true });
-		await new WorkflowSettingsStore(repositoryRootPath).initialize();
+		await new WorkflowSettingsStore(repositoryRootPath).initialize({
+			...(options.settings ? { settings: options.settings } : {})
+		});
 		const workflowDirectoryPath = path.join(controlDirectoryPath, 'workflow');
 		const workflowDefinitionPath = path.join(workflowDirectoryPath, 'workflow.json');
 		const workflowTemplatesPath = path.join(workflowDirectoryPath, 'templates');
@@ -668,7 +672,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			: this.available();
 	}
 
-	public canPrepare() {
+	public canSetup() {
 		if (!this.platformRepositoryRef) {
 			return this.unavailable('Repository does not have a platform repository ref.');
 		}
@@ -682,51 +686,75 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return true;
 	}
 
-	public async prepare(
-		input: RepositoryLocatorType,
+	public async setup(
+		input: RepositorySetupType,
 		context?: EntityExecutionContext
-	): Promise<RepositoryPrepareResultType> {
-		this.assertRepositoryIdentity(RepositoryLocatorSchema.parse(input));
+	): Promise<RepositorySetupResultType> {
+		const args = RepositorySetupSchema.parse(input);
+		this.assertRepositoryIdentity(args);
 		const platformRepositoryRef = this.platformRepositoryRef?.trim();
 		if (!platformRepositoryRef) {
 			throw new Error(`Repository '${this.id}' does not have a platform repository ref configured.`);
 		}
-		const store = new FilesystemAdapter(this.repositoryRootPath);
-		const baseBranch = store.getDefaultBranch();
-		const platform = this.requireRepositoryPlatformAdapter(context?.authToken);
-		const existingPreparationIssue = (await platform.listOpenIssues(50))
-			.find((issue) => issue.title.trim() === REPOSITORY_PREPARATION_ISSUE_TITLE);
-		const brief = existingPreparationIssue
-			? await platform.fetchIssue(String(existingPreparationIssue.number))
-			: await platform.createIssue({
-				title: REPOSITORY_PREPARATION_ISSUE_TITLE,
-				body: await renderRepositoryPreparationIssueBody({
-					repositoryRef: platformRepositoryRef,
-					repositoryRootPath: this.repositoryRootPath,
-					defaultBranch: baseBranch
-				})
-			});
-		const preparation = await this.prepareMissionFromBrief(store, this.createDefaultPreparationWorkflowBindings(), { brief });
-
-		if (preparation.kind !== 'mission') {
-			throw new Error('Repository preparation did not create a Mission worktree.');
+		if (this.isInitialized || Repository.readSettingsDocument(this.repositoryRootPath)) {
+			throw new Error(`Repository '${this.id}' already has Repository setup state.`);
 		}
 
-		refreshSystemStatus({ cwd: preparation.worktreePath });
-		return RepositoryPrepareResultSchema.parse({
-			ok: true,
-			entity: repositoryEntityName,
-			method: 'prepare',
-			id: preparation.missionId,
-			kind: 'mission-preparation',
-			state: preparation.state,
-			branchRef: preparation.branchRef,
-			baseBranch: preparation.baseBranch,
-			worktreePath: preparation.worktreePath,
-			missionRootDir: preparation.missionRootDir,
-			...(preparation.issueId !== undefined ? { issueId: preparation.issueId } : {}),
-			...(preparation.issueUrl ? { issueUrl: preparation.issueUrl } : {})
-		});
+		const store = new FilesystemAdapter(this.repositoryRootPath);
+		const baseBranch = store.getDefaultBranch();
+		const branchRef = store.deriveRepositoryBootstrapBranchName();
+		const temporaryRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-setup-'));
+		const proposalWorktreePath = path.join(temporaryRoot, 'setup');
+		const platform = this.requireRepositoryPlatformAdapter(context?.authToken);
+
+		try {
+			await store.materializeLinkedWorktree(proposalWorktreePath, branchRef, baseBranch);
+			const scaffolding = await Repository.initializeScaffolding(proposalWorktreePath, {
+				settings: args.settings
+			});
+			const proposalStore = new FilesystemAdapter(proposalWorktreePath);
+			proposalStore.stagePaths([
+				path.relative(proposalWorktreePath, scaffolding.settingsDocumentPath),
+				path.relative(proposalWorktreePath, scaffolding.workflowDirectoryPath)
+			], proposalWorktreePath, { force: true });
+			proposalStore.commit(Repository.buildRepositorySetupCommitMessage(), proposalWorktreePath);
+			proposalStore.pushBranch(branchRef, proposalWorktreePath);
+
+			const pullRequestUrl = await platform.createPullRequest({
+				title: 'Initialize Mission repository setup',
+				body: Repository.buildRepositorySetupPullRequestBody({ branchRef, baseBranch }),
+				headBranch: branchRef,
+				baseBranch
+			});
+			const autoMerge = await Repository.tryAutoMergeSetupPullRequest(platform, pullRequestUrl);
+			const basePull = autoMerge.merged
+				? Repository.tryPullSetupBaseBranch(platform, baseBranch)
+				: { pulled: false };
+			refreshSystemStatus({ cwd: proposalWorktreePath });
+
+			return RepositorySetupResultSchema.parse({
+				ok: true,
+				entity: repositoryEntityName,
+				method: 'setup',
+				id: this.id,
+				kind: 'repository-setup',
+				state: autoMerge.merged ? 'merged' : autoMerge.succeeded ? 'auto-merge-requested' : 'pull-request-opened',
+				branchRef,
+				baseBranch,
+				pullRequestUrl,
+				settingsPath: scaffolding.settingsDocumentPath,
+				workflowDefinitionPath: scaffolding.workflowDefinitionPath,
+				autoMergeAttempted: autoMerge.attempted,
+				autoMergeSucceeded: autoMerge.succeeded,
+				merged: autoMerge.merged,
+				basePulled: basePull.pulled,
+				...(basePull.error ? { basePullError: basePull.error } : {}),
+				...(autoMerge.error ? { autoMergeError: autoMerge.error } : {})
+			});
+		} finally {
+			await store.removeLinkedWorktree(proposalWorktreePath).catch(() => undefined);
+			await fsp.rm(temporaryRoot, { recursive: true, force: true });
+		}
 	}
 
 	public override async remove(
@@ -851,6 +879,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	): Promise<RepositoryMissionStartAcknowledgementType> {
 		const args = RepositoryStartMissionFromIssueSchema.parse(input);
 		this.assertRepositoryIdentity(args);
+		await this.refreshRepositoryControlState(args);
 		this.assertCanStartRegularMission();
 		const brief = await this.requireRepositoryPlatformAdapter(context?.authToken)
 			.fetchIssue(String(args.issueNumber));
@@ -863,6 +892,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	): Promise<RepositoryMissionStartAcknowledgementType> {
 		const args = RepositoryStartMissionFromBriefSchema.parse(input);
 		this.assertRepositoryIdentity(args);
+		await this.refreshRepositoryControlState(args);
 		this.assertCanStartRegularMission();
 		const platform = this.tryCreateRepositoryPlatformAdapter(context?.authToken);
 		const brief = platform
@@ -882,32 +912,15 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 	private assertCanStartRegularMission(): void {
 		if (!this.isInitialized) {
-			throw new Error('Prepare this Repository for Mission before starting regular missions.');
+			throw new Error('Complete Repository setup before starting regular missions.');
 		}
 	}
 
-	private createDefaultPreparationWorkflowBindings(): MissionWorkflowBindings {
-		const workflow = Repository.createAutostartWorkflowDefinition(this.workflowConfiguration);
-		return {
-			workflow,
-			resolveWorkflow: () => workflow,
-			taskRunners: new Map(),
-			instructionsPath: Repository.resolveRepositoryPath(this.repositoryRootPath, this.settings.instructionsPath),
-			skillsPath: Repository.resolveRepositoryPath(this.repositoryRootPath, this.settings.skillsPath),
-			...(this.settings.defaultModel ? { defaultModel: this.settings.defaultModel } : {}),
-			...(this.settings.defaultAgentMode ? { defaultMode: this.settings.defaultAgentMode } : {})
-		};
-	}
-
-	private static createAutostartWorkflowDefinition(workflow: WorkflowDefinition): WorkflowDefinition {
-		const nextWorkflow = structuredClone(workflow);
-		for (const stageId of nextWorkflow.stageOrder) {
-			const stage = nextWorkflow.stages[stageId];
-			if (stage) {
-				stage.taskLaunchPolicy.defaultAutostart = true;
-			}
-		}
-		return nextWorkflow;
+	private async refreshRepositoryControlState(input: RepositoryLocatorType): Promise<void> {
+		await this.read({
+			id: input.id,
+			...(input.repositoryRootPath ? { repositoryRootPath: input.repositoryRootPath } : {})
+		});
 	}
 
 	private async prepareMission(
@@ -1073,6 +1086,53 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			throw new Error(`Repository '${this.id}' does not have a platform repository ref configured.`);
 		}
 		return adapter;
+	}
+
+	private static async tryAutoMergeSetupPullRequest(
+		platform: RepositoryPlatformAdapter,
+		pullRequestUrl: string
+	): Promise<{ attempted: boolean; succeeded: boolean; merged: boolean; error?: string }> {
+		try {
+			await platform.mergePullRequest({
+				pullRequest: pullRequestUrl,
+				method: 'squash'
+			});
+			return { attempted: true, succeeded: true, merged: true };
+		} catch (mergeError) {
+			const immediateMergeError = mergeError instanceof Error ? mergeError.message : String(mergeError);
+			try {
+				await platform.mergePullRequest({
+					pullRequest: pullRequestUrl,
+					method: 'squash',
+					auto: true
+				});
+				return { attempted: true, succeeded: true, merged: false };
+			} catch (autoMergeError) {
+				const autoMergeMessage = autoMergeError instanceof Error ? autoMergeError.message : String(autoMergeError);
+				return {
+					attempted: true,
+					succeeded: false,
+					merged: false,
+					error: `${immediateMergeError}\n${autoMergeMessage}`
+				};
+			}
+		}
+	}
+
+	private static tryPullSetupBaseBranch(
+		platform: RepositoryPlatformAdapter,
+		baseBranch: string
+	): { pulled: boolean; error?: string } {
+		try {
+			platform.fetchRemote();
+			platform.pullBranch(baseBranch);
+			return { pulled: true };
+		} catch (error) {
+			return {
+				pulled: false,
+				error: error instanceof Error ? error.message : String(error)
+			};
+		}
 	}
 
 	private buildSyncStatus(
@@ -1244,6 +1304,26 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 	private static buildMissionPreparationCommitMessage(missionId: string, brief: MissionBrief): string {
 		return `chore(mission): prepare ${missionId}${brief.issueId !== undefined ? ` for #${String(brief.issueId)}` : ''}`;
+	}
+
+	private static buildRepositorySetupCommitMessage(): string {
+		return 'chore(mission): initialize repository setup';
+	}
+
+	private static buildRepositorySetupPullRequestBody(input: { branchRef: string; baseBranch: string }): string {
+		return [
+			'## Repository Setup',
+			'',
+			'This PR initializes tracked Mission repository setup.',
+			'',
+			`- Branch: \`${input.branchRef}\``,
+			`- Base: \`${input.baseBranch}\``,
+			'- Creates `.mission/settings.json` for Repository control settings.',
+			'- Creates `.mission/workflow/workflow.json` and the default workflow template preset.',
+			'- Leaves Mission dossiers to future Mission branches.',
+			'',
+			'After this PR merges, update the local default branch before starting missions.'
+		].join('\n');
 	}
 
 	private static getRepositoryFactory(context?: EntityExecutionContext) {

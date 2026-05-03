@@ -1,9 +1,7 @@
 <script lang="ts">
-    import { goto } from "$app/navigation";
     import EntityCommandbar from "$lib/components/entities/Commandbar/EntityCommandbar.svelte";
     import type { Repository } from "$lib/components/entities/Repository/Repository.svelte.js";
     import type { EntityCommandDescriptorType } from "@flying-pillow/mission-core/entities/Entity/EntitySchema";
-    import { RepositoryPrepareResultSchema } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
 
     let {
         repository,
@@ -18,34 +16,6 @@
     } = $props();
 
     let refreshNonce = $state(0);
-    let loadError = $state<string | null>(null);
-
-    $effect(() => {
-        if (!repository) {
-            return;
-        }
-
-        let cancelled = false;
-        loadError = null;
-
-        void repository
-            .refreshCommands()
-            .then(() => {
-                if (!cancelled) {
-                    refreshNonce += 1;
-                }
-            })
-            .catch((error) => {
-                if (!cancelled) {
-                    loadError =
-                        error instanceof Error ? error.message : String(error);
-                }
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    });
 
     async function handleCommandExecuted(
         result: unknown,
@@ -64,18 +34,6 @@
 
         if (command.commandId === "repository.remove") {
             refreshNonce += 1;
-            return;
-        }
-
-        if (command.commandId === "repository.prepare" && repository) {
-            const preparation = RepositoryPrepareResultSchema.parse(result);
-            await repository.refresh();
-            await repository.refreshCommands();
-            refreshNonce += 1;
-            await onCommandExecuted();
-            await goto(
-                `/airport/${encodeURIComponent(repository.id)}/${encodeURIComponent(preparation.id)}`,
-            );
             return;
         }
 
@@ -100,8 +58,4 @@
         {showEmptyState}
         onCommandExecuted={handleCommandExecuted}
     />
-
-    {#if loadError}
-        <p class="text-sm text-rose-600">{loadError}</p>
-    {/if}
 </div>

@@ -46,9 +46,20 @@
 
         localRepositoryRefreshRequested = true;
         const refreshHandle = window.setTimeout(() => {
-            void appContext.application
-                .loadRepositories({ force: true })
-                .catch(() => undefined);
+            if (repositoryFilter !== "external") {
+                void appContext.application
+                    .loadRepositories({ force: true })
+                    .catch(() => undefined);
+            }
+
+            if (repositoryFilter !== "local") {
+                void appContext.application
+                    .loadGitHubRepositories({ force: true })
+                    .catch(() => undefined);
+                void appContext.application
+                    .loadRepositoryClassCommands()
+                    .catch(() => undefined);
+            }
         }, 0);
 
         return () => {

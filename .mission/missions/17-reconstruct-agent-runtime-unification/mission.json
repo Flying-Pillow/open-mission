@@ -3,7 +3,7 @@
   "missionId": "17-reconstruct-agent-runtime-unification",
   "configuration": {
     "createdAt": "2026-04-10T21:00:07.000Z",
-    "source": "global-settings",
+    "source": "workflow-definition",
     "workflowVersion": "mission-workflow-v1",
     "workflow": {
       "autostart": {
@@ -11,9 +11,7 @@
       },
       "humanInLoop": {
         "enabled": true,
-        "pauseOnMissionStart": false,
-        "pauseOnTaskFailure": true,
-        "pauseOnTaskCompletion": false
+        "pauseOnMissionStart": false
       },
       "panic": {
         "terminateSessions": true,
@@ -36,61 +34,42 @@
           "stageId": "prd",
           "displayName": "PRD",
           "taskLaunchPolicy": {
-            "defaultAutostart": true,
-            "launchMode": "automatic"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": true
           }
         },
         "spec": {
           "stageId": "spec",
           "displayName": "Spec",
           "taskLaunchPolicy": {
-            "defaultAutostart": true,
-            "launchMode": "automatic"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": true
           }
         },
         "implementation": {
           "stageId": "implementation",
           "displayName": "Implement",
           "taskLaunchPolicy": {
-            "defaultAutostart": false,
-            "launchMode": "manual"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": false
           }
         },
         "audit": {
           "stageId": "audit",
           "displayName": "Audit",
           "taskLaunchPolicy": {
-            "defaultAutostart": true,
-            "launchMode": "automatic"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": true
           }
         },
         "delivery": {
           "stageId": "delivery",
           "displayName": "Delivery",
           "taskLaunchPolicy": {
-            "defaultAutostart": false,
-            "launchMode": "manual"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": false
           }
         }
       },
       "taskGeneration": [
         {
           "stageId": "prd",
+          "artifactTasks": false,
           "templateSources": [
             {
               "templateId": "prd-from-brief",
@@ -101,6 +80,7 @@
         },
         {
           "stageId": "spec",
+          "artifactTasks": false,
           "templateSources": [
             {
               "templateId": "draft-spec",
@@ -115,11 +95,13 @@
         },
         {
           "stageId": "implementation",
+          "artifactTasks": true,
           "templateSources": [],
           "tasks": []
         },
         {
           "stageId": "audit",
+          "artifactTasks": false,
           "templateSources": [
             {
               "templateId": "debrief",
@@ -134,6 +116,7 @@
         },
         {
           "stageId": "delivery",
+          "artifactTasks": false,
           "templateSources": [],
           "tasks": []
         }
@@ -184,7 +167,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": [
           "prd/01-prd-from-brief"
         ]
@@ -199,7 +181,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": [
           "spec/01-draft-spec",
           "spec/02-plan"
@@ -223,7 +204,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": [
           "implementation/01-establish-unified-runtime-contract-and-normalized-types",
           "implementation/verify-01-establish-unified-runtime-contract-and-normalized-types",
@@ -245,7 +225,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": [
           "audit/01-debrief",
           "audit/02-touchdown"
@@ -258,7 +237,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": []
       }
     ],
@@ -272,8 +250,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -290,8 +267,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -310,8 +286,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "planner",
         "retries": 0,
@@ -328,8 +303,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -348,8 +322,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -368,8 +341,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -388,8 +360,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -409,8 +380,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -429,8 +399,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -450,8 +419,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -470,8 +438,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -491,8 +458,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -511,8 +477,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -529,8 +494,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -547,8 +511,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -565,7 +528,7 @@
         "state": "passed",
         "stageId": "implementation",
         "reasons": [],
-        "updatedAt": "2026-04-10T21:45:00.000Z"
+        "updatedAt": "2026-04-10T21:47:00.000Z"
       },
       {
         "gateId": "verify",
@@ -573,7 +536,7 @@
         "state": "passed",
         "stageId": "implementation",
         "reasons": [],
-        "updatedAt": "2026-04-10T21:45:00.000Z"
+        "updatedAt": "2026-04-10T21:47:00.000Z"
       },
       {
         "gateId": "audit",
@@ -594,338 +557,5 @@
     ],
     "launchQueue": [],
     "updatedAt": "2026-04-10T21:47:00.000Z"
-  },
-  "eventLog": [
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:mission-created",
-      "type": "mission.created",
-      "occurredAt": "2026-04-10T21:00:07.000Z",
-      "source": "human",
-      "payload": {}
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:mission-started",
-      "type": "mission.started",
-      "occurredAt": "2026-04-10T21:00:10.000Z",
-      "source": "human",
-      "payload": {}
-    },
-    {
-      "eventId": "tasks.request-generation:2026-04-10T21:00:10.000Z:{\"stageId\":\"prd\"}:tasks-generated",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T21:00:15.000Z",
-      "source": "daemon",
-      "causedByRequestId": "tasks.request-generation:2026-04-10T21:00:10.000Z:{\"stageId\":\"prd\"}",
-      "payload": {
-        "stageId": "prd",
-        "tasks": [
-          {
-            "taskId": "prd/01-prd-from-brief",
-            "title": "PRD From Brief",
-            "instruction": "Use BRIEF.md as the canonical intake context. Rewrite or enrich PRD.md so it clearly states the problem, the target outcome, the constraints, and the success criteria for this mission. Only modify PRD.md in this task. Do not create or edit SPEC.md, implementation files, verification files, or delivery artifacts. Do not create application code in this task.",
-            "dependsOn": [],
-            "agentRunner": "copilot-cli"
-          }
-        ]
-      }
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:task-completed:prd-01-prd-from-brief",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:05:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "prd/01-prd-from-brief"
-      }
-    },
-    {
-      "eventId": "tasks.request-generation:2026-04-10T21:05:00.000Z:{\"stageId\":\"spec\"}:tasks-generated",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T21:05:05.000Z",
-      "source": "daemon",
-      "causedByRequestId": "tasks.request-generation:2026-04-10T21:05:00.000Z:{\"stageId\":\"spec\"}",
-      "payload": {
-        "stageId": "spec",
-        "tasks": [
-          {
-            "taskId": "spec/01-draft-spec",
-            "title": "Draft Spec",
-            "instruction": "Read PRD.md and define the technical target in SPEC.md. The specification must describe the intended design, the key boundaries, and the concrete files that will change. Only modify SPEC.md in this task. Do not create implementation code or verification evidence in this task.",
-            "dependsOn": [],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "spec/02-plan",
-            "title": "Plan Implementation And Verification",
-            "instruction": "Read SPEC.md and turn it into an execution ledger. Create paired markdown task files under 03-IMPLEMENTATION/tasks for each implementation slice: one task for building the slice and a second verification task for testing or validating that same slice. Name the verification task with the verify- prefix, keep both tasks in 03-IMPLEMENTATION/tasks, and make the verification task depend on its implementation task. The verification task must focus on tests and validation rather than feature creation. Do not create application code in this planning task. Do not modify delivery artifacts.",
-            "dependsOn": [
-              "spec/01-draft-spec"
-            ],
-            "agentRunner": "planner"
-          }
-        ]
-      }
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:task-completed:spec-01-draft-spec",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:12:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "spec/01-draft-spec"
-      }
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:task-completed:spec-02-plan",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:12:05.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "spec/02-plan"
-      }
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:emulated-tasks-generated:implementation",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T21:12:10.000Z",
-      "source": "human",
-      "payload": {
-        "stageId": "implementation",
-        "tasks": [
-          {
-            "taskId": "implementation/01-establish-unified-runtime-contract-and-normalized-types",
-            "title": "Establish Unified Runtime Contract And Normalized Types",
-            "instruction": "Align the core runtime surface around one authoritative provider-neutral contract. This slice should preserve `AgentRunner`, `AgentSession`, normalized prompt, command, snapshot, capability, and event types, while removing split-boundary ambiguity from runtime naming and ownership across `packages/core/src/runtime/*`, `packages/core/src/index.ts`, and any adjacent type or export surfaces that still imply parallel runtime contracts.",
-            "dependsOn": [],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/verify-01-establish-unified-runtime-contract-and-normalized-types",
-            "title": "Verify Unified Runtime Contract And Normalized Types",
-            "instruction": "Verify that one normalized runtime contract remains authoritative after this slice. Confirm the focused runtime and type-level tests cover canonical runner and session contracts, normalized snapshots and events, and explicit rejection of unsupported prompt or command behavior. Record any remaining gaps in VERIFY.md.",
-            "dependsOn": [
-              "implementation/01-establish-unified-runtime-contract-and-normalized-types"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/02-align-orchestrator-and-persisted-session-coordination",
-            "title": "Align Orchestrator And Persisted Session Coordination",
-            "instruction": "Align the session orchestrator, runner registry, and persisted session coordination around the unified runtime boundary. This slice should preserve runner registration, attach or reattach behavior, session registry ownership, normalized event forwarding, snapshot persistence, and restored mission or task ownership across `packages/core/src/runtime/AgentSessionOrchestrator.ts`, `AgentRunnerRegistry.ts`, `PersistedAgentSessionStore.ts`, and related focused tests.",
-            "dependsOn": [
-              "implementation/01-establish-unified-runtime-contract-and-normalized-types"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/verify-02-align-orchestrator-and-persisted-session-coordination",
-            "title": "Verify Orchestrator And Persisted Session Coordination",
-            "instruction": "Verify that the orchestrator remains the only coordination path for live sessions after this slice. Confirm the focused runtime tests cover runner registration, attach fallback behavior, normalized snapshot persistence, and terminal-session reconciliation edge cases. Record any remaining gaps in VERIFY.md.",
-            "dependsOn": [
-              "implementation/02-align-orchestrator-and-persisted-session-coordination"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/03-align-workflow-request-execution-with-unified-runtime",
-            "title": "Align Workflow Request Execution With Unified Runtime",
-            "instruction": "Align workflow request execution and session reconciliation with the unified runtime path. This slice should keep workflow launch, attach, prompt, command, cancel, terminate, and normalized session-fact handling routed through the orchestrator across `packages/core/src/workflow/engine/requestExecutor.ts`, related workflow runtime surfaces, and any session-reconciliation helpers that still imply a split workflow-only runtime path.",
-            "dependsOn": [
-              "implementation/01-establish-unified-runtime-contract-and-normalized-types",
-              "implementation/02-align-orchestrator-and-persisted-session-coordination"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/verify-03-align-workflow-request-execution-with-unified-runtime",
-            "title": "Verify Workflow Request Execution With Unified Runtime",
-            "instruction": "Verify that workflow runtime requests now use the unified runtime path consistently after this slice. Confirm the focused workflow tests cover launch, attach, prompt, command, cancel, terminate, and normalized session reconciliation behavior without falling back to split-era workflow-only abstractions. Record any remaining gaps in VERIFY.md.",
-            "dependsOn": [
-              "implementation/03-align-workflow-request-execution-with-unified-runtime"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/04-align-daemon-and-client-session-surfaces",
-            "title": "Align Daemon And Client Session Surfaces",
-            "instruction": "Align daemon and client session surfaces with one runtime registry and one session-control path. This slice should keep configured runner loading, daemon protocol naming, mission-facing session operations, and client launch or prompt or command surfaces coherent across `packages/core/src/daemon/runDaemonMain.ts`, `defaultRuntimeFactory.ts`, `Workspace.ts`, `protocol.ts`, `packages/core/src/client/*`, and related daemon mission session helpers.",
-            "dependsOn": [
-              "implementation/02-align-orchestrator-and-persisted-session-coordination",
-              "implementation/03-align-workflow-request-execution-with-unified-runtime"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/verify-04-align-daemon-and-client-session-surfaces",
-            "title": "Verify Daemon And Client Session Surfaces",
-            "instruction": "Verify that daemon and client session operations now route through one unified runtime path after this slice. Confirm the focused daemon and client tests cover configured runner loading, session launch, prompt, command, cancel, terminate, and reconnect semantics without preserving dual runtime registries. Record any remaining gaps in VERIFY.md.",
-            "dependsOn": [
-              "implementation/04-align-daemon-and-client-session-surfaces"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/05-align-provider-adapters-exports-and-focused-tests",
-            "title": "Align Provider Adapters, Exports, And Focused Tests",
-            "instruction": "Complete the runtime replay mission by aligning provider adapters, package exports, preserved specs, and focused tests with the clean-break runtime contract. This slice should keep mission `17` primary on the provider-neutral runtime corpus, keep workflow and airport references narrow, and remove any remaining split-era adapter or export assumptions that contradict the unified runtime boundary.",
-            "dependsOn": [
-              "implementation/03-align-workflow-request-execution-with-unified-runtime",
-              "implementation/04-align-daemon-and-client-session-surfaces"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/verify-05-align-provider-adapters-exports-and-focused-tests",
-            "title": "Verify Provider Adapters, Exports, And Focused Tests",
-            "instruction": "Verify that the preserved agent-runtime source material, provider adapters, public exports, and focused tests all describe the same clean-break runtime boundary after this slice. Confirm the replay artifacts stay aligned with the retrospective coverage map and record any remaining gaps in VERIFY.md.",
-            "dependsOn": [
-              "implementation/05-align-provider-adapters-exports-and-focused-tests"
-            ],
-            "agentRunner": "copilot-cli"
-          }
-        ]
-      }
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:task-completed:implementation-01-establish-unified-runtime-contract-and-normalized-types",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:18:55.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/01-establish-unified-runtime-contract-and-normalized-types"
-      }
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:task-completed:implementation-verify-01-establish-unified-runtime-contract-and-normalized-types",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:19:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/verify-01-establish-unified-runtime-contract-and-normalized-types"
-      }
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:task-completed:implementation-02-align-orchestrator-and-persisted-session-coordination",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:24:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/02-align-orchestrator-and-persisted-session-coordination"
-      }
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:task-completed:implementation-verify-02-align-orchestrator-and-persisted-session-coordination",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:24:10.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/verify-02-align-orchestrator-and-persisted-session-coordination"
-      }
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:task-completed:implementation-03-align-workflow-request-execution-with-unified-runtime",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:32:20.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/03-align-workflow-request-execution-with-unified-runtime"
-      }
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:task-completed:implementation-verify-03-align-workflow-request-execution-with-unified-runtime",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:32:30.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/verify-03-align-workflow-request-execution-with-unified-runtime"
-      }
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:task-completed:implementation-04-align-daemon-and-client-session-surfaces",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:38:45.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/04-align-daemon-and-client-session-surfaces"
-      }
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:task-completed:implementation-verify-04-align-daemon-and-client-session-surfaces",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:39:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/verify-04-align-daemon-and-client-session-surfaces"
-      }
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:task-completed:implementation-05-align-provider-adapters-exports-and-focused-tests",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:44:30.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/05-align-provider-adapters-exports-and-focused-tests"
-      }
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:task-completed:implementation-verify-05-align-provider-adapters-exports-and-focused-tests",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:45:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/verify-05-align-provider-adapters-exports-and-focused-tests"
-      }
-    },
-    {
-      "eventId": "tasks.request-generation:2026-04-10T21:45:00.000Z:{\"stageId\":\"audit\"}:tasks-generated",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T21:45:10.000Z",
-      "source": "daemon",
-      "causedByRequestId": "tasks.request-generation:2026-04-10T21:45:00.000Z:{\"stageId\":\"audit\"}",
-      "payload": {
-        "stageId": "audit",
-        "tasks": [
-          {
-            "taskId": "audit/01-debrief",
-            "title": "Debrief",
-            "instruction": "Run the focused end-to-end validation required for the mission. Record the agent-runtime replay results, residual risks, and release readiness in AUDIT.md.",
-            "dependsOn": [],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "audit/02-touchdown",
-            "title": "Touchdown",
-            "instruction": "Prepare the final delivery motion. Confirm AUDIT.md is complete, summarize the final agent-runtime replay status, and write DELIVERY.md as the final delivery artifact for the mission.",
-            "dependsOn": [],
-            "agentRunner": "copilot-cli"
-          }
-        ]
-      }
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:task-completed:audit-01-debrief",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:46:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "audit/01-debrief"
-      }
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:task-completed:audit-02-touchdown",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:47:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "audit/02-touchdown"
-      }
-    },
-    {
-      "eventId": "17-reconstruct-agent-runtime-unification:mission-delivered",
-      "type": "mission.delivered",
-      "occurredAt": "2026-04-10T21:47:00.000Z",
-      "source": "human",
-      "payload": {}
-    }
-  ]
+  }
 }

@@ -3,7 +3,7 @@
   "missionId": "11-reconstruct-repository-adoption-and-mission-doss",
   "configuration": {
     "createdAt": "2026-04-10T15:51:25.000Z",
-    "source": "global-settings",
+    "source": "workflow-definition",
     "workflowVersion": "mission-workflow-v1",
     "workflow": {
       "autostart": {
@@ -11,9 +11,7 @@
       },
       "humanInLoop": {
         "enabled": true,
-        "pauseOnMissionStart": false,
-        "pauseOnTaskFailure": true,
-        "pauseOnTaskCompletion": false
+        "pauseOnMissionStart": false
       },
       "panic": {
         "terminateSessions": true,
@@ -36,61 +34,42 @@
           "stageId": "prd",
           "displayName": "PRD",
           "taskLaunchPolicy": {
-            "defaultAutostart": true,
-            "launchMode": "automatic"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": true
           }
         },
         "spec": {
           "stageId": "spec",
           "displayName": "Spec",
           "taskLaunchPolicy": {
-            "defaultAutostart": true,
-            "launchMode": "automatic"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": true
           }
         },
         "implementation": {
           "stageId": "implementation",
           "displayName": "Implement",
           "taskLaunchPolicy": {
-            "defaultAutostart": false,
-            "launchMode": "manual"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": false
           }
         },
         "audit": {
           "stageId": "audit",
           "displayName": "Audit",
           "taskLaunchPolicy": {
-            "defaultAutostart": true,
-            "launchMode": "automatic"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": true
           }
         },
         "delivery": {
           "stageId": "delivery",
           "displayName": "Delivery",
           "taskLaunchPolicy": {
-            "defaultAutostart": false,
-            "launchMode": "manual"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": false
           }
         }
       },
       "taskGeneration": [
         {
           "stageId": "prd",
+          "artifactTasks": false,
           "templateSources": [
             {
               "templateId": "prd-from-brief",
@@ -101,6 +80,7 @@
         },
         {
           "stageId": "spec",
+          "artifactTasks": false,
           "templateSources": [
             {
               "templateId": "draft-spec",
@@ -115,11 +95,13 @@
         },
         {
           "stageId": "implementation",
+          "artifactTasks": true,
           "templateSources": [],
           "tasks": []
         },
         {
           "stageId": "audit",
+          "artifactTasks": false,
           "templateSources": [
             {
               "templateId": "debrief",
@@ -130,6 +112,7 @@
         },
         {
           "stageId": "delivery",
+          "artifactTasks": false,
           "templateSources": [
             {
               "templateId": "closeout",
@@ -165,6 +148,7 @@
   },
   "runtime": {
     "lifecycle": "delivered",
+    "activeStageId": "audit",
     "pause": {
       "paused": false
     },
@@ -184,7 +168,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": [
           "prd/01-prd-from-brief"
         ]
@@ -199,7 +182,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": [
           "spec/01-draft-spec",
           "spec/02-plan"
@@ -221,7 +203,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": [
           "implementation/01-establish-repository-adoption-layout",
           "implementation/verify-01-establish-repository-adoption-layout",
@@ -235,28 +216,24 @@
       },
       {
         "stageId": "audit",
-        "lifecycle": "completed",
+        "lifecycle": "ready",
         "taskIds": [
-          "audit/01-debrief",
-          "audit/02-touchdown"
+          "audit/01-debrief"
         ],
-        "readyTaskIds": [],
+        "readyTaskIds": [
+          "audit/01-debrief"
+        ],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
-        "completedTaskIds": [
-          "audit/01-debrief",
-          "audit/02-touchdown"
-        ]
+        "completedTaskIds": []
       },
       {
         "stageId": "delivery",
-        "lifecycle": "completed",
+        "lifecycle": "pending",
         "taskIds": [],
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": []
       }
     ],
@@ -270,8 +247,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -288,8 +264,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -308,8 +283,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "planner",
         "retries": 0,
@@ -326,8 +300,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -346,8 +319,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -366,8 +338,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -386,8 +357,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -407,8 +377,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -427,8 +396,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -449,8 +417,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -469,61 +436,41 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
         "createdAt": "2026-04-10T16:52:10.797Z",
         "updatedAt": "2026-04-10T17:36:00.000Z",
         "completedAt": "2026-04-10T17:36:00.000Z"
-      }
-    ],
-    "sessions": [],
-    "gates": [
+      },
       {
         "taskId": "audit/01-debrief",
         "stageId": "audit",
         "title": "Debrief",
-        "instruction": "Run the repo-wide end-to-end validation required for the mission. Record the simulator run results, residual risks, and release readiness in AUDIT.md.",
+        "instruction": "Run mission-level validation and update AUDIT.md.\n\nSeparate mission regressions from baseline failures. Record risks and smallest follow-ups.",
         "dependsOn": [],
-        "lifecycle": "completed",
+        "lifecycle": "ready",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
-        "agentRunner": "copilot-cli",
+        "agentRunner": "copilot",
         "retries": 0,
-        "createdAt": "2026-04-10T17:45:00.000Z",
-        "updatedAt": "2026-04-10T17:50:00.000Z",
-        "completedAt": "2026-04-10T17:50:00.000Z"
-      },
-      {
-        "taskId": "audit/02-touchdown",
-        "stageId": "audit",
-        "title": "Touchdown",
-        "instruction": "Prepare the final delivery motion. Confirm AUDIT.md is complete, summarize the final status, and write DELIVERY.md as the final delivery artifact for the mission.",
-        "dependsOn": [],
-        "lifecycle": "completed",
-        "waitingOnTaskIds": [],
-        "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
-        },
-        "agentRunner": "copilot-cli",
-        "retries": 0,
-        "createdAt": "2026-04-10T17:45:00.000Z",
-        "updatedAt": "2026-04-10T18:00:00.000Z",
-        "completedAt": "2026-04-10T18:00:00.000Z"
-      },
+        "reworkIterationCount": 0,
+        "createdAt": "2026-05-03T08:06:35.381Z",
+        "updatedAt": "2026-05-03T08:06:35.381Z"
+      }
+    ],
+    "sessions": [],
+    "gates": [
       {
         "gateId": "implement",
         "intent": "implement",
         "state": "passed",
         "stageId": "implementation",
         "reasons": [],
-        "updatedAt": "2026-04-10T18:02:00.000Z"
+        "updatedAt": "2026-05-03T08:06:35.381Z"
       },
       {
         "gateId": "verify",
@@ -531,347 +478,30 @@
         "state": "passed",
         "stageId": "implementation",
         "reasons": [],
-        "updatedAt": "2026-04-10T18:02:00.000Z"
+        "updatedAt": "2026-05-03T08:06:35.381Z"
       },
       {
         "gateId": "audit",
         "intent": "audit",
-        "state": "passed",
+        "state": "blocked",
         "stageId": "audit",
-        "reasons": [],
-        "updatedAt": "2026-04-10T18:02:00.000Z"
+        "reasons": [
+          "Stage 'audit' is not completed."
+        ],
+        "updatedAt": "2026-05-03T08:06:35.381Z"
       },
       {
         "gateId": "deliver",
         "intent": "deliver",
-        "state": "passed",
+        "state": "blocked",
         "stageId": "delivery",
-        "reasons": [],
-        "updatedAt": "2026-04-10T18:02:00.000Z"
+        "reasons": [
+          "Stage 'delivery' is not completed."
+        ],
+        "updatedAt": "2026-05-03T08:06:35.381Z"
       }
     ],
     "launchQueue": [],
-    "updatedAt": "2026-04-10T18:02:00.000Z"
-  },
-  "eventLog": [
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:mission-created",
-      "type": "mission.created",
-      "occurredAt": "2026-04-10T15:51:25.000Z",
-      "source": "system"
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:mission-started",
-      "type": "mission.started",
-      "occurredAt": "2026-04-10T15:51:25.000Z",
-      "source": "system"
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:tasks-generated-prd",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T15:51:25.000Z",
-      "source": "daemon",
-      "stageId": "prd",
-      "tasks": [
-        {
-          "taskId": "prd/01-prd-from-brief",
-          "title": "PRD From Brief",
-          "instruction": "Use BRIEF.md as the canonical intake context. Rewrite or enrich PRD.md so it clearly states the problem, the target outcome, the constraints, and the success criteria for this mission. Only modify PRD.md in this task. Do not create or edit SPEC.md, implementation files, verification files, or delivery artifacts. Do not create application code in this task.",
-          "dependsOn": [],
-          "agentRunner": "copilot-cli"
-        }
-      ]
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:task-completed:prd-01-prd-from-brief",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T16:25:15.493Z",
-      "source": "human",
-      "taskId": "prd/01-prd-from-brief"
-    },
-    {
-      "eventId": "tasks.request-generation:2026-04-10T16:25:15.493Z:{\"stageId\":\"spec\"}:tasks-generated",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T16:25:15.499Z",
-      "source": "daemon",
-      "causedByRequestId": "tasks.request-generation:2026-04-10T16:25:15.493Z:{\"stageId\":\"spec\"}",
-      "stageId": "spec",
-      "tasks": [
-        {
-          "taskId": "spec/01-draft-spec",
-          "title": "Draft Spec",
-          "instruction": "Read PRD.md and define the technical target in SPEC.md. The specification must describe the intended design, the key boundaries, and the concrete files that will change. Only modify SPEC.md in this task. Do not create implementation code or verification evidence in this task.",
-          "dependsOn": [],
-          "agentRunner": "copilot-cli"
-        },
-        {
-          "taskId": "spec/02-plan",
-          "title": "Plan Implementation And Verification",
-          "instruction": "Read SPEC.md and turn it into an execution ledger. Create paired markdown task files under 03-IMPLEMENTATION/tasks for each implementation slice: one task for building the slice and a second verification task for testing or validating that same slice. Name the verification task with the verify- prefix, keep both tasks in 03-IMPLEMENTATION/tasks, and make the verification task depend on its implementation task. The verification task must focus on tests and validation rather than feature creation. Do not create application code in this planning task. Do not modify delivery artifacts.",
-          "dependsOn": [
-            "spec/01-draft-spec"
-          ],
-          "agentRunner": "planner"
-        }
-      ]
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:task-completed:spec-01-draft-spec",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T16:26:46.221Z",
-      "source": "human",
-      "taskId": "spec/01-draft-spec"
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:task-completed:spec-02-plan",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T16:50:44.982Z",
-      "source": "human",
-      "taskId": "spec/02-plan"
-    },
-    {
-      "eventId": "tasks.request-generation:2026-04-10T16:50:44.982Z:{\"stageId\":\"implementation\"}:tasks-generated",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T16:50:44.986Z",
-      "source": "daemon",
-      "causedByRequestId": "tasks.request-generation:2026-04-10T16:50:44.982Z:{\"stageId\":\"implementation\"}",
-      "stageId": "implementation",
-      "tasks": []
-    },
-    {
-      "eventId": "tasks.request-generation:2026-04-10T16:50:44.986Z:{\"stageId\":\"implementation\"}:tasks-generated",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T16:50:44.987Z",
-      "source": "daemon",
-      "causedByRequestId": "tasks.request-generation:2026-04-10T16:50:44.986Z:{\"stageId\":\"implementation\"}",
-      "stageId": "implementation",
-      "tasks": []
-    },
-    {
-      "eventId": "tasks.request-generation:2026-04-10T16:50:44.987Z:{\"stageId\":\"implementation\"}:tasks-generated",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T16:50:44.988Z",
-      "source": "daemon",
-      "causedByRequestId": "tasks.request-generation:2026-04-10T16:50:44.987Z:{\"stageId\":\"implementation\"}",
-      "stageId": "implementation",
-      "tasks": []
-    },
-    {
-      "eventId": "tasks.request-generation:2026-04-10T16:50:44.988Z:{\"stageId\":\"implementation\"}:tasks-generated",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T16:50:44.989Z",
-      "source": "daemon",
-      "causedByRequestId": "tasks.request-generation:2026-04-10T16:50:44.988Z:{\"stageId\":\"implementation\"}",
-      "stageId": "implementation",
-      "tasks": []
-    },
-    {
-      "eventId": "tasks.request-generation:2026-04-10T16:50:44.989Z:{\"stageId\":\"implementation\"}:tasks-generated",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T16:50:44.991Z",
-      "source": "daemon",
-      "causedByRequestId": "tasks.request-generation:2026-04-10T16:50:44.989Z:{\"stageId\":\"implementation\"}",
-      "stageId": "implementation",
-      "tasks": []
-    },
-    {
-      "eventId": "tasks.request-generation:2026-04-10T16:50:44.991Z:{\"stageId\":\"implementation\"}:tasks-generated",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T16:50:44.992Z",
-      "source": "daemon",
-      "causedByRequestId": "tasks.request-generation:2026-04-10T16:50:44.991Z:{\"stageId\":\"implementation\"}",
-      "stageId": "implementation",
-      "tasks": []
-    },
-    {
-      "eventId": "tasks.request-generation:2026-04-10T16:50:44.992Z:{\"stageId\":\"implementation\"}:tasks-generated",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T16:50:44.992Z",
-      "source": "daemon",
-      "causedByRequestId": "tasks.request-generation:2026-04-10T16:50:44.992Z:{\"stageId\":\"implementation\"}",
-      "stageId": "implementation",
-      "tasks": []
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:emulated-tasks-generated:implementation",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T16:52:10.797Z",
-      "source": "human",
-      "stageId": "implementation",
-      "tasks": [
-        {
-          "taskId": "implementation/01-establish-repository-adoption-layout",
-          "title": "Establish Repository Adoption Layout",
-          "instruction": "Implement the repository-owned Mission layout so tracked repository state lives under `.mission/` and each mission dossier lives directly under `.mission/missions/<mission-id>/`. This slice should establish the canonical filesystem contract for the repository-bound Mission namespace, the mission dossier root, root-level `BRIEF.md`, root-level `mission.json`, and canonical stage-folder paths.",
-          "dependsOn": [],
-          "agentRunner": "copilot-cli"
-        },
-        {
-          "taskId": "implementation/verify-01-establish-repository-adoption-layout",
-          "title": "Verify Repository Adoption Layout",
-          "instruction": "Verify that the repository-bound Mission layout is coherent. Check that mission dossiers resolve at `.mission/missions/<mission-id>/`, that `BRIEF.md` and `mission.json` resolve at the mission root, and that root-level stage folders use the canonical names. Confirm the relevant focused tests or adapter-level validations cover this slice, and record any gaps in VERIFY.md.",
-          "dependsOn": [
-            "implementation/01-establish-repository-adoption-layout"
-          ],
-          "agentRunner": "copilot-cli"
-        },
-        {
-          "taskId": "implementation/02-enable-first-mission-bootstrap",
-          "title": "Enable First-Mission Bootstrap",
-          "instruction": "Implement the repository-adoption bootstrap flow so a repository can become Mission-enabled from the mission branch worktree without requiring a separate bootstrap PR or dirtying the original checkout first. This slice should cover repository settings initialization in the mission worktree and the contract that the first mission branch may contain both repository bootstrap content and the first mission dossier.",
-          "dependsOn": [
-            "implementation/01-establish-repository-adoption-layout"
-          ],
-          "agentRunner": "copilot-cli"
-        },
-        {
-          "taskId": "implementation/verify-02-enable-first-mission-bootstrap",
-          "title": "Verify First-Mission Bootstrap",
-          "instruction": "Verify that first-mission bootstrap works from the mission worktree and does not require mutating the original checkout first. Confirm the relevant focused tests or controlled validations cover repository settings initialization and first-mission setup behavior, and record any remaining bootstrap gaps in VERIFY.md.",
-          "dependsOn": [
-            "implementation/02-enable-first-mission-bootstrap"
-          ],
-          "agentRunner": "copilot-cli"
-        },
-        {
-          "taskId": "implementation/03-support-repository-modes-and-routing",
-          "title": "Support Repository Modes And Routing",
-          "instruction": "Implement the repository-mode and routing contract described by the brief and PRD. This slice should support both tracked shared `.mission/` usage and local-only gitignored `.mission/` usage, keep the registered repository list minimal and machine-local, and make repository switching semantics coherent around `/repo` and `/add-repo` rather than per-repository command variants.",
-          "dependsOn": [
-            "implementation/01-establish-repository-adoption-layout",
-            "implementation/02-enable-first-mission-bootstrap"
-          ],
-          "agentRunner": "copilot-cli"
-        },
-        {
-          "taskId": "implementation/verify-03-support-repository-modes-and-routing",
-          "title": "Verify Repository Modes And Routing",
-          "instruction": "Verify that shared tracked mode, local-only mode, minimal repository registration, and repo-routing semantics remain coherent after this slice. Confirm the relevant focused checks cover the intended routing and mode boundaries, and record any remaining repository-mode or routing gaps in VERIFY.md.",
-          "dependsOn": [
-            "implementation/03-support-repository-modes-and-routing"
-          ],
-          "agentRunner": "copilot-cli"
-        },
-        {
-          "taskId": "implementation/04-update-consumers-specs-and-tests",
-          "title": "Update Consumers, Specs, And Tests",
-          "instruction": "Complete the repository-adoption layout mission by aligning downstream consumers, normative specifications, implementation plans, and focused tests with the repository-adoption contract. This slice should cover Tower and related consumers, the repository-layout specifications and plan, and the focused tests that must assert the complete repository-adoption layout contract for mission `11`.",
-          "dependsOn": [
-            "implementation/01-establish-repository-adoption-layout",
-            "implementation/02-enable-first-mission-bootstrap",
-            "implementation/03-support-repository-modes-and-routing"
-          ],
-          "agentRunner": "copilot-cli"
-        },
-        {
-          "taskId": "implementation/verify-04-update-consumers-specs-and-tests",
-          "title": "Verify Consumers, Specs, And Tests",
-          "instruction": "Verify that the final repository-adoption mission is fully reflected across consumers, specs, and focused tests. Confirm the relevant build or focused checks pass for the affected surfaces, verify that the specifications still reflect mission `11` rather than later replay missions, and record any remaining gaps in VERIFY.md.",
-          "dependsOn": [
-            "implementation/04-update-consumers-specs-and-tests"
-          ],
-          "agentRunner": "copilot-cli"
-        }
-      ]
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:task-completed:implementation-01-establish-repository-adoption-layout",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T17:05:00.000Z",
-      "source": "human",
-      "taskId": "implementation/01-establish-repository-adoption-layout"
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:task-completed:implementation-verify-01-establish-repository-adoption-layout",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T17:06:00.000Z",
-      "source": "human",
-      "taskId": "implementation/verify-01-establish-repository-adoption-layout"
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:task-completed:implementation-02-enable-first-mission-bootstrap",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T17:07:00.000Z",
-      "source": "human",
-      "taskId": "implementation/02-enable-first-mission-bootstrap"
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:task-completed:implementation-verify-02-enable-first-mission-bootstrap",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T17:08:00.000Z",
-      "source": "human",
-      "taskId": "implementation/verify-02-enable-first-mission-bootstrap"
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:task-completed:implementation-03-support-repository-modes-and-routing",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T17:20:00.000Z",
-      "source": "human",
-      "taskId": "implementation/03-support-repository-modes-and-routing"
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:task-completed:implementation-verify-03-support-repository-modes-and-routing",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T17:21:00.000Z",
-      "source": "human",
-      "taskId": "implementation/verify-03-support-repository-modes-and-routing"
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:task-completed:implementation-04-update-consumers-specs-and-tests",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T17:35:00.000Z",
-      "source": "human",
-      "taskId": "implementation/04-update-consumers-specs-and-tests"
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:task-completed:implementation-verify-04-update-consumers-specs-and-tests",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T17:36:00.000Z",
-      "source": "human",
-      "taskId": "implementation/verify-04-update-consumers-specs-and-tests"
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:emulated-tasks-generated:audit",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T17:45:00.000Z",
-      "source": "human",
-      "stageId": "audit",
-      "tasks": [
-        {
-          "taskId": "audit/01-debrief",
-          "title": "Debrief",
-          "instruction": "Run the repo-wide end-to-end validation required for the mission. Record the simulator run results, residual risks, and release readiness in AUDIT.md.",
-          "dependsOn": [],
-          "agentRunner": "copilot-cli"
-        },
-        {
-          "taskId": "audit/02-touchdown",
-          "title": "Touchdown",
-          "instruction": "Prepare the final delivery motion. Confirm AUDIT.md is complete, summarize the final status, and write DELIVERY.md as the final delivery artifact for the mission.",
-          "dependsOn": [],
-          "agentRunner": "copilot-cli"
-        }
-      ]
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:task-completed:audit-01-debrief",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T17:50:00.000Z",
-      "source": "human",
-      "taskId": "audit/01-debrief"
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:task-completed:audit-02-touchdown",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T18:00:00.000Z",
-      "source": "human",
-      "taskId": "audit/02-touchdown"
-    },
-    {
-      "eventId": "11-reconstruct-repository-adoption-and-mission-doss:mission-delivered",
-      "type": "mission.delivered",
-      "occurredAt": "2026-04-10T18:02:00.000Z",
-      "source": "human"
-    }
-  ]
+    "updatedAt": "2026-05-03T08:06:35.381Z"
+  }
 }

@@ -1,8 +1,8 @@
 // /apps/airport/web/src/lib/components/entities/Repository/Repository.svelte.ts: OO browser entity for repository data with remote issue and mission commands.
 import type { MissionCatalogEntryType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import { RepositoryDataSchema, RepositoryIssueDetailSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformRepositorySchema, RepositoryStorageSchema, RepositorySyncStatusSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
-import type { RepositoryDataType, RepositoryIssueDetailType, RepositoryStorageType, RepositorySyncStatusType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import { RepositoryDataSchema, RepositoryIssueDetailSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformRepositorySchema, RepositorySetupResultSchema, RepositoryStorageSchema, RepositorySyncStatusSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { RepositoryDataType, RepositoryIssueDetailType, RepositorySetupResultType, RepositorySettingsType, RepositoryStorageType, RepositorySyncStatusType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import { z } from 'zod/v4';
 import { getApp } from '$lib/client/globals';
 import { qry } from '../../../../routes/api/entities/remote/query.remote';
@@ -130,7 +130,7 @@ export class Repository extends Entity<RepositoryDataType> {
             entity: 'Repository',
             method: 'syncStatus',
             payload: this.entityLocator
-        }));
+        }).run());
     }
 
     public applySummary(input: RepositoryStorageType): this {
@@ -188,6 +188,16 @@ export class Repository extends Entity<RepositoryDataType> {
         };
     }
 
+    public async setup(settings: RepositorySettingsType): Promise<RepositorySetupResultType> {
+        const result = RepositorySetupResultSchema.parse(await this.executeCommand(
+            this.commandIdFor('setup'),
+            { settings }
+        ));
+        await this.refresh();
+        await this.refreshCommands();
+        return result;
+    }
+
     public async startMissionFromBrief(input: {
         title: string;
         body: string;
@@ -207,7 +217,7 @@ export class Repository extends Entity<RepositoryDataType> {
 
     private assertCanStartMission(): void {
         if (!this.data.isInitialized) {
-            throw new Error('Prepare this Repository for Mission before starting regular missions.');
+            throw new Error('Complete Repository setup before starting regular missions.');
         }
     }
 }

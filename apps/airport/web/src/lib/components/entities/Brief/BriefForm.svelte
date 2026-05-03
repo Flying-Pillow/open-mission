@@ -43,7 +43,7 @@
 
         if (!canStartMission) {
             submitError =
-                "Prepare this Repository for Mission before starting regular missions.";
+                "Complete Repository setup before starting regular missions.";
             return;
         }
 
@@ -194,7 +194,7 @@
                 ? "Creating mission..."
                 : canStartMission
                   ? "Create mission"
-                  : "Prepare first"}
+                  : "Setup required"}
         </Button>
     </form>
 </section>

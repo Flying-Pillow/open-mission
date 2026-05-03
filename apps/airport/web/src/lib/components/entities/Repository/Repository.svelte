@@ -8,6 +8,7 @@
     import IssuePreview from "$lib/components/entities/Issue/IssuePreview.svelte";
     import MissionList from "$lib/components/entities/Mission/MissionList.svelte";
     import RepositoryPanel from "$lib/components/entities/Repository/RepositoryPanel.svelte";
+    import RepositorySetup from "$lib/components/entities/Repository/RepositorySetup.svelte";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import type { AirportRepositoryListItem } from "$lib/components/entities/types";
 
@@ -114,24 +115,31 @@
             />
         {/if}
 
-        {#key activeRepository.id}
-            <div
-                class="mt-4 grid min-h-0 flex-1 gap-4 overflow-hidden sm:grid-cols-2"
-            >
-                <section class="flex min-h-0 w-full overflow-hidden">
-                    <MissionList />
-                </section>
+        {#if !activeRepository.data.isInitialized}
+            <RepositorySetup
+                repository={activeRepository}
+                onSetupSubmitted={refreshRepositories}
+            />
+        {:else}
+            {#key activeRepository.id}
+                <div
+                    class="mt-4 grid min-h-0 flex-1 gap-4 overflow-hidden sm:grid-cols-2"
+                >
+                    <section class="flex min-h-0 w-full overflow-hidden">
+                        <MissionList />
+                    </section>
 
-                <section class="flex min-h-0 w-full overflow-hidden">
-                    <IssueList
-                        bind:selectedIssue
-                        bind:issuePreviewOpen
-                        bind:issueError
-                        bind:issueLoadingNumber
-                    />
-                </section>
-            </div>
-        {/key}
+                    <section class="flex min-h-0 w-full overflow-hidden">
+                        <IssueList
+                            bind:selectedIssue
+                            bind:issuePreviewOpen
+                            bind:issueError
+                            bind:issueLoadingNumber
+                        />
+                    </section>
+                </div>
+            {/key}
+        {/if}
 
         <Dialog.Root bind:open={issuePreviewOpen}>
             <Dialog.Content

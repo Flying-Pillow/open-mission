@@ -1,4 +1,5 @@
 import type { WorkflowDefinition } from '../workflow/engine/types.js';
+import type { RepositorySettingsType } from '../entities/Repository/RepositorySchema.js';
 
 export type WorkflowSettingsRevisionToken = string;
 
@@ -37,6 +38,7 @@ export type WorkflowSettingsGetResult = {
 };
 
 export type WorkflowSettingsInitializeRequest = {
+	settings?: RepositorySettingsType;
 	force?: boolean;
 	confirmReinitialize?: boolean;
 };

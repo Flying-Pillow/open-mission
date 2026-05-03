@@ -10,7 +10,6 @@ import {
 import { renderMissionArtifactTitle } from '../mission/templates/common.js';
 import { getMissionArtifactDefinition } from '../mission/manifest.js';
 import { Repository } from '../../entities/Repository/Repository.js';
-import { RepositoryPreparationOperation } from '../mission/RepositoryPreparationOperation.js';
 import {
 	type MissionWorkflowConfigurationSnapshot,
 	type MissionGeneratedTaskPayload,
@@ -63,12 +62,10 @@ export class MissionWorkflowRequestExecutor {
 	private readonly defaultModel: string | undefined;
 	private readonly defaultMode: MissionDefaultAgentModeType | undefined;
 	private readonly workingDirectoryResolver: (task: MissionTaskRuntimeState, descriptor: MissionDescriptor) => string;
-	private readonly repositoryPreparationOperation: RepositoryPreparationOperation;
 
 	public constructor(private readonly options: MissionWorkflowRequestExecutorOptions) {
 		this.defaultModel = options.defaultModel;
 		this.defaultMode = options.defaultMode;
-		this.repositoryPreparationOperation = new RepositoryPreparationOperation(options.adapter);
 		this.workingDirectoryResolver =
 			options.workingDirectoryResolver ?? ((_task, descriptor) => descriptor.missionDir);
 	}
@@ -103,7 +100,6 @@ export class MissionWorkflowRequestExecutor {
 		requests: MissionWorkflowRequest[];
 	}): Promise<MissionWorkflowEvent[]> {
 		const events: MissionWorkflowEvent[] = [];
-		await this.repositoryPreparationOperation.execute({ descriptor: input.descriptor });
 
 		for (const request of input.requests) {
 			switch (request.type) {

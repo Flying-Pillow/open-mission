@@ -238,7 +238,7 @@
                 throw new Error("This artifact is not editable in Monaco.");
             }
 
-            const payload = await artifact.read({ executionContext: "render" });
+            const payload = await artifact.read();
             if (typeof payload.body !== "string") {
                 throw new Error("This artifact body is not text.");
             }

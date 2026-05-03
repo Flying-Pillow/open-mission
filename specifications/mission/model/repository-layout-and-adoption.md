@@ -153,28 +153,29 @@ The important rule is that local contributor mode changes sharing policy, not pa
 
 Mission still uses `.mission/`, but the repository chooses not to track it.
 
-## First-Mission Bootstrap Model
+## Repository Setup Model
 
 Mission must support starting from a repository that does not yet contain `.mission/settings.json` on the current checkout.
 
-The daemon must not require the original local checkout to be modified before a contributor can begin using Mission.
+When a Repository is cloned or registered without `.mission/settings.json`, Mission enters Repository setup mode for that Repository. Regular missions must not start until Repository setup has produced tracked Repository control state and that state is available in the local checkout.
 
-### Required First-Mission Flow
+### Required Repository Setup Flow
 
-When a user selects an issue in a repository that is not yet Mission-enabled on the current checkout, Mission should:
+When a user selects a Repository that is not yet Mission-enabled on the current checkout, Mission should:
 
-1. resolve the repository and issue from the original checkout
-2. create the mission branch and external mission worktree first
-3. initialize `.mission/settings.json` inside that new worktree if absent
-4. create `.mission/missions/<mission-id>/...` inside that same worktree
-5. commit the bootstrap and first mission dossier together on the mission branch
-6. push the mission branch
-7. optionally open a single PR for shared Mission adoption and the first mission
-8. allow work to continue immediately from the mission worktree without touching the original local checkout
+1. resolve the Repository from the original checkout
+2. display a Repository setup screen for `.mission/settings.json`
+3. submit the settings through daemon-owned Repository behavior
+4. create a setup branch and linked setup worktree
+5. initialize `.mission/settings.json`, `.mission/workflow/workflow.json`, and the default workflow template preset in that setup worktree
+6. commit and push the setup branch
+7. open a pull request against the Repository default branch
+8. attempt auto-merge for the setup pull request
+9. keep regular mission start disabled until `.mission/settings.json` is available in the local checkout
 
-This is the authoritative first-mission bootstrap model.
+This is the authoritative Repository setup model.
 
-The previous model of a mandatory standalone repository bootstrap PR before any mission may exist is not the target architecture.
+The previous model of creating a first issue or preparation Mission to initialize Repository control state is retired.
 
 ## Original Checkout Rules
 
@@ -182,10 +183,10 @@ The original local checkout must not be treated as the only valid place where Mi
 
 Required behavior:
 
-1. a repo may be uninitialized in the original checkout and still be startable through Mission
-2. the first mission worktree may contain the first `.mission/settings.json`
-3. the original checkout may remain untouched until the user explicitly pulls or merges changes
-4. Mission should treat any Git repo as startable
+1. a repo may be uninitialized in the original checkout and still be selectable in Airport
+2. an uninitialized repo must show Repository setup before mission start affordances
+3. the setup branch contains the first `.mission/settings.json`
+4. the original checkout may remain untouched until the setup pull request is merged and pulled
 5. Mission may register a repository checkout automatically when it starts from that real repo
 6. the machine-local config may list registered repositories for repo switching and later delivery routing
 
@@ -234,7 +235,7 @@ This model does not:
 - move repo control into user config
 - derive mission status from directory buckets
 - require a top-level `missions/` folder in the repository root
-- require the original checkout to be dirtied before the first mission can begin
+- require the original checkout to be dirtied immediately after clone
 
 ## Contributor Guidance
 

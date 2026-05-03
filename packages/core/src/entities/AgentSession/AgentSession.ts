@@ -26,8 +26,10 @@ import {
 	AgentSessionDataSchema,
 	AgentSessionCommandIds,
 	agentSessionEntityName,
+	type AgentSessionCommandType,
 	type AgentRuntimeMessageDescriptorType,
 	type AgentSessionContextType,
+	type AgentSessionPromptType,
 	type AgentSessionTerminalHandleType,
 	type AgentSessionDataType
 } from './AgentSessionSchema.js';
@@ -150,10 +152,10 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 					await mission.completeAgentSession(input.sessionId);
 					break;
 				case AgentSessionCommandIds.cancel:
-					await mission.cancelAgentSession(input.sessionId, service.getReason(input.input));
+					await mission.cancelAgentSession(input.sessionId, AgentSession.getReason(input.input));
 					break;
 				case AgentSessionCommandIds.terminate:
-					await mission.terminateAgentSession(input.sessionId, service.getReason(input.input));
+					await mission.terminateAgentSession(input.sessionId, AgentSession.getReason(input.input));
 					break;
 				default:
 					throw new Error(`AgentSession command '${input.commandId}' is not implemented in the daemon.`);
@@ -178,7 +180,7 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 		const mission = await service.loadRequiredMission(input, context);
 		try {
 			AgentSession.requireData(await mission.buildMissionSnapshot(), input.sessionId);
-			await mission.sendAgentSessionPrompt(input.sessionId, service.normalizeAgentPrompt(input.prompt));
+			await mission.sendAgentSessionPrompt(input.sessionId, AgentSession.normalizeAgentPrompt(input.prompt));
 			return AgentSessionCommandAcknowledgementSchema.parse({
 				ok: true,
 				entity: 'AgentSession',
@@ -198,7 +200,7 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 		const mission = await service.loadRequiredMission(input, context);
 		try {
 			AgentSession.requireData(await mission.buildMissionSnapshot(), input.sessionId);
-			await mission.sendAgentSessionCommand(input.sessionId, service.normalizeAgentCommand(input.command));
+			await mission.sendAgentSessionCommand(input.sessionId, AgentSession.normalizeAgentCommand(input.command));
 			return AgentSessionCommandAcknowledgementSchema.parse({
 				ok: true,
 				entity: 'AgentSession',
@@ -262,6 +264,35 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 		} catch {
 			return true;
 		}
+	}
+
+	private static isRecord(input: unknown): input is Record<string, unknown> {
+		return typeof input === 'object' && input !== null && !Array.isArray(input);
+	}
+
+	private static getReason(input: unknown): string | undefined {
+		if (!AgentSession.isRecord(input) || typeof input['reason'] !== 'string') {
+			return undefined;
+		}
+		const reason = input['reason'].trim();
+		return reason.length > 0 ? reason : undefined;
+	}
+
+	private static normalizeAgentPrompt(input: AgentSessionPromptType): AgentPrompt {
+		return {
+			source: input.source,
+			text: input.text,
+			...(input.title ? { title: input.title } : {}),
+			...(input.metadata ? { metadata: input.metadata } : {})
+		};
+	}
+
+	private static normalizeAgentCommand(input: AgentSessionCommandType): AgentCommand {
+		return {
+			type: input.type,
+			...(input.reason ? { reason: input.reason } : {}),
+			...(input.metadata ? { metadata: input.metadata } : {})
+		};
 	}
 
 	public static isTerminalRuntimeStatus(status: AgentSessionSnapshot['status']): boolean {

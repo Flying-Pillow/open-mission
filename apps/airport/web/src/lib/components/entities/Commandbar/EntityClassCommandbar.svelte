@@ -1,7 +1,6 @@
 <script lang="ts">
     import type { EntityCommandDescriptorType } from "@flying-pillow/mission-core/entities/Entity/EntitySchema";
     import type { ButtonVariant } from "$lib/components/ui/button/index.js";
-    import { Entity } from "$lib/components/entities/shared/Entity.svelte.js";
     import EntityCommandbar from "./EntityCommandbar.svelte";
     import type { CommandableEntity } from "./CommandableEntity";
 
@@ -9,18 +8,21 @@
         refreshNonce,
         entityName,
         commandInput,
+        commands = [],
         executeCommand,
         onCommandExecuted,
         class: className,
         buttonClass = "",
         defaultVariant = "default",
         showEmptyState = false,
-        showLoadingState = true,
+        loading = false,
+        loadError,
     }: {
         refreshNonce: number;
         entityName: string;
         commandInput?: unknown;
-        executeCommand?: (
+        commands?: EntityCommandDescriptorType[];
+        executeCommand: (
             commandId: string,
             input?: unknown,
         ) => Promise<unknown>;
@@ -32,61 +34,17 @@
         buttonClass?: string;
         defaultVariant?: ButtonVariant;
         showEmptyState?: boolean;
-        showLoadingState?: boolean;
+        loading?: boolean;
+        loadError?: string;
     } = $props();
-
-    let commands = $state<EntityCommandDescriptorType[]>([]);
-    let loading = $state(false);
-    let loadError = $state<string | null>(null);
 
     const commandEntity = $derived<CommandableEntity>({
         entityName,
         entityId: entityName,
         commands,
         executeCommand: async (commandId, input) => {
-            if (executeCommand) {
-                return await executeCommand(commandId, input);
-            }
-
-            return await Entity.executeClassCommand(
-                entityName,
-                commandId,
-                input ?? commandInput,
-            );
+            return await executeCommand(commandId, input ?? commandInput);
         },
-    });
-
-    $effect(() => {
-        refreshNonce;
-        entityName;
-        commandInput;
-
-        let cancelled = false;
-        loading = true;
-        loadError = null;
-
-        void Entity.classCommands(entityName, commandInput)
-            .then((nextCommands) => {
-                if (!cancelled) {
-                    commands = nextCommands;
-                }
-            })
-            .catch((error) => {
-                if (!cancelled) {
-                    commands = [];
-                    loadError =
-                        error instanceof Error ? error.message : String(error);
-                }
-            })
-            .finally(() => {
-                if (!cancelled) {
-                    loading = false;
-                }
-            });
-
-        return () => {
-            cancelled = true;
-        };
     });
 </script>
 
@@ -101,7 +59,7 @@
         {onCommandExecuted}
     />
 
-    {#if showLoadingState && loading}
+    {#if loading}
         <p class="text-sm text-muted-foreground">Loading commands...</p>
     {/if}
 

@@ -178,6 +178,10 @@ export const RepositoryStartMissionFromBriefSchema = RepositoryLocatorSchema.ext
     ...MissionFromBriefInputSchema.shape
 }).strict();
 
+export const RepositorySetupSchema = RepositoryLocatorSchema.extend({
+    settings: RepositorySettingsSchema
+}).strict();
+
 export const TrackedIssueSummarySchema = z.object({
     number: z.number().int().positive(),
     title: z.string().trim().min(1),
@@ -219,18 +223,23 @@ export const RepositoryRemoveAcknowledgementSchema = EntityCommandAcknowledgemen
     id: z.string().trim().min(1)
 }).strict();
 
-export const RepositoryPrepareResultSchema = EntityCommandAcknowledgementSchema.extend({
+export const RepositorySetupResultSchema = EntityCommandAcknowledgementSchema.extend({
     entity: z.literal(repositoryEntityName),
-    method: z.literal('prepare'),
+    method: z.literal('setup'),
     id: z.string().trim().min(1),
-    kind: z.literal('mission-preparation'),
-    state: z.literal('branch-prepared'),
+    kind: z.literal('repository-setup'),
+    state: z.enum(['pull-request-opened', 'auto-merge-requested', 'merged']),
     branchRef: z.string().trim().min(1),
     baseBranch: z.string().trim().min(1),
-    worktreePath: z.string().trim().min(1),
-    missionRootDir: z.string().trim().min(1),
-    issueId: z.number().int().positive().optional(),
-    issueUrl: z.string().trim().min(1).optional()
+    pullRequestUrl: z.string().trim().min(1),
+    settingsPath: z.string().trim().min(1),
+    workflowDefinitionPath: z.string().trim().min(1),
+    autoMergeAttempted: z.boolean(),
+    autoMergeSucceeded: z.boolean(),
+    merged: z.boolean(),
+    basePulled: z.boolean(),
+    basePullError: z.string().trim().min(1).optional(),
+    autoMergeError: z.string().trim().min(1).optional()
 }).strict();
 
 export type RepositoryInputType = z.infer<typeof RepositoryInputSchema>;
@@ -247,12 +256,13 @@ export type RepositorySyncStatusType = z.infer<typeof RepositorySyncStatusSchema
 export type RepositorySyncCommandAcknowledgementType = z.infer<typeof RepositorySyncCommandAcknowledgementSchema>;
 export type RepositoryStartMissionFromIssueType = z.infer<typeof RepositoryStartMissionFromIssueSchema>;
 export type RepositoryStartMissionFromBriefType = z.infer<typeof RepositoryStartMissionFromBriefSchema>;
+export type RepositorySetupType = z.infer<typeof RepositorySetupSchema>;
 export type RepositoryDataType = z.infer<typeof RepositoryDataSchema>;
 export type RepositoryIssueDetailType = z.infer<typeof RepositoryIssueDetailSchema>;
 export type TrackedIssueSummaryType = z.infer<typeof TrackedIssueSummarySchema>;
 export type RepositoryMissionStartAcknowledgementType = z.infer<typeof RepositoryMissionStartAcknowledgementSchema>;
 export type RepositoryRemoveAcknowledgementType = z.infer<typeof RepositoryRemoveAcknowledgementSchema>;
-export type RepositoryPrepareResultType = z.infer<typeof RepositoryPrepareResultSchema>;
+export type RepositorySetupResultType = z.infer<typeof RepositorySetupResultSchema>;
 export type RepositorySettingsType = z.infer<typeof RepositorySettingsSchema>;
 
 export function createDefaultRepositoryConfiguration(): Pick<RepositoryStorageType, 'settings' | 'workflowConfiguration' | 'isInitialized'> {

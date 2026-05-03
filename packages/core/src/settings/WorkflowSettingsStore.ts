@@ -75,7 +75,7 @@ export class WorkflowSettingsStore {
 			);
 		}
 
-		const nextDocument = this.createInitializedDocument(state.document);
+		const nextDocument = this.createInitializedDocument(state.document, request.settings);
 		await this.persistSettings(nextDocument, state.workflow, state.revision.token, request.force === true);
 		return this.get();
 	}
@@ -117,7 +117,13 @@ export class WorkflowSettingsStore {
 		await writeMissionWorkflowDefinition(this.controlRoot, workflow);
 	}
 
-	private createInitializedDocument(currentDocument?: RepositorySettingsType): RepositorySettingsType {
+	private createInitializedDocument(
+		currentDocument?: RepositorySettingsType,
+		requestedDocument?: RepositorySettingsType
+	): RepositorySettingsType {
+		if (requestedDocument) {
+			return Repository.resolveSettingsDocument(requestedDocument);
+		}
 		if (currentDocument) {
 			return Repository.resolveSettingsDocument(currentDocument);
 		}

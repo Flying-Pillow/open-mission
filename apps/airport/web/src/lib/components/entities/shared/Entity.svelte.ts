@@ -14,7 +14,7 @@ export abstract class Entity<TData, TId extends string = string>
 			entity: entityName,
 			method: 'classCommands',
 			payload: commandInput === undefined ? {} : { commandInput }
-		}));
+		}).run());
 		return structuredClone(view.commands);
 	}
 
@@ -41,7 +41,7 @@ export abstract class Entity<TData, TId extends string = string>
 			entity: this.entityName,
 			method: 'commands',
 			payload: this.entityLocator
-		}));
+		}).run());
 		return structuredClone(view.commands);
 	}
 

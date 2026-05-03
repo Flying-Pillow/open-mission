@@ -3,7 +3,7 @@
   "missionId": "18-reconstruct-airport-control-plane",
   "configuration": {
     "createdAt": "2026-04-10T21:32:50.000Z",
-    "source": "global-settings",
+    "source": "workflow-definition",
     "workflowVersion": "mission-workflow-v1",
     "workflow": {
       "autostart": {
@@ -11,9 +11,7 @@
       },
       "humanInLoop": {
         "enabled": true,
-        "pauseOnMissionStart": false,
-        "pauseOnTaskFailure": true,
-        "pauseOnTaskCompletion": false
+        "pauseOnMissionStart": false
       },
       "panic": {
         "terminateSessions": true,
@@ -36,61 +34,42 @@
           "stageId": "prd",
           "displayName": "PRD",
           "taskLaunchPolicy": {
-            "defaultAutostart": true,
-            "launchMode": "automatic"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": true
           }
         },
         "spec": {
           "stageId": "spec",
           "displayName": "Spec",
           "taskLaunchPolicy": {
-            "defaultAutostart": true,
-            "launchMode": "automatic"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": true
           }
         },
         "implementation": {
           "stageId": "implementation",
           "displayName": "Implement",
           "taskLaunchPolicy": {
-            "defaultAutostart": false,
-            "launchMode": "manual"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": false
           }
         },
         "audit": {
           "stageId": "audit",
           "displayName": "Audit",
           "taskLaunchPolicy": {
-            "defaultAutostart": true,
-            "launchMode": "automatic"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": true
           }
         },
         "delivery": {
           "stageId": "delivery",
           "displayName": "Delivery",
           "taskLaunchPolicy": {
-            "defaultAutostart": false,
-            "launchMode": "manual"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": false
           }
         }
       },
       "taskGeneration": [
         {
           "stageId": "prd",
+          "artifactTasks": false,
           "templateSources": [
             {
               "templateId": "prd-from-brief",
@@ -101,6 +80,7 @@
         },
         {
           "stageId": "spec",
+          "artifactTasks": false,
           "templateSources": [
             {
               "templateId": "draft-spec",
@@ -115,11 +95,13 @@
         },
         {
           "stageId": "implementation",
+          "artifactTasks": true,
           "templateSources": [],
           "tasks": []
         },
         {
           "stageId": "audit",
+          "artifactTasks": false,
           "templateSources": [
             {
               "templateId": "debrief",
@@ -134,6 +116,7 @@
         },
         {
           "stageId": "delivery",
+          "artifactTasks": false,
           "templateSources": [],
           "tasks": []
         }
@@ -184,7 +167,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": [
           "prd/01-prd-from-brief"
         ]
@@ -199,7 +181,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": [
           "spec/01-draft-spec",
           "spec/02-plan"
@@ -221,7 +202,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": [
           "implementation/01-establish-repository-scoped-airport-state-and-remove-fallbacks",
           "implementation/verify-01-establish-repository-scoped-airport-state-and-remove-fallbacks",
@@ -243,7 +223,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": [
           "audit/01-debrief",
           "audit/02-touchdown"
@@ -256,7 +235,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": []
       }
     ],
@@ -270,8 +248,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -288,8 +265,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -308,8 +284,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "planner",
         "retries": 0,
@@ -326,8 +301,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -346,8 +320,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -366,8 +339,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -386,8 +358,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -407,8 +378,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -427,8 +397,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -448,8 +417,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -468,8 +436,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -486,8 +453,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -504,8 +470,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -522,7 +487,7 @@
         "state": "passed",
         "stageId": "implementation",
         "reasons": [],
-        "updatedAt": "2026-04-10T22:03:06.000Z"
+        "updatedAt": "2026-04-10T22:18:04.000Z"
       },
       {
         "gateId": "verify",
@@ -530,7 +495,7 @@
         "state": "passed",
         "stageId": "implementation",
         "reasons": [],
-        "updatedAt": "2026-04-10T22:03:06.000Z"
+        "updatedAt": "2026-04-10T22:18:04.000Z"
       },
       {
         "gateId": "audit",
@@ -551,301 +516,5 @@
     ],
     "launchQueue": [],
     "updatedAt": "2026-04-10T22:18:04.000Z"
-  },
-  "eventLog": [
-    {
-      "eventId": "18-reconstruct-airport-control-plane:mission-created",
-      "type": "mission.created",
-      "occurredAt": "2026-04-10T21:32:50.000Z",
-      "source": "human",
-      "payload": {}
-    },
-    {
-      "eventId": "18-reconstruct-airport-control-plane:mission-started",
-      "type": "mission.started",
-      "occurredAt": "2026-04-10T21:32:55.000Z",
-      "source": "human",
-      "payload": {}
-    },
-    {
-      "eventId": "tasks.request-generation:2026-04-10T21:32:55.000Z:{\"stageId\":\"prd\"}:tasks-generated",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T21:33:00.000Z",
-      "source": "daemon",
-      "causedByRequestId": "tasks.request-generation:2026-04-10T21:32:55.000Z:{\"stageId\":\"prd\"}",
-      "payload": {
-        "stageId": "prd",
-        "tasks": [
-          {
-            "taskId": "prd/01-prd-from-brief",
-            "title": "PRD From Brief",
-            "instruction": "Use BRIEF.md as the canonical intake context. Rewrite or enrich PRD.md so it clearly states the problem, the target outcome, the constraints, and the success criteria for this mission. Only modify PRD.md in this task. Do not create or edit SPEC.md, implementation files, verification files, or delivery artifacts. Do not create application code in this task.",
-            "dependsOn": [],
-            "agentRunner": "copilot-cli"
-          }
-        ]
-      }
-    },
-    {
-      "eventId": "18-reconstruct-airport-control-plane:task-completed:prd-01-prd-from-brief",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:49:40.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "prd/01-prd-from-brief"
-      }
-    },
-    {
-      "eventId": "tasks.request-generation:2026-04-10T21:49:40.000Z:{\"stageId\":\"spec\"}:tasks-generated",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T21:49:45.000Z",
-      "source": "daemon",
-      "causedByRequestId": "tasks.request-generation:2026-04-10T21:49:40.000Z:{\"stageId\":\"spec\"}",
-      "payload": {
-        "stageId": "spec",
-        "tasks": [
-          {
-            "taskId": "spec/01-draft-spec",
-            "title": "Draft Spec",
-            "instruction": "Read PRD.md and define the technical target in SPEC.md. The specification must describe the intended design, the key boundaries, and the concrete files that will change. Only modify SPEC.md in this task. Do not create implementation code or verification evidence in this task.",
-            "dependsOn": [],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "spec/02-plan",
-            "title": "Plan Implementation And Verification",
-            "instruction": "Read SPEC.md and turn it into an execution ledger. Create paired markdown task files under 03-IMPLEMENTATION/tasks for each implementation slice: one task for building the slice and a second verification task for testing or validating that same slice. Name the verification task with the verify- prefix, keep both tasks in 03-IMPLEMENTATION/tasks, and make the verification task depend on its implementation task. The verification task must focus on tests and validation rather than feature creation. Do not create application code in this planning task. Do not modify delivery artifacts.",
-            "dependsOn": [
-              "spec/01-draft-spec"
-            ],
-            "agentRunner": "planner"
-          }
-        ]
-      }
-    },
-    {
-      "eventId": "18-reconstruct-airport-control-plane:task-completed:spec-01-draft-spec",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:52:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "spec/01-draft-spec"
-      }
-    },
-    {
-      "eventId": "18-reconstruct-airport-control-plane:task-completed:spec-02-plan",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:52:05.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "spec/02-plan"
-      }
-    },
-    {
-      "eventId": "18-reconstruct-airport-control-plane:emulated-tasks-generated:implementation",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T21:52:10.000Z",
-      "source": "human",
-      "payload": {
-        "stageId": "implementation",
-        "tasks": [
-          {
-            "taskId": "implementation/01-establish-repository-scoped-airport-state-and-remove-fallbacks",
-            "title": "Establish Repository-Scoped Airport State And Remove Fallbacks",
-            "instruction": "Align the airport package and daemon registry around one valid repository-scoped control-plane identity. This slice should remove unscoped airport fallbacks, keep airport identity and terminal session naming repository-bound, and preserve one clean construction path across `packages/airport/src/AirportControl.ts`, `packages/airport/src/types.ts`, `packages/core/src/daemon/system/RepositoryAirportRegistry.ts`, and adjacent focused tests.",
-            "dependsOn": [],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/verify-01-establish-repository-scoped-airport-state-and-remove-fallbacks",
-            "title": "Verify Repository-Scoped Airport State And Removed Fallbacks",
-            "instruction": "Verify that airport state can only be constructed and persisted through repository-scoped identity after this slice. Confirm the focused airport and daemon tests cover repository-scoped airport ids, repository-scoped session naming, and rejection of unscoped fallback behavior. Record any remaining gaps in VERIFY.md.",
-            "dependsOn": [
-              "implementation/01-establish-repository-scoped-airport-state-and-remove-fallbacks"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/02-align-daemon-owned-projections-and-gate-bindings",
-            "title": "Align Daemon-Owned Projections And Gate Bindings",
-            "instruction": "Align dashboard, editor, and agent-session projections with one daemon-owned system state and one gate-binding policy. This slice should preserve the `MissionControl` versus `AirportControl` boundary while tightening `packages/core/src/daemon/system/ProjectionService.ts`, `MissionSystemController.ts`, related airport types, and focused daemon or airport tests that still permit placeholder or split-source projection behavior.",
-            "dependsOn": [
-              "implementation/01-establish-repository-scoped-airport-state-and-remove-fallbacks"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/verify-02-align-daemon-owned-projections-and-gate-bindings",
-            "title": "Verify Daemon-Owned Projections And Gate Bindings",
-            "instruction": "Verify that panels receive coherent airport projections derived from daemon-owned state after this slice. Confirm the focused daemon and airport tests cover repository-mode versus mission-mode dashboard routing, editor artifact binding, and agent-session projection ownership without relying on panel-local reconstruction. Record any remaining gaps in VERIFY.md.",
-            "dependsOn": [
-              "implementation/02-align-daemon-owned-projections-and-gate-bindings"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/03-align-substrate-reconciliation-and-bootstrap-handoff",
-            "title": "Align Substrate Reconciliation And Bootstrap Handoff",
-            "instruction": "Align the airport control loop, substrate observations, and entry-path bootstrap boundary with the airport specification. This slice should keep intended focus, observed focus, pane existence, client registration, and terminal session identity explicit across `packages/core/src/daemon/MissionSystemController.ts`, `packages/airport/src/effects.ts`, `packages/airport/src/terminal-manager.ts`, `apps/tower/terminal/src/commands/airport-layout.ts`, and focused tests that assert the bootstrap handoff and substrate reconciliation behavior.",
-            "dependsOn": [
-              "implementation/01-establish-repository-scoped-airport-state-and-remove-fallbacks",
-              "implementation/02-align-daemon-owned-projections-and-gate-bindings"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/verify-03-align-substrate-reconciliation-and-bootstrap-handoff",
-            "title": "Verify Substrate Reconciliation And Bootstrap Handoff",
-            "instruction": "Verify that airport-owned reconciliation remains authoritative after this slice. Confirm the focused tests cover focus intent versus observed focus, pane existence versus expected state, panel gate identity injection, and repository-scoped terminal session behavior without falling back to shell or panel authority. Record any remaining gaps in VERIFY.md.",
-            "dependsOn": [
-              "implementation/03-align-substrate-reconciliation-and-bootstrap-handoff"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/04-align-airport-specs-contracts-and-focused-tests",
-            "title": "Align Airport Specs Contracts And Focused Tests",
-            "instruction": "Complete the airport replay mission by aligning the preserved source specification, airport-facing contracts, and focused tests with the daemon-owned control-plane boundary. This slice should update the airport spec or adjacent docs only where needed to keep mission `18` primary on the airport corpus, keep secondary references to semantic model, workflow, and agent runtime narrow, and tighten any focused tests or contract surfaces that must assert the airport architecture coherently.",
-            "dependsOn": [
-              "implementation/02-align-daemon-owned-projections-and-gate-bindings",
-              "implementation/03-align-substrate-reconciliation-and-bootstrap-handoff"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/verify-04-align-airport-specs-contracts-and-focused-tests",
-            "title": "Verify Airport Specs Contracts And Focused Tests",
-            "instruction": "Verify that the preserved airport-control-plane source material, daemon-facing contracts, and focused tests all describe the same airport ownership boundary after this slice. Confirm the replay artifacts stay aligned with the retrospective coverage map and record any remaining gaps in VERIFY.md.",
-            "dependsOn": [
-              "implementation/04-align-airport-specs-contracts-and-focused-tests"
-            ],
-            "agentRunner": "copilot-cli"
-          }
-        ]
-      }
-    },
-    {
-      "eventId": "18-reconstruct-airport-control-plane:task-completed:implementation-01-establish-repository-scoped-airport-state-and-remove-fallbacks",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:53:20.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/01-establish-repository-scoped-airport-state-and-remove-fallbacks"
-      }
-    },
-    {
-      "eventId": "18-reconstruct-airport-control-plane:task-completed:implementation-verify-01-establish-repository-scoped-airport-state-and-remove-fallbacks",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:53:35.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/verify-01-establish-repository-scoped-airport-state-and-remove-fallbacks"
-      }
-    },
-    {
-      "eventId": "18-reconstruct-airport-control-plane:task-completed:implementation-02-align-daemon-owned-projections-and-gate-bindings",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:55:20.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/02-align-daemon-owned-projections-and-gate-bindings"
-      }
-    },
-    {
-      "eventId": "18-reconstruct-airport-control-plane:task-completed:implementation-verify-02-align-daemon-owned-projections-and-gate-bindings",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T21:56:15.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/verify-02-align-daemon-owned-projections-and-gate-bindings"
-      }
-    },
-    {
-      "eventId": "18-reconstruct-airport-control-plane:task-completed:implementation-03-align-substrate-reconciliation-and-bootstrap-handoff",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T22:03:06.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/03-align-substrate-reconciliation-and-bootstrap-handoff"
-      }
-    },
-    {
-      "eventId": "18-reconstruct-airport-control-plane:task-completed:implementation-verify-03-align-substrate-reconciliation-and-bootstrap-handoff",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T22:03:06.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/verify-03-align-substrate-reconciliation-and-bootstrap-handoff"
-      }
-    },
-    {
-      "eventId": "18-reconstruct-airport-control-plane:task-completed:implementation-04-align-airport-specs-contracts-and-focused-tests",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T22:03:06.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/04-align-airport-specs-contracts-and-focused-tests"
-      }
-    },
-    {
-      "eventId": "18-reconstruct-airport-control-plane:task-completed:implementation-verify-04-align-airport-specs-contracts-and-focused-tests",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T22:03:06.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/verify-04-align-airport-specs-contracts-and-focused-tests"
-      }
-    },
-    {
-      "eventId": "tasks.request-generation:2026-04-10T22:03:06.000Z:{\"stageId\":\"audit\"}:tasks-generated",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T22:18:04.000Z",
-      "source": "daemon",
-      "causedByRequestId": "tasks.request-generation:2026-04-10T22:03:06.000Z:{\"stageId\":\"audit\"}",
-      "payload": {
-        "stageId": "audit",
-        "tasks": [
-          {
-            "taskId": "audit/01-debrief",
-            "title": "Debrief",
-            "instruction": "Run the focused end-to-end validation required for the mission. Record the airport-control-plane replay results, residual risks, and release readiness in AUDIT.md.",
-            "dependsOn": [],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "audit/02-touchdown",
-            "title": "Touchdown",
-            "instruction": "Prepare the final delivery motion. Confirm AUDIT.md is complete, summarize the final airport-control-plane replay status, and write DELIVERY.md as the final delivery artifact for the mission.",
-            "dependsOn": [],
-            "agentRunner": "copilot-cli"
-          }
-        ]
-      }
-    },
-    {
-      "eventId": "18-reconstruct-airport-control-plane:task-completed:audit-01-debrief",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T22:18:04.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "audit/01-debrief"
-      }
-    },
-    {
-      "eventId": "18-reconstruct-airport-control-plane:task-completed:audit-02-touchdown",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T22:18:04.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "audit/02-touchdown"
-      }
-    },
-    {
-      "eventId": "18-reconstruct-airport-control-plane:mission-delivered",
-      "type": "mission.delivered",
-      "occurredAt": "2026-04-10T22:18:04.000Z",
-      "source": "human",
-      "payload": {}
-    }
-  ]
+  }
 }

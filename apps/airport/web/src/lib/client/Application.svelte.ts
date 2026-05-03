@@ -1,4 +1,5 @@
 import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/daemon/protocol/entityRemote';
+import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 import { z } from 'zod/v4';
 import {
     MissionCatalogEntrySchema,
@@ -70,6 +71,10 @@ export class AirportApplication {
     #isInitialized = false;
     #repositoryLoadPromise: Promise<Repository[]> | null = null;
     #githubRepositoryLoadPromise: Promise<RepositoryPlatformRepositoryType[]> | null = null;
+    #repositoryClassCommandLoadPromise: Promise<EntityCommandDescriptorType[]> | null = null;
+    public repositoryClassCommandsState = $state<EntityCommandDescriptorType[]>([]);
+    public repositoryClassCommandsLoading = $state(false);
+    public repositoryClassCommandsError = $state<string | undefined>();
     public githubRepositoriesState = $state<RepositoryPlatformRepositoryType[]>([]);
     public githubRepositoriesLoading = $state(false);
     public githubRepositoriesError = $state<string | undefined>();
@@ -154,6 +159,10 @@ export class AirportApplication {
 
     public get activeMission(): Mission | undefined {
         return this.activeMissionState;
+    }
+
+    public get repositoryClassCommands(): EntityCommandDescriptorType[] {
+        return structuredClone($state.snapshot(this.repositoryClassCommandsState));
     }
 
     public hydrateRepositoryData(
@@ -258,6 +267,8 @@ export class AirportApplication {
         const loadPromise = Repository.find({ run: true })
             .then(async (repositories) => {
                 await Promise.all(repositories.map((repository) => this.loadMissionCatalog(repository)));
+                void Promise.all(repositories.map((repository) => repository.refreshCommands().catch(() => undefined)));
+                void Promise.all(repositories.map((repository) => repository.refreshSyncStatus().catch(() => undefined)));
                 return repositories;
             })
             .finally(() => {
@@ -270,9 +281,49 @@ export class AirportApplication {
         return await loadPromise;
     }
 
+    public async loadRepositoryClassCommands(input: {
+        force?: boolean;
+    } = {}): Promise<EntityCommandDescriptorType[]> {
+        if (!input.force) {
+            if (this.#repositoryClassCommandLoadPromise) {
+                return await this.#repositoryClassCommandLoadPromise;
+            }
+
+            if (this.repositoryClassCommandsState.length > 0 || this.repositoryClassCommandsError) {
+                return this.repositoryClassCommands;
+            }
+        }
+
+        this.repositoryClassCommandsLoading = true;
+        this.repositoryClassCommandsError = undefined;
+
+        const loadPromise = Repository.classCommands()
+            .then((commands) => {
+                this.repositoryClassCommandsState = structuredClone(commands);
+                return this.repositoryClassCommands;
+            })
+            .catch((error) => {
+                const message = error instanceof Error ? error.message : String(error);
+                this.repositoryClassCommandsState = [];
+                this.repositoryClassCommandsError = message;
+                throw error;
+            })
+            .finally(() => {
+                this.repositoryClassCommandsLoading = false;
+                if (this.#repositoryClassCommandLoadPromise === loadPromise) {
+                    this.#repositoryClassCommandLoadPromise = null;
+                }
+            });
+
+        this.#repositoryClassCommandLoadPromise = loadPromise;
+        return await loadPromise;
+    }
+
     public async loadGitHubRepositories(input: {
         force?: boolean;
     } = {}): Promise<RepositoryPlatformRepositoryType[]> {
+        void this.loadRepositoryClassCommands().catch(() => undefined);
+
         if (!input.force) {
             if (this.#githubRepositoryLoadPromise) {
                 return await this.#githubRepositoryLoadPromise;

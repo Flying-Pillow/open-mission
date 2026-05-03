@@ -42,6 +42,13 @@ export type RepositoryPlatformPullRequestRequest = {
 	baseBranch?: string;
 };
 
+export type RepositoryPlatformPullRequestMergeRequest = {
+	pullRequest: string;
+	method?: 'merge' | 'squash' | 'rebase';
+	deleteBranch?: boolean;
+	auto?: boolean;
+};
+
 export type RepositoryPlatformIssueCreateRequest = {
 	title: string;
 	body: string;
@@ -56,6 +63,7 @@ export interface RepositoryPlatformAdapter {
 	cloneRepository(input: RepositoryPlatformCloneRequest): Promise<string>;
 	createIssue(input: RepositoryPlatformIssueCreateRequest): Promise<MissionBrief>;
 	createPullRequest(input: RepositoryPlatformPullRequestRequest): Promise<string>;
+	mergePullRequest(input: RepositoryPlatformPullRequestMergeRequest): Promise<void>;
 	fetchRemote(remoteName?: string): void;
 	getBranchSyncStatus(branchRef: string, remoteName?: string): RepositoryBranchSyncStatus;
 	pullBranch(branchRef: string, remoteName?: string): void;

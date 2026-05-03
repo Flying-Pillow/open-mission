@@ -46,6 +46,15 @@
             { label: "Issues", value: repository.openIssuesCount },
         ].filter((metric) => metric.value !== undefined),
     );
+    const repositoryClassCommands = $derived(
+        appContext.application.repositoryClassCommands,
+    );
+    const repositoryClassCommandsLoading = $derived(
+        appContext.application.repositoryClassCommandsLoading,
+    );
+    const repositoryClassCommandsError = $derived(
+        appContext.application.repositoryClassCommandsError,
+    );
 
     const commandInput = $derived({
         platform: "github" as const,
@@ -131,11 +140,13 @@
                 refreshNonce={commandRefreshNonce}
                 entityName="Repository"
                 {commandInput}
+                commands={repositoryClassCommands}
+                loading={repositoryClassCommandsLoading}
+                loadError={repositoryClassCommandsError}
                 executeCommand={executeRepositoryClassCommand}
                 onCommandExecuted={async () => undefined}
                 buttonClass="shadow-sm"
                 showEmptyState={false}
-                showLoadingState={false}
             />
             <Dialog.Root bind:open={detailsOpen}>
                 <Dialog.Trigger>
@@ -339,6 +350,9 @@
                                     refreshNonce={commandRefreshNonce}
                                     entityName="Repository"
                                     {commandInput}
+                                    commands={repositoryClassCommands}
+                                    loading={repositoryClassCommandsLoading}
+                                    loadError={repositoryClassCommandsError}
                                     executeCommand={executeRepositoryClassCommand}
                                     onCommandExecuted={async () => undefined}
                                     buttonClass="shadow-sm"

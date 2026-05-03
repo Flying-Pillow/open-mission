@@ -186,14 +186,10 @@ describe('Repository', () => {
         });
 
         expect(view.commands.map((command) => command.commandId)).toEqual([
-            'repository.prepare',
             'repository.fetchExternalState',
             'repository.fastForwardFromExternal',
             'repository.remove'
         ]);
-        expect(view.commands.find((command) => command.commandId === 'repository.prepare')).toMatchObject({
-            disabled: false
-        });
         expect(view.commands.find((command) => command.commandId === 'repository.remove')).toMatchObject({
             disabled: false,
             confirmation: {
@@ -332,7 +328,7 @@ describe('Repository', () => {
         }
     });
 
-    it('marks prepare unavailable after Repository control state is initialized', async () => {
+    it('keeps setup out of generic command descriptors after Repository control state is initialized', async () => {
         const repository = Repository.create({
             repositoryRootPath: '/tmp/mission-proof-of-concept',
             platformRepositoryRef: 'Flying-Pillow/mission',
@@ -344,10 +340,7 @@ describe('Repository', () => {
             repositoryRootPath: repository.repositoryRootPath
         });
 
-        expect(view.commands.find((command) => command.commandId === 'repository.prepare')).toMatchObject({
-            disabled: true,
-            disabledReason: 'Repository control state is already initialized.'
-        });
+        expect(view.commands.find((command) => command.commandId === 'repository.setup')).toBeUndefined();
     });
 });
 

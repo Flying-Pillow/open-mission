@@ -78,6 +78,18 @@ Use SvelteKit server routes or remote functions as thin request-response proxies
 
 These endpoints return validated DTOs only. They do not contain mission-domain policy. Mission, Stage, Task, Artifact, AgentSession, and Repository behavior is reached through the relevant Entity contract.
 
+Remote functions are infrastructure, not component dependencies. Svelte components must not import or call `cmd`, `qry`, route remote modules, or daemon proxy helpers directly. Components call browser Entity instances, Entity class methods, or the `AirportApplication` runtime; those objects own the remote invocation and DTO validation.
+
+Browser Entity methods must choose the SvelteKit remote query execution form at the Entity boundary:
+
+- Render-time reads that are awaited from markup, for example inside `{#await ...}`, pass `executionContext: 'render'` and await the query object directly behind the Entity method.
+- Event, effect, refresh, command, and application-runtime reads run outside render and must call `.run()` behind the Entity method.
+- Commands are event-style operations and stay behind Entity command methods.
+
+The practical rule is: presentation components never decide between direct query await and `.run()`. They state intent by calling an Entity method such as `artifact.read({ executionContext: 'render' })`, `repository.setup(settings)`, or `repository.refreshCommands()`, and the Entity layer applies the remote-function rule.
+
+Commandbars are render-only controls over command descriptors that have already been supplied by an Entity or application cache. A commandbar may execute a command from an event handler, but it must not query available commands during render or component effects. Mission-scoped commandbars read from the Mission control-view command snapshot, and repository/class commandbars read descriptors cached by `Repository` or `AirportApplication` methods. This avoids one remote command-descriptor query per rendered row.
+
 ### 2. Live Daemon Event Transport
 
 Use SSE for daemon notifications that are already emitted today:

@@ -3,7 +3,7 @@
   "missionId": "15-reconstruct-mission-semantic-model-and-core-obje",
   "configuration": {
     "createdAt": "2026-04-10T19:45:21.638Z",
-    "source": "global-settings",
+    "source": "workflow-definition",
     "workflowVersion": "mission-workflow-v1",
     "workflow": {
       "autostart": {
@@ -11,9 +11,7 @@
       },
       "humanInLoop": {
         "enabled": true,
-        "pauseOnMissionStart": false,
-        "pauseOnTaskFailure": true,
-        "pauseOnTaskCompletion": false
+        "pauseOnMissionStart": false
       },
       "panic": {
         "terminateSessions": true,
@@ -36,61 +34,42 @@
           "stageId": "prd",
           "displayName": "PRD",
           "taskLaunchPolicy": {
-            "defaultAutostart": true,
-            "launchMode": "automatic"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": true
           }
         },
         "spec": {
           "stageId": "spec",
           "displayName": "Spec",
           "taskLaunchPolicy": {
-            "defaultAutostart": true,
-            "launchMode": "automatic"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": true
           }
         },
         "implementation": {
           "stageId": "implementation",
           "displayName": "Implement",
           "taskLaunchPolicy": {
-            "defaultAutostart": false,
-            "launchMode": "manual"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": false
           }
         },
         "audit": {
           "stageId": "audit",
           "displayName": "Audit",
           "taskLaunchPolicy": {
-            "defaultAutostart": true,
-            "launchMode": "automatic"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": true
           }
         },
         "delivery": {
           "stageId": "delivery",
           "displayName": "Delivery",
           "taskLaunchPolicy": {
-            "defaultAutostart": false,
-            "launchMode": "manual"
-          },
-          "completionPolicy": {
-            "requireAllTasksCompleted": true
+            "defaultAutostart": false
           }
         }
       },
       "taskGeneration": [
         {
           "stageId": "prd",
+          "artifactTasks": false,
           "templateSources": [
             {
               "templateId": "prd-from-brief",
@@ -101,6 +80,7 @@
         },
         {
           "stageId": "spec",
+          "artifactTasks": false,
           "templateSources": [
             {
               "templateId": "draft-spec",
@@ -115,11 +95,13 @@
         },
         {
           "stageId": "implementation",
+          "artifactTasks": true,
           "templateSources": [],
           "tasks": []
         },
         {
           "stageId": "audit",
+          "artifactTasks": false,
           "templateSources": [
             {
               "templateId": "debrief",
@@ -134,6 +116,7 @@
         },
         {
           "stageId": "delivery",
+          "artifactTasks": false,
           "templateSources": [],
           "tasks": []
         }
@@ -184,7 +167,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": [
           "prd/01-prd-from-brief"
         ]
@@ -199,7 +181,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": [
           "spec/01-draft-spec",
           "spec/02-plan"
@@ -221,7 +202,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": [
           "implementation/01-establish-semantic-contexts-and-record-types",
           "implementation/verify-01-establish-semantic-contexts-and-record-types",
@@ -243,7 +223,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": [
           "audit/01-debrief",
           "audit/02-touchdown"
@@ -256,7 +235,6 @@
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [],
-        "blockedTaskIds": [],
         "completedTaskIds": []
       }
     ],
@@ -270,8 +248,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -288,8 +265,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -308,8 +284,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "planner",
         "retries": 0,
@@ -326,8 +301,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -346,8 +320,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -366,8 +339,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -386,8 +358,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -407,8 +378,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -427,8 +397,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -449,8 +418,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -469,8 +437,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": false,
-          "launchMode": "manual"
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -487,8 +454,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -505,8 +471,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true,
-          "launchMode": "automatic"
+          "autostart": true
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
@@ -552,302 +517,5 @@
     ],
     "launchQueue": [],
     "updatedAt": "2026-04-10T20:49:00.000Z"
-  },
-  "eventLog": [
-    {
-      "eventId": "15-reconstruct-mission-semantic-model-and-core-obje:mission-created",
-      "type": "mission.created",
-      "occurredAt": "2026-04-10T19:45:21.638Z",
-      "source": "human",
-      "payload": {}
-    },
-    {
-      "eventId": "15-reconstruct-mission-semantic-model-and-core-obje:mission-started",
-      "type": "mission.started",
-      "occurredAt": "2026-04-10T19:47:34.622Z",
-      "source": "human",
-      "payload": {}
-    },
-    {
-      "eventId": "tasks.request-generation:2026-04-10T19:47:34.622Z:{\"stageId\":\"prd\"}:tasks-generated",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T19:47:34.633Z",
-      "source": "daemon",
-      "causedByRequestId": "tasks.request-generation:2026-04-10T19:47:34.622Z:{\"stageId\":\"prd\"}",
-      "payload": {
-        "stageId": "prd",
-        "tasks": [
-          {
-            "taskId": "prd/01-prd-from-brief",
-            "title": "PRD From Brief",
-            "instruction": "Use BRIEF.md as the canonical intake context. Rewrite or enrich PRD.md so it clearly states the problem, the target outcome, the constraints, and the success criteria for this mission. Only modify PRD.md in this task. Do not create or edit SPEC.md, implementation files, verification files, or delivery artifacts. Do not create application code in this task.",
-            "dependsOn": [],
-            "agentRunner": "copilot-cli"
-          }
-        ]
-      }
-    },
-    {
-      "eventId": "15-reconstruct-mission-semantic-model-and-core-obje:task-completed:prd-01-prd-from-brief",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T19:48:23.462Z",
-      "source": "human",
-      "payload": {
-        "taskId": "prd/01-prd-from-brief"
-      }
-    },
-    {
-      "eventId": "tasks.request-generation:2026-04-10T19:48:23.462Z:{\"stageId\":\"spec\"}:tasks-generated",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T19:48:23.471Z",
-      "source": "daemon",
-      "causedByRequestId": "tasks.request-generation:2026-04-10T19:48:23.462Z:{\"stageId\":\"spec\"}",
-      "payload": {
-        "stageId": "spec",
-        "tasks": [
-          {
-            "taskId": "spec/01-draft-spec",
-            "title": "Draft Spec",
-            "instruction": "Read PRD.md and define the technical target in SPEC.md. The specification must describe the intended design, the key boundaries, and the concrete files that will change. Only modify SPEC.md in this task. Do not create implementation code or verification evidence in this task.",
-            "dependsOn": [],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "spec/02-plan",
-            "title": "Plan Implementation And Verification",
-            "instruction": "Read SPEC.md and turn it into an execution ledger. Create paired markdown task files under 03-IMPLEMENTATION/tasks for each implementation slice: one task for building the slice and a second verification task for testing or validating that same slice. Name the verification task with the verify- prefix, keep both tasks in 03-IMPLEMENTATION/tasks, and make the verification task depend on its implementation task. The verification task must focus on tests and validation rather than feature creation. Do not create application code in this planning task. Do not modify delivery artifacts.",
-            "dependsOn": [
-              "spec/01-draft-spec"
-            ],
-            "agentRunner": "planner"
-          }
-        ]
-      }
-    },
-    {
-      "eventId": "15-reconstruct-mission-semantic-model-and-core-obje:task-completed:spec-01-draft-spec",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T19:51:45.819Z",
-      "source": "human",
-      "payload": {
-        "taskId": "spec/01-draft-spec"
-      }
-    },
-    {
-      "eventId": "15-reconstruct-mission-semantic-model-and-core-obje:task-completed:spec-02-plan",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T19:51:45.819Z",
-      "source": "human",
-      "payload": {
-        "taskId": "spec/02-plan"
-      }
-    },
-    {
-      "eventId": "15-reconstruct-mission-semantic-model-and-core-obje:emulated-tasks-generated:implementation",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T19:51:45.819Z",
-      "source": "human",
-      "payload": {
-        "stageId": "implementation",
-        "tasks": [
-          {
-            "taskId": "implementation/01-establish-semantic-contexts-and-record-types",
-            "title": "Establish Semantic Contexts And Record Types",
-            "instruction": "Align the semantic model around the canonical first-class contexts owned by packages/core: repository, mission, task, artifact, and agent session. This slice should preserve the mission-model record types and context exports in `packages/core/src/types.ts`, keep repository and mission contexts coherent in `packages/core/src/daemon/system/MissionControl.ts`, and ensure the persisted dossier and descriptor surfaces in `packages/core/src/lib/FilesystemAdapter.ts` continue to reflect those semantic records cleanly.",
-            "dependsOn": [],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/verify-01-establish-semantic-contexts-and-record-types",
-            "title": "Verify Semantic Contexts And Record Types",
-            "instruction": "Verify that repository, mission, task, artifact, and agent-session semantic records are coherent after this slice. Confirm the relevant focused type, adapter, or mission-context tests cover the exported record shapes and that the preserved terminology still matches the semantic-model specification. Record any remaining gaps in VERIFY.md.",
-            "dependsOn": [
-              "implementation/01-establish-semantic-contexts-and-record-types"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/02-align-workflow-runtime-semantic-boundaries",
-            "title": "Align Workflow Runtime Semantic Boundaries",
-            "instruction": "Align the mission-local workflow document boundary with the preserved semantic model. This slice should keep `mission.json`, `WorkflowSnapshot`, `WorkflowRuntimeState`, stage projections, task runtime, and gate projections clearly mission-local and reducer-owned across `packages/core/src/workflow/engine/types.ts`, related workflow document helpers, and the mission-facing runtime surfaces that consume them.",
-            "dependsOn": [
-              "implementation/01-establish-semantic-contexts-and-record-types"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/verify-02-align-workflow-runtime-semantic-boundaries",
-            "title": "Verify Workflow Runtime Semantic Boundaries",
-            "instruction": "Verify that mutable workflow truth remains mission-local and that runtime projections are still derived from workflow events rather than ad hoc filesystem or daemon-wide state. Confirm the relevant workflow-engine and mission runtime tests cover these ownership boundaries, and record any remaining semantic-boundary gaps in VERIFY.md.",
-            "dependsOn": [
-              "implementation/02-align-workflow-runtime-semantic-boundaries"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/03-align-daemon-mission-and-system-projections",
-            "title": "Align Daemon Mission And System Projections",
-            "instruction": "Align daemon-facing mission and repository projections with the semantic model without collapsing top-level control-plane authority into packages/core. This slice should keep `packages/core/src/daemon/mission/Mission.ts`, `packages/core/src/daemon/system/MissionControl.ts`, and `packages/core/src/daemon/system/ProjectionService.ts` consistent about what is semantic mission state, what is derived operator projection, and what remains daemon-wide system state.",
-            "dependsOn": [
-              "implementation/01-establish-semantic-contexts-and-record-types",
-              "implementation/02-align-workflow-runtime-semantic-boundaries"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/verify-03-align-daemon-mission-and-system-projections",
-            "title": "Verify Daemon Mission And System Projections",
-            "instruction": "Verify that daemon mission status, mission-control domain contexts, and operator-facing projections remain aligned with the preserved semantic ownership model. Confirm the relevant mission, workspace, and projection tests cover the intended boundaries, and record any remaining gaps in VERIFY.md.",
-            "dependsOn": [
-              "implementation/03-align-daemon-mission-and-system-projections"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/04-update-semantic-specs-and-focused-tests",
-            "title": "Update Semantic Specs And Focused Tests",
-            "instruction": "Complete the semantic-model replay mission by aligning the preserved source specifications, replay planning records, and focused tests with the semantic ownership model. This slice should keep mission `15` primary on the mission-model and core-object-model corpus, keep secondary references to repository layout and workflow runtime narrow, and update the focused tests or docs that must assert the semantic-model contract coherently.",
-            "dependsOn": [
-              "implementation/01-establish-semantic-contexts-and-record-types",
-              "implementation/02-align-workflow-runtime-semantic-boundaries",
-              "implementation/03-align-daemon-mission-and-system-projections"
-            ],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "implementation/verify-04-update-semantic-specs-and-focused-tests",
-            "title": "Verify Semantic Specs And Focused Tests",
-            "instruction": "Verify that the final semantic-model mission is reflected consistently across the replayed specs, semantic code surfaces, and focused tests. Confirm the affected checks still support mission `15` rather than later replay missions, and record any remaining specification-preservation or verification gaps in VERIFY.md.",
-            "dependsOn": [
-              "implementation/04-update-semantic-specs-and-focused-tests"
-            ],
-            "agentRunner": "copilot-cli"
-          }
-        ]
-      }
-    },
-    {
-      "eventId": "15-reconstruct-mission-semantic-model-and-core-obje:task-completed:implementation-01-establish-semantic-contexts-and-record-types",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T20:05:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/01-establish-semantic-contexts-and-record-types"
-      }
-    },
-    {
-      "eventId": "15-reconstruct-mission-semantic-model-and-core-obje:task-completed:implementation-verify-01-establish-semantic-contexts-and-record-types",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T20:06:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/verify-01-establish-semantic-contexts-and-record-types"
-      }
-    },
-    {
-      "eventId": "15-reconstruct-mission-semantic-model-and-core-obje:task-completed:implementation-02-align-workflow-runtime-semantic-boundaries",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T20:20:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/02-align-workflow-runtime-semantic-boundaries"
-      }
-    },
-    {
-      "eventId": "15-reconstruct-mission-semantic-model-and-core-obje:task-completed:implementation-verify-02-align-workflow-runtime-semantic-boundaries",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T20:21:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/verify-02-align-workflow-runtime-semantic-boundaries"
-      }
-    },
-    {
-      "eventId": "15-reconstruct-mission-semantic-model-and-core-obje:task-completed:implementation-03-align-daemon-mission-and-system-projections",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T20:32:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/03-align-daemon-mission-and-system-projections"
-      }
-    },
-    {
-      "eventId": "15-reconstruct-mission-semantic-model-and-core-obje:task-completed:implementation-verify-03-align-daemon-mission-and-system-projections",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T20:33:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/verify-03-align-daemon-mission-and-system-projections"
-      }
-    },
-    {
-      "eventId": "15-reconstruct-mission-semantic-model-and-core-obje:task-completed:implementation-04-update-semantic-specs-and-focused-tests",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T20:34:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/04-update-semantic-specs-and-focused-tests"
-      }
-    },
-    {
-      "eventId": "15-reconstruct-mission-semantic-model-and-core-obje:task-completed:implementation-verify-04-update-semantic-specs-and-focused-tests",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T20:35:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "implementation/verify-04-update-semantic-specs-and-focused-tests"
-      }
-    },
-    {
-      "eventId": "tasks.request-generation:2026-04-10T20:40:00.000Z:{\"stageId\":\"audit\"}:tasks-generated",
-      "type": "tasks.generated",
-      "occurredAt": "2026-04-10T20:40:00.000Z",
-      "source": "daemon",
-      "causedByRequestId": "tasks.request-generation:2026-04-10T20:40:00.000Z:{\"stageId\":\"audit\"}",
-      "payload": {
-        "stageId": "audit",
-        "tasks": [
-          {
-            "taskId": "audit/01-debrief",
-            "title": "Debrief",
-            "instruction": "Run the focused end-to-end validation required for the mission. Record the semantic-model replay results, residual risks, and release readiness in AUDIT.md.",
-            "dependsOn": [],
-            "agentRunner": "copilot-cli"
-          },
-          {
-            "taskId": "audit/02-touchdown",
-            "title": "Touchdown",
-            "instruction": "Prepare the final delivery motion. Confirm AUDIT.md is complete, summarize the final semantic-model replay status, and write DELIVERY.md as the final delivery artifact for the mission.",
-            "dependsOn": [],
-            "agentRunner": "copilot-cli"
-          }
-        ]
-      }
-    },
-    {
-      "eventId": "15-reconstruct-mission-semantic-model-and-core-obje:task-completed:audit-01-debrief",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T20:44:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "audit/01-debrief"
-      }
-    },
-    {
-      "eventId": "15-reconstruct-mission-semantic-model-and-core-obje:task-completed:audit-02-touchdown",
-      "type": "task.completed",
-      "occurredAt": "2026-04-10T20:48:00.000Z",
-      "source": "human",
-      "payload": {
-        "taskId": "audit/02-touchdown"
-      }
-    },
-    {
-      "eventId": "15-reconstruct-mission-semantic-model-and-core-obje:mission-delivered",
-      "type": "mission.delivered",
-      "occurredAt": "2026-04-10T20:49:00.000Z",
-      "source": "human",
-      "payload": {}
-    }
-  ]
+  }
 }

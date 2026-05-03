@@ -296,6 +296,7 @@ export class GitHubPlatformAdapter {
 		pullRequest: string;
 		method?: 'merge' | 'squash' | 'rebase';
 		deleteBranch?: boolean;
+		auto?: boolean;
 	}): Promise<void> {
 		const strategy = input.method ?? 'merge';
 		await this.runTextProcess([
@@ -303,6 +304,7 @@ export class GitHubPlatformAdapter {
 			'merge',
 			input.pullRequest,
 			`--${strategy}`,
+			...(input.auto === true ? ['--auto'] : []),
 			...(input.deleteBranch === false ? [] : ['--delete-branch']),
 			...(this.repository ? ['--repo', this.repository] : [])
 		]);

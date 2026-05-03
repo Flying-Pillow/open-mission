@@ -8,7 +8,6 @@
         repository?: Repository;
     } = $props();
 
-    let loadError = $state<string | undefined>();
     const status = $derived(repository?.syncStatus);
     const hasLocalChanges = $derived(
         (status?.worktree.stagedCount ?? 0) > 0 ||
@@ -42,26 +41,6 @@
             ? "border-amber-500/70 bg-amber-500/15 text-amber-700 dark:text-amber-300"
             : undefined,
     );
-
-    $effect(() => {
-        if (!repository) {
-            return;
-        }
-
-        let cancelled = false;
-        loadError = undefined;
-
-        void repository.refreshSyncStatus().catch((error) => {
-            if (!cancelled) {
-                loadError =
-                    error instanceof Error ? error.message : String(error);
-            }
-        });
-
-        return () => {
-            cancelled = true;
-        };
-    });
 </script>
 
 <div class="mt-2 flex flex-wrap gap-2">
@@ -72,8 +51,5 @@
         <Badge variant="destructive">Local changes</Badge>
     {:else if status}
         <Badge variant="secondary">Clean</Badge>
-    {/if}
-    {#if loadError}
-        <Badge variant="destructive">Sync status unavailable</Badge>
     {/if}
 </div>

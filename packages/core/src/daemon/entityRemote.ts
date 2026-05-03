@@ -75,7 +75,7 @@ async function hydrateStartedRepositoryMission(
     if (!context.missionRegistry || input.entity !== 'Repository') {
         return;
     }
-    if (input.method !== 'prepare' && input.method !== 'startMissionFromIssue' && input.method !== 'startMissionFromBrief') {
+    if (input.method !== 'startMissionFromIssue' && input.method !== 'startMissionFromBrief') {
         return;
     }
     if (!isRecord(result) || typeof result['id'] !== 'string' || !result['id'].trim()) {

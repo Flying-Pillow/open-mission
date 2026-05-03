@@ -1,11 +1,6 @@
 import * as path from 'node:path';
-import type { AgentCommand, AgentPrompt } from './runtime/agent/AgentRuntimeTypes.js';
 import { createConfiguredAgentRunners } from './runtime/agent/runtimes/AgentRuntimeFactory.js';
 import type { EntityExecutionContext } from '../entities/Entity/Entity.js';
-import type {
-    AgentSessionCommandType,
-    AgentSessionPromptType
-} from '../entities/AgentSession/AgentSessionSchema.js';
 import {
     MissionLocatorSchema,
     type MissionLocatorType
@@ -22,39 +17,7 @@ export type MissionLoader = (
     terminalSessionName?: string
 ) => Promise<MissionHandle | undefined>;
 
-export type MissionHandle = Pick<
-    Mission,
-    | 'command'
-    | 'clearMissionPanic'
-    | 'completeAgentSession'
-    | 'completeTask'
-    | 'dispose'
-    | 'ensureTerminal'
-    | 'cancelAgentSession'
-    | 'deliver'
-    | 'generateTasksForStage'
-    | 'buildMissionSnapshot'
-    | 'panicStopMission'
-    | 'pauseMission'
-    | 'read'
-    | 'readDocument'
-    | 'readControlView'
-    | 'readTerminal'
-    | 'readWorktree'
-    | 'reopenTask'
-    | 'restartLaunchQueue'
-    | 'resumeMission'
-    | 'reworkTask'
-    | 'reworkTaskFromVerification'
-    | 'sendAgentSessionCommand'
-    | 'sendAgentSessionPrompt'
-    | 'sendTerminalInput'
-    | 'startTask'
-    | 'setTaskAutostart'
-    | 'terminateAgentSession'
-    | 'toEntity'
-    | 'writeDocument'
->;
+export type MissionHandle = Mission;
 
 export class MissionRegistry {
     private readonly missionLoads = new Map<string, Promise<MissionHandle | undefined>>();
@@ -133,40 +96,7 @@ export class MissionRegistry {
             throw new Error(`Mission '${payload.missionId}' could not be resolved.`);
         }
 
-        return this.toRequestMissionHandle(mission);
-    }
-
-    public getTerminalSessionName(input: unknown): string | undefined {
-        if (!isRecord(input) || typeof input['terminalSessionName'] !== 'string') {
-            return undefined;
-        }
-        const terminalSessionName = input['terminalSessionName'].trim();
-        return terminalSessionName.length > 0 ? terminalSessionName : undefined;
-    }
-
-    public getReason(input: unknown): string | undefined {
-        if (!isRecord(input) || typeof input['reason'] !== 'string') {
-            return undefined;
-        }
-        const reason = input['reason'].trim();
-        return reason.length > 0 ? reason : undefined;
-    }
-
-    public normalizeAgentPrompt(input: AgentSessionPromptType): AgentPrompt {
-        return {
-            source: input.source,
-            text: input.text,
-            ...(input.title ? { title: input.title } : {}),
-            ...(input.metadata ? { metadata: input.metadata } : {})
-        };
-    }
-
-    public normalizeAgentCommand(input: AgentSessionCommandType): AgentCommand {
-        return {
-            type: input.type,
-            ...(input.reason ? { reason: input.reason } : {}),
-            ...(input.metadata ? { metadata: input.metadata } : {})
-        };
+        return this.createBorrowedMissionHandle(mission);
     }
 
     private async loadMissionFromRegistry(
@@ -256,39 +186,16 @@ export class MissionRegistry {
         return `${path.resolve(controlRoot)}:${missionId}`;
     }
 
-    private toRequestMissionHandle(mission: MissionHandle): MissionHandle {
-        return {
-            clearMissionPanic: mission.clearMissionPanic.bind(mission),
-            command: mission.command.bind(mission),
-            completeAgentSession: mission.completeAgentSession.bind(mission),
-            completeTask: mission.completeTask.bind(mission),
-            dispose: () => undefined,
-            ensureTerminal: mission.ensureTerminal.bind(mission),
-            cancelAgentSession: mission.cancelAgentSession.bind(mission),
-            deliver: mission.deliver.bind(mission),
-            generateTasksForStage: mission.generateTasksForStage.bind(mission),
-            buildMissionSnapshot: mission.buildMissionSnapshot.bind(mission),
-            panicStopMission: mission.panicStopMission.bind(mission),
-            pauseMission: mission.pauseMission.bind(mission),
-            read: mission.read.bind(mission),
-            readDocument: mission.readDocument.bind(mission),
-            readControlView: mission.readControlView.bind(mission),
-            readTerminal: mission.readTerminal.bind(mission),
-            readWorktree: mission.readWorktree.bind(mission),
-            reopenTask: mission.reopenTask.bind(mission),
-            restartLaunchQueue: mission.restartLaunchQueue.bind(mission),
-            resumeMission: mission.resumeMission.bind(mission),
-            reworkTask: mission.reworkTask.bind(mission),
-            reworkTaskFromVerification: mission.reworkTaskFromVerification.bind(mission),
-            sendAgentSessionCommand: mission.sendAgentSessionCommand.bind(mission),
-            sendAgentSessionPrompt: mission.sendAgentSessionPrompt.bind(mission),
-            sendTerminalInput: mission.sendTerminalInput.bind(mission),
-            startTask: mission.startTask.bind(mission),
-            setTaskAutostart: mission.setTaskAutostart.bind(mission),
-            terminateAgentSession: mission.terminateAgentSession.bind(mission),
-            toEntity: mission.toEntity.bind(mission),
-            writeDocument: mission.writeDocument.bind(mission)
-        };
+    private createBorrowedMissionHandle(mission: MissionHandle): MissionHandle {
+        return new Proxy(mission, {
+            get(target, property) {
+                if (property === 'dispose') {
+                    return () => undefined;
+                }
+                const value = Reflect.get(target, property, target);
+                return typeof value === 'function' ? value.bind(target) : value;
+            }
+        });
     }
 
 }
@@ -298,10 +205,6 @@ export function requireMissionRegistry(context: EntityExecutionContext): Mission
         throw new Error('Mission entity methods require a daemon-owned mission registry.');
     }
     return context.missionRegistry;
-}
-
-function isRecord(input: unknown): input is Record<string, unknown> {
-    return typeof input === 'object' && input !== null && !Array.isArray(input);
 }
 
 function resolveRepositoryPath(repositoryRootPath: string, configuredPath: string): string {

@@ -26,7 +26,7 @@
         repository.platformRepositoryRef ?? repository.displayName,
     );
     const repositoryName = $derived(repositoryRef.trim() || "Repository");
-    const requiresPreparation = $derived(
+    const requiresSetup = $derived(
         Boolean(localRepository && !localRepository.data.isInitialized),
     );
     const platformRepositoryUrl = $derived(
@@ -112,7 +112,7 @@
                 >
                     {repositoryName}
                 </h3>
-                {#if requiresPreparation}
+                {#if requiresSetup}
                     <Badge variant="secondary" class="shrink-0">
                         Setup required
                     </Badge>
@@ -202,7 +202,7 @@
         </div>
     </div>
 
-    {#if requiresPreparation}
+    {#if requiresSetup}
         <div
             class="border-t border-dashed bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:bg-amber-950/20 dark:text-amber-100"
         >
@@ -212,8 +212,8 @@
                     class="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-300"
                 />
                 <p class="min-w-0 leading-5">
-                    This Repository needs a preparation Mission before regular
-                    SPEC-driven work can start.
+                    This Repository needs setup before regular missions can
+                    start.
                 </p>
             </div>
         </div>

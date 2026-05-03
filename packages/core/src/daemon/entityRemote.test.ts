@@ -78,7 +78,7 @@ describe('daemon entity dispatch', () => {
 	it('dispatches Repository platform-backed source methods through explicit handlers', async () => {
 		const repositorySnapshot = Repository.open('/tmp/mission-proof-of-concept').toData();
 		const checkedOutRepository = Repository.create({
-			repositoryRootPath: '/repositories/Flying-Pillow/already-cloned',
+			repositoryRootPath: process.cwd(),
 			platformRepositoryRef: 'Flying-Pillow/already-cloned'
 		});
 		const findSpy = vi.spyOn(Repository, 'findAvailable').mockResolvedValue([
@@ -138,7 +138,7 @@ describe('daemon entity dispatch', () => {
 					{
 						commandId: 'repository.add',
 						disabled: true,
-						disabledReason: "Repository 'Flying-Pillow/already-cloned' is already checked out at '/repositories/Flying-Pillow/already-cloned'."
+						disabledReason: `Repository 'Flying-Pillow/already-cloned' is already checked out at '${process.cwd()}'.`
 					}
 				]
 			});
@@ -192,19 +192,23 @@ describe('daemon entity dispatch', () => {
 				method: 'startMissionFromBrief',
 				id: 'mission-2'
 			}),
-			prepare: vi.fn().mockResolvedValue({
+			setup: vi.fn().mockResolvedValue({
 				ok: true,
 				entity: 'Repository',
-				method: 'prepare',
-				id: 'mission-preparation',
-				kind: 'mission-preparation',
-				state: 'branch-prepared',
-				branchRef: 'mission/1-prepare-repo-for-mission',
+				method: 'setup',
+				id: 'repository:github/Flying-Pillow/example',
+				kind: 'repository-setup',
+				state: 'auto-merge-requested',
+				branchRef: 'mission/bootstrap-20260503120000-example',
 				baseBranch: 'main',
-				worktreePath: '/missions/Flying-Pillow/example/1-prepare-repo-for-mission',
-				missionRootDir: '/missions/Flying-Pillow/example/1-prepare-repo-for-mission/.mission/missions/mission-preparation',
-				issueId: 1,
-				issueUrl: 'https://github.com/Flying-Pillow/example/issues/1'
+				pullRequestUrl: 'https://github.com/Flying-Pillow/example/pull/1',
+				settingsPath: '/tmp/example/.mission/settings.json',
+				workflowDefinitionPath: '/tmp/example/.mission/workflow/workflow.json',
+				autoMergeAttempted: true,
+				autoMergeSucceeded: false,
+				merged: false,
+				basePulled: false,
+				autoMergeError: 'Branch protection requires checks.'
 			})
 		} as unknown as Repository;
 		const resolveSpy = vi.spyOn(Repository, 'resolve').mockResolvedValue(repository);
@@ -261,14 +265,23 @@ describe('daemon entity dispatch', () => {
 
 			await expect(executeEntityCommandInDaemon({
 				entity: 'Repository',
-				method: 'prepare',
-				payload: identity
+				method: 'setup',
+				payload: {
+					...identity,
+					settings: {
+						missionsRoot: 'missions',
+						trackingProvider: 'github',
+						instructionsPath: '.agents',
+						skillsPath: '.agents/skills',
+						agentRunner: 'copilot-cli'
+					}
+				}
 			}, { surfacePath: process.cwd() })).resolves.toMatchObject({
 				ok: true,
 				entity: 'Repository',
-				method: 'prepare',
-				id: 'mission-preparation',
-				worktreePath: '/missions/Flying-Pillow/example/1-prepare-repo-for-mission'
+				method: 'setup',
+				id: 'repository:github/Flying-Pillow/example',
+				pullRequestUrl: 'https://github.com/Flying-Pillow/example/pull/1'
 			});
 
 			expect(resolveSpy).toHaveBeenNthCalledWith(1, identity, { surfacePath: process.cwd() });
@@ -281,64 +294,23 @@ describe('daemon entity dispatch', () => {
 				body: 'Mission body',
 				type: 'feature'
 			}, { surfacePath: process.cwd() });
-			expect(resolveSpy).toHaveBeenNthCalledWith(6, identity, { surfacePath: process.cwd() });
+			expect(resolveSpy).toHaveBeenNthCalledWith(6, {
+				...identity,
+				settings: {
+					missionsRoot: 'missions',
+					trackingProvider: 'github',
+					instructionsPath: '.agents',
+					skillsPath: '.agents/skills',
+					agentRunner: 'copilot-cli'
+				}
+			}, { surfacePath: process.cwd() });
 			expect(resolveSpy).toHaveBeenCalledTimes(6);
 			expect(repository.read).toHaveBeenCalledOnce();
 			expect(repository.listIssues).toHaveBeenCalledOnce();
 			expect(repository.getIssue).toHaveBeenCalledOnce();
 			expect(repository.startMissionFromIssue).toHaveBeenCalledOnce();
 			expect(repository.startMissionFromBrief).toHaveBeenCalledOnce();
-			expect(repository.prepare).toHaveBeenCalledOnce();
-		} finally {
-			resolveSpy.mockRestore();
-		}
-	});
-
-	it('hydrates Repository.prepare results from the prepared Mission worktree', async () => {
-		const repository = {
-			prepare: vi.fn().mockResolvedValue({
-				ok: true,
-				entity: 'Repository',
-				method: 'prepare',
-				id: 'mission-preparation',
-				kind: 'mission-preparation',
-				state: 'branch-prepared',
-				branchRef: 'mission/1-prepare-repo-for-mission',
-				baseBranch: 'main',
-				worktreePath: '/missions/Flying-Pillow/example/1-prepare-repo-for-mission',
-				missionRootDir: '/missions/Flying-Pillow/example/1-prepare-repo-for-mission/.mission/missions/mission-preparation',
-				issueId: 1,
-				issueUrl: 'https://github.com/Flying-Pillow/example/issues/1'
-			})
-		} as unknown as Repository;
-		const resolveSpy = vi.spyOn(Repository, 'resolve').mockResolvedValue(repository);
-		const loadMission = vi.fn(async () => createMissionHandle(createMissionSnapshot().mission));
-		const context = {
-			surfacePath: '/repositories/Flying-Pillow/example',
-			missionRegistry: new MissionRegistry({ loadMission })
-		};
-
-		try {
-			await expect(executeEntityCommandInDaemon({
-				entity: 'Repository',
-				method: 'prepare',
-				payload: {
-					id: 'repository:github/Flying-Pillow/example',
-					repositoryRootPath: '/repositories/Flying-Pillow/example'
-				}
-			}, context)).resolves.toMatchObject({
-				id: 'mission-preparation',
-				worktreePath: '/missions/Flying-Pillow/example/1-prepare-repo-for-mission'
-			});
-
-			expect(loadMission).toHaveBeenCalledWith(
-				{
-					missionId: 'mission-preparation',
-					repositoryRootPath: '/missions/Flying-Pillow/example/1-prepare-repo-for-mission'
-				},
-				{ surfacePath: '/missions/Flying-Pillow/example/1-prepare-repo-for-mission' },
-				undefined
-			);
+			expect(repository.setup).toHaveBeenCalledOnce();
 		} finally {
 			resolveSpy.mockRestore();
 		}

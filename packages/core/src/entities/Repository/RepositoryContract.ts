@@ -14,8 +14,9 @@ import {
     RepositoryLocatorSchema,
     RepositoryMissionStartAcknowledgementSchema,
     RepositoryIssueDetailSchema,
-    RepositoryPrepareResultSchema,
     RepositoryRemoveAcknowledgementSchema,
+    RepositorySetupResultSchema,
+    RepositorySetupSchema,
     RepositorySyncCommandAcknowledgementSchema,
     RepositorySyncStatusSchema,
     RepositoryStartMissionFromBriefSchema,
@@ -93,7 +94,7 @@ export const RepositoryContract: EntityContractType = {
             result: RepositoryDataSchema,
             execution: 'class',
             ui: {
-                label: 'Clone Repository',
+                label: 'Clone',
                 variant: 'default',
                 icon: 'folder-plus',
                 presentationOrder: 0
@@ -105,7 +106,7 @@ export const RepositoryContract: EntityContractType = {
             result: RepositoryRemoveAcknowledgementSchema,
             execution: 'entity',
             ui: {
-                label: 'Remove Repository',
+                label: 'Remove',
                 variant: 'destructive',
                 icon: 'trash-2',
                 confirmation: {
@@ -115,22 +116,11 @@ export const RepositoryContract: EntityContractType = {
                 presentationOrder: 90
             }
         },
-        prepare: {
+        setup: {
             kind: 'mutation',
-            payload: RepositoryLocatorSchema,
-            result: RepositoryPrepareResultSchema,
-            execution: 'entity',
-            ui: {
-                label: 'Prepare repo for Mission',
-                description: 'Create the first preparation issue and Mission worktree for this Repository.',
-                variant: 'default',
-                icon: 'git-pull-request-create',
-                confirmation: {
-                    required: true,
-                    prompt: 'Create a preparation issue and Mission worktree for this Repository?'
-                },
-                presentationOrder: 5
-            }
+            payload: RepositorySetupSchema,
+            result: RepositorySetupResultSchema,
+            execution: 'entity'
         },
         fetchExternalState: {
             kind: 'mutation',
@@ -139,7 +129,7 @@ export const RepositoryContract: EntityContractType = {
             execution: 'entity',
             ui: {
                 variant: 'outline',
-                label: 'Fetch External State',
+                label: 'Refresh state',
                 icon: 'refresh-cw',
                 presentationOrder: 20
             }
