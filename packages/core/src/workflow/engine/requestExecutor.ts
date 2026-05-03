@@ -684,6 +684,7 @@ export class MissionWorkflowRequestExecutor {
 					...(artifact.stageId ? { stage: artifact.stageId } : {})
 				},
 				body: await renderMissionProductTemplate(template, {
+					missionId: descriptor.missionId,
 					controlRoot: Repository.getMissionControlRootFromMissionDir(descriptor.missionDir),
 					brief: descriptor.brief,
 					branchRef: descriptor.branchRef

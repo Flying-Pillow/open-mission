@@ -34,6 +34,7 @@ export async function generateMissionWorkflowTasks(input: {
             renderMissionTaskTemplate(
                 { templatePath: templateSource.path },
                 {
+                    missionId: input.descriptor.missionId,
                     controlRoot: Repository.getMissionControlRootFromMissionDir(input.descriptor.missionDir),
                     brief: input.descriptor.brief,
                     branchRef: input.descriptor.branchRef

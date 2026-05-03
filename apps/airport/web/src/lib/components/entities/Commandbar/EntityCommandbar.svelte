@@ -48,7 +48,6 @@
     const availableCommands = $derived(
         commands.filter((command) => !command.disabled),
     );
-
     $effect(() => {
         refreshNonce;
         commandError = null;

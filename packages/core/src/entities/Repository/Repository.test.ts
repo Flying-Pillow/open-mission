@@ -154,6 +154,43 @@ describe('Repository', () => {
         }
     });
 
+    it('adopts an existing Mission worktree on the expected branch', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-adopt-worktree-'));
+        const repositoryRootPath = path.join(tempRoot, 'repository');
+        const worktreePath = path.join(tempRoot, 'mission-worktree');
+        const branchRef = 'mission/1-initial-setup';
+        const repository = Repository.create({ repositoryRootPath });
+        const repositoryInternals = repository as unknown as {
+            materializeOrAdoptMissionWorktree(
+                store: FilesystemAdapter,
+                worktreePath: string,
+                branchRef: string,
+                baseBranch: string
+            ): Promise<void>;
+        };
+
+        try {
+            git(tempRoot, ['init', repositoryRootPath]);
+            await fsp.writeFile(path.join(repositoryRootPath, 'README.md'), 'initial\n', 'utf8');
+            git(repositoryRootPath, ['add', 'README.md']);
+            git(repositoryRootPath, ['commit', '-m', 'initial']);
+            git(repositoryRootPath, ['branch', '-M', 'main']);
+            git(repositoryRootPath, ['worktree', 'add', '-b', branchRef, worktreePath, 'main']);
+
+            await expect(repositoryInternals.materializeOrAdoptMissionWorktree(
+                new FilesystemAdapter(repositoryRootPath),
+                worktreePath,
+                branchRef,
+                'main'
+            )).resolves.toBeUndefined();
+
+            expect(git(worktreePath, ['branch', '--show-current'])).toBe(branchRef);
+        } finally {
+            await fsp.rm(worktreePath, { recursive: true, force: true }).catch(() => undefined);
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
     it('rejects extra fields in daemon-callable static payloads', async () => {
         await expect(Repository.find({ unexpected: true } as never)).rejects.toThrow();
     });

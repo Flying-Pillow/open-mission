@@ -140,12 +140,13 @@ export const RepositoryContract: EntityContractType = {
             result: RepositorySyncCommandAcknowledgementSchema,
             execution: 'entity',
             ui: {
-                label: 'Fast-Forward From External',
+                label: 'Pull from GitHub',
+                description: 'Fast-forward this Repository from its GitHub tracking branch.',
                 variant: 'default',
                 icon: 'git-pull-request-arrow',
                 confirmation: {
                     required: true,
-                    prompt: 'Fast-forward this Repository from its external tracking branch? This updates the local checkout without merging divergent local commits.'
+                    prompt: 'Pull changes from GitHub by fast-forwarding this Repository from its tracking branch? This updates the local checkout without merging divergent local commits.'
                 },
                 presentationOrder: 25
             }

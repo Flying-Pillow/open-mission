@@ -524,6 +524,7 @@ export class FilesystemAdapter {
 				...(descriptor.brief.url ? { url: descriptor.brief.url } : {})
 			},
 			body: await renderMissionBriefBody({
+				missionId: descriptor.missionId,
 				controlRoot: this.workspaceRoot,
 				brief: descriptor.brief,
 				branchRef: descriptor.branchRef

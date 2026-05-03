@@ -7,6 +7,7 @@ import { renderMissionTitle } from './common.js';
 import { parseFrontmatterDocument } from '../../../lib/frontmatter.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../../../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
 import { Repository } from '../../../entities/Repository/Repository.js';
+import { getMissionArtifactDefinition, getMissionStageDefinition, type MissionArtifactKey } from '../../manifest.js';
 import type {
     MissionProductTemplate,
     MissionStageTemplateDefinitions,
@@ -92,16 +93,42 @@ export async function renderMissionTaskTemplate(
 }
 
 export function createMissionTemplateContext(input: MissionTemplateContextInput): MissionTemplateContext {
+    const missionDossierPath = path.posix.join(Repository.missionDirectoryName, 'missions', input.missionId);
     return {
         mission: {
+            id: input.missionId,
             title: renderMissionTitle(input.brief),
             branchRef: input.branchRef,
-            issueLine: input.brief.issueId !== undefined ? `Issue: #${String(input.brief.issueId)}` : 'Issue: Unattached'
+            issueLine: input.brief.issueId !== undefined ? `Issue: #${String(input.brief.issueId)}` : 'Issue: Unattached',
+            dossierPath: missionDossierPath,
+            briefPath: createMissionDossierArtifactPath(missionDossierPath, 'brief'),
+            prdPath: createMissionDossierArtifactPath(missionDossierPath, 'prd'),
+            specPath: createMissionDossierArtifactPath(missionDossierPath, 'spec'),
+            verifyPath: createMissionDossierArtifactPath(missionDossierPath, 'verify'),
+            auditPath: createMissionDossierArtifactPath(missionDossierPath, 'audit'),
+            deliveryPath: createMissionDossierArtifactPath(missionDossierPath, 'delivery'),
+            implementationTasksPath: path.posix.join(
+                missionDossierPath,
+                getMissionStageDefinition('implementation').stageFolder,
+                'tasks'
+            )
         },
         brief: {
             body: input.brief.body.trim()
         }
     };
+}
+
+function createMissionDossierArtifactPath(missionDossierPath: string, artifactKey: MissionArtifactKey): string {
+    const artifact = getMissionArtifactDefinition(artifactKey);
+    if (artifact.stageId) {
+        return path.posix.join(
+            missionDossierPath,
+            getMissionStageDefinition(artifact.stageId).stageFolder,
+            artifact.fileName
+        );
+    }
+    return path.posix.join(missionDossierPath, artifact.fileName);
 }
 
 async function renderMissionTemplate(

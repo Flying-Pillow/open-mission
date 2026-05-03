@@ -40,9 +40,18 @@ export type MissionStageTemplateDefinitions = Record<
 
 export type MissionTemplateContext = TemplateObject & {
 	mission: {
+		id: string;
 		title: string;
 		branchRef: string;
 		issueLine: string;
+		dossierPath: string;
+		briefPath: string;
+		prdPath: string;
+		specPath: string;
+		verifyPath: string;
+		auditPath: string;
+		deliveryPath: string;
+		implementationTasksPath: string;
 	};
 	brief: {
 		body: string;
@@ -50,6 +59,7 @@ export type MissionTemplateContext = TemplateObject & {
 };
 
 export type MissionTemplateContextInput = {
+	missionId: string;
 	controlRoot: string;
 	brief: MissionBrief;
 	branchRef: string;

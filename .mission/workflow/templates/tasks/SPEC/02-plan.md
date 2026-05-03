@@ -2,7 +2,7 @@
 fileName: 02-plan.md
 subject: Plan Implementation And Verification
 ---
-Read SPEC.md and generate paired task markdown under 03-IMPLEMENTATION/tasks. Each slice gets one implementation task and one "-verify.md" task that depends on it. Set `taskKind` and `pairedTaskId` in frontmatter. Do not create production code, delivery artifacts, or workflow-engine structured runtime data.
+Read {{mission.specPath}} and generate paired task markdown under {{mission.implementationTasksPath}}. Each slice gets one implementation task and one "-verify.md" task that depends on it. Set `taskKind` and `pairedTaskId` in frontmatter. Do not create production code, delivery artifacts, or workflow-engine structured runtime data.
 
 Implementation tasks must state objective, context, allowed files, forbidden files, expected change, compatibility policy, and validation gate.
 

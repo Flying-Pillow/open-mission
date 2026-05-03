@@ -980,7 +980,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		let preparedMission: Mission | undefined;
 
 		try {
-			await store.materializeMissionWorktree(proposalWorktreePath, branchRef, baseBranch);
+			await this.materializeOrAdoptMissionWorktree(store, proposalWorktreePath, branchRef, baseBranch);
 
 			const proposalStore = new FilesystemAdapter(proposalWorktreePath);
 			const missionRootDir = proposalStore.getTrackedMissionDir(missionId, proposalWorktreePath);
@@ -1045,6 +1045,30 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			};
 		} finally {
 			preparedMission?.dispose();
+		}
+	}
+
+	private async materializeOrAdoptMissionWorktree(
+		store: FilesystemAdapter,
+		worktreePath: string,
+		branchRef: string,
+		baseBranch: string
+	): Promise<void> {
+		if (!fs.existsSync(worktreePath)) {
+			await store.materializeMissionWorktree(worktreePath, branchRef, baseBranch);
+			return;
+		}
+
+		const worktreeStore = new FilesystemAdapter(worktreePath);
+		if (!worktreeStore.isGitRepository()) {
+			throw new Error(`Mission worktree path '${worktreePath}' already exists but is not a Git worktree.`);
+		}
+
+		const currentBranch = worktreeStore.getCurrentBranch(worktreePath);
+		if (currentBranch !== branchRef) {
+			throw new Error(
+				`Mission worktree path '${worktreePath}' already exists on branch '${currentBranch}' instead of expected Mission branch '${branchRef}'.`
+			);
 		}
 	}
 

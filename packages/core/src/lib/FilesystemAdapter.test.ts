@@ -77,7 +77,7 @@ describe('FilesystemAdapter', () => {
 		}
 	});
 
-	it('prunes stale registered worktrees before materializing a Mission worktree', async () => {
+	it('rematerializes a missing but still registered Mission worktree', async () => {
 		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-stale-worktree-'));
 		const worktreePath = path.join(workspaceRoot, '..', 'mission-worktree');
 
