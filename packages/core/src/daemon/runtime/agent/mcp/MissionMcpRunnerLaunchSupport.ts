@@ -14,16 +14,17 @@ export type MissionMcpBridgeLaunchEnv = Partial<Record<
 >>;
 
 export function hasMissionMcpBridgeLaunchEnv(env: Record<string, string> | undefined): env is Record<string, string> {
-	return typeof env?.[missionMcpAgentBridgeEnvKeys.endpoint] === 'string'
-		&& env[missionMcpAgentBridgeEnvKeys.endpoint].trim().length > 0
+	if (!env) return false;
+	return typeof env[missionMcpAgentBridgeEnvKeys.endpoint] === 'string'
+		&& env[missionMcpAgentBridgeEnvKeys.endpoint]!.trim().length > 0
 		&& typeof env[missionMcpAgentBridgeEnvKeys.missionId] === 'string'
-		&& env[missionMcpAgentBridgeEnvKeys.missionId].trim().length > 0
+		&& env[missionMcpAgentBridgeEnvKeys.missionId]!.trim().length > 0
 		&& typeof env[missionMcpAgentBridgeEnvKeys.taskId] === 'string'
-		&& env[missionMcpAgentBridgeEnvKeys.taskId].trim().length > 0
+		&& env[missionMcpAgentBridgeEnvKeys.taskId]!.trim().length > 0
 		&& typeof env[missionMcpAgentBridgeEnvKeys.agentSessionId] === 'string'
-		&& env[missionMcpAgentBridgeEnvKeys.agentSessionId].trim().length > 0
+		&& env[missionMcpAgentBridgeEnvKeys.agentSessionId]!.trim().length > 0
 		&& typeof env[missionMcpAgentBridgeEnvKeys.allowedTools] === 'string'
-		&& env[missionMcpAgentBridgeEnvKeys.allowedTools].trim().length > 0;
+		&& env[missionMcpAgentBridgeEnvKeys.allowedTools]!.trim().length > 0;
 }
 
 export function buildMissionMcpBridgeServerEnv(
@@ -42,14 +43,14 @@ export function buildCodexMissionMcpOverrideArgs(env: Record<string, string>): s
 	const bridgeEnv = buildMissionMcpBridgeServerEnv(env);
 	return [
 		'-c',
-		`mcp_servers.mission_signal.command=${JSON.stringify(MISSION_MCP_AGENT_BRIDGE_COMMAND)}`,
+		`mcp_servers.mission.command=${JSON.stringify(MISSION_MCP_AGENT_BRIDGE_COMMAND)}`,
 		'-c',
-		`mcp_servers.mission_signal.args=${JSON.stringify([...MISSION_MCP_AGENT_BRIDGE_ARGS])}`,
+		`mcp_servers.mission.args=${JSON.stringify([...MISSION_MCP_AGENT_BRIDGE_ARGS])}`,
 		'-c',
-		'mcp_servers.mission_signal.enabled=true',
+		'mcp_servers.mission.enabled=true',
 		...Object.entries(bridgeEnv).flatMap(([key, value]) => [
 			'-c',
-			`mcp_servers.mission_signal.env.${key}=${JSON.stringify(value)}`
+			`mcp_servers.mission.env.${key}=${JSON.stringify(value)}`
 		])
 	];
 }
@@ -57,7 +58,7 @@ export function buildCodexMissionMcpOverrideArgs(env: Record<string, string>): s
 export function buildOpenCodeMissionMcpConfigContent(env: Record<string, string>): string {
 	return JSON.stringify({
 		mcp: {
-			mission_signal: {
+			mission: {
 				type: 'local',
 				command: [MISSION_MCP_AGENT_BRIDGE_COMMAND, ...MISSION_MCP_AGENT_BRIDGE_ARGS],
 				enabled: true,
@@ -91,7 +92,7 @@ export async function createPiMissionMcpConfigDir(env: Record<string, string>): 
 		path.join(configDir, 'mcp.json'),
 		`${JSON.stringify({
 			mcpServers: {
-				mission_signal: {
+				mission: {
 					transport: 'stdio',
 					command: MISSION_MCP_AGENT_BRIDGE_COMMAND,
 					args: [...MISSION_MCP_AGENT_BRIDGE_ARGS],

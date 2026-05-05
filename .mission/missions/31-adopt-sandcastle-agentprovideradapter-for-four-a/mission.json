@@ -178,7 +178,7 @@
       },
       {
         "stageId": "implementation",
-        "lifecycle": "running",
+        "lifecycle": "ready",
         "taskIds": [
           "implementation/01-dependency-and-runner-id-boundary",
           "implementation/01-dependency-and-runner-id-boundary-verify",
@@ -203,11 +203,11 @@
           "implementation/09-documentation-and-final-cleanup",
           "implementation/09-documentation-and-final-cleanup-verify"
         ],
-        "readyTaskIds": [],
-        "queuedTaskIds": [],
-        "runningTaskIds": [
+        "readyTaskIds": [
           "implementation/09-documentation-and-final-cleanup"
         ],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
         "completedTaskIds": [
           "implementation/01-dependency-and-runner-id-boundary",
           "implementation/01-dependency-and-runner-id-boundary-verify",
@@ -756,30 +756,30 @@
         "stageId": "implementation",
         "title": "Documentation And Final Cleanup",
         "instruction": "Objective: publish the leaner preserved ownership model and remove any obsolete Sandcastle- or materializer-era runtime truth left behind by the simplification.\n\nContext: use `02-SPEC/SPEC.md` plus the follow-up simplification tasks as the authority for the final ownership model so the repository ends with one active Mission-owned runtime path, one Mission-owned MCP signaling path, no external Sandcastle dependency, and no per-agent MCP config materializers.\n\nAllowed files: `specifications/mission/execution/agent-runtime.md` plus any cleanup files from Slice 3 that remain obsolete.\n\nForbidden files: `apps/airport/**` outside the Agent session interaction-mode projection; `packages/core/src/daemon/runtime/agent/TerminalAgentTransport.ts`; `packages/core/src/entities/**` outside runner-id schema updates and provider-neutral Agent session interaction-mode projection; `docs/adr/**`; any Sandcastle sandbox/worktree/orchestration integration files; workflow gate or verification code; any parser that directly mutates workflow state; remote MCP services or hosted endpoints; `.agents/mcp.json` as a presumed universal agent config; tracked files containing per-session MCP credentials.\n\nExpected change: document that Mission now owns the four agent-coder runner implementations directly, with CLI launch and stream parsing logic adapted from upstream reference behavior rather than delegated to `@ai-hero/sandcastle`; document that Mission still owns lifecycle, logs, PTY transport, interaction modes, MCP server lifecycle, session registration, acknowledgement semantics, and instruction-guided MCP usage; and remove any obsolete runner, adapter, dependency, or materializer artifacts left from earlier slices so no stale Pi-only truth, Sandcastle dependency, or per-agent MCP file mutation path remains active.\n\nCompatibility policy: preserve Mission runtime ownership and current Airport terminal behavior, but do not preserve obsolete Sandcastle-backed adapter layers, direct Pi-only command-building, or per-agent MCP materialization paths once the leaner Mission-owned runtime is active.\n\nValidation gate: `pnpm --filter @flying-pillow/mission-core check`, `pnpm --filter @flying-pillow/mission-core test`, `pnpm --filter @flying-pillow/mission-core build`.",
-        "model": "gpt-5-codex",
+        "model": "claude-sonnet-4-6",
         "reasoningEffort": "high",
         "taskKind": "implementation",
         "pairedTaskId": "implementation/09-documentation-and-final-cleanup-verify",
         "dependsOn": [
           "implementation/08.2-simplify-agent-mcp-integration-verify"
         ],
-        "lifecycle": "running",
+        "lifecycle": "ready",
         "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false
         },
-        "agentRunner": "codex",
+        "agentRunner": "claude-code",
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-05T12:38:10.759Z"
+        "updatedAt": "2026-05-05T13:52:54.990Z"
       },
       {
         "taskId": "implementation/09-documentation-and-final-cleanup-verify",
         "stageId": "implementation",
         "title": "Verify Documentation And Final Cleanup",
         "instruction": "Paired task: `implementation/09-documentation-and-final-cleanup`.\n\nFocused checks: confirm the runtime documentation states Mission now owns the four agent-coder runners directly, Mission still owns lifecycle, logs, PTY transport, interaction-mode semantics, local MCP signaling, and instruction-guided MCP usage, and that no Sandcastle dependency, no legacy Pi-only path, and no per-agent MCP materialization path remain active; verify the slice satisfies `pnpm --filter @flying-pillow/mission-core check`, `pnpm --filter @flying-pillow/mission-core test`, plus `pnpm --filter @flying-pillow/mission-core build`.\n\nFailure signals: stale Pi path still active, PTY launch bypassed in the documented ownership model, agent claim treated as deterministic verification, Sandcastle dependency or per-agent MCP config mutation reintroduced as active truth, or cleanup leaving dual runtime paths behind.\n\nIgnored baseline failures: none.\n\nEvidence location: append a task-specific section to `03-IMPLEMENTATION/VERIFY.md`. Do not add features.",
-        "model": "gpt-5-codex",
+        "model": "claude-sonnet-4-6",
         "reasoningEffort": "high",
         "taskKind": "verification",
         "pairedTaskId": "implementation/09-documentation-and-final-cleanup",
@@ -793,7 +793,7 @@
         "runtime": {
           "autostart": true
         },
-        "agentRunner": "codex",
+        "agentRunner": "claude-code",
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
@@ -1921,9 +1921,70 @@
           "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-codex-3ebfcc02",
           "paneId": "pty"
         },
-        "lifecycle": "running",
+        "lifecycle": "terminated",
         "launchedAt": "2026-05-05T12:38:10.759Z",
-        "updatedAt": "2026-05-05T12:38:10.759Z"
+        "updatedAt": "2026-05-05T13:03:31.810Z",
+        "terminatedAt": "2026-05-05T13:03:31.810Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-claude-code-4b843418",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "claude-code",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-claude-code-4b843418.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-claude-code-4b843418",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-05T13:36:46.726Z",
+        "updatedAt": "2026-05-05T13:43:41.706Z",
+        "terminatedAt": "2026-05-05T13:43:41.706Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-claude-code-5d0170bd",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "claude-code",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-claude-code-5d0170bd.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-claude-code-5d0170bd",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-05T13:43:57.040Z",
+        "updatedAt": "2026-05-05T13:44:04.863Z",
+        "terminatedAt": "2026-05-05T13:44:04.863Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-claude-code-e625a149",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "claude-code",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-claude-code-e625a149.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-claude-code-e625a149",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-05T13:44:12.544Z",
+        "updatedAt": "2026-05-05T13:47:58.055Z",
+        "terminatedAt": "2026-05-05T13:47:58.055Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-claude-code-4f5c4191",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "claude-code",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-claude-code-4f5c4191.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-claude-code-4f5c4191",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-05T13:50:15.939Z",
+        "updatedAt": "2026-05-05T13:52:54.990Z",
+        "terminatedAt": "2026-05-05T13:52:54.990Z"
       }
     ],
     "gates": [
@@ -1935,7 +1996,7 @@
         "reasons": [
           "Stage 'implementation' is not completed."
         ],
-        "updatedAt": "2026-05-05T12:38:10.759Z"
+        "updatedAt": "2026-05-05T13:52:54.990Z"
       },
       {
         "gateId": "verify",
@@ -1945,7 +2006,7 @@
         "reasons": [
           "Stage 'implementation' is not completed."
         ],
-        "updatedAt": "2026-05-05T12:38:10.759Z"
+        "updatedAt": "2026-05-05T13:52:54.990Z"
       },
       {
         "gateId": "audit",
@@ -1955,7 +2016,7 @@
         "reasons": [
           "Stage 'audit' is not completed."
         ],
-        "updatedAt": "2026-05-05T12:38:10.759Z"
+        "updatedAt": "2026-05-05T13:52:54.990Z"
       },
       {
         "gateId": "deliver",
@@ -1965,10 +2026,10 @@
         "reasons": [
           "Stage 'delivery' is not completed."
         ],
-        "updatedAt": "2026-05-05T12:38:10.759Z"
+        "updatedAt": "2026-05-05T13:52:54.990Z"
       }
     ],
     "launchQueue": [],
-    "updatedAt": "2026-05-05T12:38:10.759Z"
+    "updatedAt": "2026-05-05T13:52:54.990Z"
   }
 }

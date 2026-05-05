@@ -344,7 +344,7 @@ describe('Mission-owned agent runners', () => {
 			}));
 			expect(copilotPlan.args).toContain('--additional-mcp-config');
 			expect(copilotPlan.args).toContain(`@${path.join(workspaceRoot, '.mcp.json')}`);
-			expect(copilotPlan.env?.MISSION_MCP_ENDPOINT).toBe(missionMcpEnv.MISSION_MCP_ENDPOINT);
+			expect(copilotPlan.env?.['MISSION_MCP_ENDPOINT']).toBe(missionMcpEnv['MISSION_MCP_ENDPOINT']);
 
 			const codexPlan = codex.createInteractiveLaunchPlan(createLaunchConfig());
 			expect(codexPlan.args).toContain('-c');
@@ -355,13 +355,13 @@ describe('Mission-owned agent runners', () => {
 			expect(codexPrintPlan.command).toContain("mcp_servers.mission_signal.command=\"mission\"");
 
 			const openCodePlan = opencode.createInteractiveLaunchPlan(createLaunchConfig());
-			expect(openCodePlan.env?.OPENCODE_CONFIG_CONTENT).toContain('"mission_signal"');
-			expect(openCodePlan.env?.OPENCODE_CONFIG_CONTENT).toContain('"mission-local://mcp-signal/session-1"');
+			expect(openCodePlan.env?.['OPENCODE_CONFIG_CONTENT']).toContain('"mission_signal"');
+			expect(openCodePlan.env?.['OPENCODE_CONFIG_CONTENT']).toContain('"mission-local://mcp-signal/session-1"');
 
 			const preparedPiConfig = await pi['prepareRunnerLaunchConfig'](createLaunchConfig({
 				launchEnv: missionMcpEnv
 			}));
-			expect(preparedPiConfig.config.launchEnv?.PI_CODING_AGENT_DIR).toBeTruthy();
+			expect(preparedPiConfig.config.launchEnv?.['PI_CODING_AGENT_DIR']).toBeTruthy();
 			const piPlan = pi.createInteractiveLaunchPlan(preparedPiConfig.config);
 			expect(piPlan.args).toContain('-e');
 			expect(piPlan.args).toContain('npm:pi-mcp-extension');

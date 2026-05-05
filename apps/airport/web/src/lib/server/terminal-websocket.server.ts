@@ -161,26 +161,29 @@ async function handleTerminalConnection(
     const processRawMessage = async (rawMessage: Buffer) => {
         try {
             const message = AgentSessionTerminalSocketClientMessageSchema.parse(JSON.parse(rawMessage.toString()));
+            if (message.type === 'input') {
+                daemon?.client.request('entity.command', {
+                    entity: 'AgentSession',
+                    method: 'sendTerminalInput',
+                    payload: {
+                        missionId: query.missionId,
+                        sessionId,
+                        data: message.data,
+                        ...(message.literal !== undefined ? { literal: message.literal } : {})
+                    }
+                }).catch(() => {});
+                return;
+            }
             const nextState = AgentSessionTerminalSnapshotSchema.parse(await daemon?.client.request('entity.command', {
                 entity: 'AgentSession',
                 method: 'sendTerminalInput',
                 payload: {
                     missionId: query.missionId,
                     sessionId,
-                    ...(message.type === 'input'
-                        ? {
-                            data: message.data,
-                            ...(message.literal !== undefined ? { literal: message.literal } : {})
-                        }
-                        : {
-                            cols: message.cols,
-                            rows: message.rows
-                        })
+                    cols: message.cols,
+                    rows: message.rows
                 }
             }));
-            if (message.type === 'input') {
-                return;
-            }
             if (message.type === 'resize' || nextState.dead || !nextState.connected) {
                 sendSnapshot(nextState, nextState.dead || !nextState.connected ? 'disconnected' : 'snapshot');
             }
@@ -352,25 +355,27 @@ async function handleMissionTerminalConnection(
     const processRawMessage = async (rawMessage: Buffer) => {
         try {
             const message = MissionTerminalSocketClientMessageSchema.parse(JSON.parse(rawMessage.toString()));
+            if (message.type === 'input') {
+                daemon?.client.request('entity.command', {
+                    entity: 'Mission',
+                    method: 'sendTerminalInput',
+                    payload: {
+                        missionId,
+                        data: message.data,
+                        ...(message.literal !== undefined ? { literal: message.literal } : {})
+                    }
+                }).catch(() => {});
+                return;
+            }
             const nextState = MissionTerminalSnapshotSchema.parse(await daemon?.client.request('entity.command', {
                 entity: 'Mission',
                 method: 'sendTerminalInput',
                 payload: {
                     missionId,
-                    ...(message.type === 'input'
-                        ? {
-                            data: message.data,
-                            ...(message.literal !== undefined ? { literal: message.literal } : {})
-                        }
-                        : {
-                            cols: message.cols,
-                            rows: message.rows
-                        })
+                    cols: message.cols,
+                    rows: message.rows
                 }
             }));
-            if (message.type === 'input') {
-                return;
-            }
             sendMissionState(nextState);
         } catch (error) {
             sendError(error instanceof Error ? error.message : String(error));

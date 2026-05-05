@@ -4,7 +4,7 @@ import {
 	type MissionMcpSignalToolName
 } from './MissionMcpSignalTools.js';
 
-export const MISSION_MCP_SERVER_NAME = 'mission_signal';
+export const MISSION_MCP_SERVER_NAME = 'mission';
 export const MISSION_MCP_AGENT_BRIDGE_COMMAND = 'mission';
 export const MISSION_MCP_AGENT_BRIDGE_ARGS = ['mcp', 'agent-bridge'] as const;
 

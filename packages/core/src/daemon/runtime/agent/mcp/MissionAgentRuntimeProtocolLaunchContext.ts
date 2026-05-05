@@ -41,7 +41,7 @@ function buildValidatedSessionInstructions(): string {
 
 	return [
 		'Mission runtime protocol for this session:',
-		'- Mission MCP is available for this session through the local mission_signal server.',
+		'- Mission MCP is available for this session through the local mission server.',
 		`- The session launch environment includes ${endpointEnvVar} and the corresponding Mission session identity fields.`,
 		`- If your tooling needs an explicit MCP bridge command, use: ${bridgeCommand}`,
 		'- Use Mission MCP first for structured progress, needs-input, blocked, ready-for-verification, completion/failure claims, notes, and usage.',

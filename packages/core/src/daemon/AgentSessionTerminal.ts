@@ -179,7 +179,7 @@ function createAgentSessionTerminalStateFromSnapshot(
         connected: snapshot.connected,
         dead: snapshot.dead,
         exitCode: snapshot.exitCode,
-        screen: isIncrementalOutput ? '' : snapshot.screen,
+        screen: isIncrementalOutput ? snapshot.chunk! : snapshot.screen,
         ...(snapshot.truncated ? { truncated: true } : {}),
         ...(typeof snapshot.chunk === 'string' ? { chunk: snapshot.chunk } : {}),
         terminalHandle: {
