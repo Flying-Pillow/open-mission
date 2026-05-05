@@ -178,7 +178,7 @@
       },
       {
         "stageId": "implementation",
-        "lifecycle": "ready",
+        "lifecycle": "running",
         "taskIds": [
           "implementation/01-dependency-and-runner-id-boundary",
           "implementation/01-dependency-and-runner-id-boundary-verify",
@@ -203,11 +203,11 @@
           "implementation/09-documentation-and-final-cleanup",
           "implementation/09-documentation-and-final-cleanup-verify"
         ],
-        "readyTaskIds": [
+        "readyTaskIds": [],
+        "queuedTaskIds": [],
+        "runningTaskIds": [
           "implementation/09-documentation-and-final-cleanup"
         ],
-        "queuedTaskIds": [],
-        "runningTaskIds": [],
         "completedTaskIds": [
           "implementation/01-dependency-and-runner-id-boundary",
           "implementation/01-dependency-and-runner-id-boundary-verify",
@@ -763,7 +763,7 @@
         "dependsOn": [
           "implementation/08.2-simplify-agent-mcp-integration-verify"
         ],
-        "lifecycle": "ready",
+        "lifecycle": "running",
         "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false
@@ -772,7 +772,7 @@
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-05T13:52:54.990Z"
+        "updatedAt": "2026-05-05T14:27:13.348Z"
       },
       {
         "taskId": "implementation/09-documentation-and-final-cleanup-verify",
@@ -1985,6 +1985,35 @@
         "launchedAt": "2026-05-05T13:50:15.939Z",
         "updatedAt": "2026-05-05T13:52:54.990Z",
         "terminatedAt": "2026-05-05T13:52:54.990Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-claude-code-71e7cc05",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "claude-code",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-claude-code-71e7cc05.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-claude-code-71e7cc05",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-05T14:21:48.957Z",
+        "updatedAt": "2026-05-05T14:26:50.739Z",
+        "terminatedAt": "2026-05-05T14:26:50.739Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-claude-code-5d7203bd",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "claude-code",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-claude-code-5d7203bd.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-claude-code-5d7203bd",
+          "paneId": "pty"
+        },
+        "lifecycle": "running",
+        "launchedAt": "2026-05-05T14:27:13.348Z",
+        "updatedAt": "2026-05-05T14:27:13.348Z"
       }
     ],
     "gates": [
@@ -1996,7 +2025,7 @@
         "reasons": [
           "Stage 'implementation' is not completed."
         ],
-        "updatedAt": "2026-05-05T13:52:54.990Z"
+        "updatedAt": "2026-05-05T14:27:13.348Z"
       },
       {
         "gateId": "verify",
@@ -2006,7 +2035,7 @@
         "reasons": [
           "Stage 'implementation' is not completed."
         ],
-        "updatedAt": "2026-05-05T13:52:54.990Z"
+        "updatedAt": "2026-05-05T14:27:13.348Z"
       },
       {
         "gateId": "audit",
@@ -2016,7 +2045,7 @@
         "reasons": [
           "Stage 'audit' is not completed."
         ],
-        "updatedAt": "2026-05-05T13:52:54.990Z"
+        "updatedAt": "2026-05-05T14:27:13.348Z"
       },
       {
         "gateId": "deliver",
@@ -2026,10 +2055,10 @@
         "reasons": [
           "Stage 'delivery' is not completed."
         ],
-        "updatedAt": "2026-05-05T13:52:54.990Z"
+        "updatedAt": "2026-05-05T14:27:13.348Z"
       }
     ],
     "launchQueue": [],
-    "updatedAt": "2026-05-05T13:52:54.990Z"
+    "updatedAt": "2026-05-05T14:27:13.348Z"
   }
 }

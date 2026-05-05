@@ -17,7 +17,7 @@
         }
     },
     "servers": {
-        "mission_signal": {
+        "mission": {
             "type": "stdio",
             "command": "mission",
             "args": [

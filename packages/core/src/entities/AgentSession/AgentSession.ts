@@ -45,6 +45,9 @@ export type AgentSessionOwner = {
 	sendSessionCommand(sessionId: string, command: AgentCommand): Promise<AgentSessionRecord>;
 };
 
+const agentSessionDataCache = new Map<string, { data: AgentSessionDataType; timestamp: number }>();
+const SESSION_DATA_CACHE_TTL_MS = 5_000;
+
 type AgentSessionLaunchRecord = {
 	sessionId: string;
 	runnerId: string;
@@ -801,10 +804,18 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 		input: { missionId: string; sessionId: string },
 		context: EntityExecutionContext
 	): Promise<AgentSessionDataType> {
+		const cacheKey = `${input.missionId}:${input.sessionId}`;
+		const cached = agentSessionDataCache.get(cacheKey);
+		if (cached && Date.now() - cached.timestamp < SESSION_DATA_CACHE_TTL_MS) {
+			return cached.data;
+		}
+
 		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			return AgentSession.requireData(await mission.buildMissionSnapshot(), input.sessionId);
+			const data = AgentSession.requireData(await mission.buildMissionSnapshot(), input.sessionId);
+			agentSessionDataCache.set(cacheKey, { data, timestamp: Date.now() });
+			return data;
 		} finally {
 			mission.dispose();
 		}
