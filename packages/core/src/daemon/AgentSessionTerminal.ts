@@ -42,11 +42,15 @@ TerminalAgentTransport.onDidSessionUpdate((event) => {
         return;
     }
 
+    const snapshot = createAgentSessionTerminalStateFromSnapshot(record, event);
     agentSessionTerminalEventEmitter.fire({
         workspaceRoot: record.workspaceRoot,
         missionId: record.missionId,
         sessionId: record.sessionId,
-        state: createAgentSessionTerminalStateFromSnapshot(record, event)
+        state: {
+            ...snapshot,
+            screen: snapshot.chunk ?? ''
+        }
     });
 });
 

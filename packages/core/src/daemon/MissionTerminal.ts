@@ -41,10 +41,14 @@ TerminalAgentTransport.onDidSessionUpdate((event) => {
         return;
     }
 
+    const snapshot = createMissionTerminalStateFromSnapshot(record, event);
     missionTerminalEventEmitter.fire({
         workspaceRoot: record.surfacePath,
         missionId: record.missionId,
-        state: createMissionTerminalStateFromSnapshot(record, event)
+        state: {
+            ...snapshot,
+            screen: snapshot.chunk ?? ''
+        }
     });
 });
 
