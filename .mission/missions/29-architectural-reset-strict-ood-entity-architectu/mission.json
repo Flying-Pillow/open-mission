@@ -13,11 +13,6 @@
         "enabled": true,
         "pauseOnMissionStart": false
       },
-      "panic": {
-        "terminateSessions": true,
-        "clearLaunchQueue": true,
-        "haltMission": true
-      },
       "execution": {
         "maxParallelTasks": 1,
         "maxParallelSessions": 1
@@ -505,12 +500,6 @@
       "reason": "human-requested",
       "targetType": "mission",
       "requestedAt": "2026-04-27T15:13:04.659Z"
-    },
-    "panic": {
-      "active": false,
-      "terminateSessions": true,
-      "clearLaunchQueue": true,
-      "haltMission": true
     },
     "stages": [
       {

@@ -73,12 +73,6 @@ class MissionWorkflowTransitionEngine {
                 this.state.lifecycle = 'ready';
                 assignActiveStageId(this.state, this.configuration.workflow.stageOrder[0]);
                 this.state.pause = { paused: false };
-                this.state.panic = {
-                    active: false,
-                    terminateSessions: this.configuration.workflow.panic.terminateSessions,
-                    clearLaunchQueue: this.configuration.workflow.panic.clearLaunchQueue,
-                    haltMission: this.configuration.workflow.panic.haltMission
-                };
                 return;
             case 'mission.started':
                 if (this.configuration.workflow.humanInLoop.enabled && this.configuration.workflow.humanInLoop.pauseOnMissionStart) {
@@ -106,48 +100,6 @@ class MissionWorkflowTransitionEngine {
                     ...(event.targetType ? { targetType: event.targetType } : {}),
                     ...(event.targetId ? { targetId: event.targetId } : {}),
                     requestedAt: event.occurredAt
-                };
-                return;
-            case 'mission.panic.requested':
-                this.state.lifecycle = 'panicked';
-                this.state.pause = {
-                    paused: true,
-                    reason: 'panic',
-                    targetType: 'mission',
-                    requestedAt: event.occurredAt
-                };
-                this.state.panic = {
-                    active: true,
-                    requestedAt: event.occurredAt,
-                    requestedBy: event.source === 'human' ? 'human' : 'system',
-                    terminateSessions: this.configuration.workflow.panic.terminateSessions,
-                    clearLaunchQueue: this.configuration.workflow.panic.clearLaunchQueue,
-                    haltMission: this.configuration.workflow.panic.haltMission
-                };
-                if (this.state.panic.clearLaunchQueue) {
-                    const queuedTaskIds = new Set(this.state.launchQueue.map((request) => request.taskId));
-                    this.state.launchQueue = [];
-                    this.state.tasks = this.state.tasks.map((task) =>
-                        queuedTaskIds.has(task.taskId) && task.lifecycle === 'queued'
-                            ? {
-                                ...task,
-                                lifecycle: 'ready',
-                                updatedAt: event.occurredAt
-                            }
-                            : task
-                    );
-                }
-                return;
-            case 'mission.panic.cleared':
-                this.state.lifecycle = 'paused';
-                this.state.pause = {
-                    paused: true,
-                    reason: 'panic',
-                    requestedAt: event.occurredAt
-                };
-                this.state.panic = {
-                    ...this.state.panic,
-                    active: false
                 };
                 return;
             case 'mission.launch-queue.restarted': {
@@ -193,6 +145,8 @@ class MissionWorkflowTransitionEngine {
                         stageId: event.stageId,
                         title: task.title,
                         instruction: task.instruction,
+                        ...(task.model ? { model: task.model } : {}),
+                        ...(task.reasoningEffort ? { reasoningEffort: task.reasoningEffort } : {}),
                         ...(task.taskKind ? { taskKind: task.taskKind } : {}),
                         ...(task.pairedTaskId ? { pairedTaskId: task.pairedTaskId } : {}),
                         dependsOn: [...task.dependsOn],
@@ -506,18 +460,6 @@ class MissionWorkflowDerivationEngine {
 
         this.requests.push(...buildWorkflowTaskGenerationRequests(this.state, this.configuration, event.occurredAt));
 
-        if (this.state.panic.active && this.state.panic.terminateSessions) {
-            for (const session of this.state.sessions) {
-                if (isActiveSessionLifecycle(session.lifecycle)) {
-                    this.requests.push(createRequest('session.terminate', event.occurredAt, {
-                        sessionId: session.sessionId,
-                        taskId: session.taskId,
-                        runnerId: session.runnerId
-                    }));
-                }
-            }
-        }
-
         this.state.updatedAt = event.occurredAt;
     }
 }
@@ -540,20 +482,10 @@ function enforceLifecycleInvariants(
     configuration: MissionWorkflowConfigurationSnapshot,
     occurredAt: string
 ): void {
-    const defaultPanicState = {
-        terminateSessions: configuration.workflow.panic.terminateSessions,
-        clearLaunchQueue: configuration.workflow.panic.clearLaunchQueue,
-        haltMission: configuration.workflow.panic.haltMission
-    };
-
+    void configuration;
     switch (state.lifecycle) {
         case 'running':
             state.pause = { paused: false };
-            state.panic = {
-                ...state.panic,
-                ...defaultPanicState,
-                active: false
-            };
             return;
         case 'paused':
             state.pause = {
@@ -563,35 +495,9 @@ function enforceLifecycleInvariants(
                 ...(state.pause.targetId ? { targetId: state.pause.targetId } : {}),
                 requestedAt: state.pause.requestedAt ?? occurredAt
             };
-            state.panic = {
-                ...state.panic,
-                ...defaultPanicState,
-                active: false
-            };
-            return;
-        case 'panicked':
-            state.pause = {
-                paused: true,
-                reason: 'panic',
-                targetType: state.pause.targetType ?? 'mission',
-                ...(state.pause.targetId ? { targetId: state.pause.targetId } : {}),
-                requestedAt: state.pause.requestedAt ?? state.panic.requestedAt ?? occurredAt
-            };
-            state.panic = {
-                ...state.panic,
-                ...defaultPanicState,
-                active: true,
-                requestedAt: state.panic.requestedAt ?? occurredAt,
-                requestedBy: state.panic.requestedBy ?? 'system'
-            };
             return;
         default:
             state.pause = { paused: false };
-            state.panic = {
-                ...state.panic,
-                ...defaultPanicState,
-                active: false
-            };
     }
 }
 
@@ -601,7 +507,7 @@ function queueAutostartTasks(
     _configuration: MissionWorkflowConfigurationSnapshot,
     requests: MissionWorkflowRequest[]
 ): void {
-    if (state.lifecycle !== 'running' || state.pause.paused || state.panic.active) {
+    if (state.lifecycle !== 'running' || state.pause.paused) {
         return;
     }
 
@@ -751,7 +657,6 @@ function cloneRuntimeState(state: MissionWorkflowRuntimeState): MissionWorkflowR
         lifecycle: state.lifecycle,
         ...(state.activeStageId ? { activeStageId: state.activeStageId } : {}),
         pause: { ...state.pause },
-        panic: { ...state.panic },
         stages: state.stages.map((stage) => ({
             ...stage,
             taskIds: [...stage.taskIds],

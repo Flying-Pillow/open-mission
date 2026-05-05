@@ -20,3 +20,5 @@ Expected change: create typed signal boundaries that distinguish MCP-validated, 
 Compatibility policy: keep all promotion centralized in `AgentSessionSignalPolicy`, do not broaden workflow law, and do not treat agent claims, provider output, or heuristics as deterministic verification, delivery, or completion authority.
 
 Validation gate: `pnpm --filter @flying-pillow/mission-core check`, `pnpm --filter @flying-pillow/mission-core test`.
+
+Extra instruction: Only verify, the code is already in place.

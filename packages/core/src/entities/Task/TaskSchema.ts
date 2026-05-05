@@ -56,6 +56,8 @@ export const TaskStorageSchema = z.object({
     sequence: z.number().int().positive(),
     title: z.string().trim().min(1),
     instruction: z.string(),
+    model: z.string().trim().min(1).optional(),
+    reasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).optional(),
     taskKind: z.enum(['implementation', 'verification']).optional(),
     pairedTaskId: z.string().trim().min(1).optional(),
     lifecycle: z.string().trim().min(1),

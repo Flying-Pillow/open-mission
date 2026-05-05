@@ -3,108 +3,19 @@ layout: default
 title: Semantic Model
 parent: Architecture
 nav_order: 3
+description: The domain concepts that should stay stable in code and docs.
 ---
 
-# Semantic Model
+Mission uses a small domain vocabulary on purpose.
 
-Mission uses two related but different semantic layers:
+| Concept | Meaning |
+| --- | --- |
+| Mission | Long-lived unit of engineering work |
+| Running Mission instance | Live daemon-owned Mission Entity |
+| Mission workflow definition | Repository-owned workflow law |
+| Mission task | Executable unit of Mission work |
+| Mission artifact | Tracked operator-facing file |
+| Agent session | Daemon-managed runtime execution |
+| Entity | Daemon-addressable domain object with behavior |
 
-1. Domain identities and persisted mission records.
-2. Daemon-owned surface read models used for status, selection, routing, and UI composition.
-
-The architecture stays coherent only if those layers are not collapsed.
-
-## First-Class Entities
-
-| Entity | Primary representation | Purpose | Runtime authority |
-| --- | --- | --- | --- |
-| Repository | Repository root path, `.mission/settings.json`, `RepositoryControlStatus` | Repository-scoped Mission system root | `WorkspaceManager`, `MissionWorkspace` |
-| Mission | `MissionDescriptor`, `MissionRuntimeData`, `MissionRecord` | Long-lived unit of work and its persisted execution state | `Mission` aggregate + workflow controller |
-| Stage | `MissionStageId`, `MissionStageRuntimeProjection` | Structural phase boundary derived from task state | Workflow runtime |
-| Task | `MissionTaskRuntimeState`, `MissionTaskState` | Atomic unit of executable work | Workflow runtime |
-| Artifact | `MissionArtifactKey`, artifact records | Mission output and operator-readable state | Workflow artifact materialization |
-| Agent session | `AgentSessionState`, `AgentSessionRecord` | Live or recorded execution of a task through a runner | Agent runtime + mission aggregate |
-
-## Mission Records Versus Projection Records
-
-| Record | Scope | Why it exists |
-| --- | --- | --- |
-| `MissionDescriptor` | Mission identity | Stable mission metadata such as `missionId`, brief, branch, and creation time |
-| `MissionRuntimeData` | Mission persistence | Snapshot of workflow configuration, runtime state, and event log |
-| `MissionRecord` | Operator-facing aggregate summary | Mission identity plus current stage and session records |
-| `OperatorStatus` | Surface-facing response | Aggregated mission status returned by daemon APIs |
-
-## Stage And Artifact Taxonomy
-
-The current workflow manifest defines a fixed mission taxonomy.
-
-| Stage id | Folder | Primary artifacts | Notes |
-| --- | --- | --- | --- |
-| `prd` | `01-PRD` | `PRD.md` | First requirements stage |
-| `spec` | `02-SPEC` | `SPEC.md` | Technical design stage |
-| `implementation` | `03-IMPLEMENTATION` | `VERIFY.md` | Supports execution and paired verification tasks |
-| `audit` | `04-AUDIT` | `AUDIT.md` | Post-implementation audit stage |
-| `delivery` | `05-DELIVERY` | `DELIVERY.md` | Final delivery stage |
-
-## Task Model Boundaries
-
-Mission exposes two different task shapes for different reasons.
-
-| Shape | Current fields emphasize | Used by |
-| --- | --- | --- |
-| `MissionTaskRuntimeState` | Runtime lifecycle, launch policy, retries, dependency blocking | Workflow engine |
-| `MissionTaskState` | Task file identity, subject, instruction body, simplified status for operator surfaces | Mission aggregate and control surfaces |
-| `MissionTaskState` | Operator-facing task fields and dependency links | Mission aggregate and control surfaces |
-
-This is intentional. The workflow engine needs detailed lifecycle semantics such as `queued` and `running`. The operator surface model uses a simpler task status vocabulary for mission control and selection.
-
-## Session Model Boundaries
-
-Sessions also exist in more than one form.
-
-| Shape | Scope | Owned by |
-| --- | --- | --- |
-| `AgentSession` | Live runtime object | daemon-owned agent control plus concrete adapter |
-| `AgentSessionSnapshot` | Provider-neutral AgentSession snapshot | daemon-owned agent control |
-| `AgentSessionState` | Workflow-tracked AgentSession state | Workflow runtime |
-| `AgentSessionRecord` | Mission aggregate AgentSession record for surfaces | `Mission` aggregate |
-| `AgentSessionRecord` | Mission aggregate Agent session record for surfaces | `Mission` aggregate |
-
-## Selection And Surface Read Models
-
-Mission does not currently have a separate generic navigation graph. Selection and routing should be expressed through concrete owner-owned read models:
-
-- `OperatorStatus` for aggregated Mission and Repository status returned by daemon APIs
-- `MissionTowerProjection` for Tower stage rail and tree nodes
-- Airport pane binding state for Airport-owned layout and focus intent
-
-These read models are not stored in `mission.json`.
-
-Together they answer questions such as:
-
-- which repository is currently selected
-- which mission Tower should center on
-- which artifact Briefing Room should show
-- which task or session the operator is targeting
-
-Mission mode also needs one more layer above that raw target:
-
-- which task instruction should be active when a task is selected
-- which agent session should be active for that task when no explicit session row is selected
-- which stage product artifact should be active when a stage is selected
-
-That resolution is daemon-owned or Airport-owned read-model behavior, depending on the owner of the state being resolved; it is not Mission runtime persistence.
-
-## Invariants
-
-1. Stage state is derived from task state, not independently edited by the UI.
-2. Surface routing records are not the artifacts themselves.
-3. The daemon may update surface read models without changing Mission execution state.
-4. Sessions are tied to tasks semantically, but they remain runtime objects with their own lifecycle and transport boundary.
-5. Task selection is a work-bundle selection: task identity, canonical instruction artifact, and preferred session belong together.
-6. Stage selection resolves to the stage's canonical product artifact.
-7. Selection resolution must be explicit and deterministic; filename guessing and pane-local fallback behavior are architectural drift.
-
-## Relationship To Replay Anchors
-
-This page is the architecture home for the replayed mission "Mission Semantic Model" and aligns with `specifications/mission/model/core-object-model.md`, `specifications/mission/model/mission-model.md`, and `specifications/mission/model/selection-resolution.md`.
+When code or docs need a new term, add it to CONTEXT.md or reuse an existing one. Stale synonyms make the architecture harder to operate.

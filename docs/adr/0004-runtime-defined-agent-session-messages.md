@@ -1,4 +1,16 @@
-# Runtime-Defined Agent Session Messages
+---
+layout: default
+title: Runtime-Defined Agent Session Messages
+parent: Architecture Decisions
+nav_order: 4
+status: accepted
+date: 2026-05-04
+decision_area: agent-runtime
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Mission exposes Agent sessions as controlled daemon Entities while many agents still run inside terminal-backed CLI applications. Raw terminal input remains available for native CLI interaction, but it is not the canonical channel for Mission-controlled operator intent or Agent session context changes.
 

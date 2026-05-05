@@ -1,6 +1,7 @@
 import {
 	MAX_AGENT_SESSION_MESSAGE_LENGTH,
 	MAX_AGENT_SESSION_SIGNAL_TEXT_LENGTH,
+	MAX_MISSION_PROTOCOL_MARKER_LENGTH,
 	MAX_AGENT_SESSION_SUGGESTED_RESPONSES,
 	MAX_AGENT_SESSION_USAGE_ENTRIES,
 	type AgentSessionDiagnosticCode,
@@ -60,9 +61,17 @@ export class AgentSessionSignalPolicy {
 		if (confidenceBoundaryError) {
 			return confidenceBoundaryError;
 		}
+		const payloadBoundaryError = validateObservationPayloadBoundary(observation);
+		if (payloadBoundaryError) {
+			return payloadBoundaryError;
+		}
 		const claimBoundaryError = validateClaimBoundary(observation);
 		if (claimBoundaryError) {
 			return claimBoundaryError;
+		}
+		const lifecycleBoundaryError = validateSessionLifecycleBoundary(snapshot, observation);
+		if (lifecycleBoundaryError) {
+			return lifecycleBoundaryError;
 		}
 		return validateSignalShape(observation.signal);
 	}
@@ -382,6 +391,35 @@ function validateClaimBoundary(observation: AgentSessionObservation): string | u
 		return 'Protocol-marker observations must carry a claimed Mission scope.';
 	}
 	return undefined;
+}
+
+function validateObservationPayloadBoundary(observation: AgentSessionObservation): string | undefined {
+	if (
+		observation.route.origin === 'protocol-marker'
+		&& observation.signal.type !== 'diagnostic'
+		&& observation.rawText
+		&& observation.rawText.trimEnd().length > MAX_MISSION_PROTOCOL_MARKER_LENGTH
+	) {
+		return 'Mission protocol marker exceeded the maximum length.';
+	}
+	return undefined;
+}
+
+function validateSessionLifecycleBoundary(
+	snapshot: AgentSessionSnapshot,
+	observation: AgentSessionObservation
+): string | undefined {
+	if (snapshot.status !== 'completed' && snapshot.status !== 'failed') {
+		return undefined;
+	}
+	if (
+		observation.signal.type === 'diagnostic'
+		|| observation.signal.type === 'usage'
+		|| observation.signal.type === 'message'
+	) {
+		return undefined;
+	}
+	return `Mission session '${snapshot.sessionId}' already ended with status '${snapshot.status}'.`;
 }
 
 function validateObservationConfidenceBoundary(observation: AgentSessionObservation): string | undefined {

@@ -72,7 +72,6 @@ export async function buildMissionStatusView(input: MissionStatusViewInput): Pro
 		workflow: {
 			lifecycle: input.document.runtime.lifecycle,
 			pause: { ...input.document.runtime.pause },
-			panic: { ...input.document.runtime.panic },
 			...(currentStageId ? { currentStageId } : {}),
 			configuration: input.document.configuration,
 			stages: input.document.runtime.stages.map((stage) => ({
@@ -149,7 +148,6 @@ async function buildDraftMissionStatusView(input: MissionStatusViewInput): Promi
 		workflow: {
 			lifecycle: runtime.lifecycle,
 			pause: { ...runtime.pause },
-			panic: { ...runtime.panic },
 			currentStageId,
 			configuration,
 			stages: runtime.stages.map((stage) => ({
@@ -380,7 +378,7 @@ function progressTone(status: MissionStageStatus['status'] | MissionTaskState['s
 	if (status === 'completed') {
 		return '#3fb950';
 	}
-	if (status === 'active' || status === 'queued' || status === 'running') {
+	if (status === 'queued' || status === 'running') {
 		return '#58a6ff';
 	}
 	if (status === 'ready') {

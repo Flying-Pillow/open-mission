@@ -47,7 +47,9 @@ describe('AgentRuntimeIds', () => {
 			expect(MissionAgentRunnerSchema.parse(runnerId)).toBe(runnerId);
 			expect(
 				WorkflowRuntimeSettingsSchema.parse({
-					agentRunner: runnerId
+					agentRunner: runnerId,
+					defaultModel: 'gpt-5-codex',
+					defaultReasoningEffort: 'high'
 				}).agentRunner
 			).toBe(runnerId);
 			expect(
@@ -55,10 +57,30 @@ describe('AgentRuntimeIds', () => {
 					taskId: 'implementation/test-runner-id',
 					title: 'Runner id task',
 					instruction: 'Validate legal workflow task runner ids.',
+					model: 'gpt-5-codex',
+					reasoningEffort: 'high',
 					dependsOn: [],
 					agentRunner: runnerId
 				}).agentRunner
 			).toBe(runnerId);
 		}
+	});
+
+	it('rejects unsupported workflow reasoning effort values', () => {
+		expect(
+			WorkflowRuntimeSettingsSchema.safeParse({
+				agentRunner: DEFAULT_AGENT_RUNNER_ID,
+				defaultReasoningEffort: 'extreme'
+			}).success
+		).toBe(false);
+		expect(
+			WorkflowGeneratedTaskDefinitionSchema.safeParse({
+				taskId: 'implementation/test-reasoning-effort',
+				title: 'Reasoning effort task',
+				instruction: 'Reject unsupported task reasoning effort values.',
+				reasoningEffort: 'extreme',
+				dependsOn: []
+			}).success
+		).toBe(false);
 	});
 });

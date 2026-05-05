@@ -1,4 +1,16 @@
-# Agent Session Logs As Daemon Audit Material
+---
+layout: default
+title: Agent Session Logs As Daemon Audit Material
+parent: Architecture Decisions
+nav_order: 11
+status: accepted
+date: 2026-05-04
+decision_area: agent-session-log
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Raw Agent session logs are daemon-owned audit material, not Mission artifacts by default. They are retained with the Mission dossier/state store so Mission can inspect delivered interaction, recover context, and preserve evidence of what was sent to and produced by an Agent runtime.
 

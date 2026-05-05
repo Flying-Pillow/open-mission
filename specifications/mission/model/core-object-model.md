@@ -64,12 +64,12 @@ The `Type` column describes the object's role in the model, not a TypeScript key
 | `missiond` | `not covered` | Service | `System` | The single authority process that composes semantic Mission control with Airport control. | Own the authoritative mutation loop, route accepted commands and observations, persist authoritative state changes, and publish derived projections. |
 | `RepositoryContext` | `repository` | Entity | `MissionControl` | The canonical semantic context for one repository inside the daemon-owned domain graph. | Own repository identity, repository root, display metadata, known mission ids, and repository-scoped settings identity. |
 | `RepositorySettings` | `MissionDaemonSettings` | Entity | `RepositoryContext` | The persisted repository-level settings associated with one repository context. | Store repository-scoped defaults such as runner, mode, model, paths, theme, tracking provider, and workflow settings. |
-| `WorkflowDefinition` | `WorkflowGlobalSettings` | Specification | `RepositorySettings` | The repository-level workflow policy used to initialize future missions. | Define stage order, stage definitions, task generation rules, workflow gate rules, human-in-the-loop policy, panic policy, and execution limits. |
+| `WorkflowDefinition` | `WorkflowGlobalSettings` | Specification | `RepositorySettings` | The repository-level workflow policy used to initialize future missions. | Define stage order, stage definitions, task generation rules, workflow gate rules, human-in-the-loop policy, and execution limits. |
 | `StageDefinition` | `WorkflowStageDefinition` | Specification | `WorkflowDefinition` | The static definition of one Stage inside the WorkflowDefinition. | Define stage identity, display name, completion policy, and the default launch policy for tasks created in that stage. |
 | `StageLaunchPolicy` | `WorkflowStageTaskLaunchPolicy` | Specification | `StageDefinition` | The default launch behavior applied to tasks generated for a stage. | Define default autostart behavior and default launch mode for newly generated tasks. |
 | `TaskGenerationRule` | `prose only` | Specification | `WorkflowDefinition` | The rule that determines which tasks are created when a stage becomes eligible. | Define how tasks are generated for a stage and what task definitions should be instantiated. |
 | `WorkflowGateDefinition` | `gate rules` | Specification | `WorkflowDefinition` | The static workflow checkpoint rule that later becomes a workflow gate projection. | Define semantic progression conditions before workflow gate projections are derived. |
-| `MissionAction` | `daemon/UI command model` | Action | `missiond` | An operator-facing control exposed by the daemon or a Surface. | Express controls such as pause mission, resume mission, panic stop mission, clear panic, mark task done, reopen task, or manually start a ready task. |
+| `MissionAction` | `daemon/UI command model` | Action | `missiond` | An operator-facing control exposed by the daemon or a Surface. | Express controls such as pause mission, resume mission, restart queue, stop session, mark task done, reopen task, or manually start a ready task. |
 
 ## Mission Terms
 
@@ -89,7 +89,7 @@ The `Type` column describes the object's role in the model, not a TypeScript key
 
 | Canonical Term | Workflow Spec Term | Type | Owned By | Definition | Responsibilities |
 | --- | --- | --- | --- | --- | --- |
-| `WorkflowRuntimeState` | `MissionWorkflowRuntimeState` | Entity | `MissionRuntime` | The mutable workflow state persisted inside MissionRuntime. | Store mission lifecycle, pause state, panic state, active stage id, stage projections, task runtimes, session runtimes, gate projections, launch queue, and last update time. |
+| `WorkflowRuntimeState` | `MissionWorkflowRuntimeState` | Entity | `MissionRuntime` | The mutable workflow state persisted inside MissionRuntime. | Store mission lifecycle, pause state, active stage id, stage projections, task runtimes, session runtimes, gate projections, launch queue, and last update time. |
 | `WorkflowReducer` | `MissionWorkflowReducer` | Service | `MissionControl` | The pure reducer that accepts one WorkflowEvent and returns next state, signals, and requests. | Reduce workflow state deterministically and emit WorkflowRequests without performing external work directly. |
 | `WorkflowEvent` | `MissionWorkflowEvent` | Event | `MissionRuntime` | An immutable fact accepted by the WorkflowReducer. | Describe a mission, task, or agent-session state change in workflow terms and serve as the only valid input for workflow transitions. |
 | `WorkflowSignal` | `MissionWorkflowSignal` | Signal | `WorkflowReducer` | A derived notification emitted by the WorkflowReducer after a WorkflowEvent is reduced. | Publish derived readiness or completion facts such as `stage.ready`, `task.ready`, `gate.passed`, and `mission.completed`. |
@@ -103,7 +103,6 @@ The `Type` column describes the object's role in the model, not a TypeScript key
 | `TaskLaunchRequest` | `MissionTaskLaunchRequest` | Entity | `WorkflowRuntimeState` | The queued request to launch execution for one Task. | Represent pending launch intent with request identity, task identity, timestamp, and requesting actor. |
 | `WorkflowGateProjection` | `MissionGateProjection` | Projection | `WorkflowRuntimeState` | The derived runtime view of one workflow gate in MissionRuntime. | Report whether a workflow gate is `blocked` or `passed` and explain the current reasons; this is distinct from airport gate binding state. |
 | `PauseState` | `MissionPauseState` | Entity | `WorkflowRuntimeState` | The mission-local runtime pause state. | Record whether the Mission is paused, why it is paused, and when the pause was requested. |
-| `PanicState` | `MissionPanicState` | Entity | `WorkflowRuntimeState` | The mission-local runtime panic state. | Record whether panic is active and how session termination, queue clearing, and mission halt rules apply. |
 
 ## Agent Execution Terms
 

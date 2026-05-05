@@ -11,7 +11,6 @@ const runtimeFactoryModulePath = path.join(packageRoot, 'src', 'daemon', 'runtim
 
 process.env.MISSION_DAEMON_RUNTIME_MODE = 'source';
 process.env.MISSION_RUNTIME_FACTORY_MODULE = process.env.MISSION_RUNTIME_FACTORY_MODULE?.trim() || runtimeFactoryModulePath;
-process.env.MISSION_DAEMON_SUPERVISED = process.env.MISSION_DAEMON_SUPERVISED?.trim() || '1';
 
 const server = await createServer({
 	root: packageRoot,
@@ -28,6 +27,7 @@ const server = await createServer({
 });
 
 let daemonHandle;
+let daemonModule;
 let reloadSequence = 0;
 let reloadTimer;
 let reloadInFlight = Promise.resolve();
@@ -66,18 +66,44 @@ function queueReload(filePath) {
 async function reloadDaemon(filePath) {
 	process.stdout.write(`Mission daemon source changed: ${path.relative(packageRoot, filePath)}\n`);
 	server.moduleGraph.invalidateAll();
-	await daemonHandle?.dispose();
-	await startDaemon();
+	const nextModule = await loadDaemonModule();
+	const previousModule = daemonModule;
+	const previousHandle = daemonHandle;
+	await previousHandle?.dispose();
+	await previousHandle?.closed;
+	try {
+		daemonHandle = await startDaemonFromModule(nextModule);
+		daemonModule = nextModule;
+	} catch (error) {
+		if (previousModule) {
+			process.stderr.write(`Mission daemon reload rollback: ${formatError(error)}\n`);
+			daemonHandle = await startDaemonFromModule(previousModule);
+			daemonModule = previousModule;
+			process.stderr.write('Mission daemon rollback completed.\n');
+			return;
+		}
+		throw error;
+	}
 	process.stdout.write('Mission daemon reloaded.\n');
 }
 
 async function startDaemon() {
+	const module = await loadDaemonModule();
+	daemonHandle = await startDaemonFromModule(module);
+	daemonModule = module;
+}
+
+async function loadDaemonModule() {
 	reloadSequence += 1;
 	const module = await server.ssrLoadModule(`${daemonEntry}?reload=${reloadSequence}`);
 	if (typeof module.startMissionDaemon !== 'function') {
 		throw new TypeError('Daemon entry does not export startMissionDaemon().');
 	}
-	daemonHandle = await module.startMissionDaemon({
+	return module;
+}
+
+async function startDaemonFromModule(module) {
+	return await module.startMissionDaemon({
 		argv: process.argv.slice(2),
 		surfacePath: process.env.MISSION_SURFACE_PATH,
 		installSignalHandlers: false

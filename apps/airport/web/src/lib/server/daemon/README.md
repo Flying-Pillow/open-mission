@@ -6,8 +6,9 @@ This folder is the web-only gateway layer over the Mission daemon client exporte
 
 It exists to keep the boundary explicit:
 
-- core owns raw daemon connectivity, protocol compatibility, and daemon startup mechanics
-- Airport web owns SvelteKit request context, daemon availability UX, shared request pooling, and long-lived web relay behavior
+- core owns raw daemon connectivity and protocol compatibility
+- daemon process lifecycle belongs to the daemon CLI/dev process, outside the Airport web request path
+- Airport web owns SvelteKit request context, daemon availability UX, shared request pooling, EntityRemote proxying, and long-lived web relay behavior
 
 ## Module Responsibilities
 
@@ -45,10 +46,9 @@ Owns web-facing daemon availability state:
 
 - daemon runtime state for hooks and UI bootstrapping
 - cached daemon health probes
-- recovery backoff and retry timing
 - cached system status reads for lightweight app context hydration
 
-This file is allowed to shape web-facing availability messages. It must not become a second daemon API surface.
+This file is allowed to shape web-facing availability messages. It must not start, stop, recover, or replace daemon processes.
 
 ### `connections.server.ts`
 
@@ -72,7 +72,8 @@ This folder must not:
 
 - redefine daemon business semantics
 - create a second daemon API family
+- start, stop, supervise, recover, or replace daemon processes
 - move repository or mission policy out of core
 - make SvelteKit the source of truth for daemon state
 
-The daemon remains the runtime authority. This folder is infrastructure glue for the web surface.
+The daemon remains the runtime authority. This folder is infrastructure glue for the web surface: EntityRemote calls are relayed over IPC, and daemon events are relayed to the browser over SSE/WebSocket where needed.

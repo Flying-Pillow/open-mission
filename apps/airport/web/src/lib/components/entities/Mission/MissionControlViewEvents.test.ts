@@ -145,6 +145,64 @@ describe('Mission control view reconciliation', () => {
             }
         ]);
     });
+
+    it('routes structured AgentSession prompts and commands through the AgentSession command surface', async () => {
+        const agentSessionCommandCalls: EntityCommandInvocation[] = [];
+        const mission = createMission(
+            createMissionSnapshot({
+                agentSessions: [createSessionSnapshot('session-1', 'awaiting-input', {
+                    interactionCapabilities: {
+                        mode: 'agent-message',
+                        canSendTerminalInput: false,
+                        canSendStructuredPrompt: true,
+                        canSendStructuredCommand: true
+                    },
+                    runtimeMessages: [
+                        { type: 'checkpoint', label: 'Checkpoint', delivery: 'best-effort', mutatesContext: false },
+                        { type: 'resume', label: 'Resume', delivery: 'best-effort', mutatesContext: false }
+                    ]
+                })]
+            }),
+            createMissionGatewayDependencies([], [], agentSessionCommandCalls)
+        );
+        const session = mission.getSession('session-1');
+
+        if (!session) {
+            throw new Error('Expected session to be available.');
+        }
+
+        await session.sendPrompt({ source: 'operator', text: 'Continue with the next slice.' });
+        await session.sendCommand({ type: 'resume', reason: 'Operator approved continuation.' });
+
+        expect(agentSessionCommandCalls).toEqual([
+            {
+                entity: 'AgentSession',
+                method: 'command',
+                payload: {
+                    missionId: 'mission-29',
+                    sessionId: 'session-1',
+                    commandId: AgentSessionCommandIds.sendPrompt,
+                    input: {
+                        source: 'operator',
+                        text: 'Continue with the next slice.'
+                    }
+                }
+            },
+            {
+                entity: 'AgentSession',
+                method: 'command',
+                payload: {
+                    missionId: 'mission-29',
+                    sessionId: 'session-1',
+                    commandId: AgentSessionCommandIds.sendRuntimeMessage,
+                    input: {
+                        type: 'resume',
+                        reason: 'Operator approved continuation.'
+                    }
+                }
+            }
+        ]);
+    });
 });
 
 function createMission(
@@ -160,17 +218,20 @@ function createMission(
 
 function createMissionGatewayDependencies(
     artifactBodyCalls: string[],
-    artifactBodyCommandCalls: EntityCommandInvocation[] = []
+    artifactBodyCommandCalls: EntityCommandInvocation[] = [],
+    agentSessionCommandCalls: EntityCommandInvocation[] = []
 ): MissionGatewayDependencies {
     return {
-        commandRemote: async (input) => handleCommandInvocation(input, artifactBodyCommandCalls),
+        commandRemote: async (input) =>
+            handleCommandInvocation(input, artifactBodyCommandCalls, agentSessionCommandCalls),
         queryRemote: async (input) => handleQueryInvocation(input, artifactBodyCalls)
     };
 }
 
 async function handleCommandInvocation(
     input: EntityCommandInvocation,
-    artifactBodyCommandCalls: EntityCommandInvocation[]
+    artifactBodyCommandCalls: EntityCommandInvocation[],
+    agentSessionCommandCalls: EntityCommandInvocation[]
 ): Promise<EntityRemoteResult> {
     if (input.entity === 'Stage' && input.method === 'command') {
         return createStageAcknowledgement();
@@ -194,15 +255,8 @@ async function handleCommandInvocation(
     }
 
     if (input.entity === 'AgentSession' && input.method === 'command') {
+        agentSessionCommandCalls.push(input);
         return createAgentSessionAcknowledgement('command');
-    }
-
-    if (input.entity === 'AgentSession' && input.method === 'sendPrompt') {
-        return createAgentSessionAcknowledgement('sendPrompt');
-    }
-
-    if (input.entity === 'AgentSession' && input.method === 'sendCommand') {
-        return createAgentSessionAcknowledgement('sendCommand');
     }
 
     if (input.entity === 'Mission' && input.method === 'command') {
@@ -287,7 +341,7 @@ function createAgentSessionAcknowledgement(method: AgentSessionCommandAcknowledg
         id: 'session-1',
         missionId: 'mission-29',
         sessionId: 'session-1',
-        ...(method === 'command' ? { commandId: AgentSessionCommandIds.cancel } : {})
+        commandId: AgentSessionCommandIds.cancel
     };
 }
 
@@ -301,7 +355,7 @@ function createMissionAcknowledgement(method: MissionCommandAcknowledgementType[
     };
 }
 
-function createMissionSnapshot(): MissionSnapshotType {
+function createMissionSnapshot(overrides: Partial<MissionSnapshotType> = {}): MissionSnapshotType {
     const stages = [createStageSnapshot({
         lifecycle: 'running',
         tasks: [
@@ -344,7 +398,8 @@ function createMissionSnapshot(): MissionSnapshotType {
         stages,
         tasks: stages.flatMap((stage) => stage.tasks),
         artifacts: [createArtifactData('verify', 'VERIFY.md')],
-        agentSessions: [createSessionSnapshot('session-1', 'running')]
+        agentSessions: [createSessionSnapshot('session-1', 'running')],
+        ...overrides
     };
 }
 
@@ -390,7 +445,8 @@ function createArtifactData(id: string, label: string): ArtifactDataType {
 
 function createSessionSnapshot(
     sessionId: string,
-    lifecycleState: AgentSessionDataType['lifecycleState']
+    lifecycleState: AgentSessionDataType['lifecycleState'],
+    overrides: Partial<AgentSessionDataType> = {}
 ): AgentSessionDataType {
     return {
         id: `agent_session:mission-29/${sessionId}`,
@@ -398,7 +454,14 @@ function createSessionSnapshot(
         runnerId: 'copilot-cli',
         runnerLabel: 'Copilot CLI',
         lifecycleState,
+        interactionCapabilities: {
+            mode: 'pty-terminal',
+            canSendTerminalInput: true,
+            canSendStructuredPrompt: false,
+            canSendStructuredCommand: false
+        },
         context: { artifacts: [], instructions: [] },
-        runtimeMessages: []
+        runtimeMessages: [],
+        ...overrides
     };
 }

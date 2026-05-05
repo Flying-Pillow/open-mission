@@ -7,6 +7,7 @@ const DAEMON_CLIENT_IDLE_TIMEOUT_MS = 15_000;
 type SharedDaemonClientEntry = {
     clientPromise: Promise<DaemonClient>;
     client?: DaemonClient;
+    disconnectSubscription?: { dispose(): void };
     activeLeases: number;
     idleTimer?: ReturnType<typeof setTimeout>;
 };
@@ -24,12 +25,12 @@ export function clearSharedDaemonClient(surfacePath: string, authToken?: string)
         clearTimeout(entry.idleTimer);
     }
     sharedDaemonClients.delete(key);
+    entry.disconnectSubscription?.dispose();
     entry.client?.dispose();
 }
 
 export async function acquireSharedDaemonClient(input: {
     surfacePath: string;
-    allowStart: boolean;
     authToken?: string;
 }): Promise<{
     client: DaemonClient;
@@ -41,7 +42,6 @@ export async function acquireSharedDaemonClient(input: {
         const newEntry: SharedDaemonClientEntry = {
             clientPromise: openDaemonConnection({
                 surfacePath: input.surfacePath,
-                allowStart: input.allowStart,
                 ...(input.authToken ? { authToken: input.authToken } : {})
             }).then((connection) => connection.client),
             activeLeases: 0
@@ -50,6 +50,14 @@ export async function acquireSharedDaemonClient(input: {
         newEntry.clientPromise = newEntry.clientPromise.then(
             (client) => {
                 newEntry.client = client;
+                newEntry.disconnectSubscription = client.onDidDisconnect(() => {
+                    const currentEntry = sharedDaemonClients.get(key);
+                    if (currentEntry !== newEntry) {
+                        return;
+                    }
+
+                    clearSharedDaemonClient(input.surfacePath, input.authToken);
+                });
                 return client;
             },
             (error) => {
@@ -69,9 +77,9 @@ export async function acquireSharedDaemonClient(input: {
     let client: DaemonClient;
     try {
         client = await entry.clientPromise;
-        await client.connect({ surfacePath: input.surfacePath });
     } catch (error) {
         sharedDaemonClients.delete(key);
+        entry.disconnectSubscription?.dispose();
         entry.client?.dispose();
         throw error;
     }

@@ -36,7 +36,7 @@ export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): 
 
 export async function runMissiondCommand(argv: string[] = process.argv.slice(2)): Promise<void> {
 	const parsed = parseDaemonArgs(argv);
-	const runtimeMode: DaemonRuntimeMode = process.env['MISSION_DAEMON_RUNTIME_MODE']?.trim() === 'source' ? 'source' : 'build';
+	const runtimeMode: DaemonRuntimeMode = parsed.dev || process.env['MISSION_DAEMON_RUNTIME_MODE']?.trim() === 'source' ? 'source' : 'build';
 	const runtimeFactoryModulePath = resolveDefaultRuntimeFactoryModulePath(runtimeMode);
 
 	switch (parsed.command) {
@@ -97,14 +97,16 @@ export async function runMissiondCommand(argv: string[] = process.argv.slice(2))
 function parseDaemonArgs(argv: string[]): {
 	command: 'start' | 'stop' | 'restart' | 'status' | 'run' | 'logs' | 'tail';
 	socketPath?: string;
+	dev: boolean;
 	json: boolean;
 	follow: boolean;
 	maxLogLines: number;
 } {
 	const remaining = [...argv];
+	const dev = remaining.includes('--dev');
 	const json = remaining.includes('--json');
 	const follow = remaining.includes('--follow') || remaining.includes('-f');
-	const filtered = remaining.filter((arg) => arg !== '--json');
+	const filtered = remaining.filter((arg) => arg !== '--' && arg !== '--dev' && arg !== '--json');
 	const commandToken = filtered[0];
 	const command =
 		commandToken === undefined
@@ -126,6 +128,7 @@ function parseDaemonArgs(argv: string[]): {
 	return {
 		command,
 		...(socketPath ? { socketPath } : {}),
+		dev,
 		json,
 		follow,
 		maxLogLines: readMaxLogLines(filtered)

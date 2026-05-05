@@ -9,6 +9,7 @@ import {
 	type MissionAgentEvent,
 	type MissionTerminalSnapshotType,
 	type MissionDefaultAgentModeType,
+	type MissionReasoningEffortType,
 	type MissionCommandAcknowledgementType,
 	type MissionDataType,
 	type MissionLocatorType,
@@ -56,6 +57,10 @@ import {
 } from '../../workflow/engine/index.js';
 import type { AgentRunner } from '../../daemon/runtime/agent/AgentRunner.js';
 import type { AgentSessionEvent, AgentSessionSnapshot } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
+import type {
+	AgentSessionObservation,
+	AgentSessionSignalDecision
+} from '../../daemon/runtime/agent/signals/AgentSessionSignal.js';
 import { MISSION_ARTIFACT_KEYS, getMissionStageDefinition } from '../../workflow/mission/manifest.js';
 import { Artifact } from '../Artifact/Artifact.js';
 import { Task } from '../Task/Task.js';
@@ -99,9 +104,13 @@ export type MissionWorkflowBindings = {
 	workflow: WorkflowDefinition;
 	resolveWorkflow?: () => WorkflowDefinition;
 	taskRunners: Map<string, AgentRunner>;
+	logger?: {
+		info(message: string, metadata?: Record<string, unknown>): void;
+	};
 	instructionsPath?: string;
 	skillsPath?: string;
 	defaultModel?: string;
+	defaultReasoningEffort?: MissionReasoningEffortType;
 	defaultMode?: MissionDefaultAgentModeType;
 };
 
@@ -196,12 +205,6 @@ export class Mission extends Entity<MissionDataType, string> {
 				break;
 			case MissionCommandIds.resume:
 				await this.resumeMission();
-				break;
-			case MissionCommandIds.panic:
-				await this.panicStopMission();
-				break;
-			case MissionCommandIds.clearPanic:
-				await this.clearMissionPanic();
 				break;
 			case MissionCommandIds.restartQueue:
 				await this.restartLaunchQueue();
@@ -339,6 +342,9 @@ export class Mission extends Entity<MissionDataType, string> {
 				: {}),
 			...(workflowBindings.skillsPath ? { skillsPath: workflowBindings.skillsPath } : {}),
 			...(workflowBindings.defaultModel ? { defaultModel: workflowBindings.defaultModel } : {}),
+			...(workflowBindings.defaultReasoningEffort
+				? { defaultReasoningEffort: workflowBindings.defaultReasoningEffort }
+				: {}),
 			...(workflowBindings.defaultMode ? { defaultMode: workflowBindings.defaultMode } : {})
 		});
 		this.agentSessionEventSubscription = this.workflowRequestExecutor.onDidRuntimeEvent((event) => {
@@ -352,7 +358,8 @@ export class Mission extends Entity<MissionDataType, string> {
 			descriptor,
 			workflow: workflowBindings.workflow,
 			resolveWorkflow: this.workflowResolver,
-			requestExecutor: this.workflowRequestExecutor
+			requestExecutor: this.workflowRequestExecutor,
+			...(workflowBindings.logger ? { logger: workflowBindings.logger } : {})
 		});
 	}
 
@@ -644,6 +651,18 @@ export class Mission extends Entity<MissionDataType, string> {
 		this.agentEventEmitter.dispose();
 	}
 
+	public getRuntimeSessionSnapshot(sessionId: string): AgentSessionSnapshot | undefined {
+		return this.workflowController.getRuntimeSession(sessionId);
+	}
+
+	public applyRuntimeSessionSignalDecision(
+		sessionId: string,
+		_observation: AgentSessionObservation,
+		decision: Exclude<AgentSessionSignalDecision, { action: 'reject' }>
+	): AgentSessionSnapshot | undefined {
+		return this.workflowController.applyRuntimeSessionSignalDecision(sessionId, decision);
+	}
+
 	private async resolveLiveAgentSession(session: AgentSessionRecord): Promise<AgentSessionSnapshot | undefined> {
 		return this.workflowController.getRuntimeSession(session.sessionId)
 			?? await this.workflowController.attachRuntimeSession({
@@ -725,16 +744,6 @@ export class Mission extends Entity<MissionDataType, string> {
 
 	public async resumeMission(): Promise<void> {
 		await this.applyWorkflowEvent(this.createWorkflowEvent('mission.resumed', {}));
-		await this.status();
-	}
-
-	public async panicStopMission(): Promise<void> {
-		await this.applyWorkflowEvent(this.createWorkflowEvent('mission.panic.requested', {}));
-		await this.status();
-	}
-
-	public async clearMissionPanic(): Promise<void> {
-		await this.applyWorkflowEvent(this.createWorkflowEvent('mission.panic.cleared', {}));
 		await this.status();
 	}
 
@@ -1806,4 +1815,3 @@ export class Mission extends Entity<MissionDataType, string> {
 		return MissionEntityTypeSchema.parse(value);
 	}
 }
-

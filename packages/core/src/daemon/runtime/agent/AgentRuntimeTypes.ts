@@ -38,6 +38,19 @@ export type AgentAttentionState =
 
 export type AgentPromptSource = 'engine' | 'operator' | 'system';
 
+export type AgentSessionInteractionMode =
+    | 'pty-terminal'
+    | 'agent-message'
+    | 'read-only';
+
+export interface AgentSessionInteractionCapabilities {
+    mode: AgentSessionInteractionMode;
+    canSendTerminalInput: boolean;
+    canSendStructuredPrompt: boolean;
+    canSendStructuredCommand: boolean;
+    reason?: string;
+}
+
 export interface AgentProgressSnapshot {
     state: AgentProgressState;
     summary?: string;
@@ -106,6 +119,7 @@ export interface AgentLaunchConfig {
     requestedRunnerId?: AgentRunnerId;
     resume: AgentResumePolicy;
     initialPrompt?: AgentPrompt;
+    launchEnv?: Record<string, string>;
     metadata?: AgentMetadata;
 }
 
@@ -135,6 +149,7 @@ export interface AgentSessionSnapshot {
     waitingForInput: boolean;
     acceptsPrompts: boolean;
     acceptedCommands: AgentCommand['type'][];
+    interactionCapabilities?: AgentSessionInteractionCapabilities;
     transport?: {
         kind: 'terminal';
         terminalSessionName: string;
@@ -195,3 +210,55 @@ export type AgentSessionEvent =
         reason?: string;
         snapshot: AgentSessionSnapshot;
     };
+
+export function deriveAgentSessionInteractionCapabilities(input: Pick<
+    AgentSessionSnapshot,
+    'status' | 'transport' | 'acceptsPrompts' | 'acceptedCommands'
+>): AgentSessionInteractionCapabilities {
+    const terminalBacked = input.transport?.kind === 'terminal';
+    const liveTerminalSession = terminalBacked && !isTerminalSessionStatus(input.status);
+    if (liveTerminalSession) {
+        return {
+            mode: 'pty-terminal',
+            canSendTerminalInput: true,
+            canSendStructuredPrompt: false,
+            canSendStructuredCommand: false
+        };
+    }
+
+    const canSendStructuredPrompt = input.acceptsPrompts;
+    const canSendStructuredCommand = input.acceptedCommands.length > 0;
+    if (canSendStructuredPrompt || canSendStructuredCommand) {
+        return {
+            mode: 'agent-message',
+            canSendTerminalInput: false,
+            canSendStructuredPrompt,
+            canSendStructuredCommand
+        };
+    }
+
+    if (terminalBacked) {
+        return {
+            mode: 'read-only',
+            canSendTerminalInput: false,
+            canSendStructuredPrompt: false,
+            canSendStructuredCommand: false,
+            reason: 'The terminal session is no longer accepting live input.'
+        };
+    }
+
+    return {
+        mode: 'read-only',
+        canSendTerminalInput: false,
+        canSendStructuredPrompt: false,
+        canSendStructuredCommand: false,
+        reason: 'This session does not accept operator follow-up input.'
+    };
+}
+
+function isTerminalSessionStatus(status: AgentSessionSnapshot['status']): boolean {
+    return status === 'completed'
+        || status === 'failed'
+        || status === 'cancelled'
+        || status === 'terminated';
+}

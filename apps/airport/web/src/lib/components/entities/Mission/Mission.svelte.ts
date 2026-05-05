@@ -3,8 +3,6 @@ import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult
 import {
     AgentSessionCommandAcknowledgementSchema,
     type AgentSessionCommandAcknowledgementType,
-    type AgentSessionCommandType,
-    type AgentSessionPromptType,
     type AgentSessionDataType
 } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import {
@@ -109,16 +107,6 @@ type MissionChildEntityCommandGateway = {
         sessionId: string;
         commandId: string;
         input?: unknown;
-    }): Promise<AgentSessionCommandAcknowledgementType>;
-    sendAgentSessionPrompt(input: {
-        missionId: string;
-        sessionId: string;
-        prompt: AgentSessionPromptType;
-    }): Promise<AgentSessionCommandAcknowledgementType>;
-    sendAgentSessionCommand(input: {
-        missionId: string;
-        sessionId: string;
-        command: AgentSessionCommandType;
     }): Promise<AgentSessionCommandAcknowledgementType>;
     artifactBody(input: {
         missionId: string;
@@ -256,32 +244,6 @@ function createMissionChildEntityCommandGateway(input: MissionGatewayDependencie
                 }
             }));
         },
-        sendAgentSessionPrompt: async ({ missionId, sessionId, prompt }) => {
-            const normalizedMissionId = requireMissionId(missionId, 'AgentSession prompt commands require missionId and sessionId.');
-            const normalizedSessionId = requireNonEmptyValue(sessionId, 'AgentSession prompt commands require missionId and sessionId.');
-            return AgentSessionCommandAcknowledgementSchema.parse(await commandRemote({
-                entity: agentSessionEntityName,
-                method: 'sendPrompt',
-                payload: {
-                    ...buildMissionPayload(normalizedMissionId, repositoryRootPath),
-                    sessionId: normalizedSessionId,
-                    prompt
-                }
-            }));
-        },
-        sendAgentSessionCommand: async ({ missionId, sessionId, command }) => {
-            const normalizedMissionId = requireMissionId(missionId, 'AgentSession terminal commands require missionId and sessionId.');
-            const normalizedSessionId = requireNonEmptyValue(sessionId, 'AgentSession terminal commands require missionId and sessionId.');
-            return AgentSessionCommandAcknowledgementSchema.parse(await commandRemote({
-                entity: agentSessionEntityName,
-                method: 'sendCommand',
-                payload: {
-                    ...buildMissionPayload(normalizedMissionId, repositoryRootPath),
-                    sessionId: normalizedSessionId,
-                    command
-                }
-            }));
-        },
         artifactBody: async ({ missionId, id, executionContext }) => {
             const normalizedMissionId = requireMissionId(missionId, 'Artifact body queries require missionId and id.');
             const normalizedId = requireNonEmptyValue(id, 'Artifact body queries require missionId and id.');
@@ -408,14 +370,6 @@ export class Mission implements EntityModel<MissionSnapshotType> {
 
     public async resume(): Promise<this> {
         return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: MissionCommandIds.resume }));
-    }
-
-    public async panic(): Promise<this> {
-        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: MissionCommandIds.panic }));
-    }
-
-    public async clearPanic(): Promise<this> {
-        return this.runCommandAndRefresh(this.commandGateway.executeMissionCommand({ missionId: this.missionId, commandId: MissionCommandIds.clearPanic }));
     }
 
     public async restartQueue(): Promise<this> {
@@ -626,22 +580,6 @@ export class Mission implements EntityModel<MissionSnapshotType> {
                         sessionId,
                         commandId,
                         ...(input !== undefined ? { input } : {})
-                    });
-                    await this.refresh();
-                },
-                sendPrompt: async (sessionId, prompt) => {
-                    await this.childCommands.sendAgentSessionPrompt({
-                        missionId: this.missionId,
-                        sessionId,
-                        prompt
-                    });
-                    await this.refresh();
-                },
-                sendCommand: async (sessionId, command) => {
-                    await this.childCommands.sendAgentSessionCommand({
-                        missionId: this.missionId,
-                        sessionId,
-                        command
                     });
                     await this.refresh();
                 }
@@ -978,4 +916,3 @@ function sendMissionCommand(
         }
     }));
 }
-

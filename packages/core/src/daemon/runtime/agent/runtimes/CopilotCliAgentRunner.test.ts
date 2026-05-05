@@ -1,18 +1,16 @@
 import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
 import * as path from 'node:path';
+import type { IPty } from 'node-pty';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentLaunchConfig, AgentSessionEvent } from '../AgentRuntimeTypes.js';
-import { CopilotCliAgentRunner, type CopilotCliAgentRunnerOptions } from './CopilotCliAgentRunner.js';
-
-const TEST_TRUSTED_CONFIG_DIR = '/tmp/mission-copilot-runner-config';
+import { CopilotCliAgentRunner } from './CopilotCliAgentRunner.js';
 
 type MockTerminalState = {
-	exists: boolean;
-	capture: string;
-	dead: boolean;
-	exitCode: number;
-	sentKeys: string[][];
-	lastLaunchCommand: string;
+	spawnedCommand: string;
+	spawnedArgs: string[];
+	writes: string[];
+	killCount: number;
 };
 
 function createLaunchConfig(overrides: Partial<AgentLaunchConfig> = {}): AgentLaunchConfig {
@@ -47,76 +45,36 @@ function createLaunchConfigWithoutInitialPrompt(): AgentLaunchConfig {
 
 describe('CopilotCliAgentRunner', () => {
 	let state: MockTerminalState;
-	let executor: NonNullable<CopilotCliAgentRunnerOptions['executor']>;
-	let activeSessionName: string | undefined;
+	let runtimeDirectory: string;
+	let trustedConfigDir: string;
+	let copilotScriptPath: string;
 
 	beforeEach(async () => {
 		vi.useFakeTimers();
-		await fs.rm(TEST_TRUSTED_CONFIG_DIR, { recursive: true, force: true });
+		runtimeDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-copilot-cli-'));
+		trustedConfigDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-copilot-config-'));
+		copilotScriptPath = path.join(runtimeDirectory, 'copilot');
+		await fs.writeFile(copilotScriptPath, '#!/bin/sh\nexit 0\n', { encoding: 'utf8', mode: 0o755 });
 		state = {
-			exists: true,
-			capture: '',
-			dead: false,
-			exitCode: 0,
-			sentKeys: [],
-			lastLaunchCommand: ''
-		};
-		activeSessionName = undefined;
-		executor = async (args) => {
-			if (args[0] === '--version') {
-				return { stdout: 'zellij 0.40.1\n', stderr: '' };
-			}
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
-				return {
-					stdout: JSON.stringify([
-						{ id: 1, title: 'RUNWAY', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: false },
-						{ id: 2, title: 'MISSION', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: true },
-						...(state.exists && activeSessionName
-							? [{ id: 4, title: activeSessionName, tab_id: 0, exited: state.dead, exitStatus: state.dead ? state.exitCode : null, is_plugin: false, is_focused: false }]
-							: [])
-					]),
-					stderr: ''
-				};
-			}
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'new-pane') {
-				activeSessionName = args[8];
-				state.lastLaunchCommand = args.at(-1) ?? '';
-				return { stdout: 'terminal_4\n', stderr: '' };
-			}
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'stack-panes') {
-				return { stdout: '', stderr: '' };
-			}
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'focus-pane-id') {
-				return { stdout: '', stderr: '' };
-			}
-			if (args[0] === '--session' && args[2] === 'action' && (args[3] === 'write-chars' || args[3] === 'write')) {
-				state.sentKeys.push(args);
-				return { stdout: '', stderr: '' };
-			}
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'dump-screen') {
-				return { stdout: state.capture, stderr: '' };
-			}
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'close-pane') {
-				state.exists = false;
-				return { stdout: '', stderr: '' };
-			}
-			throw new Error(`Unexpected terminal command: ${args.join(' ')}`);
+			spawnedCommand: '',
+			spawnedArgs: [],
+			writes: [],
+			killCount: 0
 		};
 	});
 
 	afterEach(async () => {
-		await fs.rm(TEST_TRUSTED_CONFIG_DIR, { recursive: true, force: true });
+		await fs.rm(runtimeDirectory, { recursive: true, force: true });
+		await fs.rm(trustedConfigDir, { recursive: true, force: true });
 		vi.useRealTimers();
 	});
 
-	it('starts a terminal-backed session and passes the initial prompt via launch args', async () => {
+	it('starts a PTY-backed session and passes the initial prompt via launch args', async () => {
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
-			args: ['--add-dir', '/tmp/work'],
-			trustedConfigDir: TEST_TRUSTED_CONFIG_DIR,
-			sharedSessionMode: 'enabled',
-			executor,
-			sharedSessionName: 'mission-mission',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
 			pollIntervalMs: 500
 		});
 
@@ -126,25 +84,27 @@ describe('CopilotCliAgentRunner', () => {
 		expect(snapshot.runnerId).toBe('copilot-cli');
 		expect(snapshot.transport?.kind).toBe('terminal');
 		expect(snapshot.sessionId).toMatch(/^task-1-copilot-cli-[a-z0-9]{8}$/);
-		expect(snapshot.transport?.terminalSessionName).toBe('mission-mission');
-		expect(snapshot.transport?.paneId).toBe('terminal_4');
+		expect(snapshot.transport?.terminalSessionName.endsWith(`:mission-1:task-1:${snapshot.sessionId}`)).toBe(true);
+		expect(snapshot.transport?.paneId).toBe('pty');
 		expect(snapshot.status).toBe('running');
-		expect(state.lastLaunchCommand).toContain("'--allow-all-paths'");
-		expect(state.lastLaunchCommand).toContain("'--allow-all-tools'");
-		expect(state.lastLaunchCommand).toContain("'--allow-all-urls'");
-		expect(state.lastLaunchCommand).toContain("'--config-dir'");
-		expect(state.lastLaunchCommand).toContain(`'${TEST_TRUSTED_CONFIG_DIR}'`);
-		expect(state.lastLaunchCommand).toContain("'--add-dir'");
-		expect(state.lastLaunchCommand).toContain("'/tmp/work'");
-		expect(state.lastLaunchCommand).toContain("'-i'");
-		expect(state.lastLaunchCommand).toContain("'Implement the task.'");
-		expect(state.sentKeys.some((args) => args.includes('write-chars') && args.includes('Implement the task.'))).toBe(false);
+		expect(state.spawnedCommand).toBe('/bin/sh');
+		expect(state.spawnedArgs).toContain(copilotScriptPath);
+		expect(state.spawnedArgs).toContain('--allow-all-paths');
+		expect(state.spawnedArgs).toContain('--allow-all-tools');
+		expect(state.spawnedArgs).toContain('--allow-all-urls');
+		expect(state.spawnedArgs).toContain('--config-dir');
+		expect(state.spawnedArgs).toContain(trustedConfigDir);
+		expect(state.spawnedArgs).toContain('--add-dir');
+		expect(state.spawnedArgs).toContain('/tmp/work');
+		expect(state.spawnedArgs).toContain('-i');
+		expect(state.spawnedArgs).toContain('Implement the task.');
+		expect(state.writes).not.toContain('Implement the task.');
 	});
 
 	it('stores trusted folders in settings.json without reading managed config.json', async () => {
-		await fs.mkdir(TEST_TRUSTED_CONFIG_DIR, { recursive: true });
+		await fs.mkdir(trustedConfigDir, { recursive: true });
 		await fs.writeFile(
-			path.join(TEST_TRUSTED_CONFIG_DIR, 'config.json'),
+			path.join(trustedConfigDir, 'config.json'),
 			[
 				'// User settings belong in settings.json.',
 				'// This file is managed automatically.',
@@ -157,17 +117,16 @@ describe('CopilotCliAgentRunner', () => {
 
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
-			trustedConfigDir: TEST_TRUSTED_CONFIG_DIR,
-			sharedSessionMode: 'enabled',
-			executor,
-			sharedSessionName: 'mission-mission',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
 			pollIntervalMs: 500
 		});
 
 		const session = await runner.startSession(createLaunchConfig());
 		const snapshot = session.getSnapshot();
 		const persistedSettings = JSON.parse(
-			await fs.readFile(path.join(TEST_TRUSTED_CONFIG_DIR, 'settings.json'), 'utf8')
+			await fs.readFile(path.join(trustedConfigDir, 'settings.json'), 'utf8')
 		) as { trustedFolders?: string[]; trusted_folders?: string[] };
 
 		expect(snapshot.status).toBe('running');
@@ -175,72 +134,12 @@ describe('CopilotCliAgentRunner', () => {
 		expect(persistedSettings.trusted_folders).toContain('/tmp/work');
 	});
 
-	it('falls back to a standalone terminal session when the runway gate pane is unavailable', async () => {
-		let standaloneSessionName: string | undefined;
-		const fallbackExecutor: NonNullable<CopilotCliAgentRunnerOptions['executor']> = async (args) => {
-			if (args[0] === '--version') {
-				return { stdout: 'zellij 0.40.1\n', stderr: '' };
-			}
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'list-panes') {
-				return {
-					stdout: JSON.stringify([
-						{ id: 2, title: 'MISSION', tab_id: 0, exited: false, exitStatus: null, is_plugin: false, is_focused: true }
-					]),
-					stderr: ''
-				};
-			}
-			if (args[0] === '--new-session-with-layout') {
-				standaloneSessionName = args.at(-1);
-				const layoutPath = args[1];
-				if (layoutPath) {
-					const layout = await fs.readFile(layoutPath, 'utf8');
-					state.lastLaunchCommand = layout;
-				}
-				return { stdout: '', stderr: '' };
-			}
-			if (args[0] === 'list-sessions') {
-				return {
-					stdout: standaloneSessionName ? `${standaloneSessionName} [Created 1s ago]\n` : '',
-					stderr: ''
-				};
-			}
-			if (args[0] === '--session' && args[2] === 'action' && args[3] === 'dump-screen') {
-				return { stdout: state.capture, stderr: '' };
-			}
-			if (args[0] === '--session' && args[2] === 'action' && (args[3] === 'write-chars' || args[3] === 'write')) {
-				state.sentKeys.push(args);
-				return { stdout: '', stderr: '' };
-			}
-			throw new Error(`Unexpected terminal command: ${args.join(' ')}`);
-		};
-
-		const runner = new CopilotCliAgentRunner({
-			command: 'copilot',
-			trustedConfigDir: TEST_TRUSTED_CONFIG_DIR,
-			sharedSessionMode: 'enabled',
-			executor: fallbackExecutor,
-			sharedSessionName: 'mission-mission',
-			pollIntervalMs: 500
-		});
-
-		const session = await runner.startSession(createLaunchConfig());
-		const snapshot = session.getSnapshot();
-
-		expect(snapshot.sessionId).toMatch(/^task-1-copilot-cli-[a-z0-9]{8}$/);
-		expect(snapshot.transport?.terminalSessionName).toBe(snapshot.sessionId);
-		expect(snapshot.transport?.paneId).toBeUndefined();
-		expect(state.lastLaunchCommand).toContain("'-i'");
-		expect(state.lastLaunchCommand).toContain("'Implement the task.'");
-		expect(state.sentKeys.some((args) => args.includes('write-chars') && args.includes('Implement the task.'))).toBe(false);
-	});
-
 	it('derives a task-based session name from the task path on launch', async () => {
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
-			trustedConfigDir: TEST_TRUSTED_CONFIG_DIR,
-			sharedSessionMode: 'enabled',
-			executor,
-			sharedSessionName: 'mission-mission',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
 			pollIntervalMs: 500
 		});
 
@@ -260,10 +159,9 @@ describe('CopilotCliAgentRunner', () => {
 	it('creates a fresh session id for each new launch of the same task', async () => {
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
-			trustedConfigDir: TEST_TRUSTED_CONFIG_DIR,
-			sharedSessionMode: 'enabled',
-			executor,
-			sharedSessionName: 'mission-mission',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
 			pollIntervalMs: 500
 		});
 
@@ -276,10 +174,9 @@ describe('CopilotCliAgentRunner', () => {
 	it('submits prompts by sending literal keys into terminal transport', async () => {
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
-			trustedConfigDir: TEST_TRUSTED_CONFIG_DIR,
-			sharedSessionMode: 'enabled',
-			executor,
-			sharedSessionName: 'mission-mission',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
 			pollIntervalMs: 500
 		});
 		const session = await runner.startSession(createLaunchConfigWithoutInitialPrompt());
@@ -290,17 +187,17 @@ describe('CopilotCliAgentRunner', () => {
 
 		await session.submitPrompt({ source: 'operator', text: 'Explain the current failure.' });
 
-		expect(state.sentKeys.some((args) => args.includes('write-chars') && args.includes('Explain the current failure.'))).toBe(true);
+		expect(state.writes).toContain('Explain the current failure.');
+		expect(state.writes).toContain('\r');
 		expect(events.some((event) => event.type === 'session.updated')).toBe(true);
 	});
 
 	it('maps interrupt commands to Ctrl+C and awaiting-input state', async () => {
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
-			trustedConfigDir: TEST_TRUSTED_CONFIG_DIR,
-			sharedSessionMode: 'enabled',
-			executor,
-			sharedSessionName: 'mission-mission',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
 			pollIntervalMs: 500
 		});
 		const session = await runner.startSession(createLaunchConfigWithoutInitialPrompt());
@@ -311,7 +208,7 @@ describe('CopilotCliAgentRunner', () => {
 
 		const snapshot = await session.submitCommand({ type: 'interrupt' });
 
-		expect(state.sentKeys.some((args) => args.includes('write') && args.includes('3'))).toBe(true);
+		expect(state.writes).toContain('\x03');
 		expect(snapshot.waitingForInput).toBe(true);
 		expect(events.find((event) => event.type === 'session.awaiting-input')).toBeDefined();
 	});
@@ -319,10 +216,9 @@ describe('CopilotCliAgentRunner', () => {
 	it('terminates a session through the runner API', async () => {
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
-			trustedConfigDir: TEST_TRUSTED_CONFIG_DIR,
-			sharedSessionMode: 'enabled',
-			executor,
-			sharedSessionName: 'mission-mission',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
 			pollIntervalMs: 500
 		});
 		const session = await runner.startSession(createLaunchConfigWithoutInitialPrompt());
@@ -334,7 +230,7 @@ describe('CopilotCliAgentRunner', () => {
 
 		expect(events.some((event) => event.type === 'session.terminated')).toBe(true);
 		expect(session.getSnapshot().status).toBe('terminated');
-		expect(state.exists).toBe(false);
+		expect(state.killCount).toBe(1);
 	});
 
 	it('trusts mission dossier cwd and mission root ancestor when launching', async () => {
@@ -342,10 +238,9 @@ describe('CopilotCliAgentRunner', () => {
 		const missionRootDirectory = '/tmp/mission-root';
 		const runner = new CopilotCliAgentRunner({
 			command: 'copilot',
-			trustedConfigDir: TEST_TRUSTED_CONFIG_DIR,
-			sharedSessionMode: 'enabled',
-			executor,
-			sharedSessionName: 'mission-mission',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
 			pollIntervalMs: 500
 		});
 
@@ -353,13 +248,157 @@ describe('CopilotCliAgentRunner', () => {
 			workingDirectory: missionDossierWorkingDirectory
 		}));
 
-		expect(state.lastLaunchCommand).toContain(`'${missionDossierWorkingDirectory}'`);
-		expect(state.lastLaunchCommand).toContain(`'${missionRootDirectory}'`);
+		expect(state.spawnedArgs).toContain(missionDossierWorkingDirectory);
+		expect(state.spawnedArgs).toContain(missionRootDirectory);
 
-		const config = JSON.parse(
-			await fs.readFile(`${TEST_TRUSTED_CONFIG_DIR}/config.json`, 'utf8')
-		) as { trusted_folders?: string[] };
-		expect(config.trusted_folders).toContain(missionDossierWorkingDirectory);
-		expect(config.trusted_folders).toContain(missionRootDirectory);
+		const settings = JSON.parse(
+			await fs.readFile(`${trustedConfigDir}/settings.json`, 'utf8')
+		) as { trustedFolders?: string[]; trusted_folders?: string[] };
+		expect(settings.trustedFolders).toContain(missionDossierWorkingDirectory);
+		expect(settings.trustedFolders).toContain(missionRootDirectory);
+		expect(settings.trusted_folders).toContain(missionDossierWorkingDirectory);
+		expect(settings.trusted_folders).toContain(missionRootDirectory);
+	});
+
+	it('passes Mission MCP launch env through and points Copilot at the workspace mcp config', async () => {
+		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-copilot-workspace-'));
+		try {
+			await fs.writeFile(
+				path.join(workspaceRoot, '.mcp.json'),
+				`${JSON.stringify({
+					mcpServers: {
+						mission_signal: {
+							type: 'stdio',
+							command: 'mission',
+							args: ['mcp', 'agent-bridge']
+						}
+					}
+				}, null, 2)}\n`,
+				'utf8'
+			);
+			const runner = new CopilotCliAgentRunner({
+				command: 'copilot',
+				trustedConfigDir,
+				env: { PATH: runtimeDirectory },
+				spawn: createSpawn(state, () => createFakePty(state)),
+				pollIntervalMs: 500,
+				mcpProvisioner: {
+					provision: async () => ({
+						runnerId: 'copilot-cli',
+						policy: 'optional',
+						accessState: 'mcp-validated',
+						launchEnv: {
+							MISSION_MCP_ENDPOINT: 'mission-local://mcp-signal/session-1',
+							MISSION_MCP_MISSION_ID: 'mission-1',
+							MISSION_MCP_TASK_ID: 'task-1',
+							MISSION_MCP_AGENT_SESSION_ID: 'session-1',
+							MISSION_MCP_ALLOWED_TOOLS: '["mission_report_progress"]'
+						},
+						generatedFiles: [],
+						cleanup: async () => undefined
+					})
+				} as never
+			});
+
+			await runner.startSession(createLaunchConfig({
+				workingDirectory: workspaceRoot
+			}));
+
+			expect(state.spawnedArgs).toContain('--additional-mcp-config');
+			expect(state.spawnedArgs).toContain(`@${path.join(workspaceRoot, '.mcp.json')}`);
+		} finally {
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		}
 	});
 });
+
+type FakePty = IPty & {
+	writes: string[];
+	killCount: number;
+	emitExit(exitCode?: number): void;
+};
+
+function createSpawn(
+	state: MockTerminalState,
+	createPty: () => FakePty
+): (command: string, args: string | string[]) => FakePty {
+	return ((command: string, args: string | string[]) => {
+		state.spawnedCommand = command;
+		state.spawnedArgs = Array.isArray(args) ? [...args] : [args];
+		return createPty();
+	}) as never;
+}
+
+function createFakePty(state: MockTerminalState): FakePty {
+	let onDataListener: ((chunk: string) => void) | undefined;
+	let onExitListener: ((event: { exitCode: number; signal?: number }) => void) | undefined;
+	const fakePty = {
+		pid: 1,
+		process: 'fake-shell',
+		cols: 120,
+		rows: 32,
+		handleFlowControl: false,
+		writes: [] as string[],
+		killCount: 0,
+		write(data: string) {
+			fakePty.writes.push(data);
+			state.writes.push(data);
+			onDataListener?.(data);
+		},
+		resize() {},
+		kill() {
+			fakePty.killCount += 1;
+			state.killCount += 1;
+			onExitListener?.({ exitCode: 0 });
+		},
+		clear() {},
+		onData(listener: (chunk: string) => void) {
+			onDataListener = listener;
+			return { dispose() {} };
+		},
+		onExit(listener: (event: { exitCode: number; signal?: number }) => void) {
+			onExitListener = listener;
+			return { dispose() {} };
+		},
+		emitExit(exitCode = 0) {
+			onExitListener?.({ exitCode });
+		},
+		pause() {},
+		resume() {},
+		setEncoding() {},
+		addListener() {
+			return fakePty;
+		},
+		removeListener() {
+			return fakePty;
+		},
+		once() {
+			return fakePty;
+		},
+		removeAllListeners() {
+			return fakePty;
+		},
+		listeners() {
+			return [];
+		},
+		rawListeners() {
+			return [];
+		},
+		emit() {
+			return true;
+		},
+		listenerCount() {
+			return 0;
+		},
+		prependListener() {
+			return fakePty;
+		},
+		prependOnceListener() {
+			return fakePty;
+		},
+		eventNames() {
+			return [];
+		}
+	} as FakePty;
+	return fakePty;
+}

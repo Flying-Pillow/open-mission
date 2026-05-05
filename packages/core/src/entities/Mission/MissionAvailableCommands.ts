@@ -26,8 +26,6 @@ export function buildMissionAvailableCommands(input: MissionAvailableCommandsInp
     const commands: MissionOwnedCommandDescriptorType[] = [
         buildPauseMissionCommand(input),
         buildResumeMissionCommand(input),
-        buildPanicStopCommand(input),
-        buildClearPanicCommand(input),
         buildRestartLaunchQueueCommand(input),
         buildDeliverMissionCommand(input)
     ];
@@ -49,7 +47,6 @@ export function buildMissionAvailableCommands(input: MissionAvailableCommandsInp
 
     for (const session of getOrderedSessions(input)) {
         commands.push(buildSessionCancelCommand(session));
-        commands.push(buildSessionTerminateCommand(session));
     }
 
     return commands;
@@ -78,41 +75,12 @@ function buildPauseMissionCommand(input: MissionAvailableCommandsInput): Mission
 
 function buildResumeMissionCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptorType {
     const errors = getValidationErrors(input, { type: 'mission.resumed' });
-    const enabled = input.runtime.lifecycle === 'paused' && !input.runtime.panic.active && errors.length === 0;
+    const enabled = input.runtime.lifecycle === 'paused' && errors.length === 0;
     return ownedMissionCommand(missionCommand({
         commandId: MissionCommandIds.resume,
         label: 'Resume Mission',
         ...buildAvailability(enabled, describeResumeUnavailable(input, errors)),
         requiresConfirmation: false
-    }));
-}
-
-function buildPanicStopCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptorType {
-    const errors = getValidationErrors(input, { type: 'mission.panic.requested' });
-    const enabled = input.runtime.lifecycle !== 'draft'
-        && input.runtime.lifecycle !== 'completed'
-        && input.runtime.lifecycle !== 'delivered'
-        && !input.runtime.panic.active
-        && errors.length === 0;
-    return ownedMissionCommand(missionCommand({
-        commandId: MissionCommandIds.panic,
-        label: 'Panic Stop',
-        ...buildAvailability(enabled, describePanicUnavailable(input, errors)),
-        requiresConfirmation: true,
-        confirmationPrompt: 'Stop all active mission work immediately?',
-        variant: 'destructive'
-    }));
-}
-
-function buildClearPanicCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptorType {
-    const errors = getValidationErrors(input, { type: 'mission.panic.cleared' });
-    const enabled = input.runtime.panic.active && input.runtime.lifecycle === 'panicked' && errors.length === 0;
-    return ownedMissionCommand(missionCommand({
-        commandId: MissionCommandIds.clearPanic,
-        label: 'Clear Panic',
-        ...buildAvailability(enabled, describeClearPanicUnavailable(input, errors)),
-        requiresConfirmation: true,
-        confirmationPrompt: 'Clear the mission panic state?'
     }));
 }
 
@@ -273,22 +241,10 @@ function buildSessionCancelCommand(session: AgentSessionRecord): MissionOwnedCom
     const enabled = isActiveAgentSession(session.lifecycleState);
     return ownedAgentSessionCommand(session.sessionId, missionCommand({
         commandId: AgentSessionCommandIds.cancel,
-        label: 'Stop Running Agent',
+        label: 'Stop agent',
         ...buildAvailability(enabled, 'Session is not active.'),
         requiresConfirmation: true,
         confirmationPrompt: 'Stop the running agent session?'
-    }));
-}
-
-function buildSessionTerminateCommand(session: AgentSessionRecord): MissionOwnedCommandDescriptorType {
-    const enabled = isActiveAgentSession(session.lifecycleState);
-    return ownedAgentSessionCommand(session.sessionId, missionCommand({
-        commandId: AgentSessionCommandIds.terminate,
-        label: 'Force Stop Agent',
-        ...buildAvailability(enabled, 'Session is not active.'),
-        requiresConfirmation: true,
-        confirmationPrompt: 'Force stop this agent session?',
-        variant: 'destructive'
     }));
 }
 
@@ -305,49 +261,19 @@ function resolveVerificationReworkTargetTask(
 function describePauseUnavailable(input: MissionAvailableCommandsInput): string {
     switch (input.runtime.lifecycle) {
         case 'paused': return 'Mission is already paused.';
-        case 'panicked': return 'Mission is panicked.';
         case 'delivered': return 'Mission already delivered.';
         default: return 'Mission is not running.';
     }
 }
 
 function describeResumeUnavailable(input: MissionAvailableCommandsInput, errors: string[]): string {
-    if (input.runtime.panic.active) {
-        return 'Clear panic before resuming the mission.';
-    }
     if (input.runtime.lifecycle !== 'paused') {
         return 'Mission is not paused.';
     }
     return errors[0] ?? 'Mission cannot be resumed.';
 }
 
-function describePanicUnavailable(input: MissionAvailableCommandsInput, errors: string[]): string {
-    if (input.runtime.panic.active) {
-        return 'Mission is already in panic state.';
-    }
-    if (input.runtime.lifecycle === 'draft') {
-        return 'Start the workflow before using panic stop.';
-    }
-    if (input.runtime.lifecycle === 'completed') {
-        return 'Mission is already completed.';
-    }
-    if (input.runtime.lifecycle === 'delivered') {
-        return 'Mission already delivered.';
-    }
-    return errors[0] ?? 'Mission cannot enter panic state.';
-}
-
-function describeClearPanicUnavailable(input: MissionAvailableCommandsInput, errors: string[]): string {
-    if (!input.runtime.panic.active) {
-        return 'Mission is not panicked.';
-    }
-    return errors[0] ?? 'Panic cannot be cleared right now.';
-}
-
 function describeRestartLaunchQueueUnavailable(input: MissionAvailableCommandsInput, errors: string[]): string {
-    if (input.runtime.panic.active || input.runtime.lifecycle === 'panicked') {
-        return 'Clear panic before restarting the launch queue.';
-    }
     if (input.runtime.pause.paused || input.runtime.lifecycle !== 'running') {
         return 'Mission must be running to restart the launch queue.';
     }
@@ -360,9 +286,6 @@ function describeRestartLaunchQueueUnavailable(input: MissionAvailableCommandsIn
 }
 
 function describeTaskStartUnavailable(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number], errors: string[]): string {
-    if (input.runtime.lifecycle === 'panicked' || input.runtime.panic.active) {
-        return 'Clear panic before starting new work.';
-    }
     if (input.runtime.lifecycle === 'paused' || input.runtime.pause.paused) {
         return 'Resume the mission before starting new work.';
     }
@@ -416,8 +339,6 @@ function getValidationErrors(
     input: MissionAvailableCommandsInput,
     event:
         | { type: 'mission.resumed' }
-        | { type: 'mission.panic.requested' }
-        | { type: 'mission.panic.cleared' }
         | { type: 'mission.launch-queue.restarted' }
         | { type: 'mission.delivered' }
         | { type: 'task.queued'; taskId: string }

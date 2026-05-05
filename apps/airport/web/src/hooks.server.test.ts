@@ -6,6 +6,7 @@ const readCachedDaemonSystemStatus = vi.fn();
 const readGithubAuthToken = vi.fn();
 const readGithubSessionContext = vi.fn();
 const resolveSurfacePath = vi.fn();
+const startMissionDaemonBootstrap = vi.fn();
 
 vi.mock("$lib/server/daemon/health.server", () => ({
 	getDaemonRuntimeState,
@@ -21,9 +22,12 @@ vi.mock("$lib/server/daemon/context.server", () => ({
 	resolveSurfacePath,
 }));
 
+vi.mock("$lib/server/daemon/bootstrap.server", () => ({
+	startMissionDaemonBootstrap,
+}));
+
 const daemonUnavailableState = {
 	running: false,
-	startedByHook: false,
 	message: "Mission daemon is unavailable.",
 	lastCheckedAt: "2026-04-20T00:00:00.000Z",
 } as const;
@@ -81,6 +85,7 @@ describe("handle", () => {
 		});
 
 		expect(resolve).toHaveBeenCalledTimes(2);
+		expect(getDaemonRuntimeState).not.toHaveBeenCalled();
 	});
 
 	it("does not canonical-redirect api requests on localhost port 5174", async () => {
@@ -94,10 +99,62 @@ describe("handle", () => {
 
 		expect(await response.text()).toBe("api ok");
 		expect(resolve).toHaveBeenCalledTimes(1);
+		expect(getDaemonRuntimeState).not.toHaveBeenCalled();
+	});
+
+	it("does not redirect remote command requests when the daemon is unavailable", async () => {
+		const { handle } = await import("./hooks.server");
+		const resolve = vi.fn().mockResolvedValue(new Response("remote ok"));
+
+		const response = await handle({
+			event: createEvent("http://127.0.0.1:5174/_app/remote/command-id/cmd"),
+			resolve,
+		});
+
+		expect(await response.text()).toBe("remote ok");
+		expect(resolve).toHaveBeenCalledTimes(1);
+		expect(getDaemonRuntimeState).not.toHaveBeenCalled();
+	});
+
+	it("does not redirect stripped remote command requests from daemon-gated pages", async () => {
+		const { handle } = await import("./hooks.server");
+		const resolve = vi.fn().mockResolvedValue(new Response("remote ok"));
+
+		const response = await handle({
+			event: createEvent("http://127.0.0.1:5174/airport/github%2FFlying-Pillow%2Fmission", {
+				isRemoteRequest: true,
+			}),
+			resolve,
+		});
+
+		expect(await response.text()).toBe("remote ok");
+		expect(resolve).toHaveBeenCalledTimes(1);
+		expect(getDaemonRuntimeState).not.toHaveBeenCalled();
+	});
+
+	it("does not canonical-redirect remote command requests on localhost port 5174", async () => {
+		getDaemonRuntimeState.mockResolvedValue({
+			running: true,
+			message: "Mission daemon connected.",
+			lastCheckedAt: "2026-04-20T00:00:00.000Z",
+		});
+		const { handle } = await import("./hooks.server");
+		const resolve = vi.fn().mockResolvedValue(new Response("remote ok"));
+
+		const response = await handle({
+			event: createEvent("http://localhost:5174/airport/github%2FFlying-Pillow%2Fmission", {
+				isRemoteRequest: true,
+			}),
+			resolve,
+		});
+
+		expect(await response.text()).toBe("remote ok");
+		expect(resolve).toHaveBeenCalledTimes(1);
+		expect(getDaemonRuntimeState).not.toHaveBeenCalled();
 	});
 });
 
-function createEvent(url: string) {
+function createEvent(url: string, options: { isRemoteRequest?: boolean } = {}) {
 	const requestUrl = new URL(url);
 
 	return {
@@ -112,6 +169,7 @@ function createEvent(url: string) {
 		route: { id: null },
 		setHeaders: () => { },
 		isDataRequest: false,
+		isRemoteRequest: options.isRemoteRequest ?? false,
 		isSubRequest: false,
 	} as unknown as RequestEvent;
 }

@@ -488,7 +488,7 @@ describe('Mission', () => {
                     stage.stageId === 'implementation'
                         ? {
                             ...stage,
-                            lifecycle: 'active',
+                            lifecycle: 'running',
                             taskIds: ['implementation/02-boundary', 'implementation/02-boundary-verify'],
                             readyTaskIds: [],
                             queuedTaskIds: [],
@@ -624,7 +624,7 @@ describe('Mission', () => {
                     stage.stageId === 'implementation'
                         ? {
                             ...stage,
-                            lifecycle: 'active',
+                            lifecycle: 'running',
                             taskIds: ['implementation/02-boundary', 'implementation/02-boundary-verify'],
                             readyTaskIds: [],
                             queuedTaskIds: [],
@@ -1156,7 +1156,7 @@ describe('Mission', () => {
 
                 const commands = await mission.listAvailableCommandSnapshot();
                 expect(findSessionCommand(commands.commands, launched.sessionId, AgentSessionCommandIds.cancel)?.disabled).toBe(false);
-                expect(findSessionCommand(commands.commands, launched.sessionId, AgentSessionCommandIds.terminate)?.disabled).toBe(false);
+                expect(commands.commands.filter((command) => command.owner.entity === 'AgentSession' && command.owner.sessionId === launched.sessionId)).toHaveLength(1);
             } finally {
                 mission.dispose();
             }
@@ -1220,50 +1220,6 @@ describe('Mission', () => {
         }
     });
 
-    it('does not expose panic when the mission is already completed', async () => {
-        const workspaceRoot = await createTempRepo();
-        const runner = new FakeAgentRunner('test-runner', 'Test Runner');
-
-        try {
-            const adapter = new MissionDossierFilesystem(workspaceRoot);
-            const mission = await Mission.create(adapter, {
-                brief: createBrief(211, 'Mission panic command availability'),
-                branchRef: adapter.deriveMissionBranchName(211, 'Mission panic command availability')
-            }, createWorkflowBindings(runner));
-
-            try {
-                await mission.startWorkflow();
-
-                const persisted = await Mission.readStateData(adapter, mission.getMissionDir());
-                if (!persisted) {
-                    throw new Error('Expected a persisted mission runtime data.');
-                }
-
-                persisted.runtime = {
-                    ...persisted.runtime,
-                    lifecycle: 'completed',
-                    updatedAt: '2026-04-20T16:05:00.000Z'
-                };
-                await Mission.writeStateData(adapter, mission.getMissionDir(), persisted);
-
-                const reloaded = await Mission.load(adapter, { missionId: mission.getRecord().id }, createWorkflowBindings(runner));
-                if (!reloaded) {
-                    throw new Error('Expected mission to reload.');
-                }
-
-                const commands = await reloaded.listAvailableCommandSnapshot();
-                expect(findMissionCommand(commands.commands, 'mission.panic')).toMatchObject({
-                    disabled: true,
-                    disabledReason: 'Mission is already completed.'
-                });
-                reloaded.dispose();
-            } finally {
-                mission.dispose();
-            }
-        } finally {
-            await fs.rm(workspaceRoot, { recursive: true, force: true });
-        }
-    });
 });
 
 type TestOwnedCommand = Awaited<ReturnType<Mission['listAvailableCommands']>>[number];

@@ -157,12 +157,6 @@ describe('Repository', () => {
                 runtime: {
                     lifecycle: 'draft',
                     pause: { paused: false },
-                    panic: {
-                        active: false,
-                        terminateSessions: true,
-                        clearLaunchQueue: true,
-                        haltMission: true
-                    },
                     stages: [],
                     tasks: [],
                     sessions: [],

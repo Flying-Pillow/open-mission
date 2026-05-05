@@ -86,7 +86,7 @@
             return "lucide:pause";
         }
 
-        if (commandId.includes("panic") || commandId.includes("terminate")) {
+        if (commandId.includes("terminate")) {
             return "lucide:triangle-alert";
         }
 

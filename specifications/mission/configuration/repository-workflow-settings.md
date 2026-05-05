@@ -277,7 +277,7 @@ Rules:
 1. A mission in `draft` does not yet own an isolated workflow configuration snapshot.
 2. Repository workflow settings are snapshotted into `mission.json` at the exact transition from `draft` to `ready`.
 3. Repository setting updates made while a mission is still `draft` do apply to that mission when it transitions to `ready`.
-4. Once a mission is `ready`, `running`, `paused`, `panicked`, `completed`, or `delivered`, its workflow snapshot is mission-local and isolated from later repository setting changes.
+4. Once a mission is `ready`, `running`, `paused`, `completed`, or `delivered`, its workflow snapshot is mission-local and isolated from later repository setting changes.
 5. Later repository updates do not retroactively mutate existing mission snapshots unless an explicit future migration command is defined.
 
 ## Security And Policy

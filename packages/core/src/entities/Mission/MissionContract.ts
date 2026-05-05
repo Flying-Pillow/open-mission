@@ -140,9 +140,7 @@ export function createMissionRuntimeEventSubscriptionChannels(missionId: string)
     }
 
     return [
-        ...Object.keys(MissionContract.events ?? {}).map((eventName) =>
-            createEntityChannel(createEntityId('mission', normalizedMissionId), eventName)
-        ),
+        ...createEntityContractChannelPatterns('mission', normalizedMissionId, MissionContract),
         ...createEntityContractChannelPatterns('stage', `${normalizedMissionId}/*`, StageContract),
         ...createEntityContractChannelPatterns('task', `${normalizedMissionId}/*`, TaskContract),
         ...createEntityContractChannelPatterns('artifact', `${normalizedMissionId}/*`, ArtifactContract),
@@ -161,7 +159,7 @@ export function createAllRuntimeEventSubscriptionChannels(): string[] {
 }
 
 function createEntityContractChannelPatterns(table: string, uniqueId: string, contract: EntityContractType): string[] {
-    return Object.keys(contract.events ?? {}).map((eventName) =>
+    return Object.keys(contract.events ?? {}).filter((eventName) => eventName !== 'terminal').map((eventName) =>
         createEntityChannel(createEntityId(table, uniqueId), eventName)
     );
 }

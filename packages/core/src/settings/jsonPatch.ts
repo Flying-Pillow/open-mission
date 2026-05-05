@@ -4,7 +4,6 @@ import { WorkflowSettingsError, type JsonPatchOperation } from './types.js';
 const ALLOWED_PATH_PREFIXES = [
 	'/autostart',
 	'/humanInLoop',
-	'/panic',
 	'/execution',
 	'/stageOrder',
 	'/stages',

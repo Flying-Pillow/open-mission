@@ -1,4 +1,16 @@
-# Local Surface Preferences
+---
+layout: default
+title: Local Surface Preferences
+parent: Architecture Decisions
+nav_order: 8
+status: accepted
+date: 2026-05-04
+decision_area: surface-preferences
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Mission surface preferences are local Airport surface/client affordances, such as collapsed outline nodes, panel sizes, and temporary focus. They do not change Mission state and they are not part of the Mission's durable work record.
 

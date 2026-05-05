@@ -10,6 +10,13 @@ import { Repository } from '../entities/Repository/Repository.js';
 import { MissionDossierFilesystem } from '../entities/Mission/MissionDossierFilesystem.js';
 import { parsePersistedWorkflowSettings } from '../settings/validation.js';
 import { readMissionWorkflowDefinition } from '../workflow/mission/preset.js';
+import type { MissionMcpSignalServer } from './runtime/agent/mcp/MissionMcpSignalServer.js';
+import type {
+	AgentSessionObservation,
+	AgentSessionSignalDecision,
+	AgentSessionSignalScope
+} from './runtime/agent/signals/AgentSessionSignal.js';
+import type { AgentSessionSnapshot } from './runtime/agent/AgentRuntimeTypes.js';
 
 export type MissionLoader = (
     input: MissionLocatorType,
@@ -22,13 +29,19 @@ export type MissionHandle = Mission;
 export class MissionRegistry {
     private readonly missionLoads = new Map<string, Promise<MissionHandle | undefined>>();
     private readonly missionHandles = new Map<string, MissionHandle>();
+    private mcpSignalServer: MissionMcpSignalServer | undefined;
 
     public constructor(private readonly options: {
         loadMission?: MissionLoader;
         logger?: {
+            info(message: string, metadata?: Record<string, unknown>): void;
             warn(message: string, metadata?: Record<string, unknown>): void;
         };
     } = {}) { }
+
+    public bindMcpSignalServer(signalServer: MissionMcpSignalServer): void {
+        this.mcpSignalServer = signalServer;
+    }
 
     public async hydrateDaemonMissions(context: { surfacePath: string }): Promise<void> {
         const roots = new Set<string>([path.resolve(context.surfacePath)]);
@@ -76,6 +89,24 @@ export class MissionRegistry {
         }
         this.missionHandles.clear();
         this.missionLoads.clear();
+    }
+
+    public getRuntimeSessionSnapshot(scope: AgentSessionSignalScope): AgentSessionSnapshot | undefined {
+        const mission = this.findLoadedMission(scope.missionId);
+        return mission?.getRuntimeSessionSnapshot(scope.agentSessionId);
+    }
+
+    public applyRuntimeSessionSignalDecision(input: {
+        scope: AgentSessionSignalScope;
+        observation: AgentSessionObservation;
+        decision: Exclude<AgentSessionSignalDecision, { action: 'reject' }>;
+    }): AgentSessionSnapshot | undefined {
+        const mission = this.findLoadedMission(input.scope.missionId);
+        return mission?.applyRuntimeSessionSignalDecision(
+            input.scope.agentSessionId,
+            input.observation,
+            input.decision
+        );
     }
 
     public async loadRequiredMission(
@@ -149,7 +180,8 @@ export class MissionRegistry {
         const workflow = parsePersistedWorkflowSettings(workflowDocument);
         const taskRunners = new Map(
             (await createConfiguredAgentRunners({
-                repositoryRootPath: repositoryRoot
+                repositoryRootPath: repositoryRoot,
+                ...(this.mcpSignalServer ? { mcpSignalServer: this.mcpSignalServer } : {})
             })).map((runner) => [runner.id, runner] as const)
         );
 
@@ -168,7 +200,9 @@ export class MissionRegistry {
                 : {}),
             ...(settings.skillsPath ? { skillsPath: resolveRepositoryPath(repositoryRoot, settings.skillsPath) } : {}),
             ...(settings.defaultModel ? { defaultModel: settings.defaultModel } : {}),
-            ...(settings.defaultAgentMode ? { defaultMode: settings.defaultAgentMode } : {})
+            ...(settings.defaultReasoningEffort ? { defaultReasoningEffort: settings.defaultReasoningEffort } : {}),
+            ...(settings.defaultAgentMode ? { defaultMode: settings.defaultAgentMode } : {}),
+            ...(this.options.logger ? { logger: this.options.logger } : {})
         });
         await mission.refresh();
         return mission;
@@ -196,6 +230,15 @@ export class MissionRegistry {
                 return typeof value === 'function' ? value.bind(target) : value;
             }
         });
+    }
+
+    private findLoadedMission(missionId: string): MissionHandle | undefined {
+        for (const mission of this.missionHandles.values()) {
+            if (mission.missionId === missionId) {
+                return mission;
+            }
+        }
+        return undefined;
     }
 
 }

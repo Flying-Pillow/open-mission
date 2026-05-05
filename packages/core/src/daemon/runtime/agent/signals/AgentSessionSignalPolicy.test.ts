@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentSessionSnapshot } from '../AgentRuntimeTypes.js';
 import { AgentSessionSignalPolicy } from './AgentSessionSignalPolicy.js';
+import { MAX_MISSION_PROTOCOL_MARKER_LENGTH } from './AgentSessionSignal.js';
+import {
+	MISSION_PROTOCOL_MARKER_PREFIX
+} from './MissionProtocolMarkerParser.js';
 import type { AgentSessionObservation } from './AgentSessionSignal.js';
 
 function createSnapshot(): AgentSessionSnapshot {
@@ -462,6 +466,40 @@ describe('AgentSessionSignalPolicy', () => {
 		})).toEqual({
 			action: 'reject',
 			reason: 'suggested responses exceeded the maximum supported size.'
+		});
+	});
+
+	it('rejects oversized protocol-marker claims before they can promote session state', () => {
+		const policy = new AgentSessionSignalPolicy();
+
+		expect(policy.evaluate({
+			snapshot: createSnapshot(),
+			observation: createObservation({
+				observationId: 'observation-oversized-marker',
+				rawText: `${MISSION_PROTOCOL_MARKER_PREFIX}${'x'.repeat(MAX_MISSION_PROTOCOL_MARKER_LENGTH)}`
+			})
+		})).toEqual({
+			action: 'reject',
+			reason: 'Mission protocol marker exceeded the maximum length.'
+		});
+	});
+
+	it('rejects promotable claims after the session has already ended', () => {
+		const policy = new AgentSessionSignalPolicy();
+
+		expect(policy.evaluate({
+			snapshot: {
+				...createSnapshot(),
+				status: 'completed',
+				attention: 'none',
+				endedAt: '2026-05-04T12:00:00.000Z'
+			},
+			observation: createObservation({
+				observationId: 'observation-terminal-session-progress'
+			})
+		})).toEqual({
+			action: 'reject',
+			reason: "Mission session 'session-7' already ended with status 'completed'."
 		});
 	});
 });

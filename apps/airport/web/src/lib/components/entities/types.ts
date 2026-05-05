@@ -1,6 +1,5 @@
 import type {
     RepositoryIssueDetailType,
-    RepositoryStorageType,
     RepositoryPlatformRepositoryType,
     RepositoryDataType,
     TrackedIssueSummaryType
@@ -9,7 +8,7 @@ import type { MissionCatalogEntryType } from '@flying-pillow/mission-core/entiti
 import type { AgentSessionDataType } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import type { MissionSnapshotType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 
-export type SidebarRepositoryData = RepositoryStorageType & {
+export type SidebarRepositoryData = RepositoryDataType & {
     missions?: MissionCatalogEntryType[];
 };
 export type AirportRepositoryListItem = {
@@ -26,7 +25,6 @@ export type AirportRepositoryListItem = {
 export type {
     RepositoryIssueDetailType,
     MissionCatalogEntryType,
-    RepositoryStorageType,
     RepositoryPlatformRepositoryType,
     RepositoryDataType,
     TrackedIssueSummaryType,

@@ -1,5 +1,6 @@
 <script lang="ts">
     import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
+    import { Badge } from "$lib/components/ui/badge";
 
     type MissionCockpitSelectionState = {
         treeNodes: MissionTowerTreeNode[];
@@ -22,6 +23,9 @@
     const currentStageIndex = $derived(
         stageNodes.findIndex((node) => node.stageId === currentStageId),
     );
+    const taskNodes = $derived(
+        selectionState.treeNodes.filter((node) => node.kind === "task"),
+    );
 
     function isSelected(nodeId: string): boolean {
         return selectionState.selectedNodeId === nodeId;
@@ -41,7 +45,6 @@
 
     function statusColor(statusLabel: string | undefined): string {
         switch (normalizeStatusLabel(statusLabel)) {
-            case "active":
             case "running":
                 return "#0ea5e9";
             case "ready":
@@ -53,7 +56,6 @@
             case "delivered":
                 return "#10b981";
             case "failed":
-            case "panicked":
                 return "#ef4444";
             case "cancelled":
             case "terminated":
@@ -70,36 +72,48 @@
         return statusColor(node.statusLabel);
     }
 
-    function connectorFillOpacity(index: number): number {
-        if (currentStageIndex === -1) {
-            return 0.18;
-        }
-
-        if (index < currentStageIndex) {
-            return 1;
-        }
-
-        if (index === currentStageIndex) {
-            return 0.45;
-        }
-
-        return 0.18;
+    function stageBadgeBackground(node: MissionTowerTreeNode): string {
+        return `${stageColor(node)}4d`;
     }
 
-    function connectorFillWidth(index: number): string {
-        if (currentStageIndex === -1) {
-            return "0%";
+    function stageTrackBackground(node: MissionTowerTreeNode): string {
+        return `${stageColor(node)}1f`;
+    }
+
+    function isCompletedTask(node: MissionTowerTreeNode): boolean {
+        const statusLabel = normalizeStatusLabel(node.statusLabel);
+        return statusLabel === "completed" || statusLabel === "delivered";
+    }
+
+    function stageProgressPercent(stage: MissionTowerTreeNode): number {
+        const stageTasks = taskNodes.filter(
+            (task) => task.stageId === stage.stageId,
+        );
+        if (stageTasks.length === 0) {
+            return isCompletedTask(stage) ? 100 : 0;
         }
 
-        if (index < currentStageIndex) {
-            return "100%";
+        const completedTaskCount = stageTasks.filter(isCompletedTask).length;
+        return (completedTaskCount / stageTasks.length) * 100;
+    }
+
+    function stageProgressBackground(stage: MissionTowerTreeNode): string {
+        const progress = stageProgressPercent(stage);
+        const gradientMargin = 10;
+        const gradientStart = Math.max(0, progress - gradientMargin);
+        const gradientEnd = Math.min(100, progress + gradientMargin);
+        const progressColor = stageBadgeBackground(stage);
+        const trackColor = stageTrackBackground(stage);
+
+        if (progress <= 0) {
+            return trackColor;
         }
 
-        if (index === currentStageIndex) {
-            return "55%";
+        if (progress >= 100) {
+            return progressColor;
         }
 
-        return "0%";
+        return `linear-gradient(90deg, ${progressColor} 0%, ${progressColor} ${gradientStart}%, ${trackColor} ${gradientEnd}%, ${trackColor} 100%)`;
     }
 
     function stageTextClass(nodeId: string): string {
@@ -134,44 +148,38 @@
     }
 </script>
 
-<div class="min-h-0 overflow-x-hidden pb-2">
+<div class="h-12 min-h-0 overflow-hidden p-2">
     {#if stageNodes.length === 0}
         <div
-            class="rounded-xl border border-dashed bg-background/60 px-4 py-8 text-sm text-muted-foreground"
+            class="flex h-full items-center border border-dashed bg-background/60 text-sm text-muted-foreground"
         >
             Mission cockpit is waiting for the control view.
         </div>
     {:else}
-        <div class="relative w-full px-1 py-2">
-            <div
-                class="mb-4 grid w-full gap-0"
-                style={`grid-template-columns: repeat(${stageNodes.length}, minmax(0, 1fr));`}
-            >
-                {#each stageNodes as stage (stage.id)}
-                    <div class="px-2 text-center">
-                        <p
-                            class={`text-sm font-medium transition-colors ${stageTextClass(stage.id)}`}
-                        >
-                            {stage.label}
-                        </p>
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            {stageStatusLabel(stage)}
-                        </p>
-                    </div>
-                {/each}
-            </div>
-
+        <div class="relative h-full w-full overflow-hidden">
             {#if stageNodes.length > 0}
-                <div class="pointer-events-none relative mx-[0.625rem] h-5">
+                <div class="pointer-events-none relative mx-[0.625rem] h-full">
                     {#each stageNodes as stage, index (stage.id)}
                         <span
-                            class="absolute top-1/2 block h-1 -translate-y-1/2 rounded-full"
-                            style={`left: ${endpointPosition(index)}%; width: ${endpointPosition(index + 1) - endpointPosition(index)}%; background-color: ${stageColor(stage)}; opacity: 0.18;`}
+                            class="absolute top-1/2 block h-6 -translate-y-1/2"
+                            style={`left: ${endpointPosition(index)}%; width: ${endpointPosition(index + 1) - endpointPosition(index)}%;`}
                         >
                             <span
-                                class="block h-full rounded-full transition-all"
-                                style={`width: ${connectorFillWidth(index)}; background-color: ${stageColor(stage)}; opacity: ${connectorFillOpacity(index)};`}
+                                class="absolute top-1/2 block h-1 w-full -translate-y-1/2"
+                                style={`background: ${stageProgressBackground(stage)};`}
                             ></span>
+                            <span
+                                class={`absolute inset-0 z-20 flex items-center justify-center px-1 text-center text-sm font-medium leading-none transition-colors ${stageTextClass(stage.id)}`}
+                            >
+                                <Badge
+                                    variant="outline"
+                                    class="max-w-full overflow-hidden rounded-full border bg-background px-2 text-xs font-semibold shadow-sm"
+                                    style={`border-color: ${stageColor(stage)}; color: ${stageColor(stage)};`}
+                                    title={`${stage.label}: ${stageStatusLabel(stage)}`}
+                                >
+                                    <span class="truncate">{stage.label}</span>
+                                </Badge>
+                            </span>
                         </span>
                     {/each}
 
@@ -185,13 +193,13 @@
             {/if}
 
             <div
-                class="absolute inset-x-0 top-0 grid gap-0"
+                class="absolute inset-0 grid gap-0"
                 style={`grid-template-columns: repeat(${stageNodes.length}, minmax(0, 1fr));`}
             >
                 {#each stageNodes as stage (stage.id)}
                     <button
                         type="button"
-                        class="group flex h-[5.25rem] w-full flex-col items-center text-center"
+                        class="group flex h-full w-full flex-col items-center text-center"
                         onclick={() => onSelectNode(stage.id)}
                     >
                         <span class="sr-only">

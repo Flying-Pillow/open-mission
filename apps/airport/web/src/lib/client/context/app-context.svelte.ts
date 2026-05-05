@@ -13,12 +13,9 @@ export type GithubStatus = "connected" | "disconnected" | "unknown";
 export type AppContextServerValue = {
     daemon: {
         running: boolean;
-        startedByHook: boolean;
         message: string;
         endpointPath?: string;
         lastCheckedAt: string;
-        nextRetryAt?: string;
-        failureCount?: number;
     };
     githubStatus: GithubStatus;
     user?: {
@@ -64,6 +61,7 @@ export type AppContextValue = {
         missionId: string;
         repositoryRootPath?: string;
         onUpdate?: (mission: Mission, event: MissionRuntimeEventEnvelopeType) => void;
+        onConnected?: (mission: Mission) => void;
         onError?: (error: Error) => void;
     }): RuntimeSubscription;
     setRepositories(repositories: SidebarRepositoryData[]): void;
@@ -136,6 +134,9 @@ export function createAppContext(
         observeMission(input) {
             return state.application.observeMission({
                 ...input,
+                onConnected: (mission) => {
+                    input.onConnected?.(mission);
+                },
                 onUpdate: (mission, event) => {
                     input.onUpdate?.(mission, event);
                 },

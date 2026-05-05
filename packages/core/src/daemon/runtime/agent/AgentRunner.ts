@@ -11,11 +11,13 @@ import type {
     AgentSessionReference,
     AgentSessionSnapshot
 } from './AgentRuntimeTypes.js';
+import { deriveAgentSessionInteractionCapabilities } from './AgentRuntimeTypes.js';
 import {
     TerminalAgentTransport,
     type TerminalAgentTransportOptions
 } from './TerminalAgentTransport.js';
 import { Repository } from '../../../entities/Repository/Repository.js';
+import type { AgentSessionSignalDecision } from './signals/AgentSessionSignal.js';
 
 export type AgentRunnerDefinition = {
     id: AgentRunnerId;
@@ -85,6 +87,7 @@ export type AgentRunnerTerminalTransportRuntimeOptions = {
     agentSessionPaneTitle?: TerminalAgentTransportOptions['agentSessionPaneTitle'];
     discoverSharedSessionName?: TerminalAgentTransportOptions['discoverSharedSessionName'];
     executor?: TerminalAgentTransportOptions['executor'];
+    spawn?: TerminalAgentTransportOptions['spawn'];
 };
 
 type ManagedSessionRecord = {
@@ -227,6 +230,7 @@ export abstract class AgentRunner {
             ...(options.agentSessionPaneTitle ? { agentSessionPaneTitle: options.agentSessionPaneTitle } : {}),
             ...(options.discoverSharedSessionName !== undefined ? { discoverSharedSessionName: options.discoverSharedSessionName } : {}),
             ...(options.executor ? { executor: options.executor } : {}),
+            ...(options.spawn ? { spawn: options.spawn } : {}),
             ...(options.logLine ? { logLine: options.logLine } : {})
         });
         this.configureTerminalCommandRuntime({
@@ -277,20 +281,32 @@ export abstract class AgentRunner {
 
     protected async startTerminalCommandSession(
         config: AgentLaunchConfig,
-        options: { launchArgs?: string[]; skipInitialPromptSubmission?: boolean } = {}
+        options: {
+            sessionId?: string;
+            launchCommand?: string;
+            launchArgs?: string[];
+            launchEnv?: NodeJS.ProcessEnv;
+            replaceBaseArgs?: boolean;
+            skipInitialPromptSubmission?: boolean;
+        } = {}
     ): Promise<AgentSession> {
         const runtime = this.requireTerminalRuntime();
         const requestedSharedSessionName = getRequestedTerminalSessionName(config);
-        const sessionId = buildFreshAgentSessionId(config.task.taskId, this.id);
+        const sessionId = options.sessionId?.trim() || buildFreshAgentSessionId(config.task.taskId, this.id);
+        const launchCommand = options.launchCommand?.trim() || runtime.command;
+        if (!launchCommand) {
+            throw new Error(`${this.displayName} requires a non-empty launch command.`);
+        }
         const launchArgs = [
-            ...runtime.args,
+            ...(options.replaceBaseArgs ? [] : runtime.args),
             ...(options.launchArgs ?? [])
         ];
+        const launchEnv = options.launchEnv ?? runtime.env;
         const transportHandle = await runtime.openSession({
             workingDirectory: config.workingDirectory,
-            command: runtime.command,
+            command: launchCommand,
             args: launchArgs,
-            ...(runtime.env ? { env: runtime.env } : {}),
+            ...(launchEnv ? { env: launchEnv } : {}),
             sessionPrefix: runtime.sessionPrefix,
             sessionName: buildTaskTerminalSessionName(config.workingDirectory, config.missionId, config.task.taskId, sessionId),
             ...(requestedSharedSessionName ? { sharedSessionName: requestedSharedSessionName } : {})
@@ -399,7 +415,8 @@ export abstract class AgentRunner {
             submitPrompt: (prompt) => this.invokeManagedSubmitPrompt(sessionId, prompt),
             submitCommand: (command) => this.invokeManagedSubmitCommand(sessionId, command),
             cancel: (reason) => this.invokeManagedCancel(sessionId, reason),
-            terminate: (reason) => this.invokeManagedTerminate(sessionId, reason)
+            terminate: (reason) => this.invokeManagedTerminate(sessionId, reason),
+            applySignalDecision: (decision) => this.applyManagedSignalDecision(sessionId, decision)
         });
     }
 
@@ -450,6 +467,7 @@ export abstract class AgentRunner {
         if ('failureMessage' in overrides && overrides.failureMessage === undefined) {
             delete nextSnapshot.failureMessage;
         }
+        nextSnapshot.interactionCapabilities = deriveAgentSessionInteractionCapabilities(nextSnapshot);
         record.snapshot = nextSnapshot;
         return cloneSnapshot(record.snapshot);
     }
@@ -462,6 +480,35 @@ export abstract class AgentRunner {
         record.snapshot = cloneSnapshot(event.snapshot);
         for (const listener of record.listeners) {
             listener(event);
+        }
+    }
+
+    protected createFreshSessionId(config: AgentLaunchConfig): AgentSessionId {
+        return buildFreshAgentSessionId(config.task.taskId, this.id);
+    }
+
+    protected applyManagedSignalDecision(
+        sessionId: AgentSessionId,
+        decision: Exclude<AgentSessionSignalDecision, { action: 'reject' }>
+    ): AgentSessionSnapshot | void {
+        switch (decision.action) {
+            case 'emit-message': {
+                this.emitSessionEvent({
+                    ...decision.event,
+                    snapshot: this.getManagedSnapshot(sessionId)
+                });
+                return this.getManagedSnapshot(sessionId);
+            }
+            case 'record-observation-only':
+                return this.getManagedSnapshot(sessionId);
+            case 'update-session': {
+                const snapshot = this.updateManagedSnapshot(sessionId, {
+                    ...decision.snapshotPatch,
+                    ...toSignalDrivenInteractionPatch(decision.eventType)
+                });
+                this.emitSessionEvent(createSignalDrivenSessionEvent(decision.eventType, snapshot));
+                return snapshot;
+            }
         }
     }
 
@@ -689,6 +736,17 @@ export abstract class AgentRunner {
             const paneState = await runtime.readPaneState(handle.transportHandle);
             if (paneState.dead) {
                 this.stopTerminalPolling(sessionId);
+                const finalCapture = await runtime.capturePane(handle.transportHandle).catch(() => '');
+                const finalLines = diffCapturedOutput(handle.lastCapture, finalCapture);
+                handle.lastCapture = finalCapture;
+                for (const line of finalLines) {
+                    this.emitSessionEvent({
+                        type: 'session.message',
+                        channel: 'stdout',
+                        text: line,
+                        snapshot: this.getManagedSnapshot(sessionId)
+                    });
+                }
                 const snapshot = paneState.exitCode === 0
                     ? this.updateManagedSnapshot(sessionId, {
                         status: 'completed',
@@ -860,6 +918,9 @@ type ManagedAgentSessionOptions = {
     submitCommand(command: AgentCommand): Promise<AgentSessionSnapshot>;
     cancel(reason?: string): Promise<AgentSessionSnapshot>;
     terminate(reason?: string): Promise<AgentSessionSnapshot>;
+    applySignalDecision(
+        decision: Exclude<AgentSessionSignalDecision, { action: 'reject' }>
+    ): Promise<AgentSessionSnapshot | void> | AgentSessionSnapshot | void;
 };
 
 class ManagedAgentSession implements AgentSession {
@@ -895,6 +956,12 @@ class ManagedAgentSession implements AgentSession {
 
     public terminate(reason?: string): Promise<AgentSessionSnapshot> {
         return this.options.terminate(reason);
+    }
+
+    public applySignalDecision(
+        decision: Exclude<AgentSessionSignalDecision, { action: 'reject' }>
+    ): Promise<AgentSessionSnapshot | void> | AgentSessionSnapshot | void {
+        return this.options.applySignalDecision(decision);
     }
 }
 
@@ -938,6 +1005,9 @@ function cloneSnapshot(snapshot: AgentSessionSnapshot): AgentSessionSnapshot {
     return {
         ...snapshot,
         acceptedCommands: [...snapshot.acceptedCommands],
+        ...(snapshot.interactionCapabilities
+            ? { interactionCapabilities: { ...snapshot.interactionCapabilities } }
+            : {}),
         progress: {
             ...snapshot.progress,
             ...(snapshot.progress.units ? { units: { ...snapshot.progress.units } } : {})
@@ -948,6 +1018,58 @@ function cloneSnapshot(snapshot: AgentSessionSnapshot): AgentSessionSnapshot {
         },
         ...(snapshot.transport ? { transport: { ...snapshot.transport } } : {})
     };
+}
+
+function toSignalDrivenInteractionPatch(
+    eventType: 'session.updated' | 'session.awaiting-input' | 'session.completed' | 'session.failed'
+): Pick<AgentSessionSnapshot, 'acceptsPrompts' | 'acceptedCommands' | 'waitingForInput'>
+    & Partial<Pick<AgentSessionSnapshot, 'failureMessage'>> {
+    switch (eventType) {
+        case 'session.awaiting-input':
+            return {
+                acceptsPrompts: true,
+                acceptedCommands: ['interrupt', 'checkpoint', 'nudge', 'resume'],
+                waitingForInput: true
+            };
+        case 'session.completed':
+            return {
+                acceptsPrompts: false,
+                acceptedCommands: [],
+                waitingForInput: false
+            };
+        case 'session.failed':
+            return {
+                acceptsPrompts: false,
+                acceptedCommands: [],
+                waitingForInput: false
+            };
+        case 'session.updated':
+            return {
+                acceptsPrompts: true,
+                acceptedCommands: ['interrupt', 'checkpoint', 'nudge'],
+                waitingForInput: false
+            };
+    }
+}
+
+function createSignalDrivenSessionEvent(
+    eventType: 'session.updated' | 'session.awaiting-input' | 'session.completed' | 'session.failed',
+    snapshot: AgentSessionSnapshot
+): AgentSessionEvent {
+    switch (eventType) {
+        case 'session.updated':
+            return { type: 'session.updated', snapshot };
+        case 'session.awaiting-input':
+            return { type: 'session.awaiting-input', snapshot };
+        case 'session.completed':
+            return { type: 'session.completed', snapshot };
+        case 'session.failed':
+            return {
+                type: 'session.failed',
+                reason: snapshot.failureMessage ?? snapshot.progress.detail ?? 'Agent session failed.',
+                snapshot
+            };
+    }
 }
 
 function toSnapshotTransport(
@@ -1120,6 +1242,12 @@ function createTerminalSnapshot(input: {
         waitingForInput: false,
         acceptsPrompts: input.acceptsPrompts,
         acceptedCommands: [...input.acceptedCommands],
+        interactionCapabilities: deriveAgentSessionInteractionCapabilities({
+            status: input.status,
+            transport: input.transport,
+            acceptsPrompts: input.acceptsPrompts,
+            acceptedCommands: input.acceptedCommands
+        }),
         transport: input.transport,
         reference,
         startedAt: timestamp,
@@ -1152,6 +1280,12 @@ function createDetachedTerminalSnapshot(
         waitingForInput: false,
         acceptsPrompts: false,
         acceptedCommands: [],
+        interactionCapabilities: deriveAgentSessionInteractionCapabilities({
+            status: 'terminated',
+            ...(reference.transport ? { transport: { ...reference.transport } } : {}),
+            acceptsPrompts: false,
+            acceptedCommands: []
+        }),
         reference: {
             runnerId,
             sessionId: reference.sessionId,

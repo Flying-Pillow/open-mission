@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MissionDescriptor, MissionTaskState } from '../../entities/Mission/MissionSchema.js';
-import type { MissionDossierFilesystem } from '../../entities/Mission/MissionDossierFilesystem.js';
+import type { MissionDossierFilesystem, TaskArtifactWrite } from '../../entities/Mission/MissionDossierFilesystem.js';
 import {
 	createInitialMissionWorkflowRuntimeState,
 	createMissionWorkflowConfigurationSnapshot
@@ -48,12 +48,12 @@ function createTask(task: Partial<MissionTaskRuntimeState> = {}): MissionTaskRun
 describe('MissionWorkflowRequestExecutor', () => {
 	it('generates implementation tasks from configured task-generation tasks', async () => {
 		const runner = new FakeAgentRunner('fake-runner', 'Fake Runner', 'terminal');
-		const writtenTasks: Array<{ stage: string; fileName: string }> = [];
+		const writtenTasks: Array<{ stage: string; fileName: string; record: TaskArtifactWrite }> = [];
 		const adapter = {
 			writeArtifactRecord: async () => undefined,
 			listTaskStates: async () => [],
-			writeTaskRecord: async (_missionDir: string, stage: string, fileName: string) => {
-				writtenTasks.push({ stage, fileName });
+			writeTaskRecord: async (_missionDir: string, stage: string, fileName: string, record: TaskArtifactWrite) => {
+				writtenTasks.push({ stage, fileName, record });
 			}
 		} as unknown as MissionDossierFilesystem;
 
@@ -71,6 +71,8 @@ describe('MissionWorkflowRequestExecutor', () => {
 							taskId: 'implementation/01-visible-while-planning',
 							title: 'Visible While Planning',
 							instruction: 'Keep implementation slices visible while planning executes.',
+							model: 'gpt-5-codex',
+							reasoningEffort: 'high',
 							dependsOn: []
 						}
 					]
@@ -104,15 +106,18 @@ describe('MissionWorkflowRequestExecutor', () => {
 			tasks: [
 				{
 					taskId: 'implementation/01-visible-while-planning',
-					title: 'Visible While Planning'
+					title: 'Visible While Planning',
+					model: 'gpt-5-codex',
+					reasoningEffort: 'high'
 				}
 			]
 		});
-		expect(writtenTasks).toEqual(
-			expect.arrayContaining([
-				{ stage: 'implementation', fileName: '01-visible-while-planning.md' }
-			])
-		);
+		expect(writtenTasks[0]).toMatchObject({
+			stage: 'implementation',
+			fileName: '01-visible-while-planning.md'
+		});
+		expect(writtenTasks[0]?.record).not.toHaveProperty('model');
+		expect(writtenTasks[0]?.record).not.toHaveProperty('reasoningEffort');
 	});
 
 	it('generates implementation tasks from existing stage task artifacts when workflow rules are empty', async () => {
@@ -666,6 +671,89 @@ describe('MissionWorkflowRequestExecutor', () => {
 		expect(events).toEqual([]);
 	});
 
+	it('passes task-level model and reasoning effort from mission runtime state into the launch config', async () => {
+		const runner = new FakeAgentRunner('fake-runner', 'Fake Runner', 'terminal');
+		const executor = new MissionWorkflowRequestExecutor({
+			adapter: {} as MissionDossierFilesystem,
+			runners: new Map([[runner.id, runner]])
+		});
+		const configuration = createMissionWorkflowConfigurationSnapshot({
+			createdAt: '2026-04-10T21:00:07.000Z',
+			workflowVersion: DEFAULT_WORKFLOW_VERSION,
+			workflow: createDefaultWorkflowSettings()
+		});
+		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const task = createTask({
+			model: 'gpt-5-codex',
+			reasoningEffort: 'high'
+		});
+		runtime.tasks = [task];
+
+		await executor.executeRequests({
+			missionId: 'mission-17',
+			descriptor: createDescriptor(),
+			configuration,
+			runtime,
+			requests: [{
+				requestId: 'request-task-metadata-launch',
+				type: 'session.launch',
+				payload: {
+					taskId: task.taskId,
+					runnerId: 'fake-runner',
+					prompt: 'Operator supplied launch prompt.'
+				}
+			} satisfies MissionWorkflowRequest]
+		});
+
+		expect(runner.getLastStartRequest()?.metadata).toMatchObject({
+			model: 'gpt-5-codex',
+			reasoningEffort: 'high'
+		});
+	});
+
+	it('passes repository-level model and reasoning effort defaults into the launch config', async () => {
+		const runner = new FakeAgentRunner('fake-runner', 'Fake Runner', 'terminal');
+		const executor = new MissionWorkflowRequestExecutor({
+			adapter: {} as MissionDossierFilesystem,
+			runners: new Map([[runner.id, runner]]),
+			defaultModel: 'gpt-5-codex',
+			defaultReasoningEffort: 'high'
+		});
+		const configuration = createMissionWorkflowConfigurationSnapshot({
+			createdAt: '2026-04-10T21:00:07.000Z',
+			workflowVersion: DEFAULT_WORKFLOW_VERSION,
+			workflow: createDefaultWorkflowSettings()
+		});
+		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const task = createTask();
+		runtime.tasks = [task];
+
+		await executor.executeRequests({
+			missionId: 'mission-17',
+			descriptor: createDescriptor(),
+			configuration,
+			runtime,
+			requests: [{
+				requestId: 'request-default-metadata-launch',
+				type: 'session.launch',
+				payload: {
+					taskId: task.taskId,
+					runnerId: 'fake-runner',
+					prompt: 'Operator supplied launch prompt.'
+				}
+			} satisfies MissionWorkflowRequest]
+		});
+
+		expect(runner.getLastStartRequest()?.metadata).toMatchObject({
+			model: 'gpt-5-codex',
+			reasoningEffort: 'high'
+		});
+		expect(runner.getLastStartRequest()?.initialPrompt?.metadata).toMatchObject({
+			defaultModel: 'gpt-5-codex',
+			defaultReasoningEffort: 'high'
+		});
+	});
+
 	it('does not reconcile persisted terminal sessions that are already terminated', async () => {
 		class ThrowingReconcileRunner extends FakeAgentRunner {
 			protected override async onReconcileSession(_reference: AgentSessionReference): Promise<AgentSession> {
@@ -717,7 +805,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 
 		const events = await executor.terminateRuntimeSession(
 			'detached-session',
-			'terminated by panic',
+			'terminated by operator request',
 			'spec/01'
 		);
 

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { MissionContract } from './MissionContract.js';
+import {
+    createAllRuntimeEventSubscriptionChannels,
+    createMissionRuntimeEventSubscriptionChannels,
+    MissionContract
+} from './MissionContract.js';
 import { MissionCommandIds, MissionDataSchema, MissionSnapshotSchema } from './MissionSchema.js';
 import { AgentSessionDataSchema } from '../AgentSession/AgentSessionSchema.js';
 import { ArtifactDataSchema } from '../Artifact/ArtifactSchema.js';
@@ -52,6 +56,12 @@ const agentSession = AgentSessionDataSchema.parse({
         paneId: 'terminal_1'
     },
     taskId: 'implementation/01',
+    interactionCapabilities: {
+        mode: 'pty-terminal',
+        canSendTerminalInput: true,
+        canSendStructuredPrompt: false,
+        canSendStructuredCommand: false
+    },
     context: {
         artifacts: [],
         instructions: []
@@ -139,5 +149,13 @@ describe('Mission schemas', () => {
         expect(MissionContract.methods?.['read']?.result).toBe(MissionSnapshotSchema);
         expect(snapshot.commandView?.commands[0]?.command.commandId).toBe(MissionCommandIds.pause);
         expect(snapshot.mission.missionId).toBe('mission-1');
+    });
+
+    it('excludes terminal snapshot channels from runtime event subscriptions', () => {
+        expect(createMissionRuntimeEventSubscriptionChannels('mission-1')).not.toContain('mission:mission-1.terminal');
+        expect(createMissionRuntimeEventSubscriptionChannels('mission-1')).not.toContain('agent_session:mission-1/*.terminal');
+        expect(createMissionRuntimeEventSubscriptionChannels('mission-1')).toContain('agent_session:mission-1/*.data.changed');
+        expect(createAllRuntimeEventSubscriptionChannels()).not.toContain('mission:*.terminal');
+        expect(createAllRuntimeEventSubscriptionChannels()).not.toContain('agent_session:*.terminal');
     });
 });

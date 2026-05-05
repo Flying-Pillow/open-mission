@@ -1,25 +1,28 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {
+	type AgentProviderObservation
+} from '../AgentProviderObservations.js';
+import type { AgentLaunchConfig } from '../AgentRuntimeTypes.js';
 import { COPILOT_CLI_AGENT_RUNNER_ID } from './AgentRuntimeIds.js';
 import {
-	AgentRunner,
-	type AgentRunnerTerminalTransportRuntimeOptions
-} from '../AgentRunner.js';
-import type { AgentSession } from '../AgentSession.js';
-import type {
-	AgentLaunchConfig,
-	AgentRunnerCapabilities,
-	AgentSessionReference
-} from '../AgentRuntimeTypes.js';
+	MissionAgentPtyRunner,
+	type MissionAgentRunnerLaunchPlan
+} from './MissionAgentPtyRunner.js';
+import {
+	findNearestMissionMcpConfigPath,
+	hasMissionMcpBridgeLaunchEnv
+} from '../mcp/MissionMcpRunnerLaunchSupport.js';
 
 export type CopilotCliAgentRunnerOptions = Omit<
-	AgentRunnerTerminalTransportRuntimeOptions,
+	ConstructorParameters<typeof MissionAgentPtyRunner>[0],
+	| 'id'
 	| 'command'
 > & {
 	command?: string;
 	trustedConfigDir?: string;
-	sharedSessionMode?: 'enabled' | 'disabled';
+	env?: NodeJS.ProcessEnv;
 };
 
 const DEFAULT_COPILOT_CLI_ARGS = [
@@ -28,63 +31,89 @@ const DEFAULT_COPILOT_CLI_ARGS = [
 	'--allow-all-urls'
 ];
 
-export class CopilotCliAgentRunner extends AgentRunner {
+export class CopilotCliAgentRunner extends MissionAgentPtyRunner {
+	private readonly launchCommand: string;
+
 	private readonly trustedConfigDir: string;
 
-	public constructor(options: CopilotCliAgentRunnerOptions) {
+	private readonly runtimeEnv: NodeJS.ProcessEnv | undefined;
+
+	public constructor(options: CopilotCliAgentRunnerOptions = {}) {
+		const launchCommand = options.command?.trim() || process.env['MISSION_COPILOT_CLI_COMMAND']?.trim() || 'copilot';
 		super({
 			id: COPILOT_CLI_AGENT_RUNNER_ID,
-			displayName: `${COPILOT_CLI_AGENT_RUNNER_ID} via PTY transport`
-		});
-		this.trustedConfigDir = resolveTrustedConfigDir(options.trustedConfigDir);
-		const effectiveArgs = options.args && options.args.length > 0
-			? [...DEFAULT_COPILOT_CLI_ARGS, ...options.args]
-			: [...DEFAULT_COPILOT_CLI_ARGS];
-		const sharedSessionMode = options.sharedSessionMode ?? 'disabled';
-		this.configureTerminalTransportRuntime({
-			command: options.command?.trim() || process.env['MISSION_COPILOT_CLI_COMMAND']?.trim() || 'copilot',
-			args: effectiveArgs,
-			discoverSharedSessionName: false,
-			...(options.env ? { env: options.env } : {}),
+			command: launchCommand,
+			displayName: `${COPILOT_CLI_AGENT_RUNNER_ID} via PTY transport`,
+			...(options.mcpProvisioner ? { mcpProvisioner: options.mcpProvisioner } : {}),
+			...(options.mcpProvisioningPolicy ? { mcpProvisioningPolicy: options.mcpProvisioningPolicy } : {}),
+			...(options.allowedMcpTools ? { allowedMcpTools: options.allowedMcpTools } : {}),
 			...(options.sessionPrefix ? { sessionPrefix: options.sessionPrefix } : {}),
 			...(options.pollIntervalMs ? { pollIntervalMs: options.pollIntervalMs } : {}),
 			...(options.logLine ? { logLine: options.logLine } : {}),
 			...(options.terminalBinary ? { terminalBinary: options.terminalBinary } : {}),
-			...(sharedSessionMode === 'enabled' && options.sharedSessionName
-				? { sharedSessionName: options.sharedSessionName }
-				: {}),
+			...(options.sharedSessionName ? { sharedSessionName: options.sharedSessionName } : {}),
 			...(options.agentSessionPaneTitle ? { agentSessionPaneTitle: options.agentSessionPaneTitle } : {}),
-			...(options.executor ? { executor: options.executor } : {})
+			...(options.discoverSharedSessionName !== undefined
+				? { discoverSharedSessionName: options.discoverSharedSessionName }
+				: {}),
+			...(options.executor ? { executor: options.executor } : {}),
+			...(options.spawn ? { spawn: options.spawn } : {})
 		});
+		this.launchCommand = launchCommand;
+		this.trustedConfigDir = resolveTrustedConfigDir(options.trustedConfigDir);
+		this.runtimeEnv = options.env;
 	}
 
-	public async getCapabilities(): Promise<AgentRunnerCapabilities> {
-		return this.getTerminalCommandCapabilities();
-	}
-
-	public async isAvailable(): Promise<{ available: boolean; reason?: string }> {
-		return this.isTerminalCommandRuntimeAvailable();
-	}
-
-	protected override async onStartSession(config: AgentLaunchConfig): Promise<AgentSession> {
+	public createInteractiveLaunchPlan(config: AgentLaunchConfig): MissionAgentRunnerLaunchPlan {
 		const trustedDirectories = resolveTrustedDirectories(config.workingDirectory);
-		await ensureTrustedFolderConfig(this.trustedConfigDir, trustedDirectories);
-		const launchArgs = ['--config-dir', this.trustedConfigDir];
+		const args = [
+			...DEFAULT_COPILOT_CLI_ARGS,
+			'--config-dir',
+			this.trustedConfigDir
+		];
+		if (hasMissionMcpBridgeLaunchEnv(config.launchEnv)) {
+			const additionalConfigPath = findNearestMissionMcpConfigPath(config.workingDirectory);
+			if (additionalConfigPath) {
+				args.push('--additional-mcp-config', `@${additionalConfigPath}`);
+			}
+		}
 		for (const directory of trustedDirectories) {
-			launchArgs.push('--add-dir', directory);
+			args.push('--add-dir', directory);
 		}
 		const initialPromptText = config.initialPrompt?.text.trim();
 		if (initialPromptText) {
-			launchArgs.push('-i', initialPromptText);
+			args.push('-i', initialPromptText);
 		}
-		return this.startTerminalCommandSession(config, {
-			launchArgs,
-			skipInitialPromptSubmission: Boolean(initialPromptText)
-		});
+		return {
+			mode: 'interactive',
+			command: this.launchCommand,
+			args,
+			env: this.readRuntimeEnv(config.launchEnv)
+		};
 	}
 
-	protected override async onReconcileSession(reference: AgentSessionReference): Promise<AgentSession> {
-		return this.reconcileTerminalCommandSession(reference);
+	protected override async onStartSession(config: AgentLaunchConfig) {
+		const trustedDirectories = resolveTrustedDirectories(config.workingDirectory);
+		await ensureTrustedFolderConfig(this.trustedConfigDir, trustedDirectories);
+		return super.onStartSession(config);
+	}
+
+	protected override parseRuntimeOutputLine(_line: string): AgentProviderObservation[] {
+		return [{ kind: 'none' }];
+	}
+
+	private readRuntimeEnv(launchEnv: Record<string, string> | undefined): NodeJS.ProcessEnv {
+		const env: NodeJS.ProcessEnv = {};
+		for (const [key, value] of Object.entries({
+			...process.env,
+			...(this.runtimeEnv ?? {}),
+			...(launchEnv ?? {})
+		})) {
+			if (typeof value === 'string') {
+				env[key] = value;
+			}
+		}
+		return env;
 	}
 }
 

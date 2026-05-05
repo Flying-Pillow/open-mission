@@ -254,7 +254,7 @@ describe('workflow engine e2e', () => {
         expect(executor.executedRequestTypes).toEqual(['tasks.request-generation']);
     });
 
-    it('covers panic termination and stale launch-queue restart recovery', async () => {
+    it('covers pause and stale launch-queue restart recovery', async () => {
         const workflow = createDefaultWorkflowSettings();
         workflow.execution.maxParallelTasks = 2;
         workflow.execution.maxParallelSessions = 1;
@@ -267,7 +267,7 @@ describe('workflow engine e2e', () => {
                 ]
             }
         });
-        const descriptor = createDescriptor('mission-e2e-panic');
+        const descriptor = createDescriptor('mission-e2e-pause-recovery');
         const controller = new MissionWorkflowController({
             adapter,
             descriptor,
@@ -286,23 +286,19 @@ describe('workflow engine e2e', () => {
         expect(document.runtime.launchQueue).toHaveLength(1);
 
         document = await controller.applyEvent({
-            eventId: 'mission.panic.requested:2026-04-14T13:00:30.000Z',
-            type: 'mission.panic.requested',
+            eventId: 'mission.paused:2026-04-14T13:00:30.000Z',
+            type: 'mission.paused',
             occurredAt: '2026-04-14T13:00:30.000Z',
-            source: 'human'
+            source: 'human',
+            reason: 'human-requested',
+            targetType: 'mission'
         });
 
-        expect(document.runtime.lifecycle).toBe('panicked');
-        expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('ready');
-        expect(document.runtime.tasks.find((task) => task.taskId === 'prd/02')?.lifecycle).toBe('ready');
-        expect(document.runtime.launchQueue).toEqual([]);
+        expect(document.runtime.lifecycle).toBe('paused');
+        expect(document.runtime.pause.reason).toBe('human-requested');
+        expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('running');
+        expect(document.runtime.tasks.find((task) => task.taskId === 'prd/02')?.lifecycle).toBe('queued');
 
-        document = await controller.applyEvent({
-            eventId: 'mission.panic.cleared:2026-04-14T13:01:00.000Z',
-            type: 'mission.panic.cleared',
-            occurredAt: '2026-04-14T13:01:00.000Z',
-            source: 'human'
-        });
         document = await controller.applyEvent({
             eventId: 'task.launch-policy.changed:prd/02:2026-04-14T13:01:10.000Z',
             type: 'task.launch-policy.changed',
@@ -364,9 +360,7 @@ describe('workflow engine e2e', () => {
 
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/02')?.lifecycle).toBe('running');
         expect(adapter.getPersistedEventLog().map((event) => event.type)).toEqual(expect.arrayContaining([
-            'mission.panic.requested',
-            'session.terminated',
-            'mission.panic.cleared',
+            'mission.paused',
             'mission.resumed',
             'mission.launch-queue.restarted',
             'session.started'

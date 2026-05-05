@@ -90,7 +90,7 @@
     }
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-2">
+<div class="flex min-h-0 flex-1 flex-col">
     {#if repositoryLoading && !activeRepository}
         <section
             class="rounded-2xl border bg-card/70 px-5 py-4 text-sm text-muted-foreground backdrop-blur-sm"
@@ -98,9 +98,7 @@
             Loading repository surface...
         </section>
     {:else if repositoryError || !activeRepository}
-        <section
-            class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
-        >
+        <section class="rounded-2xl border bg-card/70 backdrop-blur-sm">
             <h2 class="text-lg font-semibold text-foreground">Repository</h2>
             <p class="mt-3 text-sm text-rose-600">
                 {repositoryError ?? "Repository data could not be loaded."}
@@ -121,24 +119,20 @@
                 onSetupSubmitted={refreshRepositories}
             />
         {:else}
-            {#key activeRepository.id}
-                <div
-                    class="mt-4 grid min-h-0 flex-1 gap-4 overflow-hidden sm:grid-cols-2"
-                >
-                    <section class="flex min-h-0 w-full overflow-hidden">
-                        <MissionList />
-                    </section>
+            <div class="grid min-h-0 flex-1 overflow-hidden sm:grid-cols-2">
+                <section class="flex min-h-0 w-full overflow-hidden">
+                    <MissionList />
+                </section>
 
-                    <section class="flex min-h-0 w-full overflow-hidden">
-                        <IssueList
-                            bind:selectedIssue
-                            bind:issuePreviewOpen
-                            bind:issueError
-                            bind:issueLoadingNumber
-                        />
-                    </section>
-                </div>
-            {/key}
+                <section class="flex min-h-0 w-full overflow-hidden">
+                    <IssueList
+                        bind:selectedIssue
+                        bind:issuePreviewOpen
+                        bind:issueError
+                        bind:issueLoadingNumber
+                    />
+                </section>
+            </div>
         {/if}
 
         <Dialog.Root bind:open={issuePreviewOpen}>

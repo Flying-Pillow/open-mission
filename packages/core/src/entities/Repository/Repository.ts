@@ -947,6 +947,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 				? { skillsPath: Repository.resolveRepositoryPath(this.repositoryRootPath, settings.skillsPath) }
 				: {}),
 			...(settings.defaultModel ? { defaultModel: settings.defaultModel } : {}),
+			...(settings.defaultReasoningEffort ? { defaultReasoningEffort: settings.defaultReasoningEffort } : {}),
 			...(settings.defaultAgentMode ? { defaultMode: settings.defaultAgentMode } : {})
 		}, { brief });
 

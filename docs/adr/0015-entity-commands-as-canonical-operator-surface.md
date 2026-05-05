@@ -1,4 +1,16 @@
-# Entity Commands As Canonical Operator Surface
+---
+layout: default
+title: Entity Commands As Canonical Operator Surface
+parent: Architecture Decisions
+nav_order: 15
+status: accepted
+date: 2026-05-04
+decision_area: entity-command-surface
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Entity commands are the canonical operator surface for Repository, Mission, Stage, Task, Artifact, AgentSession, and future command-capable Entities. A command is identified by `commandId` and may carry typed `input`.
 

@@ -11,10 +11,13 @@ import {
     type DaemonRuntimeState,
 } from '$lib/server/daemon/health.server';
 import { resolveSurfacePath } from '$lib/server/daemon/context.server';
+import { startMissionDaemonBootstrap } from '$lib/server/daemon/bootstrap.server';
 
 type GithubStatus = 'connected' | 'disconnected' | 'unknown';
 
 const DAEMON_STATE_REQUEST_TIMEOUT_MS = 1_500;
+
+startMissionDaemonBootstrap();
 
 function resolveCanonicalOrigin(requestUrl: URL): string | undefined {
     const configuredCallbackUrl = process.env['GITHUB_OAUTH_CALLBACK_URL']?.trim();
@@ -32,9 +35,16 @@ function resolveCanonicalOrigin(requestUrl: URL): string | undefined {
 async function ensureDaemonState(): Promise<DaemonRuntimeState> {
     return getDaemonRuntimeState({
         surfacePath: resolveSurfacePath(),
-        allowStart: true,
         timeoutMs: DAEMON_STATE_REQUEST_TIMEOUT_MS,
     });
+}
+
+function createUncheckedDaemonState(): DaemonRuntimeState {
+    return {
+        running: false,
+        message: 'Mission daemon state was not checked for this request.',
+        lastCheckedAt: new Date(0).toISOString()
+    };
 }
 
 function resolveGithubStatus(authenticated: boolean): GithubStatus {
@@ -78,16 +88,21 @@ function resolveGitHubContext(input: {
 export const handle: Handle = async ({ event, resolve }) => {
     const canonicalOrigin = resolveCanonicalOrigin(event.url);
     const isApiRequest = event.url.pathname.startsWith('/api/');
+    const isAuthRequest = event.url.pathname.startsWith('/auth/');
+    const isRemoteFunctionRequest = event.isRemoteRequest || event.url.pathname.startsWith('/_app/remote/');
     if (
         canonicalOrigin
         && event.url.origin !== canonicalOrigin
         && ['GET', 'HEAD'].includes(event.request.method)
         && !isApiRequest
+        && !isRemoteFunctionRequest
     ) {
         throw redirect(307, `${canonicalOrigin}${event.url.pathname}${event.url.search}`);
     }
 
-    const daemonState = await ensureDaemonState();
+    const daemonState = isApiRequest || isAuthRequest || isRemoteFunctionRequest
+        ? createUncheckedDaemonState()
+        : await ensureDaemonState();
     const githubAuthToken = await readGithubAuthToken(event.cookies);
     const githubSession = await readGithubSessionContext(event.cookies);
     const githubContext = resolveGitHubContext(githubSession);
@@ -103,7 +118,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     if (shouldRedirectUnavailableDaemonRoute({
         pathname,
         daemonRunning: daemonState.running
-    })) {
+    }) && !isRemoteFunctionRequest) {
         throw redirect(303, '/');
     }
 

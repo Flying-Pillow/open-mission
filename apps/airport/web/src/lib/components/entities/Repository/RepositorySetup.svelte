@@ -28,6 +28,7 @@
     let agentRunner = $state("copilot-cli");
     let defaultAgentMode = $state("");
     let defaultModel = $state("");
+    let defaultReasoningEffort = $state("");
     let submitPending = $state(false);
     let submitError = $state<string | null>(null);
     let setupResult = $state<RepositorySetupResultType | null>(null);
@@ -44,6 +45,7 @@
         agentRunner = settings.agentRunner;
         defaultAgentMode = settings.defaultAgentMode ?? "";
         defaultModel = settings.defaultModel ?? "";
+        defaultReasoningEffort = settings.defaultReasoningEffort ?? "";
         initializedRepositoryId = repository.id;
     });
 
@@ -62,6 +64,9 @@
             ...(defaultAgentMode ? { defaultAgentMode } : {}),
             ...(defaultModel.trim()
                 ? { defaultModel: defaultModel.trim() }
+                : {}),
+            ...(defaultReasoningEffort.trim()
+                ? { defaultReasoningEffort: defaultReasoningEffort.trim() }
                 : {}),
         });
 
@@ -141,7 +146,10 @@
                     class="h-10 rounded-md border bg-background px-3 text-sm text-foreground"
                 >
                     <option value="copilot-cli">Copilot CLI</option>
+                    <option value="claude-code">Claude Code</option>
                     <option value="pi">Pi</option>
+                    <option value="codex">Codex</option>
+                    <option value="opencode">OpenCode</option>
                 </select>
                 {#each fieldErrors.agentRunner ?? [] as issue (`agentRunner:${issue}`)}
                     <p class="text-sm text-rose-600">{issue}</p>
@@ -214,6 +222,29 @@
                     placeholder="Runner default"
                 />
                 {#each fieldErrors.defaultModel ?? [] as issue (`defaultModel:${issue}`)}
+                    <p class="text-sm text-rose-600">{issue}</p>
+                {/each}
+            </div>
+
+            <div class="grid gap-2">
+                <label
+                    class="text-sm font-medium text-foreground"
+                    for="repository-setup-default-reasoning-effort"
+                >
+                    Default reasoning effort
+                </label>
+                <select
+                    id="repository-setup-default-reasoning-effort"
+                    bind:value={defaultReasoningEffort}
+                    class="h-10 rounded-md border bg-background px-3 text-sm text-foreground"
+                >
+                    <option value="">Runner default</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="xhigh">XHigh</option>
+                </select>
+                {#each fieldErrors.defaultReasoningEffort ?? [] as issue (`defaultReasoningEffort:${issue}`)}
                     <p class="text-sm text-rose-600">{issue}</p>
                 {/each}
             </div>

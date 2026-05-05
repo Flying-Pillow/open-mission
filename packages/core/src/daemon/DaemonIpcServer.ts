@@ -33,6 +33,8 @@ import {
 } from './protocol/contracts.js';
 import { DaemonLogger } from './runtime/DaemonLogger.js';
 import type { MissionAgentDisposable } from './runtime/agent/events.js';
+import { MissionMcpSignalServer } from './runtime/agent/mcp/MissionMcpSignalServer.js';
+import { PolicyBoundAgentSessionSignalPort } from './runtime/agent/signals/AgentSessionSignalPort.js';
 
 export type MissionDaemonHandle = {
 	manifest: Manifest;
@@ -59,6 +61,8 @@ type DaemonRuntimeLockHandle = {
 	release: () => Promise<void>;
 };
 
+const STALE_DAEMON_TERMINATION_TIMEOUT_MS = 2_000;
+
 export type DaemonIpcServer = {
 	server: net.Server;
 	broadcastEvent: (event: EntityEventEnvelopeType) => void;
@@ -75,6 +79,23 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 	await assertNoReachableDaemon(socketPath);
 	const runtimeLock = await acquireDaemonRuntimeLock(socketPath);
 	const missionRegistry = new MissionRegistryClass({ logger });
+	const mcpSignalServer = new MissionMcpSignalServer({
+		signalPort: new PolicyBoundAgentSessionSignalPort({
+			sink: {
+				getSnapshot: async (scope) => missionRegistry.getRuntimeSessionSnapshot(scope),
+				commit: async (input) => missionRegistry.applyRuntimeSessionSignalDecision({
+					scope: {
+						missionId: input.snapshot.missionId,
+						taskId: input.snapshot.taskId,
+						agentSessionId: input.snapshot.sessionId
+					},
+					observation: input.observation,
+					decision: input.decision
+				})
+			}
+		})
+	});
+	missionRegistry.bindMcpSignalServer(mcpSignalServer);
 	const ipcServer = createDaemonIpcServer({ startedAt, missionRegistry });
 	const notificationSources = startEntityEventSources(ipcServer.broadcastEvent);
 	let shuttingDown = false;
@@ -89,6 +110,7 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 	let startupCompleted = false;
 
 	try {
+		await mcpSignalServer.start();
 		await missionRegistry.hydrateDaemonMissions({ surfacePath: resolveSurfacePath(options.surfacePath) });
 		logger.info('Mission daemon hydration completed.');
 		if (!isNamedPipePath(socketPath)) {
@@ -106,6 +128,7 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 	} finally {
 		if (!startupCompleted) {
 			missionRegistry.dispose();
+			await mcpSignalServer.stop();
 			notificationSources.dispose();
 			await closeServer(ipcServer.server);
 			await runtimeLock.release();
@@ -136,6 +159,7 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 		shuttingDown = true;
 		logger.info('Mission daemon shutting down.');
 		missionRegistry.dispose();
+		await mcpSignalServer.stop();
 		notificationSources.dispose();
 		ipcServer.destroyConnections();
 		await closeServer(ipcServer.server);
@@ -274,87 +298,119 @@ async function handleRequestLine(
 }
 
 async function createDaemonResponse(request: Request, startedAt: string, missionRegistry: MissionRegistry): Promise<Response> {
+	const requestStartedAt = performance.now();
 	try {
-		switch (request.method) {
-			case 'ping': {
-				const result: Ping = {
-					ok: true,
-					pid: process.pid,
-					startedAt,
-					protocolVersion: PROTOCOL_VERSION
-				};
-				return {
-					type: 'response',
-					id: request.id,
-					ok: true,
-					result
-				};
-			}
-			case 'event.subscribe':
-				return {
-					type: 'response',
-					id: request.id,
-					ok: true,
-					result: null
-				};
-			case 'system.status': {
-				const { readSystemStatus } = await import('../system/SystemStatus.js');
-				return {
-					type: 'response',
-					id: request.id,
-					ok: true,
-					result: readSystemStatus({
-						cwd: resolveSurfacePath(request.surfacePath),
-						...(request.authToken?.trim() ? { authToken: request.authToken.trim() } : {})
-					})
-				};
-			}
-			case 'entity.query':
-				return {
-					type: 'response',
-					id: request.id,
-					ok: true,
-					result: await executeEntityQueryInDaemon(
-						entityQueryInvocationSchema.parse(request.params),
-						createEntityExecutionContext(request, missionRegistry)
-					)
-				};
-			case 'entity.command': {
-				const commandInvocation = entityCommandInvocationSchema.safeParse(request.params);
-				const invocation = commandInvocation.success
-					? commandInvocation.data
-					: entityFormInvocationSchema.parse(request.params);
-				return {
-					type: 'response',
-					id: request.id,
-					ok: true,
-					result: await executeEntityCommandInDaemon(
-						invocation,
-						createEntityExecutionContext(request, missionRegistry)
-					)
-				};
-			}
-			default:
-				return {
-					type: 'response',
-					id: request.id,
-					ok: false,
-					error: {
-						code: 'NOT_IMPLEMENTED',
-						message: `Mission daemon method '${request.method}' is not implemented in the daemon transport.`
-					}
-				};
-		}
+		const response = await createDaemonResponseUnchecked(request, startedAt, missionRegistry);
+		logSlowDaemonRequest(request, requestStartedAt);
+		return response;
 	} catch (error) {
-		return {
-			type: 'response',
-			id: request.id,
-			ok: false,
-			error: {
-				message: error instanceof Error ? error.message : String(error)
-			}
-		};
+		logSlowDaemonRequest(request, requestStartedAt);
+		return createErrorResponse(request, error);
 	}
+}
+
+async function createDaemonResponseUnchecked(request: Request, startedAt: string, missionRegistry: MissionRegistry): Promise<Response> {
+	switch (request.method) {
+		case 'ping': {
+			const result: Ping = {
+				ok: true,
+				pid: process.pid,
+				startedAt,
+				protocolVersion: PROTOCOL_VERSION
+			};
+			return {
+				type: 'response',
+				id: request.id,
+				ok: true,
+				result
+			};
+		}
+		case 'event.subscribe':
+			return {
+				type: 'response',
+				id: request.id,
+				ok: true,
+				result: null
+			};
+		case 'system.status': {
+			const { readSystemStatus } = await import('../system/SystemStatus.js');
+			return {
+				type: 'response',
+				id: request.id,
+				ok: true,
+				result: readSystemStatus({
+					cwd: resolveSurfacePath(request.surfacePath),
+					...(request.authToken?.trim() ? { authToken: request.authToken.trim() } : {})
+				})
+			};
+		}
+		case 'entity.query':
+			return {
+				type: 'response',
+				id: request.id,
+				ok: true,
+				result: await executeEntityQueryInDaemon(
+					entityQueryInvocationSchema.parse(request.params),
+					createEntityExecutionContext(request, missionRegistry)
+				)
+			};
+		case 'entity.command': {
+			const commandInvocation = entityCommandInvocationSchema.safeParse(request.params);
+			const invocation = commandInvocation.success
+				? commandInvocation.data
+				: entityFormInvocationSchema.parse(request.params);
+			return {
+				type: 'response',
+				id: request.id,
+				ok: true,
+				result: await executeEntityCommandInDaemon(
+					invocation,
+					createEntityExecutionContext(request, missionRegistry)
+				)
+			};
+		}
+		default:
+			return {
+				type: 'response',
+				id: request.id,
+				ok: false,
+				error: {
+					code: 'NOT_IMPLEMENTED',
+					message: `Mission daemon method '${request.method}' is not implemented in the daemon transport.`
+				}
+			};
+	}
+}
+
+function createErrorResponse(request: Request, error: unknown): Response {
+	return {
+		type: 'response',
+		id: request.id,
+		ok: false,
+		error: {
+			message: error instanceof Error ? error.message : String(error)
+		}
+	};
+}
+
+function logSlowDaemonRequest(request: Request, startedAtMs: number): void {
+	const durationMs = performance.now() - startedAtMs;
+	if (process.env['MISSION_DAEMON_RUNTIME_MODE'] !== 'source' || durationMs < 1_000) {
+		return;
+	}
+
+	const params = request.params && typeof request.params === 'object' ? request.params as {
+		entity?: unknown;
+		method?: unknown;
+	} : undefined;
+	process.stderr.write(`${JSON.stringify({
+		source: 'mission-daemon',
+		message: 'slow ipc request',
+		method: request.method,
+		entity: typeof params?.entity === 'string' ? params.entity : undefined,
+		entityMethod: typeof params?.method === 'string' ? params.method : undefined,
+		durationMs: Math.round(durationMs)
+	})}\n`);
 }
 
 function registerSubscription(
@@ -428,9 +484,15 @@ async function acquireDaemonRuntimeLock(socketPath: string): Promise<DaemonRunti
 
 			const existingLock = await readDaemonRuntimeLock(lockPath);
 			if (existingLock && isProcessRunning(existingLock.processId)) {
-				throw new Error(
-					`Mission daemon is already running with pid ${String(existingLock.processId)} at '${existingLock.socketPath}'. Stop it before starting another daemon.`
-				);
+				const existingSocketPath = existingLock.socketPath || socketPath;
+				const reachableDaemon = await probeDaemonSocket(existingSocketPath);
+				if (reachableDaemon) {
+					throw new Error(
+						`Mission daemon is already running with pid ${String(reachableDaemon.pid)} at '${existingSocketPath}'. Stop it before starting another daemon.`
+					);
+				}
+
+				await terminateStaleDaemonProcess(existingLock.processId);
 			}
 
 			await fs.rm(lockPath, { force: true }).catch(() => undefined);
@@ -533,6 +595,45 @@ function isProcessRunning(processId: number): boolean {
 	} catch (error) {
 		return (error as NodeJS.ErrnoException).code === 'EPERM';
 	}
+}
+
+async function terminateStaleDaemonProcess(processId: number): Promise<void> {
+	if (processId === process.pid || !isProcessRunning(processId)) {
+		return;
+	}
+
+	try {
+		process.kill(processId, 'SIGTERM');
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+			throw error;
+		}
+		return;
+	}
+
+	const exited = await waitForProcessExit(processId, STALE_DAEMON_TERMINATION_TIMEOUT_MS);
+	if (exited) {
+		return;
+	}
+
+	try {
+		process.kill(processId, 'SIGKILL');
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+			throw error;
+		}
+	}
+}
+
+async function waitForProcessExit(processId: number, timeoutMs: number): Promise<boolean> {
+	const timeoutAt = Date.now() + timeoutMs;
+	while (Date.now() < timeoutAt) {
+		if (!isProcessRunning(processId)) {
+			return true;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+	return !isProcessRunning(processId);
 }
 
 async function closeServer(server: net.Server): Promise<void> {

@@ -1,5 +1,4 @@
 // /apps/airport/web/src/lib/server/daemon/daemon-gateway.ts: Daemon-backed gateway for mission runtime, terminal, and document operations.
-import { DaemonApi } from '@flying-pillow/mission-core/daemon/client/DaemonApi';
 import type { Notification } from '@flying-pillow/mission-core/daemon/protocol/contracts';
 import type { SystemState } from '@flying-pillow/mission-core/system/SystemContract';
 import {
@@ -8,7 +7,6 @@ import {
 } from '@flying-pillow/mission-core/entities/Mission/MissionContract';
 import {
     AgentSessionTerminalSnapshotSchema,
-    type AgentSessionDataType,
     type AgentSessionTerminalSnapshotType,
 } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
 import {
@@ -17,15 +15,14 @@ import {
     type MissionRuntimeEventEnvelopeType,
     type MissionTerminalSnapshotType,
 } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-import { RepositoryDataSchema, RepositoryStorageSchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
-import type { RepositoryStorageType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import {
     connectDedicatedAuthenticatedDaemonClient,
-    connectSharedAuthenticatedDaemonClient
+    connectSharedAuthenticatedDaemonClient,
+    isRecoverableDaemonConnectionError,
+    resetSharedAuthenticatedDaemonClient
 } from './connections.server';
 import type { AppContextServerValue } from '$lib/client/context/app-context.svelte';
 import { readCachedDaemonSystemStatus } from './health.server';
-const AIRPORT_WEB_TERMINAL_SCREEN_LIMIT = 40_000;
 const DAEMON_CONNECT_TIMEOUT_MS = 12_000;
 
 export type AirportSystemState = {
@@ -48,6 +45,7 @@ export class DaemonGateway {
     public async openEventSubscription(input: {
         missionId?: string;
         surfacePath?: string;
+        onDisconnect?: () => void;
         onEvent: (event: MissionRuntimeEventEnvelopeType) => void;
     }): Promise<{ dispose(): void }> {
         const missionId = input.missionId?.trim();
@@ -60,10 +58,14 @@ export class DaemonGateway {
         const subscription = daemon.client.onDidEvent((event) => {
             input.onEvent(this.toRuntimeEventEnvelope(event));
         });
+        const disconnectSubscription = daemon.client.onDidDisconnect(() => {
+            input.onDisconnect?.();
+        });
 
         return {
             dispose: () => {
                 subscription.dispose();
+                disconnectSubscription.dispose();
                 daemon.dispose();
             }
         };
@@ -72,6 +74,7 @@ export class DaemonGateway {
     public async openApplicationEventSubscription(input: {
         channels: string[];
         surfacePath?: string;
+        onDisconnect?: () => void;
         onEvent: (event: Notification) => void;
     }): Promise<{ dispose(): void }> {
         const daemon = await this.connectDedicatedDaemonClient(input.surfacePath);
@@ -81,10 +84,14 @@ export class DaemonGateway {
         const subscription = daemon.client.onDidEvent((event) => {
             input.onEvent(event);
         });
+        const disconnectSubscription = daemon.client.onDidDisconnect(() => {
+            input.onDisconnect?.();
+        });
 
         return {
             dispose: () => {
                 subscription.dispose();
+                disconnectSubscription.dispose();
                 daemon.dispose();
             }
         };
@@ -95,17 +102,20 @@ export class DaemonGateway {
         sessionId: string;
         surfacePath?: string;
     }): Promise<AgentSessionTerminalSnapshotType> {
-        return this.queryEntity({
-            surfacePath: input.surfacePath,
-            entity: 'AgentSession',
-            method: 'readTerminal',
-            payload: {
-                missionId: input.missionId,
-                sessionId: input.sessionId,
-            },
-            parse: (value) => AgentSessionTerminalSnapshotSchema.parse(value),
-            timeoutMessage: 'Mission terminal snapshot request timed out.',
-        });
+        return this.withSharedClient(input.surfacePath, async (daemon) => AgentSessionTerminalSnapshotSchema.parse(
+            await withTimeout(
+                daemon.client.request('entity.query', {
+                    entity: 'AgentSession',
+                    method: 'readTerminal',
+                    payload: {
+                        missionId: input.missionId,
+                        sessionId: input.sessionId,
+                    }
+                }),
+                2500,
+                'Mission terminal snapshot request timed out.'
+            )
+        ));
     }
 
     public async sendMissionSessionTerminalInput(input: {
@@ -117,35 +127,41 @@ export class DaemonGateway {
         rows?: number;
         surfacePath?: string;
     }): Promise<AgentSessionTerminalSnapshotType> {
-        return this.commandEntity({
-            surfacePath: input.surfacePath,
-            entity: 'AgentSession',
-            method: 'sendTerminalInput',
-            payload: {
-                missionId: input.missionId,
-                sessionId: input.sessionId,
-                ...(input.data !== undefined ? { data: input.data } : {}),
-                ...(input.literal !== undefined ? { literal: input.literal } : {}),
-                ...(input.cols !== undefined ? { cols: input.cols } : {}),
-                ...(input.rows !== undefined ? { rows: input.rows } : {}),
-            },
-            parse: (value) => AgentSessionTerminalSnapshotSchema.parse(value),
-            timeoutMessage: 'Mission terminal input request timed out.',
-        });
+        return this.withSharedClient(input.surfacePath, async (daemon) => AgentSessionTerminalSnapshotSchema.parse(
+            await withTimeout(
+                daemon.client.request('entity.command', {
+                    entity: 'AgentSession',
+                    method: 'sendTerminalInput',
+                    payload: {
+                        missionId: input.missionId,
+                        sessionId: input.sessionId,
+                        ...(input.data !== undefined ? { data: input.data } : {}),
+                        ...(input.literal !== undefined ? { literal: input.literal } : {}),
+                        ...(input.cols !== undefined ? { cols: input.cols } : {}),
+                        ...(input.rows !== undefined ? { rows: input.rows } : {}),
+                    }
+                }),
+                2500,
+                'Mission terminal input request timed out.'
+            )
+        ));
     }
 
     public async getMissionTerminalSnapshot(input: {
         missionId: string;
         surfacePath?: string;
     }): Promise<MissionTerminalSnapshotType> {
-        return this.commandEntity({
-            surfacePath: input.surfacePath,
-            entity: 'Mission',
-            method: 'ensureTerminal',
-            payload: { missionId: input.missionId },
-            parse: (value) => MissionTerminalSnapshotSchema.parse(value),
-            timeoutMessage: 'Mission terminal snapshot request timed out.',
-        });
+        return this.withSharedClient(input.surfacePath, async (daemon) => MissionTerminalSnapshotSchema.parse(
+            await withTimeout(
+                daemon.client.request('entity.command', {
+                    entity: 'Mission',
+                    method: 'ensureTerminal',
+                    payload: { missionId: input.missionId }
+                }),
+                2500,
+                'Mission terminal snapshot request timed out.'
+            )
+        ));
     }
 
     public async sendMissionTerminalInput(input: {
@@ -156,103 +172,54 @@ export class DaemonGateway {
         rows?: number;
         surfacePath?: string;
     }): Promise<MissionTerminalSnapshotType> {
-        return this.commandEntity({
-            surfacePath: input.surfacePath,
-            entity: 'Mission',
-            method: 'sendTerminalInput',
-            payload: {
-                missionId: input.missionId,
-                ...(input.data !== undefined ? { data: input.data } : {}),
-                ...(input.literal !== undefined ? { literal: input.literal } : {}),
-                ...(input.cols !== undefined ? { cols: input.cols } : {}),
-                ...(input.rows !== undefined ? { rows: input.rows } : {}),
-            },
-            parse: (value) => MissionTerminalSnapshotSchema.parse(value),
-            timeoutMessage: 'Mission terminal input request timed out.',
-        });
+        return this.withSharedClient(input.surfacePath, async (daemon) => MissionTerminalSnapshotSchema.parse(
+            await withTimeout(
+                daemon.client.request('entity.command', {
+                    entity: 'Mission',
+                    method: 'sendTerminalInput',
+                    payload: {
+                        missionId: input.missionId,
+                        ...(input.data !== undefined ? { data: input.data } : {}),
+                        ...(input.literal !== undefined ? { literal: input.literal } : {}),
+                        ...(input.cols !== undefined ? { cols: input.cols } : {}),
+                        ...(input.rows !== undefined ? { rows: input.rows } : {}),
+                    }
+                }),
+                2500,
+                'Mission terminal input request timed out.'
+            )
+        ));
     }
 
     private toRuntimeEventEnvelope(event: Notification): MissionRuntimeEventEnvelopeType {
         return MissionRuntimeEventEnvelopeSchema.parse(event);
     }
 
-    public async resolveRepositoryCandidate(input: {
-        id: string;
-    }): Promise<RepositoryStorageType> {
-        const id = input.id.trim();
-        if (!id) {
-            throw new Error('Repository access requires an id.');
-        }
-
+    private async withSharedClient<T>(
+        surfacePath: string | undefined,
+        execute: (daemon: Awaited<ReturnType<DaemonGateway['connectSharedDaemonClient']>>) => Promise<T>
+    ): Promise<T> {
         try {
-            const data = await this.queryEntity({
-                entity: 'Repository',
-                method: 'read',
-                payload: { id },
-                parse: (value) => RepositoryDataSchema.parse(value),
-                timeoutMessage: `Repository '${id}' read timed out.`,
-            });
-
-            return RepositoryStorageSchema.parse({
-                id: data.id,
-                repositoryRootPath: data.repositoryRootPath,
-                ownerId: data.ownerId,
-                repoName: data.repoName,
-                ...(data.platformRepositoryRef ? { platformRepositoryRef: data.platformRepositoryRef } : {}),
-                settings: data.settings,
-                workflowConfiguration: data.workflowConfiguration,
-                isInitialized: data.isInitialized,
-            });
+            return await this.withSharedClientLease(surfacePath, execute);
         } catch (error) {
-            if (error instanceof Error && /not found/i.test(error.message)) {
-                throw new Error(`Repository '${id}' could not be resolved in Airport.`);
+            if (!isRecoverableDaemonConnectionError(error)) {
+                throw error;
             }
-            throw error;
+            resetSharedAuthenticatedDaemonClient({
+                locals: this.locals,
+                ...(surfacePath?.trim() ? { surfacePath: surfacePath.trim() } : {})
+            });
+            return this.withSharedClientLease(surfacePath, execute);
         }
     }
 
-    private async queryEntity<T>(input: {
-        surfacePath?: string;
-        entity: string;
-        method: string;
-        payload: Record<string, unknown>;
-        parse: (value: unknown) => T;
-        timeoutMessage: string;
-    }): Promise<T> {
-        return this.withSharedApi(input.surfacePath, async (api) => input.parse(await withTimeout(
-            api.entity.query({
-                entity: input.entity,
-                method: input.method,
-                payload: input.payload,
-            }),
-            2500,
-            input.timeoutMessage,
-        )));
-    }
-
-    private async commandEntity<T>(input: {
-        surfacePath?: string;
-        entity: string;
-        method: string;
-        payload: Record<string, unknown>;
-        parse: (value: unknown) => T;
-        timeoutMessage: string;
-    }): Promise<T> {
-        return this.withSharedApi(input.surfacePath, async (api) => input.parse(await withTimeout(
-            api.entity.command({
-                entity: input.entity,
-                method: input.method,
-                payload: input.payload,
-            }),
-            2500,
-            input.timeoutMessage,
-        )));
-    }
-
-    private async withSharedApi<T>(surfacePath: string | undefined, execute: (api: DaemonApi) => Promise<T>): Promise<T> {
+    private async withSharedClientLease<T>(
+        surfacePath: string | undefined,
+        execute: (daemon: Awaited<ReturnType<DaemonGateway['connectSharedDaemonClient']>>) => Promise<T>
+    ): Promise<T> {
         const daemon = await this.connectSharedDaemonClient(surfacePath);
         try {
-            return await execute(new DaemonApi(daemon.client));
+            return await execute(daemon);
         } finally {
             daemon.dispose();
         }
@@ -262,7 +229,6 @@ export class DaemonGateway {
         return withTimeout(
             connectSharedAuthenticatedDaemonClient({
                 locals: this.locals,
-                allowStart: true,
                 ...(surfacePath?.trim() ? { surfacePath: surfacePath.trim() } : {})
             }),
             DAEMON_CONNECT_TIMEOUT_MS,
@@ -274,7 +240,6 @@ export class DaemonGateway {
         return withTimeout(
             connectDedicatedAuthenticatedDaemonClient({
                 locals: this.locals,
-                allowStart: true,
                 ...(surfacePath?.trim() ? { surfacePath: surfacePath.trim() } : {})
             }),
             DAEMON_CONNECT_TIMEOUT_MS,
@@ -286,7 +251,6 @@ export class DaemonGateway {
         return this.locals?.appContext ?? {
             daemon: {
                 running: false,
-                startedByHook: false,
                 message: 'Mission daemon state is unavailable.',
                 lastCheckedAt: new Date(0).toISOString(),
             },

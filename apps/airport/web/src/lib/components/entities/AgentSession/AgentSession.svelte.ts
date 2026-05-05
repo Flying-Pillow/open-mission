@@ -6,8 +6,6 @@ import type { EntityModel } from '$lib/components/entities/shared/EntityModel.sv
 export type AgentSessionDependencies = {
     resolveCommands(sessionId: string): EntityCommandDescriptorType[];
     executeCommand(sessionId: string, commandId: string, input?: unknown): Promise<void>;
-    sendPrompt(sessionId: string, prompt: AgentSessionPromptType): Promise<void>;
-    sendCommand(sessionId: string, command: AgentSessionCommandType): Promise<void>;
 };
 
 export class AgentSession implements EntityModel<AgentSessionDataType> {
@@ -80,6 +78,34 @@ export class AgentSession implements EntityModel<AgentSessionDataType> {
         return this.data.terminalHandle;
     }
 
+    public get interactionCapabilities(): AgentSessionDataType['interactionCapabilities'] {
+        return this.data.interactionCapabilities;
+    }
+
+    public get interactionMode(): AgentSessionDataType['interactionCapabilities']['mode'] {
+        return this.interactionCapabilities.mode;
+    }
+
+    public get interactionReason(): string | undefined {
+        return this.interactionCapabilities.reason;
+    }
+
+    public get runtimeMessages(): AgentSessionDataType['runtimeMessages'] {
+        return this.data.runtimeMessages;
+    }
+
+    public get canSendTerminalInput(): boolean {
+        return this.interactionCapabilities.canSendTerminalInput;
+    }
+
+    public get canSendStructuredPrompt(): boolean {
+        return this.interactionCapabilities.canSendStructuredPrompt;
+    }
+
+    public get canSendStructuredCommand(): boolean {
+        return this.interactionCapabilities.canSendStructuredCommand;
+    }
+
     public isRunning(): boolean {
         return this.lifecycleState === 'starting'
             || this.lifecycleState === 'running'
@@ -100,7 +126,7 @@ export class AgentSession implements EntityModel<AgentSessionDataType> {
     }
 
     public async sendPrompt(prompt: AgentSessionPromptType): Promise<this> {
-        await this.dependencies.sendPrompt(this.sessionId, prompt);
+        await this.executeCommand(AgentSessionCommandIds.sendPrompt, prompt);
         return this;
     }
 
@@ -109,7 +135,7 @@ export class AgentSession implements EntityModel<AgentSessionDataType> {
     }
 
     public async sendCommand(command: AgentSessionCommandType): Promise<this> {
-        await this.dependencies.sendCommand(this.sessionId, command);
+        await this.executeCommand(AgentSessionCommandIds.sendRuntimeMessage, command);
         return this;
     }
 
@@ -120,11 +146,6 @@ export class AgentSession implements EntityModel<AgentSessionDataType> {
 
     public async cancel(reason?: string): Promise<this> {
         await this.executeCommand(AgentSessionCommandIds.cancel, reason?.trim() ? { reason: reason.trim() } : undefined);
-        return this;
-    }
-
-    public async terminate(reason?: string): Promise<this> {
-        await this.executeCommand(AgentSessionCommandIds.terminate, reason?.trim() ? { reason: reason.trim() } : undefined);
         return this;
     }
 

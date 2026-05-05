@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 import { AgentSessionTerminalHandleSchema, type AgentSessionTerminalHandleType } from '../../entities/AgentSession/AgentSessionSchema.js';
-import type { MissionAgentRunnerType } from '../../entities/Mission/MissionSchema.js';
+import { MissionReasoningEffortSchema, type MissionAgentRunnerType, type MissionReasoningEffortType } from '../../entities/Mission/MissionSchema.js';
 import {
     WorkflowDefinitionSchema,
 } from '../WorkflowSchema.js';
@@ -12,7 +12,6 @@ export const MISSION_LIFECYCLE_STATES = [
     'ready',
     'running',
     'paused',
-    'panicked',
     'completed',
     'delivered'
 ] as const;
@@ -22,7 +21,7 @@ export type MissionLifecycleState = (typeof MISSION_LIFECYCLE_STATES)[number];
 export const MISSION_STAGE_DERIVED_STATES = [
     'pending',
     'ready',
-    'active',
+    'running',
     'completed'
 ] as const;
 
@@ -44,7 +43,6 @@ export const DEFAULT_TASK_MAX_REWORK_ITERATIONS = 3;
 
 export type MissionPauseReason =
     | 'human-requested'
-    | 'panic'
     | 'checkpoint'
     | 'agent-failure'
     | 'system';
@@ -115,6 +113,8 @@ export const MissionTaskRuntimeStateSchema = z.object({
     stageId: nonEmptyStringSchema,
     title: nonEmptyStringSchema,
     instruction: nonEmptyStringSchema,
+    model: nonEmptyStringSchema.optional(),
+    reasoningEffort: MissionReasoningEffortSchema.optional(),
     taskKind: z.enum(['implementation', 'verification']).optional(),
     pairedTaskId: nonEmptyStringSchema.optional(),
     dependsOn: z.array(nonEmptyStringSchema),
@@ -138,24 +138,13 @@ export type MissionTaskRuntimeState = z.infer<typeof MissionTaskRuntimeStateSche
 
 export const MissionPauseStateSchema = z.object({
     paused: z.boolean(),
-    reason: z.enum(['human-requested', 'panic', 'checkpoint', 'agent-failure', 'system']).optional(),
+    reason: z.enum(['human-requested', 'checkpoint', 'agent-failure', 'system']).optional(),
     targetType: z.enum(['mission', 'task', 'session']).optional(),
     targetId: nonEmptyStringSchema.optional(),
     requestedAt: nonEmptyStringSchema.optional()
 }).strict();
 
 export type MissionPauseState = z.infer<typeof MissionPauseStateSchema>;
-
-export const MissionPanicStateSchema = z.object({
-    active: z.boolean(),
-    requestedAt: nonEmptyStringSchema.optional(),
-    requestedBy: z.enum(['human', 'system']).optional(),
-    terminateSessions: z.boolean(),
-    clearLaunchQueue: z.boolean(),
-    haltMission: z.boolean()
-}).strict();
-
-export type MissionPanicState = z.infer<typeof MissionPanicStateSchema>;
 
 export const MissionTaskLaunchRequestSchema = z.object({
     requestId: nonEmptyStringSchema,
@@ -222,7 +211,6 @@ export type {
     WorkflowDefinition,
     WorkflowHumanInLoopSettings,
     WorkflowMissionAutostartSettings,
-    WorkflowPanicSettings,
     WorkflowStageDefinition,
     WorkflowStageTaskLaunchPolicy,
     WorkflowTaskGenerationRule,
@@ -242,7 +230,6 @@ export const MissionWorkflowRuntimeStateSchema = z.object({
     lifecycle: z.enum(MISSION_LIFECYCLE_STATES),
     activeStageId: nonEmptyStringSchema.optional(),
     pause: MissionPauseStateSchema,
-    panic: MissionPanicStateSchema,
     stages: z.array(MissionStageRuntimeProjectionSchema),
     tasks: z.array(MissionTaskRuntimeStateSchema),
     sessions: z.array(AgentSessionRuntimeStateSchema),
@@ -265,6 +252,8 @@ export interface MissionGeneratedTaskPayload {
     taskId: string;
     title: string;
     instruction: string;
+    model?: string;
+    reasoningEffort?: MissionReasoningEffortType;
     taskKind?: 'implementation' | 'verification';
     pairedTaskId?: string;
     dependsOn: string[];
@@ -288,14 +277,6 @@ export interface MissionPausedEvent extends MissionWorkflowEventBase {
     reason: MissionPauseReason;
     targetType?: 'mission' | 'task' | 'session';
     targetId?: string;
-}
-
-export interface PanicStopRequestedEvent extends MissionWorkflowEventBase {
-    type: 'mission.panic.requested';
-}
-
-export interface PanicStopClearedEvent extends MissionWorkflowEventBase {
-    type: 'mission.panic.cleared';
 }
 
 export interface MissionLaunchQueueRestartedEvent extends MissionWorkflowEventBase {
@@ -398,8 +379,6 @@ export type MissionWorkflowEvent =
     | MissionStartedEvent
     | MissionResumedEvent
     | MissionPausedEvent
-    | PanicStopRequestedEvent
-    | PanicStopClearedEvent
     | MissionLaunchQueueRestartedEvent
     | MissionDeliveredEvent
     | TasksGeneratedEvent

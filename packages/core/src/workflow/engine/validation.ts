@@ -66,23 +66,10 @@ export function getMissionWorkflowEventValidationErrors(
             if (runtime.lifecycle !== 'paused') {
                 errors.push(`mission.resumed requires lifecycle paused, received '${runtime.lifecycle}'.`);
             }
-            if (runtime.panic.active) {
-                errors.push('mission.resumed is not allowed while panic is active.');
-            }
             break;
         case 'mission.paused':
             if (runtime.lifecycle === 'delivered') {
                 errors.push('mission.paused is not allowed after delivery.');
-            }
-            break;
-        case 'mission.panic.requested':
-            if (runtime.lifecycle === 'completed' || runtime.lifecycle === 'delivered') {
-                errors.push('mission.panic.requested is not allowed after mission completion.');
-            }
-            break;
-        case 'mission.panic.cleared':
-            if (runtime.lifecycle !== 'panicked' && !(runtime.lifecycle === 'paused' && runtime.pause.reason === 'panic' && !runtime.panic.active)) {
-                errors.push(`mission.panic.cleared requires lifecycle panicked or paused after panic clear, received '${runtime.lifecycle}'.`);
             }
             break;
         case 'mission.launch-queue.restarted':
@@ -91,9 +78,6 @@ export function getMissionWorkflowEventValidationErrors(
             }
             if (runtime.pause.paused) {
                 errors.push('mission.launch-queue.restarted is not allowed while the mission is paused.');
-            }
-            if (runtime.panic.active) {
-                errors.push('mission.launch-queue.restarted is not allowed while panic is active.');
             }
             if (runtime.launchQueue.length === 0 && !runtime.tasks.some((task) => task.lifecycle === 'queued')) {
                 errors.push('mission.launch-queue.restarted requires at least one queued task or launch request.');
@@ -128,9 +112,6 @@ export function getMissionWorkflowEventValidationErrors(
             break;
         }
         case 'task.queued': {
-            if (runtime.lifecycle === 'panicked' || runtime.panic.active) {
-                errors.push('task.queued is not allowed while the mission is panicked.');
-            }
             if (runtime.lifecycle === 'paused' || runtime.pause.paused) {
                 errors.push('task.queued is not allowed while the mission is paused.');
             }
@@ -246,10 +227,12 @@ function lifecycleForSessionEvent(
     }
 }
 
-function generatedTaskPayloadMatches(task: MissionTaskRuntimeState, payload: { taskId: string; title: string; instruction: string; dependsOn: string[]; agentRunner?: string }): boolean {
+function generatedTaskPayloadMatches(task: MissionTaskRuntimeState, payload: { taskId: string; title: string; instruction: string; model?: string; reasoningEffort?: string; dependsOn: string[]; agentRunner?: string }): boolean {
     return task.taskId === payload.taskId &&
         task.title === payload.title &&
         task.instruction === payload.instruction &&
+    task.model === payload.model &&
+    task.reasoningEffort === payload.reasoningEffort &&
         JSON.stringify(task.dependsOn) === JSON.stringify(payload.dependsOn) &&
         task.agentRunner === payload.agentRunner;
 }

@@ -49,6 +49,8 @@ export async function generateMissionWorkflowTasks(input: {
             taskId: task.taskId,
             title: task.title,
             instruction: task.instruction,
+            ...(task.model ? { model: task.model } : {}),
+            ...(task.reasoningEffort ? { reasoningEffort: task.reasoningEffort } : {}),
             ...(task.taskKind ? { taskKind: task.taskKind } : {}),
             ...(task.pairedTaskId ? { pairedTaskId: task.pairedTaskId } : {}),
             dependsOn: [...task.dependsOn],

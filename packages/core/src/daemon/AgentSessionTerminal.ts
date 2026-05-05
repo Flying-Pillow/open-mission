@@ -172,13 +172,14 @@ function createAgentSessionTerminalStateFromSnapshot(
     record: AgentSessionTerminalRecord,
     snapshot: TerminalSessionSnapshot
 ): AgentSessionTerminalSnapshotType {
+    const isIncrementalOutput = typeof snapshot.chunk === 'string' && snapshot.chunk.length > 0 && snapshot.connected && !snapshot.dead;
     return {
         missionId: record.missionId,
         sessionId: record.sessionId,
         connected: snapshot.connected,
         dead: snapshot.dead,
         exitCode: snapshot.exitCode,
-        screen: snapshot.screen,
+        screen: isIncrementalOutput ? '' : snapshot.screen,
         ...(snapshot.truncated ? { truncated: true } : {}),
         ...(typeof snapshot.chunk === 'string' ? { chunk: snapshot.chunk } : {}),
         terminalHandle: {

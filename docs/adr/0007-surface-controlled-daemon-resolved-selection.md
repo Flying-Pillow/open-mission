@@ -1,4 +1,16 @@
-# Surface-Controlled Daemon-Resolved Selection
+---
+layout: default
+title: Surface-Controlled Daemon-Resolved Selection
+parent: Architecture Decisions
+nav_order: 7
+status: accepted
+date: 2026-05-04
+decision_area: surface-selection
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Mission control selection represents an operator's current focus in one surface: a Mission stage, Mission task, Mission artifact, Agent session, or other valid focus target. It is not part of the Mission's durable work record.
 

@@ -13,11 +13,6 @@
         "enabled": true,
         "pauseOnMissionStart": false
       },
-      "panic": {
-        "terminateSessions": true,
-        "clearLaunchQueue": true,
-        "haltMission": true
-      },
       "execution": {
         "maxParallelTasks": 1,
         "maxParallelSessions": 1
@@ -152,12 +147,6 @@
     "pause": {
       "paused": false
     },
-    "panic": {
-      "active": false,
-      "terminateSessions": true,
-      "clearLaunchQueue": true,
-      "haltMission": true
-    },
     "stages": [
       {
         "stageId": "prd",
@@ -189,7 +178,7 @@
       },
       {
         "stageId": "implementation",
-        "lifecycle": "active",
+        "lifecycle": "running",
         "taskIds": [
           "implementation/01-dependency-and-runner-id-boundary",
           "implementation/01-dependency-and-runner-id-boundary-verify",
@@ -207,19 +196,39 @@
           "implementation/07-pty-launch-integration-and-pi-migration-verify",
           "implementation/08-agent-session-execution-ux",
           "implementation/08-agent-session-execution-ux-verify",
+          "implementation/08.1-replace-sandcastle-dependency-with-mission-owned-agent-runners",
+          "implementation/08.1-replace-sandcastle-dependency-with-mission-owned-agent-runners-verify",
+          "implementation/08.2-simplify-agent-mcp-integration",
+          "implementation/08.2-simplify-agent-mcp-integration-verify",
           "implementation/09-documentation-and-final-cleanup",
           "implementation/09-documentation-and-final-cleanup-verify"
         ],
         "readyTaskIds": [],
         "queuedTaskIds": [],
         "runningTaskIds": [
-          "implementation/03-agent-session-signal-boundary-and-policy"
+          "implementation/09-documentation-and-final-cleanup"
         ],
         "completedTaskIds": [
           "implementation/01-dependency-and-runner-id-boundary",
           "implementation/01-dependency-and-runner-id-boundary-verify",
           "implementation/02-mission-owned-sandcastle-provider-initialization-boundary",
-          "implementation/02-mission-owned-sandcastle-provider-initialization-boundary-verify"
+          "implementation/02-mission-owned-sandcastle-provider-initialization-boundary-verify",
+          "implementation/03-agent-session-signal-boundary-and-policy",
+          "implementation/03-agent-session-signal-boundary-and-policy-verify",
+          "implementation/04-local-mcp-signal-server",
+          "implementation/04-local-mcp-signal-server-verify",
+          "implementation/05-agent-session-mcp-access-provisioning",
+          "implementation/05-agent-session-mcp-access-provisioning-verify",
+          "implementation/06-agent-skill-protocol-and-launch-instructions",
+          "implementation/06-agent-skill-protocol-and-launch-instructions-verify",
+          "implementation/07-pty-launch-integration-and-pi-migration",
+          "implementation/07-pty-launch-integration-and-pi-migration-verify",
+          "implementation/08-agent-session-execution-ux",
+          "implementation/08-agent-session-execution-ux-verify",
+          "implementation/08.1-replace-sandcastle-dependency-with-mission-owned-agent-runners",
+          "implementation/08.1-replace-sandcastle-dependency-with-mission-owned-agent-runners-verify",
+          "implementation/08.2-simplify-agent-mcp-integration",
+          "implementation/08.2-simplify-agent-mcp-integration-verify"
         ]
       },
       {
@@ -247,13 +256,15 @@
         "stageId": "prd",
         "title": "PRD From Brief",
         "instruction": "Read .mission/missions/31-adopt-sandcastle-agentprovideradapter-for-four-a/BRIEF.md as intake. Update only .mission/missions/31-adopt-sandcastle-agentprovideradapter-for-four-a/01-PRD/PRD.md. State the problem, outcome, constraints, and success criteria. Do not create code or other artifacts.\n\nInclude affected surface, authoritative inputs, known unrelated failures, compatibility policy, and smallest verification signals. Record unknowns as open questions.",
+        "model": "gpt-5-codex",
+        "reasoningEffort": "high",
         "dependsOn": [],
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true
         },
-        "agentRunner": "copilot-cli",
+        "agentRunner": "codex",
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T07:01:50.444Z",
@@ -265,13 +276,15 @@
         "stageId": "spec",
         "title": "Draft Spec",
         "instruction": "Read .mission/missions/31-adopt-sandcastle-agentprovideradapter-for-four-a/01-PRD/PRD.md and update only .mission/missions/31-adopt-sandcastle-agentprovideradapter-for-four-a/02-SPEC/SPEC.md. Define the design, boundaries, changed files, and checks. Do not create implementation code or verification evidence.\n\nMake .mission/missions/31-adopt-sandcastle-agentprovideradapter-for-four-a/02-SPEC/SPEC.md ready for task generation: ownership rules, allowed and forbidden scope, boundary semantics, required files, validation commands, ignored failures, and compatibility or cleanup policy.",
+        "model": "gpt-5-codex",
+        "reasoningEffort": "high",
         "dependsOn": [],
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true
         },
-        "agentRunner": "copilot-cli",
+        "agentRunner": "codex",
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T08:33:00.233Z",
@@ -396,7 +409,7 @@
         "dependsOn": [
           "implementation/02-mission-owned-sandcastle-provider-initialization-boundary-verify"
         ],
-        "lifecycle": "running",
+        "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false
@@ -405,7 +418,8 @@
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-04T16:49:19.175Z"
+        "updatedAt": "2026-05-04T17:25:20.771Z",
+        "completedAt": "2026-05-04T17:25:20.771Z"
       },
       {
         "taskId": "implementation/03-agent-session-signal-boundary-and-policy-verify",
@@ -417,18 +431,17 @@
         "dependsOn": [
           "implementation/03-agent-session-signal-boundary-and-policy"
         ],
-        "lifecycle": "pending",
-        "waitingOnTaskIds": [
-          "implementation/03-agent-session-signal-boundary-and-policy"
-        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-04T09:34:28.161Z"
+        "updatedAt": "2026-05-04T17:35:12.557Z",
+        "completedAt": "2026-05-04T17:35:12.557Z"
       },
       {
         "taskId": "implementation/04-local-mcp-signal-server",
@@ -440,18 +453,17 @@
         "dependsOn": [
           "implementation/03-agent-session-signal-boundary-and-policy-verify"
         ],
-        "lifecycle": "pending",
-        "waitingOnTaskIds": [
-          "implementation/03-agent-session-signal-boundary-and-policy-verify"
-        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-04T09:34:40.287Z"
+        "updatedAt": "2026-05-04T18:01:50.741Z",
+        "completedAt": "2026-05-04T18:01:50.741Z"
       },
       {
         "taskId": "implementation/04-local-mcp-signal-server-verify",
@@ -463,18 +475,17 @@
         "dependsOn": [
           "implementation/04-local-mcp-signal-server"
         ],
-        "lifecycle": "pending",
-        "waitingOnTaskIds": [
-          "implementation/04-local-mcp-signal-server"
-        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-04T09:34:43.761Z"
+        "updatedAt": "2026-05-04T20:36:33.071Z",
+        "completedAt": "2026-05-04T20:36:33.071Z"
       },
       {
         "taskId": "implementation/05-agent-session-mcp-access-provisioning",
@@ -486,18 +497,17 @@
         "dependsOn": [
           "implementation/04-local-mcp-signal-server-verify"
         ],
-        "lifecycle": "pending",
-        "waitingOnTaskIds": [
-          "implementation/04-local-mcp-signal-server-verify"
-        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-04T09:34:46.163Z"
+        "updatedAt": "2026-05-04T21:35:59.428Z",
+        "completedAt": "2026-05-04T21:35:59.428Z"
       },
       {
         "taskId": "implementation/05-agent-session-mcp-access-provisioning-verify",
@@ -509,10 +519,8 @@
         "dependsOn": [
           "implementation/05-agent-session-mcp-access-provisioning"
         ],
-        "lifecycle": "pending",
-        "waitingOnTaskIds": [
-          "implementation/05-agent-session-mcp-access-provisioning"
-        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false
         },
@@ -520,7 +528,8 @@
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-04T09:34:02.459Z"
+        "updatedAt": "2026-05-04T21:39:39.527Z",
+        "completedAt": "2026-05-04T21:39:39.527Z"
       },
       {
         "taskId": "implementation/06-agent-skill-protocol-and-launch-instructions",
@@ -532,18 +541,17 @@
         "dependsOn": [
           "implementation/05-agent-session-mcp-access-provisioning-verify"
         ],
-        "lifecycle": "pending",
-        "waitingOnTaskIds": [
-          "implementation/05-agent-session-mcp-access-provisioning-verify"
-        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-04T09:34:49.192Z"
+        "updatedAt": "2026-05-04T22:05:19.637Z",
+        "completedAt": "2026-05-04T22:05:19.637Z"
       },
       {
         "taskId": "implementation/06-agent-skill-protocol-and-launch-instructions-verify",
@@ -555,18 +563,17 @@
         "dependsOn": [
           "implementation/06-agent-skill-protocol-and-launch-instructions"
         ],
-        "lifecycle": "pending",
-        "waitingOnTaskIds": [
-          "implementation/06-agent-skill-protocol-and-launch-instructions"
-        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-04T09:34:51.654Z"
+        "updatedAt": "2026-05-04T22:10:00.525Z",
+        "completedAt": "2026-05-04T22:10:00.525Z"
       },
       {
         "taskId": "implementation/07-pty-launch-integration-and-pi-migration",
@@ -578,18 +585,17 @@
         "dependsOn": [
           "implementation/06-agent-skill-protocol-and-launch-instructions-verify"
         ],
-        "lifecycle": "pending",
-        "waitingOnTaskIds": [
-          "implementation/06-agent-skill-protocol-and-launch-instructions-verify"
-        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-04T09:34:53.741Z"
+        "updatedAt": "2026-05-04T22:24:37.612Z",
+        "completedAt": "2026-05-04T22:24:37.612Z"
       },
       {
         "taskId": "implementation/07-pty-launch-integration-and-pi-migration-verify",
@@ -601,18 +607,17 @@
         "dependsOn": [
           "implementation/07-pty-launch-integration-and-pi-migration"
         ],
-        "lifecycle": "pending",
-        "waitingOnTaskIds": [
-          "implementation/07-pty-launch-integration-and-pi-migration"
-        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-04T09:34:56.384Z"
+        "updatedAt": "2026-05-04T22:31:52.874Z",
+        "completedAt": "2026-05-04T22:31:52.874Z"
       },
       {
         "taskId": "implementation/08-agent-session-execution-ux",
@@ -624,18 +629,17 @@
         "dependsOn": [
           "implementation/07-pty-launch-integration-and-pi-migration-verify"
         ],
-        "lifecycle": "pending",
-        "waitingOnTaskIds": [
-          "implementation/07-pty-launch-integration-and-pi-migration-verify"
-        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true
+          "autostart": false
         },
         "agentRunner": "copilot-cli",
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-04T09:34:59.195Z"
+        "updatedAt": "2026-05-04T22:56:41.100Z",
+        "completedAt": "2026-05-04T22:56:41.100Z"
       },
       {
         "taskId": "implementation/08-agent-session-execution-ux-verify",
@@ -647,10 +651,8 @@
         "dependsOn": [
           "implementation/08-agent-session-execution-ux"
         ],
-        "lifecycle": "pending",
-        "waitingOnTaskIds": [
-          "implementation/08-agent-session-execution-ux"
-        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
         "runtime": {
           "autostart": true
         },
@@ -658,36 +660,127 @@
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-04T09:35:05.583Z"
+        "updatedAt": "2026-05-04T22:56:46.277Z",
+        "completedAt": "2026-05-04T22:56:46.277Z"
+      },
+      {
+        "taskId": "implementation/08.1-replace-sandcastle-dependency-with-mission-owned-agent-runners",
+        "stageId": "implementation",
+        "title": "Replace Sandcastle Dependency With Mission-Owned Agent Runners",
+        "instruction": "Objective: remove the `@ai-hero/sandcastle` runtime dependency and fully delete the current adapter-plus-runner stack in favor of lean Mission-owned runner implementations for `claude-code`, `codex`, `opencode`, and `pi`.\n\nContext: keep the Mission-owned PTY transport, session lifecycle, signal routing, signal policy, MCP server, and Airport projection work already established in earlier slices. Treat the Sandcastle repository as a behavioral reference for command construction and stream parsing only. This slice is intentionally KISS: do not keep Sandcastle as a production dependency and do not preserve the `AgentProviderAdapter` / `SandcastleAgentRunner` layering under any name.\n\nAllowed files: `packages/core/package.json`, `pnpm-lock.yaml`, `packages/core/src/daemon/runtime/agent/runtimes/AgentRuntimeFactory.ts`, `packages/core/src/daemon/runtime/agent/runtimes/CopilotCliAgentRunner.ts`, `packages/core/src/daemon/runtime/agent/runtimes/CopilotCliAgentRunner.test.ts`, `packages/core/src/daemon/runtime/agent/runtimes/PiAgentRunner.ts`, `packages/core/src/daemon/runtime/agent/runtimes/PiAgentRunner.test.ts`, new or existing Mission-owned runner or helper files under `packages/core/src/daemon/runtime/agent/runtimes/**`, and deletion of `packages/core/src/daemon/runtime/agent/providers/AgentProviderAdapter.ts`, `packages/core/src/daemon/runtime/agent/providers/AgentProviderAdapter.test.ts`, `packages/core/src/daemon/runtime/agent/runtimes/SandcastleAgentRunner.ts`, and `packages/core/src/daemon/runtime/agent/runtimes/SandcastleAgentRunner.test.ts`.\n\nForbidden files: `apps/airport/**` outside existing provider-neutral interaction-mode projection work; `packages/core/src/daemon/runtime/agent/TerminalAgentTransport.ts`; `packages/core/src/daemon/runtime/agent/signals/**` except narrowly required integration adjustments; `packages/core/src/daemon/runtime/agent/mcp/**` except env or launch-context wiring that is unavoidable for the new runner shape; `docs/adr/**`; any Sandcastle sandbox/worktree/orchestration integration files; workflow gate or verification code; tracked files containing per-session MCP credentials.\n\nExpected change: remove `@ai-hero/sandcastle` from Mission; delete `AgentProviderAdapter` and `SandcastleAgentRunner` completely; inline only the command-launch and output-parsing behavior Mission truly needs; introduce explicit Mission-owned PTY-backed runner implementations, or at most one very small local shared helper, for `claude-code`, `codex`, `opencode`, and `pi`; keep runner registration explicit in `AgentRuntimeFactory`; preserve provider-specific metadata handling for model, effort, permission bypass, resume, and usage/session parsing where supported; refactor `PiAgentRunner` onto the new local shape; and align `CopilotCliAgentRunner` with the leaner PTY runner conventions where that reduces duplication without introducing a new generic provider abstraction.\n\nCompatibility policy: preserve the existing Mission-owned PTY launch path, session lifecycle, signal observation routing, and runner ids; keep unsupported capabilities honest; do not preserve `AgentProviderAdapter`, `SandcastleAgentRunner`, or any renamed replacement for those abstractions. The desired end state is direct Mission-owned runners with no extra provider-adapter layer.\n\nValidation gate: `pnpm --filter @flying-pillow/mission-core check`, `pnpm --filter @flying-pillow/mission-core test`, `pnpm --filter @flying-pillow/mission-core build`.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/08.1-replace-sandcastle-dependency-with-mission-owned-agent-runners-verify",
+        "dependsOn": [
+          "implementation/08-agent-session-execution-ux-verify"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "reworkIterationCount": 0,
+        "createdAt": "2026-05-05T00:10:00.000Z",
+        "updatedAt": "2026-05-05T00:10:00.000Z",
+        "completedAt": "2026-05-05T00:10:00.000Z"
+      },
+      {
+        "taskId": "implementation/08.1-replace-sandcastle-dependency-with-mission-owned-agent-runners-verify",
+        "stageId": "implementation",
+        "title": "Verify Replace Sandcastle Dependency With Mission-Owned Agent Runners",
+        "instruction": "Paired task: `implementation/08.1-replace-sandcastle-dependency-with-mission-owned-agent-runners`.\n\nFocused checks: confirm `@ai-hero/sandcastle` is no longer a Mission dependency; `packages/core/src/daemon/runtime/agent/providers/AgentProviderAdapter.ts` and `packages/core/src/daemon/runtime/agent/runtimes/SandcastleAgentRunner.ts` are removed rather than preserved under another name; Mission now owns the launch and stream-parsing logic for `claude-code`, `codex`, `opencode`, and `pi`; `AgentRuntimeFactory` registers the four direct Mission-owned runners explicitly; `PiAgentRunner` and `CopilotCliAgentRunner` reflect the leaner PTY-launch contract without regressing behavior; and the slice satisfies `pnpm --filter @flying-pillow/mission-core check`, `pnpm --filter @flying-pillow/mission-core test`, plus `pnpm --filter @flying-pillow/mission-core build`.\n\nFailure signals: Sandcastle dependency still present, `AgentProviderAdapter` or `SandcastleAgentRunner` still present, a renamed generic adapter layer preserved, PTY launch behavior regressed, upstream command/stream semantics copied inaccurately, stale Pi-only truth still active, or runtime ownership leaking back to an external provider dependency.\n\nIgnored baseline failures: none.\n\nEvidence location: append a task-specific section to `03-IMPLEMENTATION/VERIFY.md`. Do not add features.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/08.1-replace-sandcastle-dependency-with-mission-owned-agent-runners",
+        "dependsOn": [
+          "implementation/08.1-replace-sandcastle-dependency-with-mission-owned-agent-runners"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": true
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "reworkIterationCount": 0,
+        "createdAt": "2026-05-05T00:10:00.000Z",
+        "updatedAt": "2026-05-05T08:35:32Z",
+        "completedAt": "2026-05-05T08:35:32Z"
+      },
+      {
+        "taskId": "implementation/08.2-simplify-agent-mcp-integration",
+        "stageId": "implementation",
+        "title": "Simplify Agent MCP Integration",
+        "instruction": "Objective: keep Mission-owned MCP signaling but remove per-agent MCP config materialization so agent coders are instructed to use the Mission MCP server instead of relying on runner-specific config-file mutation.\n\nContext: preserve the local Mission MCP signal server, session registry, signal port, signal policy, and protocol-marker fallback established in earlier slices. The simplification target is the agent-coder-specific provisioning layer under `packages/core/src/daemon/runtime/agent/mcp/**` that currently writes or patches runner-specific config files for Claude Code, Codex, OpenCode, and Pi.\n\nAllowed files: `packages/core/src/daemon/runtime/agent/mcp/**`, `packages/core/src/daemon/runtime/agent/runtimes/**` only as needed to pass launch env or launch instructions through the new leaner path, `.agents/skills/mission-agent-runtime-protocol/SKILL.md`, and existing provider-neutral launch-instruction or signal-boundary files only as needed to reflect instruction-guided MCP access.\n\nForbidden files: `apps/airport/**` outside provider-neutral interaction-mode projection work; `packages/core/src/daemon/runtime/agent/TerminalAgentTransport.ts`; `docs/adr/**`; any remote MCP service or hosted endpoint; tracked files containing per-session MCP credentials; any new per-agent config materializer, config-patching helper, or universal `.agents/mcp.json` assumption.\n\nExpected change: remove runner-specific MCP config materializers and the maintenance-heavy provisioning path that mutates coder-specific config files; keep one Mission-owned MCP server and session registration boundary; expose the session-scoped MCP endpoint and identity through launch env and explicit runtime instructions; tell agents how to use the local Mission MCP server when their tooling supports it; preserve strict fallback markers when MCP is unavailable or unsupported; and keep degraded or unavailable MCP states honest without pretending Mission has validated first-class MCP wiring for every coder.\n\nCompatibility policy: preserve Mission-owned signal ingestion and policy authority, but do not preserve per-runner `.mcp.json`, `.codex/config.toml`, `opencode.json`, or similar config-writing paths once instruction-guided MCP access is in place.\n\nValidation gate: `pnpm --filter @flying-pillow/mission-core check`, `pnpm --filter @flying-pillow/mission-core test`, `pnpm --filter @flying-pillow/mission-core build`.",
+        "taskKind": "implementation",
+        "pairedTaskId": "implementation/08.2-simplify-agent-mcp-integration-verify",
+        "dependsOn": [
+          "implementation/08.1-replace-sandcastle-dependency-with-mission-owned-agent-runners-verify"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": false
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "reworkIterationCount": 0,
+        "createdAt": "2026-05-05T00:10:00.000Z",
+        "updatedAt": "2026-05-05T08:43:50Z",
+        "completedAt": "2026-05-05T08:43:50Z"
+      },
+      {
+        "taskId": "implementation/08.2-simplify-agent-mcp-integration-verify",
+        "stageId": "implementation",
+        "title": "Verify Simplify Agent MCP Integration",
+        "instruction": "Paired task: `implementation/08.2-simplify-agent-mcp-integration`.\n\nFocused checks: confirm the Mission MCP server, registry, signal port, and fallback marker path remain intact; runner-specific MCP config materializers and config-file mutation paths are removed; launch env and launch instructions now carry the MCP endpoint and session identity without tracked per-session config; agents are explicitly instructed to use the local Mission MCP server where supported; degraded or unavailable MCP states remain honest; and the slice satisfies `pnpm --filter @flying-pillow/mission-core check`, `pnpm --filter @flying-pillow/mission-core test`, plus `pnpm --filter @flying-pillow/mission-core build`.\n\nFailure signals: per-agent config materialization still active, MCP signaling authority regressed, instructions no longer tell agents how to use Mission MCP, fake validated MCP capability claimed for unsupported coders, or fallback protocol markers broken.\n\nIgnored baseline failures: none.\n\nEvidence location: append a task-specific section to `03-IMPLEMENTATION/VERIFY.md`. Do not add features.",
+        "taskKind": "verification",
+        "pairedTaskId": "implementation/08.2-simplify-agent-mcp-integration",
+        "dependsOn": [
+          "implementation/08.2-simplify-agent-mcp-integration"
+        ],
+        "lifecycle": "completed",
+        "waitingOnTaskIds": [],
+        "runtime": {
+          "autostart": true
+        },
+        "agentRunner": "copilot-cli",
+        "retries": 0,
+        "reworkIterationCount": 0,
+        "createdAt": "2026-05-05T00:10:00.000Z",
+        "updatedAt": "2026-05-05T08:43:50Z",
+        "completedAt": "2026-05-05T08:43:50Z"
       },
       {
         "taskId": "implementation/09-documentation-and-final-cleanup",
         "stageId": "implementation",
         "title": "Documentation And Final Cleanup",
-        "instruction": "Objective: publish the preserved ownership model and remove any obsolete direct-provider runner truth left behind by the migration.\n\nContext: use `02-SPEC/SPEC.md` for the required documentation points, cleanup rules, and remaining boundary assertions so the repository ends with one active provider-neutral runtime path and no stale Pi-only truth.\n\nAllowed files: `specifications/mission/execution/agent-runtime.md` plus any cleanup files from Slice 3 that remain obsolete.\n\nForbidden files: `apps/airport/**` outside the Agent session interaction-mode projection; `packages/core/src/daemon/runtime/agent/TerminalAgentTransport.ts`; `packages/core/src/entities/**` outside runner-id schema updates and provider-neutral Agent session interaction-mode projection; `docs/adr/**`; any Sandcastle sandbox/worktree/orchestration integration files; workflow gate or verification code; any parser that directly mutates workflow state; remote MCP services or hosted endpoints; `.agents/mcp.json` as a presumed universal agent config; tracked files containing per-session MCP credentials.\n\nExpected change: document that Sandcastle is a provider-adapter dependency while Mission still owns lifecycle, logs, PTY transport, interaction modes, MCP server lifecycle, session registration, acknowledgement semantics, and capability-gated non-interactive UX; remove any obsolete runner or signal artifacts left from earlier slices so no legacy Pi-only path remains active.\n\nCompatibility policy: preserve Mission runtime ownership and current Airport terminal behavior, but do not preserve obsolete direct Pi command-building or duplicate runtime truths once the Sandcastle-backed path is active.\n\nValidation gate: `pnpm --filter @flying-pillow/mission-core check`, `pnpm --filter @flying-pillow/mission-core test`, `pnpm --filter @flying-pillow/mission-core build`.",
+        "instruction": "Objective: publish the leaner preserved ownership model and remove any obsolete Sandcastle- or materializer-era runtime truth left behind by the simplification.\n\nContext: use `02-SPEC/SPEC.md` plus the follow-up simplification tasks as the authority for the final ownership model so the repository ends with one active Mission-owned runtime path, one Mission-owned MCP signaling path, no external Sandcastle dependency, and no per-agent MCP config materializers.\n\nAllowed files: `specifications/mission/execution/agent-runtime.md` plus any cleanup files from Slice 3 that remain obsolete.\n\nForbidden files: `apps/airport/**` outside the Agent session interaction-mode projection; `packages/core/src/daemon/runtime/agent/TerminalAgentTransport.ts`; `packages/core/src/entities/**` outside runner-id schema updates and provider-neutral Agent session interaction-mode projection; `docs/adr/**`; any Sandcastle sandbox/worktree/orchestration integration files; workflow gate or verification code; any parser that directly mutates workflow state; remote MCP services or hosted endpoints; `.agents/mcp.json` as a presumed universal agent config; tracked files containing per-session MCP credentials.\n\nExpected change: document that Mission now owns the four agent-coder runner implementations directly, with CLI launch and stream parsing logic adapted from upstream reference behavior rather than delegated to `@ai-hero/sandcastle`; document that Mission still owns lifecycle, logs, PTY transport, interaction modes, MCP server lifecycle, session registration, acknowledgement semantics, and instruction-guided MCP usage; and remove any obsolete runner, adapter, dependency, or materializer artifacts left from earlier slices so no stale Pi-only truth, Sandcastle dependency, or per-agent MCP file mutation path remains active.\n\nCompatibility policy: preserve Mission runtime ownership and current Airport terminal behavior, but do not preserve obsolete Sandcastle-backed adapter layers, direct Pi-only command-building, or per-agent MCP materialization paths once the leaner Mission-owned runtime is active.\n\nValidation gate: `pnpm --filter @flying-pillow/mission-core check`, `pnpm --filter @flying-pillow/mission-core test`, `pnpm --filter @flying-pillow/mission-core build`.",
+        "model": "gpt-5-codex",
+        "reasoningEffort": "high",
         "taskKind": "implementation",
         "pairedTaskId": "implementation/09-documentation-and-final-cleanup-verify",
         "dependsOn": [
-          "implementation/08-agent-session-execution-ux-verify"
+          "implementation/08.2-simplify-agent-mcp-integration-verify"
         ],
-        "lifecycle": "pending",
-        "waitingOnTaskIds": [
-          "implementation/08-agent-session-execution-ux-verify"
-        ],
+        "lifecycle": "running",
+        "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true
+          "autostart": false
         },
-        "agentRunner": "copilot-cli",
+        "agentRunner": "codex",
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-04T09:35:14.431Z"
+        "updatedAt": "2026-05-05T12:38:10.759Z"
       },
       {
         "taskId": "implementation/09-documentation-and-final-cleanup-verify",
         "stageId": "implementation",
         "title": "Verify Documentation And Final Cleanup",
-        "instruction": "Paired task: `implementation/09-documentation-and-final-cleanup`.\n\nFocused checks: confirm the runtime documentation states Sandcastle is a provider-adapter dependency, Mission still owns lifecycle, logs, PTY transport, interaction-mode semantics, local MCP signaling, runner-specific provisioning, and capability-gated non-interactive UX, and that no legacy Pi-only path remains active; verify the slice satisfies `pnpm --filter @flying-pillow/mission-core check`, `pnpm --filter @flying-pillow/mission-core test`, plus `pnpm --filter @flying-pillow/mission-core build`.\n\nFailure signals: stale Pi path still active, PTY launch bypassed in the documented ownership model, agent claim treated as deterministic verification, direct Sandcastle orchestration import reintroduced as active truth, or cleanup leaving dual runtime paths behind.\n\nIgnored baseline failures: none.\n\nEvidence location: append a task-specific section to `03-IMPLEMENTATION/VERIFY.md`. Do not add features.",
+        "instruction": "Paired task: `implementation/09-documentation-and-final-cleanup`.\n\nFocused checks: confirm the runtime documentation states Mission now owns the four agent-coder runners directly, Mission still owns lifecycle, logs, PTY transport, interaction-mode semantics, local MCP signaling, and instruction-guided MCP usage, and that no Sandcastle dependency, no legacy Pi-only path, and no per-agent MCP materialization path remain active; verify the slice satisfies `pnpm --filter @flying-pillow/mission-core check`, `pnpm --filter @flying-pillow/mission-core test`, plus `pnpm --filter @flying-pillow/mission-core build`.\n\nFailure signals: stale Pi path still active, PTY launch bypassed in the documented ownership model, agent claim treated as deterministic verification, Sandcastle dependency or per-agent MCP config mutation reintroduced as active truth, or cleanup leaving dual runtime paths behind.\n\nIgnored baseline failures: none.\n\nEvidence location: append a task-specific section to `03-IMPLEMENTATION/VERIFY.md`. Do not add features.",
+        "model": "gpt-5-codex",
+        "reasoningEffort": "high",
         "taskKind": "verification",
         "pairedTaskId": "implementation/09-documentation-and-final-cleanup",
         "dependsOn": [
@@ -700,11 +793,11 @@
         "runtime": {
           "autostart": true
         },
-        "agentRunner": "copilot-cli",
+        "agentRunner": "codex",
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-04T09:35:16.901Z"
+        "updatedAt": "2026-05-05T10:27:00.897Z"
       }
     ],
     "sessions": [
@@ -1168,9 +1261,669 @@
           "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-03-agent-session-signal-boundary-and-policy:03-agent-session-signal-boundary-and-policy-copilot-cli-567203b5",
           "paneId": "pty"
         },
-        "lifecycle": "running",
+        "lifecycle": "terminated",
         "launchedAt": "2026-05-04T16:49:19.175Z",
-        "updatedAt": "2026-05-04T16:49:19.175Z"
+        "updatedAt": "2026-05-04T17:05:30.792Z",
+        "terminatedAt": "2026-05-04T17:05:30.792Z"
+      },
+      {
+        "sessionId": "03-agent-session-signal-boundary-and-policy-copilot-cli-3366c76e",
+        "taskId": "implementation/03-agent-session-signal-boundary-and-policy",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/03-agent-session-signal-boundary-and-policy-copilot-cli-3366c76e.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-03-agent-session-signal-boundary-and-policy:03-agent-session-signal-boundary-and-policy-copilot-cli-3366c76e",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T17:06:48.940Z",
+        "updatedAt": "2026-05-04T17:08:47.792Z",
+        "terminatedAt": "2026-05-04T17:08:47.792Z"
+      },
+      {
+        "sessionId": "03-agent-session-signal-boundary-and-policy-copilot-cli-1d481e4f",
+        "taskId": "implementation/03-agent-session-signal-boundary-and-policy",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/03-agent-session-signal-boundary-and-policy-copilot-cli-1d481e4f.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-03-agent-session-signal-boundary-and-policy:03-agent-session-signal-boundary-and-policy-copilot-cli-1d481e4f",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T17:08:52.367Z",
+        "updatedAt": "2026-05-04T17:13:03.940Z",
+        "terminatedAt": "2026-05-04T17:13:03.940Z"
+      },
+      {
+        "sessionId": "03-agent-session-signal-boundary-and-policy-copilot-cli-0aa01f3e",
+        "taskId": "implementation/03-agent-session-signal-boundary-and-policy",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/03-agent-session-signal-boundary-and-policy-copilot-cli-0aa01f3e.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-03-agent-session-signal-boundary-and-policy:03-agent-session-signal-boundary-and-policy-copilot-cli-0aa01f3e",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T17:13:56.635Z",
+        "updatedAt": "2026-05-04T17:15:37.012Z",
+        "terminatedAt": "2026-05-04T17:15:37.012Z"
+      },
+      {
+        "sessionId": "03-agent-session-signal-boundary-and-policy-copilot-cli-82d3b92d",
+        "taskId": "implementation/03-agent-session-signal-boundary-and-policy",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/03-agent-session-signal-boundary-and-policy-copilot-cli-82d3b92d.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-03-agent-session-signal-boundary-and-policy:03-agent-session-signal-boundary-and-policy-copilot-cli-82d3b92d",
+          "paneId": "pty"
+        },
+        "lifecycle": "cancelled",
+        "launchedAt": "2026-05-04T17:19:21.316Z",
+        "updatedAt": "2026-05-04T17:19:35.279Z",
+        "cancelledAt": "2026-05-04T17:19:35.279Z"
+      },
+      {
+        "sessionId": "03-agent-session-signal-boundary-and-policy-copilot-cli-566681e3",
+        "taskId": "implementation/03-agent-session-signal-boundary-and-policy",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/03-agent-session-signal-boundary-and-policy-copilot-cli-566681e3.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-03-agent-session-signal-boundary-and-policy:03-agent-session-signal-boundary-and-policy-copilot-cli-566681e3",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T17:20:23.057Z",
+        "updatedAt": "2026-05-04T17:24:48.610Z",
+        "terminatedAt": "2026-05-04T17:24:48.610Z"
+      },
+      {
+        "sessionId": "03-agent-session-signal-boundary-and-policy-verify-copilot-cli-bcac6213",
+        "taskId": "implementation/03-agent-session-signal-boundary-and-policy-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/03-agent-session-signal-boundary-and-policy-verify-copilot-cli-bcac6213.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-03-agent-session-signal-boundary-and-policy-verify:03-agent-session-signal-boundary-and-policy-verify-copilot-cli-bcac6213",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T17:25:20.818Z",
+        "updatedAt": "2026-05-04T17:27:30.807Z",
+        "terminatedAt": "2026-05-04T17:27:30.807Z"
+      },
+      {
+        "sessionId": "03-agent-session-signal-boundary-and-policy-verify-copilot-cli-299a8dbb",
+        "taskId": "implementation/03-agent-session-signal-boundary-and-policy-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/03-agent-session-signal-boundary-and-policy-verify-copilot-cli-299a8dbb.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-03-agent-session-signal-boundary-and-policy-verify:03-agent-session-signal-boundary-and-policy-verify-copilot-cli-299a8dbb",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T17:27:34.964Z",
+        "updatedAt": "2026-05-04T17:35:05.626Z",
+        "terminatedAt": "2026-05-04T17:35:05.626Z"
+      },
+      {
+        "sessionId": "04-local-mcp-signal-server-copilot-cli-769adaaf",
+        "taskId": "implementation/04-local-mcp-signal-server",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/04-local-mcp-signal-server-copilot-cli-769adaaf.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-04-local-mcp-signal-server:04-local-mcp-signal-server-copilot-cli-769adaaf",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T17:35:12.604Z",
+        "updatedAt": "2026-05-04T17:42:03.913Z",
+        "terminatedAt": "2026-05-04T17:42:03.913Z"
+      },
+      {
+        "sessionId": "04-local-mcp-signal-server-copilot-cli-7d212d5d",
+        "taskId": "implementation/04-local-mcp-signal-server",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/04-local-mcp-signal-server-copilot-cli-7d212d5d.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-04-local-mcp-signal-server:04-local-mcp-signal-server-copilot-cli-7d212d5d",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T17:43:57.981Z",
+        "updatedAt": "2026-05-04T17:49:34.719Z",
+        "terminatedAt": "2026-05-04T17:49:34.719Z"
+      },
+      {
+        "sessionId": "04-local-mcp-signal-server-copilot-cli-036a8994",
+        "taskId": "implementation/04-local-mcp-signal-server",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/04-local-mcp-signal-server-copilot-cli-036a8994.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-04-local-mcp-signal-server:04-local-mcp-signal-server-copilot-cli-036a8994",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T17:53:27.466Z",
+        "updatedAt": "2026-05-04T17:56:28.855Z",
+        "terminatedAt": "2026-05-04T17:56:28.855Z"
+      },
+      {
+        "sessionId": "04-local-mcp-signal-server-copilot-cli-a9eec6dd",
+        "taskId": "implementation/04-local-mcp-signal-server",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/04-local-mcp-signal-server-copilot-cli-a9eec6dd.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-04-local-mcp-signal-server:04-local-mcp-signal-server-copilot-cli-a9eec6dd",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T18:00:44.461Z",
+        "updatedAt": "2026-05-04T18:01:40.905Z",
+        "terminatedAt": "2026-05-04T18:01:40.905Z"
+      },
+      {
+        "sessionId": "04-local-mcp-signal-server-verify-copilot-cli-b2266434",
+        "taskId": "implementation/04-local-mcp-signal-server-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/04-local-mcp-signal-server-verify-copilot-cli-b2266434.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-04-local-mcp-signal-server-verify:04-local-mcp-signal-server-verify-copilot-cli-b2266434",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T18:01:50.789Z",
+        "updatedAt": "2026-05-04T18:02:15.534Z",
+        "terminatedAt": "2026-05-04T18:02:15.534Z"
+      },
+      {
+        "sessionId": "04-local-mcp-signal-server-verify-copilot-cli-7a587ce3",
+        "taskId": "implementation/04-local-mcp-signal-server-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/04-local-mcp-signal-server-verify-copilot-cli-7a587ce3.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-04-local-mcp-signal-server-verify:04-local-mcp-signal-server-verify-copilot-cli-7a587ce3",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T18:05:32.838Z",
+        "updatedAt": "2026-05-04T18:06:56.684Z",
+        "terminatedAt": "2026-05-04T18:06:56.684Z"
+      },
+      {
+        "sessionId": "04-local-mcp-signal-server-verify-copilot-cli-d03e6f92",
+        "taskId": "implementation/04-local-mcp-signal-server-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/04-local-mcp-signal-server-verify-copilot-cli-d03e6f92.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-04-local-mcp-signal-server-verify:04-local-mcp-signal-server-verify-copilot-cli-d03e6f92",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T18:07:03.425Z",
+        "updatedAt": "2026-05-04T18:14:50.517Z",
+        "terminatedAt": "2026-05-04T18:14:50.517Z"
+      },
+      {
+        "sessionId": "04-local-mcp-signal-server-verify-copilot-cli-72f32705",
+        "taskId": "implementation/04-local-mcp-signal-server-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/04-local-mcp-signal-server-verify-copilot-cli-72f32705.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-04-local-mcp-signal-server-verify:04-local-mcp-signal-server-verify-copilot-cli-72f32705",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T18:14:55.929Z",
+        "updatedAt": "2026-05-04T18:16:56.835Z",
+        "terminatedAt": "2026-05-04T18:16:56.835Z"
+      },
+      {
+        "sessionId": "04-local-mcp-signal-server-verify-copilot-cli-d037ce8b",
+        "taskId": "implementation/04-local-mcp-signal-server-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/04-local-mcp-signal-server-verify-copilot-cli-d037ce8b.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-04-local-mcp-signal-server-verify:04-local-mcp-signal-server-verify-copilot-cli-d037ce8b",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T18:19:32.386Z",
+        "updatedAt": "2026-05-04T18:25:53.067Z",
+        "terminatedAt": "2026-05-04T18:25:53.067Z"
+      },
+      {
+        "sessionId": "04-local-mcp-signal-server-verify-copilot-cli-18fd3608",
+        "taskId": "implementation/04-local-mcp-signal-server-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/04-local-mcp-signal-server-verify-copilot-cli-18fd3608.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-04-local-mcp-signal-server-verify:04-local-mcp-signal-server-verify-copilot-cli-18fd3608",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T18:25:57.982Z",
+        "updatedAt": "2026-05-04T18:44:30.249Z",
+        "terminatedAt": "2026-05-04T18:44:30.249Z"
+      },
+      {
+        "sessionId": "04-local-mcp-signal-server-verify-copilot-cli-0cf865bf",
+        "taskId": "implementation/04-local-mcp-signal-server-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/04-local-mcp-signal-server-verify-copilot-cli-0cf865bf.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-04-local-mcp-signal-server-verify:04-local-mcp-signal-server-verify-copilot-cli-0cf865bf",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T18:44:52.487Z",
+        "updatedAt": "2026-05-04T20:27:47.289Z",
+        "terminatedAt": "2026-05-04T20:27:47.289Z"
+      },
+      {
+        "sessionId": "04-local-mcp-signal-server-verify-copilot-cli-9125c458",
+        "taskId": "implementation/04-local-mcp-signal-server-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/04-local-mcp-signal-server-verify-copilot-cli-9125c458.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-04-local-mcp-signal-server-verify:04-local-mcp-signal-server-verify-copilot-cli-9125c458",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T20:29:23.722Z",
+        "updatedAt": "2026-05-04T20:36:14.408Z",
+        "terminatedAt": "2026-05-04T20:36:14.408Z"
+      },
+      {
+        "sessionId": "05-agent-session-mcp-access-provisioning-copilot-cli-bc736650",
+        "taskId": "implementation/05-agent-session-mcp-access-provisioning",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/05-agent-session-mcp-access-provisioning-copilot-cli-bc736650.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-05-agent-session-mcp-access-provisioning:05-agent-session-mcp-access-provisioning-copilot-cli-bc736650",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T20:36:33.117Z",
+        "updatedAt": "2026-05-04T20:40:13.515Z",
+        "terminatedAt": "2026-05-04T20:40:13.515Z"
+      },
+      {
+        "sessionId": "05-agent-session-mcp-access-provisioning-copilot-cli-a0918a4f",
+        "taskId": "implementation/05-agent-session-mcp-access-provisioning",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/05-agent-session-mcp-access-provisioning-copilot-cli-a0918a4f.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-05-agent-session-mcp-access-provisioning:05-agent-session-mcp-access-provisioning-copilot-cli-a0918a4f",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T20:40:18.665Z",
+        "updatedAt": "2026-05-04T20:45:40.624Z",
+        "terminatedAt": "2026-05-04T20:45:40.624Z"
+      },
+      {
+        "sessionId": "05-agent-session-mcp-access-provisioning-copilot-cli-a5ce5b15",
+        "taskId": "implementation/05-agent-session-mcp-access-provisioning",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/05-agent-session-mcp-access-provisioning-copilot-cli-a5ce5b15.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-05-agent-session-mcp-access-provisioning:05-agent-session-mcp-access-provisioning-copilot-cli-a5ce5b15",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T20:53:02.340Z",
+        "updatedAt": "2026-05-04T20:58:26.361Z",
+        "terminatedAt": "2026-05-04T20:58:26.361Z"
+      },
+      {
+        "sessionId": "05-agent-session-mcp-access-provisioning-copilot-cli-d0e6fea1",
+        "taskId": "implementation/05-agent-session-mcp-access-provisioning",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/05-agent-session-mcp-access-provisioning-copilot-cli-d0e6fea1.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-05-agent-session-mcp-access-provisioning:05-agent-session-mcp-access-provisioning-copilot-cli-d0e6fea1",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T20:59:58.594Z",
+        "updatedAt": "2026-05-04T21:02:14.749Z",
+        "terminatedAt": "2026-05-04T21:02:14.749Z"
+      },
+      {
+        "sessionId": "05-agent-session-mcp-access-provisioning-copilot-cli-967a3c32",
+        "taskId": "implementation/05-agent-session-mcp-access-provisioning",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/05-agent-session-mcp-access-provisioning-copilot-cli-967a3c32.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-05-agent-session-mcp-access-provisioning:05-agent-session-mcp-access-provisioning-copilot-cli-967a3c32",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T21:07:27.799Z",
+        "updatedAt": "2026-05-04T21:13:50.281Z",
+        "terminatedAt": "2026-05-04T21:13:50.281Z"
+      },
+      {
+        "sessionId": "05-agent-session-mcp-access-provisioning-copilot-cli-a26a5571",
+        "taskId": "implementation/05-agent-session-mcp-access-provisioning",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/05-agent-session-mcp-access-provisioning-copilot-cli-a26a5571.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-05-agent-session-mcp-access-provisioning:05-agent-session-mcp-access-provisioning-copilot-cli-a26a5571",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T21:13:57.085Z",
+        "updatedAt": "2026-05-04T21:16:32.179Z",
+        "terminatedAt": "2026-05-04T21:16:32.179Z"
+      },
+      {
+        "sessionId": "05-agent-session-mcp-access-provisioning-copilot-cli-dafd2908",
+        "taskId": "implementation/05-agent-session-mcp-access-provisioning",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/05-agent-session-mcp-access-provisioning-copilot-cli-dafd2908.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-05-agent-session-mcp-access-provisioning:05-agent-session-mcp-access-provisioning-copilot-cli-dafd2908",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T21:20:07.296Z",
+        "updatedAt": "2026-05-04T21:24:56.076Z",
+        "terminatedAt": "2026-05-04T21:24:56.076Z"
+      },
+      {
+        "sessionId": "05-agent-session-mcp-access-provisioning-copilot-cli-9c60b99d",
+        "taskId": "implementation/05-agent-session-mcp-access-provisioning",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/05-agent-session-mcp-access-provisioning-copilot-cli-9c60b99d.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-05-agent-session-mcp-access-provisioning:05-agent-session-mcp-access-provisioning-copilot-cli-9c60b99d",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T21:31:04.365Z",
+        "updatedAt": "2026-05-04T21:33:27.403Z",
+        "terminatedAt": "2026-05-04T21:33:27.403Z"
+      },
+      {
+        "sessionId": "05-agent-session-mcp-access-provisioning-verify-copilot-cli-d4bf4eb1",
+        "taskId": "implementation/05-agent-session-mcp-access-provisioning-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/05-agent-session-mcp-access-provisioning-verify-copilot-cli-d4bf4eb1.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-05-agent-session-mcp-access-provisioning-verify:05-agent-session-mcp-access-provisioning-verify-copilot-cli-d4bf4eb1",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T21:35:59.475Z",
+        "updatedAt": "2026-05-04T21:38:16.420Z",
+        "terminatedAt": "2026-05-04T21:38:16.420Z"
+      },
+      {
+        "sessionId": "06-agent-skill-protocol-and-launch-instructions-copilot-cli-0fc95f0d",
+        "taskId": "implementation/06-agent-skill-protocol-and-launch-instructions",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/06-agent-skill-protocol-and-launch-instructions-copilot-cli-0fc95f0d.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-06-agent-skill-protocol-and-launch-instructions:06-agent-skill-protocol-and-launch-instructions-copilot-cli-0fc95f0d",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T21:39:39.563Z",
+        "updatedAt": "2026-05-04T22:05:19.540Z",
+        "terminatedAt": "2026-05-04T22:05:19.540Z"
+      },
+      {
+        "sessionId": "06-agent-skill-protocol-and-launch-instructions-verify-copilot-cli-45e05e93",
+        "taskId": "implementation/06-agent-skill-protocol-and-launch-instructions-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/06-agent-skill-protocol-and-launch-instructions-verify-copilot-cli-45e05e93.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-06-agent-skill-protocol-and-launch-instructions-verify:06-agent-skill-protocol-and-launch-instructions-verify-copilot-cli-45e05e93",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T22:05:19.683Z",
+        "updatedAt": "2026-05-04T22:10:00.425Z",
+        "terminatedAt": "2026-05-04T22:10:00.425Z"
+      },
+      {
+        "sessionId": "07-pty-launch-integration-and-pi-migration-copilot-cli-89660c88",
+        "taskId": "implementation/07-pty-launch-integration-and-pi-migration",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/07-pty-launch-integration-and-pi-migration-copilot-cli-89660c88.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-07-pty-launch-integration-and-pi-migration:07-pty-launch-integration-and-pi-migration-copilot-cli-89660c88",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T22:10:00.572Z",
+        "updatedAt": "2026-05-04T22:16:26.616Z",
+        "terminatedAt": "2026-05-04T22:16:26.616Z"
+      },
+      {
+        "sessionId": "07-pty-launch-integration-and-pi-migration-copilot-cli-72f56305",
+        "taskId": "implementation/07-pty-launch-integration-and-pi-migration",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/07-pty-launch-integration-and-pi-migration-copilot-cli-72f56305.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-07-pty-launch-integration-and-pi-migration:07-pty-launch-integration-and-pi-migration-copilot-cli-72f56305",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T22:17:38.261Z",
+        "updatedAt": "2026-05-04T22:23:41.470Z",
+        "terminatedAt": "2026-05-04T22:23:41.470Z"
+      },
+      {
+        "sessionId": "07-pty-launch-integration-and-pi-migration-verify-copilot-cli-269b79e3",
+        "taskId": "implementation/07-pty-launch-integration-and-pi-migration-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/07-pty-launch-integration-and-pi-migration-verify-copilot-cli-269b79e3.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-07-pty-launch-integration-and-pi-migration-verify:07-pty-launch-integration-and-pi-migration-verify-copilot-cli-269b79e3",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T22:24:37.656Z",
+        "updatedAt": "2026-05-04T22:26:31.850Z",
+        "terminatedAt": "2026-05-04T22:26:31.850Z"
+      },
+      {
+        "sessionId": "08-agent-session-execution-ux-copilot-cli-006d0eaf",
+        "taskId": "implementation/08-agent-session-execution-ux",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/08-agent-session-execution-ux-copilot-cli-006d0eaf.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-08-agent-session-execution-ux:08-agent-session-execution-ux-copilot-cli-006d0eaf",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T22:31:52.925Z",
+        "updatedAt": "2026-05-04T22:47:49.903Z",
+        "terminatedAt": "2026-05-04T22:47:49.903Z"
+      },
+      {
+        "sessionId": "08-agent-session-execution-ux-verify-copilot-cli-e65d87ee",
+        "taskId": "implementation/08-agent-session-execution-ux-verify",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/08-agent-session-execution-ux-verify-copilot-cli-e65d87ee.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-08-agent-session-execution-ux-verify:08-agent-session-execution-ux-verify-copilot-cli-e65d87ee",
+          "paneId": "pty"
+        },
+        "lifecycle": "completed",
+        "launchedAt": "2026-05-04T22:56:41.171Z",
+        "updatedAt": "2026-05-04T22:56:46.277Z",
+        "completedAt": "2026-05-04T22:56:46.277Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-copilot-cli-2dfd275e",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-copilot-cli-2dfd275e.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-copilot-cli-2dfd275e",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-04T22:56:46.352Z",
+        "updatedAt": "2026-05-05T00:01:39.218Z",
+        "terminatedAt": "2026-05-05T00:01:39.218Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-copilot-cli-1934314b",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-copilot-cli-1934314b.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-copilot-cli-1934314b",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-05T08:59:25.804Z",
+        "updatedAt": "2026-05-05T09:00:39.337Z",
+        "terminatedAt": "2026-05-05T09:00:39.337Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-copilot-cli-b7fa71f6",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-copilot-cli-b7fa71f6.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-copilot-cli-b7fa71f6",
+          "paneId": "pty"
+        },
+        "lifecycle": "cancelled",
+        "launchedAt": "2026-05-05T09:32:02.006Z",
+        "updatedAt": "2026-05-05T09:32:15.330Z",
+        "cancelledAt": "2026-05-05T09:32:15.330Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-copilot-cli-6f9304d7",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-copilot-cli-6f9304d7.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-copilot-cli-6f9304d7",
+          "paneId": "pty"
+        },
+        "lifecycle": "cancelled",
+        "launchedAt": "2026-05-05T09:34:36.931Z",
+        "updatedAt": "2026-05-05T09:34:47.388Z",
+        "cancelledAt": "2026-05-05T09:34:47.388Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-copilot-cli-e1ef29f5",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "copilot-cli",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-copilot-cli-e1ef29f5.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-copilot-cli-e1ef29f5",
+          "paneId": "pty"
+        },
+        "lifecycle": "cancelled",
+        "launchedAt": "2026-05-05T09:35:51.679Z",
+        "updatedAt": "2026-05-05T09:36:01.279Z",
+        "cancelledAt": "2026-05-05T09:36:01.279Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-codex-092da5a7",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "codex",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-codex-092da5a7.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-codex-092da5a7",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-05T10:40:10.189Z",
+        "updatedAt": "2026-05-05T11:20:35.510Z",
+        "terminatedAt": "2026-05-05T11:20:35.510Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-codex-be757f9d",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "codex",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-codex-be757f9d.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-codex-be757f9d",
+          "paneId": "pty"
+        },
+        "lifecycle": "terminated",
+        "launchedAt": "2026-05-05T11:58:09.652Z",
+        "updatedAt": "2026-05-05T12:24:10.281Z",
+        "terminatedAt": "2026-05-05T12:24:10.281Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-codex-54db8a57",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "codex",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-codex-54db8a57.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-codex-54db8a57",
+          "paneId": "pty"
+        },
+        "lifecycle": "cancelled",
+        "launchedAt": "2026-05-05T12:27:26.873Z",
+        "updatedAt": "2026-05-05T12:38:07.931Z",
+        "cancelledAt": "2026-05-05T12:38:07.931Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-codex-3ebfcc02",
+        "taskId": "implementation/09-documentation-and-final-cleanup",
+        "runnerId": "codex",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-codex-3ebfcc02.log",
+        "terminalHandle": {
+          "sessionName": "repository:github/Flying-Pillow/mission:31-adopt-sandcastle-agentprovideradapter-for-four-a:implementation-09-documentation-and-final-cleanup:09-documentation-and-final-cleanup-codex-3ebfcc02",
+          "paneId": "pty"
+        },
+        "lifecycle": "running",
+        "launchedAt": "2026-05-05T12:38:10.759Z",
+        "updatedAt": "2026-05-05T12:38:10.759Z"
       }
     ],
     "gates": [
@@ -1182,7 +1935,7 @@
         "reasons": [
           "Stage 'implementation' is not completed."
         ],
-        "updatedAt": "2026-05-04T16:49:19.175Z"
+        "updatedAt": "2026-05-05T12:38:10.759Z"
       },
       {
         "gateId": "verify",
@@ -1192,7 +1945,7 @@
         "reasons": [
           "Stage 'implementation' is not completed."
         ],
-        "updatedAt": "2026-05-04T16:49:19.175Z"
+        "updatedAt": "2026-05-05T12:38:10.759Z"
       },
       {
         "gateId": "audit",
@@ -1202,7 +1955,7 @@
         "reasons": [
           "Stage 'audit' is not completed."
         ],
-        "updatedAt": "2026-05-04T16:49:19.175Z"
+        "updatedAt": "2026-05-05T12:38:10.759Z"
       },
       {
         "gateId": "deliver",
@@ -1212,10 +1965,10 @@
         "reasons": [
           "Stage 'delivery' is not completed."
         ],
-        "updatedAt": "2026-05-04T16:49:19.175Z"
+        "updatedAt": "2026-05-05T12:38:10.759Z"
       }
     ],
     "launchQueue": [],
-    "updatedAt": "2026-05-04T16:49:19.175Z"
+    "updatedAt": "2026-05-05T12:38:10.759Z"
   }
 }

@@ -319,6 +319,9 @@
         const subscription = appContext.observeMission({
             missionId: normalizedMissionId,
             repositoryRootPath: normalizedWorktreePath,
+            onConnected: () => {
+                runtimeError = null;
+            },
             onUpdate: (_, event) => {
                 runtimeError = null;
                 handleMissionRuntimeEvent(event);
@@ -343,13 +346,11 @@
     function statusBadgeClass(statusLabel: string | undefined): string {
         switch (statusLabel?.trim().toLowerCase()) {
             case "running":
-            case "active":
                 return "border-sky-500/35 bg-sky-500/10 text-sky-700 dark:text-sky-300";
             case "completed":
             case "delivered":
                 return "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
             case "failed":
-            case "panicked":
                 return "border-rose-500/35 bg-rose-500/10 text-rose-700 dark:text-rose-300";
             case "paused":
             case "cancelled":
@@ -762,17 +763,21 @@
     }
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-2 gap-4">
+<div class="flex min-h-0 flex-1 flex-col">
     {#if missionLoading && !activeMission}
         <section
-            class="rounded-2xl border bg-card/70 px-5 py-4 text-sm text-muted-foreground backdrop-blur-sm"
+            class="border bg-card/70 text-sm text-muted-foreground backdrop-blur-sm p-2"
         >
             Loading mission snapshot...
         </section>
-    {:else if missionLoadError || !activeRepository || !activeMission || !missionView}
+    {:else if !missionLoadError && activeRepository && activeMission && !missionView}
         <section
-            class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
+            class="border bg-card/70 text-sm text-muted-foreground backdrop-blur-sm p-2"
         >
+            Loading mission view...
+        </section>
+    {:else if missionLoadError || !activeRepository || !activeMission || !missionView}
+        <section class="border bg-card/70 backdrop-blur-sm p-2">
             <h2 class="text-lg font-semibold text-foreground">Mission</h2>
             <p class="mt-3 text-sm text-rose-600">
                 {missionLoadError ?? "Mission view could not be loaded."}
@@ -780,9 +785,7 @@
         </section>
     {:else}
         {#if missionViewError || runtimeError}
-            <section
-                class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
-            >
+            <section class="border bg-card/70 backdrop-blur-sm p-2">
                 {#if missionViewError}
                     <p class="text-sm text-rose-600">{missionViewError}</p>
                 {/if}
@@ -793,10 +796,10 @@
         {/if}
 
         <section
-            class={`min-h-0 gap-4 rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm ${progressCollapsed ? "grid grid-rows-[auto]" : "grid grid-rows-[auto_minmax(0,1fr)]"}`}
+            class={`min-h-0 border bg-card/70 backdrop-blur-sm ${progressCollapsed ? "grid grid-rows-[auto]" : "grid grid-rows-[auto_minmax(0,1fr)]"}`}
         >
             <header
-                class={`space-y-4 ${progressCollapsed ? "" : "border-b pb-4"}`}
+                class={`space-y-4 p-2 ${progressCollapsed ? "" : "border-b"}`}
             >
                 <div
                     class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between"
@@ -883,13 +886,13 @@
             <ResizablePane
                 defaultSize={24}
                 minSize={18}
-                class="flex h-full min-h-0 flex-col p-2"
+                class="flex h-full min-h-0 flex-col"
             >
                 <Tabs.Root
                     bind:value={leftPanelMode}
-                    class="min-h-0 flex-1 overflow-hidden rounded-2xl border bg-card/70 backdrop-blur-sm"
+                    class="min-h-0 flex-1 overflow-hidden border bg-card/70 backdrop-blur-sm"
                 >
-                    <div class="border-b px-3 py-2">
+                    <div class="border-b">
                         <Tabs.List class="w-full">
                             <Tabs.Trigger value="mission"
                                 >Mission Tree</Tabs.Trigger
@@ -932,7 +935,7 @@
             <ResizablePane
                 defaultSize={38}
                 minSize={24}
-                class="flex h-full min-h-0 flex-col p-2"
+                class="flex h-full min-h-0 flex-col"
             >
                 {#if showArtifactEditor}
                     <ArtifactEditor
@@ -955,13 +958,13 @@
             <ResizablePane
                 defaultSize={38}
                 minSize={24}
-                class="flex h-full min-h-0 flex-col p-2"
+                class="flex h-full min-h-0 flex-col"
             >
                 <Tabs.Root
                     bind:value={rightPanelMode}
-                    class="min-h-0 flex-1 overflow-hidden rounded-2xl border bg-card/70 backdrop-blur-sm"
+                    class="min-h-0 flex-1 overflow-hidden border bg-card/70 backdrop-blur-sm"
                 >
-                    <div class="border-b px-3 py-2">
+                    <div class="border-b">
                         <Tabs.List class="w-full">
                             <Tabs.Trigger value="terminal"
                                 >Mission Terminal</Tabs.Trigger

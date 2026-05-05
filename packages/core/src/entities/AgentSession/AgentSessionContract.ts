@@ -6,8 +6,6 @@ import {
     agentSessionEntityName,
     AgentSessionLocatorSchema,
     AgentSessionCommandInputSchema,
-    AgentSessionSendPromptInputSchema,
-    AgentSessionSendCommandInputSchema,
     AgentSessionSendTerminalInputSchema,
     AgentSessionStorageSchema,
     AgentSessionDataSchema,
@@ -40,18 +38,6 @@ export const AgentSessionContract: EntityContractType = {
             payload: AgentSessionCommandInputSchema,
             result: AgentSessionCommandAcknowledgementSchema,
             execution: 'entity'
-        },
-        sendPrompt: {
-            kind: 'mutation',
-            payload: AgentSessionSendPromptInputSchema,
-            result: AgentSessionCommandAcknowledgementSchema,
-            execution: 'class'
-        },
-        sendCommand: {
-            kind: 'mutation',
-            payload: AgentSessionSendCommandInputSchema,
-            result: AgentSessionCommandAcknowledgementSchema,
-            execution: 'class'
         },
         sendTerminalInput: {
             kind: 'mutation',

@@ -20,11 +20,13 @@ import type { Duplex } from 'node:stream';
 import { WebSocketServer, WebSocket as NodeWebSocket } from 'ws';
 import { connectDedicatedAuthenticatedDaemonClient } from './daemon/connections.server';
 import { resolveMissionTerminalRuntimeError } from './mission-terminal-errors';
-import { DaemonGateway } from './daemon/daemon-gateway';
+import { resolveRepositoryRootPath } from './repository-root-path.server';
 
 const TERMINAL_WS_PATH_PATTERN = /^\/api\/runtime\/sessions\/([^/]+)\/terminal\/ws$/u;
 const MISSION_TERMINAL_WS_PATH_PATTERN = /^\/api\/runtime\/missions\/([^/]+)\/terminal\/ws$/u;
 const AIRPORT_WEB_TERMINAL_SCREEN_LIMIT = 40_000;
+const TERMINAL_SUBSCRIPTION_TIMEOUT_MS = 5_000;
+const TERMINAL_INITIAL_SNAPSHOT_TIMEOUT_MS = 8_000;
 type UpgradeCapableServer = {
     on(event: 'upgrade', listener: (request: IncomingMessage, socket: Duplex, head: Buffer) => void): unknown;
 };
@@ -196,15 +198,17 @@ async function handleTerminalConnection(
     });
 
     try {
-        const repositoryRootPath = query.repositoryRootPath ?? (query.repositoryId
-            ? (await new DaemonGateway().resolveRepositoryCandidate({ id: query.repositoryId })).repositoryRootPath
-            : undefined);
+        const repositoryRootPath = await resolveRepositoryRootPath({
+            repositoryId: query.repositoryId,
+            repositoryRootPath: query.repositoryRootPath
+        });
         daemon = await connectDedicatedAuthenticatedDaemonClient({
-            allowStart: true,
             ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {})
         });
         await daemon.client.request<null>('event.subscribe', {
             channels: [`agent_session:${query.missionId}/${sessionId}.terminal`]
+        }, {
+            timeoutMs: TERMINAL_SUBSCRIPTION_TIMEOUT_MS
         });
 
         const initialState = AgentSessionTerminalSnapshotSchema.parse(await daemon.client.request('entity.query', {
@@ -214,6 +218,8 @@ async function handleTerminalConnection(
                 missionId: query.missionId,
                 sessionId
             }
+        }, {
+            timeoutMs: TERMINAL_INITIAL_SNAPSHOT_TIMEOUT_MS
         }));
         sendSnapshot(initialState);
         if (!initialState.connected || initialState.dead) {
@@ -380,20 +386,24 @@ async function handleMissionTerminalConnection(
     });
 
     try {
-        repositoryRootPath = queryRepositoryRootPath ?? (repositoryId
-            ? (await new DaemonGateway().resolveRepositoryCandidate({ id: repositoryId })).repositoryRootPath
-            : undefined);
+        repositoryRootPath = await resolveRepositoryRootPath({
+            repositoryId,
+            repositoryRootPath: queryRepositoryRootPath
+        });
         daemon = await connectDedicatedAuthenticatedDaemonClient({
-            allowStart: true,
             ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {})
         });
         await daemon.client.request<null>('event.subscribe', {
             channels: [`mission:${missionId}.terminal`]
+        }, {
+            timeoutMs: TERMINAL_SUBSCRIPTION_TIMEOUT_MS
         });
         const initialState = MissionTerminalSnapshotSchema.parse(await daemon.client.request('entity.command', {
             entity: 'Mission',
             method: 'ensureTerminal',
             payload: { missionId }
+        }, {
+            timeoutMs: TERMINAL_INITIAL_SNAPSHOT_TIMEOUT_MS
         }));
 
         sendSnapshot(initialState);

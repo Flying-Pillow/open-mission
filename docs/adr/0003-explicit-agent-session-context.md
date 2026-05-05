@@ -1,4 +1,16 @@
-# Explicit Agent Session Context
+---
+layout: default
+title: Explicit Agent Session Context
+parent: Architecture Decisions
+nav_order: 3
+status: accepted
+date: 2026-05-04
+decision_area: agent-session-context
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Mission uses agents to perform controlled engineering work. The context for an Agent session must be explicit, inspectable, and daemon-owned; it must not depend on adding a broad prompt and hoping the agent discovers the correct artifacts.
 

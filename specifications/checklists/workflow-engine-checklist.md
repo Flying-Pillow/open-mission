@@ -57,7 +57,7 @@ Use it to sequence delivery without expanding the spec.
 ## 5. Launch Queue And Scheduling
 
 - Ensure queueing a task updates task lifecycle and `launchQueue` in the same reduce cycle.
-- Remove launch requests only on `session.started`, `session.launch-failed`, panic queue clearing, or explicit cancellation behavior.
+- Remove launch requests only on `session.started`, `session.launch-failed`, or explicit cancellation behavior.
 - Count concurrency using queued or running tasks and starting or running sessions.
 - Implement deterministic auto-queue ordering: stage order first, then lexical `taskId` order.
 - Allow manual queueing for manual-launch tasks while preventing automatic queueing for them.
@@ -81,7 +81,7 @@ Use it to sequence delivery without expanding the spec.
 
 ## 8. Commands And UI Surface
 
-- Expose mission pause, resume, panic, and clear-panic actions.
+- Expose mission pause, resume, restart queue, and session stop actions.
 - Expose task done, blocked, reopen, autostart toggle, and manual start actions.
 - Do not expose a separate task or agent `/launch` action once manual task start is modeled through `task.queued`.
 - Remove or rewrite commands centered on stage runtime control.

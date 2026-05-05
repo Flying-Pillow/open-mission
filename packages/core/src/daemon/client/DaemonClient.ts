@@ -28,10 +28,12 @@ export class DaemonClient implements MissionAgentDisposable {
 	private nextRequestId = 0;
 	private readonly pendingRequests = new Map<string, PendingRequest>();
 	private readonly eventEmitter = new MissionAgentEventEmitter<EntityEventEnvelopeType>();
+	private readonly disconnectEmitter = new MissionAgentEventEmitter<Error>();
 	private surfacePath = '';
 	private authToken = '';
 
 	public readonly onDidEvent = this.eventEmitter.event;
+	public readonly onDidDisconnect = this.disconnectEmitter.event;
 
 	public setAuthToken(authToken: string | undefined): void {
 		this.authToken = authToken?.trim() ?? '';
@@ -164,6 +166,7 @@ export class DaemonClient implements MissionAgentDisposable {
 		this.socket?.destroy();
 		this.socket = undefined;
 		this.eventEmitter.dispose();
+		this.disconnectEmitter.dispose();
 	}
 
 	private attachSocket(socket: net.Socket): void {
@@ -188,6 +191,7 @@ export class DaemonClient implements MissionAgentDisposable {
 		socket.once('error', (error) => {
 			if (this.socket === socket) {
 				this.socket = undefined;
+				this.disconnectEmitter.fire(error instanceof Error ? error : new Error(String(error)));
 			}
 			this.buffer = '';
 			this.rejectPendingRequests(error instanceof Error ? error : new Error(String(error)));
@@ -195,6 +199,7 @@ export class DaemonClient implements MissionAgentDisposable {
 		socket.once('close', () => {
 			if (this.socket === socket) {
 				this.socket = undefined;
+				this.disconnectEmitter.fire(new Error('Mission daemon connection closed.'));
 			}
 			this.buffer = '';
 			this.rejectPendingRequests(new Error('Mission daemon connection closed.'));

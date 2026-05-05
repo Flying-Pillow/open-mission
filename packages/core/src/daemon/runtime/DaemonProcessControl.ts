@@ -12,11 +12,14 @@ import {
 	getDaemonManifestPath,
 	getDaemonRuntimePath,
 	getDaemonStdoutLogPath,
-	readDaemonManifest
+	isNamedPipePath,
+	readDaemonManifest,
+	resolveDaemonSocketPath
 } from '../daemonPaths.js';
 
 const execFileAsync = promisify(execFile);
 const DAEMON_STATUS_TIMEOUT_MS = 2_000;
+const DAEMON_STALE_PROCESS_TIMEOUT_MS = 2_000;
 
 export type DaemonRuntimeMode = 'build' | 'source';
 
@@ -95,7 +98,15 @@ export async function startMissionDaemonProcess(options: {
 	runtimeMode?: DaemonRuntimeMode;
 	runtimeFactoryModulePath?: string;
 }): Promise<DaemonStartResult> {
-	const currentStatus = await getMissionDaemonProcessStatus();
+	let currentStatus = await getMissionDaemonProcessStatus();
+	if (currentStatus.running) {
+		return {
+			...currentStatus,
+			started: false,
+			alreadyRunning: true
+		};
+	}
+	currentStatus = await cleanupUnreachableDaemonRuntime(currentStatus);
 	if (currentStatus.running) {
 		return {
 			...currentStatus,
@@ -143,23 +154,10 @@ export async function stopMissionDaemonProcess(): Promise<DaemonStopResult> {
 		...staleProcessIds
 	]);
 	for (const processId of processIdsToStop) {
-		try {
-			process.kill(processId, 'SIGTERM');
-			killed = true;
-		} catch (error) {
-			const code = (error as NodeJS.ErrnoException).code;
-			if (code !== 'ESRCH') {
-				throw error;
-			}
-		}
+		killed = await terminateDaemonProcess(processId) || killed;
 	}
 
-	await fs.rm(manifestPath, { force: true }).catch(() => undefined);
-	await fs.rm(getDaemonLockPath(), { force: true }).catch(() => undefined);
-	if (manifest?.endpoint.transport === 'ipc') {
-		await fs.rm(manifest.endpoint.path, { force: true }).catch(() => undefined);
-	}
-	await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(() => undefined);
+	await cleanupDaemonRuntimeFilesIfUnreachable(manifest?.endpoint.path);
 
 	return {
 		stopped: true,
@@ -168,9 +166,112 @@ export async function stopMissionDaemonProcess(): Promise<DaemonStopResult> {
 		...(manifest?.pid ? { pid: manifest.pid } : {}),
 		killed,
 		message: killed
-			? 'Mission daemon stop signal sent and runtime files cleaned.'
-			: 'Mission daemon runtime files cleaned; process was not running.'
+			? 'Mission daemon stop signal sent and control files cleaned.'
+			: 'Mission daemon control files cleaned; process was not running.'
 	};
+}
+
+async function cleanupUnreachableDaemonRuntime(
+	currentStatus: DaemonStatusResult
+): Promise<DaemonStatusResult> {
+	const manifest = await readDaemonManifest();
+	const staleProcessIds = new Set<number>([
+		...(manifest?.pid ? [manifest.pid] : []),
+		...(currentStatus.pid ? [currentStatus.pid] : []),
+		...(await listMissionDaemonProcessIds())
+	]);
+
+	for (const processId of staleProcessIds) {
+		await terminateDaemonProcess(processId);
+	}
+
+	await cleanupDaemonRuntimeFilesIfUnreachable(manifest?.endpoint.path ?? currentStatus.endpointPath);
+	return getMissionDaemonProcessStatus();
+}
+
+async function cleanupDaemonRuntimeFilesIfUnreachable(endpointPath: string | undefined): Promise<void> {
+	const currentStatus = await getMissionDaemonProcessStatus();
+	if (currentStatus.running) {
+		return;
+	}
+
+	const socketPath = endpointPath?.trim() || resolveDaemonSocketPath();
+	if (await isDaemonEndpointReachable(socketPath)) {
+		return;
+	}
+
+	await fs.rm(getDaemonManifestPath(), { force: true }).catch(() => undefined);
+	await fs.rm(getDaemonLockPath(), { force: true }).catch(() => undefined);
+	if (!isNamedPipePath(socketPath)) {
+		await fs.rm(socketPath, { force: true }).catch(() => undefined);
+	}
+}
+
+async function isDaemonEndpointReachable(socketPath: string): Promise<boolean> {
+	const client = new DaemonClient();
+	try {
+		await client.connect({
+			surfacePath: process.cwd(),
+			socketPath,
+			timeoutMs: DAEMON_STATUS_TIMEOUT_MS
+		});
+		await client.request<Ping>('ping', undefined, { timeoutMs: DAEMON_STATUS_TIMEOUT_MS });
+		return true;
+	} catch {
+		return false;
+	} finally {
+		client.dispose();
+	}
+}
+
+async function terminateDaemonProcess(processId: number): Promise<boolean> {
+	if (processId === process.pid || !isProcessRunning(processId)) {
+		return false;
+	}
+
+	try {
+		process.kill(processId, 'SIGTERM');
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+			throw error;
+		}
+		return false;
+	}
+
+	const exited = await waitForProcessExit(processId, DAEMON_STALE_PROCESS_TIMEOUT_MS);
+	if (exited) {
+		return true;
+	}
+
+	try {
+		process.kill(processId, 'SIGKILL');
+		return true;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+			throw error;
+		}
+		return true;
+	}
+}
+
+async function waitForProcessExit(processId: number, timeoutMs: number): Promise<boolean> {
+	const timeoutAt = Date.now() + timeoutMs;
+	while (Date.now() < timeoutAt) {
+		if (!isProcessRunning(processId)) {
+			return true;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+	return !isProcessRunning(processId);
+}
+
+function isProcessRunning(processId: number): boolean {
+	try {
+		process.kill(processId, 0);
+		return true;
+	} catch (error) {
+		return (error as NodeJS.ErrnoException).code === 'EPERM';
+	}
 }
 
 export function resolveDefaultRuntimeFactoryModulePath(
@@ -230,7 +331,7 @@ async function spawnDaemonRunner(options: {
 	if (runtimeMode === 'source') {
 		const child = spawn(
 			'pnpm',
-			['--dir', packageRoot, 'exec', 'tsx', sourceEntry, 'run', ...socketArgs],
+			['--dir', packageRoot, 'exec', 'tsx', '--tsconfig', path.join(packageRoot, 'tsconfig.json'), sourceEntry, 'run', ...socketArgs],
 			{
 				cwd: packageRoot,
 				env,

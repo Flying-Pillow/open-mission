@@ -45,12 +45,6 @@ export function createDraftMissionWorkflowRuntimeState(
         pause: {
             paused: false
         },
-        panic: {
-            active: false,
-            terminateSessions: configuration.workflow.panic.terminateSessions,
-            clearLaunchQueue: configuration.workflow.panic.clearLaunchQueue,
-            haltMission: configuration.workflow.panic.haltMission
-        },
         stages: configuration.workflow.stageOrder.map((stageId, index) =>
             createEmptyStageProjection(stageId, index === 0 ? 'ready' : 'pending')
         ),

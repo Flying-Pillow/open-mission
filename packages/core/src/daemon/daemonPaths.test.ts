@@ -16,6 +16,9 @@ import {
 describe('daemonPaths', () => {
 	it('resolves runtime state outside the repository', async () => {
 		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-paths-'));
+		const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-paths-runtime-'));
+		const previousRuntimeDirectory = process.env['XDG_RUNTIME_DIR'];
+		process.env['XDG_RUNTIME_DIR'] = runtimeRoot;
 
 		try {
 			const runtimePath = getDaemonRuntimePath();
@@ -44,6 +47,12 @@ describe('daemonPaths', () => {
 			await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(
 				() => undefined
 			);
+			if (previousRuntimeDirectory === undefined) {
+				delete process.env['XDG_RUNTIME_DIR'];
+			} else {
+				process.env['XDG_RUNTIME_DIR'] = previousRuntimeDirectory;
+			}
+			await fs.rm(runtimeRoot, { recursive: true, force: true });
 			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}
 	});

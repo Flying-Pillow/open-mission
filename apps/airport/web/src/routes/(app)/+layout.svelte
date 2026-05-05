@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { page } from "$app/state";
 	import { onMount } from "svelte";
 	import type { Snippet } from "svelte";
 	import {
@@ -19,14 +18,6 @@
 
 	$effect(() => {
 		appContext.syncServerContext(data.appContext);
-	});
-
-	$effect(() => {
-		appContext.application.syncPageState({
-			pathname: page.url.pathname,
-			repositoryId: page.params.repositoryId?.trim() || undefined,
-			missionId: page.params.missionId?.trim() || undefined,
-		});
 	});
 </script>
 

@@ -1,4 +1,16 @@
-# Mission Runtime Data Migrations
+---
+layout: default
+title: Mission Runtime Data Migrations
+parent: Architecture Decisions
+nav_order: 5
+status: accepted
+date: 2026-05-04
+decision_area: runtime-data
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Mission persists workflow runtime state in Mission runtime data. That data includes Mission task runtime state, Agent session runtime state, configuration snapshot, and Derived workflow state. Agent session context and Mission artifact references are part of daemon-owned runtime state, but they do not currently have independent persisted schema versions.
 

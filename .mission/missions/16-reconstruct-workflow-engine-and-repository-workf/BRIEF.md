@@ -20,7 +20,7 @@ This is a retrospective reconstruction issue. The architecture and specification
 This mission covers the workflow-engine and repository-workflow-settings outcome, including:
 
 - preserving `mission.json` as the authoritative mission-local workflow runtime document
-- preserving the reducer-owned event model, task runtime, stage projections, gate projections, launch queue, pause behavior, and panic behavior defined by the workflow engine specification
+- preserving the reducer-owned event model, task runtime, stage projections, gate projections, launch queue, and pause behavior defined by the workflow engine specification
 - preserving deterministic task-generation and replay-valid runtime semantics as the workflow-engine contract
 - preserving the daemon-owned repository workflow settings boundary for initialization, validation, patching, persistence, revision checks, and update events
 - preserving the `draft` to `ready` workflow-snapshot capture boundary so repository workflow settings seed new missions without mutating existing started missions

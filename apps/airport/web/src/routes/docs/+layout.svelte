@@ -12,15 +12,19 @@
 </script>
 
 <SidebarProvider>
-	<DocsSidebar variant="inset" navigation={data.navigation} site={data.site} />
+	<DocsSidebar
+		variant="inset"
+		navigation={data.navigation}
+		site={data.site}
+	/>
 
-	<SidebarInset class="min-h-0 overflow-hidden h-svh md:peer-data-[variant=inset]:my-0">
+	<SidebarInset
+		class="min-h-0 overflow-hidden h-svh md:peer-data-[variant=inset]:my-0"
+	>
 		<DocsLayoutHeader site={data.site} />
 
-		<div
-			class="docs-shell min-h-0 flex-1 overflow-auto"
-		>
-			<div class="mx-auto flex min-h-full w-full max-w-7xl flex-col px-4 pb-8 pt-6 lg:px-8">
+		<div class="docs-shell min-h-0 flex-1 overflow-auto">
+			<div class="mx-auto flex min-h-full w-full max-w-7xl flex-col">
 				{@render children()}
 			</div>
 		</div>

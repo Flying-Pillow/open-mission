@@ -99,7 +99,7 @@
 		{
 			title: "Operators keep live control",
 			description:
-				"Pause, interrupt, checkpoint, relaunch, or panic-stop an agent session while Mission keeps the durable mission state intact.",
+				"Pause, interrupt, checkpoint, relaunch, or stop an agent session while Mission keeps the durable mission state intact.",
 		},
 	];
 
@@ -117,7 +117,7 @@
 		"Isolated Git worktrees keep the control checkout clean.",
 		".agents/constitution.md carries repository-specific engineering rules into task sessions.",
 		"Manual and CI gates separate agent claims from verified delivery.",
-		"First-class panic control halts automated work until an operator reviews it.",
+		"Mission pause and session stop controls keep automated work under operator review.",
 	];
 
 	const technicalProof = [

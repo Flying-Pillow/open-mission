@@ -95,7 +95,7 @@
 
 {#snippet panelContent()}
     <div
-        class="flex min-h-12 flex-col gap-3 border-b bg-muted/15 px-4 py-3 md:flex-row md:items-center md:justify-between"
+        class="flex min-h-12 flex-col gap-3 border-b bg-muted/15 px-4 md:flex-row md:items-center md:justify-between"
         role="group"
         aria-label={`${repository.displayName} commands`}
         data-repository-row-action

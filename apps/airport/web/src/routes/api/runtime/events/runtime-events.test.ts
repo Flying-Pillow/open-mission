@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const openEventSubscription = vi.fn();
 const openApplicationEventSubscription = vi.fn();
@@ -11,9 +11,17 @@ vi.mock('$lib/server/daemon/daemon-gateway', () => ({
 }));
 
 describe('/api/runtime/events', () => {
-    it('opens the application Entity event stream when scope is application', async () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
         openEventSubscription.mockReset();
         openApplicationEventSubscription.mockReset();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('opens the application Entity event stream when scope is application', async () => {
         openApplicationEventSubscription.mockImplementation(async (input: {
             channels: string[];
             onEvent: (event: unknown) => void;
@@ -58,7 +66,75 @@ describe('/api/runtime/events', () => {
             channels: ['repository:*.*']
         }));
         expect(openEventSubscription).not.toHaveBeenCalled();
+        expect(body).toContain('event: connected');
         expect(body).toContain('event: entity');
         expect(body).toContain('"type":"entity.deleted"');
+    });
+
+    it('reconnects the daemon subscription without closing the SSE stream', async () => {
+        let disconnectFirstSubscription: (() => void) | undefined;
+
+        openApplicationEventSubscription
+            .mockImplementationOnce(async (input: {
+                channels: string[];
+                onDisconnect: () => void;
+                onEvent: (event: unknown) => void;
+            }) => {
+                disconnectFirstSubscription = input.onDisconnect;
+                return { dispose: vi.fn() };
+            })
+            .mockImplementationOnce(async (input: {
+                channels: string[];
+                onDisconnect: () => void;
+                onEvent: (event: unknown) => void;
+            }) => {
+                input.onEvent({
+                    type: 'entity.changed',
+                    entity: 'Repository',
+                    id: 'repository:github/Flying-Pillow/mission',
+                    entityId: 'repository:github/Flying-Pillow/mission',
+                    channel: 'repository:github/Flying-Pillow/mission.changed',
+                    eventName: 'changed',
+                    occurredAt: '2026-05-02T00:00:00.000Z'
+                });
+                return { dispose: vi.fn() };
+            });
+
+        const { GET } = await import('./+server');
+        const abortController = new AbortController();
+        const response = await GET({
+            locals: {} as App.Locals,
+            request: new Request('http://127.0.0.1:4175/api/runtime/events?scope=application', {
+                signal: abortController.signal
+            }),
+            url: new URL('http://127.0.0.1:4175/api/runtime/events?scope=application')
+        } as Parameters<typeof GET>[0]);
+
+        const reader = response.body?.getReader();
+        expect(reader).toBeDefined();
+
+        const firstChunk = await reader!.read();
+        expect(firstChunk.done).toBe(false);
+
+        disconnectFirstSubscription?.();
+        await vi.advanceTimersByTimeAsync(1_000);
+
+        const decoder = new TextDecoder();
+        let body = decoder.decode(firstChunk.value, { stream: true });
+        for (let readCount = 0; readCount < 4 && !body.includes('event: entity'); readCount += 1) {
+            const chunk = await reader!.read();
+            if (chunk.done) {
+                break;
+            }
+            body += decoder.decode(chunk.value, { stream: true });
+        }
+
+        await reader!.cancel();
+        abortController.abort();
+
+        expect(openApplicationEventSubscription).toHaveBeenCalledTimes(2);
+        expect(body.match(/event: connected/g)?.length).toBeGreaterThanOrEqual(2);
+        expect(body).toContain('event: entity');
+        expect(body).toContain('"type":"entity.changed"');
     });
 });

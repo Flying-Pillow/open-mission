@@ -1,4 +1,4 @@
-import type { AgentProviderObservation } from '../providers/AgentProviderAdapter.js';
+import type { AgentProviderObservation } from '../AgentProviderObservations.js';
 import type { AgentSessionSignalCandidate } from './AgentSessionSignal.js';
 
 export class ProviderOutputSignalParser {

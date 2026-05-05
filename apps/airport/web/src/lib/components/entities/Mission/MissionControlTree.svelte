@@ -162,7 +162,6 @@
 
     function statusColor(statusLabel: string | undefined): string | undefined {
         switch (normalizeStatusLabel(statusLabel)) {
-            case "active":
             case "running":
                 return "#0ea5e9";
             case "ready":
@@ -174,7 +173,6 @@
             case "delivered":
                 return "#10b981";
             case "failed":
-            case "panicked":
                 return "#ef4444";
             case "cancelled":
             case "terminated":
@@ -239,13 +237,9 @@
     function isActiveTaskStatus(statusLabel: string | undefined): boolean {
         const normalizedStatus = normalizeStatusLabel(statusLabel);
 
-        return [
-            "active",
-            "queued",
-            "running",
-            "starting",
-            "awaiting input",
-        ].includes(normalizedStatus);
+        return ["queued", "running", "starting", "awaiting input"].includes(
+            normalizedStatus,
+        );
     }
 
     function taskContainsSelectedNode(task: MissionSidebarTask): boolean {

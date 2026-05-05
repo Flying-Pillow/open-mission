@@ -495,44 +495,6 @@ describe('workflow reducer delivery completion', () => {
         expect(followUp.requests).toEqual([]);
     });
 
-    it('accepts panic clear after panic was already converted to a paused checkpoint', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
-            createdAt: '2026-04-10T15:51:25.000Z',
-            workflowVersion: DEFAULT_WORKFLOW_VERSION,
-            workflow: createDefaultWorkflowSettings()
-        });
-
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
-        runtime.lifecycle = 'paused';
-        runtime.pause = {
-            paused: true,
-            reason: 'panic',
-            requestedAt: '2026-04-10T15:52:00.000Z'
-        };
-        runtime.panic = {
-            active: false,
-            requestedAt: '2026-04-10T15:51:00.000Z',
-            requestedBy: 'human',
-            terminateSessions: true,
-            clearLaunchQueue: true,
-            haltMission: true
-        };
-
-        const event: MissionWorkflowEvent = {
-            eventId: 'mission.panic.cleared:duplicate',
-            type: 'mission.panic.cleared',
-            occurredAt: '2026-04-10T15:53:00.000Z',
-            source: 'human'
-        };
-
-        validateMissionWorkflowEvent(runtime, event, configuration);
-        const result = reduceMissionWorkflowEvent(runtime, event, configuration);
-
-        expect(result.nextState.lifecycle).toBe('paused');
-        expect(result.nextState.pause.reason).toBe('panic');
-        expect(result.nextState.panic.active).toBe(false);
-    });
-
     it('tracks the reducer-owned active stage id as work advances', () => {
         const configuration = createMissionWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
@@ -1349,24 +1311,6 @@ describe('workflow reducer delivery completion', () => {
 
         expect(result.nextState.tasks.find((task) => task.taskId === 'implementation/01')?.lifecycle).toBe('ready');
         expect(result.nextState.sessions.find((session) => session.sessionId === 'session-implementation-01')?.lifecycle).toBe('cancelled');
-    });
-
-    it('rejects panic requests after mission completion', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
-            createdAt: '2026-04-10T15:51:25.000Z',
-            workflowVersion: DEFAULT_WORKFLOW_VERSION,
-            workflow: createDefaultWorkflowSettings()
-        });
-
-        const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
-        runtime.lifecycle = 'completed';
-
-        expect(() => validateMissionWorkflowEvent(runtime, {
-            eventId: 'mission.panic.requested:2026-04-10T15:52:00.000Z',
-            type: 'mission.panic.requested',
-            occurredAt: '2026-04-10T15:52:00.000Z',
-            source: 'human'
-        }, configuration)).toThrow(/not allowed after mission completion/);
     });
 
 });

@@ -38,7 +38,7 @@
         switch (stage.lifecycle) {
             case "completed":
                 return "border-emerald-500/40 bg-emerald-500/10 text-emerald-700";
-            case "active":
+            case "running":
                 return "border-sky-500/40 bg-sky-500/10 text-sky-700";
             case "ready":
                 return "border-amber-500/40 bg-amber-500/10 text-amber-700";

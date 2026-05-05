@@ -4,6 +4,7 @@ import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.j
 import {
     MissionAgentRunnerSchema,
     MissionDefaultAgentModeSchema,
+    MissionReasoningEffortSchema,
     MissionEntityTypeSchema
 } from '../Mission/MissionSchema.js';
 import {
@@ -60,7 +61,8 @@ export const RepositorySettingsSchema = z.object({
     skillsPath: z.string().trim().min(1),
     agentRunner: MissionAgentRunnerSchema,
     defaultAgentMode: MissionDefaultAgentModeSchema.optional(),
-    defaultModel: z.string().trim().min(1).optional()
+    defaultModel: z.string().trim().min(1).optional(),
+    defaultReasoningEffort: MissionReasoningEffortSchema.optional()
 }).strict();
 
 const defaultRepositorySettings: RepositorySettingsType = {

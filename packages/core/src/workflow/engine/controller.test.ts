@@ -81,7 +81,75 @@ describe('MissionWorkflowController', () => {
         expect(executor.getExecutedRequestTypes()).toEqual(['tasks.request-generation']);
     });
 
+    it('logs applied workflow events with useful event metadata', async () => {
+        const adapter = createAdapter();
+        const logger = createLogger();
+        const controller = new MissionWorkflowController({
+            adapter,
+            descriptor: createDescriptor(),
+            workflow: createDefaultWorkflowSettings(),
+            requestExecutor: createRequestExecutor(),
+            logger
+        });
+
+        await controller.startFromDraft({
+            occurredAt: '2026-04-14T09:00:00.000Z',
+            source: 'human',
+            startMission: false
+        });
+        await controller.applyEvent({
+            eventId: 'task.queued:prd/01:2026-04-14T09:00:02.000Z',
+            type: 'task.queued',
+            occurredAt: '2026-04-14T09:00:02.000Z',
+            source: 'human',
+            taskId: 'prd/01',
+            runnerId: 'copilot-cli'
+        });
+        await controller.applyEvent({
+            eventId: 'task.queued:prd/01:2026-04-14T09:00:02.000Z',
+            type: 'task.queued',
+            occurredAt: '2026-04-14T09:00:02.000Z',
+            source: 'human',
+            taskId: 'prd/01',
+            runnerId: 'copilot-cli'
+        });
+
+        expect(logger.entries.map((entry) => entry.message)).toEqual([
+            'Mission workflow event applied.',
+            'Mission workflow event applied.',
+            'Mission workflow event applied.'
+        ]);
+        expect(logger.entries.map((entry) => entry.metadata['type'])).toEqual([
+            'mission.created',
+            'tasks.generated',
+            'task.queued'
+        ]);
+        expect(logger.entries[1]?.metadata).toMatchObject({
+            missionId: 'mission-42',
+            eventId: 'tasks.generated:prd:2026-04-14T09:00:01.000Z',
+            stageId: 'prd',
+            taskCount: 1,
+            taskIds: ['prd/01']
+        });
+        expect(logger.entries[2]?.metadata).toMatchObject({
+            missionId: 'mission-42',
+            eventId: 'task.queued:prd/01:2026-04-14T09:00:02.000Z',
+            taskId: 'prd/01',
+            runnerId: 'copilot-cli'
+        });
+    });
+
 });
+
+function createLogger() {
+    const entries: Array<{ message: string; metadata: Record<string, unknown> }> = [];
+    return {
+        entries,
+        info(message: string, metadata?: Record<string, unknown>) {
+            entries.push({ message, metadata: metadata ?? {} });
+        }
+    };
+}
 
 function createDescriptor(): MissionDescriptor {
     return {

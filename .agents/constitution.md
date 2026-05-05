@@ -5,176 +5,139 @@
 
 ## Preamble
 
-We the maintainers of the Flying Pillow Mission system declare:
+Mission is a governed software system, not a pile of scripts, helpers, or surface-specific shortcuts.
 
-Mission is a governed mission orchestration system, not a collection of convenience scripts or markdown.
+This repository exists to enforce repository-backed workflow law, provider-neutral runtime orchestration, and explicit domain ownership.
 
-This repository exists to enforce repository-backed workflow law, provider-neutral agent runtime orchestration, and tower-style operator surfaces through explicit domain boundaries.
-
-We reject accidental architecture. We reject vague ownership. We reject procedural sprawl disguised as speed.
-
-The system must remain spec-driven, mission-centered, repo-native, and object-oriented.
+The architecture must remain mission-centered, repo-native, DRY, and object-oriented.
 
 ---
 
-## Article I: The Sovereign Unit Is The Mission
+## Article I: Mission Sovereignty
 
 1. All meaningful work is bounded by a Mission.
-2. A Mission is not merely a ticket reference. It is the governed unit that owns intent, artifacts, stage transitions, gate legality, and delivery readiness.
-3. The canonical mission workspace is repo-local under `.mission/worktrees`.
-4. The canonical artifact chain is `BRIEF.md`, `PRD.md`, `SPEC.md`, `PLAN.md`, `VERIFICATION.md`, and `AUDIT.md`.
-5. No feature, fix, refactor, docs change, or delivery workflow may bypass the Mission model.
+2. A Mission owns intent, artifacts, stage transitions, gate legality, and delivery readiness.
+3. No feature, fix, refactor, docs change, or runtime path may bypass the Mission model.
+4. Canonical mission state lives in the repository, not in editor-local or UI-local state.
 
 ---
 
 ## Article II: Repo-Native Authority
 
-1. Mission is repo-native first. Repository state outranks editor-local convenience.
-2. Repo-local configuration belongs in `.mission/settings.json`.
-3. Mission roots, tracking settings, runtime defaults, and future adapter selection must derive from repository law before editor overrides are consulted.
-4. The repository is the source of truth. IDE state is an optional projection.
+1. The repository is the source of truth.
+2. Repo-local configuration and governed state outrank editor convenience, cached UI state, and local preferences.
+3. `.mission` is canonical for Mission-backed repository state.
+4. Presentation surfaces may reflect or edit governed state, but they do not own truth.
 
 ---
 
-## Article III: Physical Topology
+## Article III: Explicit Ownership
 
-The monorepo is intentionally product-shaped and must remain explicit about ownership.
+1. Every non-trivial behavior must have a single clear owner.
+2. Workspace and module boundaries must remain product-shaped and responsibility-driven.
+3. No workspace may absorb another workspace's responsibility for convenience.
+4. If ownership is ambiguous, the design is incomplete.
 
-1. `packages/core` owns mission manifests, artifact law, stage law, gate evaluation, status projection, repository config, and platform-neutral domain contracts.
-2. `packages/core` also owns provider-neutral coding-agent runtime contracts and orchestration.
-3. `apps/airport/terminal` owns the Mission terminal surface and sidecar-oriented repository workflow entrypoint.
-4. `packages/tsconfig` owns shared TypeScript policy.
+Ownership rules:
 
-No workspace may absorb another workspace's responsibility out of convenience.
-
----
-
-## Article IV: The OOD Fortress
-
-Object-Oriented Design is mandatory for domain logic in this repository.
-
-1. Domain behavior must live in named entities, policies, services, repositories, orchestrators, or adapters with clear ownership.
-2. Files full of loose procedural functions are forbidden for mission-domain behavior.
-3. If behavior mutates mission state, interprets workflow law, maps platform concepts, or coordinates execution, it must be owned by an explicit class or strict contract-bearing object.
-4. Free functions are allowed only when they are genuinely low-level, domain-agnostic helpers with no workflow authority.
-
-OOD ownership rules:
-
-1. Entities own invariants around their own state.
-2. Policies own legality checks and rule evaluation.
-3. Repositories own storage-path and persistence concerns.
-4. Adapters own external platform translation.
-5. Orchestrators own cross-boundary coordination but not domain truth.
-6. Domain classes must receive external capabilities through explicit Dependency Injection and depend on interfaces or ports, never on concrete adapter implementations.
-
-Explicit anti-patterns:
-
-1. putting business rules in CLI command handlers
-2. putting provider-specific logic in presentation surfaces
-3. putting mission state transitions in utility files
-4. scattering workflow decisions across unrelated helper functions
+1. Entities own invariants and stateful behavior.
+2. Policies own legality and rule evaluation.
+3. Repositories own persistence and path concerns.
+4. Adapters own translation to external systems.
+5. Contracts own cross-boundary method, event, and schema definitions.
+6. Orchestrators own coordination across boundaries, but not domain truth.
+7. UI owns presentation and interaction, but not workflow law.
 
 ---
 
-## Article V: Specification Before Execution
+## Article IV: DRY By Law
 
-1. `PRD.md` captures original context and bounded objective.
-2. `SPEC.md` is the normative implementation blueprint.
-3. `TASKS.md` is the canonical execution ledger derived from the spec, not from ad hoc implementation intuition.
-4. `VERIFY.md` proves correctness.
-5. `AUDIT.md` records final gate and delivery readiness evidence.
-
-Implementation must not outrun specification.
-
-In particular:
-
-1. implementation may not begin if `TASKS.md` is structurally placeholder-grade
-2. workflow legality belongs to gates and manifest policy, not contributor discretion
-3. stage transitions must remain mechanically enforced
+1. Every rule, workflow decision, translation, and schema must have one authoritative implementation.
+2. Duplicated business logic across UI, CLI, daemon, adapters, or tests is forbidden.
+3. Copy-pasted branching, parallel data shaping, and repeated protocol mapping are architecture failures, not harmless shortcuts.
+4. Shared behavior must be extracted to the owning domain object, policy, repository, adapter, or contract.
+5. Reuse must not come from vague utility sprawl; shared code must still have explicit ownership.
+6. Shared payload shapes must come from canonical schemas and contracts, not local re-declarations.
 
 ---
 
-## Article VI: Provider-Neutral Execution
+## Article V: Object-Oriented Domain Design
 
-1. Mission must never collapse into a GitHub-only, Copilot-only, or VS Code-only architecture.
+1. Object-Oriented Design is mandatory for domain logic.
+2. Mission behavior must live in explicit entities, policies, repositories, adapters, services, or orchestrators with named responsibilities.
+3. Loose procedural files may support low-level helpers, but they must not own mission law, state transitions, execution rules, or platform translation.
+4. Domain classes must depend on explicit contracts and injected capabilities, not hidden globals or concrete external implementations.
+5. Behavior belongs with the object that has the authority to enforce it.
+6. Browser-side and server-side surface logic should prefer explicit models, gateways, and registries over anonymous state bags when behavior is non-trivial.
+
+Forbidden patterns:
+
+1. Business rules in route handlers, CLI handlers, or UI components.
+2. Mission state transitions in generic helper files.
+3. Provider-specific logic in presentation surfaces.
+4. Cross-cutting workflow rules scattered across unrelated modules.
+5. Re-implementing domain payload shapes locally when a shared schema or contract already exists.
+
+---
+
+## Article VI: Contract-First Boundaries
+
+1. Every daemon, entity, route, socket, and event boundary must be defined by an explicit shared contract.
+2. Inputs must be parsed at ingress. Outputs must be parsed before they cross the boundary.
+3. Event subscriptions, command invocations, query payloads, and snapshot payloads must use canonical schemas rather than ad hoc object shapes.
+4. Entity data, command metadata, and transport-specific streams are separate contracts and must not be collapsed into one payload for convenience.
+5. Thin transport layers are preferred: routes, gateways, and dispatchers should validate, forward, and translate, but not own business logic.
+
+---
+
+## Article VII: Specification Governs Execution
+
+1. Specification outranks implementation intuition.
+2. `PRD.md` defines the bounded objective.
+3. `SPEC.md` defines the normative implementation blueprint.
+4. `TASKS.md` defines the execution ledger derived from the spec.
+5. `VERIFY.md` and `AUDIT.md` provide proof and closeout evidence.
+6. Implementation must not outrun specification or bypass enforced workflow gates.
+
+---
+
+## Article VIII: Provider-Neutral Boundaries
+
+1. The core domain must remain provider-neutral and platform-neutral.
 2. External systems must be isolated behind explicit adapter contracts.
-3. Coding-agent execution belongs behind provider-neutral runtime interfaces.
-4. Issue tracking and delivery platforms belong behind provider-neutral platform adapter interfaces.
-
-Examples of acceptable adapter categories:
-
-1. runtime adapters such as Copilot CLI today and future providers later
-2. platform adapters such as GitHub now and Jira, Linear, GitLab, or other systems later
-
-The core domain must not speak raw provider protocol shapes.
+3. The domain must not import raw provider assumptions, terminology, or protocol shapes as core truth.
+4. Surface implementations must adapt to Mission law, not redefine it.
 
 ---
 
-## Article VII: Platform Adapter Law
+## Article IX: Zero-Legacy Discipline
 
-1. The core domain may define platform-neutral contracts such as mission briefs, issue status updates, and pull request creation intents.
-2. Concrete adapters must translate external ecosystems into Mission concepts rather than leaking foreign terminology inward.
-3. GitHub labels or templates may inform mission type inference, but the resulting type must be expressed in Mission's own vocabulary such as `fix`, `feature`, `docs`, `refactor`, or `task`.
-4. Adapter inference is preferred over repeated manual CLI flags when the external platform already contains reliable intent signals.
-5. When platform metadata is insufficient, Mission must fail clearly or prompt explicitly rather than guessing silently.
-6. The `domain` layer may depend on `interfaces`, but it must not import from concrete `platforms` or concrete `agents` implementations.
+1. Dead paths, obsolete terminology, compatibility shims, and parallel truths must be removed aggressively.
+2. Backward-compatibility is allowed only when explicitly justified by real migration need.
+3. The repository must converge toward one active model, not preserve prior architectures indefinitely.
 
 ---
 
-## Article VIII: The Airport WEB/NATIVE Is A Control Surface, Not The Domain
+## Article X: Deterministic Validation
 
-1. `airport` is an operator surface.
-2. It is an interrface to the daemon that controls all running missions
-
----
-
-## Article IX: Presentation Surfaces Are Projections
-
-1. The panels, graphs, and tree views are read-write presentation surfaces over governed state.
-2. Presentation layers must consume normalized domain state and adapter outputs.
-3. They must not embed provider-specific execution loops, mission legality rules, or storage authority.
-4. UI may visualize governance. UI may not replace governance.
+1. Every meaningful change must be validated by deterministic evidence.
+2. Acceptable proof includes tests, typechecks, builds, gate evaluation, generated artifacts, or equivalent machine-verifiable results.
+3. Confidence without execution evidence is not sufficient.
+4. If validation is incomplete, the limitation must be stated explicitly.
 
 ---
 
-## Article X: Zero-Legacy Mandate
+## Article XI: Constitutionality Test
 
-1. Backward-compatibility shims are disfavored and require explicit justification.
-2. Legacy paths must not survive merely because they once existed.
-3. When architecture changes, stale generated outputs, dead files, obsolete terminology, and outdated workflow artifacts must be deleted.
-4. The repository must converge to one active truth, not dual systems in prolonged parallel.
+New code is constitutional only if the answer is yes to all of the following:
 
-Mission favors hard clarity over soft compatibility drift.
+1. Does this behavior have one clear owner?
+2. Is the logic implemented once in the proper layer?
+3. Is domain behavior modeled through explicit objects or contracts rather than procedural sprawl?
+4. Do all cross-boundary payloads use canonical shared schemas or contracts?
+5. Does the repository remain the source of truth?
+6. Are provider and platform details contained behind adapters?
+7. Is specification still governing execution?
+8. Can the result be validated deterministically?
 
----
-
-## Article XI: Naming And Terminology Discipline
-
-1. Public terminology must align with Mission's current model: mission, stage, gate, artifact, flight, operator, runtime, adapter.
-2. Deprecated mental models and extracted-monorepo residue must be removed as the architecture stabilizes.
-3. New names must reveal ownership and role. A class name should tell the reader whether it is an entity, policy, adapter, repository, orchestrator, or presentation model.
-
----
-
-## Article XII: Deterministic Validation
-
-1. Every meaningful change must be validated by tools.
-2. Acceptable proof includes build output, typecheck success, test results, gate evaluation, generated artifact state, or other deterministic machine evidence.
-3. Visual confidence, conversational confidence, and code-reading confidence are insufficient substitutes for execution evidence.
-4. If a change cannot be validated end-to-end, the limitation must be stated explicitly.
-
----
-
-## Article XIII: Constitutionality Test For New Code
-
-Before new code is added, contributors must be able to answer yes to all of the following:
-
-1. Does this code have an explicit owner and architectural role?
-2. Is the behavior located in the right workspace?
-3. Is mission law still enforced by the domain rather than by UI or CLI convenience?
-4. Is the design adapter-friendly rather than hardcoded to one provider or platform?
-5. Is the change repo-native and consistent with `.mission` as canonical state?
-6. Is the implementation object-oriented where domain behavior is involved?
-7. Can the behavior be validated deterministically?
-
-If the answer is no, the design is incomplete.
+If any answer is no, the design is incomplete.

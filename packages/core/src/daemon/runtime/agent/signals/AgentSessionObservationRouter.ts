@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentProviderObservation } from '../providers/AgentProviderAdapter.js';
+import type { AgentProviderObservation } from '../AgentProviderObservations.js';
 import {
 	cloneSignal,
 	cloneSignalScope,

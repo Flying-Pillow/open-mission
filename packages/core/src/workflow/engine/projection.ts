@@ -92,7 +92,7 @@ function buildStageProjections(
         } else if (!eligible) {
             lifecycle = 'pending';
         } else if (queuedTaskIds.length > 0 || runningTaskIds.length > 0) {
-            lifecycle = 'active';
+            lifecycle = 'running';
         } else if (readyTaskIds.length > 0) {
             lifecycle = 'ready';
         } else {

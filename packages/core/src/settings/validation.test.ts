@@ -65,4 +65,27 @@ describe('workflow settings validation', () => {
 			stageOrder: ['prd']
 		})).toThrow(WorkflowSettingsError);
 	});
+
+	it('ignores the retired panic root key in persisted workflow definitions', () => {
+		const settings = createDefaultWorkflowSettings();
+		const parsed = parsePersistedWorkflowSettings({
+			...settings,
+			panic: {
+				terminateSessions: true,
+				clearLaunchQueue: true,
+				haltMission: true
+			}
+		});
+
+		expect(parsed).toEqual(settings);
+	});
+
+	it('reports unrecognized workflow keys by name', () => {
+		const settings = createDefaultWorkflowSettings();
+
+		expect(() => parsePersistedWorkflowSettings({
+			...settings,
+			unexpectedPolicy: true
+		})).toThrow(/\/ \(unrecognized_keys\) \[unexpectedPolicy\]/u);
+	});
 });

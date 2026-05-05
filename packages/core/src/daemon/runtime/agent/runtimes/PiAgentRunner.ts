@@ -1,55 +1,146 @@
+import type { AgentProviderObservation } from '../AgentProviderObservations.js';
+import type { AgentLaunchConfig } from '../AgentRuntimeTypes.js';
 import { PI_AGENT_RUNNER_ID } from './AgentRuntimeIds.js';
 import {
-	AgentRunner,
-	type AgentRunnerTerminalTransportRuntimeOptions
-} from '../AgentRunner.js';
-import type { AgentSession } from '../AgentSession.js';
-import type {
-	AgentLaunchConfig,
-	AgentRunnerCapabilities,
-	AgentSessionReference
-} from '../AgentRuntimeTypes.js';
+	getNestedRecord,
+	getStringField,
+	mergeLaunchEnv,
+	MissionAgentPtyRunner,
+	type MissionAgentRunnerLaunchPlan,
+	type MissionAgentRunnerSettingsResolver,
+	parseJsonLine,
+	ProviderInitializationError,
+	quoteShellArg,
+	resolveMissionAgentRunnerSettings
+} from './MissionAgentPtyRunner.js';
+import {
+	createPiMissionMcpConfigDir,
+	hasMissionMcpBridgeLaunchEnv
+} from '../mcp/MissionMcpRunnerLaunchSupport.js';
 
-export type PiAgentRunnerOptions = Omit<
-	AgentRunnerTerminalTransportRuntimeOptions,
-	| 'command'
-> & {
-	command?: string;
+export type PiAgentRunnerOptions = ConstructorParameters<typeof MissionAgentPtyRunner>[0] & {
+	resolveSettings?: MissionAgentRunnerSettingsResolver<typeof PI_AGENT_RUNNER_ID>;
 };
 
-export class PiAgentRunner extends AgentRunner {
-	public constructor(options: PiAgentRunnerOptions = {}) {
+export class PiAgentRunner extends MissionAgentPtyRunner {
+	private readonly resolveSettings: MissionAgentRunnerSettingsResolver<typeof PI_AGENT_RUNNER_ID> | undefined;
+
+	public constructor(options: Omit<PiAgentRunnerOptions, 'id' | 'command'> = {}) {
 		super({
 			id: PI_AGENT_RUNNER_ID,
-			displayName: 'pi via PTY transport'
+			command: 'pi',
+			...options
 		});
-		this.configureTerminalTransportRuntime({
-			command: options.command?.trim() || process.env['MISSION_PI_COMMAND']?.trim() || 'pi',
-			...(options.args ? { args: [...options.args] } : {}),
-			...(options.env ? { env: options.env } : {}),
-			...(options.sessionPrefix ? { sessionPrefix: options.sessionPrefix } : {}),
-			...(options.pollIntervalMs ? { pollIntervalMs: options.pollIntervalMs } : {}),
-			...(options.logLine ? { logLine: options.logLine } : {}),
-			...(options.terminalBinary ? { terminalBinary: options.terminalBinary } : {}),
-			...(options.sharedSessionName ? { sharedSessionName: options.sharedSessionName } : {}),
-			...(options.agentSessionPaneTitle ? { agentSessionPaneTitle: options.agentSessionPaneTitle } : {}),
-			...(options.executor ? { executor: options.executor } : {})
+		this.resolveSettings = options.resolveSettings;
+	}
+
+	public createInteractiveLaunchPlan(config: AgentLaunchConfig): MissionAgentRunnerLaunchPlan {
+		const settings = this.readSettings(config);
+		const prompt = config.initialPrompt?.text ?? '';
+		const args = [
+			'--model',
+			settings.model,
+			...(hasMissionMcpBridgeLaunchEnv(settings.launchEnv) ? ['-e', 'npm:pi-mcp-extension'] : []),
+			prompt
+		];
+		return {
+			mode: 'interactive',
+			command: 'pi',
+			args,
+			env: mergeLaunchEnv(settings.runtimeEnv, settings.providerEnv, settings.launchEnv)
+		};
+	}
+
+	public createPrintLaunchPlan(config: AgentLaunchConfig): MissionAgentRunnerLaunchPlan {
+		const settings = this.readSettings(config);
+		const extensionArgs = hasMissionMcpBridgeLaunchEnv(settings.launchEnv)
+			? ' -e npm:pi-mcp-extension'
+			: '';
+		return {
+			mode: 'print',
+			command: `pi -p --mode json --no-session${extensionArgs} --model ${quoteShellArg(settings.model)}`,
+			args: [],
+			stdin: config.initialPrompt?.text ?? '',
+			env: mergeLaunchEnv(settings.runtimeEnv, settings.providerEnv, settings.launchEnv)
+		};
+	}
+
+	protected override async prepareRunnerLaunchConfig(config: AgentLaunchConfig): Promise<{
+		config: AgentLaunchConfig;
+		cleanup?: () => Promise<void>;
+	}> {
+		if (!hasMissionMcpBridgeLaunchEnv(config.launchEnv)) {
+			return { config };
+		}
+		const prepared = await createPiMissionMcpConfigDir(config.launchEnv);
+		return {
+			config: {
+				...config,
+				launchEnv: {
+					...(config.launchEnv ?? {}),
+					PI_CODING_AGENT_DIR: prepared.configDir
+				}
+			},
+			cleanup: prepared.cleanup
+		};
+	}
+
+	protected override parseRuntimeOutputLine(line: string): AgentProviderObservation[] {
+		const parsed = parseJsonLine(line);
+		if (!parsed) {
+			return [{ kind: 'none' }];
+		}
+		if (getStringField(parsed, 'type') === 'tool_execution_start') {
+			const toolName = getStringField(parsed, 'toolName');
+			const args = getNestedRecord(parsed, 'args');
+			if (toolName) {
+				return [{
+					kind: 'signal',
+					signal: {
+						type: 'tool-call',
+						toolName,
+						args: typeof args?.['command'] === 'string'
+							? args['command']
+							: JSON.stringify(args ?? {}),
+						source: 'provider-structured',
+						confidence: 'medium'
+					}
+				}];
+			}
+		}
+		return [{ kind: 'none' }];
+	}
+
+	private readSettings(config: AgentLaunchConfig) {
+		const settings = resolveMissionAgentRunnerSettings({
+			config,
+			runnerId: PI_AGENT_RUNNER_ID,
+			...(this.resolveSettings ? { resolveSettings: this.resolveSettings } : {})
 		});
-	}
-
-	public async getCapabilities(): Promise<AgentRunnerCapabilities> {
-		return this.getTerminalCommandCapabilities();
-	}
-
-	public async isAvailable(): Promise<{ available: boolean; reason?: string }> {
-		return this.isTerminalCommandRuntimeAvailable();
-	}
-
-	protected override async onStartSession(config: AgentLaunchConfig): Promise<AgentSession> {
-		return this.startTerminalCommandSession(config);
-	}
-
-	protected override async onReconcileSession(reference: AgentSessionReference): Promise<AgentSession> {
-		return this.reconcileTerminalCommandSession(reference);
+		if (settings.reasoningEffort) {
+			throw new ProviderInitializationError(
+				PI_AGENT_RUNNER_ID,
+				"Runner 'pi' does not support a reasoning effort option."
+			);
+		}
+		if (settings.dangerouslySkipPermissions) {
+			throw new ProviderInitializationError(
+				PI_AGENT_RUNNER_ID,
+				"Runner 'pi' does not support configurable permission bypass."
+			);
+		}
+		if (settings.captureSessions) {
+			throw new ProviderInitializationError(
+				PI_AGENT_RUNNER_ID,
+				"Runner 'pi' does not support enabling session capture."
+			);
+		}
+		if (settings.resumeSession) {
+			throw new ProviderInitializationError(
+				PI_AGENT_RUNNER_ID,
+				`Runner 'pi' does not support resumeSession for ${settings.launchMode} launch plans.`
+			);
+		}
+		return settings;
 	}
 }

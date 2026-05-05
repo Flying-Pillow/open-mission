@@ -22,7 +22,7 @@ The AI coding space has evolved rapidly, but existing tools suffer from severe a
 | **Execution Safety** | None | None | Modifies active branch | **Isolated Git Worktrees** |
 | **State Resilience** | None | None | CLI script (brittle if crashed) | **Reducer-based (Crash-proof)** |
 | **User Interface** | CLI | CLI / Chat | Scrolling Terminal Text | **Interactive TUI (Tower/Pilot)** |
-| **Human-in-the-Loop** | Upfront only | Chat-based | Yes | **Native (Pause, Panic, Manual Tasks)** |
+| **Human-in-the-Loop** | Upfront only | Chat-based | Yes | **Native (Pause, Stop, Manual Tasks)** |
 
 * **SpecKit** helps you write a prompt, but abandons you during execution.
 * **BMAD** forces AI to roleplay as PMs and Architects, leading to massive overhead and hallucinated agreements in giant context windows.
@@ -47,8 +47,8 @@ By shifting the workflow from **prompt-driven** to **spec-driven**, Mission lock
     Steer missions through a shared Airport application hosted natively on the desktop. Mission launches the Airport host through Tauri while the persistent daemon keeps repository state and runtime orchestration alive in the background. Mission's pure reducer-based state machine (`mission.json`) ensures you can reconnect later and resume exactly where you left off.
 * 🛑 **Deterministic CI Gating & Human Checklists**
     Mission disables AI self-praise. An agent cannot simply claim a task is "done." Mission gates progress behind your actual CI pipeline, and allows you to inject `manual` verification tasks where the human Principal Architect must explicitly check off deliverables before the workflow proceeds.
-* 🚨 **First-Class Panic & Governance Controls**
-    Mission treats Human-in-the-Loop as a fundamental state. Hit the "Panic" command to instantly sever the AI's terminal transport, halt the queue, and prevent any further automated work until a human reviews the situation.
+* 🚨 **First-Class Pause & Governance Controls**
+    Mission treats Human-in-the-Loop as a fundamental state. Pause the mission or stop a session to keep automated work under operator review while preserving durable workflow state.
 
 ---
 

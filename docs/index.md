@@ -3,179 +3,77 @@ layout: default
 title: Mission
 nav_title: Overview
 nav_order: 1
+description: Mission coordinates AI-assisted software delivery through repository-owned workflow law, daemon-owned state, and operator-controlled agent runtimes.
 ---
 
-<section class="mission-home-hero">
- <span class="mission-home-kicker">Operator-first AI Delivery</span>
- <div class="mission-home-title">Flying Pillow Mission</div>
- <p class="mission-home-tagline">Mission is an orchestration layer for software delivery: it controls the workflow, stages the evidence, and dispatches well-defined tasks to coding agents instead of pretending to be the agent itself.</p>
- <div class="mission-home-actions">
-  <a class="btn btn-primary" href="{{ '/getting-started/installation.html' | relative_url }}">Start Here</a>
-  <a class="btn" href="{{ '/getting-started/start-your-first-mission.html' | relative_url }}">Prepare a Mission</a>
-  <a class="btn" href="{{ '/user-manual/workflow-control.html' | relative_url }}">Read Tower Control</a>
- </div>
- <div class="mission-home-grid">
-  <div class="mission-home-card">
-   <strong>Safe By Design</strong>
-   <span>Keep agent work in isolated mission workspaces instead of your active branch.</span>
-  </div>
-  <div class="mission-home-card">
-   <strong>Structured Delivery</strong>
-   <span>Move from brief to PRD, SPEC, implementation, audit, and delivery with named artifacts.</span>
-  </div>
-  <div class="mission-home-card">
-   <strong>Runtime Freedom</strong>
-   <span>Keep the workflow stable while the runtime layer stays open to different agents and models.</span>
-  </div>
- </div>
-</section>
+Mission is a local-first control system for AI-assisted software delivery. It gives coding agents a governed workflow, isolated workspaces, durable artifacts, and a human operator above the automation.
 
-Mission is for teams that want the speed of AI coding agents without giving up architectural discipline, repository safety, or human control.
+[Start Here](getting-started/installation.md) · [Start a Mission](getting-started/start-your-first-mission.md) · [Why Mission Exists](core-workflows/ai-technical-debt.md)
 
-Mission is not a model and it is not a coding agent. It is the orchestration layer that governs how software moves from intake to delivery. Agents are the execution workers underneath that layer, launched to perform bounded, well-defined tasks inside a controlled mission flow.
-
-Instead of one long chat session working directly on your active branch, Mission turns software delivery into a governed operational flow:
-
-- adopt a repository once
-- start a mission from a new brief or an existing GitHub issue
-- let Mission create an isolated mission workspace
-- move through requirements, specification, implementation, audit, and delivery
-- monitor and steer everything from the Airport layout, with Tower as the control surface
-
-The result is a workflow that feels closer to running a flight operation than babysitting a chatbot.
-
-## What Mission Actually Is
-
-Mission sits above the agent runtime.
-
-- Mission controls the flow of work.
-- Mission decides which stage comes next.
-- Mission persists the mission state and artifacts.
-- Mission gives the operator a published CLI, an Airport layout, and daemon control surfaces.
-- The coding agent is used to execute the current task inside that structure.
-
-That distinction is the whole point of the product. The value is not just "AI that can code." The value is a governed operating layer that keeps coding work bounded, inspectable, recoverable, and steerable.
-
-## The Vocabulary To Keep Stable
-
-Use these terms consistently while reading the docs:
-
-- Airport is the overall operator layout.
-- Tower is the left-side control surface.
-- Runway is the live agent-session pane.
-- Briefing Room is the artifact and editor pane.
-- Workflow gates such as `implement`, `verify`, `audit`, and `deliver` describe mission progression, not Airport panes.
-
-<div class="mission-status-grid">
- <div class="mission-status-card mission-status-card--current">
-  <strong>Current implementation</strong>
-  <p>Reference pages and routed CLI pages describe the exact behavior Mission ships today: current commands, persisted state, daemon behavior, and Airport pane bindings.</p>
- </div>
- <div class="mission-status-card mission-status-card--target">
-  <strong>Target architecture</strong>
-  <p>Some architecture and specification pages also explain the cleaner model Mission is steering toward. When current code and target direction differ, prefer the current implementation for operational truth.</p>
- </div>
-</div>
-
-## What Mission Is For
-
-Mission exists to solve the problems that show up as soon as AI coding becomes real work instead of a demo:
-
-- agents lose architectural discipline in long, improvised sessions
-- verification gets mixed together with implementation
-- active branches become unsafe places to experiment
-- crashes and disconnects destroy context
-- humans lose the ability to intervene cleanly
-
-Mission fixes that by separating intake, planning, implementation, verification, audit, and delivery into explicit artifacts, explicit tasks, and explicit runtime state.
-
-One visible failure mode is AI slop: codebases that accumulate software entropy because each fast local change ignores the shape of the whole system and leaves behind more shallow structure, weaker seams, and harder future edits.
-
-<div class="mission-video-embed">
- <a class="mission-video-link" href="https://www.youtube.com/watch?v=3MP8D-mdheA" target="_blank" rel="noopener noreferrer">
-  <span class="mission-video-link__poster" style="background-image: linear-gradient(180deg, rgba(23, 8, 26, 0.1), rgba(23, 8, 26, 0.38)), url('https://img.youtube.com/vi/3MP8D-mdheA/hqdefault.jpg');"></span>
-  <span class="mission-video-link__body">
-   <span class="mission-video-link__eyebrow">Source Talk</span>
-   <span class="mission-video-link__title">How To De-Slop A Codebase Ruined By AI (with one skill)</span>
-    <span class="mission-video-link__text">Matt Pocock shows the codebase-level version of AI debt: entropy compounds when agents work without shared vocabulary, deep modules, clear seams, and human architectural judgment.</span>
-  </span>
- </a>
-</div>
-
-If you want the broader argument for why Mission is built this way, read [AI Technical Debt and Mission](core-workflows/ai-technical-debt.md), which now pairs IBM's framing of AI debt with this codebase-level AI slop example.
-
-## What Using Mission Feels Like
-
-Mission is built around a simple operator journey:
-
-1. Install Mission and launch the terminal surface.
-2. Register or switch to the repository you want to operate on.
-3. Prepare a mission from a brief or select an existing GitHub issue.
-4. Review the generated dossier and let the workflow advance from `prd` to `spec` to `implementation`, then `audit` and `delivery`.
-5. Watch stages, tasks, artifacts, and live agent sessions in the Airport layout, with Tower as the left-side control surface.
-6. Pause, resume, relaunch, interrupt, or panic-stop work whenever you need to.
-7. Deliver from a verified mission workspace instead of hoping an AI chat stayed in bounds.
-
-Mission is intentionally opinionated about process, but lightweight in day-to-day operation. The product is designed so the operator always understands what exists, what is running, what produced an artifact, and what still needs human judgment.
-
-## Why Teams Adopt It
-
-Mission is attractive when you care about these outcomes:
-
-| Outcome | What Mission does |
+| Promise | What it means |
 | --- | --- |
-| Protect the main checkout | Runs work in isolated mission workspaces and worktrees |
-| Reduce context drift | Breaks missions into staged artifacts and bounded task sessions |
-| Make progress recoverable | Persists mission runtime state instead of relying on terminal scrollback |
-| Keep humans in charge | Exposes pause, panic, launch policy, and task-level control as first-class operations |
-| Separate writing from verification | Uses explicit verification tasks and a dedicated `VERIFY.md` artifact |
-| Avoid vendor lock-in at the workflow layer | Keeps runtime selection separate from workflow policy |
+| Safe by design | Agent work runs in isolated Mission worktrees instead of your active branch |
+| Structured delivery | Work moves from brief to requirements, spec, implementation, verification, audit, and delivery |
+| Runtime freedom | Workflow stays stable while agent runtimes remain replaceable adapters |
 
-## Freedom Without Workflow Chaos
+Mission exists because raw AI coding is fast, but fast is not the same thing as governable. A long chat session can drift from the architecture, rewrite the wrong files, lose context, sound confident without proof, and leave the human trying to reconstruct what happened from terminal scrollback.
 
-Mission is not meant to lock you into one giant vendor-specific session.
+Mission turns that into an operation. The Mission owns the workflow, state, artifacts, tasks, and command surface. Agent runtimes execute bounded work underneath that control layer.
 
-The workflow engine, runtime contract, and Airport layout all treat the agent layer as a replaceable execution boundary. Today, the built-in runtimes in the codebase are `copilot-cli` and `pi`, and repository settings already separate:
+The practical promise is simple: use AI speed without giving up architectural discipline, repository safety, or human control.
 
-- the selected runtime
-- the default execution mode
-- the default model
-- task-level runner assignment in workflow settings and task templates
+## How It Works
 
-That matters because it keeps Mission's workflow model independent from any one provider. In practical terms: Mission orchestrates, the selected agent executes. Today the first shipped agent path is Copilot, with `copilot-cli` as the first concrete CLI runtime and `pi` also present in the codebase. Claude Code, Gemini CLI, Codex, and other runtimes are intended follow-on integrations rather than a redesign of the product.
+Instead of one open-ended session working directly on your checkout, Mission gives each unit of work a governed path:
 
-## The Mission Flow In One View
+1. adopt a Repository and record its Mission control state
+2. start a Mission from a brief or tracked issue
+3. create an isolated Mission worktree
+4. move through staged artifacts and tasks
+5. launch Agent sessions with bounded context
+6. verify, audit, and deliver with evidence
 
-Every mission starts with intent and ends with delivery evidence:
+Airport is the operator surface for that flow. Tower shows the legal commands, Runway hosts live agent execution, and Briefing Room keeps artifacts in view.
 
-| Step | What the operator gets |
+## What Mission Protects
+
+| Risk | Mission response |
 | --- | --- |
-| Brief or issue intake | A concrete mission with title, scope, and tracking link |
-| PRD stage | A requirements document that states the problem and success criteria |
-| SPEC stage | A technical plan that bounds how the change should be built |
-| Implementation stage | Bounded coding tasks plus paired verification work |
-| Audit stage | Recorded findings, residual risks, and post-build review |
-| Delivery stage | A final delivery artifact for handoff and release readiness |
+| Agent work corrupts the main checkout | Work happens in isolated Mission worktrees |
+| Context turns into one fragile chat | Work is split into artifacts, stages, tasks, and sessions |
+| UI state becomes truth | The daemon owns runtime state and Entity behavior |
+| Provider details leak inward | GitHub, Git, and agent runtimes sit behind adapters |
+| Verification becomes self-reported | Gates require artifacts and operator-visible evidence |
 
-That staged model is what makes Mission feel safe. It does not ask you to trust a stream of agent output. It gives you checkpoints, artifacts, and explicit runtime state at every step.
+## Why Teams Use It
 
-## Current Alpha Reality
+Mission is for teams that want agents to move quickly inside a system that still feels like serious engineering. It is useful when you care about:
 
-Mission is already usable, but it is still an alpha product. A few current truths matter for operators:
+- protecting the main checkout while agents explore and edit
+- keeping requirements, implementation, verification, and audit separate
+- making progress recoverable after crashes, restarts, or runtime failures
+- keeping humans in charge of launch, pause, stop, rework, and delivery
+- preventing provider-specific details from becoming your workflow model
 
-- the published CLI package is `@flying-pillow/mission`
-- the public CLI centers on opening the Airport layout, installing prerequisites, inspecting airport state, and stopping the daemon
-- the active workspace now expects pnpm on Node 24
-- GitHub is the tracking provider used by the implemented mission intake flows
-- repository scaffolding is real, but it is currently prepared through the Airport `/init` control flow rather than a public routed `mission init` command
+The system is opinionated because the failure mode is real: AI accelerates both good architecture and bad architecture. Mission tries to make the disciplined path the easiest path.
 
-Those constraints do not change the product direction. They just define the current operational boundary.
+For the broader motivation, read [AI Technical Debt](core-workflows/ai-technical-debt.md), including the IBM and Matt Pocock talks that shaped this framing.
 
-## What To Read Next
+## Core Vocabulary
 
-- [Installation](getting-started/installation.md) explains the first-run operator setup.
-- [AI Technical Debt](core-workflows/ai-technical-debt.md) explains the failure modes Mission is explicitly designed to contain.
-- [Repository Setup](getting-started/repository-setup.md) explains how to adopt a repository and keep the control layer separate from delivery work.
-- [Start Your First Mission](getting-started/start-your-first-mission.md) walks through intake from a brief or an existing issue.
-- [Mission Lifecycle](core-workflows/mission-lifecycle.md) explains the five stages, their artifacts, and how work moves forward.
-- [Tower Control](user-manual/workflow-control.md) explains how to monitor and steer live work.
+- **Repository**: the local checked-out Git repository used as the base for Mission work.
+- **Mission**: a long-lived unit of engineering work with a brief, workflow state, artifacts, tasks, and agent sessions.
+- **Running Mission instance**: the daemon-owned Entity that applies workflow law while a Mission is live.
+- **Mission artifact**: a tracked operator-facing file produced or consumed by the Mission.
+- **Agent session**: a daemon-managed execution attached to a Mission or Mission task.
+- **Airport**: the operator surface for reading and steering the daemon-owned system.
+
+The full domain glossary lives in CONTEXT.md. ADRs explain why the architecture is shaped this way.
+
+## Start Reading
+
+- [Installation](getting-started/installation.md) gets the tooling running.
+- [Repository Setup](getting-started/repository-setup.md) explains how a repository becomes Mission-ready.
+- [Mission Lifecycle](core-workflows/mission-lifecycle.md) shows how work moves from brief to delivery.
+- [Architecture](architecture/index.md) explains the daemon, Entity model, Airport surfaces, and adapters.
+- [Architecture Decisions](adr/index.md) records the decisions that constrain future changes.

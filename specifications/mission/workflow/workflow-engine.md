@@ -38,7 +38,7 @@ The workflow engine must be:
 - reducer-based
 - explicit about side effects
 - human-interruptible by design
-- capable of full panic stop behavior
+- capable of operator pause, restart, cancellation, and termination behavior
 - task-centric in execution semantics
 - stage-centric only as a structural and derived concept
 
@@ -80,7 +80,7 @@ It defines:
 - task generation rules
 - default task launch policy per stage
 - mission-level human interrupt policy
-- panic policy
+- execution limits
 - concurrency policy
 
 ### 2. Mission Runtime State
@@ -96,7 +96,7 @@ It contains:
 - agent session runtime state
 - gate projections
 - mission pause state
-- panic state
+- launch queue state
 - recent event log
 
 It does not contain:
@@ -132,7 +132,7 @@ That means:
 
 - a task may be ready, queued, running, blocked, completed, failed, or cancelled
 - a session may be starting, running, completed, failed, cancelled, or terminated
-- a stage may be pending, ready, active, blocked, or completed, but only as a derived projection
+- a stage may be pending, ready, running, blocked, or completed, but only as a derived projection
 
 The engine must not model a stage as a separately paused or running actor.
 
@@ -146,7 +146,6 @@ export type MissionLifecycleState =
   | 'ready'
   | 'running'
   | 'paused'
-  | 'panicked'
   | 'completed'
   | 'delivered';
 ```
@@ -157,7 +156,6 @@ Definitions:
 - `ready`: mission is initialized and may begin processing
 - `running`: engine is allowed to launch work automatically
 - `paused`: engine may not auto-launch new work until resumed by a human event
-- `panicked`: engine has halted, active sessions are being terminated or already terminated, and no automatic progression is allowed
 - `completed`: all workflow work is complete but mission has not yet been delivered
 - `delivered`: delivery action has been completed
 
@@ -169,7 +167,7 @@ Stage state is derived.
 export type MissionStageDerivedState =
   | 'pending'
   | 'ready'
-  | 'active'
+  | 'running'
   | 'blocked'
   | 'completed';
 ```
@@ -178,7 +176,7 @@ Definitions:
 
 - `pending`: prior stage completion conditions have not been satisfied
 - `ready`: the stage is eligible and contains one or more ready tasks, but no tasks are currently queued or running
-- `active`: the stage contains one or more queued or running tasks
+- `running`: the stage contains one or more queued or running tasks
 - `blocked`: the stage is eligible but no progress can be made because relevant remaining tasks are blocked or require manual start
 - `completed`: all required tasks in the stage are completed
 
@@ -241,7 +239,7 @@ The workflow engine stores and snapshots it, but does not interpret provider-spe
 - and every task listed in `dependsOn` is completed, so `waitingOnTaskIds` is empty
 - and the mission lifecycle allows auto-execution
 - and concurrency rules permit new work
-- and no panic or global pause is in effect
+- and no global pause is in effect
 
 then the engine may queue the task and emit a session launch effect for it.
 
@@ -283,7 +281,6 @@ Human intervention belongs to mission orchestration.
 ```ts
 export type MissionPauseReason =
   | 'human-requested'
-  | 'panic'
   | 'checkpoint'
   | 'agent-failure'
   | 'system';
@@ -304,28 +301,6 @@ Checkpoint behavior is implemented by one or both of these policies:
 1. mission lifecycle enters `paused`
 2. tasks in a newly eligible stage are created with `autostart: false`
 
-## Panic Model
-
-Panic is a first-class mission runtime state.
-
-```ts
-export interface MissionPanicState {
-  active: boolean;
-  requestedAt?: string;
-  requestedBy?: 'human' | 'system';
-  terminateSessions: boolean;
-  clearLaunchQueue: boolean;
-  haltMission: boolean;
-}
-```
-
-When panic is triggered:
-
-1. the mission lifecycle becomes `panicked`
-2. all queued launches are discarded if configured
-3. all active sessions receive termination effects if configured
-4. no auto-launch is allowed until a human resume event occurs
-
 ## Global Workflow Settings
 
 These settings belong in daemon-level global settings.
@@ -342,12 +317,6 @@ export interface WorkflowHumanInLoopSettings {
   pauseOnMissionStart: boolean;
 }
 
-export interface WorkflowPanicSettings {
-  terminateSessions: boolean;
-  clearLaunchQueue: boolean;
-  haltMission: boolean;
-}
-
 export interface WorkflowExecutionSettings {
   maxParallelTasks: number;
   maxParallelSessions: number;
@@ -356,7 +325,6 @@ export interface WorkflowExecutionSettings {
 export interface WorkflowGlobalSettings {
   autostart: WorkflowMissionAutostartSettings;
   humanInLoop: WorkflowHumanInLoopSettings;
-  panic: WorkflowPanicSettings;
   execution: WorkflowExecutionSettings;
   stages: Record<MissionStageId, WorkflowStageDefinition>;
 }
@@ -365,6 +333,7 @@ export interface MissionDaemonSettings {
   agentRunner?: string;
   defaultAgentMode?: 'interactive' | 'autonomous';
   defaultModel?: string;
+  defaultReasoningEffort?: string;
   defaultAgentMetadata?: Record<string, string | number | boolean | null>;
   trackingProvider?: 'github';
   instructionsPath?: string;
@@ -373,7 +342,7 @@ export interface MissionDaemonSettings {
 }
 ```
 
-`defaultAgentMode` and `defaultModel` remain scalar Mission preferences because they are already used as cross-runner setup defaults.
+`defaultAgentMode`, `defaultModel`, and `defaultReasoningEffort` remain scalar Mission preferences because they are already used as runner setup defaults.
 
 Runner-specific launch knobs that do not generalize across adapters belong in opaque metadata instead of new top-level core fields.
 
@@ -410,7 +379,6 @@ export interface MissionWorkflowConfigurationSnapshot {
 export interface MissionWorkflowRuntimeState {
   lifecycle: MissionLifecycleState;
   pause: MissionPauseState;
-  panic: MissionPanicState;
   activeStageId?: MissionStageId;
   stages: MissionStageRuntimeProjection[];
   tasks: MissionTaskRuntimeState[];
@@ -433,7 +401,7 @@ The workflow engine owns only semantic mission runtime truth.
 
 That means:
 
-- task lifecycle, session lifecycle, pause state, panic state, stage projections, and workflow gate projections belong here
+- task lifecycle, session lifecycle, pause state, stage projections, and workflow gate projections belong here
 - airport gate bindings, panel identity, focus intent, observed focus, client state, and substrate observations do not belong here
 - workflow reduction must not inspect terminal-manager, panel processes, or client focus directly
 - any substrate or panel fact that matters to application behavior must be reduced elsewhere in the daemon-owned airport loop
@@ -517,8 +485,6 @@ export type MissionWorkflowEvent =
   | MissionStartedEvent
   | MissionResumedEvent
   | MissionPausedEvent
-  | PanicStopRequestedEvent
-  | PanicStopClearedEvent
   | TasksGeneratedEvent
   | TaskLaunchPolicyChangedEvent
   | TaskMarkedReadyEvent
@@ -556,14 +522,6 @@ export interface MissionResumedEvent extends MissionWorkflowEventBase {
 export interface MissionPausedEvent extends MissionWorkflowEventBase {
   type: 'mission.paused';
   reason: MissionPauseReason;
-}
-
-export interface PanicStopRequestedEvent extends MissionWorkflowEventBase {
-  type: 'mission.panic.requested';
-}
-
-export interface PanicStopClearedEvent extends MissionWorkflowEventBase {
-  type: 'mission.panic.cleared';
 }
 
 export interface TasksGeneratedEvent extends MissionWorkflowEventBase {
@@ -720,7 +678,7 @@ Minimum required scenario coverage:
 1. Mission bootstrap from `mission.created` through `mission.started`, generation, auto-launch, stage progression, mission completion, and `mission.delivered`.
 2. Human control events and commands: `mission.paused`, `mission.resumed`, manual `task.queued`, prompt, command, cancel, and terminate.
 3. Failure recovery: `session.launch-failed`, manual `task.reopened`, and audited `task.reworked`.
-4. Panic recovery: `mission.panic.requested`, queue clearing, `session.terminated`, `mission.panic.cleared`, and launch-queue restart.
+4. Pause and restart recovery: `mission.paused`, launch queue preservation, `session.terminated`, `mission.resumed`, and launch-queue restart.
 5. Refresh recovery where persisted state is missing machine-derived follow-up work and the controller must replay it.
 
 The authoritative regression suite for this is `packages/core/src/workflow/engine/workflowEngine.e2e.test.ts`.
@@ -730,7 +688,7 @@ Examples:
 - `session.launch` request succeeds and generates `session.started`
 - a running session later exits successfully and generates `session.completed`
 - a running session later gets cancelled or terminated and generates `session.cancelled` or `session.terminated`, while the task returns to normal derived readiness instead of becoming terminal `cancelled`
-- panic policy emits `session.terminate` requests for all running sessions
+- explicit operator termination emits `session.terminate` requests for targeted running sessions
 
 ## Core Flow
 
@@ -811,7 +769,7 @@ A stage becomes `completed` when:
 1. its completion policy is satisfied
 2. all required tasks in that stage are `completed`
 
-A stage becomes `active` when:
+A stage becomes `running` when:
 
 1. it is eligible
 2. and one or more tasks in the stage are `queued` or `running`
@@ -832,17 +790,7 @@ Mission pause does not necessarily:
 - terminate active sessions
 - cancel queued work
 
-Those behaviors are controlled separately by panic or explicit human commands.
-
-## Panic Rule
-
-Panic always suppresses new launches.
-
-Depending on configured policy, panic may also:
-
-- terminate all active sessions
-- clear queued tasks
-- force mission lifecycle to remain halted until resume
+Those behaviors are controlled separately by explicit human commands.
 
 ## Command Model Implication
 
@@ -850,8 +798,6 @@ The daemon and UI should expose commands against these first-class concepts:
 
 - pause mission
 - resume mission
-- panic stop mission
-- clear panic
 - mark task done
 - reopen task
 - set task autostart on
@@ -890,5 +836,5 @@ This specification establishes the following design decisions:
 5. task runtime launch policy may be edited per task after generation
 6. all runtime changes happen via events
 7. all external work happens via requested runtime work
-8. mission-level orchestration owns pause and panic behavior
+8. mission-level orchestration owns pause behavior
 9. gates are derived projections, not imperative checks

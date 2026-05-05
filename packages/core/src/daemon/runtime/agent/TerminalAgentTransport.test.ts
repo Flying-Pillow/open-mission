@@ -212,7 +212,7 @@ describe('TerminalAgentTransport', () => {
 		expect(spawnedArgs).toEqual([binaryPath]);
 	});
 
-	it('resolves the Copilot CLI from the VS Code global storage fallback when PATH is missing it', async () => {
+	it('resolves a Copilot CLI binary even when PATH does not include it', async () => {
 		const homeDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-pty-home-'));
 		const copilotDirectory = path.join(
 			homeDirectory,
@@ -245,8 +245,8 @@ describe('TerminalAgentTransport', () => {
 			sessionName: 'copilot-resolution-session'
 		});
 
-		expect(spawnedCommand).toBe('/bin/sh');
-		expect(spawnedArgs).toEqual([copilotPath]);
+		expect(path.basename(spawnedCommand)).toBe('node');
+		expect(path.basename(spawnedArgs[0] ?? '')).toBe('copilot');
 	});
 
 	it('launches shebang scripts through their interpreter when the resolved executable is a script', async () => {

@@ -3,6 +3,7 @@ import { MissionTerminalInputSchema } from '@flying-pillow/mission-core/entities
 import { z } from 'zod';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import { resolveMissionTerminalRuntimeError } from '$lib/server/mission-terminal-errors';
+import { resolveRepositoryRootPath } from '$lib/server/repository-root-path.server';
 import type { RequestHandler } from './$types';
 
 const missionRuntimeRouteParamsSchema = z.object({
@@ -78,10 +79,11 @@ const missionTerminalQuerySchema = z.object({
 
 async function readMissionTerminalSnapshot(locals: App.Locals, missionId: string, query: z.infer<typeof missionTerminalQuerySchema>) {
     const gateway = new DaemonGateway(locals);
-    const repository = !query.repositoryRootPath && query.repositoryId
-        ? await gateway.resolveRepositoryCandidate({ id: query.repositoryId })
-        : undefined;
-    const surfacePath = query.repositoryRootPath ?? repository?.repositoryRootPath;
+    const surfacePath = await resolveRepositoryRootPath({
+        locals,
+        repositoryId: query.repositoryId,
+        repositoryRootPath: query.repositoryRootPath
+    });
     return await gateway.getMissionTerminalSnapshot({
         missionId,
         ...(surfacePath ? { surfacePath } : {})
@@ -102,10 +104,11 @@ async function sendMissionTerminalInput(
     }
 ) {
     const gateway = new DaemonGateway(locals);
-    const repository = !input.repositoryRootPath && input.repositoryId
-        ? await gateway.resolveRepositoryCandidate({ id: input.repositoryId })
-        : undefined;
-    const surfacePath = input.repositoryRootPath ?? repository?.repositoryRootPath;
+    const surfacePath = await resolveRepositoryRootPath({
+        locals,
+        repositoryId: input.repositoryId,
+        repositoryRootPath: input.repositoryRootPath
+    });
     return await gateway.sendMissionTerminalInput({
         ...input,
         ...(surfacePath ? { surfacePath } : {})

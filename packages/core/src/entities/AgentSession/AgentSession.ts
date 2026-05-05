@@ -3,6 +3,7 @@ import type {
 	AgentPrompt,
 	AgentSessionSnapshot
 } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
+import { deriveAgentSessionInteractionCapabilities } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import type { MissionTaskState } from '../Mission/MissionSchema.js';
 import type {
@@ -19,8 +20,8 @@ import {
 	AgentSessionContextSchema,
 	AgentRuntimeMessageDescriptorSchema,
 	AgentSessionLocatorSchema,
-	AgentSessionSendCommandInputSchema,
-	AgentSessionSendPromptInputSchema,
+	AgentSessionPromptSchema,
+	AgentSessionCommandSchema,
 	AgentSessionSendTerminalInputSchema,
 	AgentSessionTerminalSnapshotSchema,
 	AgentSessionDataSchema,
@@ -29,6 +30,7 @@ import {
 	type AgentSessionCommandType,
 	type AgentRuntimeMessageDescriptorType,
 	type AgentSessionContextType,
+	type AgentSessionInteractionCapabilitiesType,
 	type AgentSessionPromptType,
 	type AgentSessionTerminalHandleType,
 	type AgentSessionDataType
@@ -77,8 +79,9 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 			...(record.assignmentLabel ? { assignmentLabel: record.assignmentLabel } : {}),
 			...(record.workingDirectory ? { workingDirectory: record.workingDirectory } : {}),
 			...(record.currentTurnTitle ? { currentTurnTitle: record.currentTurnTitle } : {}),
+			interactionCapabilities: { ...record.interactionCapabilities },
 			context: AgentSession.createContext(record),
-			runtimeMessages: AgentSession.createRuntimeMessageDescriptors(),
+			runtimeMessages: AgentSession.cloneRuntimeMessages(record.runtimeMessages),
 			...(record.scope ? { scope: record.scope } : {}),
 			...(record.telemetry ? { telemetry: record.telemetry } : {}),
 			createdAt: record.createdAt,
@@ -154,8 +157,17 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 				case AgentSessionCommandIds.cancel:
 					await mission.cancelAgentSession(input.sessionId, AgentSession.getReason(input.input));
 					break;
-				case AgentSessionCommandIds.terminate:
-					await mission.terminateAgentSession(input.sessionId, AgentSession.getReason(input.input));
+				case AgentSessionCommandIds.sendPrompt:
+					await mission.sendAgentSessionPrompt(
+						input.sessionId,
+						AgentSession.normalizeAgentPrompt(AgentSessionPromptSchema.parse(input.input))
+					);
+					break;
+				case AgentSessionCommandIds.sendRuntimeMessage:
+					await mission.sendAgentSessionCommand(
+						input.sessionId,
+						AgentSession.normalizeAgentCommand(AgentSessionCommandSchema.parse(input.input))
+					);
 					break;
 				default:
 					throw new Error(`AgentSession command '${input.commandId}' is not implemented in the daemon.`);
@@ -168,46 +180,6 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 				missionId: input.missionId,
 				sessionId: input.sessionId,
 				commandId: input.commandId
-			});
-		} finally {
-			mission.dispose();
-		}
-	}
-
-	public static async sendPrompt(payload: unknown, context: EntityExecutionContext) {
-		const input = AgentSessionSendPromptInputSchema.parse(payload);
-		const service = await loadMissionRegistry(context);
-		const mission = await service.loadRequiredMission(input, context);
-		try {
-			AgentSession.requireData(await mission.buildMissionSnapshot(), input.sessionId);
-			await mission.sendAgentSessionPrompt(input.sessionId, AgentSession.normalizeAgentPrompt(input.prompt));
-			return AgentSessionCommandAcknowledgementSchema.parse({
-				ok: true,
-				entity: 'AgentSession',
-				method: 'sendPrompt',
-				id: input.sessionId,
-				missionId: input.missionId,
-				sessionId: input.sessionId
-			});
-		} finally {
-			mission.dispose();
-		}
-	}
-
-	public static async sendCommand(payload: unknown, context: EntityExecutionContext) {
-		const input = AgentSessionSendCommandInputSchema.parse(payload);
-		const service = await loadMissionRegistry(context);
-		const mission = await service.loadRequiredMission(input, context);
-		try {
-			AgentSession.requireData(await mission.buildMissionSnapshot(), input.sessionId);
-			await mission.sendAgentSessionCommand(input.sessionId, AgentSession.normalizeAgentCommand(input.command));
-			return AgentSessionCommandAcknowledgementSchema.parse({
-				ok: true,
-				entity: 'AgentSession',
-				method: 'sendCommand',
-				id: input.sessionId,
-				missionId: input.missionId,
-				sessionId: input.sessionId
 			});
 		} finally {
 			mission.dispose();
@@ -318,12 +290,18 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 	}
 
 	public static createRuntimeMessageDescriptors(): AgentRuntimeMessageDescriptorType[] {
+		return AgentSession.createRuntimeMessageDescriptorsForCommands(['interrupt', 'checkpoint', 'nudge', 'resume']);
+	}
+
+	public static createRuntimeMessageDescriptorsForCommands(
+		commandTypes: AgentCommand['type'][]
+	): AgentRuntimeMessageDescriptorType[] {
 		return AgentRuntimeMessageDescriptorSchema.array().parse([
 			{ type: 'interrupt', label: 'Interrupt', delivery: 'best-effort', mutatesContext: false },
 			{ type: 'checkpoint', label: 'Checkpoint', delivery: 'best-effort', mutatesContext: false },
 			{ type: 'nudge', label: 'Nudge', delivery: 'best-effort', mutatesContext: false },
 			{ type: 'resume', label: 'Resume', delivery: 'best-effort', mutatesContext: false }
-		]);
+		].filter((descriptor) => commandTypes.includes(descriptor.type as AgentCommand['type'])));
 	}
 
 	public static buildTaskScope(
@@ -378,6 +356,32 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 			...(input.task?.relativePath ? { assignmentLabel: input.task.relativePath } : {}),
 			...(input.snapshot?.workingDirectory ? { workingDirectory: input.snapshot.workingDirectory } : {}),
 			...(input.task?.subject ? { currentTurnTitle: input.task.subject } : {}),
+			interactionCapabilities: AgentSession.resolveInteractionCapabilities({
+				lifecycleState: input.snapshot?.status ?? input.launch.lifecycle,
+				transport: input.snapshot?.transport
+					?? (terminalFields.terminalHandle
+						? {
+							kind: 'terminal',
+							terminalSessionName: terminalFields.terminalHandle.sessionName,
+							paneId: terminalFields.terminalHandle.paneId
+						}
+						: undefined),
+				...(input.snapshot?.acceptsPrompts !== undefined
+					? { acceptsPrompts: input.snapshot.acceptsPrompts }
+					: {}),
+				...(input.snapshot?.acceptedCommands
+					? { acceptedCommands: input.snapshot.acceptedCommands }
+					: {})
+			}),
+			runtimeMessages: AgentSession.resolveRuntimeMessages({
+				lifecycleState: input.snapshot?.status ?? input.launch.lifecycle,
+				...(input.snapshot?.acceptsPrompts !== undefined
+					? { acceptsPrompts: input.snapshot.acceptsPrompts }
+					: {}),
+				...(input.snapshot?.acceptedCommands
+					? { acceptedCommands: input.snapshot.acceptedCommands }
+					: {})
+			}),
 			...(scope ? { scope } : {}),
 			...(input.snapshot?.failureMessage ? { failureMessage: input.snapshot.failureMessage } : {})
 		});
@@ -409,6 +413,19 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 					? { workingDirectory: record.workingDirectory }
 					: {}),
 			...(record?.currentTurnTitle ? { currentTurnTitle: record.currentTurnTitle } : {}),
+			interactionCapabilities: snapshot.interactionCapabilities
+				? { ...snapshot.interactionCapabilities }
+				: AgentSession.resolveInteractionCapabilities({
+					lifecycleState: snapshot.status,
+					...(snapshot.transport ? { transport: snapshot.transport } : {}),
+					acceptsPrompts: snapshot.acceptsPrompts,
+					acceptedCommands: snapshot.acceptedCommands
+				}),
+			runtimeMessages: AgentSession.resolveRuntimeMessages({
+				lifecycleState: snapshot.status,
+				acceptsPrompts: snapshot.acceptsPrompts,
+				acceptedCommands: snapshot.acceptedCommands
+			}),
 			...(record?.scope ? { scope: record.scope } : {}),
 			...(snapshot.failureMessage
 				? { failureMessage: snapshot.failureMessage }
@@ -434,6 +451,8 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 			...(record.assignmentLabel ? { assignmentLabel: record.assignmentLabel } : {}),
 			...(record.workingDirectory ? { workingDirectory: record.workingDirectory } : {}),
 			...(record.currentTurnTitle ? { currentTurnTitle: record.currentTurnTitle } : {}),
+			interactionCapabilities: { ...record.interactionCapabilities },
+			runtimeMessages: AgentSession.cloneRuntimeMessages(record.runtimeMessages),
 			...(record.scope ? { scope: AgentSession.cloneScope(record.scope) } : {}),
 			...(telemetry ? { telemetry } : {}),
 			...(record.failureMessage ? { failureMessage: record.failureMessage } : {})
@@ -453,6 +472,8 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 			lastUpdatedAt: state.lastUpdatedAt,
 			...(state.workingDirectory ? { workingDirectory: state.workingDirectory } : {}),
 			...(state.currentTurnTitle ? { currentTurnTitle: state.currentTurnTitle } : {}),
+			interactionCapabilities: { ...state.interactionCapabilities },
+			runtimeMessages: AgentSession.cloneRuntimeMessages(state.runtimeMessages),
 			...(state.scope ? { scope: AgentSession.cloneScope(state.scope) } : {}),
 			...(state.awaitingPermission
 				? {
@@ -488,6 +509,73 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 				return 'running';
 			case 'starting':
 				return 'starting';
+			default:
+				return 'running';
+		}
+	}
+
+	private static cloneRuntimeMessages(
+		runtimeMessages: AgentRuntimeMessageDescriptorType[]
+	): AgentRuntimeMessageDescriptorType[] {
+		return runtimeMessages.map((descriptor) => ({
+			...descriptor,
+			...(descriptor.input ? { input: { ...descriptor.input } } : {})
+		}));
+	}
+
+	private static resolveRuntimeMessages(input: {
+		lifecycleState: AgentSessionRecord['lifecycleState'] | AgentSessionSnapshot['status'];
+		acceptsPrompts?: boolean;
+		acceptedCommands?: AgentCommand['type'][];
+	}): AgentRuntimeMessageDescriptorType[] {
+		const acceptedCommands = input.acceptedCommands ?? AgentSession.deriveAcceptedCommands(input.lifecycleState);
+		return AgentSession.createRuntimeMessageDescriptorsForCommands(acceptedCommands);
+	}
+
+	private static resolveInteractionCapabilities(input: {
+		lifecycleState: AgentSessionRecord['lifecycleState'] | AgentSessionSnapshot['status'];
+		transport?: AgentSessionSnapshot['transport'];
+		acceptsPrompts?: boolean;
+		acceptedCommands?: AgentCommand['type'][];
+	}): AgentSessionInteractionCapabilitiesType {
+		return deriveAgentSessionInteractionCapabilities({
+			status: AgentSession.toSnapshotStatus(input.lifecycleState),
+			...(input.transport ? { transport: input.transport } : {}),
+			acceptsPrompts: input.acceptsPrompts ?? AgentSession.deriveAcceptsPrompts(input.lifecycleState),
+			acceptedCommands: input.acceptedCommands ?? AgentSession.deriveAcceptedCommands(input.lifecycleState)
+		});
+	}
+
+	private static deriveAcceptsPrompts(
+		lifecycleState: AgentSessionRecord['lifecycleState'] | AgentSessionSnapshot['status']
+	): boolean {
+		return lifecycleState === 'running' || lifecycleState === 'awaiting-input';
+	}
+
+	private static deriveAcceptedCommands(
+		lifecycleState: AgentSessionRecord['lifecycleState'] | AgentSessionSnapshot['status']
+	): AgentCommand['type'][] {
+		if (lifecycleState === 'awaiting-input') {
+			return ['interrupt', 'checkpoint', 'nudge', 'resume'];
+		}
+		if (lifecycleState === 'starting' || lifecycleState === 'running') {
+			return ['interrupt', 'checkpoint', 'nudge'];
+		}
+		return [];
+	}
+
+	private static toSnapshotStatus(
+		lifecycleState: AgentSessionRecord['lifecycleState'] | AgentSessionSnapshot['status']
+	): AgentSessionSnapshot['status'] {
+		switch (lifecycleState) {
+			case 'starting':
+			case 'running':
+			case 'awaiting-input':
+			case 'completed':
+			case 'failed':
+			case 'cancelled':
+			case 'terminated':
+				return lifecycleState;
 			default:
 				return 'running';
 		}
@@ -540,6 +628,8 @@ export class AgentSession extends Entity<AgentSessionDataType, string> {
 				lastUpdatedAt: record.lastUpdatedAt,
 				...(record.workingDirectory ? { workingDirectory: record.workingDirectory } : {}),
 				...(record.currentTurnTitle ? { currentTurnTitle: record.currentTurnTitle } : {}),
+				interactionCapabilities: { ...record.interactionCapabilities },
+				runtimeMessages: AgentSession.cloneRuntimeMessages(record.runtimeMessages),
 				...(record.scope ? { scope: record.scope } : {}),
 				...(record.failureMessage ? { failureMessage: record.failureMessage } : {})
 			});

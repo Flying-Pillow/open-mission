@@ -448,7 +448,7 @@ The target migration collapses that split into a canonical entity contract witho
 
 Terminal runtime services are transport adapters only. They are allowed to resolve an existing terminal stream, explicitly create a mission shell when a terminal-specific command asks for creation, send raw bytes, resize a terminal, return terminal snapshots, publish terminal stream notifications, and return a persisted transcript for a detached historical agent session.
 
-Terminal runtime services must not derive Mission, Task, Stage, Artifact, or AgentSession lifecycle. They must not emit workflow lifecycle events, treat a missing process-local terminal registry as authoritative workflow termination, create terminals as a read/state side effect, relaunch, terminate, cancel, or complete workflow sessions, repair launch queues, autostart, or panic state, or invent transcript text as domain truth.
+Terminal runtime services must not derive Mission, Task, Stage, Artifact, or AgentSession lifecycle. They must not emit workflow lifecycle events, treat a missing process-local terminal registry as authoritative workflow termination, create terminals as a read/state side effect, relaunch, terminate, cancel, complete workflow sessions, repair launch queues, autostart, or invent transcript text as domain truth.
 
 ### Mission Data Properties
 

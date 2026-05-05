@@ -1,5 +1,37 @@
 {
+    "mcpServers": {
+        "mission_signal": {
+            "type": "stdio",
+            "command": "mission",
+            "args": [
+                "mcp",
+                "agent-bridge"
+            ],
+            "env": {
+                "MISSION_MCP_ENDPOINT": "${MISSION_MCP_ENDPOINT}",
+                "MISSION_MCP_MISSION_ID": "${MISSION_MCP_MISSION_ID}",
+                "MISSION_MCP_TASK_ID": "${MISSION_MCP_TASK_ID}",
+                "MISSION_MCP_AGENT_SESSION_ID": "${MISSION_MCP_AGENT_SESSION_ID}",
+                "MISSION_MCP_ALLOWED_TOOLS": "${MISSION_MCP_ALLOWED_TOOLS}"
+            }
+        }
+    },
     "servers": {
+        "mission_signal": {
+            "type": "stdio",
+            "command": "mission",
+            "args": [
+                "mcp",
+                "agent-bridge"
+            ],
+            "env": {
+                "MISSION_MCP_ENDPOINT": "${MISSION_MCP_ENDPOINT}",
+                "MISSION_MCP_MISSION_ID": "${MISSION_MCP_MISSION_ID}",
+                "MISSION_MCP_TASK_ID": "${MISSION_MCP_TASK_ID}",
+                "MISSION_MCP_AGENT_SESSION_ID": "${MISSION_MCP_AGENT_SESSION_ID}",
+                "MISSION_MCP_ALLOWED_TOOLS": "${MISSION_MCP_ALLOWED_TOOLS}"
+            }
+        },
         "svelte": {
             "type": "http",
             "url": "https://mcp.svelte.dev/mcp"

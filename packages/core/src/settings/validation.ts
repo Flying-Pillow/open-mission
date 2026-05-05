@@ -21,11 +21,6 @@ export function normalizeWorkflowSettings(input: unknown): WorkflowDefinition {
 			enabled: asBoolean(source.humanInLoop?.enabled, defaults.humanInLoop.enabled),
 			pauseOnMissionStart: asBoolean(source.humanInLoop?.pauseOnMissionStart, defaults.humanInLoop.pauseOnMissionStart)
 		},
-		panic: {
-			terminateSessions: asBoolean(source.panic?.terminateSessions, defaults.panic.terminateSessions),
-			clearLaunchQueue: asBoolean(source.panic?.clearLaunchQueue, defaults.panic.clearLaunchQueue),
-			haltMission: asBoolean(source.panic?.haltMission, defaults.panic.haltMission)
-		},
 		execution: {
 			maxParallelTasks: asNumber(source.execution?.maxParallelTasks, defaults.execution.maxParallelTasks),
 			maxParallelSessions: asNumber(source.execution?.maxParallelSessions, defaults.execution.maxParallelSessions)
@@ -84,17 +79,35 @@ export function normalizeWorkflowSettings(input: unknown): WorkflowDefinition {
 }
 
 export function parsePersistedWorkflowSettings(input: unknown): WorkflowDefinition {
-	const parsed = WorkflowDefinitionSchema.safeParse(input);
+	const parsed = WorkflowDefinitionSchema.safeParse(stripRetiredWorkflowSettingsKeys(input));
 	if (!parsed.success) {
 		throw new WorkflowSettingsError(
 			'SETTINGS_VALIDATION_FAILED',
-			`Workflow settings validation failed: ${parsed.error.issues.map((issue) => `${toJsonPointer(issue.path)} (${issue.code})`).join(', ')}`,
+			`Workflow settings validation failed: ${parsed.error.issues.map(formatWorkflowSettingsIssue).join(', ')}`,
 			{
 				validationErrors: toWorkflowSettingsValidationErrors(parsed.error.issues)
 			}
 		);
 	}
 	return parsed.data;
+}
+
+function stripRetiredWorkflowSettingsKeys(input: unknown): unknown {
+	if (!input || typeof input !== 'object' || Array.isArray(input)) {
+		return input;
+	}
+	if (!Object.prototype.hasOwnProperty.call(input, 'panic')) {
+		return input;
+	}
+	const { panic: _retiredPanic, ...workflow } = input as Record<string, unknown>;
+	return workflow;
+}
+
+function formatWorkflowSettingsIssue(issue: { path: PropertyKey[]; code: string; keys?: string[] }): string {
+	const keys = issue.code === 'unrecognized_keys' && issue.keys?.length
+		? ` [${issue.keys.join(', ')}]`
+		: '';
+	return `${toJsonPointer(issue.path)} (${issue.code})${keys}`;
 }
 
 export function validateWorkflowSettings(settings: WorkflowDefinition): WorkflowSettingsValidationError[] {

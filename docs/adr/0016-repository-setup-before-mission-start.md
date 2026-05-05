@@ -1,4 +1,16 @@
-# Repository Setup Before Mission Start
+---
+layout: default
+title: Repository Setup Before Mission Start
+parent: Architecture Decisions
+nav_order: 16
+status: accepted
+date: 2026-05-04
+decision_area: repository-setup
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Repositories that do not contain `.mission/settings.json` enter Repository setup mode after clone or registration. Airport presents a Repository setup screen for operator-editable Repository settings. It must not create a first issue, a preparation Mission, or a Mission worktree to initialize Repository control state.
 

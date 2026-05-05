@@ -4,6 +4,8 @@ import { z } from 'zod/v4';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import type { RequestHandler } from './$types';
 
+const DAEMON_STREAM_RECONNECT_DELAY_MS = 1_000;
+
 const airportRuntimeEventsQuerySchema = z.object({
     missionId: z.string().trim().min(1).optional(),
     scope: z.enum(['mission', 'application']).optional()
@@ -31,9 +33,11 @@ export const GET: RequestHandler = async ({ locals, request, url }) => {
     const repositoryRootPath = url.searchParams.get('repositoryRootPath')?.trim() || undefined;
     const gateway = new DaemonGateway(locals);
     const encoder = new TextEncoder();
+    let successfulSubscriptionCount = 0;
 
     let disposeSubscription: (() => void) | undefined;
     let disposeHeartbeat: (() => void) | undefined;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let closed = false;
 
     const close = () => {
@@ -41,12 +45,147 @@ export const GET: RequestHandler = async ({ locals, request, url }) => {
             return;
         }
         closed = true;
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = undefined;
+        }
         disposeHeartbeat?.();
         disposeSubscription?.();
+        disposeSubscription = undefined;
     };
 
     const stream = new ReadableStream<Uint8Array>({
         start: async (controller) => {
+            const emitConnected = () => {
+                successfulSubscriptionCount += 1;
+                controller.enqueue(encoder.encode(serializeSseEvent({
+                    event: 'connected',
+                    id: randomUUID(),
+                    data: JSON.stringify({
+                        connected: true,
+                        recovered: successfulSubscriptionCount > 1
+                    })
+                })));
+            };
+
+            const scheduleReconnect = () => {
+                if (closed || reconnectTimer) {
+                    return;
+                }
+
+                reconnectTimer = setTimeout(() => {
+                    reconnectTimer = undefined;
+                    void connectSubscription();
+                }, DAEMON_STREAM_RECONNECT_DELAY_MS);
+            };
+
+            const connectSubscription = async () => {
+                if (closed) {
+                    return;
+                }
+
+                try {
+                    if (query.scope === 'application') {
+                        const pendingEvents: unknown[] = [];
+                        let subscriptionConnected = false;
+                        const emitEvent = (event: unknown) => {
+                            controller.enqueue(encoder.encode(serializeSseEvent({
+                                event: 'entity',
+                                id: randomUUID(),
+                                data: JSON.stringify(event)
+                            })));
+                        };
+                        const applicationSubscription = await gateway.openApplicationEventSubscription({
+                            channels: ['repository:*.*'],
+                            ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {}),
+                            onDisconnect: () => {
+                                if (closed || disposeSubscription !== activeDispose) {
+                                    return;
+                                }
+                                disposeSubscription = undefined;
+                                scheduleReconnect();
+                            },
+                            onEvent: (event) => {
+                                if (closed) {
+                                    return;
+                                }
+                                if (!subscriptionConnected) {
+                                    pendingEvents.push(event);
+                                    return;
+                                }
+                                emitEvent(event);
+                            }
+                        });
+
+                        const activeDispose = () => applicationSubscription.dispose();
+                        if (closed) {
+                            activeDispose();
+                            return;
+                        }
+                        disposeSubscription?.();
+                        disposeSubscription = activeDispose;
+                        emitConnected();
+                        subscriptionConnected = true;
+                        for (const event of pendingEvents) {
+                            if (closed) {
+                                break;
+                            }
+                            emitEvent(event);
+                        }
+                        return;
+                    }
+
+                    const pendingEvents: unknown[] = [];
+                    let subscriptionConnected = false;
+                    const emitEvent = (event: { eventId: string }) => {
+                        controller.enqueue(encoder.encode(serializeSseEvent({
+                            event: 'runtime',
+                            id: event.eventId,
+                            data: JSON.stringify(event)
+                        })));
+                    };
+                    const subscription = await gateway.openEventSubscription({
+                        missionId: query.missionId,
+                        ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {}),
+                        onDisconnect: () => {
+                            if (closed || disposeSubscription !== activeDispose) {
+                                return;
+                            }
+                            disposeSubscription = undefined;
+                            scheduleReconnect();
+                        },
+                        onEvent: (event) => {
+                            if (closed) {
+                                return;
+                            }
+                            if (!subscriptionConnected) {
+                                pendingEvents.push(event);
+                                return;
+                            }
+                            emitEvent(event);
+                        }
+                    });
+
+                    const activeDispose = () => subscription.dispose();
+                    if (closed) {
+                        activeDispose();
+                        return;
+                    }
+                    disposeSubscription?.();
+                    disposeSubscription = activeDispose;
+                    emitConnected();
+                    subscriptionConnected = true;
+                    for (const event of pendingEvents) {
+                        if (closed) {
+                            break;
+                        }
+                        emitEvent(event as { eventId: string });
+                    }
+                } catch {
+                    scheduleReconnect();
+                }
+            };
+
             request.signal.addEventListener('abort', () => {
                 close();
                 try {
@@ -55,12 +194,6 @@ export const GET: RequestHandler = async ({ locals, request, url }) => {
                     // Ignore duplicate close attempts during request abort.
                 }
             }, { once: true });
-
-            controller.enqueue(encoder.encode(serializeSseEvent({
-                event: 'connected',
-                id: randomUUID(),
-                data: JSON.stringify({ connected: true })
-            })));
 
             const heartbeat = setInterval(() => {
                 if (closed) {
@@ -74,40 +207,7 @@ export const GET: RequestHandler = async ({ locals, request, url }) => {
             }, 15_000);
             disposeHeartbeat = () => clearInterval(heartbeat);
 
-            if (query.scope === 'application') {
-                const applicationSubscription = await gateway.openApplicationEventSubscription({
-                    channels: ['repository:*.*'],
-                    ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {}),
-                    onEvent: (event) => {
-                        if (closed) {
-                            return;
-                        }
-                        controller.enqueue(encoder.encode(serializeSseEvent({
-                            event: 'entity',
-                            id: randomUUID(),
-                            data: JSON.stringify(event)
-                        })));
-                    }
-                });
-                disposeSubscription = () => applicationSubscription.dispose();
-                return;
-            }
-
-            const subscription = await gateway.openEventSubscription({
-                missionId: query.missionId,
-                ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {}),
-                onEvent: (event) => {
-                    if (closed) {
-                        return;
-                    }
-                    controller.enqueue(encoder.encode(serializeSseEvent({
-                        event: 'runtime',
-                        id: event.eventId,
-                        data: JSON.stringify(event)
-                    })));
-                }
-            });
-            disposeSubscription = () => subscription.dispose();
+            await connectSubscription();
         },
         cancel: () => {
             close();

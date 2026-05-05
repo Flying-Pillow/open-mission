@@ -1,31 +1,27 @@
-// /apps/airport/web/src/lib/server/daemon/health.server.ts: Tracks daemon availability and recovery state for the Airport web server.
+// /apps/airport/web/src/lib/server/daemon/health.server.ts: Reads daemon availability for Airport UI without daemon process control.
 import type { SystemState } from '@flying-pillow/mission-core/system/SystemContract';
 import { resolveRequestAuthToken, resolveSurfacePath } from './context.server';
 import { clearSharedDaemonClient } from './shared-client.server';
 import { openDaemonConnection } from './transport.server';
 
 const DAEMON_HEALTH_CACHE_TTL_MS = 3_000;
-const DAEMON_RECOVERY_BACKOFF_MS = [0, 2_000, 5_000, 15_000, 30_000, 60_000] as const;
+const DAEMON_HEALTH_CHECK_STALE_MS = 5_000;
 
 export type DaemonRuntimeState = {
     running: boolean;
-    startedByHook: boolean;
     message: string;
     endpointPath?: string;
     lastCheckedAt: string;
-    nextRetryAt?: string;
-    failureCount?: number;
 };
 
-type DaemonRecoveryRecord = {
+type DaemonHealthRecord = {
     state: DaemonRuntimeState;
     checkedAtMs: number;
-    consecutiveFailures: number;
-    nextRetryAtMs: number;
 };
 
-let daemonRecoveryRecord: DaemonRecoveryRecord | undefined;
-let daemonRecoveryCheck: Promise<DaemonRuntimeState> | undefined;
+let daemonHealthRecord: DaemonHealthRecord | undefined;
+let daemonHealthCheck: Promise<DaemonRuntimeState> | undefined;
+let daemonHealthCheckStartedAtMs = 0;
 
 export class DaemonUnavailableError extends Error {
     public readonly runtimeState: DaemonRuntimeState;
@@ -54,7 +50,6 @@ export async function readCachedDaemonSystemStatus(input: {
     try {
         const daemon = await openDaemonConnection({
             surfacePath,
-            allowStart: false,
             ...(authToken ? { authToken } : {})
         });
         try {
@@ -70,37 +65,46 @@ export async function readCachedDaemonSystemStatus(input: {
 export async function getDaemonRuntimeState(input: {
     locals?: App.Locals;
     authToken?: string;
-    allowStart?: boolean;
     surfacePath?: string;
     timeoutMs?: number;
 } = {}): Promise<DaemonRuntimeState> {
     const authToken = input.authToken?.trim() || resolveRequestAuthToken(input.locals);
     const surfacePath = input.surfacePath?.trim() || resolveSurfacePath();
-    const allowStart = input.allowStart ?? true;
     const now = Date.now();
     const timeoutMs = input.timeoutMs ?? 0;
 
-    if (daemonRecoveryRecord && now - daemonRecoveryRecord.checkedAtMs < DAEMON_HEALTH_CACHE_TTL_MS) {
-        return daemonRecoveryRecord.state;
+    if (
+        daemonHealthRecord?.state.running
+        && now - daemonHealthRecord.checkedAtMs < DAEMON_HEALTH_CACHE_TTL_MS
+    ) {
+        return daemonHealthRecord.state;
     }
 
-    if (daemonRecoveryCheck) {
+    if (daemonHealthCheck && now - daemonHealthCheckStartedAtMs <= DAEMON_HEALTH_CHECK_STALE_MS) {
         return timeoutMs > 0
-            ? await raceDaemonRuntimeState(daemonRecoveryCheck, timeoutMs, now)
-            : daemonRecoveryCheck;
+            ? await raceDaemonRuntimeState(daemonHealthCheck, timeoutMs, now)
+            : daemonHealthCheck;
+    }
+    if (daemonHealthCheck) {
+        daemonHealthCheck = undefined;
+        daemonHealthCheckStartedAtMs = 0;
     }
 
-    daemonRecoveryCheck = checkDaemonRuntimeState({
+    const healthCheck = checkDaemonRuntimeState({
         surfacePath,
-        allowStart,
         ...(authToken ? { authToken } : {})
     }).finally(() => {
-        daemonRecoveryCheck = undefined;
+        if (daemonHealthCheck === healthCheck) {
+            daemonHealthCheck = undefined;
+            daemonHealthCheckStartedAtMs = 0;
+        }
     });
+    daemonHealthCheck = healthCheck;
+    daemonHealthCheckStartedAtMs = now;
 
     return timeoutMs > 0
-        ? await raceDaemonRuntimeState(daemonRecoveryCheck, timeoutMs, now)
-        : daemonRecoveryCheck;
+        ? await raceDaemonRuntimeState(healthCheck, timeoutMs, now)
+        : healthCheck;
 }
 
 async function raceDaemonRuntimeState(
@@ -126,25 +130,8 @@ async function raceDaemonRuntimeState(
     }
 }
 
-function rememberDaemonRuntimeState(input: {
-    state: DaemonRuntimeState;
-    checkedAtMs: number;
-    consecutiveFailures: number;
-    nextRetryAtMs: number;
-}): DaemonRuntimeState {
-    daemonRecoveryRecord = {
-        state: input.state,
-        checkedAtMs: input.checkedAtMs,
-        consecutiveFailures: input.consecutiveFailures,
-        nextRetryAtMs: input.nextRetryAtMs
-    };
-
-    return input.state;
-}
-
 async function checkDaemonRuntimeState(input: {
     surfacePath: string;
-    allowStart: boolean;
     authToken?: string;
 }): Promise<DaemonRuntimeState> {
     const now = Date.now();
@@ -153,123 +140,58 @@ async function checkDaemonRuntimeState(input: {
     try {
         const daemon = await openDaemonConnection({
             surfacePath: input.surfacePath,
-            allowStart: false,
             ...(authToken ? { authToken } : {})
         });
         try {
             return rememberDaemonRuntimeState({
                 state: {
                     running: true,
-                    startedByHook: false,
                     message: 'Mission daemon connected.',
-                    lastCheckedAt: new Date(now).toISOString(),
-                    failureCount: 0
+                    lastCheckedAt: new Date(now).toISOString()
                 },
-                checkedAtMs: now,
-                consecutiveFailures: 0,
-                nextRetryAtMs: 0
+                checkedAtMs: now
             });
         } finally {
             daemon.dispose();
         }
-    } catch (probeError) {
+    } catch (error) {
         clearSharedDaemonClient(input.surfacePath, authToken);
-
-        const previousFailures = daemonRecoveryRecord?.consecutiveFailures ?? 0;
-        const nextRetryAtMs = daemonRecoveryRecord?.nextRetryAtMs ?? 0;
-
-        if (!input.allowStart || now < nextRetryAtMs) {
-            const state = buildUnavailableDaemonState({
-                error: probeError,
-                checkedAtMs: now,
-                startedByHook: false,
-                consecutiveFailures: previousFailures,
-                nextRetryAtMs
-            });
-            return rememberDaemonRuntimeState({
-                state,
-                checkedAtMs: now,
-                consecutiveFailures: previousFailures,
-                nextRetryAtMs
-            });
-        }
-
-        try {
-            const daemon = await openDaemonConnection({
-                surfacePath: input.surfacePath,
-                allowStart: true,
-                ...(authToken ? { authToken } : {})
-            });
-            try {
-                return rememberDaemonRuntimeState({
-                    state: {
-                        running: true,
-                        startedByHook: true,
-                        message: 'Mission daemon recovered and connected.',
-                        lastCheckedAt: new Date(now).toISOString(),
-                        failureCount: 0
-                    },
-                    checkedAtMs: now,
-                    consecutiveFailures: 0,
-                    nextRetryAtMs: 0
-                });
-            } finally {
-                daemon.dispose();
-            }
-        } catch (recoveryError) {
-            clearSharedDaemonClient(input.surfacePath, authToken);
-            const consecutiveFailures = previousFailures + 1;
-            const recoveryBackoffMs = DAEMON_RECOVERY_BACKOFF_MS[
-                Math.min(consecutiveFailures - 1, DAEMON_RECOVERY_BACKOFF_MS.length - 1)
-            ];
-            const scheduledRetryAtMs = now + recoveryBackoffMs;
-            const state = buildUnavailableDaemonState({
-                error: recoveryError,
-                checkedAtMs: now,
-                startedByHook: true,
-                consecutiveFailures,
-                nextRetryAtMs: scheduledRetryAtMs
-            });
-            return rememberDaemonRuntimeState({
-                state,
-                checkedAtMs: now,
-                consecutiveFailures,
-                nextRetryAtMs: scheduledRetryAtMs
-            });
-        }
+        return rememberDaemonRuntimeState({
+            state: buildUnavailableDaemonState({
+                error,
+                checkedAtMs: now
+            }),
+            checkedAtMs: now
+        });
     }
+}
+
+function rememberDaemonRuntimeState(input: {
+    state: DaemonRuntimeState;
+    checkedAtMs: number;
+}): DaemonRuntimeState {
+    daemonHealthRecord = {
+        state: input.state,
+        checkedAtMs: input.checkedAtMs
+    };
+
+    return input.state;
 }
 
 function buildUnavailableDaemonState(input: {
     error: unknown;
     checkedAtMs: number;
-    startedByHook: boolean;
-    consecutiveFailures: number;
-    nextRetryAtMs: number;
 }): DaemonRuntimeState {
     const reason = input.error instanceof Error ? input.error.message : String(input.error);
-    const nextRetryAt = input.nextRetryAtMs > input.checkedAtMs
-        ? new Date(input.nextRetryAtMs).toISOString()
-        : undefined;
-
     return {
         running: false,
-        startedByHook: input.startedByHook,
-        message: nextRetryAt
-            ? `Mission daemon is unavailable: ${reason}. The web app will retry recovery after ${nextRetryAt}.`
-            : `Mission daemon is unavailable: ${reason}`,
-        lastCheckedAt: new Date(input.checkedAtMs).toISOString(),
-        ...(nextRetryAt ? { nextRetryAt } : {}),
-        ...(input.consecutiveFailures > 0 ? { failureCount: input.consecutiveFailures } : {})
+        message: `Mission daemon is unavailable: ${reason}`,
+        lastCheckedAt: new Date(input.checkedAtMs).toISOString()
     };
 }
 
 function buildPendingDaemonState(checkedAtMs: number): DaemonRuntimeState {
-    const lastKnownState = daemonRecoveryRecord?.state;
-    const lastKnownFailureCount = daemonRecoveryRecord?.consecutiveFailures
-        ?? lastKnownState?.failureCount
-        ?? 0;
-
+    const lastKnownState = daemonHealthRecord?.state;
     if (lastKnownState?.running) {
         return {
             ...lastKnownState,
@@ -279,11 +201,7 @@ function buildPendingDaemonState(checkedAtMs: number): DaemonRuntimeState {
 
     return {
         running: false,
-        startedByHook: true,
-        message: lastKnownState?.message
-            ?? 'Mission daemon recovery is still in progress. The web app will keep retrying automatically.',
-        lastCheckedAt: new Date(checkedAtMs).toISOString(),
-        ...(lastKnownState?.nextRetryAt ? { nextRetryAt: lastKnownState.nextRetryAt } : {}),
-        ...(lastKnownFailureCount > 0 ? { failureCount: lastKnownFailureCount } : {})
+        message: lastKnownState?.message ?? 'Mission daemon availability check is still in progress.',
+        lastCheckedAt: new Date(checkedAtMs).toISOString()
     };
 }

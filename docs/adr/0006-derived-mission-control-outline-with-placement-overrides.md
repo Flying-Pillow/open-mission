@@ -1,4 +1,16 @@
-# Derived Mission Control Outline With Placement Overrides
+---
+layout: default
+title: Derived Mission Control Outline With Placement Overrides
+parent: Architecture Decisions
+nav_order: 6
+status: accepted
+date: 2026-05-04
+decision_area: mission-control-outline
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Mission control needs a stable outline for operator navigation, but the outline must not become another owner of Mission task, Mission artifact, Agent session, or Agent session context data.
 

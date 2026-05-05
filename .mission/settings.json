@@ -4,5 +4,7 @@
   "instructionsPath": ".agents",
   "skillsPath": ".agents/skills",
   "agentRunner": "copilot-cli",
-  "defaultAgentMode": "interactive"
+  "defaultAgentMode": "interactive",
+  "defaultModel": "gpt-5.3-codex",
+  "defaultReasoningEffort": "high"
 }

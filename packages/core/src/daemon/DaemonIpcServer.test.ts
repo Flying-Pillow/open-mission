@@ -1,11 +1,13 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { getDaemonLockPath, getDaemonRuntimePath } from './daemonPaths.js';
 import { MissionRegistry } from './MissionRegistry.js';
 import { executeEntityCommandInDaemon } from '../entities/Entity/EntityRemote.js';
 import { startMissionDaemon } from './DaemonIpcServer.js';
+import { MissionMcpSignalServer } from './runtime/agent/mcp/MissionMcpSignalServer.js';
 
 vi.mock('./MissionTerminal.js', () => ({
     ensureMissionTerminalState: vi.fn(async () => ({
@@ -97,6 +99,39 @@ describe('minimal source daemon request handling', () => {
         }
     });
 
+    it('terminates a live but unreachable daemon lock owner before starting', async () => {
+        const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-unreachable-lock-workspace-'));
+        const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-unreachable-lock-runtime-'));
+        const previousRuntimeDirectory = process.env['XDG_RUNTIME_DIR'];
+        process.env['XDG_RUNTIME_DIR'] = runtimeRoot;
+        const staleProcess = spawnStaleDaemonProcess();
+        const hydrateDaemonMissions = vi.spyOn(MissionRegistry.prototype, 'hydrateDaemonMissions').mockResolvedValue(undefined);
+        await fs.mkdir(getDaemonRuntimePath(), { recursive: true });
+        await fs.writeFile(getDaemonLockPath(), `${JSON.stringify({
+            lockPath: getDaemonLockPath(),
+            processId: staleProcess.pid,
+            createdAt: '2026-05-04T00:00:00.000Z',
+            socketPath: path.join(runtimeRoot, 'missing-daemon.sock')
+        }, null, 2)}\n`, 'utf8');
+
+        const daemon = await startMissionDaemon({
+            socketPath: path.join(runtimeRoot, 'daemon.sock'),
+            surfacePath: workspaceRoot
+        });
+
+        try {
+            await expect(waitForChildExit(staleProcess)).resolves.toBe(true);
+            await expect(fs.readFile(getDaemonLockPath(), 'utf8')).resolves.toContain(`"processId": ${String(process.pid)}`);
+        } finally {
+            await daemon.dispose();
+            terminateChild(staleProcess);
+            hydrateDaemonMissions.mockRestore();
+            restoreRuntimeDirectory(previousRuntimeDirectory);
+            await fs.rm(runtimeRoot, { recursive: true, force: true });
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
     it('returns a mission terminal snapshot for mission entity ensure requests', async () => {
         const context = createMissionTerminalContext();
         const result = await executeEntityCommandInDaemon({
@@ -140,6 +175,35 @@ describe('minimal source daemon request handling', () => {
         });
     });
 
+    it('starts and stops the daemon-owned MCP signal server with daemon lifecycle', async () => {
+        const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-mcp-workspace-'));
+        const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-mcp-runtime-'));
+        const previousRuntimeDirectory = process.env['XDG_RUNTIME_DIR'];
+        process.env['XDG_RUNTIME_DIR'] = runtimeRoot;
+        const hydrateDaemonMissions = vi.spyOn(MissionRegistry.prototype, 'hydrateDaemonMissions').mockResolvedValue(undefined);
+        const startSpy = vi.spyOn(MissionMcpSignalServer.prototype, 'start');
+        const stopSpy = vi.spyOn(MissionMcpSignalServer.prototype, 'stop');
+
+        const daemon = await startMissionDaemon({
+            socketPath: path.join(runtimeRoot, 'daemon.sock'),
+            surfacePath: workspaceRoot
+        });
+
+        try {
+            expect(startSpy).toHaveBeenCalledTimes(1);
+            expect(stopSpy).not.toHaveBeenCalled();
+        } finally {
+            await daemon.dispose();
+            expect(stopSpy).toHaveBeenCalledTimes(1);
+            startSpy.mockRestore();
+            stopSpy.mockRestore();
+            hydrateDaemonMissions.mockRestore();
+            restoreRuntimeDirectory(previousRuntimeDirectory);
+            await fs.rm(runtimeRoot, { recursive: true, force: true });
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
     function createMissionTerminalContext() {
         const mission = {
             ensureTerminal: vi.fn(async (payload: { missionId: string }) => ({
@@ -165,6 +229,36 @@ describe('minimal source daemon request handling', () => {
         };
     }
 });
+
+function spawnStaleDaemonProcess(): ChildProcess & { pid: number } {
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => undefined, 1000);'], {
+        stdio: 'ignore'
+    });
+    if (!child.pid) {
+        throw new Error('Failed to spawn stale daemon fixture process.');
+    }
+    return child as ChildProcess & { pid: number };
+}
+
+async function waitForChildExit(child: ChildProcess): Promise<boolean> {
+    if (child.exitCode !== null || child.signalCode !== null) {
+        return true;
+    }
+    return await new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => resolve(false), 3_000);
+        child.once('exit', () => {
+            clearTimeout(timer);
+            resolve(true);
+        });
+    });
+}
+
+function terminateChild(child: ChildProcess): void {
+    if (child.exitCode !== null || child.signalCode !== null) {
+        return;
+    }
+    child.kill('SIGKILL');
+}
 
 function restoreRuntimeDirectory(previousRuntimeDirectory: string | undefined): void {
     if (previousRuntimeDirectory === undefined) {

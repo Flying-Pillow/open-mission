@@ -1,12 +1,16 @@
 <script lang="ts">
     import AgentSessionCommandbar from "$lib/components/entities/AgentSession/AgentSessionCommandbar.svelte";
+    import { Button } from "$lib/components/ui/button/index.js";
     import type { AgentSession as AgentSessionEntity } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
     import Anser from "anser/lib/index.js";
     import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import { FitAddon } from "@xterm/addon-fit";
     import * as XtermModule from "@xterm/xterm";
     import { sanitizeBrowserHtml } from "$lib/client/runtime/html-sanitizer";
-    import type { AgentSessionTerminalSnapshotType } from "@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema";
+    import type {
+        AgentSessionCommandType,
+        AgentSessionTerminalSnapshotType,
+    } from "@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema";
     import {
         subscribeMissionSessionTerminalTransport,
         type SharedTerminalTransportSubscription,
@@ -72,11 +76,52 @@
     let pendingTerminalResponseFragment = "";
     let lastRenderedScreen = "";
     let pendingResize: { cols: number; rows: number } | null = null;
+    let promptText = $state("");
+    let selectedCommandType = $state<AgentSessionCommandType["type"] | "">("");
+    let commandReason = $state("");
+    let interactionPending = $state<"prompt" | "command" | null>(null);
+    let interactionError = $state<string | null>(null);
 
     const MAX_TERMINAL_SNAPSHOT_LENGTH = 40_000;
     type TerminalResizeEvent = { cols: number; rows: number };
 
     const canAttachTerminal = $derived(Boolean(session?.isTerminalBacked()));
+    const runtimeMessages = $derived(session?.runtimeMessages ?? []);
+    const canShowStructuredComposer = $derived(
+        Boolean(
+            session &&
+                session.interactionMode === "agent-message" &&
+                (session.canSendStructuredPrompt ||
+                    session.canSendStructuredCommand),
+        ),
+    );
+    const interactionModeLabel = $derived.by(() => {
+        switch (session?.interactionMode) {
+            case "pty-terminal":
+                return "terminal";
+            case "agent-message":
+                return "Agent message";
+            case "read-only":
+                return "Read only";
+            default:
+                return "Unknown";
+        }
+    });
+    const interactionSummary = $derived.by(() => {
+        if (!session) {
+            return null;
+        }
+        if (session.interactionMode === "pty-terminal") {
+            return "Mission is attached to the live PTY terminal for this session.";
+        }
+        if (session.interactionMode === "agent-message") {
+            return "Mission can continue this session through structured prompts and commands.";
+        }
+        return (
+            session.interactionReason ??
+            "This session is read-only and cannot accept follow-up input."
+        );
+    });
     const terminalSessionId = $derived(session?.sessionId ?? null);
     const mission = $derived(missionScope.mission);
     const activeRepository = $derived(missionScope.repository);
@@ -246,6 +291,98 @@
         }
         fitAddon?.fit();
     });
+
+    $effect(() => {
+        const nextCommandType = runtimeMessages[0]?.type;
+        if (runtimeMessages.length === 0) {
+            selectedCommandType = "";
+            return;
+        }
+        if (
+            !runtimeMessages.some(
+                (message) => message.type === selectedCommandType,
+            )
+        ) {
+            selectedCommandType =
+                (nextCommandType as
+                    | AgentSessionCommandType["type"]
+                    | undefined) ?? "";
+        }
+    });
+
+    $effect(() => {
+        refreshNonce;
+        interactionError = null;
+    });
+
+    async function submitStructuredPrompt(): Promise<void> {
+        if (
+            !session ||
+            !session.canSendStructuredPrompt ||
+            interactionPending !== null
+        ) {
+            return;
+        }
+
+        const text = promptText.trim();
+        if (!text) {
+            interactionError = "Prompt text is required.";
+            return;
+        }
+
+        interactionPending = "prompt";
+        interactionError = null;
+        try {
+            await session.sendPrompt({
+                source: "operator",
+                text,
+            });
+            promptText = "";
+            await onCommandExecuted();
+        } catch (submitError) {
+            interactionError =
+                submitError instanceof Error
+                    ? submitError.message
+                    : String(submitError);
+        } finally {
+            interactionPending = null;
+        }
+    }
+
+    async function submitStructuredCommand(): Promise<void> {
+        if (
+            !session ||
+            !session.canSendStructuredCommand ||
+            interactionPending !== null
+        ) {
+            return;
+        }
+
+        if (!selectedCommandType) {
+            interactionError = "Select a command to continue.";
+            return;
+        }
+
+        interactionPending = "command";
+        interactionError = null;
+        try {
+            await session.sendCommand({
+                type: selectedCommandType,
+                ...(commandReason.trim()
+                    ? { reason: commandReason.trim() }
+                    : {}),
+            });
+            commandReason = "";
+            await onCommandExecuted();
+        } catch (submitError) {
+            interactionError =
+                submitError instanceof Error
+                    ? submitError.message
+                    : String(submitError);
+        } finally {
+            interactionPending = null;
+        }
+    }
 
     async function flushPendingInput(): Promise<void> {
         if (!session || !canAttachTerminal || pendingInput.length === 0) {
@@ -507,12 +644,13 @@
                 </p>
             </div>
 
-            <div class="text-right text-xs text-muted-foreground">
+            <!-- <div class="text-right text-xs text-muted-foreground">
                 <p>{terminalStateLabel}</p>
                 {#if session}
                     <p class="mt-1">{session.lifecycleState}</p>
+                    <p class="mt-1">{interactionModeLabel}</p>
                 {/if}
-            </div>
+            </div> -->
 
             <AgentSessionCommandbar
                 {refreshNonce}
@@ -523,6 +661,9 @@
         {#if error}
             <p class="text-sm text-rose-600">{error}</p>
         {/if}
+        <!-- {#if interactionSummary}
+            <p class="text-xs text-muted-foreground">{interactionSummary}</p>
+        {/if} -->
     </header>
 
     <div class="flex-1 min-h-0">
@@ -536,8 +677,13 @@
             <div
                 class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
             >
-                This session is not terminal-backed, so Mission Control cannot
-                attach an interactive console.
+                {#if canShowStructuredComposer}
+                    Mission is not attached to a live PTY for this session. Use
+                    the structured input controls below to continue the run.
+                {:else}
+                    {session.interactionReason ??
+                        "This session is not terminal-backed, so Mission Control cannot attach an interactive console."}
+                {/if}
             </div>
         {:else if isPersistedTranscriptSnapshot}
             <div
@@ -560,6 +706,109 @@
             </div>
         {/if}
     </div>
+
+    {#if canShowStructuredComposer}
+        <section class="border-t border-border/60 px-3 py-3">
+            <div class="grid gap-4 lg:grid-cols-2">
+                {#if session?.canSendStructuredPrompt}
+                    <form
+                        class="space-y-2"
+                        onsubmit={(event) => {
+                            event.preventDefault();
+                            void submitStructuredPrompt();
+                        }}
+                    >
+                        <div>
+                            <h3 class="text-sm font-medium text-foreground">
+                                Prompt
+                            </h3>
+                            <p class="text-xs text-muted-foreground">
+                                Send a structured operator reply through Mission
+                                runtime APIs.
+                            </p>
+                        </div>
+                        <textarea
+                            bind:value={promptText}
+                            class="min-h-28 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
+                            placeholder="Explain what the agent should do next."
+                            disabled={interactionPending !== null}
+                        ></textarea>
+                        <Button
+                            type="submit"
+                            size="sm"
+                            disabled={interactionPending !== null ||
+                                promptText.trim().length === 0}
+                        >
+                            {interactionPending === "prompt"
+                                ? "Sending prompt..."
+                                : "Send prompt"}
+                        </Button>
+                    </form>
+                {/if}
+
+                {#if session?.canSendStructuredCommand}
+                    <form
+                        class="space-y-2"
+                        onsubmit={(event) => {
+                            event.preventDefault();
+                            void submitStructuredCommand();
+                        }}
+                    >
+                        <div>
+                            <h3 class="text-sm font-medium text-foreground">
+                                Command
+                            </h3>
+                            <p class="text-xs text-muted-foreground">
+                                Use Mission-owned runtime commands instead of
+                                terminal keystrokes.
+                            </p>
+                        </div>
+                        <label class="space-y-1 text-sm">
+                            <span class="text-xs text-muted-foreground">
+                                Command
+                            </span>
+                            <select
+                                bind:value={selectedCommandType}
+                                class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
+                                disabled={interactionPending !== null}
+                            >
+                                {#each runtimeMessages as message (message.type)}
+                                    <option value={message.type}>
+                                        {message.label}
+                                    </option>
+                                {/each}
+                            </select>
+                        </label>
+                        <label class="space-y-1 text-sm">
+                            <span class="text-xs text-muted-foreground">
+                                Reason
+                            </span>
+                            <textarea
+                                bind:value={commandReason}
+                                class="min-h-28 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
+                                placeholder="Optional context for the selected runtime command."
+                                disabled={interactionPending !== null}
+                            ></textarea>
+                        </label>
+                        <Button
+                            type="submit"
+                            size="sm"
+                            disabled={interactionPending !== null ||
+                                selectedCommandType.length === 0}
+                        >
+                            {interactionPending === "command"
+                                ? "Sending command..."
+                                : "Send command"}
+                        </Button>
+                    </form>
+                {/if}
+            </div>
+
+            {#if interactionError}
+                <p class="mt-3 text-sm text-rose-600">{interactionError}</p>
+            {/if}
+        </section>
+    {/if}
 </section>
 
 <style>

@@ -84,7 +84,7 @@
     const isEditableTextArtifact = $derived(
         isArtifactTextEditable(artifactBodyLocation),
     );
-    const panelLabel = $derived(artifact?.label ?? "Resolved artifact");
+    const panelLabel = $derived(artifact?.label ?? "");
     const hasUnsavedChanges = $derived(
         id === loadedId && content !== originalContent,
     );

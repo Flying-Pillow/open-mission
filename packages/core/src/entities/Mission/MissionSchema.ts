@@ -5,7 +5,6 @@ import type { RepositorySettingsType } from '../Repository/RepositorySchema.js';
 import type {
     MissionGateProjection,
     MissionLifecycleState,
-    MissionPanicState,
     MissionPauseState,
     MissionStageDerivedState,
     MissionStageRuntimeProjection,
@@ -52,8 +51,6 @@ export const missionEntityName = 'Mission' as const;
 export const MissionCommandIds = {
     pause: 'mission.pause',
     resume: 'mission.resume',
-    panic: 'mission.panic',
-    clearPanic: 'mission.clearPanic',
     restartQueue: 'mission.restartQueue',
     deliver: 'mission.deliver'
 } as const;
@@ -61,23 +58,23 @@ export const MissionCommandIds = {
 export const MissionCommandIdSchema = z.enum([
     MissionCommandIds.pause,
     MissionCommandIds.resume,
-    MissionCommandIds.panic,
-    MissionCommandIds.clearPanic,
     MissionCommandIds.restartQueue,
     MissionCommandIds.deliver
 ]);
 
 export const MissionEntityTypeSchema = z.enum(['feature', 'fix', 'docs', 'refactor', 'task']);
 export const MISSION_AGENT_RUNNER_IDS = [
-	'copilot-cli',
-	'claude-code',
-	'pi',
-	'codex',
-	'opencode'
+    'copilot-cli',
+    'claude-code',
+    'pi',
+    'codex',
+    'opencode'
 ] as const;
 export const MissionAgentRunnerSchema = z.enum(MISSION_AGENT_RUNNER_IDS);
 export type MissionAgentRunnerType = z.infer<typeof MissionAgentRunnerSchema>;
 export const MissionDefaultAgentModeSchema = z.enum(['interactive', 'autonomous']);
+export const MissionReasoningEffortSchema = z.enum(['low', 'medium', 'high', 'xhigh']);
+export type MissionReasoningEffortType = z.infer<typeof MissionReasoningEffortSchema>;
 
 export const MissionCommandInvocationSchema = z.object({
     commandId: MissionCommandIdSchema,
@@ -384,7 +381,6 @@ export type OperatorStatus = {
     workflow?: {
         lifecycle: MissionLifecycleState;
         pause: MissionPauseState;
-        panic: MissionPanicState;
         currentStageId?: MissionStageId;
         configuration: MissionWorkflowConfigurationSnapshot;
         stages: MissionStageRuntimeProjection[];

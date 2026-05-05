@@ -37,36 +37,6 @@
 
         return repositories;
     });
-    let localRepositoryRefreshRequested = $state(false);
-
-    onMount(() => {
-        if (localRepositoryRefreshRequested) {
-            return;
-        }
-
-        localRepositoryRefreshRequested = true;
-        const refreshHandle = window.setTimeout(() => {
-            if (repositoryFilter !== "external") {
-                void appContext.application
-                    .loadRepositories({ force: true })
-                    .catch(() => undefined);
-            }
-
-            if (repositoryFilter !== "local") {
-                void appContext.application
-                    .loadGitHubRepositories({ force: true })
-                    .catch(() => undefined);
-                void appContext.application
-                    .loadRepositoryClassCommands()
-                    .catch(() => undefined);
-            }
-        }, 0);
-
-        return () => {
-            window.clearTimeout(refreshHandle);
-        };
-    });
-
     const resolvedHeading = $derived(
         heading ??
             (repositoryFilter === "local"
@@ -112,6 +82,20 @@
     async function refreshRepositories(): Promise<void> {
         await appContext.application.loadRepositories({ force: true });
     }
+
+    onMount(() => {
+        if (repositoryFilter !== "external") {
+            void appContext.application
+                .loadRepositories()
+                .catch(() => undefined);
+        }
+
+        if (repositoryFilter !== "local") {
+            void appContext.application
+                .loadGitHubRepositories()
+                .catch(() => undefined);
+        }
+    });
 </script>
 
 <section

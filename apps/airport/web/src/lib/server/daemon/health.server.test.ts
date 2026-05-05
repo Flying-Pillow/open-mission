@@ -33,12 +33,11 @@ describe('getDaemonRuntimeState', () => {
 
         await expect(
             getDaemonRuntimeState({
-                surfacePath: '/mission',
-                allowStart: true
+                surfacePath: '/mission'
             })
         ).resolves.toMatchObject({
             running: true,
-            startedByHook: false
+            message: 'Mission daemon connected.'
         });
 
         vi.setSystemTime(new Date('2026-05-04T10:00:03.100Z'));
@@ -48,7 +47,6 @@ describe('getDaemonRuntimeState', () => {
 
         const pendingStatePromise = getDaemonRuntimeState({
             surfacePath: '/mission',
-            allowStart: true,
             timeoutMs: 10
         });
 
@@ -56,7 +54,62 @@ describe('getDaemonRuntimeState', () => {
 
         await expect(pendingStatePromise).resolves.toMatchObject({
             running: true,
-            startedByHook: false
+            message: 'Mission daemon connected.'
+        });
+    });
+
+    it('reports daemon unavailable without attempting process recovery', async () => {
+        openDaemonConnection.mockRejectedValueOnce(new Error('daemon socket closed'));
+
+        const { getDaemonRuntimeState } = await import('./health.server');
+
+        await expect(
+            getDaemonRuntimeState({
+                surfacePath: '/mission'
+            })
+        ).resolves.toEqual({
+            running: false,
+            message: 'Mission daemon is unavailable: daemon socket closed',
+            lastCheckedAt: '2026-05-04T10:00:00.000Z'
+        });
+        expect(openDaemonConnection).toHaveBeenCalledTimes(1);
+        expect(openDaemonConnection).toHaveBeenCalledWith({
+            surfacePath: '/mission'
+        });
+        expect(clearSharedDaemonClient).toHaveBeenCalledWith('/mission', undefined);
+    });
+
+    it('starts a fresh probe when the previous daemon health check is stale and still pending', async () => {
+        openDaemonConnection.mockImplementationOnce(
+            () => new Promise(() => { })
+        );
+
+        const { getDaemonRuntimeState } = await import('./health.server');
+
+        const pendingStatePromise = getDaemonRuntimeState({
+            surfacePath: '/mission',
+            timeoutMs: 10
+        });
+
+        await vi.advanceTimersByTimeAsync(10);
+        await expect(pendingStatePromise).resolves.toMatchObject({
+            running: false,
+            message: 'Mission daemon availability check is still in progress.'
+        });
+
+        vi.setSystemTime(new Date('2026-05-04T10:00:05.100Z'));
+        openDaemonConnection.mockResolvedValueOnce({
+            client: {},
+            dispose: vi.fn()
+        });
+
+        await expect(
+            getDaemonRuntimeState({
+                surfacePath: '/mission'
+            })
+        ).resolves.toMatchObject({
+            running: true,
+            message: 'Mission daemon connected.'
         });
     });
 });

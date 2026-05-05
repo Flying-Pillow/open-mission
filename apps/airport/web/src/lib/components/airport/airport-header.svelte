@@ -5,6 +5,8 @@
     import * as Sidebar from "$lib/components/ui/sidebar/index.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
 
+    let { daemonLogsOpen = $bindable(false) } = $props();
+
     const app = getAppContext();
 
     const missionRepositoryUrl = "https://github.com/Flying-Pillow/mission";
@@ -34,19 +36,22 @@
             <h1 class="truncate text-sm font-semibold sm:text-base">Mission</h1>
         </div>
         <div class="ms-auto flex items-center gap-2">
-            <div class="hidden items-center gap-2 lg:flex">
-                <span
-                    class={`inline-flex size-9 items-center justify-center rounded-full ${daemonBadge.className}`}
-                    aria-label={daemonBadge.label}
-                    title={daemonBadge.detail}
-                >
-                    {#if app.daemon.running}
-                        <Icon icon="lucide:plug" class="size-4" />
-                    {:else}
-                        <Icon icon="lucide:unplug" class="size-4" />
-                    {/if}
-                </span>
-            </div>
+            <button
+                type="button"
+                class={`inline-flex size-9 items-center justify-center rounded-full border border-transparent transition-colors hover:border-border hover:bg-muted/60 ${daemonLogsOpen ? "bg-muted/80" : ""} ${daemonBadge.className}`}
+                aria-pressed={daemonLogsOpen}
+                aria-label={`${daemonBadge.label}. ${daemonLogsOpen ? "Hide" : "Show"} daemon logs`}
+                title={`${daemonBadge.detail}. ${daemonLogsOpen ? "Hide" : "Show"} daemon logs.`}
+                onclick={() => {
+                    daemonLogsOpen = !daemonLogsOpen;
+                }}
+            >
+                {#if app.daemon.running}
+                    <Icon icon="lucide:plug" class="size-4" />
+                {:else}
+                    <Icon icon="lucide:unplug" class="size-4" />
+                {/if}
+            </button>
             <a
                 href={missionRepositoryUrl}
                 target="_blank"

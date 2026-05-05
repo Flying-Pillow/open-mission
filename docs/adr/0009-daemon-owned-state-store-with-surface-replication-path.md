@@ -1,4 +1,16 @@
-# Daemon-Owned State Store With Surface Replication Path
+---
+layout: default
+title: Daemon-Owned State Store With Surface Replication Path
+parent: Architecture Decisions
+nav_order: 9
+status: accepted
+date: 2026-05-04
+decision_area: state-store
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Mission will move toward a daemon-owned Mission state store as the canonical owner of Entity storage records, Mission runtime data, Agent session context, Mission control placement overrides, and other durable Mission coordination state. The first intended adapter is a daemon in-memory datastore using embedded SurrealDB with SurrealMX-backed memory as canonical working state.
 

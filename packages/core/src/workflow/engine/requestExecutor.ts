@@ -2,7 +2,8 @@ import type { MissionDescriptor, MissionTaskState } from '../../entities/Mission
 import type { MissionStageId } from '../manifest.js';
 import {
 	MissionAgentRunnerSchema,
-	type MissionDefaultAgentModeType
+	type MissionDefaultAgentModeType,
+	type MissionReasoningEffortType
 } from '../../entities/Mission/MissionSchema.js';
 import type { AgentSessionTerminalHandleType } from '../../entities/AgentSession/AgentSessionSchema.js';
 import { DEFAULT_AGENT_RUNNER_ID } from '../../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
@@ -40,6 +41,7 @@ import type {
 	AgentSessionReference,
 	AgentSessionSnapshot
 } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
+import type { AgentSessionSignalDecision } from '../../daemon/runtime/agent/signals/AgentSessionSignal.js';
 
 type RuntimeSessionHandle = {
 	session: AgentSession;
@@ -54,6 +56,7 @@ export interface MissionWorkflowRequestExecutorOptions {
 	instructionsPath?: string;
 	skillsPath?: string;
 	defaultModel?: string;
+	defaultReasoningEffort?: MissionReasoningEffortType;
 	defaultMode?: MissionDefaultAgentModeType;
 	workingDirectoryResolver?: (task: MissionTaskRuntimeState, descriptor: MissionDescriptor) => string;
 }
@@ -64,11 +67,13 @@ export class MissionWorkflowRequestExecutor {
 	private readonly sessionTaskIds = new Map<AgentSessionId, string>();
 	private readonly runtimeListeners = new Set<RuntimeEventListener>();
 	private readonly defaultModel: string | undefined;
+	private readonly defaultReasoningEffort: string | undefined;
 	private readonly defaultMode: MissionDefaultAgentModeType | undefined;
 	private readonly workingDirectoryResolver: (task: MissionTaskRuntimeState, descriptor: MissionDescriptor) => string;
 
 	public constructor(private readonly options: MissionWorkflowRequestExecutorOptions) {
 		this.defaultModel = options.defaultModel;
+		this.defaultReasoningEffort = options.defaultReasoningEffort;
 		this.defaultMode = options.defaultMode;
 		this.workingDirectoryResolver =
 			options.workingDirectoryResolver ?? ((_task, descriptor) => descriptor.missionDir);
@@ -186,6 +191,25 @@ export class MissionWorkflowRequestExecutor {
 							task,
 							input.descriptor
 						);
+						const metadata = {
+							...(typeof request.payload['terminalSessionName'] === 'string' && request.payload['terminalSessionName'].trim()
+								? { terminalSessionName: request.payload['terminalSessionName'].trim() }
+								: {}),
+							...(typeof request.payload['model'] === 'string' && request.payload['model'].trim()
+								? { model: request.payload['model'].trim() }
+								: typeof task.model === 'string' && task.model.trim()
+									? { model: task.model.trim() }
+									: this.defaultModel
+										? { model: this.defaultModel }
+										: {}),
+							...(typeof request.payload['reasoningEffort'] === 'string' && request.payload['reasoningEffort'].trim()
+								? { reasoningEffort: request.payload['reasoningEffort'].trim() }
+								: typeof task.reasoningEffort === 'string' && task.reasoningEffort.trim()
+									? { reasoningEffort: task.reasoningEffort.trim() }
+									: this.defaultReasoningEffort
+										? { reasoningEffort: this.defaultReasoningEffort }
+										: {})
+						};
 						const launchConfig: AgentLaunchConfig = {
 							missionId: input.missionId,
 							workingDirectory:
@@ -215,12 +239,13 @@ export class MissionWorkflowRequestExecutor {
 								metadata: {
 									stageId: task.stageId,
 									...(this.defaultModel ? { defaultModel: this.defaultModel } : {}),
+									...(this.defaultReasoningEffort
+										? { defaultReasoningEffort: this.defaultReasoningEffort }
+										: {}),
 									...(this.defaultMode ? { defaultMode: this.defaultMode } : {})
 								}
 							},
-							...(typeof request.payload['terminalSessionName'] === 'string' && request.payload['terminalSessionName'].trim()
-								? { metadata: { terminalSessionName: request.payload['terminalSessionName'].trim() } }
-								: {})
+							...(Object.keys(metadata).length > 0 ? { metadata } : {})
 						};
 						const snapshot = await this.startSession(launchConfig);
 						events.push(this.createSessionStartedEvent(request.requestId, snapshot, task.taskId));
@@ -348,6 +373,26 @@ export class MissionWorkflowRequestExecutor {
 	public getRuntimeSession(sessionId: AgentSessionId): AgentSessionSnapshot | undefined {
 		const handle = this.runtimeSessions.get(sessionId);
 		return handle ? this.readRuntimeSessionSnapshot(sessionId, handle) : undefined;
+	}
+
+	public applyRuntimeSessionSignalDecision(
+		sessionId: AgentSessionId,
+		decision: Exclude<AgentSessionSignalDecision, { action: 'reject' }>
+	): AgentSessionSnapshot | undefined {
+		const handle = this.runtimeSessions.get(sessionId);
+		if (!handle) {
+			return undefined;
+		}
+		const signalAwareSession = handle.session as AgentSession & {
+			applySignalDecision?: (
+				nextDecision: Exclude<AgentSessionSignalDecision, { action: 'reject' }>
+			) => AgentSessionSnapshot | void;
+		};
+		if (!signalAwareSession.applySignalDecision) {
+			return undefined;
+		}
+		const applied = signalAwareSession.applySignalDecision(decision);
+		return applied ?? signalAwareSession.getSnapshot();
 	}
 
 	public async cancelRuntimeSession(

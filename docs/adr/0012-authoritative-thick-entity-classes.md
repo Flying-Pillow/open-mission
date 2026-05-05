@@ -1,4 +1,16 @@
-# Authoritative Thick Entity Classes
+---
+layout: default
+title: Authoritative Thick Entity Classes
+parent: Architecture Decisions
+nav_order: 12
+status: accepted
+date: 2026-05-04
+decision_area: entity-model
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Mission Entities are authoritative domain classes, not passive records paired with outboard procedural handlers. The abstract Entity base owns shared mechanics such as clone-protected data access, optional UI state, method command ids, availability naming, and remote method dispatch. A concrete Entity class owns its own identity, invariants, behavior, and remote method targets.
 

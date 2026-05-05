@@ -15,8 +15,7 @@ import type { ActiveMissionOutline } from '$lib/client/context/app-context.svelt
 import { Repository } from '$lib/components/entities/Repository/Repository.svelte.js';
 import {
     getRepositoryDisplayDescription,
-    getRepositoryDisplayName,
-    toRepositoryStorage
+    getRepositoryDisplayName
 } from '$lib/components/entities/Repository/Repository.svelte.js';
 import {
     Mission,
@@ -64,6 +63,7 @@ export class AirportApplication {
     private readonly repositories = new Map<string, Repository>();
     private readonly missionStores = new Map<string, EntityRuntimeStore<string, MissionSnapshotType, Mission>>();
     private repositoryVersion = $state(0);
+    private repositorySummaries = $state<SidebarRepositoryData[]>([]);
     private applicationEventSubscription: RuntimeSubscription | undefined;
     private activeMissionState = $state<Mission | undefined>();
     #activeRouteKey: string | undefined;
@@ -102,21 +102,11 @@ export class AirportApplication {
 
         this.#isInitialized = true;
         this.applicationEventSubscription ??= this.observeApplicationEvents();
-
-        try {
-            await this.loadRepositories();
-        } catch (error) {
-            this.#isInitialized = false;
-            throw error;
-        }
     }
 
     public get repositoriesState(): SidebarRepositoryData[] {
         this.repositoryVersion;
-        return [...this.repositories.values()].map((repository) => ({
-            ...toRepositoryStorage(repository.data),
-            missions: repository.missions
-        }));
+        return structuredClone($state.snapshot(this.repositorySummaries));
     }
 
     public get repositoryListItems(): AirportRepositoryListItem[] {
@@ -172,6 +162,7 @@ export class AirportApplication {
         const existing = this.repositories.get(id);
         if (existing) {
             existing.applyData(data);
+            this.syncRepositorySummaries();
             this.repositoryVersion += 1;
             return existing;
         }
@@ -180,6 +171,7 @@ export class AirportApplication {
             loadData: (input) => this.loadRepositoryData(input)
         });
         this.repositories.set(id, created);
+        this.syncRepositorySummaries();
         this.repositoryVersion += 1;
         return created;
     }
@@ -195,6 +187,7 @@ export class AirportApplication {
             this.setActiveMissionOutline(undefined);
             this.setActiveMissionSelectedNodeId(undefined);
         }
+        this.syncRepositorySummaries();
         this.repositoryVersion += 1;
     }
 
@@ -210,6 +203,7 @@ export class AirportApplication {
         for (const [repositoryId, repository] of nextRepositories.entries()) {
             this.repositories.set(repositoryId, repository);
         }
+        this.syncRepositorySummaries();
         this.repositoryVersion += 1;
 
         return repositories;
@@ -248,11 +242,20 @@ export class AirportApplication {
         for (const [repositoryId, repository] of nextRepositories.entries()) {
             this.repositories.set(repositoryId, repository);
         }
+        this.syncRepositorySummaries();
         this.repositoryVersion += 1;
+    }
+
+    private syncRepositorySummaries(): void {
+        this.repositorySummaries = [...this.repositories.values()].map((repository) => ({
+            ...repository.toData(),
+            missions: structuredClone($state.snapshot(repository.missions))
+        }));
     }
 
     public async loadRepositories(input: {
         force?: boolean;
+        refreshDetails?: boolean;
     } = {}): Promise<Repository[]> {
         if (!input.force) {
             if (this.#repositoryLoadPromise) {
@@ -267,8 +270,10 @@ export class AirportApplication {
         const loadPromise = Repository.find({ run: true })
             .then(async (repositories) => {
                 await Promise.all(repositories.map((repository) => this.loadMissionCatalog(repository)));
-                void Promise.all(repositories.map((repository) => repository.refreshCommands().catch(() => undefined)));
-                void Promise.all(repositories.map((repository) => repository.refreshSyncStatus().catch(() => undefined)));
+                if (input.refreshDetails) {
+                    void Promise.all(repositories.map((repository) => repository.refreshCommands().catch(() => undefined)));
+                    void Promise.all(repositories.map((repository) => repository.refreshSyncStatus().catch(() => undefined)));
+                }
                 return repositories;
             })
             .finally(() => {
@@ -361,26 +366,51 @@ export class AirportApplication {
         return await loadPromise;
     }
 
-    public syncPageState(input: {
-        pathname: string;
-        repositoryId?: string;
-        missionId?: string;
-    }): void {
-        const pathname = input.pathname.trim() || '/';
-        const repositoryId = input.repositoryId?.trim() || undefined;
-        const missionId = input.missionId?.trim() || undefined;
-        const routeKey = `${pathname}:${repositoryId ?? ''}:${missionId ?? ''}`;
+    public syncAirportSelection(input:
+        | { kind: 'home' }
+        | {
+            kind: 'repository';
+            repositoryId: string;
+        }
+        | {
+            kind: 'mission';
+            repositoryId: string;
+            missionId: string;
+        }
+    ): void {
+        const routeKey = input.kind === 'home'
+            ? 'airport:home'
+            : input.kind === 'repository'
+                ? `airport:repository:${input.repositoryId.trim()}`
+                : `airport:mission:${input.repositoryId.trim()}:${input.missionId.trim()}`;
         if (routeKey === this.#activeRouteKey) {
             return;
         }
 
         this.#activeRouteKey = routeKey;
         const requestId = ++this.#routeSyncRequestId;
-        void this.applyPageState({
-            pathname,
-            repositoryId,
-            missionId
+        if (input.kind === 'home') {
+            void this.applyAirportHomeState(requestId, routeKey);
+            return;
+        }
+
+        if (input.kind === 'repository') {
+            void this.applyRepositoryPageState({
+                repositoryId: input.repositoryId.trim()
+            }, requestId, routeKey);
+            return;
+        }
+
+        void this.applyMissionPageState({
+            repositoryId: input.repositoryId.trim(),
+            missionId: input.missionId.trim()
         }, requestId, routeKey);
+    }
+
+    public clearAirportSelection(): void {
+        this.#activeRouteKey = undefined;
+        this.#routeSyncRequestId += 1;
+        this.resetActiveRouteState();
     }
 
     public async refreshMission(input: {
@@ -394,6 +424,7 @@ export class AirportApplication {
         missionId: string;
         repositoryRootPath?: string;
         onUpdate?: (mission: Mission, event: MissionRuntimeEventEnvelopeType) => void;
+        onConnected?: (mission: Mission) => void;
         onError?: (error: Error) => void;
     }): RuntimeSubscription {
         const missionId = input.missionId.trim();
@@ -408,6 +439,16 @@ export class AirportApplication {
         }
 
         const eventSource = (this.input.createEventSource ?? ((url) => new EventSource(url)))(`/api/runtime/events?${query.toString()}`);
+        const handleConnected = () => {
+            void this.refreshMission({
+                missionId,
+                ...(repositoryRootPath ? { repositoryRootPath } : {})
+            }).then((mission) => {
+                input.onConnected?.(mission);
+            }).catch((error) => {
+                input.onError?.(error instanceof Error ? error : new Error(String(error)));
+            });
+        };
         const handleRuntimeEvent = (event: Event) => {
             const messageEvent = event as MessageEvent<string>;
             void (async () => {
@@ -426,11 +467,13 @@ export class AirportApplication {
             input.onError?.(new Error(`Mission runtime event stream failed for '${missionId}'.`));
         };
 
+        eventSource.addEventListener('connected', handleConnected as EventListener);
         eventSource.addEventListener('runtime', handleRuntimeEvent as EventListener);
         eventSource.addEventListener('error', handleError as EventListener);
 
         return {
             dispose: () => {
+                eventSource.removeEventListener('connected', handleConnected as EventListener);
                 eventSource.removeEventListener('runtime', handleRuntimeEvent as EventListener);
                 eventSource.removeEventListener('error', handleError as EventListener);
                 eventSource.close();
@@ -440,6 +483,7 @@ export class AirportApplication {
 
     private observeApplicationEvents(): RuntimeSubscription {
         const eventSource = (this.input.createEventSource ?? ((url) => new EventSource(url)))(`/api/runtime/events?scope=application`);
+        const handleConnected = () => undefined;
         const handleEntityEvent = (event: Event) => {
             const messageEvent = event as MessageEvent<string>;
             try {
@@ -450,8 +494,10 @@ export class AirportApplication {
                 }
                 if (payload.type === 'entity.changed' && payload.entity === 'Repository' && payload.id) {
                     const repository = this.repositories.get(payload.id);
-                    void repository?.refreshSyncStatus().catch(() => undefined);
-                    void repository?.refreshCommands().catch(() => undefined);
+                    if (repository && this.activeRepositoryId === payload.id) {
+                        void repository.refreshSyncStatus().catch(() => undefined);
+                        void repository.refreshCommands().catch(() => undefined);
+                    }
                     void this.loadRepositories({ force: true }).catch(() => undefined);
                 }
             } catch {
@@ -460,14 +506,16 @@ export class AirportApplication {
         };
 
         const handleError = () => {
-            void this.loadRepositories({ force: true }).catch(() => undefined);
+            // EventSource already reconnects; forcing repository reads here creates a retry storm while the daemon is unavailable.
         };
 
+        eventSource.addEventListener('connected', handleConnected as EventListener);
         eventSource.addEventListener('entity', handleEntityEvent as EventListener);
         eventSource.addEventListener('error', handleError as EventListener);
 
         return {
             dispose: () => {
+                eventSource.removeEventListener('connected', handleConnected as EventListener);
                 eventSource.removeEventListener('entity', handleEntityEvent as EventListener);
                 eventSource.removeEventListener('error', handleError as EventListener);
                 eventSource.close();
@@ -495,30 +543,27 @@ export class AirportApplication {
         this.activeMissionSelectedNodeId = nodeId;
     }
 
-    private async applyPageState(input: {
-        pathname: string;
-        repositoryId?: string;
-        missionId?: string;
-    }, requestId: number, routeKey: string): Promise<void> {
-        if (!input.pathname.startsWith('/airport')) {
-            if (!this.isCurrentRouteSync(requestId, routeKey)) {
-                return;
-            }
-
-            this.resetActiveRouteState();
-            return;
-        }
-
+    private async applyAirportHomeState(requestId: number, routeKey: string): Promise<void> {
         await this.initialize();
         if (!this.isCurrentRouteSync(requestId, routeKey)) {
             return;
         }
 
-        if (!input.repositoryId) {
-            this.resetActiveRouteState();
-            void this.loadRepositories({ force: true }).catch(() => undefined);
-            void this.loadGitHubRepositories({ force: true }).catch(() => undefined);
-            return;
+        this.resetActiveRouteState();
+        await Promise.allSettled([
+            this.loadRepositories({ force: true, refreshDetails: true }),
+            this.loadGitHubRepositories({ force: true }),
+            this.loadRepositoryClassCommands({ force: true })
+        ]);
+    }
+
+    private async applyRepositoryPageState(input: {
+        repositoryId: string;
+        skipMissionCatalogLoad?: boolean;
+    }, requestId: number, routeKey: string): Promise<boolean> {
+        await this.initialize();
+        if (!this.isCurrentRouteSync(requestId, routeKey)) {
+            return false;
         }
 
         this.activeRepositoryLoading = true;
@@ -534,16 +579,16 @@ export class AirportApplication {
             repository = await this.loadActiveRepository(input.repositoryId);
         } catch (error) {
             if (!this.isCurrentRouteSync(requestId, routeKey)) {
-                return;
+                return false;
             }
 
             this.resetActiveRouteState();
             this.activeRepositoryError = error instanceof Error ? error.message : String(error);
-            return;
+            return false;
         }
 
         if (!this.isCurrentRouteSync(requestId, routeKey)) {
-            return;
+            return false;
         }
 
         this.setActiveRepositorySelection({
@@ -552,20 +597,51 @@ export class AirportApplication {
         });
         this.activeRepositoryLoading = false;
 
-        if (!input.missionId) {
-            repository.applyData({
-                ...repository.toData()
-            });
-            this.activeMissionState = undefined;
-            this.activeMissionLoading = false;
+        if (!input.skipMissionCatalogLoad) {
+            void repository.refreshCommands().catch(() => undefined);
+            void repository.refreshSyncStatus().catch(() => undefined);
+        }
+
+        if (!input.skipMissionCatalogLoad && repository.missions.length === 0) {
+            try {
+                await this.loadMissionCatalog(repository);
+            } catch (error) {
+                if (!this.isCurrentRouteSync(requestId, routeKey)) {
+                    return false;
+                }
+
+                this.activeMissionError = error instanceof Error ? error.message : String(error);
+            }
+        }
+
+        repository.applyData({
+            ...repository.toData()
+        });
+        this.activeMissionState = undefined;
+        this.activeMissionLoading = false;
+        if (!this.activeMissionError) {
             this.activeMissionError = undefined;
+        }
+        return true;
+    }
+
+    private async applyMissionPageState(input: {
+        repositoryId: string;
+        missionId: string;
+    }, requestId: number, routeKey: string): Promise<void> {
+        const repositoryLoaded = await this.applyRepositoryPageState({
+            repositoryId: input.repositoryId,
+            skipMissionCatalogLoad: true
+        }, requestId, routeKey);
+        if (!repositoryLoaded || !this.isCurrentRouteSync(requestId, routeKey)) {
             return;
         }
 
         this.activeMissionLoading = true;
         try {
-            if (repository.missions.length === 0) {
-                await this.loadMissionCatalog(repository);
+            const repository = this.activeRepository;
+            if (!repository) {
+                throw new Error(`Repository '${input.repositoryId}' is unavailable.`);
             }
             const missionCatalogEntry = repository.missions.find((mission) => mission.missionId === input.missionId);
             const missionRepositoryRootPath = missionCatalogEntry?.repositoryRootPath ?? repository.data.repositoryRootPath;
@@ -573,7 +649,21 @@ export class AirportApplication {
                 missionId: input.missionId,
                 repositoryRootPath: missionRepositoryRootPath
             });
+            mission.setRouteState({
+                worktreePath: missionRepositoryRootPath
+            });
+            this.activeMissionState = mission;
+            if (!this.isCurrentRouteSync(requestId, routeKey)) {
+                return;
+            }
+
+            this.setActiveMissionSelection(mission.missionId);
+            this.activeMissionError = undefined;
             const controlViewSnapshot = await mission.getControlViewSnapshot();
+            if (!this.isCurrentRouteSync(requestId, routeKey)) {
+                return;
+            }
+
             mission.setRouteState({
                 controlViewSnapshot,
                 worktreePath: missionRepositoryRootPath
@@ -583,7 +673,6 @@ export class AirportApplication {
                 return;
             }
 
-            this.setActiveMissionSelection(mission.missionId);
             this.activeMissionError = undefined;
         } catch (error) {
             if (!this.isCurrentRouteSync(requestId, routeKey)) {

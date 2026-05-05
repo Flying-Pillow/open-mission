@@ -24,7 +24,7 @@
         onCommandExecuted: () => Promise<void>;
     } = $props();
 
-    const panelLabel = $derived(artifact?.label ?? "Resolved artifact");
+    const panelLabel = $derived(artifact?.label ?? "");
     const artifactBodyLocation = $derived(artifact?.bodyLocationLabel);
     const viewerKind = $derived(
         resolveArtifactViewerKind(artifactBodyLocation),

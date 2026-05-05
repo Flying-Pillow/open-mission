@@ -13,11 +13,6 @@
         "enabled": true,
         "pauseOnMissionStart": false
       },
-      "panic": {
-        "terminateSessions": true,
-        "clearLaunchQueue": true,
-        "haltMission": true
-      },
       "execution": {
         "maxParallelTasks": 1,
         "maxParallelSessions": 1
@@ -151,12 +146,6 @@
     "activeStageId": "audit",
     "pause": {
       "paused": false
-    },
-    "panic": {
-      "active": false,
-      "terminateSessions": true,
-      "clearLaunchQueue": true,
-      "haltMission": true
     },
     "stages": [
       {
