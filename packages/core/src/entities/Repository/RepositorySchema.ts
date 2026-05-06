@@ -3,11 +3,13 @@ import { WorkflowDefinitionSchema } from '../../workflow/WorkflowSchema.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
 import { parsePersistedWorkflowSettings } from '../../settings/validation.js';
 import {
-    MissionAgentRunnerSchema,
     MissionDefaultAgentModeSchema,
     MissionReasoningEffortSchema,
     MissionEntityTypeSchema
 } from '../Mission/MissionSchema.js';
+import {
+    AgentIdSchema
+} from '../Agent/AgentSchema.js';
 import {
     EntityCommandAcknowledgementSchema,
     EntityIdSchema
@@ -25,20 +27,21 @@ export const repositoryEntityName = 'Repository' as const;
 export const RepositoryPlatformKindSchema = z.enum(['github']);
 
 const defaultMissionsRoot = 'missions';
+const defaultAgentId = 'copilot-cli';
 
-export const RepositoryAgentRunnerModelOptionSchema = z.object({
+export const RepositoryAgentAdapterModelOptionSchema = z.object({
     value: z.string().trim().min(1),
     label: z.string().trim().min(1)
 }).strict();
 
-export const RepositoryAgentRunnerSettingsSchema = z.object({
-    id: MissionAgentRunnerSchema,
+export const RepositoryAgentAdapterSettingsSchema = z.object({
+    id: AgentIdSchema,
     label: z.string().trim().min(1),
-    models: z.array(RepositoryAgentRunnerModelOptionSchema),
+    models: z.array(RepositoryAgentAdapterModelOptionSchema),
     reasoningEfforts: z.array(MissionReasoningEffortSchema)
 }).strict();
 
-const defaultAgentRunnerSettings = [
+const defaultAgentAdapterSettings = [
     {
         id: 'copilot-cli',
         label: 'Copilot CLI',
@@ -82,7 +85,7 @@ const defaultAgentRunnerSettings = [
         ],
         reasoningEfforts: []
     }
-] as const satisfies readonly RepositoryAgentRunnerSettingsType[];
+] as const satisfies readonly RepositoryAgentAdapterSettingsType[];
 
 export const RepositoryPlatformRepositorySchema = z.object({
     platform: RepositoryPlatformKindSchema,
@@ -124,8 +127,8 @@ export const RepositorySettingsSchema = z.object({
     trackingProvider: z.literal('github'),
     instructionsPath: z.string().trim().min(1),
     skillsPath: z.string().trim().min(1),
-    agentRunner: MissionAgentRunnerSchema,
-    agentRunners: z.array(RepositoryAgentRunnerSettingsSchema).default(() => createDefaultRepositoryAgentRunnerSettings()),
+    agentAdapter: AgentIdSchema,
+    agentAdapters: z.array(RepositoryAgentAdapterSettingsSchema).default(() => createDefaultRepositoryAgentAdapterSettings()),
     defaultAgentMode: MissionDefaultAgentModeSchema.optional(),
     defaultModel: z.string().trim().min(1).optional(),
     defaultReasoningEffort: MissionReasoningEffortSchema.optional()
@@ -136,12 +139,12 @@ const defaultRepositorySettings: RepositorySettingsType = {
     trackingProvider: 'github',
     instructionsPath: '.agents',
     skillsPath: '.agents/skills',
-    agentRunner: 'copilot-cli',
-    agentRunners: createDefaultRepositoryAgentRunnerSettings()
+    agentAdapter: defaultAgentId,
+    agentAdapters: createDefaultRepositoryAgentAdapterSettings()
 };
 
-export function createDefaultRepositoryAgentRunnerSettings(): RepositoryAgentRunnerSettingsType[] {
-    return defaultAgentRunnerSettings.map((entry) => ({
+export function createDefaultRepositoryAgentAdapterSettings(): RepositoryAgentAdapterSettingsType[] {
+    return defaultAgentAdapterSettings.map((entry) => ({
         ...entry,
         models: entry.models.map((model) => ({ ...model })),
         reasoningEfforts: [...entry.reasoningEfforts]
@@ -152,11 +155,11 @@ export function createDefaultRepositorySettings(): RepositorySettingsType {
     return structuredClone(defaultRepositorySettings);
 }
 
-export function readRepositoryAgentRunnerSettings(
-    settings: Pick<RepositorySettingsType, 'agentRunners'>,
-    runnerId: string | undefined
-): RepositoryAgentRunnerSettingsType | undefined {
-    return settings.agentRunners.find((entry) => entry.id === runnerId);
+export function readRepositoryAgentAdapterSettings(
+    settings: Pick<RepositorySettingsType, 'agentAdapters'>,
+    agentId: string | undefined
+): RepositoryAgentAdapterSettingsType | undefined {
+    return settings.agentAdapters.find((entry) => entry.id === agentId);
 }
 
 export const RepositoryInputSchema = z.object({
@@ -329,8 +332,8 @@ export const RepositorySetupResultSchema = EntityCommandAcknowledgementSchema.ex
 export type RepositoryInputType = z.infer<typeof RepositoryInputSchema>;
 export type RepositoryStorageType = z.infer<typeof RepositoryStorageSchema>;
 export type RepositoryPlatformKindType = z.infer<typeof RepositoryPlatformKindSchema>;
-export type RepositoryAgentRunnerModelOptionType = z.infer<typeof RepositoryAgentRunnerModelOptionSchema>;
-export type RepositoryAgentRunnerSettingsType = z.infer<typeof RepositoryAgentRunnerSettingsSchema>;
+export type RepositoryAgentAdapterModelOptionType = z.infer<typeof RepositoryAgentAdapterModelOptionSchema>;
+export type RepositoryAgentAdapterSettingsType = z.infer<typeof RepositoryAgentAdapterSettingsSchema>;
 export type RepositoryPlatformRepositoryType = z.infer<typeof RepositoryPlatformRepositorySchema>;
 export type RepositoryFindType = z.infer<typeof RepositoryFindSchema>;
 export type RepositoryFindAvailableType = z.infer<typeof RepositoryFindAvailableSchema>;

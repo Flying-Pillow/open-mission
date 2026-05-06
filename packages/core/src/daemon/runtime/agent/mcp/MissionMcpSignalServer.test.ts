@@ -1,17 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentSessionSnapshot } from '../AgentRuntimeTypes.js';
-import { PolicyBoundAgentSessionSignalPort } from '../signals/AgentSessionSignalPort.js';
+import type { AgentExecutionSnapshot } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import { PolicyBoundAgentExecutionSignalPort } from '../signals/AgentExecutionSignalPort.js';
 import type {
-	AgentSessionObservation,
-	AgentSessionSignalDecision
-} from '../signals/AgentSessionSignal.js';
+	AgentExecutionObservation,
+	AgentExecutionSignalDecision
+} from '../signals/AgentExecutionSignal.js';
 import { MissionMcpSignalServer } from './MissionMcpSignalServer.js';
 
 function createSnapshot(
-	overrides: Partial<AgentSessionSnapshot> = {}
-): AgentSessionSnapshot {
+	overrides: Partial<AgentExecutionSnapshot> = {}
+): AgentExecutionSnapshot {
+	const scope = overrides.scope ?? {
+		kind: 'task' as const,
+		missionId: 'mission-31',
+		taskId: 'task-3',
+		stageId: 'implementation'
+	};
 	return {
-		runnerId: 'claude-code',
+		agentId: 'claude-code',
 		sessionId: 'session-7',
 		workingDirectory: '/missions/Flying-Pillow/mission/31-adopt-sandcastle-agentprovideradapter-for-four-a',
 		taskId: 'task-3',
@@ -28,29 +34,30 @@ function createSnapshot(
 		acceptsPrompts: true,
 		acceptedCommands: [],
 		reference: {
-			runnerId: 'claude-code',
+			agentId: 'claude-code',
 			sessionId: 'session-7'
 		},
 		startedAt: '2026-05-04T11:58:00.000Z',
 		updatedAt: '2026-05-04T11:59:00.000Z',
-		...overrides
+		...overrides,
+		scope
 	};
 }
 
 describe('MissionMcpSignalServer', () => {
 	it('starts local-only, registers sessions, and routes valid calls through the signal policy port', async () => {
 		const commits: {
-			observation: AgentSessionObservation;
-			decision: Exclude<AgentSessionSignalDecision, { action: 'reject' }>;
+			observation: AgentExecutionObservation;
+			decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>;
 		}[] = [];
-		const snapshots = new Map<string, AgentSessionSnapshot>([
+		const snapshots = new Map<string, AgentExecutionSnapshot>([
 			['session-7', createSnapshot()]
 		]);
-		const port = new PolicyBoundAgentSessionSignalPort({
+		const port = new PolicyBoundAgentExecutionSignalPort({
 			now: () => '2026-05-04T12:20:00.000Z',
 			sink: {
 				getSnapshot(scope) {
-					return snapshots.get(scope.agentSessionId);
+					return snapshots.get(scope.agentExecutionId);
 				},
 				commit(input) {
 					commits.push({
@@ -63,10 +70,10 @@ describe('MissionMcpSignalServer', () => {
 		const server = new MissionMcpSignalServer({ signalPort: port });
 
 		const handle = await server.start();
-		const registration = await server.registerSession({
+		const registration = await server.registerExecution({
 			missionId: 'mission-31',
 			taskId: 'task-3',
-			agentSessionId: 'session-7',
+			agentExecutionId: 'session-7',
 			allowedTools: ['progress', 'note']
 		});
 		const progressAcknowledgement = await handle.invokeTool('progress', {
@@ -92,7 +99,7 @@ describe('MissionMcpSignalServer', () => {
 		expect(registration).toEqual({
 			missionId: 'mission-31',
 			taskId: 'task-3',
-			agentSessionId: 'session-7',
+			agentExecutionId: 'session-7',
 			sessionToken: expect.any(String),
 			allowedTools: ['progress', 'note'],
 			endpoint: handle.endpoint,
@@ -117,14 +124,14 @@ describe('MissionMcpSignalServer', () => {
 	});
 
 	it('rejects invalid, disallowed, duplicate, unknown-session-token, and stopped calls', async () => {
-		const snapshots = new Map<string, AgentSessionSnapshot>([
+		const snapshots = new Map<string, AgentExecutionSnapshot>([
 			['session-7', createSnapshot()]
 		]);
-		const port = new PolicyBoundAgentSessionSignalPort({
+		const port = new PolicyBoundAgentExecutionSignalPort({
 			now: () => '2026-05-04T12:21:00.000Z',
 			sink: {
 				getSnapshot(scope) {
-					return snapshots.get(scope.agentSessionId);
+					return snapshots.get(scope.agentExecutionId);
 				},
 				commit() {
 					return undefined;
@@ -133,10 +140,10 @@ describe('MissionMcpSignalServer', () => {
 		});
 		const server = new MissionMcpSignalServer({ signalPort: port });
 		const handle = await server.start();
-		const registration = await server.registerSession({
+		const registration = await server.registerExecution({
 			missionId: 'mission-31',
 			taskId: 'task-3',
-			agentSessionId: 'session-7',
+			agentExecutionId: 'session-7',
 			allowedTools: ['progress']
 		});
 
@@ -152,7 +159,7 @@ describe('MissionMcpSignalServer', () => {
 		}, registration.sessionToken)).toEqual({
 			accepted: false,
 			outcome: 'rejected',
-			reason: "Mission MCP tool 'fail' is not allowed for this session."
+			reason: "Mission MCP tool 'fail' is not allowed for this execution."
 		});
 		expect(await handle.invokeTool('progress', {
 			summary: 'Accepted once.'
@@ -171,7 +178,7 @@ describe('MissionMcpSignalServer', () => {
 			waitingForInput: false
 		});
 
-		await server.unregisterSession(registration.sessionToken);
+		await server.unregisterExecution(registration.sessionToken);
 
 		expect(await handle.invokeTool('progress', {
 			summary: 'No longer registered.'
@@ -193,19 +200,19 @@ describe('MissionMcpSignalServer', () => {
 	});
 
 	it('rejects ended sessions through the signal policy instead of mutating state directly', async () => {
-		const snapshots = new Map<string, AgentSessionSnapshot>([
+		const snapshots = new Map<string, AgentExecutionSnapshot>([
 			['session-7', createSnapshot({
 				status: 'completed',
 				attention: 'none',
 				endedAt: '2026-05-04T12:19:00.000Z'
 			})]
 		]);
-		const commits: AgentSessionObservation[] = [];
-		const port = new PolicyBoundAgentSessionSignalPort({
+		const commits: AgentExecutionObservation[] = [];
+		const port = new PolicyBoundAgentExecutionSignalPort({
 			now: () => '2026-05-04T12:22:00.000Z',
 			sink: {
 				getSnapshot(scope) {
-					return snapshots.get(scope.agentSessionId);
+					return snapshots.get(scope.agentExecutionId);
 				},
 				commit(input) {
 					commits.push(input.observation);
@@ -214,15 +221,15 @@ describe('MissionMcpSignalServer', () => {
 		});
 		const server = new MissionMcpSignalServer({ signalPort: port });
 		const handle = await server.start();
-		const registration = await server.registerSession({
+		const registration = await server.registerExecution({
 			missionId: 'mission-31',
 			taskId: 'task-3',
-			agentSessionId: 'session-7',
+			agentExecutionId: 'session-7',
 			allowedTools: ['progress']
 		});
 
 		const acknowledgement = await handle.invokeTool('progress', {
-			summary: 'Trying to update a finished session.'
+			summary: 'Trying to update a finished execution.'
 		}, registration.sessionToken);
 
 		expect(acknowledgement).toEqual({
@@ -234,18 +241,18 @@ describe('MissionMcpSignalServer', () => {
 	});
 
 	it('keeps rejected policy calls out of event id dedupe and validates session registration input', async () => {
-		const snapshots = new Map<string, AgentSessionSnapshot>([
+		const snapshots = new Map<string, AgentExecutionSnapshot>([
 			['session-7', createSnapshot({
 				status: 'completed',
 				attention: 'none',
 				endedAt: '2026-05-04T12:19:00.000Z'
 			})]
 		]);
-		const port = new PolicyBoundAgentSessionSignalPort({
+		const port = new PolicyBoundAgentExecutionSignalPort({
 			now: () => '2026-05-04T12:23:00.000Z',
 			sink: {
 				getSnapshot(scope) {
-					return snapshots.get(scope.agentSessionId);
+					return snapshots.get(scope.agentExecutionId);
 				},
 				commit() {
 					throw new Error('commit should not be called for rejected policy signals');
@@ -255,19 +262,19 @@ describe('MissionMcpSignalServer', () => {
 		const server = new MissionMcpSignalServer({ signalPort: port });
 		const handle = await server.start();
 
-		await expect(server.registerSession({
+		await expect(server.registerExecution({
 			missionId: 'mission-31',
 			taskId: 'task-3',
-			agentSessionId: '   ',
+			agentExecutionId: '   ',
 			allowedTools: ['progress']
 		})).rejects.toThrow(
-			'Invalid Mission MCP session registration: agentSessionId: Too small: expected string to have >=1 characters'
+			'Invalid Mission MCP session registration: agentExecutionId: Too small: expected string to have >=1 characters'
 		);
 
-		const registration = await server.registerSession({
+		const registration = await server.registerExecution({
 			missionId: 'mission-31',
 			taskId: 'task-3',
-			agentSessionId: 'session-7',
+			agentExecutionId: 'session-7',
 			allowedTools: ['progress']
 		});
 
@@ -289,7 +296,7 @@ describe('MissionMcpSignalServer', () => {
 	it('routes allowlisted entity commands through the daemon entity command executor', async () => {
 		const executed: unknown[] = [];
 		const server = new MissionMcpSignalServer({
-			signalPort: new PolicyBoundAgentSessionSignalPort({
+			signalPort: new PolicyBoundAgentExecutionSignalPort({
 				sink: {
 					getSnapshot: async () => undefined,
 					commit: async () => undefined
@@ -301,10 +308,10 @@ describe('MissionMcpSignalServer', () => {
 			}
 		});
 		const handle = await server.start();
-		const registration = await server.registerSession({
+		const registration = await server.registerExecution({
 			missionId: 'mission-31',
 			taskId: 'task-3',
-			agentSessionId: 'session-7',
+			agentExecutionId: 'session-7',
 			allowedTools: ['entity'],
 			allowedEntityCommands: [{ entity: 'Task', method: 'command', commandId: 'task.complete' }]
 		});
@@ -333,7 +340,7 @@ describe('MissionMcpSignalServer', () => {
 
 	it('rejects entity commands outside the session allowlist', async () => {
 		const server = new MissionMcpSignalServer({
-			signalPort: new PolicyBoundAgentSessionSignalPort({
+			signalPort: new PolicyBoundAgentExecutionSignalPort({
 				sink: {
 					getSnapshot: async () => undefined,
 					commit: async () => undefined
@@ -342,10 +349,10 @@ describe('MissionMcpSignalServer', () => {
 			executeEntityCommand: async () => ({ ok: true })
 		});
 		const handle = await server.start();
-		const registration = await server.registerSession({
+		const registration = await server.registerExecution({
 			missionId: 'mission-31',
 			taskId: 'task-3',
-			agentSessionId: 'session-7',
+			agentExecutionId: 'session-7',
 			allowedTools: ['entity'],
 			allowedEntityCommands: [{ entity: 'Task', method: 'command', commandId: 'task.complete' }]
 		});
@@ -360,7 +367,7 @@ describe('MissionMcpSignalServer', () => {
 		}, registration.sessionToken)).resolves.toEqual({
 			accepted: false,
 			outcome: 'rejected',
-			reason: "Entity command 'Task.command:task.reopen' is not allowed for this session."
+			reason: "Entity command 'Task.command:task.reopen' is not allowed for this execution."
 		});
 	});
 });

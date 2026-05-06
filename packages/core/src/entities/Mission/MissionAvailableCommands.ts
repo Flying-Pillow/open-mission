@@ -1,14 +1,14 @@
-import type { AgentSessionRecord } from '../AgentSession/AgentSessionSchema.js';
+import type { AgentExecutionRecord } from '../AgentExecution/AgentExecutionSchema.js';
 import type { MissionStageId } from '../../workflow/mission/manifest.js';
 import type { MissionWorkflowEvent, MissionStateData } from '../../workflow/engine/index.js';
 import { getMissionWorkflowEventValidationErrors } from '../../workflow/engine/validation.js';
-import { AgentSessionCommandIds } from '../AgentSession/AgentSessionSchema.js';
+import { AgentExecutionCommandIds } from '../AgentExecution/AgentExecutionSchema.js';
 import { StageCommandIds } from '../Stage/StageSchema.js';
 import { TaskCommandIds } from '../Task/TaskSchema.js';
 import { MissionCommandIds, type MissionOwnedCommandDescriptorType } from './MissionSchema.js';
 import {
     missionCommand,
-    ownedAgentSessionCommand,
+    ownedAgentExecutionCommand,
     ownedMissionCommand,
     ownedStageCommand,
     ownedTaskCommand
@@ -18,7 +18,7 @@ export type MissionAvailableCommandsInput = {
     missionId: string;
     configuration: MissionStateData['configuration'];
     runtime: MissionStateData['runtime'];
-    sessions: AgentSessionRecord[];
+    sessions: AgentExecutionRecord[];
 };
 
 export function buildMissionAvailableCommands(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptorType[] {
@@ -237,14 +237,14 @@ function buildTaskLaunchPolicyCommands(input: MissionAvailableCommandsInput, tas
     return commands;
 }
 
-function buildSessionCancelCommand(session: AgentSessionRecord): MissionOwnedCommandDescriptorType {
-    const enabled = isActiveAgentSession(session.lifecycleState);
-    return ownedAgentSessionCommand(session.sessionId, missionCommand({
-        commandId: AgentSessionCommandIds.cancel,
+function buildSessionCancelCommand(execution: AgentExecutionRecord): MissionOwnedCommandDescriptorType {
+    const enabled = isActiveAgentExecution(execution.lifecycleState);
+    return ownedAgentExecutionCommand(execution.sessionId, missionCommand({
+        commandId: AgentExecutionCommandIds.cancel,
         label: 'Stop agent',
         ...buildAvailability(enabled, 'Session is not active.'),
         requiresConfirmation: true,
-        confirmationPrompt: 'Stop the running agent session?'
+        confirmationPrompt: 'Stop the running agent execution?'
     }));
 }
 
@@ -331,7 +331,7 @@ function isRuntimeDelivered(runtime: MissionStateData['runtime']): boolean {
     return runtime.stages.some((stage) => stage.stageId === 'delivery' && stage.lifecycle === 'completed');
 }
 
-function isActiveAgentSession(lifecycleState: AgentSessionRecord['lifecycleState']): boolean {
+function isActiveAgentExecution(lifecycleState: AgentExecutionRecord['lifecycleState']): boolean {
     return lifecycleState === 'starting' || lifecycleState === 'running' || lifecycleState === 'awaiting-input';
 }
 

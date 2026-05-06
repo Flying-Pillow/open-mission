@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
-import { MissionAgentRunnerSchema, MissionReasoningEffortSchema } from '../entities/Mission/MissionSchema.js';
+import { AgentIdSchema } from '../entities/Agent/AgentSchema.js';
+import { MissionReasoningEffortSchema } from '../entities/Mission/MissionSchema.js';
 import { StageIdSchema } from '../entities/Stage/StageSchema.js';
 import { TaskContextArtifactReferenceSchema, TaskIdSchema } from '../entities/Task/TaskSchema.js';
 
@@ -43,7 +44,7 @@ export const WorkflowGeneratedTaskDefinitionSchema = z.object({
 	pairedTaskId: TaskIdSchema.optional(),
 	dependsOn: z.array(TaskIdSchema),
 	context: z.array(TaskContextArtifactReferenceSchema).optional(),
-	agentRunner: MissionAgentRunnerSchema.optional()
+	agentAdapter: AgentIdSchema.optional()
 }).strict();
 
 export const WorkflowTaskTemplateSourceSchema = z.object({
@@ -145,7 +146,7 @@ export const WorkflowDefinitionSchema = z.object({
 });
 
 export const WorkflowRuntimeSettingsSchema = z.object({
-	agentRunner: MissionAgentRunnerSchema,
+	agentAdapter: AgentIdSchema,
 	defaultAgentMode: z.enum(['interactive', 'autonomous']).optional(),
 	defaultModel: z.string().trim().min(1).optional(),
 	defaultReasoningEffort: MissionReasoningEffortSchema.optional()

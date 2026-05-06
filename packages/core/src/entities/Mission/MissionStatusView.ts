@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import type { AgentSessionRecord } from '../AgentSession/AgentSessionSchema.js';
+import type { AgentExecutionRecord } from '../AgentExecution/AgentExecutionSchema.js';
 import type { MissionDossierFilesystem } from './MissionDossierFilesystem.js';
 import {
 	MISSION_ARTIFACTS,
@@ -34,7 +34,7 @@ export type MissionStatusViewInput = {
 	descriptor: MissionDescriptor;
 	workflow: WorkflowDefinition;
 	document?: MissionStateData;
-	sessions: AgentSessionRecord[];
+	sessions: AgentExecutionRecord[];
 	hydrateRuntimeTasksForActions(tasks: MissionStateData['runtime']['tasks']): Promise<MissionStateData['runtime']['tasks']>;
 };
 
@@ -67,7 +67,7 @@ export async function buildMissionStatusView(input: MissionStatusViewInput): Pro
 		...(activeTasks.length > 0 ? { activeTasks } : {}),
 		...(readyTasks.length > 0 ? { readyTasks } : {}),
 		stages,
-		agentSessions: input.sessions,
+		agentExecutions: input.sessions,
 		tower,
 		workflow: {
 			lifecycle: input.document.runtime.lifecycle,
@@ -144,7 +144,7 @@ async function buildDraftMissionStatusView(input: MissionStatusViewInput): Promi
 		missionRootDir: input.missionDir,
 		productFiles,
 		stages,
-		agentSessions: [],
+		agentExecutions: [],
 		tower,
 		workflow: {
 			lifecycle: runtime.lifecycle,
@@ -230,7 +230,7 @@ async function buildWorkflowStageStatuses(
 function buildTowerView(
 	configuration: MissionStateData['configuration'],
 	stages: MissionStageStatus[],
-	sessions: AgentSessionRecord[],
+	sessions: AgentExecutionRecord[],
 	productFiles: Partial<Record<MissionArtifactKey, string>>
 ): MissionTowerView {
 	return {
@@ -254,7 +254,7 @@ function toTowerStageRailItem(
 function buildTowerTreeNodes(
 	configuration: MissionStateData['configuration'],
 	stages: MissionStageStatus[],
-	sessions: AgentSessionRecord[],
+	sessions: AgentExecutionRecord[],
 	productFiles: Partial<Record<MissionArtifactKey, string>>
 ): MissionTowerTreeNode[] {
 	const nodes: MissionTowerTreeNode[] = [];
@@ -295,26 +295,26 @@ function buildTowerTreeNodes(
 				depth: 1,
 				color: taskColor,
 				statusLabel: taskStatusLabel,
-				collapsible: Boolean(task.filePath) || sessions.some((session) => session.taskId === task.taskId),
+				collapsible: Boolean(task.filePath) || sessions.some((execution) => execution.taskId === task.taskId),
 				stageId: stage.stage,
 				taskId: task.taskId
 			});
 
 			const taskSessions = sessions
-				.filter((session) => session.taskId === task.taskId)
+				.filter((execution) => execution.taskId === task.taskId)
 				.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
-			for (const session of taskSessions) {
+			for (const execution of taskSessions) {
 				nodes.push({
-					id: `tree:session:${session.sessionId}`,
-					label: `${session.runnerId} ${session.sessionId.slice(-4)}`,
+					id: `tree:session:${execution.sessionId}`,
+					label: `${execution.agentId} ${execution.sessionId.slice(-4)}`,
 					kind: 'session',
 					depth: 2,
-					color: sessionTone(session.lifecycleState, taskColor),
-					statusLabel: toStatusLabel(session.lifecycleState),
+					color: sessionTone(execution.lifecycleState, taskColor),
+					statusLabel: toStatusLabel(execution.lifecycleState),
 					collapsible: false,
 					stageId: stage.stage,
 					taskId: task.taskId,
-					sessionId: session.sessionId
+					sessionId: execution.sessionId
 				});
 			}
 

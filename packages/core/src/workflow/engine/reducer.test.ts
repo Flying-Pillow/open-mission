@@ -6,7 +6,7 @@ import {
 import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../mission/workflow.js';
 import { reduceMissionWorkflowEvent } from './reducer.js';
 import { validateMissionWorkflowEvent } from './validation.js';
-import { AgentSessionRuntimeStateSchema, type MissionWorkflowEvent } from './types.js';
+import { AgentExecutionRuntimeStateSchema, type MissionWorkflowEvent } from './types.js';
 
 function createWorkflowSettingsWithoutTaskAutostart() {
     const workflow = createDefaultWorkflowSettings();
@@ -49,17 +49,17 @@ describe('workflow reducer delivery completion', () => {
         }];
 
         const event: MissionWorkflowEvent = {
-            eventId: 'session.started:implementation/01',
-            type: 'session.started',
+            eventId: 'execution.started:implementation/01',
+            type: 'execution.started',
             occurredAt: '2026-04-10T15:52:00.000Z',
             source: 'daemon',
             sessionId: 'session-1',
             taskId: 'implementation/01',
-            runnerId: 'copilot-cli',
+            agentId: 'copilot-cli',
             transportId: 'terminal',
             terminalHandle: {
-                sessionName: 'airport-terminal-session',
-                paneId: 'terminal_44'
+                terminalName: 'airport-terminal-session',
+                terminalPaneId: 'terminal_44'
             }
         };
 
@@ -69,13 +69,13 @@ describe('workflow reducer delivery completion', () => {
         expect(runtime.sessions).toContainEqual(expect.objectContaining({
             sessionId: 'session-1',
             terminalHandle: {
-                sessionName: 'airport-terminal-session',
-                paneId: 'terminal_44'
+                terminalName: 'airport-terminal-session',
+                terminalPaneId: 'terminal_44'
             }
         }));
-        expect(() => AgentSessionRuntimeStateSchema.parse({
+        expect(() => AgentExecutionRuntimeStateSchema.parse({
             ...runtime.sessions[0],
-            terminalSessionName: 'airport-terminal-session'
+            terminalName: 'airport-terminal-session'
         })).toThrow();
     });
 
@@ -106,7 +106,7 @@ describe('workflow reducer delivery completion', () => {
 
         expect(result.nextState.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('queued');
         expect(result.requests).toContainEqual(expect.objectContaining({
-            type: 'session.launch',
+            type: 'execution.launch',
             payload: { taskId: 'prd/01' }
         }));
     });
@@ -143,35 +143,35 @@ describe('workflow reducer delivery completion', () => {
             waitingOnTaskIds: ['prd/01']
         }));
         expect(generated.requests).toContainEqual(expect.objectContaining({
-            type: 'session.launch',
+            type: 'execution.launch',
             payload: { taskId: 'prd/01' }
         }));
         expect(generated.requests).not.toContainEqual(expect.objectContaining({
-            type: 'session.launch',
+            type: 'execution.launch',
             payload: { taskId: 'prd/02' }
         }));
 
         const started = reduceMissionWorkflowEvent(generated.nextState, {
-            eventId: 'session.started:prd/01:2026-04-10T15:53:30.000Z',
-            type: 'session.started',
+            eventId: 'execution.started:prd/01:2026-04-10T15:53:30.000Z',
+            type: 'execution.started',
             occurredAt: '2026-04-10T15:53:30.000Z',
             source: 'daemon',
             sessionId: 'session-prd-01',
             taskId: 'prd/01',
-            runnerId: 'copilot-cli'
+            agentId: 'copilot-cli'
         }, configuration);
 
         const completed = reduceMissionWorkflowEvent(started.nextState, createTaskCompletedEvent('prd/01', '2026-04-10T15:54:00.000Z'), configuration);
 
         expect(completed.nextState.tasks.find((task) => task.taskId === 'prd/02')?.lifecycle).toBe('queued');
         expect(completed.requests).not.toContainEqual(expect.objectContaining({
-            type: 'session.launch',
+            type: 'execution.launch',
             payload: { taskId: 'prd/02' }
         }));
 
         const sessionCompleted = reduceMissionWorkflowEvent(completed.nextState, {
-            eventId: 'session.completed:prd/01:2026-04-10T15:54:05.000Z',
-            type: 'session.completed',
+            eventId: 'execution.completed:prd/01:2026-04-10T15:54:05.000Z',
+            type: 'execution.completed',
             occurredAt: '2026-04-10T15:54:05.000Z',
             source: 'daemon',
             sessionId: 'session-prd-01',
@@ -179,7 +179,7 @@ describe('workflow reducer delivery completion', () => {
         }, configuration);
 
         expect(sessionCompleted.requests).toContainEqual(expect.objectContaining({
-            type: 'session.launch',
+            type: 'execution.launch',
             payload: { taskId: 'prd/02' }
         }));
     });
@@ -219,7 +219,7 @@ describe('workflow reducer delivery completion', () => {
             'prd/02'
         ]);
         expect(generated.nextState.tasks.find((task) => task.taskId === 'prd/03')?.lifecycle).toBe('ready');
-        expect(generated.requests.filter((request) => request.type === 'session.launch')).toHaveLength(1);
+        expect(generated.requests.filter((request) => request.type === 'execution.launch')).toHaveLength(1);
         expect(generated.nextState.launchQueue.find((request) => request.taskId === 'prd/01')?.dispatchedAt).toBe('2026-04-10T15:53:00.000Z');
         expect(generated.nextState.launchQueue.find((request) => request.taskId === 'prd/02')?.dispatchedAt).toBeUndefined();
     });
@@ -319,7 +319,7 @@ describe('workflow reducer delivery completion', () => {
         expect(result.nextState.launchQueue[0]?.taskId).toBe('prd/01');
         expect(result.nextState.launchQueue[0]?.dispatchedAt).toBe('2026-04-10T15:52:00.000Z');
         expect(result.requests).toContainEqual(expect.objectContaining({
-            type: 'session.launch',
+            type: 'execution.launch',
             payload: { taskId: 'prd/01' }
         }));
     });
@@ -350,7 +350,7 @@ describe('workflow reducer delivery completion', () => {
         runtime.sessions = [{
             sessionId: 'session-1',
             taskId: 'audit/01',
-            runnerId: 'copilot-cli',
+            agentId: 'copilot-cli',
             lifecycle: 'terminated',
             launchedAt: '2026-04-10T15:51:30.000Z',
             updatedAt: '2026-04-10T15:51:40.000Z'
@@ -364,8 +364,8 @@ describe('workflow reducer delivery completion', () => {
         }];
 
         const event: MissionWorkflowEvent = {
-            eventId: 'session.launch-failed:audit/01',
-            type: 'session.launch-failed',
+            eventId: 'execution.launch-failed:audit/01',
+            type: 'execution.launch-failed',
             occurredAt: '2026-04-10T15:52:00.000Z',
             source: 'daemon',
             taskId: 'audit/01',
@@ -383,7 +383,7 @@ describe('workflow reducer delivery completion', () => {
         }));
     });
 
-    it('treats duplicate terminal session lifecycle events as idempotent', () => {
+    it('treats duplicate terminal lifecycle events as idempotent', () => {
         const configuration = createMissionWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
@@ -409,7 +409,7 @@ describe('workflow reducer delivery completion', () => {
         runtime.sessions = [{
             sessionId: 'session-1',
             taskId: 'prd/01',
-            runnerId: 'copilot-cli',
+            agentId: 'copilot-cli',
             lifecycle: 'terminated',
             launchedAt: '2026-04-10T15:52:00.000Z',
             updatedAt: '2026-04-10T15:53:00.000Z',
@@ -417,8 +417,8 @@ describe('workflow reducer delivery completion', () => {
         }];
 
         const event: MissionWorkflowEvent = {
-            eventId: 'runtime:session-1:session.terminated:duplicate',
-            type: 'session.terminated',
+            eventId: 'runtime:session-1:execution.terminated:duplicate',
+            type: 'execution.terminated',
             occurredAt: '2026-04-10T15:54:00.000Z',
             source: 'daemon',
             sessionId: 'session-1',
@@ -459,15 +459,15 @@ describe('workflow reducer delivery completion', () => {
         runtime.sessions = [{
             sessionId: 'session-1',
             taskId: 'prd/01',
-            runnerId: 'copilot-cli',
+            agentId: 'copilot-cli',
             lifecycle: 'running',
             launchedAt: '2026-04-10T15:52:00.000Z',
             updatedAt: '2026-04-10T15:52:00.000Z'
         }];
 
         const event: MissionWorkflowEvent = {
-            eventId: 'runtime:session-1:session.terminated',
-            type: 'session.terminated',
+            eventId: 'runtime:session-1:execution.terminated',
+            type: 'execution.terminated',
             occurredAt: '2026-04-10T15:53:00.000Z',
             source: 'daemon',
             sessionId: 'session-1',
@@ -804,17 +804,17 @@ describe('workflow reducer delivery completion', () => {
                 { taskId: 'implementation/01', title: 'Implement', instruction: 'Ship implementation.', dependsOn: ['spec/01'] }
             ]),
             {
-                eventId: 'session.started:implementation/01:2026-04-10T15:57:30.000Z',
-                type: 'session.started',
+                eventId: 'execution.started:implementation/01:2026-04-10T15:57:30.000Z',
+                type: 'execution.started',
                 occurredAt: '2026-04-10T15:57:30.000Z',
                 source: 'daemon',
                 sessionId: 'session-implementation-01',
                 taskId: 'implementation/01',
-                runnerId: 'copilot-cli'
+                agentId: 'copilot-cli'
             },
             {
-                eventId: 'session.cancelled:implementation/01:2026-04-10T15:58:00.000Z',
-                type: 'session.cancelled',
+                eventId: 'execution.cancelled:implementation/01:2026-04-10T15:58:00.000Z',
+                type: 'execution.cancelled',
                 occurredAt: '2026-04-10T15:58:00.000Z',
                 source: 'daemon',
                 sessionId: 'session-implementation-01',
@@ -1186,13 +1186,13 @@ describe('workflow reducer delivery completion', () => {
         ];
 
         const result = reduceMissionWorkflowEvent(runtime, {
-            eventId: 'session.started:implementation/02:2026-04-10T15:57:00.000Z',
-            type: 'session.started',
+            eventId: 'execution.started:implementation/02:2026-04-10T15:57:00.000Z',
+            type: 'execution.started',
             occurredAt: '2026-04-10T15:57:00.000Z',
             source: 'daemon',
             sessionId: 'session-implementation-02',
             taskId: 'implementation/02',
-            runnerId: 'copilot-cli'
+            agentId: 'copilot-cli'
         }, configuration);
 
         const task = result.nextState.tasks.find((candidate) => candidate.taskId === 'implementation/02');
@@ -1294,15 +1294,15 @@ describe('workflow reducer delivery completion', () => {
         runtime.sessions = [{
             sessionId: 'session-implementation-01',
             taskId: 'implementation/01',
-            runnerId: 'copilot-cli',
+            agentId: 'copilot-cli',
             lifecycle: 'running',
             launchedAt: '2026-04-10T15:57:30.000Z',
             updatedAt: '2026-04-10T15:57:30.000Z'
         }];
 
         const result = reduceMissionWorkflowEvent(runtime, {
-            eventId: 'session.cancelled:implementation/01:2026-04-10T15:58:00.000Z',
-            type: 'session.cancelled',
+            eventId: 'execution.cancelled:implementation/01:2026-04-10T15:58:00.000Z',
+            type: 'execution.cancelled',
             occurredAt: '2026-04-10T15:58:00.000Z',
             source: 'daemon',
             sessionId: 'session-implementation-01',
@@ -1310,7 +1310,7 @@ describe('workflow reducer delivery completion', () => {
         }, configuration);
 
         expect(result.nextState.tasks.find((task) => task.taskId === 'implementation/01')?.lifecycle).toBe('ready');
-        expect(result.nextState.sessions.find((session) => session.sessionId === 'session-implementation-01')?.lifecycle).toBe('cancelled');
+        expect(result.nextState.sessions.find((execution) => execution.sessionId === 'session-implementation-01')?.lifecycle).toBe('cancelled');
     });
 
 });

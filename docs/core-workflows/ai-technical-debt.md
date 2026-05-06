@@ -28,7 +28,7 @@ Mission is built to invert that pattern. It treats coding agents as probabilisti
 | --- | --- |
 | Ready, fire, aim | Requirements and specification come before implementation |
 | Active branch pollution | Agent work happens in isolated Mission worktrees |
-| Context rot | Work is split into bounded tasks and Agent sessions |
+| Context rot | Work is split into bounded tasks and Agent executions |
 | Repeated governance prompting | Repository rules and workflow law are durable control state |
 | Agent self-certification | Verification and audit are explicit artifacts and gates |
 

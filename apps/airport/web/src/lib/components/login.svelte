@@ -315,7 +315,7 @@
                 </Card.Title>
                 <Card.Description class="pt-1 text-sm leading-6">
                     Mission will use this GitHub account for authenticated
-                    repository actions in this browser session.
+                    repository actions in this browser execution.
                 </Card.Description>
             </Card.Header>
 

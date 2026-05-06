@@ -1,11 +1,11 @@
 <script lang="ts">
-    import AgentSession from "$lib/components/entities/AgentSession/AgentSession.svelte";
-    import type { AgentSession as AgentSessionEntity } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
+    import AgentExecution from "$lib/components/entities/AgentExecution/AgentExecution.svelte";
+    import type { AgentExecution as AgentExecutionEntity } from "$lib/components/entities/AgentExecution/AgentExecution.svelte.js";
     import Artifact from "$lib/components/entities/Artifact/Artifact.svelte";
     import type { Artifact as ArtifactEntity } from "$lib/components/entities/Artifact/Artifact.svelte.js";
     import type { Task as TaskEntity } from "$lib/components/entities/Task/Task.svelte.js";
     import TaskCommandbar from "$lib/components/entities/Task/TaskCommandbar.svelte";
-    import type { RepositoryAgentRunnerSettingsType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
+    import type { RepositoryAgentAdapterSettingsType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import {
         ResizableHandle,
         ResizablePane,
@@ -15,7 +15,7 @@
 
     let {
         refreshNonce,
-        agentRunners = [],
+        agentAdapters = [],
         artifacts = [],
         selectedArtifactId,
         task,
@@ -24,19 +24,19 @@
         onCommandExecuted,
     }: {
         refreshNonce: number;
-        agentRunners?: RepositoryAgentRunnerSettingsType[];
+        agentAdapters?: RepositoryAgentAdapterSettingsType[];
         artifacts?: ArtifactEntity[];
         selectedArtifactId?: string;
         task?: TaskEntity;
-        session?: AgentSessionEntity;
-        sessions?: AgentSessionEntity[];
+        session?: AgentExecutionEntity;
+        sessions?: AgentExecutionEntity[];
         onCommandExecuted: () => Promise<void>;
     } = $props();
 
     let activeArtifactTab = $state("");
-    let activeAgentSessionTab = $state("");
+    let activeAgentExecutionTab = $state("");
     let lastSelectedArtifactId = $state<string | undefined>(undefined);
-    let lastSelectedAgentSessionId = $state<string | undefined>(undefined);
+    let lastSelectedAgentExecutionId = $state<string | undefined>(undefined);
 
     const panelLabel = $derived(task?.title ?? "Task");
     const artifactTabs = $derived.by(() => {
@@ -49,19 +49,19 @@
         }
         return tabs;
     });
-    const agentSessionTabs = $derived.by(() => {
-        const tabs: AgentSessionEntity[] = [];
+    const agentExecutionTabs = $derived.by(() => {
+        const tabs: AgentExecutionEntity[] = [];
         for (const candidate of [...sessions, ...(session ? [session] : [])]) {
             if (
                 tabs.some(
-                    (agentSessionTab) => agentSessionTab.id === candidate.id,
+                    (agentExecutionTab) => agentExecutionTab.id === candidate.id,
                 )
             ) {
                 continue;
             }
             tabs.push(candidate);
         }
-        return tabs.sort(compareAgentSessionTabs);
+        return tabs.sort(compareAgentExecutionTabs);
     });
     $effect(() => {
         const selectedArtifactChanged =
@@ -104,44 +104,44 @@
         }
     });
     $effect(() => {
-        const selectedAgentSessionId = session?.sessionId;
-        const selectedAgentSessionChanged =
-            selectedAgentSessionId !== lastSelectedAgentSessionId;
-        if (selectedAgentSessionChanged) {
-            lastSelectedAgentSessionId = selectedAgentSessionId;
+        const selectedAgentExecutionId = session?.sessionId;
+        const selectedAgentExecutionChanged =
+            selectedAgentExecutionId !== lastSelectedAgentExecutionId;
+        if (selectedAgentExecutionChanged) {
+            lastSelectedAgentExecutionId = selectedAgentExecutionId;
         }
 
-        if (agentSessionTabs.length === 0) {
-            activeAgentSessionTab = "";
+        if (agentExecutionTabs.length === 0) {
+            activeAgentExecutionTab = "";
             return;
         }
 
-        const selectedAgentSessionExists = Boolean(
-            selectedAgentSessionId &&
-                agentSessionTabs.some(
-                    (candidate) => candidate.id === selectedAgentSessionId,
+        const selectedAgentExecutionExists = Boolean(
+            selectedAgentExecutionId &&
+                agentExecutionTabs.some(
+                    (candidate) => candidate.id === selectedAgentExecutionId,
                 ),
         );
         if (
-            selectedAgentSessionChanged &&
-            selectedAgentSessionId &&
-            selectedAgentSessionExists
+            selectedAgentExecutionChanged &&
+            selectedAgentExecutionId &&
+            selectedAgentExecutionExists
         ) {
-            activeAgentSessionTab = selectedAgentSessionId;
+            activeAgentExecutionTab = selectedAgentExecutionId;
             return;
         }
 
-        if (selectedAgentSessionChanged && !selectedAgentSessionId) {
-            activeAgentSessionTab = agentSessionTabs[0].id;
+        if (selectedAgentExecutionChanged && !selectedAgentExecutionId) {
+            activeAgentExecutionTab = agentExecutionTabs[0].id;
             return;
         }
 
         if (
-            !agentSessionTabs.some(
-                (candidate) => candidate.id === activeAgentSessionTab,
+            !agentExecutionTabs.some(
+                (candidate) => candidate.id === activeAgentExecutionTab,
             )
         ) {
-            activeAgentSessionTab = agentSessionTabs[0].id;
+            activeAgentExecutionTab = agentExecutionTabs[0].id;
         }
     });
 
@@ -153,14 +153,14 @@
         return artifact.label;
     }
 
-    function agentSessionTabLabel(agentSession: AgentSessionEntity): string {
-        const snapshot = agentSession.toData();
-        const runnerLabel = snapshot.runnerId.trim();
-        const startTime = formatAgentSessionStartTime(snapshot.createdAt);
-        return startTime ? `${runnerLabel} ${startTime}` : runnerLabel;
+    function agentExecutionTabLabel(agentExecution: AgentExecutionEntity): string {
+        const snapshot = agentExecution.toData();
+        const adapterLabel = snapshot.agentId.trim();
+        const startTime = formatAgentExecutionStartTime(snapshot.createdAt);
+        return startTime ? `${adapterLabel} ${startTime}` : adapterLabel;
     }
 
-    function formatAgentSessionStartTime(
+    function formatAgentExecutionStartTime(
         timestamp: string | undefined,
     ): string {
         if (!timestamp) {
@@ -179,9 +179,9 @@
         });
     }
 
-    function compareAgentSessionTabs(
-        left: AgentSessionEntity,
-        right: AgentSessionEntity,
+    function compareAgentExecutionTabs(
+        left: AgentExecutionEntity,
+        right: AgentExecutionEntity,
     ): number {
         const leftActiveRank = left.isRunning() ? 1 : 0;
         const rightActiveRank = right.isRunning() ? 1 : 0;
@@ -195,13 +195,13 @@
             return rightTerminalRank - leftTerminalRank;
         }
 
-        return getAgentSessionUpdatedAt(right) - getAgentSessionUpdatedAt(left);
+        return getAgentExecutionUpdatedAt(right) - getAgentExecutionUpdatedAt(left);
     }
 
-    function getAgentSessionUpdatedAt(
-        agentSession: AgentSessionEntity,
+    function getAgentExecutionUpdatedAt(
+        agentExecution: AgentExecutionEntity,
     ): number {
-        const snapshot = agentSession.toData();
+        const snapshot = agentExecution.toData();
         const timestamp = snapshot.lastUpdatedAt ?? snapshot.createdAt;
         return timestamp ? Date.parse(timestamp) || 0 : 0;
     }
@@ -222,7 +222,7 @@
         <div class="flex flex-wrap items-center gap-2">
             <TaskCommandbar
                 {refreshNonce}
-                {agentRunners}
+                {agentAdapters}
                 {task}
                 {onCommandExecuted}
             />
@@ -273,39 +273,39 @@
             minSize={28}
             class="flex h-full min-h-0 flex-col"
         >
-            {#if agentSessionTabs.length > 0}
+            {#if agentExecutionTabs.length > 0}
                 <Tabs.Root
-                    bind:value={activeAgentSessionTab}
+                    bind:value={activeAgentExecutionTab}
                     class="min-h-0 flex-1 overflow-hidden border bg-card/70 backdrop-blur-sm"
                 >
                     <Tabs.List class="w-full overflow-x-auto overflow-y-hidden">
-                        {#each agentSessionTabs as agentSessionTab (agentSessionTab.id)}
+                        {#each agentExecutionTabs as agentExecutionTab (agentExecutionTab.id)}
                             <Tabs.Trigger
-                                value={agentSessionTab.id}
+                                value={agentExecutionTab.id}
                                 class="min-w-32 max-w-56 flex-none truncate"
                             >
                                 <span class="truncate">
-                                    {agentSessionTabLabel(agentSessionTab)}
+                                    {agentExecutionTabLabel(agentExecutionTab)}
                                 </span>
                             </Tabs.Trigger>
                         {/each}
                     </Tabs.List>
 
-                    {#each agentSessionTabs as agentSessionTab (agentSessionTab.id)}
+                    {#each agentExecutionTabs as agentExecutionTab (agentExecutionTab.id)}
                         <Tabs.Content
-                            value={agentSessionTab.id}
+                            value={agentExecutionTab.id}
                             class="min-h-0 overflow-hidden"
                         >
-                            <AgentSession
+                            <AgentExecution
                                 {refreshNonce}
-                                session={agentSessionTab}
+                                session={agentExecutionTab}
                                 {onCommandExecuted}
                             />
                         </Tabs.Content>
                     {/each}
                 </Tabs.Root>
             {:else}
-                <AgentSession
+                <AgentExecution
                     {refreshNonce}
                     session={undefined}
                     {onCommandExecuted}

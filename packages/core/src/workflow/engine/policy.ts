@@ -1,6 +1,6 @@
 import type {
     MissionTaskPendingLaunchContext,
-    AgentSessionLifecycleState,
+    AgentExecutionLifecycleState,
     MissionStageId,
     MissionTaskLifecycleState,
     MissionTaskRuntimeState,
@@ -10,7 +10,7 @@ import type {
 } from './types.js';
 import { DEFAULT_TASK_MAX_REWORK_ITERATIONS } from './types.js';
 
-export function isActiveSessionLifecycle(lifecycle: AgentSessionLifecycleState): boolean {
+export function isActiveSessionLifecycle(lifecycle: AgentExecutionLifecycleState): boolean {
     return lifecycle === 'starting' || lifecycle === 'running';
 }
 
@@ -165,11 +165,11 @@ export function countOccupiedTaskExecutionSlots(runtime: MissionWorkflowRuntimeS
 }
 
 export function countOccupiedSessionExecutionSlots(runtime: MissionWorkflowRuntimeState): number {
-    const activeSessions = runtime.sessions.filter((session) => isActiveSessionLifecycle(session.lifecycle)).length;
+    const activeSessions = runtime.sessions.filter((execution) => isActiveSessionLifecycle(execution.lifecycle)).length;
     const dispatchedLaunches = runtime.launchQueue.filter((request) =>
         Boolean(request.dispatchedAt) &&
-        !runtime.sessions.some((session) =>
-            session.taskId === request.taskId && isActiveSessionLifecycle(session.lifecycle)
+        !runtime.sessions.some((execution) =>
+            execution.taskId === request.taskId && isActiveSessionLifecycle(execution.lifecycle)
         )
     ).length;
     return activeSessions + dispatchedLaunches;
@@ -238,8 +238,8 @@ export function hasActiveDependentActivity(
         return true;
     }
 
-    return runtime.sessions.some((session) =>
-        dependentTaskIds.has(session.taskId) && isActiveSessionLifecycle(session.lifecycle)
+    return runtime.sessions.some((execution) =>
+        dependentTaskIds.has(execution.taskId) && isActiveSessionLifecycle(execution.lifecycle)
     );
 }
 
@@ -249,5 +249,5 @@ export function isMissionCompleted(
 ): boolean {
     return configuration.workflow.stageOrder.every((stageId) => isStageCompletedFromTasks(runtime.tasks, stageId, configuration)) &&
         !runtime.tasks.some((task) => task.lifecycle === 'queued' || task.lifecycle === 'running') &&
-        !runtime.sessions.some((session) => isActiveSessionLifecycle(session.lifecycle));
+        !runtime.sessions.some((execution) => isActiveSessionLifecycle(execution.lifecycle));
 }

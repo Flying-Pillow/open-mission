@@ -264,7 +264,7 @@
         return (
             activeNodeId === task.node.id ||
             task.artifacts.some((artifact) => artifact.id === activeNodeId) ||
-            task.sessions.some((session) => session.id === activeNodeId)
+            task.sessions.some((execution) => execution.id === activeNodeId)
         );
     }
 
@@ -281,8 +281,8 @@
             hasTaskChildren(task) &&
             (isActiveTaskStatus(task.node.statusLabel) ||
                 taskContainsSelectedNode(task) ||
-                task.sessions.some((session) =>
-                    isActiveTaskStatus(session.statusLabel),
+                task.sessions.some((execution) =>
+                    isActiveTaskStatus(execution.statusLabel),
                 ))
         );
     }
@@ -453,17 +453,17 @@
                                             </TreeView.File>
                                         {/each}
 
-                                        {#each task.sessions as session (session.id)}
+                                        {#each task.sessions as execution (execution.id)}
                                             {@const selected =
-                                                activeNodeId === session.id}
+                                                activeNodeId === execution.id}
                                             {@const sessionIconName =
-                                                sessionIcon(session)}
+                                                sessionIcon(execution)}
                                             <TreeView.File
-                                                name={nodeLabel(session)}
+                                                name={nodeLabel(execution)}
                                                 class={fileItemClass(selected)}
-                                                style={nodeStyle(session)}
+                                                style={nodeStyle(execution)}
                                                 onclick={() =>
-                                                    onSelectNode(session.id)}
+                                                    onSelectNode(execution.id)}
                                             >
                                                 {#snippet icon()}
                                                     <Icon
@@ -471,7 +471,7 @@
                                                         class={cn(
                                                             "size-4 shrink-0",
                                                             sessionIconClass(
-                                                                session,
+                                                                execution,
                                                             ),
                                                         )}
                                                     />

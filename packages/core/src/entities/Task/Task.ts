@@ -3,11 +3,11 @@ import type {
 } from '../../workflow/engine/types.js';
 import * as path from 'node:path';
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
-import type { AgentRunner } from '../../daemon/runtime/agent/AgentRunner.js';
-import type { AgentSessionSnapshot } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
-import type { AgentSessionLaunchRequest } from '../AgentSession/AgentSessionSchema.js';
-import { DEFAULT_AGENT_RUNNER_ID } from '../../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
-import { AgentSession } from '../AgentSession/AgentSession.js';
+import type { AgentAdapter } from '../../daemon/runtime/agent/AgentAdapter.js';
+import type { AgentExecutionSnapshot } from '../AgentExecution/AgentExecutionProtocolTypes.js';
+import type { AgentExecutionLaunchRequest } from '../AgentExecution/AgentExecutionSchema.js';
+import type { AgentRegistry } from '../Agent/AgentRegistry.js';
+import { AgentExecution } from '../AgentExecution/AgentExecution.js';
 import { buildTaskLaunchPrompt } from './taskLaunchPrompt.js';
 import {
 	evaluateMissionTaskStatusIntent,
@@ -40,7 +40,7 @@ export type TaskOwner = {
 	isMissionDelivered(): boolean;
 	refreshTaskState(taskId: string): Promise<MissionTaskState>;
 	configureTask(taskId: string, input: TaskConfigureOptions): Promise<void>;
-	queueTask(taskId: string, options?: { runnerId?: string; prompt?: string; workingDirectory?: string; model?: string; reasoningEffort?: string; terminalSessionName?: string }): Promise<void>;
+	queueTask(taskId: string, options?: { agentId?: string; prompt?: string; workingDirectory?: string; model?: string; reasoningEffort?: string; terminalName?: string }): Promise<void>;
 	completeTask(taskId: string): Promise<void>;
 	reopenTask(taskId: string): Promise<void>;
 	reworkTask(taskId: string, input: {
@@ -52,18 +52,18 @@ export type TaskOwner = {
 		artifactRefs?: MissionTaskArtifactReference[];
 	}): Promise<void>;
 	updateTaskLaunchPolicy(taskId: string, launchPolicy: TaskLaunchPolicy): Promise<void>;
-	requireAgentRunner(runnerId: string): AgentRunner;
-	startTaskAgentSession(
+	requireAgentAdapter(agentId: string): AgentAdapter;
+	startTaskAgentExecution(
 		task: MissionTaskState,
-		runner: AgentRunner,
-		request: AgentSessionLaunchRequest
-	): Promise<AgentSessionSnapshot>;
-	recordStartedTaskSession(snapshot: AgentSessionSnapshot): Promise<AgentSession>;
+		adapter: AgentAdapter,
+		request: AgentExecutionLaunchRequest
+	): Promise<AgentExecutionSnapshot>;
+	recordStartedTaskSession(snapshot: AgentExecutionSnapshot): Promise<AgentExecution>;
 	recordTaskSessionLaunchFailure(taskId: string, error: unknown): Promise<void>;
 };
 
 export type TaskConfigureOptions = {
-	agentRunner?: string;
+	agentAdapter?: string;
 	model?: string | null;
 	reasoningEffort?: string | null;
 	autostart?: boolean;
@@ -104,7 +104,7 @@ export class Task extends Entity<TaskDataType, string> {
 			dependsOn: [...task.dependsOn],
 			context: [...(task.context ?? [])],
 			waitingOnTaskIds: [...task.waitingOn],
-			agentRunner: task.agent,
+			agentAdapter: task.agent,
 			...(typeof task.autostart === 'boolean' ? { autostart: task.autostart } : {}),
 			retries: task.retries,
 			...(task.fileName ? { fileName: task.fileName } : {}),
@@ -150,22 +150,15 @@ export class Task extends Entity<TaskDataType, string> {
 		return task.status === 'queued' || task.status === 'running';
 	}
 
-	public static resolveStartRunnerId(
+	public static resolveStartAgentId(
 		task: MissionTaskState,
-		runners: ReadonlyMap<string, AgentRunner>
+		agentRegistry: AgentRegistry
 	): string | undefined {
-		const taskRunnerId = typeof task.agent === 'string' && task.agent.trim() ? task.agent.trim() : undefined;
-		if (taskRunnerId) {
-			if (!runners.has(taskRunnerId)) {
-				if (taskRunnerId === DEFAULT_AGENT_RUNNER_ID && runners.size === 1) {
-					return runners.keys().next().value;
-				}
-				throw new Error(`Task '${task.taskId}' specifies unregistered agent runner '${taskRunnerId}'.`);
-			}
-			return taskRunnerId;
+		const taskAdapterId = typeof task.agent === 'string' && task.agent.trim() ? task.agent.trim() : undefined;
+		if (taskAdapterId) {
+			return agentRegistry.requireAgent(taskAdapterId).agentId;
 		}
-		return (runners.size === 1 ? runners.keys().next().value : undefined)
-			?? (runners.has(DEFAULT_AGENT_RUNNER_ID) ? DEFAULT_AGENT_RUNNER_ID : undefined);
+		return agentRegistry.resolveStartAgentId();
 	}
 
 	public static fromWorkflowState(input: {
@@ -199,7 +192,7 @@ export class Task extends Entity<TaskDataType, string> {
 			context: (task.context ?? []).map((contextArtifact) => ({ ...contextArtifact })),
 			waitingOn: [...task.waitingOnTaskIds],
 			status: task.lifecycle,
-			agent: task.agentRunner ?? fileTask?.agent ?? DEFAULT_AGENT_RUNNER_ID,
+			agent: task.agentAdapter ?? fileTask?.agent ?? 'copilot-cli',
 			autostart: task.runtime.autostart,
 			retries: task.retries,
 			fileName,
@@ -273,7 +266,7 @@ export class Task extends Entity<TaskDataType, string> {
 		return structuredClone(this.requireState());
 	}
 
-	public async start(options: { runnerId?: string; prompt?: string; workingDirectory?: string; model?: string; reasoningEffort?: string; terminalSessionName?: string } = {}): Promise<MissionTaskState> {
+	public async start(options: { agentId?: string; prompt?: string; workingDirectory?: string; model?: string; reasoningEffort?: string; terminalName?: string } = {}): Promise<MissionTaskState> {
 		await this.refresh();
 		this.assertCanTransition('start');
 		const state = this.requireState();
@@ -293,25 +286,27 @@ export class Task extends Entity<TaskDataType, string> {
 
 	public async startFromMissionControl(input: {
 		missionWorkspacePath: string;
-		runners: ReadonlyMap<string, AgentRunner>;
-		runnerId?: string;
+		agentRegistry: AgentRegistry;
+		agentId?: string;
 		model?: string;
 		reasoningEffort?: string;
-		terminalSessionName?: string;
+		terminalName?: string;
 	}): Promise<MissionTaskState> {
 		await this.refresh();
 		const taskState = this.toState();
-		const requestedRunnerId = input.runnerId?.trim();
-		const runnerId = requestedRunnerId || Task.resolveStartRunnerId(taskState, input.runners);
+		const requestedAdapterId = input.agentId?.trim();
+		const agentId = requestedAdapterId
+			? input.agentRegistry.requireAgent(requestedAdapterId).agentId
+			: Task.resolveStartAgentId(taskState, input.agentRegistry);
 		const model = input.model?.trim() || taskState.model?.trim();
 		const reasoningEffort = input.reasoningEffort?.trim() || taskState.reasoningEffort?.trim();
 		return this.start({
-			...(runnerId ? { runnerId } : {}),
+			...(agentId ? { agentId } : {}),
 			prompt: buildTaskLaunchPrompt(taskState, input.missionWorkspacePath),
 			workingDirectory: input.missionWorkspacePath,
 			...(model ? { model } : {}),
 			...(reasoningEffort ? { reasoningEffort } : {}),
-			...(input.terminalSessionName?.trim() ? { terminalSessionName: input.terminalSessionName.trim() } : {})
+			...(input.terminalName?.trim() ? { terminalName: input.terminalName.trim() } : {})
 		});
 	}
 
@@ -355,15 +350,15 @@ export class Task extends Entity<TaskDataType, string> {
 	}
 
 	public async launchSession(
-		request: AgentSessionLaunchRequest
-	): Promise<AgentSession> {
+		request: AgentExecutionLaunchRequest
+	): Promise<AgentExecution> {
 		await this.prepareForSessionLaunch();
 		const owner = this.requireOwner();
 		const state = this.requireState();
-		const runner = owner.requireAgentRunner(request.runnerId);
-		const availability = await runner.isAvailable();
+		const adapter = owner.requireAgentAdapter(request.agentId);
+		const availability = await adapter.isAvailable();
 		if (!availability.available) {
-			throw new Error(availability.reason ?? `${runner.displayName} is unavailable.`);
+			throw new Error(availability.reason ?? `${adapter.displayName} is unavailable.`);
 		}
 
 		try {
@@ -373,7 +368,7 @@ export class Task extends Entity<TaskDataType, string> {
 					...request,
 					prompt: buildTaskLaunchPrompt(state, request.workingDirectory)
 				};
-			const snapshot = await owner.startTaskAgentSession(state, runner, launchRequest);
+			const snapshot = await owner.startTaskAgentExecution(state, adapter, launchRequest);
 			return owner.recordStartedTaskSession(snapshot);
 		} catch (error) {
 			try {
@@ -438,20 +433,20 @@ export class Task extends Entity<TaskDataType, string> {
 		}
 	}
 
-	private static readStartCommandOptions(input: unknown): { agentRunner?: string; model?: string; reasoningEffort?: string; terminalSessionName?: string } {
+	private static readStartCommandOptions(input: unknown): { agentAdapter?: string; model?: string; reasoningEffort?: string; terminalName?: string } {
 		const options = TaskStartCommandOptionsSchema.optional().parse(input);
 		return {
-			...(options?.agentRunner ? { agentRunner: options.agentRunner } : {}),
+			...(options?.agentAdapter ? { agentAdapter: options.agentAdapter } : {}),
 			...(options?.model ? { model: options.model } : {}),
 			...(options?.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
-			...(options?.terminalSessionName ? { terminalSessionName: options.terminalSessionName } : {})
+			...(options?.terminalName ? { terminalName: options.terminalName } : {})
 		};
 	}
 
 	private static readConfigureCommandOptions(input: unknown): TaskConfigureOptions {
 		const options = TaskConfigureCommandOptionsSchema.parse(input);
 		return {
-			...(options.agentRunner ? { agentRunner: options.agentRunner } : {}),
+			...(options.agentAdapter ? { agentAdapter: options.agentAdapter } : {}),
 			...(Object.prototype.hasOwnProperty.call(options, 'model') ? { model: options.model ?? null } : {}),
 			...(Object.prototype.hasOwnProperty.call(options, 'reasoningEffort') ? { reasoningEffort: options.reasoningEffort ?? null } : {}),
 			...(typeof options.autostart === 'boolean' ? { autostart: options.autostart } : {}),

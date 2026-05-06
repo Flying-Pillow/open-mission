@@ -6,9 +6,9 @@ import {
     createMissionRuntimeEventSubscriptionChannels
 } from '@flying-pillow/mission-core/entities/Mission/MissionContract';
 import {
-    AgentSessionTerminalSnapshotSchema,
-    type AgentSessionTerminalSnapshotType,
-} from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+    AgentExecutionTerminalSnapshotSchema,
+    type AgentExecutionTerminalSnapshotType,
+} from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import {
     MissionRuntimeEventEnvelopeSchema,
     MissionTerminalSnapshotSchema,
@@ -101,11 +101,11 @@ export class DaemonGateway {
         missionId: string;
         sessionId: string;
         surfacePath?: string;
-    }): Promise<AgentSessionTerminalSnapshotType> {
-        return this.withSharedClient(input.surfacePath, async (daemon) => AgentSessionTerminalSnapshotSchema.parse(
+    }): Promise<AgentExecutionTerminalSnapshotType> {
+        return this.withSharedClient(input.surfacePath, async (daemon) => AgentExecutionTerminalSnapshotSchema.parse(
             await withTimeout(
                 daemon.client.request('entity.query', {
-                    entity: 'AgentSession',
+                    entity: 'AgentExecution',
                     method: 'readTerminal',
                     payload: {
                         missionId: input.missionId,
@@ -126,11 +126,11 @@ export class DaemonGateway {
         cols?: number;
         rows?: number;
         surfacePath?: string;
-    }): Promise<AgentSessionTerminalSnapshotType> {
-        return this.withSharedClient(input.surfacePath, async (daemon) => AgentSessionTerminalSnapshotSchema.parse(
+    }): Promise<AgentExecutionTerminalSnapshotType> {
+        return this.withSharedClient(input.surfacePath, async (daemon) => AgentExecutionTerminalSnapshotSchema.parse(
             await withTimeout(
                 daemon.client.request('entity.command', {
-                    entity: 'AgentSession',
+                    entity: 'AgentExecution',
                     method: 'sendTerminalInput',
                     payload: {
                         missionId: input.missionId,

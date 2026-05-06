@@ -10,7 +10,7 @@ Tower shows what the daemon says can happen now.
 
 Use it to:
 
-- select repositories, Missions, stages, tasks, artifacts, and Agent sessions
+- select repositories, Missions, stages, tasks, artifacts, and Agent executions
 - inspect command availability
 - launch, pause, resume, or interrupt work
 - move through workflow gates when evidence is ready

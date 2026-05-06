@@ -24,7 +24,6 @@ import {
 	getMissionArtifactDefinition,
 	getMissionStageDefinition
 } from '../../workflow/mission/manifest.js';
-import { DEFAULT_AGENT_RUNNER_ID } from '../../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
 import { TaskContextArtifactReferenceSchema, type TaskContextArtifactReferenceType } from '../Task/TaskSchema.js';
 
 export const IGNORED_WORKTREE_ENTRY_NAMES = new Set([
@@ -970,7 +969,7 @@ export class MissionDossierFilesystem {
 		const pairedTaskId = this.readOptionalStringAttribute(document.attributes, 'pairedTaskId', filePath);
 		const agent = typeof agentAttribute === 'string' && agentAttribute.trim()
 			? agentAttribute.trim()
-			: DEFAULT_AGENT_RUNNER_ID;
+			: 'copilot-cli';
 
 		return {
 			taskId,

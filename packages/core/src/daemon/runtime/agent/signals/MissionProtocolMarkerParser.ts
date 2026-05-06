@@ -1,21 +1,21 @@
 import { z } from 'zod';
 import {
-	MAX_AGENT_SESSION_MESSAGE_LENGTH,
-	MAX_AGENT_SESSION_SIGNAL_TEXT_LENGTH,
-	MAX_AGENT_SESSION_SUGGESTED_RESPONSES,
+	MAX_AGENT_EXECUTION_MESSAGE_LENGTH,
+	MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH,
+	MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES,
 	MAX_MISSION_PROTOCOL_MARKER_LENGTH,
-	type AgentSessionSignalCandidate,
-	type AgentSessionSignalScope
-} from './AgentSessionSignal.js';
+	type AgentExecutionSignalCandidate,
+	type AgentExecutionSignalScope
+} from './AgentExecutionSignal.js';
 
 export const MISSION_PROTOCOL_MARKER_PREFIX = 'mission::';
 
-const boundedText = z.string().trim().min(1).max(MAX_AGENT_SESSION_SIGNAL_TEXT_LENGTH);
+const boundedText = z.string().trim().min(1).max(MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH);
 
 const scopeSchema = z.object({
 	missionId: boundedText,
 	taskId: boundedText,
-	agentSessionId: boundedText
+	agentExecutionId: boundedText
 }).strict();
 
 const signalSchema = z.discriminatedUnion('type', [
@@ -27,7 +27,7 @@ const signalSchema = z.discriminatedUnion('type', [
 	z.object({
 		type: z.literal('needs_input'),
 		question: boundedText,
-		suggestedResponses: z.array(boundedText).max(MAX_AGENT_SESSION_SUGGESTED_RESPONSES).optional()
+		suggestedResponses: z.array(boundedText).max(MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES).optional()
 	}).strict(),
 	z.object({
 		type: z.literal('blocked'),
@@ -48,7 +48,7 @@ const signalSchema = z.discriminatedUnion('type', [
 	z.object({
 		type: z.literal('message'),
 		channel: z.enum(['agent', 'system', 'stdout', 'stderr']),
-		text: z.string().trim().min(1).max(MAX_AGENT_SESSION_MESSAGE_LENGTH)
+		text: z.string().trim().min(1).max(MAX_AGENT_EXECUTION_MESSAGE_LENGTH)
 	}).strict()
 ]);
 
@@ -56,13 +56,13 @@ const markerSchema = z.object({
 	version: z.literal(1),
 	missionId: boundedText,
 	taskId: boundedText,
-	agentSessionId: boundedText,
+	agentExecutionId: boundedText,
 	eventId: boundedText,
 	signal: signalSchema
 }).strict();
 
 export class MissionProtocolMarkerParser {
-	public parse(line: string): AgentSessionSignalCandidate[] {
+	public parse(line: string): AgentExecutionSignalCandidate[] {
 		const trimmed = line.trimEnd();
 		if (!trimmed.startsWith(MISSION_PROTOCOL_MARKER_PREFIX)) {
 			return [];
@@ -97,10 +97,10 @@ export class MissionProtocolMarkerParser {
 			];
 		}
 
-		const claimedScope: AgentSessionSignalScope = scopeSchema.parse({
+		const claimedScope: AgentExecutionSignalScope = scopeSchema.parse({
 			missionId: result.data.missionId,
 			taskId: result.data.taskId,
-			agentSessionId: result.data.agentSessionId
+			agentExecutionId: result.data.agentExecutionId
 		});
 
 		return [{
@@ -116,7 +116,7 @@ export class MissionProtocolMarkerParser {
 		summary: string,
 		rawText: string,
 		detail?: string
-	): AgentSessionSignalCandidate {
+	): AgentExecutionSignalCandidate {
 		return {
 			rawText,
 			signal: {
@@ -131,7 +131,7 @@ export class MissionProtocolMarkerParser {
 	}
 }
 
-function toAgentDeclaredSignal(signal: z.infer<typeof signalSchema>): AgentSessionSignalCandidate['signal'] {
+function toAgentDeclaredSignal(signal: z.infer<typeof signalSchema>): AgentExecutionSignalCandidate['signal'] {
 	switch (signal.type) {
 		case 'progress':
 			return {

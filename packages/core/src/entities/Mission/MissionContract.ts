@@ -1,6 +1,6 @@
 import type { EntityContractType } from '../Entity/EntitySchema.js';
 import { Mission } from './Mission.js';
-import { AgentSessionContract } from '../AgentSession/AgentSessionContract.js';
+import { AgentExecutionContract } from '../AgentExecution/AgentExecutionContract.js';
 import { ArtifactContract } from '../Artifact/ArtifactContract.js';
 import { createEntityChannel, createEntityId } from '../Entity/Entity.js';
 import { createEntityEventEnvelope } from '../Entity/Entity.js';
@@ -144,7 +144,7 @@ export function createMissionRuntimeEventSubscriptionChannels(missionId: string)
         ...createEntityContractChannelPatterns('stage', `${normalizedMissionId}/*`, StageContract),
         ...createEntityContractChannelPatterns('task', `${normalizedMissionId}/*`, TaskContract),
         ...createEntityContractChannelPatterns('artifact', `${normalizedMissionId}/*`, ArtifactContract),
-        ...createEntityContractChannelPatterns('agent_session', `${normalizedMissionId}/*`, AgentSessionContract)
+        ...createEntityContractChannelPatterns('agent_execution', `${normalizedMissionId}/*`, AgentExecutionContract)
     ];
 }
 
@@ -154,7 +154,7 @@ export function createAllRuntimeEventSubscriptionChannels(): string[] {
         ...createEntityContractChannelPatterns('stage', '*', StageContract),
         ...createEntityContractChannelPatterns('task', '*', TaskContract),
         ...createEntityContractChannelPatterns('artifact', '*', ArtifactContract),
-        ...createEntityContractChannelPatterns('agent_session', '*', AgentSessionContract)
+        ...createEntityContractChannelPatterns('agent_execution', '*', AgentExecutionContract)
     ];
 }
 

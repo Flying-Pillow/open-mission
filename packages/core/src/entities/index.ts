@@ -1,5 +1,6 @@
 export * from './Entity/EntitySchema.js';
-export * from './AgentSession/AgentSessionSchema.js';
+export * from './Agent/AgentSchema.js';
+export * from './AgentExecution/AgentExecutionSchema.js';
 export * from './Artifact/ArtifactSchema.js';
 export * from './Mission/MissionSchema.js';
 export * from './Repository/RepositorySchema.js';

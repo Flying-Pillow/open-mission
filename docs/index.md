@@ -3,7 +3,7 @@ layout: default
 title: Mission
 nav_title: Overview
 nav_order: 1
-description: Mission coordinates AI-assisted software delivery through repository-owned workflow law, daemon-owned state, and operator-controlled agent runtimes.
+description: Mission coordinates AI-assisted software delivery through repository-owned workflow law, daemon-owned state, and operator-controlled agent adapters.
 ---
 
 Mission is a local-first control system for AI-assisted software delivery. It gives coding agents a governed workflow, isolated workspaces, durable artifacts, and a human operator above the automation.
@@ -14,11 +14,11 @@ Mission is a local-first control system for AI-assisted software delivery. It gi
 | --- | --- |
 | Safe by design | Agent work runs in isolated Mission worktrees instead of your active branch |
 | Structured delivery | Work moves from brief to requirements, spec, implementation, verification, audit, and delivery |
-| Runtime freedom | Workflow stays stable while agent runtimes remain replaceable adapters |
+| Runtime freedom | Workflow stays stable while agent adapters remain replaceable adapters |
 
 Mission exists because raw AI coding is fast, but fast is not the same thing as governable. A long chat session can drift from the architecture, rewrite the wrong files, lose context, sound confident without proof, and leave the human trying to reconstruct what happened from terminal scrollback.
 
-Mission turns that into an operation. The Mission owns the workflow, state, artifacts, tasks, and command surface. Agent runtimes execute bounded work underneath that control layer.
+Mission turns that into an operation. The Mission owns the workflow, state, artifacts, tasks, and command surface. Agent adapters execute bounded work underneath that control layer.
 
 The practical promise is simple: use AI speed without giving up architectural discipline, repository safety, or human control.
 
@@ -30,7 +30,7 @@ Instead of one open-ended session working directly on your checkout, Mission giv
 2. start a Mission from a brief or tracked issue
 3. create an isolated Mission worktree
 4. move through staged artifacts and tasks
-5. launch Agent sessions with bounded context
+5. launch Agent executions with bounded context
 6. verify, audit, and deliver with evidence
 
 Airport is the operator surface for that flow. Tower shows the legal commands, Runway hosts live agent execution, and Briefing Room keeps artifacts in view.
@@ -42,7 +42,7 @@ Airport is the operator surface for that flow. Tower shows the legal commands, R
 | Agent work corrupts the main checkout | Work happens in isolated Mission worktrees |
 | Context turns into one fragile chat | Work is split into artifacts, stages, tasks, and sessions |
 | UI state becomes truth | The daemon owns runtime state and Entity behavior |
-| Provider details leak inward | GitHub, Git, and agent runtimes sit behind adapters |
+| Provider details leak inward | GitHub, Git, and agent adapters sit behind adapters |
 | Verification becomes self-reported | Gates require artifacts and operator-visible evidence |
 
 ## Why Teams Use It
@@ -62,10 +62,10 @@ For the broader motivation, read [AI Technical Debt](core-workflows/ai-technical
 ## Core Vocabulary
 
 - **Repository**: the local checked-out Git repository used as the base for Mission work.
-- **Mission**: a long-lived unit of engineering work with a brief, workflow state, artifacts, tasks, and agent sessions.
+- **Mission**: a long-lived unit of engineering work with a brief, workflow state, artifacts, tasks, and agent executions.
 - **Running Mission instance**: the daemon-owned Entity that applies workflow law while a Mission is live.
 - **Mission artifact**: a tracked operator-facing file produced or consumed by the Mission.
-- **Agent session**: a daemon-managed execution attached to a Mission or Mission task.
+- **Agent execution**: a daemon-managed execution attached to a Mission or Mission task.
 - **Airport**: the operator surface for reading and steering the daemon-owned system.
 
 The full domain glossary lives in CONTEXT.md. ADRs explain why the architecture is shaped this way.

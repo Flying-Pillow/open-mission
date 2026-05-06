@@ -46,10 +46,10 @@ export const TaskCommandInputSchema = TaskLocatorSchema.extend({
 }).strict();
 
 export const TaskStartCommandOptionsSchema = z.object({
-    agentRunner: z.string().trim().min(1).optional(),
+    agentAdapter: z.string().trim().min(1).optional(),
     model: z.string().trim().min(1).optional(),
     reasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).optional(),
-    terminalSessionName: z.string().trim().min(1).optional()
+    terminalName: z.string().trim().min(1).optional()
 }).strict();
 
 export const TaskReworkCommandInputSchema = z.string().trim().min(1);
@@ -61,7 +61,7 @@ export const TaskContextArtifactReferenceSchema = z.object({
 }).strict();
 
 export const TaskConfigureCommandOptionsSchema = z.object({
-    agentRunner: z.string().trim().min(1).optional(),
+    agentAdapter: z.string().trim().min(1).optional(),
     model: z.string().trim().min(1).nullable().optional(),
     reasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).nullable().optional(),
     autostart: z.boolean().optional(),
@@ -83,7 +83,7 @@ export const TaskStorageSchema = z.object({
     dependsOn: z.array(z.string().trim().min(1)),
     context: z.array(TaskContextArtifactReferenceSchema).optional(),
     waitingOnTaskIds: z.array(z.string().trim().min(1)),
-    agentRunner: z.string().trim().min(1),
+    agentAdapter: z.string().trim().min(1),
     autostart: z.boolean().optional(),
     retries: z.number().int().nonnegative(),
     fileName: z.string().trim().min(1).optional(),

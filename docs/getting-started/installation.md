@@ -30,6 +30,6 @@ On Linux, mission install can provision the Mission-managed GitHub CLI when it i
 
 ## What Starts
 
-The CLI opens Airport and connects it to the Mission daemon. The daemon owns repository state, Mission runtime state, Entity command dispatch, and agent runtime coordination.
+The CLI opens Airport and connects it to the Mission daemon. The daemon owns repository state, Mission runtime state, Entity command dispatch, and agent adapter coordination.
 
 After Airport opens, continue with [Repository Setup](repository-setup.md).

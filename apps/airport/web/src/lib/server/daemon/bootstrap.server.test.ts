@@ -26,7 +26,7 @@ describe('startMissionDaemonBootstrap', () => {
             manifestPath: '/tmp/mission/daemon.json',
             message: 'Mission daemon is not running.'
         });
-        resolveDefaultRuntimeFactoryModulePath.mockReturnValue('/mission/packages/core/build/daemon/runtime/agent/runtimes/AgentRuntimeFactory.js');
+        resolveDefaultRuntimeFactoryModulePath.mockReturnValue('/mission/packages/core/build/daemon/runtime/agent/adapters/AgentAdapterFactory.js');
         resolveSurfacePath.mockReturnValue('/mission');
         startMissionDaemonProcess.mockResolvedValue({
             running: true,
@@ -60,7 +60,7 @@ describe('startMissionDaemonBootstrap', () => {
         expect(startMissionDaemonProcess).toHaveBeenCalledWith({
             surfacePath: '/mission',
             runtimeMode: 'source',
-            runtimeFactoryModulePath: '/mission/packages/core/build/daemon/runtime/agent/runtimes/AgentRuntimeFactory.js'
+            runtimeFactoryModulePath: '/mission/packages/core/build/daemon/runtime/agent/adapters/AgentAdapterFactory.js'
         });
     });
 

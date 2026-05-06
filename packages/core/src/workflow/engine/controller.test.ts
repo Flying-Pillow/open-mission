@@ -103,7 +103,7 @@ describe('MissionWorkflowController', () => {
             occurredAt: '2026-04-14T09:00:02.000Z',
             source: 'human',
             taskId: 'prd/01',
-            runnerId: 'copilot-cli'
+            agentId: 'copilot-cli'
         });
         await controller.applyEvent({
             eventId: 'task.queued:prd/01:2026-04-14T09:00:02.000Z',
@@ -111,7 +111,7 @@ describe('MissionWorkflowController', () => {
             occurredAt: '2026-04-14T09:00:02.000Z',
             source: 'human',
             taskId: 'prd/01',
-            runnerId: 'copilot-cli'
+            agentId: 'copilot-cli'
         });
 
         expect(logger.entries.map((entry) => entry.message)).toEqual([
@@ -135,7 +135,7 @@ describe('MissionWorkflowController', () => {
             missionId: 'mission-42',
             eventId: 'task.queued:prd/01:2026-04-14T09:00:02.000Z',
             taskId: 'prd/01',
-            runnerId: 'copilot-cli'
+            agentId: 'copilot-cli'
         });
     });
 
@@ -210,13 +210,13 @@ function createRequestExecutor() {
                     : []
             );
         },
-        reconcileSessions: async () => [],
+        reconcileExecutions: async () => [],
         listRuntimeSessions: () => [],
         getRuntimeSession: () => undefined,
-        attachSession: async () => {
+        attachTerminal: async () => {
             throw new Error('not implemented for test');
         },
-        startSession: async () => {
+        startExecution: async () => {
             throw new Error('not implemented for test');
         },
         cancelRuntimeSession: async () => [],

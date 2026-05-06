@@ -6,12 +6,12 @@ export {
 export { EntityRuntimeStore } from '$lib/client/runtime/EntityRuntimeStore';
 export type { RuntimeSubscription } from '$lib/client/runtime/RuntimeSubscription';
 export { Mission } from '$lib/components/entities/Mission/Mission.svelte.js';
-export { AgentSession } from '$lib/components/entities/AgentSession/AgentSession.svelte.js';
+export { AgentExecution } from '$lib/components/entities/AgentExecution/AgentExecution.svelte.js';
 export { Artifact } from '$lib/components/entities/Artifact/Artifact.svelte.js';
 export { Stage } from '$lib/components/entities/Stage/Stage.svelte.js';
 export { Task } from '$lib/components/entities/Task/Task.svelte.js';
 export { Repository } from '$lib/components/entities/Repository/Repository.svelte.js';
 export { EntityRegistry, type EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
-export type { AgentSessionCommandType, AgentSessionPromptType, AgentSessionDataType, AgentSessionTerminalHandleType, AgentSessionTerminalSnapshotType } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+export type { AgentExecutionCommandType, AgentExecutionPromptType, AgentExecutionDataType, AgentExecutionTerminalHandleType, AgentExecutionTerminalSnapshotType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 export type { MissionCommandInvocationType, MissionRuntimeEventEnvelopeType, MissionSnapshotType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 export type { RepositoryStorageType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';

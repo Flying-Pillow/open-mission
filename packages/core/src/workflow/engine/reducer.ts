@@ -7,7 +7,7 @@ import {
     type MissionWorkflowRuntimeState,
     type MissionWorkflowSignal,
     type MissionTaskRuntimeState,
-    type AgentSessionRuntimeState
+    type AgentExecutionRuntimeState
 } from './types.js';
 import { createInitialMissionWorkflowRuntimeState } from './document.js';
 import {
@@ -113,10 +113,10 @@ class MissionWorkflowTransitionEngine {
                         requestedAt: event.occurredAt,
                         requestedBy: event.source === 'human' ? 'human' : event.source === 'daemon' ? 'daemon' : 'system',
                         causedByEventId: event.eventId,
-                        ...(existing?.runnerId ? { runnerId: existing.runnerId } : {}),
+                        ...(existing?.agentId ? { agentId: existing.agentId } : {}),
                         ...(existing?.prompt ? { prompt: existing.prompt } : {}),
                         ...(existing?.workingDirectory ? { workingDirectory: existing.workingDirectory } : {}),
-                        ...(existing?.terminalSessionName ? { terminalSessionName: existing.terminalSessionName } : {})
+                        ...(existing?.terminalName ? { terminalName: existing.terminalName } : {})
                     };
                 });
                 this.state.tasks = this.state.tasks.map((task) =>
@@ -156,7 +156,7 @@ class MissionWorkflowTransitionEngine {
                         runtime: {
                             autostart: stageDefinition.taskLaunchPolicy.defaultAutostart
                         },
-                        ...(task.agentRunner ? { agentRunner: task.agentRunner } : {}),
+                        ...(task.agentAdapter ? { agentAdapter: task.agentAdapter } : {}),
                         retries: 0,
                         reworkIterationCount: 0,
                         createdAt: event.occurredAt,
@@ -191,7 +191,7 @@ class MissionWorkflowTransitionEngine {
                     task.taskId === event.taskId
                         ? {
                             ...task,
-                            ...(event.runnerId ? { agentRunner: event.runnerId } : {}),
+                            ...(event.agentId ? { agentAdapter: event.agentId } : {}),
                             ...(event.model ? { model: event.model } : {}),
                             ...(event.reasoningEffort ? { reasoningEffort: event.reasoningEffort } : {}),
                             lifecycle: 'queued',
@@ -206,12 +206,12 @@ class MissionWorkflowTransitionEngine {
                         requestedAt: event.occurredAt,
                         requestedBy: event.source === 'human' ? 'human' : event.source === 'daemon' ? 'daemon' : 'system',
                         causedByEventId: event.eventId,
-                        ...(event.runnerId ? { runnerId: event.runnerId } : {}),
+                        ...(event.agentId ? { agentId: event.agentId } : {}),
                         ...(event.prompt ? { prompt: event.prompt } : {}),
                         ...(event.workingDirectory ? { workingDirectory: event.workingDirectory } : {}),
                         ...(event.model ? { model: event.model } : {}),
                         ...(event.reasoningEffort ? { reasoningEffort: event.reasoningEffort } : {}),
-                        ...(event.terminalSessionName ? { terminalSessionName: event.terminalSessionName } : {})
+                        ...(event.terminalName ? { terminalName: event.terminalName } : {})
                     });
                 }
                 return;
@@ -321,7 +321,7 @@ class MissionWorkflowTransitionEngine {
                 this.state.launchQueue = this.state.launchQueue.filter((request) => !resetTaskIds.has(request.taskId));
                 return;
             }
-            case 'session.started': {
+            case 'execution.started': {
                 this.state.tasks = this.state.tasks.map((task) => {
                     if (task.taskId !== event.taskId) {
                         return task;
@@ -346,7 +346,7 @@ class MissionWorkflowTransitionEngine {
                 this.state.sessions = upsertSession(this.state.sessions, {
                     sessionId: event.sessionId,
                     taskId: event.taskId,
-                    runnerId: event.runnerId,
+                    agentId: event.agentId,
                     ...(event.transportId ? { transportId: event.transportId } : {}),
                     ...(event.sessionLogPath ? { sessionLogPath: event.sessionLogPath } : {}),
                     ...(event.terminalHandle ? { terminalHandle: { ...event.terminalHandle } } : {}),
@@ -357,7 +357,7 @@ class MissionWorkflowTransitionEngine {
                 this.state.launchQueue = this.state.launchQueue.filter((request) => request.taskId !== event.taskId);
                 return;
             }
-            case 'session.launch-failed':
+            case 'execution.launch-failed':
                 this.state.tasks = this.state.tasks.map((task) =>
                     task.taskId === event.taskId
                         ? {
@@ -370,10 +370,10 @@ class MissionWorkflowTransitionEngine {
                 );
                 this.state.launchQueue = this.state.launchQueue.filter((request) => request.taskId !== event.taskId);
                 return;
-            case 'session.completed':
+            case 'execution.completed':
                 this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'completed', event.occurredAt);
                 return;
-            case 'session.failed': {
+            case 'execution.failed': {
                 const wasActive = hasActiveSession(this.state.sessions, event.sessionId);
                 this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'failed', event.occurredAt);
                 if (!wasActive) {
@@ -391,7 +391,7 @@ class MissionWorkflowTransitionEngine {
                 );
                 return;
             }
-            case 'session.cancelled': {
+            case 'execution.cancelled': {
                 const wasActive = hasActiveSession(this.state.sessions, event.sessionId);
                 this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'cancelled', event.occurredAt);
                 if (!wasActive) {
@@ -404,7 +404,7 @@ class MissionWorkflowTransitionEngine {
                 );
                 return;
             }
-            case 'session.terminated': {
+            case 'execution.terminated': {
                 const wasActive = hasActiveSession(this.state.sessions, event.sessionId);
                 this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'terminated', event.occurredAt);
                 if (!wasActive) {
@@ -528,8 +528,8 @@ function queueAutostartTasks(
     const queuedLaunchTaskIds = new Set(state.launchQueue.map((request) => request.taskId));
     const activeSessionTaskIds = new Set(
         state.sessions
-            .filter((session) => isActiveSessionLifecycle(session.lifecycle))
-            .map((session) => session.taskId)
+            .filter((execution) => isActiveSessionLifecycle(execution.lifecycle))
+            .map((execution) => execution.taskId)
     );
 
     for (const task of state.tasks) {
@@ -563,14 +563,14 @@ function queueAutostartTasks(
         if (occupiedSessionSlots >= _configuration.workflow.execution.maxParallelSessions) {
             break;
         }
-        const request = createRequest('session.launch', event.occurredAt, {
+        const request = createRequest('execution.launch', event.occurredAt, {
             taskId: launchRequest.taskId,
-            ...(launchRequest.runnerId ? { runnerId: launchRequest.runnerId } : {}),
+            ...(launchRequest.agentId ? { agentId: launchRequest.agentId } : {}),
             ...(launchRequest.prompt ? { prompt: launchRequest.prompt } : {}),
             ...(launchRequest.workingDirectory ? { workingDirectory: launchRequest.workingDirectory } : {}),
             ...(launchRequest.model ? { model: launchRequest.model } : {}),
             ...(launchRequest.reasoningEffort ? { reasoningEffort: launchRequest.reasoningEffort } : {}),
-            ...(launchRequest.terminalSessionName ? { terminalSessionName: launchRequest.terminalSessionName } : {})
+            ...(launchRequest.terminalName ? { terminalName: launchRequest.terminalName } : {})
         });
         launchRequest.dispatchedAt = event.occurredAt;
         launchRequest.requestId = request.requestId;
@@ -580,9 +580,9 @@ function queueAutostartTasks(
 }
 
 function upsertSession(
-    sessions: AgentSessionRuntimeState[],
-    session: AgentSessionRuntimeState
-): AgentSessionRuntimeState[] {
+    sessions: AgentExecutionRuntimeState[],
+    session: AgentExecutionRuntimeState
+): AgentExecutionRuntimeState[] {
     const existingIndex = sessions.findIndex((candidate) => candidate.sessionId === session.sessionId);
     if (existingIndex < 0) {
         return [...sessions, session];
@@ -593,11 +593,11 @@ function upsertSession(
 }
 
 function updateSessionLifecycle(
-    sessions: AgentSessionRuntimeState[],
+    sessions: AgentExecutionRuntimeState[],
     sessionId: string,
-    lifecycle: AgentSessionRuntimeState['lifecycle'],
+    lifecycle: AgentExecutionRuntimeState['lifecycle'],
     occurredAt: string
-): AgentSessionRuntimeState[] {
+): AgentExecutionRuntimeState[] {
     return sessions.map((session) =>
         session.sessionId === sessionId
             ? {
@@ -613,8 +613,8 @@ function updateSessionLifecycle(
     );
 }
 
-function hasActiveSession(sessions: AgentSessionRuntimeState[], sessionId: string): boolean {
-    return sessions.some((session) => session.sessionId === sessionId && isActiveSessionLifecycle(session.lifecycle));
+function hasActiveSession(sessions: AgentExecutionRuntimeState[], sessionId: string): boolean {
+    return sessions.some((execution) => execution.sessionId === sessionId && isActiveSessionLifecycle(execution.lifecycle));
 }
 
 function isInactiveSessionLifecycleEvent(
@@ -622,10 +622,10 @@ function isInactiveSessionLifecycleEvent(
     event: MissionWorkflowEvent
 ): boolean {
     switch (event.type) {
-        case 'session.cancelled':
-        case 'session.terminated':
+        case 'execution.cancelled':
+        case 'execution.terminated':
             return true;
-        case 'session.failed':
+        case 'execution.failed':
             return !hasActiveSession(state.sessions, event.sessionId);
         default:
             return false;
@@ -718,8 +718,8 @@ function configureTaskRuntimeState(
         ...task,
         updatedAt: event.occurredAt
     };
-    if (event.agentRunner?.trim()) {
-        next.agentRunner = event.agentRunner.trim();
+    if (event.agentAdapter?.trim()) {
+        next.agentAdapter = event.agentAdapter.trim();
     }
     if (Object.prototype.hasOwnProperty.call(event, 'model')) {
         if (event.model?.trim()) {

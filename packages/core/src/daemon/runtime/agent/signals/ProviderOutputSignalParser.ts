@@ -1,8 +1,8 @@
-import type { AgentProviderObservation } from '../AgentProviderObservations.js';
-import type { AgentSessionSignalCandidate } from './AgentSessionSignal.js';
+import type { AgentProviderObservation } from './AgentProviderObservation.js';
+import type { AgentExecutionSignalCandidate } from './AgentExecutionSignal.js';
 
 export class ProviderOutputSignalParser {
-	public parse(observation: AgentProviderObservation): AgentSessionSignalCandidate[] {
+	public parse(observation: AgentProviderObservation): AgentExecutionSignalCandidate[] {
 		switch (observation.kind) {
 			case 'message':
 				return [{
@@ -31,7 +31,7 @@ export class ProviderOutputSignalParser {
 	}
 }
 
-function toDiagnosticCandidate(observation: Extract<AgentProviderObservation, { kind: 'signal' }>): AgentSessionSignalCandidate {
+function toDiagnosticCandidate(observation: Extract<AgentProviderObservation, { kind: 'signal' }>): AgentExecutionSignalCandidate {
 	if (observation.signal.type === 'provider-session') {
 		return {
 			dedupeKey: `provider-session:${observation.signal.providerName}:${observation.signal.sessionId}`,

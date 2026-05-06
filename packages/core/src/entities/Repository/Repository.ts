@@ -5,6 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import { EntityClassCommandViewSchema, EntityCommandViewSchema, type EntityClassCommandViewType, type EntityCommandViewType } from '../Entity/EntitySchema.js';
+import { AgentRegistry } from '../Agent/AgentRegistry.js';
 import type { Mission, MissionWorkflowBindings } from '../Mission/Mission.js';
 import {
 	getMissionGitHubCliBinary,
@@ -939,7 +940,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		const store = new MissionDossierFilesystem(this.repositoryRootPath);
 		const preparation = await this.prepareMissionFromBrief(store, {
 			workflow,
-			taskRunners: new Map(),
+			agentRegistry: new AgentRegistry({ agents: [] }),
 			...(settings.instructionsPath
 				? { instructionsPath: Repository.resolveRepositoryPath(this.repositoryRootPath, settings.instructionsPath) }
 				: {}),
@@ -1098,16 +1099,13 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		workflowBindings: MissionWorkflowBindings,
 		repositoryRootPath: string
 	): Promise<MissionWorkflowBindings> {
-		if (workflowBindings.taskRunners.size > 0) {
+		if (workflowBindings.agentRegistry.listAgents().length > 0) {
 			return workflowBindings;
 		}
-		const { createConfiguredAgentRunners } = await import('../../daemon/runtime/agent/runtimes/AgentRuntimeFactory.js');
+		const { AgentRegistry } = await import('../Agent/AgentRegistry.js');
 		return {
 			...workflowBindings,
-			taskRunners: new Map(
-				(await createConfiguredAgentRunners({ repositoryRootPath }))
-					.map((runner) => [runner.id, runner] as const)
-			)
+			agentRegistry: await AgentRegistry.createConfigured({ repositoryRootPath })
 		};
 	}
 

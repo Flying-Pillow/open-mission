@@ -20,17 +20,17 @@ import {
     EntityEventEnvelopeSchema
 } from '../Entity/EntitySchema.js';
 import {
-    AgentSessionEventSubjectSchema,
-    AgentSessionTerminalSnapshotSchema,
-    AgentSessionTerminalHandleSchema,
-    AgentSessionDataSchema,
-    AgentSessionDataChangedSchema,
-    AgentSessionLifecycleStateSchema,
-    type AgentSessionRecord,
-    type AgentSessionState,
+    AgentExecutionEventSubjectSchema,
+    AgentExecutionTerminalSnapshotSchema,
+    AgentExecutionTerminalHandleSchema,
+    AgentExecutionDataSchema,
+    AgentExecutionDataChangedSchema,
+    AgentExecutionLifecycleStateSchema,
+    type AgentExecutionRecord,
+    type AgentExecutionState,
     type MissionAgentPermissionRequest,
     type MissionAgentTelemetrySnapshot
-} from '../AgentSession/AgentSessionSchema.js';
+} from '../AgentExecution/AgentExecutionSchema.js';
 import {
     ArtifactEventLocatorSchema,
     ArtifactDataSchema,
@@ -64,15 +64,6 @@ export const MissionCommandIdSchema = z.enum([
 ]);
 
 export const MissionEntityTypeSchema = z.enum(['feature', 'fix', 'docs', 'refactor', 'task']);
-export const MISSION_AGENT_RUNNER_IDS = [
-    'copilot-cli',
-    'claude-code',
-    'pi',
-    'codex',
-    'opencode'
-] as const;
-export const MissionAgentRunnerSchema = z.enum(MISSION_AGENT_RUNNER_IDS);
-export type MissionAgentRunnerType = z.infer<typeof MissionAgentRunnerSchema>;
 export const MissionDefaultAgentModeSchema = z.enum(['interactive', 'autonomous']);
 export const MissionReasoningEffortSchema = z.enum(['low', 'medium', 'high', 'xhigh']);
 export type MissionReasoningEffortType = z.infer<typeof MissionReasoningEffortSchema>;
@@ -108,7 +99,7 @@ export const MissionTerminalSnapshotSchema = z.object({
     screen: z.string(),
     chunk: z.string().optional(),
     truncated: z.boolean().optional(),
-    terminalHandle: AgentSessionTerminalHandleSchema.optional()
+    terminalHandle: AgentExecutionTerminalHandleSchema.optional()
 }).strict();
 
 export const MissionTerminalSocketClientMessageSchema = z.discriminatedUnion('type', [
@@ -130,7 +121,7 @@ export const MissionTerminalOutputSchema = z.object({
     dead: z.boolean(),
     exitCode: z.number().int().nullable(),
     truncated: z.boolean().optional(),
-    terminalHandle: AgentSessionTerminalHandleSchema.optional()
+    terminalHandle: AgentExecutionTerminalHandleSchema.optional()
 }).strict();
 
 export const MissionTerminalSocketServerMessageSchema = z.discriminatedUnion('type', [
@@ -202,7 +193,7 @@ export type MissionRecord = {
     createdAt: string;
     stage: MissionStageId;
     deliveredAt?: string;
-    agentSessions: AgentSessionRecord[];
+    agentExecutions: AgentExecutionRecord[];
 };
 
 export type MissionGateResult = {
@@ -357,7 +348,7 @@ export type MissionResolvedSelection = {
     activeInstructionPath?: string;
     activeStageResultArtifact?: string;
     activeStageResultPath?: string;
-    activeAgentSessionId?: string;
+    activeAgentExecutionId?: string;
 };
 
 export type MissionTowerProjection = {
@@ -382,7 +373,7 @@ export type OperatorStatus = {
     activeTasks?: MissionTaskState[];
     readyTasks?: MissionTaskState[];
     stages?: MissionStageStatus[];
-    agentSessions?: AgentSessionRecord[];
+    agentExecutions?: AgentExecutionRecord[];
     tower?: MissionTowerProjection;
     workflow?: {
         lifecycle: MissionLifecycleState;
@@ -407,8 +398,8 @@ export type MissionAgentConsoleState = {
     lines: string[];
     promptOptions: string[] | null;
     awaitingInput: boolean;
-    runnerId?: string;
-    runnerLabel?: string;
+    agentId?: string;
+    adapterLabel?: string;
     sessionId?: string;
 };
 
@@ -430,80 +421,80 @@ export type MissionAgentConsoleEvent =
 export type MissionAgentEvent =
     | {
         type: 'session-state-changed';
-        state: AgentSessionState;
+        state: AgentExecutionState;
     }
     | {
         type: 'prompt-accepted';
         prompt: string;
-        state: AgentSessionState;
+        state: AgentExecutionState;
     }
     | {
         type: 'prompt-rejected';
         prompt: string;
         reason: string;
-        state: AgentSessionState;
+        state: AgentExecutionState;
     }
     | {
         type: 'session-started';
-        state: AgentSessionState;
+        state: AgentExecutionState;
     }
     | {
         type: 'session-resumed';
-        state: AgentSessionState;
+        state: AgentExecutionState;
     }
     | {
         type: 'agent-message';
         channel: 'stdout' | 'stderr' | 'system';
         text: string;
-        state: AgentSessionState;
+        state: AgentExecutionState;
     }
     | {
         type: 'permission-requested';
         request: MissionAgentPermissionRequest;
-        state: AgentSessionState;
+        state: AgentExecutionState;
     }
     | {
         type: 'tool-started';
         toolName: string;
         summary?: string;
-        state: AgentSessionState;
+        state: AgentExecutionState;
     }
     | {
         type: 'tool-finished';
         toolName: string;
         summary?: string;
-        state: AgentSessionState;
+        state: AgentExecutionState;
     }
     | {
         type: 'telemetry-updated';
         telemetry: MissionAgentTelemetrySnapshot;
-        state: AgentSessionState;
+        state: AgentExecutionState;
     }
     | {
         type: 'context-updated';
         telemetry: MissionAgentTelemetrySnapshot;
-        state: AgentSessionState;
+        state: AgentExecutionState;
     }
     | {
         type: 'cost-updated';
         telemetry: MissionAgentTelemetrySnapshot;
-        state: AgentSessionState;
+        state: AgentExecutionState;
     }
     | {
         type: 'session-completed';
         exitCode: number;
-        state: AgentSessionState;
+        state: AgentExecutionState;
     }
     | {
         type: 'session-failed';
         errorMessage: string;
         exitCode?: number;
-        state: AgentSessionState;
+        state: AgentExecutionState;
     }
     | {
         type: 'session-cancelled';
         reason?: string;
-        state: AgentSessionState;
+        state: AgentExecutionState;
     };
 
 export const MissionEventSubjectSchema = MissionLocatorSchema.extend({
@@ -528,7 +519,7 @@ export const MissionChildEventSubjectSchema = z.discriminatedUnion('entity', [
     StageEventSubjectSchema,
     TaskEventSubjectSchema,
     ArtifactEventLocatorSchema,
-    AgentSessionEventSubjectSchema
+    AgentExecutionEventSubjectSchema
 ]);
 
 export const MissionDocumentSnapshotSchema = z.object({
@@ -573,7 +564,7 @@ export const MissionStorageSchema = z.object({
     currentStageId: z.string().trim().min(1).optional(),
     artifacts: z.array(ArtifactDataSchema),
     stages: z.array(StageDataSchema),
-    agentSessions: z.array(AgentSessionDataSchema),
+    agentExecutions: z.array(AgentExecutionDataSchema),
     recommendedAction: z.string().trim().min(1).optional()
 }).strict();
 
@@ -594,7 +585,7 @@ export const MissionCommandOwnerSchema = z.discriminatedUnion('entity', [
         taskId: z.string().trim().min(1)
     }).strict(),
     z.object({
-        entity: z.literal('AgentSession'),
+        entity: z.literal('AgentExecution'),
         sessionId: z.string().trim().min(1)
     }).strict()
 ]);
@@ -639,7 +630,7 @@ export const MissionSnapshotSchema = z.object({
     stages: z.array(StageDataSchema),
     tasks: z.array(TaskDataSchema),
     artifacts: z.array(ArtifactDataSchema),
-    agentSessions: z.array(AgentSessionDataSchema),
+    agentExecutions: z.array(AgentExecutionDataSchema),
     control: z.record(z.string(), z.unknown()).optional(),
     worktree: MissionWorktreeSnapshotSchema.optional()
 }).strict();
@@ -656,9 +647,9 @@ export const MissionSnapshotChangedEventSchema = z.object({
     snapshot: MissionSnapshotSchema
 }).strict();
 
-export const MissionAgentSessionLifecycleNotificationSchema = z.object({
+export const MissionAgentExecutionLifecycleNotificationSchema = z.object({
     phase: z.enum(['spawned', 'active', 'terminated']),
-    lifecycleState: AgentSessionLifecycleStateSchema
+    lifecycleState: AgentExecutionLifecycleStateSchema
 }).strict();
 
 const MissionRuntimeEventEnvelopeBaseSchema = EntityEventEnvelopeSchema.omit({
@@ -692,20 +683,20 @@ export const MissionRuntimeEventEnvelopeSchema = z.discriminatedUnion('type', [
         payload: ArtifactDataChangedSchema
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
-        type: z.literal('agentSession.data.changed'),
-        payload: AgentSessionDataChangedSchema
+        type: z.literal('agentExecution.data.changed'),
+        payload: AgentExecutionDataChangedSchema
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
-        type: z.literal('session.terminal'),
-        payload: AgentSessionTerminalSnapshotSchema
+        type: z.literal('execution.terminal'),
+        payload: AgentExecutionTerminalSnapshotSchema
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
-        type: z.literal('session.event'),
-        payload: AgentSessionDataSchema
+        type: z.literal('execution.event'),
+        payload: AgentExecutionDataSchema
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
-        type: z.literal('session.lifecycle'),
-        payload: MissionAgentSessionLifecycleNotificationSchema
+        type: z.literal('execution.lifecycle'),
+        payload: MissionAgentExecutionLifecycleNotificationSchema
     })
 ]);
 

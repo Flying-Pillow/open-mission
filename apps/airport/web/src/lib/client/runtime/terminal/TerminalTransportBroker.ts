@@ -1,10 +1,10 @@
 import {
-    AgentSessionTerminalSnapshotSchema,
-    AgentSessionTerminalSocketServerMessageSchema,
-    type AgentSessionTerminalSnapshotType,
-    type AgentSessionTerminalSocketClientMessageType,
-    type AgentSessionTerminalSocketServerMessageType
-} from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+    AgentExecutionTerminalSnapshotSchema,
+    AgentExecutionTerminalSocketServerMessageSchema,
+    type AgentExecutionTerminalSnapshotType,
+    type AgentExecutionTerminalSocketClientMessageType,
+    type AgentExecutionTerminalSocketServerMessageType
+} from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import {
     MissionTerminalSnapshotSchema,
     MissionTerminalSocketServerMessageSchema,
@@ -21,9 +21,9 @@ type TerminalSnapshotBase = {
     chunk?: string;
     truncated?: boolean;
     terminalHandle?: {
-        sessionName: string;
-        paneId: string;
-        sharedSessionName?: string;
+        terminalName: string;
+        terminalPaneId: string;
+        sharedTerminalName?: string;
     };
 };
 
@@ -50,15 +50,15 @@ type TerminalServerMessage<TSnapshot extends TerminalSnapshotBase, TOutput exten
 
 type TerminalClientMessage =
     | MissionTerminalSocketClientMessageType
-    | AgentSessionTerminalSocketClientMessageType;
+    | AgentExecutionTerminalSocketClientMessageType;
 
 type SharedTerminalSnapshot =
     | MissionTerminalSnapshotType
-    | AgentSessionTerminalSnapshotType;
+    | AgentExecutionTerminalSnapshotType;
 
 type SharedTerminalServerMessage =
     | MissionTerminalSocketServerMessageType
-    | AgentSessionTerminalSocketServerMessageType;
+    | AgentExecutionTerminalSocketServerMessageType;
 
 type TerminalBrokerState<TSnapshot extends TerminalSnapshotBase> = {
     snapshot: TSnapshot | null;
@@ -163,8 +163,8 @@ export function subscribeMissionSessionTerminalTransport(
         repositoryRootPath?: string;
         sessionId: string;
     },
-    listener: TerminalBrokerListener<AgentSessionTerminalSnapshotType>,
-): SharedTerminalTransportSubscription<AgentSessionTerminalSnapshotType> {
+    listener: TerminalBrokerListener<AgentExecutionTerminalSnapshotType>,
+): SharedTerminalTransportSubscription<AgentExecutionTerminalSnapshotType> {
     const missionId = input.missionId.trim();
     const repositoryId = input.repositoryId.trim();
     const repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
@@ -182,7 +182,7 @@ export function subscribeMissionSessionTerminalTransport(
                 throw new Error(`Terminal data request failed (${response.status}).`);
             }
 
-            return AgentSessionTerminalSnapshotSchema.parse(await response.json());
+            return AgentExecutionTerminalSnapshotSchema.parse(await response.json());
         },
         createSocket: () => {
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -192,7 +192,7 @@ export function subscribeMissionSessionTerminalTransport(
             );
             return new WebSocket(wsUrl);
         },
-        parseMessage: (value) => AgentSessionTerminalSocketServerMessageSchema.parse(value),
+        parseMessage: (value) => AgentExecutionTerminalSocketServerMessageSchema.parse(value),
         retryOnDisconnected: true,
     }, listener);
 }

@@ -57,7 +57,7 @@ describe('MissionRegistry', () => {
 				trackingProvider: 'github',
 				instructionsPath: '.agents',
 				skillsPath: '.agents/skills',
-				agentRunner: 'copilot-cli'
+				agentAdapter: 'copilot-cli'
 			}, null, 2)}\n`,
 			'utf8'
 		);
@@ -90,7 +90,7 @@ async function createTempWorkspace(): Promise<string> {
 			trackingProvider: 'github',
 			instructionsPath: '.agents',
 			skillsPath: '.agents/skills',
-			agentRunner: 'copilot-cli'
+			agentAdapter: 'copilot-cli'
 		}, null, 2)}\n`,
 		'utf8'
 	);

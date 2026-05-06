@@ -1,13 +1,11 @@
 <script lang="ts">
     import Icon from "@iconify/svelte";
+    import type { AgentIdType } from "@flying-pillow/mission-core/entities/Agent/AgentSchema";
+    import { type MissionReasoningEffortType } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
     import {
-        type MissionAgentRunnerType,
-        type MissionReasoningEffortType,
-    } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
-    import {
-        createDefaultRepositoryAgentRunnerSettings,
-        readRepositoryAgentRunnerSettings,
-        type RepositoryAgentRunnerSettingsType,
+        createDefaultRepositoryAgentAdapterSettings,
+        readRepositoryAgentAdapterSettings,
+        type RepositoryAgentAdapterSettingsType,
     } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import type { EntityCommandDescriptorType } from "@flying-pillow/mission-core/entities/Entity/EntitySchema";
     import {
@@ -49,47 +47,47 @@
 
     let {
         refreshNonce,
-        agentRunners = createDefaultRepositoryAgentRunnerSettings(),
+        agentAdapters = createDefaultRepositoryAgentAdapterSettings(),
         task,
         onCommandExecuted,
     }: {
         refreshNonce: number;
-        agentRunners?: RepositoryAgentRunnerSettingsType[];
+        agentAdapters?: RepositoryAgentAdapterSettingsType[];
         task?: Task;
         onCommandExecuted: () => Promise<void>;
     } = $props();
 
     let initializedTaskId = $state<string | undefined>(undefined);
     let persistedConfigurationSignature = $state<string | undefined>(undefined);
-    let agentRunner = $state<MissionAgentRunnerType>("copilot-cli");
+    let agentAdapter = $state<AgentIdType>("copilot-cli");
     let model = $state("");
     let customModel = $state("");
     let reasoningEffort = $state<"" | MissionReasoningEffortType>("");
 
-    const agentRunnerCatalog = $derived(
-        agentRunners.length > 0
-            ? agentRunners
-            : createDefaultRepositoryAgentRunnerSettings(),
+    const agentAdapterCatalog = $derived(
+        agentAdapters.length > 0
+            ? agentAdapters
+            : createDefaultRepositoryAgentAdapterSettings(),
     );
-    const agentRunnerOptions = $derived(
-        agentRunnerCatalog.map((entry) => ({
+    const agentAdapterOptions = $derived(
+        agentAdapterCatalog.map((entry) => ({
             value: entry.id,
             label: entry.label,
         })),
     );
-    const defaultAgentRunner = $derived(agentRunnerCatalog[0]);
-    const selectedAgentRunner = $derived(
-        readRepositoryAgentRunnerSettings(
-            { agentRunners: agentRunnerCatalog },
-            agentRunner,
-        ) ?? defaultAgentRunner,
+    const defaultAgentAdapter = $derived(agentAdapterCatalog[0]);
+    const selectedAgentAdapter = $derived(
+        readRepositoryAgentAdapterSettings(
+            { agentAdapters: agentAdapterCatalog },
+            agentAdapter,
+        ) ?? defaultAgentAdapter,
     );
 
     const availableModelOptions = $derived.by(() => {
         const taskModel = task?.model?.trim();
         const options: MenuOption<string>[] = [
             defaultSelectionOption,
-            ...selectedAgentRunner.models,
+            ...selectedAgentAdapter.models,
         ];
         if (
             taskModel &&
@@ -112,15 +110,15 @@
         return options;
     });
     const reasoningEffortOptions = $derived.by(() => {
-        const availableValues = new Set(selectedAgentRunner.reasoningEfforts);
+        const availableValues = new Set(selectedAgentAdapter.reasoningEfforts);
         return allReasoningEffortOptions.filter(
             (option) =>
                 option.value === "" || availableValues.has(option.value),
         );
     });
-    const selectedAgentRunnerOption = $derived(
-        agentRunnerOptions.find((option) => option.value === agentRunner) ??
-            agentRunnerOptions[0],
+    const selectedAgentAdapterOption = $derived(
+        agentAdapterOptions.find((option) => option.value === agentAdapter) ??
+            agentAdapterOptions[0],
     );
     const selectedModelOption = $derived(
         availableModelOptions.find((option) => option.value === model) ??
@@ -137,12 +135,12 @@
             return;
         }
 
-        const taskAgentRunner = task?.agentRunner;
-        agentRunner =
-            readRepositoryAgentRunnerSettings(
-                { agentRunners: agentRunnerCatalog },
-                taskAgentRunner,
-            )?.id ?? defaultAgentRunner.id;
+        const taskAgentAdapter = task?.agentAdapter;
+        agentAdapter =
+            readRepositoryAgentAdapterSettings(
+                { agentAdapters: agentAdapterCatalog },
+                taskAgentAdapter,
+            )?.id ?? defaultAgentAdapter.id;
         model = task?.model ?? "";
         customModel = "";
         reasoningEffort = task?.reasoningEffort ?? "";
@@ -190,7 +188,7 @@
         }
 
         return {
-            agentRunner,
+            agentAdapter,
             ...(model ? { model } : {}),
             ...(reasoningEffort ? { reasoningEffort } : {}),
         };
@@ -198,7 +196,7 @@
 
     function readConfigureInput(): TaskConfigureCommandOptionsType {
         return {
-            agentRunner,
+            agentAdapter,
             model: model || null,
             reasoningEffort: reasoningEffort || null,
             context: task?.context ?? [],
@@ -242,8 +240,8 @@
                     size="sm"
                     class="min-w-32 justify-between gap-2 bg-background/80"
                     disabled={!task}
-                    aria-label="Agent runner"
-                    title="Agent runner"
+                    aria-label="Agent adapter"
+                    title="Agent adapter"
                     {...props}
                 >
                     <Icon
@@ -252,7 +250,7 @@
                         data-icon="inline-start"
                     />
                     <span class="min-w-0 flex-1 truncate text-left">
-                        {selectedAgentRunnerOption.label}
+                        {selectedAgentAdapterOption.label}
                     </span>
                     <Icon
                         icon="lucide:chevron-down"
@@ -266,10 +264,10 @@
             sideOffset={6}
             class="min-w-56 rounded-lg"
         >
-            <DropdownMenu.Label>Agent runner</DropdownMenu.Label>
+            <DropdownMenu.Label>Agent adapter</DropdownMenu.Label>
             <DropdownMenu.Separator />
-            <DropdownMenu.RadioGroup bind:value={agentRunner}>
-                {#each agentRunnerOptions as option (option.value)}
+            <DropdownMenu.RadioGroup bind:value={agentAdapter}>
+                {#each agentAdapterOptions as option (option.value)}
                     <DropdownMenu.RadioItem value={option.value}>
                         <span>{option.label}</span>
                     </DropdownMenu.RadioItem>

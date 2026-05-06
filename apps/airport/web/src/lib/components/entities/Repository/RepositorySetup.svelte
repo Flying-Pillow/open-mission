@@ -25,7 +25,7 @@
     let missionsRoot = $state("");
     let instructionsPath = $state("");
     let skillsPath = $state("");
-    let agentRunner = $state("copilot-cli");
+    let agentAdapter = $state("copilot-cli");
     let defaultAgentMode = $state("");
     let defaultModel = $state("");
     let defaultReasoningEffort = $state("");
@@ -42,7 +42,7 @@
         missionsRoot = settings.missionsRoot;
         instructionsPath = settings.instructionsPath;
         skillsPath = settings.skillsPath;
-        agentRunner = settings.agentRunner;
+        agentAdapter = settings.agentAdapter;
         defaultAgentMode = settings.defaultAgentMode ?? "";
         defaultModel = settings.defaultModel ?? "";
         defaultReasoningEffort = settings.defaultReasoningEffort ?? "";
@@ -60,8 +60,8 @@
             trackingProvider: "github",
             instructionsPath,
             skillsPath,
-            agentRunner,
-            agentRunners: repository.data.settings.agentRunners,
+            agentAdapter,
+            agentAdapters: repository.data.settings.agentAdapters,
             ...(defaultAgentMode ? { defaultAgentMode } : {}),
             ...(defaultModel.trim()
                 ? { defaultModel: defaultModel.trim() }
@@ -137,13 +137,13 @@
             <div class="grid gap-2">
                 <label
                     class="text-sm font-medium text-foreground"
-                    for="repository-setup-agent-runner"
+                    for="repository-setup-agent-adapter"
                 >
-                    Agent runner
+                    Agent adapter
                 </label>
                 <select
-                    id="repository-setup-agent-runner"
-                    bind:value={agentRunner}
+                    id="repository-setup-agent-adapter"
+                    bind:value={agentAdapter}
                     class="h-10 rounded-md border bg-background px-3 text-sm text-foreground"
                 >
                     <option value="copilot-cli">Copilot CLI</option>
@@ -152,7 +152,7 @@
                     <option value="codex">Codex</option>
                     <option value="opencode">OpenCode</option>
                 </select>
-                {#each fieldErrors.agentRunner ?? [] as issue (`agentRunner:${issue}`)}
+                {#each fieldErrors.agentAdapter ?? [] as issue (`agentAdapter:${issue}`)}
                     <p class="text-sm text-rose-600">{issue}</p>
                 {/each}
             </div>
@@ -201,7 +201,7 @@
                     bind:value={defaultAgentMode}
                     class="h-10 rounded-md border bg-background px-3 text-sm text-foreground"
                 >
-                    <option value="">Runner default</option>
+                    <option value="">Adapter default</option>
                     <option value="interactive">Interactive</option>
                     <option value="autonomous">Autonomous</option>
                 </select>
@@ -220,7 +220,7 @@
                 <Input
                     id="repository-setup-default-model"
                     bind:value={defaultModel}
-                    placeholder="Runner default"
+                    placeholder="Adapter default"
                 />
                 {#each fieldErrors.defaultModel ?? [] as issue (`defaultModel:${issue}`)}
                     <p class="text-sm text-rose-600">{issue}</p>
@@ -239,7 +239,7 @@
                     bind:value={defaultReasoningEffort}
                     class="h-10 rounded-md border bg-background px-3 text-sm text-foreground"
                 >
-                    <option value="">Runner default</option>
+                    <option value="">Adapter default</option>
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
                     <option value="high">High</option>

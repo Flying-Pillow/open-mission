@@ -1,6 +1,6 @@
 import * as path from 'node:path';
-import { createConfiguredAgentRunners } from './runtime/agent/runtimes/AgentRuntimeFactory.js';
 import type { EntityExecutionContext } from '../entities/Entity/Entity.js';
+import { AgentRegistry } from '../entities/Agent/AgentRegistry.js';
 import {
     MissionLocatorSchema,
     type MissionLocatorType
@@ -12,16 +12,16 @@ import { parsePersistedWorkflowSettings } from '../settings/validation.js';
 import { readMissionWorkflowDefinition } from '../workflow/mission/preset.js';
 import type { MissionMcpSignalServer } from './runtime/agent/mcp/MissionMcpSignalServer.js';
 import type {
-	AgentSessionObservation,
-	AgentSessionSignalDecision,
-	AgentSessionSignalScope
-} from './runtime/agent/signals/AgentSessionSignal.js';
-import type { AgentSessionSnapshot } from './runtime/agent/AgentRuntimeTypes.js';
+    AgentExecutionObservation,
+    AgentExecutionSignalDecision,
+    AgentExecutionSignalScope
+} from './runtime/agent/signals/AgentExecutionSignal.js';
+import type { AgentExecutionSnapshot } from '../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 
 export type MissionLoader = (
     input: MissionLocatorType,
     context: { surfacePath: string },
-    terminalSessionName?: string
+    terminalName?: string
 ) => Promise<MissionHandle | undefined>;
 
 export type MissionHandle = Mission;
@@ -91,19 +91,19 @@ export class MissionRegistry {
         this.missionLoads.clear();
     }
 
-    public getRuntimeSessionSnapshot(scope: AgentSessionSignalScope): AgentSessionSnapshot | undefined {
+    public getRuntimeSessionSnapshot(scope: AgentExecutionSignalScope): AgentExecutionSnapshot | undefined {
         const mission = this.findLoadedMission(scope.missionId);
-        return mission?.getRuntimeSessionSnapshot(scope.agentSessionId);
+        return mission?.getRuntimeSessionSnapshot(scope.agentExecutionId);
     }
 
     public applyRuntimeSessionSignalDecision(input: {
-        scope: AgentSessionSignalScope;
-        observation: AgentSessionObservation;
-        decision: Exclude<AgentSessionSignalDecision, { action: 'reject' }>;
-    }): AgentSessionSnapshot | undefined {
+        scope: AgentExecutionSignalScope;
+        observation: AgentExecutionObservation;
+        decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>;
+    }): AgentExecutionSnapshot | undefined {
         const mission = this.findLoadedMission(input.scope.missionId);
         return mission?.applyRuntimeSessionSignalDecision(
-            input.scope.agentSessionId,
+            input.scope.agentExecutionId,
             input.observation,
             input.decision
         );
@@ -112,7 +112,7 @@ export class MissionRegistry {
     public async loadRequiredMission(
         input: MissionLocatorType,
         context: { surfacePath: string },
-        terminalSessionName?: string
+        terminalName?: string
     ): Promise<MissionHandle> {
         const payload = MissionLocatorSchema.parse({
             missionId: input.missionId,
@@ -122,7 +122,7 @@ export class MissionRegistry {
             throw new Error('Mission entity methods require a surfacePath context.');
         }
 
-        const mission = await this.loadMissionFromRegistry(payload, context, terminalSessionName);
+        const mission = await this.loadMissionFromRegistry(payload, context, terminalName);
         if (!mission) {
             throw new Error(`Mission '${payload.missionId}' could not be resolved.`);
         }
@@ -133,7 +133,7 @@ export class MissionRegistry {
     private async loadMissionFromRegistry(
         input: MissionLocatorType,
         context: { surfacePath: string },
-        terminalSessionName?: string
+        terminalName?: string
     ): Promise<MissionHandle | undefined> {
         const repositoryRoot = path.resolve(input.repositoryRootPath?.trim() || context.surfacePath);
         const key = this.createMissionKey(repositoryRoot, input.missionId);
@@ -151,7 +151,7 @@ export class MissionRegistry {
         const load = loader(
             input,
             { surfacePath: repositoryRoot },
-            terminalSessionName
+            terminalName
         ).then((mission) => {
             if (!mission) {
                 this.missionLoads.delete(key);
@@ -178,12 +178,10 @@ export class MissionRegistry {
             throw new Error(`Repository workflow definition '${Repository.getMissionWorkflowDefinitionPath(repositoryRoot)}' is required.`);
         }
         const workflow = parsePersistedWorkflowSettings(workflowDocument);
-        const taskRunners = new Map(
-            (await createConfiguredAgentRunners({
-                repositoryRootPath: repositoryRoot,
-                ...(this.mcpSignalServer ? { mcpSignalServer: this.mcpSignalServer } : {})
-            })).map((runner) => [runner.id, runner] as const)
-        );
+        const agentRegistry = await AgentRegistry.createConfigured({
+            repositoryRootPath: repositoryRoot,
+            ...(this.mcpSignalServer ? { mcpSignalServer: this.mcpSignalServer } : {})
+        });
 
         const adapter = new MissionDossierFilesystem(repositoryRoot);
         const resolved = await adapter.resolveKnownMission({ missionId: input.missionId });
@@ -194,7 +192,7 @@ export class MissionRegistry {
         const mission = new Mission(adapter, resolved.missionDir, resolved.descriptor, {
             workflow,
             resolveWorkflow: () => workflow,
-            taskRunners,
+            agentRegistry,
             ...(settings.instructionsPath
                 ? { instructionsPath: resolveRepositoryPath(repositoryRoot, settings.instructionsPath) }
                 : {}),

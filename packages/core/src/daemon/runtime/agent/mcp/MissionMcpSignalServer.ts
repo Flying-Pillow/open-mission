@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentSessionSignalPort } from '../signals/AgentSessionSignalPort.js';
+import type { AgentExecutionSignalPort } from '../signals/AgentExecutionSignalPort.js';
 import {
 	listMissionMcpSignalToolDefinitions,
 	missionMcpSignalToolNames,
@@ -52,7 +52,7 @@ export type MissionMcpRegisteredSession = MissionMcpSessionRegistration & {
 };
 
 export class MissionMcpSignalServer {
-	private readonly signalPort: AgentSessionSignalPort;
+	private readonly signalPort: AgentExecutionSignalPort;
 
 	private readonly sessionRegistry: MissionMcpSessionRegistry;
 
@@ -61,7 +61,7 @@ export class MissionMcpSignalServer {
 	private handle: MissionMcpSignalServerHandle | undefined;
 
 	public constructor(options: {
-		signalPort: AgentSessionSignalPort;
+		signalPort: AgentExecutionSignalPort;
 		sessionRegistry?: MissionMcpSessionRegistry;
 		executeEntityCommand?: MissionMcpEntityCommandExecutor;
 	}) {
@@ -89,11 +89,11 @@ export class MissionMcpSignalServer {
 		return this.handle;
 	}
 
-	public async registerSession(
+	public async registerExecution(
 		input: Omit<MissionMcpSessionRegistration, 'sessionToken'>
 	): Promise<MissionMcpRegisteredSession> {
 		const handle = this.requireHandle();
-		const registration = this.sessionRegistry.registerSession(input);
+		const registration = this.sessionRegistry.registerExecution(input);
 		return {
 			...registration,
 			endpoint: handle.endpoint,
@@ -102,8 +102,8 @@ export class MissionMcpSignalServer {
 		};
 	}
 
-	public async unregisterSession(sessionToken: string): Promise<void> {
-		this.sessionRegistry.unregisterSession(sessionToken);
+	public async unregisterExecution(sessionToken: string): Promise<void> {
+		this.sessionRegistry.unregisterExecution(sessionToken);
 	}
 
 	public async stop(): Promise<void> {
@@ -178,7 +178,7 @@ export class MissionMcpSignalServer {
 			scope: {
 				missionId: authorization.registration.missionId,
 				taskId: authorization.registration.taskId,
-				agentSessionId: authorization.registration.agentSessionId
+				agentExecutionId: authorization.registration.agentExecutionId
 			},
 			eventId: createInvocationEventId(name),
 			signal: parsed.value.signal

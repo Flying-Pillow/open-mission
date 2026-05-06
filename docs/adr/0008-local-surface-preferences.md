@@ -14,6 +14,6 @@ superseded_by: []
 
 Mission surface preferences are local Airport surface/client affordances, such as collapsed outline nodes, panel sizes, and temporary focus. They do not change Mission state and they are not part of the Mission's durable work record.
 
-The daemon must not store Mission surface preferences. The daemon owns canonical Mission coordination state, including Entity data, Agent session context, Mission control placement overrides, and daemon-resolved selection validation. Surface preferences stay in the Airport surface/client layer because they express local ergonomics rather than shared Mission semantics.
+The daemon must not store Mission surface preferences. The daemon owns canonical Mission coordination state, including Entity data, Agent execution context, Mission control placement overrides, and daemon-resolved selection validation. Surface preferences stay in the Airport surface/client layer because they express local ergonomics rather than shared Mission semantics.
 
 If a future preference needs to coordinate operators or affect the shared Mission record, it should be renamed and modeled as explicit Mission state instead of being added to the surface preference bucket.

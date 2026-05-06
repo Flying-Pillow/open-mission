@@ -12,11 +12,11 @@ supersedes: []
 superseded_by: []
 ---
 
-Mission control needs a stable outline for operator navigation, but the outline must not become another owner of Mission task, Mission artifact, Agent session, or Agent session context data.
+Mission control needs a stable outline for operator navigation, but the outline must not become another owner of Mission task, Mission artifact, Agent execution, or Agent execution context data.
 
 The Mission control outline is derived by default from Entity relationships, workflow definition, and runtime state. This keeps ordinary outline structure predictable and avoids storing duplicate tree data that can drift from canonical Entities.
 
-Operator curation is still necessary in two cases: stable manual ordering and cross-placement roles, such as showing the same Mission artifact under the Agent session that produced it and under a task or stage where it becomes useful. Mission handles those cases with durable Mission-scoped, daemon-owned Mission control placement overrides. A placement override adds, orders, or roles an Entity reference in the outline; it does not copy artifacts, mutate canonical Entity data, or create surface-local tree ownership.
+Operator curation is still necessary in two cases: stable manual ordering and cross-placement roles, such as showing the same Mission artifact under the Agent execution that produced it and under a task or stage where it becomes useful. Mission handles those cases with durable Mission-scoped, daemon-owned Mission control placement overrides. A placement override adds, orders, or roles an Entity reference in the outline; it does not copy artifacts, mutate canonical Entity data, or create surface-local tree ownership.
 
 Airport surfaces may request placement changes, but the daemon owns the resulting placement overrides and republishes the Mission control view to all surfaces and future operators. Mission surface preferences are limited to local Airport surface/client affordances such as collapsed nodes, panel sizes, and temporary focus, and the daemon must not store them. This preserves a derived outline as the default while allowing intentional human curation without leaking durable outline state into surface code.
 

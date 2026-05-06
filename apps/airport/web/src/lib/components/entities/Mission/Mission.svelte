@@ -5,14 +5,14 @@
     import Icon from "@iconify/svelte";
     import type { MissionRuntimeEventEnvelopeType } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
     import { ArtifactDataSchema } from "@flying-pillow/mission-core/entities/Artifact/ArtifactSchema";
-    import { AgentSessionDataSchema } from "@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema";
+    import { AgentExecutionDataSchema } from "@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema";
     import {
         MissionSnapshotSchema,
         MissionStatusSnapshotSchema,
     } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
     import { StageDataSchema } from "@flying-pillow/mission-core/entities/Stage/StageSchema";
     import { TaskDataSchema } from "@flying-pillow/mission-core/entities/Task/TaskSchema";
-    import type { AgentSession as AgentSessionModel } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
+    import type { AgentExecution as AgentExecutionModel } from "$lib/components/entities/AgentExecution/AgentExecution.svelte.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { setScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import MissionCockpit from "$lib/components/entities/Mission/MissionCockpit.svelte";
@@ -285,8 +285,10 @@
         }
 
         return activeMission
-            .listSessions()
-            .filter((agentSession) => agentSession.taskId === displayTaskId);
+            .listExecutions()
+            .filter(
+                (agentExecution) => agentExecution.taskId === displayTaskId,
+            );
     });
 
     $effect(() => {
@@ -494,25 +496,25 @@
                 );
                 commandRefreshNonce += 1;
                 return;
-            case "agentSession.data.changed":
-                const agentSessionPayload = event.payload as {
+            case "agentExecution.data.changed":
+                const agentExecutionPayload = event.payload as {
                     data?: unknown;
                 };
-                activeMission?.applyAgentSessionData(
-                    AgentSessionDataSchema.parse(agentSessionPayload.data),
+                activeMission?.applyAgentExecutionData(
+                    AgentExecutionDataSchema.parse(agentExecutionPayload.data),
                 );
                 commandRefreshNonce += 1;
                 return;
-            case "session.event":
+            case "execution.event":
                 const sessionEventPayload = event.payload as {
                     session?: unknown;
                 };
-                activeMission?.applyAgentSessionData(
-                    AgentSessionDataSchema.parse(sessionEventPayload.session),
+                activeMission?.applyAgentExecutionData(
+                    AgentExecutionDataSchema.parse(sessionEventPayload.session),
                 );
                 commandRefreshNonce += 1;
                 return;
-            case "session.lifecycle":
+            case "execution.lifecycle":
                 scheduleMissionViewRefresh();
                 return;
             default:
@@ -573,20 +575,21 @@
     function resolvePreferredTaskSession(
         currentMission: MissionEntity,
         taskId: string | undefined,
-    ): AgentSessionModel | undefined {
+    ): AgentExecutionModel | undefined {
         if (!taskId) {
             return undefined;
         }
 
         const sessions = currentMission
-            .listSessions()
-            .filter((session) => session.taskId === taskId);
+            .listExecutions()
+            .filter((execution) => execution.taskId === taskId);
         return (
             sessions.find(
-                (session) => session.isRunning() && session.isTerminalBacked(),
+                (execution) =>
+                    execution.isRunning() && execution.isTerminalBacked(),
             ) ??
-            sessions.find((session) => session.isRunning()) ??
-            sessions.find((session) => session.isTerminalBacked()) ??
+            sessions.find((execution) => execution.isRunning()) ??
+            sessions.find((execution) => execution.isTerminalBacked()) ??
             sessions[0]
         );
     }
@@ -633,7 +636,7 @@
     function resolvePreferredStageSession(
         currentMission: MissionEntity,
         stageId: string | undefined,
-    ): AgentSessionModel | undefined {
+    ): AgentExecutionModel | undefined {
         if (!stageId) {
             return undefined;
         }
@@ -644,33 +647,40 @@
                 .map((task) => task.taskId),
         );
         return currentMission
-            .listSessions()
+            .listExecutions()
             .filter(
-                (session) =>
-                    session.taskId !== undefined && taskIds.has(session.taskId),
+                (execution) =>
+                    execution.taskId !== undefined &&
+                    taskIds.has(execution.taskId),
             )
-            .sort(comparePreferredAgentSessions)[0];
+            .sort(comparePreferredAgentExecutions)[0];
     }
 
-    function comparePreferredAgentSessions(
-        left: AgentSessionModel,
-        right: AgentSessionModel,
+    function comparePreferredAgentExecutions(
+        left: AgentExecutionModel,
+        right: AgentExecutionModel,
     ): number {
-        const leftActiveRank = getAgentSessionActiveRank(left);
-        const rightActiveRank = getAgentSessionActiveRank(right);
+        const leftActiveRank = getAgentExecutionActiveRank(left);
+        const rightActiveRank = getAgentExecutionActiveRank(right);
         if (leftActiveRank !== rightActiveRank) {
             return rightActiveRank - leftActiveRank;
         }
 
-        return getAgentSessionUpdatedAt(right) - getAgentSessionUpdatedAt(left);
+        return (
+            getAgentExecutionUpdatedAt(right) - getAgentExecutionUpdatedAt(left)
+        );
     }
 
-    function getAgentSessionActiveRank(session: AgentSessionModel): number {
-        return session.isRunning() ? 1 : 0;
+    function getAgentExecutionActiveRank(
+        execution: AgentExecutionModel,
+    ): number {
+        return execution.isRunning() ? 1 : 0;
     }
 
-    function getAgentSessionUpdatedAt(session: AgentSessionModel): number {
-        const snapshot = session.toData();
+    function getAgentExecutionUpdatedAt(
+        execution: AgentExecutionModel,
+    ): number {
+        const snapshot = execution.toData();
         const timestamp = snapshot.lastUpdatedAt ?? snapshot.createdAt;
         return timestamp ? Date.parse(timestamp) || 0 : 0;
     }
@@ -767,20 +777,21 @@
                     });
                 }
 
-                for (const session of currentMission
-                    .listSessions()
+                for (const execution of currentMission
+                    .listExecutions()
                     .filter((candidate) => candidate.taskId === task.taskId)) {
                     nodes.push({
-                        id: `tree:session:${session.sessionId}`,
-                        label: session.currentTurnTitle ?? session.sessionId,
+                        id: `tree:session:${execution.sessionId}`,
+                        label:
+                            execution.currentTurnTitle ?? execution.sessionId,
                         kind: "session",
                         depth: 2,
                         color: stageColor,
-                        statusLabel: session.lifecycleState,
+                        statusLabel: execution.lifecycleState,
                         collapsible: false,
                         stageId: stageNodeId,
                         taskId: task.taskId,
-                        sessionId: session.sessionId,
+                        sessionId: execution.sessionId,
                     });
                 }
             }
@@ -1006,8 +1017,8 @@
                     >
                         <Task
                             refreshNonce={commandRefreshNonce}
-                            agentRunners={activeRepository?.data.settings
-                                .agentRunners ?? []}
+                            agentAdapters={activeRepository?.data.settings
+                                .agentAdapters ?? []}
                             artifacts={displayArtifacts}
                             selectedArtifactId={activeArtifactSelection}
                             task={displayTask}

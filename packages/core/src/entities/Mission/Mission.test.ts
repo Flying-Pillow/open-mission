@@ -5,7 +5,7 @@ import {
     MissionContract
 } from './MissionContract.js';
 import { MissionCommandIds, MissionDataSchema, MissionSnapshotSchema } from './MissionSchema.js';
-import { AgentSessionDataSchema } from '../AgentSession/AgentSessionSchema.js';
+import { AgentExecutionDataSchema } from '../AgentExecution/AgentExecutionSchema.js';
 import { ArtifactDataSchema } from '../Artifact/ArtifactSchema.js';
 import { StageDataSchema } from '../Stage/StageSchema.js';
 import { TaskCommandIds, TaskDataSchema } from '../Task/TaskSchema.js';
@@ -29,7 +29,7 @@ const task = TaskDataSchema.parse({
     lifecycle: 'ready',
     dependsOn: [],
     waitingOnTaskIds: [],
-    agentRunner: 'copilot-cli',
+    agentAdapter: 'copilot-cli',
     retries: 0,
     fileName: '01.md',
     relativePath: 'implementation/tasks/01.md'
@@ -44,16 +44,16 @@ const stage = StageDataSchema.parse({
     tasks: [task]
 });
 
-const agentSession = AgentSessionDataSchema.parse({
-    id: 'agent_session:mission-1/session-1',
+const agentExecution = AgentExecutionDataSchema.parse({
+    id: 'agent_execution:mission-1/session-1',
     sessionId: 'session-1',
-    runnerId: 'copilot-cli',
+    agentId: 'copilot-cli',
     transportId: 'terminal',
-    runnerLabel: 'Copilot CLI',
+    adapterLabel: 'Copilot CLI',
     lifecycleState: 'running',
     terminalHandle: {
-        sessionName: 'mission-agent-session',
-        paneId: 'terminal_1'
+        terminalName: 'mission-agent-execution',
+        terminalPaneId: 'terminal_1'
     },
     taskId: 'implementation/01',
     interactionCapabilities: {
@@ -81,7 +81,7 @@ const missionData = {
     currentStageId: 'implementation',
     artifacts: [artifact],
     stages: [stage],
-    agentSessions: [agentSession]
+    agentExecutions: [agentExecution]
 };
 
 describe('Mission schemas', () => {
@@ -91,15 +91,15 @@ describe('Mission schemas', () => {
         expect(parsed.artifacts[0]).toEqual(artifact);
         expect(parsed.stages[0]).toEqual(stage);
         expect(parsed.stages[0]?.tasks[0]).toEqual(task);
-        expect(parsed.agentSessions[0]).toEqual(agentSession);
+        expect(parsed.agentExecutions[0]).toEqual(agentExecution);
     });
 
-    it('rejects stale child AgentSession runtime terminal fields', () => {
+    it('rejects stale child AgentExecution runtime terminal fields', () => {
         expect(() => MissionDataSchema.parse({
             ...missionData,
-            agentSessions: [{
-                ...agentSession,
-                terminalSessionName: 'mission-agent-session'
+            agentExecutions: [{
+                ...agentExecution,
+                terminalName: 'mission-agent-execution'
             }]
         })).toThrow();
     });
@@ -143,7 +143,7 @@ describe('Mission schemas', () => {
             stages: [stage],
             tasks: [task],
             artifacts: [artifact],
-            agentSessions: [agentSession]
+            agentExecutions: [agentExecution]
         });
 
         expect(MissionContract.methods?.['read']?.result).toBe(MissionSnapshotSchema);
@@ -153,9 +153,9 @@ describe('Mission schemas', () => {
 
     it('excludes terminal snapshot channels from runtime event subscriptions', () => {
         expect(createMissionRuntimeEventSubscriptionChannels('mission-1')).not.toContain('mission:mission-1.terminal');
-        expect(createMissionRuntimeEventSubscriptionChannels('mission-1')).not.toContain('agent_session:mission-1/*.terminal');
-        expect(createMissionRuntimeEventSubscriptionChannels('mission-1')).toContain('agent_session:mission-1/*.data.changed');
+        expect(createMissionRuntimeEventSubscriptionChannels('mission-1')).not.toContain('agent_execution:mission-1/*.terminal');
+        expect(createMissionRuntimeEventSubscriptionChannels('mission-1')).toContain('agent_execution:mission-1/*.data.changed');
         expect(createAllRuntimeEventSubscriptionChannels()).not.toContain('mission:*.terminal');
-        expect(createAllRuntimeEventSubscriptionChannels()).not.toContain('agent_session:*.terminal');
+        expect(createAllRuntimeEventSubscriptionChannels()).not.toContain('agent_execution:*.terminal');
     });
 });

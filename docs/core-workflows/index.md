@@ -10,7 +10,7 @@ Mission turns AI-assisted work into a small set of explicit loops:
 
 - write artifacts before execution outruns intent
 - split work into Mission tasks
-- run agent sessions with bounded context
+- run agent executions with bounded context
 - verify with evidence, not claims
 - let the operator pause, redirect, or stop work at any point
 

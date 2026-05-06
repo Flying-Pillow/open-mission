@@ -14,7 +14,7 @@ Operator commands should be Entity commands whenever they change or depend on do
 | Repository instance | setup, read, list issues, start Mission |
 | Running Mission instance | read, advance, pause, resume |
 | Mission task | assign, launch, verify, retry |
-| Agent session | send message, interrupt, read log |
+| Agent execution | send message, interrupt, read log |
 
 Airport renders command views. The daemon dispatches methods. Entity classes own behavior.
 

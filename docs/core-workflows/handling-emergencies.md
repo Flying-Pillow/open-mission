@@ -13,7 +13,7 @@ Pause, stop, and interrupt actions are daemon commands. They target runtime exec
 After an emergency:
 
 1. inspect the Mission worktree
-2. inspect Agent session logs and artifacts
+2. inspect Agent execution logs and artifacts
 3. decide whether to resume, replan, or abandon the task
 4. record the recovery evidence in the Mission artifacts when it affects delivery readiness
 

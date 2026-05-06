@@ -1,10 +1,10 @@
-// /apps/airport/web/src/lib/client/entities/Mission.svelte.ts: OO browser entity for a mission runtime snapshot and its live agent sessions.
+// /apps/airport/web/src/lib/client/entities/Mission.svelte.ts: OO browser entity for a mission runtime snapshot and its live agent executions.
 import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/entities/Entity/EntityRemote';
 import {
-    AgentSessionCommandAcknowledgementSchema,
-    type AgentSessionCommandAcknowledgementType,
-    type AgentSessionDataType
-} from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+    AgentExecutionCommandAcknowledgementSchema,
+    type AgentExecutionCommandAcknowledgementType,
+    type AgentExecutionDataType
+} from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import {
     ArtifactCommandAcknowledgementSchema,
     ArtifactCommandIds,
@@ -37,7 +37,7 @@ import {
     type TaskDataType,
     type TaskCommandAcknowledgementType
 } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
-import { AgentSession } from '$lib/components/entities/AgentSession/AgentSession.svelte.js';
+import { AgentExecution } from '$lib/components/entities/AgentExecution/AgentExecution.svelte.js';
 import {
     Artifact
 } from '$lib/components/entities/Artifact/Artifact.svelte.js';
@@ -103,12 +103,12 @@ type MissionChildEntityCommandGateway = {
         commandId: string;
         input?: unknown;
     }): Promise<TaskCommandAcknowledgementType>;
-    executeAgentSessionCommand(input: {
+    executeAgentExecutionCommand(input: {
         missionId: string;
         sessionId: string;
         commandId: string;
         input?: unknown;
-    }): Promise<AgentSessionCommandAcknowledgementType>;
+    }): Promise<AgentExecutionCommandAcknowledgementType>;
     artifactBody(input: {
         missionId: string;
         id: string;
@@ -131,7 +131,7 @@ const missionEntityName = 'Mission';
 const stageEntityName = 'Stage';
 const taskEntityName = 'Task';
 const artifactEntityName = 'Artifact';
-const agentSessionEntityName = 'AgentSession';
+const agentExecutionEntityName = 'AgentExecution';
 
 function createMissionCommandGateway(input: MissionGatewayDependencies): MissionCommandGateway {
     const repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
@@ -230,12 +230,12 @@ function createMissionChildEntityCommandGateway(input: MissionGatewayDependencie
                 }
             }));
         },
-        executeAgentSessionCommand: async ({ missionId, sessionId, commandId, input: commandInput }) => {
-            const normalizedMissionId = requireMissionId(missionId, 'AgentSession commands require missionId, sessionId, and commandId.');
-            const normalizedSessionId = requireNonEmptyValue(sessionId, 'AgentSession commands require missionId, sessionId, and commandId.');
-            const normalizedCommandId = requireNonEmptyValue(commandId, 'AgentSession commands require missionId, sessionId, and commandId.');
-            return AgentSessionCommandAcknowledgementSchema.parse(await commandRemote({
-                entity: agentSessionEntityName,
+        executeAgentExecutionCommand: async ({ missionId, sessionId, commandId, input: commandInput }) => {
+            const normalizedMissionId = requireMissionId(missionId, 'AgentExecution commands require missionId, sessionId, and commandId.');
+            const normalizedSessionId = requireNonEmptyValue(sessionId, 'AgentExecution commands require missionId, sessionId, and commandId.');
+            const normalizedCommandId = requireNonEmptyValue(commandId, 'AgentExecution commands require missionId, sessionId, and commandId.');
+            return AgentExecutionCommandAcknowledgementSchema.parse(await commandRemote({
+                entity: agentExecutionEntityName,
                 method: 'command',
                 payload: {
                     ...buildMissionPayload(normalizedMissionId, repositoryRootPath),
@@ -281,7 +281,7 @@ export class Mission implements EntityModel<MissionSnapshotType> {
     private snapshotState = $state<MissionSnapshotType | undefined>();
     private controlViewSnapshotState = $state<MissionControlViewSnapshotType | undefined>();
     private worktreePathState = $state<string | undefined>();
-    private readonly sessions = new EntityRegistry<string, AgentSessionDataType, AgentSession>();
+    private readonly terminals = new EntityRegistry<string, AgentExecutionDataType, AgentExecution>();
     private readonly stages = new EntityRegistry<string, StageDataType, Stage>();
     private readonly tasks = new EntityRegistry<string, TaskSnapshot, Task>();
     private readonly artifacts = new EntityRegistry<string, ArtifactDataType, Artifact>();
@@ -291,7 +291,7 @@ export class Mission implements EntityModel<MissionSnapshotType> {
         this.loadData = input.loadData;
         this.commandGateway = createMissionCommandGateway(input.gatewayDependencies);
         this.childCommands = createMissionChildEntityCommandGateway(input.gatewayDependencies);
-        this.applySessionSnapshots(input.snapshot.agentSessions);
+        this.applySessionSnapshots(input.snapshot.agentExecutions);
         this.applyTaskSnapshots(input.snapshot);
         this.applyStageSnapshots(input.snapshot);
         this.applyArtifactDataFromMission(input.snapshot);
@@ -439,8 +439,8 @@ export class Mission implements EntityModel<MissionSnapshotType> {
         return this.stages.get(stageId);
     }
 
-    public listSessions(): AgentSession[] {
-        return this.sessions.values();
+    public listExecutions(): AgentExecution[] {
+        return this.terminals.values();
     }
 
     public listArtifacts(): Artifact[] {
@@ -459,8 +459,8 @@ export class Mission implements EntityModel<MissionSnapshotType> {
         return this.getStage(stageId)?.listTasks() ?? [];
     }
 
-    public getSession(sessionId: string): AgentSession | undefined {
-        return this.sessions.get(sessionId);
+    public getSession(sessionId: string): AgentExecution | undefined {
+        return this.terminals.get(sessionId);
     }
 
     public getArtifact(id: string): Artifact | undefined {
@@ -474,7 +474,7 @@ export class Mission implements EntityModel<MissionSnapshotType> {
 
     public updateFromData(snapshot: MissionSnapshotType): this {
         this.snapshot = snapshot;
-        this.applySessionSnapshots(snapshot.agentSessions);
+        this.applySessionSnapshots(snapshot.agentExecutions);
         this.applyTaskSnapshots(snapshot);
         this.applyStageSnapshots(snapshot);
         this.applyArtifactDataFromMission(snapshot);
@@ -541,12 +541,12 @@ export class Mission implements EntityModel<MissionSnapshotType> {
         return this;
     }
 
-    public applyAgentSessionData(data: AgentSessionDataType): this {
+    public applyAgentExecutionData(data: AgentExecutionDataType): this {
         const nextSessions = [
-            ...this.sessions
+            ...this.terminals
                 .values()
-                .map((session) => session.toData())
-                .filter((session) => session.sessionId !== data.sessionId),
+                .map((execution) => execution.toData())
+                .filter((execution) => execution.sessionId !== data.sessionId),
             data
         ];
 
@@ -561,7 +561,7 @@ export class Mission implements EntityModel<MissionSnapshotType> {
     public toData(): MissionSnapshotType {
         return {
             ...structuredClone($state.snapshot(this.snapshot)),
-            agentSessions: this.listSessions().map((session) => session.toData())
+            agentExecutions: this.listExecutions().map((execution) => execution.toData())
         };
     }
 
@@ -569,14 +569,14 @@ export class Mission implements EntityModel<MissionSnapshotType> {
         return this.toData();
     }
 
-    private applySessionSnapshots(sessionSnapshots: AgentSessionDataType[]): void {
-        this.sessions.reconcile(
+    private applySessionSnapshots(sessionSnapshots: AgentExecutionDataType[]): void {
+        this.terminals.reconcile(
             sessionSnapshots,
             (sessionSnapshot) => sessionSnapshot.sessionId,
-            (sessionSnapshot) => new AgentSession(sessionSnapshot, {
-                resolveCommands: (sessionId) => this.resolveCommandsForOwner({ entity: 'AgentSession', sessionId }),
+            (sessionSnapshot) => new AgentExecution(sessionSnapshot, {
+                resolveCommands: (sessionId) => this.resolveCommandsForOwner({ entity: 'AgentExecution', sessionId }),
                 executeCommand: async (sessionId, commandId, input) => {
-                    await this.childCommands.executeAgentSessionCommand({
+                    await this.childCommands.executeAgentExecutionCommand({
                         missionId: this.missionId,
                         sessionId,
                         commandId,
@@ -899,7 +899,7 @@ function matchesCommandOwner(candidate: MissionCommandOwnerType, owner: MissionC
     if (candidate.entity === 'Task' && owner.entity === 'Task') {
         return candidate.taskId === owner.taskId;
     }
-    if (candidate.entity === 'AgentSession' && owner.entity === 'AgentSession') {
+    if (candidate.entity === 'AgentExecution' && owner.entity === 'AgentExecution') {
         return candidate.sessionId === owner.sessionId;
     }
     return candidate.entity === 'Mission';

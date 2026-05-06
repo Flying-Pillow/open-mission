@@ -10,9 +10,8 @@ import {
 } from './daemonPaths.js';
 import type { MissionRegistry } from './MissionRegistry.js';
 import { MissionRegistry as MissionRegistryClass } from './MissionRegistry.js';
-import { observeAgentSessionTerminalUpdates } from './AgentSessionTerminal.js';
 import { observeMissionTerminalUpdates } from './MissionTerminal.js';
-import { createAgentSessionTerminalEvent } from '../entities/AgentSession/AgentSessionContract.js';
+import { createAgentExecutionTerminalEvent } from '../entities/AgentExecution/AgentExecutionContract.js';
 import { createMissionTerminalEvent } from '../entities/Mission/MissionContract.js';
 import { matchesEntityChannel } from '../entities/Entity/Entity.js';
 import type { EntityEventEnvelopeType } from '../entities/Entity/EntitySchema.js';
@@ -34,7 +33,8 @@ import {
 import { DaemonLogger } from './runtime/DaemonLogger.js';
 import type { MissionAgentDisposable } from './runtime/agent/events.js';
 import { MissionMcpSignalServer } from './runtime/agent/mcp/MissionMcpSignalServer.js';
-import { PolicyBoundAgentSessionSignalPort } from './runtime/agent/signals/AgentSessionSignalPort.js';
+import { PolicyBoundAgentExecutionSignalPort } from './runtime/agent/signals/AgentExecutionSignalPort.js';
+import { TerminalRegistry } from '../entities/Terminal/TerminalRegistry.js';
 
 export type MissionDaemonHandle = {
 	manifest: Manifest;
@@ -80,15 +80,11 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 	const runtimeLock = await acquireDaemonRuntimeLock(socketPath);
 	const missionRegistry = new MissionRegistryClass({ logger });
 	const mcpSignalServer = new MissionMcpSignalServer({
-		signalPort: new PolicyBoundAgentSessionSignalPort({
+		signalPort: new PolicyBoundAgentExecutionSignalPort({
 			sink: {
 				getSnapshot: async (scope) => missionRegistry.getRuntimeSessionSnapshot(scope),
 				commit: async (input) => missionRegistry.applyRuntimeSessionSignalDecision({
-					scope: {
-						missionId: input.snapshot.missionId,
-						taskId: input.snapshot.taskId,
-						agentSessionId: input.snapshot.sessionId
-					},
+					scope: input.observation.route.scope,
 					observation: input.observation,
 					decision: input.decision
 				})
@@ -509,8 +505,27 @@ function startEntityEventSources(publish: (event: EntityEventEnvelopeType) => vo
 	const missionTerminalUpdates = observeMissionTerminalUpdates((event) => {
 		publish(createMissionTerminalEvent(event));
 	});
-	const sessionTerminalUpdates = observeAgentSessionTerminalUpdates((event) => {
-		publish(createAgentSessionTerminalEvent(event));
+	const sessionTerminalUpdates = TerminalRegistry.shared().onDidTerminalUpdate((event) => {
+		if (event.owner?.kind !== 'agent-execution' || !event.owner.missionId) {
+			return;
+		}
+		publish(createAgentExecutionTerminalEvent({
+			missionId: event.owner.missionId,
+			sessionId: event.owner.agentExecutionId,
+			state: {
+				connected: event.connected,
+				dead: event.dead,
+				exitCode: event.exitCode,
+				screen: event.chunk && event.connected && !event.dead ? event.chunk : event.screen,
+				...(event.chunk ? { chunk: event.chunk } : {}),
+				...(event.truncated ? { truncated: true } : {}),
+				terminalHandle: {
+					terminalName: event.terminalName,
+					terminalPaneId: event.terminalPaneId,
+					...(event.sharedTerminalName ? { sharedTerminalName: event.sharedTerminalName } : {})
+				}
+			}
+		}));
 	});
 
 	return {

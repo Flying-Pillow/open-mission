@@ -1,12 +1,14 @@
 import type { EntityContractType } from './EntitySchema.js';
 import { Entity, type EntityExecutionContext } from './Entity.js';
 import { MissionRegistry } from '../../daemon/MissionRegistry.js';
-import { AgentSessionContract } from '../AgentSession/AgentSessionContract.js';
+import { AgentContract } from '../Agent/AgentContract.js';
+import { AgentExecutionContract } from '../AgentExecution/AgentExecutionContract.js';
 import { ArtifactContract } from '../Artifact/ArtifactContract.js';
 import { MissionContract } from '../Mission/MissionContract.js';
 import { RepositoryContract } from '../Repository/RepositoryContract.js';
 import { StageContract } from '../Stage/StageContract.js';
 import { TaskContract } from '../Task/TaskContract.js';
+import { TerminalContract } from '../Terminal/TerminalContract.js';
 export {
     entityCommandInvocationSchema,
     entityFormInvocationSchema,
@@ -27,8 +29,10 @@ const entityContracts = [
     StageContract,
     TaskContract,
     ArtifactContract,
-    AgentSessionContract,
+    AgentContract,
+    AgentExecutionContract,
     RepositoryContract,
+    TerminalContract,
 ] as const satisfies readonly EntityContractType[];
 
 const entityContractsByName = new Map<string, EntityContractType>(
@@ -36,7 +40,7 @@ const entityContractsByName = new Map<string, EntityContractType>(
 );
 
 const missionRegistry = new MissionRegistry();
-const missionOwnedEntities = new Set(['Mission', 'Stage', 'Task', 'Artifact', 'AgentSession']);
+const missionOwnedEntities = new Set(['Mission', 'Stage', 'Task', 'Artifact', 'AgentExecution']);
 
 export async function executeEntityQueryInDaemon(
     input: EntityQueryInvocation,

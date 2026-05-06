@@ -18,7 +18,7 @@ export type MissionMcpToolName = MissionMcpSignalToolName | MissionMcpEntityComm
 export type MissionMcpSessionRegistration = {
 	missionId: string;
 	taskId: string;
-	agentSessionId: string;
+	agentExecutionId: string;
 	sessionToken: string;
 	allowedTools: MissionMcpToolName[];
 	allowedEntityCommands?: MissionMcpAllowedEntityCommand[];
@@ -33,7 +33,7 @@ type MissionMcpSessionRegistryEntry = {
 const missionMcpSessionRegistrationSchema = z.object({
 	missionId: z.string().trim().min(1),
 	taskId: z.string().trim().min(1),
-	agentSessionId: z.string().trim().min(1),
+	agentExecutionId: z.string().trim().min(1),
 	allowedTools: z.array(z.union([
 		missionMcpSignalToolNameSchema,
 		z.literal(missionMcpEntityCommandToolName)
@@ -44,41 +44,41 @@ const missionMcpSessionRegistrationSchema = z.object({
 export class MissionMcpSessionRegistry {
 	private readonly registrationsByToken = new Map<string, MissionMcpSessionRegistryEntry>();
 
-	private readonly tokenByAgentSessionId = new Map<string, string>();
+	private readonly tokenByAgentExecutionId = new Map<string, string>();
 
-	public registerSession(input: MissionMcpSessionRegistrationInput): MissionMcpSessionRegistration {
+	public registerExecution(input: MissionMcpSessionRegistrationInput): MissionMcpSessionRegistration {
 		const registration = parseRegistration(input);
 		const sessionToken = randomUUID();
 		const stored = {
 			...registration,
 			sessionToken
 		};
-		const existingToken = this.tokenByAgentSessionId.get(stored.agentSessionId);
+		const existingToken = this.tokenByAgentExecutionId.get(stored.agentExecutionId);
 		if (existingToken) {
 			this.registrationsByToken.delete(existingToken);
 		}
-		this.tokenByAgentSessionId.set(stored.agentSessionId, sessionToken);
+		this.tokenByAgentExecutionId.set(stored.agentExecutionId, sessionToken);
 		this.registrationsByToken.set(sessionToken, {
 			registration: stored
 		});
 		return cloneRegistration(stored);
 	}
 
-	public unregisterSession(sessionToken: string): void {
+	public unregisterExecution(sessionToken: string): void {
 		const token = sessionToken.trim();
 		const entry = this.registrationsByToken.get(token);
 		if (!entry) {
 			return;
 		}
 		this.registrationsByToken.delete(token);
-		if (this.tokenByAgentSessionId.get(entry.registration.agentSessionId) === token) {
-			this.tokenByAgentSessionId.delete(entry.registration.agentSessionId);
+		if (this.tokenByAgentExecutionId.get(entry.registration.agentExecutionId) === token) {
+			this.tokenByAgentExecutionId.delete(entry.registration.agentExecutionId);
 		}
 	}
 
 	public clear(): void {
 		this.registrationsByToken.clear();
-		this.tokenByAgentSessionId.clear();
+		this.tokenByAgentExecutionId.clear();
 	}
 
 	public getRegisteredSessionCount(): number {
@@ -103,7 +103,7 @@ export class MissionMcpSessionRegistry {
 		if (!entry.registration.allowedTools.includes(input.toolName)) {
 			return {
 				ok: false,
-				reason: `Mission MCP tool '${input.toolName}' is not allowed for this session.`
+				reason: `Mission MCP tool '${input.toolName}' is not allowed for this execution.`
 			};
 		}
 		return {
@@ -128,7 +128,7 @@ export class MissionMcpSessionRegistry {
 		)) {
 			return {
 				ok: false,
-				reason: `Entity command '${input.entity}.${input.method}${input.commandId ? `:${input.commandId}` : ''}' is not allowed for this session.`
+				reason: `Entity command '${input.entity}.${input.method}${input.commandId ? `:${input.commandId}` : ''}' is not allowed for this execution.`
 			};
 		}
 		return toolAuthorization;
@@ -148,7 +148,7 @@ function parseRegistration(input: MissionMcpSessionRegistrationInput): MissionMc
 	return {
 		missionId: parsed.data.missionId,
 		taskId: parsed.data.taskId,
-		agentSessionId: parsed.data.agentSessionId,
+		agentExecutionId: parsed.data.agentExecutionId,
 		allowedTools: [...new Set(parsed.data.allowedTools)],
 		...(parsed.data.allowedEntityCommands ? {
 			allowedEntityCommands: dedupeAllowedEntityCommands(parsed.data.allowedEntityCommands)
@@ -160,7 +160,7 @@ function cloneRegistration(input: MissionMcpSessionRegistration): MissionMcpSess
 	return {
 		missionId: input.missionId,
 		taskId: input.taskId,
-		agentSessionId: input.agentSessionId,
+		agentExecutionId: input.agentExecutionId,
 		sessionToken: input.sessionToken,
 		allowedTools: [...input.allowedTools],
 		...(input.allowedEntityCommands ? {

@@ -9,7 +9,6 @@ import { getDaemonLogPath } from './daemonPaths.js';
 import { readDaemonLogLines } from './runtime/DaemonLogger.js';
 import {
 	getMissionDaemonProcessStatus,
-	resolveDefaultRuntimeFactoryModulePath,
 	startMissionDaemonProcess,
 	stopMissionDaemonProcess,
 	type DaemonRuntimeMode
@@ -37,7 +36,6 @@ export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): 
 export async function runMissiondCommand(argv: string[] = process.argv.slice(2)): Promise<void> {
 	const parsed = parseDaemonArgs(argv);
 	const runtimeMode: DaemonRuntimeMode = parsed.dev || process.env['MISSION_DAEMON_RUNTIME_MODE']?.trim() === 'source' ? 'source' : 'build';
-	const runtimeFactoryModulePath = resolveDefaultRuntimeFactoryModulePath(runtimeMode);
 
 	switch (parsed.command) {
 		case 'run':
@@ -46,8 +44,7 @@ export async function runMissiondCommand(argv: string[] = process.argv.slice(2))
 		case 'start': {
 			const result = await startMissionDaemonProcess({
 				...(parsed.socketPath ? { socketPath: parsed.socketPath } : {}),
-				runtimeMode,
-				...(runtimeFactoryModulePath ? { runtimeFactoryModulePath } : {})
+				runtimeMode
 			});
 			renderResult('missiond', result, parsed.json, result.message, result.alreadyRunning ? 'already running' : 'started');
 			break;
@@ -61,8 +58,7 @@ export async function runMissiondCommand(argv: string[] = process.argv.slice(2))
 			await stopMissionDaemonProcess();
 			const result = await startMissionDaemonProcess({
 				...(parsed.socketPath ? { socketPath: parsed.socketPath } : {}),
-				runtimeMode,
-				...(runtimeFactoryModulePath ? { runtimeFactoryModulePath } : {})
+				runtimeMode
 			});
 			renderResult('missiond', result, parsed.json, 'Mission daemon restarted.', 'restarted');
 			break;

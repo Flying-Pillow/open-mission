@@ -10,8 +10,8 @@ describe('mission template resolution', () => {
                 repositoryRootPath: '/',
                 branchRef: 'mission/17-reconstruct-agent-runtime-unification',
                 brief: {
-                    title: 'Reconstruct agent runtime unification',
-                    body: 'Reconstruct agent runtime unification body',
+                    title: 'Reconstruct agent adapter unification',
+                    body: 'Reconstruct agent adapter unification body',
                     type: 'refactor'
                 }
             }

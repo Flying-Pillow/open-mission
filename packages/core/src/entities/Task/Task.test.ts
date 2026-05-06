@@ -41,7 +41,7 @@ describe('Task', () => {
                 { name: 'Spec', path: '02-spec/SPEC.md', selectionPosition: 1 },
                 { name: 'Brief', path: 'BRIEF.md', selectionPosition: 0 }
             ],
-            agentRunner: 'copilot-cli'
+            agentAdapter: 'copilot-cli'
         });
     });
 
@@ -54,10 +54,10 @@ describe('Task', () => {
     });
 
     it('uses strict schemas for command inputs', () => {
-        expect(TaskStartCommandOptionsSchema.parse({ terminalSessionName: 'terminal-1' })).toEqual({
-            terminalSessionName: 'terminal-1'
+        expect(TaskStartCommandOptionsSchema.parse({ terminalName: 'terminal-1' })).toEqual({
+            terminalName: 'terminal-1'
         });
-        expect(() => TaskStartCommandOptionsSchema.parse({ terminalSessionName: 'terminal-1', extra: true })).toThrow();
+        expect(() => TaskStartCommandOptionsSchema.parse({ terminalName: 'terminal-1', extra: true })).toThrow();
         expect(TaskReworkCommandInputSchema.parse('Needs another pass.')).toBe('Needs another pass.');
         expect(() => TaskReworkCommandInputSchema.parse('')).toThrow();
     });

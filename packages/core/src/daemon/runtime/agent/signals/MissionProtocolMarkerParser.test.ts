@@ -3,7 +3,7 @@ import {
 	MISSION_PROTOCOL_MARKER_PREFIX,
 	MissionProtocolMarkerParser
 } from './MissionProtocolMarkerParser.js';
-import { MAX_MISSION_PROTOCOL_MARKER_LENGTH } from './AgentSessionSignal.js';
+import { MAX_MISSION_PROTOCOL_MARKER_LENGTH } from './AgentExecutionSignal.js';
 
 describe('MissionProtocolMarkerParser', () => {
 	it('parses strict Mission progress markers into agent-declared signals', () => {
@@ -13,7 +13,7 @@ describe('MissionProtocolMarkerParser', () => {
 				version: 1,
 				missionId: 'mission-31',
 				taskId: 'task-3',
-				agentSessionId: 'session-7',
+				agentExecutionId: 'session-7',
 				eventId: 'evt-1',
 				signal: {
 					type: 'progress',
@@ -28,7 +28,7 @@ describe('MissionProtocolMarkerParser', () => {
 			claimedScope: {
 				missionId: 'mission-31',
 				taskId: 'task-3',
-				agentSessionId: 'session-7'
+				agentExecutionId: 'session-7'
 			},
 			rawText: expect.stringContaining('"eventId":"evt-1"'),
 			signal: {
@@ -48,7 +48,7 @@ describe('MissionProtocolMarkerParser', () => {
 				version: 1,
 				missionId: 'mission-31',
 				taskId: 'task-3',
-				agentSessionId: 'session-7',
+				agentExecutionId: 'session-7',
 				eventId: 'evt-message-1',
 				signal: {
 					type: 'message',
@@ -63,7 +63,7 @@ describe('MissionProtocolMarkerParser', () => {
 			claimedScope: {
 				missionId: 'mission-31',
 				taskId: 'task-3',
-				agentSessionId: 'session-7'
+				agentExecutionId: 'session-7'
 			},
 			rawText: expect.stringContaining('"channel":"stdout"'),
 			signal: {

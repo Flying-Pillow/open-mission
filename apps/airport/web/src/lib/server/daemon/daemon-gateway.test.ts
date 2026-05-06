@@ -34,7 +34,7 @@ describe('DaemonGateway runtime projection forwarding', () => {
                     lifecycle: 'completed',
                     dependsOn: [],
                     waitingOnTaskIds: [],
-                    agentRunner: 'copilot-cli',
+                    agentAdapter: 'copilot-cli',
                     retries: 0
                 }
             }

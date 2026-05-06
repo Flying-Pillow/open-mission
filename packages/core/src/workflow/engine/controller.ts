@@ -8,10 +8,10 @@ import type {
     AgentLaunchConfig,
     AgentCommand,
     AgentPrompt,
-    AgentSessionReference,
-    AgentSessionSnapshot
-} from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
-import type { AgentSessionSignalDecision } from '../../daemon/runtime/agent/signals/AgentSessionSignal.js';
+    AgentExecutionReference,
+    AgentExecutionSnapshot
+} from '../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import type { AgentExecutionSignalDecision } from '../../daemon/runtime/agent/signals/AgentExecutionSignal.js';
 import {
     buildWorkflowTaskGenerationRequests,
     createMissionWorkflowConfigurationSnapshot,
@@ -108,9 +108,9 @@ export class MissionWorkflowController {
         return this.refresh();
     }
 
-    public async reconcileSessions(): Promise<MissionStateData> {
+    public async reconcileExecutions(): Promise<MissionStateData> {
         const document = await this.getDocument();
-        const emittedEvents = await this.requestExecutor.reconcileSessions(document);
+        const emittedEvents = await this.requestExecutor.reconcileExecutions(document);
         let nextDocument = document;
         for (const emittedEvent of emittedEvents) {
             nextDocument = await this.applyEvent(emittedEvent);
@@ -119,27 +119,27 @@ export class MissionWorkflowController {
         return nextDocument;
     }
 
-    public listRuntimeSessions(): AgentSessionSnapshot[] {
+    public listRuntimeSessions(): AgentExecutionSnapshot[] {
         return this.requestExecutor.listRuntimeSessions();
     }
 
-    public getRuntimeSession(sessionId: string): AgentSessionSnapshot | undefined {
+    public getRuntimeSession(sessionId: string): AgentExecutionSnapshot | undefined {
         return this.requestExecutor.getRuntimeSession(sessionId);
     }
 
     public applyRuntimeSessionSignalDecision(
         sessionId: string,
-        decision: Exclude<AgentSessionSignalDecision, { action: 'reject' }>
-    ): AgentSessionSnapshot | undefined {
+        decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>
+    ): AgentExecutionSnapshot | undefined {
         return this.requestExecutor.applyRuntimeSessionSignalDecision(sessionId, decision);
     }
 
-    public async attachRuntimeSession(reference: AgentSessionReference): Promise<AgentSessionSnapshot> {
-        return this.requestExecutor.attachSession(reference);
+    public async attachRuntimeSession(reference: AgentExecutionReference): Promise<AgentExecutionSnapshot> {
+        return this.requestExecutor.reconcileExecution(reference);
     }
 
-    public async startRuntimeSession(config: AgentLaunchConfig): Promise<AgentSessionSnapshot> {
-        return this.requestExecutor.startSession(config);
+    public async startRuntimeSession(config: AgentLaunchConfig): Promise<AgentExecutionSnapshot> {
+        return this.requestExecutor.startExecution(config);
     }
 
     public async cancelRuntimeSession(
@@ -418,7 +418,7 @@ function pickWorkflowPayloadSummary(payload: Record<string, unknown>): Record<st
         'stageId',
         'taskId',
         'sessionId',
-        'runnerId',
+        'agentId',
         'transportId',
         'reason',
         'reasonCode',
@@ -441,11 +441,11 @@ function pickWorkflowPayloadSummary(payload: Record<string, unknown>): Record<st
     }
     const terminalHandle = payload['terminalHandle'];
     if (isRecord(terminalHandle)) {
-        summary['terminalSessionName'] = typeof terminalHandle['sessionName'] === 'string'
-            ? terminalHandle['sessionName']
+        summary['terminalName'] = typeof terminalHandle['terminalName'] === 'string'
+            ? terminalHandle['terminalName']
             : undefined;
-        summary['terminalPaneId'] = typeof terminalHandle['paneId'] === 'string'
-            ? terminalHandle['paneId']
+        summary['terminalPaneId'] = typeof terminalHandle['terminalPaneId'] === 'string'
+            ? terminalHandle['terminalPaneId']
             : undefined;
     }
     const artifactRefs = payload['artifactRefs'];

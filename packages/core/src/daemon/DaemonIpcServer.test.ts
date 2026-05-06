@@ -19,8 +19,8 @@ vi.mock('./MissionTerminal.js', () => ({
         exitCode: null,
         screen: '$ ',
         terminalHandle: {
-            sessionName: 'mission-shell:connect-four:fixture:1-initial-setup',
-            paneId: 'pty'
+            terminalName: 'mission-shell:connect-four:fixture:1-initial-setup',
+            terminalPaneId: 'pty'
         }
     })),
     sendMissionTerminalInput: vi.fn(async () => ({
@@ -31,15 +31,11 @@ vi.mock('./MissionTerminal.js', () => ({
         exitCode: null,
         screen: '$ printf daemon-terminal-test\ndaemon-terminal-test\n$ ',
         terminalHandle: {
-            sessionName: 'mission-shell:connect-four:fixture:1-initial-setup',
-            paneId: 'pty'
+            terminalName: 'mission-shell:connect-four:fixture:1-initial-setup',
+            terminalPaneId: 'pty'
         }
     })),
     observeMissionTerminalUpdates: vi.fn(() => ({ dispose: vi.fn() }))
-}));
-
-vi.mock('./AgentSessionTerminal.js', () => ({
-    observeAgentSessionTerminalUpdates: vi.fn(() => ({ dispose: vi.fn() }))
 }));
 
 describe('minimal source daemon request handling', () => {

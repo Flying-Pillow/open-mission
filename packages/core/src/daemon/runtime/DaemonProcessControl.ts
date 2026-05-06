@@ -96,7 +96,6 @@ export async function startMissionDaemonProcess(options: {
 	socketPath?: string;
 	surfacePath?: string;
 	runtimeMode?: DaemonRuntimeMode;
-	runtimeFactoryModulePath?: string;
 }): Promise<DaemonStartResult> {
 	let currentStatus = await getMissionDaemonProcessStatus();
 	if (currentStatus.running) {
@@ -115,7 +114,7 @@ export async function startMissionDaemonProcess(options: {
 		};
 	}
 
-	const child = await spawnDaemonRunner(options);
+	const child = await spawnDaemonAdapter(options);
 	child.unref();
 	const timeoutAt = Date.now() + 15_000;
 	let latestStatus = currentStatus;
@@ -274,37 +273,10 @@ function isProcessRunning(processId: number): boolean {
 	}
 }
 
-export function resolveDefaultRuntimeFactoryModulePath(
-	runtimeMode: DaemonRuntimeMode
-): string | undefined {
-	const packageRoot = resolveCorePackageRoot();
-	const sourcePath = path.join(packageRoot, 'src', 'daemon', 'runtime', 'agent', 'runtimes', 'AgentRuntimeFactory.ts');
-	const buildPath = path.join(packageRoot, 'build', 'daemon', 'runtime', 'agent', 'runtimes', 'AgentRuntimeFactory.js');
-
-	if (runtimeMode === 'source' && fsSync.existsSync(sourcePath)) {
-		return sourcePath;
-	}
-
-	if (runtimeMode === 'build' && fsSync.existsSync(buildPath)) {
-		return buildPath;
-	}
-
-	if (fsSync.existsSync(buildPath)) {
-		return buildPath;
-	}
-
-	if (fsSync.existsSync(sourcePath)) {
-		return sourcePath;
-	}
-
-	return undefined;
-}
-
-async function spawnDaemonRunner(options: {
+async function spawnDaemonAdapter(options: {
 	socketPath?: string;
 	surfacePath?: string;
 	runtimeMode?: DaemonRuntimeMode;
-	runtimeFactoryModulePath?: string;
 }) {
 	const packageRoot = resolveCorePackageRoot();
 	const runtimeMode =
@@ -318,9 +290,6 @@ async function spawnDaemonRunner(options: {
 		MISSION_DAEMON_RUNTIME_MODE: runtimeMode,
 		...(runtimeMode === 'source'
 			? { NODE_OPTIONS: appendNodeCondition(process.env['NODE_OPTIONS'], 'typescript') }
-			: {}),
-		...(options.runtimeFactoryModulePath
-			? { MISSION_RUNTIME_FACTORY_MODULE: options.runtimeFactoryModulePath }
 			: {})
 	};
 	await fs.mkdir(getDaemonRuntimePath(), { recursive: true });

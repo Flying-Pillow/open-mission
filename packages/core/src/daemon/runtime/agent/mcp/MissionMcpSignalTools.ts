@@ -1,13 +1,13 @@
 import { z } from 'zod/v4';
-import type { AgentSessionSignalAcknowledgement } from '../signals/AgentSessionSignalPort.js';
+import type { AgentExecutionSignalAcknowledgement } from '../signals/AgentExecutionSignalPort.js';
 import {
-	MAX_AGENT_SESSION_MESSAGE_LENGTH,
-	MAX_AGENT_SESSION_SIGNAL_TEXT_LENGTH,
-	MAX_AGENT_SESSION_SUGGESTED_RESPONSES,
-	MAX_AGENT_SESSION_USAGE_ENTRIES,
+	MAX_AGENT_EXECUTION_MESSAGE_LENGTH,
+	MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH,
+	MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES,
+	MAX_AGENT_EXECUTION_USAGE_ENTRIES,
 	isScalarAgentMetadataValue,
-	type AgentSessionSignal
-} from '../signals/AgentSessionSignal.js';
+	type AgentExecutionSignal
+} from '../signals/AgentExecutionSignal.js';
 
 export const missionMcpSignalToolNames = [
 	'progress',
@@ -24,28 +24,28 @@ export type MissionMcpSignalToolName = (typeof missionMcpSignalToolNames)[number
 
 export const missionMcpSignalToolNameSchema = z.enum(missionMcpSignalToolNames);
 
-export type MissionMcpSignalAcknowledgement = AgentSessionSignalAcknowledgement;
+export type MissionMcpSignalAcknowledgement = AgentExecutionSignalAcknowledgement;
 
 type MissionMcpSignalToolDefinition<Input> = {
 	name: MissionMcpSignalToolName;
 	description: string;
 	inputSchema: z.ZodType<Input>;
-	toSignal(input: Input): AgentSessionSignal;
+	toSignal(input: Input): AgentExecutionSignal;
 };
 
 type AnyMissionMcpSignalToolDefinition = MissionMcpSignalToolDefinition<any>;
 
 export type MissionMcpValidatedToolCall = {
 	name: MissionMcpSignalToolName;
-	signal: AgentSessionSignal;
+	signal: AgentExecutionSignal;
 };
 
-const boundedSignalTextSchema = z.string().trim().min(1).max(MAX_AGENT_SESSION_SIGNAL_TEXT_LENGTH);
-const boundedMessageTextSchema = z.string().trim().min(1).max(MAX_AGENT_SESSION_MESSAGE_LENGTH);
+const boundedSignalTextSchema = z.string().trim().min(1).max(MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH);
+const boundedMessageTextSchema = z.string().trim().min(1).max(MAX_AGENT_EXECUTION_MESSAGE_LENGTH);
 const suggestedResponsesSchema = z
 	.array(boundedSignalTextSchema)
 	.min(1)
-	.max(MAX_AGENT_SESSION_SUGGESTED_RESPONSES)
+	.max(MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES)
 	.optional();
 const metadataValueSchema = z.union([
 	z.string(),
@@ -56,10 +56,10 @@ const metadataValueSchema = z.union([
 
 const usagePayloadSchema = z.record(z.string(), metadataValueSchema).superRefine((payload, context) => {
 	const entries = Object.entries(payload);
-	if (entries.length > MAX_AGENT_SESSION_USAGE_ENTRIES) {
+	if (entries.length > MAX_AGENT_EXECUTION_USAGE_ENTRIES) {
 		context.addIssue({
 			code: z.ZodIssueCode.custom,
-			message: `usage payload exceeded the maximum supported size of ${String(MAX_AGENT_SESSION_USAGE_ENTRIES)} entries.`
+			message: `usage payload exceeded the maximum supported size of ${String(MAX_AGENT_EXECUTION_USAGE_ENTRIES)} entries.`
 		});
 	}
 	for (const [key, value] of entries) {

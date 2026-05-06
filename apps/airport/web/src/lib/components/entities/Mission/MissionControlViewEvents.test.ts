@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Mission } from './Mission.svelte.js';
 import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/entities/Entity/EntityRemote';
-import { AgentSessionCommandIds, type AgentSessionCommandAcknowledgementType, type AgentSessionDataType } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import { AgentExecutionCommandIds, type AgentExecutionCommandAcknowledgementType, type AgentExecutionDataType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import { ArtifactCommandIds, type ArtifactDataType } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
 import { MissionCommandIds, type MissionCommandAcknowledgementType, type MissionSnapshotType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { StageDataType, StageCommandAcknowledgementType } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
@@ -47,7 +47,7 @@ describe('Mission control view reconciliation', () => {
 
         mission.applyTaskData(createTaskSnapshot('task-1', 'completed'));
         mission.applyArtifactData(createArtifactData('verify', 'Verification Evidence'));
-        mission.applyAgentSessionData(createSessionSnapshot('session-1', 'completed'));
+        mission.applyAgentExecutionData(createSessionSnapshot('session-1', 'completed'));
 
         expect(mission.getTask('task-1')?.lifecycle).toBe('completed');
         expect(mission.getTask('task-2')?.lifecycle).toBe('pending');
@@ -146,11 +146,11 @@ describe('Mission control view reconciliation', () => {
         ]);
     });
 
-    it('routes structured AgentSession prompts and commands through the AgentSession command surface', async () => {
-        const agentSessionCommandCalls: EntityCommandInvocation[] = [];
+    it('routes structured AgentExecution prompts and commands through the AgentExecution command surface', async () => {
+        const agentExecutionCommandCalls: EntityCommandInvocation[] = [];
         const mission = createMission(
             createMissionSnapshot({
-                agentSessions: [createSessionSnapshot('session-1', 'awaiting-input', {
+                agentExecutions: [createSessionSnapshot('session-1', 'awaiting-input', {
                     interactionCapabilities: {
                         mode: 'agent-message',
                         canSendTerminalInput: false,
@@ -163,7 +163,7 @@ describe('Mission control view reconciliation', () => {
                     ]
                 })]
             }),
-            createMissionGatewayDependencies([], [], agentSessionCommandCalls)
+            createMissionGatewayDependencies([], [], agentExecutionCommandCalls)
         );
         const session = mission.getSession('session-1');
 
@@ -174,14 +174,14 @@ describe('Mission control view reconciliation', () => {
         await session.sendPrompt({ source: 'operator', text: 'Continue with the next slice.' });
         await session.sendCommand({ type: 'resume', reason: 'Operator approved continuation.' });
 
-        expect(agentSessionCommandCalls).toEqual([
+        expect(agentExecutionCommandCalls).toEqual([
             {
-                entity: 'AgentSession',
+                entity: 'AgentExecution',
                 method: 'command',
                 payload: {
                     missionId: 'mission-29',
                     sessionId: 'session-1',
-                    commandId: AgentSessionCommandIds.sendPrompt,
+                    commandId: AgentExecutionCommandIds.sendPrompt,
                     input: {
                         source: 'operator',
                         text: 'Continue with the next slice.'
@@ -189,12 +189,12 @@ describe('Mission control view reconciliation', () => {
                 }
             },
             {
-                entity: 'AgentSession',
+                entity: 'AgentExecution',
                 method: 'command',
                 payload: {
                     missionId: 'mission-29',
                     sessionId: 'session-1',
-                    commandId: AgentSessionCommandIds.sendRuntimeMessage,
+                    commandId: AgentExecutionCommandIds.sendRuntimeMessage,
                     input: {
                         type: 'resume',
                         reason: 'Operator approved continuation.'
@@ -219,11 +219,11 @@ function createMission(
 function createMissionGatewayDependencies(
     artifactBodyCalls: string[],
     artifactBodyCommandCalls: EntityCommandInvocation[] = [],
-    agentSessionCommandCalls: EntityCommandInvocation[] = []
+    agentExecutionCommandCalls: EntityCommandInvocation[] = []
 ): MissionGatewayDependencies {
     return {
         commandRemote: async (input) =>
-            handleCommandInvocation(input, artifactBodyCommandCalls, agentSessionCommandCalls),
+            handleCommandInvocation(input, artifactBodyCommandCalls, agentExecutionCommandCalls),
         queryRemote: async (input) => handleQueryInvocation(input, artifactBodyCalls)
     };
 }
@@ -231,7 +231,7 @@ function createMissionGatewayDependencies(
 async function handleCommandInvocation(
     input: EntityCommandInvocation,
     artifactBodyCommandCalls: EntityCommandInvocation[],
-    agentSessionCommandCalls: EntityCommandInvocation[]
+    agentExecutionCommandCalls: EntityCommandInvocation[]
 ): Promise<EntityRemoteResult> {
     if (input.entity === 'Stage' && input.method === 'command') {
         return createStageAcknowledgement();
@@ -254,9 +254,9 @@ async function handleCommandInvocation(
         };
     }
 
-    if (input.entity === 'AgentSession' && input.method === 'command') {
-        agentSessionCommandCalls.push(input);
-        return createAgentSessionAcknowledgement('command');
+    if (input.entity === 'AgentExecution' && input.method === 'command') {
+        agentExecutionCommandCalls.push(input);
+        return createAgentExecutionAcknowledgement('command');
     }
 
     if (input.entity === 'Mission' && input.method === 'command') {
@@ -333,15 +333,15 @@ function createTaskAcknowledgement(): TaskCommandAcknowledgementType {
     };
 }
 
-function createAgentSessionAcknowledgement(method: AgentSessionCommandAcknowledgementType['method']): AgentSessionCommandAcknowledgementType {
+function createAgentExecutionAcknowledgement(method: AgentExecutionCommandAcknowledgementType['method']): AgentExecutionCommandAcknowledgementType {
     return {
         ok: true,
-        entity: 'AgentSession',
+        entity: 'AgentExecution',
         method,
         id: 'session-1',
         missionId: 'mission-29',
         sessionId: 'session-1',
-        commandId: AgentSessionCommandIds.cancel
+        commandId: AgentExecutionCommandIds.cancel
     };
 }
 
@@ -374,7 +374,7 @@ function createMissionSnapshot(overrides: Partial<MissionSnapshotType> = {}): Mi
             missionRootDir: '/tmp/mission-29/.mission/mission-29',
             artifacts: [createArtifactData('verify', 'VERIFY.md')],
             stages,
-            agentSessions: [createSessionSnapshot('session-1', 'running')]
+            agentExecutions: [createSessionSnapshot('session-1', 'running')]
         },
         commandView: {
             revision: 'commands-1',
@@ -398,7 +398,7 @@ function createMissionSnapshot(overrides: Partial<MissionSnapshotType> = {}): Mi
         stages,
         tasks: stages.flatMap((stage) => stage.tasks),
         artifacts: [createArtifactData('verify', 'VERIFY.md')],
-        agentSessions: [createSessionSnapshot('session-1', 'running')],
+        agentExecutions: [createSessionSnapshot('session-1', 'running')],
         ...overrides
     };
 }
@@ -428,7 +428,7 @@ function createTaskSnapshot(taskId: string, lifecycle: string): TaskDataType {
         lifecycle,
         dependsOn: [],
         waitingOnTaskIds: [],
-        agentRunner: 'copilot-cli',
+        agentAdapter: 'copilot-cli',
         retries: 0
     };
 }
@@ -445,14 +445,14 @@ function createArtifactData(id: string, label: string): ArtifactDataType {
 
 function createSessionSnapshot(
     sessionId: string,
-    lifecycleState: AgentSessionDataType['lifecycleState'],
-    overrides: Partial<AgentSessionDataType> = {}
-): AgentSessionDataType {
+    lifecycleState: AgentExecutionDataType['lifecycleState'],
+    overrides: Partial<AgentExecutionDataType> = {}
+): AgentExecutionDataType {
     return {
-        id: `agent_session:mission-29/${sessionId}`,
+        id: `agent_execution:mission-29/${sessionId}`,
         sessionId,
-        runnerId: 'copilot-cli',
-        runnerLabel: 'Copilot CLI',
+        agentId: 'copilot-cli',
+        adapterLabel: 'Copilot CLI',
         lifecycleState,
         interactionCapabilities: {
             mode: 'pty-terminal',

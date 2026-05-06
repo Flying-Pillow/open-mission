@@ -9,10 +9,10 @@ export type TaskSnapshot = {
 };
 
 export type TaskStartOptions = {
-    agentRunner?: string;
+    agentAdapter?: string;
     model?: string;
     reasoningEffort?: TaskStartCommandOptionsType['reasoningEffort'];
-    terminalSessionName?: string;
+    terminalName?: string;
 };
 
 export type TaskConfigureOptions = TaskConfigureCommandOptionsType;
@@ -72,8 +72,8 @@ export class Task implements EntityModel<TaskSnapshot> {
         return this.snapshot.task.lifecycle;
     }
 
-    public get agentRunner(): string {
-        return this.snapshot.task.agentRunner;
+    public get agentAdapter(): string {
+        return this.snapshot.task.agentAdapter;
     }
 
     public get model(): string | undefined {

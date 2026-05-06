@@ -275,15 +275,16 @@
                 <p
                     class="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground"
                 >
-                    Agent sessions
+                    Agent executions
                 </p>
-                {#if mission.listSessions().length === 0}
+                {#if mission.listExecutions().length === 0}
                     <p class="mt-2 text-sm text-muted-foreground">
-                        No live agent sessions are attached to this mission yet.
+                        No live agent executions are attached to this mission
+                        yet.
                     </p>
                 {:else}
                     <div class="mt-3 grid gap-2">
-                        {#each mission.listSessions() as session (session.sessionId)}
+                        {#each mission.listExecutions() as execution (execution.sessionId)}
                             <div
                                 class="rounded-lg border bg-background px-3 py-2"
                             >
@@ -293,22 +294,22 @@
                                     <p
                                         class="text-sm font-medium text-foreground"
                                     >
-                                        {session.sessionId}
+                                        {execution.sessionId}
                                     </p>
                                     <Badge variant="outline"
-                                        >{session.lifecycleState}</Badge
+                                        >{execution.lifecycleState}</Badge
                                     >
                                 </div>
-                                {#if session.currentTurnTitle}
+                                {#if execution.currentTurnTitle}
                                     <p
                                         class="mt-1 text-sm text-muted-foreground"
                                     >
-                                        {session.currentTurnTitle}
+                                        {execution.currentTurnTitle}
                                     </p>
                                 {/if}
                                 <div class="mt-2 flex flex-wrap gap-2">
-                                    {#each session.commands as command (command.commandId)}
-                                        {@const pendingCommandId = `${session.sessionId}:${command.commandId}`}
+                                    {#each execution.commands as command (command.commandId)}
+                                        {@const pendingCommandId = `${execution.sessionId}:${command.commandId}`}
                                         <Button
                                             size="sm"
                                             variant={command.variant ??
@@ -320,7 +321,7 @@
                                                 runItemCommand(
                                                     pendingCommandId,
                                                     () =>
-                                                        session.executeCommand(
+                                                        execution.executeCommand(
                                                             command.commandId,
                                                         ),
                                                 )}

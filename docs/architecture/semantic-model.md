@@ -15,7 +15,7 @@ Mission uses a small domain vocabulary on purpose.
 | Mission workflow definition | Repository-owned workflow law |
 | Mission task | Executable unit of Mission work |
 | Mission artifact | Tracked operator-facing file |
-| Agent session | Daemon-managed runtime execution |
+| Agent execution | Daemon-managed runtime execution |
 | Entity | Daemon-addressable domain object with behavior |
 
 When code or docs need a new term, add it to CONTEXT.md or reuse an existing one. Stale synonyms make the architecture harder to operate.
