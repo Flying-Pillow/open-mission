@@ -14,6 +14,7 @@ import { Agent } from '../../../../entities/Agent/Agent.js';
 import { AgentRegistry } from '../../../../entities/Agent/AgentRegistry.js';
 import { createAgentAdapter, type AgentAdapter } from '../AgentAdapter.js';
 import { AgentExecutor } from '../AgentExecutor.js';
+import { MISSION_PROTOCOL_MARKER_PREFIX } from '../signals/MissionProtocolMarkerParser.js';
 import { createCopilot } from './Copilot.js';
 
 type MockTerminalState = {
@@ -73,8 +74,7 @@ async function startExecution(
 	const executor = new AgentExecutor({
 		agentRegistry: new AgentRegistry({
 			agents: [await Agent.fromAdapter(adapter)]
-		}),
-		mcpProvisioningPolicy: 'disabled'
+		})
 	});
 	const execution = await executor.startExecution(config);
 	const sessionId = execution.getSnapshot().sessionId;
@@ -140,7 +140,9 @@ describe('Copilot', () => {
 		expect(state.spawnedArgs).toContain('--add-dir');
 		expect(state.spawnedArgs).toContain('/tmp/work');
 		expect(state.spawnedArgs).toContain('-i');
-		expect(state.spawnedArgs).toContain('Implement the task.');
+		expect(state.spawnedArgs.some((arg) => arg.includes('Implement the task.'))).toBe(true);
+		expect(state.spawnedArgs.some((arg) => arg.includes('Mission signal protocol is mandatory'))).toBe(true);
+		expect(state.spawnedArgs.some((arg) => arg.includes(MISSION_PROTOCOL_MARKER_PREFIX))).toBe(true);
 		expect(state.writes).not.toContain('Implement the task.');
 	});
 
@@ -302,7 +304,7 @@ describe('Copilot', () => {
 		expect(settings.trusted_folders).toContain(missionRootDirectory);
 	});
 
-	it('passes Mission MCP launch env through without generating adapter-specific MCP config', async () => {
+	it('launches successfully with caller-provided launch env', async () => {
 		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-copilot-workspace-'));
 		try {
 			const adapter = createAgentAdapter(createCopilot({
@@ -315,12 +317,11 @@ describe('Copilot', () => {
 			await startExecution(adapter, createLaunchConfig({
 				workingDirectory: workspaceRoot,
 				launchEnv: {
-					MISSION_MCP_ENDPOINT: 'mission-local://mcp-signal/session-1',
-					MISSION_MCP_SESSION_TOKEN: 'token-1'
+					MISSION_AGENT_ENV_FIXTURE: 'enabled'
 				}
 			}));
 
-			expect(state.spawnedArgs).not.toContain('--additional-mcp-config');
+			expect(state.spawnedArgs).toContain(copilotScriptPath);
 		} finally {
 			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}

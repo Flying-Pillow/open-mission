@@ -141,7 +141,7 @@
     }
   },
   "runtime": {
-    "lifecycle": "delivered",
+    "lifecycle": "completed",
     "activeStageId": "delivery",
     "pause": {
       "paused": false

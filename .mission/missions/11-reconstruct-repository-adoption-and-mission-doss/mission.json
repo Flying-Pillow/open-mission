@@ -142,7 +142,7 @@
     }
   },
   "runtime": {
-    "lifecycle": "delivered",
+    "lifecycle": "completed",
     "activeStageId": "audit",
     "pause": {
       "paused": false

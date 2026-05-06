@@ -48,7 +48,7 @@ entities/Terminal
 daemon/runtime/agent
   AgentExecutor
   AgentExecutionLogWriter
-  MCP execution provisioning
+  prompt-scoped signal instruction
   observation routing
   signal policy
   provider observation vocabulary
@@ -83,7 +83,7 @@ Agent does not own:
 
 - PTY launch
 - TerminalRegistry
-- MCP provisioning
+- prompt-scoped signal instruction
 - signal policy
 - runtime output routing
 - AgentExecution lifecycle mutation
@@ -103,7 +103,7 @@ AgentAdapter does not own:
 
 - lifecycle truth
 - TerminalRegistry or PTY process mechanics
-- MCP server lifecycle or session registration
+- prompt-scoped signal instruction
 - AgentExecution creation or mutation
 - Mission workflow state transitions
 - Airport behavior
@@ -117,11 +117,11 @@ AgentExecutor owns:
 
 - resolving the requested Agent through AgentRegistry
 - asking the Agent's AgentAdapter for launch translation
-- daemon-owned MCP execution provisioning
+- prepending mandatory prompt-scoped signal instructions for task-scoped executions
 - opening or reconciling TerminalRegistry terminals for terminal-backed executions
 - creating live AgentExecution snapshots for terminal-backed execution
 - wiring TerminalRegistry updates into `AgentExecution.attachTerminal(...)`
-- routing adapter, MCP, protocol-marker, and terminal observations
+- routing adapter, protocol-marker, and terminal observations
 - applying AgentExecutionSignalPolicy
 - exposing start, reconcile, prompt, command, cancel, and terminate operations
 
@@ -152,7 +152,7 @@ AgentExecution does not own:
 - `node-pty`
 - TerminalRegistry lookup
 - process spawning or killing
-- MCP provisioning
+- prompt-scoped signal instruction
 - adapter output parsing
 - signal policy application
 - workflow task ownership
@@ -195,7 +195,7 @@ Terminal may carry owner metadata for an AgentExecution, Mission, task, reposito
 3. Delete `daemon/runtime/agent/AgentExecutionProtocolTypes.ts`; do not keep a compatibility export.
 4. Delete `daemon/runtime/agent/AgentRuntime.ts`.
 5. Replace `daemon/runtime/agent/AgentAdapter.ts` with the narrow adapter contract.
-6. Move lifecycle, TerminalRegistry, MCP provisioning, signal policy, and live AgentExecution mutation out of `entities/Agent/AgentAdapter.ts`.
+6. Move lifecycle, TerminalRegistry, prompt-scoped signal instruction, signal policy, and live AgentExecution mutation out of `entities/Agent/AgentAdapter.ts`.
 7. Split or rename `daemon/runtime/agent/adapters/AgentPtyAdapter.ts` because the current name hides executor responsibilities.
 8. Move configured runtime construction out of `entities/Agent/AgentRegistry.ts` into daemon composition or AgentExecutor setup.
 9. Extract TerminalRegistry and process supervision out of `entities/AgentExecution/AgentExecution.ts` into the Terminal Entity boundary, with AgentExecutor coordinating lifecycle use.
@@ -205,7 +205,7 @@ Terminal may carry owner metadata for an AgentExecution, Mission, task, reposito
 
 The implementation had overlapping lifecycle concepts:
 
-- `entities/Agent/AgentAdapter.ts`: concrete PTY/MCP/signal lifecycle implementation in an Entity folder.
+- `entities/Agent/AgentAdapter.ts`: concrete PTY/signal lifecycle implementation in an Entity folder.
 - `daemon/runtime/agent/AgentRuntime.ts`: duplicate lifecycle abstraction.
 - `daemon/runtime/agent/AgentAdapter.ts`: duplicate lifecycle abstraction with adapter naming.
 - `daemon/runtime/agent/adapters/AgentPtyAdapter.ts`: runtime-side copy that still owns lifecycle behavior under an adapter name.
@@ -218,7 +218,7 @@ The target is one lifecycle owner: `AgentExecutor`, with TerminalRegistry inside
 2. Add explicit AgentExecutionScope before implementing AgentExecutor so the new lifecycle owner does not bake in Mission/task assumptions.
 3. Delete `AgentRuntime` and update tests/fakes to stop extending it.
 4. Rewrite runtime-side `AgentAdapter` as the narrow provider translation contract.
-5. Create `AgentExecutor` and move PTY/MCP/signal lifecycle behavior into it.
+5. Create `AgentExecutor` and move PTY/signal lifecycle behavior into it.
 6. Reduce provider adapter files to launch translation and output parsing.
 7. Make workflow and daemon control call AgentExecutor.
 8. Remove the Entity-side concrete AgentAdapter implementation.

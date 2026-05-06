@@ -7,10 +7,8 @@ const { createServer } = await import(vitePlusRequire.resolve('@voidzero-dev/vit
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const daemonEntry = '/src/daemon/startDaemon.ts';
-const runtimeFactoryModulePath = path.join(packageRoot, 'src', 'daemon', 'runtime', 'agent', 'runtimes', 'AgentRuntimeFactory.ts');
 
 process.env.MISSION_DAEMON_RUNTIME_MODE = 'source';
-process.env.MISSION_RUNTIME_FACTORY_MODULE = process.env.MISSION_RUNTIME_FACTORY_MODULE?.trim() || runtimeFactoryModulePath;
 
 const server = await createServer({
 	root: packageRoot,

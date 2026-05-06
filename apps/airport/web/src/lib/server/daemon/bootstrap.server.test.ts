@@ -1,13 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getMissionDaemonProcessStatus = vi.fn();
-const resolveDefaultRuntimeFactoryModulePath = vi.fn();
 const startMissionDaemonProcess = vi.fn();
 const resolveSurfacePath = vi.fn();
 
 vi.mock('@flying-pillow/mission-core/daemon/runtime/DaemonProcessControl', () => ({
     getMissionDaemonProcessStatus,
-    resolveDefaultRuntimeFactoryModulePath,
     startMissionDaemonProcess
 }));
 
@@ -26,7 +24,6 @@ describe('startMissionDaemonBootstrap', () => {
             manifestPath: '/tmp/mission/daemon.json',
             message: 'Mission daemon is not running.'
         });
-        resolveDefaultRuntimeFactoryModulePath.mockReturnValue('/mission/packages/core/build/daemon/runtime/agent/adapters/AgentAdapterFactory.js');
         resolveSurfacePath.mockReturnValue('/mission');
         startMissionDaemonProcess.mockResolvedValue({
             running: true,
@@ -56,11 +53,9 @@ describe('startMissionDaemonBootstrap', () => {
         const { startMissionDaemonBootstrap } = await import('./bootstrap.server');
         await startMissionDaemonBootstrap();
 
-        expect(resolveDefaultRuntimeFactoryModulePath).toHaveBeenCalledWith('source');
         expect(startMissionDaemonProcess).toHaveBeenCalledWith({
             surfacePath: '/mission',
-            runtimeMode: 'source',
-            runtimeFactoryModulePath: '/mission/packages/core/build/daemon/runtime/agent/adapters/AgentAdapterFactory.js'
+            runtimeMode: 'source'
         });
     });
 

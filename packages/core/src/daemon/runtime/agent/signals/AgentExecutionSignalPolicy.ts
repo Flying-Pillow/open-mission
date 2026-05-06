@@ -309,7 +309,6 @@ function isAuthoritativeLifecycleClaim(
 function validateObservationSourceBoundary(observation: AgentExecutionObservation): string | undefined {
 	const expectedSourceByOrigin = {
 		daemon: 'daemon-authoritative',
-		mcp: 'mcp-validated',
 		'provider-output': 'provider-structured',
 		'protocol-marker': 'agent-declared',
 		'terminal-output': 'terminal-heuristic'
@@ -327,17 +326,6 @@ function validateObservationTypeBoundary(observation: AgentExecutionObservation)
 		readonly AgentExecutionSignal['type'][]
 	> = {
 		daemon: [
-			'progress',
-			'needs_input',
-			'blocked',
-			'ready_for_verification',
-			'completed_claim',
-			'failed_claim',
-			'message',
-			'usage',
-			'diagnostic'
-		],
-		mcp: [
 			'progress',
 			'needs_input',
 			'blocked',
@@ -373,7 +361,6 @@ function validateObservationTypeBoundary(observation: AgentExecutionObservation)
 		readonly AgentExecutionDiagnosticCode[] | undefined
 	> = {
 		daemon: undefined,
-		mcp: undefined,
 		'provider-output': ['provider-session', 'tool-call'],
 		'protocol-marker': ['protocol-marker-malformed', 'protocol-marker-oversized'],
 		'terminal-output': ['terminal-heuristic']
@@ -429,12 +416,6 @@ function validateObservationConfidenceBoundary(observation: AgentExecutionObserv
 	if (observation.route.origin === 'daemon') {
 		if (observation.signal.confidence !== 'authoritative') {
 			return "Observation origin 'daemon' requires signal confidence 'authoritative'.";
-		}
-	}
-	if (observation.route.origin === 'mcp') {
-		const expectedConfidence = observation.signal.type === 'diagnostic' ? 'diagnostic' : 'high';
-		if (observation.signal.confidence !== expectedConfidence) {
-			return `Observation origin 'mcp' requires signal confidence '${expectedConfidence}'.`;
 		}
 	}
 	if (observation.route.origin === 'provider-output') {

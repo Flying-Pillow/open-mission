@@ -10,7 +10,6 @@ import { Repository } from '../entities/Repository/Repository.js';
 import { MissionDossierFilesystem } from '../entities/Mission/MissionDossierFilesystem.js';
 import { parsePersistedWorkflowSettings } from '../settings/validation.js';
 import { readMissionWorkflowDefinition } from '../workflow/mission/preset.js';
-import type { MissionMcpSignalServer } from './runtime/agent/mcp/MissionMcpSignalServer.js';
 import type {
     AgentExecutionObservation,
     AgentExecutionSignalDecision,
@@ -29,7 +28,6 @@ export type MissionHandle = Mission;
 export class MissionRegistry {
     private readonly missionLoads = new Map<string, Promise<MissionHandle | undefined>>();
     private readonly missionHandles = new Map<string, MissionHandle>();
-    private mcpSignalServer: MissionMcpSignalServer | undefined;
 
     public constructor(private readonly options: {
         loadMission?: MissionLoader;
@@ -38,10 +36,6 @@ export class MissionRegistry {
             warn(message: string, metadata?: Record<string, unknown>): void;
         };
     } = {}) { }
-
-    public bindMcpSignalServer(signalServer: MissionMcpSignalServer): void {
-        this.mcpSignalServer = signalServer;
-    }
 
     public async hydrateDaemonMissions(context: { surfacePath: string }): Promise<void> {
         const roots = new Set<string>([path.resolve(context.surfacePath)]);
@@ -179,8 +173,7 @@ export class MissionRegistry {
         }
         const workflow = parsePersistedWorkflowSettings(workflowDocument);
         const agentRegistry = await AgentRegistry.createConfigured({
-            repositoryRootPath: repositoryRoot,
-            ...(this.mcpSignalServer ? { mcpSignalServer: this.mcpSignalServer } : {})
+            repositoryRootPath: repositoryRoot
         });
 
         const adapter = new MissionDossierFilesystem(repositoryRoot);
@@ -211,7 +204,24 @@ export class MissionRegistry {
             ...await adapter.listTrackedMissions(),
             ...await adapter.listMissions()
         ];
-        return [...new Map(missions.map((mission) => [mission.missionDir, mission])).values()];
+        const uniqueMissions = [...new Map(missions.map((mission) => [mission.missionDir, mission])).values()];
+        const hydratableMissions = [];
+        for (const mission of uniqueMissions) {
+            if (await this.shouldHydrateMission(adapter, mission.missionDir)) {
+                hydratableMissions.push(mission);
+            }
+        }
+        return hydratableMissions;
+    }
+
+    private async shouldHydrateMission(adapter: MissionDossierFilesystem, missionDir: string): Promise<boolean> {
+        const stateData = await adapter.readMissionStateDataFile(missionDir);
+        if (!isRecord(stateData) || !isRecord(stateData['runtime'])) {
+            return true;
+        }
+
+        const lifecycle = stateData['runtime']['lifecycle'];
+        return lifecycle !== 'completed' && lifecycle !== 'delivered';
     }
 
     private createMissionKey(repositoryRoot: string, missionId: string): string {
@@ -252,4 +262,8 @@ function resolveRepositoryPath(repositoryRootPath: string, configuredPath: strin
     return path.isAbsolute(configuredPath)
         ? configuredPath
         : path.join(repositoryRootPath, configuredPath);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

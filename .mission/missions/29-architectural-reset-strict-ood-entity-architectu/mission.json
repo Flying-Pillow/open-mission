@@ -493,13 +493,10 @@
     }
   },
   "runtime": {
-    "lifecycle": "paused",
+    "lifecycle": "completed",
     "activeStageId": "audit",
     "pause": {
-      "paused": true,
-      "reason": "human-requested",
-      "targetType": "mission",
-      "requestedAt": "2026-04-27T15:13:04.659Z"
+      "paused": false
     },
     "stages": [
       {

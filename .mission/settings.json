@@ -3,7 +3,7 @@
   "trackingProvider": "github",
   "instructionsPath": ".agents",
   "skillsPath": ".agents/skills",
-  "agentRunner": "copilot-cli",
+  "agentAdapter": "copilot-cli",
   "defaultAgentMode": "interactive",
   "defaultModel": "gpt-5.3-codex",
   "defaultReasoningEffort": "high"

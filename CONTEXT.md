@@ -183,9 +183,9 @@ _Avoid_: boolean capability, UI method, runtime method
 A best-effort attempt to send an Agent execution message to an Agent adapter; it is not proof that the indeterministic Agent execution read, understood, applied, or structurally acknowledged the message.
 _Avoid_: context mutation, state acknowledgement, reliable command result
 
-**Mission MCP tool**:
-A daemon-published structured tool exposed to a validated Agent-session surface, either a signal tool or the `entity` tool for authorized Entity commands.
-_Avoid_: agent-only command, arbitrary prompt action, surface-local tool
+**Mission protocol marker**:
+A strict one-line stdout marker emitted by an Agent execution and parsed by the daemon as an advisory Agent execution signal. The marker starts with the Mission protocol prefix and carries strict JSON with Mission id, task id, Agent execution id, event id, and signal payload.
+_Avoid_: prose state claim, hidden side channel, workflow authority, terminal heuristic
 
 **Agent message shorthand**:
 Operator-facing syntax that parses into an Agent execution message, such as a slash command in an external prompt field.
@@ -453,7 +453,7 @@ _Avoid_: workflow projection, stage projection
 - An **Agent execution message** describes a structured message supported by an Agent execution's Agent adapter.
 - An **Agent execution token** is the daemon-issued identifier used for structured transport and registration.
 - An **Agent execution message descriptor** is the source of truth for which structured controls a surface may offer for an **Agent execution**.
-- A validated **Agent-session surface** uses the shared **Mission MCP tool** vocabulary: signal tools plus the `entity` tool for authorized Entity commands.
+- A task-scoped **Agent execution** receives mandatory **Mission protocol marker** instructions in its initial prompt.
 - An **Agent message shorthand** is not canonical; it parses into an **Agent execution message** backed by an **Agent execution message descriptor** or daemon-owned context operation.
 - An **Agent message shorthand parser** belongs to the daemon; surfaces may offer autocomplete or previews but do not define canonical parse results.
 - Base **Agent execution messages** are common across Agent adapters; Agent child adapters may advertise additional supported messages.

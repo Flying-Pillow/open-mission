@@ -1,7 +1,6 @@
 // /apps/airport/web/src/lib/server/daemon/bootstrap.server.ts: One-shot Airport startup check for daemon availability.
 import {
     getMissionDaemonProcessStatus,
-    resolveDefaultRuntimeFactoryModulePath,
     startMissionDaemonProcess,
     type DaemonRuntimeMode
 } from '@flying-pillow/mission-core/daemon/runtime/DaemonProcessControl';
@@ -28,11 +27,9 @@ async function ensureMissionDaemonInBackground(): Promise<void> {
     }
 
     const runtimeMode = resolveConfiguredRuntimeMode();
-    const runtimeFactoryModulePath = resolveDefaultRuntimeFactoryModulePath(runtimeMode);
     await startMissionDaemonProcess({
         surfacePath: resolveSurfacePath(),
-        runtimeMode,
-        ...(runtimeFactoryModulePath ? { runtimeFactoryModulePath } : {})
+        runtimeMode
     });
 }
 

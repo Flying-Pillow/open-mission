@@ -42,7 +42,7 @@ describe('EntityProxy', () => {
             method: 'command',
             payload: {
                 missionId: 'mission-31',
-                taskId: 'implementation/04-local-mcp-signal-server',
+                taskId: 'implementation/04-agent-signal-parser',
                 commandId: 'task.complete'
             }
         });
@@ -57,7 +57,7 @@ describe('EntityProxy', () => {
             method: 'command',
             payload: {
                 missionId: 'mission-31',
-                taskId: 'implementation/04-local-mcp-signal-server',
+                taskId: 'implementation/04-agent-signal-parser',
                 commandId: 'task.complete'
             }
         });
@@ -76,7 +76,7 @@ describe('EntityProxy', () => {
             method: 'command',
             payload: {
                 missionId: 'mission-31',
-                taskId: 'implementation/04-local-mcp-signal-server',
+                taskId: 'implementation/04-agent-signal-parser',
                 commandId: 'task.complete'
             }
         })).rejects.toThrow('Task is not completable.');

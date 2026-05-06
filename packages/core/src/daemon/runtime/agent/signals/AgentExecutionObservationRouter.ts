@@ -41,15 +41,6 @@ export type AgentExecutionObservationInput =
 		observedAt?: string;
 	}
 	| {
-		kind: 'mcp-signal';
-		signal: AgentExecutionSignal;
-		scope: AgentExecutionSignalScope;
-		dedupeKey?: string;
-		claimedScope?: AgentExecutionSignalScope;
-		rawText?: string;
-		observedAt?: string;
-	}
-	| {
 		kind: 'protocol-marker';
 		line: string;
 		scope: AgentExecutionSignalScope;
@@ -82,19 +73,6 @@ export class AgentExecutionObservationRouter {
 			return this.toObservations(
 				this.providerOutputParser.parse(input.observation),
 				'provider-output',
-				input.scope,
-				observedAt
-			);
-		}
-		if (input.kind === 'mcp-signal') {
-			return this.toObservations(
-				[{
-					signal: input.signal,
-					...(input.dedupeKey ? { dedupeKey: input.dedupeKey } : {}),
-					...(input.claimedScope ? { claimedScope: input.claimedScope } : {}),
-					...(input.rawText ? { rawText: input.rawText } : {})
-				}],
-				'mcp',
 				input.scope,
 				observedAt
 			);

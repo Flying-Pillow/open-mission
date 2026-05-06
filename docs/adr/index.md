@@ -45,7 +45,7 @@ Read them when a change touches ownership, naming, state, runtime behavior, repo
 - [Explicit Agent Execution Context](0003-explicit-agent-execution-context.md)
 - [Runtime-Defined Agent Execution Messages](0004-runtime-defined-agent-execution-messages.md)
 - [Agent Execution Logs As Daemon Audit Material](0011-agent-execution-logs-as-daemon-audit-material.md)
-- [Daemon-Issued Agent Execution Tokens and Payload-Only Delivery](0017-daemon-issued-agent-execution-tokens-and-payload-only-delivery.md)
+- [Prompt-Scoped Agent Execution Signals](0017-prompt-scoped-agent-execution-signals.md)
 - [Agent Execution And Agent Adapter Vocabulary](0018-agent-execution-and-agent-adapter-vocabulary.md)
 
 ### Mission Control And Surfaces

@@ -12,7 +12,6 @@ export const MAX_MISSION_PROTOCOL_MARKER_LENGTH = 4_096;
 
 export type AgentExecutionSignalSource =
 	| 'daemon-authoritative'
-	| 'mcp-validated'
 	| 'provider-structured'
 	| 'agent-declared'
 	| 'terminal-heuristic';
@@ -88,7 +87,6 @@ export type AgentExecutionSignalScope = {
 
 export type AgentExecutionObservationOrigin =
 	| 'daemon'
-	| 'mcp'
 	| 'provider-output'
 	| 'protocol-marker'
 	| 'terminal-output';

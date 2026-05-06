@@ -5,7 +5,6 @@
   "type": "module",
   "bin": {
     "mission": "./build/mission.js",
-    "mission-command": "./build/mission-command.js",
     "missiond": "./build/missiond.js"
   },
   "main": "build/index.js",

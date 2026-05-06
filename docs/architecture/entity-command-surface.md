@@ -22,4 +22,4 @@ Command views are read results. They advertise what is currently available for a
 
 This keeps Airport thin. The surface renders commands; Entity classes decide what commands mean.
 
-Agent-session MCP surfaces should present the same daemon-published command view through the `entity` tool, not a second command vocabulary. The daemon authorizes which command descriptors are available to a registered execution.
+Agent executions do not receive a separate agent-only command vocabulary. Surfaces present daemon-published Entity command views, and Agent terminal output may only make advisory state claims through strict Mission protocol markers.

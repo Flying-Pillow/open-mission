@@ -1,7 +1,5 @@
 import type { AgentAdapter } from '../../daemon/runtime/agent/AgentAdapter.js';
 import { missionAgents } from '../../daemon/runtime/agent/adapters/index.js';
-import { AgentExecutionMcpAccessProvisioner } from '../../daemon/runtime/agent/mcp/AgentExecutionMcpAccessProvisioner.js';
-import type { MissionMcpSignalServer } from '../../daemon/runtime/agent/mcp/MissionMcpSignalServer.js';
 import { Agent } from './Agent.js';
 import { Repository } from '../Repository/Repository.js';
 import {
@@ -23,7 +21,6 @@ export type AgentRegistryOptions = {
 export type ConfiguredAgentRegistryOptions = {
     repositoryRootPath: string;
     logLine?: (line: string) => void;
-    mcpSignalServer?: MissionMcpSignalServer;
 };
 
 export class AgentRegistry {
@@ -41,12 +38,8 @@ export class AgentRegistry {
     public static async createConfigured(options: ConfiguredAgentRegistryOptions): Promise<AgentRegistry> {
         const settings = Repository.readSettingsDocument(options.repositoryRootPath) ?? createDefaultRepositorySettings();
         const resolveSettings = createProviderSettingsResolver({ settings });
-        const mcpProvisioner = options.mcpSignalServer
-            ? new AgentExecutionMcpAccessProvisioner({ signalServer: options.mcpSignalServer })
-            : undefined;
         const adapterContext = {
             resolveSettings,
-            ...(mcpProvisioner ? { mcpProvisioner } : {}),
             ...(options.logLine ? { logLine: options.logLine } : {})
         };
         const agents = await Promise.all(missionAgents.map((agentInput) => createConfiguredAgent(agentInput, adapterContext)));

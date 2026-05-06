@@ -362,28 +362,8 @@ describe('AgentExecutionSignalPolicy', () => {
 		});
 	});
 
-	it('requires high-confidence MCP claims and authoritative daemon claims', () => {
+	it('requires authoritative daemon claims', () => {
 		const policy = new AgentExecutionSignalPolicy();
-		const lowConfidenceMcp = policy.evaluate({
-			snapshot: createSnapshot(),
-			observation: createObservation({
-				observationId: 'observation-mcp-low',
-				route: {
-					origin: 'mcp',
-					scope: {
-						missionId: 'mission-31',
-						taskId: 'task-3',
-						agentExecutionId: 'session-7'
-					}
-				},
-				signal: {
-					type: 'needs_input',
-					question: 'Need a decision.',
-					source: 'mcp-validated',
-					confidence: 'medium'
-				}
-			})
-		});
 		const nonAuthoritativeDaemon = policy.evaluate({
 			snapshot: createSnapshot(),
 			observation: createObservation({
@@ -405,10 +385,6 @@ describe('AgentExecutionSignalPolicy', () => {
 			})
 		});
 
-		expect(lowConfidenceMcp).toEqual({
-			action: 'reject',
-			reason: "Observation origin 'mcp' requires signal confidence 'high'."
-		});
 		expect(nonAuthoritativeDaemon).toEqual({
 			action: 'reject',
 			reason: "Observation origin 'daemon' requires signal confidence 'authoritative'."
@@ -505,7 +481,7 @@ describe('AgentExecutionSignalPolicy', () => {
 			})
 		})).toEqual({
 			action: 'reject',
-			reason: "Mission session 'session-7' already ended with status 'completed'."
+			reason: "Agent execution 'session-7' already ended with status 'completed'."
 		});
 	});
 });

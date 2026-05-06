@@ -32,8 +32,6 @@ import {
 } from './protocol/contracts.js';
 import { DaemonLogger } from './runtime/DaemonLogger.js';
 import type { MissionAgentDisposable } from './runtime/agent/events.js';
-import { MissionMcpSignalServer } from './runtime/agent/mcp/MissionMcpSignalServer.js';
-import { PolicyBoundAgentExecutionSignalPort } from './runtime/agent/signals/AgentExecutionSignalPort.js';
 import { TerminalRegistry } from '../entities/Terminal/TerminalRegistry.js';
 
 export type MissionDaemonHandle = {
@@ -79,27 +77,7 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 	await assertNoReachableDaemon(socketPath);
 	const runtimeLock = await acquireDaemonRuntimeLock(socketPath);
 	const missionRegistry = new MissionRegistryClass({ logger });
-	const mcpSignalServer = new MissionMcpSignalServer({
-		signalPort: new PolicyBoundAgentExecutionSignalPort({
-			sink: {
-				getSnapshot: async (scope) => missionRegistry.getRuntimeSessionSnapshot(scope),
-				commit: async (input) => missionRegistry.applyRuntimeSessionSignalDecision({
-					scope: input.observation.route.scope,
-					observation: input.observation,
-					decision: input.decision
-				})
-			}
-		}),
-		executeEntityCommand: async (input) => executeEntityCommandInDaemon(
-			input,
-			{
-				surfacePath: resolveSurfacePath(options.surfacePath),
-				missionRegistry
-			}
-		)
-	});
-	missionRegistry.bindMcpSignalServer(mcpSignalServer);
-	const ipcServer = createDaemonIpcServer({ startedAt, missionRegistry, mcpSignalServer });
+	const ipcServer = createDaemonIpcServer({ startedAt, missionRegistry });
 	const notificationSources = startEntityEventSources(ipcServer.broadcastEvent);
 	let shuttingDown = false;
 	let closeResolve: (() => void) | undefined;
@@ -113,7 +91,6 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 	let startupCompleted = false;
 
 	try {
-		await mcpSignalServer.start();
 		await missionRegistry.hydrateDaemonMissions({ surfacePath: resolveSurfacePath(options.surfacePath) });
 		logger.info('Mission daemon hydration completed.');
 		if (!isNamedPipePath(socketPath)) {
@@ -131,7 +108,6 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 	} finally {
 		if (!startupCompleted) {
 			missionRegistry.dispose();
-			await mcpSignalServer.stop();
 			notificationSources.dispose();
 			await closeServer(ipcServer.server);
 			await runtimeLock.release();
@@ -162,7 +138,6 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 		shuttingDown = true;
 		logger.info('Mission daemon shutting down.');
 		missionRegistry.dispose();
-		await mcpSignalServer.stop();
 		notificationSources.dispose();
 		ipcServer.destroyConnections();
 		await closeServer(ipcServer.server);
@@ -204,7 +179,6 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 export function createDaemonIpcServer(input: {
 	startedAt: string;
 	missionRegistry: MissionRegistry;
-	mcpSignalServer?: MissionMcpSignalServer;
 }): DaemonIpcServer {
 	const sockets = new Set<net.Socket>();
 	const subscriptionsBySocket = new Map<net.Socket, EventSubscription[]>();
@@ -246,7 +220,7 @@ export function createDaemonIpcServer(input: {
 					continue;
 				}
 
-				void handleRequestLine(socket, line, input.startedAt, subscriptionsBySocket, input.missionRegistry, input.mcpSignalServer);
+				void handleRequestLine(socket, line, input.startedAt, subscriptionsBySocket, input.missionRegistry);
 			}
 		});
 
@@ -277,8 +251,7 @@ async function handleRequestLine(
 	line: string,
 	startedAt: string,
 	subscriptionsBySocket: Map<net.Socket, EventSubscription[]>,
-	missionRegistry: MissionRegistry,
-	mcpSignalServer: MissionMcpSignalServer | undefined
+	missionRegistry: MissionRegistry
 ): Promise<void> {
 	let request: Request;
 	try {
@@ -291,7 +264,7 @@ async function handleRequestLine(
 		return;
 	}
 
-	const response = await createDaemonResponse(request, startedAt, missionRegistry, mcpSignalServer);
+	const response = await createDaemonResponse(request, startedAt, missionRegistry);
 	if (!socket.destroyed) {
 		try {
 			socket.write(`${JSON.stringify(response)}\n`);
@@ -305,12 +278,11 @@ async function handleRequestLine(
 async function createDaemonResponse(
 	request: Request,
 	startedAt: string,
-	missionRegistry: MissionRegistry,
-	mcpSignalServer: MissionMcpSignalServer | undefined
+	missionRegistry: MissionRegistry
 ): Promise<Response> {
 	const requestStartedAt = performance.now();
 	try {
-		const response = await createDaemonResponseUnchecked(request, startedAt, missionRegistry, mcpSignalServer);
+		const response = await createDaemonResponseUnchecked(request, startedAt, missionRegistry);
 		logSlowDaemonRequest(request, requestStartedAt);
 		return response;
 	} catch (error) {
@@ -322,8 +294,7 @@ async function createDaemonResponse(
 async function createDaemonResponseUnchecked(
 	request: Request,
 	startedAt: string,
-	missionRegistry: MissionRegistry,
-	mcpSignalServer: MissionMcpSignalServer | undefined
+	missionRegistry: MissionRegistry
 ): Promise<Response> {
 	switch (request.method) {
 		case 'ping': {
@@ -384,25 +355,6 @@ async function createDaemonResponseUnchecked(
 				)
 			};
 		}
-		case 'mcp.tools.list': {
-			const handle = requireMcpSignalServer(mcpSignalServer).getStartedHandle();
-			return {
-				type: 'response',
-				id: request.id,
-				ok: true,
-				result: { tools: await handle.listTools(request.authToken) }
-			};
-		}
-		case 'mcp.tool.invoke': {
-			const params = parseMcpToolInvokeParams(request.params);
-			const handle = requireMcpSignalServer(mcpSignalServer).getStartedHandle();
-			return {
-				type: 'response',
-				id: request.id,
-				ok: true,
-				result: await handle.invokeTool(params.name, params.payload, request.authToken)
-			};
-		}
 		default:
 			return {
 				type: 'response',
@@ -415,29 +367,6 @@ async function createDaemonResponseUnchecked(
 			};
 	}
 }
-
-function requireMcpSignalServer(mcpSignalServer: MissionMcpSignalServer | undefined): MissionMcpSignalServer {
-	if (!mcpSignalServer) {
-		throw new Error('Mission MCP server is not configured for this daemon transport.');
-	}
-	return mcpSignalServer;
-}
-
-function parseMcpToolInvokeParams(params: unknown): { name: Parameters<MissionMcpSignalServerHandleInvoke>[0]; payload: unknown } {
-	if (!params || typeof params !== 'object' || Array.isArray(params)) {
-		throw new Error('MCP tool invocation params must be an object.');
-	}
-	const record = params as Record<string, unknown>;
-	if (typeof record['name'] !== 'string' || !record['name'].trim()) {
-		throw new Error('MCP tool invocation requires a tool name.');
-	}
-	return {
-		name: record['name'].trim() as Parameters<MissionMcpSignalServerHandleInvoke>[0],
-		payload: record['payload']
-	};
-}
-
-type MissionMcpSignalServerHandleInvoke = Awaited<ReturnType<MissionMcpSignalServer['start']>>['invokeTool'];
 
 function createErrorResponse(request: Request, error: unknown): Response {
 	return {

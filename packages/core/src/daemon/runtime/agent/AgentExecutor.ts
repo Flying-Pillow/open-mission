@@ -27,20 +27,13 @@ import {
     type TerminalState
 } from '../../../entities/Terminal/TerminalRegistry.js';
 import type { AgentAdapter } from './AgentAdapter.js';
-import { AgentExecutionMcpAccessProvisioner, type AgentExecutionMcpProvisioningPolicy } from './mcp/AgentExecutionMcpAccessProvisioner.js';
-import { buildMissionAgentExecutionProtocolLaunchContext } from './mcp/MissionAgentExecutionProtocolLaunchContext.js';
-import { missionMcpEntityCommandToolName } from './mcp/MissionMcpEntityCommandTools.js';
-import { missionMcpSignalToolNames } from './mcp/MissionMcpSignalTools.js';
-import type { MissionMcpToolName } from './mcp/MissionMcpSessionRegistry.js';
+import { buildAgentExecutionSignalLaunchContext } from './signals/AgentExecutionSignalLaunchContext.js';
 import { AgentExecutionObservationRouter } from './signals/AgentExecutionObservationRouter.js';
 import { AgentExecutionSignalPolicy } from './signals/AgentExecutionSignalPolicy.js';
 import type { AgentExecutionObservation } from './signals/AgentExecutionSignal.js';
 
 export type AgentExecutorOptions = {
     agentRegistry: AgentRegistry;
-    mcpProvisioner?: AgentExecutionMcpAccessProvisioner;
-    mcpProvisioningPolicy?: AgentExecutionMcpProvisioningPolicy;
-    allowedMcpTools?: readonly MissionMcpToolName[];
 };
 
 type ManagedAgentExecution = {
@@ -80,20 +73,11 @@ type AgentExecutionTerminalReconcileOptions = AgentExecutionTerminalOptions & {
 
 export class AgentExecutor {
     private readonly agentRegistry: AgentRegistry;
-    private readonly mcpProvisioner: AgentExecutionMcpAccessProvisioner | undefined;
-    private readonly mcpProvisioningPolicy: AgentExecutionMcpProvisioningPolicy;
-    private readonly allowedMcpTools: readonly MissionMcpToolName[];
     private readonly observationRouter = new AgentExecutionObservationRouter();
     private readonly managedExecutions = new Map<string, ManagedAgentExecution>();
 
     public constructor(options: AgentExecutorOptions) {
         this.agentRegistry = options.agentRegistry;
-        this.mcpProvisioner = options.mcpProvisioner;
-        this.mcpProvisioningPolicy = options.mcpProvisioningPolicy ?? 'required';
-        this.allowedMcpTools = options.allowedMcpTools ?? [
-            ...missionMcpSignalToolNames,
-            missionMcpEntityCommandToolName
-        ];
     }
 
     public dispose(): void {
@@ -130,7 +114,7 @@ export class AgentExecutor {
                 ...(launchPlan.env ? { env: launchPlan.env } : {})
             }
         });
-        const cleanup = mergeCleanupCallbacks(prepared.cleanup, adapterPrepared.cleanup);
+        const cleanup = adapterPrepared.cleanup;
         this.trackExecution({
             terminalController,
             adapter,
@@ -182,36 +166,16 @@ export class AgentExecutor {
     private async prepareLaunch(config: AgentLaunchConfig, agentId: string): Promise<{
         config: AgentLaunchConfig;
         executionId: string;
-        cleanup?: () => Promise<void>;
     }> {
         const executionId = AgentExecution.createFreshExecutionId(config, agentId);
-        if (!this.mcpProvisioner || this.mcpProvisioningPolicy === 'disabled') {
+        const signalScope = toSignalInstructionScope(config);
+        if (!signalScope) {
             return { config, executionId };
         }
 
-        const mcpScope = toMcpScope(config);
-        if (!mcpScope) {
-            return { config, executionId };
-        }
-
-        const provisioning = await this.mcpProvisioner.provision({
-            agentId,
-            policy: this.mcpProvisioningPolicy,
-            workingDirectory: config.workingDirectory,
-            missionId: mcpScope.missionId,
-            taskId: mcpScope.taskId,
-            agentExecutionId: executionId,
-            allowedTools: [...this.allowedMcpTools],
-            allowedEntityCommands: [
-                { entity: 'Task', method: 'command' },
-                { entity: 'AgentExecution', method: 'command' },
-                { entity: 'Artifact', method: 'command' }
-            ]
-        });
-        const launchContext = buildMissionAgentExecutionProtocolLaunchContext({
-            provisioning,
-            missionId: mcpScope.missionId,
-            taskId: mcpScope.taskId,
+        const launchContext = buildAgentExecutionSignalLaunchContext({
+            missionId: signalScope.missionId,
+            taskId: signalScope.taskId,
             agentExecutionId: executionId
         });
         return {
@@ -231,8 +195,7 @@ export class AgentExecutor {
                     ...(config.launchEnv ?? {}),
                     ...launchContext.launchEnv
                 }
-            },
-            cleanup: provisioning.cleanup
+            }
         };
     }
 
@@ -530,7 +493,7 @@ class AgentExecutionTerminalController {
     }
 }
 
-function toMcpScope(config: AgentLaunchConfig): { missionId: string; taskId: string } | undefined {
+function toSignalInstructionScope(config: AgentLaunchConfig): { missionId: string; taskId: string } | undefined {
     if (config.scope.kind === 'task') {
         return { missionId: config.scope.missionId, taskId: config.scope.taskId };
     }
@@ -545,22 +508,6 @@ function toSignalScope(snapshot: AgentExecutionSnapshot): { missionId: string; t
         missionId: snapshot.missionId,
         taskId: snapshot.taskId,
         agentExecutionId: snapshot.sessionId
-    };
-}
-
-function mergeCleanupCallbacks(
-    first: (() => Promise<void>) | undefined,
-    second: (() => Promise<void>) | undefined
-): (() => Promise<void>) | undefined {
-    if (!first) {
-        return second;
-    }
-    if (!second) {
-        return first;
-    }
-    return async () => {
-        await second();
-        await first();
     };
 }
 

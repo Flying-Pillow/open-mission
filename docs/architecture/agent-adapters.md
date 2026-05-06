@@ -15,13 +15,10 @@ The runtime boundary includes:
 - terminal input when a CLI runtime requires it
 - runtime message descriptors advertised to Airport
 - durable Agent execution logs
-- MCP tool exposure for agent-execution surfaces
+- prompt-scoped stdout signal markers for agent-declared state
 
-A validated agent-execution surface uses the same Mission MCP tool vocabulary:
+A validated terminal-backed Agent execution receives mandatory signal instructions in its initial prompt. The Agent reports advisory state by emitting one-line stdout markers using the Mission protocol marker prefix.
 
-- signal tools: `progress`, `request_input`, `blocked`, `ready`, `complete`, `fail`, `note`, `usage`
-- Entity command tool: `entity`
+Supported marker payloads cover progress, needs-input, blocked, ready-for-verification, completion claims, failure claims, and short messages. The daemon parses, validates, scopes, de-duplicates, and policy-gates those markers before any AgentExecution state changes.
 
-The `entity` tool is a thin transport wrapper over authorized Entity command views. The daemon registers which Entity commands a session may invoke, and the surface must not invent a separate agent-only command vocabulary.
-
-Runtime delivery is best effort. It is not a state acknowledgement. Mission state changes must still flow through daemon-owned commands and accepted transactions. Structured command and signal payloads stay payload-only; routing identity lives with the daemon-issued session token.
+Runtime delivery is best effort. It is not a state acknowledgement. Mission state changes must still flow through daemon-owned commands, accepted transactions, and policy-approved observations. Natural language terminal output is audit material, not workflow truth.

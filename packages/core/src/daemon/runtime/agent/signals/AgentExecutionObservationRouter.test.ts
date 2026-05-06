@@ -132,37 +132,6 @@ describe('AgentExecutionObservationRouter', () => {
 		})).toEqual([]);
 	});
 
-	it('routes mcp-validated signals through the mcp boundary', () => {
-		const router = new AgentExecutionObservationRouter();
-		const observations = router.route({
-			kind: 'mcp-signal',
-			scope,
-			dedupeKey: 'mcp-evt-1',
-			observedAt: '2026-05-04T12:02:00.000Z',
-			signal: {
-				type: 'progress',
-				summary: 'Reported through Mission MCP.',
-				source: 'mcp-validated',
-				confidence: 'high'
-			}
-		});
-
-		expect(observations).toEqual([{
-			observationId: 'mcp:mcp-evt-1',
-			observedAt: '2026-05-04T12:02:00.000Z',
-			route: {
-				origin: 'mcp',
-				scope
-			},
-			signal: {
-				type: 'progress',
-				summary: 'Reported through Mission MCP.',
-				source: 'mcp-validated',
-				confidence: 'high'
-			}
-		}]);
-	});
-
 	it('assigns distinct observation ids when identical provider output repeats', () => {
 		const router = new AgentExecutionObservationRouter();
 		const firstObservation = router.route({
