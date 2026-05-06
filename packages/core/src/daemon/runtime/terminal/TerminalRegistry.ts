@@ -4,32 +4,18 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { IPty } from 'node-pty';
 import {
+    Terminal,
     cloneTerminalSessionOwner,
     type TerminalOpenSessionRequest,
     type TerminalProcessController,
     type TerminalProcessLease,
     type TerminalRegistryOptions,
     type TerminalSessionHandle,
-    type TerminalSessionOwner,
     type TerminalSessionSnapshot,
     type TerminalSessionState,
     type TerminalSessionUpdate
 } from './Terminal.js';
 import { createPlainTerminalScreen, type TerminalScreen } from './TerminalScreen.js';
-
-type PtySessionRecord = {
-    sessionName: string;
-    paneId: string;
-    pty: IPty;
-    workingDirectory: string;
-    screen: TerminalScreen;
-    dead: boolean;
-    exitCode: number | null;
-    cols: number;
-    rows: number;
-    processLease: TerminalProcessLease;
-    owner?: TerminalSessionOwner;
-};
 
 type PtyLaunchCommand = {
     command: string;
@@ -47,7 +33,7 @@ const DEFAULT_UNIX_PATH_SEGMENTS = ['/opt/homebrew/bin', '/usr/local/bin', '/usr
 const COPILOT_CLI_DIRECTORY_SUFFIX = path.join('User', 'globalStorage', 'github.copilot-chat', 'copilotCli');
 
 export class TerminalRegistry {
-    private readonly sessions = new Map<string, PtySessionRecord>();
+    private readonly sessions = new Map<string, Terminal>();
     private readonly listeners = new Set<(event: TerminalSessionUpdate) => void>();
 
     public constructor(private readonly options: TerminalRegistryOptions) { }
@@ -80,14 +66,12 @@ export class TerminalRegistry {
         }
         this.options.logLine?.(`pty spawn ${launchCommand.command} ${launchCommand.args.join(' ')}`.trim());
 
-        const record: PtySessionRecord = {
+        const terminal = new Terminal({
             sessionName,
             paneId: PTY_PANE_ID,
             pty,
             workingDirectory: request.workingDirectory,
             screen: this.createScreen(DEFAULT_COLS, DEFAULT_ROWS),
-            dead: false,
-            exitCode: null,
             cols: DEFAULT_COLS,
             rows: DEFAULT_ROWS,
             processLease: createProcessLease({
@@ -96,41 +80,26 @@ export class TerminalRegistry {
                 workingDirectory: request.workingDirectory
             }),
             ...(request.owner ? { owner: cloneTerminalSessionOwner(request.owner) } : {})
-        };
-        this.sessions.set(sessionName, record);
+        });
+        this.sessions.set(sessionName, terminal);
 
         pty.onData((chunk) => {
-            record.screen.write(chunk);
-            this.emit({
-                ...this.createSnapshot(record),
-                chunk
-            });
+            this.emit(terminal.write(chunk));
         });
 
         pty.onExit(({ exitCode }) => {
-            record.dead = true;
-            record.exitCode = exitCode;
-            this.emit({
-                ...this.createSnapshot(record),
-                chunk: ''
-            });
+            this.emit(terminal.markExited(exitCode));
         });
 
-        return {
-            sessionName,
-            paneId: record.paneId
-        };
+        return terminal.handle();
     }
 
     public attachSession(sessionName: string): TerminalSessionHandle | undefined {
-        const record = this.sessions.get(sessionName);
-        if (!record) {
+        const terminal = this.sessions.get(sessionName);
+        if (!terminal) {
             return undefined;
         }
-        return {
-            sessionName: record.sessionName,
-            paneId: record.paneId
-        };
+        return terminal.handle();
     }
 
     public hasSession(sessionName: string): boolean {
@@ -138,38 +107,32 @@ export class TerminalRegistry {
     }
 
     public readSnapshot(sessionName: string): TerminalSessionSnapshot | undefined {
-        const record = this.sessions.get(sessionName);
-        return record ? this.createSnapshot(record) : undefined;
+        const terminal = this.sessions.get(sessionName);
+        return terminal?.snapshot();
     }
 
     public sendKeys(sessionName: string, keys: string, options: { literal?: boolean } = {}): void {
-        const record = this.requireSession(sessionName);
-        record.pty.write(translateKeys(keys, options));
+        const terminal = this.requireSession(sessionName);
+        terminal.sendKeys(translateKeys(keys, options));
     }
 
     public resize(sessionName: string, cols: number, rows: number): void {
-        const record = this.requireSession(sessionName);
+        const terminal = this.requireSession(sessionName);
         const normalizedCols = clampTerminalSize(cols, DEFAULT_COLS);
         const normalizedRows = clampTerminalSize(rows, DEFAULT_ROWS);
-        if (record.cols === normalizedCols && record.rows === normalizedRows) {
-            return;
-        }
-        record.cols = normalizedCols;
-        record.rows = normalizedRows;
-        record.screen.resize(normalizedCols, normalizedRows);
-        record.pty.resize(normalizedCols, normalizedRows);
+        terminal.resize(normalizedCols, normalizedRows);
     }
 
     public async killSession(sessionName: string): Promise<TerminalSessionState> {
-        const record = this.sessions.get(sessionName);
-        if (!record) {
+        const terminal = this.sessions.get(sessionName);
+        if (!terminal) {
             return { dead: true, exitCode: null };
         }
-        if (record.dead) {
-            return { dead: true, exitCode: record.exitCode };
+        if (terminal.isDead) {
+            return terminal.state;
         }
-        await this.terminateRecord(record);
-        return { dead: record.dead, exitCode: record.exitCode };
+        await this.terminateTerminal(terminal);
+        return terminal.state;
     }
 
     public onDidSessionUpdate(listener: (event: TerminalSessionUpdate) => void): { dispose(): void } {
@@ -187,34 +150,18 @@ export class TerminalRegistry {
         }
     }
 
-    private createSnapshot(record: PtySessionRecord): TerminalSessionSnapshot {
-        const screen = record.screen.snapshot();
-        return {
-            sessionName: record.sessionName,
-            paneId: record.paneId,
-            connected: true,
-            dead: record.dead,
-            exitCode: record.exitCode,
-            screen: screen.screen,
-            truncated: screen.truncated,
-            workingDirectory: record.workingDirectory,
-            processLease: { ...record.processLease },
-            ...(record.owner ? { owner: cloneTerminalSessionOwner(record.owner) } : {})
-        };
-    }
-
-    private requireSession(sessionName: string): PtySessionRecord {
-        const record = this.sessions.get(sessionName);
-        if (!record) {
+    private requireSession(sessionName: string): Terminal {
+        const terminal = this.sessions.get(sessionName);
+        if (!terminal) {
             throw new Error(`Terminal session '${sessionName}' is not active.`);
         }
-        return record;
+        return terminal;
     }
 
     private resolveSessionName(requestedName: string | undefined, sessionPrefix: string | undefined): string {
         const baseName = requestedName?.trim() || `${sessionPrefix?.trim() || 'mission-terminal'}-${randomUUID().slice(0, 8)}`;
         const existing = this.sessions.get(baseName);
-        if (existing?.dead) {
+        if (existing?.isDead) {
             this.sessions.delete(baseName);
             return baseName;
         }
@@ -230,41 +177,41 @@ export class TerminalRegistry {
         throw new Error(`Unable to allocate a unique terminal session name for '${baseName}'.`);
     }
 
-    private async terminateRecord(record: PtySessionRecord): Promise<void> {
-        this.killPty(record, 'SIGTERM');
-        this.killProcessGroup(record, 'SIGTERM');
-        if (await this.waitForExit(record, this.terminationGraceMs)) {
+    private async terminateTerminal(terminal: Terminal): Promise<void> {
+        this.killPty(terminal, 'SIGTERM');
+        this.killProcessGroup(terminal, 'SIGTERM');
+        if (await this.waitForExit(terminal, this.terminationGraceMs)) {
             return;
         }
 
-        this.killPty(record, 'SIGKILL');
-        this.killProcessGroup(record, 'SIGKILL');
-        await this.waitForExit(record, this.terminationGraceMs);
+        this.killPty(terminal, 'SIGKILL');
+        this.killProcessGroup(terminal, 'SIGKILL');
+        await this.waitForExit(terminal, this.terminationGraceMs);
     }
 
-    private killPty(record: PtySessionRecord, signal: NodeJS.Signals): void {
+    private killPty(terminal: Terminal, signal: NodeJS.Signals): void {
         try {
-            record.pty.kill(signal);
+            terminal.pty.kill(signal);
         } catch {
             try {
-                record.pty.kill();
+                terminal.pty.kill();
             } catch {
                 // Termination continues through the process lease when PTY kill fails.
             }
         }
     }
 
-    private killProcessGroup(record: PtySessionRecord, signal: NodeJS.Signals): void {
-        const processGroupId = record.processLease.processGroupId;
+    private killProcessGroup(terminal: Terminal, signal: NodeJS.Signals): void {
+        const processGroupId = terminal.processLease.processGroupId;
         if (!processGroupId || process.platform === 'win32') {
             return;
         }
         try {
             this.processController.killProcessGroup(processGroupId, signal);
         } catch {
-            if (record.processLease.pid > 1 && record.processLease.pid !== process.pid) {
+            if (terminal.processLease.pid > 1 && terminal.processLease.pid !== process.pid) {
                 try {
-                    this.processController.killProcess(record.processLease.pid, signal);
+                    this.processController.killProcess(terminal.processLease.pid, signal);
                 } catch {
                     // Best effort; waitForExit reports the final truth.
                 }
@@ -272,12 +219,12 @@ export class TerminalRegistry {
         }
     }
 
-    private async waitForExit(record: PtySessionRecord, timeoutMs: number): Promise<boolean> {
+    private async waitForExit(terminal: Terminal, timeoutMs: number): Promise<boolean> {
         const deadline = Date.now() + Math.max(0, timeoutMs);
-        while (!record.dead && Date.now() <= deadline) {
+        while (!terminal.isDead && Date.now() <= deadline) {
             await delay(this.terminationPollIntervalMs);
         }
-        return record.dead;
+        return terminal.isDead;
     }
 
     private createScreen(cols: number, rows: number): TerminalScreen {

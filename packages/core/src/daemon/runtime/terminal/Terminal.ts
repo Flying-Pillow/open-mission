@@ -1,6 +1,5 @@
 import type { spawn as spawnPty } from 'node-pty';
 import type { IPty } from 'node-pty';
-import type { TerminalScreen, TerminalScreenFactory } from './TerminalScreen.js';
 
 export type TerminalExecutorResult = {
     stdout: string;
@@ -71,6 +70,25 @@ export type TerminalSessionState = {
     dead: boolean;
     exitCode: number | null;
 };
+
+export type TerminalScreenSnapshot = {
+    screen: string;
+    truncated: boolean;
+};
+
+export type TerminalScreen = {
+    write(chunk: string): TerminalScreenSnapshot;
+    resize(cols: number, rows: number): TerminalScreenSnapshot;
+    snapshot(): TerminalScreenSnapshot;
+    serialize(): TerminalScreenSnapshot;
+    restore(state: TerminalScreenSnapshot): void;
+};
+
+export type TerminalScreenFactory = (input: {
+    cols: number;
+    rows: number;
+    maxBufferSize: number;
+}) => TerminalScreen;
 
 export type TerminalRegistryOptions = {
     spawnImpl: typeof spawnPty;
