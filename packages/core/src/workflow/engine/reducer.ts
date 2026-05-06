@@ -735,6 +735,12 @@ function configureTaskRuntimeState(
             delete next.reasoningEffort;
         }
     }
+    if (typeof event.autostart === 'boolean') {
+        next.runtime = {
+            ...next.runtime,
+            autostart: event.autostart
+        };
+    }
     if (event.context) {
         next.context = event.context.map((contextArtifact) => ({ ...contextArtifact }));
     }

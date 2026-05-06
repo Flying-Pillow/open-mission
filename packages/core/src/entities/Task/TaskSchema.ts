@@ -64,6 +64,7 @@ export const TaskConfigureCommandOptionsSchema = z.object({
     agentRunner: z.string().trim().min(1).optional(),
     model: z.string().trim().min(1).nullable().optional(),
     reasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).nullable().optional(),
+    autostart: z.boolean().optional(),
     context: z.array(TaskContextArtifactReferenceSchema).optional()
 }).strict();
 
@@ -83,6 +84,7 @@ export const TaskStorageSchema = z.object({
     context: z.array(TaskContextArtifactReferenceSchema).optional(),
     waitingOnTaskIds: z.array(z.string().trim().min(1)),
     agentRunner: z.string().trim().min(1),
+    autostart: z.boolean().optional(),
     retries: z.number().int().nonnegative(),
     fileName: z.string().trim().min(1).optional(),
     filePath: z.string().trim().min(1).optional(),

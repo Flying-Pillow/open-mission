@@ -76,16 +76,18 @@ export class Repository extends Entity<RepositoryDataType> {
 
     public static async findAvailable(input: {
         platform?: 'github';
+        run?: boolean;
     } = {}) {
-        return RepositoryPlatformRepositorySchema.array().parse(await qry({
+        const query = qry({
             entity: 'Repository',
             method: 'findAvailable',
-            payload: input
-        }).run());
+            payload: input.platform ? { platform: input.platform } : {}
+        });
+        return RepositoryPlatformRepositorySchema.array().parse(input.run === false ? await query : await query.run());
     }
 
-    public static async classCommands(commandInput?: unknown): Promise<EntityCommandDescriptorType[]> {
-        return Entity.classCommands('Repository', commandInput);
+    public static async classCommands(commandInput?: unknown, input: { run?: boolean } = {}): Promise<EntityCommandDescriptorType[]> {
+        return Entity.classCommands('Repository', commandInput, input);
     }
 
     public static async executeClassCommand<TResult = unknown>(commandId: string, input?: unknown): Promise<TResult> {

@@ -13,10 +13,6 @@ import {
 	quoteShellArg,
 	resolveMissionAgentRunnerSettings
 } from './MissionAgentPtyRunner.js';
-import {
-	createPiMissionMcpConfigDir,
-	hasMissionMcpBridgeLaunchEnv
-} from '../mcp/MissionMcpRunnerLaunchSupport.js';
 
 export type PiAgentRunnerOptions = ConstructorParameters<typeof MissionAgentPtyRunner>[0] & {
 	resolveSettings?: MissionAgentRunnerSettingsResolver<typeof PI_AGENT_RUNNER_ID>;
@@ -40,7 +36,6 @@ export class PiAgentRunner extends MissionAgentPtyRunner {
 		const args = [
 			'--model',
 			settings.model,
-			...(hasMissionMcpBridgeLaunchEnv(settings.launchEnv) ? ['-e', 'npm:pi-mcp-extension'] : []),
 			prompt
 		];
 		return {
@@ -53,35 +48,12 @@ export class PiAgentRunner extends MissionAgentPtyRunner {
 
 	public createPrintLaunchPlan(config: AgentLaunchConfig): MissionAgentRunnerLaunchPlan {
 		const settings = this.readSettings(config);
-		const extensionArgs = hasMissionMcpBridgeLaunchEnv(settings.launchEnv)
-			? ' -e npm:pi-mcp-extension'
-			: '';
 		return {
 			mode: 'print',
-			command: `pi -p --mode json --no-session${extensionArgs} --model ${quoteShellArg(settings.model)}`,
+			command: `pi -p --mode json --no-session --model ${quoteShellArg(settings.model)}`,
 			args: [],
 			stdin: config.initialPrompt?.text ?? '',
 			env: mergeLaunchEnv(settings.runtimeEnv, settings.providerEnv, settings.launchEnv)
-		};
-	}
-
-	protected override async prepareRunnerLaunchConfig(config: AgentLaunchConfig): Promise<{
-		config: AgentLaunchConfig;
-		cleanup?: () => Promise<void>;
-	}> {
-		if (!hasMissionMcpBridgeLaunchEnv(config.launchEnv)) {
-			return { config };
-		}
-		const prepared = await createPiMissionMcpConfigDir(config.launchEnv);
-		return {
-			config: {
-				...config,
-				launchEnv: {
-					...(config.launchEnv ?? {}),
-					PI_CODING_AGENT_DIR: prepared.configDir
-				}
-			},
-			cleanup: prepared.cleanup
 		};
 	}
 

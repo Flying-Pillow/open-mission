@@ -21,3 +21,5 @@ Command views are read results. They advertise what is currently available for a
 | EntityContract.ts | method metadata and routing contract |
 
 This keeps Airport thin. The surface renders commands; Entity classes decide what commands mean.
+
+Agent-session MCP surfaces should present the same daemon-published command view through the `entity` tool, not a second command vocabulary. The daemon authorizes which command descriptors are available to a registered session.

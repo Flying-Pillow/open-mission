@@ -16,8 +16,7 @@ import {
 	parseMissionMcpEntityCommandToolCall,
 	type MissionMcpEntityCommandAcknowledgement,
 	type MissionMcpEntityCommandExecutor,
-	type MissionMcpEntityCommandToolName,
-	type MissionMcpValidatedEntityCommandToolCall
+	type MissionMcpEntityCommandToolName
 } from './MissionMcpEntityCommandTools.js';
 
 export type MissionMcpSignalServerHandle = {
@@ -26,8 +25,9 @@ export type MissionMcpSignalServerHandle = {
 	localOnly: true;
 	transport: 'in-memory-local';
 	toolNames: readonly MissionMcpToolName[];
+	listTools(sessionToken?: string): Promise<string[]>;
 	healthCheck(): Promise<MissionMcpSignalServerHealth>;
-	invokeTool(name: MissionMcpToolName, payload: unknown): Promise<MissionMcpToolAcknowledgement>;
+	invokeTool(name: MissionMcpToolName, payload: unknown, sessionToken?: string): Promise<MissionMcpToolAcknowledgement>;
 };
 
 export type MissionMcpSignalServerHealth = {
@@ -82,14 +82,15 @@ export class MissionMcpSignalServer {
 			localOnly: true,
 			transport: 'in-memory-local',
 			toolNames: [...missionMcpSignalToolNames, missionMcpEntityCommandToolName],
+			listTools: async (sessionToken) => this.listTools(sessionToken),
 			healthCheck: async () => this.healthCheck(),
-			invokeTool: async (name, payload) => this.invokeTool(name, payload)
+			invokeTool: async (name, payload, sessionToken) => this.invokeTool(name, payload, sessionToken)
 		};
 		return this.handle;
 	}
 
 	public async registerSession(
-		input: MissionMcpSessionRegistration
+		input: Omit<MissionMcpSessionRegistration, 'sessionToken'>
 	): Promise<MissionMcpRegisteredSession> {
 		const handle = this.requireHandle();
 		const registration = this.sessionRegistry.registerSession(input);
@@ -101,13 +102,17 @@ export class MissionMcpSignalServer {
 		};
 	}
 
-	public async unregisterSession(agentSessionId: string): Promise<void> {
-		this.sessionRegistry.unregisterSession(agentSessionId);
+	public async unregisterSession(sessionToken: string): Promise<void> {
+		this.sessionRegistry.unregisterSession(sessionToken);
 	}
 
 	public async stop(): Promise<void> {
 		this.sessionRegistry.clear();
 		this.handle = undefined;
+	}
+
+	public getStartedHandle(): MissionMcpSignalServerHandle {
+		return this.requireHandle();
 	}
 
 	public async healthCheck(): Promise<MissionMcpSignalServerHealth> {
@@ -122,18 +127,46 @@ export class MissionMcpSignalServer {
 		};
 	}
 
+	private async listTools(sessionToken?: string): Promise<string[]> {
+		if (!this.handle) {
+			throw new Error('Mission MCP signal server is not running.');
+		}
+		const token = sessionToken?.trim();
+		if (!token) {
+			throw new Error('Mission MCP session token is required.');
+		}
+		const allowedTools = this.sessionRegistry.getAllowedTools(token);
+		if (!allowedTools) {
+			throw new Error('Unknown Mission MCP session token.');
+		}
+		return allowedTools;
+	}
+
 	private async invokeTool(
 		name: MissionMcpToolName,
-		payload: unknown
+		payload: unknown,
+		sessionToken?: string
 	): Promise<MissionMcpToolAcknowledgement> {
 		if (!this.handle) {
 			return rejectAcknowledgement('Mission MCP signal server is not running.');
 		}
+		const token = sessionToken?.trim();
+		if (!token) {
+			return rejectAcknowledgement('Mission MCP session token is required.');
+		}
 		if (name === missionMcpEntityCommandToolName) {
-			return this.invokeEntityCommandTool(payload);
+			return this.invokeEntityCommandTool(payload, token);
 		}
 		if (!listMissionMcpSignalToolDefinitions().some((definition) => definition.name === name)) {
 			return rejectAcknowledgement(`Unknown Mission MCP tool '${name}'.`);
+		}
+
+		const authorization = this.sessionRegistry.authorizeTool({
+			sessionToken: token,
+			toolName: name
+		});
+		if (!authorization.ok) {
+			return rejectAcknowledgement(authorization.reason);
 		}
 
 		const parsed = parseMissionMcpSignalToolCall(name, payload);
@@ -141,33 +174,21 @@ export class MissionMcpSignalServer {
 			return rejectAcknowledgement(parsed.reason);
 		}
 
-		const authorization = this.sessionRegistry.authorizeTool({
-			envelope: parsed.value.envelope,
-			toolName: name
-		});
-		if (!authorization.ok) {
-			return rejectAcknowledgement(authorization.reason);
-		}
-
-		const acknowledgement = await this.signalPort.reportSignal({
+		return this.signalPort.reportSignal({
 			scope: {
-				missionId: parsed.value.envelope.missionId,
-				taskId: parsed.value.envelope.taskId,
-				agentSessionId: parsed.value.envelope.agentSessionId
+				missionId: authorization.registration.missionId,
+				taskId: authorization.registration.taskId,
+				agentSessionId: authorization.registration.agentSessionId
 			},
-			eventId: parsed.value.envelope.eventId,
+			eventId: createInvocationEventId(name),
 			signal: parsed.value.signal
 		});
-		if (acknowledgement.accepted) {
-			this.sessionRegistry.rememberEvent(
-				parsed.value.envelope.agentSessionId,
-				parsed.value.envelope.eventId
-			);
-		}
-		return acknowledgement;
 	}
 
-	private async invokeEntityCommandTool(payload: unknown): Promise<MissionMcpEntityCommandAcknowledgement> {
+	private async invokeEntityCommandTool(
+		payload: unknown,
+		sessionToken: string
+	): Promise<MissionMcpEntityCommandAcknowledgement> {
 		const parsed = parseMissionMcpEntityCommandToolCall(payload);
 		if (!parsed.success) {
 			return rejectEntityCommandAcknowledgement(parsed.reason);
@@ -177,7 +198,7 @@ export class MissionMcpSignalServer {
 		}
 
 		const authorization = this.sessionRegistry.authorizeEntityCommand({
-			envelope: parsed.value.envelope,
+			sessionToken,
 			toolName: missionMcpEntityCommandToolName,
 			entity: parsed.value.invocation.entity,
 			method: parsed.value.invocation.method,
@@ -186,17 +207,9 @@ export class MissionMcpSignalServer {
 		if (!authorization.ok) {
 			return rejectEntityCommandAcknowledgement(authorization.reason);
 		}
-		const scopeRejection = validateEntityCommandScope(parsed.value);
-		if (scopeRejection) {
-			return rejectEntityCommandAcknowledgement(scopeRejection);
-		}
 
 		try {
 			const result = await this.executeEntityCommand(parsed.value.invocation);
-			this.sessionRegistry.rememberEvent(
-				parsed.value.envelope.agentSessionId,
-				parsed.value.envelope.eventId
-			);
 			return {
 				accepted: true,
 				outcome: 'entity-command',
@@ -215,24 +228,6 @@ export class MissionMcpSignalServer {
 	}
 }
 
-function validateEntityCommandScope(input: MissionMcpValidatedEntityCommandToolCall): string | undefined {
-	const payload = input.invocation.payload;
-	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-		return undefined;
-	}
-	const record = payload as Record<string, unknown>;
-	if (typeof record['missionId'] === 'string' && record['missionId'] !== input.envelope.missionId) {
-		return `Entity command mission '${record['missionId']}' did not match MCP envelope mission '${input.envelope.missionId}'.`;
-	}
-	if (input.invocation.entity === 'Task' && typeof record['taskId'] === 'string' && record['taskId'] !== input.envelope.taskId) {
-		return `Task command target '${record['taskId']}' did not match MCP envelope task '${input.envelope.taskId}'.`;
-	}
-	if (input.invocation.entity === 'AgentSession' && typeof record['sessionId'] === 'string' && record['sessionId'] !== input.envelope.agentSessionId) {
-		return `AgentSession command target '${record['sessionId']}' did not match MCP envelope session '${input.envelope.agentSessionId}'.`;
-	}
-	return undefined;
-}
-
 function rejectAcknowledgement(reason: string): MissionMcpSignalAcknowledgement {
 	return {
 		accepted: false,
@@ -247,4 +242,8 @@ function rejectEntityCommandAcknowledgement(reason: string): MissionMcpEntityCom
 		outcome: 'rejected',
 		reason
 	};
+}
+
+function createInvocationEventId(toolName: string): string {
+	return `${toolName}:${randomUUID()}`;
 }

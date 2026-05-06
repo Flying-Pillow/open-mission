@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { connectDaemon } from '@flying-pillow/mission-core/daemon/client/connectAirportDaemon';
-import { Repository } from '@flying-pillow/mission-core/entities/Repository/Repository';
 
 type JsonRpcRequest = {
 	jsonrpc?: string;
@@ -20,15 +19,15 @@ type McpTool = {
 };
 
 const toolDescriptions: Record<string, string> = {
-	mission_report_progress: 'Report structured Mission session progress.',
-	mission_request_operator_input: 'Ask Mission to surface an operator decision.',
-	mission_report_blocked: 'Report that the active Agent session is blocked.',
-	mission_report_ready_for_verification: 'Report a ready-for-verification claim.',
-	mission_report_completion_claim: 'Report a completion claim.',
-	mission_report_failure_claim: 'Report a failure claim.',
-	mission_append_session_note: 'Append an agent-authored session note.',
-	mission_report_usage: 'Attach structured usage metadata to the active Mission session.',
-	mission_entity_command: 'Invoke an allowlisted Mission Entity command for this Agent session.'
+	progress: 'Report structured progress.',
+	request_input: 'Ask for an operator decision.',
+	blocked: 'Report that the session is blocked.',
+	ready: 'Report ready-for-verification.',
+	complete: 'Report a completion claim.',
+	fail: 'Report a failure claim.',
+	note: 'Append a short session note.',
+	usage: 'Attach structured usage metadata.',
+	entity: 'Invoke an allowlisted entity command.'
 };
 
 let buffer = '';
@@ -80,22 +79,17 @@ async function handleLine(line: string): Promise<void> {
 }
 
 async function listTools(): Promise<McpTool[]> {
-	const client = await connectDaemon({
-		surfacePath: process.env['MISSION_ENTRY_CWD']?.trim() || process.cwd()
-	});
+	const client = await connectDaemon(createDaemonConnectionOptions());
 	try {
 		const result = await client.request<{ tools: string[] }>('mcp.tools.list');
-		const allowedTools = readAllowedTools();
-		return result.tools
-			.filter((toolName) => allowedTools.length === 0 || allowedTools.includes(toolName))
-			.map((toolName) => ({
-				name: toolName,
-				description: toolDescriptions[toolName] ?? `Mission MCP tool ${toolName}.`,
-				inputSchema: {
-					type: 'object',
-					additionalProperties: true
-				}
-			}));
+		return result.tools.map((toolName) => ({
+			name: toolName,
+			description: toolDescriptions[toolName] ?? `Mission MCP tool ${toolName}.`,
+			inputSchema: {
+				type: 'object',
+				additionalProperties: true
+			}
+		}));
 	} finally {
 		client.dispose();
 	}
@@ -103,9 +97,7 @@ async function listTools(): Promise<McpTool[]> {
 
 async function callTool(params: unknown): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
 	const parsed = parseToolCallParams(params);
-	const client = await connectDaemon({
-		surfacePath: process.env['MISSION_ENTRY_CWD']?.trim() || Repository.resolveRepositoryRoot()
-	});
+	const client = await connectDaemon(createDaemonConnectionOptions());
 	try {
 		const result = await client.request('mcp.tool.invoke', {
 			name: parsed.name,
@@ -135,17 +127,10 @@ function parseToolCallParams(params: unknown): { name: string; arguments: unknow
 	};
 }
 
-function readAllowedTools(): string[] {
-	const raw = process.env['MISSION_MCP_ALLOWED_TOOLS'];
-	if (!raw) return [];
-	try {
-		const parsed = JSON.parse(raw) as unknown;
-		return Array.isArray(parsed)
-			? parsed.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-			: [];
-	} catch {
-		return [];
-	}
+function createDaemonConnectionOptions(): { surfacePath: string; authToken?: string } {
+	const surfacePath = process.env['MISSION_ENTRY_CWD']?.trim() || process.cwd();
+	const authToken = process.env['MISSION_MCP_SESSION_TOKEN']?.trim();
+	return authToken ? { surfacePath, authToken } : { surfacePath };
 }
 
 function writeResponse(id: JsonRpcRequest['id'], result?: unknown, error?: unknown): void {

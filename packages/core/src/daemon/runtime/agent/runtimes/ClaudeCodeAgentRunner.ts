@@ -1,6 +1,3 @@
-import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
-import * as path from 'node:path';
 import type { AgentProviderObservation } from '../AgentProviderObservations.js';
 import type { AgentLaunchConfig } from '../AgentRuntimeTypes.js';
 import { CLAUDE_CODE_AGENT_RUNNER_ID } from './AgentRuntimeIds.js';
@@ -19,13 +16,8 @@ import {
 	validateDangerouslySkipPermissions,
 	validateReasoningEffort
 } from './MissionAgentPtyRunner.js';
-import {
-	buildClaudeCodeMissionMcpConfigContent,
-	hasMissionMcpBridgeLaunchEnv
-} from '../mcp/MissionMcpRunnerLaunchSupport.js';
 
 const CLAUDE_REASONING_EFFORTS = ['low', 'medium', 'high', 'max'] as const;
-const CLAUDE_CODE_MCP_CONFIG_PATH_ENV = 'MISSION_CLAUDE_CODE_MCP_CONFIG_PATH';
 
 export type ClaudeCodeAgentRunnerOptions = ConstructorParameters<typeof MissionAgentPtyRunner>[0] & {
 	resolveSettings?: MissionAgentRunnerSettingsResolver<typeof CLAUDE_CODE_AGENT_RUNNER_ID>;
@@ -52,7 +44,6 @@ export class ClaudeCodeAgentRunner extends MissionAgentPtyRunner {
 			);
 		}
 		const prompt = config.initialPrompt?.text ?? '';
-		const mcpConfigPath = settings.launchEnv[CLAUDE_CODE_MCP_CONFIG_PATH_ENV]?.trim();
 		const args = [
 			'--verbose',
 			'--output-format',
@@ -61,7 +52,6 @@ export class ClaudeCodeAgentRunner extends MissionAgentPtyRunner {
 			settings.model,
 			...(settings.reasoningEffort ? ['--effort', settings.reasoningEffort] : []),
 			...(settings.dangerouslySkipPermissions ? ['--dangerously-skip-permissions'] : []),
-			...(mcpConfigPath ? ['--mcp-config', mcpConfigPath] : []),
 			prompt
 		];
 		return {
@@ -74,7 +64,6 @@ export class ClaudeCodeAgentRunner extends MissionAgentPtyRunner {
 
 	public createPrintLaunchPlan(config: AgentLaunchConfig): MissionAgentRunnerLaunchPlan {
 		const settings = this.readSettings(config);
-		const mcpConfigPath = settings.launchEnv[CLAUDE_CODE_MCP_CONFIG_PATH_ENV]?.trim();
 		const parts = [
 			'claude',
 			'--print',
@@ -86,7 +75,6 @@ export class ClaudeCodeAgentRunner extends MissionAgentPtyRunner {
 			quoteShellArg(settings.model),
 			...(settings.reasoningEffort ? ['--effort', settings.reasoningEffort] : []),
 			...(settings.resumeSession ? ['--resume', quoteShellArg(settings.resumeSession)] : []),
-			...(mcpConfigPath ? ['--mcp-config', quoteShellArg(mcpConfigPath)] : []),
 			'-p',
 			'-'
 		];
@@ -134,34 +122,6 @@ export class ClaudeCodeAgentRunner extends MissionAgentPtyRunner {
 		}
 
 		return [{ kind: 'none' }];
-	}
-
-	protected override async prepareRunnerLaunchConfig(config: AgentLaunchConfig): Promise<{
-		config: AgentLaunchConfig;
-		cleanup?: () => Promise<void>;
-	}> {
-		if (!hasMissionMcpBridgeLaunchEnv(config.launchEnv)) {
-			return { config };
-		}
-		const configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-claude-mcp-'));
-		const configPath = path.join(configDir, 'mcp.json');
-		await fs.writeFile(
-			configPath,
-			`${buildClaudeCodeMissionMcpConfigContent(config.launchEnv)}\n`,
-			'utf8'
-		);
-		return {
-			config: {
-				...config,
-				launchEnv: {
-					...(config.launchEnv ?? {}),
-					[CLAUDE_CODE_MCP_CONFIG_PATH_ENV]: configPath
-				}
-			},
-			cleanup: async () => {
-				await fs.rm(configDir, { recursive: true, force: true });
-			}
-		};
 	}
 
 	protected override parseSessionUsageContent(content: string): AgentProviderObservation | undefined {

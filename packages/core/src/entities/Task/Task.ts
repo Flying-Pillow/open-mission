@@ -66,6 +66,7 @@ export type TaskConfigureOptions = {
 	agentRunner?: string;
 	model?: string | null;
 	reasoningEffort?: string | null;
+	autostart?: boolean;
 	context?: NonNullable<MissionTaskState['context']>;
 };
 
@@ -104,6 +105,7 @@ export class Task extends Entity<TaskDataType, string> {
 			context: [...(task.context ?? [])],
 			waitingOnTaskIds: [...task.waitingOn],
 			agentRunner: task.agent,
+			...(typeof task.autostart === 'boolean' ? { autostart: task.autostart } : {}),
 			retries: task.retries,
 			...(task.fileName ? { fileName: task.fileName } : {}),
 			...(task.filePath ? { filePath: task.filePath } : {}),
@@ -198,6 +200,7 @@ export class Task extends Entity<TaskDataType, string> {
 			waitingOn: [...task.waitingOnTaskIds],
 			status: task.lifecycle,
 			agent: task.agentRunner ?? fileTask?.agent ?? DEFAULT_AGENT_RUNNER_ID,
+			autostart: task.runtime.autostart,
 			retries: task.retries,
 			fileName,
 			filePath,
@@ -451,6 +454,7 @@ export class Task extends Entity<TaskDataType, string> {
 			...(options.agentRunner ? { agentRunner: options.agentRunner } : {}),
 			...(Object.prototype.hasOwnProperty.call(options, 'model') ? { model: options.model ?? null } : {}),
 			...(Object.prototype.hasOwnProperty.call(options, 'reasoningEffort') ? { reasoningEffort: options.reasoningEffort ?? null } : {}),
+			...(typeof options.autostart === 'boolean' ? { autostart: options.autostart } : {}),
 			...(options.context ? { context: options.context.map((contextArtifact) => ({ ...contextArtifact })) } : {})
 		};
 	}

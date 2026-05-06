@@ -260,22 +260,9 @@ describe('CopilotCliAgentRunner', () => {
 		expect(settings.trusted_folders).toContain(missionRootDirectory);
 	});
 
-	it('passes Mission MCP launch env through and points Copilot at the workspace mcp config', async () => {
+	it('passes Mission MCP launch env through without generating runner-specific MCP config', async () => {
 		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-copilot-workspace-'));
 		try {
-			await fs.writeFile(
-				path.join(workspaceRoot, '.mcp.json'),
-				`${JSON.stringify({
-					mcpServers: {
-						mission: {
-							type: 'stdio',
-							command: 'mission-command',
-							args: []
-						}
-					}
-				}, null, 2)}\n`,
-				'utf8'
-			);
 			const runner = new CopilotCliAgentRunner({
 				command: 'copilot',
 				trustedConfigDir,
@@ -289,10 +276,7 @@ describe('CopilotCliAgentRunner', () => {
 						accessState: 'mcp-validated',
 						launchEnv: {
 							MISSION_MCP_ENDPOINT: 'mission-local://mcp-signal/session-1',
-							MISSION_MCP_MISSION_ID: 'mission-1',
-							MISSION_MCP_TASK_ID: 'task-1',
-							MISSION_MCP_AGENT_SESSION_ID: 'session-1',
-							MISSION_MCP_ALLOWED_TOOLS: '["mission_report_progress"]'
+							MISSION_MCP_SESSION_TOKEN: 'token-1'
 						},
 						generatedFiles: [],
 						cleanup: async () => undefined
@@ -304,8 +288,7 @@ describe('CopilotCliAgentRunner', () => {
 				workingDirectory: workspaceRoot
 			}));
 
-			expect(state.spawnedArgs).toContain('--additional-mcp-config');
-			expect(state.spawnedArgs).toContain(`@${path.join(workspaceRoot, '.mcp.json')}`);
+			expect(state.spawnedArgs).not.toContain('--additional-mcp-config');
 		} finally {
 			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}

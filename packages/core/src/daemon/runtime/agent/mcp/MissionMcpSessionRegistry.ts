@@ -1,17 +1,15 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod/v4';
 import type {
-	MissionMcpSignalEnvelope,
 	MissionMcpSignalToolName
 } from './MissionMcpSignalTools.js';
 import {
-	missionMcpSignalEnvelopeSchema,
 	missionMcpSignalToolNameSchema
 } from './MissionMcpSignalTools.js';
 import {
 	missionMcpAllowedEntityCommandSchema,
 	missionMcpEntityCommandToolName,
 	type MissionMcpAllowedEntityCommand,
-	type MissionMcpEntityCommandEnvelope,
 	type MissionMcpEntityCommandToolName
 } from './MissionMcpEntityCommandTools.js';
 
@@ -21,20 +19,21 @@ export type MissionMcpSessionRegistration = {
 	missionId: string;
 	taskId: string;
 	agentSessionId: string;
+	sessionToken: string;
 	allowedTools: MissionMcpToolName[];
 	allowedEntityCommands?: MissionMcpAllowedEntityCommand[];
 };
 
+type MissionMcpSessionRegistrationInput = Omit<MissionMcpSessionRegistration, 'sessionToken'>;
+
 type MissionMcpSessionRegistryEntry = {
 	registration: MissionMcpSessionRegistration;
-	seenEventIds: Set<string>;
 };
 
-const missionMcpSessionRegistrationSchema = missionMcpSignalEnvelopeSchema.pick({
-	missionId: true,
-	taskId: true,
-	agentSessionId: true
-}).extend({
+const missionMcpSessionRegistrationSchema = z.object({
+	missionId: z.string().trim().min(1),
+	taskId: z.string().trim().min(1),
+	agentSessionId: z.string().trim().min(1),
 	allowedTools: z.array(z.union([
 		missionMcpSignalToolNameSchema,
 		z.literal(missionMcpEntityCommandToolName)
@@ -43,62 +42,68 @@ const missionMcpSessionRegistrationSchema = missionMcpSignalEnvelopeSchema.pick(
 }).strict();
 
 export class MissionMcpSessionRegistry {
-	private readonly registrations = new Map<string, MissionMcpSessionRegistryEntry>();
+	private readonly registrationsByToken = new Map<string, MissionMcpSessionRegistryEntry>();
 
-	public registerSession(input: MissionMcpSessionRegistration): MissionMcpSessionRegistration {
+	private readonly tokenByAgentSessionId = new Map<string, string>();
+
+	public registerSession(input: MissionMcpSessionRegistrationInput): MissionMcpSessionRegistration {
 		const registration = parseRegistration(input);
-		this.registrations.set(registration.agentSessionId, {
-			registration,
-			seenEventIds: new Set<string>()
+		const sessionToken = randomUUID();
+		const stored = {
+			...registration,
+			sessionToken
+		};
+		const existingToken = this.tokenByAgentSessionId.get(stored.agentSessionId);
+		if (existingToken) {
+			this.registrationsByToken.delete(existingToken);
+		}
+		this.tokenByAgentSessionId.set(stored.agentSessionId, sessionToken);
+		this.registrationsByToken.set(sessionToken, {
+			registration: stored
 		});
-		return cloneRegistration(registration);
+		return cloneRegistration(stored);
 	}
 
-	public unregisterSession(agentSessionId: string): void {
-		this.registrations.delete(agentSessionId);
+	public unregisterSession(sessionToken: string): void {
+		const token = sessionToken.trim();
+		const entry = this.registrationsByToken.get(token);
+		if (!entry) {
+			return;
+		}
+		this.registrationsByToken.delete(token);
+		if (this.tokenByAgentSessionId.get(entry.registration.agentSessionId) === token) {
+			this.tokenByAgentSessionId.delete(entry.registration.agentSessionId);
+		}
 	}
 
 	public clear(): void {
-		this.registrations.clear();
+		this.registrationsByToken.clear();
+		this.tokenByAgentSessionId.clear();
 	}
 
 	public getRegisteredSessionCount(): number {
-		return this.registrations.size;
+		return this.registrationsByToken.size;
+	}
+
+	public getAllowedTools(sessionToken: string): MissionMcpToolName[] | undefined {
+		return this.registrationsByToken.get(sessionToken.trim())?.registration.allowedTools;
 	}
 
 	public authorizeTool(input: {
-		envelope: MissionMcpSignalEnvelope;
+		sessionToken: string;
 		toolName: MissionMcpToolName;
 	}): { ok: true; registration: MissionMcpSessionRegistration } | { ok: false; reason: string } {
-		const entry = this.registrations.get(input.envelope.agentSessionId);
+		const entry = this.getEntry(input.sessionToken);
 		if (!entry) {
 			return {
 				ok: false,
-				reason: `Unknown Mission MCP session '${input.envelope.agentSessionId}'.`
-			};
-		}
-		if (entry.registration.missionId !== input.envelope.missionId) {
-			return {
-				ok: false,
-				reason: `Mission MCP envelope mission '${input.envelope.missionId}' did not match registered mission '${entry.registration.missionId}'.`
-			};
-		}
-		if (entry.registration.taskId !== input.envelope.taskId) {
-			return {
-				ok: false,
-				reason: `Mission MCP envelope task '${input.envelope.taskId}' did not match registered task '${entry.registration.taskId}'.`
+				reason: 'Unknown Mission MCP session token.'
 			};
 		}
 		if (!entry.registration.allowedTools.includes(input.toolName)) {
 			return {
 				ok: false,
-				reason: `Mission MCP tool '${input.toolName}' is not allowed for session '${input.envelope.agentSessionId}'.`
-			};
-		}
-		if (entry.seenEventIds.has(input.envelope.eventId)) {
-			return {
-				ok: false,
-				reason: `Mission MCP event '${input.envelope.eventId}' was already processed for session '${input.envelope.agentSessionId}'.`
+				reason: `Mission MCP tool '${input.toolName}' is not allowed for this session.`
 			};
 		}
 		return {
@@ -108,7 +113,7 @@ export class MissionMcpSessionRegistry {
 	}
 
 	public authorizeEntityCommand(input: {
-		envelope: MissionMcpEntityCommandEnvelope;
+		sessionToken: string;
 		toolName: MissionMcpEntityCommandToolName;
 		entity: string;
 		method: string;
@@ -123,22 +128,18 @@ export class MissionMcpSessionRegistry {
 		)) {
 			return {
 				ok: false,
-				reason: `Entity command '${input.entity}.${input.method}${input.commandId ? `:${input.commandId}` : ''}' is not allowed for session '${input.envelope.agentSessionId}'.`
+				reason: `Entity command '${input.entity}.${input.method}${input.commandId ? `:${input.commandId}` : ''}' is not allowed for this session.`
 			};
 		}
 		return toolAuthorization;
 	}
 
-	public rememberEvent(agentSessionId: string, eventId: string): void {
-		const entry = this.registrations.get(agentSessionId);
-		if (!entry) {
-			return;
-		}
-		entry.seenEventIds.add(eventId);
+	private getEntry(sessionToken: string): MissionMcpSessionRegistryEntry | undefined {
+		return this.registrationsByToken.get(sessionToken.trim());
 	}
 }
 
-function parseRegistration(input: MissionMcpSessionRegistration): MissionMcpSessionRegistration {
+function parseRegistration(input: MissionMcpSessionRegistrationInput): MissionMcpSessionRegistrationInput {
 	const parsed = missionMcpSessionRegistrationSchema.safeParse(input);
 	if (!parsed.success) {
 		throw new Error(`Invalid Mission MCP session registration: ${formatZodIssues(parsed.error.issues)}`);
@@ -160,6 +161,7 @@ function cloneRegistration(input: MissionMcpSessionRegistration): MissionMcpSess
 		missionId: input.missionId,
 		taskId: input.taskId,
 		agentSessionId: input.agentSessionId,
+		sessionToken: input.sessionToken,
 		allowedTools: [...input.allowedTools],
 		...(input.allowedEntityCommands ? {
 			allowedEntityCommands: input.allowedEntityCommands.map((command) => ({ ...command }))

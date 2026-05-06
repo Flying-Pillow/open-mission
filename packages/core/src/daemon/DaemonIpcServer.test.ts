@@ -7,6 +7,7 @@ import { getDaemonLockPath, getDaemonRuntimePath } from './daemonPaths.js';
 import { MissionRegistry } from './MissionRegistry.js';
 import { executeEntityCommandInDaemon } from '../entities/Entity/EntityRemote.js';
 import { startMissionDaemon } from './DaemonIpcServer.js';
+import { connectDaemon } from './client/connectAirportDaemon.js';
 import { MissionMcpSignalServer } from './runtime/agent/mcp/MissionMcpSignalServer.js';
 
 vi.mock('./MissionTerminal.js', () => ({
@@ -197,6 +198,60 @@ describe('minimal source daemon request handling', () => {
             expect(stopSpy).toHaveBeenCalledTimes(1);
             startSpy.mockRestore();
             stopSpy.mockRestore();
+            hydrateDaemonMissions.mockRestore();
+            restoreRuntimeDirectory(previousRuntimeDirectory);
+            await fs.rm(runtimeRoot, { recursive: true, force: true });
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('serves MCP tool listing from the daemon-owned singleton without lazy restart', async () => {
+        const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-mcp-list-workspace-'));
+        const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-mcp-list-runtime-'));
+        const previousRuntimeDirectory = process.env['XDG_RUNTIME_DIR'];
+        process.env['XDG_RUNTIME_DIR'] = runtimeRoot;
+        const hydrateDaemonMissions = vi.spyOn(MissionRegistry.prototype, 'hydrateDaemonMissions').mockResolvedValue(undefined);
+        const fakeHandle = {
+            serverId: 'server-1',
+            endpoint: 'mission-local://mcp-signal/server-1',
+            localOnly: true as const,
+            transport: 'in-memory-local' as const,
+            toolNames: ['progress', 'entity'] as const,
+            listTools: async () => ['progress', 'entity'],
+            healthCheck: async () => ({
+                serverId: 'server-1',
+                endpoint: 'mission-local://mcp-signal/server-1',
+                running: true,
+                localOnly: true as const,
+                transport: 'in-memory-local' as const,
+                registeredSessionCount: 0
+            }),
+            invokeTool: async () => ({ accepted: false, outcome: 'rejected' as const, reason: 'unused' })
+        };
+        const startSpy = vi.spyOn(MissionMcpSignalServer.prototype, 'start').mockResolvedValue(fakeHandle as never);
+        const getStartedHandleSpy = vi.spyOn(MissionMcpSignalServer.prototype, 'getStartedHandle').mockReturnValue(fakeHandle as never);
+
+        const daemon = await startMissionDaemon({
+            socketPath: path.join(runtimeRoot, 'daemon.sock'),
+            surfacePath: workspaceRoot
+        });
+
+        try {
+            const client = await connectDaemon({
+                surfacePath: workspaceRoot
+            });
+            try {
+                const result = await client.request<{ tools: string[] }>('mcp.tools.list');
+                expect(result.tools).toEqual(['progress', 'entity']);
+                expect(startSpy).toHaveBeenCalledTimes(1);
+                expect(getStartedHandleSpy).toHaveBeenCalledTimes(1);
+            } finally {
+                client.dispose();
+            }
+        } finally {
+            await daemon.dispose();
+            startSpy.mockRestore();
+            getStartedHandleSpy.mockRestore();
             hydrateDaemonMissions.mockRestore();
             restoreRuntimeDirectory(previousRuntimeDirectory);
             await fs.rm(runtimeRoot, { recursive: true, force: true });

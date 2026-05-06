@@ -5,6 +5,7 @@ import type { Mission } from "$lib/components/entities/Mission/Mission.svelte.js
 import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
 import type { MissionRuntimeEventEnvelopeType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { MissionTowerTreeNode } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import type { TaskConfigureCommandOptionsType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import type { SidebarRepositoryData } from "$lib/components/entities/types";
 import type { RuntimeSubscription } from "$lib/client/runtime/RuntimeSubscription";
 
@@ -53,6 +54,10 @@ export type AppContextValue = {
         activeMissionSelectedNodeId?: string;
     };
     syncServerContext(next: AppContextServerValue): void;
+    loadAirportRepositories(): Promise<void>;
+    loadRepositoryPage(input: { repositoryId: string }): Promise<void>;
+    loadMissionPage(input: { repositoryId: string; missionId: string }): Promise<void>;
+    clearAirportSelection(): void;
     refreshMission(input: {
         missionId: string;
         repositoryRootPath?: string;
@@ -64,6 +69,10 @@ export type AppContextValue = {
         onConnected?: (mission: Mission) => void;
         onError?: (error: Error) => void;
     }): RuntimeSubscription;
+    configureActiveMissionTask(input: {
+        taskId: string;
+        options: TaskConfigureCommandOptionsType;
+    }): Promise<void>;
     setRepositories(repositories: SidebarRepositoryData[]): void;
     setActiveRepository(input?: {
         id?: string;
@@ -128,6 +137,18 @@ export function createAppContext(
             state.githubStatus = next.githubStatus;
             state.user = next.user;
         },
+        async loadAirportRepositories() {
+            await state.application.loadAirportRepositories();
+        },
+        async loadRepositoryPage(input) {
+            await state.application.loadRepositoryPage(input);
+        },
+        async loadMissionPage(input) {
+            await state.application.loadMissionPage(input);
+        },
+        clearAirportSelection() {
+            state.application.clearAirportSelection();
+        },
         async refreshMission(input) {
             return state.application.refreshMission(input);
         },
@@ -141,6 +162,9 @@ export function createAppContext(
                     input.onUpdate?.(mission, event);
                 },
             });
+        },
+        async configureActiveMissionTask(input) {
+            await state.application.configureActiveMissionTask(input);
         },
         setRepositories(repositories) {
             state.application.setRepositories(repositories);

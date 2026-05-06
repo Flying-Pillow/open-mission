@@ -8,8 +8,15 @@ import {
 } from './connections.server';
 
 const ENTITY_REQUEST_TIMEOUT_MS = 8_000;
+const LONG_ENTITY_COMMAND_TIMEOUT_MS = 120_000;
 const DAEMON_CONNECT_TIMEOUT_MS = 12_000;
 const SLOW_ENTITY_REMOTE_REQUEST_MS = 1_000;
+const LONG_REPOSITORY_COMMAND_METHODS = new Set([
+    'add',
+    'setup',
+    'startMissionFromIssue',
+    'startMissionFromBrief'
+]);
 
 export class EntityProxy {
     public constructor(private readonly locals?: App.Locals) { }
@@ -37,7 +44,7 @@ export class EntityProxy {
                 const api = new DaemonApi(daemon.client);
                 return await withTimeout(
                     api.entity.command(input),
-                    ENTITY_REQUEST_TIMEOUT_MS,
+                    resolveEntityCommandTimeoutMs(input),
                     `Entity command '${input.method}' timed out.`
                 );
             } finally {
@@ -83,6 +90,14 @@ export class EntityProxy {
             'Mission daemon connection timed out.'
         );
     }
+}
+
+function resolveEntityCommandTimeoutMs(input: EntityCommandInvocation | EntityFormInvocation): number {
+    if (input.entity === 'Repository' && LONG_REPOSITORY_COMMAND_METHODS.has(input.method)) {
+        return LONG_ENTITY_COMMAND_TIMEOUT_MS;
+    }
+
+    return ENTITY_REQUEST_TIMEOUT_MS;
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {

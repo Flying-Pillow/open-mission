@@ -773,6 +773,7 @@ export class Mission extends Entity<MissionDataType, string> {
 			...(input.agentRunner?.trim() ? { agentRunner: input.agentRunner.trim() } : {}),
 			...(Object.prototype.hasOwnProperty.call(input, 'model') ? { model: input.model?.trim() || null } : {}),
 			...(Object.prototype.hasOwnProperty.call(input, 'reasoningEffort') ? { reasoningEffort: input.reasoningEffort ?? null } : {}),
+			...(typeof input.autostart === 'boolean' ? { autostart: input.autostart } : {}),
 			...(input.context ? { context: input.context.map((contextArtifact) => ({ ...contextArtifact })) } : {})
 		}));
 	}

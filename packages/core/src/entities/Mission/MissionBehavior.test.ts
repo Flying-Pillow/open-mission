@@ -398,6 +398,68 @@ describe('Mission', () => {
         }
     });
 
+    it('persists task configuration before start and uses it for launch', async () => {
+        const workspaceRoot = await createTempRepo();
+        const runner = new FakeAgentRunner('test-runner', 'Test Runner', 'terminal');
+
+        try {
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
+            const mission = await Mission.create(adapter, {
+                brief: createBrief(206, 'Mission task configured launch settings'),
+                branchRef: adapter.deriveMissionBranchName(206, 'Mission task configured launch settings')
+            }, createWorkflowBindings(runner));
+
+            try {
+                const startedStatus = await mission.startWorkflow();
+                const taskId = startedStatus.readyTasks?.[0]?.taskId;
+                if (!taskId) {
+                    throw new Error('Expected a ready task after workflow start.');
+                }
+
+                await mission.configureTask(taskId, {
+                    agentRunner: runner.id,
+                    model: 'gpt-5.5',
+                    reasoningEffort: 'high',
+                    autostart: false,
+                    context: [{ name: 'Operator note', path: 'context/operator-note.md', selectionPosition: 0 }]
+                });
+
+                const configuredStatus = await mission.status();
+                const configuredTask = configuredStatus.workflow?.tasks.find((task) => task.taskId === taskId);
+                expect(configuredTask).toMatchObject({
+                    taskId,
+                    agentRunner: runner.id,
+                    model: 'gpt-5.5',
+                    reasoningEffort: 'high',
+                    autostart: false,
+                    context: [{ name: 'Operator note', path: 'context/operator-note.md', selectionPosition: 0 }]
+                });
+
+                const persisted = await Mission.readStateData(adapter, mission.getMissionDir());
+                const persistedTask = persisted?.runtime.tasks.find((task) => task.taskId === taskId);
+                expect(persistedTask).toMatchObject({
+                    agentRunner: runner.id,
+                    model: 'gpt-5.5',
+                    reasoningEffort: 'high',
+                    runtime: { autostart: false },
+                    context: [{ name: 'Operator note', path: 'context/operator-note.md', selectionPosition: 0 }]
+                });
+
+                await mission.startTask(taskId);
+
+                expect(runner.getLastStartRequest()?.requestedRunnerId).toBe(runner.id);
+                expect(runner.getLastStartRequest()?.metadata).toMatchObject({
+                    model: 'gpt-5.5',
+                    reasoningEffort: 'high'
+                });
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
     it('exposes and executes task rework as an input-taking operator command', async () => {
         const workspaceRoot = await createTempRepo();
         const runner = new FakeAgentRunner('test-runner', 'Test Runner');

@@ -1,10 +1,6 @@
 import { z } from 'zod/v4';
-import {
-	missionMcpSignalEnvelopeSchema,
-	type MissionMcpSignalEnvelope
-} from './MissionMcpSignalTools.js';
 
-export const missionMcpEntityCommandToolName = 'mission_entity_command' as const;
+export const missionMcpEntityCommandToolName = 'entity' as const;
 
 export type MissionMcpEntityCommandToolName = typeof missionMcpEntityCommandToolName;
 
@@ -14,11 +10,10 @@ export type MissionMcpAllowedEntityCommand = {
 	commandId?: string | undefined;
 };
 
-export type MissionMcpEntityCommandEnvelope = MissionMcpSignalEnvelope;
-
 export type MissionMcpEntityCommandInvocation = {
 	entity: string;
 	method: string;
+	commandId?: string | undefined;
 	payload?: unknown;
 };
 
@@ -40,7 +35,6 @@ export type MissionMcpEntityCommandExecutor = (
 
 export type MissionMcpValidatedEntityCommandToolCall = {
 	name: MissionMcpEntityCommandToolName;
-	envelope: MissionMcpEntityCommandEnvelope;
 	invocation: MissionMcpEntityCommandInvocation;
 	commandId?: string;
 };
@@ -51,15 +45,17 @@ export const missionMcpAllowedEntityCommandSchema = z.object({
 	commandId: z.string().trim().min(1).optional()
 }).strict();
 
-const missionMcpEntityCommandToolCallSchema = missionMcpSignalEnvelopeSchema.extend({
+const missionMcpEntityCommandToolCallSchema = z.object({
 	entity: z.string().trim().min(1),
 	method: z.string().trim().min(1),
+	commandId: z.string().trim().min(1).optional(),
 	payload: z.unknown().optional()
 }).strict();
 
 const missionMcpEntityCommandInvocationSchema = z.object({
 	entity: z.string().trim().min(1),
 	method: z.string().trim().min(1),
+	commandId: z.string().trim().min(1).optional(),
 	payload: z.unknown().optional()
 }).strict();
 
@@ -77,6 +73,7 @@ export function parseMissionMcpEntityCommandToolCall(
 	const invocation = missionMcpEntityCommandInvocationSchema.safeParse({
 		entity: parsed.data.entity,
 		method: parsed.data.method,
+		...(parsed.data.commandId ? { commandId: parsed.data.commandId } : {}),
 		...(parsed.data.payload === undefined ? {} : { payload: parsed.data.payload })
 	});
 	if (!invocation.success) {
@@ -90,26 +87,10 @@ export function parseMissionMcpEntityCommandToolCall(
 		success: true,
 		value: {
 			name: missionMcpEntityCommandToolName,
-			envelope: {
-				missionId: parsed.data.missionId,
-				taskId: parsed.data.taskId,
-				agentSessionId: parsed.data.agentSessionId,
-				eventId: parsed.data.eventId
-			},
 			invocation: invocation.data,
-			...extractEntityCommandId(invocation.data.payload)
+			...(parsed.data.commandId ? { commandId: parsed.data.commandId } : {})
 		}
 	};
-}
-
-function extractEntityCommandId(payload: unknown): { commandId?: string } {
-	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-		return {};
-	}
-	const commandId = (payload as Record<string, unknown>)['commandId'];
-	return typeof commandId === 'string' && commandId.trim()
-		? { commandId: commandId.trim() }
-		: {};
 }
 
 function formatZodIssues(issues: z.core.$ZodIssue[]): string {

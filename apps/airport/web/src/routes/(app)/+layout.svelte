@@ -13,7 +13,10 @@
 	setAppContext(appContext);
 
 	onMount(() => {
-		void appContext.application.initialize().catch(() => undefined);
+		void (async () => {
+			await appContext.application.initialize();
+			await appContext.loadAirportRepositories();
+		})().catch(() => undefined);
 	});
 
 	$effect(() => {

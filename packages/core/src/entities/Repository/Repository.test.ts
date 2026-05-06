@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { Repository } from './Repository.js';
-import { createDefaultRepositorySettings } from './RepositorySchema.js';
+import { createDefaultRepositorySettings, RepositoryDataSchema } from './RepositorySchema.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
 import type { EntityExecutionContext } from '../Entity/Entity.js';
 import { MissionDossierFilesystem } from '../Mission/MissionDossierFilesystem.js';
@@ -66,6 +66,26 @@ describe('Repository', () => {
         expect(repository.platformRepositoryRef).toBe('Flying-Pillow/mission');
         expect(repository.settings.instructionsPath).toBe('.copilot');
         expect(repository.isInitialized).toBe(true);
+    });
+
+    it('accepts repository data with the retired workflow panic key', () => {
+        const workflowConfiguration = createDefaultWorkflowSettings();
+        const parsed = RepositoryDataSchema.parse({
+            ...Repository.create({
+                repositoryRootPath: '/workspaces/connect-four',
+                platformRepositoryRef: 'Flying-Pillow/connect-four'
+            }).toData(),
+            workflowConfiguration: {
+                ...workflowConfiguration,
+                panic: {
+                    terminateSessions: true,
+                    clearLaunchQueue: true,
+                    haltMission: true
+                }
+            }
+        });
+
+        expect(parsed.workflowConfiguration).toEqual(workflowConfiguration);
     });
 
     it('starts a mission when repo-native setup exists but persisted Entity state is stale', async () => {

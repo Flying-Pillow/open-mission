@@ -28,7 +28,7 @@ Command acknowledgements mean the command was accepted and attempted at the auth
 
 Consequences:
 
-- Command payloads use the target Entity locator, the advertised `commandId`, and optional typed `input` needed by the owning Entity contract.
+- Command payloads use the target Entity locator, the advertised `commandId`, and optional typed `input` needed by the owning Entity contract; callers do not supply extra transport ids or `eventId` fields.
 - Airport command UI uses Commandbar naming.
 - Entity command views advertise available commands; Entity data schemas must not contain command descriptors.
 - Class-level commands are advertised through `classCommands`, not through ambiguous source, collection, or global command vocabulary.

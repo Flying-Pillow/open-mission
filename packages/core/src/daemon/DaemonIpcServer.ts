@@ -389,22 +389,22 @@ async function createDaemonResponseUnchecked(
 			};
 		}
 		case 'mcp.tools.list': {
-			const handle = await requireMcpSignalServer(mcpSignalServer).start();
+			const handle = requireMcpSignalServer(mcpSignalServer).getStartedHandle();
 			return {
 				type: 'response',
 				id: request.id,
 				ok: true,
-				result: { tools: [...handle.toolNames] }
+				result: { tools: await handle.listTools(request.authToken) }
 			};
 		}
 		case 'mcp.tool.invoke': {
 			const params = parseMcpToolInvokeParams(request.params);
-			const handle = await requireMcpSignalServer(mcpSignalServer).start();
+			const handle = requireMcpSignalServer(mcpSignalServer).getStartedHandle();
 			return {
 				type: 'response',
 				id: request.id,
 				ok: true,
-				result: await handle.invokeTool(params.name, params.payload)
+				result: await handle.invokeTool(params.name, params.payload, request.authToken)
 			};
 		}
 		default:

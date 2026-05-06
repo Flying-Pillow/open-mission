@@ -128,16 +128,20 @@ An executable unit of Mission work with instructions, dependencies, lifecycle st
 _Avoid_: job, step, todo
 
 **Agent session**:
-A daemon-managed agent execution attached to a Mission, optionally focused on one Mission task.
-_Avoid_: chat, terminal, process
+A daemon-managed agent execution attached to a Mission, optionally focused on one Mission task, and registered in the daemon with a session token.
+_Avoid_: chat, terminal, process, env-based routing
 
 **Agent session context**:
 The durable daemon-managed set of Mission artifacts and instructions made available to an Agent session, including their roles and ordering.
 _Avoid_: prompt text, loose context, implicit context, Mission control outline order
 
+**Agent session token**:
+A daemon-issued opaque token that identifies and authorizes one registered Agent session over the structured transport.
+_Avoid_: taskId env var, agentSessionId env var, routing secret
+
 **Agent session message**:
-A structured non-terminal message sent to an Agent session through the Mission system.
-_Avoid_: terminal input, raw prompt, CLI text injection, reliable state acknowledgement
+A structured non-terminal message sent to an Agent session through the Mission system; the payload carries only the message-specific fields.
+_Avoid_: terminal input, raw prompt, CLI text injection, reliable state acknowledgement, transport envelope
 
 **Agent session log**:
 The durable daemon-owned audit record of interaction sent to and produced by an Agent session runtime; it is not a Mission artifact by default.
@@ -154,6 +158,10 @@ _Avoid_: boolean capability, UI method, runtime method
 **Agent runtime delivery**:
 A best-effort attempt to send an Agent session message to an Agent runtime; it is not proof that the indeterministic Agent session read, understood, applied, or structurally acknowledged the message.
 _Avoid_: context mutation, state acknowledgement, reliable command result
+
+**Mission MCP tool**:
+A daemon-published structured tool exposed to a validated Agent-session surface, either a signal tool or the `entity` tool for authorized Entity commands.
+_Avoid_: agent-only command, arbitrary prompt action, surface-local tool
 
 **Agent message shorthand**:
 Operator-facing syntax that parses into an Agent session message, such as a slash command in an external prompt field.
@@ -398,14 +406,16 @@ _Avoid_: workflow projection, stage projection
 - An **Agent session context** contains explicit **Mission artifact** references; it is not inferred from prompt text.
 - An **Agent session context** owns the order of artifacts and instructions made available to its **Agent session**.
 - **Mission control outline** placement may visualize or request changes to **Agent session context** ordering, but it is not the source of truth for that order.
-- An **Agent session message** is accepted through the daemon, not by writing raw text directly into an Agent session terminal.
+- An **Agent session message** is accepted through the daemon, not by writing raw text directly into an Agent session terminal; the daemon resolves the session from its token instead of env-passed ids.
 - **Agent runtime delivery** is best-effort and must not be treated as proof that an **Agent session** applied a context change.
 - An **Agent session message** is not a first-class durable Entity unless the Mission system later needs queryable structured message history.
 - An **Agent session log** records delivered Agent session interaction, while **Agent session context** records lasting context state.
 - An **Agent session log** is daemon-owned audit material, not a **Mission artifact** by default.
 - An **Agent-session artifact** may reference or extract from an **Agent session log** when the daemon or operator promotes useful material into Mission work.
 - An **Agent runtime message** describes a structured message supported by an Agent session's Agent runtime.
+- An **Agent session token** is the daemon-issued identifier used for structured transport and registration.
 - An **Agent runtime message descriptor** is the source of truth for which structured controls a surface may offer for an **Agent session**.
+- A validated **Agent-session surface** uses the shared **Mission MCP tool** vocabulary: signal tools plus the `entity` tool for authorized Entity commands.
 - An **Agent message shorthand** is not canonical; it parses into an **Agent session message** backed by an **Agent runtime message descriptor** or daemon-owned context operation.
 - An **Agent message shorthand parser** belongs to the daemon; surfaces may offer autocomplete or previews but do not define canonical parse results.
 - Base **Agent runtime messages** are common across Agent runtimes; Agent child runtimes may advertise additional supported messages.

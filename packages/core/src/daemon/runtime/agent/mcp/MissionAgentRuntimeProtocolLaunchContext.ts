@@ -37,6 +37,7 @@ export function buildMissionAgentRuntimeProtocolLaunchContext(input: {
 
 function buildValidatedSessionInstructions(): string {
 	const endpointEnvVar = missionMcpAgentBridgeEnvKeys.endpoint;
+	const sessionTokenEnvVar = missionMcpAgentBridgeEnvKeys.sessionToken;
 	const bridgeCommand = [MISSION_MCP_AGENT_BRIDGE_COMMAND, ...MISSION_MCP_AGENT_BRIDGE_ARGS].join(' ');
 	const toolList = [...missionMcpSignalToolNames, missionMcpEntityCommandToolName]
 		.map((toolName) => `- ${toolName}`)
@@ -44,14 +45,17 @@ function buildValidatedSessionInstructions(): string {
 
 	return [
 		'Mission runtime protocol for this session:',
-		'- Mission MCP is available for this session through the local mission server.',
-		`- The session launch environment includes ${endpointEnvVar} and the corresponding Mission session identity fields.`,
-		`- If your tooling needs an explicit MCP bridge command, use: ${bridgeCommand}`,
-		'- Use Mission MCP first for structured progress, needs-input, blocked, ready-for-verification, completion/failure claims, notes, usage, and allowlisted Entity commands.',
-		'- Every MCP tool call must include missionId, taskId, agentSessionId, and a unique eventId.',
+		'- Mission MCP is available through the configured mission MCP transport.',
+		'- The Mission daemon already owns the MCP signal server; do not start another MCP server.',
+		`- The session launch environment includes ${endpointEnvVar} and ${sessionTokenEnvVar}.`,
+		`- If your MCP client needs an explicit stdio bridge command for the configured transport, use: ${bridgeCommand}`,
+		'- Use Mission MCP first for structured progress, request_input, blocked, ready, complete, fail, note, usage, and entity commands.',
+		'- MCP tool calls are payload-only; the daemon resolves mission/task/session from the session token and supplies audit ids internally.',
+		'- The entity tool is the transport wrapper for authorized Entity commands from the daemon-published command view.',
 		'- Mission acknowledgements and your own claims do not prove verification or completion; they remain advisory until Mission policy and deterministic checks confirm them.',
 		'Available Mission MCP tools:',
 		toolList,
+		'- If the mission MCP tools are not visible, treat that as client transport/provisioning failure; do not start another server.',
 		'- Emit fallback protocol markers only if Mission MCP becomes unavailable or degraded later in the session.'
 	].join('\n');
 }

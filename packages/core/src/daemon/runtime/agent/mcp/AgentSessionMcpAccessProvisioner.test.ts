@@ -17,25 +17,17 @@ describe('AgentSessionMcpAccessProvisioner', () => {
 			missionId: 'mission-31',
 			taskId: 'task-5',
 			agentSessionId: 'session-7',
-			allowedTools: ['mission_report_progress', 'mission_append_session_note']
+			allowedTools: ['progress', 'note'],
+			allowedEntityCommands: [{ entity: 'Task', method: 'command', commandId: 'task.complete' }]
 		});
 
 		expect(result.accessState).toBe('mcp-validated');
 		expect(result.generatedFiles).toEqual([]);
 		expect(result.launchEnv[missionMcpAgentBridgeEnvKeys.endpoint]).toContain('mission-local://mcp-signal/');
-		expect(result.launchEnv[missionMcpAgentBridgeEnvKeys.missionId]).toBe('mission-31');
-		expect(result.launchEnv[missionMcpAgentBridgeEnvKeys.taskId]).toBe('task-5');
-		expect(result.launchEnv[missionMcpAgentBridgeEnvKeys.agentSessionId]).toBe('session-7');
-		expect(JSON.parse(result.launchEnv[missionMcpAgentBridgeEnvKeys.allowedTools] ?? '[]')).toEqual([
-			'mission_report_progress',
-			'mission_append_session_note'
-		]);
+		expect(result.launchEnv[missionMcpAgentBridgeEnvKeys.sessionToken]).toBeDefined();
 		expect(new MissionMcpAgentBridge().readLaunchEnv(result.launchEnv)).toEqual({
 			endpoint: result.launchEnv[missionMcpAgentBridgeEnvKeys.endpoint] ?? '',
-			missionId: 'mission-31',
-			taskId: 'task-5',
-			agentSessionId: 'session-7',
-			allowedTools: ['mission_report_progress', 'mission_append_session_note']
+			sessionToken: result.launchEnv[missionMcpAgentBridgeEnvKeys.sessionToken] ?? ''
 		});
 		await expect(server.start().then((handle) => handle.healthCheck())).resolves.toMatchObject({
 			registeredSessionCount: 1
@@ -61,12 +53,12 @@ describe('AgentSessionMcpAccessProvisioner', () => {
 				missionId: 'mission-31',
 				taskId: `task-${runnerId}`,
 				agentSessionId: `session-${runnerId}`,
-				allowedTools: ['mission_report_progress']
+				allowedTools: ['progress']
 			});
 
 			expect(result.accessState).toBe('mcp-validated');
 			expect(result.generatedFiles).toEqual([]);
-			expect(result.launchEnv[missionMcpAgentBridgeEnvKeys.agentSessionId]).toBe(`session-${runnerId}`);
+			expect(result.launchEnv[missionMcpAgentBridgeEnvKeys.sessionToken]).toBeDefined();
 			await result.cleanup();
 		}
 	});
@@ -83,7 +75,7 @@ describe('AgentSessionMcpAccessProvisioner', () => {
 			missionId: 'mission-31',
 			taskId: 'task-disabled',
 			agentSessionId: 'session-disabled',
-			allowedTools: ['mission_report_progress']
+			allowedTools: ['progress']
 		});
 
 		expect(result.accessState).toBe('mcp-unavailable');
@@ -103,6 +95,8 @@ describe('AgentSessionMcpAccessProvisioner', () => {
 				localOnly: true as const,
 				transport: 'in-memory-local' as const,
 				toolNames: [] as const,
+				handled: false,
+				listTools: async () => [],
 				healthCheck: async () => ({
 					serverId: 'server-fail',
 					endpoint: 'mission-local://mcp-signal/fail',
@@ -133,7 +127,7 @@ describe('AgentSessionMcpAccessProvisioner', () => {
 			missionId: 'mission-31',
 			taskId: 'task-optional',
 			agentSessionId: 'session-optional',
-			allowedTools: ['mission_report_progress']
+			allowedTools: ['progress']
 		});
 
 		expect(optional.accessState).toBe('mcp-degraded');
@@ -151,23 +145,23 @@ describe('AgentSessionMcpAccessProvisioner', () => {
 			missionId: 'mission-31',
 			taskId: 'task-required',
 			agentSessionId: 'session-required',
-			allowedTools: ['mission_report_progress']
+			allowedTools: ['progress']
 		})).rejects.toEqual(
 			new AgentSessionMcpProvisioningError('claude-code', 'registration failed')
 		);
 	});
 
-	it('rejects malformed bridge launch env instead of silently dropping tool scope', () => {
+	it('rejects malformed bridge launch env instead of silently dropping session scope', () => {
 		const bridge = new MissionMcpAgentBridge();
 
 		expect(() => bridge.readLaunchEnv({
 			MISSION_MCP_ENDPOINT: 'mission-local://mcp-signal/server',
-			MISSION_MCP_MISSION_ID: 'mission-31',
-			MISSION_MCP_TASK_ID: 'task-5',
-			MISSION_MCP_AGENT_SESSION_ID: 'session-15',
-			MISSION_MCP_ALLOWED_TOOLS: '{"tool":"mission_report_progress"}'
+			MISSION_MCP_SESSION_TOKEN: 'session-token'
+		})).not.toThrow();
+		expect(() => bridge.readLaunchEnv({
+			MISSION_MCP_ENDPOINT: 'mission-local://mcp-signal/server'
 		})).toThrowError(
-			'Invalid Mission MCP agent bridge context: allowedTools: Invalid input: expected array, received object'
+			'Invalid Mission MCP agent bridge context: sessionToken: Too small: expected string to have >=1 characters'
 		);
 	});
 });

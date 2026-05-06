@@ -62,7 +62,7 @@ describe('TerminalAgentTransport', () => {
 		let activePty: FakePty | undefined;
 		const transport = new TerminalAgentTransport({
 			spawn: (() => {
-				activePty = createFakePty();
+				activePty = createFakePty(4242);
 				return activePty;
 			}) as never
 		});
@@ -81,6 +81,16 @@ describe('TerminalAgentTransport', () => {
 			exitCode: null
 		});
 		expect(await transport.readSnapshot(handle)).toMatchObject({ truncated: false });
+		expect(await transport.readSnapshot(handle)).toMatchObject({
+			processLease: {
+				pid: 4242,
+				processGroupId: 4242,
+				command: expect.any(String),
+				args: expect.any(Array),
+				workingDirectory: '/tmp/work',
+				startedAt: expect.any(String)
+			}
+		});
 
 		activePty?.emitExit(7);
 
@@ -163,6 +173,68 @@ describe('TerminalAgentTransport', () => {
 
 		subscription.dispose();
 		expect(observed).toEqual(['hello', ' world']);
+	});
+
+	it('stores owner metadata without binding terminal sessions to missions', async () => {
+		let activePty: FakePty | undefined;
+		const transport = new TerminalAgentTransport({
+			spawn: (() => {
+				activePty = createFakePty(5151);
+				return activePty;
+			}) as never
+		});
+
+		const handle = await transport.openSession({
+			workingDirectory: '/tmp/work',
+			command: 'copilot',
+			sessionName: 'owner-session',
+			owner: { kind: 'repository', repositoryRootPath: '/tmp/work' }
+		});
+		activePty?.emitData('ready');
+
+		expect(await transport.readSnapshot(handle)).toMatchObject({
+			owner: { kind: 'repository', repositoryRootPath: '/tmp/work' },
+			processLease: {
+				pid: 5151,
+				processGroupId: 5151
+			}
+		});
+	});
+
+	it('does not report termination until the PTY confirms exit', async () => {
+		let activePty: FakePty | undefined;
+		const processGroupSignals: string[] = [];
+		const transport = new TerminalAgentTransport({
+			spawn: (() => {
+				activePty = createFakePty(6262);
+				return activePty;
+			}) as never,
+			terminationGraceMs: 0,
+			terminationPollIntervalMs: 1,
+			processController: {
+				isProcessRunning: () => true,
+				killProcess: (_processId, signal) => processGroupSignals.push(`process:${signal}`),
+				killProcessGroup: (_processGroupId, signal) => processGroupSignals.push(`group:${signal}`)
+			}
+		});
+
+		const handle = await transport.openSession({
+			workingDirectory: '/tmp/work',
+			command: 'copilot',
+			sessionName: 'stubborn-session'
+		});
+
+		await expect(transport.killSession(handle)).resolves.toEqual({
+			dead: false,
+			exitCode: null
+		});
+		expect(activePty?.killCount).toBeGreaterThanOrEqual(2);
+		expect(processGroupSignals).toContain('group:SIGTERM');
+		expect(processGroupSignals).toContain('group:SIGKILL');
+		expect(await transport.readPaneState(handle)).toEqual({
+			dead: false,
+			exitCode: null
+		});
 	});
 
 	it('marks snapshots as truncated when scrollback exceeds the buffer limit', async () => {
@@ -278,11 +350,11 @@ describe('TerminalAgentTransport', () => {
 	});
 });
 
-function createFakePty(): FakePty {
+function createFakePty(pid = 1): FakePty {
 	let onDataListener: ((chunk: string) => void) | undefined;
 	let onExitListener: ((event: { exitCode: number; signal?: number }) => void) | undefined;
 	const fakePty = {
-		pid: 1,
+		pid,
 		process: 'fake-shell',
 		cols: 120,
 		rows: 32,

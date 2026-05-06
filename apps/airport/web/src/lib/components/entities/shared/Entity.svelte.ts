@@ -9,12 +9,13 @@ import { qry } from '../../../../routes/api/entities/remote/query.remote';
 
 export abstract class Entity<TData, TId extends string = string>
 	implements EntityModel<TData, TId> {
-	public static async classCommands(entityName: string, commandInput?: unknown): Promise<EntityCommandDescriptorType[]> {
-		const view = EntityClassCommandViewSchema.parse(await qry({
+	public static async classCommands(entityName: string, commandInput?: unknown, input: { run?: boolean } = {}): Promise<EntityCommandDescriptorType[]> {
+		const query = qry({
 			entity: entityName,
 			method: 'classCommands',
 			payload: commandInput === undefined ? {} : { commandInput }
-		}).run());
+		});
+		const view = EntityClassCommandViewSchema.parse(input.run === false ? await query : await query.run());
 		return structuredClone(view.commands);
 	}
 

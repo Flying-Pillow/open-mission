@@ -23,6 +23,7 @@ export type AgentSessionMcpRegistration = {
 	missionId: string;
 	taskId: string;
 	agentSessionId: string;
+	sessionToken: string;
 	allowedTools: MissionMcpToolName[];
 	allowedEntityCommands?: MissionMcpAllowedEntityCommand[];
 	endpoint: string;
@@ -102,10 +103,13 @@ export class AgentSessionMcpAccessProvisioner {
 				runnerId: input.runnerId,
 				policy: input.policy,
 				accessState: 'mcp-validated',
-				launchEnv: this.bridge.createLaunchEnv(registration),
+				launchEnv: this.bridge.createLaunchEnv({
+					endpoint: registration.endpoint,
+					sessionToken: registration.sessionToken
+				}),
 				generatedFiles: [],
 				cleanup: createSingleUseCleanup(async () => {
-					await this.signalServer.unregisterSession(input.agentSessionId);
+					await this.signalServer.unregisterSession(registration.sessionToken);
 				})
 			};
 		} catch (error) {
@@ -113,7 +117,7 @@ export class AgentSessionMcpAccessProvisioner {
 				throw error;
 			}
 			if (registeredSession) {
-				await this.signalServer.unregisterSession(input.agentSessionId);
+				await this.signalServer.unregisterSession(registeredSession.sessionToken);
 			}
 			return this.handleProvisioningFallback(
 				input,
@@ -129,6 +133,7 @@ export class AgentSessionMcpAccessProvisioner {
 			missionId: registeredSession.missionId,
 			taskId: registeredSession.taskId,
 			agentSessionId: registeredSession.agentSessionId,
+			sessionToken: registeredSession.sessionToken,
 			allowedTools: [...registeredSession.allowedTools],
 			...(registeredSession.allowedEntityCommands ? {
 				allowedEntityCommands: registeredSession.allowedEntityCommands.map((command) => ({ ...command }))

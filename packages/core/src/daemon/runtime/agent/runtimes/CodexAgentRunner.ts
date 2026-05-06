@@ -14,10 +14,6 @@ import {
 	resolveMissionAgentRunnerSettings,
 	validateReasoningEffort
 } from './MissionAgentPtyRunner.js';
-import {
-	buildCodexMissionMcpOverrideArgs,
-	hasMissionMcpBridgeLaunchEnv
-} from '../mcp/MissionMcpRunnerLaunchSupport.js';
 
 const CODEX_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh'] as const;
 
@@ -40,13 +36,10 @@ export class CodexAgentRunner extends MissionAgentPtyRunner {
 	public createInteractiveLaunchPlan(config: AgentLaunchConfig): MissionAgentRunnerLaunchPlan {
 		const settings = this.readSettings(config);
 		const prompt = config.initialPrompt?.text ?? '';
-		const mcpOverrideArgs = hasMissionMcpBridgeLaunchEnv(settings.launchEnv)
-			? buildCodexMissionMcpOverrideArgs(settings.launchEnv)
-			: [];
 		return {
 			mode: 'interactive',
 			command: 'codex',
-			args: ['--model', settings.model, ...mcpOverrideArgs, prompt],
+			args: ['--model', settings.model, prompt],
 			env: mergeLaunchEnv(settings.runtimeEnv, settings.providerEnv, settings.launchEnv)
 		};
 	}
@@ -64,11 +57,6 @@ export class CodexAgentRunner extends MissionAgentPtyRunner {
 				? ['-c', quoteShellArg(`model_reasoning_effort="${settings.reasoningEffort}"`)]
 				: [])
 		];
-		if (hasMissionMcpBridgeLaunchEnv(settings.launchEnv)) {
-			for (const [index, value] of buildCodexMissionMcpOverrideArgs(settings.launchEnv).entries()) {
-				parts.push(index % 2 === 0 ? value : quoteShellArg(value));
-			}
-		}
 		return {
 			mode: 'print',
 			command: parts.join(' '),

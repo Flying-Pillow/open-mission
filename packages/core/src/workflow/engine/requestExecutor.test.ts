@@ -797,7 +797,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 		})).resolves.toEqual([]);
 	});
 
-	it('treats workflow termination of an unattached session as a terminal lifecycle event', async () => {
+	it('does not mark unattached sessions terminated without runtime confirmation', async () => {
 		const executor = new MissionWorkflowRequestExecutor({
 			adapter: {} as MissionDossierFilesystem,
 			runners: new Map()
@@ -809,12 +809,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 			'spec/01'
 		);
 
-		expect(events).toHaveLength(1);
-		expect(events[0]).toMatchObject({
-			type: 'session.terminated',
-			sessionId: 'detached-session',
-			taskId: 'spec/01'
-		});
+		expect(events).toEqual([]);
 	});
 
 	it('reconciles detached terminal snapshots even when runtime snapshot taskId is unknown', async () => {

@@ -128,19 +128,21 @@ The PTY terminal remains the primary UX for interactive coder sessions. A struct
 Mission owns one active MCP signaling path:
 
 1. `MissionMcpSignalServer` owns local-only MCP server lifecycle.
-2. `MissionMcpSessionRegistry` owns per-session registration, scoping, and idempotency.
-3. `MissionMcpSignalTools` owns tool names, validation, and acknowledgement payloads.
+2. `MissionMcpSessionRegistry` owns token registration, scoping, and idempotency.
+3. `MissionMcpSignalTools` owns lean tool names, validation, and acknowledgement payloads.
 4. `AgentSessionMcpAccessProvisioner` owns session registration plus launch-env handoff for supported runners.
 5. `MissionMcpRunnerLaunchSupport` owns runner-native launch adaptation for providers that need extra MCP wiring beyond raw session env.
 6. `MissionAgentRuntimeProtocolLaunchContext` owns the instruction text that tells agents to use Mission MCP first and fall back to strict Mission protocol markers when needed.
 
-Mission may use checked-in project MCP config where the upstream agent supports it, and may synthesize runner-local or process-local launch config for the lifetime of a session when a provider requires a different MCP registration shape.
+Mission uses a checked-in project MCP entry that passes only `MISSION_MCP_ENDPOINT` and `MISSION_MCP_SESSION_TOKEN` to the local bridge. The daemon resolves the session token to mission/task/session scope, allowed tools, and idempotency state.
 
-Mission does **not** persist per-session MCP credentials, session ids, or endpoint secrets into tracked repository files, and does **not** mutate user-global runner settings as part of routine runtime provisioning.
+When Mission wires a local MCP bridge into a runner, it targets the Mission-owned `mission-command` entry point and may resolve that entry point to a concrete local executable path instead of assuming a globally installed `mission-command` binary is already on `PATH`.
+
+Mission does **not** persist per-session MCP credentials, session tokens, session ids, or endpoint secrets into tracked repository files, and does **not** mutate user-global runner settings as part of routine runtime provisioning.
 
 Mission does **not** assume one universal `.agents/mcp.json`.
 
-Mission does **not** write per-session MCP credentials, session ids, or endpoint secrets into tracked repository files.
+Mission does **not** write per-session MCP credentials, session tokens, session ids, or endpoint secrets into tracked repository files.
 
 ## Observation And Promotion Rules
 

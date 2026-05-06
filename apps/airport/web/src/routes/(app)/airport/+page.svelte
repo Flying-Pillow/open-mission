@@ -7,7 +7,7 @@
     const appContext = getAppContext();
 
     afterNavigate(() => {
-        appContext.application.syncAirportSelection({ kind: "home" });
+        appContext.clearAirportSelection();
     });
 </script>
 

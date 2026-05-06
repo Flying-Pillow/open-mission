@@ -1,5 +1,4 @@
 <script lang="ts">
-    import { onMount } from "svelte";
     import Icon from "@iconify/svelte";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import GithubRepository from "$lib/components/entities/Repository/GithubRepository.svelte";
@@ -82,20 +81,6 @@
     async function refreshRepositories(): Promise<void> {
         await appContext.application.loadRepositories({ force: true });
     }
-
-    onMount(() => {
-        if (repositoryFilter !== "external") {
-            void appContext.application
-                .loadRepositories()
-                .catch(() => undefined);
-        }
-
-        if (repositoryFilter !== "local") {
-            void appContext.application
-                .loadGitHubRepositories()
-                .catch(() => undefined);
-        }
-    });
 </script>
 
 <section

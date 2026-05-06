@@ -279,6 +279,15 @@
                 )
               : undefined,
     );
+    const displayTaskSessions = $derived.by(() => {
+        if (!activeMission || !displayTaskId) {
+            return [];
+        }
+
+        return activeMission
+            .listSessions()
+            .filter((agentSession) => agentSession.taskId === displayTaskId);
+    });
 
     $effect(() => {
         if (!selectedNodeId) {
@@ -515,6 +524,43 @@
         await refreshMissionView();
     }
 
+    async function handleTaskAutostartChange(
+        taskId: string,
+        autostart: boolean,
+    ): Promise<void> {
+        const task = activeMission?.getTask(taskId);
+        if (!task) {
+            return;
+        }
+
+        await appContext.configureActiveMissionTask({
+            taskId,
+            options: { autostart },
+        });
+        await handleMissionMutated();
+    }
+
+    async function handleAllTaskAutostartChange(
+        autostart: boolean,
+    ): Promise<void> {
+        const tasks = activeMission
+            ?.listTasks()
+            .filter((task) => task.autostart !== autostart);
+        if (!tasks || tasks.length === 0) {
+            return;
+        }
+
+        await Promise.all(
+            tasks.map((task) =>
+                appContext.configureActiveMissionTask({
+                    taskId: task.taskId,
+                    options: { autostart },
+                }),
+            ),
+        );
+        await handleMissionMutated();
+    }
+
     function handleSelectNode(nodeId: string): void {
         selectedWorktreeNode = null;
         appContext.setActiveMissionSelectedNodeId(nodeId);
@@ -701,6 +747,7 @@
                     sourcePath: taskSnapshot.filePath,
                     stageId: stageNodeId,
                     taskId: task.taskId,
+                    autostart: task.autostart,
                 });
 
                 for (const artifact of currentMission
@@ -920,6 +967,8 @@
                                     activeNodeId={selectedNodeId}
                                     class="h-full rounded-none border-0 bg-transparent"
                                     onSelectNode={handleSelectNode}
+                                    onTaskAutostartChange={handleTaskAutostartChange}
+                                    onAllTaskAutostartChange={handleAllTaskAutostartChange}
                                 />
                             </div>
                         {:else}
@@ -963,6 +1012,7 @@
                             selectedArtifactId={activeArtifactSelection}
                             task={displayTask}
                             session={resolvedSession}
+                            sessions={displayTaskSessions}
                             onCommandExecuted={handleMissionMutated}
                         />
                     </ResizablePane>

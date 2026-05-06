@@ -310,6 +310,7 @@ export interface TaskConfiguredEvent extends MissionWorkflowEventBase {
     agentRunner?: string;
     model?: string | null;
     reasoningEffort?: MissionReasoningEffortType | null;
+    autostart?: boolean;
     context?: TaskContextArtifactReferenceType[];
 }
 

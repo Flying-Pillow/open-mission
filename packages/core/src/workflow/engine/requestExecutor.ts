@@ -441,10 +441,7 @@ export class MissionWorkflowRequestExecutor {
 		this.rememberSessionTaskId(sessionId, fallbackTaskId);
 		const runtimeSession = this.runtimeSessions.get(sessionId);
 		if (!runtimeSession) {
-			const taskId = normalizeTaskId(fallbackTaskId) ?? this.sessionTaskIds.get(sessionId);
-			return taskId
-				? [this.createDetachedSessionTerminatedEvent(sessionId, taskId)]
-				: [];
+			return [];
 		}
 		const snapshot = await this.requireRuntimeSession(sessionId).terminate(reason);
 		const events = this.drainRuntimeEvents();
@@ -612,21 +609,6 @@ export class MissionWorkflowRequestExecutor {
 			runnerId: snapshot.runnerId,
 			...(sessionLogPath ? { sessionLogPath } : {}),
 			...toTransportEventFields(snapshot)
-		};
-	}
-
-	private createDetachedSessionTerminatedEvent(
-		sessionId: AgentSessionId,
-		taskId: string
-	): MissionWorkflowEvent {
-		const occurredAt = new Date().toISOString();
-		return {
-			eventId: `runtime:${sessionId}:session.terminated:${occurredAt}`,
-			type: 'session.terminated',
-			occurredAt,
-			source: 'daemon',
-			sessionId,
-			taskId
 		};
 	}
 

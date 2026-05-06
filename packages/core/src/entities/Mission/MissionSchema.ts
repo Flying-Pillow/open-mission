@@ -229,6 +229,7 @@ export type MissionTaskState = {
     waitingOn: string[];
     status: MissionTaskStatus;
     agent: MissionTaskAgent;
+    autostart?: boolean;
     retries: number;
     fileName: string;
     filePath: string;
@@ -333,6 +334,7 @@ export type MissionTowerTreeNode = {
     sourcePath?: string;
     stageId?: MissionStageId;
     taskId?: string;
+    autostart?: boolean;
     sessionId?: string;
 };
 

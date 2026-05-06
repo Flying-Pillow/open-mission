@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { buildMissionAgentRuntimeProtocolLaunchContext } from './MissionAgentRuntimeProtocolLaunchContext.js';
-import { MISSION_PROTOCOL_MARKER_PREFIX } from '../signals/MissionProtocolMarkerParser.js';
 
 describe('MissionAgentRuntimeProtocolLaunchContext', () => {
 	it('passes validated Mission MCP launch env through and emits MCP-first session instructions', () => {
@@ -11,10 +10,7 @@ describe('MissionAgentRuntimeProtocolLaunchContext', () => {
 				accessState: 'mcp-validated',
 				launchEnv: {
 					MISSION_MCP_ENDPOINT: 'mission-local://mcp-signal/session-1',
-					MISSION_MCP_MISSION_ID: 'mission-31',
-					MISSION_MCP_TASK_ID: 'task-6',
-					MISSION_MCP_AGENT_SESSION_ID: 'session-1',
-					MISSION_MCP_ALLOWED_TOOLS: '["mission_report_progress"]'
+					MISSION_MCP_SESSION_TOKEN: 'token-1'
 				},
 				generatedFiles: [],
 				cleanup: async () => undefined
@@ -26,20 +22,14 @@ describe('MissionAgentRuntimeProtocolLaunchContext', () => {
 
 		expect(context.launchEnv).toEqual({
 			MISSION_MCP_ENDPOINT: 'mission-local://mcp-signal/session-1',
-			MISSION_MCP_MISSION_ID: 'mission-31',
-			MISSION_MCP_TASK_ID: 'task-6',
-			MISSION_MCP_AGENT_SESSION_ID: 'session-1',
-			MISSION_MCP_ALLOWED_TOOLS: '["mission_report_progress"]'
+			MISSION_MCP_SESSION_TOKEN: 'token-1'
 		});
 		expect(context.mcpAccessState).toBe('mcp-validated');
-		expect(context.sessionInstructions).toContain('Mission MCP is available for this session');
-		expect(context.sessionInstructions).toContain('MISSION_MCP_ENDPOINT');
-		expect(context.sessionInstructions).toContain('mission-command');
-		expect(context.sessionInstructions).toContain('mission_entity_command');
-		expect(context.sessionInstructions).toContain('mission_report_progress');
-		expect(context.sessionInstructions).toContain('mission_report_completion_claim');
-		expect(context.sessionInstructions).toContain('do not prove verification or completion');
-		expect(context.sessionInstructions).not.toContain(`${MISSION_PROTOCOL_MARKER_PREFIX}{`);
+		expect(context.sessionInstructions).toContain('Mission MCP is available through the local mission server');
+		expect(context.sessionInstructions).toContain('MISSION_MCP_SESSION_TOKEN');
+		expect(context.sessionInstructions).toContain('progress');
+		expect(context.sessionInstructions).toContain('complete');
+		expect(context.sessionInstructions).toContain('entity');
 	});
 
 	it('marks degraded launches as lower-confidence fallback sessions instead of forwarding MCP env', () => {
@@ -63,11 +53,6 @@ describe('MissionAgentRuntimeProtocolLaunchContext', () => {
 		expect(context.launchEnv).toEqual({});
 		expect(context.mcpAccessState).toBe('mcp-unavailable');
 		expect(context.sessionInstructions).toContain("Mission MCP is unavailable for this session: Runner 'pi' does not support Mission MCP provisioning.");
-		expect(context.sessionInstructions).toContain('lower-confidence agent declarations');
-		expect(context.sessionInstructions).toContain(MISSION_PROTOCOL_MARKER_PREFIX);
-		expect(context.sessionInstructions).toContain('"missionId":"mission-31"');
-		expect(context.sessionInstructions).toContain('"taskId":"task-6"');
-		expect(context.sessionInstructions).toContain('"agentSessionId":"session-2"');
-		expect(context.sessionInstructions).toContain('ready_for_verification and completed_claim do not prove verification or completion');
+		expect(context.sessionInstructions).toContain('agentSessionId');
 	});
 });

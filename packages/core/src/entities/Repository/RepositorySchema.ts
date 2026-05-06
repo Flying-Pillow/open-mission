@@ -1,6 +1,7 @@
 import { z } from 'zod/v4';
 import { WorkflowDefinitionSchema } from '../../workflow/WorkflowSchema.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
+import { parsePersistedWorkflowSettings } from '../../settings/validation.js';
 import {
     MissionAgentRunnerSchema,
     MissionDefaultAgentModeSchema,
@@ -12,7 +13,13 @@ import {
     EntityIdSchema
 } from '../Entity/EntitySchema.js';
 
-export const RepositoryWorkflowConfigurationSchema = WorkflowDefinitionSchema;
+export const RepositoryWorkflowConfigurationSchema = z.preprocess((input) => {
+    try {
+        return parsePersistedWorkflowSettings(input);
+    } catch {
+        return input;
+    }
+}, WorkflowDefinitionSchema);
 
 export const repositoryEntityName = 'Repository' as const;
 export const RepositoryPlatformKindSchema = z.enum(['github']);

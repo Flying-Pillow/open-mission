@@ -13,10 +13,7 @@
             return;
         }
 
-        appContext.application.syncAirportSelection({
-            kind: "repository",
-            repositoryId,
-        });
+        void appContext.loadRepositoryPage({ repositoryId });
     });
 </script>
 

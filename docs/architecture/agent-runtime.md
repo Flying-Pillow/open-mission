@@ -10,10 +10,18 @@ Agent runtimes execute bounded work. Mission controls when they run, what contex
 
 The runtime boundary includes:
 
-- Agent session creation and lifecycle
+- Agent session creation, daemon-issued session tokens, and lifecycle
 - structured Agent session messages
 - terminal input when a CLI runtime requires it
 - runtime message descriptors advertised to Airport
 - durable Agent session logs
+- MCP tool exposure for agent-session surfaces
 
-Runtime delivery is best effort. It is not a state acknowledgement. Mission state changes must still flow through daemon-owned commands and accepted transactions.
+A validated agent-session surface uses the same Mission MCP tool vocabulary:
+
+- signal tools: `progress`, `request_input`, `blocked`, `ready`, `complete`, `fail`, `note`, `usage`
+- Entity command tool: `entity`
+
+The `entity` tool is a thin transport wrapper over authorized Entity command views. The daemon registers which Entity commands a session may invoke, and the surface must not invent a separate agent-only command vocabulary.
+
+Runtime delivery is best effort. It is not a state acknowledgement. Mission state changes must still flow through daemon-owned commands and accepted transactions. Structured command and signal payloads stay payload-only; routing identity lives with the daemon-issued session token.

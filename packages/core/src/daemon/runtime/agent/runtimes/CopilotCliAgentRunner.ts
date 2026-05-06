@@ -10,10 +10,6 @@ import {
 	MissionAgentPtyRunner,
 	type MissionAgentRunnerLaunchPlan
 } from './MissionAgentPtyRunner.js';
-import {
-	findNearestMissionMcpConfigPath,
-	hasMissionMcpBridgeLaunchEnv
-} from '../mcp/MissionMcpRunnerLaunchSupport.js';
 
 export type CopilotCliAgentRunnerOptions = Omit<
 	ConstructorParameters<typeof MissionAgentPtyRunner>[0],
@@ -30,7 +26,6 @@ const DEFAULT_COPILOT_CLI_ARGS = [
 	'--allow-all-tools',
 	'--allow-all-urls'
 ];
-
 export class CopilotCliAgentRunner extends MissionAgentPtyRunner {
 	private readonly launchCommand: string;
 
@@ -71,12 +66,6 @@ export class CopilotCliAgentRunner extends MissionAgentPtyRunner {
 			'--config-dir',
 			this.trustedConfigDir
 		];
-		if (hasMissionMcpBridgeLaunchEnv(config.launchEnv)) {
-			const additionalConfigPath = findNearestMissionMcpConfigPath(config.workingDirectory);
-			if (additionalConfigPath) {
-				args.push('--additional-mcp-config', `@${additionalConfigPath}`);
-			}
-		}
 		for (const directory of trustedDirectories) {
 			args.push('--add-dir', directory);
 		}

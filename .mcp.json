@@ -6,11 +6,7 @@
             "args": [],
             "env": {
                 "MISSION_MCP_ENDPOINT": "${MISSION_MCP_ENDPOINT}",
-                "MISSION_MCP_MISSION_ID": "${MISSION_MCP_MISSION_ID}",
-                "MISSION_MCP_TASK_ID": "${MISSION_MCP_TASK_ID}",
-                "MISSION_MCP_AGENT_SESSION_ID": "${MISSION_MCP_AGENT_SESSION_ID}",
-                "MISSION_MCP_ALLOWED_TOOLS": "${MISSION_MCP_ALLOWED_TOOLS}",
-                "MISSION_MCP_ALLOWED_ENTITY_COMMANDS": "${MISSION_MCP_ALLOWED_ENTITY_COMMANDS}"
+                "MISSION_MCP_SESSION_TOKEN": "${MISSION_MCP_SESSION_TOKEN}"
             }
         }
     },
@@ -21,11 +17,7 @@
             "args": [],
             "env": {
                 "MISSION_MCP_ENDPOINT": "${MISSION_MCP_ENDPOINT}",
-                "MISSION_MCP_MISSION_ID": "${MISSION_MCP_MISSION_ID}",
-                "MISSION_MCP_TASK_ID": "${MISSION_MCP_TASK_ID}",
-                "MISSION_MCP_AGENT_SESSION_ID": "${MISSION_MCP_AGENT_SESSION_ID}",
-                "MISSION_MCP_ALLOWED_TOOLS": "${MISSION_MCP_ALLOWED_TOOLS}",
-                "MISSION_MCP_ALLOWED_ENTITY_COMMANDS": "${MISSION_MCP_ALLOWED_ENTITY_COMMANDS}"
+                "MISSION_MCP_SESSION_TOKEN": "${MISSION_MCP_SESSION_TOKEN}"
             }
         },
         "svelte": {

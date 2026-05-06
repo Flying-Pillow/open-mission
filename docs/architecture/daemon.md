@@ -14,7 +14,7 @@ It is responsible for:
 - running Mission instances
 - dispatching Entity remote methods
 - publishing Entity events and command views
-- coordinating Agent sessions and runtime delivery
+- coordinating Agent sessions, daemon-issued session tokens, and runtime delivery
 - checkpointing accepted Mission runtime data
 
 Airport connects to the daemon. It does not recreate daemon state or workflow legality locally.

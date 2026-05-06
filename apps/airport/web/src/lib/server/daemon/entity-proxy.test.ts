@@ -14,6 +14,7 @@ vi.mock('./connections.server', () => ({
 
 describe('EntityProxy', () => {
     beforeEach(() => {
+        vi.useRealTimers();
         vi.resetModules();
         vi.clearAllMocks();
         isRecoverableDaemonConnectionError.mockImplementation((error: unknown) => (
@@ -82,6 +83,38 @@ describe('EntityProxy', () => {
 
         expect(resetSharedAuthenticatedDaemonClient).not.toHaveBeenCalled();
         expect(connectSharedAuthenticatedDaemonClient).toHaveBeenCalledTimes(1);
+        expect(dispose).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+        'add',
+        'setup',
+        'startMissionFromIssue',
+        'startMissionFromBrief'
+    ])('allows Repository %s commands to outlive the default entity timeout', async (method) => {
+        vi.useFakeTimers();
+        const client = {
+            request: vi.fn().mockImplementation(() => new Promise((resolve) => {
+                setTimeout(() => resolve({ ok: true, method }), 9_000);
+            }))
+        };
+        const dispose = vi.fn();
+        connectSharedAuthenticatedDaemonClient.mockResolvedValueOnce({ client, dispose });
+
+        const { EntityProxy } = await import('./entity-proxy');
+        const resultPromise = new EntityProxy().executeEntityCommand({
+            entity: 'Repository',
+            method,
+            payload: {
+                id: 'repository:github/Flying-Pillow/connect-four',
+                repositoryRootPath: '/repositories/Flying-Pillow/connect-four',
+                issueNumber: 1
+            }
+        });
+
+        await vi.advanceTimersByTimeAsync(9_000);
+
+        await expect(resultPromise).resolves.toEqual({ ok: true, method });
         expect(dispose).toHaveBeenCalledTimes(1);
     });
 });

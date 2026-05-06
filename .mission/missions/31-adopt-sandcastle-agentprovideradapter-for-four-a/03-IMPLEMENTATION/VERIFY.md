@@ -349,6 +349,24 @@ Branch: mission/31-adopt-sandcastle-agentprovideradapter-for-four-a
 - **Fixes applied:** Added local MCP Entity command support, changed the bridge command to `mission-command`, added the `mission-command` stdio bridge binary entrypoint, exposed daemon-local MCP IPC methods, and updated task 09 architecture notes.
 - **Ignored unrelated failures:** Current package test failures in SystemStatus, Repository, and workflow e2e are outside this MCP command architecture change.
 
+#### Reverification at `2026-05-05T18:04:00Z`
+
+- **Result:** **Focused documentation and cleanup checks passed; required core test gate still fails outside this slice**
+- **Checks:**
+  - Confirmed the runtime specification now states Mission owns the active runtime path directly: `AgentRunner`/`AgentSession` remain the lifecycle contract, the four agent-coder runners (`claude-code`, `pi`, `codex`, `opencode`) are Mission-owned direct CLI runners, and Mission still owns PTY transport, session lifecycle truth, durable logs, interaction-mode projection, local MCP signaling, and instruction-guided MCP usage.
+  - Confirmed the active runtime specification preserves the Mission-owned PTY transport, lifecycle truth, logs and snapshot/event emission, MCP lifecycle/session registration/acknowledgement semantics, and explicitly states that MCP acknowledgements plus agent `ready_for_verification`/`completed_claim` signals remain advisory rather than deterministic verification.
+  - Confirmed the active runtime specification states there is no external Sandcastle dependency in the active runtime path, no Mission-owned `AgentProviderAdapter` or `SandcastleAgentRunner`, no direct Pi-only legacy command-building path as a parallel truth, and no per-agent MCP config materializer or universal `.agents/mcp.json` assumption.
+  - Confirmed `packages/core/package.json` and `pnpm-lock.yaml` contain no `@ai-hero/sandcastle` dependency entry, so the old Sandcastle package is no longer active truth in the workspace.
+  - Confirmed daemon/runtime wiring still reflects the documented ownership model: `startMissionDaemon()` creates one `MissionMcpSignalServer` singleton, binds it into `MissionRegistry`, starts it with daemon startup, and stops it during daemon shutdown; `createConfiguredAgentRunners()` constructs the four coder runners directly; and `MissionAgentPtyRunner` provisions MCP access, prepends the Mission protocol instructions, allowlists `mission_entity_command` plus signal tools, and launches through the PTY-backed terminal transport.
+  - Confirmed the local MCP bridge contract is the Mission-owned `mission-command` entry point in both the runtime spec and `MissionMcpAgentBridge.ts`, while the repository no longer contains an active `mission mcp agent-bridge` path in core source or runtime docs.
+  - Ran `pnpm --filter @flying-pillow/mission-core check`, `pnpm --filter @flying-pillow/mission-core test`, and `pnpm --filter @flying-pillow/mission-core build`.
+- **Validation note:**
+  - `pnpm --filter @flying-pillow/mission-core check` passes.
+  - `pnpm --filter @flying-pillow/mission-core build` passes.
+  - `pnpm --filter @flying-pillow/mission-core test` does **not** satisfy this task's validation gate in the current workspace: the run fails in `src/system/SystemStatus.test.ts` (4 failures), `src/entities/Repository/Repository.test.ts` (2 failures), `src/entities/Mission/MissionBehavior.test.ts` (1 failure), and `src/workflow/engine/workflowEngine.e2e.test.ts` (1 failure), for 8 failing tests across 4 files.
+- **Fixes applied:** None. Verification only.
+- **Ignored unrelated failures:** None.
+
 ## Gaps
 
 - TODO: Record verification gaps that must be resolved before audit.

@@ -84,6 +84,10 @@ export class Task implements EntityModel<TaskSnapshot> {
         return this.snapshot.task.reasoningEffort;
     }
 
+    public get autostart(): boolean {
+        return this.snapshot.task.autostart ?? false;
+    }
+
     public get dependsOn(): string[] {
         return [...this.snapshot.task.dependsOn];
     }

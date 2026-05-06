@@ -288,30 +288,13 @@ describe('Mission-owned agent runners', () => {
 		expect(opencode['parseRuntimeOutputLine']('plain text without structured output')).toEqual([{ kind: 'none' }]);
 	});
 
-	it('maps Mission MCP launch support into Copilot, Claude Code, Codex, OpenCode, and Pi launch plans', async () => {
+	it('passes Mission MCP session env through without runner-specific MCP config mutation', async () => {
 		const missionMcpEnv = {
 			MISSION_MCP_ENDPOINT: 'mission-local://mcp-signal/session-1',
-			MISSION_MCP_MISSION_ID: 'mission-31',
-			MISSION_MCP_TASK_ID: 'task-7',
-			MISSION_MCP_AGENT_SESSION_ID: 'session-1',
-			MISSION_MCP_ALLOWED_TOOLS: '["mission_report_progress"]'
+			MISSION_MCP_SESSION_TOKEN: 'token-1'
 		};
 		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-mcp-runner-test-'));
 		try {
-			await fs.writeFile(
-				path.join(workspaceRoot, '.mcp.json'),
-				`${JSON.stringify({
-					mcpServers: {
-						mission: {
-							type: 'stdio',
-							command: 'mission-command',
-							args: []
-						}
-					}
-				}, null, 2)}\n`,
-				'utf8'
-			);
-
 			const copilot = new CopilotCliAgentRunner({
 				command: 'copilot',
 				trustedConfigDir: workspaceRoot,
@@ -350,49 +333,48 @@ describe('Mission-owned agent runners', () => {
 				workingDirectory: workspaceRoot,
 				launchEnv: missionMcpEnv
 			}));
-			expect(copilotPlan.args).toContain('--additional-mcp-config');
-			expect(copilotPlan.args).toContain(`@${path.join(workspaceRoot, '.mcp.json')}`);
+			expect(copilotPlan.args).not.toContain('--additional-mcp-config');
 			expect(copilotPlan.env?.['MISSION_MCP_ENDPOINT']).toBe(missionMcpEnv['MISSION_MCP_ENDPOINT']);
 
-			const preparedClaudeConfig = await claudeCode['prepareRunnerLaunchConfig'](createLaunchConfig({
+			const claudeCodePlan = claudeCode.createInteractiveLaunchPlan(createLaunchConfig({
 				launchEnv: missionMcpEnv
 			}));
-			const claudeCodePlan = claudeCode.createInteractiveLaunchPlan(preparedClaudeConfig.config);
-			expect(claudeCodePlan.args).toContain('--mcp-config');
-			const mcpConfigIndex = claudeCodePlan.args.indexOf('--mcp-config');
-			expect(mcpConfigIndex).toBeGreaterThanOrEqual(0);
-			const mcpConfigPath = claudeCodePlan.args[mcpConfigIndex + 1];
-			expect(mcpConfigPath).toBeDefined();
-			expect(mcpConfigPath).toContain('mission-claude-mcp-');
-			const mcpConfigContent = await fs.readFile(mcpConfigPath!, 'utf8');
-			expect(mcpConfigContent).toContain('"mission"');
-			expect(mcpConfigContent).toContain('mission-local://mcp-signal/session-1');
+			expect(claudeCodePlan.args).not.toContain('--mcp-config');
+			expect(claudeCodePlan.env?.['MISSION_MCP_ENDPOINT']).toBe(missionMcpEnv['MISSION_MCP_ENDPOINT']);
 
-			const claudeCodePrintPlan = claudeCode.createPrintLaunchPlan(preparedClaudeConfig.config);
-			expect(claudeCodePrintPlan.command).toContain('--mcp-config');
-			expect(claudeCodePrintPlan.command).toContain('mission-claude-mcp-');
-
-			const codexPlan = codex.createInteractiveLaunchPlan(createLaunchConfig());
-			expect(codexPlan.args).toContain('-c');
-			expect(codexPlan.args).toContain('mcp_servers.mission.enabled=true');
-
-			const codexPrintPlan = codex.createPrintLaunchPlan(createLaunchConfig());
-			expect(codexPrintPlan.command).toContain("mcp_servers.mission.enabled=true");
-			expect(codexPrintPlan.command).toContain("mcp_servers.mission.command=\"mission-command\"");
-
-			const openCodePlan = opencode.createInteractiveLaunchPlan(createLaunchConfig());
-			expect(openCodePlan.env?.['OPENCODE_CONFIG_CONTENT']).toContain('"mission"');
-			expect(openCodePlan.env?.['OPENCODE_CONFIG_CONTENT']).toContain('"mission-local://mcp-signal/session-1"');
-
-			const preparedPiConfig = await pi['prepareRunnerLaunchConfig'](createLaunchConfig({
+			const claudeCodePrintPlan = claudeCode.createPrintLaunchPlan(createLaunchConfig({
 				launchEnv: missionMcpEnv
 			}));
-			expect(preparedPiConfig.config.launchEnv?.['PI_CODING_AGENT_DIR']).toBeTruthy();
-			const piPlan = pi.createInteractiveLaunchPlan(preparedPiConfig.config);
-			expect(piPlan.args).toContain('-e');
-			expect(piPlan.args).toContain('npm:pi-mcp-extension');
-			await preparedClaudeConfig.cleanup?.();
-			await preparedPiConfig.cleanup?.();
+			expect(claudeCodePrintPlan.command).not.toContain('--mcp-config');
+			expect(claudeCodePrintPlan.env?.['MISSION_MCP_ENDPOINT']).toBe(missionMcpEnv['MISSION_MCP_ENDPOINT']);
+
+			const codexPlan = codex.createInteractiveLaunchPlan(createLaunchConfig({
+				launchEnv: missionMcpEnv
+			}));
+			expect(codexPlan.args).not.toContain('-c');
+			expect(codexPlan.args).not.toContain('mcp_servers.mission.enabled=true');
+			expect(codexPlan.env?.['MISSION_MCP_ENDPOINT']).toBe(missionMcpEnv['MISSION_MCP_ENDPOINT']);
+
+			const codexPrintPlan = codex.createPrintLaunchPlan(createLaunchConfig({
+				launchEnv: missionMcpEnv
+			}));
+			expect(codexPrintPlan.command).not.toContain('mcp_servers.mission.enabled=true');
+			expect(codexPrintPlan.env?.['MISSION_MCP_ENDPOINT']).toBe(missionMcpEnv['MISSION_MCP_ENDPOINT']);
+
+			const openCodePlan = opencode.createInteractiveLaunchPlan(createLaunchConfig({
+				launchEnv: missionMcpEnv
+			}));
+			expect(openCodePlan.env?.['OPENCODE_CONFIG_CONTENT']).toBeUndefined();
+			expect(openCodePlan.env?.['MISSION_MCP_ENDPOINT']).toBe(missionMcpEnv['MISSION_MCP_ENDPOINT']);
+
+			const piPlan = pi.createInteractiveLaunchPlan(createLaunchConfig({
+				launchEnv: missionMcpEnv
+			}));
+			expect(piPlan.args).not.toContain('-e');
+			expect(piPlan.args).not.toContain('npm:pi-mcp-extension');
+			expect(piPlan.env?.['PI_CODING_AGENT_DIR']).toBeUndefined();
+			expect(piPlan.env?.['MISSION_MCP_ENDPOINT']).toBe(missionMcpEnv['MISSION_MCP_ENDPOINT']);
+			expect(piPlan.env?.['MISSION_MCP_SESSION_TOKEN']).toBe(missionMcpEnv['MISSION_MCP_SESSION_TOKEN']);
 		} finally {
 			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}

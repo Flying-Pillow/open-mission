@@ -1,6 +1,7 @@
 <script lang="ts">
     import Icon from "@iconify/svelte";
     import type { ActiveMissionOutline } from "$lib/client/context/app-context.svelte";
+    import { Checkbox } from "$lib/components/ui/checkbox/index.js";
     import * as TreeView from "$lib/components/ui/tree-view/index.js";
     import { cn } from "$lib/utils.js";
     import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
@@ -32,12 +33,19 @@
         activeNodeId,
         class: className,
         onSelectNode,
+        onTaskAutostartChange,
+        onAllTaskAutostartChange,
     }: {
         outline?: ActiveMissionOutline;
         missionId?: string;
         activeNodeId?: string;
         class?: string;
         onSelectNode: (nodeId: string) => void;
+        onTaskAutostartChange?: (
+            taskId: string,
+            autostart: boolean,
+        ) => void | Promise<void>;
+        onAllTaskAutostartChange?: (autostart: boolean) => void | Promise<void>;
     } = $props();
 
     const missionOutline = $derived.by(() => {
@@ -55,6 +63,16 @@
         };
     });
     const currentMissionStageId = $derived(missionOutline?.currentStageId);
+    const taskNodes = $derived(
+        missionOutline?.stages.flatMap((stage) =>
+            stage.tasks.map((task) => task.node),
+        ) ?? [],
+    );
+    const allTasksAutostart = $derived(
+        taskNodes.length > 0 && taskNodes.every((task) => task.autostart),
+    );
+    const anyTaskAutostart = $derived(taskNodes.some((task) => task.autostart));
+    const someTasksAutostart = $derived(anyTaskAutostart && !allTasksAutostart);
     let missionBranchOverrides = $state<Record<string, boolean>>({});
 
     function buildMissionOutline(
@@ -308,6 +326,18 @@
             selected && "bg-accent/70 ring-border/60 ring-1 hover:bg-accent",
         );
     }
+
+    function toggleTaskAutostart(task: MissionSidebarTask, autostart: boolean) {
+        if (!task.node.taskId) {
+            return;
+        }
+
+        void onTaskAutostartChange?.(task.node.taskId, autostart);
+    }
+
+    function toggleAllTaskAutostart(autostart: boolean): void {
+        void onAllTaskAutostartChange?.(autostart);
+    }
 </script>
 
 <section
@@ -318,6 +348,20 @@
 >
     <div class="min-h-0 overflow-auto p-2">
         {#if missionOutline}
+            <div
+                class="mb-2 flex items-center gap-2 rounded-md border border-border/60 bg-background/70 px-2 py-1.5 text-xs font-medium text-muted-foreground"
+            >
+                <Checkbox
+                    checked={allTasksAutostart}
+                    indeterminate={someTasksAutostart}
+                    disabled={taskNodes.length === 0 ||
+                        !onAllTaskAutostartChange}
+                    onCheckedChange={(value: boolean | "indeterminate") =>
+                        toggleAllTaskAutostart(value === true)}
+                    aria-label="Toggle autostart for all tasks"
+                />
+                <span>Autostart</span>
+            </div>
             <TreeView.Root class="gap-1">
                 {#each missionOutline.artifacts as artifact (artifact.node.id)}
                     {@const selected = activeNodeId === artifact.node.id}
@@ -366,6 +410,12 @@
                                         name={task.node.label}
                                         class={folderItemClass(taskSelected)}
                                         style={nodeStyle(task.node)}
+                                        checked={task.node.autostart ?? false}
+                                        onCheckedChange={(autostart: boolean) =>
+                                            toggleTaskAutostart(
+                                                task,
+                                                autostart,
+                                            )}
                                         onclick={() =>
                                             onSelectNode(task.node.id)}
                                         bind:open={
@@ -434,6 +484,12 @@
                                         name={task.node.label}
                                         class={fileItemClass(taskSelected)}
                                         style={nodeStyle(task.node)}
+                                        checked={task.node.autostart ?? false}
+                                        onCheckedChange={(autostart) =>
+                                            toggleTaskAutostart(
+                                                task,
+                                                autostart,
+                                            )}
                                         onclick={() =>
                                             onSelectNode(task.node.id)}
                                     >

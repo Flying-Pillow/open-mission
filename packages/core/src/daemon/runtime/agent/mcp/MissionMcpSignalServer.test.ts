@@ -67,26 +67,15 @@ describe('MissionMcpSignalServer', () => {
 			missionId: 'mission-31',
 			taskId: 'task-3',
 			agentSessionId: 'session-7',
-			allowedTools: [
-				'mission_report_progress',
-				'mission_append_session_note'
-			]
+			allowedTools: ['progress', 'note']
 		});
-		const progressAcknowledgement = await handle.invokeTool('mission_report_progress', {
-			missionId: 'mission-31',
-			taskId: 'task-3',
-			agentSessionId: 'session-7',
-			eventId: 'evt-1',
+		const progressAcknowledgement = await handle.invokeTool('progress', {
 			summary: 'Halfway there.',
 			detail: '3/6 checklist items are done.'
-		});
-		const noteAcknowledgement = await handle.invokeTool('mission_append_session_note', {
-			missionId: 'mission-31',
-			taskId: 'task-3',
-			agentSessionId: 'session-7',
-			eventId: 'evt-2',
+		}, registration.sessionToken);
+		const noteAcknowledgement = await handle.invokeTool('note', {
 			text: 'Need a follow-up after the next test run.'
-		});
+		}, registration.sessionToken);
 		const health = await handle.healthCheck();
 
 		expect(handle.localOnly).toBe(true);
@@ -104,10 +93,8 @@ describe('MissionMcpSignalServer', () => {
 			missionId: 'mission-31',
 			taskId: 'task-3',
 			agentSessionId: 'session-7',
-			allowedTools: [
-				'mission_report_progress',
-				'mission_append_session_note'
-			],
+			sessionToken: expect.any(String),
+			allowedTools: ['progress', 'note'],
 			endpoint: handle.endpoint,
 			localOnly: true,
 			transport: 'in-memory-local'
@@ -125,11 +112,11 @@ describe('MissionMcpSignalServer', () => {
 			waitingForInput: false
 		});
 		expect(commits).toHaveLength(2);
-		expect(commits[0]?.observation.observationId).toBe('mcp:session-7:evt-1');
+		expect(commits[0]?.observation.observationId).toMatch(/^mcp:session-7:/);
 		expect(commits[1]?.decision.action).toBe('emit-message');
 	});
 
-	it('rejects invalid, mismatched, disallowed, duplicate, unknown-session, and stopped calls', async () => {
+	it('rejects invalid, disallowed, duplicate, unknown-session-token, and stopped calls', async () => {
 		const snapshots = new Map<string, AgentSessionSnapshot>([
 			['session-7', createSnapshot()]
 		]);
@@ -146,93 +133,59 @@ describe('MissionMcpSignalServer', () => {
 		});
 		const server = new MissionMcpSignalServer({ signalPort: port });
 		const handle = await server.start();
-		await server.registerSession({
+		const registration = await server.registerSession({
 			missionId: 'mission-31',
 			taskId: 'task-3',
 			agentSessionId: 'session-7',
-			allowedTools: ['mission_report_progress']
+			allowedTools: ['progress']
 		});
 
-		expect(await handle.invokeTool('mission_report_progress', {
-			missionId: 'mission-31',
-			taskId: 'task-3',
-			agentSessionId: 'session-7',
-			eventId: 'evt-invalid',
+		expect(await handle.invokeTool('progress', {
 			summary: '   '
-		})).toEqual({
+		}, registration.sessionToken)).toEqual({
 			accepted: false,
 			outcome: 'rejected',
-			reason: "Invalid payload for MCP tool 'mission_report_progress': summary: Too small: expected string to have >=1 characters"
+			reason: "Invalid payload for MCP tool 'progress': summary: Too small: expected string to have >=1 characters"
 		});
-		expect(await handle.invokeTool('mission_report_progress', {
-			missionId: 'mission-31',
-			taskId: 'task-4',
-			agentSessionId: 'session-7',
-			eventId: 'evt-mismatch',
-			summary: 'Wrong task.'
-		})).toEqual({
-			accepted: false,
-			outcome: 'rejected',
-			reason: "Mission MCP envelope task 'task-4' did not match registered task 'task-3'."
-		});
-		expect(await handle.invokeTool('mission_report_failure_claim', {
-			missionId: 'mission-31',
-			taskId: 'task-3',
-			agentSessionId: 'session-7',
-			eventId: 'evt-disallowed',
+		expect(await handle.invokeTool('fail', {
 			reason: 'This tool should not be available.'
-		})).toEqual({
+		}, registration.sessionToken)).toEqual({
 			accepted: false,
 			outcome: 'rejected',
-			reason: "Mission MCP tool 'mission_report_failure_claim' is not allowed for session 'session-7'."
+			reason: "Mission MCP tool 'fail' is not allowed for this session."
 		});
-		expect(await handle.invokeTool('mission_report_progress', {
-			missionId: 'mission-31',
-			taskId: 'task-3',
-			agentSessionId: 'session-7',
-			eventId: 'evt-1',
+		expect(await handle.invokeTool('progress', {
 			summary: 'Accepted once.'
-		})).toEqual({
+		}, registration.sessionToken)).toEqual({
 			accepted: true,
 			outcome: 'promoted',
 			sessionStatus: 'running',
 			waitingForInput: false
 		});
-		expect(await handle.invokeTool('mission_report_progress', {
-			missionId: 'mission-31',
-			taskId: 'task-3',
-			agentSessionId: 'session-7',
-			eventId: 'evt-1',
+		expect(await handle.invokeTool('progress', {
 			summary: 'Accepted twice?'
-		})).toEqual({
-			accepted: false,
-			outcome: 'rejected',
-			reason: "Mission MCP event 'evt-1' was already processed for session 'session-7'."
+		}, registration.sessionToken)).toEqual({
+			accepted: true,
+			outcome: 'promoted',
+			sessionStatus: 'running',
+			waitingForInput: false
 		});
 
-		await server.unregisterSession('session-7');
+		await server.unregisterSession(registration.sessionToken);
 
-		expect(await handle.invokeTool('mission_report_progress', {
-			missionId: 'mission-31',
-			taskId: 'task-3',
-			agentSessionId: 'session-7',
-			eventId: 'evt-2',
+		expect(await handle.invokeTool('progress', {
 			summary: 'No longer registered.'
-		})).toEqual({
+		}, registration.sessionToken)).toEqual({
 			accepted: false,
 			outcome: 'rejected',
-			reason: "Unknown Mission MCP session 'session-7'."
+			reason: 'Unknown Mission MCP session token.'
 		});
 
 		await server.stop();
 
-		expect(await handle.invokeTool('mission_report_progress', {
-			missionId: 'mission-31',
-			taskId: 'task-3',
-			agentSessionId: 'session-7',
-			eventId: 'evt-after-stop',
+		expect(await handle.invokeTool('progress', {
 			summary: 'Server is down.'
-		})).toEqual({
+		}, registration.sessionToken)).toEqual({
 			accepted: false,
 			outcome: 'rejected',
 			reason: 'Mission MCP signal server is not running.'
@@ -261,20 +214,16 @@ describe('MissionMcpSignalServer', () => {
 		});
 		const server = new MissionMcpSignalServer({ signalPort: port });
 		const handle = await server.start();
-		await server.registerSession({
+		const registration = await server.registerSession({
 			missionId: 'mission-31',
 			taskId: 'task-3',
 			agentSessionId: 'session-7',
-			allowedTools: ['mission_report_progress']
+			allowedTools: ['progress']
 		});
 
-		const acknowledgement = await handle.invokeTool('mission_report_progress', {
-			missionId: 'mission-31',
-			taskId: 'task-3',
-			agentSessionId: 'session-7',
-			eventId: 'evt-ended',
+		const acknowledgement = await handle.invokeTool('progress', {
 			summary: 'Trying to update a finished session.'
-		});
+		}, registration.sessionToken);
 
 		expect(acknowledgement).toEqual({
 			accepted: false,
@@ -310,32 +259,24 @@ describe('MissionMcpSignalServer', () => {
 			missionId: 'mission-31',
 			taskId: 'task-3',
 			agentSessionId: '   ',
-			allowedTools: ['mission_report_progress']
+			allowedTools: ['progress']
 		})).rejects.toThrow(
-			"Invalid Mission MCP session registration: agentSessionId: Too small: expected string to have >=1 characters"
+			'Invalid Mission MCP session registration: agentSessionId: Too small: expected string to have >=1 characters'
 		);
 
-		await server.registerSession({
+		const registration = await server.registerSession({
 			missionId: 'mission-31',
 			taskId: 'task-3',
 			agentSessionId: 'session-7',
-			allowedTools: ['mission_report_progress']
+			allowedTools: ['progress']
 		});
 
-		const firstAcknowledgement = await handle.invokeTool('mission_report_progress', {
-			missionId: 'mission-31',
-			taskId: 'task-3',
-			agentSessionId: 'session-7',
-			eventId: 'evt-ended',
+		const firstAcknowledgement = await handle.invokeTool('progress', {
 			summary: 'Trying again after completion.'
-		});
-		const retryAcknowledgement = await handle.invokeTool('mission_report_progress', {
-			missionId: 'mission-31',
-			taskId: 'task-3',
-			agentSessionId: 'session-7',
-			eventId: 'evt-ended',
+		}, registration.sessionToken);
+		const retryAcknowledgement = await handle.invokeTool('progress', {
 			summary: 'Trying again after completion.'
-		});
+		}, registration.sessionToken);
 
 		expect(firstAcknowledgement).toEqual({
 			accepted: false,
@@ -356,31 +297,26 @@ describe('MissionMcpSignalServer', () => {
 			}),
 			executeEntityCommand: async (input) => {
 				executed.push(input);
-				return { ok: true, commandId: (input.payload as { commandId?: string }).commandId };
+				return { ok: true, commandId: input.commandId };
 			}
 		});
 		const handle = await server.start();
-		await server.registerSession({
+		const registration = await server.registerSession({
 			missionId: 'mission-31',
 			taskId: 'task-3',
 			agentSessionId: 'session-7',
-			allowedTools: ['mission_entity_command'],
+			allowedTools: ['entity'],
 			allowedEntityCommands: [{ entity: 'Task', method: 'command', commandId: 'task.complete' }]
 		});
 
-		await expect(handle.invokeTool('mission_entity_command', {
-			missionId: 'mission-31',
-			taskId: 'task-3',
-			agentSessionId: 'session-7',
-			eventId: 'entity-evt-1',
+		await expect(handle.invokeTool('entity', {
 			entity: 'Task',
 			method: 'command',
+			commandId: 'task.complete',
 			payload: {
-				missionId: 'mission-31',
-				taskId: 'task-3',
-				commandId: 'task.complete'
+				reason: 'done'
 			}
-		})).resolves.toEqual({
+		}, registration.sessionToken)).resolves.toEqual({
 			accepted: true,
 			outcome: 'entity-command',
 			result: { ok: true, commandId: 'task.complete' }
@@ -388,15 +324,14 @@ describe('MissionMcpSignalServer', () => {
 		expect(executed).toEqual([{
 			entity: 'Task',
 			method: 'command',
+			commandId: 'task.complete',
 			payload: {
-				missionId: 'mission-31',
-				taskId: 'task-3',
-				commandId: 'task.complete'
+				reason: 'done'
 			}
 		}]);
 	});
 
-	it('rejects entity commands outside the session allowlist or scope', async () => {
+	it('rejects entity commands outside the session allowlist', async () => {
 		const server = new MissionMcpSignalServer({
 			signalPort: new PolicyBoundAgentSessionSignalPort({
 				sink: {
@@ -407,48 +342,25 @@ describe('MissionMcpSignalServer', () => {
 			executeEntityCommand: async () => ({ ok: true })
 		});
 		const handle = await server.start();
-		await server.registerSession({
+		const registration = await server.registerSession({
 			missionId: 'mission-31',
 			taskId: 'task-3',
 			agentSessionId: 'session-7',
-			allowedTools: ['mission_entity_command'],
+			allowedTools: ['entity'],
 			allowedEntityCommands: [{ entity: 'Task', method: 'command', commandId: 'task.complete' }]
 		});
 
-		await expect(handle.invokeTool('mission_entity_command', {
-			missionId: 'mission-31',
-			taskId: 'task-3',
-			agentSessionId: 'session-7',
-			eventId: 'entity-evt-1',
+		await expect(handle.invokeTool('entity', {
 			entity: 'Task',
 			method: 'command',
+			commandId: 'task.reopen',
 			payload: {
-				missionId: 'mission-31',
-				taskId: 'task-3',
-				commandId: 'task.reopen'
+				reason: 'reopen'
 			}
-		})).resolves.toEqual({
+		}, registration.sessionToken)).resolves.toEqual({
 			accepted: false,
 			outcome: 'rejected',
-			reason: "Entity command 'Task.command:task.reopen' is not allowed for session 'session-7'."
-		});
-
-		await expect(handle.invokeTool('mission_entity_command', {
-			missionId: 'mission-31',
-			taskId: 'task-3',
-			agentSessionId: 'session-7',
-			eventId: 'entity-evt-2',
-			entity: 'Task',
-			method: 'command',
-			payload: {
-				missionId: 'mission-31',
-				taskId: 'task-4',
-				commandId: 'task.complete'
-			}
-		})).resolves.toEqual({
-			accepted: false,
-			outcome: 'rejected',
-			reason: "Task command target 'task-4' did not match MCP envelope task 'task-3'."
+			reason: "Entity command 'Task.command:task.reopen' is not allowed for this session."
 		});
 	});
 });

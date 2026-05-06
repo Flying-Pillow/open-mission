@@ -14,7 +14,8 @@ import type {
 import { deriveAgentSessionInteractionCapabilities } from './AgentRuntimeTypes.js';
 import {
     TerminalAgentTransport,
-    type TerminalAgentTransportOptions
+    type TerminalAgentTransportOptions,
+    type TerminalSessionOwner
 } from './TerminalAgentTransport.js';
 import { Repository } from '../../../entities/Repository/Repository.js';
 import type { AgentSessionSignalDecision } from './signals/AgentSessionSignal.js';
@@ -59,6 +60,7 @@ export type AgentRunnerTerminalRuntimeOptions = {
         sessionPrefix: string;
         sessionName: string;
         sharedSessionName?: string | undefined;
+        owner?: TerminalSessionOwner;
     }): Promise<AgentRunnerTerminalSessionHandle>;
     attachSession(
         sessionId: string,
@@ -71,7 +73,7 @@ export type AgentRunnerTerminalRuntimeOptions = {
     ): Promise<void>;
     capturePane(handle: AgentRunnerTerminalSessionHandle): Promise<string>;
     readPaneState(handle: AgentRunnerTerminalSessionHandle): Promise<AgentRunnerTerminalSessionState>;
-    killSession(handle: AgentRunnerTerminalSessionHandle): Promise<void>;
+    killSession(handle: AgentRunnerTerminalSessionHandle): Promise<AgentRunnerTerminalSessionState>;
     isAvailable(): Promise<{ available: boolean; reason?: string }>;
 };
 
@@ -88,6 +90,9 @@ export type AgentRunnerTerminalTransportRuntimeOptions = {
     discoverSharedSessionName?: TerminalAgentTransportOptions['discoverSharedSessionName'];
     executor?: TerminalAgentTransportOptions['executor'];
     spawn?: TerminalAgentTransportOptions['spawn'];
+    processController?: TerminalAgentTransportOptions['processController'];
+    terminationGraceMs?: TerminalAgentTransportOptions['terminationGraceMs'];
+    terminationPollIntervalMs?: TerminalAgentTransportOptions['terminationPollIntervalMs'];
 };
 
 type ManagedSessionRecord = {
@@ -231,7 +236,10 @@ export abstract class AgentRunner {
             ...(options.discoverSharedSessionName !== undefined ? { discoverSharedSessionName: options.discoverSharedSessionName } : {}),
             ...(options.executor ? { executor: options.executor } : {}),
             ...(options.spawn ? { spawn: options.spawn } : {}),
-            ...(options.logLine ? { logLine: options.logLine } : {})
+            ...(options.logLine ? { logLine: options.logLine } : {}),
+            ...(options.processController ? { processController: options.processController } : {}),
+            ...(options.terminationGraceMs !== undefined ? { terminationGraceMs: options.terminationGraceMs } : {}),
+            ...(options.terminationPollIntervalMs !== undefined ? { terminationPollIntervalMs: options.terminationPollIntervalMs } : {})
         });
         this.configureTerminalCommandRuntime({
             command: options.command,
@@ -247,7 +255,8 @@ export abstract class AgentRunner {
                 ...(request.env ? { env: request.env } : {}),
                 sessionPrefix: request.sessionPrefix,
                 sessionName: request.sessionName,
-                ...(request.sharedSessionName ? { sharedSessionName: request.sharedSessionName } : {})
+                ...(request.sharedSessionName ? { sharedSessionName: request.sharedSessionName } : {}),
+                ...(request.owner ? { owner: request.owner } : {})
             }),
             attachSession: (sessionId, attachOptions) => transport.attachSession(sessionId, attachOptions),
             sendKeys: (handle, keys, sendOptions) => transport.sendKeys(handle, keys, sendOptions),
@@ -309,7 +318,13 @@ export abstract class AgentRunner {
             ...(launchEnv ? { env: launchEnv } : {}),
             sessionPrefix: runtime.sessionPrefix,
             sessionName: buildTaskTerminalSessionName(config.workingDirectory, config.missionId, config.task.taskId, sessionId),
-            ...(requestedSharedSessionName ? { sharedSessionName: requestedSharedSessionName } : {})
+            ...(requestedSharedSessionName ? { sharedSessionName: requestedSharedSessionName } : {}),
+            owner: {
+                kind: 'agent-session',
+                missionId: config.missionId,
+                taskId: config.task.taskId,
+                agentSessionId: sessionId
+            }
         });
 
         const snapshot = createRunningSnapshot({
@@ -647,6 +662,13 @@ export abstract class AgentRunner {
         const runtime = this.requireTerminalRuntime();
         const handle = this.requireActiveTerminalSession(sessionId, 'cancel');
         await runtime.sendKeys(handle.transportHandle, 'C-c');
+        let paneState = await waitForTerminalSessionExit(runtime, handle.transportHandle, 1_500);
+        if (!paneState.dead) {
+            paneState = await runtime.killSession(handle.transportHandle);
+        }
+        if (!paneState.dead) {
+            throw new Error(`Terminal session '${sessionId}' did not exit after cancellation was requested.`);
+        }
         this.stopTerminalPolling(sessionId);
         const snapshot = this.updateManagedSnapshot(sessionId, {
             status: 'cancelled',
@@ -673,8 +695,10 @@ export abstract class AgentRunner {
     private async terminateTerminalSession(sessionId: string, reason?: string): Promise<AgentSessionSnapshot> {
         const runtime = this.requireTerminalRuntime();
         const handle = this.requireTerminalSession(sessionId);
-        await runtime.killSession(handle.transportHandle);
-        const paneState = await waitForTerminalSessionExit(runtime, handle.transportHandle);
+        let paneState = await runtime.killSession(handle.transportHandle);
+        if (!paneState.dead) {
+            paneState = await waitForTerminalSessionExit(runtime, handle.transportHandle, 5_000);
+        }
         if (!paneState.dead) {
             throw new Error(`Terminal session '${sessionId}' did not exit after termination was requested.`);
         }
@@ -1138,14 +1162,23 @@ async function sendTerminalText(
 
 async function waitForTerminalSessionExit(
     runtime: ConfiguredTerminalRuntime,
-    handle: AgentRunnerTerminalSessionHandle
+    handle: AgentRunnerTerminalSessionHandle,
+    timeoutMs = 5_000
 ): Promise<AgentRunnerTerminalSessionState> {
-    let lastState = await runtime.readPaneState(handle);
-    if (!lastState.dead) {
-        await Promise.resolve();
+    const deadline = Date.now() + Math.max(0, timeoutMs);
+    let lastState: AgentRunnerTerminalSessionState;
+    do {
         lastState = await runtime.readPaneState(handle);
-    }
+        if (lastState.dead) {
+            return lastState;
+        }
+        await delay(50);
+    } while (Date.now() <= deadline);
     return lastState;
+}
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isTerminalStatus(status: AgentSessionSnapshot['status']): boolean {

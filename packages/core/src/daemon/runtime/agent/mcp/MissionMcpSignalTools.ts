@@ -10,26 +10,19 @@ import {
 } from '../signals/AgentSessionSignal.js';
 
 export const missionMcpSignalToolNames = [
-	'mission_report_progress',
-	'mission_request_operator_input',
-	'mission_report_blocked',
-	'mission_report_ready_for_verification',
-	'mission_report_completion_claim',
-	'mission_report_failure_claim',
-	'mission_append_session_note',
-	'mission_report_usage'
+	'progress',
+	'request_input',
+	'blocked',
+	'ready',
+	'complete',
+	'fail',
+	'note',
+	'usage'
 ] as const;
 
 export type MissionMcpSignalToolName = (typeof missionMcpSignalToolNames)[number];
 
 export const missionMcpSignalToolNameSchema = z.enum(missionMcpSignalToolNames);
-
-export type MissionMcpSignalEnvelope = {
-	missionId: string;
-	taskId: string;
-	agentSessionId: string;
-	eventId: string;
-};
 
 export type MissionMcpSignalAcknowledgement = AgentSessionSignalAcknowledgement;
 
@@ -44,7 +37,6 @@ type AnyMissionMcpSignalToolDefinition = MissionMcpSignalToolDefinition<any>;
 
 export type MissionMcpValidatedToolCall = {
 	name: MissionMcpSignalToolName;
-	envelope: MissionMcpSignalEnvelope;
 	signal: AgentSessionSignal;
 };
 
@@ -62,19 +54,12 @@ const metadataValueSchema = z.union([
 	z.null()
 ]);
 
-export const missionMcpSignalEnvelopeSchema = z.object({
-	missionId: z.string().trim().min(1).max(128),
-	taskId: z.string().trim().min(1).max(128),
-	agentSessionId: z.string().trim().min(1).max(128),
-	eventId: z.string().trim().min(1).max(256)
-}).strict();
-
 const usagePayloadSchema = z.record(z.string(), metadataValueSchema).superRefine((payload, context) => {
 	const entries = Object.entries(payload);
 	if (entries.length > MAX_AGENT_SESSION_USAGE_ENTRIES) {
 		context.addIssue({
 			code: z.ZodIssueCode.custom,
-			message: `usage payload exceeded the maximum supported size of ${MAX_AGENT_SESSION_USAGE_ENTRIES} entries.`
+			message: `usage payload exceeded the maximum supported size of ${String(MAX_AGENT_SESSION_USAGE_ENTRIES)} entries.`
 		});
 	}
 	for (const [key, value] of entries) {
@@ -95,45 +80,45 @@ const usagePayloadSchema = z.record(z.string(), metadataValueSchema).superRefine
 	}
 });
 
-const missionReportProgressSchema = missionMcpSignalEnvelopeSchema.extend({
+const missionProgressSchema = z.object({
 	summary: boundedSignalTextSchema,
 	detail: boundedSignalTextSchema.optional()
 }).strict();
 
-const missionRequestOperatorInputSchema = missionMcpSignalEnvelopeSchema.extend({
+const missionRequestInputSchema = z.object({
 	question: boundedSignalTextSchema,
 	suggestedResponses: suggestedResponsesSchema
 }).strict();
 
-const missionReportBlockedSchema = missionMcpSignalEnvelopeSchema.extend({
+const missionBlockedSchema = z.object({
 	reason: boundedSignalTextSchema
 }).strict();
 
-const missionReportReadyForVerificationSchema = missionMcpSignalEnvelopeSchema.extend({
+const missionReadySchema = z.object({
 	summary: boundedSignalTextSchema
 }).strict();
 
-const missionReportCompletionClaimSchema = missionMcpSignalEnvelopeSchema.extend({
+const missionCompleteSchema = z.object({
 	summary: boundedSignalTextSchema
 }).strict();
 
-const missionReportFailureClaimSchema = missionMcpSignalEnvelopeSchema.extend({
+const missionFailSchema = z.object({
 	reason: boundedSignalTextSchema
 }).strict();
 
-const missionAppendSessionNoteSchema = missionMcpSignalEnvelopeSchema.extend({
+const missionNoteSchema = z.object({
 	text: boundedMessageTextSchema
 }).strict();
 
-const missionReportUsageSchema = missionMcpSignalEnvelopeSchema.extend({
+const missionUsageSchema = z.object({
 	payload: usagePayloadSchema
 }).strict();
 
 const missionMcpSignalToolDefinitions = {
-	mission_report_progress: {
-		name: 'mission_report_progress',
-		description: 'Report structured Mission session progress through the daemon-owned signal policy.',
-		inputSchema: missionReportProgressSchema,
+	progress: {
+		name: 'progress',
+		description: 'Report structured progress.',
+		inputSchema: missionProgressSchema,
 		toSignal(input) {
 			return {
 				type: 'progress',
@@ -144,10 +129,10 @@ const missionMcpSignalToolDefinitions = {
 			};
 		}
 	},
-	mission_request_operator_input: {
-		name: 'mission_request_operator_input',
-		description: 'Ask Mission to surface an operator decision for the active agent session.',
-		inputSchema: missionRequestOperatorInputSchema,
+	request_input: {
+		name: 'request_input',
+		description: 'Ask for an operator decision.',
+		inputSchema: missionRequestInputSchema,
 		toSignal(input) {
 			return {
 				type: 'needs_input',
@@ -158,10 +143,10 @@ const missionMcpSignalToolDefinitions = {
 			};
 		}
 	},
-	mission_report_blocked: {
-		name: 'mission_report_blocked',
-		description: 'Report that the active agent session is blocked and waiting on Mission/system help.',
-		inputSchema: missionReportBlockedSchema,
+	blocked: {
+		name: 'blocked',
+		description: 'Report that the session is blocked.',
+		inputSchema: missionBlockedSchema,
 		toSignal(input) {
 			return {
 				type: 'blocked',
@@ -171,10 +156,10 @@ const missionMcpSignalToolDefinitions = {
 			};
 		}
 	},
-	mission_report_ready_for_verification: {
-		name: 'mission_report_ready_for_verification',
-		description: 'Report a ready-for-verification claim without taking workflow authority.',
-		inputSchema: missionReportReadyForVerificationSchema,
+	ready: {
+		name: 'ready',
+		description: 'Report ready-for-verification.',
+		inputSchema: missionReadySchema,
 		toSignal(input) {
 			return {
 				type: 'ready_for_verification',
@@ -184,10 +169,10 @@ const missionMcpSignalToolDefinitions = {
 			};
 		}
 	},
-	mission_report_completion_claim: {
-		name: 'mission_report_completion_claim',
-		description: 'Report a completion claim as structured MCP data without mutating workflow state directly.',
-		inputSchema: missionReportCompletionClaimSchema,
+	complete: {
+		name: 'complete',
+		description: 'Report a completion claim.',
+		inputSchema: missionCompleteSchema,
 		toSignal(input) {
 			return {
 				type: 'completed_claim',
@@ -197,10 +182,10 @@ const missionMcpSignalToolDefinitions = {
 			};
 		}
 	},
-	mission_report_failure_claim: {
-		name: 'mission_report_failure_claim',
-		description: 'Report a failure claim as structured MCP data without mutating workflow state directly.',
-		inputSchema: missionReportFailureClaimSchema,
+	fail: {
+		name: 'fail',
+		description: 'Report a failure claim.',
+		inputSchema: missionFailSchema,
 		toSignal(input) {
 			return {
 				type: 'failed_claim',
@@ -210,10 +195,10 @@ const missionMcpSignalToolDefinitions = {
 			};
 		}
 	},
-	mission_append_session_note: {
-		name: 'mission_append_session_note',
-		description: 'Append an agent-authored session note/message without taking workflow authority.',
-		inputSchema: missionAppendSessionNoteSchema,
+	note: {
+		name: 'note',
+		description: 'Append a short session note.',
+		inputSchema: missionNoteSchema,
 		toSignal(input) {
 			return {
 				type: 'message',
@@ -224,10 +209,10 @@ const missionMcpSignalToolDefinitions = {
 			};
 		}
 	},
-	mission_report_usage: {
-		name: 'mission_report_usage',
-		description: 'Attach structured usage metadata to the active Mission session.',
-		inputSchema: missionReportUsageSchema,
+	usage: {
+		name: 'usage',
+		description: 'Attach structured usage metadata.',
+		inputSchema: missionUsageSchema,
 		toSignal(input) {
 			return {
 				type: 'usage',
@@ -266,18 +251,8 @@ export function parseMissionMcpSignalToolCall(
 		success: true,
 		value: {
 			name,
-			envelope: toEnvelope(parsed.data),
 			signal: definition.toSignal(parsed.data)
 		}
-	};
-}
-
-function toEnvelope(input: MissionMcpSignalEnvelope): MissionMcpSignalEnvelope {
-	return {
-		missionId: input.missionId,
-		taskId: input.taskId,
-		agentSessionId: input.agentSessionId,
-		eventId: input.eventId
 	};
 }
 

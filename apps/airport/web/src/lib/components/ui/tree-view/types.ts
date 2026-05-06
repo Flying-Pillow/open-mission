@@ -25,6 +25,8 @@ export type TreeViewFolderProps = WithChildren<{
 export type TreeViewFilePropsWithoutHTML = {
 	name: string;
 	icon?: Snippet<[{ name: string }]>;
+	checked?: boolean;
+	onCheckedChange?: (checked: boolean) => void;
 };
 
 export type TreeViewFileProps = WithElementRef<HTMLButtonAttributes, HTMLButtonElement> &
