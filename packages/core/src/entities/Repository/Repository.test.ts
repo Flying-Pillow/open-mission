@@ -177,7 +177,7 @@ describe('Repository', () => {
                 repositoryRootPath,
                 title: 'Adopt Sandcastle AgentProviderAdapter for four agent coders',
                 body: 'Use Sandcastle providers behind Mission runtime boundaries.',
-                type: 'feat'
+                type: 'feature'
             });
             const missionWorktreePath = path.join(missionsRoot, 'mission', result.id);
 
@@ -247,7 +247,7 @@ describe('Repository', () => {
         const repository = Repository.create({ repositoryRootPath });
         const repositoryInternals = repository as unknown as {
             ensureMissionWorktreeOnBranch(
-                store: FilesystemAdapter,
+                store: MissionDossierFilesystem,
                 missionWorktreePath: string,
                 branchRef: string,
                 baseBranch: string
@@ -263,7 +263,7 @@ describe('Repository', () => {
             git(repositoryRootPath, ['worktree', 'add', '-b', branchRef, worktreePath, 'main']);
 
             await expect(repositoryInternals.ensureMissionWorktreeOnBranch(
-                new FilesystemAdapter(repositoryRootPath),
+                new MissionDossierFilesystem(repositoryRootPath),
                 worktreePath,
                 branchRef,
                 'main'

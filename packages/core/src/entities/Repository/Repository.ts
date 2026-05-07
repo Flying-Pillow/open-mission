@@ -1060,7 +1060,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		try {
 			await this.ensureMissionWorktreeOnBranch(store, missionWorktreePath, branchRef, baseBranch);
 
-			const missionWorktreeStore = new FilesystemAdapter(missionWorktreePath);
+			const missionWorktreeStore = new MissionDossierFilesystem(missionWorktreePath);
 			const missionRootDir = missionWorktreeStore.getTrackedMissionDir(missionId, missionWorktreePath);
 			const existingDescriptor = await missionWorktreeStore.readMissionDescriptor(missionRootDir);
 			if (existingDescriptor) {
@@ -1129,7 +1129,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	private async ensureMissionWorktreeOnBranch(
-		store: FilesystemAdapter,
+		store: MissionDossierFilesystem,
 		missionWorktreePath: string,
 		branchRef: string,
 		baseBranch: string
@@ -1139,7 +1139,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			return;
 		}
 
-		const missionWorktreeStore = new FilesystemAdapter(missionWorktreePath);
+		const missionWorktreeStore = new MissionDossierFilesystem(missionWorktreePath);
 		if (!missionWorktreeStore.isGitRepository()) {
 			throw new Error(`Mission worktree root '${missionWorktreePath}' already exists but is not a Git worktree.`);
 		}
