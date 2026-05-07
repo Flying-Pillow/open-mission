@@ -44,6 +44,7 @@
     const activeRepository = $derived(repositoryScope.repository);
     const repositoryLoading = $derived(repositoryScope.loading);
     const repositoryError = $derived(repositoryScope.error);
+    const invalidState = $derived(activeRepository?.data.invalidState);
     const activeRepositoryPanelItem = $derived.by(
         (): AirportRepositoryListItem | undefined => {
             if (!activeRepository) {
@@ -113,7 +114,19 @@
             />
         {/if}
 
-        {#if !activeRepository.data.isInitialized}
+        {#if invalidState}
+            <section
+                class="border-y border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+            >
+                <p class="font-medium">Repository control state is invalid.</p>
+                <p class="mt-1 break-all text-destructive/85">
+                    {invalidState.path}
+                </p>
+                <p class="mt-2 break-words text-destructive/85">
+                    {invalidState.message}
+                </p>
+            </section>
+        {:else if !activeRepository.data.isInitialized}
             <RepositorySetup
                 repository={activeRepository}
                 onSetupSubmitted={refreshRepositories}

@@ -150,6 +150,46 @@ describe('Repository', () => {
         }
     });
 
+    it('marks invalid Repository settings without fallback-loading them', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-invalid-settings-'));
+        const repositoryRootPath = path.join(tempRoot, 'example');
+        const settingsPath = path.join(repositoryRootPath, '.mission', 'settings.json');
+        const repository = Repository.create({ repositoryRootPath });
+
+        try {
+            await fsp.mkdir(path.dirname(settingsPath), { recursive: true });
+            await fsp.writeFile(settingsPath, JSON.stringify({
+                missionsRoot: 'missions',
+                trackingProvider: 'github',
+                instructionsPath: '.agents',
+                skillsPath: '.agents/skills',
+                agentRunner: 'copilot-cli'
+            }), 'utf8');
+
+            const data = await repository.read({
+                id: repository.id,
+                repositoryRootPath
+            });
+
+            expect(data.operationalMode).toBe('invalid');
+            expect(data.invalidState).toMatchObject({
+                code: 'invalid-settings-document',
+                path: settingsPath
+            });
+            expect(data.invalidState?.message).toContain('agentAdapter');
+            expect(() => Repository.readSettingsDocument(repositoryRootPath)).toThrow(/Repository settings document .* is invalid/u);
+            await expect(repository.startMissionFromBrief({
+                id: repository.id,
+                repositoryRootPath,
+                title: 'Invalid settings mission',
+                body: 'Body',
+                type: 'task'
+            })).rejects.toThrow(/Repository control state is invalid/u);
+        } finally {
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
     it('rejects an existing Mission dossier with stale runtime data during start', async () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-existing-stale-runtime-'));
         const repositoryRootPath = path.join(tempRoot, 'example');

@@ -178,7 +178,7 @@
       },
       {
         "stageId": "implementation",
-        "lifecycle": "running",
+        "lifecycle": "ready",
         "taskIds": [
           "implementation/01-dependency-and-runner-id-boundary",
           "implementation/01-dependency-and-runner-id-boundary-verify",
@@ -203,11 +203,11 @@
           "implementation/09-documentation-and-final-cleanup",
           "implementation/09-documentation-and-final-cleanup-verify"
         ],
-        "readyTaskIds": [],
-        "queuedTaskIds": [],
-        "runningTaskIds": [
+        "readyTaskIds": [
           "implementation/09-documentation-and-final-cleanup-verify"
         ],
+        "queuedTaskIds": [],
+        "runningTaskIds": [],
         "completedTaskIds": [
           "implementation/01-dependency-and-runner-id-boundary",
           "implementation/01-dependency-and-runner-id-boundary-verify",
@@ -812,7 +812,7 @@
           "implementation/09-documentation-and-final-cleanup"
         ],
         "context": [],
-        "lifecycle": "running",
+        "lifecycle": "ready",
         "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false
@@ -821,7 +821,7 @@
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-07T10:40:06.758Z"
+        "updatedAt": "2026-05-07T11:21:04.115Z"
       },
       {
         "taskId": "audit/01-debrief",
@@ -1004,9 +1004,10 @@
           "terminalName": "repository:github/Flying-Pillow/mission:task:implementation-09-documentation-and-final-cleanup-verify:09-documentation-and-final-cleanup-verify-codex-36bd36a9",
           "terminalPaneId": "pty"
         },
-        "lifecycle": "running",
+        "lifecycle": "terminated",
         "launchedAt": "2026-05-07T10:40:06.758Z",
-        "updatedAt": "2026-05-07T10:40:06.758Z"
+        "updatedAt": "2026-05-07T11:21:04.115Z",
+        "terminatedAt": "2026-05-07T11:21:04.115Z"
       }
     ],
     "gates": [
@@ -1018,7 +1019,7 @@
         "reasons": [
           "Stage 'implementation' is not completed."
         ],
-        "updatedAt": "2026-05-07T10:40:06.758Z"
+        "updatedAt": "2026-05-07T11:21:04.115Z"
       },
       {
         "gateId": "verify",
@@ -1028,7 +1029,7 @@
         "reasons": [
           "Stage 'implementation' is not completed."
         ],
-        "updatedAt": "2026-05-07T10:40:06.758Z"
+        "updatedAt": "2026-05-07T11:21:04.115Z"
       },
       {
         "gateId": "audit",
@@ -1038,7 +1039,7 @@
         "reasons": [
           "Stage 'audit' is not completed."
         ],
-        "updatedAt": "2026-05-07T10:40:06.758Z"
+        "updatedAt": "2026-05-07T11:21:04.115Z"
       },
       {
         "gateId": "deliver",
@@ -1048,10 +1049,10 @@
         "reasons": [
           "Stage 'delivery' is not completed."
         ],
-        "updatedAt": "2026-05-07T10:40:06.758Z"
+        "updatedAt": "2026-05-07T11:21:04.115Z"
       }
     ],
     "launchQueue": [],
-    "updatedAt": "2026-05-07T10:40:06.758Z"
+    "updatedAt": "2026-05-07T11:21:04.115Z"
   }
 }

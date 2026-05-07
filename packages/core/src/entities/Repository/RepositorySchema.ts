@@ -134,6 +134,14 @@ export const RepositorySettingsSchema = z.object({
     defaultReasoningEffort: MissionReasoningEffortSchema.optional()
 }).strict();
 
+export const RepositoryOperationalModeSchema = z.enum(['setup', 'repository', 'invalid']);
+
+export const RepositoryInvalidStateSchema = z.object({
+    code: z.enum(['invalid-settings-document']),
+    path: z.string().trim().min(1),
+    message: z.string().trim().min(1)
+}).strict();
+
 const defaultRepositorySettings: RepositorySettingsType = {
     missionsRoot: defaultMissionsRoot,
     trackingProvider: 'github',
@@ -289,7 +297,8 @@ export const RepositoryIssueDetailSchema = z.object({
 }).strict();
 
 export const RepositoryDataSchema = RepositoryStorageSchema.extend({
-    operationalMode: z.string().trim().min(1).optional(),
+    operationalMode: RepositoryOperationalModeSchema.optional(),
+    invalidState: RepositoryInvalidStateSchema.optional(),
     currentBranch: z.string().trim().min(1).optional()
 }).strict();
 
@@ -346,6 +355,8 @@ export type RepositorySyncCommandAcknowledgementType = z.infer<typeof Repository
 export type RepositoryStartMissionFromIssueType = z.infer<typeof RepositoryStartMissionFromIssueSchema>;
 export type RepositoryStartMissionFromBriefType = z.infer<typeof RepositoryStartMissionFromBriefSchema>;
 export type RepositorySetupType = z.infer<typeof RepositorySetupSchema>;
+export type RepositoryOperationalModeType = z.infer<typeof RepositoryOperationalModeSchema>;
+export type RepositoryInvalidStateType = z.infer<typeof RepositoryInvalidStateSchema>;
 export type RepositoryDataType = z.infer<typeof RepositoryDataSchema>;
 export type RepositoryIssueDetailType = z.infer<typeof RepositoryIssueDetailSchema>;
 export type TrackedIssueSummaryType = z.infer<typeof TrackedIssueSummarySchema>;

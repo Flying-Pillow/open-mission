@@ -29,6 +29,7 @@
     const requiresSetup = $derived(
         Boolean(localRepository && !localRepository.data.isInitialized),
     );
+    const invalidState = $derived(localRepository?.data.invalidState);
     const platformRepositoryUrl = $derived(
         repository.platformRepositoryRef?.trim()
             ? `https://github.com/${repository.platformRepositoryRef.trim()}`
@@ -112,7 +113,11 @@
                 >
                     {repositoryName}
                 </h3>
-                {#if requiresSetup}
+                {#if invalidState}
+                    <Badge variant="destructive" class="shrink-0">
+                        Invalid
+                    </Badge>
+                {:else if requiresSetup}
                     <Badge variant="secondary" class="shrink-0">
                         Setup required
                     </Badge>
@@ -202,7 +207,21 @@
         </div>
     </div>
 
-    {#if requiresSetup}
+    {#if invalidState}
+        <div
+            class="border-t border-dashed bg-destructive/5 px-4 py-3 text-sm text-destructive"
+        >
+            <div class="flex min-w-0 items-start gap-2">
+                <Icon
+                    icon="lucide:triangle-alert"
+                    class="mt-0.5 size-4 shrink-0"
+                />
+                <p class="min-w-0 break-words leading-5">
+                    Repository control state is invalid at {invalidState.path}.
+                </p>
+            </div>
+        </div>
+    {:else if requiresSetup}
         <div
             class="border-t border-dashed bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:bg-amber-950/20 dark:text-amber-100"
         >

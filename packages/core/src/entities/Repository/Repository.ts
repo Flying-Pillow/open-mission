@@ -45,6 +45,7 @@ import {
 	type RepositorySyncCommandAcknowledgementType,
 	type RepositorySyncStatusType,
 	type RepositorySettingsType,
+	type RepositoryInvalidStateType,
 	type RepositoryStartMissionFromBriefType,
 	type RepositoryStartMissionFromIssueType,
 	RepositorySettingsSchema,
@@ -86,6 +87,11 @@ export type RepositoryScaffolding = {
 	workflowTemplatesPath: string;
 	worktreesRoot: string;
 };
+
+type RepositorySettingsDocumentState =
+	| { kind: 'missing'; settingsPath: string }
+	| { kind: 'valid'; settingsPath: string; settings: RepositorySettingsType }
+	| { kind: 'invalid'; settingsPath: string; invalidState: RepositoryInvalidStateType };
 
 export class Repository extends Entity<RepositoryDataType, string> {
 	public static override readonly entityName = repositoryEntityName;
@@ -431,23 +437,51 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return RepositorySettingsSchema.parse(input);
 	}
 
-	public static readSettingsDocument(
+	private static inspectSettingsDocument(
 		repositoryRootPath = process.cwd(),
 		options: { resolveWorkspaceRoot?: boolean } = {}
-	): RepositorySettingsType | undefined {
+	): RepositorySettingsDocumentState {
 		const settingsPath = Repository.getSettingsDocumentPath(repositoryRootPath, options);
 		try {
 			const content = fs.readFileSync(settingsPath, 'utf8').trim();
 			if (!content) {
-				return undefined;
+				return { kind: 'missing', settingsPath };
 			}
-			return Repository.resolveSettingsDocument(JSON.parse(content) as unknown);
+			return {
+				kind: 'valid',
+				settingsPath,
+				settings: Repository.resolveSettingsDocument(JSON.parse(content) as unknown)
+			};
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
-				return undefined;
+				return { kind: 'missing', settingsPath };
 			}
-			throw error;
+			return {
+				kind: 'invalid',
+				settingsPath,
+				invalidState: {
+					code: 'invalid-settings-document',
+					path: settingsPath,
+					message: error instanceof Error ? error.message : String(error)
+				}
+			};
 		}
+	}
+
+	public static readSettingsDocument(
+		repositoryRootPath = process.cwd(),
+		options: { resolveWorkspaceRoot?: boolean } = {}
+	): RepositorySettingsType | undefined {
+		const documentState = Repository.inspectSettingsDocument(repositoryRootPath, options);
+		if (documentState.kind === 'missing') {
+			return undefined;
+		}
+		if (documentState.kind === 'invalid') {
+			throw new Error(
+				`Repository settings document '${documentState.settingsPath}' is invalid: ${documentState.invalidState.message}`
+			);
+		}
+		return documentState.settings;
 	}
 
 	public static requireSettingsDocument(
@@ -631,6 +665,10 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return this.data.isInitialized;
 	}
 
+	public get invalidState(): RepositoryInvalidStateType | undefined {
+		return this.data.invalidState ? structuredClone(this.data.invalidState) : undefined;
+	}
+
 	public updateSettings(settings: RepositorySettingsType): this {
 		this.data = RepositoryDataSchema.parse({
 			...this.data,
@@ -656,10 +694,19 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	public toStorage(): RepositoryStorageType {
-		return RepositoryStorageSchema.parse(this.toData());
+		const {
+			operationalMode: _operationalMode,
+			invalidState: _invalidState,
+			currentBranch: _currentBranch,
+			...storage
+		} = this.toData();
+		return RepositoryStorageSchema.parse(storage);
 	}
 
 	public canStartMissionFromIssue() {
+		if (this.invalidState) {
+			return this.unavailable(Repository.describeInvalidState(this.invalidState));
+		}
 		if (!this.platformRepositoryRef) {
 			return this.unavailable('Repository does not have a platform repository ref.');
 		}
@@ -670,12 +717,18 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	public canStartMissionFromBrief() {
+		if (this.invalidState) {
+			return this.unavailable(Repository.describeInvalidState(this.invalidState));
+		}
 		return !this.isInitialized
 			? this.unavailable('Repository control state is not initialized.')
 			: this.available();
 	}
 
 	public canSetup() {
+		if (this.invalidState) {
+			return this.unavailable(Repository.describeInvalidState(this.invalidState));
+		}
 		if (!this.platformRepositoryRef) {
 			return this.unavailable('Repository does not have a platform repository ref.');
 		}
@@ -698,6 +751,9 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		const platformRepositoryRef = this.platformRepositoryRef?.trim();
 		if (!platformRepositoryRef) {
 			throw new Error(`Repository '${this.id}' does not have a platform repository ref configured.`);
+		}
+		if (this.invalidState) {
+			throw new Error(Repository.describeInvalidState(this.invalidState));
 		}
 		if (this.isInitialized || Repository.readSettingsDocument(this.repositoryRootPath)) {
 			throw new Error(`Repository '${this.id}' already has Repository setup state.`);
@@ -780,14 +836,25 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	public async read(input: RepositoryLocatorType): Promise<RepositoryDataType> {
 		this.assertRepositoryIdentity(RepositoryLocatorSchema.parse(input));
 		const store = new MissionDossierFilesystem(this.repositoryRootPath);
-		const settings = Repository.readSettingsDocument(this.repositoryRootPath);
+		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
 		const currentBranch = store.isGitRepository() ? store.getCurrentBranch() : undefined;
+
+		if (settingsState.kind === 'invalid') {
+			this.data = RepositoryDataSchema.parse({
+				...this.toStorage(),
+				operationalMode: 'invalid',
+				invalidState: settingsState.invalidState,
+				...(currentBranch ? { currentBranch } : {}),
+				isInitialized: false
+			});
+			return this.toData();
+		}
 
 		this.data = RepositoryDataSchema.parse({
 			...this.toStorage(),
-			operationalMode: settings ? 'repository' : 'setup',
+			operationalMode: settingsState.kind === 'valid' ? 'repository' : 'setup',
 			...(currentBranch ? { currentBranch } : {}),
-			isInitialized: this.isInitialized || settings !== undefined
+			isInitialized: this.isInitialized || settingsState.kind === 'valid'
 		});
 		return this.toData();
 	}
@@ -914,9 +981,16 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	private assertCanStartRegularMission(): void {
+		if (this.invalidState) {
+			throw new Error(Repository.describeInvalidState(this.invalidState));
+		}
 		if (!this.isInitialized) {
 			throw new Error('Complete Repository setup before starting regular missions.');
 		}
+	}
+
+	private static describeInvalidState(invalidState: RepositoryInvalidStateType): string {
+		return `Repository control state is invalid at '${invalidState.path}': ${invalidState.message}`;
 	}
 
 	private async refreshRepositoryControlState(input: RepositoryLocatorType): Promise<void> {

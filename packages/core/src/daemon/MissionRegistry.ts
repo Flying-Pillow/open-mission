@@ -41,6 +41,14 @@ export class MissionRegistry {
     public async hydrateDaemonMissions(context: { surfacePath: string }): Promise<void> {
         const roots = new Set<string>([path.resolve(context.surfacePath)]);
         for (const repository of await Repository.find({}, context)) {
+            if (repository.invalidState) {
+                this.options.logger?.warn(`Mission daemon skipped invalid Repository '${repository.id}'.`, {
+                    repositoryId: repository.id,
+                    repositoryRootPath: repository.repositoryRootPath,
+                    invalidState: repository.invalidState
+                });
+                continue;
+            }
             roots.add(path.resolve(repository.repositoryRootPath));
         }
 
