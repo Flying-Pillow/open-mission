@@ -178,7 +178,7 @@
       },
       {
         "stageId": "implementation",
-        "lifecycle": "ready",
+        "lifecycle": "running",
         "taskIds": [
           "implementation/01-dependency-and-runner-id-boundary",
           "implementation/01-dependency-and-runner-id-boundary-verify",
@@ -203,11 +203,11 @@
           "implementation/09-documentation-and-final-cleanup",
           "implementation/09-documentation-and-final-cleanup-verify"
         ],
-        "readyTaskIds": [
+        "readyTaskIds": [],
+        "queuedTaskIds": [],
+        "runningTaskIds": [
           "implementation/09-documentation-and-final-cleanup-verify"
         ],
-        "queuedTaskIds": [],
-        "runningTaskIds": [],
         "completedTaskIds": [
           "implementation/01-dependency-and-runner-id-boundary",
           "implementation/01-dependency-and-runner-id-boundary-verify",
@@ -770,7 +770,7 @@
         "lifecycle": "completed",
         "waitingOnTaskIds": [],
         "runtime": {
-          "autostart": true
+          "autostart": false
         },
         "agentAdapter": "copilot-cli",
         "retries": 0,
@@ -798,7 +798,7 @@
           ]
         },
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-07T10:34:09.110Z",
+        "updatedAt": "2026-05-07T09:19:54.182Z",
         "completedAt": "2026-05-07T09:19:54.182Z"
       },
       {
@@ -812,7 +812,7 @@
           "implementation/09-documentation-and-final-cleanup"
         ],
         "context": [],
-        "lifecycle": "ready",
+        "lifecycle": "running",
         "waitingOnTaskIds": [],
         "runtime": {
           "autostart": false
@@ -821,7 +821,7 @@
         "retries": 0,
         "reworkIterationCount": 0,
         "createdAt": "2026-05-04T09:34:02.459Z",
-        "updatedAt": "2026-05-07T10:33:00.830Z"
+        "updatedAt": "2026-05-07T10:40:06.758Z"
       },
       {
         "taskId": "audit/01-debrief",
@@ -991,8 +991,22 @@
         },
         "lifecycle": "terminated",
         "launchedAt": "2026-05-07T10:04:25.243Z",
-        "updatedAt": "2026-05-07T10:33:00.830Z",
-        "terminatedAt": "2026-05-07T10:33:00.830Z"
+        "updatedAt": "2026-05-07T10:38:55.829Z",
+        "terminatedAt": "2026-05-07T10:38:55.829Z"
+      },
+      {
+        "sessionId": "09-documentation-and-final-cleanup-verify-codex-36bd36a9",
+        "taskId": "implementation/09-documentation-and-final-cleanup-verify",
+        "agentId": "codex",
+        "transportId": "terminal",
+        "sessionLogPath": "session-logs/09-documentation-and-final-cleanup-verify-codex-36bd36a9.terminal.jsonl",
+        "terminalHandle": {
+          "terminalName": "repository:github/Flying-Pillow/mission:task:implementation-09-documentation-and-final-cleanup-verify:09-documentation-and-final-cleanup-verify-codex-36bd36a9",
+          "terminalPaneId": "pty"
+        },
+        "lifecycle": "running",
+        "launchedAt": "2026-05-07T10:40:06.758Z",
+        "updatedAt": "2026-05-07T10:40:06.758Z"
       }
     ],
     "gates": [
@@ -1004,7 +1018,7 @@
         "reasons": [
           "Stage 'implementation' is not completed."
         ],
-        "updatedAt": "2026-05-07T10:34:09.110Z"
+        "updatedAt": "2026-05-07T10:40:06.758Z"
       },
       {
         "gateId": "verify",
@@ -1014,7 +1028,7 @@
         "reasons": [
           "Stage 'implementation' is not completed."
         ],
-        "updatedAt": "2026-05-07T10:34:09.110Z"
+        "updatedAt": "2026-05-07T10:40:06.758Z"
       },
       {
         "gateId": "audit",
@@ -1024,7 +1038,7 @@
         "reasons": [
           "Stage 'audit' is not completed."
         ],
-        "updatedAt": "2026-05-07T10:34:09.110Z"
+        "updatedAt": "2026-05-07T10:40:06.758Z"
       },
       {
         "gateId": "deliver",
@@ -1034,10 +1048,10 @@
         "reasons": [
           "Stage 'delivery' is not completed."
         ],
-        "updatedAt": "2026-05-07T10:34:09.110Z"
+        "updatedAt": "2026-05-07T10:40:06.758Z"
       }
     ],
     "launchQueue": [],
-    "updatedAt": "2026-05-07T10:34:09.110Z"
+    "updatedAt": "2026-05-07T10:40:06.758Z"
   }
 }
