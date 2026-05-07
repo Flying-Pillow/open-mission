@@ -11,10 +11,7 @@
   "types": "build/index.d.ts",
   "exports": {
     ".": {
-      "development": "./src/index.ts",
-      "typescript": "./src/index.ts",
       "types": "./build/index.d.ts",
-      "import": "./build/index.js",
       "default": "./build/index.js"
     }
   },
@@ -27,7 +24,8 @@
   "scripts": {
     "build": "rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json",
     "check": "tsc --noEmit -p tsconfig.json",
-    "install:local:dev": "node --conditions=development --import tsx ./src/mission.ts install --json",
+    "install:dev": "tsx --tsconfig ./tsconfig.dev.json ./src/mission.ts install --json",
+    "missiond:dev": "tsx --watch --watch-path ./src --watch-path ../core/src --tsconfig ./tsconfig.dev.json ./src/missiond.ts --dev",
     "lint": "vp lint src",
     "test": "vp test run --passWithNoTests"
   },

@@ -1,4 +1,4 @@
-import type { MissionTaskState } from '../../types.js';
+import type { MissionTaskState } from '../Mission/MissionSchema.js';
 
 export function buildTaskLaunchPrompt(task: MissionTaskState, missionDir: string): string {
 	const instruction = task.instruction.trim();
@@ -11,10 +11,26 @@ export function buildTaskLaunchPrompt(task: MissionTaskState, missionDir: string
 		`Here are your instructions: @${task.filePath}`,
 		'That task file is authoritative.'
 	];
+	appendTaskContextArtifactReferences(lines, task.context);
 
 	if (instruction.length > 0) {
 		lines.push('', 'Task summary:', instruction);
 	}
 
 	return lines.join('\n');
+}
+
+export function appendTaskContextArtifactReferences(
+	lines: string[],
+	context: MissionTaskState['context']
+): void {
+	const orderedContext = [...(context ?? [])].sort((left, right) => left.selectionPosition - right.selectionPosition);
+	if (orderedContext.length === 0) {
+		return;
+	}
+
+	lines.push('', 'Context artifacts:');
+	for (const artifact of orderedContext) {
+		lines.push(`- ${artifact.name}: @${artifact.path}`);
+	}
 }

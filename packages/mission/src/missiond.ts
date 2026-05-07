@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { runMissiondCommand } from '@flying-pillow/mission-core/daemon';
+import { runMissiondCommand } from '@flying-pillow/mission-core/daemon/startDaemon';
 
 void runMissiondCommand().catch((error: unknown) => {
 	const message = error instanceof Error ? error.message : String(error);

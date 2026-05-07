@@ -4,7 +4,7 @@ import { app, type AirportApplication } from "$lib/client/Application.svelte.js"
 import type { Mission } from "$lib/components/entities/Mission/Mission.svelte.js";
 import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
 import type { MissionRuntimeEventEnvelopeType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-import type { MissionTowerTreeNode } from '@flying-pillow/mission-core/types';
+import type { TaskConfigureCommandOptionsType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import type { SidebarRepositoryData } from "$lib/components/entities/types";
 import type { RuntimeSubscription } from "$lib/client/runtime/RuntimeSubscription";
 
@@ -13,12 +13,9 @@ export type GithubStatus = "connected" | "disconnected" | "unknown";
 export type AppContextServerValue = {
     daemon: {
         running: boolean;
-        startedByHook: boolean;
         message: string;
         endpointPath?: string;
         lastCheckedAt: string;
-        nextRetryAt?: string;
-        failureCount?: number;
     };
     githubStatus: GithubStatus;
     user?: {
@@ -27,13 +24,6 @@ export type AppContextServerValue = {
         avatarUrl?: string;
         githubStatus: GithubStatus;
     };
-};
-
-export type ActiveMissionOutline = {
-    title?: string;
-    currentStageId?: string;
-    briefPath?: string;
-    treeNodes: MissionTowerTreeNode[];
 };
 
 export type AppContextValue = {
@@ -52,10 +42,13 @@ export type AppContextValue = {
         activeMissionError?: string;
         activeMissionId?: string;
         activeMission?: Mission;
-        activeMissionOutline?: ActiveMissionOutline;
-        activeMissionSelectedNodeId?: string;
+        activeMissionSelectedFocusId?: string;
     };
     syncServerContext(next: AppContextServerValue): void;
+    loadAirportRepositories(): Promise<void>;
+    loadRepositoryPage(input: { repositoryId: string }): Promise<void>;
+    loadMissionPage(input: { repositoryId: string; missionId: string }): Promise<void>;
+    clearAirportSelection(): void;
     refreshMission(input: {
         missionId: string;
         repositoryRootPath?: string;
@@ -64,16 +57,20 @@ export type AppContextValue = {
         missionId: string;
         repositoryRootPath?: string;
         onUpdate?: (mission: Mission, event: MissionRuntimeEventEnvelopeType) => void;
+        onConnected?: (mission: Mission) => void;
         onError?: (error: Error) => void;
     }): RuntimeSubscription;
+    configureActiveMissionTask(input: {
+        taskId: string;
+        options: TaskConfigureCommandOptionsType;
+    }): Promise<void>;
     setRepositories(repositories: SidebarRepositoryData[]): void;
     setActiveRepository(input?: {
         id?: string;
         repositoryRootPath?: string;
     }): void;
     setActiveMission(missionId?: string): void;
-    setActiveMissionOutline(next?: ActiveMissionOutline): void;
-    setActiveMissionSelectedNodeId(nodeId?: string): void;
+    setActiveMissionSelectedFocusId(focusId?: string): void;
 };
 
 const [getAppContext, setAppContext] = createContext<AppContextValue>();
@@ -121,8 +118,7 @@ export function createAppContext(
                 activeMissionError: state.application.activeMissionError,
                 activeMissionId: state.application.activeMissionId,
                 activeMission: state.application.activeMission,
-                activeMissionOutline: state.application.activeMissionOutline,
-                activeMissionSelectedNodeId: state.application.activeMissionSelectedNodeId,
+                activeMissionSelectedFocusId: state.application.activeMissionSelectedFocusId,
             };
         },
         syncServerContext(next) {
@@ -130,16 +126,34 @@ export function createAppContext(
             state.githubStatus = next.githubStatus;
             state.user = next.user;
         },
+        async loadAirportRepositories() {
+            await state.application.loadAirportRepositories();
+        },
+        async loadRepositoryPage(input) {
+            await state.application.loadRepositoryPage(input);
+        },
+        async loadMissionPage(input) {
+            await state.application.loadMissionPage(input);
+        },
+        clearAirportSelection() {
+            state.application.clearAirportSelection();
+        },
         async refreshMission(input) {
             return state.application.refreshMission(input);
         },
         observeMission(input) {
             return state.application.observeMission({
                 ...input,
+                onConnected: (mission) => {
+                    input.onConnected?.(mission);
+                },
                 onUpdate: (mission, event) => {
                     input.onUpdate?.(mission, event);
                 },
             });
+        },
+        async configureActiveMissionTask(input) {
+            await state.application.configureActiveMissionTask(input);
         },
         setRepositories(repositories) {
             state.application.setRepositories(repositories);
@@ -150,18 +164,9 @@ export function createAppContext(
         setActiveMission(missionId) {
             state.application.setActiveMissionSelection(missionId);
         },
-        setActiveMissionOutline(next) {
-            state.application.setActiveMissionOutline(next
-                ? {
-                    title: next.title?.trim() || undefined,
-                    currentStageId: next.currentStageId?.trim() || undefined,
-                    treeNodes: [...next.treeNodes],
-                }
-                : undefined);
-        },
-        setActiveMissionSelectedNodeId(nodeId) {
-            state.application.setActiveMissionSelectedNodeId(
-                nodeId?.trim() || undefined,
+        setActiveMissionSelectedFocusId(focusId) {
+            state.application.setActiveMissionSelectedFocusId(
+                focusId?.trim() || undefined,
             );
         },
     };

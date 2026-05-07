@@ -7,7 +7,7 @@ import {
     type MissionWorkflowRuntimeState,
     type MissionWorkflowSignal,
     type MissionTaskRuntimeState,
-    type AgentSessionRuntimeState
+    type AgentExecutionRuntimeState
 } from './types.js';
 import { createInitialMissionWorkflowRuntimeState } from './document.js';
 import {
@@ -73,12 +73,6 @@ class MissionWorkflowTransitionEngine {
                 this.state.lifecycle = 'ready';
                 assignActiveStageId(this.state, this.configuration.workflow.stageOrder[0]);
                 this.state.pause = { paused: false };
-                this.state.panic = {
-                    active: false,
-                    terminateSessions: this.configuration.workflow.panic.terminateSessions,
-                    clearLaunchQueue: this.configuration.workflow.panic.clearLaunchQueue,
-                    haltMission: this.configuration.workflow.panic.haltMission
-                };
                 return;
             case 'mission.started':
                 if (this.configuration.workflow.humanInLoop.enabled && this.configuration.workflow.humanInLoop.pauseOnMissionStart) {
@@ -108,48 +102,6 @@ class MissionWorkflowTransitionEngine {
                     requestedAt: event.occurredAt
                 };
                 return;
-            case 'mission.panic.requested':
-                this.state.lifecycle = 'panicked';
-                this.state.pause = {
-                    paused: true,
-                    reason: 'panic',
-                    targetType: 'mission',
-                    requestedAt: event.occurredAt
-                };
-                this.state.panic = {
-                    active: true,
-                    requestedAt: event.occurredAt,
-                    requestedBy: event.source === 'human' ? 'human' : 'system',
-                    terminateSessions: this.configuration.workflow.panic.terminateSessions,
-                    clearLaunchQueue: this.configuration.workflow.panic.clearLaunchQueue,
-                    haltMission: this.configuration.workflow.panic.haltMission
-                };
-                if (this.state.panic.clearLaunchQueue) {
-                    const queuedTaskIds = new Set(this.state.launchQueue.map((request) => request.taskId));
-                    this.state.launchQueue = [];
-                    this.state.tasks = this.state.tasks.map((task) =>
-                        queuedTaskIds.has(task.taskId) && task.lifecycle === 'queued'
-                            ? {
-                                ...task,
-                                lifecycle: 'ready',
-                                updatedAt: event.occurredAt
-                            }
-                            : task
-                    );
-                }
-                return;
-            case 'mission.panic.cleared':
-                this.state.lifecycle = 'paused';
-                this.state.pause = {
-                    paused: true,
-                    reason: 'panic',
-                    requestedAt: event.occurredAt
-                };
-                this.state.panic = {
-                    ...this.state.panic,
-                    active: false
-                };
-                return;
             case 'mission.launch-queue.restarted': {
                 const existingRequestsByTaskId = new Map(this.state.launchQueue.map((request) => [request.taskId, request]));
                 const queuedTasks = this.state.tasks.filter((task) => task.lifecycle === 'queued');
@@ -161,10 +113,10 @@ class MissionWorkflowTransitionEngine {
                         requestedAt: event.occurredAt,
                         requestedBy: event.source === 'human' ? 'human' : event.source === 'daemon' ? 'daemon' : 'system',
                         causedByEventId: event.eventId,
-                        ...(existing?.runnerId ? { runnerId: existing.runnerId } : {}),
+                        ...(existing?.agentId ? { agentId: existing.agentId } : {}),
                         ...(existing?.prompt ? { prompt: existing.prompt } : {}),
                         ...(existing?.workingDirectory ? { workingDirectory: existing.workingDirectory } : {}),
-                        ...(existing?.terminalSessionName ? { terminalSessionName: existing.terminalSessionName } : {})
+                        ...(existing?.terminalName ? { terminalName: existing.terminalName } : {})
                     };
                 });
                 this.state.tasks = this.state.tasks.map((task) =>
@@ -193,15 +145,18 @@ class MissionWorkflowTransitionEngine {
                         stageId: event.stageId,
                         title: task.title,
                         instruction: task.instruction,
+                        ...(task.model ? { model: task.model } : {}),
+                        ...(task.reasoningEffort ? { reasoningEffort: task.reasoningEffort } : {}),
                         ...(task.taskKind ? { taskKind: task.taskKind } : {}),
                         ...(task.pairedTaskId ? { pairedTaskId: task.pairedTaskId } : {}),
                         dependsOn: [...task.dependsOn],
+                        context: task.context ? task.context.map((contextArtifact) => ({ ...contextArtifact })) : [],
                         lifecycle: 'pending',
                         waitingOnTaskIds: [],
                         runtime: {
                             autostart: stageDefinition.taskLaunchPolicy.defaultAutostart
                         },
-                        ...(task.agentRunner ? { agentRunner: task.agentRunner } : {}),
+                        ...(task.agentAdapter ? { agentAdapter: task.agentAdapter } : {}),
                         retries: 0,
                         reworkIterationCount: 0,
                         createdAt: event.occurredAt,
@@ -224,11 +179,21 @@ class MissionWorkflowTransitionEngine {
                         : task
                 );
                 return;
+            case 'task.configured':
+                this.state.tasks = this.state.tasks.map((task) =>
+                    task.taskId === event.taskId
+                        ? configureTaskRuntimeState(task, event)
+                        : task
+                );
+                return;
             case 'task.queued':
                 this.state.tasks = this.state.tasks.map((task) =>
                     task.taskId === event.taskId
                         ? {
                             ...task,
+                            ...(event.agentId ? { agentAdapter: event.agentId } : {}),
+                            ...(event.model ? { model: event.model } : {}),
+                            ...(event.reasoningEffort ? { reasoningEffort: event.reasoningEffort } : {}),
                             lifecycle: 'queued',
                             updatedAt: event.occurredAt
                         }
@@ -241,10 +206,12 @@ class MissionWorkflowTransitionEngine {
                         requestedAt: event.occurredAt,
                         requestedBy: event.source === 'human' ? 'human' : event.source === 'daemon' ? 'daemon' : 'system',
                         causedByEventId: event.eventId,
-                        ...(event.runnerId ? { runnerId: event.runnerId } : {}),
+                        ...(event.agentId ? { agentId: event.agentId } : {}),
                         ...(event.prompt ? { prompt: event.prompt } : {}),
                         ...(event.workingDirectory ? { workingDirectory: event.workingDirectory } : {}),
-                        ...(event.terminalSessionName ? { terminalSessionName: event.terminalSessionName } : {})
+                        ...(event.model ? { model: event.model } : {}),
+                        ...(event.reasoningEffort ? { reasoningEffort: event.reasoningEffort } : {}),
+                        ...(event.terminalName ? { terminalName: event.terminalName } : {})
                     });
                 }
                 return;
@@ -354,7 +321,7 @@ class MissionWorkflowTransitionEngine {
                 this.state.launchQueue = this.state.launchQueue.filter((request) => !resetTaskIds.has(request.taskId));
                 return;
             }
-            case 'session.started': {
+            case 'execution.started': {
                 this.state.tasks = this.state.tasks.map((task) => {
                     if (task.taskId !== event.taskId) {
                         return task;
@@ -379,7 +346,7 @@ class MissionWorkflowTransitionEngine {
                 this.state.sessions = upsertSession(this.state.sessions, {
                     sessionId: event.sessionId,
                     taskId: event.taskId,
-                    runnerId: event.runnerId,
+                    agentId: event.agentId,
                     ...(event.transportId ? { transportId: event.transportId } : {}),
                     ...(event.sessionLogPath ? { sessionLogPath: event.sessionLogPath } : {}),
                     ...(event.terminalHandle ? { terminalHandle: { ...event.terminalHandle } } : {}),
@@ -390,7 +357,7 @@ class MissionWorkflowTransitionEngine {
                 this.state.launchQueue = this.state.launchQueue.filter((request) => request.taskId !== event.taskId);
                 return;
             }
-            case 'session.launch-failed':
+            case 'execution.launch-failed':
                 this.state.tasks = this.state.tasks.map((task) =>
                     task.taskId === event.taskId
                         ? {
@@ -403,10 +370,10 @@ class MissionWorkflowTransitionEngine {
                 );
                 this.state.launchQueue = this.state.launchQueue.filter((request) => request.taskId !== event.taskId);
                 return;
-            case 'session.completed':
+            case 'execution.completed':
                 this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'completed', event.occurredAt);
                 return;
-            case 'session.failed': {
+            case 'execution.failed': {
                 const wasActive = hasActiveSession(this.state.sessions, event.sessionId);
                 this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'failed', event.occurredAt);
                 if (!wasActive) {
@@ -424,7 +391,7 @@ class MissionWorkflowTransitionEngine {
                 );
                 return;
             }
-            case 'session.cancelled': {
+            case 'execution.cancelled': {
                 const wasActive = hasActiveSession(this.state.sessions, event.sessionId);
                 this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'cancelled', event.occurredAt);
                 if (!wasActive) {
@@ -437,7 +404,7 @@ class MissionWorkflowTransitionEngine {
                 );
                 return;
             }
-            case 'session.terminated': {
+            case 'execution.terminated': {
                 const wasActive = hasActiveSession(this.state.sessions, event.sessionId);
                 this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'terminated', event.occurredAt);
                 if (!wasActive) {
@@ -506,18 +473,6 @@ class MissionWorkflowDerivationEngine {
 
         this.requests.push(...buildWorkflowTaskGenerationRequests(this.state, this.configuration, event.occurredAt));
 
-        if (this.state.panic.active && this.state.panic.terminateSessions) {
-            for (const session of this.state.sessions) {
-                if (isActiveSessionLifecycle(session.lifecycle)) {
-                    this.requests.push(createRequest('session.terminate', event.occurredAt, {
-                        sessionId: session.sessionId,
-                        taskId: session.taskId,
-                        runnerId: session.runnerId
-                    }));
-                }
-            }
-        }
-
         this.state.updatedAt = event.occurredAt;
     }
 }
@@ -540,20 +495,10 @@ function enforceLifecycleInvariants(
     configuration: MissionWorkflowConfigurationSnapshot,
     occurredAt: string
 ): void {
-    const defaultPanicState = {
-        terminateSessions: configuration.workflow.panic.terminateSessions,
-        clearLaunchQueue: configuration.workflow.panic.clearLaunchQueue,
-        haltMission: configuration.workflow.panic.haltMission
-    };
-
+    void configuration;
     switch (state.lifecycle) {
         case 'running':
             state.pause = { paused: false };
-            state.panic = {
-                ...state.panic,
-                ...defaultPanicState,
-                active: false
-            };
             return;
         case 'paused':
             state.pause = {
@@ -563,35 +508,9 @@ function enforceLifecycleInvariants(
                 ...(state.pause.targetId ? { targetId: state.pause.targetId } : {}),
                 requestedAt: state.pause.requestedAt ?? occurredAt
             };
-            state.panic = {
-                ...state.panic,
-                ...defaultPanicState,
-                active: false
-            };
-            return;
-        case 'panicked':
-            state.pause = {
-                paused: true,
-                reason: 'panic',
-                targetType: state.pause.targetType ?? 'mission',
-                ...(state.pause.targetId ? { targetId: state.pause.targetId } : {}),
-                requestedAt: state.pause.requestedAt ?? state.panic.requestedAt ?? occurredAt
-            };
-            state.panic = {
-                ...state.panic,
-                ...defaultPanicState,
-                active: true,
-                requestedAt: state.panic.requestedAt ?? occurredAt,
-                requestedBy: state.panic.requestedBy ?? 'system'
-            };
             return;
         default:
             state.pause = { paused: false };
-            state.panic = {
-                ...state.panic,
-                ...defaultPanicState,
-                active: false
-            };
     }
 }
 
@@ -601,7 +520,7 @@ function queueAutostartTasks(
     _configuration: MissionWorkflowConfigurationSnapshot,
     requests: MissionWorkflowRequest[]
 ): void {
-    if (state.lifecycle !== 'running' || state.pause.paused || state.panic.active) {
+    if (state.lifecycle !== 'running' || state.pause.paused) {
         return;
     }
 
@@ -609,8 +528,8 @@ function queueAutostartTasks(
     const queuedLaunchTaskIds = new Set(state.launchQueue.map((request) => request.taskId));
     const activeSessionTaskIds = new Set(
         state.sessions
-            .filter((session) => isActiveSessionLifecycle(session.lifecycle))
-            .map((session) => session.taskId)
+            .filter((execution) => isActiveSessionLifecycle(execution.lifecycle))
+            .map((execution) => execution.taskId)
     );
 
     for (const task of state.tasks) {
@@ -644,12 +563,14 @@ function queueAutostartTasks(
         if (occupiedSessionSlots >= _configuration.workflow.execution.maxParallelSessions) {
             break;
         }
-        const request = createRequest('session.launch', event.occurredAt, {
+        const request = createRequest('execution.launch', event.occurredAt, {
             taskId: launchRequest.taskId,
-            ...(launchRequest.runnerId ? { runnerId: launchRequest.runnerId } : {}),
+            ...(launchRequest.agentId ? { agentId: launchRequest.agentId } : {}),
             ...(launchRequest.prompt ? { prompt: launchRequest.prompt } : {}),
             ...(launchRequest.workingDirectory ? { workingDirectory: launchRequest.workingDirectory } : {}),
-            ...(launchRequest.terminalSessionName ? { terminalSessionName: launchRequest.terminalSessionName } : {})
+            ...(launchRequest.model ? { model: launchRequest.model } : {}),
+            ...(launchRequest.reasoningEffort ? { reasoningEffort: launchRequest.reasoningEffort } : {}),
+            ...(launchRequest.terminalName ? { terminalName: launchRequest.terminalName } : {})
         });
         launchRequest.dispatchedAt = event.occurredAt;
         launchRequest.requestId = request.requestId;
@@ -659,9 +580,9 @@ function queueAutostartTasks(
 }
 
 function upsertSession(
-    sessions: AgentSessionRuntimeState[],
-    session: AgentSessionRuntimeState
-): AgentSessionRuntimeState[] {
+    sessions: AgentExecutionRuntimeState[],
+    session: AgentExecutionRuntimeState
+): AgentExecutionRuntimeState[] {
     const existingIndex = sessions.findIndex((candidate) => candidate.sessionId === session.sessionId);
     if (existingIndex < 0) {
         return [...sessions, session];
@@ -672,11 +593,11 @@ function upsertSession(
 }
 
 function updateSessionLifecycle(
-    sessions: AgentSessionRuntimeState[],
+    sessions: AgentExecutionRuntimeState[],
     sessionId: string,
-    lifecycle: AgentSessionRuntimeState['lifecycle'],
+    lifecycle: AgentExecutionRuntimeState['lifecycle'],
     occurredAt: string
-): AgentSessionRuntimeState[] {
+): AgentExecutionRuntimeState[] {
     return sessions.map((session) =>
         session.sessionId === sessionId
             ? {
@@ -692,8 +613,8 @@ function updateSessionLifecycle(
     );
 }
 
-function hasActiveSession(sessions: AgentSessionRuntimeState[], sessionId: string): boolean {
-    return sessions.some((session) => session.sessionId === sessionId && isActiveSessionLifecycle(session.lifecycle));
+function hasActiveSession(sessions: AgentExecutionRuntimeState[], sessionId: string): boolean {
+    return sessions.some((execution) => execution.sessionId === sessionId && isActiveSessionLifecycle(execution.lifecycle));
 }
 
 function isInactiveSessionLifecycleEvent(
@@ -701,10 +622,10 @@ function isInactiveSessionLifecycleEvent(
     event: MissionWorkflowEvent
 ): boolean {
     switch (event.type) {
-        case 'session.cancelled':
-        case 'session.terminated':
+        case 'execution.cancelled':
+        case 'execution.terminated':
             return true;
-        case 'session.failed':
+        case 'execution.failed':
             return !hasActiveSession(state.sessions, event.sessionId);
         default:
             return false;
@@ -751,7 +672,6 @@ function cloneRuntimeState(state: MissionWorkflowRuntimeState): MissionWorkflowR
         lifecycle: state.lifecycle,
         ...(state.activeStageId ? { activeStageId: state.activeStageId } : {}),
         pause: { ...state.pause },
-        panic: { ...state.panic },
         stages: state.stages.map((stage) => ({
             ...stage,
             taskIds: [...stage.taskIds],
@@ -763,6 +683,7 @@ function cloneRuntimeState(state: MissionWorkflowRuntimeState): MissionWorkflowR
         tasks: state.tasks.map((task) => ({
             ...task,
             dependsOn: [...task.dependsOn],
+            ...(task.context ? { context: task.context.map((contextArtifact) => ({ ...contextArtifact })) } : {}),
             waitingOnTaskIds: [...task.waitingOnTaskIds],
             runtime: { ...task.runtime },
             ...(task.reworkRequest
@@ -787,6 +708,43 @@ function cloneRuntimeState(state: MissionWorkflowRuntimeState): MissionWorkflowR
         launchQueue: state.launchQueue.map((request) => ({ ...request })),
         updatedAt: state.updatedAt
     };
+}
+
+function configureTaskRuntimeState(
+    task: MissionTaskRuntimeState,
+    event: Extract<MissionWorkflowEvent, { type: 'task.configured' }>
+): MissionTaskRuntimeState {
+    const next: MissionTaskRuntimeState = {
+        ...task,
+        updatedAt: event.occurredAt
+    };
+    if (event.agentAdapter?.trim()) {
+        next.agentAdapter = event.agentAdapter.trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(event, 'model')) {
+        if (event.model?.trim()) {
+            next.model = event.model.trim();
+        } else {
+            delete next.model;
+        }
+    }
+    if (Object.prototype.hasOwnProperty.call(event, 'reasoningEffort')) {
+        if (event.reasoningEffort) {
+            next.reasoningEffort = event.reasoningEffort;
+        } else {
+            delete next.reasoningEffort;
+        }
+    }
+    if (typeof event.autostart === 'boolean') {
+        next.runtime = {
+            ...next.runtime,
+            autostart: event.autostart
+        };
+    }
+    if (event.context) {
+        next.context = event.context.map((contextArtifact) => ({ ...contextArtifact }));
+    }
+    return next;
 }
 
 function assignActiveStageId(

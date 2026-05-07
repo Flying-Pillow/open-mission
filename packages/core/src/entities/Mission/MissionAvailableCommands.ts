@@ -1,14 +1,14 @@
-import type { AgentSessionRecord } from '../../daemon/protocol/contracts.js';
-import type { MissionStageId } from '../../types.js';
+import type { AgentExecutionRecord } from '../AgentExecution/AgentExecutionSchema.js';
+import type { MissionStageId } from '../../workflow/mission/manifest.js';
 import type { MissionWorkflowEvent, MissionStateData } from '../../workflow/engine/index.js';
 import { getMissionWorkflowEventValidationErrors } from '../../workflow/engine/validation.js';
-import { AgentSessionCommandIds } from '../AgentSession/AgentSessionSchema.js';
+import { AgentExecutionCommandIds } from '../AgentExecution/AgentExecutionSchema.js';
 import { StageCommandIds } from '../Stage/StageSchema.js';
 import { TaskCommandIds } from '../Task/TaskSchema.js';
 import { MissionCommandIds, type MissionOwnedCommandDescriptorType } from './MissionSchema.js';
 import {
     missionCommand,
-    ownedAgentSessionCommand,
+    ownedAgentExecutionCommand,
     ownedMissionCommand,
     ownedStageCommand,
     ownedTaskCommand
@@ -18,7 +18,7 @@ export type MissionAvailableCommandsInput = {
     missionId: string;
     configuration: MissionStateData['configuration'];
     runtime: MissionStateData['runtime'];
-    sessions: AgentSessionRecord[];
+    sessions: AgentExecutionRecord[];
 };
 
 export function buildMissionAvailableCommands(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptorType[] {
@@ -26,8 +26,6 @@ export function buildMissionAvailableCommands(input: MissionAvailableCommandsInp
     const commands: MissionOwnedCommandDescriptorType[] = [
         buildPauseMissionCommand(input),
         buildResumeMissionCommand(input),
-        buildPanicStopCommand(input),
-        buildClearPanicCommand(input),
         buildRestartLaunchQueueCommand(input),
         buildDeliverMissionCommand(input)
     ];
@@ -49,7 +47,6 @@ export function buildMissionAvailableCommands(input: MissionAvailableCommandsInp
 
     for (const session of getOrderedSessions(input)) {
         commands.push(buildSessionCancelCommand(session));
-        commands.push(buildSessionTerminateCommand(session));
     }
 
     return commands;
@@ -78,41 +75,12 @@ function buildPauseMissionCommand(input: MissionAvailableCommandsInput): Mission
 
 function buildResumeMissionCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptorType {
     const errors = getValidationErrors(input, { type: 'mission.resumed' });
-    const enabled = input.runtime.lifecycle === 'paused' && !input.runtime.panic.active && errors.length === 0;
+    const enabled = input.runtime.lifecycle === 'paused' && errors.length === 0;
     return ownedMissionCommand(missionCommand({
         commandId: MissionCommandIds.resume,
         label: 'Resume Mission',
         ...buildAvailability(enabled, describeResumeUnavailable(input, errors)),
         requiresConfirmation: false
-    }));
-}
-
-function buildPanicStopCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptorType {
-    const errors = getValidationErrors(input, { type: 'mission.panic.requested' });
-    const enabled = input.runtime.lifecycle !== 'draft'
-        && input.runtime.lifecycle !== 'completed'
-        && input.runtime.lifecycle !== 'delivered'
-        && !input.runtime.panic.active
-        && errors.length === 0;
-    return ownedMissionCommand(missionCommand({
-        commandId: MissionCommandIds.panic,
-        label: 'Panic Stop',
-        ...buildAvailability(enabled, describePanicUnavailable(input, errors)),
-        requiresConfirmation: true,
-        confirmationPrompt: 'Stop all active mission work immediately?',
-        variant: 'destructive'
-    }));
-}
-
-function buildClearPanicCommand(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptorType {
-    const errors = getValidationErrors(input, { type: 'mission.panic.cleared' });
-    const enabled = input.runtime.panic.active && input.runtime.lifecycle === 'panicked' && errors.length === 0;
-    return ownedMissionCommand(missionCommand({
-        commandId: MissionCommandIds.clearPanic,
-        label: 'Clear Panic',
-        ...buildAvailability(enabled, describeClearPanicUnavailable(input, errors)),
-        requiresConfirmation: true,
-        confirmationPrompt: 'Clear the mission panic state?'
     }));
 }
 
@@ -162,7 +130,7 @@ function buildTaskStartCommand(input: MissionAvailableCommandsInput, task: Missi
     const enabled = task.lifecycle === 'ready' && errors.length === 0;
     return ownedTaskCommand(task.taskId, missionCommand({
         commandId: TaskCommandIds.start,
-        label: 'Start Ready Task',
+        label: 'Start task',
         ...buildAvailability(enabled, describeTaskStartUnavailable(input, task, errors)),
         requiresConfirmation: false
     }));
@@ -172,7 +140,7 @@ function buildTaskDoneCommand(input: MissionAvailableCommandsInput, task: Missio
     const errors = getValidationErrors(input, { type: 'task.completed', taskId: task.taskId });
     return ownedTaskCommand(task.taskId, missionCommand({
         commandId: TaskCommandIds.complete,
-        label: 'Mark Task Done',
+        label: 'Mark task done',
         ...buildAvailability(errors.length === 0, errors[0]),
         requiresConfirmation: true,
         confirmationPrompt: 'Mark this task done?'
@@ -183,7 +151,7 @@ function buildTaskReopenCommand(input: MissionAvailableCommandsInput, task: Miss
     const errors = getValidationErrors(input, { type: 'task.reopened', taskId: task.taskId });
     return ownedTaskCommand(task.taskId, missionCommand({
         commandId: TaskCommandIds.reopen,
-        label: 'Reopen Task',
+        label: 'Reopen task',
         ...buildAvailability(errors.length === 0, errors[0]),
         requiresConfirmation: true,
         confirmationPrompt: 'Reopen this task and invalidate downstream stage progress?'
@@ -269,26 +237,14 @@ function buildTaskLaunchPolicyCommands(input: MissionAvailableCommandsInput, tas
     return commands;
 }
 
-function buildSessionCancelCommand(session: AgentSessionRecord): MissionOwnedCommandDescriptorType {
-    const enabled = isActiveAgentSession(session.lifecycleState);
-    return ownedAgentSessionCommand(session.sessionId, missionCommand({
-        commandId: AgentSessionCommandIds.cancel,
-        label: 'Stop Running Agent',
+function buildSessionCancelCommand(execution: AgentExecutionRecord): MissionOwnedCommandDescriptorType {
+    const enabled = isActiveAgentExecution(execution.lifecycleState);
+    return ownedAgentExecutionCommand(execution.sessionId, missionCommand({
+        commandId: AgentExecutionCommandIds.cancel,
+        label: 'Stop agent',
         ...buildAvailability(enabled, 'Session is not active.'),
         requiresConfirmation: true,
-        confirmationPrompt: 'Stop the running agent session?'
-    }));
-}
-
-function buildSessionTerminateCommand(session: AgentSessionRecord): MissionOwnedCommandDescriptorType {
-    const enabled = isActiveAgentSession(session.lifecycleState);
-    return ownedAgentSessionCommand(session.sessionId, missionCommand({
-        commandId: AgentSessionCommandIds.terminate,
-        label: 'Force Stop Agent',
-        ...buildAvailability(enabled, 'Session is not active.'),
-        requiresConfirmation: true,
-        confirmationPrompt: 'Force stop this agent session?',
-        variant: 'destructive'
+        confirmationPrompt: 'Stop the running agent execution?'
     }));
 }
 
@@ -305,49 +261,19 @@ function resolveVerificationReworkTargetTask(
 function describePauseUnavailable(input: MissionAvailableCommandsInput): string {
     switch (input.runtime.lifecycle) {
         case 'paused': return 'Mission is already paused.';
-        case 'panicked': return 'Mission is panicked.';
         case 'delivered': return 'Mission already delivered.';
         default: return 'Mission is not running.';
     }
 }
 
 function describeResumeUnavailable(input: MissionAvailableCommandsInput, errors: string[]): string {
-    if (input.runtime.panic.active) {
-        return 'Clear panic before resuming the mission.';
-    }
     if (input.runtime.lifecycle !== 'paused') {
         return 'Mission is not paused.';
     }
     return errors[0] ?? 'Mission cannot be resumed.';
 }
 
-function describePanicUnavailable(input: MissionAvailableCommandsInput, errors: string[]): string {
-    if (input.runtime.panic.active) {
-        return 'Mission is already in panic state.';
-    }
-    if (input.runtime.lifecycle === 'draft') {
-        return 'Start the workflow before using panic stop.';
-    }
-    if (input.runtime.lifecycle === 'completed') {
-        return 'Mission is already completed.';
-    }
-    if (input.runtime.lifecycle === 'delivered') {
-        return 'Mission already delivered.';
-    }
-    return errors[0] ?? 'Mission cannot enter panic state.';
-}
-
-function describeClearPanicUnavailable(input: MissionAvailableCommandsInput, errors: string[]): string {
-    if (!input.runtime.panic.active) {
-        return 'Mission is not panicked.';
-    }
-    return errors[0] ?? 'Panic cannot be cleared right now.';
-}
-
 function describeRestartLaunchQueueUnavailable(input: MissionAvailableCommandsInput, errors: string[]): string {
-    if (input.runtime.panic.active || input.runtime.lifecycle === 'panicked') {
-        return 'Clear panic before restarting the launch queue.';
-    }
     if (input.runtime.pause.paused || input.runtime.lifecycle !== 'running') {
         return 'Mission must be running to restart the launch queue.';
     }
@@ -360,9 +286,6 @@ function describeRestartLaunchQueueUnavailable(input: MissionAvailableCommandsIn
 }
 
 function describeTaskStartUnavailable(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number], errors: string[]): string {
-    if (input.runtime.lifecycle === 'panicked' || input.runtime.panic.active) {
-        return 'Clear panic before starting new work.';
-    }
     if (input.runtime.lifecycle === 'paused' || input.runtime.pause.paused) {
         return 'Resume the mission before starting new work.';
     }
@@ -408,7 +331,7 @@ function isRuntimeDelivered(runtime: MissionStateData['runtime']): boolean {
     return runtime.stages.some((stage) => stage.stageId === 'delivery' && stage.lifecycle === 'completed');
 }
 
-function isActiveAgentSession(lifecycleState: AgentSessionRecord['lifecycleState']): boolean {
+function isActiveAgentExecution(lifecycleState: AgentExecutionRecord['lifecycleState']): boolean {
     return lifecycleState === 'starting' || lifecycleState === 'running' || lifecycleState === 'awaiting-input';
 }
 
@@ -416,8 +339,6 @@ function getValidationErrors(
     input: MissionAvailableCommandsInput,
     event:
         | { type: 'mission.resumed' }
-        | { type: 'mission.panic.requested' }
-        | { type: 'mission.panic.cleared' }
         | { type: 'mission.launch-queue.restarted' }
         | { type: 'mission.delivered' }
         | { type: 'task.queued'; taskId: string }

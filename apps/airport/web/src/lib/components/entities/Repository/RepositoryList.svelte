@@ -1,5 +1,4 @@
 <script lang="ts">
-    import { onMount } from "svelte";
     import Icon from "@iconify/svelte";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import GithubRepository from "$lib/components/entities/Repository/GithubRepository.svelte";
@@ -37,36 +36,6 @@
 
         return repositories;
     });
-    let localRepositoryRefreshRequested = $state(false);
-
-    onMount(() => {
-        if (localRepositoryRefreshRequested) {
-            return;
-        }
-
-        localRepositoryRefreshRequested = true;
-        const refreshHandle = window.setTimeout(() => {
-            if (repositoryFilter !== "external") {
-                void appContext.application
-                    .loadRepositories({ force: true })
-                    .catch(() => undefined);
-            }
-
-            if (repositoryFilter !== "local") {
-                void appContext.application
-                    .loadGitHubRepositories({ force: true })
-                    .catch(() => undefined);
-                void appContext.application
-                    .loadRepositoryClassCommands()
-                    .catch(() => undefined);
-            }
-        }, 0);
-
-        return () => {
-            window.clearTimeout(refreshHandle);
-        };
-    });
-
     const resolvedHeading = $derived(
         heading ??
             (repositoryFilter === "local"

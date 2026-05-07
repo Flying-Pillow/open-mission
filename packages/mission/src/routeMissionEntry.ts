@@ -1,5 +1,5 @@
 import { intro } from '@clack/prompts';
-import { getWorkspaceRoot } from '@flying-pillow/mission-core/node';
+import { Repository } from '@flying-pillow/mission-core/entities/Repository/Repository';
 import type { EntryContext, MissionEntryHandler } from './entryContext.js';
 import { ensureMissionInstallation } from './ensureMissionInstallation.js';
 import { runAirportNativeCommand } from './runAirportNativeCommand.js';
@@ -24,7 +24,7 @@ export async function routeMissionEntry(argv: string[] = process.argv.slice(2)):
 	}
 
 	const context: EntryContext = {
-		controlRoot: process.env['MISSION_CONTROL_ROOT']?.trim() || getWorkspaceRoot(),
+		repositoryRootPath: process.env['MISSION_REPOSITORY_ROOT']?.trim() || Repository.resolveRepositoryRoot(),
 		workingDirectory: process.env['MISSION_ENTRY_CWD']?.trim() || process.cwd(),
 		args,
 		json

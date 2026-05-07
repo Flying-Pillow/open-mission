@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import type {
 	EntityChannelType,
 	EntityCommandDescriptorType,
+	EntityEventEnvelopeType,
 	EntityIdType,
 	EntityMethodType,
 	EntityContractType
@@ -16,7 +18,7 @@ import type {
 	EntityFormInvocation,
 	EntityQueryInvocation,
 	EntityRemoteResult
-} from '../../daemon/protocol/entityRemote.js';
+} from './EntityRemote.js';
 import type { MissionRegistry } from '../../daemon/MissionRegistry.js';
 import {
 	getDefaultEntityFactory,
@@ -335,6 +337,30 @@ export function createEntityChannel(entityId: EntityIdType | string, eventName: 
 	const normalizedEntityId = EntityIdSchema.parse(entityId);
 	const normalizedEventName = EntityEventAddressSchema.shape.eventName.parse(eventName);
 	return EntityChannelSchema.parse(`${normalizedEntityId}.${normalizedEventName}`);
+}
+
+export function createEntityEventEnvelope(input: {
+	entityId: EntityIdType | string;
+	eventName: string;
+	type?: string;
+	missionId?: string;
+	payload: unknown;
+	occurredAt?: string;
+	eventId?: string;
+}): EntityEventEnvelopeType {
+	const entityId = EntityIdSchema.parse(input.entityId);
+	const eventName = EntityEventAddressSchema.shape.eventName.parse(input.eventName);
+	const type = EntityEventAddressSchema.shape.eventName.parse(input.type ?? eventName);
+	return {
+		eventId: input.eventId ?? randomUUID(),
+		entityId,
+		channel: createEntityChannel(entityId, eventName),
+		eventName,
+		type,
+		occurredAt: input.occurredAt ?? new Date().toISOString(),
+		...(input.missionId?.trim() ? { missionId: input.missionId.trim() } : {}),
+		payload: input.payload
+	};
 }
 
 export function getEntityTable(entityId: EntityIdType | string): string {

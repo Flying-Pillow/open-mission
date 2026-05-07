@@ -94,12 +94,12 @@
 		{
 			title: "Adapters own provider mechanics",
 			description:
-				"Copilot CLI, pi, and future runners translate Mission intent into each provider's executable or SDK without redefining workflow policy.",
+				"Copilot CLI, pi, and future adapters translate Mission intent into each provider's executable or SDK without redefining workflow policy.",
 		},
 		{
 			title: "Operators keep live control",
 			description:
-				"Pause, interrupt, checkpoint, relaunch, or panic-stop an agent session while Mission keeps the durable mission state intact.",
+				"Pause, interrupt, checkpoint, relaunch, or stop an agent execution while Mission keeps the durable mission state intact.",
 		},
 	];
 
@@ -117,14 +117,14 @@
 		"Isolated Git worktrees keep the control checkout clean.",
 		".agents/constitution.md carries repository-specific engineering rules into task sessions.",
 		"Manual and CI gates separate agent claims from verified delivery.",
-		"First-class panic control halts automated work until an operator reviews it.",
+		"Mission pause and session stop controls keep automated work under operator review.",
 	];
 
 	const technicalProof = [
 		{ label: "mission.json", value: "Reducer-backed mission truth" },
-		{ label: "AgentRunner", value: "Provider-neutral runner contract" },
+		{ label: "AgentAdapter", value: "Provider-neutral adapter contract" },
 		{
-			label: "AgentSession",
+			label: "AgentExecution",
 			value: "Live command and observation boundary",
 		},
 		{
@@ -287,7 +287,7 @@
 								icon="lucide:terminal"
 								class="size-4 text-white"
 							/>
-							Agent runtime boundary
+							Agent adapter boundary
 						</div>
 					</div>
 				</div>
@@ -657,7 +657,7 @@
 						<Card.Description class="leading-7">
 							Airport gives operators the live surface for
 							repository adoption, mission state, task control,
-							agent sessions, and artifacts.
+							agent executions, and artifacts.
 						</Card.Description>
 					</Card.Header>
 					<Card.Content>
@@ -679,7 +679,7 @@
 								<p
 									class="mt-1 text-xs leading-5 text-slate-500"
 								>
-									Live agent session
+									Live agent execution
 								</p>
 							</div>
 							<div class="rounded-lg bg-slate-50 p-3">
@@ -710,7 +710,7 @@
 						</h2>
 						<p class="mt-5 text-base leading-8 text-slate-600">
 							Mission keeps provider mechanics out of workflow
-							policy. The agent runtime exposes normalized
+							policy. The agent adapter exposes normalized
 							sessions and observations while mission state
 							remains the durable source of truth.
 						</p>

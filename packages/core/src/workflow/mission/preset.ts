@@ -15,12 +15,12 @@ export type MissionWorkflowPresetScaffold = {
 };
 
 export async function scaffoldMissionWorkflowPreset(
-	controlRoot: string,
+	repositoryRoot: string,
 	options: { overwrite?: boolean } = {}
 ): Promise<MissionWorkflowPresetScaffold> {
-	const workflowDirectoryPath = Repository.getMissionWorkflowPath(controlRoot);
-	const workflowDefinitionPath = Repository.getMissionWorkflowDefinitionPath(controlRoot);
-	const workflowTemplatesPath = Repository.getMissionWorkflowTemplatesPath(controlRoot);
+	const workflowDirectoryPath = Repository.getMissionWorkflowPath(repositoryRoot);
+	const workflowDefinitionPath = Repository.getMissionWorkflowDefinitionPath(repositoryRoot);
+	const workflowTemplatesPath = Repository.getMissionWorkflowTemplatesPath(repositoryRoot);
 
 	await fsp.mkdir(workflowDirectoryPath, { recursive: true });
 	await fsp.mkdir(workflowTemplatesPath, { recursive: true });
@@ -32,7 +32,7 @@ export async function scaffoldMissionWorkflowPreset(
 		recursive: true,
 		force: options.overwrite === true
 	});
-	await writeMissionWorkflowDefinition(controlRoot, createDefaultWorkflowSettings());
+	await writeMissionWorkflowDefinition(repositoryRoot, createDefaultWorkflowSettings());
 
 	return {
 		workflowDirectoryPath,
@@ -41,8 +41,8 @@ export async function scaffoldMissionWorkflowPreset(
 	};
 }
 
-export function readMissionWorkflowDefinition(controlRoot: string): unknown | undefined {
-	const workflowPath = Repository.getMissionWorkflowDefinitionPath(controlRoot);
+export function readMissionWorkflowDefinition(repositoryRoot: string): unknown | undefined {
+	const workflowPath = Repository.getMissionWorkflowDefinitionPath(repositoryRoot);
 	try {
 		const content = fs.readFileSync(workflowPath, 'utf8').trim();
 		if (!content) {
@@ -55,10 +55,10 @@ export function readMissionWorkflowDefinition(controlRoot: string): unknown | un
 }
 
 export async function writeMissionWorkflowDefinition(
-	controlRoot: string,
+	repositoryRoot: string,
 	workflow: WorkflowDefinition
 ): Promise<WorkflowDefinition> {
-	const workflowPath = Repository.getMissionWorkflowDefinitionPath(controlRoot);
+	const workflowPath = Repository.getMissionWorkflowDefinitionPath(repositoryRoot);
 	const temporaryPath = `${workflowPath}.${process.pid.toString(36)}.${Date.now().toString(36)}.tmp`;
 	await fsp.mkdir(path.dirname(workflowPath), { recursive: true });
 	await fsp.writeFile(temporaryPath, `${JSON.stringify(workflow, null, 2)}\n`, 'utf8');

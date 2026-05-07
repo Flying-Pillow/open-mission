@@ -1,4 +1,16 @@
-# Authoritative Thick Entity Classes
+---
+layout: default
+title: Authoritative Thick Entity Classes
+parent: Architecture Decisions
+nav_order: 12
+status: accepted
+date: 2026-05-04
+decision_area: entity-model
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Mission Entities are authoritative domain classes, not passive records paired with outboard procedural handlers. The abstract Entity base owns shared mechanics such as clone-protected data access, optional UI state, method command ids, availability naming, and remote method dispatch. A concrete Entity class owns its own identity, invariants, behavior, and remote method targets.
 
@@ -6,7 +18,7 @@ Each Entity follows a three-file ownership pattern. `<Entity>.ts` owns execution
 
 Repository is the first reference implementation of this pattern. `Repository` owns local repository identity derivation, registration, Repository settings document handling, Mission scaffolding, platform issue lookup through adapters, Mission preparation, and method availability. Its schema module owns Repository input, storage, data, payload, result, and acknowledgement shapes, with `id` as the canonical Entity identity field. Its contract binds those methods to the Entity remote protocol.
 
-Mission is the next flagship implementation of this pattern. A running `Mission` instance is the daemon-owned authoritative aggregate for one live Mission. It owns Mission lifecycle behavior, child-entity coordination for stages, tasks, artifacts, and Agent sessions, workflow-definition application, gate evaluation, and Mission read projection. Mission may use private collaborators for workflow policy or runtime orchestration, but those collaborators must not become alternate owners of Mission truth.
+Mission is the next flagship implementation of this pattern. A running `Mission` instance is the daemon-owned authoritative aggregate for one live Mission. It owns Mission lifecycle behavior, child-entity coordination for stages, tasks, artifacts, and Agent executions, workflow-definition application, gate evaluation, and Mission read projection. Mission may use private collaborators for workflow policy or runtime orchestration, but those collaborators must not become alternate owners of Mission truth.
 
 Class-level Entity methods are appropriate for behavior that is owned by an Entity class but not tied to an existing Entity instance, such as discovery, creation, registration, clone, and resolving instances. Class-level commands are advertised through `classCommands`. Instance-level Entity methods are appropriate for behavior that depends on the Entity's current state, such as reading Repository data, reading Repository command views, preparing a Repository, removing it, listing issues, or starting a Mission.
 

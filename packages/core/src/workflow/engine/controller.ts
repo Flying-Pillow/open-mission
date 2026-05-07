@@ -1,5 +1,5 @@
-import type { MissionDescriptor } from '../../types.js';
-import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import type { MissionDescriptor } from '../../entities/Mission/MissionSchema.js';
+import type { MissionDossierFilesystem } from '../../entities/Mission/MissionDossierFilesystem.js';
 import {
     MissionWorkflowEventRecordSchema,
     MissionStateDataSchema
@@ -8,9 +8,10 @@ import type {
     AgentLaunchConfig,
     AgentCommand,
     AgentPrompt,
-    AgentSessionReference,
-    AgentSessionSnapshot
-} from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
+    AgentExecutionReference,
+    AgentExecutionSnapshot
+} from '../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import type { AgentExecutionSignalDecision } from '../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import {
     buildWorkflowTaskGenerationRequests,
     createMissionWorkflowConfigurationSnapshot,
@@ -27,21 +28,25 @@ import type { MissionWorkflowRequestExecutor } from './requestExecutor.js';
 import type { WorkflowDefinition } from './types.js';
 
 export interface MissionWorkflowControllerOptions {
-    adapter: FilesystemAdapter;
+    adapter: MissionDossierFilesystem;
     descriptor: MissionDescriptor;
     workflow: WorkflowDefinition;
     resolveWorkflow?: () => WorkflowDefinition;
     requestExecutor: MissionWorkflowRequestExecutor;
     workflowVersion?: string;
+    logger?: {
+        info(message: string, metadata?: Record<string, unknown>): void;
+    };
 }
 
 export class MissionWorkflowController {
     private readonly descriptor: MissionDescriptor;
-    private readonly adapter: FilesystemAdapter;
+    private readonly adapter: MissionDossierFilesystem;
     private readonly requestExecutor: MissionWorkflowRequestExecutor;
     private readonly workflowVersion: string;
     private readonly workflow: WorkflowDefinition;
     private readonly resolveWorkflowOverride: (() => WorkflowDefinition) | undefined;
+    private readonly logger: MissionWorkflowControllerOptions['logger'];
     private document: MissionStateData | undefined;
     private mutationQueue: Promise<void> = Promise.resolve();
 
@@ -52,6 +57,7 @@ export class MissionWorkflowController {
         this.resolveWorkflowOverride = options.resolveWorkflow;
         this.requestExecutor = options.requestExecutor;
         this.workflowVersion = options.workflowVersion ?? DEFAULT_WORKFLOW_VERSION;
+        this.logger = options.logger;
     }
 
     public async initialize(): Promise<MissionStateData | undefined> {
@@ -102,9 +108,9 @@ export class MissionWorkflowController {
         return this.refresh();
     }
 
-    public async reconcileSessions(): Promise<MissionStateData> {
+    public async reconcileExecutions(): Promise<MissionStateData> {
         const document = await this.getDocument();
-        const emittedEvents = await this.requestExecutor.reconcileSessions(document);
+        const emittedEvents = await this.requestExecutor.reconcileExecutions(document);
         let nextDocument = document;
         for (const emittedEvent of emittedEvents) {
             nextDocument = await this.applyEvent(emittedEvent);
@@ -113,20 +119,27 @@ export class MissionWorkflowController {
         return nextDocument;
     }
 
-    public listRuntimeSessions(): AgentSessionSnapshot[] {
+    public listRuntimeSessions(): AgentExecutionSnapshot[] {
         return this.requestExecutor.listRuntimeSessions();
     }
 
-    public getRuntimeSession(sessionId: string): AgentSessionSnapshot | undefined {
+    public getRuntimeSession(sessionId: string): AgentExecutionSnapshot | undefined {
         return this.requestExecutor.getRuntimeSession(sessionId);
     }
 
-    public async attachRuntimeSession(reference: AgentSessionReference): Promise<AgentSessionSnapshot> {
-        return this.requestExecutor.attachSession(reference);
+    public applyRuntimeSessionSignalDecision(
+        sessionId: string,
+        decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>
+    ): AgentExecutionSnapshot | undefined {
+        return this.requestExecutor.applyRuntimeSessionSignalDecision(sessionId, decision);
     }
 
-    public async startRuntimeSession(config: AgentLaunchConfig): Promise<AgentSessionSnapshot> {
-        return this.requestExecutor.startSession(config);
+    public async attachRuntimeSession(reference: AgentExecutionReference): Promise<AgentExecutionSnapshot> {
+        return this.requestExecutor.reconcileExecution(reference);
+    }
+
+    public async startRuntimeSession(config: AgentLaunchConfig): Promise<AgentExecutionSnapshot> {
+        return this.requestExecutor.startExecution(config);
     }
 
     public async cancelRuntimeSession(
@@ -198,6 +211,7 @@ export class MissionWorkflowController {
                 missionStateData: document,
                 appendMissionEventRecords: [created.eventRecord]
             });
+            this.logWorkflowEvent(created.eventRecord.eventId, created.eventRecord);
             this.document = document;
 
             const emittedEvents = await this.executeRequests(document, created.requests);
@@ -245,6 +259,7 @@ export class MissionWorkflowController {
             missionStateData: ingested.document,
             appendMissionEventRecords: [ingested.eventRecord]
         });
+        this.logWorkflowEvent(ingested.eventRecord.eventId, event);
         let nextDocument = ingested.document;
         this.document = ingested.document;
         const emittedEvents = await this.executeRequests(nextDocument, ingested.requests);
@@ -338,6 +353,15 @@ export class MissionWorkflowController {
         return this.resolveWorkflowOverride?.() ?? this.workflow;
     }
 
+    private logWorkflowEvent(transactionId: string, event: MissionWorkflowEvent | MissionWorkflowEventRecord): void {
+        this.logger?.info('Mission workflow event applied.', {
+            missionId: this.descriptor.missionId,
+            missionDir: this.descriptor.missionDir,
+            transactionId,
+            ...summarizeWorkflowEvent(event)
+        });
+    }
+
     private async runExclusiveMutation<T>(operation: () => Promise<T>): Promise<T> {
         const previous = this.mutationQueue;
         let release!: () => void;
@@ -374,6 +398,67 @@ export class MissionWorkflowController {
     }
 }
 
+function summarizeWorkflowEvent(event: MissionWorkflowEvent | MissionWorkflowEventRecord): Record<string, unknown> {
+    const payload = 'payload' in event && isRecord(event.payload)
+        ? event.payload
+        : Object.fromEntries(Object.entries(event));
+    return {
+        eventId: event.eventId,
+        type: event.type,
+        source: event.source,
+        occurredAt: event.occurredAt,
+        ...(event.causedByRequestId ? { causedByRequestId: event.causedByRequestId } : {}),
+        ...pickWorkflowPayloadSummary(payload)
+    };
+}
+
+function pickWorkflowPayloadSummary(payload: Record<string, unknown>): Record<string, unknown> {
+    const summary: Record<string, unknown> = {};
+    for (const key of [
+        'stageId',
+        'taskId',
+        'sessionId',
+        'agentId',
+        'transportId',
+        'reason',
+        'reasonCode',
+        'actor',
+        'targetType',
+        'targetId',
+        'autostart'
+    ]) {
+        const value = payload[key];
+        if (typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number') {
+            summary[key] = value;
+        }
+    }
+    const tasks = payload['tasks'];
+    if (Array.isArray(tasks)) {
+        summary['taskCount'] = tasks.length;
+        summary['taskIds'] = tasks
+            .map((task) => isRecord(task) && typeof task['taskId'] === 'string' ? task['taskId'] : undefined)
+            .filter((taskId): taskId is string => Boolean(taskId));
+    }
+    const terminalHandle = payload['terminalHandle'];
+    if (isRecord(terminalHandle)) {
+        summary['terminalName'] = typeof terminalHandle['terminalName'] === 'string'
+            ? terminalHandle['terminalName']
+            : undefined;
+        summary['terminalPaneId'] = typeof terminalHandle['terminalPaneId'] === 'string'
+            ? terminalHandle['terminalPaneId']
+            : undefined;
+    }
+    const artifactRefs = payload['artifactRefs'];
+    if (Array.isArray(artifactRefs)) {
+        summary['artifactRefCount'] = artifactRefs.length;
+    }
+    return Object.fromEntries(Object.entries(summary).filter(([, value]) => value !== undefined));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function parseMissionEventRecord(value: unknown): MissionWorkflowEventRecord {
     const parsed = MissionWorkflowEventRecordSchema.parse(value);
     return {
@@ -385,4 +470,3 @@ function parseMissionEventRecord(value: unknown): MissionWorkflowEventRecord {
         payload: parsed.payload
     };
 }
-

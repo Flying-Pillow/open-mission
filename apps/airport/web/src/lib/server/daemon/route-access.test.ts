@@ -83,5 +83,11 @@ describe("shouldRedirectUnavailableDaemonRoute", () => {
 				daemonRunning: false,
 			}),
 		).toBe(false);
+		expect(
+			shouldRedirectUnavailableDaemonRoute({
+				pathname: "/_app/remote/command-id/cmd",
+				daemonRunning: false,
+			}),
+		).toBe(false);
 	});
 });

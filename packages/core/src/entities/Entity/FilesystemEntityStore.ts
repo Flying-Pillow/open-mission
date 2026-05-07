@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { getMissionDaemonDirectory } from '../../lib/config.js';
+import { getMissionDaemonDirectory } from '../../settings/MissionInstall.js';
 import { JsonFileAdapter } from '../../lib/formats/JsonFileAdapter.js';
 import { EntityTableSchema, type EntityStore } from './EntitySchema.js';
 

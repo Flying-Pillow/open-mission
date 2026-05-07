@@ -1,21 +1,19 @@
 <script lang="ts">
     import Icon from "@iconify/svelte";
-    import type { Snippet } from "svelte";
-    import type { HTMLButtonAttributes } from "svelte/elements";
+    import { Checkbox } from "$lib/components/ui/checkbox/index.js";
     import { cn } from "$lib/utils.js";
+    import type { TreeViewFileProps } from "./types.js";
 
     let {
         ref = $bindable(null),
         name,
         icon,
+        checked = false,
+        onCheckedChange,
         type = "button",
         class: className,
         ...restProps
-    }: HTMLButtonAttributes & {
-        ref?: HTMLButtonElement | null;
-        name: string;
-        icon?: Snippet<[{ name: string }]>;
-    } = $props();
+    }: TreeViewFileProps = $props();
 </script>
 
 <button
@@ -27,6 +25,20 @@
     )}
     {...restProps}
 >
+    {#if onCheckedChange}
+        <div class="flex w-6 shrink-0 items-start justify-center pt-0.5">
+            <Checkbox
+                class="border-muted-foreground"
+                {checked}
+                onpointerdown={(event: PointerEvent) => event.stopPropagation()}
+                onclick={(event: MouseEvent) => event.stopPropagation()}
+                onkeydown={(event: KeyboardEvent) => event.stopPropagation()}
+                onCheckedChange={(value: boolean | "indeterminate") =>
+                    onCheckedChange?.(value === true)}
+                aria-label={`Select file ${name}`}
+            />
+        </div>
+    {/if}
     {#if icon}
         {@render icon({ name })}
     {:else}

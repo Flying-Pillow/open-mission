@@ -1,7 +1,7 @@
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
-import type { MissionStageId, MissionStageStatus } from '../../types.js';
+import type { MissionStageId } from '../../workflow/mission/manifest.js';
+import type { MissionStageStatus, MissionTaskState } from '../Mission/MissionSchema.js';
 import { Task } from '../Task/Task.js';
-import type { MissionTaskState } from '../../types.js';
 import {
 	StageDataSchema,
 	StageCommandAcknowledgementSchema,

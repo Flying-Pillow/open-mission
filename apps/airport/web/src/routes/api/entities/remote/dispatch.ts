@@ -1,5 +1,5 @@
-import type { EntityCommandInvocation, EntityFormInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/daemon/protocol/entityRemote';
-import { entityCommandInvocationSchema, entityFormInvocationSchema, entityQueryInvocationSchema } from '@flying-pillow/mission-core/daemon/protocol/entityRemote';
+import type { EntityCommandInvocation, EntityFormInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/entities/Entity/EntityRemote';
+import { entityCommandInvocationSchema, entityFormInvocationSchema, entityQueryInvocationSchema } from '@flying-pillow/mission-core/entities/Entity/EntityRemote';
 
 export {
     entityCommandInvocationSchema,

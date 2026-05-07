@@ -5,17 +5,18 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import { EntityClassCommandViewSchema, EntityCommandViewSchema, type EntityClassCommandViewType, type EntityCommandViewType } from '../Entity/EntitySchema.js';
+import { AgentRegistry } from '../Agent/AgentRegistry.js';
 import type { Mission, MissionWorkflowBindings } from '../Mission/Mission.js';
 import {
 	getMissionGitHubCliBinary,
 	readMissionConfig,
 	resolveRepositoriesRoot
-} from '../../lib/config.js';
-import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+} from '../../settings/MissionInstall.js';
+import { MissionDossierFilesystem } from '../Mission/MissionDossierFilesystem.js';
 import { resolveGitHubRepositoryFromRepositoryRoot } from '../../platforms/GitHubPlatformAdapter.js';
 import { refreshSystemStatus } from '../../system/SystemStatus.js';
-import type { MissionBrief, MissionDescriptor, MissionPreparationStatus } from '../../types.js';
-import { resolveGitWorkspaceRoot } from '../../lib/workspacePaths.js';
+import type { MissionBrief, MissionDescriptor, MissionPreparationStatus } from '../Mission/MissionSchema.js';
+import { resolveGitWorkspaceRoot } from '../../platforms/git/GitWorkspace.js';
 import {
 	RepositoryDataSchema,
 	RepositoryStorageSchema,
@@ -44,6 +45,7 @@ import {
 	type RepositorySyncCommandAcknowledgementType,
 	type RepositorySyncStatusType,
 	type RepositorySettingsType,
+	type RepositoryInvalidStateType,
 	type RepositoryStartMissionFromBriefType,
 	type RepositoryStartMissionFromIssueType,
 	RepositorySettingsSchema,
@@ -85,6 +87,11 @@ export type RepositoryScaffolding = {
 	workflowTemplatesPath: string;
 	worktreesRoot: string;
 };
+
+type RepositorySettingsDocumentState =
+	| { kind: 'missing'; settingsPath: string }
+	| { kind: 'valid'; settingsPath: string; settings: RepositorySettingsType }
+	| { kind: 'invalid'; settingsPath: string; invalidState: RepositoryInvalidStateType };
 
 export class Repository extends Entity<RepositoryDataType, string> {
 	public static override readonly entityName = repositoryEntityName;
@@ -170,7 +177,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		if (!fs.existsSync(this.repositoryRootPath)) {
 			return { available: false, reason: 'Repository root does not exist.' };
 		}
-		const store = new FilesystemAdapter(this.repositoryRootPath);
+		const store = new MissionDossierFilesystem(this.repositoryRootPath);
 		return store.isGitRepository()
 			? true
 			: { available: false, reason: 'Repository root is not a Git worktree.' };
@@ -355,8 +362,13 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return path.join(Repository.getMissionWorkflowPath(repositoryRootPath), 'templates');
 	}
 
-	public static getMissionControlRootFromMissionDir(missionDir: string): string {
+	public static getRepositoryRootFromMissionDir(missionDir: string): string {
 		return path.resolve(missionDir, '..', '..', '..');
+	}
+
+	public static resolveRepositoryRoot(startPath = process.cwd()): string {
+		const normalizedStartPath = startPath.trim() || process.cwd();
+		return resolveGitWorkspaceRoot(normalizedStartPath) ?? path.resolve(normalizedStartPath);
 	}
 
 	public static resolveMissionsRoot(
@@ -408,10 +420,10 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		repositoryRootPath = process.cwd(),
 		options: { resolveWorkspaceRoot?: boolean } = {}
 	): string {
-		const resolvedControlRoot = options.resolveWorkspaceRoot === false
+		const resolvedRepositoryRoot = options.resolveWorkspaceRoot === false
 			? path.resolve(repositoryRootPath.trim())
-			: Repository.resolveMissionControlRoot(repositoryRootPath);
-		return Repository.getMissionDirectoryPath(resolvedControlRoot);
+			: Repository.resolveRepositoryRoot(repositoryRootPath);
+		return Repository.getMissionDirectoryPath(resolvedRepositoryRoot);
 	}
 
 	public static getSettingsDocumentPath(
@@ -425,23 +437,51 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return RepositorySettingsSchema.parse(input);
 	}
 
-	public static readSettingsDocument(
+	private static inspectSettingsDocument(
 		repositoryRootPath = process.cwd(),
 		options: { resolveWorkspaceRoot?: boolean } = {}
-	): RepositorySettingsType | undefined {
+	): RepositorySettingsDocumentState {
 		const settingsPath = Repository.getSettingsDocumentPath(repositoryRootPath, options);
 		try {
 			const content = fs.readFileSync(settingsPath, 'utf8').trim();
 			if (!content) {
-				return undefined;
+				return { kind: 'missing', settingsPath };
 			}
-			return Repository.resolveSettingsDocument(JSON.parse(content) as unknown);
+			return {
+				kind: 'valid',
+				settingsPath,
+				settings: Repository.resolveSettingsDocument(JSON.parse(content) as unknown)
+			};
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
-				return undefined;
+				return { kind: 'missing', settingsPath };
 			}
-			throw error;
+			return {
+				kind: 'invalid',
+				settingsPath,
+				invalidState: {
+					code: 'invalid-settings-document',
+					path: settingsPath,
+					message: error instanceof Error ? error.message : String(error)
+				}
+			};
 		}
+	}
+
+	public static readSettingsDocument(
+		repositoryRootPath = process.cwd(),
+		options: { resolveWorkspaceRoot?: boolean } = {}
+	): RepositorySettingsType | undefined {
+		const documentState = Repository.inspectSettingsDocument(repositoryRootPath, options);
+		if (documentState.kind === 'missing') {
+			return undefined;
+		}
+		if (documentState.kind === 'invalid') {
+			throw new Error(
+				`Repository settings document '${documentState.settingsPath}' is invalid: ${documentState.invalidState.message}`
+			);
+		}
+		return documentState.settings;
 	}
 
 	public static requireSettingsDocument(
@@ -509,12 +549,12 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 	private static async addLocalRepository(repositoryPath: string, context?: EntityExecutionContext): Promise<Repository> {
 		const { repositoryPath: trimmedRepositoryPath } = RepositoryLocalAddInputSchema.parse({ repositoryPath });
-		const controlRoot = resolveGitWorkspaceRoot(trimmedRepositoryPath);
-		if (!controlRoot) {
+		const repositoryRoot = resolveGitWorkspaceRoot(trimmedRepositoryPath);
+		if (!repositoryRoot) {
 			throw new Error(`Mission could not resolve a Git repository from '${repositoryPath}'.`);
 		}
 
-		const repository = Repository.open(controlRoot);
+		const repository = Repository.open(repositoryRoot);
 		return Repository.getRepositoryFactory(context).save(Repository, repository.toStorage());
 	}
 
@@ -586,7 +626,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		if (!fs.existsSync(repositoryRootPath)) {
 			return false;
 		}
-		return new FilesystemAdapter(repositoryRootPath).isGitRepository();
+		return new MissionDossierFilesystem(repositoryRootPath).isGitRepository();
 	}
 
 	public constructor(data: RepositoryStorageType) {
@@ -625,6 +665,10 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return this.data.isInitialized;
 	}
 
+	public get invalidState(): RepositoryInvalidStateType | undefined {
+		return this.data.invalidState ? structuredClone(this.data.invalidState) : undefined;
+	}
+
 	public updateSettings(settings: RepositorySettingsType): this {
 		this.data = RepositoryDataSchema.parse({
 			...this.data,
@@ -650,10 +694,19 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	public toStorage(): RepositoryStorageType {
-		return RepositoryStorageSchema.parse(this.toData());
+		const {
+			operationalMode: _operationalMode,
+			invalidState: _invalidState,
+			currentBranch: _currentBranch,
+			...storage
+		} = this.toData();
+		return RepositoryStorageSchema.parse(storage);
 	}
 
 	public canStartMissionFromIssue() {
+		if (this.invalidState) {
+			return this.unavailable(Repository.describeInvalidState(this.invalidState));
+		}
 		if (!this.platformRepositoryRef) {
 			return this.unavailable('Repository does not have a platform repository ref.');
 		}
@@ -664,12 +717,18 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	public canStartMissionFromBrief() {
+		if (this.invalidState) {
+			return this.unavailable(Repository.describeInvalidState(this.invalidState));
+		}
 		return !this.isInitialized
 			? this.unavailable('Repository control state is not initialized.')
 			: this.available();
 	}
 
 	public canSetup() {
+		if (this.invalidState) {
+			return this.unavailable(Repository.describeInvalidState(this.invalidState));
+		}
 		if (!this.platformRepositoryRef) {
 			return this.unavailable('Repository does not have a platform repository ref.');
 		}
@@ -693,11 +752,14 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		if (!platformRepositoryRef) {
 			throw new Error(`Repository '${this.id}' does not have a platform repository ref configured.`);
 		}
+		if (this.invalidState) {
+			throw new Error(Repository.describeInvalidState(this.invalidState));
+		}
 		if (this.isInitialized || Repository.readSettingsDocument(this.repositoryRootPath)) {
 			throw new Error(`Repository '${this.id}' already has Repository setup state.`);
 		}
 
-		const store = new FilesystemAdapter(this.repositoryRootPath);
+		const store = new MissionDossierFilesystem(this.repositoryRootPath);
 		const baseBranch = store.getDefaultBranch();
 		const branchRef = store.deriveRepositoryBootstrapBranchName();
 		const temporaryRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-setup-'));
@@ -709,7 +771,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			const scaffolding = await Repository.initializeScaffolding(proposalWorktreePath, {
 				settings: args.settings
 			});
-			const proposalStore = new FilesystemAdapter(proposalWorktreePath);
+			const proposalStore = new MissionDossierFilesystem(proposalWorktreePath);
 			proposalStore.stagePaths([
 				path.relative(proposalWorktreePath, scaffolding.settingsDocumentPath),
 				path.relative(proposalWorktreePath, scaffolding.workflowDirectoryPath)
@@ -773,15 +835,26 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 	public async read(input: RepositoryLocatorType): Promise<RepositoryDataType> {
 		this.assertRepositoryIdentity(RepositoryLocatorSchema.parse(input));
-		const store = new FilesystemAdapter(this.repositoryRootPath);
-		const settings = Repository.readSettingsDocument(this.repositoryRootPath);
+		const store = new MissionDossierFilesystem(this.repositoryRootPath);
+		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
 		const currentBranch = store.isGitRepository() ? store.getCurrentBranch() : undefined;
+
+		if (settingsState.kind === 'invalid') {
+			this.data = RepositoryDataSchema.parse({
+				...this.toStorage(),
+				operationalMode: 'invalid',
+				invalidState: settingsState.invalidState,
+				...(currentBranch ? { currentBranch } : {}),
+				isInitialized: false
+			});
+			return this.toData();
+		}
 
 		this.data = RepositoryDataSchema.parse({
 			...this.toStorage(),
-			operationalMode: settings ? 'repository' : 'setup',
+			operationalMode: settingsState.kind === 'valid' ? 'repository' : 'setup',
 			...(currentBranch ? { currentBranch } : {}),
-			isInitialized: this.isInitialized || settings !== undefined
+			isInitialized: this.isInitialized || settingsState.kind === 'valid'
 		});
 		return this.toData();
 	}
@@ -908,9 +981,16 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	private assertCanStartRegularMission(): void {
+		if (this.invalidState) {
+			throw new Error(Repository.describeInvalidState(this.invalidState));
+		}
 		if (!this.isInitialized) {
 			throw new Error('Complete Repository setup before starting regular missions.');
 		}
+	}
+
+	private static describeInvalidState(invalidState: RepositoryInvalidStateType): string {
+		return `Repository control state is invalid at '${invalidState.path}': ${invalidState.message}`;
 	}
 
 	private async refreshRepositoryControlState(input: RepositoryLocatorType): Promise<void> {
@@ -931,10 +1011,10 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			throw new Error(`Repository workflow definition '${Repository.getMissionWorkflowDefinitionPath(this.repositoryRootPath)}' is required.`);
 		}
 		const workflow = parsePersistedWorkflowSettings(workflowDocument);
-		const store = new FilesystemAdapter(this.repositoryRootPath);
+		const store = new MissionDossierFilesystem(this.repositoryRootPath);
 		const preparation = await this.prepareMissionFromBrief(store, {
 			workflow,
-			taskRunners: new Map(),
+			agentRegistry: new AgentRegistry({ agents: [] }),
 			...(settings.instructionsPath
 				? { instructionsPath: Repository.resolveRepositoryPath(this.repositoryRootPath, settings.instructionsPath) }
 				: {}),
@@ -942,6 +1022,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 				? { skillsPath: Repository.resolveRepositoryPath(this.repositoryRootPath, settings.skillsPath) }
 				: {}),
 			...(settings.defaultModel ? { defaultModel: settings.defaultModel } : {}),
+			...(settings.defaultReasoningEffort ? { defaultReasoningEffort: settings.defaultReasoningEffort } : {}),
 			...(settings.defaultAgentMode ? { defaultMode: settings.defaultAgentMode } : {})
 		}, { brief });
 
@@ -958,7 +1039,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	private async prepareMissionFromBrief(
-		store: FilesystemAdapter,
+		store: MissionDossierFilesystem,
 		workflowBindings: MissionWorkflowBindings,
 		input: {
 			brief: MissionBrief;
@@ -1072,7 +1153,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	private async assertExistingMissionRuntimeDataValid(
-		adapter: FilesystemAdapter,
+		adapter: MissionDossierFilesystem,
 		missionDir: string,
 		missionId: string
 	): Promise<void> {
@@ -1092,18 +1173,15 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 	private async resolveMissionWorkflowBindings(
 		workflowBindings: MissionWorkflowBindings,
-		controlRoot: string
+		repositoryRootPath: string
 	): Promise<MissionWorkflowBindings> {
-		if (workflowBindings.taskRunners.size > 0) {
+		if (workflowBindings.agentRegistry.listAgents().length > 0) {
 			return workflowBindings;
 		}
-		const { createConfiguredAgentRunners } = await import('../../daemon/runtime/agent/runtimes/AgentRuntimeFactory.js');
+		const { AgentRegistry } = await import('../Agent/AgentRegistry.js');
 		return {
 			...workflowBindings,
-			taskRunners: new Map(
-				(await createConfiguredAgentRunners({ controlRoot }))
-					.map((runner) => [runner.id, runner] as const)
-			)
+			agentRegistry: await AgentRegistry.createConfigured({ repositoryRootPath })
 		};
 	}
 
@@ -1182,7 +1260,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		authToken?: string,
 		options: { refreshExternalState?: boolean } = {}
 	): RepositorySyncStatusType {
-		const store = new FilesystemAdapter(this.repositoryRootPath);
+		const store = new MissionDossierFilesystem(this.repositoryRootPath);
 		const rootExists = fs.existsSync(this.repositoryRootPath);
 		const isGitRepository = rootExists && store.isGitRepository();
 		const worktree = isGitRepository
@@ -1337,12 +1415,6 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		const repositoryLabel = Repository.slugIdentitySegment(path.basename(repositoryRootPath) || 'repository') || 'repository';
 		const repositoryHash = createHash('sha1').update(repositoryRootPath).digest('hex').slice(0, 8);
 		return `repository:local/${repositoryLabel}/${repositoryHash}`;
-	}
-
-	private static resolveMissionControlRoot(repositoryRootPath: string): string {
-		const normalizedRoot = repositoryRootPath.trim();
-		const resolvedRoot = resolveGitWorkspaceRoot(normalizedRoot);
-		return resolvedRoot ?? path.resolve(normalizedRoot);
 	}
 
 	private static buildMissionPreparationCommitMessage(missionId: string, brief: MissionBrief): string {

@@ -10,11 +10,7 @@
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
-    "moduleResolution": "bundler",
-    "customConditions": [
-      "development",
-      "typescript"
-    ]
+    "moduleResolution": "bundler"
   },
   "include": [
     ".svelte-kit/ambient.d.ts",
@@ -34,7 +30,8 @@
     "tests/**/*.svelte"
   ]
   // Path aliases are generated from https://svelte.dev/docs/kit/configuration#alias.
-  // Workspace package imports resolve through package.json exports and customConditions.
+  // Workspace package imports resolve through package.json exports in production and through
+  // SvelteKit/Vite aliases in development/type-checking.
   //
   // To make changes to top-level options such as include and exclude, we recommend extending
   // the generated config; see https://svelte.dev/docs/kit/configuration#typescript

@@ -47,6 +47,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
     | tar -xJ -C /usr/local --strip-components=1 --no-same-owner \
     && npm install -g @github/copilot \
+    && npm install -g @openai/codex \
+    && npm install -g @anthropic-ai/claude-code \
+    && curl -fsSL https://pi.dev/install.sh | bash \
     && ln -s /usr/local/bin/node /usr/local/bin/nodejs \
     && sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
     && locale-gen en_US.UTF-8 \
@@ -65,11 +68,13 @@ ENV LC_ALL=en_US.UTF-8
 ENV PATH=/home/dev/.local/bin:/home/dev/.cargo/bin:${PATH}
 WORKDIR /mission
 
-RUN mkdir -p /home/dev/.config
+RUN mkdir -p /home/dev/.config /home/dev/.local/bin
 
 COPY --chown=dev:dev ./starship.toml /home/dev/.config/starship.toml
 
 RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --profile minimal --default-toolchain stable \
+    && curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path \
+    && ln -sf /home/dev/.opencode/bin/opencode /home/dev/.local/bin/opencode \
     && rustup component add rustfmt clippy \
     && echo 'if [ -f ~/.bashrc ]; then . ~/.bashrc; fi' > /home/dev/.bash_profile \
     && echo '' >> /home/dev/.bash_profile \

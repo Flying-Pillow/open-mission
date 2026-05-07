@@ -1,4 +1,16 @@
-# Retire Projection As Canonical Vocabulary
+---
+layout: default
+title: Retire Projection As Canonical Vocabulary
+parent: Architecture Decisions
+nav_order: 2
+status: accepted
+date: 2026-05-04
+decision_area: language
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Mission previously used projection-oriented communication where broad derived mission data was sent to clients after changes. Mission 29 moves communication toward canonical Entity data plus fine-grained Entity events, with System snapshots reserved for bootstrapping and reconnecting clients.
 

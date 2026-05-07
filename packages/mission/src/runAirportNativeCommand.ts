@@ -17,7 +17,7 @@ export async function runAirportNativeCommand(
         stdio: 'inherit',
         env: {
             ...process.env,
-            MISSION_CONTROL_ROOT: context.controlRoot,
+            MISSION_REPOSITORY_ROOT: context.repositoryRootPath,
             MISSION_ENTRY_CWD: context.workingDirectory
         }
     });

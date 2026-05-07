@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
 	getDaemonLogPath,
+	getDaemonLockPath,
 	getDaemonManifestPath,
 	getDaemonRuntimePath,
 	getDaemonSessionStatePath,
@@ -15,12 +16,16 @@ import {
 describe('daemonPaths', () => {
 	it('resolves runtime state outside the repository', async () => {
 		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-paths-'));
+		const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-paths-runtime-'));
+		const previousRuntimeDirectory = process.env['XDG_RUNTIME_DIR'];
+		process.env['XDG_RUNTIME_DIR'] = runtimeRoot;
 
 		try {
 			const runtimePath = getDaemonRuntimePath();
 			const logPath = getDaemonLogPath();
 			const stdoutLogPath = getDaemonStdoutLogPath();
 			const manifestPath = getDaemonManifestPath();
+			const lockPath = getDaemonLockPath();
 			const sessionPath = getDaemonSessionStatePath(workspaceRoot, 'mission-123');
 			const socketPath = resolveDaemonSocketPath();
 
@@ -28,6 +33,7 @@ describe('daemonPaths', () => {
 			expect(logPath).toBe(path.join(runtimePath, 'daemon.log'));
 			expect(stdoutLogPath).toBe(path.join(runtimePath, 'daemon.stdout.log'));
 			expect(manifestPath).toBe(path.join(runtimePath, 'daemon.json'));
+			expect(lockPath).toBe(path.join(runtimePath, 'daemon.lock'));
 			expect(sessionPath.startsWith(path.join(runtimePath, 'workspaces'))).toBe(true);
 			expect(sessionPath.endsWith(path.join('sessions', 'mission-123.json'))).toBe(true);
 			expect(logPath.startsWith(workspaceRoot)).toBe(false);
@@ -41,6 +47,12 @@ describe('daemonPaths', () => {
 			await fs.rm(getDaemonRuntimePath(), { recursive: true, force: true }).catch(
 				() => undefined
 			);
+			if (previousRuntimeDirectory === undefined) {
+				delete process.env['XDG_RUNTIME_DIR'];
+			} else {
+				process.env['XDG_RUNTIME_DIR'] = previousRuntimeDirectory;
+			}
+			await fs.rm(runtimeRoot, { recursive: true, force: true });
 			await fs.rm(workspaceRoot, { recursive: true, force: true });
 		}
 	});

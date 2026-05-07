@@ -1,43 +1,15 @@
 <script lang="ts">
     import type { MissionTerminalSnapshotType } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
     import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
-    import { FitAddon } from "@xterm/addon-fit";
-    import * as XtermModule from "@xterm/xterm";
+    import {
+        createAirportTerminalRuntime,
+        type AirportTerminal,
+        type AirportTerminalRuntime,
+    } from "$lib/client/runtime/terminal/GhosttyTerminalRuntime";
     import {
         subscribeMissionTerminalTransport,
         type SharedTerminalTransportSubscription,
     } from "$lib/client/runtime/terminal/TerminalTransportBroker";
-    import "@xterm/xterm/css/xterm.css";
-
-    const Terminal = resolveConstructorExport<
-        typeof import("@xterm/xterm").Terminal
-    >(
-        XtermModule as unknown as Record<string, unknown>,
-        "Terminal",
-        "@xterm/xterm",
-    );
-    type XtermTerminal = InstanceType<typeof Terminal>;
-    type XtermFitAddon = InstanceType<typeof FitAddon>;
-
-    function resolveConstructorExport<T>(
-        moduleRecord: Record<string, unknown>,
-        exportName: string,
-        moduleName: string,
-    ): T {
-        const direct = moduleRecord[exportName];
-        const defaultRecord = moduleRecord.default as
-            | Record<string, unknown>
-            | undefined;
-        const resolved = direct ?? defaultRecord?.[exportName];
-        if (!resolved) {
-            throw new Error(
-                `${moduleName} does not expose '${exportName}' in this runtime build.`,
-            );
-        }
-        return resolved as T;
-    }
-
-    type TerminalResizeEvent = { cols: number; rows: number };
     const missionScope = getScopedMissionContext();
     const mission = $derived(missionScope.mission);
     const activeRepository = $derived(missionScope.repository);
@@ -56,9 +28,8 @@
     let sendingInput = $state(false);
     let activeTransportKey = $state<string | null>(null);
 
-    let terminal: XtermTerminal | null = null;
-    let fitAddon: XtermFitAddon | null = null;
-    let resizeObserver: ResizeObserver | null = null;
+    let terminal: AirportTerminal | null = null;
+    let terminalRuntime: AirportTerminalRuntime | null = null;
     let terminalTransport =
         $state<SharedTerminalTransportSubscription<MissionTerminalSnapshotType> | null>(
             null,
@@ -95,9 +66,8 @@
 
         return () => {
             disposed = true;
-            resizeObserver?.disconnect();
-            terminal?.dispose();
-            fitAddon = null;
+            terminalRuntime?.dispose();
+            terminalRuntime = null;
             terminal = null;
             lastRenderedScreen = "";
         };
@@ -180,7 +150,7 @@
         lastRenderedScreen = screen;
         terminal.reset();
         terminal.write(normalizeScreen(screen));
-        fitAddon?.fit();
+        terminalRuntime?.fit();
     });
 
     async function flushPendingInput(): Promise<void> {
@@ -208,79 +178,49 @@
         }
     }
 
-    function initializeTerminal(
+    async function initializeTerminal(
         target: HTMLDivElement,
         isDisposed: () => boolean,
-    ): void {
+    ): Promise<void> {
         if (isDisposed()) {
             return;
         }
 
-        terminal = new Terminal({
-            convertEol: true,
-            cursorBlink: true,
-            fontFamily:
-                "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace",
-            fontSize: 13,
-            scrollback: 1500,
-            theme: {
-                background: "#000000",
-                foreground: "#e2e8f0",
-                cursor: "#f8fafc",
-                selectionBackground: "#334155",
-                black: "#020617",
-                red: "#f87171",
-                green: "#4ade80",
-                yellow: "#facc15",
-                blue: "#60a5fa",
-                magenta: "#f472b6",
-                cyan: "#22d3ee",
-                white: "#e2e8f0",
-                brightBlack: "#475569",
-                brightRed: "#fb7185",
-                brightGreen: "#86efac",
-                brightYellow: "#fde047",
-                brightBlue: "#93c5fd",
-                brightMagenta: "#f9a8d4",
-                brightCyan: "#67e8f9",
-                brightWhite: "#f8fafc",
+        const runtime = await createAirportTerminalRuntime({
+            target,
+            isDisposed,
+            onResize: ({ cols, rows }) => {
+                if (terminalSnapshot?.dead) {
+                    return;
+                }
+                if (
+                    document.visibilityState !== "visible" ||
+                    !document.hasFocus()
+                ) {
+                    return;
+                }
+                pendingResize = { cols, rows };
+                void flushPendingResize();
+            },
+            onData: (data) => {
+                if (terminalSnapshot?.dead) {
+                    return;
+                }
+                const sanitizedData = sanitizeTerminalInputData(data);
+                if (sanitizedData.length === 0) {
+                    return;
+                }
+                pendingInput += sanitizedData;
+                if (!sendingInput) {
+                    void flushPendingInput();
+                }
             },
         });
-        fitAddon = new FitAddon();
-        terminal.loadAddon(fitAddon);
-        terminal.open(target);
-        fitAddon.fit();
-        terminal.onResize(({ cols, rows }: TerminalResizeEvent) => {
-            if (terminalSnapshot?.dead) {
-                return;
-            }
-            if (
-                document.visibilityState !== "visible" ||
-                !document.hasFocus()
-            ) {
-                return;
-            }
-            pendingResize = { cols, rows };
-            void flushPendingResize();
-        });
-        terminal.onData((data: string) => {
-            if (terminalSnapshot?.dead) {
-                return;
-            }
-            const sanitizedData = sanitizeTerminalInputData(data);
-            if (sanitizedData.length === 0) {
-                return;
-            }
-            pendingInput += sanitizedData;
-            if (!sendingInput) {
-                void flushPendingInput();
-            }
-        });
-
-        resizeObserver = new ResizeObserver(() => {
-            fitAddon?.fit();
-        });
-        resizeObserver.observe(target);
+        if (!runtime) {
+            return;
+        }
+        terminalRuntime = runtime;
+        terminal = runtime.terminal;
     }
 
     async function flushPendingResize(): Promise<void> {
@@ -397,7 +337,7 @@
     </header>
 
     <div class="flex-1 min-h-0">
-        <div class="h-full min-h-[24rem] overflow-hidden">
+        <div class="h-full min-h-0 overflow-hidden">
             <div class="h-full min-h-0 overflow-hidden bg-slate-950 px-2 py-2">
                 <div bind:this={container} class="h-full w-full min-h-0"></div>
             </div>

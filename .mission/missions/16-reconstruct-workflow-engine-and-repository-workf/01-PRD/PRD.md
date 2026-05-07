@@ -11,7 +11,7 @@ Branch: mission/16-reconstruct-workflow-engine-and-repository-workf
 ## Outcome
 
 - Establish one coherent workflow-runtime and repository-policy model in which `mission.json` is the authoritative mission-local workflow document and `.mission/settings.json` is the daemon-owned repository policy source.
-- Preserve the reducer-driven event model, deterministic task generation, launch and pause behavior, panic semantics, and the `draft` to `ready` snapshot boundary as one architectural step rather than as disconnected implementation details.
+- Preserve the reducer-driven event model, deterministic task generation, launch and pause behavior, restart semantics, and the `draft` to `ready` snapshot boundary as one architectural step rather than as disconnected implementation details.
 - Convert the existing workflow-engine, repository-workflow-settings, and checklist specifications into a replayed mission artifact trail without collapsing semantic-model, agent-runtime, or airport-control-plane ownership into mission `16`.
 
 ## Problem Statement

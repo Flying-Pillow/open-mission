@@ -3,30 +3,13 @@ layout: default
 title: Getting Started
 nav_order: 2
 has_children: true
+description: Install Mission, prepare a repository, and start a governed Mission.
 ---
 
-# Getting Started
+Use these pages in order when bringing Mission to a repository for the first time.
 
-<section class="mission-section-hero">
-	<span class="mission-section-kicker">Launch Sequence</span>
-	<div class="mission-section-title">Get from first install to first real mission fast.</div>
-	<p class="mission-section-lead">This section is the shortest path to a working Mission setup: install the operator tooling, adopt a repository safely, and prepare a mission from a brief or an issue.</p>
-</section>
+1. [Installation](installation.md): install the published CLI and start Airport.
+2. [Repository Setup](repository-setup.md): create the repository-owned .mission control state.
+3. [Start Your First Mission](start-your-first-mission.md): turn a brief or issue into a live Mission.
 
-<div class="mission-section-grid mission-section-grid--three">
-	<a class="mission-section-card" href="{{ '/getting-started/installation.html' | relative_url }}">
-		<span class="mission-section-card__eyebrow">Step 1</span>
-		<span class="mission-section-card__title">Installation</span>
-		<span class="mission-section-card__text">Prepare your machine, published CLI, terminal substrate, editor integration, and Airport terminal runtime.</span>
-	</a>
-	<a class="mission-section-card" href="{{ '/getting-started/repository-setup.html' | relative_url }}">
-		<span class="mission-section-card__eyebrow">Step 2</span>
-		<span class="mission-section-card__title">Repository Setup</span>
-		<span class="mission-section-card__text">Adopt a codebase without confusing repository policy with live mission execution.</span>
-	</a>
-	<a class="mission-section-card" href="{{ '/getting-started/start-your-first-mission.html' | relative_url }}">
-		<span class="mission-section-card__eyebrow">Step 3</span>
-		<span class="mission-section-card__title">Start Your First Mission</span>
-		<span class="mission-section-card__text">Create bounded work from a fresh brief or an existing GitHub issue and move into Tower inside the Airport layout.</span>
-	</a>
-</div>
+Repository setup prepares durable repository control state. Starting a Mission creates bounded work inside that prepared repository.

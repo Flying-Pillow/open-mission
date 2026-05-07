@@ -1,6 +1,6 @@
 // /apps/airport/web/src/lib/components/entities/Task/Task.svelte.ts: OO browser entity for workflow tasks exposed by a mission snapshot.
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import { TaskCommandIds, type TaskDataType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
+import { TaskCommandIds, type TaskConfigureCommandOptionsType, type TaskDataType, type TaskStartCommandOptionsType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
 export type TaskSnapshot = {
@@ -9,8 +9,13 @@ export type TaskSnapshot = {
 };
 
 export type TaskStartOptions = {
-    terminalSessionName?: string;
+    agentAdapter?: string;
+    model?: string;
+    reasoningEffort?: TaskStartCommandOptionsType['reasoningEffort'];
+    terminalName?: string;
 };
+
+export type TaskConfigureOptions = TaskConfigureCommandOptionsType;
 
 export type TaskDependencies = {
     resolveCommands(taskId: string): EntityCommandDescriptorType[];
@@ -67,8 +72,28 @@ export class Task implements EntityModel<TaskSnapshot> {
         return this.snapshot.task.lifecycle;
     }
 
+    public get agentAdapter(): string {
+        return this.snapshot.task.agentAdapter;
+    }
+
+    public get model(): string | undefined {
+        return this.snapshot.task.model;
+    }
+
+    public get reasoningEffort(): TaskStartCommandOptionsType['reasoningEffort'] | undefined {
+        return this.snapshot.task.reasoningEffort;
+    }
+
+    public get autostart(): boolean {
+        return this.snapshot.task.autostart ?? false;
+    }
+
     public get dependsOn(): string[] {
         return [...this.snapshot.task.dependsOn];
+    }
+
+    public get context(): NonNullable<TaskDataType['context']> {
+        return this.snapshot.task.context?.map((contextArtifact) => ({ ...contextArtifact })) ?? [];
     }
 
     public get waitingOnTaskIds(): string[] {
@@ -81,6 +106,11 @@ export class Task implements EntityModel<TaskSnapshot> {
 
     public async start(options: TaskStartOptions = {}): Promise<this> {
         await this.executeCommand(TaskCommandIds.start, options);
+        return this;
+    }
+
+    public async configure(options: TaskConfigureOptions): Promise<this> {
+        await this.executeCommand(TaskCommandIds.configure, options);
         return this;
     }
 

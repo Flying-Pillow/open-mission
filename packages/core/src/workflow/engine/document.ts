@@ -1,6 +1,6 @@
 import {
     MISSION_WORKFLOW_RUNTIME_SCHEMA_VERSION,
-    type AgentSessionRuntimeState,
+    type AgentExecutionRuntimeState,
     type MissionStageId,
     type MissionWorkflowConfigurationSnapshot,
     type MissionWorkflowEvent,
@@ -44,12 +44,6 @@ export function createDraftMissionWorkflowRuntimeState(
         ...(activeStageId ? { activeStageId } : {}),
         pause: {
             paused: false
-        },
-        panic: {
-            active: false,
-            terminateSessions: configuration.workflow.panic.terminateSessions,
-            clearLaunchQueue: configuration.workflow.panic.clearLaunchQueue,
-            haltMission: configuration.workflow.panic.haltMission
         },
         stages: configuration.workflow.stageOrder.map((stageId, index) =>
             createEmptyStageProjection(stageId, index === 0 ? 'ready' : 'pending')
@@ -111,23 +105,23 @@ export function ingestMissionWorkflowEvent(
     };
 }
 
-export function toAgentSessionRuntimeState(
-    session: AgentSessionRuntimeState
-): AgentSessionRuntimeState {
+export function toAgentExecutionRuntimeState(
+    execution: AgentExecutionRuntimeState
+): AgentExecutionRuntimeState {
     return {
-        sessionId: session.sessionId,
-        taskId: session.taskId,
-        runnerId: session.runnerId,
-        ...(session.transportId ? { transportId: session.transportId } : {}),
-        ...(session.sessionLogPath ? { sessionLogPath: session.sessionLogPath } : {}),
-        ...(session.terminalHandle ? { terminalHandle: { ...session.terminalHandle } } : {}),
-        lifecycle: session.lifecycle,
-        launchedAt: session.launchedAt,
-        updatedAt: session.updatedAt,
-        ...(session.completedAt ? { completedAt: session.completedAt } : {}),
-        ...(session.failedAt ? { failedAt: session.failedAt } : {}),
-        ...(session.cancelledAt ? { cancelledAt: session.cancelledAt } : {}),
-        ...(session.terminatedAt ? { terminatedAt: session.terminatedAt } : {})
+        sessionId: execution.sessionId,
+        taskId: execution.taskId,
+        agentId: execution.agentId,
+        ...(execution.transportId ? { transportId: execution.transportId } : {}),
+        ...(execution.sessionLogPath ? { sessionLogPath: execution.sessionLogPath } : {}),
+        ...(execution.terminalHandle ? { terminalHandle: { ...execution.terminalHandle } } : {}),
+        lifecycle: execution.lifecycle,
+        launchedAt: execution.launchedAt,
+        updatedAt: execution.updatedAt,
+        ...(execution.completedAt ? { completedAt: execution.completedAt } : {}),
+        ...(execution.failedAt ? { failedAt: execution.failedAt } : {}),
+        ...(execution.cancelledAt ? { cancelledAt: execution.cancelledAt } : {}),
+        ...(execution.terminatedAt ? { terminatedAt: execution.terminatedAt } : {})
     };
 }
 

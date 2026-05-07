@@ -14,12 +14,14 @@ export function shouldRedirectUnavailableDaemonRoute(input: {
 	const isRootPage = input.pathname === "/";
 	const isApiRequest = input.pathname.startsWith("/api/");
 	const isAuthRequest = input.pathname.startsWith("/auth/");
+	const isRemoteFunctionRequest = input.pathname.startsWith("/_app/remote/");
 
 	return (
 		!input.daemonRunning &&
 		!isRootPage &&
 		!allowsDaemonlessRouteAccess(input.pathname) &&
 		!isApiRequest &&
-		!isAuthRequest
+		!isAuthRequest &&
+		!isRemoteFunctionRequest
 	);
 }

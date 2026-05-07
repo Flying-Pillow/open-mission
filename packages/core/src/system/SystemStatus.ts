@@ -1,6 +1,6 @@
 // /packages/core/src/system/SystemStatus.ts: Resolves GitHub CLI authentication state and GitHub account identity for Mission surfaces.
 import { spawnSync } from 'node:child_process';
-import { getMissionGitHubCliBinary } from '../lib/config.js';
+import { getMissionGitHubCliBinary } from '../settings/MissionInstall.js';
 import { systemStateSchema, type SystemState } from './SystemContract.js';
 
 const GITHUB_CLI_TIMEOUT_MS = 1_500;

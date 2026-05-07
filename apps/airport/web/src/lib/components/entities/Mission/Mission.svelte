@@ -1,31 +1,26 @@
 <script lang="ts">
     import { page } from "$app/state";
-    import type { Artifact as ArtifactEntity } from "$lib/components/entities/Artifact/Artifact.svelte.js";
     import type { Mission as MissionEntity } from "$lib/components/entities/Mission/Mission.svelte.js";
     import type { Task as TaskEntity } from "$lib/components/entities/Task/Task.svelte.js";
     import Icon from "@iconify/svelte";
     import type { MissionRuntimeEventEnvelopeType } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
     import { ArtifactDataSchema } from "@flying-pillow/mission-core/entities/Artifact/ArtifactSchema";
-    import { AgentSessionDataSchema } from "@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema";
+    import { AgentExecutionDataSchema } from "@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema";
     import {
         MissionSnapshotSchema,
         MissionStatusSnapshotSchema,
     } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
     import { StageDataSchema } from "@flying-pillow/mission-core/entities/Stage/StageSchema";
     import { TaskDataSchema } from "@flying-pillow/mission-core/entities/Task/TaskSchema";
-    import type { AgentSession as AgentSessionModel } from "$lib/components/entities/AgentSession/AgentSession.svelte.js";
+    import type { AgentExecution as AgentExecutionModel } from "$lib/components/entities/AgentExecution/AgentExecution.svelte.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { setScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
-    import AgentSession from "$lib/components/entities/AgentSession/AgentSession.svelte";
-    import ArtifactEditor from "$lib/components/entities/Artifact/ArtifactEditor.svelte";
-    import { isArtifactTextEditable } from "$lib/components/entities/Artifact/ArtifactPresentation.js";
-    import ArtifactViewer from "$lib/components/entities/Artifact/ArtifactViewer.svelte";
     import MissionCockpit from "$lib/components/entities/Mission/MissionCockpit.svelte";
     import MissionCommandbar from "$lib/components/entities/Mission/MissionCommandbar.svelte";
-    import MissionControlTree from "$lib/components/entities/Mission/MissionControlTree.svelte";
     import MissionFileTree from "$lib/components/entities/Mission/MissionFileTree.svelte";
+    import MissionTaskList from "$lib/components/entities/Mission/MissionTaskList.svelte";
     import MissionTerminal from "$lib/components/entities/Mission/MissionTerminal.svelte";
-    import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/types";
+    import Task from "$lib/components/entities/Task/Task.svelte";
     import { Button } from "$lib/components/ui/button/index.js";
     import {
         ResizableHandle,
@@ -33,22 +28,22 @@
         ResizablePaneGroup,
     } from "$lib/components/ui/resizable";
     import * as Tabs from "$lib/components/ui/tabs/index.js";
-    import type { ActiveMissionOutline } from "$lib/client/context/app-context.svelte";
     import type { MissionFileTreeNode } from "$lib/types/mission-file-tree";
     import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
     import { Badge } from "$lib/components/ui/badge";
 
+    type MissionFocusTarget = {
+        id: string;
+        kind: "stage" | "task";
+        stageId: string;
+        taskId?: string;
+    };
+
     type MissionSelectionState = {
-        treeNodes: MissionTowerTreeNode[];
-        visibleTreeNodes: MissionTowerTreeNode[];
-        selectedNodeId?: string;
+        selectedFocusId?: string;
         resolvedSelection?: {
             stageId?: string;
             taskId?: string;
-        };
-        activeArtifact?: {
-            id: string;
-            displayLabel?: string;
         };
         activeSessionId?: string;
     };
@@ -86,12 +81,8 @@
     let missionViewError = $state<string | null>(null);
     let runtimeError = $state<string | null>(null);
     let commandRefreshNonce = $state(0);
-    let artifactPanelMode = $state<"view" | "edit">("view");
     let leftPanelMode = $state<"mission" | "files">("mission");
-    let rightPanelMode = $state<"terminal" | "agent">("terminal");
     let selectedWorktreeNode = $state<MissionFileTreeNode | null>(null);
-    let artifactPanelSourceKey = $state<string | null>(null);
-    let displayArtifact = $state<ArtifactEntity | undefined>(undefined);
     let missionViewRefreshTimer: number | null = null;
     let refreshQueued = false;
     let progressCollapsed = $state(false);
@@ -149,56 +140,47 @@
     const missionHeading = $derived(
         `${repositoryName} - ${missionIssueLabel ? `${missionIssueLabel} ` : ""}${missionTitle}`,
     );
-    const missionTreeNodes = $derived(
-        activeMission ? buildMissionTreeNodes(activeMission) : [],
+    const missionFocusTargets = $derived(
+        activeMission ? buildMissionFocusTargets(activeMission) : [],
     );
-    const selectedNodeId = $derived.by(() => {
-        if (!missionView || missionTreeNodes.length === 0) {
+    const selectedFocusId = $derived.by(() => {
+        if (!missionView || missionFocusTargets.length === 0) {
             return undefined;
         }
 
-        const activeNodeId = appContext.airport.activeMissionSelectedNodeId;
-        return missionTreeNodes.some((node) => node.id === activeNodeId)
-            ? activeNodeId
-            : missionTreeNodes.find((node) => node.stageId === currentStageId)
-                  ?.id;
+        const activeFocusId = appContext.airport.activeMissionSelectedFocusId;
+        return missionFocusTargets.some((target) => target.id === activeFocusId)
+            ? activeFocusId
+            : (missionFocusTargets.find(
+                  (target) =>
+                      target.stageId === currentStageId &&
+                      target.kind === "stage",
+              )?.id ?? missionFocusTargets[0]?.id);
     });
-    const missionOutline = $derived<ActiveMissionOutline | undefined>(
-        activeMission
-            ? {
-                  title: missionTitle,
-                  currentStageId,
-                  briefPath: activeMission
-                      .listArtifacts()
-                      .find((artifact) => artifact.toData().key === "brief")
-                      ?.filePath,
-                  treeNodes: missionTreeNodes,
-              }
-            : undefined,
-    );
     const selectionState = $derived.by((): MissionSelectionState => {
-        const selectedNode = missionTreeNodes.find(
-            (node) => node.id === selectedNodeId,
+        const selectedTarget = missionFocusTargets.find(
+            (target) => target.id === selectedFocusId,
         );
         const companionStageTask =
-            activeMission && isStageSelectionNode(selectedNode)
-                ? resolvePreferredStageTask(activeMission, selectedNode.stageId)
-                : undefined;
-        const companionStageSession =
-            activeMission && isStageSelectionNode(selectedNode)
-                ? resolvePreferredStageSession(
+            activeMission && selectedTarget?.kind === "stage"
+                ? resolvePreferredStageTask(
                       activeMission,
-                      selectedNode.stageId,
+                      selectedTarget.stageId,
                   )
                 : undefined;
-        const resolvedStageId = selectedNode?.stageId;
+        const companionStageSession =
+            activeMission && selectedTarget?.kind === "stage"
+                ? resolvePreferredStageSession(
+                      activeMission,
+                      selectedTarget.stageId,
+                  )
+                : undefined;
+        const resolvedStageId = selectedTarget?.stageId;
         const resolvedTaskId =
-            selectedNode?.taskId ?? companionStageTask?.taskId;
+            selectedTarget?.taskId ?? companionStageTask?.taskId;
 
         return {
-            treeNodes: missionTreeNodes,
-            visibleTreeNodes: missionTreeNodes,
-            selectedNodeId,
+            selectedFocusId,
             ...(resolvedStageId || resolvedTaskId
                 ? {
                       resolvedSelection: {
@@ -209,22 +191,12 @@
                       },
                   }
                 : {}),
-            ...(isArtifactSelectionNode(selectedNode)
-                ? {
-                      activeArtifact: {
-                          id: selectedNode.id,
-                          displayLabel: selectedNode.label,
-                      },
-                  }
+            ...(companionStageSession?.sessionId
+                ? { activeSessionId: companionStageSession.sessionId }
                 : {}),
-            ...(selectedNode?.sessionId
-                ? { activeSessionId: selectedNode.sessionId }
-                : companionStageSession?.sessionId
-                  ? { activeSessionId: companionStageSession.sessionId }
-                  : {}),
         };
     });
-    const activeArtifactSelection = $derived(selectionState.activeArtifact?.id);
+    const activeArtifactSelection = $derived(undefined);
     const selectedWorktreeFile = $derived(
         selectedWorktreeNode?.kind === "file" ? selectedWorktreeNode : null,
     );
@@ -235,15 +207,47 @@
             ? activeMission.getTask(displayTaskId)
             : undefined,
     );
-    const showArtifactEditor = $derived.by(() => {
-        if (!displayArtifact) {
-            return false;
+    const displayArtifacts = $derived.by(() => {
+        if (!activeMission) {
+            return [];
         }
 
-        return (
-            artifactPanelMode === "edit" &&
-            isArtifactTextEditable(displayArtifact.bodyLocationLabel)
-        );
+        const artifacts = activeMission.listArtifacts();
+        const contextArtifacts = displayTask
+            ? [...displayTask.context]
+                  .sort(
+                      (left, right) =>
+                          left.selectionPosition - right.selectionPosition,
+                  )
+                  .map((contextArtifact) =>
+                      resolveContextArtifact(artifacts, contextArtifact.path),
+                  )
+                  .filter((artifact): artifact is (typeof artifacts)[number] =>
+                      Boolean(artifact),
+                  )
+            : [];
+        const taskArtifacts = displayTaskId
+            ? artifacts.filter(
+                  (candidate) => candidate.taskId === displayTaskId,
+              )
+            : [];
+        const stageArtifacts = displayStageId
+            ? artifacts.filter(
+                  (candidate) =>
+                      candidate.stageId === displayStageId && !candidate.taskId,
+              )
+            : [];
+        const artifactById = new Map<string, (typeof artifacts)[number]>();
+        for (const candidate of contextArtifacts) {
+            artifactById.set(candidate.id, candidate);
+        }
+        for (const candidate of taskArtifacts) {
+            artifactById.set(candidate.id, candidate);
+        }
+        for (const candidate of stageArtifacts) {
+            artifactById.set(candidate.id, candidate);
+        }
+        return [...artifactById.values()];
     });
     const resolvedSession = $derived(
         selectionState.activeSessionId && activeMission
@@ -255,57 +259,28 @@
                 )
               : undefined,
     );
+    const displayTaskSessions = $derived.by(() => {
+        if (!activeMission || !displayTaskId) {
+            return [];
+        }
+
+        return activeMission
+            .listExecutions()
+            .filter(
+                (agentExecution) => agentExecution.taskId === displayTaskId,
+            );
+    });
 
     $effect(() => {
-        if (!missionView) {
+        if (!selectedFocusId) {
             return;
         }
 
-        const activeSessionId = resolvedSession?.sessionId ?? null;
         if (
-            activeSessionId &&
-            (selectionState.activeSessionId ||
-                selectionState.resolvedSelection?.taskId)
+            appContext.airport.activeMissionSelectedFocusId !== selectedFocusId
         ) {
-            rightPanelMode = "agent";
+            appContext.setActiveMissionSelectedFocusId(selectedFocusId);
         }
-    });
-
-    $effect(() => {
-        if (!activeMission || !activeArtifactSelection) {
-            displayArtifact = undefined;
-            return;
-        }
-
-        displayArtifact = activeMission.getArtifact(activeArtifactSelection);
-    });
-
-    $effect(() => {
-        if (!selectedNodeId) {
-            return;
-        }
-
-        if (appContext.airport.activeMissionSelectedNodeId !== selectedNodeId) {
-            appContext.setActiveMissionSelectedNodeId(selectedNodeId);
-        }
-    });
-
-    $effect(() => {
-        if (!missionOutline) {
-            return;
-        }
-
-        appContext.setActiveMissionOutline(missionOutline);
-    });
-
-    $effect(() => {
-        const nextSourceKey = activeArtifactSelection ?? null;
-        if (artifactPanelSourceKey === nextSourceKey) {
-            return;
-        }
-
-        artifactPanelSourceKey = nextSourceKey;
-        artifactPanelMode = "view";
     });
 
     $effect(() => {
@@ -319,6 +294,9 @@
         const subscription = appContext.observeMission({
             missionId: normalizedMissionId,
             repositoryRootPath: normalizedWorktreePath,
+            onConnected: () => {
+                runtimeError = null;
+            },
             onUpdate: (_, event) => {
                 runtimeError = null;
                 handleMissionRuntimeEvent(event);
@@ -343,13 +321,11 @@
     function statusBadgeClass(statusLabel: string | undefined): string {
         switch (statusLabel?.trim().toLowerCase()) {
             case "running":
-            case "active":
                 return "border-sky-500/35 bg-sky-500/10 text-sky-700 dark:text-sky-300";
             case "completed":
             case "delivered":
                 return "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
             case "failed":
-            case "panicked":
                 return "border-rose-500/35 bg-rose-500/10 text-rose-700 dark:text-rose-300";
             case "paused":
             case "cancelled":
@@ -358,6 +334,36 @@
             default:
                 return "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300";
         }
+    }
+
+    function resolveContextArtifact<
+        T extends {
+            filePath?: string;
+            relativePath?: string;
+            fileName: string;
+        },
+    >(artifacts: T[], contextPath: string): T | undefined {
+        const normalizedContextPath = normalizeArtifactPath(contextPath);
+        return artifacts.find((artifact) => {
+            const artifactPaths = [
+                artifact.relativePath,
+                artifact.filePath,
+                artifact.fileName,
+            ]
+                .filter((path): path is string => Boolean(path))
+                .map(normalizeArtifactPath);
+
+            return artifactPaths.some(
+                (artifactPath) =>
+                    artifactPath === normalizedContextPath ||
+                    normalizedContextPath.endsWith(`/${artifactPath}`) ||
+                    artifactPath.endsWith(`/${normalizedContextPath}`),
+            );
+        });
+    }
+
+    function normalizeArtifactPath(value: string): string {
+        return value.trim().replace(/\\/g, "/").replace(/^\.\//, "");
     }
 
     async function refreshMissionView(): Promise<void> {
@@ -377,13 +383,6 @@
             activeMission.setRouteState({
                 controlViewSnapshot: nextView,
                 worktreePath: missionWorktreePath,
-            });
-            appContext.setActiveMissionOutline({
-                title: nextView.status?.title,
-                currentStageId: nextView.workflow?.currentStageId,
-                treeNodes: activeMission
-                    ? buildMissionTreeNodes(activeMission)
-                    : [],
             });
         } catch (error) {
             missionViewError =
@@ -422,11 +421,6 @@
         const status = MissionStatusSnapshotSchema.parse(payload.status);
 
         activeMission.applyMissionStatus(status);
-        appContext.setActiveMissionOutline({
-            title: status.title,
-            currentStageId: status.workflow?.currentStageId,
-            treeNodes: buildMissionTreeNodes(activeMission),
-        });
     }
 
     function handleMissionRuntimeEvent(
@@ -464,25 +458,25 @@
                 );
                 commandRefreshNonce += 1;
                 return;
-            case "agentSession.data.changed":
-                const agentSessionPayload = event.payload as {
+            case "agentExecution.data.changed":
+                const agentExecutionPayload = event.payload as {
                     data?: unknown;
                 };
-                activeMission?.applyAgentSessionData(
-                    AgentSessionDataSchema.parse(agentSessionPayload.data),
+                activeMission?.applyAgentExecutionData(
+                    AgentExecutionDataSchema.parse(agentExecutionPayload.data),
                 );
                 commandRefreshNonce += 1;
                 return;
-            case "session.event":
+            case "execution.event":
                 const sessionEventPayload = event.payload as {
                     session?: unknown;
                 };
-                activeMission?.applyAgentSessionData(
-                    AgentSessionDataSchema.parse(sessionEventPayload.session),
+                activeMission?.applyAgentExecutionData(
+                    AgentExecutionDataSchema.parse(sessionEventPayload.session),
                 );
                 commandRefreshNonce += 1;
                 return;
-            case "session.lifecycle":
+            case "execution.lifecycle":
                 scheduleMissionViewRefresh();
                 return;
             default:
@@ -494,68 +488,50 @@
         await refreshMissionView();
     }
 
-    function handleSelectNode(nodeId: string): void {
+    async function handleTaskAutostartChange(
+        taskId: string,
+        autostart: boolean,
+    ): Promise<void> {
+        const task = activeMission?.getTask(taskId);
+        if (!task) {
+            return;
+        }
+
+        await appContext.configureActiveMissionTask({
+            taskId,
+            options: { autostart },
+        });
+        await handleMissionMutated();
+    }
+
+    function handleSelectFocus(focusId: string): void {
         selectedWorktreeNode = null;
-        appContext.setActiveMissionSelectedNodeId(nodeId);
+        appContext.setActiveMissionSelectedFocusId(focusId);
     }
 
     function handleSelectWorktreeNode(node: MissionFileTreeNode): void {
         selectedWorktreeNode = node.kind === "file" ? node : null;
     }
 
-    function handleEditArtifact(): void {
-        if (
-            !displayArtifact ||
-            !isArtifactTextEditable(displayArtifact.bodyLocationLabel)
-        ) {
-            return;
-        }
-
-        artifactPanelMode = "edit";
-    }
-
-    function handleCloseArtifactEditor(): void {
-        artifactPanelMode = "view";
-    }
-
     function resolvePreferredTaskSession(
         currentMission: MissionEntity,
         taskId: string | undefined,
-    ): AgentSessionModel | undefined {
+    ): AgentExecutionModel | undefined {
         if (!taskId) {
             return undefined;
         }
 
         const sessions = currentMission
-            .listSessions()
-            .filter((session) => session.taskId === taskId);
+            .listExecutions()
+            .filter((execution) => execution.taskId === taskId);
         return (
             sessions.find(
-                (session) => session.isRunning() && session.isTerminalBacked(),
+                (execution) =>
+                    execution.isRunning() && execution.isTerminalBacked(),
             ) ??
-            sessions.find((session) => session.isRunning()) ??
-            sessions.find((session) => session.isTerminalBacked()) ??
+            sessions.find((execution) => execution.isRunning()) ??
+            sessions.find((execution) => execution.isTerminalBacked()) ??
             sessions[0]
-        );
-    }
-
-    function isStageSelectionNode(
-        node: MissionTowerTreeNode | undefined,
-    ): node is MissionTowerTreeNode & { stageId: string } {
-        return Boolean(
-            node?.stageId &&
-                (node.kind === "stage" || node.kind === "stage-artifact"),
-        );
-    }
-
-    function isArtifactSelectionNode(
-        node: MissionTowerTreeNode | undefined,
-    ): node is MissionTowerTreeNode & { id: string } {
-        return Boolean(
-            node?.id &&
-                (node.kind === "mission-artifact" ||
-                    node.kind === "stage-artifact" ||
-                    node.kind === "task-artifact"),
         );
     }
 
@@ -581,7 +557,7 @@
     function resolvePreferredStageSession(
         currentMission: MissionEntity,
         stageId: string | undefined,
-    ): AgentSessionModel | undefined {
+    ): AgentExecutionModel | undefined {
         if (!stageId) {
             return undefined;
         }
@@ -592,187 +568,86 @@
                 .map((task) => task.taskId),
         );
         return currentMission
-            .listSessions()
+            .listExecutions()
             .filter(
-                (session) =>
-                    session.taskId !== undefined && taskIds.has(session.taskId),
+                (execution) =>
+                    execution.taskId !== undefined &&
+                    taskIds.has(execution.taskId),
             )
-            .sort(comparePreferredAgentSessions)[0];
+            .sort(comparePreferredAgentExecutions)[0];
     }
 
-    function comparePreferredAgentSessions(
-        left: AgentSessionModel,
-        right: AgentSessionModel,
+    function comparePreferredAgentExecutions(
+        left: AgentExecutionModel,
+        right: AgentExecutionModel,
     ): number {
-        const leftActiveRank = getAgentSessionActiveRank(left);
-        const rightActiveRank = getAgentSessionActiveRank(right);
+        const leftActiveRank = getAgentExecutionActiveRank(left);
+        const rightActiveRank = getAgentExecutionActiveRank(right);
         if (leftActiveRank !== rightActiveRank) {
             return rightActiveRank - leftActiveRank;
         }
 
-        return getAgentSessionUpdatedAt(right) - getAgentSessionUpdatedAt(left);
+        return (
+            getAgentExecutionUpdatedAt(right) - getAgentExecutionUpdatedAt(left)
+        );
     }
 
-    function getAgentSessionActiveRank(session: AgentSessionModel): number {
-        return session.isRunning() ? 1 : 0;
+    function getAgentExecutionActiveRank(
+        execution: AgentExecutionModel,
+    ): number {
+        return execution.isRunning() ? 1 : 0;
     }
 
-    function getAgentSessionUpdatedAt(session: AgentSessionModel): number {
-        const snapshot = session.toData();
+    function getAgentExecutionUpdatedAt(
+        execution: AgentExecutionModel,
+    ): number {
+        const snapshot = execution.toData();
         const timestamp = snapshot.lastUpdatedAt ?? snapshot.createdAt;
         return timestamp ? Date.parse(timestamp) || 0 : 0;
     }
 
-    function buildMissionTreeNodes(
+    function buildMissionFocusTargets(
         currentMission: MissionEntity,
-    ): MissionTowerTreeNode[] {
-        const stageColors = [
-            "#38bdf8",
-            "#34d399",
-            "#f59e0b",
-            "#f43f5e",
-            "#a78bfa",
-        ];
-        const nodes: MissionTowerTreeNode[] = [];
-
-        for (const artifact of currentMission.listArtifacts()) {
-            if (artifact.stageId || artifact.taskId) {
-                continue;
-            }
-            nodes.push({
-                id: artifact.id,
-                label: artifact.label,
-                kind: "mission-artifact",
-                depth: 0,
-                color: "#8b949e",
-                statusLabel: "Mission artifact",
-                collapsible: false,
-                sourcePath: artifact.filePath,
-            });
-        }
-
-        currentMission.listStages().forEach((stage, stageIndex) => {
-            const stageSnapshot = stage.toData();
-            const stageColor = stageColors[stageIndex % stageColors.length];
-            const stageNodeId = toMissionTreeStageId(stage.stageId);
-            nodes.push({
-                id: `tree:stage:${stage.stageId}`,
-                label: stage.stageId,
-                kind: "stage",
-                depth: 0,
-                color: stageColor,
-                statusLabel: stage.lifecycle,
-                collapsible: true,
-                stageId: stageNodeId,
-            });
-
-            for (const artifact of stage.artifacts) {
-                nodes.push({
-                    id: artifact.id,
-                    label: artifact.label,
-                    kind: "stage-artifact",
-                    depth: 1,
-                    color: stageColor,
-                    statusLabel: "Stage artifact",
-                    collapsible: false,
-                    sourcePath: artifact.filePath ?? artifact.relativePath,
-                    stageId: stageNodeId,
-                });
-            }
-
-            for (const task of currentMission.listTasksForStage(
-                stage.stageId,
-            )) {
-                const taskSnapshot = task.toData().task;
-                nodes.push({
-                    id: `tree:task:${task.taskId}`,
-                    label: task.title,
-                    kind: "task",
-                    depth: 1,
-                    color: stageColor,
-                    statusLabel: task.lifecycle,
-                    collapsible: true,
-                    sourcePath: taskSnapshot.filePath,
-                    stageId: stageNodeId,
-                    taskId: task.taskId,
-                });
-
-                for (const artifact of currentMission
-                    .listArtifacts()
-                    .filter((candidate) => candidate.taskId === task.taskId)) {
-                    nodes.push({
-                        id: artifact.id,
-                        label: artifact.label,
-                        kind: "task-artifact",
-                        depth: 2,
-                        color: stageColor,
-                        statusLabel: "Task artifact",
-                        collapsible: false,
-                        sourcePath: artifact.filePath,
-                        stageId: stageNodeId,
-                        taskId: task.taskId,
-                    });
-                }
-
-                for (const session of currentMission
-                    .listSessions()
-                    .filter((candidate) => candidate.taskId === task.taskId)) {
-                    nodes.push({
-                        id: `tree:session:${session.sessionId}`,
-                        label: session.currentTurnTitle ?? session.sessionId,
-                        kind: "session",
-                        depth: 2,
-                        color: stageColor,
-                        statusLabel: session.lifecycleState,
-                        collapsible: false,
-                        stageId: stageNodeId,
-                        taskId: task.taskId,
-                        sessionId: session.sessionId,
-                    });
-                }
-            }
-
-            for (const artifact of stageSnapshot.artifacts.filter(
-                (candidate: { taskId?: string }) => !candidate.taskId,
-            )) {
-                if (nodes.some((node) => node.id === artifact.id)) {
-                    continue;
-                }
-                nodes.push({
-                    id: artifact.id,
-                    label: artifact.label,
-                    kind: "stage-artifact",
-                    depth: 1,
-                    color: stageColor,
-                    statusLabel: "Stage artifact",
-                    collapsible: false,
-                    sourcePath: artifact.filePath ?? artifact.relativePath,
-                    stageId: stageNodeId,
-                });
-            }
-        });
-
-        return nodes;
+    ): MissionFocusTarget[] {
+        return currentMission.listStages().flatMap((stage) => [
+            {
+                id: stageFocusId(stage.stageId),
+                kind: "stage" as const,
+                stageId: stage.stageId,
+            },
+            ...currentMission.listTasksForStage(stage.stageId).map((task) => ({
+                id: taskFocusId(task.taskId),
+                kind: "task" as const,
+                stageId: stage.stageId,
+                taskId: task.taskId,
+            })),
+        ]);
     }
 
-    function toMissionTreeStageId(
-        stageId: string,
-    ): MissionTowerTreeNode["stageId"] {
-        return stageId as MissionTowerTreeNode["stageId"];
+    function stageFocusId(stageId: string): string {
+        return `stage:${stageId}`;
+    }
+
+    function taskFocusId(taskId: string): string {
+        return `task:${taskId}`;
     }
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-2 gap-4">
+<div class="flex min-h-0 flex-1 flex-col">
     {#if missionLoading && !activeMission}
         <section
-            class="rounded-2xl border bg-card/70 px-5 py-4 text-sm text-muted-foreground backdrop-blur-sm"
+            class="border bg-card/70 text-sm text-muted-foreground backdrop-blur-sm p-2"
         >
             Loading mission snapshot...
         </section>
-    {:else if missionLoadError || !activeRepository || !activeMission || !missionView}
+    {:else if !missionLoadError && activeRepository && activeMission && !missionView}
         <section
-            class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
+            class="border bg-card/70 text-sm text-muted-foreground backdrop-blur-sm p-2"
         >
+            Loading mission view...
+        </section>
+    {:else if missionLoadError || !activeRepository || !activeMission || !missionView}
+        <section class="border bg-card/70 backdrop-blur-sm p-2">
             <h2 class="text-lg font-semibold text-foreground">Mission</h2>
             <p class="mt-3 text-sm text-rose-600">
                 {missionLoadError ?? "Mission view could not be loaded."}
@@ -780,9 +655,7 @@
         </section>
     {:else}
         {#if missionViewError || runtimeError}
-            <section
-                class="rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
-            >
+            <section class="border bg-card/70 backdrop-blur-sm p-2">
                 {#if missionViewError}
                     <p class="text-sm text-rose-600">{missionViewError}</p>
                 {/if}
@@ -793,10 +666,10 @@
         {/if}
 
         <section
-            class={`min-h-0 gap-4 rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm ${progressCollapsed ? "grid grid-rows-[auto]" : "grid grid-rows-[auto_minmax(0,1fr)]"}`}
+            class={`min-h-0 border bg-card/70 backdrop-blur-sm ${progressCollapsed ? "grid grid-rows-[auto]" : "grid grid-rows-[auto_minmax(0,1fr)]"}`}
         >
             <header
-                class={`space-y-4 ${progressCollapsed ? "" : "border-b pb-4"}`}
+                class={`space-y-4 p-2 ${progressCollapsed ? "" : "border-b"}`}
             >
                 <div
                     class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between"
@@ -833,11 +706,6 @@
                     <div
                         class="flex items-start gap-2 self-start xl:justify-end"
                     >
-                        <MissionCommandbar
-                            refreshNonce={commandRefreshNonce}
-                            mission={activeMission}
-                            onCommandExecuted={handleMissionMutated}
-                        />
                         <Button
                             type="button"
                             variant="outline"
@@ -868,9 +736,10 @@
 
             {#if !progressCollapsed}
                 <MissionCockpit
-                    {selectionState}
+                    mission={activeMission}
                     {currentStageId}
-                    onSelectNode={handleSelectNode}
+                    {selectedFocusId}
+                    onSelectFocus={handleSelectFocus}
                 />
             {/if}
         </section>
@@ -883,17 +752,23 @@
             <ResizablePane
                 defaultSize={24}
                 minSize={18}
-                class="flex h-full min-h-0 flex-col p-2"
+                class="flex h-full min-h-0 flex-col"
             >
                 <Tabs.Root
                     bind:value={leftPanelMode}
-                    class="min-h-0 flex-1 overflow-hidden rounded-2xl border bg-card/70 backdrop-blur-sm"
+                    class="min-h-0 flex-1 overflow-hidden border bg-card/70 backdrop-blur-sm"
                 >
-                    <div class="border-b px-3 py-2">
+                    <div class="border-b">
+                        <div class="border-b p-2">
+                            <MissionCommandbar
+                                refreshNonce={commandRefreshNonce}
+                                mission={activeMission}
+                                onCommandExecuted={handleMissionMutated}
+                            />
+                        </div>
+
                         <Tabs.List class="w-full">
-                            <Tabs.Trigger value="mission"
-                                >Mission Tree</Tabs.Trigger
-                            >
+                            <Tabs.Trigger value="mission">Tasks</Tabs.Trigger>
                             <Tabs.Trigger value="files">Files</Tabs.Trigger>
                         </Tabs.List>
                     </div>
@@ -903,12 +778,15 @@
                             <div
                                 class="absolute inset-0 min-h-0 overflow-hidden"
                             >
-                                <MissionControlTree
-                                    outline={missionOutline}
-                                    {missionId}
-                                    activeNodeId={selectedNodeId}
+                                <MissionTaskList
+                                    mission={activeMission}
+                                    {currentStageId}
+                                    activeFocusId={selectedFocusId}
+                                    refreshNonce={commandRefreshNonce}
                                     class="h-full rounded-none border-0 bg-transparent"
-                                    onSelectNode={handleSelectNode}
+                                    onSelectFocus={handleSelectFocus}
+                                    onTaskAutostartChange={handleTaskAutostartChange}
+                                    onCommandExecuted={handleMissionMutated}
                                 />
                             </div>
                         {:else}
@@ -930,68 +808,44 @@
             <ResizableHandle withHandle />
 
             <ResizablePane
-                defaultSize={38}
+                defaultSize={76}
                 minSize={24}
-                class="flex h-full min-h-0 flex-col p-2"
+                class="flex h-full min-h-0 flex-col"
             >
-                {#if showArtifactEditor}
-                    <ArtifactEditor
-                        artifact={displayArtifact}
-                        onCloseRequested={handleCloseArtifactEditor}
-                    />
-                {:else}
-                    <ArtifactViewer
-                        refreshNonce={commandRefreshNonce}
-                        artifact={displayArtifact}
-                        task={displayTask}
-                        onEditRequested={handleEditArtifact}
-                        onCommandExecuted={handleMissionMutated}
-                    />
-                {/if}
-            </ResizablePane>
-
-            <ResizableHandle withHandle />
-
-            <ResizablePane
-                defaultSize={38}
-                minSize={24}
-                class="flex h-full min-h-0 flex-col p-2"
-            >
-                <Tabs.Root
-                    bind:value={rightPanelMode}
-                    class="min-h-0 flex-1 overflow-hidden rounded-2xl border bg-card/70 backdrop-blur-sm"
+                <ResizablePaneGroup
+                    direction="vertical"
+                    class="min-h-0 flex-1 overflow-hidden"
+                    autoSaveId={`mission-panel:${missionId}`}
                 >
-                    <div class="border-b px-3 py-2">
-                        <Tabs.List class="w-full">
-                            <Tabs.Trigger value="terminal"
-                                >Mission Terminal</Tabs.Trigger
-                            >
-                            <Tabs.Trigger value="agent"
-                                >Agent Session</Tabs.Trigger
-                            >
-                        </Tabs.List>
-                    </div>
+                    <ResizablePane
+                        defaultSize={68}
+                        minSize={35}
+                        class="flex h-full min-h-0 flex-col"
+                    >
+                        <Task
+                            refreshNonce={commandRefreshNonce}
+                            agentAdapters={activeRepository?.data.settings
+                                .agentAdapters ?? []}
+                            artifacts={displayArtifacts}
+                            selectedArtifactId={activeArtifactSelection}
+                            task={displayTask}
+                            session={resolvedSession}
+                            sessions={displayTaskSessions}
+                            onCommandExecuted={handleMissionMutated}
+                        />
+                    </ResizablePane>
 
-                    <div class="relative min-h-0 flex-1 overflow-hidden p-0">
-                        {#if rightPanelMode === "terminal"}
-                            <div
-                                class="absolute inset-0 min-h-0 overflow-hidden"
-                            >
-                                <MissionTerminal />
-                            </div>
-                        {:else}
-                            <div
-                                class="absolute inset-0 min-h-0 overflow-hidden"
-                            >
-                                <AgentSession
-                                    refreshNonce={commandRefreshNonce}
-                                    session={resolvedSession}
-                                    onCommandExecuted={handleMissionMutated}
-                                />
-                            </div>
-                        {/if}
-                    </div>
-                </Tabs.Root>
+                    <ResizableHandle withHandle />
+
+                    <ResizablePane
+                        defaultSize={32}
+                        minSize={18}
+                        maxSize={60}
+                        class="flex h-full min-h-0 flex-col border bg-card/70 backdrop-blur-sm"
+                    >
+                        <MissionTerminal />
+                    </ResizablePane>
+                </ResizablePaneGroup>
             </ResizablePane>
         </ResizablePaneGroup>
     {/if}

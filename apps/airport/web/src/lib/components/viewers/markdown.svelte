@@ -11,8 +11,13 @@
     let containerElement = $state<HTMLElement | null>(null);
 
     type MarkdownDocument = {
-        frontmatter: string | null;
+        frontmatterRows: FrontmatterRow[];
         body: string;
+    };
+
+    type FrontmatterRow = {
+        key: string;
+        value: string;
     };
 
     const markdownDocument = $derived.by(() => splitFrontmatter(source ?? ""));
@@ -71,18 +76,55 @@
     function splitFrontmatter(content: string): MarkdownDocument {
         const normalized = content.replace(/\r\n/g, "\n");
         if (!normalized.startsWith("---\n")) {
-            return { frontmatter: null, body: normalized };
+            return { frontmatterRows: [], body: normalized };
         }
 
         const closingIndex = normalized.indexOf("\n---\n", 4);
         if (closingIndex < 0) {
-            return { frontmatter: null, body: normalized };
+            return { frontmatterRows: [], body: normalized };
         }
 
+        const frontmatter = normalized.slice(4, closingIndex).trim();
+
         return {
-            frontmatter: normalized.slice(0, closingIndex + 5).trimEnd(),
+            frontmatterRows: parseFrontmatterRows(frontmatter),
             body: normalized.slice(closingIndex + 5),
         };
+    }
+
+    function parseFrontmatterRows(frontmatter: string): FrontmatterRow[] {
+        const rows: FrontmatterRow[] = [];
+        let activeRow: FrontmatterRow | null = null;
+
+        for (const line of frontmatter.split("\n")) {
+            if (!line.trim()) {
+                continue;
+            }
+
+            const fieldMatch = /^(?<key>[^\s:#][^:]*):\s*(?<value>.*)$/.exec(
+                line,
+            );
+            if (fieldMatch?.groups) {
+                activeRow = {
+                    key: fieldMatch.groups.key.trim(),
+                    value: fieldMatch.groups.value.trim(),
+                };
+                rows.push(activeRow);
+                continue;
+            }
+
+            const continuation = line.trim();
+            if (activeRow) {
+                activeRow.value = activeRow.value
+                    ? `${activeRow.value}\n${continuation}`
+                    : continuation;
+                continue;
+            }
+
+            rows.push({ key: "", value: continuation });
+        }
+
+        return rows;
     }
 
     async function enhanceContent(): Promise<void> {
@@ -109,8 +151,21 @@
     bind:this={containerElement}
     class="markdown-viewer max-w-none break-words p-2 pb-6 text-sm text-foreground"
 >
-    {#if markdownDocument.frontmatter}
-        <pre class="markdown-frontmatter">{markdownDocument.frontmatter}</pre>
+    {#if markdownDocument.frontmatterRows.length}
+        <table class="markdown-frontmatter" aria-label="Frontmatter">
+            <tbody>
+                {#each markdownDocument.frontmatterRows as row, rowIndex (`${row.key}:${rowIndex}`)}
+                    <tr>
+                        {#if row.key}
+                            <th scope="row">{row.key}</th>
+                            <td>{row.value}</td>
+                        {:else}
+                            <td colspan="2">{row.value}</td>
+                        {/if}
+                    </tr>
+                {/each}
+            </tbody>
+        </table>
     {/if}
 
     <div class="markdown markdown-body" data-theme={mode.current}>

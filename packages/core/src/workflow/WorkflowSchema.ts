@@ -1,6 +1,8 @@
 import { z } from 'zod/v4';
+import { AgentIdSchema } from '../entities/Agent/AgentSchema.js';
+import { MissionReasoningEffortSchema } from '../entities/Mission/MissionSchema.js';
 import { StageIdSchema } from '../entities/Stage/StageSchema.js';
-import { TaskIdSchema } from '../entities/Task/TaskSchema.js';
+import { TaskContextArtifactReferenceSchema, TaskIdSchema } from '../entities/Task/TaskSchema.js';
 
 export type WorkflowSettingsValidationError = {
 	code: string;
@@ -15,12 +17,6 @@ export const WorkflowMissionAutostartSettingsSchema = z.object({
 export const WorkflowHumanInLoopSettingsSchema = z.object({
 	enabled: z.boolean(),
 	pauseOnMissionStart: z.boolean()
-}).strict();
-
-export const WorkflowPanicSettingsSchema = z.object({
-	terminateSessions: z.boolean(),
-	clearLaunchQueue: z.boolean(),
-	haltMission: z.boolean()
 }).strict();
 
 export const WorkflowExecutionSettingsSchema = z.object({
@@ -42,10 +38,13 @@ export const WorkflowGeneratedTaskDefinitionSchema = z.object({
 	taskId: TaskIdSchema,
 	title: z.string().trim().min(1),
 	instruction: z.string().trim().min(1),
+	model: z.string().trim().min(1).optional(),
+	reasoningEffort: MissionReasoningEffortSchema.optional(),
 	taskKind: z.enum(['implementation', 'verification']).optional(),
 	pairedTaskId: TaskIdSchema.optional(),
 	dependsOn: z.array(TaskIdSchema),
-	agentRunner: z.string().trim().min(1).optional()
+	context: z.array(TaskContextArtifactReferenceSchema).optional(),
+	agentAdapter: AgentIdSchema.optional()
 }).strict();
 
 export const WorkflowTaskTemplateSourceSchema = z.object({
@@ -69,7 +68,6 @@ export const WorkflowGateDefinitionSchema = z.object({
 export const WorkflowDefinitionSchema = z.object({
 	autostart: WorkflowMissionAutostartSettingsSchema,
 	humanInLoop: WorkflowHumanInLoopSettingsSchema,
-	panic: WorkflowPanicSettingsSchema,
 	execution: WorkflowExecutionSettingsSchema,
 	stageOrder: z.array(StageIdSchema),
 	stages: z.record(StageIdSchema, WorkflowStageDefinitionSchema),
@@ -148,9 +146,10 @@ export const WorkflowDefinitionSchema = z.object({
 });
 
 export const WorkflowRuntimeSettingsSchema = z.object({
-	agentRunner: z.enum(['copilot-cli', 'pi']),
+	agentAdapter: AgentIdSchema,
 	defaultAgentMode: z.enum(['interactive', 'autonomous']).optional(),
-	defaultModel: z.string().trim().min(1).optional()
+	defaultModel: z.string().trim().min(1).optional(),
+	defaultReasoningEffort: MissionReasoningEffortSchema.optional()
 }).strict();
 
 export const WorkflowIntegrationSettingsSchema = z.object({
@@ -165,7 +164,6 @@ export const WorkflowPathSettingsSchema = z.object({
 
 export type WorkflowMissionAutostartSettings = z.infer<typeof WorkflowMissionAutostartSettingsSchema>;
 export type WorkflowHumanInLoopSettings = z.infer<typeof WorkflowHumanInLoopSettingsSchema>;
-export type WorkflowPanicSettings = z.infer<typeof WorkflowPanicSettingsSchema>;
 export type WorkflowExecutionSettings = z.infer<typeof WorkflowExecutionSettingsSchema>;
 export type WorkflowStageTaskLaunchPolicy = z.infer<typeof WorkflowStageTaskLaunchPolicySchema>;
 export type WorkflowStageDefinition = z.infer<typeof WorkflowStageDefinitionSchema>;

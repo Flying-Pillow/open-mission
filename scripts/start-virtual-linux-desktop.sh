@@ -87,5 +87,5 @@ VNC:    localhost:${vnc_port}
 noVNC:  http://localhost:${novnc_port}/vnc.html
 
 Use this display for visible Tauri runs:
-  DISPLAY=${display_value} pnpm run dev:native
+  DISPLAY=${display_value} pnpm --dir apps/airport/native run dev
 EOF

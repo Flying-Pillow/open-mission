@@ -20,7 +20,7 @@ export function buildMissionSnapshot(input: {
         stages: input.mission.stages,
         tasks: input.mission.stages.flatMap((stage) => stage.tasks),
         artifacts: input.mission.artifacts,
-        agentSessions: input.mission.agentSessions
+        agentExecutions: input.mission.agentExecutions
     });
 }
 

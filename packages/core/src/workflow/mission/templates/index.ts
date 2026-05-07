@@ -5,7 +5,6 @@ import { readTemplateFile } from '../../engine/templates/templateRepository.js';
 import { renderTemplate } from '../../engine/templates/templateRenderer.js';
 import { renderMissionTitle } from './common.js';
 import { parseFrontmatterDocument } from '../../../lib/frontmatter.js';
-import { DEFAULT_AGENT_RUNNER_ID } from '../../../daemon/runtime/agent/runtimes/AgentRuntimeIds.js';
 import { Repository } from '../../../entities/Repository/Repository.js';
 import { getMissionArtifactDefinition, getMissionStageDefinition, type MissionArtifactKey } from '../../manifest.js';
 import type {
@@ -16,7 +15,8 @@ import type {
     MissionTemplateContext,
     MissionTemplateContextInput
 } from './types.js';
-import type { MissionTaskAgent, MissionTaskStatus } from '../../../types.js';
+import type { MissionTaskAgent, MissionTaskStatus } from '../../../entities/Mission/MissionSchema.js';
+import { TaskContextArtifactReferenceSchema } from '../../../entities/Task/TaskSchema.js';
 
 const packagedTemplateDirectory = path.dirname(fileURLToPath(import.meta.url));
 
@@ -45,7 +45,7 @@ export async function renderMissionTaskTemplate(
     template: MissionTaskTemplateRef,
     input: MissionTemplateContextInput
 ): Promise<MissionTaskTemplate> {
-    const templateText = await readTemplateFile(resolveMissionTemplateDirectory(input.controlRoot), template.templatePath);
+    const templateText = await readTemplateFile(resolveMissionTemplateDirectory(input.repositoryRootPath), template.templatePath);
     const renderedText = renderTemplate(templateText, createMissionTemplateContext(input));
     const document = parseFrontmatterDocument(renderedText);
 
@@ -59,6 +59,7 @@ export async function renderMissionTaskTemplate(
     const taskKindAttr = document.attributes['taskKind'];
     const pairedTaskIdAttr = document.attributes['pairedTaskId'];
     const dependsOnAttr = document.attributes['dependsOn'];
+    const contextAttr = document.attributes['context'];
     const statusAttr = document.attributes['status'];
     const retriesAttr = document.attributes['retries'];
 
@@ -66,11 +67,15 @@ export async function renderMissionTaskTemplate(
         fileName,
         subject: String(subjectAttr || ''),
         instruction: document.body.trim(),
-        agent: String(typeof agentAttr === 'string' && agentAttr.trim() ? agentAttr.trim() : DEFAULT_AGENT_RUNNER_ID) as MissionTaskAgent,
+        agent: String(typeof agentAttr === 'string' && agentAttr.trim() ? agentAttr.trim() : 'copilot-cli') as MissionTaskAgent,
     };
 
     if (Array.isArray(dependsOnAttr)) {
         result.dependsOn = dependsOnAttr.map(String);
+    }
+
+    if (Array.isArray(contextAttr)) {
+        result.context = contextAttr.map((entry) => TaskContextArtifactReferenceSchema.parse(entry));
     }
 
     if (taskKindAttr === 'implementation' || taskKindAttr === 'verification') {
@@ -135,12 +140,12 @@ async function renderMissionTemplate(
     templatePath: string,
     input: MissionTemplateContextInput
 ): Promise<string> {
-    const templateText = await readTemplateFile(resolveMissionTemplateDirectory(input.controlRoot), templatePath);
+    const templateText = await readTemplateFile(resolveMissionTemplateDirectory(input.repositoryRootPath), templatePath);
     return renderTemplate(templateText, createMissionTemplateContext(input));
 }
 
-function resolveMissionTemplateDirectory(controlRoot: string): string {
-    const repositoryTemplateDirectory = Repository.getMissionWorkflowTemplatesPath(controlRoot);
+function resolveMissionTemplateDirectory(repositoryRoot: string): string {
+    const repositoryTemplateDirectory = Repository.getMissionWorkflowTemplatesPath(repositoryRoot);
     if (path.isAbsolute(repositoryTemplateDirectory) && fs.existsSync(repositoryTemplateDirectory)) {
         return repositoryTemplateDirectory;
     }

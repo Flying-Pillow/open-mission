@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Mission } from './Mission.svelte.js';
-import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/daemon/protocol/entityRemote';
-import { AgentSessionCommandIds, type AgentSessionCommandAcknowledgementType, type AgentSessionDataType } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/entities/Entity/EntityRemote';
+import { AgentExecutionCommandIds, type AgentExecutionCommandAcknowledgementType, type AgentExecutionDataType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import { ArtifactCommandIds, type ArtifactDataType } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
 import { MissionCommandIds, type MissionCommandAcknowledgementType, type MissionSnapshotType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { StageDataType, StageCommandAcknowledgementType } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
@@ -47,7 +47,7 @@ describe('Mission control view reconciliation', () => {
 
         mission.applyTaskData(createTaskSnapshot('task-1', 'completed'));
         mission.applyArtifactData(createArtifactData('verify', 'Verification Evidence'));
-        mission.applyAgentSessionData(createSessionSnapshot('session-1', 'completed'));
+        mission.applyAgentExecutionData(createSessionSnapshot('session-1', 'completed'));
 
         expect(mission.getTask('task-1')?.lifecycle).toBe('completed');
         expect(mission.getTask('task-2')?.lifecycle).toBe('pending');
@@ -111,7 +111,7 @@ describe('Mission control view reconciliation', () => {
             throw new Error('Expected PRD Artifact to be available.');
         }
 
-        await artifact.read({ executionContext: 'render' });
+        await artifact.refreshBody({ executionContext: 'render' });
 
         expect(artifactBodyCalls).toEqual(['artifact:mission-29/mission-29:prd']);
     });
@@ -145,6 +145,64 @@ describe('Mission control view reconciliation', () => {
             }
         ]);
     });
+
+    it('routes structured AgentExecution prompts and commands through the AgentExecution command surface', async () => {
+        const agentExecutionCommandCalls: EntityCommandInvocation[] = [];
+        const mission = createMission(
+            createMissionSnapshot({
+                agentExecutions: [createSessionSnapshot('session-1', 'awaiting-input', {
+                    interactionCapabilities: {
+                        mode: 'agent-message',
+                        canSendTerminalInput: false,
+                        canSendStructuredPrompt: true,
+                        canSendStructuredCommand: true
+                    },
+                    runtimeMessages: [
+                        { type: 'checkpoint', label: 'Checkpoint', delivery: 'best-effort', mutatesContext: false },
+                        { type: 'resume', label: 'Resume', delivery: 'best-effort', mutatesContext: false }
+                    ]
+                })]
+            }),
+            createMissionGatewayDependencies([], [], agentExecutionCommandCalls)
+        );
+        const session = mission.getSession('session-1');
+
+        if (!session) {
+            throw new Error('Expected session to be available.');
+        }
+
+        await session.sendPrompt({ source: 'operator', text: 'Continue with the next slice.' });
+        await session.sendCommand({ type: 'resume', reason: 'Operator approved continuation.' });
+
+        expect(agentExecutionCommandCalls).toEqual([
+            {
+                entity: 'AgentExecution',
+                method: 'command',
+                payload: {
+                    missionId: 'mission-29',
+                    sessionId: 'session-1',
+                    commandId: AgentExecutionCommandIds.sendPrompt,
+                    input: {
+                        source: 'operator',
+                        text: 'Continue with the next slice.'
+                    }
+                }
+            },
+            {
+                entity: 'AgentExecution',
+                method: 'command',
+                payload: {
+                    missionId: 'mission-29',
+                    sessionId: 'session-1',
+                    commandId: AgentExecutionCommandIds.sendRuntimeMessage,
+                    input: {
+                        type: 'resume',
+                        reason: 'Operator approved continuation.'
+                    }
+                }
+            }
+        ]);
+    });
 });
 
 function createMission(
@@ -160,17 +218,20 @@ function createMission(
 
 function createMissionGatewayDependencies(
     artifactBodyCalls: string[],
-    artifactBodyCommandCalls: EntityCommandInvocation[] = []
+    artifactBodyCommandCalls: EntityCommandInvocation[] = [],
+    agentExecutionCommandCalls: EntityCommandInvocation[] = []
 ): MissionGatewayDependencies {
     return {
-        commandRemote: async (input) => handleCommandInvocation(input, artifactBodyCommandCalls),
+        commandRemote: async (input) =>
+            handleCommandInvocation(input, artifactBodyCommandCalls, agentExecutionCommandCalls),
         queryRemote: async (input) => handleQueryInvocation(input, artifactBodyCalls)
     };
 }
 
 async function handleCommandInvocation(
     input: EntityCommandInvocation,
-    artifactBodyCommandCalls: EntityCommandInvocation[]
+    artifactBodyCommandCalls: EntityCommandInvocation[],
+    agentExecutionCommandCalls: EntityCommandInvocation[]
 ): Promise<EntityRemoteResult> {
     if (input.entity === 'Stage' && input.method === 'command') {
         return createStageAcknowledgement();
@@ -193,16 +254,9 @@ async function handleCommandInvocation(
         };
     }
 
-    if (input.entity === 'AgentSession' && input.method === 'command') {
-        return createAgentSessionAcknowledgement('command');
-    }
-
-    if (input.entity === 'AgentSession' && input.method === 'sendPrompt') {
-        return createAgentSessionAcknowledgement('sendPrompt');
-    }
-
-    if (input.entity === 'AgentSession' && input.method === 'sendCommand') {
-        return createAgentSessionAcknowledgement('sendCommand');
+    if (input.entity === 'AgentExecution' && input.method === 'command') {
+        agentExecutionCommandCalls.push(input);
+        return createAgentExecutionAcknowledgement('command');
     }
 
     if (input.entity === 'Mission' && input.method === 'command') {
@@ -279,15 +333,15 @@ function createTaskAcknowledgement(): TaskCommandAcknowledgementType {
     };
 }
 
-function createAgentSessionAcknowledgement(method: AgentSessionCommandAcknowledgementType['method']): AgentSessionCommandAcknowledgementType {
+function createAgentExecutionAcknowledgement(method: AgentExecutionCommandAcknowledgementType['method']): AgentExecutionCommandAcknowledgementType {
     return {
         ok: true,
-        entity: 'AgentSession',
+        entity: 'AgentExecution',
         method,
         id: 'session-1',
         missionId: 'mission-29',
         sessionId: 'session-1',
-        ...(method === 'command' ? { commandId: AgentSessionCommandIds.cancel } : {})
+        commandId: AgentExecutionCommandIds.cancel
     };
 }
 
@@ -301,7 +355,7 @@ function createMissionAcknowledgement(method: MissionCommandAcknowledgementType[
     };
 }
 
-function createMissionSnapshot(): MissionSnapshotType {
+function createMissionSnapshot(overrides: Partial<MissionSnapshotType> = {}): MissionSnapshotType {
     const stages = [createStageSnapshot({
         lifecycle: 'running',
         tasks: [
@@ -320,7 +374,7 @@ function createMissionSnapshot(): MissionSnapshotType {
             missionRootDir: '/tmp/mission-29/.mission/mission-29',
             artifacts: [createArtifactData('verify', 'VERIFY.md')],
             stages,
-            agentSessions: [createSessionSnapshot('session-1', 'running')]
+            agentExecutions: [createSessionSnapshot('session-1', 'running')]
         },
         commandView: {
             revision: 'commands-1',
@@ -344,7 +398,8 @@ function createMissionSnapshot(): MissionSnapshotType {
         stages,
         tasks: stages.flatMap((stage) => stage.tasks),
         artifacts: [createArtifactData('verify', 'VERIFY.md')],
-        agentSessions: [createSessionSnapshot('session-1', 'running')]
+        agentExecutions: [createSessionSnapshot('session-1', 'running')],
+        ...overrides
     };
 }
 
@@ -373,7 +428,7 @@ function createTaskSnapshot(taskId: string, lifecycle: string): TaskDataType {
         lifecycle,
         dependsOn: [],
         waitingOnTaskIds: [],
-        agentRunner: 'copilot-cli',
+        agentAdapter: 'copilot-cli',
         retries: 0
     };
 }
@@ -390,15 +445,23 @@ function createArtifactData(id: string, label: string): ArtifactDataType {
 
 function createSessionSnapshot(
     sessionId: string,
-    lifecycleState: AgentSessionDataType['lifecycleState']
-): AgentSessionDataType {
+    lifecycleState: AgentExecutionDataType['lifecycleState'],
+    overrides: Partial<AgentExecutionDataType> = {}
+): AgentExecutionDataType {
     return {
-        id: `agent_session:mission-29/${sessionId}`,
+        id: `agent_execution:mission-29/${sessionId}`,
         sessionId,
-        runnerId: 'copilot-cli',
-        runnerLabel: 'Copilot CLI',
+        agentId: 'copilot-cli',
+        adapterLabel: 'Copilot CLI',
         lifecycleState,
+        interactionCapabilities: {
+            mode: 'pty-terminal',
+            canSendTerminalInput: true,
+            canSendStructuredPrompt: false,
+            canSendStructuredCommand: false
+        },
         context: { artifacts: [], instructions: [] },
-        runtimeMessages: []
+        runtimeMessages: [],
+        ...overrides
     };
 }

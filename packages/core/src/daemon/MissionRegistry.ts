@@ -1,20 +1,27 @@
 import * as path from 'node:path';
-import { createConfiguredAgentRunners } from './runtime/agent/runtimes/AgentRuntimeFactory.js';
 import type { EntityExecutionContext } from '../entities/Entity/Entity.js';
+import { AgentRegistry } from '../entities/Agent/AgentRegistry.js';
 import {
     MissionLocatorSchema,
     type MissionLocatorType
 } from '../entities/Mission/MissionSchema.js';
 import { Mission } from '../entities/Mission/Mission.js';
 import { Repository } from '../entities/Repository/Repository.js';
-import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
+import { MissionDossierFilesystem } from '../entities/Mission/MissionDossierFilesystem.js';
 import { parsePersistedWorkflowSettings } from '../settings/validation.js';
 import { readMissionWorkflowDefinition } from '../workflow/mission/preset.js';
+import type {
+    AgentExecutionObservation,
+    AgentExecutionObservationAddress,
+    AgentExecutionSignalDecision,
+    AgentExecutionSnapshot
+} from '../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import { getAgentExecutionScopeMissionId } from '../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 
 export type MissionLoader = (
     input: MissionLocatorType,
     context: { surfacePath: string },
-    terminalSessionName?: string
+    terminalName?: string
 ) => Promise<MissionHandle | undefined>;
 
 export type MissionHandle = Mission;
@@ -26,6 +33,7 @@ export class MissionRegistry {
     public constructor(private readonly options: {
         loadMission?: MissionLoader;
         logger?: {
+            info(message: string, metadata?: Record<string, unknown>): void;
             warn(message: string, metadata?: Record<string, unknown>): void;
         };
     } = {}) { }
@@ -33,28 +41,36 @@ export class MissionRegistry {
     public async hydrateDaemonMissions(context: { surfacePath: string }): Promise<void> {
         const roots = new Set<string>([path.resolve(context.surfacePath)]);
         for (const repository of await Repository.find({}, context)) {
+            if (repository.invalidState) {
+                this.options.logger?.warn(`Mission daemon skipped invalid Repository '${repository.id}'.`, {
+                    repositoryId: repository.id,
+                    repositoryRootPath: repository.repositoryRootPath,
+                    invalidState: repository.invalidState
+                });
+                continue;
+            }
             roots.add(path.resolve(repository.repositoryRootPath));
         }
 
-        for (const controlRoot of roots) {
-            await this.hydrateRepositoryMissions({ surfacePath: controlRoot });
+        for (const repositoryRoot of roots) {
+            await this.hydrateRepositoryMissions({ surfacePath: repositoryRoot });
         }
     }
 
     public async hydrateRepositoryMissions(context: { surfacePath: string }): Promise<void> {
-        const controlRoot = path.resolve(context.surfacePath);
-        const adapter = new FilesystemAdapter(controlRoot);
+        const repositoryRoot = path.resolve(context.surfacePath);
+        const adapter = new MissionDossierFilesystem(repositoryRoot);
         const missions = await this.listKnownMissions(adapter);
         await Promise.all(
             missions.map(async (mission) => {
                 try {
-                    const missionControlRoot = adapter.getMissionWorkspacePath(mission.missionDir);
+                    const missionRepositoryRoot = adapter.getMissionWorkspacePath(mission.missionDir);
                     await this.loadMissionFromRegistry(
                         {
                             missionId: mission.descriptor.missionId,
-                            repositoryRootPath: missionControlRoot
+                            repositoryRootPath: missionRepositoryRoot
                         },
-                        { surfacePath: missionControlRoot }
+                        { surfacePath: missionRepositoryRoot }
                     );
                 } catch (error) {
                     const message = `Mission daemon could not hydrate mission '${mission.descriptor.missionId}' at '${mission.missionDir}': ${error instanceof Error ? error.message : String(error)}`;
@@ -78,10 +94,30 @@ export class MissionRegistry {
         this.missionLoads.clear();
     }
 
+    public getRuntimeSessionSnapshot(address: AgentExecutionObservationAddress): AgentExecutionSnapshot | undefined {
+        const missionId = getAgentExecutionScopeMissionId(address.scope);
+        const mission = missionId ? this.findLoadedMission(missionId) : undefined;
+        return mission?.getRuntimeSessionSnapshot(address.agentExecutionId);
+    }
+
+    public applyRuntimeSessionSignalDecision(input: {
+        address: AgentExecutionObservationAddress;
+        observation: AgentExecutionObservation;
+        decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>;
+    }): AgentExecutionSnapshot | undefined {
+        const missionId = getAgentExecutionScopeMissionId(input.address.scope);
+        const mission = missionId ? this.findLoadedMission(missionId) : undefined;
+        return mission?.applyRuntimeSessionSignalDecision(
+            input.address.agentExecutionId,
+            input.observation,
+            input.decision
+        );
+    }
+
     public async loadRequiredMission(
         input: MissionLocatorType,
         context: { surfacePath: string },
-        terminalSessionName?: string
+        terminalName?: string
     ): Promise<MissionHandle> {
         const payload = MissionLocatorSchema.parse({
             missionId: input.missionId,
@@ -91,7 +127,7 @@ export class MissionRegistry {
             throw new Error('Mission entity methods require a surfacePath context.');
         }
 
-        const mission = await this.loadMissionFromRegistry(payload, context, terminalSessionName);
+        const mission = await this.loadMissionFromRegistry(payload, context, terminalName);
         if (!mission) {
             throw new Error(`Mission '${payload.missionId}' could not be resolved.`);
         }
@@ -102,10 +138,10 @@ export class MissionRegistry {
     private async loadMissionFromRegistry(
         input: MissionLocatorType,
         context: { surfacePath: string },
-        terminalSessionName?: string
+        terminalName?: string
     ): Promise<MissionHandle | undefined> {
-        const controlRoot = path.resolve(input.repositoryRootPath?.trim() || context.surfacePath);
-        const key = this.createMissionKey(controlRoot, input.missionId);
+        const repositoryRoot = path.resolve(input.repositoryRootPath?.trim() || context.surfacePath);
+        const key = this.createMissionKey(repositoryRoot, input.missionId);
         const existingMission = this.missionHandles.get(key);
         if (existingMission) {
             return existingMission;
@@ -119,8 +155,8 @@ export class MissionRegistry {
         const loader = this.options.loadMission ?? this.loadMission;
         const load = loader(
             input,
-            { surfacePath: controlRoot },
-            terminalSessionName
+            { surfacePath: repositoryRoot },
+            terminalName
         ).then((mission) => {
             if (!mission) {
                 this.missionLoads.delete(key);
@@ -140,20 +176,18 @@ export class MissionRegistry {
         input: MissionLocatorType,
         context: { surfacePath: string },
     ): Promise<Mission | undefined> => {
-        const controlRoot = input.repositoryRootPath?.trim() || context.surfacePath;
-        const settings = Repository.requireSettingsDocument(controlRoot);
-        const workflowDocument = readMissionWorkflowDefinition(controlRoot);
+        const repositoryRoot = input.repositoryRootPath?.trim() || context.surfacePath;
+        const settings = Repository.requireSettingsDocument(repositoryRoot);
+        const workflowDocument = readMissionWorkflowDefinition(repositoryRoot);
         if (!workflowDocument) {
-            throw new Error(`Repository workflow definition '${Repository.getMissionWorkflowDefinitionPath(controlRoot)}' is required.`);
+            throw new Error(`Repository workflow definition '${Repository.getMissionWorkflowDefinitionPath(repositoryRoot)}' is required.`);
         }
         const workflow = parsePersistedWorkflowSettings(workflowDocument);
-        const taskRunners = new Map(
-            (await createConfiguredAgentRunners({
-                controlRoot
-            })).map((runner) => [runner.id, runner] as const)
-        );
+        const agentRegistry = await AgentRegistry.createConfigured({
+            repositoryRootPath: repositoryRoot
+        });
 
-        const adapter = new FilesystemAdapter(controlRoot);
+        const adapter = new MissionDossierFilesystem(repositoryRoot);
         const resolved = await adapter.resolveKnownMission({ missionId: input.missionId });
         if (!resolved) {
             return undefined;
@@ -162,28 +196,47 @@ export class MissionRegistry {
         const mission = new Mission(adapter, resolved.missionDir, resolved.descriptor, {
             workflow,
             resolveWorkflow: () => workflow,
-            taskRunners,
+            agentRegistry,
             ...(settings.instructionsPath
-                ? { instructionsPath: resolveRepositoryPath(controlRoot, settings.instructionsPath) }
+                ? { instructionsPath: resolveRepositoryPath(repositoryRoot, settings.instructionsPath) }
                 : {}),
-            ...(settings.skillsPath ? { skillsPath: resolveRepositoryPath(controlRoot, settings.skillsPath) } : {}),
+            ...(settings.skillsPath ? { skillsPath: resolveRepositoryPath(repositoryRoot, settings.skillsPath) } : {}),
             ...(settings.defaultModel ? { defaultModel: settings.defaultModel } : {}),
-            ...(settings.defaultAgentMode ? { defaultMode: settings.defaultAgentMode } : {})
+            ...(settings.defaultReasoningEffort ? { defaultReasoningEffort: settings.defaultReasoningEffort } : {}),
+            ...(settings.defaultAgentMode ? { defaultMode: settings.defaultAgentMode } : {}),
+            ...(this.options.logger ? { logger: this.options.logger } : {})
         });
         await mission.refresh();
         return mission;
     };
 
-    private async listKnownMissions(adapter: FilesystemAdapter) {
+    private async listKnownMissions(adapter: MissionDossierFilesystem) {
         const missions = [
             ...await adapter.listTrackedMissions(),
             ...await adapter.listMissions()
         ];
-        return [...new Map(missions.map((mission) => [mission.missionDir, mission])).values()];
+        const uniqueMissions = [...new Map(missions.map((mission) => [mission.missionDir, mission])).values()];
+        const hydratableMissions = [];
+        for (const mission of uniqueMissions) {
+            if (await this.shouldHydrateMission(adapter, mission.missionDir)) {
+                hydratableMissions.push(mission);
+            }
+        }
+        return hydratableMissions;
     }
 
-    private createMissionKey(controlRoot: string, missionId: string): string {
-        return `${path.resolve(controlRoot)}:${missionId}`;
+    private async shouldHydrateMission(adapter: MissionDossierFilesystem, missionDir: string): Promise<boolean> {
+        const stateData = await adapter.readMissionStateDataFile(missionDir);
+        if (!isRecord(stateData) || !isRecord(stateData['runtime'])) {
+            return true;
+        }
+
+        const lifecycle = stateData['runtime']['lifecycle'];
+        return lifecycle !== 'completed' && lifecycle !== 'delivered';
+    }
+
+    private createMissionKey(repositoryRoot: string, missionId: string): string {
+        return `${path.resolve(repositoryRoot)}:${missionId}`;
     }
 
     private createBorrowedMissionHandle(mission: MissionHandle): MissionHandle {
@@ -196,6 +249,15 @@ export class MissionRegistry {
                 return typeof value === 'function' ? value.bind(target) : value;
             }
         });
+    }
+
+    private findLoadedMission(missionId: string): MissionHandle | undefined {
+        for (const mission of this.missionHandles.values()) {
+            if (mission.missionId === missionId) {
+                return mission;
+            }
+        }
+        return undefined;
     }
 
 }
@@ -211,4 +273,8 @@ function resolveRepositoryPath(repositoryRootPath: string, configuredPath: strin
     return path.isAbsolute(configuredPath)
         ? configuredPath
         : path.join(repositoryRootPath, configuredPath);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

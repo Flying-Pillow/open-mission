@@ -1,15 +1,14 @@
 import type {
     RepositoryIssueDetailType,
-    RepositoryStorageType,
     RepositoryPlatformRepositoryType,
     RepositoryDataType,
     TrackedIssueSummaryType
 } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import type { MissionCatalogEntryType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-import type { AgentSessionDataType } from '@flying-pillow/mission-core/entities/AgentSession/AgentSessionSchema';
+import type { AgentExecutionDataType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import type { MissionSnapshotType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 
-export type SidebarRepositoryData = RepositoryStorageType & {
+export type SidebarRepositoryData = RepositoryDataType & {
     missions?: MissionCatalogEntryType[];
 };
 export type AirportRepositoryListItem = {
@@ -26,10 +25,9 @@ export type AirportRepositoryListItem = {
 export type {
     RepositoryIssueDetailType,
     MissionCatalogEntryType,
-    RepositoryStorageType,
     RepositoryPlatformRepositoryType,
     RepositoryDataType,
     TrackedIssueSummaryType,
-    AgentSessionDataType,
+    AgentExecutionDataType,
     MissionSnapshotType
 };

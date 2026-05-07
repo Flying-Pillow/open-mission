@@ -3,105 +3,18 @@ layout: default
 title: Architecture
 nav_order: 5
 has_children: true
+description: The current Mission architecture in daemon, Entity, Airport, workflow, and adapter terms.
 ---
 
-<!-- /docs/architecture/index.md: Entry page for Mission architecture references, including the current Airport web blueprint alongside existing daemon and terminal surface docs. -->
+Mission is built around strict ownership:
 
-# Architecture
+- **Entity classes** own domain behavior and invariants.
+- **Entity schemas** own validated payload, storage, and data shapes.
+- **Entity contracts** expose daemon-readable method metadata.
+- **The daemon** owns runtime state, command dispatch, and agent coordination.
+- **Airport** is a surface over daemon-owned state.
+- **Adapters** translate external systems into Mission concepts.
 
-This section is the implementation-grounded architecture reference for Mission.
+Read [System Context](system-context.md), [Semantic Model](semantic-model.md), and [Entity Command Surface](entity-command-surface.md) first. ADR-0012 is the key architectural decision behind the current OOD model.
 
-It documents the system as it exists in the repository today across:
-
-- the repository-owned control state under `.mission/`
-- the daemon-owned control plane and system snapshot
-- the mission-local workflow engine and runtime data
-- the provider-neutral agent runtime contract
-- the repository-scoped airport layout authority
-- the Airport terminal surfaces and their client relationship to the daemon
-- the Airport web blueprint and its gateway relationship to the daemon and terminal runtime
-- the Entity command surface across Mission, child Entities, Airport, and daemon dispatch
-- the published Mission CLI package and its distribution boundary
-- the public IPC and package export surfaces
-
-This architecture section resolves against the repository code, daemon behavior, persisted state, and routed surfaces that exist today.
-
-<div class="mission-status-grid">
- <div class="mission-status-card mission-status-card--current">
-  <strong>Current implementation</strong>
-  <p>This architecture section resolves against the repository code, daemon behavior, persisted state, and routed surfaces that exist today.</p>
- </div>
- <div class="mission-status-card mission-status-card--target">
-  <strong>Target architecture</strong>
-  <p>Specifications and replay material still matter because they capture the cleaner end-state Mission is driving toward. Treat them as directional intent unless this section explicitly says the current code already matches.</p>
- </div>
-</div>
-
-## How To Read This Section
-
-1. Start with [system-context.md](./system-context.html) for the end-to-end topology.
-2. Read [repository-and-dossier.md](./repository-and-dossier.html) and [semantic-model.md](./semantic-model.html) for the repository, mission, stage, task, artifact, and session model.
-3. Read [daemon.md](./daemon.html), [workflow-engine.md](./workflow-engine.html), [agent-runtime.md](./agent-runtime.html), and [airport-control-plane.md](./airport-control-plane.html) for the main authorities.
-4. Read [airport-terminal-surface.md](./airport-terminal-surface.html), [airport-web-surface-blueprint.md](./airport-web-surface-blueprint.html), [contracts.md](./contracts.html), and [entity-command-surface.md](./entity-command-surface.html) for Airport surface, protocol boundaries, and Entity command flows. ADR 0015 records the command-only vocabulary decision behind that surface.
-5. Use [recovery-and-reconciliation.md](./recovery-and-reconciliation.html), [package-map.md](./package-map.html), and [integrity-checklist.md](./integrity-checklist.html) as operational reference pages.
-
-## System Context
-
-```mermaid
-flowchart LR
- Operator[Operator] --> CLI[Mission CLI package]
- CLI --> AirportSurface[Airport terminal surface]
- AirportSurface -->|IPC requests and subscriptions| Daemon[Mission daemon]
- BrowserSurface[Airport web surface] -->|HTTP, SSE, terminal relay| Gateway[SvelteKit gateway]
- Gateway --> Daemon
- Gateway --> Zellij
- Daemon --> Registry[MissionRegistry]
- Daemon --> Status[system.status\nentity remote]
- Registry --> Mission[Mission aggregate]
- Mission --> Workflow[MissionWorkflowController\nReducer + request executor]
- Workflow --> Runtime[daemon-owned agent control\nAgentRunner + AgentSession]
- Workflow --> Dossier[(.mission/missions/<mission-id>/mission.json)]
- Mission --> Settings[(.mission/settings.json)]
- Mission --> WorkflowPreset[(.mission/workflow/*)]
- Mission --> Briefs[(.mission/missions/<mission-id>/*)]
- Daemon --> Zellij[zellij substrate observations]
- Runtime --> Providers[Copilot CLI / Copilot SDK / transport]
- Daemon --> Config[(~/.config/mission/config.json)]
- Runtime --> DaemonRuntime[(XDG runtime or tmp daemon state)]
-```
-
-## Authority Matrix
-
-| Concern | Authority | Non-authorities |
-| --- | --- | --- |
-| Repository adoption and settings | `initializeMissionRepository(...)`, `WorkflowSettingsStore`, `.mission/settings.json`, `.mission/workflow/` | Airport terminal surfaces, Airport control, task markdown |
-| Mission execution truth | `MissionWorkflowController` + `mission.json` | Terminal local state, airport state |
-| Semantic selection graph | Mission entity and daemon-owned entity projections | `mission.json`, terminal panes |
-| Layout bindings and focus intent | Airport surfaces plus client-reported substrate observations | workflow engine |
-| Live terminal panes | `MissionTerminal` and `AgentSessionTerminal` observers | Workflow reducer |
-| Agent execution | daemon-owned agent control path + `AgentRunner` / `AgentSession` implementations | Airport terminal surfaces, Airport control |
-| Client protocol | `DaemonClient` / `DaemonApi` + daemon request handlers | Direct file editing from local surfaces |
-
-## Replay Anchors
-
-The architecture coverage in this section reflects the five replayed architectural missions captured under `.mission/missions/` and mapped in `specifications/replay/retrospective-specification-coverage-map.md`.
-
-| Replay anchor | Primary architecture home in these docs |
-| --- | --- |
-| Repository Adoption And Mission Dossier Layout | [repository-and-dossier.md](./repository-and-dossier.html) |
-| Mission Semantic Model | [semantic-model.md](./semantic-model.html) |
-| Workflow Engine And Repository Workflow Settings | [workflow-engine.md](./workflow-engine.html) and [contracts.md](./contracts.html) |
-| Agent Runtime Unification | [agent-runtime.md](./agent-runtime.html) |
-| Airport Control Plane | [airport-control-plane.md](./airport-control-plane.html) and [airport-terminal-surface.md](./airport-terminal-surface.html) |
-
-## Source-Of-Truth Ladder
-
-Use this order when reconciling architectural questions:
-
-1. Current implementation in `packages/mission`, `packages/core`, `packages/airport`, and `apps/airport/terminal`
-2. Persisted runtime surfaces: `.mission/settings.json`, `.mission/workflow/`, `.mission/missions/<mission-id>/mission.json`, Mission config, daemon runtime files
-3. Current reference docs such as `docs/reference/state-schema.md`
-4. Source specifications under `specifications/`
-5. Replayed mission dossiers under `.mission/missions/`
-
-If two layers disagree, prefer the higher layer and record the mismatch in [discrepancies.md](./discrepancies.html).
+Temporary working specs are allowed while a refactor is in flight. For Agent execution structured interaction, use [Agent Execution Structured Interaction Spec](agent-execution-structured-interaction-spec.md) as the current implementation reference until its durable decisions are folded back into `CONTEXT.md` and accepted ADRs.

@@ -1,8 +1,7 @@
 <script lang="ts">
     import type { Artifact } from "$lib/components/entities/Artifact/Artifact.svelte.js";
-    import TaskCommandbar from "$lib/components/entities/Task/TaskCommandbar.svelte";
-    import type { Task } from "$lib/components/entities/Task/Task.svelte.js";
     import Icon from "@iconify/svelte";
+    import { ArtifactBodySchema } from "@flying-pillow/mission-core/entities/Artifact/ArtifactSchema";
     import { Button } from "$lib/components/ui/button/index.js";
     import MarkdownViewer from "$lib/components/viewers/markdown.svelte";
     import {
@@ -13,18 +12,14 @@
     let {
         refreshNonce,
         artifact,
-        task,
         onEditRequested,
-        onCommandExecuted,
     }: {
         refreshNonce: number;
         artifact?: Artifact;
-        task?: Task;
-        onEditRequested: () => void;
-        onCommandExecuted: () => Promise<void>;
+        onEditRequested: () => void | Promise<void>;
     } = $props();
 
-    const panelLabel = $derived(artifact?.label ?? "Resolved artifact");
+    const panelLabel = $derived(artifact?.label ?? "");
     const artifactBodyLocation = $derived(artifact?.bodyLocationLabel);
     const viewerKind = $derived(
         resolveArtifactViewerKind(artifactBodyLocation),
@@ -32,15 +27,18 @@
     const canEditArtifact = $derived(
         isArtifactTextEditable(artifactBodyLocation),
     );
-    const artifactBodyKey = $derived(
-        artifact ? `${artifact.id}:${refreshNonce}` : "none",
-    );
     const canReadArtifactBody = $derived.by(() => {
         refreshNonce;
         return Boolean(
             artifact && viewerKind !== "unsupported" && viewerKind !== "image",
         );
     });
+    const artifactBodyKey = $derived(
+        artifact ? `${artifact.id}:${refreshNonce}` : "none",
+    );
+    const artifactBodyQuery = $derived(
+        artifact ? artifact.readForRender() : undefined,
+    );
 </script>
 
 <section
@@ -53,10 +51,6 @@
             </h2>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2">
-            <TaskCommandbar {refreshNonce} {task} {onCommandExecuted} />
-        </div>
-
         {#if artifact && canEditArtifact}
             <Button variant="outline" size="sm" onclick={onEditRequested}>
                 <Icon icon="lucide:pencil" />
@@ -67,16 +61,17 @@
 
     <div class="min-h-0 overflow-auto p-2">
         {#if artifact}
-            {#if canReadArtifactBody}
+            {#if canReadArtifactBody && artifactBodyQuery}
                 {#key artifactBodyKey}
-                    {#await artifact.read({ executionContext: "render" })}
+                    {#await artifactBodyQuery}
                         <div
                             class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
                         >
                             Loading artifact...
                         </div>
                     {:then artifactBodyResult}
-                        {@const artifactBody = artifactBodyResult}
+                        {@const artifactBody =
+                            ArtifactBodySchema.parse(artifactBodyResult)}
                         {#if viewerKind === "markdown"}
                             {#if typeof artifactBody.body !== "string"}
                                 <div

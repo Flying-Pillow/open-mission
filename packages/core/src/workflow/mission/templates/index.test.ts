@@ -7,11 +7,11 @@ describe('mission template resolution', () => {
             { key: 'spec', templatePath: 'stages/SPEC.md' },
             {
                 missionId: 'mission-17',
-                controlRoot: '/',
+                repositoryRootPath: '/',
                 branchRef: 'mission/17-reconstruct-agent-runtime-unification',
                 brief: {
-                    title: 'Reconstruct agent runtime unification',
-                    body: 'Reconstruct agent runtime unification body',
+                    title: 'Reconstruct agent adapter unification',
+                    body: 'Reconstruct agent adapter unification body',
                     type: 'refactor'
                 }
             }
@@ -26,12 +26,12 @@ describe('mission template resolution', () => {
             { templatePath: 'tasks/PRD/01-prd-from-brief.md' },
             {
                 missionId: '1-initial-setup',
-                controlRoot: '/',
+                repositoryRootPath: '/',
                 branchRef: 'mission/1-initial-setup',
                 brief: {
                     title: 'Initial setup',
                     body: 'Initial setup body',
-                    type: 'feat'
+                    type: 'feature'
                 }
             }
         );
@@ -45,12 +45,12 @@ describe('mission template resolution', () => {
             { templatePath: 'tasks/SPEC/01-spec-from-prd.md' },
             {
                 missionId: '1-initial-setup',
-                controlRoot: '/',
+                repositoryRootPath: '/',
                 branchRef: 'mission/1-initial-setup',
                 brief: {
                     title: 'Initial setup',
                     body: 'Initial setup body',
-                    type: 'feat'
+                    type: 'feature'
                 }
             }
         );
@@ -65,12 +65,12 @@ describe('mission template resolution', () => {
             { templatePath: 'tasks/SPEC/02-plan.md' },
             {
                 missionId: '1-initial-setup',
-                controlRoot: '/',
+                repositoryRootPath: '/',
                 branchRef: 'mission/1-initial-setup',
                 brief: {
                     title: 'Initial setup',
                     body: 'Initial setup body',
-                    type: 'feat'
+                    type: 'feature'
                 }
             }
         );

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { MissionDescriptor } from '../../types.js';
-import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
-import type { AgentCommand, AgentPrompt } from '../../daemon/runtime/agent/AgentRuntimeTypes.js';
+import type { MissionDescriptor } from '../../entities/Mission/MissionSchema.js';
+import type { MissionDossierFilesystem } from '../../entities/Mission/MissionDossierFilesystem.js';
+import type { AgentCommand, AgentPrompt } from '../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import {
     createMissionWorkflowConfigurationSnapshot,
     createMissionStateData,
@@ -51,7 +51,7 @@ describe('workflow engine e2e', () => {
         expect(document.runtime.lifecycle).toBe('running');
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('running');
 
-        const prdSessionId = executor.requireSessionId('prd/01');
+        const prdSessionId = executor.requireTerminalId('prd/01');
         await controller.promptRuntimeSession(prdSessionId, {
             source: 'operator',
             text: 'Keep the PRD tight.'
@@ -72,10 +72,10 @@ describe('workflow engine e2e', () => {
         });
         expect(document.runtime.lifecycle).toBe('running');
 
-        document = await completeTask(controller, 'prd/01', executor.requireSessionId('prd/01'), '2026-04-14T10:02:00.000Z');
+        document = await completeTask(controller, 'prd/01', executor.requireTerminalId('prd/01'), '2026-04-14T10:02:00.000Z');
         expect(document.runtime.tasks.find((task) => task.taskId === 'spec/01')?.lifecycle).toBe('running');
 
-        document = await completeTask(controller, 'spec/01', executor.requireSessionId('spec/01'), '2026-04-14T10:03:00.000Z');
+        document = await completeTask(controller, 'spec/01', executor.requireTerminalId('spec/01'), '2026-04-14T10:03:00.000Z');
         expect(document.runtime.tasks.find((task) => task.taskId === 'implementation/01')?.lifecycle).toBe('ready');
 
         document = await controller.applyEvent({
@@ -85,7 +85,7 @@ describe('workflow engine e2e', () => {
             source: 'human',
             taskId: 'implementation/01'
         });
-        const implementationSessionId = executor.requireSessionId('implementation/01');
+        const implementationSessionId = executor.requireTerminalId('implementation/01');
 
         document = await controller.cancelRuntimeSession(
             implementationSessionId,
@@ -101,11 +101,11 @@ describe('workflow engine e2e', () => {
             source: 'human',
             taskId: 'implementation/01'
         });
-        document = await completeTask(controller, 'implementation/01', executor.requireSessionId('implementation/01'), '2026-04-14T10:05:00.000Z');
+        document = await completeTask(controller, 'implementation/01', executor.requireTerminalId('implementation/01'), '2026-04-14T10:05:00.000Z');
 
         expect(document.runtime.tasks.find((task) => task.taskId === 'audit/01')?.lifecycle).toBe('running');
         document = await controller.terminateRuntimeSession(
-            executor.requireSessionId('audit/01'),
+            executor.requireTerminalId('audit/01'),
             'stop audit and relaunch',
             'audit/01'
         );
@@ -120,7 +120,7 @@ describe('workflow engine e2e', () => {
         });
         expect(document.runtime.tasks.find((task) => task.taskId === 'audit/01')?.lifecycle).toBe('running');
 
-        document = await completeTask(controller, 'audit/01', executor.requireSessionId('audit/01'), '2026-04-14T10:06:00.000Z');
+        document = await completeTask(controller, 'audit/01', executor.requireTerminalId('audit/01'), '2026-04-14T10:06:00.000Z');
 
         expect(document.runtime.lifecycle).toBe('completed');
         expect(document.runtime.stages.find((stage) => stage.stageId === 'delivery')?.lifecycle).toBe('completed');
@@ -141,8 +141,8 @@ describe('workflow engine e2e', () => {
             'mission.started',
             'mission.paused',
             'mission.resumed',
-            'session.cancelled',
-            'session.terminated',
+            'execution.cancelled',
+            'execution.terminated',
             'mission.delivered'
         ]));
     });
@@ -181,13 +181,13 @@ describe('workflow engine e2e', () => {
         });
 
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('failed');
-        expect(adapter.getPersistedEventLog().at(-1)?.type).toBe('session.launch-failed');
+        expect(adapter.getPersistedEventLog().at(-1)?.type).toBe('execution.launch-failed');
 
         document = await controller.applyEvent(createTaskReopenedEvent('prd/01', '2026-04-14T11:00:30.000Z'));
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('running');
 
         document = await controller.terminateRuntimeSession(
-            executor.requireSessionId('prd/01'),
+            executor.requireTerminalId('prd/01'),
             'reset session',
             'prd/01'
         );
@@ -202,13 +202,13 @@ describe('workflow engine e2e', () => {
         });
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('running');
 
-        document = await completeTask(controller, 'prd/01', executor.requireSessionId('prd/01'), '2026-04-14T11:02:00.000Z');
+        document = await completeTask(controller, 'prd/01', executor.requireTerminalId('prd/01'), '2026-04-14T11:02:00.000Z');
 
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('completed');
         expect(adapter.getPersistedEventLog().map((event) => event.type)).toEqual(expect.arrayContaining([
-            'session.launch-failed',
+            'execution.launch-failed',
             'task.reopened',
-            'session.started',
+            'execution.started',
             'task.completed'
         ]));
     });
@@ -254,7 +254,7 @@ describe('workflow engine e2e', () => {
         expect(executor.executedRequestTypes).toEqual(['tasks.request-generation']);
     });
 
-    it('covers panic termination and stale launch-queue restart recovery', async () => {
+    it('covers pause and stale launch-queue restart recovery', async () => {
         const workflow = createDefaultWorkflowSettings();
         workflow.execution.maxParallelTasks = 2;
         workflow.execution.maxParallelSessions = 1;
@@ -267,7 +267,7 @@ describe('workflow engine e2e', () => {
                 ]
             }
         });
-        const descriptor = createDescriptor('mission-e2e-panic');
+        const descriptor = createDescriptor('mission-e2e-pause-recovery');
         const controller = new MissionWorkflowController({
             adapter,
             descriptor,
@@ -286,23 +286,19 @@ describe('workflow engine e2e', () => {
         expect(document.runtime.launchQueue).toHaveLength(1);
 
         document = await controller.applyEvent({
-            eventId: 'mission.panic.requested:2026-04-14T13:00:30.000Z',
-            type: 'mission.panic.requested',
+            eventId: 'mission.paused:2026-04-14T13:00:30.000Z',
+            type: 'mission.paused',
             occurredAt: '2026-04-14T13:00:30.000Z',
-            source: 'human'
+            source: 'human',
+            reason: 'human-requested',
+            targetType: 'mission'
         });
 
-        expect(document.runtime.lifecycle).toBe('panicked');
-        expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('ready');
-        expect(document.runtime.tasks.find((task) => task.taskId === 'prd/02')?.lifecycle).toBe('ready');
-        expect(document.runtime.launchQueue).toEqual([]);
+        expect(document.runtime.lifecycle).toBe('paused');
+        expect(document.runtime.pause.reason).toBe('human-requested');
+        expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('running');
+        expect(document.runtime.tasks.find((task) => task.taskId === 'prd/02')?.lifecycle).toBe('queued');
 
-        document = await controller.applyEvent({
-            eventId: 'mission.panic.cleared:2026-04-14T13:01:00.000Z',
-            type: 'mission.panic.cleared',
-            occurredAt: '2026-04-14T13:01:00.000Z',
-            source: 'human'
-        });
         document = await controller.applyEvent({
             eventId: 'task.launch-policy.changed:prd/02:2026-04-14T13:01:10.000Z',
             type: 'task.launch-policy.changed',
@@ -364,12 +360,10 @@ describe('workflow engine e2e', () => {
 
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/02')?.lifecycle).toBe('running');
         expect(adapter.getPersistedEventLog().map((event) => event.type)).toEqual(expect.arrayContaining([
-            'mission.panic.requested',
-            'session.terminated',
-            'mission.panic.cleared',
+            'mission.paused',
             'mission.resumed',
             'mission.launch-queue.restarted',
-            'session.started'
+            'execution.started'
         ]));
     });
 });
@@ -406,7 +400,7 @@ function createAdapter() {
         setPersistedDocument: (document: MissionStateData | undefined) => {
             persisted = document;
         }
-    } as unknown as FilesystemAdapter & {
+    } as unknown as MissionDossierFilesystem & {
         getPersistedDocument(): MissionStateData | undefined;
         getPersistedEventLog(): Array<{ type: string }>;
         setPersistedDocument(document: MissionStateData | undefined): void;
@@ -429,8 +423,8 @@ async function completeTask(
     occurredAt: string
 ): Promise<MissionStateData> {
     const completedSessionDocument = await controller.applyEvent({
-        eventId: `session.completed:${sessionId}:${occurredAt}`,
-        type: 'session.completed',
+        eventId: `execution.completed:${sessionId}:${occurredAt}`,
+        type: 'execution.completed',
         occurredAt,
         source: 'daemon',
         sessionId,
@@ -502,14 +496,14 @@ function createScenarioExecutor(input: {
                         });
                         break;
                     }
-                    case 'session.launch': {
+                    case 'execution.launch': {
                         const taskId = String(request.payload['taskId']);
                         const plan = input.launchPlans?.[taskId];
                         const outcome = plan?.shift() ?? 'started';
                         if (outcome === 'launch-failed') {
                             events.push({
-                                eventId: `session.launch-failed:${taskId}:${request.requestId}`,
-                                type: 'session.launch-failed',
+                                eventId: `execution.launch-failed:${taskId}:${request.requestId}`,
+                                type: 'execution.launch-failed',
                                 occurredAt: advanceTimestamp('2026-04-14T09:00:00.000Z', executedRequestTypes.length),
                                 source: 'daemon',
                                 causedByRequestId: request.requestId,
@@ -523,30 +517,30 @@ function createScenarioExecutor(input: {
                         taskSessionIds.set(taskId, sessionId);
                         sessionTaskIds.set(sessionId, taskId);
                         events.push({
-                            eventId: `session.started:${taskId}:${request.requestId}`,
-                            type: 'session.started',
+                            eventId: `execution.started:${taskId}:${request.requestId}`,
+                            type: 'execution.started',
                             occurredAt: advanceTimestamp('2026-04-14T09:00:00.000Z', executedRequestTypes.length),
                             source: 'daemon',
                             causedByRequestId: request.requestId,
                             sessionId,
                             taskId,
-                            runnerId: 'fake-runner',
+                            agentId: 'fake-adapter',
                             transportId: 'terminal',
                             terminalHandle: {
-                                sessionName: sessionId,
-                                paneId: 'pty'
+                                terminalName: sessionId,
+                                terminalPaneId: 'pty'
                             }
                         });
                         break;
                     }
-                    case 'session.terminate': {
+                    case 'execution.terminate': {
                         const sessionId = String(request.payload['sessionId']);
                         const taskId = sessionTaskIds.get(sessionId) ?? String(request.payload['taskId'] ?? '');
                         taskSessionIds.delete(taskId);
                         sessionTaskIds.delete(sessionId);
                         events.push({
-                            eventId: `session.terminated:${sessionId}:${request.requestId}`,
-                            type: 'session.terminated',
+                            eventId: `execution.terminated:${sessionId}:${request.requestId}`,
+                            type: 'execution.terminated',
                             occurredAt: advanceTimestamp('2026-04-14T09:00:00.000Z', executedRequestTypes.length),
                             source: 'daemon',
                             causedByRequestId: request.requestId,
@@ -559,13 +553,13 @@ function createScenarioExecutor(input: {
             }
             return events;
         },
-        reconcileSessions: async () => [],
+        reconcileExecutions: async () => [],
         listRuntimeSessions: () => [],
         getRuntimeSession: () => undefined,
-        attachSession: async () => {
+        reconcileExecution: async () => {
             throw new Error('not implemented in workflowEngine.e2e.test.ts');
         },
-        startSession: async () => {
+        startExecution: async () => {
             throw new Error('not implemented in workflowEngine.e2e.test.ts');
         },
         cancelRuntimeSession: async (sessionId: string, _reason?: string, fallbackTaskId?: string) => {
@@ -573,8 +567,8 @@ function createScenarioExecutor(input: {
             taskSessionIds.delete(taskId);
             sessionTaskIds.delete(sessionId);
             return [{
-                eventId: `session.cancelled:${sessionId}`,
-                type: 'session.cancelled',
+                eventId: `execution.cancelled:${sessionId}`,
+                type: 'execution.cancelled',
                 occurredAt: '2026-04-14T09:30:00.000Z',
                 source: 'daemon',
                 sessionId,
@@ -594,8 +588,8 @@ function createScenarioExecutor(input: {
             taskSessionIds.delete(taskId);
             sessionTaskIds.delete(sessionId);
             return [{
-                eventId: `session.terminated:${sessionId}`,
-                type: 'session.terminated',
+                eventId: `execution.terminated:${sessionId}`,
+                type: 'execution.terminated',
                 occurredAt: '2026-04-14T09:31:00.000Z',
                 source: 'daemon',
                 sessionId,
@@ -609,7 +603,7 @@ function createScenarioExecutor(input: {
         executedRequestTypes,
         promptCalls,
         commandCalls,
-        requireSessionId(taskId: string): string {
+        requireTerminalId(taskId: string): string {
             const sessionId = taskSessionIds.get(taskId);
             if (!sessionId) {
                 throw new Error(`Missing session id for task '${taskId}'.`);

@@ -1,20 +1,18 @@
-import * as path from 'node:path';
-import type { AgentSessionRecord } from '../../daemon/protocol/contracts.js';
-import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import type { AgentExecutionRecord } from '../AgentExecution/AgentExecutionSchema.js';
+import type { MissionDossierFilesystem } from './MissionDossierFilesystem.js';
 import {
 	MISSION_ARTIFACTS,
 	MISSION_STAGES,
 	MISSION_STAGE_FOLDERS,
 	type MissionArtifactKey,
-	type MissionDescriptor,
-	type MissionStageId,
-	type MissionStageStatus,
-	type MissionTaskState,
-	type MissionTowerProjection as MissionTowerView,
-	type MissionTowerStageRailItem,
-	type MissionTowerTreeNode,
-	type OperatorStatus
-} from '../../types.js';
+	type MissionStageId
+} from '../../workflow/mission/manifest.js';
+import type {
+	MissionDescriptor,
+	MissionStageStatus,
+	MissionTaskState,
+	OperatorStatus
+} from './MissionSchema.js';
 import { DEFAULT_WORKFLOW_VERSION } from '../../workflow/mission/workflow.js';
 import {
 	createDraftMissionWorkflowRuntimeState,
@@ -22,17 +20,16 @@ import {
 	type MissionStateData,
 	type WorkflowDefinition
 } from '../../workflow/engine/index.js';
-import { getMissionStageDefinition } from '../../workflow/mission/manifest.js';
 import { Task } from '../Task/Task.js';
 import { Stage } from '../Stage/Stage.js';
 
 export type MissionStatusViewInput = {
-	adapter: FilesystemAdapter;
+	adapter: MissionDossierFilesystem;
 	missionDir: string;
 	descriptor: MissionDescriptor;
 	workflow: WorkflowDefinition;
 	document?: MissionStateData;
-	sessions: AgentSessionRecord[];
+	sessions: AgentExecutionRecord[];
 	hydrateRuntimeTasksForActions(tasks: MissionStateData['runtime']['tasks']): Promise<MissionStateData['runtime']['tasks']>;
 };
 
@@ -49,7 +46,6 @@ export async function buildMissionStatusView(input: MissionStatusViewInput): Pro
 	const activeTasks = Stage.resolveActiveTasks(currentStage);
 	const readyTasks = Stage.resolveReadyTasks(currentStage);
 	const productFiles = await collectMissionArtifactPaths({ adapter: input.adapter, missionDir: input.missionDir });
-	const tower = buildTowerView(input.document.configuration, stages, input.sessions, productFiles);
 
 	return {
 		found: true,
@@ -65,12 +61,10 @@ export async function buildMissionStatusView(input: MissionStatusViewInput): Pro
 		...(activeTasks.length > 0 ? { activeTasks } : {}),
 		...(readyTasks.length > 0 ? { readyTasks } : {}),
 		stages,
-		agentSessions: input.sessions,
-		tower,
+		agentExecutions: input.sessions,
 		workflow: {
 			lifecycle: input.document.runtime.lifecycle,
 			pause: { ...input.document.runtime.pause },
-			panic: { ...input.document.runtime.panic },
 			...(currentStageId ? { currentStageId } : {}),
 			configuration: input.document.configuration,
 			stages: input.document.runtime.stages.map((stage) => ({
@@ -85,6 +79,7 @@ export async function buildMissionStatusView(input: MissionStatusViewInput): Pro
 				...task,
 				title: projectedTasksById.get(task.taskId)?.subject ?? task.title,
 				dependsOn: [...task.dependsOn],
+				context: (task.context ?? []).map((contextArtifact) => ({ ...contextArtifact })),
 				waitingOnTaskIds: [...task.waitingOnTaskIds],
 				runtime: { ...task.runtime }
 			})),
@@ -128,7 +123,6 @@ async function buildDraftMissionStatusView(input: MissionStatusViewInput): Promi
 	}));
 	const currentStageId = (input.workflow.stageOrder[0] as MissionStageId | undefined) ?? 'prd';
 	const productFiles = await collectMissionArtifactPaths({ adapter: input.adapter, missionDir: input.missionDir });
-	const tower = buildTowerView(configuration, stages, [], productFiles);
 
 	return {
 		found: true,
@@ -142,12 +136,10 @@ async function buildDraftMissionStatusView(input: MissionStatusViewInput): Promi
 		missionRootDir: input.missionDir,
 		productFiles,
 		stages,
-		agentSessions: [],
-		tower,
+		agentExecutions: [],
 		workflow: {
 			lifecycle: runtime.lifecycle,
 			pause: { ...runtime.pause },
-			panic: { ...runtime.panic },
 			currentStageId,
 			configuration,
 			stages: runtime.stages.map((stage) => ({
@@ -226,202 +218,8 @@ async function buildWorkflowStageStatuses(
 	}));
 }
 
-function buildTowerView(
-	configuration: MissionStateData['configuration'],
-	stages: MissionStageStatus[],
-	sessions: AgentSessionRecord[],
-	productFiles: Partial<Record<MissionArtifactKey, string>>
-): MissionTowerView {
-	return {
-		stageRail: stages.map((stage) => toTowerStageRailItem(stage, configuration)),
-		treeNodes: buildTowerTreeNodes(configuration, stages, sessions, productFiles)
-	};
-}
-
-function toTowerStageRailItem(
-	stage: MissionStageStatus,
-	configuration: MissionStateData['configuration']
-): MissionTowerStageRailItem {
-	return {
-		id: stage.stage,
-		label: resolveTowerStageLabel(stage.stage, configuration),
-		state: stage.status,
-		subtitle: `${String(stage.completedTaskCount)}/${String(stage.taskCount)}`
-	};
-}
-
-function buildTowerTreeNodes(
-	configuration: MissionStateData['configuration'],
-	stages: MissionStageStatus[],
-	sessions: AgentSessionRecord[],
-	productFiles: Partial<Record<MissionArtifactKey, string>>
-): MissionTowerTreeNode[] {
-	const nodes: MissionTowerTreeNode[] = [];
-	const missionArtifactPath = productFiles.brief;
-	if (missionArtifactPath) {
-		nodes.push({
-			id: 'tree:mission-artifact:brief',
-			label: MISSION_ARTIFACTS.brief,
-			kind: 'mission-artifact',
-			depth: 0,
-			color: progressTone('pending'),
-			statusLabel: 'Mission artifact',
-			collapsible: false,
-			sourcePath: missionArtifactPath
-		});
-	}
-	for (const stage of stages) {
-		const stageArtifactPath = resolveStageArtifactPath(stage.stage, productFiles);
-		const stageStatusLabel = toStatusLabel(stage.status);
-		nodes.push({
-			id: `tree:stage:${stage.stage}`,
-			label: resolveTowerStageLabel(stage.stage, configuration),
-			kind: 'stage',
-			depth: 0,
-			color: progressTone(stage.status),
-			statusLabel: stageStatusLabel,
-			collapsible: Boolean(stageArtifactPath) || stage.tasks.length > 0,
-			stageId: stage.stage
-		});
-
-		for (const task of stage.tasks) {
-			const taskColor = progressTone(task.status);
-			const taskStatusLabel = toStatusLabel(task.status);
-			nodes.push({
-				id: `tree:task:${task.taskId}`,
-				label: `${String(task.sequence)} ${task.subject}`,
-				kind: 'task',
-				depth: 1,
-				color: taskColor,
-				statusLabel: taskStatusLabel,
-				collapsible: Boolean(task.filePath) || sessions.some((session) => session.taskId === task.taskId),
-				stageId: stage.stage,
-				taskId: task.taskId
-			});
-
-			const taskSessions = sessions
-				.filter((session) => session.taskId === task.taskId)
-				.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
-			for (const session of taskSessions) {
-				nodes.push({
-					id: `tree:session:${session.sessionId}`,
-					label: `${session.runnerId} ${session.sessionId.slice(-4)}`,
-					kind: 'session',
-					depth: 2,
-					color: sessionTone(session.lifecycleState, taskColor),
-					statusLabel: toStatusLabel(session.lifecycleState),
-					collapsible: false,
-					stageId: stage.stage,
-					taskId: task.taskId,
-					sessionId: session.sessionId
-				});
-			}
-
-			if (task.filePath) {
-				nodes.push({
-					id: `tree:task-artifact:${task.taskId}`,
-					label: task.fileName,
-					kind: 'task-artifact',
-					depth: 2,
-					color: taskColor,
-					statusLabel: taskStatusLabel,
-					collapsible: false,
-					sourcePath: task.filePath,
-					stageId: stage.stage,
-					taskId: task.taskId
-				});
-			}
-		}
-
-		if (stageArtifactPath) {
-			nodes.push({
-				id: `tree:stage-artifact:${stage.stage}`,
-				label: path.basename(stageArtifactPath),
-				kind: 'stage-artifact',
-				depth: 1,
-				color: progressTone(stage.status),
-				statusLabel: stageStatusLabel,
-				collapsible: false,
-				sourcePath: stageArtifactPath,
-				stageId: stage.stage
-			});
-		}
-	}
-	return nodes;
-}
-
-function resolveTowerStageLabel(
-	stageId: MissionStageId,
-	configuration: MissionStateData['configuration']
-): string {
-	const configuredLabel = configuration.workflow.stages[stageId]?.displayName?.trim();
-	if (configuredLabel) {
-		return configuredLabel.toUpperCase();
-	}
-	return stageId.toUpperCase();
-}
-
-function resolveStageArtifactPath(
-	stageId: MissionStageId,
-	productFiles: Partial<Record<MissionArtifactKey, string>>
-): string | undefined {
-	for (const artifactKey of getMissionStageDefinition(stageId).artifacts) {
-		const filePath = productFiles[artifactKey];
-		if (filePath) {
-			return filePath;
-		}
-	}
-	return undefined;
-}
-
-function progressTone(status: MissionStageStatus['status'] | MissionTaskState['status']): string {
-	if (status === 'completed') {
-		return '#3fb950';
-	}
-	if (status === 'active' || status === 'queued' || status === 'running') {
-		return '#58a6ff';
-	}
-	if (status === 'ready') {
-		return '#79c0ff';
-	}
-	if (status === 'failed') {
-		return '#f85149';
-	}
-	if (status === 'cancelled') {
-		return '#ffa657';
-	}
-	return '#8b949e';
-}
-
-function sessionTone(state: string, fallbackColor: string): string {
-	if (state === 'starting') {
-		return '#79c0ff';
-	}
-	if (state === 'running') {
-		return '#58a6ff';
-	}
-	if (state === 'terminated') {
-		return '#9be9a8';
-	}
-	if (state === 'failed') {
-		return '#f85149';
-	}
-	if (state === 'cancelled') {
-		return '#d29922';
-	}
-	if (state === 'completed') {
-		return '#3fb950';
-	}
-	return fallbackColor;
-}
-
-function toStatusLabel(state: string): string {
-	const normalized = state.trim();
-	return normalized.length > 0 ? normalized.replace(/[_-]+/g, ' ') : 'unknown';
-}
-
 async function collectMissionArtifactPaths(input: {
-	adapter: FilesystemAdapter;
+	adapter: MissionDossierFilesystem;
 	missionDir: string;
 }): Promise<Partial<Record<MissionArtifactKey, string>>> {
 	const entries = await Promise.all(

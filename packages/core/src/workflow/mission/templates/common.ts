@@ -1,4 +1,5 @@
-import type { MissionArtifactKey, MissionBrief } from '../../../types.js';
+import type { MissionBrief } from '../../../entities/Mission/MissionSchema.js';
+import type { MissionArtifactKey } from '../../manifest.js';
 
 export function renderMissionTitle(brief: MissionBrief): string {
 	return brief.issueId !== undefined ? `#${String(brief.issueId)} - ${brief.title}` : brief.title;

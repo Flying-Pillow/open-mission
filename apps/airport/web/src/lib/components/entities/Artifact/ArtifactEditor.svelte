@@ -2,7 +2,6 @@
     import { browser } from "$app/environment";
     import Icon from "@iconify/svelte";
     import type { Artifact } from "./Artifact.svelte.js";
-    import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import {
         isArtifactTextEditable,
@@ -61,17 +60,13 @@
         artifact?: Artifact;
         onCloseRequested: () => void;
     } = $props();
-    const missionScope = getScopedMissionContext();
-    const mission = $derived(missionScope.mission);
 
     let content = $state("");
     let originalContent = $state("");
-    let loading = $state(false);
     let saveInFlight = $state(false);
     let saveStatus = $state<"idle" | "saving" | "saved">("idle");
     let saveError = $state<string | null>(null);
     let lastSavedAt = $state<string | null>(null);
-    let error = $state<string | null>(null);
     let loadedId = $state<string | null>(null);
     let monacoContainer = $state<HTMLElement | null>(null);
     let editor = $state<MonacoEditorInstance | null>(null);
@@ -82,10 +77,14 @@
     let monacoLoadError = $state<string | null>(null);
     const id = $derived(artifact?.id);
     const artifactBodyLocation = $derived(artifact?.bodyLocationLabel);
+    const artifactBodyStatus = $derived(artifact?.bodyStatus ?? "idle");
+    const artifactBodyText = $derived(artifact?.bodyText);
+    const artifactBodyError = $derived(artifact?.bodyError);
+    const loading = $derived(artifact?.isBodyLoading ?? false);
     const isEditableTextArtifact = $derived(
         isArtifactTextEditable(artifactBodyLocation),
     );
-    const panelLabel = $derived(artifact?.label ?? "Resolved artifact");
+    const panelLabel = $derived(artifact?.label ?? "");
     const hasUnsavedChanges = $derived(
         id === loadedId && content !== originalContent,
     );
@@ -116,15 +115,27 @@
             saveStatus = "idle";
             saveError = null;
             lastSavedAt = null;
-            error = null;
             return;
         }
 
-        if (id === loadedId) {
+        if (artifactBodyStatus !== "loaded") {
             return;
         }
 
-        void loadArtifactBody();
+        if (loadedId === id) {
+            return;
+        }
+
+        if (artifactBodyText === undefined) {
+            return;
+        }
+
+        content = artifactBodyText;
+        originalContent = artifactBodyText;
+        saveStatus = "idle";
+        saveError = null;
+        lastSavedAt = null;
+        loadedId = id;
     });
 
     $effect(() => {
@@ -223,50 +234,15 @@
         };
     });
 
-    async function loadArtifactBody(): Promise<void> {
-        loading = true;
-        error = null;
-
-        try {
-            if (!artifact || !mission) {
-                throw new Error(
-                    "Artifact loading is unavailable until the app context is synchronized.",
-                );
-            }
-
-            if (!isEditableTextArtifact) {
-                throw new Error("This artifact is not editable in Monaco.");
-            }
-
-            const payload = await artifact.read();
-            if (typeof payload.body !== "string") {
-                throw new Error("This artifact body is not text.");
-            }
-            content = payload.body;
-            originalContent = payload.body;
-            saveStatus = "idle";
-            saveError = null;
-            lastSavedAt = null;
-            loadedId = artifact.id;
-        } catch (loadError) {
-            error =
-                loadError instanceof Error
-                    ? loadError.message
-                    : String(loadError);
-        } finally {
-            loading = false;
-        }
-    }
-
     async function saveArtifactBody(nextContent: string): Promise<void> {
         saveInFlight = true;
         saveStatus = "saving";
         saveError = null;
 
         try {
-            if (!artifact || !mission) {
+            if (!artifact) {
                 throw new Error(
-                    "Artifact saving is unavailable until the app context is synchronized.",
+                    "Artifact saving is unavailable for the current selection.",
                 );
             }
 
@@ -276,7 +252,7 @@
 
             await artifact.saveBody(nextContent);
 
-            originalContent = nextContent;
+            originalContent = artifact.bodyText ?? nextContent;
             loadedId = artifact.id;
             lastSavedAt = new Date().toISOString();
             saveStatus = "saved";
@@ -548,13 +524,13 @@
             </div>
         </div>
 
-        <div class="flex items-center gap-2 text-xs text-muted-foreground">
+        <!-- <div class="flex items-center gap-2 text-xs text-muted-foreground">
             <Icon icon="lucide:save" class="size-3.5" />
             <span>{statusMessage}</span>
-        </div>
+        </div> -->
 
-        {#if error}
-            <p class="text-sm text-rose-600">{error}</p>
+        {#if artifactBodyError}
+            <p class="text-sm text-rose-600">{artifactBodyError}</p>
         {/if}
 
         {#if monacoLoadError}

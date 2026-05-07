@@ -1,11 +1,11 @@
 import * as path from 'node:path';
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
-import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import { MissionDossierFilesystem } from '../Mission/MissionDossierFilesystem.js';
 import {
 	MISSION_STAGE_FOLDERS,
 	type MissionArtifactKey,
 	type MissionStageId
-} from '../../types.js';
+} from '../../workflow/mission/manifest.js';
 import { getMissionArtifactDefinition } from '../../workflow/mission/manifest.js';
 import {
 	ArtifactCommandInputSchema,
@@ -69,7 +69,7 @@ export class Artifact extends Entity<ArtifactDataType, string> {
 		try {
 			const snapshot = await mission.buildMissionSnapshot();
 			const filePath = Artifact.resolveBodyPath(snapshot, input.id);
-			const adapter = Artifact.createFilesystemAdapter(input, context);
+			const adapter = Artifact.createMissionDossierFilesystem(input, context);
 			await adapter.assertFilePath(filePath, 'read');
 			return ArtifactBodySchema.parse({
 				body: (await adapter.readFileBody(filePath)).body
@@ -93,7 +93,7 @@ export class Artifact extends Entity<ArtifactDataType, string> {
 				throw new Error(`Artifact '${input.id}' only supports string body edits.`);
 			}
 			const filePath = Artifact.resolveBodyPath(snapshot, input.id);
-			const adapter = Artifact.createFilesystemAdapter(input, context);
+			const adapter = Artifact.createMissionDossierFilesystem(input, context);
 			await adapter.assertFilePath(filePath, 'write');
 			await adapter.writeFileBody(filePath, input.input.body);
 			return ArtifactCommandAcknowledgementSchema.parse({
@@ -157,8 +157,8 @@ export class Artifact extends Entity<ArtifactDataType, string> {
 		});
 	}
 
-	private static createFilesystemAdapter(input: { repositoryRootPath?: string | undefined }, context: EntityExecutionContext): FilesystemAdapter {
-		return new FilesystemAdapter(input.repositoryRootPath?.trim() || context.surfacePath);
+	private static createMissionDossierFilesystem(input: { repositoryRootPath?: string | undefined }, context: EntityExecutionContext): MissionDossierFilesystem {
+		return new MissionDossierFilesystem(input.repositoryRootPath?.trim() || context.surfacePath);
 	}
 
 }

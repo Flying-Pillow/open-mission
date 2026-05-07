@@ -11,11 +11,6 @@ export function createDefaultWorkflowSettings(): WorkflowDefinition {
             enabled: true,
             pauseOnMissionStart: false
         },
-        panic: {
-            terminateSessions: true,
-            clearLaunchQueue: true,
-            haltMission: true
-        },
         execution: {
             maxParallelTasks: 1,
             maxParallelSessions: 1

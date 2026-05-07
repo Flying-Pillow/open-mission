@@ -1,5 +1,5 @@
 export type EntryContext = {
-	controlRoot: string;
+	repositoryRootPath: string;
 	workingDirectory: string;
 	args: string[];
 	json: boolean;

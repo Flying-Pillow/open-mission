@@ -24,7 +24,7 @@ import {
 	resolveRepositoriesRoot,
 	type MissionConfig,
 	writeMissionConfig
-} from '@flying-pillow/mission-core/node';
+} from '@flying-pillow/mission-core/settings/MissionInstall';
 
 const execFileAsync = promisify(execFile);
 

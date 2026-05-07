@@ -13,11 +13,6 @@
         "enabled": true,
         "pauseOnMissionStart": false
       },
-      "panic": {
-        "terminateSessions": true,
-        "clearLaunchQueue": true,
-        "haltMission": true
-      },
       "execution": {
         "maxParallelTasks": 1,
         "maxParallelSessions": 1
@@ -146,16 +141,10 @@
     }
   },
   "runtime": {
-    "lifecycle": "delivered",
+    "lifecycle": "completed",
     "activeStageId": "delivery",
     "pause": {
       "paused": false
-    },
-    "panic": {
-      "active": false,
-      "terminateSessions": true,
-      "clearLaunchQueue": true,
-      "haltMission": true
     },
     "stages": [
       {
@@ -296,7 +285,7 @@
         "taskId": "implementation/01-establish-workflow-runtime-document-and-reducer-boundary",
         "stageId": "implementation",
         "title": "Establish Workflow Runtime Document And Reducer Boundary",
-        "instruction": "Align the workflow engine around one canonical mission-local runtime document and reducer-owned state transitions. This slice should preserve mission lifecycle, stage projections, task runtime, gate projections, panic, pause target metadata, and reducer-owned `activeStageId` semantics across `packages/core/src/workflow/engine/types.ts`, `document.ts`, `reducer.ts`, `validation.ts`, and the mission-facing runtime surfaces that consume them.",
+        "instruction": "Align the workflow engine around one canonical mission-local runtime document and reducer-owned state transitions. This slice should preserve mission lifecycle, stage projections, task runtime, gate projections, pause target metadata, and reducer-owned `activeStageId` semantics across `packages/core/src/workflow/engine/types.ts`, `document.ts`, `reducer.ts`, `validation.ts`, and the mission-facing runtime surfaces that consume them.",
         "dependsOn": [],
         "lifecycle": "completed",
         "waitingOnTaskIds": [],

@@ -50,9 +50,9 @@ export class WorkflowSettingsStore {
 	private readonly settingsPath: string;
 	private readonly workflowPath: string;
 
-	public constructor(private readonly controlRoot: string) {
-		this.settingsPath = Repository.getSettingsDocumentPath(controlRoot, { resolveWorkspaceRoot: false });
-		this.workflowPath = Repository.getMissionWorkflowDefinitionPath(controlRoot);
+	public constructor(private readonly repositoryRootPath: string) {
+		this.settingsPath = Repository.getSettingsDocumentPath(repositoryRootPath, { resolveWorkspaceRoot: false });
+		this.workflowPath = Repository.getMissionWorkflowDefinitionPath(repositoryRootPath);
 	}
 
 	public async get(): Promise<WorkflowSettingsGetResult> {
@@ -109,12 +109,12 @@ export class WorkflowSettingsStore {
 		const latestRevision = await readWorkflowSettingsRevision(this.workflowPath);
 		this.assertRevisionMatches(expectedRevision, latestRevision.token);
 		if (overwritePreset || !latestRevision.exists) {
-			await scaffoldMissionWorkflowPreset(this.controlRoot, { overwrite: overwritePreset });
+			await scaffoldMissionWorkflowPreset(this.repositoryRootPath, { overwrite: overwritePreset });
 		}
-		await Repository.writeSettingsDocument(nextDocument, this.controlRoot, {
+		await Repository.writeSettingsDocument(nextDocument, this.repositoryRootPath, {
 			resolveWorkspaceRoot: false
 		});
-		await writeMissionWorkflowDefinition(this.controlRoot, workflow);
+		await writeMissionWorkflowDefinition(this.repositoryRootPath, workflow);
 	}
 
 	private createInitializedDocument(
@@ -153,7 +153,7 @@ export class WorkflowSettingsStore {
 
 		let document: RepositorySettingsType | undefined;
 		try {
-			document = Repository.readSettingsDocument(this.controlRoot, {
+			document = Repository.readSettingsDocument(this.repositoryRootPath, {
 				resolveWorkspaceRoot: false
 			});
 		} catch (error) {
@@ -162,7 +162,7 @@ export class WorkflowSettingsStore {
 			}
 		}
 
-		const persistedWorkflow = readMissionWorkflowDefinition(this.controlRoot);
+		const persistedWorkflow = readMissionWorkflowDefinition(this.repositoryRootPath);
 		if (!document && options.allowUninitialized !== true) {
 			throw new WorkflowSettingsError(
 				'SETTINGS_NOT_INITIALIZED',

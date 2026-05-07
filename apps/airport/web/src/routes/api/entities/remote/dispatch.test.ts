@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { EntityCommandInvocation, EntityFormInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/daemon/protocol/entityRemote';
+import type { EntityCommandInvocation, EntityFormInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/entities/Entity/EntityRemote';
 import {
     entityCommandInvocationSchema,
     entityFormInvocationSchema,

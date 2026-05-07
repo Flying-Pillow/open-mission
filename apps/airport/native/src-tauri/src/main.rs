@@ -34,7 +34,8 @@ fn main() {
             let webview_url = if cfg!(debug_assertions) {
                 WebviewUrl::External(DEV_SERVER_URL.parse().expect("valid development URL"))
             } else {
-                let native_log_directory = resolve_native_log_directory().map_err(tauri::Error::Anyhow)?;
+                let native_log_directory =
+                    resolve_native_log_directory().map_err(tauri::Error::Anyhow)?;
                 log_native_event(
                     &native_log_directory,
                     &format!(
@@ -76,7 +77,8 @@ fn main() {
 }
 
 fn start_embedded_web_server(app: &App, port: u16) -> Result<Child, tauri::Error> {
-    let mission_root = resolve_mission_root().map_err(|error| tauri::Error::Anyhow(anyhow::anyhow!(error)))?;
+    let repository_root =
+        resolve_repository_root().map_err(|error| tauri::Error::Anyhow(anyhow::anyhow!(error)))?;
     let embedded_server_root = resolve_embedded_server_root(app).map_err(tauri::Error::Anyhow)?;
     let node_binary = resolve_node_binary(app).map_err(tauri::Error::Anyhow)?;
     let native_log_directory = resolve_native_log_directory().map_err(tauri::Error::Anyhow)?;
@@ -91,8 +93,10 @@ fn start_embedded_web_server(app: &App, port: u16) -> Result<Child, tauri::Error
     }
 
     let origin = embedded_server_url(port);
-    let stdout_log_file = open_log_file(&embedded_server_stdout_path).map_err(tauri::Error::Anyhow)?;
-    let stderr_log_file = open_log_file(&embedded_server_stderr_path).map_err(tauri::Error::Anyhow)?;
+    let stdout_log_file =
+        open_log_file(&embedded_server_stdout_path).map_err(tauri::Error::Anyhow)?;
+    let stderr_log_file =
+        open_log_file(&embedded_server_stderr_path).map_err(tauri::Error::Anyhow)?;
 
     log_native_event(
         &native_log_directory,
@@ -111,8 +115,8 @@ fn start_embedded_web_server(app: &App, port: u16) -> Result<Child, tauri::Error
         .env("HOST", EMBEDDED_SERVER_HOST)
         .env("PORT", port.to_string())
         .env("ORIGIN", &origin)
-        .env("MISSION_SURFACE_PATH", &mission_root)
-        .env("MISSION_CONTROL_ROOT", &mission_root)
+        .env("MISSION_SURFACE_PATH", &repository_root)
+        .env("MISSION_REPOSITORY_ROOT", &repository_root)
         .arg(&entry_path)
         .stdout(Stdio::from(stdout_log_file))
         .stderr(Stdio::from(stderr_log_file))
@@ -125,11 +129,16 @@ fn start_embedded_web_server(app: &App, port: u16) -> Result<Child, tauri::Error
             ))
         })?;
 
-    wait_for_embedded_server(&mut child, port, &native_log_directory).map_err(tauri::Error::Anyhow)?;
+    wait_for_embedded_server(&mut child, port, &native_log_directory)
+        .map_err(tauri::Error::Anyhow)?;
     Ok(child)
 }
 
-fn wait_for_embedded_server(child: &mut Child, port: u16, native_log_directory: &Path) -> Result<(), anyhow::Error> {
+fn wait_for_embedded_server(
+    child: &mut Child,
+    port: u16,
+    native_log_directory: &Path,
+) -> Result<(), anyhow::Error> {
     let address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
     let deadline = Instant::now() + Duration::from_secs(15);
 
@@ -210,10 +219,7 @@ fn open_log_file(path: &Path) -> Result<File, anyhow::Error> {
         fs::create_dir_all(parent_directory)?;
     }
 
-    Ok(OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)?)
+    Ok(OpenOptions::new().create(true).append(true).open(path)?)
 }
 
 fn log_native_event(log_directory: &Path, message: &str) {
@@ -260,13 +266,14 @@ fn ensure_mission_daemon_started() -> Result<(), String> {
         return Ok(());
     }
 
-    let mission_root = resolve_mission_root()?;
-    let daemon_entry_path = resolve_daemon_entry_path(&mission_root)?;
-    let node_binary = env::var("MISSION_NATIVE_NODE_BINARY").unwrap_or_else(|_| String::from("node"));
+    let repository_root = resolve_repository_root()?;
+    let daemon_entry_path = resolve_daemon_entry_path(&repository_root)?;
+    let node_binary =
+        env::var("MISSION_NATIVE_NODE_BINARY").unwrap_or_else(|_| String::from("node"));
 
     let output = Command::new(&node_binary)
-        .current_dir(&mission_root)
-        .env("MISSION_SURFACE_PATH", &mission_root)
+        .current_dir(&repository_root)
+        .env("MISSION_SURFACE_PATH", &repository_root)
         .env("MISSION_DAEMON_RUNTIME_MODE", "build")
         .arg(&daemon_entry_path)
         .arg("start")
@@ -296,8 +303,8 @@ fn ensure_mission_daemon_started() -> Result<(), String> {
     Err(detail)
 }
 
-fn resolve_mission_root() -> Result<PathBuf, String> {
-    if let Ok(configured_path) = env::var("MISSION_CONTROL_ROOT") {
+fn resolve_repository_root() -> Result<PathBuf, String> {
+    if let Ok(configured_path) = env::var("MISSION_REPOSITORY_ROOT") {
         let trimmed_path = configured_path.trim();
         if !trimmed_path.is_empty() {
             let path = PathBuf::from(trimmed_path);
@@ -306,7 +313,7 @@ fn resolve_mission_root() -> Result<PathBuf, String> {
             }
 
             return Err(format!(
-                "MISSION_CONTROL_ROOT does not point to a directory: {}",
+                "MISSION_REPOSITORY_ROOT does not point to a directory: {}",
                 path.display()
             ));
         }
@@ -325,12 +332,12 @@ fn resolve_mission_root() -> Result<PathBuf, String> {
     }
 
     Err(format!(
-        "could not resolve Mission workspace root from {}",
+        "could not resolve Repository root from {}",
         manifest_directory.display()
     ))
 }
 
-fn resolve_daemon_entry_path(mission_root: &Path) -> Result<PathBuf, String> {
+fn resolve_daemon_entry_path(repository_root: &Path) -> Result<PathBuf, String> {
     if let Ok(configured_path) = env::var("MISSION_NATIVE_DAEMON_ENTRY") {
         let trimmed_path = configured_path.trim();
         if !trimmed_path.is_empty() {
@@ -346,7 +353,7 @@ fn resolve_daemon_entry_path(mission_root: &Path) -> Result<PathBuf, String> {
         }
     }
 
-    let default_entry_path = mission_root.join("packages/mission/build/missiond.js");
+    let default_entry_path = repository_root.join("packages/mission/build/missiond.js");
     if default_entry_path.is_file() {
         return Ok(default_entry_path);
     }

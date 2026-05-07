@@ -45,5 +45,5 @@ if (await hasReusableDevServer()) {
 
 run("bash", [
 	"-lc",
-	"pnpm --dir ../../.. run dev:airport-host -- --host 127.0.0.1"
+	"pnpm --dir ../../.. run dev"
 ]);

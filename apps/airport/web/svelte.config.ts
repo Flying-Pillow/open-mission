@@ -8,6 +8,16 @@ import { createDocsSourcePreprocessor } from "./src/lib/docs/source-normalizatio
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const docsRootDirectory = path.resolve(currentDirectory, "../../../docs");
+const workspaceRoot = path.resolve(currentDirectory, "../../..");
+const useSourcePackages = process.env.NODE_ENV !== "production";
+const missionCoreSourceRoot = path.resolve(workspaceRoot, "packages/core/src");
+
+const sourcePackageAliases: Record<string, string> = useSourcePackages
+	? {
+		"@flying-pillow/mission-core": path.join(missionCoreSourceRoot, "index.ts"),
+		"@flying-pillow/mission-core/*": `${missionCoreSourceRoot}/*`,
+	}
+	: {};
 
 const config: Config = {
 	compilerOptions: {
@@ -32,6 +42,7 @@ const config: Config = {
 			$lib: path.resolve(currentDirectory, "src/lib"),
 			$docs: docsRootDirectory,
 			"$docs/*": `${docsRootDirectory}/*`,
+			...sourcePackageAliases,
 		},
 	},
 };

@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import path from "node:path";
-import { RepositoryEntity } from "@flying-pillow/mission-core/node";
+import { Repository as RepositoryEntity } from "@flying-pillow/mission-core/entities/Repository/Repository";
 import { resolveSurfacePath } from "$lib/server/daemon/context.server";
 import type {
 	MissionFileTreeNode,
@@ -26,10 +26,10 @@ export async function readMissionFileTree(input: {
 		throw new Error("Mission file tree requires a missionId.");
 	}
 
-	const controlRoot = path.resolve(
+	const repositoryRoot = path.resolve(
 		input.repositoryRootPath?.trim() || resolveSurfacePath(),
 	);
-	const worktreeRoot = path.join(RepositoryEntity.getMissionWorktreesPath(controlRoot), missionId);
+	const worktreeRoot = path.join(RepositoryEntity.getMissionWorktreesPath(repositoryRoot), missionId);
 	const tree = await readDirectoryTree(worktreeRoot, worktreeRoot);
 
 	return {

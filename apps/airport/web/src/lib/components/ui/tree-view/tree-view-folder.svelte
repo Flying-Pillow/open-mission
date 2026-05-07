@@ -27,7 +27,7 @@
 <Collapsible.Root bind:open>
     <div
         class={cn(
-            "flex w-full min-w-0 cursor-pointer items-center gap-1 px-1 py-0.5 **:cursor-pointer",
+            "flex w-full min-w-0 cursor-pointer items-start gap-1 px-1 py-0.5 **:cursor-pointer",
             className,
         )}
         {style}
@@ -38,7 +38,7 @@
         {ondrop}
     >
         {#if onCheckedChange}
-            <div class="flex w-6 shrink-0 items-center justify-center">
+            <div class="flex w-6 shrink-0 items-start justify-center pt-0.5">
                 <Checkbox
                     class="border-muted-foreground"
                     {checked}
@@ -53,7 +53,7 @@
                 />
             </div>
         {/if}
-        <div class="flex min-w-0 flex-1 items-center">
+        <div class="flex min-w-0 flex-1 items-start">
             <Collapsible.Trigger
                 {onclick}
                 {oncontextmenu}

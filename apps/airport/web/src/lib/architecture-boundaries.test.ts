@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 const srcRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sourceExtensions = new Set(['.ts', '.svelte']);
+const broadMissionCoreEntrypointPattern = /@flying-pillow\/mission-core(?:\/node|\/browser|\/daemon)?['"]/;
 const forbiddenWebPatterns = [
     /api\.control\b/,
     /api\.mission\b/,
@@ -30,10 +31,10 @@ const serverOnlyPathPatterns = [
 ];
 
 describe('Airport web architecture boundaries', () => {
-    it('does not import daemon-only core modules from browser-capable source files', () => {
+    it('uses explicit mission-core owner modules instead of broad entrypoints', () => {
         const offenders = listSourceFiles(srcRoot)
-            .filter((filePath) => !isServerOnlyPath(filePath))
-            .filter((filePath) => fs.readFileSync(filePath, 'utf8').includes('@flying-pillow/mission-core/node'))
+            .filter((filePath) => !filePath.endsWith('.test.ts'))
+            .filter((filePath) => broadMissionCoreEntrypointPattern.test(fs.readFileSync(filePath, 'utf8')))
             .map(toRelativeSourcePath);
 
         expect(offenders).toEqual([]);

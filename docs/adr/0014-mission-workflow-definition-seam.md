@@ -1,4 +1,16 @@
-# Mission Workflow Definition Seam
+---
+layout: default
+title: Mission Workflow Definition Seam
+parent: Architecture Decisions
+nav_order: 14
+status: accepted
+date: 2026-05-04
+decision_area: workflow-law
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Mission keeps one authoritative Mission class and one running Mission instance model even when repositories use different workflow definitions. Workflow variability belongs to repository-owned validated Mission workflow definitions, not to alternate Mission subclasses, alternate daemon projection paths, or transport-specific Mission models.
 

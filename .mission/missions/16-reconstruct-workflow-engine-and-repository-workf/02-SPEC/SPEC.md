@@ -18,7 +18,7 @@ Branch: mission/16-reconstruct-workflow-engine-and-repository-workf
 
 - Mission `16` owns the workflow-runtime and repository-policy model described primarily by `specifications/mission/workflow/workflow-engine.md`, `specifications/mission/configuration/repository-workflow-settings.md`, and `specifications/checklists/workflow-engine-checklist.md`.
 - `mission.json` is the authoritative mission-local workflow document. Workflow runtime state changes only through accepted workflow events, and the reducer is the only component allowed to mutate workflow runtime state.
-- Stage state is derived from task state and workflow structure. Task lifecycle, launch mode, queueing, mission pause state, panic state, gate projections, and active stage authority are workflow-owned runtime concerns rather than semantic-model naming concerns or daemon-wide application state.
+- Stage state is derived from task state and workflow structure. Task lifecycle, launch mode, queueing, mission pause state, gate projections, and active stage authority are workflow-owned runtime concerns rather than semantic-model naming concerns or daemon-wide application state.
 - Repository workflow settings live under `.mission/settings.json` and are daemon-owned. Initialization, normalization, RFC 6902 patch validation, revision checks, atomic persistence, and update notifications belong to daemon-controlled settings infrastructure rather than to CLI or Tower surfaces.
 - Repository workflow settings affect `draft` missions only. The mission-local workflow snapshot is captured exactly at the `draft` to `ready` transition, after which mission runtime becomes isolated from later repository settings edits.
 - Deterministic task generation belongs to the workflow engine. Runtime tasks are derived from the workflow snapshot plus `stageId`, not from ad hoc filesystem discovery of task files. For replay purposes, if implementation-stage task generation must be materialized while the current omission recorded in issue `#12` still exists, the replay may continue in explicit emulation mode as long as the derived ledger stays bounded and internally coherent.
@@ -71,7 +71,7 @@ Branch: mission/16-reconstruct-workflow-engine-and-repository-workf
 
 ## File Matrix
 
-- `specifications/mission/workflow/workflow-engine.md`: primary workflow-runtime source for mission lifecycle, reducer semantics, task generation, scheduling, pause, panic, and delivery behavior.
+- `specifications/mission/workflow/workflow-engine.md`: primary workflow-runtime source for mission lifecycle, reducer semantics, task generation, scheduling, pause, restart, and delivery behavior.
 - `specifications/mission/configuration/repository-workflow-settings.md`: primary repository-policy source for daemon-owned workflow settings initialization, update, validation, revision, and surface contracts.
 - `specifications/checklists/workflow-engine-checklist.md`: primary supporting checklist for deterministic workflow implementation sequencing and validation.
 - `specifications/plans/repository-workflow-settings-plan.md`: preserve the concrete settings implementation phases as mission `16` planning support rather than as a separate replay mission.

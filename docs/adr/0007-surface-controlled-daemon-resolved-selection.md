@@ -1,9 +1,38 @@
-# Surface-Controlled Daemon-Resolved Selection
+---
+layout: default
+title: Surface-Controlled Mission Control Selection
+parent: Architecture Decisions
+nav_order: 7
+status: accepted
+date: 2026-05-04
+decision_area: surface-selection
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
-Mission control selection represents an operator's current focus in one surface: a Mission stage, Mission task, Mission artifact, Agent session, or other valid focus target. It is not part of the Mission's durable work record.
+Mission control selection represents an operator's current focus in one surface: a Mission stage, Mission task, Mission artifact, Agent execution, or other valid focus target. It is not part of the Mission's durable work record.
 
-Selection is surface-controlled and daemon-resolved. A surface may request selection changes, but the daemon validates and normalizes those requests against canonical Mission state before returning the Mission control view. This prevents surfaces from inventing invalid focus while keeping focus local to the operator/session that requested it.
+Selection is surface-controlled and resolved by Airport against canonical Entity data. A surface may request selection changes, but it validates and normalizes those requests against the Entity instances it has received from the daemon. This prevents surfaces from inventing invalid focus while keeping focus local to the operator/session that requested it.
 
-Mission control selection must not be persisted as durable Mission state or broadcast as the current focus for every surface. One operator clicking a task should not move another operator's current focus. Durable shared navigation changes belong in Mission control placement overrides or canonical Entity relationships, not selection.
+Mission control selection must not be persisted as durable Mission state or broadcast as the current focus for every surface. One operator clicking a task should not move another operator's current focus. Durable shared navigation changes belong in canonical Entity relationships, not selection.
 
-This keeps operator focus ergonomic and local while preserving daemon authority over valid Mission references.
+Mission uses two selection layers in Mission mode:
+
+1. raw selection: the current surface/operator focus target
+2. resolved selection: the Airport-resolved work bundle companion panes consume
+
+Raw selection records what the operator selected. Resolved selection records what the Mission control surface should present alongside that target, such as an active instruction artifact, an active stage result artifact, or an active Agent execution.
+
+Selection resolution belongs to the Airport application model layer or a shared semantic selection resolver beneath it. It must not be duplicated in Briefing Room bindings, Runway bindings, terminal substrate observations, or host-specific Airport code.
+
+Task selection resolves from explicit semantic relationships. A task row resolves to its canonical instruction artifact and, when task-scoped Agent executions exist, the most recently updated task-scoped Agent execution. A task artifact row may pin the active instruction artifact while preserving the same preferred execution rule. A task without a resolvable canonical instruction artifact is invalid Mission state, not a UI fallback case.
+
+Stage selection resolves to the stage's canonical result artifact. If a workflow permits more than one result artifact for a stage, the Mission workflow definition must identify the canonical result artifact for selection resolution.
+
+Agent execution selection pins the explicitly selected Agent execution. If that Agent execution is task-scoped, resolved selection may include the owning task and its canonical instruction artifact. Mission-scoped, repository-scoped, system-scoped, and artifact-scoped Agent executions resolve from their explicit AgentExecutionScope and must not be forced through a task relationship.
+
+Resolved selection is derived view state. It must not be persisted as pane state in Mission runtime data, and surfaces must not infer it from filenames, tree order, or host-local cursor state.
+
+This keeps operator focus ergonomic and local while preserving daemon authority over valid Mission references and companion-pane semantics.

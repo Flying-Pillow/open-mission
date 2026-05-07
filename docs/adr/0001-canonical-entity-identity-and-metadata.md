@@ -1,4 +1,16 @@
-# Canonical Entity Identity And Metadata
+---
+layout: default
+title: Canonical Entity Identity And Metadata
+parent: Architecture Decisions
+nav_order: 1
+status: accepted
+date: 2026-05-04
+decision_area: entity-model
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Mission entity schemas use `id` as the canonical identity field, with entity id values owned by the daemon in `table:uniqueId` form. Relationship fields use explicit domain names such as `missionId`, `repositoryId`, `stageId`, or `taskId`, but an Entity's own identity is always `id` so JSON-backed storage and future database-backed storage share the same identity model. Entity schemas must not duplicate their own identity under entity-specific names such as `artifactId`, `stageId`, or `taskId`; those names are valid only when they reference another Entity or a non-Entity domain concept owned by a different schema.
 

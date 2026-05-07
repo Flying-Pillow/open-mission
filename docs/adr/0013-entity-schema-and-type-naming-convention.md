@@ -1,4 +1,16 @@
-# Entity Schema And Type Naming Convention
+---
+layout: default
+title: Entity Schema And Type Naming Convention
+parent: Architecture Decisions
+nav_order: 13
+status: accepted
+date: 2026-05-04
+decision_area: entity-schema
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Entity schema and type names must be mechanically predictable. Every exported Zod schema is named with a `Schema` suffix. The exported TypeScript type inferred from that schema is named by replacing only the final `Schema` suffix with `Type`. For example, `RepositorySchema` is the Zod schema and `RepositoryType` is `z.infer<typeof RepositorySchema>`. `RepositoryListPayloadSchema` becomes `RepositoryListPayloadType`, and `RepositoryPlatformRepositorySchema` becomes `RepositoryPlatformRepositoryType`.
 

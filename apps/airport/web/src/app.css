@@ -31,7 +31,7 @@
 	--chart-3: oklch(0.439 0 0);
 	--chart-4: oklch(0.371 0 0);
 	--chart-5: oklch(0.269 0 0);
-	--radius: 0.25rem;
+	--radius: 0rem;
 	--sidebar: oklch(0.985 0 0);
 	--sidebar-foreground: oklch(0.145 0 0);
 	--sidebar-primary: oklch(0.546 0.148 146.371);
@@ -270,17 +270,42 @@
 	}
 
 	.markdown-frontmatter {
+		display: block;
 		margin: 0 0 1rem;
 		overflow-x: auto;
-		border: 1px solid var(--border);
-		border-radius: 0.75rem;
-		background: color-mix(in oklab, var(--muted) 88%, black 12%);
-		padding: 1rem;
-		color: var(--muted-foreground);
-		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-			"Liberation Mono", "Courier New", monospace;
-		font-size: 0.75rem;
+		width: max-content;
+		max-width: 100%;
+		border-collapse: collapse;
+		border-spacing: 0;
+		color: var(--foreground);
+		font-size: 0.875rem;
 		line-height: 1.5;
+	}
+
+	.markdown-frontmatter tr {
+		background-color: transparent;
+		border-top: 1px solid var(--border);
+	}
+
+	.markdown-frontmatter tr:nth-child(2n) {
+		background-color: color-mix(in oklab, var(--muted) 42%, transparent);
+	}
+
+	.markdown-frontmatter th,
+	.markdown-frontmatter td {
+		border: 1px solid var(--border);
+		padding: 0.375rem 0.8125rem;
+	}
+
+	.markdown-frontmatter th {
+		width: 1%;
+		font-weight: 600;
+		text-align: left;
+		white-space: nowrap;
+	}
+
+	.markdown-frontmatter td {
+		min-width: 12rem;
 		white-space: pre-wrap;
 	}
 

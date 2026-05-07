@@ -1,4 +1,16 @@
-# State Store Transactions As Canonical Write Interface
+---
+layout: default
+title: State Store Transactions As Canonical Write Interface
+parent: Architecture Decisions
+nav_order: 10
+status: accepted
+date: 2026-05-04
+decision_area: state-store
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Mission state changes must enter the Mission state store through State store transactions. A State store transaction is a small atomic write boundary: the daemon validates Entity input commands, workflow commands, or daemon-owned domain intent, applies the resulting storage changes, checkpoints the Mission dossier, and publishes the change from one place.
 

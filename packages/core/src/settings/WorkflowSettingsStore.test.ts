@@ -15,9 +15,11 @@ describe('WorkflowSettingsStore', () => {
 			const settingsPath = Repository.getSettingsDocumentPath(workspaceRoot);
 			const workflowPath = Repository.getMissionWorkflowDefinitionPath(workspaceRoot);
 			const content = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as {
-				agentRunner?: unknown;
+				agentAdapter?: unknown;
 				trackingProvider?: unknown;
 				missionsRoot?: unknown;
+				defaultModel?: unknown;
+				defaultReasoningEffort?: unknown;
 			};
 			const persistedWorkflow = JSON.parse(await fs.readFile(workflowPath, 'utf8')) as {
 				stageOrder?: unknown;
@@ -26,9 +28,11 @@ describe('WorkflowSettingsStore', () => {
 			expect(initialized.metadata.initialized).toBe(true);
 			expect(initialized.metadata.sourcePath).toBe(workflowPath);
 			expect(initialized.workflow.stageOrder).toEqual(['prd', 'spec', 'implementation', 'audit', 'delivery']);
-			expect(content.agentRunner).toBe('copilot-cli');
+			expect(content.agentAdapter).toBe('copilot-cli');
 			expect(content.trackingProvider).toBe('github');
 			expect(content.missionsRoot).toBe('missions');
+			expect(content.defaultModel).toBeUndefined();
+			expect(content.defaultReasoningEffort).toBeUndefined();
 			expect(persistedWorkflow.stageOrder).toEqual(['prd', 'spec', 'implementation', 'audit', 'delivery']);
 		} finally {
 			await fs.rm(workspaceRoot, { recursive: true, force: true });

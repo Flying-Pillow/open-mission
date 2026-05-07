@@ -1,8 +1,6 @@
 import { note, outro } from '@clack/prompts';
-import {
-	getDaemonManifestPath,
-	stopMissionDaemonProcess,
-} from '@flying-pillow/mission-core/node';
+import { getDaemonManifestPath } from '@flying-pillow/mission-core/daemon/daemonPaths';
+import { stopMissionDaemonProcess } from '@flying-pillow/mission-core/daemon/runtime/DaemonProcessControl';
 import type { EntryContext } from './entryContext.js';
 
 export async function runDaemonStopCommand(context: EntryContext): Promise<void> {

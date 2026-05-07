@@ -184,14 +184,14 @@ type MissionStageTransitionRule = {
 const WORKFLOW_STAGE_TRANSITION_RULES: readonly MissionStageTransitionRule[] = [
     {
         intent: 'start',
-        nextStatus: 'active',
+        nextStatus: 'running',
         allowedFrom: ['ready'],
         requiresPreviousStagesComplete: true
     },
     {
         intent: 'restart',
-        nextStatus: 'active',
-        allowedFrom: ['active', 'completed']
+        nextStatus: 'running',
+        allowedFrom: ['running', 'completed']
     }
 ] as const;
 

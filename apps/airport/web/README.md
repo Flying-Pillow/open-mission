@@ -10,11 +10,8 @@ From the repository root:
 pnpm --dir apps/airport/web run dev
 ```
 
-For a remotely reachable dev server:
-
-```sh
-pnpm --dir apps/airport/web run dev:host
-```
+The package dev command runs Vite+ on `0.0.0.0:5174`. From the repository root,
+`pnpm run dev` starts both Airport web and the Mission daemon source runtime.
 
 ## GitHub Device Flow
 

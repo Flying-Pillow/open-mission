@@ -1,4 +1,16 @@
-# Clean-Sheet Implementation Discipline
+---
+layout: default
+title: Clean-Sheet Implementation Discipline
+parent: Architecture Decisions
+nav_order: 0
+status: accepted
+date: 2026-05-04
+decision_area: implementation-discipline
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
 
 Mission code changes are clean-sheet by default. When Mission renames a concept, changes a schema, replaces an interface, or removes an old domain model, the old shape must be removed in the same change. Callers must move to the new canonical shape instead of being allowed to keep using old names, old payloads, or old behavior.
 

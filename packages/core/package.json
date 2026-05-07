@@ -9,60 +9,19 @@
   "scripts": {
     "build": "rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./build/workflow/engine/copyTemplateFiles.js",
     "check": "tsc --noEmit -p tsconfig.json",
-    "daemon:dev": "node ./scripts/daemon-dev.mjs",
+    "dev": "node ./scripts/daemon-dev.mjs",
     "lint": "vp lint src",
-    "test": "vp test run --config ../../vitest.config.ts --project core"
+    "test": "vp test run --config vitest.config.ts"
   },
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "exports": {
     ".": {
-      "development": "./src/index.ts",
-      "typescript": "./src/index.ts",
       "types": "./build/index.d.ts",
-      "import": "./build/index.js",
       "default": "./build/index.js"
     },
-    "./browser": {
-      "development": "./src/browser.ts",
-      "typescript": "./src/browser.ts",
-      "types": "./build/browser.d.ts",
-      "import": "./build/browser.js",
-      "default": "./build/browser.js"
-    },
-    "./entities": {
-      "development": "./src/entities/index.ts",
-      "typescript": "./src/entities/index.ts",
-      "types": "./build/entities/index.d.ts",
-      "import": "./build/entities/index.js",
-      "default": "./build/entities/index.js"
-    },
-    "./protocol/entity-remote": {
-      "development": "./src/daemon/protocol/entityRemote.ts",
-      "typescript": "./src/daemon/protocol/entityRemote.ts",
-      "types": "./build/daemon/protocol/entityRemote.d.ts",
-      "import": "./build/daemon/protocol/entityRemote.js",
-      "default": "./build/daemon/protocol/entityRemote.js"
-    },
-    "./node": {
-      "development": "./src/node.ts",
-      "typescript": "./src/node.ts",
-      "types": "./build/node.d.ts",
-      "import": "./build/node.js",
-      "default": "./build/node.js"
-    },
-    "./daemon": {
-      "development": "./src/daemon.ts",
-      "typescript": "./src/daemon.ts",
-      "types": "./build/daemon.d.ts",
-      "import": "./build/daemon.js",
-      "default": "./build/daemon.js"
-    },
     "./*": {
-      "development": "./src/*.ts",
-      "typescript": "./src/*.ts",
       "types": "./build/*.d.ts",
-      "import": "./build/*.js",
       "default": "./build/*.js"
     }
   },
@@ -76,8 +35,8 @@
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
-    "nodemon": "^3.1.10",
     "tsx": "^4.20.6",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vite-plus": "^0.1.18"
   }
 }

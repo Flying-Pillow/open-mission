@@ -2,8 +2,9 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
-import type { MissionDescriptor } from '../types.js';
+import { MissionDossierFilesystem } from '../entities/Mission/MissionDossierFilesystem.js';
+import type { MissionDescriptor } from '../entities/Mission/MissionSchema.js';
+import { Repository } from '../entities/Repository/Repository.js';
 import { MissionRegistry } from './MissionRegistry.js';
 
 const temporaryWorkspaceRoots = new Set<string>();
@@ -20,7 +21,7 @@ afterEach(async () => {
 describe('MissionRegistry', () => {
 	it('continues startup hydration when a persisted mission fails strict loading', async () => {
 		const workspaceRoot = await createTempWorkspace();
-		const adapter = new FilesystemAdapter(workspaceRoot);
+		const adapter = new MissionDossierFilesystem(workspaceRoot);
 		await adapter.writeMissionDescriptor(adapter.getTrackedMissionDir('mission-good'), createDescriptor('mission-good'));
 		await adapter.writeMissionDescriptor(adapter.getTrackedMissionDir('mission-bad'), createDescriptor('mission-bad'));
 		const loadMission = vi.fn(async (input: { missionId: string }) => {
@@ -43,11 +44,11 @@ describe('MissionRegistry', () => {
 		}
 	});
 
-	it('hydrates discovered Mission worktrees from the worktree control root', async () => {
+	it('hydrates discovered Mission worktrees from the worktree Repository root', async () => {
 		const repositoryRoot = await createTempWorkspace();
-		const repositoryAdapter = new FilesystemAdapter(repositoryRoot);
+		const repositoryAdapter = new MissionDossierFilesystem(repositoryRoot);
 		const missionWorktreeRoot = repositoryAdapter.getMissionWorktreePath('1-prepare-repo-for-mission');
-		const missionAdapter = new FilesystemAdapter(missionWorktreeRoot);
+		const missionAdapter = new MissionDossierFilesystem(missionWorktreeRoot);
 		const missionDir = missionAdapter.getTrackedMissionDir('1-prepare-repo-for-mission', missionWorktreeRoot);
 		await fs.mkdir(path.join(missionWorktreeRoot, '.mission'), { recursive: true });
 		await fs.writeFile(
@@ -57,7 +58,7 @@ describe('MissionRegistry', () => {
 				trackingProvider: 'github',
 				instructionsPath: '.agents',
 				skillsPath: '.agents/skills',
-				agentRunner: 'copilot-cli'
+				agentAdapter: 'copilot-cli'
 			}, null, 2)}\n`,
 			'utf8'
 		);
@@ -77,6 +78,48 @@ describe('MissionRegistry', () => {
 			undefined
 		);
 	});
+
+	it('skips invalid discovered Repositories during daemon hydration', async () => {
+		const workspaceRoot = await createTempWorkspace();
+		const invalidRepositoryRoot = await createTempWorkspace();
+		const invalidRepositoryAdapter = new MissionDossierFilesystem(invalidRepositoryRoot);
+		await invalidRepositoryAdapter.writeMissionDescriptor(
+			invalidRepositoryAdapter.getTrackedMissionDir('mission-invalid-repository'),
+			createDescriptor('mission-invalid-repository')
+		);
+		const invalidRepository = Repository.create({
+			repositoryRootPath: invalidRepositoryRoot,
+			platformRepositoryRef: 'Flying-Pillow/invalid-repository'
+		}).toData();
+		const findRepositories = vi.spyOn(Repository, 'find').mockResolvedValue([
+			{
+				...invalidRepository,
+				operationalMode: 'invalid',
+				invalidState: {
+					code: 'invalid-settings-document',
+					path: path.join(invalidRepositoryRoot, '.mission', 'settings.json'),
+					message: 'Invalid input'
+				},
+				isInitialized: false
+			}
+		]);
+		const loadMission = vi.fn(async () => undefined);
+		const logger = { info: vi.fn(), warn: vi.fn() };
+
+		try {
+			await expect(new MissionRegistry({ loadMission, logger }).hydrateDaemonMissions({
+				surfacePath: workspaceRoot
+			})).resolves.toBeUndefined();
+
+			expect(loadMission).not.toHaveBeenCalled();
+			expect(logger.warn).toHaveBeenCalledWith(
+				expect.stringContaining("Mission daemon skipped invalid Repository 'repository:github/Flying-Pillow/invalid-repository'"),
+				expect.objectContaining({ repositoryRootPath: invalidRepositoryRoot })
+			);
+		} finally {
+			findRepositories.mockRestore();
+		}
+	});
 });
 
 async function createTempWorkspace(): Promise<string> {
@@ -90,7 +133,7 @@ async function createTempWorkspace(): Promise<string> {
 			trackingProvider: 'github',
 			instructionsPath: '.agents',
 			skillsPath: '.agents/skills',
-			agentRunner: 'copilot-cli'
+			agentAdapter: 'copilot-cli'
 		}, null, 2)}\n`,
 		'utf8'
 	);

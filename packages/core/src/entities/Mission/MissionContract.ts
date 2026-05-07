@@ -1,8 +1,10 @@
 import type { EntityContractType } from '../Entity/EntitySchema.js';
 import { Mission } from './Mission.js';
-import { AgentSessionContract } from '../AgentSession/AgentSessionContract.js';
+import { AgentExecutionContract } from '../AgentExecution/AgentExecutionContract.js';
 import { ArtifactContract } from '../Artifact/ArtifactContract.js';
 import { createEntityChannel, createEntityId } from '../Entity/Entity.js';
+import { createEntityEventEnvelope } from '../Entity/Entity.js';
+import type { EntityEventEnvelopeType } from '../Entity/EntitySchema.js';
 import { StageContract } from '../Stage/StageContract.js';
 import { TaskContract } from '../Task/TaskContract.js';
 import {
@@ -105,9 +107,31 @@ export const MissionContract: EntityContractType = {
         },
         status: {
             payload: MissionStatusSnapshotSchema
+        },
+        terminal: {
+            payload: MissionTerminalSnapshotSchema
         }
     }
 };
+
+export function createMissionTerminalEvent(input: {
+    workspaceRoot: string;
+    missionId: string;
+    state: unknown;
+}): EntityEventEnvelopeType {
+    const missionId = input.missionId.trim();
+    const payload = MissionTerminalSnapshotSchema.parse({
+        missionId,
+        ...(typeof input.state === 'object' && input.state !== null ? input.state : {})
+    });
+    return createEntityEventEnvelope({
+        entityId: createEntityId('mission', missionId),
+        eventName: 'terminal',
+        type: 'mission.terminal',
+        missionId,
+        payload
+    });
+}
 
 export function createMissionRuntimeEventSubscriptionChannels(missionId: string): string[] {
     const normalizedMissionId = missionId.trim();
@@ -116,13 +140,11 @@ export function createMissionRuntimeEventSubscriptionChannels(missionId: string)
     }
 
     return [
-        ...Object.keys(MissionContract.events ?? {}).map((eventName) =>
-            createEntityChannel(createEntityId('mission', normalizedMissionId), eventName)
-        ),
+        ...createEntityContractChannelPatterns('mission', normalizedMissionId, MissionContract),
         ...createEntityContractChannelPatterns('stage', `${normalizedMissionId}/*`, StageContract),
         ...createEntityContractChannelPatterns('task', `${normalizedMissionId}/*`, TaskContract),
         ...createEntityContractChannelPatterns('artifact', `${normalizedMissionId}/*`, ArtifactContract),
-        ...createEntityContractChannelPatterns('agent_session', `${normalizedMissionId}/*`, AgentSessionContract)
+        ...createEntityContractChannelPatterns('agent_execution', `${normalizedMissionId}/*`, AgentExecutionContract)
     ];
 }
 
@@ -132,12 +154,12 @@ export function createAllRuntimeEventSubscriptionChannels(): string[] {
         ...createEntityContractChannelPatterns('stage', '*', StageContract),
         ...createEntityContractChannelPatterns('task', '*', TaskContract),
         ...createEntityContractChannelPatterns('artifact', '*', ArtifactContract),
-        ...createEntityContractChannelPatterns('agent_session', '*', AgentSessionContract)
+        ...createEntityContractChannelPatterns('agent_execution', '*', AgentExecutionContract)
     ];
 }
 
 function createEntityContractChannelPatterns(table: string, uniqueId: string, contract: EntityContractType): string[] {
-    return Object.keys(contract.events ?? {}).map((eventName) =>
+    return Object.keys(contract.events ?? {}).filter((eventName) => eventName !== 'terminal').map((eventName) =>
         createEntityChannel(createEntityId(table, uniqueId), eventName)
     );
 }

@@ -1,8 +1,8 @@
 // /apps/airport/web/src/lib/components/entities/Repository/Repository.svelte.ts: OO browser entity for repository data with remote issue and mission commands.
 import type { MissionCatalogEntryType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import { RepositoryDataSchema, RepositoryIssueDetailSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformRepositorySchema, RepositorySetupResultSchema, RepositoryStorageSchema, RepositorySyncStatusSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
-import type { RepositoryDataType, RepositoryIssueDetailType, RepositorySetupResultType, RepositorySettingsType, RepositoryStorageType, RepositorySyncStatusType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import { RepositoryDataSchema, RepositoryIssueDetailSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformRepositorySchema, RepositorySetupResultSchema, RepositorySyncStatusSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { RepositoryDataType, RepositoryIssueDetailType, RepositorySetupResultType, RepositorySettingsType, RepositorySyncStatusType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import { z } from 'zod/v4';
 import { getApp } from '$lib/client/globals';
 import { qry } from '../../../../routes/api/entities/remote/query.remote';
@@ -76,16 +76,18 @@ export class Repository extends Entity<RepositoryDataType> {
 
     public static async findAvailable(input: {
         platform?: 'github';
+        run?: boolean;
     } = {}) {
-        return RepositoryPlatformRepositorySchema.array().parse(await qry({
+        const query = qry({
             entity: 'Repository',
             method: 'findAvailable',
-            payload: input
-        }).run());
+            payload: input.platform ? { platform: input.platform } : {}
+        });
+        return RepositoryPlatformRepositorySchema.array().parse(input.run === false ? await query : await query.run());
     }
 
-    public static async classCommands(commandInput?: unknown): Promise<EntityCommandDescriptorType[]> {
-        return Entity.classCommands('Repository', commandInput);
+    public static async classCommands(commandInput?: unknown, input: { run?: boolean } = {}): Promise<EntityCommandDescriptorType[]> {
+        return Entity.classCommands('Repository', commandInput, input);
     }
 
     public static async executeClassCommand<TResult = unknown>(commandId: string, input?: unknown): Promise<TResult> {
@@ -131,14 +133,6 @@ export class Repository extends Entity<RepositoryDataType> {
             method: 'syncStatus',
             payload: this.entityLocator
         }).run());
-    }
-
-    public applySummary(input: RepositoryStorageType): this {
-        this.data = RepositoryDataSchema.parse({
-            ...this.toData(),
-            ...structuredClone(input)
-        });
-        return this;
     }
 
     public toData(): RepositoryDataType {
@@ -222,23 +216,10 @@ export class Repository extends Entity<RepositoryDataType> {
     }
 }
 
-export function getRepositoryDisplayName(repository: RepositoryStorageType): string {
+export function getRepositoryDisplayName(repository: Pick<RepositoryDataType, 'platformRepositoryRef' | 'repoName'>): string {
     return repository.platformRepositoryRef ?? repository.repoName;
 }
 
-export function getRepositoryDisplayDescription(repository: RepositoryStorageType): string {
+export function getRepositoryDisplayDescription(repository: Pick<RepositoryDataType, 'platformRepositoryRef' | 'repositoryRootPath'>): string {
     return repository.platformRepositoryRef ?? repository.repositoryRootPath;
-}
-
-export function toRepositoryStorage(data: RepositoryDataType): RepositoryStorageType {
-    return RepositoryStorageSchema.parse({
-        id: data.id,
-        repositoryRootPath: data.repositoryRootPath,
-        ownerId: data.ownerId,
-        repoName: data.repoName,
-        ...(data.platformRepositoryRef ? { platformRepositoryRef: data.platformRepositoryRef } : {}),
-        settings: data.settings,
-        workflowConfiguration: data.workflowConfiguration,
-        isInitialized: data.isInitialized
-    });
 }

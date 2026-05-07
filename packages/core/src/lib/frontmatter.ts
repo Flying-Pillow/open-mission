@@ -1,7 +1,7 @@
 export type FrontmatterScalar = string | number | boolean;
 export type FrontmatterObject = Record<string, FrontmatterScalar>;
 
-export type FrontmatterValue = FrontmatterScalar | FrontmatterScalar[] | FrontmatterObject;
+export type FrontmatterValue = FrontmatterScalar | Array<FrontmatterScalar | FrontmatterObject> | FrontmatterObject;
 
 export type ParsedFrontmatterDocument = {
 	attributes: Record<string, FrontmatterValue>;
@@ -110,16 +110,21 @@ function renderFrontmatterValue(value: FrontmatterValue): string {
 	return JSON.stringify(value);
 }
 
-function parseFrontmatterArray(rawValue: string): FrontmatterScalar[] {
+function parseFrontmatterArray(rawValue: string): Array<FrontmatterScalar | FrontmatterObject> {
 	const parsed = JSON.parse(rawValue) as unknown;
 	if (!Array.isArray(parsed)) {
 		return [rawValue];
 	}
 
-	const values: FrontmatterScalar[] = [];
+	const values: Array<FrontmatterScalar | FrontmatterObject> = [];
 	for (const entry of parsed) {
 		if (typeof entry === 'string' || typeof entry === 'number' || typeof entry === 'boolean') {
 			values.push(entry);
+		} else if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+			const object = normalizeFrontmatterObject(entry);
+			if (Object.keys(object).length > 0) {
+				values.push(object);
+			}
 		}
 	}
 	return values;
@@ -131,8 +136,12 @@ function parseFrontmatterObject(rawValue: string): FrontmatterObject {
 		return {};
 	}
 
+	return normalizeFrontmatterObject(parsed);
+}
+
+function normalizeFrontmatterObject(value: object): FrontmatterObject {
 	const values: FrontmatterObject = {};
-	for (const [key, entry] of Object.entries(parsed)) {
+	for (const [key, entry] of Object.entries(value)) {
 		if (typeof entry === 'string' || typeof entry === 'number' || typeof entry === 'boolean') {
 			values[key] = entry;
 		}

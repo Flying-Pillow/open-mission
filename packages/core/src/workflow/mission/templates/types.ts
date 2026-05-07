@@ -1,10 +1,10 @@
 import type {
 	MissionBrief,
-	MissionArtifactKey,
-	MissionStageId,
 	MissionTaskAgent,
 	MissionTaskStatus
-} from '../../../types.js';
+} from '../../../entities/Mission/MissionSchema.js';
+import type { TaskContextArtifactReferenceType } from '../../../entities/Task/TaskSchema.js';
+import type { MissionArtifactKey, MissionStageId } from '../../manifest.js';
 import type { TemplateObject } from '../../engine/templates/templateRenderer.js';
 
 export type MissionProductTemplate = {
@@ -19,6 +19,7 @@ export type MissionTaskTemplate = {
 	taskKind?: 'implementation' | 'verification';
 	pairedTaskId?: string;
 	dependsOn?: string[];
+	context?: TaskContextArtifactReferenceType[];
 	agent: MissionTaskAgent;
 	status?: MissionTaskStatus;
 	retries?: number;
@@ -60,7 +61,7 @@ export type MissionTemplateContext = TemplateObject & {
 
 export type MissionTemplateContextInput = {
 	missionId: string;
-	controlRoot: string;
+	repositoryRootPath: string;
 	brief: MissionBrief;
 	branchRef: string;
 };

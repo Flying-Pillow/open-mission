@@ -1,5 +1,25 @@
 {
+    "mcpServers": {
+        "mission": {
+            "type": "stdio",
+            "command": "mission-command",
+            "args": [],
+            "env": {
+                "MISSION_MCP_ENDPOINT": "${MISSION_MCP_ENDPOINT}",
+                "MISSION_MCP_SESSION_TOKEN": "${MISSION_MCP_SESSION_TOKEN}"
+            }
+        }
+    },
     "servers": {
+        "mission": {
+            "type": "stdio",
+            "command": "mission-command",
+            "args": [],
+            "env": {
+                "MISSION_MCP_ENDPOINT": "${MISSION_MCP_ENDPOINT}",
+                "MISSION_MCP_SESSION_TOKEN": "${MISSION_MCP_SESSION_TOKEN}"
+            }
+        },
         "svelte": {
             "type": "http",
             "url": "https://mcp.svelte.dev/mcp"

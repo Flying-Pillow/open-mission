@@ -15,12 +15,14 @@
         entity,
         label,
         onCommandExecuted,
+        resolveCommandInput,
         class: className,
         buttonClass = "",
         defaultVariant = "default",
         showEmptyState = true,
         presentation = "buttons",
         menuLabel = "Commands",
+        iconOnly = false,
     }: {
         refreshNonce: number;
         entity?: CommandableEntity;
@@ -29,12 +31,14 @@
             result: unknown,
             command: EntityCommandDescriptorType,
         ) => Promise<void>;
+        resolveCommandInput?: (command: EntityCommandDescriptorType) => unknown;
         class?: string;
         buttonClass?: string;
         defaultVariant?: ButtonVariant;
         showEmptyState?: boolean;
         presentation?: "buttons" | "menu" | "responsive";
         menuLabel?: string;
+        iconOnly?: boolean;
     } = $props();
 
     let commandPending = $state<string | null>(null);
@@ -86,7 +90,7 @@
             return "lucide:pause";
         }
 
-        if (commandId.includes("panic") || commandId.includes("terminate")) {
+        if (commandId.includes("terminate")) {
             return "lucide:triangle-alert";
         }
 
@@ -155,6 +159,7 @@
         try {
             const result = await commandEntity.executeCommand(
                 command.commandId,
+                resolveCommandInput?.(command),
             );
             await onCommandExecuted(result, command);
             return true;
@@ -294,10 +299,11 @@
                 {#each availableCommands as command (command.commandId)}
                     <Button
                         variant={commandVariant(command)}
-                        size="sm"
+                        size={iconOnly ? "icon-sm" : "sm"}
                         disabled={commandPending !== null || command.disabled}
                         class={buttonClass}
                         onclick={() => void executeCommand(command)}
+                        aria-label={command.label}
                         title={command.disabledReason ||
                             command.description ||
                             command.label}
@@ -307,11 +313,13 @@
                             class="size-4"
                             data-icon="inline-start"
                         />
-                        <span>
-                            {commandPending === command.commandId
-                                ? `${command.label}...`
-                                : command.label}
-                        </span>
+                        {#if !iconOnly}
+                            <span>
+                                {commandPending === command.commandId
+                                    ? `${command.label}...`
+                                    : command.label}
+                            </span>
+                        {/if}
                     </Button>
                 {/each}
             {/if}

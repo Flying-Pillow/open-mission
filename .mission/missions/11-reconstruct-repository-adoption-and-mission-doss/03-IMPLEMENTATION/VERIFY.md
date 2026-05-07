@@ -20,7 +20,7 @@ Branch: mission/11-reconstruct-repository-adoption-and-mission-doss
 - Slice 3, repository modes and routing:
   - `pnpm exec vitest --run packages/core/src/lib/config.test.ts packages/core/src/daemon/WorkspaceManager.test.ts`
   - `config` verifies the machine-local `registeredRepositories` ledger, repository registration, and repository listing behavior.
-  - `WorkspaceManager` verifies repository-root discovery, mission-worktree-to-control-root routing, and re-registration when config state is cleaned while the daemon cache remains warm.
+  - `WorkspaceManager` verifies repository-root discovery, mission-worktree-to-repository-root routing, and re-registration when config state is cleaned while the daemon cache remains warm.
   - Tower command handling for `/repo` and `/add-repo` was inspected in `apps/tower/terminal/src/tower/TowerController.tsx` and remains consistent with the repository-adoption command contract.
 - Slice 4, consumers, specs, and focused tests:
   - `pnpm exec vitest --run packages/core/src/lib/FilesystemAdapter.test.ts packages/core/src/lib/userConfig.test.ts packages/core/src/daemon/WorkspaceManager.test.ts`

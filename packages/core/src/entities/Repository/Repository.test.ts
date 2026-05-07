@@ -4,10 +4,10 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { Repository } from './Repository.js';
-import { createDefaultRepositorySettings } from './RepositorySchema.js';
+import { createDefaultRepositorySettings, RepositoryDataSchema } from './RepositorySchema.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
 import type { EntityExecutionContext } from '../Entity/Entity.js';
-import { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import { MissionDossierFilesystem } from '../Mission/MissionDossierFilesystem.js';
 
 describe('Repository', () => {
     it('opens a local repository with default configuration', () => {
@@ -19,6 +19,34 @@ describe('Repository', () => {
         expect(repository.repoName).toBe('mission-proof-of-concept');
         expect(repository.isInitialized).toBe(false);
         expect(repository.workflowConfiguration).toEqual(createDefaultWorkflowSettings());
+    });
+
+    it('resolves the Repository root from inside a linked Mission worktree', async () => {
+        const repositoryRootPath = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-root-'));
+        const missionWorktreePath = path.join(repositoryRootPath, '..', 'mission-worktree');
+
+        try {
+            git(repositoryRootPath, ['init']);
+            await fsp.writeFile(path.join(repositoryRootPath, 'README.md'), '# Mission Test\n', 'utf8');
+            git(repositoryRootPath, ['add', 'README.md']);
+            git(repositoryRootPath, ['commit', '-m', 'init']);
+            git(repositoryRootPath, ['worktree', 'add', missionWorktreePath, '-b', 'mission/test-root']);
+
+            expect(Repository.resolveRepositoryRoot(missionWorktreePath)).toBe(repositoryRootPath);
+        } finally {
+            git(repositoryRootPath, ['worktree', 'remove', '--force', missionWorktreePath]);
+            await fsp.rm(repositoryRootPath, { recursive: true, force: true });
+        }
+    });
+
+    it('falls back to the provided path when no Git Repository can be resolved', async () => {
+        const directoryPath = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-non-git-root-'));
+
+        try {
+            expect(Repository.resolveRepositoryRoot(directoryPath)).toBe(directoryPath);
+        } finally {
+            await fsp.rm(directoryPath, { recursive: true, force: true });
+        }
     });
 
     it('opens a GitHub repository and updates only its own configuration', () => {
@@ -38,6 +66,26 @@ describe('Repository', () => {
         expect(repository.platformRepositoryRef).toBe('Flying-Pillow/mission');
         expect(repository.settings.instructionsPath).toBe('.copilot');
         expect(repository.isInitialized).toBe(true);
+    });
+
+    it('accepts repository data with the retired workflow panic key', () => {
+        const workflowConfiguration = createDefaultWorkflowSettings();
+        const parsed = RepositoryDataSchema.parse({
+            ...Repository.create({
+                repositoryRootPath: '/workspaces/connect-four',
+                platformRepositoryRef: 'Flying-Pillow/connect-four'
+            }).toData(),
+            workflowConfiguration: {
+                ...workflowConfiguration,
+                panic: {
+                    terminateSessions: true,
+                    clearLaunchQueue: true,
+                    haltMission: true
+                }
+            }
+        });
+
+        expect(parsed.workflowConfiguration).toEqual(workflowConfiguration);
     });
 
     it('starts a mission when repo-native setup exists but persisted Entity state is stale', async () => {
@@ -152,7 +200,7 @@ describe('Repository', () => {
         const repository = Repository.create({ repositoryRootPath });
         const repositoryInternals = repository as unknown as {
             assertExistingMissionRuntimeDataValid(
-                adapter: FilesystemAdapter,
+                adapter: MissionDossierFilesystem,
                 missionDir: string,
                 missionId: string
             ): Promise<void>;
@@ -172,12 +220,6 @@ describe('Repository', () => {
                 runtime: {
                     lifecycle: 'draft',
                     pause: { paused: false },
-                    panic: {
-                        active: false,
-                        terminateSessions: true,
-                        clearLaunchQueue: true,
-                        haltMission: true
-                    },
                     stages: [],
                     tasks: [],
                     sessions: [],
@@ -188,7 +230,7 @@ describe('Repository', () => {
             }, null, 2), 'utf8');
 
             await expect(repositoryInternals.assertExistingMissionRuntimeDataValid(
-                new FilesystemAdapter(repositoryRootPath),
+                new MissionDossierFilesystem(repositoryRootPath),
                 missionDir,
                 '1-initial-setup'
             )).rejects.toThrow(/does not fallback-load or implicitly migrate stale runtime data/u);

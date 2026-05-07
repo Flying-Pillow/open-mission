@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { MissionDescriptor } from '../../types.js';
-import type { FilesystemAdapter } from '../../lib/FilesystemAdapter.js';
+import type { MissionDescriptor } from '../../entities/Mission/MissionSchema.js';
+import type { MissionDossierFilesystem } from '../../entities/Mission/MissionDossierFilesystem.js';
 import {
     createMissionWorkflowConfigurationSnapshot,
     createMissionStateData,
@@ -81,7 +81,75 @@ describe('MissionWorkflowController', () => {
         expect(executor.getExecutedRequestTypes()).toEqual(['tasks.request-generation']);
     });
 
+    it('logs applied workflow events with useful event metadata', async () => {
+        const adapter = createAdapter();
+        const logger = createLogger();
+        const controller = new MissionWorkflowController({
+            adapter,
+            descriptor: createDescriptor(),
+            workflow: createDefaultWorkflowSettings(),
+            requestExecutor: createRequestExecutor(),
+            logger
+        });
+
+        await controller.startFromDraft({
+            occurredAt: '2026-04-14T09:00:00.000Z',
+            source: 'human',
+            startMission: false
+        });
+        await controller.applyEvent({
+            eventId: 'task.queued:prd/01:2026-04-14T09:00:02.000Z',
+            type: 'task.queued',
+            occurredAt: '2026-04-14T09:00:02.000Z',
+            source: 'human',
+            taskId: 'prd/01',
+            agentId: 'copilot-cli'
+        });
+        await controller.applyEvent({
+            eventId: 'task.queued:prd/01:2026-04-14T09:00:02.000Z',
+            type: 'task.queued',
+            occurredAt: '2026-04-14T09:00:02.000Z',
+            source: 'human',
+            taskId: 'prd/01',
+            agentId: 'copilot-cli'
+        });
+
+        expect(logger.entries.map((entry) => entry.message)).toEqual([
+            'Mission workflow event applied.',
+            'Mission workflow event applied.',
+            'Mission workflow event applied.'
+        ]);
+        expect(logger.entries.map((entry) => entry.metadata['type'])).toEqual([
+            'mission.created',
+            'tasks.generated',
+            'task.queued'
+        ]);
+        expect(logger.entries[1]?.metadata).toMatchObject({
+            missionId: 'mission-42',
+            eventId: 'tasks.generated:prd:2026-04-14T09:00:01.000Z',
+            stageId: 'prd',
+            taskCount: 1,
+            taskIds: ['prd/01']
+        });
+        expect(logger.entries[2]?.metadata).toMatchObject({
+            missionId: 'mission-42',
+            eventId: 'task.queued:prd/01:2026-04-14T09:00:02.000Z',
+            taskId: 'prd/01',
+            agentId: 'copilot-cli'
+        });
+    });
+
 });
+
+function createLogger() {
+    const entries: Array<{ message: string; metadata: Record<string, unknown> }> = [];
+    return {
+        entries,
+        info(message: string, metadata?: Record<string, unknown>) {
+            entries.push({ message, metadata: metadata ?? {} });
+        }
+    };
+}
 
 function createDescriptor(): MissionDescriptor {
     return {
@@ -119,7 +187,7 @@ function createAdapter() {
         setPersistedEventLog: (records: MissionWorkflowEventRecord[]) => {
             eventLog.splice(0, eventLog.length, ...records);
         }
-    } as unknown as FilesystemAdapter & {
+    } as unknown as MissionDossierFilesystem & {
         getPersistedDocument(): MissionStateData | undefined;
         getPersistedEventLog(): MissionWorkflowEventRecord[];
         setPersistedDocument(document: MissionStateData | undefined): void;
@@ -142,13 +210,13 @@ function createRequestExecutor() {
                     : []
             );
         },
-        reconcileSessions: async () => [],
+        reconcileExecutions: async () => [],
         listRuntimeSessions: () => [],
         getRuntimeSession: () => undefined,
-        attachSession: async () => {
+        attachTerminal: async () => {
             throw new Error('not implemented for test');
         },
-        startSession: async () => {
+        startExecution: async () => {
             throw new Error('not implemented for test');
         },
         cancelRuntimeSession: async () => [],

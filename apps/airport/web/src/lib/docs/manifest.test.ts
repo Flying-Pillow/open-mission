@@ -31,6 +31,7 @@ describe("docs manifest", () => {
 			"Core Workflows",
 			"User Manual",
 			"Architecture",
+			"Architecture Decisions",
 			"Reference",
 		]);
 
@@ -47,15 +48,15 @@ describe("docs manifest", () => {
 			"Semantic Model",
 			"Daemon And System Control Plane",
 			"Workflow Engine",
-			"Agent Runtime",
+			"Agent Adapter",
 			"Airport Control Plane",
-			"Airport Terminal Surface",
 			"Contracts And State Surfaces",
+			"Entity Command Surface",
 			"Airport Web Surface Blueprint",
 			"Recovery And Reconciliation",
 			"Package Map",
 			"Integrity Checklist",
-			"Discrepancies And Ambiguities",
+			"Current Architecture Notes",
 		]);
 
 		expect(new Set(flattenNavigationHrefs(manifest.navigation))).toEqual(

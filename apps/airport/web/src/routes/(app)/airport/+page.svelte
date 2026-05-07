@@ -1,6 +1,14 @@
 <!-- /apps/airport/web/src/routes/(app)/airport/+page.svelte: Airport home route showing repositories. -->
 <script lang="ts">
+    import { afterNavigate } from "$app/navigation";
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import Airport from "$lib/components/airport/Airport.svelte";
+
+    const appContext = getAppContext();
+
+    afterNavigate(() => {
+        appContext.clearAirportSelection();
+    });
 </script>
 
 <svelte:head>

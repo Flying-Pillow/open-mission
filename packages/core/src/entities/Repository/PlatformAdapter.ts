@@ -1,11 +1,11 @@
 import type {
-	MissionBrief,
-	TrackedIssueSummary
-} from '../../types.js';
+	MissionBrief
+} from '../Mission/MissionSchema.js';
 import type {
 	RepositoryPlatformKindType,
 	RepositoryPlatformRepositoryType,
-	RepositoryIssueDetailType
+	RepositoryIssueDetailType,
+	TrackedIssueSummaryType
 } from './RepositorySchema.js';
 import {
 	GitHubPlatformAdapter,
@@ -57,7 +57,7 @@ export type RepositoryPlatformIssueCreateRequest = {
 export interface RepositoryPlatformAdapter {
 	readonly platform?: RepositoryPlatformKindType;
 	fetchIssue(issueId: string): Promise<MissionBrief>;
-	listOpenIssues(limit: number): Promise<TrackedIssueSummary[]>;
+	listOpenIssues(limit: number): Promise<TrackedIssueSummaryType[]>;
 	listRepositories(): Promise<RepositoryPlatformRepositoryType[]>;
 	fetchIssueDetail(issueId: string): Promise<RepositoryIssueDetailType>;
 	cloneRepository(input: RepositoryPlatformCloneRequest): Promise<string>;

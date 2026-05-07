@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
-import { TerminalAgentTransport, type TerminalSessionHandle } from './runtime/agent/TerminalAgentTransport.js';
+import { TerminalRegistry, type TerminalHandle, type TerminalSnapshot } from '../entities/Terminal/TerminalRegistry.js';
 import { MissionAgentEventEmitter } from './runtime/agent/events.js';
-import type { MissionSelector } from '../types.js';
-import { FilesystemAdapter } from '../lib/FilesystemAdapter.js';
-import type { MissionAgentTerminalState } from './protocol/contracts.js';
+import type { MissionSelector } from '../entities/Mission/MissionSchema.js';
+import { MissionDossierFilesystem } from '../entities/Mission/MissionDossierFilesystem.js';
+import type { MissionTerminalSnapshotType } from '../entities/Mission/MissionSchema.js';
 
 type MissionTerminalInput = {
     data?: string;
@@ -19,22 +19,23 @@ type MissionTerminalRecord = {
     missionId: string;
     sessionId: string;
     workingDirectory: string;
-    handle: TerminalSessionHandle;
+    handle: TerminalHandle;
 };
 
 export type MissionTerminalUpdate = {
     workspaceRoot: string;
     missionId: string;
-    state: MissionAgentTerminalState;
+    state: MissionTerminalSnapshotType;
 };
 
-const missionTerminalTransport = new TerminalAgentTransport();
+const missionTerminalRegistry = TerminalRegistry.shared();
 const missionTerminals = new Map<string, MissionTerminalRecord>();
-const missionTerminalSessions = new Map<string, MissionTerminalRecord>();
 const missionTerminalEventEmitter = new MissionAgentEventEmitter<MissionTerminalUpdate>();
+const missionContextCache = new Map<string, { context: { key: string; surfacePath: string; missionId: string; sessionId: string; workingDirectory: string } | undefined; timestamp: number }>();
+const CONTEXT_CACHE_TTL_MS = 60_000;
 
-TerminalAgentTransport.onDidSessionUpdate((event) => {
-    const record = missionTerminalSessions.get(event.sessionName);
+missionTerminalRegistry.onDidTerminalUpdate((event) => {
+    const record = missionTerminals.get(event.terminalName);
     if (!record) {
         return;
     }
@@ -53,7 +54,7 @@ export function observeMissionTerminalUpdates(listener: (event: MissionTerminalU
 export async function readMissionTerminalState(input: {
     surfacePath: string;
     selector?: MissionSelector;
-}): Promise<MissionAgentTerminalState | null> {
+}): Promise<MissionTerminalSnapshotType | null> {
     const resolved = await readExistingMissionTerminalRecord(input);
     if (!resolved) {
         return null;
@@ -64,7 +65,7 @@ export async function readMissionTerminalState(input: {
 export async function ensureMissionTerminalState(input: {
     surfacePath: string;
     selector?: MissionSelector;
-}): Promise<MissionAgentTerminalState | null> {
+}): Promise<MissionTerminalSnapshotType | null> {
     const resolved = await ensureMissionTerminalRecord(input);
     if (!resolved) {
         return null;
@@ -76,16 +77,19 @@ export async function sendMissionTerminalInput(input: {
     surfacePath: string;
     selector?: MissionSelector;
     terminalInput: MissionTerminalInput;
-}): Promise<MissionAgentTerminalState | null> {
+}): Promise<MissionTerminalSnapshotType | null> {
     const resolved = await readExistingMissionTerminalRecord(input);
     if (!resolved) {
         return null;
     }
 
-    if (typeof input.terminalInput.data === 'string' && input.terminalInput.data.length > 0) {
-        await missionTerminalTransport.sendKeys(
-            resolved.handle,
-            input.terminalInput.data,
+    const isKeyboardInput = typeof input.terminalInput.data === 'string' && input.terminalInput.data.length > 0;
+    const isResize = input.terminalInput.cols && input.terminalInput.rows;
+
+    if (isKeyboardInput) {
+        missionTerminalRegistry.sendKeys(
+            resolved.handle.terminalName,
+            input.terminalInput.data!,
             {
                 ...(input.terminalInput.literal !== undefined
                     ? { literal: input.terminalInput.literal }
@@ -93,12 +97,16 @@ export async function sendMissionTerminalInput(input: {
             }
         );
     }
-    if (input.terminalInput.cols && input.terminalInput.rows) {
-        await missionTerminalTransport.resizeSession(
-            resolved.handle,
-            input.terminalInput.cols,
-            input.terminalInput.rows
+    if (isResize) {
+        missionTerminalRegistry.resize(
+            resolved.handle.terminalName,
+            input.terminalInput.cols!,
+            input.terminalInput.rows!
         );
+    }
+
+    if (isKeyboardInput && !isResize) {
+        return null;
     }
 
     return createMissionTerminalState(resolved);
@@ -128,19 +136,19 @@ async function ensureMissionTerminalRecord(input: {
 
     const existing = missionTerminals.get(context.key);
     if (existing?.workingDirectory === context.workingDirectory) {
-        const snapshot = await missionTerminalTransport.readSnapshot(existing.handle);
+        const snapshot = readTerminalSnapshot(existing.handle);
         if (!snapshot.dead) {
             return existing;
         }
         missionTerminals.delete(context.key);
-        missionTerminalSessions.delete(existing.handle.sessionName);
+        missionTerminals.delete(existing.handle.terminalName);
     }
 
-    const handle = await missionTerminalTransport.openSession({
+    const handle = missionTerminalRegistry.openTerminal({
         workingDirectory: context.workingDirectory,
         command: resolveShellCommand(),
         args: resolveShellArgs(),
-        sessionName: context.sessionId
+        terminalName: context.sessionId
     });
     const record: MissionTerminalRecord = {
         key: context.key,
@@ -151,7 +159,7 @@ async function ensureMissionTerminalRecord(input: {
         handle
     };
     missionTerminals.set(context.key, record);
-    missionTerminalSessions.set(handle.sessionName, record);
+    missionTerminals.set(handle.terminalName, record);
     return record;
 }
 
@@ -171,7 +179,13 @@ async function resolveMissionTerminalContext(input: {
         return undefined;
     }
 
-    const adapter = new FilesystemAdapter(surfacePath);
+    const cacheKey = `${surfacePath}:${missionId}`;
+    const cached = missionContextCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CONTEXT_CACHE_TTL_MS) {
+        return cached.context;
+    }
+
+    const adapter = new MissionDossierFilesystem(surfacePath);
     const mission = await adapter.resolveKnownMission({ missionId });
     if (!mission) {
         return undefined;
@@ -179,27 +193,29 @@ async function resolveMissionTerminalContext(input: {
 
     const workingDirectory = adapter.getMissionWorkspacePath(mission.missionDir);
     const key = `${path.resolve(surfacePath)}:${missionId}`;
-    const sessionId = buildMissionTerminalSessionId(surfacePath, missionId);
-    return {
+    const sessionId = buildMissionTerminalId(surfacePath, missionId);
+    const context = {
         key,
         surfacePath,
         missionId,
         sessionId,
         workingDirectory
     };
+    missionContextCache.set(cacheKey, { context, timestamp: Date.now() });
+    return context;
 }
 
-async function createMissionTerminalState(record: MissionTerminalRecord): Promise<MissionAgentTerminalState> {
-    const snapshot = await missionTerminalTransport.readSnapshot(record.handle);
+async function createMissionTerminalState(record: MissionTerminalRecord): Promise<MissionTerminalSnapshotType> {
+    const snapshot = readTerminalSnapshot(record.handle);
     return createMissionTerminalStateFromSnapshot(record, snapshot);
 }
 
 function createMissionTerminalStateFromSnapshot(
     record: MissionTerminalRecord,
-    snapshot: Awaited<ReturnType<typeof missionTerminalTransport.readSnapshot>>
-): MissionAgentTerminalState {
+    snapshot: TerminalSnapshot
+): MissionTerminalSnapshotType {
     return {
-        sessionId: record.sessionId,
+        missionId: record.missionId,
         connected: snapshot.connected,
         dead: snapshot.dead,
         exitCode: snapshot.exitCode,
@@ -207,14 +223,26 @@ function createMissionTerminalStateFromSnapshot(
         ...(snapshot.truncated ? { truncated: true } : {}),
         ...(typeof snapshot.chunk === 'string' ? { chunk: snapshot.chunk } : {}),
         terminalHandle: {
-            sessionName: snapshot.sessionName,
-            paneId: snapshot.paneId,
-            ...(snapshot.sharedSessionName ? { sharedSessionName: snapshot.sharedSessionName } : {})
+            terminalName: snapshot.terminalName,
+            terminalPaneId: snapshot.terminalPaneId,
+            ...(snapshot.sharedTerminalName ? { sharedTerminalName: snapshot.sharedTerminalName } : {})
         }
     };
 }
 
-function buildMissionTerminalSessionId(surfacePath: string, missionId: string): string {
+function readTerminalSnapshot(handle: TerminalHandle): TerminalSnapshot {
+    return missionTerminalRegistry.readSnapshot(handle.terminalName) ?? {
+        terminalName: handle.terminalName,
+        terminalPaneId: handle.terminalPaneId,
+        connected: false,
+        dead: true,
+        exitCode: null,
+        screen: '',
+        truncated: false
+    };
+}
+
+function buildMissionTerminalId(surfacePath: string, missionId: string): string {
     const workspaceName = path.basename(surfacePath) || 'repository';
     const digest = createHash('sha1').update(path.resolve(surfacePath)).digest('hex').slice(0, 8);
     return `mission-shell:${workspaceName}:${digest}:${missionId}`;
