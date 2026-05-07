@@ -1054,24 +1054,24 @@ export class Repository extends Entity<RepositoryDataType, string> {
 				: store.deriveDraftMissionBranchName(input.brief.title));
 		const baseBranch = store.getDefaultBranch();
 		const createdAt = new Date().toISOString();
-		const proposalWorktreePath = store.getMissionWorktreePath(missionId);
+		const missionWorktreePath = store.getMissionWorktreePath(missionId);
 		let preparedMission: Mission | undefined;
 
 		try {
-			await this.materializeOrAdoptMissionWorktree(store, proposalWorktreePath, branchRef, baseBranch);
+			await this.ensureMissionWorktreeOnBranch(store, missionWorktreePath, branchRef, baseBranch);
 
-			const proposalStore = new MissionDossierFilesystem(proposalWorktreePath);
-			const missionRootDir = proposalStore.getTrackedMissionDir(missionId, proposalWorktreePath);
-			const existingDescriptor = await proposalStore.readMissionDescriptor(missionRootDir);
+			const missionWorktreeStore = new FilesystemAdapter(missionWorktreePath);
+			const missionRootDir = missionWorktreeStore.getTrackedMissionDir(missionId, missionWorktreePath);
+			const existingDescriptor = await missionWorktreeStore.readMissionDescriptor(missionRootDir);
 			if (existingDescriptor) {
-				await this.assertExistingMissionRuntimeDataValid(proposalStore, missionRootDir, missionId);
+				await this.assertExistingMissionRuntimeDataValid(missionWorktreeStore, missionRootDir, missionId);
 				return {
 					kind: 'mission',
 					state: 'branch-prepared',
 					missionId,
 					branchRef: existingDescriptor.branchRef,
 					baseBranch,
-					worktreePath: proposalWorktreePath,
+					worktreePath: missionWorktreePath,
 					missionRootDir,
 					...(input.brief.issueId !== undefined ? { issueId: input.brief.issueId } : {}),
 					...(input.brief.url ? { issueUrl: input.brief.url } : {})
@@ -1087,9 +1087,9 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			};
 
 			const { Mission } = await import('../Mission/Mission.js');
-			const preparedWorkflowBindings = await this.resolveMissionWorkflowBindings(workflowBindings, proposalWorktreePath);
+			const preparedWorkflowBindings = await this.resolveMissionWorkflowBindings(workflowBindings, missionWorktreePath);
 			preparedMission = new Mission(
-				proposalStore,
+				missionWorktreeStore,
 				missionRootDir,
 				descriptor,
 				preparedWorkflowBindings
@@ -1098,17 +1098,19 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			preparedMission.dispose();
 			preparedMission = undefined;
 
-			proposalStore.stagePaths(
+			missionWorktreeStore.stagePaths(
 				[
-					path.relative(proposalWorktreePath, Repository.getSettingsDocumentPath(proposalWorktreePath)),
-					path.relative(proposalWorktreePath, path.dirname(Repository.getMissionWorkflowDefinitionPath(proposalWorktreePath))),
-					path.relative(proposalWorktreePath, missionRootDir)
+					path.relative(missionWorktreePath, Repository.getSettingsDocumentPath(missionWorktreePath, {
+						resolveWorkspaceRoot: false
+					})),
+					path.relative(missionWorktreePath, path.dirname(Repository.getMissionWorkflowDefinitionPath(missionWorktreePath))),
+					path.relative(missionWorktreePath, missionRootDir)
 				],
-				proposalWorktreePath,
+				missionWorktreePath,
 				{ force: true }
 			);
-			proposalStore.commit(Repository.buildMissionPreparationCommitMessage(missionId, input.brief), proposalWorktreePath);
-			proposalStore.pushBranch(branchRef, proposalWorktreePath);
+			missionWorktreeStore.commit(Repository.buildMissionPreparationCommitMessage(missionId, input.brief), missionWorktreePath);
+			missionWorktreeStore.pushBranch(branchRef, missionWorktreePath);
 
 			return {
 				kind: 'mission',
@@ -1116,7 +1118,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 				missionId,
 				branchRef,
 				baseBranch,
-				worktreePath: proposalWorktreePath,
+				worktreePath: missionWorktreePath,
 				missionRootDir: canonicalMissionRootDir,
 				...(input.brief.issueId !== undefined ? { issueId: input.brief.issueId } : {}),
 				...(input.brief.url ? { issueUrl: input.brief.url } : {})
@@ -1126,26 +1128,26 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		}
 	}
 
-	private async materializeOrAdoptMissionWorktree(
-		store: MissionDossierFilesystem,
-		worktreePath: string,
+	private async ensureMissionWorktreeOnBranch(
+		store: FilesystemAdapter,
+		missionWorktreePath: string,
 		branchRef: string,
 		baseBranch: string
 	): Promise<void> {
-		if (!fs.existsSync(worktreePath)) {
-			await store.materializeMissionWorktree(worktreePath, branchRef, baseBranch);
+		if (!fs.existsSync(missionWorktreePath)) {
+			await store.materializeMissionWorktree(missionWorktreePath, branchRef, baseBranch);
 			return;
 		}
 
-		const worktreeStore = new MissionDossierFilesystem(worktreePath);
-		if (!worktreeStore.isGitRepository()) {
-			throw new Error(`Mission worktree path '${worktreePath}' already exists but is not a Git worktree.`);
+		const missionWorktreeStore = new FilesystemAdapter(missionWorktreePath);
+		if (!missionWorktreeStore.isGitRepository()) {
+			throw new Error(`Mission worktree root '${missionWorktreePath}' already exists but is not a Git worktree.`);
 		}
 
-		const currentBranch = worktreeStore.getCurrentBranch(worktreePath);
+		const currentBranch = missionWorktreeStore.getCurrentBranch(missionWorktreePath);
 		if (currentBranch !== branchRef) {
 			throw new Error(
-				`Mission worktree path '${worktreePath}' already exists on branch '${currentBranch}' instead of expected Mission branch '${branchRef}'.`
+				`Mission worktree root '${missionWorktreePath}' already exists on branch '${currentBranch}' instead of expected Mission branch '${branchRef}'.`
 			);
 		}
 	}

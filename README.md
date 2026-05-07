@@ -3,7 +3,7 @@ We (a 2-person team) are using this daily to build our own software, but the API
 
 # 🌍 Mission
 
-**The orchestration engine for AI-driven software development.**
+**The orchestration engine for AI-driven software development. Cool!!!**
 
 Mission is a local state machine, native Airport host, and governance layer that sits between your issue tracker and your AI coding agents. It brings predictability, architectural strictness, and deterministic verification to AI-assisted development.
 
