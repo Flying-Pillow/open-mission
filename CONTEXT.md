@@ -157,7 +157,7 @@ _Avoid_: implicit mission ownership, required task execution, env-based routing
 
 **Agent execution context**:
 The durable daemon-managed set of artifacts, Entity references, and instructions made available to an Agent execution, including their roles and ordering.
-_Avoid_: prompt text, loose context, implicit context, Mission control outline order
+_Avoid_: prompt text, loose context, implicit context, Mission task list order
 
 **Agent execution token**:
 A daemon-issued opaque token that identifies and authorizes one registered Agent execution over the structured transport.
@@ -368,36 +368,24 @@ A daemon-derived view of one Airport pane for a surface to render.
 _Avoid_: pane projection
 
 **Mission control view**:
-A daemon-derived operator view for one Mission that contains Mission Control outline and Mission Control selection.
+A daemon-derived operator view for one Mission that contains Mission status and workflow snapshots for Airport surfaces.
 _Avoid_: mission projection
 
-**Mission control outline**:
-The daemon-owned ordered Mission Control structure for one Mission, including stage rail and tree node references derived from workflow definition and Entity relationships.
-_Avoid_: UI tree state, local tree derivation, mission projection tree
-
-**Mission control outline node**:
-A reference-first item in a Mission control outline that carries navigation metadata and an Entity id, not duplicated canonical Entity data.
-_Avoid_: tree data object, projected entity, UI node model
-
-**Mission control placement override**:
-A durable Mission-scoped daemon-owned instruction that adds, orders, or roles one Entity reference in a Mission control outline when operator curation needs to differ from the default derived outline.
-_Avoid_: UI reorder state, copied artifact, local tree mutation, operator preference
-
 **Mission control selection**:
-The surface-controlled, daemon-resolved operator focus for one Mission, such as active Mission stage, Mission task, Mission artifact, or Agent execution.
-_Avoid_: selected UI node, local selection heuristic, durable Mission coordination state
+The Airport surface-controlled operator focus for one Mission, such as active Mission stage or Mission task.
+_Avoid_: tree node selection, durable Mission coordination state, shared operator focus
 
 **Raw mission control selection**:
-The current surface/operator focus target before daemon semantic resolution.
+The current surface/operator focus target before Airport resolves the companion work bundle.
 _Avoid_: pane route state, durable Mission state, resolved work bundle
 
 **Resolved mission control selection**:
-The daemon-resolved companion work bundle derived from raw Mission control selection and semantic Mission relationships, such as active instruction artifact, active stage result artifact, or active Agent execution.
-_Avoid_: filename heuristic, tree-order heuristic, pane-local binding, persisted pane state
+The Airport-resolved companion work bundle derived from raw Mission control selection and semantic Mission relationships, such as active instruction artifact, active stage result artifact, or active Agent execution.
+_Avoid_: filename heuristic, tree-order heuristic, persisted pane state
 
 **Mission surface preference**:
-An Airport surface/client-local affordance such as collapsed nodes, panel sizes, or temporary focus that does not change Mission runtime data, Entity storage records, Agent execution context, or Mission control placement overrides.
-_Avoid_: Mission control placement override, Mission control outline state, durable curation, daemon preference
+An Airport surface/client-local affordance such as panel sizes, selected stage tab, or temporary focus that does not change Mission runtime data, Entity storage records, or Agent execution context.
+_Avoid_: durable Mission state, daemon preference, workflow setting
 
 **Derived workflow state**:
 Workflow runtime state derived from Mission tasks, such as Mission stage state and gate state.
@@ -443,7 +431,6 @@ _Avoid_: workflow projection, stage projection
 - An **Agent execution context** belongs to one **Agent execution**.
 - An **Agent execution context** contains explicit artifact and Entity references; it is not inferred from prompt text.
 - An **Agent execution context** owns the order of artifacts and instructions made available to its **Agent execution**.
-- **Mission control outline** placement may visualize or request changes to **Agent execution context** ordering, but it is not the source of truth for that order.
 - An **Agent execution message** is accepted through the daemon, not by writing raw text directly into an Agent execution terminal; the daemon resolves the session from its token instead of env-passed ids.
 - **Agent adapter delivery** is best-effort and must not be treated as proof that an **Agent execution** applied a context change.
 - An **Agent execution message** is not a first-class durable Entity unless the Mission system later needs queryable structured message history.
@@ -463,9 +450,8 @@ _Avoid_: workflow projection, stage projection
 - **Terminal input** is reserved for direct CLI interaction and does not define canonical Agent execution context.
 - An **External agent prompt field** always submits an **Agent execution message**; only focused terminal interaction sends **Terminal input**.
 - An **Agent-session artifact** belongs to one **Agent execution**.
-- Raw **Agent execution logs** do not appear in **Mission control outline** by default.
-- A **Mission artifact** may be placed in the **Mission control outline** at Mission, stage, task, or Agent execution level.
-- An **Agent-session artifact** remains the same canonical **Mission artifact** when it becomes useful beyond its producing **Agent execution**; the daemon may add another role or placement in the **Mission control outline** instead of copying it.
+- Raw **Agent execution logs** do not appear as Mission artifacts by default.
+- An **Agent-session artifact** remains the same canonical **Mission artifact** when it becomes useful beyond its producing **Agent execution**; Mission records relationships instead of copying it.
 - An **Entity** has exactly one canonical `id` field in its **Entity schema**.
 - An **Entity storage schema** carries the canonical `id`, entity type, audit fields, and storage-facing **Field metadata**.
 - An **Entity data schema** may include computed or linked fields described by **Field metadata**.
@@ -501,23 +487,16 @@ _Avoid_: workflow projection, stage projection
 - A **System snapshot** bootstraps client state before **Entity events** keep it current.
 - An **Airport pane view** is derived from daemon-owned Airport state.
 - A **Mission control view** is derived from Entity data, workflow definition, and runtime state for operator navigation.
-- A **Mission control outline** is derived by default from Entity relationships, workflow definition, and runtime state.
-- A **Mission control outline** may include **Mission control placement overrides** for operator-curated ordering or cross-placement roles.
-- A **Mission control placement override** is durable Mission coordination state shared across surfaces and future operators.
-- A **Mission control placement override** belongs to the daemon and does not change canonical Entity identity or duplicate Entity data.
 - A **Mission surface preference** belongs to the Airport surface/client layer, not the daemon.
-- A **Mission surface preference** must not encode durable outline placement or ordering.
-- A **Mission control outline node** may carry view metadata such as kind, parent, depth, order, collapsibility, or role.
-- A **Mission control outline node** should not duplicate canonical labels, lifecycle state, artifact paths, task status, or agent execution details owned by Entities.
-- A **Mission control selection** is controlled by one surface/operator session and resolved by the daemon against the Mission state store.
+- A **Mission surface preference** must not encode durable Mission workflow ordering.
+- Mission Control task lists are rendered by Airport surfaces from Mission stage, Mission task, Artifact, Agent execution, and Entity command data.
+- Mission Control task lists must not duplicate canonical labels, lifecycle state, artifact paths, task status, or agent execution details owned by Entities.
+- A **Mission control selection** is controlled by one surface/operator session and resolved by Airport against Entity data.
 - A **Mission control selection** is not durable Mission coordination state and must not be shared as the current focus for every surface.
 - A **Raw mission control selection** resolves to one **Resolved mission control selection** for companion panes.
 - **Resolved mission control selection** is derived view state; it is not persisted as pane state.
-- A **Mission control outline** may show **Agent execution context** artifacts under an **Agent execution**, but **Agent execution context** owns the ordered artifact references.
-- A **Mission control outline** may show the same **Mission artifact** under multiple roles or placements when those placements express different relationships.
-- Operator curation of Mission control ordering or cross-placement roles must mutate **Mission control placement overrides**, not surface-local tree state.
-- Reordering or moving context artifacts through the **Mission control outline** must call daemon commands that mutate **Agent execution context**.
-- **Entity events** update client-side Entity instances; **Mission control view** updates operator outline and selection.
+- Agent execution context artifacts are displayed from **Agent execution context** and Entity relationships; **Agent execution context** owns ordered artifact references.
+- **Entity events** update client-side Entity instances; **Mission control view** updates daemon-derived Mission status and workflow snapshots.
 - **Derived workflow state** is recomputed from **Mission task** progress and is not independently edited.
 
 ## Architecture Boundaries
@@ -533,7 +512,6 @@ _Avoid_: workflow projection, stage projection
 
 - Agent execution context ordering is durable Agent execution state managed by the daemon.
 - The order of artifacts and instructions in Agent execution context is part of the Agent execution's working context and audit trail.
-- Mission control outline placement may visualize context order or request reorder commands, but it must not become the source of truth for Agent execution context ordering.
 - Reordering Agent execution context must call daemon commands that mutate Agent execution context.
 
 ### Agent Adapter Delivery
@@ -544,22 +522,21 @@ _Avoid_: workflow projection, stage projection
 - Mission must distinguish daemon-accepted context mutation, runtime delivery attempt, runtime output observation, and operator/system interpretation of that output.
 - Agent adapter responses are observations in the Agent execution log unless a future daemon-validated state model explicitly promotes them.
 
-### Mission Control Outline Placement
+### Mission Control Task List
 
-- Mission control outlines are derived by default from Entity relationships, workflow definition, and runtime state.
-- Explicit Mission control placement overrides are allowed only for daemon-owned operator curation, such as stable manual ordering or showing the same Mission artifact in another role.
-- Mission control placement overrides are durable Mission coordination state shared by all surfaces and future operators.
-- Surfaces may request outline placement changes, but they must not persist local outline structure independently.
-- Placement overrides change outline placement only; they do not copy artifacts or mutate canonical Entity data.
+- Mission Control task lists are Airport surface views over Mission stages, Mission tasks, Artifacts, Agent executions, and Entity command descriptors.
+- Mission Control task lists are filtered by the selected Mission stage and default to the active Mission stage.
+- Airport surfaces may keep selected stage tabs and temporary focus locally, but they must not persist task-list structure as Mission state.
+- Mission Control task cards submit Entity commands through canonical Entity command descriptors; they do not define workflow legality.
 - Mission surface preferences are local Airport surface/client state only.
 - The daemon must not store Mission surface preferences.
 
 ### Mission Control Selection
 
-- Mission control selection is surface-controlled and daemon-resolved.
-- The daemon validates and normalizes requested selection against the Mission state store so surfaces do not invent invalid focus.
+- Mission control selection is surface-controlled and Airport-resolved from Entity data.
+- Airport validates and normalizes requested selection against client-side Entity instances so surfaces do not invent invalid focus.
 - Selection is not durable Mission coordination state; one operator's current focus must not change every other surface's current focus.
-- Shared Mission navigation state belongs in Mission control placement overrides or canonical Entity relationships, not selection.
+- Shared Mission navigation state belongs in canonical Entity relationships, not selection.
 
 ### Agent Execution Context Lifecycle
 
@@ -585,7 +562,7 @@ _Avoid_: workflow projection, stage projection
 
 ### Mission State Store And Surface Replication
 
-- The Mission state store is the canonical owner of Entity storage records, Mission runtime data, Agent execution context, Mission control placement overrides, and other durable Mission coordination state.
+- The Mission state store is the canonical owner of Entity storage records, Mission runtime data, Agent execution context, and other durable Mission coordination state.
 - The current **Mission dossier state store** is a narrower per-Mission runtime module and must not be treated as the daemon-wide Mission state store.
 - Mission state store schemas are written with Zod v4 and live in schema modules separate from state store adapter classes. Any shape that needs validation must have a Zod v4 schema as the source of truth, and exported TypeScript data types for validated shapes must be inferred with `z.infer` from those schemas. This keeps validation local to the Mission state store interface and prepares the same shapes for future SurrealDB database schema generation or mapping.
 - The State store transaction is a small atomic write boundary for the Mission state store. Entity input commands, workflow commands, and daemon-owned domain intent are validated and applied through State store transactions before records change.
@@ -598,7 +575,7 @@ _Avoid_: workflow projection, stage projection
 - If a Mission dossier checkpoint fails after a State store transaction was accepted, Mission does not roll back the accepted transaction. Agent executions and Agent adapters may already have changed files in the Mission worktree, and the Mission state store cannot emulate each agent adapter's checkpoint or rollback semantics.
 - A Mission checkpoint failure places the Mission in Mission recovery attention while keeping the Daemon in-memory datastore live so the daemon can retry, record diagnostics, or run recovery handling.
 - Mission recovery attention is non-blocking: the daemon continues to accept new State store transactions while persistence recovery is pending, unless a separate future safety policy explicitly pauses a Mission.
-- Mission recovery attention is daemon-only by default. Airport surfaces do not receive it through Mission control view, Mission control outline, System snapshot, or Entity data unless a future operator-facing recovery design explicitly promotes it.
+- Mission recovery attention is daemon-only by default. Airport surfaces do not receive it through Mission control view, System snapshot, or Entity data unless a future operator-facing recovery design explicitly promotes it.
 - Batching, debouncing, or lifecycle-only checkpoints are future State store persistence policy optimizations and require a new decision before replacing direct checkpoints.
 - SurrealDB capabilities remain available for live querying, indexing, relationships, change streams, and in-memory working state. Configured SurrealDB memory persistence, SurrealKV, RocksDB, or export/import may be added as recovery optimizations, but they must not replace the Mission dossier as the canonical durable recovery format without a new ADR.
 - The daemon owns the State store persistence policy; surfaces and replicas must not define persistence for the Mission state store.

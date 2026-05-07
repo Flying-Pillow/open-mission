@@ -199,8 +199,6 @@ export class AgentExecutor {
         });
 
         const launchContext = buildAgentExecutionSignalLaunchContext({
-            missionId: instructionScope.missionId,
-            taskId: instructionScope.taskId,
             agentExecutionId: executionId,
             protocolDescriptor
         });

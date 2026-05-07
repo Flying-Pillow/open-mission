@@ -9,6 +9,7 @@ import {
 	sameObservationAddress,
 	type AgentExecutionObservation,
 	type AgentExecutionObservationAddress,
+	type AgentExecutionInputChoice,
 	type AgentExecutionSignal,
 	type AgentExecutionSignalDecision,
 	type AgentExecutionSnapshot
@@ -126,9 +127,7 @@ export class AgentExecutionObservationPolicy {
 						progress: {
 							state: 'waiting-input',
 							summary: signal.question,
-							...(signal.suggestedResponses?.length
-								? { detail: `Suggested responses: ${signal.suggestedResponses.join(', ')}` }
-								: {}),
+							detail: `Choices: ${formatInputChoices(signal.choices)}`,
 							updatedAt: observation.observedAt
 						}
 					}
@@ -212,7 +211,7 @@ function validateSignalShape(signal: AgentExecutionSignal): string | undefined {
 				?? validateOptionalText(signal.detail, 'progress detail');
 		case 'needs_input':
 			return validateText(signal.question, 'needs-input question')
-				?? validateSuggestedResponses(signal.suggestedResponses);
+				?? validateInputChoices(signal.choices);
 		case 'blocked':
 			return validateText(signal.reason, 'blocked reason');
 		case 'ready_for_verification':
@@ -258,20 +257,40 @@ function validateMessage(value: string): string | undefined {
 	return undefined;
 }
 
-function validateSuggestedResponses(value: string[] | undefined): string | undefined {
-	if (!value) {
-		return undefined;
+function validateInputChoices(value: AgentExecutionInputChoice[]): string | undefined {
+	if (value.length === 0) {
+		return 'needs-input choices must include at least one fixed or manual choice.';
 	}
 	if (value.length > MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES) {
-		return 'suggested responses exceeded the maximum supported size.';
+		return 'needs-input choices exceeded the maximum supported size.';
 	}
-	for (const response of value) {
-		const error = validateText(response, 'suggested response');
-		if (error) {
-			return error;
+	for (const choice of value) {
+		const labelError = validateText(choice.label, 'needs-input choice label');
+		if (labelError) {
+			return labelError;
+		}
+		if (choice.kind === 'fixed') {
+			const valueError = validateText(choice.value, 'needs-input fixed choice value');
+			if (valueError) {
+				return valueError;
+			}
+			continue;
+		}
+		const placeholderError = validateOptionalText(choice.placeholder, 'needs-input manual choice placeholder');
+		if (placeholderError) {
+			return placeholderError;
 		}
 	}
 	return undefined;
+}
+
+function formatInputChoices(choices: AgentExecutionInputChoice[]): string {
+	return choices.map((choice) => {
+		if (choice.kind === 'fixed') {
+			return `${choice.label}=${choice.value}`;
+		}
+		return choice.placeholder ? `${choice.label}=manual (${choice.placeholder})` : `${choice.label}=manual`;
+	}).join(', ');
 }
 
 function validateUsagePayload(payload: Record<string, unknown>): string | undefined {

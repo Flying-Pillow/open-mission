@@ -23,14 +23,16 @@ describe('AgentExecutionObservationRouter', () => {
 			markerPrefix,
 			line: `${markerPrefix}${JSON.stringify({
 				version: 1,
-				missionId: address.scope.missionId,
-				taskId: address.scope.taskId,
 				agentExecutionId: address.agentExecutionId,
 				eventId: 'evt-7',
 				signal: {
 					type: 'needs_input',
 					question: 'Should I update the tests now?',
-					suggestedResponses: ['Yes', 'No']
+					choices: [
+						{ kind: 'fixed', label: 'Yes', value: 'yes' },
+						{ kind: 'fixed', label: 'No', value: 'no' },
+						{ kind: 'manual', label: 'Other', placeholder: 'Describe the preferred next step.' }
+					]
 				}
 			})}`
 		});
@@ -47,11 +49,46 @@ describe('AgentExecutionObservationRouter', () => {
 			signal: {
 				type: 'needs_input',
 				question: 'Should I update the tests now?',
-				suggestedResponses: ['Yes', 'No'],
+				choices: [
+					{ kind: 'fixed', label: 'Yes', value: 'yes' },
+					{ kind: 'fixed', label: 'No', value: 'no' },
+					{ kind: 'manual', label: 'Other', placeholder: 'Describe the preferred next step.' }
+				],
 				source: 'agent-declared',
 				confidence: 'medium'
 			}
 		}]);
+	});
+
+	it('claims only execution identity and derives scope from the active route', () => {
+		const router = new AgentExecutionObservationRouter();
+		const observations = router.route({
+			kind: 'terminal-output',
+			channel: 'stdout',
+			address,
+			observedAt: '2026-05-04T12:00:10.000Z',
+			markerPrefix,
+			line: `${markerPrefix}${JSON.stringify({
+				version: 1,
+				agentExecutionId: 'other-session',
+				eventId: 'evt-wrong-session',
+				signal: {
+					type: 'progress',
+					summary: 'This should be rejected by policy.'
+				}
+			})}`
+		});
+
+		expect(observations).toEqual([expect.objectContaining({
+			claimedAddress: {
+				agentExecutionId: 'other-session',
+				scope: address.scope
+			},
+			route: {
+				origin: 'agent-declared-signal',
+				address
+			}
+		})]);
 	});
 
 	it('routes malformed stdout markers as agent-declared signal diagnostics', () => {
@@ -127,8 +164,6 @@ describe('AgentExecutionObservationRouter', () => {
 			markerPrefix,
 			line: `${markerPrefix}${JSON.stringify({
 				version: 1,
-				missionId: address.scope.missionId,
-				taskId: address.scope.taskId,
 				agentExecutionId: address.agentExecutionId,
 				eventId: 'stderr-marker',
 				signal: {

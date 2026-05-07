@@ -4,7 +4,6 @@ import { app, type AirportApplication } from "$lib/client/Application.svelte.js"
 import type { Mission } from "$lib/components/entities/Mission/Mission.svelte.js";
 import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
 import type { MissionRuntimeEventEnvelopeType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
-import type { MissionTowerTreeNode } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { TaskConfigureCommandOptionsType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import type { SidebarRepositoryData } from "$lib/components/entities/types";
 import type { RuntimeSubscription } from "$lib/client/runtime/RuntimeSubscription";
@@ -27,13 +26,6 @@ export type AppContextServerValue = {
     };
 };
 
-export type ActiveMissionOutline = {
-    title?: string;
-    currentStageId?: string;
-    briefPath?: string;
-    treeNodes: MissionTowerTreeNode[];
-};
-
 export type AppContextValue = {
     readonly application: AirportApplication;
     daemon: AppContextServerValue["daemon"];
@@ -50,8 +42,7 @@ export type AppContextValue = {
         activeMissionError?: string;
         activeMissionId?: string;
         activeMission?: Mission;
-        activeMissionOutline?: ActiveMissionOutline;
-        activeMissionSelectedNodeId?: string;
+        activeMissionSelectedFocusId?: string;
     };
     syncServerContext(next: AppContextServerValue): void;
     loadAirportRepositories(): Promise<void>;
@@ -79,8 +70,7 @@ export type AppContextValue = {
         repositoryRootPath?: string;
     }): void;
     setActiveMission(missionId?: string): void;
-    setActiveMissionOutline(next?: ActiveMissionOutline): void;
-    setActiveMissionSelectedNodeId(nodeId?: string): void;
+    setActiveMissionSelectedFocusId(focusId?: string): void;
 };
 
 const [getAppContext, setAppContext] = createContext<AppContextValue>();
@@ -128,8 +118,7 @@ export function createAppContext(
                 activeMissionError: state.application.activeMissionError,
                 activeMissionId: state.application.activeMissionId,
                 activeMission: state.application.activeMission,
-                activeMissionOutline: state.application.activeMissionOutline,
-                activeMissionSelectedNodeId: state.application.activeMissionSelectedNodeId,
+                activeMissionSelectedFocusId: state.application.activeMissionSelectedFocusId,
             };
         },
         syncServerContext(next) {
@@ -175,18 +164,9 @@ export function createAppContext(
         setActiveMission(missionId) {
             state.application.setActiveMissionSelection(missionId);
         },
-        setActiveMissionOutline(next) {
-            state.application.setActiveMissionOutline(next
-                ? {
-                    title: next.title?.trim() || undefined,
-                    currentStageId: next.currentStageId?.trim() || undefined,
-                    treeNodes: [...next.treeNodes],
-                }
-                : undefined);
-        },
-        setActiveMissionSelectedNodeId(nodeId) {
-            state.application.setActiveMissionSelectedNodeId(
-                nodeId?.trim() || undefined,
+        setActiveMissionSelectedFocusId(focusId) {
+            state.application.setActiveMissionSelectedFocusId(
+                focusId?.trim() || undefined,
             );
         },
     };

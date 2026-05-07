@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { AgentAdapterRuntimeOutput } from '../AgentAdapter.js';
 import {
 	cloneSignal,
+	cloneAgentExecutionInputChoice,
 	cloneObservationAddress,
 	MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH,
 	MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH,
@@ -12,7 +13,6 @@ import {
 	type AgentExecutionObservationAddress
 } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import {
-	AgentDeclaredSignalClaimedTaskAddressSchema,
 	AgentDeclaredSignalMarkerPayloadSchema,
 	type AgentDeclaredSignalPayloadType,
 	AgentExecutionOwnerMarkerPrefixSchema,
@@ -170,23 +170,9 @@ export class AgentExecutionObservationRouter {
 			)];
 		}
 
-		const claimedTaskAddress = AgentDeclaredSignalClaimedTaskAddressSchema.parse({
-			missionId: result.data.missionId,
-			taskId: result.data.taskId,
-			agentExecutionId: result.data.agentExecutionId
-		});
-		const claimedAddress: AgentExecutionObservationAddress = {
-			agentExecutionId: claimedTaskAddress.agentExecutionId,
-			scope: {
-				kind: 'task',
-				missionId: claimedTaskAddress.missionId,
-				taskId: claimedTaskAddress.taskId
-			}
-		};
-
 		return [{
 			dedupeKey: result.data.eventId,
-			claimedAddress,
+			claimedAgentExecutionId: result.data.agentExecutionId,
 			rawText: line,
 			signal: toAgentDeclaredSignal(result.data.signal)
 		}];
@@ -257,7 +243,16 @@ export class AgentExecutionObservationRouter {
 				origin,
 				address: cloneObservationAddress(address)
 			},
-			...(candidate.claimedAddress ? { claimedAddress: cloneObservationAddress(candidate.claimedAddress) } : {}),
+			...(candidate.claimedAddress
+				? { claimedAddress: cloneObservationAddress(candidate.claimedAddress) }
+				: candidate.claimedAgentExecutionId
+					? {
+						claimedAddress: {
+							agentExecutionId: candidate.claimedAgentExecutionId,
+							scope: cloneObservationAddress(address).scope
+						}
+					}
+					: {}),
 			...(candidate.rawText ? { rawText: candidate.rawText } : {})
 		}));
 	}
@@ -344,7 +339,7 @@ function toAgentDeclaredSignal(signal: AgentDeclaredSignalPayloadType): AgentExe
 			return {
 				type: 'needs_input',
 				question: signal.question,
-				...(signal.suggestedResponses ? { suggestedResponses: [...signal.suggestedResponses] } : {}),
+				choices: signal.choices.map(cloneAgentExecutionInputChoice),
 				source: 'agent-declared',
 				confidence: 'medium'
 			};

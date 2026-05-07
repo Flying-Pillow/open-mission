@@ -231,7 +231,7 @@ The exact TypeScript names can change during implementation. The source of truth
 Every owner can contribute a different signal set, but the first clean implementation should support these shared Agent-declared signals:
 
 - `progress`: update AgentExecution progress after owner policy acceptance.
-- `needs_input`: move AgentExecution into awaiting-input and publish an owner-visible event.
+- `needs_input`: move AgentExecution into awaiting-input and publish an owner-visible event. Payload must include `question` and `choices`, where each choice is either a fixed label/value choice or a manual freeform-input choice with label and optional placeholder.
 - `blocked`: update AgentExecution progress/attention and publish an owner-visible event when useful.
 - `ready_for_verification`: create a verification claim for owner/operator handling.
 - `completed_claim`: create a completion claim for owner/operator handling.
@@ -271,9 +271,9 @@ Replace hand-written signal payload lists in launch prompt construction with des
 The rendered instructions include:
 
 - marker prefix
-- owner Entity identity
+- owner Entity kind resolved from AgentExecutionScope
 - execution id
-- required scope fields
+- required AgentExecution identity field
 - supported signal payloads from descriptors
 - examples generated from descriptors
 
@@ -318,7 +318,7 @@ Minimum test coverage:
 - owner prefix derivation for task, mission, repository, and artifact scopes
 - prompt instructions generated from descriptors
 - parser accepts only the active execution's owner prefix and descriptor payloads
-- parser rejects malformed, oversized, wrong-scope, duplicate, and unsupported markers
+- parser rejects malformed, oversized, wrong-execution, duplicate, and unsupported markers
 - AgentExecutor routes observations to owner handling rather than applying scoped meaning directly
 - Task-owned ready/completion/failure claims remain claims until owner workflow behavior accepts lifecycle changes
 - Airport reads message and signal descriptors from the same protocol source used for launch instructions

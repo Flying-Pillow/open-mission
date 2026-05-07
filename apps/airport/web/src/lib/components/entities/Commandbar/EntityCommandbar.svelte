@@ -22,6 +22,7 @@
         showEmptyState = true,
         presentation = "buttons",
         menuLabel = "Commands",
+        iconOnly = false,
     }: {
         refreshNonce: number;
         entity?: CommandableEntity;
@@ -37,6 +38,7 @@
         showEmptyState?: boolean;
         presentation?: "buttons" | "menu" | "responsive";
         menuLabel?: string;
+        iconOnly?: boolean;
     } = $props();
 
     let commandPending = $state<string | null>(null);
@@ -297,10 +299,11 @@
                 {#each availableCommands as command (command.commandId)}
                     <Button
                         variant={commandVariant(command)}
-                        size="sm"
+                        size={iconOnly ? "icon-sm" : "sm"}
                         disabled={commandPending !== null || command.disabled}
                         class={buttonClass}
                         onclick={() => void executeCommand(command)}
+                        aria-label={command.label}
                         title={command.disabledReason ||
                             command.description ||
                             command.label}
@@ -310,11 +313,13 @@
                             class="size-4"
                             data-icon="inline-start"
                         />
-                        <span>
-                            {commandPending === command.commandId
-                                ? `${command.label}...`
-                                : command.label}
-                        </span>
+                        {#if !iconOnly}
+                            <span>
+                                {commandPending === command.commandId
+                                    ? `${command.label}...`
+                                    : command.label}
+                            </span>
+                        {/if}
                     </Button>
                 {/each}
             {/if}

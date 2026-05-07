@@ -45,7 +45,7 @@ The descriptor has two distinct halves:
 1. **Agent-declared signal descriptors**: the owner-addressed marker payloads that the daemon parses from Agent stdout for this execution.
 2. **Agent execution message descriptors**: the structured daemon-to-AgentExecution messages that an operator or daemon module may send to the execution.
 
-Prompt-scoped instructions are rendered from this descriptor. The descriptor is the source of truth for supported marker payloads, and rendered prompt text is a delivery view of that descriptor.
+Prompt-scoped instructions are rendered from this descriptor. The descriptor is the source of truth for supported marker payloads, and rendered prompt text is a delivery view of that descriptor. Marker JSON carries only the Agent execution id, event id, version, and signal payload; owner and scope context come from the active `AgentExecutionScope` and protocol descriptor.
 
 The current `AgentExecutionMessageDescriptor` concept is only one half of this source of truth. Mission also needs an explicit descriptor for accepted Agent-declared signals so the launch instructions, parser, policy, and surface documentation share one vocabulary.
 
@@ -77,11 +77,11 @@ Agent stdout line with owner prefix
   -> AgentExecution state change, Entity event, workflow event, or rejection
 ```
 
-An Agent-declared signal may produce an AgentExecution Entity event after policy acceptance. When a signal represents a request for owner action, the owning Entity evaluates it as an observation or claim and decides the resulting domain behavior through its own methods, policies, and workflow delegate.
+An Agent-declared signal may produce an AgentExecution Entity event after policy acceptance. When a signal represents a request for owner action, the owning Entity evaluates it as an observation or claim and decides the resulting domain behavior through its own methods, policies, and workflow delegate. The Agent is not asked to echo Mission, Task, Artifact, Repository, or owner ids in the marker payload; the daemon attaches the active route scope and rejects markers whose `agentExecutionId` does not match the active execution.
 
 AgentExecution lifecycle truth remains daemon-owned. `completed_claim` and `failed_claim` are claims that become lifecycle transitions through daemon-authoritative owner behavior. `ready_for_verification` is a claim that the owning Entity or operator may use to surface verification work.
 
-`needs_input` is an observation that can put AgentExecution into an awaiting-input state and publish an Entity event. The operator response is a separate Agent execution message or Entity command.
+`needs_input` is an observation that can put AgentExecution into an awaiting-input state and publish an Entity event. Its signal payload carries a required `question` and required `choices` array. Each choice is either `kind: "fixed"` with `label` and `value`, or `kind: "manual"` with `label` and optional `placeholder` for freeform operator input. The operator response is a separate Agent execution message or Entity command.
 
 `progress`, `blocked`, and `message` can update AgentExecution progress or audit-facing state after policy evaluation. Any Mission workflow effect flows through an explicit owning Entity rule covered by tests.
 

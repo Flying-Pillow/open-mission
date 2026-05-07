@@ -303,58 +303,6 @@ export type RepositoryControlStatus = {
 };
 
 export type StageData = MissionStageStatus;
-export type MissionTowerStageRailItemState = MissionStageDerivedState;
-
-export type MissionTowerStageRailItem = {
-    id: string;
-    label: string;
-    state: MissionTowerStageRailItemState;
-    subtitle?: string;
-};
-
-export type MissionTowerTreeNodeKind = 'mission-artifact' | 'stage' | 'stage-artifact' | 'task' | 'task-artifact' | 'session';
-
-export type MissionTowerTreeNode = {
-    id: string;
-    label: string;
-    kind: MissionTowerTreeNodeKind;
-    depth: number;
-    color: string;
-    statusLabel?: string;
-    collapsible: boolean;
-    sourcePath?: string;
-    stageId?: MissionStageId;
-    taskId?: string;
-    autostart?: boolean;
-    sessionId?: string;
-};
-
-export type MissionSelectionTarget = {
-    kind: MissionTowerTreeNodeKind;
-    label?: string;
-    sourcePath?: string;
-    stageId?: MissionStageId;
-    taskId?: string;
-    sessionId?: string;
-};
-
-export type MissionResolvedSelection = {
-    missionId?: string;
-    stageId?: MissionStageId;
-    taskId?: string;
-    activeMissionArtifact?: string;
-    activeMissionArtifactPath?: string;
-    activeInstructionArtifact?: string;
-    activeInstructionPath?: string;
-    activeStageResultArtifact?: string;
-    activeStageResultPath?: string;
-    activeAgentExecutionId?: string;
-};
-
-export type MissionTowerProjection = {
-    stageRail: MissionTowerStageRailItem[];
-    treeNodes: MissionTowerTreeNode[];
-};
 
 export type OperatorStatus = {
     found: boolean;
@@ -374,7 +322,6 @@ export type OperatorStatus = {
     readyTasks?: MissionTaskState[];
     stages?: MissionStageStatus[];
     agentExecutions?: AgentExecutionRecord[];
-    tower?: MissionTowerProjection;
     workflow?: {
         lifecycle: MissionLifecycleState;
         pause: MissionPauseState;

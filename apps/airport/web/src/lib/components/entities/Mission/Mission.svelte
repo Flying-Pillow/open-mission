@@ -17,11 +17,10 @@
     import { setScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import MissionCockpit from "$lib/components/entities/Mission/MissionCockpit.svelte";
     import MissionCommandbar from "$lib/components/entities/Mission/MissionCommandbar.svelte";
-    import MissionControlTree from "$lib/components/entities/Mission/MissionControlTree.svelte";
     import MissionFileTree from "$lib/components/entities/Mission/MissionFileTree.svelte";
+    import MissionTaskList from "$lib/components/entities/Mission/MissionTaskList.svelte";
     import MissionTerminal from "$lib/components/entities/Mission/MissionTerminal.svelte";
     import Task from "$lib/components/entities/Task/Task.svelte";
-    import type { MissionTowerTreeNode } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
     import { Button } from "$lib/components/ui/button/index.js";
     import {
         ResizableHandle,
@@ -29,22 +28,22 @@
         ResizablePaneGroup,
     } from "$lib/components/ui/resizable";
     import * as Tabs from "$lib/components/ui/tabs/index.js";
-    import type { ActiveMissionOutline } from "$lib/client/context/app-context.svelte";
     import type { MissionFileTreeNode } from "$lib/types/mission-file-tree";
     import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
     import { Badge } from "$lib/components/ui/badge";
 
+    type MissionFocusTarget = {
+        id: string;
+        kind: "stage" | "task";
+        stageId: string;
+        taskId?: string;
+    };
+
     type MissionSelectionState = {
-        treeNodes: MissionTowerTreeNode[];
-        visibleTreeNodes: MissionTowerTreeNode[];
-        selectedNodeId?: string;
+        selectedFocusId?: string;
         resolvedSelection?: {
             stageId?: string;
             taskId?: string;
-        };
-        activeArtifact?: {
-            id: string;
-            displayLabel?: string;
         };
         activeSessionId?: string;
     };
@@ -141,56 +140,47 @@
     const missionHeading = $derived(
         `${repositoryName} - ${missionIssueLabel ? `${missionIssueLabel} ` : ""}${missionTitle}`,
     );
-    const missionTreeNodes = $derived(
-        activeMission ? buildMissionTreeNodes(activeMission) : [],
+    const missionFocusTargets = $derived(
+        activeMission ? buildMissionFocusTargets(activeMission) : [],
     );
-    const selectedNodeId = $derived.by(() => {
-        if (!missionView || missionTreeNodes.length === 0) {
+    const selectedFocusId = $derived.by(() => {
+        if (!missionView || missionFocusTargets.length === 0) {
             return undefined;
         }
 
-        const activeNodeId = appContext.airport.activeMissionSelectedNodeId;
-        return missionTreeNodes.some((node) => node.id === activeNodeId)
-            ? activeNodeId
-            : missionTreeNodes.find((node) => node.stageId === currentStageId)
-                  ?.id;
+        const activeFocusId = appContext.airport.activeMissionSelectedFocusId;
+        return missionFocusTargets.some((target) => target.id === activeFocusId)
+            ? activeFocusId
+            : (missionFocusTargets.find(
+                  (target) =>
+                      target.stageId === currentStageId &&
+                      target.kind === "stage",
+              )?.id ?? missionFocusTargets[0]?.id);
     });
-    const missionOutline = $derived<ActiveMissionOutline | undefined>(
-        activeMission
-            ? {
-                  title: missionTitle,
-                  currentStageId,
-                  briefPath: activeMission
-                      .listArtifacts()
-                      .find((artifact) => artifact.toData().key === "brief")
-                      ?.filePath,
-                  treeNodes: missionTreeNodes,
-              }
-            : undefined,
-    );
     const selectionState = $derived.by((): MissionSelectionState => {
-        const selectedNode = missionTreeNodes.find(
-            (node) => node.id === selectedNodeId,
+        const selectedTarget = missionFocusTargets.find(
+            (target) => target.id === selectedFocusId,
         );
         const companionStageTask =
-            activeMission && isStageSelectionNode(selectedNode)
-                ? resolvePreferredStageTask(activeMission, selectedNode.stageId)
-                : undefined;
-        const companionStageSession =
-            activeMission && isStageSelectionNode(selectedNode)
-                ? resolvePreferredStageSession(
+            activeMission && selectedTarget?.kind === "stage"
+                ? resolvePreferredStageTask(
                       activeMission,
-                      selectedNode.stageId,
+                      selectedTarget.stageId,
                   )
                 : undefined;
-        const resolvedStageId = selectedNode?.stageId;
+        const companionStageSession =
+            activeMission && selectedTarget?.kind === "stage"
+                ? resolvePreferredStageSession(
+                      activeMission,
+                      selectedTarget.stageId,
+                  )
+                : undefined;
+        const resolvedStageId = selectedTarget?.stageId;
         const resolvedTaskId =
-            selectedNode?.taskId ?? companionStageTask?.taskId;
+            selectedTarget?.taskId ?? companionStageTask?.taskId;
 
         return {
-            treeNodes: missionTreeNodes,
-            visibleTreeNodes: missionTreeNodes,
-            selectedNodeId,
+            selectedFocusId,
             ...(resolvedStageId || resolvedTaskId
                 ? {
                       resolvedSelection: {
@@ -201,22 +191,12 @@
                       },
                   }
                 : {}),
-            ...(isArtifactSelectionNode(selectedNode)
-                ? {
-                      activeArtifact: {
-                          id: selectedNode.id,
-                          displayLabel: selectedNode.label,
-                      },
-                  }
+            ...(companionStageSession?.sessionId
+                ? { activeSessionId: companionStageSession.sessionId }
                 : {}),
-            ...(selectedNode?.sessionId
-                ? { activeSessionId: selectedNode.sessionId }
-                : companionStageSession?.sessionId
-                  ? { activeSessionId: companionStageSession.sessionId }
-                  : {}),
         };
     });
-    const activeArtifactSelection = $derived(selectionState.activeArtifact?.id);
+    const activeArtifactSelection = $derived(undefined);
     const selectedWorktreeFile = $derived(
         selectedWorktreeNode?.kind === "file" ? selectedWorktreeNode : null,
     );
@@ -292,21 +272,15 @@
     });
 
     $effect(() => {
-        if (!selectedNodeId) {
+        if (!selectedFocusId) {
             return;
         }
 
-        if (appContext.airport.activeMissionSelectedNodeId !== selectedNodeId) {
-            appContext.setActiveMissionSelectedNodeId(selectedNodeId);
+        if (
+            appContext.airport.activeMissionSelectedFocusId !== selectedFocusId
+        ) {
+            appContext.setActiveMissionSelectedFocusId(selectedFocusId);
         }
-    });
-
-    $effect(() => {
-        if (!missionOutline) {
-            return;
-        }
-
-        appContext.setActiveMissionOutline(missionOutline);
     });
 
     $effect(() => {
@@ -410,13 +384,6 @@
                 controlViewSnapshot: nextView,
                 worktreePath: missionWorktreePath,
             });
-            appContext.setActiveMissionOutline({
-                title: nextView.status?.title,
-                currentStageId: nextView.workflow?.currentStageId,
-                treeNodes: activeMission
-                    ? buildMissionTreeNodes(activeMission)
-                    : [],
-            });
         } catch (error) {
             missionViewError =
                 error instanceof Error ? error.message : String(error);
@@ -454,11 +421,6 @@
         const status = MissionStatusSnapshotSchema.parse(payload.status);
 
         activeMission.applyMissionStatus(status);
-        appContext.setActiveMissionOutline({
-            title: status.title,
-            currentStageId: status.workflow?.currentStageId,
-            treeNodes: buildMissionTreeNodes(activeMission),
-        });
     }
 
     function handleMissionRuntimeEvent(
@@ -542,30 +504,9 @@
         await handleMissionMutated();
     }
 
-    async function handleAllTaskAutostartChange(
-        autostart: boolean,
-    ): Promise<void> {
-        const tasks = activeMission
-            ?.listTasks()
-            .filter((task) => task.autostart !== autostart);
-        if (!tasks || tasks.length === 0) {
-            return;
-        }
-
-        await Promise.all(
-            tasks.map((task) =>
-                appContext.configureActiveMissionTask({
-                    taskId: task.taskId,
-                    options: { autostart },
-                }),
-            ),
-        );
-        await handleMissionMutated();
-    }
-
-    function handleSelectNode(nodeId: string): void {
+    function handleSelectFocus(focusId: string): void {
         selectedWorktreeNode = null;
-        appContext.setActiveMissionSelectedNodeId(nodeId);
+        appContext.setActiveMissionSelectedFocusId(focusId);
     }
 
     function handleSelectWorktreeNode(node: MissionFileTreeNode): void {
@@ -591,26 +532,6 @@
             sessions.find((execution) => execution.isRunning()) ??
             sessions.find((execution) => execution.isTerminalBacked()) ??
             sessions[0]
-        );
-    }
-
-    function isStageSelectionNode(
-        node: MissionTowerTreeNode | undefined,
-    ): node is MissionTowerTreeNode & { stageId: string } {
-        return Boolean(
-            node?.stageId &&
-                (node.kind === "stage" || node.kind === "stage-artifact"),
-        );
-    }
-
-    function isArtifactSelectionNode(
-        node: MissionTowerTreeNode | undefined,
-    ): node is MissionTowerTreeNode & { id: string } {
-        return Boolean(
-            node?.id &&
-                (node.kind === "mission-artifact" ||
-                    node.kind === "stage-artifact" ||
-                    node.kind === "task-artifact"),
         );
     }
 
@@ -685,144 +606,30 @@
         return timestamp ? Date.parse(timestamp) || 0 : 0;
     }
 
-    function buildMissionTreeNodes(
+    function buildMissionFocusTargets(
         currentMission: MissionEntity,
-    ): MissionTowerTreeNode[] {
-        const stageColors = [
-            "#38bdf8",
-            "#34d399",
-            "#f59e0b",
-            "#f43f5e",
-            "#a78bfa",
-        ];
-        const nodes: MissionTowerTreeNode[] = [];
-
-        for (const artifact of currentMission.listArtifacts()) {
-            if (artifact.stageId || artifact.taskId) {
-                continue;
-            }
-            nodes.push({
-                id: artifact.id,
-                label: artifact.label,
-                kind: "mission-artifact",
-                depth: 0,
-                color: "#8b949e",
-                statusLabel: "Mission artifact",
-                collapsible: false,
-                sourcePath: artifact.filePath,
-            });
-        }
-
-        currentMission.listStages().forEach((stage, stageIndex) => {
-            const stageSnapshot = stage.toData();
-            const stageColor = stageColors[stageIndex % stageColors.length];
-            const stageNodeId = toMissionTreeStageId(stage.stageId);
-            nodes.push({
-                id: `tree:stage:${stage.stageId}`,
-                label: stage.stageId,
-                kind: "stage",
-                depth: 0,
-                color: stageColor,
-                statusLabel: stage.lifecycle,
-                collapsible: true,
-                stageId: stageNodeId,
-            });
-
-            for (const artifact of stage.artifacts) {
-                nodes.push({
-                    id: artifact.id,
-                    label: artifact.label,
-                    kind: "stage-artifact",
-                    depth: 1,
-                    color: stageColor,
-                    statusLabel: "Stage artifact",
-                    collapsible: false,
-                    sourcePath: artifact.filePath ?? artifact.relativePath,
-                    stageId: stageNodeId,
-                });
-            }
-
-            for (const task of currentMission.listTasksForStage(
-                stage.stageId,
-            )) {
-                const taskSnapshot = task.toData().task;
-                nodes.push({
-                    id: `tree:task:${task.taskId}`,
-                    label: task.title,
-                    kind: "task",
-                    depth: 1,
-                    color: stageColor,
-                    statusLabel: task.lifecycle,
-                    collapsible: true,
-                    sourcePath: taskSnapshot.filePath,
-                    stageId: stageNodeId,
-                    taskId: task.taskId,
-                    autostart: task.autostart,
-                });
-
-                for (const artifact of currentMission
-                    .listArtifacts()
-                    .filter((candidate) => candidate.taskId === task.taskId)) {
-                    nodes.push({
-                        id: artifact.id,
-                        label: artifact.label,
-                        kind: "task-artifact",
-                        depth: 2,
-                        color: stageColor,
-                        statusLabel: "Task artifact",
-                        collapsible: false,
-                        sourcePath: artifact.filePath,
-                        stageId: stageNodeId,
-                        taskId: task.taskId,
-                    });
-                }
-
-                for (const execution of currentMission
-                    .listExecutions()
-                    .filter((candidate) => candidate.taskId === task.taskId)) {
-                    nodes.push({
-                        id: `tree:session:${execution.sessionId}`,
-                        label:
-                            execution.currentTurnTitle ?? execution.sessionId,
-                        kind: "session",
-                        depth: 2,
-                        color: stageColor,
-                        statusLabel: execution.lifecycleState,
-                        collapsible: false,
-                        stageId: stageNodeId,
-                        taskId: task.taskId,
-                        sessionId: execution.sessionId,
-                    });
-                }
-            }
-
-            for (const artifact of stageSnapshot.artifacts.filter(
-                (candidate: { taskId?: string }) => !candidate.taskId,
-            )) {
-                if (nodes.some((node) => node.id === artifact.id)) {
-                    continue;
-                }
-                nodes.push({
-                    id: artifact.id,
-                    label: artifact.label,
-                    kind: "stage-artifact",
-                    depth: 1,
-                    color: stageColor,
-                    statusLabel: "Stage artifact",
-                    collapsible: false,
-                    sourcePath: artifact.filePath ?? artifact.relativePath,
-                    stageId: stageNodeId,
-                });
-            }
-        });
-
-        return nodes;
+    ): MissionFocusTarget[] {
+        return currentMission.listStages().flatMap((stage) => [
+            {
+                id: stageFocusId(stage.stageId),
+                kind: "stage" as const,
+                stageId: stage.stageId,
+            },
+            ...currentMission.listTasksForStage(stage.stageId).map((task) => ({
+                id: taskFocusId(task.taskId),
+                kind: "task" as const,
+                stageId: stage.stageId,
+                taskId: task.taskId,
+            })),
+        ]);
     }
 
-    function toMissionTreeStageId(
-        stageId: string,
-    ): MissionTowerTreeNode["stageId"] {
-        return stageId as MissionTowerTreeNode["stageId"];
+    function stageFocusId(stageId: string): string {
+        return `stage:${stageId}`;
+    }
+
+    function taskFocusId(taskId: string): string {
+        return `task:${taskId}`;
     }
 </script>
 
@@ -929,9 +736,10 @@
 
             {#if !progressCollapsed}
                 <MissionCockpit
-                    {selectionState}
+                    mission={activeMission}
                     {currentStageId}
-                    onSelectNode={handleSelectNode}
+                    {selectedFocusId}
+                    onSelectFocus={handleSelectFocus}
                 />
             {/if}
         </section>
@@ -960,9 +768,7 @@
                         </div>
 
                         <Tabs.List class="w-full">
-                            <Tabs.Trigger value="mission"
-                                >Mission Tree</Tabs.Trigger
-                            >
+                            <Tabs.Trigger value="mission">Tasks</Tabs.Trigger>
                             <Tabs.Trigger value="files">Files</Tabs.Trigger>
                         </Tabs.List>
                     </div>
@@ -972,14 +778,15 @@
                             <div
                                 class="absolute inset-0 min-h-0 overflow-hidden"
                             >
-                                <MissionControlTree
-                                    outline={missionOutline}
-                                    {missionId}
-                                    activeNodeId={selectedNodeId}
+                                <MissionTaskList
+                                    mission={activeMission}
+                                    {currentStageId}
+                                    activeFocusId={selectedFocusId}
+                                    refreshNonce={commandRefreshNonce}
                                     class="h-full rounded-none border-0 bg-transparent"
-                                    onSelectNode={handleSelectNode}
+                                    onSelectFocus={handleSelectFocus}
                                     onTaskAutostartChange={handleTaskAutostartChange}
-                                    onAllTaskAutostartChange={handleAllTaskAutostartChange}
+                                    onCommandExecuted={handleMissionMutated}
                                 />
                             </div>
                         {:else}

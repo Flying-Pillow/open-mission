@@ -21,7 +21,7 @@ export const baselineAgentDeclaredSignalDescriptors: AgentDeclaredSignalDescript
     {
         type: 'needs_input',
         label: 'Needs Input',
-        description: 'Requests operator or owner input before the Agent execution can continue.',
+        description: 'Requests operator or owner input before the Agent execution can continue, with fixed choices or a manual input choice.',
         payloadSchemaKey: 'agent-declared-signal.needs-input.v1',
         delivery: 'stdout-marker',
         policy: 'input-request',

@@ -15,10 +15,10 @@ Mission state is owned by the daemon and repository. Your claims are advisory si
 
 ## Required path: strict Mission protocol markers
 
-Emit a single-line stdout marker with this exact prefix:
+Emit a single-line stdout marker with the owner prefix supplied by the current launch context, for example:
 
 ```text
-mission::
+task::
 ```
 
 The prefix must be immediately followed by strict JSON on the same line. The JSON shape is:
@@ -26,8 +26,6 @@ The prefix must be immediately followed by strict JSON on the same line. The JSO
 ```json
 {
   "version": 1,
-  "missionId": "<mission-id>",
-  "taskId": "<task-id>",
   "agentExecutionId": "<agent-execution-id>",
   "eventId": "<unique-event-id>",
   "signal": {
@@ -39,7 +37,7 @@ The prefix must be immediately followed by strict JSON on the same line. The JSO
 Supported `signal` payloads:
 
 1. `{"type":"progress","summary":"...","detail":"..."}` (`detail` optional)
-2. `{"type":"needs_input","question":"...","suggestedResponses":["..."]}` (`suggestedResponses` optional)
+2. `{"type":"needs_input","question":"...","choices":[{"kind":"fixed","label":"...","value":"..."},{"kind":"manual","label":"Other","placeholder":"..."}]}` (`placeholder` optional)
 3. `{"type":"blocked","reason":"..."}`
 4. `{"type":"ready_for_verification","summary":"..."}`
 5. `{"type":"completed_claim","summary":"..."}`
@@ -50,7 +48,7 @@ Protocol markers are agent-declared claims and always require Mission signal-pol
 
 ## Behavioral rules
 
-1. Use the mission/task/execution ids supplied by the current launch context. Do not invent or reuse ids from another execution.
+1. Use the owner prefix and Agent execution id supplied by the current launch context. Do not invent or reuse ids from another execution.
 2. Use a fresh `eventId` for every distinct signal.
 3. Keep markers one line, valid JSON, and session-scoped.
 4. Emit markers on stdout, not stderr.

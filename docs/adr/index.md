@@ -51,6 +51,6 @@ Read them when a change touches ownership, naming, state, runtime behavior, repo
 
 ### Mission Control And Surfaces
 
-- [Derived Mission Control Outline With Placement Overrides](0006-derived-mission-control-outline-with-placement-overrides.md)
-- [Surface-Controlled Daemon-Resolved Selection](0007-surface-controlled-daemon-resolved-selection.md)
+- [Surface-Controlled Mission Control Selection](0007-surface-controlled-daemon-resolved-selection.md)
 - [Local Surface Preferences](0008-local-surface-preferences.md)
+- [Mission Control Task List From Entity State](0023-mission-control-task-list-from-entity-state.md)

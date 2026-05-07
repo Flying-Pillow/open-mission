@@ -10,7 +10,7 @@ import { Agent } from '../Agent/Agent.js';
 import { AgentRegistry } from '../Agent/AgentRegistry.js';
 import { FakeAgentAdapter } from '../../daemon/runtime/agent/testing/FakeAgentAdapter.js';
 import type { AgentExecutionRecord } from '../AgentExecution/AgentExecutionSchema.js';
-import type { MissionStageStatus, MissionTowerTreeNode } from './MissionSchema.js';
+import type { MissionStageStatus } from './MissionSchema.js';
 import { AgentExecutionCommandIds } from '../AgentExecution/AgentExecutionSchema.js';
 import { TaskCommandIds } from '../Task/TaskSchema.js';
 import { Mission } from './Mission.js';
@@ -793,39 +793,6 @@ describe('Mission', () => {
                 expect(verificationTask?.lifecycle).toBe('pending');
             } finally {
                 reloaded.dispose();
-            }
-        } finally {
-            await fs.rm(workspaceRoot, { recursive: true, force: true });
-        }
-    });
-
-    it('orders the tower tree with BRIEF first and stage artifacts after stage tasks', async () => {
-        const workspaceRoot = await createTempRepo();
-        const agentAdapter = new FakeAgentAdapter('test-adapter', 'Test Adapter');
-
-        try {
-            const adapter = new MissionDossierFilesystem(workspaceRoot);
-            const mission = await Mission.create(adapter, {
-                brief: createBrief(206, 'Mission tree ordering'),
-                branchRef: adapter.deriveMissionBranchName(206, 'Mission tree ordering')
-            }, createWorkflowBindings(agentAdapter));
-
-            try {
-                const status = await mission.startWorkflow();
-                const treeNodes = status.tower?.treeNodes ?? [];
-
-                expect(treeNodes[0]).toMatchObject({
-                    kind: 'mission-artifact',
-                    label: 'BRIEF.md'
-                });
-
-                const prdTaskIndex = treeNodes.findIndex((node: MissionTowerTreeNode) => node.kind === 'task' && node.stageId === 'prd');
-                const prdArtifactIndex = treeNodes.findIndex((node: MissionTowerTreeNode) => node.kind === 'stage-artifact' && node.stageId === 'prd');
-
-                expect(prdTaskIndex).toBeGreaterThan(-1);
-                expect(prdArtifactIndex).toBeGreaterThan(prdTaskIndex);
-            } finally {
-                mission.dispose();
             }
         } finally {
             await fs.rm(workspaceRoot, { recursive: true, force: true });

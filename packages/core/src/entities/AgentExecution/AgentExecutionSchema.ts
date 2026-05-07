@@ -357,11 +357,18 @@ export const AgentDeclaredSignalDescriptorSchema = z.object({
 
 const agentDeclaredSignalBoundedTextSchema = z.string().trim().min(1).max(MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH);
 
-export const AgentDeclaredSignalClaimedTaskAddressSchema = z.object({
-    missionId: agentDeclaredSignalBoundedTextSchema,
-    taskId: agentDeclaredSignalBoundedTextSchema,
-    agentExecutionId: agentDeclaredSignalBoundedTextSchema
-}).strict();
+export const AgentDeclaredSignalInputChoiceSchema = z.discriminatedUnion('kind', [
+    z.object({
+        kind: z.literal('fixed'),
+        label: agentDeclaredSignalBoundedTextSchema,
+        value: agentDeclaredSignalBoundedTextSchema
+    }).strict(),
+    z.object({
+        kind: z.literal('manual'),
+        label: agentDeclaredSignalBoundedTextSchema,
+        placeholder: agentDeclaredSignalBoundedTextSchema.optional()
+    }).strict()
+]);
 
 export const AgentDeclaredSignalPayloadSchema = z.discriminatedUnion('type', [
     z.object({
@@ -372,7 +379,7 @@ export const AgentDeclaredSignalPayloadSchema = z.discriminatedUnion('type', [
     z.object({
         type: z.literal('needs_input'),
         question: agentDeclaredSignalBoundedTextSchema,
-        suggestedResponses: z.array(agentDeclaredSignalBoundedTextSchema).max(MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES).optional()
+        choices: z.array(AgentDeclaredSignalInputChoiceSchema).min(1).max(MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES)
     }).strict(),
     z.object({
         type: z.literal('blocked'),
@@ -399,8 +406,6 @@ export const AgentDeclaredSignalPayloadSchema = z.discriminatedUnion('type', [
 
 export const AgentDeclaredSignalMarkerPayloadSchema = z.object({
     version: z.literal(1),
-    missionId: agentDeclaredSignalBoundedTextSchema,
-    taskId: agentDeclaredSignalBoundedTextSchema,
     agentExecutionId: agentDeclaredSignalBoundedTextSchema,
     eventId: agentDeclaredSignalBoundedTextSchema,
     signal: AgentDeclaredSignalPayloadSchema
@@ -449,7 +454,7 @@ export type AgentDeclaredSignalDeliveryType = z.infer<typeof AgentDeclaredSignal
 export type AgentDeclaredSignalPolicyType = z.infer<typeof AgentDeclaredSignalPolicySchema>;
 export type AgentDeclaredSignalOutcomeType = z.infer<typeof AgentDeclaredSignalOutcomeSchema>;
 export type AgentDeclaredSignalDescriptorType = z.infer<typeof AgentDeclaredSignalDescriptorSchema>;
-export type AgentDeclaredSignalClaimedTaskAddressType = z.infer<typeof AgentDeclaredSignalClaimedTaskAddressSchema>;
+export type AgentDeclaredSignalInputChoiceType = z.infer<typeof AgentDeclaredSignalInputChoiceSchema>;
 export type AgentDeclaredSignalPayloadType = z.infer<typeof AgentDeclaredSignalPayloadSchema>;
 export type AgentDeclaredSignalMarkerPayloadType = z.infer<typeof AgentDeclaredSignalMarkerPayloadSchema>;
 export type AgentExecutionProtocolOwnerType = z.infer<typeof AgentExecutionProtocolOwnerSchema>;

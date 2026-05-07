@@ -12,7 +12,6 @@ import {
 import type { TaskConfigureCommandOptionsType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import { RepositoryDataSchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import type { RepositoryPlatformRepositoryType, RepositoryDataType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
-import type { ActiveMissionOutline } from '$lib/client/context/app-context.svelte';
 import { Repository } from '$lib/components/entities/Repository/Repository.svelte.js';
 import {
     getRepositoryDisplayDescription,
@@ -85,8 +84,7 @@ export class AirportApplication {
     public activeMissionLoading = $state(false);
     public activeMissionError = $state<string | undefined>();
     public activeMissionId = $state<string | undefined>();
-    public activeMissionOutline = $state<ActiveMissionOutline | undefined>();
-    public activeMissionSelectedNodeId = $state<string | undefined>();
+    public activeMissionSelectedFocusId = $state<string | undefined>();
 
     public constructor(private readonly input: {
         fetch?: typeof fetch;
@@ -203,8 +201,7 @@ export class AirportApplication {
             this.setActiveRepositorySelection(undefined);
             this.setActiveMissionSelection(undefined);
             this.activeMissionState = undefined;
-            this.setActiveMissionOutline(undefined);
-            this.setActiveMissionSelectedNodeId(undefined);
+            this.setActiveMissionSelectedFocusId(undefined);
         }
         this.syncRepositorySummaries();
         this.repositoryVersion += 1;
@@ -537,12 +534,8 @@ export class AirportApplication {
         this.activeMissionId = missionId?.trim() || undefined;
     }
 
-    public setActiveMissionOutline(outline?: ActiveMissionOutline): void {
-        this.activeMissionOutline = outline;
-    }
-
-    public setActiveMissionSelectedNodeId(nodeId?: string): void {
-        this.activeMissionSelectedNodeId = nodeId;
+    public setActiveMissionSelectedFocusId(focusId?: string): void {
+        this.activeMissionSelectedFocusId = focusId;
     }
 
     private async applyRepositoryPageState(input: {
@@ -559,8 +552,7 @@ export class AirportApplication {
         this.activeMissionLoading = false;
         this.activeMissionError = undefined;
         this.setActiveMissionSelection(undefined);
-        this.setActiveMissionOutline(undefined);
-        this.setActiveMissionSelectedNodeId(undefined);
+        this.setActiveMissionSelectedFocusId(undefined);
 
         let repository: Repository;
         try {
@@ -685,8 +677,7 @@ export class AirportApplication {
         this.setActiveRepositorySelection(undefined);
         this.setActiveMissionSelection(undefined);
         this.activeMissionState = undefined;
-        this.setActiveMissionOutline(undefined);
-        this.setActiveMissionSelectedNodeId(undefined);
+        this.setActiveMissionSelectedFocusId(undefined);
     }
 
     private isCurrentSelectionRequest(requestId: number): boolean {

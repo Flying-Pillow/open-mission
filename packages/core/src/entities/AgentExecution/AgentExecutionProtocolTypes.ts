@@ -307,6 +307,18 @@ export type AgentExecutionSignalConfidence =
     | 'low'
     | 'diagnostic';
 
+export type AgentExecutionInputChoice =
+    | {
+        kind: 'fixed';
+        label: string;
+        value: string;
+    }
+    | {
+        kind: 'manual';
+        label: string;
+        placeholder?: string | undefined;
+    };
+
 type AgentExecutionSignalBase = {
     source: AgentExecutionSignalSource;
     confidence: AgentExecutionSignalConfidence;
@@ -328,7 +340,7 @@ export type AgentExecutionSignal =
     | ({
         type: 'needs_input';
         question: string;
-        suggestedResponses?: string[];
+        choices: AgentExecutionInputChoice[];
     } & AgentExecutionSignalBase)
     | ({
         type: 'blocked';
@@ -378,6 +390,7 @@ export type AgentExecutionSignalCandidate = {
     signal: AgentExecutionSignal;
     dedupeKey?: string;
     claimedAddress?: AgentExecutionObservationAddress;
+    claimedAgentExecutionId?: AgentExecutionId;
     rawText?: string;
 };
 
@@ -464,7 +477,7 @@ export function cloneSignal(signal: AgentExecutionSignal): AgentExecutionSignal 
         case 'needs_input':
             return {
                 ...signal,
-                ...(signal.suggestedResponses ? { suggestedResponses: [...signal.suggestedResponses] } : {})
+                choices: signal.choices.map(cloneAgentExecutionInputChoice)
             };
         case 'blocked':
         case 'ready_for_verification':
@@ -481,6 +494,18 @@ export function cloneSignal(signal: AgentExecutionSignal): AgentExecutionSignal 
             return {
                 ...signal,
                 ...(signal.payload ? { payload: { ...signal.payload } } : {})
+            };
+    }
+}
+
+export function cloneAgentExecutionInputChoice(choice: AgentExecutionInputChoice): AgentExecutionInputChoice {
+    switch (choice.kind) {
+        case 'fixed':
+            return { ...choice };
+        case 'manual':
+            return {
+                ...choice,
+                ...(choice.placeholder ? { placeholder: choice.placeholder } : {})
             };
     }
 }

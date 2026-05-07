@@ -179,7 +179,10 @@ type AgentSessionSignal =
   | {
       type: 'needs_input';
       question: string;
-      suggestedResponses?: string[];
+      choices: Array<
+        | { kind: 'fixed'; label: string; value: string }
+        | { kind: 'manual'; label: string; placeholder?: string }
+      >;
       source: AgentSessionSignalSource;
       confidence: AgentSessionSignalConfidence;
     }

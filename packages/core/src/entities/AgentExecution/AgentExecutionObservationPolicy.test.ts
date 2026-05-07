@@ -84,7 +84,11 @@ describe('AgentExecutionObservationPolicy', () => {
 				signal: {
 					type: 'needs_input',
 					question: 'Should I run the verification slice?',
-					suggestedResponses: ['Yes', 'No'],
+					choices: [
+						{ kind: 'fixed', label: 'Yes', value: 'yes' },
+						{ kind: 'fixed', label: 'No', value: 'no' },
+						{ kind: 'manual', label: 'Other', placeholder: 'Describe the verification command.' }
+					],
 					source: 'agent-declared',
 					confidence: 'medium'
 				}
@@ -115,7 +119,7 @@ describe('AgentExecutionObservationPolicy', () => {
 				progress: {
 					state: 'waiting-input',
 					summary: 'Should I run the verification slice?',
-					detail: 'Suggested responses: Yes, No',
+					detail: 'Choices: Yes=yes, No=no, Other=manual (Describe the verification command.)',
 					updatedAt: '2026-05-04T12:00:00.000Z'
 				}
 			}
@@ -412,7 +416,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		});
 	});
 
-	it('rejects oversized suggested response sets before promotion', () => {
+	it('rejects oversized needs-input choice sets before promotion', () => {
 		const policy = new AgentExecutionObservationPolicy();
 
 		expect(policy.evaluate({
@@ -422,14 +426,22 @@ describe('AgentExecutionObservationPolicy', () => {
 				signal: {
 					type: 'needs_input',
 					question: 'Choose a path.',
-					suggestedResponses: ['1', '2', '3', '4', '5', '6', '7'],
+					choices: [
+						{ kind: 'fixed', label: '1', value: '1' },
+						{ kind: 'fixed', label: '2', value: '2' },
+						{ kind: 'fixed', label: '3', value: '3' },
+						{ kind: 'fixed', label: '4', value: '4' },
+						{ kind: 'fixed', label: '5', value: '5' },
+						{ kind: 'fixed', label: '6', value: '6' },
+						{ kind: 'manual', label: 'Other' }
+					],
 					source: 'agent-declared',
 					confidence: 'medium'
 				}
 			})
 		})).toEqual({
 			action: 'reject',
-			reason: 'suggested responses exceeded the maximum supported size.'
+			reason: 'needs-input choices exceeded the maximum supported size.'
 		});
 	});
 
