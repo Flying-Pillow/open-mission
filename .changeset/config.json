@@ -11,7 +11,8 @@
   "fixed": [
     [
       "@flying-pillow/mission",
-      "@flying-pillow/mission-core"
+      "@flying-pillow/mission-core",
+      "@flying-pillow/mission-airport-web"
     ]
   ],
   "access": "restricted",

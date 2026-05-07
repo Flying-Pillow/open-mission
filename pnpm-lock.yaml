@@ -184,6 +184,9 @@ importers:
       '@clack/prompts':
         specifier: ^1.1.0
         version: 1.2.0
+      '@flying-pillow/mission-airport-web':
+        specifier: workspace:*
+        version: link:../../apps/airport/web
       '@flying-pillow/mission-core':
         specifier: workspace:*
         version: link:../core

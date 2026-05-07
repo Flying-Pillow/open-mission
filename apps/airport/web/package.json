@@ -1,8 +1,15 @@
 {
   "name": "@flying-pillow/mission-airport-web",
-  "version": "0.0.1",
-  "private": true,
+  "version": "0.1.0-alpha.1",
+  "description": "Mission Airport web host for browser-based repository and mission workflows.",
   "type": "module",
+  "main": "build/index.js",
+  "files": [
+    "build"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "MISSION_SURFACE_PATH=${MISSION_SURFACE_PATH:-$(cd ../../.. && pwd)} MISSION_DAEMON_RUNTIME_MODE=${MISSION_DAEMON_RUNTIME_MODE:-source} vp dev --host 0.0.0.0 --port 5174",
     "build": "vp build",

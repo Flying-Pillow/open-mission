@@ -1,11 +1,11 @@
 {
   "name": "@flying-pillow/mission",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-alpha.1",
   "description": "Mission CLI distribution package for the mission and missiond launchers; Mission now boots the native Airport host.",
   "type": "module",
   "bin": {
-    "mission": "./build/mission.js",
-    "missiond": "./build/missiond.js"
+    "mission": "build/mission.js",
+    "missiond": "build/missiond.js"
   },
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -31,6 +31,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.1.0",
+    "@flying-pillow/mission-airport-web": "workspace:*",
     "@flying-pillow/mission-core": "workspace:*"
   },
   "devDependencies": {

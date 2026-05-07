@@ -3,6 +3,10 @@ packages:
   - apps/*
   - apps/*/*
 
+allowBuilds:
+  esbuild: true
+  node-pty: true
+
 onlyBuiltDependencies:
   - '@tauri-apps/cli'
   - esbuild
