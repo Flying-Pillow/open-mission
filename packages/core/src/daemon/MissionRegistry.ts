@@ -33,6 +33,7 @@ export class MissionRegistry {
     public constructor(private readonly options: {
         loadMission?: MissionLoader;
         logger?: {
+            debug?(message: string, metadata?: Record<string, unknown>): void;
             info(message: string, metadata?: Record<string, unknown>): void;
             warn(message: string, metadata?: Record<string, unknown>): void;
         };

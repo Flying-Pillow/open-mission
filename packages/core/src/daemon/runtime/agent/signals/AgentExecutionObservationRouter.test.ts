@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AgentExecutionObservationRouter } from './AgentExecutionObservationRouter.js';
 
-const markerPrefix = 'task::';
+const markerPrefix = '@task::';
 
 const address = {
 	agentExecutionId: 'session-7',
@@ -151,6 +151,29 @@ describe('AgentExecutionObservationRouter', () => {
 				confidence: 'diagnostic'
 			}
 		}]);
+	});
+
+	it('logs active and matched terminal heuristic patterns for daemon debugging', () => {
+		const logger = { debug: vi.fn() };
+		const router = new AgentExecutionObservationRouter({ logger });
+
+		router.route({
+			kind: 'terminal-output',
+			channel: 'stderr',
+			address,
+			observedAt: '2026-05-04T12:01:10.000Z',
+			line: 'Cannot continue: missing token.'
+		});
+
+		expect(logger.debug).toHaveBeenCalledWith('Agent execution observation patterns active.', expect.objectContaining({
+			markerPrefixes: expect.arrayContaining(['@task::'])
+		}));
+		expect(logger.debug).toHaveBeenCalledWith('Agent execution terminal heuristic pattern matched.', {
+			heuristic: 'blocked',
+			channel: 'stderr',
+			pattern: '\\bcannot continue\\b',
+			line: 'Cannot continue: missing token.'
+		});
 	});
 
 	it('does not trust stderr marker-looking lines as agent-declared signals', () => {

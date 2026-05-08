@@ -37,22 +37,18 @@ export function buildAgentExecutionSignalLaunchContext(input: {
     return {
         launchEnv: {},
         sessionInstructions: [
-            'Agent execution structured interaction is mandatory for this execution.',
-            `- The owning Entity is ${input.protocolDescriptor.owner.entity} '${input.protocolDescriptor.owner.entityId}'.`,
-            '- Mission observes your stdout and parses strict one-line owner-addressed signal markers deterministically.',
-            `- Every structured state signal must start at the beginning of a stdout line with ${markerPrefix} followed immediately by strict JSON.`,
-            '- Do not use prose as a substitute for structured state signals; prose is only explanatory output.',
-            '- Use a fresh eventId for every distinct signal. Reusing an eventId is treated as a duplicate.',
-            '- Keep every marker on one line. Malformed, oversized, stderr, or wrong-execution markers are rejected or recorded only as diagnostics.',
-            '- Completion and ready-for-verification markers are claims, not deterministic verification authority.',
-            'Use this exact execution field in every marker:',
-            `- agentExecutionId: ${input.agentExecutionId}`,
-            'Supported signal payloads:',
+            'Structured status markers:',
+            `- To report machine-readable status, print one stdout line that starts with ${markerPrefix} followed immediately by JSON.`,
+            `- Every marker JSON must include agentExecutionId: ${input.agentExecutionId}.`,
+            '- Use a fresh eventId for each marker.',
+            '- Keep each marker on one line.',
+            '- Use normal prose for explanation; use markers only for status, input requests, blockers, or completion claims.',
+            '- Supported signal payloads:',
             ...input.protocolDescriptor.signals.map((signal) => `- ${signal.type}: ${signal.label} (${signal.policy})`),
-            'When requesting input, emit needs_input with a question and choices. Use kind "fixed" for selectable choices with label/value, and kind "manual" for freeform operator input with label and optional placeholder.',
-            'Example marker:',
+            '- For needs_input, include a question and choices. Choices use kind "fixed" with label/value or kind "manual" with label and optional placeholder.',
+            '- Example marker:',
             markerExample,
-            'Needs-input marker example:',
+            '- Needs-input marker example:',
             needsInputExample
         ].join('\n')
     };

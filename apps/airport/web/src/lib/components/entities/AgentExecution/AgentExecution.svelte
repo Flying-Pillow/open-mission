@@ -3,7 +3,7 @@
     import AgentExecutionTerminalReplay from "$lib/components/entities/AgentExecution/AgentExecutionTerminalReplay.svelte";
     import { Button } from "$lib/components/ui/button/index.js";
     import type { AgentExecution as AgentExecutionEntity } from "$lib/components/entities/AgentExecution/AgentExecution.svelte.js";
-    import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
+    import { maybeGetAgentExecutionSurfaceContext } from "$lib/client/context/agent-execution-surface-context.svelte.js";
     import {
         createAirportTerminalRuntime,
         type AirportTerminal,
@@ -14,7 +14,7 @@
         AgentExecutionTerminalSnapshotType,
     } from "@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema";
     import {
-        subscribeMissionSessionTerminalTransport,
+        subscribeAgentExecutionTerminalTransport,
         type SharedTerminalTransportSubscription,
     } from "$lib/client/runtime/terminal/TerminalTransportBroker";
 
@@ -22,12 +22,14 @@
         refreshNonce,
         session,
         onCommandExecuted,
+        panelMode = "full",
     }: {
         refreshNonce: number;
         session?: AgentExecutionEntity;
         onCommandExecuted: () => Promise<void>;
+        panelMode?: "full" | "terminal";
     } = $props();
-    const missionScope = getScopedMissionContext();
+    const executionSurface = maybeGetAgentExecutionSurfaceContext();
 
     let container = $state<HTMLDivElement | null>(null);
     let terminalSnapshot = $state<AgentExecutionTerminalSnapshotType | null>(
@@ -57,6 +59,7 @@
     let interactionError = $state<string | null>(null);
 
     const canAttachTerminal = $derived(Boolean(session?.isTerminalBacked()));
+    const showFullControls = $derived(panelMode === "full");
     const runtimeMessages = $derived(session?.runtimeMessages ?? []);
     const canShowStructuredComposer = $derived(
         Boolean(
@@ -94,15 +97,9 @@
         );
     });
     const terminalId = $derived(session?.sessionId ?? null);
-    const mission = $derived(missionScope.mission);
-    const activeRepository = $derived(missionScope.repository);
-    const missionId = $derived(mission?.missionId ?? "");
-    const repositoryId = $derived(activeRepository?.id ?? "");
-    const repositoryRootPath = $derived(
-        mission?.missionWorktreePath ??
-            activeRepository?.data.repositoryRootPath ??
-            "",
-    );
+    const ownerId = $derived(session?.ownerId ?? "");
+    const surfaceId = $derived(executionSurface?.surfaceId ?? "");
+    const surfacePath = $derived(executionSurface?.surfacePath ?? "");
     const isPersistedTranscriptSnapshot = $derived(
         Boolean(session && !session.isRunning()) ||
             Boolean(terminalSnapshot?.dead && !terminalSnapshot?.connected),
@@ -166,9 +163,9 @@
         if (
             !terminalId ||
             !canAttachTerminal ||
-            !missionId ||
-            !repositoryId ||
-            !repositoryRootPath
+            !ownerId ||
+            !surfaceId ||
+            !surfacePath
         ) {
             activeTransportKey = null;
             terminalSnapshot = null;
@@ -180,9 +177,9 @@
         }
 
         const nextTransportKey = [
-            missionId,
-            repositoryId,
-            repositoryRootPath,
+            ownerId,
+            surfaceId,
+            surfacePath,
             terminalId,
         ].join(":");
 
@@ -192,11 +189,11 @@
 
         activeTransportKey = nextTransportKey;
         terminalTransport?.dispose();
-        terminalTransport = subscribeMissionSessionTerminalTransport(
+        terminalTransport = subscribeAgentExecutionTerminalTransport(
             {
-                missionId,
-                repositoryId,
-                repositoryRootPath,
+                ownerId,
+                repositoryId: surfaceId,
+                repositoryRootPath: surfacePath,
                 sessionId: terminalId,
             },
             (state) => {
@@ -510,40 +507,47 @@
 </script>
 
 <section class="flex h-full min-h-0 flex-col overflow-hidden">
-    <header class="px-3 py-2">
-        <div class="flex flex-wrap items-start gap-2">
-            <div class="min-w-0 flex-1">
-                <h2 class="truncate text-sm font-semibold text-foreground">
-                    {session?.sessionId ?? "Agent execution"}
-                </h2>
-                <p class="truncate text-xs text-muted-foreground">
-                    {session?.currentTurnTitle ??
-                        session?.workingDirectory ??
-                        "Select a task or session row to pin the runtime console."}
-                </p>
+    {#if showFullControls}
+        <header class="px-3 py-2">
+            <div class="flex flex-wrap items-start gap-2">
+                <div class="min-w-0 flex-1">
+                    <h2 class="truncate text-sm font-semibold text-foreground">
+                        {session?.sessionId ?? "Agent execution"}
+                    </h2>
+                    <p class="truncate text-xs text-muted-foreground">
+                        {session?.currentTurnTitle ??
+                            session?.workingDirectory ??
+                            "Select a task or session row to pin the runtime console."}
+                    </p>
+                </div>
+
+                <!-- <div class="text-right text-xs text-muted-foreground">
+                    <p>{terminalStateLabel}</p>
+                    {#if session}
+                        <p class="mt-1">{session.lifecycleState}</p>
+                        <p class="mt-1">{interactionModeLabel}</p>
+                    {/if}
+                </div> -->
+
+                <AgentExecutionCommandbar
+                    {refreshNonce}
+                    {session}
+                    {onCommandExecuted}
+                />
             </div>
+            <!-- {#if interactionSummary}
+                <p class="text-xs text-muted-foreground">{interactionSummary}</p>
+            {/if} -->
+        </header>
+    {/if}
 
-            <!-- <div class="text-right text-xs text-muted-foreground">
-                <p>{terminalStateLabel}</p>
-                {#if session}
-                    <p class="mt-1">{session.lifecycleState}</p>
-                    <p class="mt-1">{interactionModeLabel}</p>
-                {/if}
-            </div> -->
-
-            <AgentExecutionCommandbar
-                {refreshNonce}
-                {session}
-                {onCommandExecuted}
-            />
+    {#if error}
+        <div
+            class="border-b border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"
+        >
+            {error}
         </div>
-        {#if error}
-            <p class="text-sm text-rose-600">{error}</p>
-        {/if}
-        <!-- {#if interactionSummary}
-            <p class="text-xs text-muted-foreground">{interactionSummary}</p>
-        {/if} -->
-    </header>
+    {/if}
 
     <div class="flex-1 min-h-0">
         {#if !session}
@@ -582,7 +586,7 @@
         {/if}
     </div>
 
-    {#if canShowStructuredComposer}
+    {#if showFullControls && canShowStructuredComposer}
         <section class="border-t border-border/60 px-3 py-3">
             <div class="grid gap-4 lg:grid-cols-2">
                 {#if session?.canSendStructuredPrompt}

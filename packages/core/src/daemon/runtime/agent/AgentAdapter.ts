@@ -130,6 +130,8 @@ export type AgentAdapterRuntimeOutput =
 export type AgentAdapterInput = {
     command: string;
     interactive: AgentAdapterLaunchInput;
+    print?: AgentAdapterLaunchInput;
+    defaultLaunchMode?: 'interactive' | 'print';
     providerSettings?: AgentAdapterProviderSettingsInput | false;
     runtimeEnv?: NodeJS.ProcessEnv;
     trustedFolders?: AgentAdapterTrustedFoldersInput;
@@ -283,11 +285,14 @@ function validateCommonLaunchConfig(config: AgentLaunchConfig, displayName: stri
 
 function createConfiguredLaunchPlan(config: AgentLaunchConfig, context: AgentAdapterContext, agent: AgentInput): AgentAdapterLaunchPlan {
     const settings = resolveConfiguredProviderSettings(config, context, agent);
+    const launchInput = settings.launchMode === 'print'
+        ? agent.adapter.print ?? agent.adapter.interactive
+        : agent.adapter.interactive;
     const env = mergeRuntimeLaunchEnv(agent.adapter.runtimeEnv, settings);
     return {
         mode: settings.launchMode,
-        command: agent.adapter.interactive.command?.trim() || agent.adapter.command,
-        args: buildLaunchArgs({ config, agent, settings }),
+        command: launchInput.command?.trim() || agent.adapter.command,
+        args: buildLaunchArgs({ config, agent, settings, launchInput }),
         ...(env ? { env } : {})
     };
 }
@@ -296,7 +301,7 @@ function resolveConfiguredProviderSettings(config: AgentLaunchConfig, context: A
     if (agent.adapter.providerSettings === false) {
         return {
             model: '',
-            launchMode: 'interactive',
+            launchMode: agent.adapter.defaultLaunchMode ?? 'interactive',
             dangerouslySkipPermissions: false,
             providerEnv: {},
             runtimeEnv: agent.adapter.runtimeEnv ?? process.env,
@@ -324,9 +329,9 @@ function resolveConfiguredProviderSettings(config: AgentLaunchConfig, context: A
     return settings;
 }
 
-function buildLaunchArgs(input: { config: AgentLaunchConfig; agent: AgentInput; settings: ResolvedAgentAdapterSettings }): string[] {
+function buildLaunchArgs(input: { config: AgentLaunchConfig; agent: AgentInput; settings: ResolvedAgentAdapterSettings; launchInput: AgentAdapterLaunchInput }): string[] {
     const args: string[] = [];
-    for (const argument of input.agent.adapter.interactive.args) {
+    for (const argument of input.launchInput.args) {
         if (typeof argument === 'string') {
             args.push(argument);
             continue;

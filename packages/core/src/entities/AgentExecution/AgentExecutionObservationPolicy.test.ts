@@ -6,7 +6,7 @@ import {
 	type AgentExecutionSnapshot
 } from './AgentExecutionProtocolTypes.js';
 
-const markerPrefix = 'task::';
+const markerPrefix = '@task::';
 
 const address = {
 	agentExecutionId: 'session-7',

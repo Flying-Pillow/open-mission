@@ -103,6 +103,15 @@ export const EntityCommandButtonVariantSchema = z.enum([
     'link'
 ]);
 
+export const EntityPresentationToneSchema = z.enum([
+    'neutral',
+    'progress',
+    'attention',
+    'success',
+    'danger',
+    'muted'
+]);
+
 export const EntityCommandDescriptorSchema = z.object({
     commandId: z.string().trim().min(1),
     label: z.string().trim().min(1),
@@ -111,6 +120,7 @@ export const EntityCommandDescriptorSchema = z.object({
     disabledReason: z.string().trim().min(1).optional(),
     variant: EntityCommandButtonVariantSchema.optional(),
     icon: z.string().trim().min(1).optional(),
+    tone: EntityPresentationToneSchema.optional(),
     confirmation: EntityCommandConfirmationSchema.optional(),
     input: EntityCommandInputDescriptorSchema.optional(),
     presentationOrder: z.number().int().optional()
@@ -131,6 +141,7 @@ export const EntityMethodUiSchema = z.object({
     description: z.string().trim().min(1).optional(),
     variant: EntityCommandButtonVariantSchema.optional(),
     icon: z.string().trim().min(1).optional(),
+    tone: EntityPresentationToneSchema.optional(),
     confirmation: EntityCommandConfirmationSchema.optional(),
     input: EntityCommandInputDescriptorSchema.optional(),
     presentationOrder: z.number().int().optional()
@@ -192,6 +203,7 @@ export type EntityCommandInputOptionType = z.infer<typeof EntityCommandInputOpti
 export type EntityCommandInputDescriptorType = z.infer<typeof EntityCommandInputDescriptorSchema>;
 export type EntityCommandConfirmationType = z.infer<typeof EntityCommandConfirmationSchema>;
 export type EntityCommandButtonVariantType = z.infer<typeof EntityCommandButtonVariantSchema>;
+export type EntityPresentationToneType = z.infer<typeof EntityPresentationToneSchema>;
 export type EntityCommandDescriptorType = z.infer<typeof EntityCommandDescriptorSchema>;
 export type EntityCommandViewType = z.infer<typeof EntityCommandViewSchema>;
 export type EntityClassCommandViewType = z.infer<typeof EntityClassCommandViewSchema>;

@@ -8,7 +8,8 @@ import type {
 	AgentExecutionScope,
 	AgentLaunchConfig,
 	AgentPrompt,
-	AgentExecutionSnapshot
+	AgentExecutionSnapshot,
+	AgentExecutionObservation
 } from './AgentExecutionProtocolTypes.js';
 import {
 	deriveAgentExecutionInteractionCapabilities,
@@ -20,17 +21,15 @@ import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/E
 import type { MissionTaskState } from '../Mission/MissionSchema.js';
 import { Repository } from '../Repository/Repository.js';
 import type {
-	MissionAgentModelInfo,
-	MissionAgentScope,
 	AgentExecutionLaunchRequest,
 	AgentExecutionRecord,
-	AgentExecutionState,
-	MissionAgentTelemetrySnapshot
+	AgentExecutionState
 } from './AgentExecutionSchema.js';
 import {
 	AgentExecutionCommandAcknowledgementSchema,
 	AgentExecutionCommandInputSchema,
 	AgentExecutionContextSchema,
+	AgentExecutionChatMessageSchema,
 	AgentExecutionMessageDescriptorSchema,
 	AgentExecutionLocatorSchema,
 	AgentExecutionPromptSchema,
@@ -41,6 +40,8 @@ import {
 	AgentExecutionDataSchema,
 	AgentExecutionCommandIds,
 	agentExecutionEntityName,
+	type AgentDeclaredSignalInputChoiceType,
+	type AgentExecutionChatMessageType,
 	type AgentExecutionCommandType,
 	type AgentExecutionMessageDescriptorType,
 	type AgentExecutionProtocolDescriptorType,
@@ -53,14 +54,6 @@ import {
 import type { MissionSnapshotType } from '../Mission/MissionSchema.js';
 import { MissionDossierFilesystem } from '../Mission/MissionDossierFilesystem.js';
 import { Terminal } from '../Terminal/Terminal.js';
-
-export type AgentExecutionOwner = {
-	completeSessionRecord(sessionId: string): Promise<AgentExecutionRecord>;
-	cancelSessionRecord(sessionId: string, reason?: string): Promise<AgentExecutionRecord>;
-	terminateSessionRecord(sessionId: string, reason?: string): Promise<AgentExecutionRecord>;
-	sendSessionPrompt(sessionId: string, prompt: AgentPrompt): Promise<AgentExecutionRecord>;
-	sendSessionCommand(sessionId: string, command: AgentCommand): Promise<AgentExecutionRecord>;
-};
 
 type LocatedAgentExecutionData = {
 	data: AgentExecutionDataType;
@@ -100,8 +93,8 @@ type AgentExecutionTerminalUpdateSource = {
 export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	public static override readonly entityName = agentExecutionEntityName;
 
-	public static createEntityId(missionId: string, sessionId: string): string {
-		return createEntityId('agent_execution', `${missionId}/${sessionId}`);
+	public static createEntityId(scopeId: string, sessionId: string): string {
+		return createEntityId('agent_execution', `${scopeId}/${sessionId}`);
 	}
 
 	public static capabilities(): AgentCapabilities {
@@ -120,9 +113,10 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	}
 
 	public static toDataFromRecord(record: AgentExecutionRecord): AgentExecutionDataType {
-		const missionId = AgentExecution.requireRecordMissionId(record);
+		const scopeId = AgentExecution.requireRecordScopeId(record);
 		return AgentExecutionDataSchema.parse({
-			id: AgentExecution.createEntityId(missionId, record.sessionId),
+			id: AgentExecution.createEntityId(scopeId, record.sessionId),
+			ownerId: AgentExecution.requireRecordOwnerId(record),
 			sessionId: record.sessionId,
 			agentId: record.agentId,
 			...(record.transportId ? { transportId: record.transportId } : {}),
@@ -148,13 +142,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 
 	public static async read(payload: unknown, context: EntityExecutionContext) {
 		const input = AgentExecutionLocatorSchema.parse(payload);
-		const service = await loadMissionRegistry(context);
-		const mission = await service.loadRequiredMission(input, context);
-		try {
-			return AgentExecution.requireData(await mission.buildMissionSnapshot(), input.sessionId);
-		} finally {
-			mission.dispose();
-		}
+		return (await AgentExecution.requireDataForOwner(input, context)).data;
 	}
 
 	public static requireData(snapshot: MissionSnapshotType, sessionId: string) {
@@ -167,26 +155,36 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 
 	public static async resolve(payload: unknown, context: EntityExecutionContext): Promise<AgentExecution> {
 		const input = AgentExecutionCommandInputSchema.parse(payload);
-		const service = await loadMissionRegistry(context);
-		const mission = await service.loadRequiredMission(input, context);
-		try {
-			return new AgentExecution(AgentExecution.requireData(await mission.buildMissionSnapshot(), input.sessionId));
-		} finally {
-			mission.dispose();
-		}
+		return new AgentExecution((await AgentExecution.requireDataForOwner(input, context)).data);
 	}
 
 	public static async readTerminal(payload: unknown, context: EntityExecutionContext) {
 		const input = AgentExecutionLocatorSchema.parse(payload);
-		const located = await AgentExecution.requireDataForLocator(input, context);
-		return AgentExecution.readTerminalData(located.missionDir, input.missionId, located.data);
+		const located = await AgentExecution.requireDataForOwner(input, context);
+		return AgentExecution.readTerminalData(input.ownerId, located.missionDir, located.data);
 	}
 
 
 	public async command(payload: unknown, context: EntityExecutionContext) {
 		const input = AgentExecutionCommandInputSchema.parse(payload);
+		const liveRegistryData = AgentExecution.readRegistryExecution(input, context);
+		if (liveRegistryData) {
+			await AgentExecution.requireRegistry(context).commandExecution(input.sessionId, {
+				commandId: input.commandId,
+				...(input.input !== undefined ? { input: input.input } : {})
+			});
+			return AgentExecutionCommandAcknowledgementSchema.parse({
+				ok: true,
+				entity: agentExecutionEntityName,
+				method: 'command',
+				id: input.sessionId,
+				ownerId: input.ownerId,
+				sessionId: input.sessionId,
+				commandId: input.commandId
+			});
+		}
 		const service = await loadMissionRegistry(context);
-		const mission = await service.loadRequiredMission(input, context);
+		const mission = await service.loadRequiredMission({ missionId: input.ownerId }, context);
 		try {
 			AgentExecution.requireData(await mission.buildMissionSnapshot(), input.sessionId);
 			switch (input.commandId) {
@@ -216,7 +214,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				entity: agentExecutionEntityName,
 				method: 'command',
 				id: input.sessionId,
-				missionId: input.missionId,
+				ownerId: input.ownerId,
 				sessionId: input.sessionId,
 				commandId: input.commandId
 			});
@@ -227,7 +225,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 
 	public static async sendTerminalInput(payload: unknown, context: EntityExecutionContext) {
 		const input = AgentExecutionSendTerminalInputSchema.parse(payload);
-		const located = await AgentExecution.requireDataForLocator(input, context);
+		const located = await AgentExecution.requireDataForOwner(input, context);
 		const terminalHandle = AgentExecution.requireTerminalHandle(located.data);
 		Terminal.sendInput({
 			terminalName: terminalHandle.terminalName,
@@ -237,7 +235,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			...(input.cols !== undefined ? { cols: input.cols } : {}),
 			...(input.rows !== undefined ? { rows: input.rows } : {})
 		}, context);
-		return AgentExecution.readTerminalData(located.missionDir, input.missionId, located.data);
+		return AgentExecution.readTerminalData(input.ownerId, located.missionDir, located.data);
 	}
 
 	public static async isCompatibleForLaunch(input: {
@@ -317,10 +315,10 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		commandTypes: AgentCommand['type'][]
 	): AgentExecutionMessageDescriptorType[] {
 		return AgentExecutionMessageDescriptorSchema.array().parse([
-			{ type: 'interrupt', label: 'Interrupt', delivery: 'best-effort', mutatesContext: false },
-			{ type: 'checkpoint', label: 'Checkpoint', delivery: 'best-effort', mutatesContext: false },
-			{ type: 'nudge', label: 'Nudge', delivery: 'best-effort', mutatesContext: false },
-			{ type: 'resume', label: 'Resume', delivery: 'best-effort', mutatesContext: false }
+			{ type: 'interrupt', label: 'Interrupt', icon: 'lucide:pause', tone: 'attention', delivery: 'best-effort', mutatesContext: false },
+			{ type: 'checkpoint', label: 'Checkpoint', icon: 'lucide:milestone', tone: 'neutral', delivery: 'best-effort', mutatesContext: false },
+			{ type: 'nudge', label: 'Nudge', icon: 'lucide:message-circle-more', tone: 'progress', delivery: 'best-effort', mutatesContext: false },
+			{ type: 'resume', label: 'Resume', icon: 'lucide:play', tone: 'success', delivery: 'best-effort', mutatesContext: false }
 		].filter((descriptor) => commandTypes.includes(descriptor.type as AgentCommand['type'])));
 	}
 
@@ -337,23 +335,20 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 
 	public static buildTaskScope(
 		task: MissionTaskState,
-		missionId?: string,
-		missionDir?: string
-	): MissionAgentScope {
-		return {
-			kind: 'slice',
-			sliceTitle: task.subject,
-			verificationTargets: [],
-			requiredSkills: [],
-			dependsOn: [...task.dependsOn],
-			...(missionId ? { missionId } : {}),
-			...(missionDir ? { missionDir } : {}),
-			...(task.stage ? { stage: task.stage } : {}),
-			...(task.taskId ? { taskId: task.taskId } : {}),
-			...(task.subject ? { taskTitle: task.subject } : {}),
-			...(task.subject ? { taskSummary: task.subject } : {}),
-			...(task.instruction ? { taskInstruction: task.instruction } : {})
-		};
+		missionId?: string
+	): AgentExecutionScope {
+		if (missionId && task.taskId) {
+			return {
+				kind: 'task',
+				missionId,
+				taskId: task.taskId,
+				...(task.stage ? { stageId: task.stage } : {})
+			};
+		}
+		if (missionId) {
+			return { kind: 'mission', missionId };
+		}
+		return { kind: 'system', ...(task.subject ? { label: task.subject } : {}) };
 	}
 
 	public static createRecordFromLaunch(input: {
@@ -365,7 +360,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		missionDir?: string;
 	}): AgentExecutionRecord {
 		const scope = input.task
-			? AgentExecution.buildTaskScope(input.task, input.missionId, input.missionDir)
+			? AgentExecution.buildTaskScope(input.task, input.missionId)
 			: undefined;
 		const terminalFields = getTerminalFields(input.snapshot);
 		const protocolDescriptor = input.snapshot
@@ -473,7 +468,6 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	}
 
 	public static cloneRecord(record: AgentExecutionRecord): AgentExecutionRecord {
-		const telemetry = AgentExecution.cloneTelemetry(record.telemetry);
 		return {
 			sessionId: record.sessionId,
 			agentId: record.agentId,
@@ -491,14 +485,13 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			interactionCapabilities: { ...record.interactionCapabilities },
 			runtimeMessages: AgentExecution.cloneRuntimeMessages(record.runtimeMessages),
 			...(record.protocolDescriptor ? { protocolDescriptor: AgentExecution.cloneProtocolDescriptor(record.protocolDescriptor) } : {}),
-			...(record.scope ? { scope: AgentExecution.cloneScope(record.scope) } : {}),
-			...(telemetry ? { telemetry } : {}),
+			...(record.scope ? { scope: { ...record.scope } } : {}),
+			...(record.telemetry ? { telemetry: cloneStructured(record.telemetry) } : {}),
 			...(record.failureMessage ? { failureMessage: record.failureMessage } : {})
 		};
 	}
 
 	public static cloneState(state: AgentExecutionState): AgentExecutionState {
-		const telemetry = AgentExecution.cloneTelemetry(state.telemetry);
 		return {
 			agentId: state.agentId,
 			...(state.transportId ? { transportId: state.transportId } : {}),
@@ -513,7 +506,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			interactionCapabilities: { ...state.interactionCapabilities },
 			runtimeMessages: AgentExecution.cloneRuntimeMessages(state.runtimeMessages),
 			...(state.protocolDescriptor ? { protocolDescriptor: AgentExecution.cloneProtocolDescriptor(state.protocolDescriptor) } : {}),
-			...(state.scope ? { scope: AgentExecution.cloneScope(state.scope) } : {}),
+			...(state.scope ? { scope: { ...state.scope } } : {}),
 			...(state.awaitingPermission
 				? {
 					awaitingPermission: {
@@ -525,7 +518,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 					}
 				}
 				: {}),
-			...(telemetry ? { telemetry } : {}),
+			...(state.telemetry ? { telemetry: cloneStructured(state.telemetry) } : {}),
 			...(state.failureMessage ? { failureMessage: state.failureMessage } : {})
 		};
 	}
@@ -595,9 +588,9 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		return [];
 	}
 
-	private readonly owner: AgentExecutionOwner | undefined;
-	private readonly record: AgentExecutionRecord | undefined;
 	private readonly listeners = new Set<(event: AgentExecutionEvent) => void>();
+	private readonly dataChangeListeners = new Set<(data: AgentExecutionDataType) => void>();
+	private chatMessages: AgentExecutionChatMessageType[] = [];
 	private liveSnapshot: AgentExecutionSnapshot | undefined;
 	private disposed = false;
 
@@ -608,9 +601,9 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	}
 
 	private static toDataFromRuntimeSnapshot(snapshot: AgentExecutionSnapshot): AgentExecutionDataType {
-		const runtimeScope = toAgentRuntimeScope(snapshot);
 		return AgentExecutionDataSchema.parse({
 			id: AgentExecution.createEntityId(getAgentExecutionEntityScopeId(snapshot), snapshot.sessionId),
+			ownerId: getAgentExecutionOwnerId(snapshot.scope),
 			sessionId: snapshot.sessionId,
 			agentId: snapshot.agentId,
 			...(snapshot.transport?.kind === 'terminal' ? { transportId: 'terminal' } : {}),
@@ -641,26 +634,29 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				acceptedCommands: snapshot.acceptedCommands
 			}),
 			protocolDescriptor: AgentExecution.createProtocolDescriptorForSnapshot(snapshot),
-			...(runtimeScope ? { scope: runtimeScope } : {}),
+			scope: { ...snapshot.scope },
 			createdAt: snapshot.startedAt,
 			lastUpdatedAt: snapshot.updatedAt,
 			...(snapshot.failureMessage ? { failureMessage: snapshot.failureMessage } : {})
 		});
 	}
 
-	public constructor(data: AgentExecutionDataType);
-	public constructor(owner: AgentExecutionOwner, record: AgentExecutionRecord);
-	public constructor(ownerOrData: AgentExecutionOwner | AgentExecutionDataType, record?: AgentExecutionRecord) {
-		if (record) {
-			super(AgentExecution.toDataFromRecord(record));
-			this.owner = ownerOrData as AgentExecutionOwner;
-			this.record = AgentExecution.cloneRecord(record);
-			return;
-		}
+	public constructor(data: AgentExecutionDataType) {
+		super(AgentExecutionDataSchema.parse(data));
+		this.chatMessages = cloneChatMessages(this.data.chatMessages);
+	}
 
-		super(AgentExecutionDataSchema.parse(ownerOrData));
-		this.owner = undefined;
-		this.record = undefined;
+	public override updateFromData(data: AgentExecutionDataType): this {
+		super.updateFromData(data);
+		this.chatMessages = cloneChatMessages(this.data.chatMessages);
+		return this;
+	}
+
+	public override toData(): AgentExecutionDataType {
+		return AgentExecutionDataSchema.parse({
+			...super.toData(),
+			chatMessages: cloneChatMessages(this.chatMessages)
+		});
 	}
 
 	public get id(): string {
@@ -668,7 +664,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	}
 
 	public get sessionId(): string {
-		return this.record?.sessionId ?? this.toData().sessionId;
+		return this.toData().sessionId;
 	}
 
 	public get reference(): AgentExecutionReference {
@@ -706,6 +702,15 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		};
 	}
 
+	public onDidDataChange(listener: (data: AgentExecutionDataType) => void): { dispose(): void } {
+		this.dataChangeListeners.add(listener);
+		return {
+			dispose: () => {
+				this.dataChangeListeners.delete(listener);
+			}
+		};
+	}
+
 	public async complete(): Promise<AgentExecutionSnapshot> {
 		const endedAt = new Date().toISOString();
 		const snapshot = this.updateSnapshot({
@@ -738,6 +743,16 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				updatedAt: new Date().toISOString()
 			}
 		});
+		if (prompt.source === 'operator') {
+			this.appendChatMessage({
+				id: createChatMessageId(snapshot.sessionId, snapshot.updatedAt, 'operator', prompt.text),
+				role: 'operator',
+				kind: 'message',
+				tone: 'neutral',
+				text: prompt.text,
+				at: snapshot.updatedAt
+			});
+		}
 		this.emitEvent({ type: 'execution.updated', snapshot });
 		this.emitEvent({
 			type: 'execution.message',
@@ -864,10 +879,24 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		if (this.disposed) {
 			return;
 		}
+		this.appendChatMessageFromEvent(event);
 		this.liveSnapshot = cloneRuntimeSnapshot(event.snapshot);
 		for (const listener of this.listeners) {
 			listener(event);
 		}
+		this.notifyDataChanged();
+	}
+
+	public applySignalObservation(
+		observation: AgentExecutionObservation,
+		decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>
+	): AgentExecutionSnapshot | void {
+		const appendedChatMessage = this.appendChatMessageFromObservation(observation, decision);
+		const snapshot = this.applySignalDecision(decision);
+		if (appendedChatMessage && decision.action === 'record-observation-only') {
+			this.notifyDataChanged();
+		}
+		return snapshot;
 	}
 
 	public applySignalDecision(
@@ -890,16 +919,130 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		}
 	}
 
+	private appendChatMessageFromObservation(
+		observation: AgentExecutionObservation,
+		decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>
+	): boolean {
+		const signal = observation.signal;
+		if (signal.type === 'diagnostic' || signal.type === 'usage' || signal.type === 'message' || decision.action === 'emit-message') {
+			return false;
+		}
+
+		const base = {
+			id: observation.observationId,
+			role: 'agent' as const,
+			signalType: signal.type,
+			at: observation.observedAt
+		};
+
+		switch (signal.type) {
+			case 'progress':
+				return this.appendChatMessage({ ...base, kind: 'progress', tone: 'progress', title: 'Progress', text: signal.summary, ...(signal.detail ? { detail: signal.detail } : {}) });
+			case 'needs_input':
+				return this.appendChatMessage({ ...base, kind: 'needs-input', tone: 'attention', title: 'Needs input', text: signal.question, choices: cloneInputChoices(signal.choices) });
+			case 'blocked':
+				return this.appendChatMessage({ ...base, kind: 'blocked', tone: 'danger', title: 'Blocked', text: signal.reason });
+			case 'ready_for_verification':
+				return this.appendChatMessage({ ...base, kind: 'claim', tone: 'success', title: 'Ready for verification', text: signal.summary });
+			case 'completed_claim':
+				return this.appendChatMessage({ ...base, kind: 'claim', tone: 'success', title: 'Completed claim', text: signal.summary });
+			case 'failed_claim':
+				return this.appendChatMessage({ ...base, kind: 'failure', tone: 'danger', title: 'Failed claim', text: signal.reason });
+		}
+		return false;
+	}
+
+	private appendChatMessageFromEvent(event: AgentExecutionEvent): boolean {
+		if (event.type === 'execution.message' && event.channel === 'agent') {
+			return this.appendChatMessage({
+				id: createChatMessageId(event.snapshot.sessionId, event.snapshot.updatedAt, event.channel, event.text),
+				role: 'agent',
+				kind: 'message',
+				tone: 'neutral',
+				text: event.text,
+				at: event.snapshot.updatedAt
+			});
+		}
+		if (event.type === 'execution.completed' && event.snapshot.progress.summary) {
+			return this.appendChatMessage({
+				id: createChatMessageId(event.snapshot.sessionId, event.snapshot.updatedAt, 'completed'),
+				role: 'system',
+				kind: 'status',
+				tone: 'success',
+				title: 'Completed',
+				text: event.snapshot.progress.summary,
+				at: event.snapshot.updatedAt
+			});
+		}
+		if (event.type === 'execution.failed') {
+			return this.appendChatMessage({
+				id: createChatMessageId(event.snapshot.sessionId, event.snapshot.updatedAt, 'failed'),
+				role: 'system',
+				kind: 'failure',
+				tone: 'danger',
+				title: 'Failed',
+				text: event.reason,
+				at: event.snapshot.updatedAt
+			});
+		}
+		return false;
+	}
+
+	private appendChatMessage(message: AgentExecutionChatMessageType): boolean {
+		const parsed = AgentExecutionChatMessageSchema.parse(message);
+		if (this.chatMessages.some((existing) => existing.id === parsed.id)) {
+			return false;
+		}
+		this.chatMessages = [...this.chatMessages, parsed];
+		this.data = AgentExecutionDataSchema.parse({
+			...super.toData(),
+			chatMessages: cloneChatMessages(this.chatMessages),
+			lastUpdatedAt: parsed.at
+		});
+		return true;
+	}
+
+	private notifyDataChanged(): void {
+		if (this.disposed) {
+			return;
+		}
+		const data = this.toData();
+		for (const listener of this.dataChangeListeners) {
+			listener(data);
+		}
+	}
+
 	public toRecord(): AgentExecutionRecord {
-		return AgentExecution.cloneRecord(this.requireRecord());
+		const data = this.toData();
+		return AgentExecution.cloneRecord({
+			sessionId: data.sessionId,
+			agentId: data.agentId,
+			...(data.transportId ? { transportId: data.transportId } : {}),
+			...(data.sessionLogPath ? { sessionLogPath: data.sessionLogPath } : {}),
+			...(data.terminalHandle ? { terminalHandle: { ...data.terminalHandle } } : {}),
+			adapterLabel: data.adapterLabel,
+			lifecycleState: data.lifecycleState,
+			...(data.taskId ? { taskId: data.taskId } : {}),
+			...(data.assignmentLabel ? { assignmentLabel: data.assignmentLabel } : {}),
+			...(data.workingDirectory ? { workingDirectory: data.workingDirectory } : {}),
+			...(data.currentTurnTitle ? { currentTurnTitle: data.currentTurnTitle } : {}),
+			interactionCapabilities: { ...data.interactionCapabilities },
+			runtimeMessages: AgentExecution.cloneRuntimeMessages(data.runtimeMessages),
+			...(data.protocolDescriptor ? { protocolDescriptor: AgentExecution.cloneProtocolDescriptor(data.protocolDescriptor) } : {}),
+			...(data.scope ? { scope: { ...data.scope } } : {}),
+			...(data.telemetry ? { telemetry: cloneStructured(data.telemetry) } : {}),
+			...(data.failureMessage ? { failureMessage: data.failureMessage } : {}),
+			createdAt: data.createdAt ?? data.lastUpdatedAt ?? new Date().toISOString(),
+			lastUpdatedAt: data.lastUpdatedAt ?? data.createdAt ?? new Date().toISOString()
+		});
 	}
 
 	public toEntity(): AgentExecutionDataType {
-		return AgentExecution.toDataFromRecord(this.requireRecord());
+		return AgentExecutionDataSchema.parse(this.toData());
 	}
 
 	public toState(snapshot?: AgentExecutionSnapshot): AgentExecutionState {
-		const record = this.requireRecord();
+		const record = this.toRecord();
 		if (!snapshot) {
 			return AgentExecution.cloneState({
 				agentId: record.agentId,
@@ -926,43 +1069,11 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		});
 	}
 
-	public async sendPrompt(prompt: AgentPrompt): Promise<AgentExecution> {
-		const nextRecord = await this.requireOwner().sendSessionPrompt(this.sessionId, prompt);
-		return new AgentExecution(this.requireOwner(), nextRecord);
-	}
-
-	public async sendCommand(command: AgentCommand): Promise<AgentExecution> {
-		const nextRecord = await this.requireOwner().sendSessionCommand(this.sessionId, command);
-		return new AgentExecution(this.requireOwner(), nextRecord);
-	}
-
-	public async done(): Promise<AgentExecution> {
-		const nextRecord = await this.requireOwner().completeSessionRecord(this.sessionId);
-		return new AgentExecution(this.requireOwner(), nextRecord);
-	}
-
-	public async cancel(reason?: string): Promise<AgentExecution> {
-		const nextRecord = await this.requireOwner().cancelSessionRecord(this.sessionId, reason);
-		return new AgentExecution(this.requireOwner(), nextRecord);
-	}
-
-	public async terminate(reason?: string): Promise<AgentExecution> {
-		const nextRecord = await this.requireOwner().terminateSessionRecord(this.sessionId, reason);
-		return new AgentExecution(this.requireOwner(), nextRecord);
-	}
-
-	private requireOwner(): AgentExecutionOwner {
-		if (!this.owner) {
-			throw new Error(`AgentExecution '${this.sessionId}' is not attached to a Mission owner.`);
+	private static requireRegistry(context: EntityExecutionContext) {
+		if (!context.agentExecutionRegistry) {
+			throw new Error('AgentExecutionRegistry is not available in the daemon execution context.');
 		}
-		return this.owner;
-	}
-
-	private requireRecord(): AgentExecutionRecord {
-		if (!this.record) {
-			throw new Error(`AgentExecution '${this.sessionId}' is not attached to a Mission session record.`);
-		}
-		return this.record;
+		return context.agentExecutionRegistry;
 	}
 
 	private requireActiveSnapshot(
@@ -1025,121 +1136,72 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			: { type: 'execution.failed', reason: snapshot.failureMessage ?? 'terminal command failed.', snapshot });
 	}
 
-	private static cloneModel(model: MissionAgentModelInfo | undefined): MissionAgentModelInfo | undefined {
-		if (!model) {
+	private static requireRecordScopeId(record: AgentExecutionRecord): string {
+		if (record.scope?.kind === 'repository') {
+			return Repository.slugIdentitySegment(record.scope.repositoryRootPath) || record.scope.repositoryRootPath;
+		}
+		if (record.scope?.kind === 'mission' || record.scope?.kind === 'task') {
+			return record.scope.missionId;
+		}
+		if (record.scope?.kind === 'artifact') {
+			return record.scope.artifactId;
+		}
+		if (record.scope?.kind === 'system') {
+			return record.scope.label ?? 'system';
+		}
+		throw new Error(`AgentExecution '${record.sessionId}' requires an AgentExecutionScope.`);
+	}
+
+	private static requireRecordOwnerId(record: AgentExecutionRecord): string {
+		if (record.scope?.kind === 'repository') {
+			return record.scope.repositoryRootPath;
+		}
+		if (record.scope?.kind === 'mission' || record.scope?.kind === 'task') {
+			return record.scope.missionId;
+		}
+		if (record.scope?.kind === 'artifact') {
+			return record.scope.artifactId;
+		}
+		if (record.scope?.kind === 'system') {
+			return record.scope.label ?? 'system';
+		}
+		throw new Error(`AgentExecution '${record.sessionId}' requires an AgentExecutionScope.`);
+	}
+
+	private static readRegistryExecution(
+		input: { ownerId: string; sessionId: string },
+		context: EntityExecutionContext
+	): AgentExecutionDataType | undefined {
+		if (!context.agentExecutionRegistry?.hasExecution(input.sessionId)) {
 			return undefined;
 		}
-
-		return {
-			...(model.id ? { id: model.id } : {}),
-			...(model.family ? { family: model.family } : {}),
-			...(model.provider ? { provider: model.provider } : {}),
-			...(model.displayName ? { displayName: model.displayName } : {})
-		};
+		const data = context.agentExecutionRegistry.readExecution(input.sessionId);
+		AgentExecution.assertOwnerMatches(input, data);
+		return data;
 	}
 
-	private static cloneTelemetry(
-		telemetry: MissionAgentTelemetrySnapshot | undefined
-	): MissionAgentTelemetrySnapshot | undefined {
-		if (!telemetry) {
-			return undefined;
-		}
-
-		const model = AgentExecution.cloneModel(telemetry.model);
-
-		return {
-			...(model ? { model } : {}),
-			...(telemetry.providerSessionId ? { providerSessionId: telemetry.providerSessionId } : {}),
-			...(telemetry.tokenUsage ? { tokenUsage: { ...telemetry.tokenUsage } } : {}),
-			...(telemetry.contextWindow ? { contextWindow: { ...telemetry.contextWindow } } : {}),
-			...(telemetry.estimatedCostUsd !== undefined ? { estimatedCostUsd: telemetry.estimatedCostUsd } : {}),
-			...(telemetry.activeToolName ? { activeToolName: telemetry.activeToolName } : {}),
-			updatedAt: telemetry.updatedAt
-		};
-	}
-
-	private static cloneScope(scope: MissionAgentScope): MissionAgentScope {
-		switch (scope.kind) {
-			case 'control':
-				return {
-					kind: 'control',
-					...(scope.workspaceRoot ? { workspaceRoot: scope.workspaceRoot } : {}),
-					...(scope.repoName ? { repoName: scope.repoName } : {}),
-					...(scope.branch ? { branch: scope.branch } : {})
-				};
-			case 'mission':
-				return {
-					kind: 'mission',
-					...(scope.missionId ? { missionId: scope.missionId } : {}),
-					...(scope.stage ? { stage: scope.stage } : {}),
-					...(scope.currentSlice ? { currentSlice: scope.currentSlice } : {}),
-					...(scope.readyTaskIds ? { readyTaskIds: [...scope.readyTaskIds] } : {}),
-					...(scope.readyTaskTitle ? { readyTaskTitle: scope.readyTaskTitle } : {}),
-					...(scope.readyTaskInstruction ? { readyTaskInstruction: scope.readyTaskInstruction } : {})
-				};
-			case 'artifact':
-				return {
-					kind: 'artifact',
-					artifactKey: scope.artifactKey,
-					...(scope.missionId ? { missionId: scope.missionId } : {}),
-					...(scope.stage ? { stage: scope.stage } : {}),
-					...(scope.artifactPath ? { artifactPath: scope.artifactPath } : {}),
-					...(scope.checkpoint ? { checkpoint: scope.checkpoint } : {}),
-					...(scope.validation ? { validation: scope.validation } : {})
-				};
-			case 'slice':
-				return {
-					kind: 'slice',
-					sliceTitle: scope.sliceTitle,
-					verificationTargets: [...scope.verificationTargets],
-					requiredSkills: [...scope.requiredSkills],
-					dependsOn: [...scope.dependsOn],
-					...(scope.missionId ? { missionId: scope.missionId } : {}),
-					...(scope.missionDir ? { missionDir: scope.missionDir } : {}),
-					...(scope.stage ? { stage: scope.stage } : {}),
-					...(scope.sliceId ? { sliceId: scope.sliceId } : {}),
-					...(scope.taskId ? { taskId: scope.taskId } : {}),
-					...(scope.taskTitle ? { taskTitle: scope.taskTitle } : {}),
-					...(scope.taskSummary ? { taskSummary: scope.taskSummary } : {}),
-					...(scope.taskInstruction ? { taskInstruction: scope.taskInstruction } : {}),
-					...(scope.doneWhen ? { doneWhen: [...scope.doneWhen] } : {}),
-					...(scope.stopCondition ? { stopCondition: scope.stopCondition } : {})
-				};
-			case 'gate':
-				return {
-					kind: 'gate',
-					intent: scope.intent,
-					...(scope.missionId ? { missionId: scope.missionId } : {}),
-					...(scope.stage ? { stage: scope.stage } : {})
-				};
-		}
-	}
-
-	private static requireRecordMissionId(record: AgentExecutionRecord): string {
-		const missionId = record.scope && 'missionId' in record.scope && typeof record.scope.missionId === 'string'
-			? record.scope.missionId.trim()
-			: undefined;
-		if (!missionId) {
-			throw new Error(`AgentExecution '${record.sessionId}' requires daemon-owned Mission context.`);
-		}
-		return missionId;
-	}
-
-	private static async requireDataForLocator(
-		input: { missionId: string; sessionId: string },
+	private static async requireDataForOwner(
+		input: { ownerId: string; sessionId: string },
 		context: EntityExecutionContext
 	): Promise<LocatedAgentExecutionData> {
-		const cacheKey = `${input.missionId}:${input.sessionId}`;
+		const registryData = AgentExecution.readRegistryExecution(input, context);
+		if (registryData) {
+			return { data: registryData, missionDir: context.surfacePath };
+		}
+
+		const cacheKey = `${input.ownerId}:${input.sessionId}`;
 		const cached = agentExecutionDataCache.get(cacheKey);
 		if (cached && Date.now() - cached.timestamp < SESSION_DATA_CACHE_TTL_MS) {
 			return cached.located;
 		}
 
 		const service = await loadMissionRegistry(context);
-		const mission = await service.loadRequiredMission(input, context);
+		const mission = await service.loadRequiredMission({ missionId: input.ownerId }, context);
 		try {
+			const data = AgentExecution.requireData(await mission.buildMissionSnapshot(), input.sessionId);
+			AgentExecution.assertOwnerMatches(input, data);
 			const located = {
-				data: AgentExecution.requireData(await mission.buildMissionSnapshot(), input.sessionId),
+				data,
 				missionDir: mission.getMissionDir()
 			};
 			agentExecutionDataCache.set(cacheKey, { located, timestamp: Date.now() });
@@ -1149,9 +1211,15 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		}
 	}
 
+	private static assertOwnerMatches(input: { ownerId: string; sessionId: string }, data: AgentExecutionDataType): void {
+		if (data.ownerId !== input.ownerId) {
+			throw new Error(`AgentExecution '${input.sessionId}' belongs to owner '${data.ownerId}', not '${input.ownerId}'.`);
+		}
+	}
+
 	private static async readTerminalData(
-		missionDir: string,
-		missionId: string,
+		ownerId: string,
+		missionDir: string | undefined,
 		data: AgentExecutionDataType
 	) {
 		const terminalHandle = AgentExecution.requireTerminalHandle(data);
@@ -1161,7 +1229,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		});
 		let screen = terminalSnapshot.screen;
 		let recording: unknown;
-		if (!terminalSnapshot.connected) {
+		if (!terminalSnapshot.connected && missionDir) {
 			const dossierFilesystem = new MissionDossierFilesystem(Repository.getRepositoryRootFromMissionDir(missionDir));
 			const events = data.sessionLogPath && missionDir
 				? await dossierFilesystem.readMissionSessionLogEvents(missionDir, data.sessionLogPath) ?? []
@@ -1172,7 +1240,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			screen = '';
 		}
 		return AgentExecutionTerminalSnapshotSchema.parse({
-			missionId,
+			ownerId,
 			sessionId: data.sessionId,
 			connected: terminalSnapshot.connected,
 			dead: terminalSnapshot.dead,
@@ -1240,42 +1308,17 @@ function getAgentExecutionEntityScopeId(snapshot: AgentExecutionSnapshot): strin
 	return Repository.slugIdentitySegment(raw) || snapshot.scope.kind;
 }
 
-function toAgentRuntimeScope(snapshot: AgentExecutionSnapshot): MissionAgentScope | undefined {
-	switch (snapshot.scope.kind) {
+function getAgentExecutionOwnerId(scope: AgentExecutionScope): string {
+	switch (scope.kind) {
 		case 'system':
-			return {
-				kind: 'control',
-				workspaceRoot: snapshot.workingDirectory
-			};
+			return scope.label?.trim() || 'system';
 		case 'repository':
-			return {
-				kind: 'control',
-				workspaceRoot: snapshot.scope.repositoryRootPath
-			};
+			return scope.repositoryRootPath;
 		case 'mission':
-			return {
-				kind: 'mission',
-				missionId: snapshot.scope.missionId,
-				...(snapshot.stageId ? { stage: snapshot.stageId } : {})
-			};
 		case 'task':
-			return {
-				kind: 'slice',
-				missionId: snapshot.scope.missionId,
-				...(snapshot.stageId ? { stage: snapshot.stageId } : {}),
-				taskId: snapshot.scope.taskId,
-				sliceTitle: snapshot.taskId ?? snapshot.scope.taskId,
-				verificationTargets: [],
-				requiredSkills: [],
-				dependsOn: []
-			};
+			return scope.missionId;
 		case 'artifact':
-			return {
-				kind: 'artifact',
-				artifactKey: snapshot.scope.artifactId,
-				...(snapshot.scope.missionId ? { missionId: snapshot.scope.missionId } : {}),
-				...(snapshot.stageId ? { stage: snapshot.stageId } : {})
-			};
+			return scope.artifactId;
 	}
 }
 
@@ -1290,6 +1333,26 @@ function buildFreshAgentExecutionId(scope: AgentExecutionScope, agentId: string)
 	return normalizedAgentId
 		? `${normalizedScopeSegment}-${normalizedAgentId}-${suffix}`
 		: `${normalizedScopeSegment}-${suffix}`;
+}
+
+function cloneStructured<T>(input: T): T {
+	return JSON.parse(JSON.stringify(input)) as T;
+}
+
+function cloneChatMessages(messages: AgentExecutionChatMessageType[]): AgentExecutionChatMessageType[] {
+	return messages.map((message) => AgentExecutionChatMessageSchema.parse({
+		...message,
+		...(message.choices ? { choices: cloneInputChoices(message.choices) } : {})
+	}));
+}
+
+function cloneInputChoices(choices: AgentDeclaredSignalInputChoiceType[]): AgentDeclaredSignalInputChoiceType[] {
+	return choices.map((choice) => ({ ...choice }));
+}
+
+function createChatMessageId(sessionId: string, at: string, kind: string, text = ''): string {
+	const normalizedText = Repository.slugIdentitySegment(text).slice(0, 32);
+	return [sessionId, at, kind, normalizedText].filter(Boolean).join(':');
 }
 
 function toRuntimeExecutionEvent(

@@ -60,6 +60,9 @@ export interface MissionWorkflowRequestExecutorOptions {
 	defaultReasoningEffort?: MissionReasoningEffortType;
 	defaultMode?: MissionDefaultAgentModeType;
 	workingDirectoryResolver?: (task: MissionTaskRuntimeState, descriptor: MissionDescriptor) => string;
+	logger?: {
+		debug(message: string, metadata?: Record<string, unknown>): void;
+	};
 }
 
 export class MissionWorkflowRequestExecutor {
@@ -77,7 +80,10 @@ export class MissionWorkflowRequestExecutor {
 		this.defaultModel = options.defaultModel;
 		this.defaultReasoningEffort = options.defaultReasoningEffort;
 		this.defaultMode = options.defaultMode;
-		this.agentExecutor = new AgentExecutor({ agentRegistry: options.agentRegistry });
+		this.agentExecutor = new AgentExecutor({
+			agentRegistry: options.agentRegistry,
+			...(options.logger ? { logger: options.logger } : {})
+		});
 		this.workingDirectoryResolver =
 			options.workingDirectoryResolver ?? ((_task, descriptor) => descriptor.missionDir);
 	}

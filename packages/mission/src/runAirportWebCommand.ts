@@ -23,6 +23,7 @@ export async function runAirportWebCommand(context: EntryContext): Promise<void>
             NODE_ENV: process.env['NODE_ENV']?.trim() || 'production',
             HOST: host,
             PORT: port,
+            ORIGIN: process.env['ORIGIN']?.trim() || url,
             MISSION_SURFACE_PATH: process.env['MISSION_SURFACE_PATH']?.trim() || context.repositoryRootPath,
             MISSION_REPOSITORY_ROOT: context.repositoryRootPath,
             MISSION_ENTRY_CWD: context.workingDirectory

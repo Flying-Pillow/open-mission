@@ -11,6 +11,7 @@ import {
 } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { TaskConfigureCommandOptionsType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import { RepositoryDataSchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import { AgentExecutionDataChangedSchema } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import type { RepositoryPlatformRepositoryType, RepositoryDataType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import { Repository } from '$lib/components/entities/Repository/Repository.svelte.js';
 import {
@@ -214,6 +215,13 @@ export class AirportApplication {
             nextRepositories.set(repository.id, repository);
             return repository;
         });
+
+        if (this.activeRepositoryId && !nextRepositories.has(this.activeRepositoryId)) {
+            this.setActiveRepositorySelection(undefined);
+            this.setActiveMissionSelection(undefined);
+            this.activeMissionState = undefined;
+            this.setActiveMissionSelectedFocusId(undefined);
+        }
 
         this.repositories.clear();
         for (const [repositoryId, repository] of nextRepositories.entries()) {
@@ -498,6 +506,14 @@ export class AirportApplication {
                         void repository.refreshCommands().catch(() => undefined);
                     }
                     void this.loadRepositories({ force: true }).catch(() => undefined);
+                }
+                if (payload.type === 'agentExecution.data.changed') {
+                    const eventPayload = AgentExecutionDataChangedSchema.parse(payload.payload);
+                    const repository = this.activeRepository;
+                    const setupExecution = repository?.setupAgentExecution;
+                    if (setupExecution?.sessionId === eventPayload.data.sessionId) {
+                        repository?.applySetupAgentExecutionData(eventPayload.data);
+                    }
                 }
             } catch {
                 // Ignore malformed application events; request-time reads remain authoritative.

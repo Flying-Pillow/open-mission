@@ -1,6 +1,7 @@
 import type { EntityContractType } from './EntitySchema.js';
 import { Entity, type EntityExecutionContext } from './Entity.js';
 import { MissionRegistry } from '../../daemon/MissionRegistry.js';
+import { getDefaultAgentExecutionRegistry } from '../../daemon/runtime/agent/AgentExecutionRegistry.js';
 import { AgentContract } from '../Agent/AgentContract.js';
 import { AgentExecutionContract } from '../AgentExecution/AgentExecutionContract.js';
 import { ArtifactContract } from '../Artifact/ArtifactContract.js';
@@ -40,6 +41,7 @@ const entityContractsByName = new Map<string, EntityContractType>(
 );
 
 const missionRegistry = new MissionRegistry();
+const agentExecutionRegistry = getDefaultAgentExecutionRegistry();
 const missionOwnedEntities = new Set(['Mission', 'Stage', 'Task', 'Artifact', 'AgentExecution']);
 
 export async function executeEntityQueryInDaemon(
@@ -68,7 +70,10 @@ function withMissionRegistry(context: EntityExecutionContext): EntityExecutionCo
 }
 
 function withEntityServices(entity: string, context: EntityExecutionContext): EntityExecutionContext {
-    return missionOwnedEntities.has(entity) ? withMissionRegistry(context) : context;
+    const scopedContext = entity === 'AgentExecution' || entity === 'Repository'
+        ? { ...context, agentExecutionRegistry: context.agentExecutionRegistry ?? agentExecutionRegistry }
+        : context;
+    return missionOwnedEntities.has(entity) ? withMissionRegistry(scopedContext) : scopedContext;
 }
 
 function resolveEntityContract(entity: string): EntityContractType {

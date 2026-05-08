@@ -24,6 +24,7 @@ import {
 	getDefaultEntityFactory,
 	type EntityFactory
 } from './EntityFactory.js';
+import type { AgentExecutionRegistry } from '../../daemon/runtime/agent/AgentExecutionRegistry.js';
 
 export type {
 	EntityChannelType,
@@ -44,6 +45,7 @@ export type EntityExecutionContext = {
 	missionRegistry?: MissionRegistry;
 	missionService?: unknown;
 	entityFactory?: EntityFactory;
+	agentExecutionRegistry?: AgentExecutionRegistry;
 };
 
 export abstract class Entity<
@@ -93,6 +95,7 @@ export abstract class Entity<
 						...(!availability.available && availability.reason ? { disabledReason: availability.reason } : {}),
 						...(method.ui!.variant ? { variant: method.ui!.variant } : {}),
 						...(method.ui!.icon ? { icon: method.ui!.icon } : {}),
+						...(method.ui!.tone ? { tone: method.ui!.tone } : {}),
 						...(method.ui!.confirmation ? { confirmation: method.ui!.confirmation } : {}),
 						...(method.ui!.input ? { input: method.ui!.input } : {}),
 						...(method.ui!.presentationOrder !== undefined ? { presentationOrder: method.ui!.presentationOrder } : {})

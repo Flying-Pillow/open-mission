@@ -46,6 +46,7 @@ const stage = StageDataSchema.parse({
 
 const agentExecution = AgentExecutionDataSchema.parse({
     id: 'agent_execution:mission-1/session-1',
+    ownerId: 'mission-1',
     sessionId: 'session-1',
     agentId: 'copilot-cli',
     transportId: 'terminal',

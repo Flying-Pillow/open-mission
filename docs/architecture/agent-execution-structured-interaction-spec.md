@@ -14,7 +14,7 @@ It is temporary on purpose. It exists so future implementation sessions can cont
 
 ## Reflection
 
-The task is to implement a clear architecture for how an Agent execution communicates with Mission through the Entity that owns its scope. The current `mission::` marker path is useful source material for parser behavior, validation, and tests.
+The task is to implement a clear architecture for how an Agent execution communicates with Mission through the Entity that owns its scope. The current `@mission::` marker path is useful source material for parser behavior, validation, and tests.
 
 The current code is useful evidence. It has parsers, policy checks, terminal observation, runtime messages, AgentExecution snapshots, and workflow integration. It is not authoritative where it conflicts with ADR-0022 or the OOD Entity model. Any current module that keeps AgentExecutor as the semantic owner of Task, Mission, Repository, or Artifact meaning is implementation material to reshape, not architecture to preserve.
 
@@ -71,11 +71,11 @@ An Agent-declared signal is structured text emitted by the Agent process. The ma
 
 Target marker prefixes:
 
-- `task::` for task-scoped Agent executions
-- `mission::` for mission-scoped Agent executions
-- `repository::` for repository-scoped Agent executions
-- `artifact::` for artifact-scoped Agent executions
-- `system::` for system-scoped Agent executions
+- `@task::` for task-scoped Agent executions
+- `@mission::` for mission-scoped Agent executions
+- `@repository::` for repository-scoped Agent executions
+- `@artifact::` for artifact-scoped Agent executions
+- `@system::` for system-scoped Agent executions
 
 The marker payload is strict JSON. The descriptor defines the accepted payload shapes for that execution.
 
@@ -203,7 +203,7 @@ type AgentExecutionProtocolDescriptor = {
   owner: {
     entity: 'Task' | 'Mission' | 'Repository' | 'Artifact' | 'System';
     entityId: string;
-    markerPrefix: 'task::' | 'mission::' | 'repository::' | 'artifact::' | 'system::';
+    markerPrefix: '@task::' | '@mission::' | '@repository::' | '@artifact::' | '@system::';
   };
   scope: AgentExecutionScope;
   messages: AgentExecutionMessageDescriptor[];
@@ -303,7 +303,7 @@ Move context-changing messages behind daemon-accepted AgentExecution context ope
 
 After the owner-routed descriptor path works, remove or rewrite current code that keeps these responsibilities outside the target owners:
 
-- hard-coded `mission::` launch instruction generation as the universal signal source
+- hard-coded `@mission::` launch instruction generation as the universal signal source
 - signal payload lists duplicated outside descriptors
 - AgentExecutor direct semantic application of scoped observations
 - Mission/task assumptions baked into AgentExecution identity where AgentExecutionScope should carry the owner context
@@ -335,10 +335,10 @@ pnpm --filter @flying-pillow/mission-airport-web build
 
 ## Open Design Questions
 
-1. Should artifact-scoped execution always use `artifact::`, or should task-owned artifact work use `task::` when `taskId` is present?
+1. Should artifact-scoped execution always use `@artifact::`, or should task-owned artifact work use `@task::` when `taskId` is present?
 2. Should owner observation handling be a daemon-internal Entity method first, then promoted to Entity contract only when a client-facing need appears?
 3. Should AgentExecution publish separate events for `progress.changed`, `claim.created`, and `input.requested`, or keep only `data.changed` until Airport needs more specific event channels?
-4. Should `system::` be implemented now, or postponed until a System Entity contract exists?
+4. Should `@system::` be implemented now, or postponed until a System Entity contract exists?
 
 ## Working Implementation Rule
 

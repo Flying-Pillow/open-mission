@@ -96,7 +96,7 @@ export const GET: RequestHandler = async ({ locals, request, url }) => {
                             })));
                         };
                         const applicationSubscription = await gateway.openApplicationEventSubscription({
-                            channels: ['repository:*.*'],
+                            channels: ['repository:*.*', 'agent_execution:*.*'],
                             ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {}),
                             onDisconnect: () => {
                                 if (closed || disposeSubscription !== activeDispose) {

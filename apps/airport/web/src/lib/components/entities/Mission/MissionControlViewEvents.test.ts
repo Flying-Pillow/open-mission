@@ -339,7 +339,7 @@ function createAgentExecutionAcknowledgement(method: AgentExecutionCommandAcknow
         entity: 'AgentExecution',
         method,
         id: 'session-1',
-        missionId: 'mission-29',
+        ownerId: 'mission-29',
         sessionId: 'session-1',
         commandId: AgentExecutionCommandIds.cancel
     };
@@ -450,6 +450,7 @@ function createSessionSnapshot(
 ): AgentExecutionDataType {
     return {
         id: `agent_execution:mission-29/${sessionId}`,
+        ownerId: 'mission-29',
         sessionId,
         agentId: 'copilot-cli',
         adapterLabel: 'Copilot CLI',
@@ -461,6 +462,7 @@ function createSessionSnapshot(
             canSendStructuredCommand: false
         },
         context: { artifacts: [], instructions: [] },
+        chatMessages: [],
         runtimeMessages: [],
         ...overrides
     };

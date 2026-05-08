@@ -114,6 +114,7 @@ describe('Copilot', () => {
 
 	it('starts a PTY-backed session and passes the initial prompt via launch args', async () => {
 		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
 			command: 'copilot',
 			trustedConfigDir,
 			env: { PATH: runtimeDirectory },
@@ -140,9 +141,37 @@ describe('Copilot', () => {
 		expect(state.spawnedArgs).toContain('/tmp/work');
 		expect(state.spawnedArgs).toContain('-i');
 		expect(state.spawnedArgs.some((arg) => arg.includes('Implement the task.'))).toBe(true);
-		expect(state.spawnedArgs.some((arg) => arg.includes('Agent execution structured interaction is mandatory'))).toBe(true);
-		expect(state.spawnedArgs.some((arg) => arg.includes('task::'))).toBe(true);
+		expect(state.spawnedArgs.some((arg) => arg.includes('Structured status markers'))).toBe(true);
+		expect(state.spawnedArgs.some((arg) => arg.includes('@task::'))).toBe(true);
 		expect(state.writes).not.toContain('Implement the task.');
+	});
+
+	it('uses non-interactive print mode by default for direct stdout parsing', async () => {
+		const adapter = createAgentAdapter(createCopilot({
+			command: 'copilot',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
+		}), {});
+
+		const plan = adapter.createLaunchPlan(createLaunchConfig());
+
+		expect(plan.mode).toBe('print');
+		expect(plan.command).toBe('copilot');
+		expect(plan.args).toContain('--allow-all');
+		expect(plan.args).toContain('--no-color');
+		expect(plan.args).toContain('--silent');
+		expect(plan.args).toContain('--output-format');
+		expect(plan.args).toContain('text');
+		expect(plan.args).toContain('--stream');
+		expect(plan.args).toContain('on');
+		expect(plan.args).toContain('--config-dir');
+		expect(plan.args).toContain(trustedConfigDir);
+		expect(plan.args).toContain('--add-dir');
+		expect(plan.args).toContain('/tmp/work');
+		expect(plan.args).toContain('-p');
+		expect(plan.args.some((arg) => arg.includes('Implement the task.'))).toBe(true);
+		expect(plan.args).not.toContain('-i');
 	});
 
 	it('stores trusted folders in settings.json without reading managed config.json', async () => {
@@ -160,6 +189,7 @@ describe('Copilot', () => {
 		);
 
 		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
 			command: 'copilot',
 			trustedConfigDir,
 			env: { PATH: runtimeDirectory },
@@ -179,6 +209,7 @@ describe('Copilot', () => {
 
 	it('derives the session name from the explicit task execution scope on launch', async () => {
 		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
 			command: 'copilot',
 			trustedConfigDir,
 			env: { PATH: runtimeDirectory },
@@ -206,6 +237,7 @@ describe('Copilot', () => {
 
 	it('creates a fresh session id for each new launch of the same task', async () => {
 		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
 			command: 'copilot',
 			trustedConfigDir,
 			env: { PATH: runtimeDirectory },
@@ -220,6 +252,7 @@ describe('Copilot', () => {
 
 	it('submits prompts by sending literal keys into terminal transport', async () => {
 		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
 			command: 'copilot',
 			trustedConfigDir,
 			env: { PATH: runtimeDirectory },
@@ -240,6 +273,7 @@ describe('Copilot', () => {
 
 	it('maps interrupt commands to Ctrl+C and awaiting-input state', async () => {
 		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
 			command: 'copilot',
 			trustedConfigDir,
 			env: { PATH: runtimeDirectory },
@@ -260,6 +294,7 @@ describe('Copilot', () => {
 
 	it('terminates a session through the adapter API', async () => {
 		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
 			command: 'copilot',
 			trustedConfigDir,
 			env: { PATH: runtimeDirectory },
@@ -281,6 +316,7 @@ describe('Copilot', () => {
 		const missionDossierWorkingDirectory = '/tmp/mission-root/.mission/missions/mission-13';
 		const missionRootDirectory = '/tmp/mission-root';
 		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
 			command: 'copilot',
 			trustedConfigDir,
 			env: { PATH: runtimeDirectory },
@@ -307,6 +343,7 @@ describe('Copilot', () => {
 		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-copilot-workspace-'));
 		try {
 			const adapter = createAgentAdapter(createCopilot({
+				launchMode: 'interactive',
 				command: 'copilot',
 				trustedConfigDir,
 				env: { PATH: runtimeDirectory },

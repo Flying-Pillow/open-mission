@@ -14,6 +14,7 @@
     import { TaskDataSchema } from "@flying-pillow/mission-core/entities/Task/TaskSchema";
     import type { AgentExecution as AgentExecutionModel } from "$lib/components/entities/AgentExecution/AgentExecution.svelte.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { setAgentExecutionSurfaceContext } from "$lib/client/context/agent-execution-surface-context.svelte.js";
     import { setScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
     import MissionCockpit from "$lib/components/entities/Mission/MissionCockpit.svelte";
     import MissionCommandbar from "$lib/components/entities/Mission/MissionCommandbar.svelte";
@@ -61,7 +62,16 @@
     }>({
         loading: true,
     });
+    const agentExecutionSurfaceState = $state<{
+        surfaceId?: string;
+        surfacePath?: string;
+        loading: boolean;
+        error?: string | null;
+    }>({ loading: true });
     const missionScope = setScopedMissionContext(missionScopeState);
+    const agentExecutionSurface = setAgentExecutionSurfaceContext(
+        agentExecutionSurfaceState,
+    );
     const activeRepository = $derived(missionScope.repository);
     const activeMission = $derived(missionScope.mission);
     const missionLoading = $derived(missionScope.loading);
@@ -108,6 +118,12 @@
             appContext.airport.activeMissionError ??
             appContext.airport.activeRepositoryError ??
             null;
+        agentExecutionSurface.surfaceId = missionScope.repositoryId;
+        agentExecutionSurface.surfacePath =
+            missionScope.mission?.missionWorktreePath ??
+            missionScope.repository?.data.repositoryRootPath;
+        agentExecutionSurface.loading = missionScope.loading;
+        agentExecutionSurface.error = missionScope.error;
     });
 
     const missionStatus = $derived(missionView?.status);

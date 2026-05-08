@@ -13,6 +13,8 @@ export const baselineAgentDeclaredSignalDescriptors: AgentDeclaredSignalDescript
         type: 'progress',
         label: 'Progress',
         description: 'Reports current Agent execution progress for owner review.',
+        icon: 'lucide:activity',
+        tone: 'progress',
         payloadSchemaKey: 'agent-declared-signal.progress.v1',
         delivery: 'stdout-marker',
         policy: 'progress',
@@ -22,6 +24,8 @@ export const baselineAgentDeclaredSignalDescriptors: AgentDeclaredSignalDescript
         type: 'needs_input',
         label: 'Needs Input',
         description: 'Requests operator or owner input before the Agent execution can continue, with fixed choices or a manual input choice.',
+        icon: 'lucide:message-circle-question',
+        tone: 'attention',
         payloadSchemaKey: 'agent-declared-signal.needs-input.v1',
         delivery: 'stdout-marker',
         policy: 'input-request',
@@ -31,6 +35,8 @@ export const baselineAgentDeclaredSignalDescriptors: AgentDeclaredSignalDescript
         type: 'blocked',
         label: 'Blocked',
         description: 'Declares that the Agent execution is blocked on a specific condition.',
+        icon: 'lucide:octagon-alert',
+        tone: 'danger',
         payloadSchemaKey: 'agent-declared-signal.blocked.v1',
         delivery: 'stdout-marker',
         policy: 'claim',
@@ -40,6 +46,8 @@ export const baselineAgentDeclaredSignalDescriptors: AgentDeclaredSignalDescript
         type: 'ready_for_verification',
         label: 'Ready For Verification',
         description: 'Claims that the owner can begin verification.',
+        icon: 'lucide:badge-check',
+        tone: 'success',
         payloadSchemaKey: 'agent-declared-signal.ready-for-verification.v1',
         delivery: 'stdout-marker',
         policy: 'claim',
@@ -49,6 +57,8 @@ export const baselineAgentDeclaredSignalDescriptors: AgentDeclaredSignalDescript
         type: 'completed_claim',
         label: 'Completed Claim',
         description: 'Claims the scoped work is complete for owner evaluation.',
+        icon: 'lucide:check-check',
+        tone: 'success',
         payloadSchemaKey: 'agent-declared-signal.completed-claim.v1',
         delivery: 'stdout-marker',
         policy: 'claim',
@@ -58,6 +68,8 @@ export const baselineAgentDeclaredSignalDescriptors: AgentDeclaredSignalDescript
         type: 'failed_claim',
         label: 'Failed Claim',
         description: 'Claims the scoped work failed for owner evaluation.',
+        icon: 'lucide:circle-x',
+        tone: 'danger',
         payloadSchemaKey: 'agent-declared-signal.failed-claim.v1',
         delivery: 'stdout-marker',
         policy: 'claim',
@@ -67,6 +79,8 @@ export const baselineAgentDeclaredSignalDescriptors: AgentDeclaredSignalDescript
         type: 'message',
         label: 'Message',
         description: 'Appends an audit-facing Agent execution message.',
+        icon: 'lucide:message-square',
+        tone: 'neutral',
         payloadSchemaKey: 'agent-declared-signal.message.v1',
         delivery: 'stdout-marker',
         policy: 'audit-message',
@@ -95,31 +109,31 @@ export function deriveAgentExecutionProtocolOwner(scope: AgentExecutionScope): A
             return {
                 entity: 'System',
                 entityId: scope.label?.trim() || 'system',
-                markerPrefix: 'system::'
+                markerPrefix: '@system::'
             };
         case 'repository':
             return {
                 entity: 'Repository',
                 entityId: scope.repositoryRootPath,
-                markerPrefix: 'repository::'
+                markerPrefix: '@repository::'
             };
         case 'mission':
             return {
                 entity: 'Mission',
                 entityId: scope.missionId,
-                markerPrefix: 'mission::'
+                markerPrefix: '@mission::'
             };
         case 'task':
             return {
                 entity: 'Task',
                 entityId: scope.taskId,
-                markerPrefix: 'task::'
+                markerPrefix: '@task::'
             };
         case 'artifact':
             return {
                 entity: 'Artifact',
                 entityId: scope.artifactId,
-                markerPrefix: 'artifact::'
+                markerPrefix: '@artifact::'
             };
     }
 }

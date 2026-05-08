@@ -104,7 +104,7 @@ type MissionChildEntityCommandGateway = {
         input?: unknown;
     }): Promise<TaskCommandAcknowledgementType>;
     executeAgentExecutionCommand(input: {
-        missionId: string;
+        ownerId: string;
         sessionId: string;
         commandId: string;
         input?: unknown;
@@ -230,15 +230,15 @@ function createMissionChildEntityCommandGateway(input: MissionGatewayDependencie
                 }
             }));
         },
-        executeAgentExecutionCommand: async ({ missionId, sessionId, commandId, input: commandInput }) => {
-            const normalizedMissionId = requireMissionId(missionId, 'AgentExecution commands require missionId, sessionId, and commandId.');
-            const normalizedSessionId = requireNonEmptyValue(sessionId, 'AgentExecution commands require missionId, sessionId, and commandId.');
-            const normalizedCommandId = requireNonEmptyValue(commandId, 'AgentExecution commands require missionId, sessionId, and commandId.');
+        executeAgentExecutionCommand: async ({ ownerId, sessionId, commandId, input: commandInput }) => {
+            const normalizedOwnerId = requireNonEmptyValue(ownerId, 'AgentExecution commands require ownerId, sessionId, and commandId.');
+            const normalizedSessionId = requireNonEmptyValue(sessionId, 'AgentExecution commands require ownerId, sessionId, and commandId.');
+            const normalizedCommandId = requireNonEmptyValue(commandId, 'AgentExecution commands require ownerId, sessionId, and commandId.');
             return AgentExecutionCommandAcknowledgementSchema.parse(await commandRemote({
                 entity: agentExecutionEntityName,
                 method: 'command',
                 payload: {
-                    ...buildMissionPayload(normalizedMissionId, repositoryRootPath),
+                    ownerId: normalizedOwnerId,
                     sessionId: normalizedSessionId,
                     commandId: normalizedCommandId,
                     ...(commandInput !== undefined ? { input: commandInput } : {})
@@ -575,9 +575,9 @@ export class Mission implements EntityModel<MissionSnapshotType> {
             (sessionSnapshot) => sessionSnapshot.sessionId,
             (sessionSnapshot) => new AgentExecution(sessionSnapshot, {
                 resolveCommands: (sessionId) => this.resolveCommandsForOwner({ entity: 'AgentExecution', sessionId }),
-                executeCommand: async (sessionId, commandId, input) => {
+                executeCommand: async (ownerId, sessionId, commandId, input) => {
                     await this.childCommands.executeAgentExecutionCommand({
-                        missionId: this.missionId,
+                        ownerId,
                         sessionId,
                         commandId,
                         ...(input !== undefined ? { input } : {})

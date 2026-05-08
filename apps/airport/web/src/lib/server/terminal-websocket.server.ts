@@ -12,7 +12,7 @@ import {
     AgentExecutionTerminalSocketClientMessageSchema,
     AgentExecutionTerminalSocketServerMessageSchema,
     AgentExecutionTerminalRouteParamsSchema,
-    AgentExecutionTerminalQuerySchema,
+    AgentExecutionTerminalRouteQuerySchema,
     type AgentExecutionTerminalSnapshotType
 } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import type { IncomingMessage } from 'node:http';
@@ -92,11 +92,11 @@ async function handleTerminalConnection(
     sessionId: string
 ): Promise<void> {
     const requestUrl = new URL(request.url ?? '/', 'http://localhost');
-    const query = AgentExecutionTerminalQuerySchema.extend({
-        repositoryId: AgentExecutionTerminalQuerySchema.shape.missionId.optional(),
-        repositoryRootPath: AgentExecutionTerminalQuerySchema.shape.missionId.optional()
+    const query = AgentExecutionTerminalRouteQuerySchema.extend({
+        repositoryId: AgentExecutionTerminalRouteQuerySchema.shape.ownerId.optional(),
+        repositoryRootPath: AgentExecutionTerminalRouteQuerySchema.shape.ownerId.optional()
     }).parse({
-        missionId: requestUrl.searchParams.get('missionId'),
+        ownerId: requestUrl.searchParams.get('ownerId'),
         repositoryId: requestUrl.searchParams.get('repositoryId') ?? undefined,
         repositoryRootPath: requestUrl.searchParams.get('repositoryRootPath') ?? undefined
     });
@@ -126,7 +126,7 @@ async function handleTerminalConnection(
     const sendSnapshot = (state: AgentExecutionTerminalSnapshotType, type: 'snapshot' | 'disconnected' = 'snapshot') => {
         const terminalScreen = clipTerminalScreen(state.screen);
         const snapshot = AgentExecutionTerminalSnapshotSchema.parse({
-            missionId: query.missionId,
+            ownerId: query.ownerId,
             sessionId,
             connected: state.connected,
             dead: state.dead,
@@ -143,7 +143,7 @@ async function handleTerminalConnection(
 
     const sendOutput = (state: AgentExecutionTerminalSnapshotType) => {
         const output = AgentExecutionTerminalOutputSchema.parse({
-            missionId: query.missionId,
+            ownerId: query.ownerId,
             sessionId,
             chunk: state.chunk ?? '',
             dead: state.dead,
@@ -169,7 +169,7 @@ async function handleTerminalConnection(
                     entity: 'AgentExecution',
                     method: 'sendTerminalInput',
                     payload: {
-                        missionId: query.missionId,
+                        ownerId: query.ownerId,
                         sessionId,
                         data: message.data,
                         ...(message.literal !== undefined ? { literal: message.literal } : {})
@@ -181,7 +181,7 @@ async function handleTerminalConnection(
                 entity: 'AgentExecution',
                 method: 'sendTerminalInput',
                 payload: {
-                    missionId: query.missionId,
+                    ownerId: query.ownerId,
                     sessionId,
                     cols: message.cols,
                     rows: message.rows
@@ -212,7 +212,7 @@ async function handleTerminalConnection(
             ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {})
         });
         await daemon.client.request<null>('event.subscribe', {
-            channels: [`agent_execution:${query.missionId}/${sessionId}.terminal`]
+            channels: [`agent_execution:${query.ownerId}/${sessionId}.terminal`]
         }, {
             timeoutMs: TERMINAL_SUBSCRIPTION_TIMEOUT_MS
         });
@@ -221,7 +221,7 @@ async function handleTerminalConnection(
             entity: 'AgentExecution',
             method: 'readTerminal',
             payload: {
-                missionId: query.missionId,
+                ownerId: query.ownerId,
                 sessionId
             }
         }, {
@@ -236,7 +236,7 @@ async function handleTerminalConnection(
         }
 
         subscription = daemon.client.onDidEvent((event: DaemonNotification) => {
-            if (event.type !== 'execution.terminal' || event.missionId !== query.missionId || event.entityId !== `agent_execution:${query.missionId}/${sessionId}`) {
+            if (event.type !== 'execution.terminal' || event.entityId !== `agent_execution:${query.ownerId}/${sessionId}`) {
                 return;
             }
 
@@ -247,7 +247,7 @@ async function handleTerminalConnection(
                         entity: 'AgentExecution',
                         method: 'readTerminal',
                         payload: {
-                            missionId: query.missionId,
+                            ownerId: query.ownerId,
                             sessionId
                         }
                     }));

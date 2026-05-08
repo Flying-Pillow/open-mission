@@ -112,7 +112,9 @@ export class MissionDossierFilesystem {
 	}
 
 	public getMissionsPath(): string {
-		const missionsRoot = Repository.readSettingsDocument(this.workspaceRoot)?.missionsRoot;
+		const missionsRoot = Repository.readSettingsDocument(this.workspaceRoot, {
+			invalidDocument: 'missing'
+		})?.missionsRoot;
 		return Repository.getMissionWorktreesPath(
 			this.workspaceRoot,
 			missionsRoot ? { missionsRoot } : {}

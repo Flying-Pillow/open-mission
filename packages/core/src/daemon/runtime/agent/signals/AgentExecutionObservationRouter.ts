@@ -36,6 +36,12 @@ const PROGRESS_PATTERNS = [
 	/\bprocessing\b/i
 ];
 
+type AgentExecutionObservationDebugLogger = {
+	debug(message: string, metadata?: Record<string, unknown>): void;
+};
+
+type TerminalHeuristicKind = 'progress' | 'needs_input' | 'blocked';
+
 export type AgentExecutionObservationInput =
 	| {
 		kind: 'provider-output';
@@ -60,6 +66,18 @@ export type AgentExecutionObservationInput =
 	};
 
 export class AgentExecutionObservationRouter {
+	private readonly logger: AgentExecutionObservationDebugLogger | undefined;
+
+	public constructor(options: { logger?: AgentExecutionObservationDebugLogger } = {}) {
+		this.logger = options.logger;
+		this.logger?.debug('Agent execution observation patterns active.', {
+			markerPrefixes: AgentExecutionOwnerMarkerPrefixSchema.options,
+			needsInputPatterns: NEEDS_INPUT_PATTERNS.map((pattern) => pattern.source),
+			blockedPatterns: BLOCKED_PATTERNS.map((pattern) => pattern.source),
+			progressPatterns: PROGRESS_PATTERNS.map((pattern) => pattern.source)
+		});
+	}
+
 	public route(input: AgentExecutionObservationInput): AgentExecutionObservation[] {
 		const observedAt = input.observedAt ?? new Date().toISOString();
 		if (input.kind === 'provider-output') {
@@ -104,7 +122,14 @@ export class AgentExecutionObservationRouter {
 		if (!trimmed) {
 			return [];
 		}
-		if (NEEDS_INPUT_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+		const needsInputPattern = NEEDS_INPUT_PATTERNS.find((pattern) => pattern.test(trimmed));
+		if (needsInputPattern) {
+			this.logTerminalHeuristicPatternMatch({
+				pattern: needsInputPattern,
+				line: trimmed,
+				channel,
+				heuristic: 'needs_input'
+			});
 			return [this.createTerminalHeuristicDiagnostic({
 				dedupeKey: `heuristic-needs-input:${trimmed.toLowerCase()}`,
 				line,
@@ -113,7 +138,14 @@ export class AgentExecutionObservationRouter {
 				summary: 'Terminal output suggested the agent is waiting for operator input.'
 			})];
 		}
-		if (BLOCKED_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+		const blockedPattern = BLOCKED_PATTERNS.find((pattern) => pattern.test(trimmed));
+		if (blockedPattern) {
+			this.logTerminalHeuristicPatternMatch({
+				pattern: blockedPattern,
+				line: trimmed,
+				channel,
+				heuristic: 'blocked'
+			});
 			return [this.createTerminalHeuristicDiagnostic({
 				dedupeKey: `heuristic-blocked:${trimmed.toLowerCase()}`,
 				line,
@@ -122,7 +154,14 @@ export class AgentExecutionObservationRouter {
 				summary: 'Terminal output suggested the agent is blocked.'
 			})];
 		}
-		if (PROGRESS_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+		const progressPattern = PROGRESS_PATTERNS.find((pattern) => pattern.test(trimmed));
+		if (progressPattern) {
+			this.logTerminalHeuristicPatternMatch({
+				pattern: progressPattern,
+				line: trimmed,
+				channel,
+				heuristic: 'progress'
+			});
 			return [this.createTerminalHeuristicDiagnostic({
 				dedupeKey: `heuristic-progress:${trimmed.toLowerCase()}`,
 				line,
@@ -132,6 +171,20 @@ export class AgentExecutionObservationRouter {
 			})];
 		}
 		return [];
+	}
+
+	private logTerminalHeuristicPatternMatch(input: {
+		pattern: RegExp;
+		line: string;
+		channel: 'stdout' | 'stderr';
+		heuristic: TerminalHeuristicKind;
+	}): void {
+		this.logger?.debug('Agent execution terminal heuristic pattern matched.', {
+			heuristic: input.heuristic,
+			channel: input.channel,
+			pattern: input.pattern.source,
+			line: toBoundedSignalText(input.line)
+		});
 	}
 
 	private parseAgentDeclaredSignals(
@@ -201,7 +254,7 @@ export class AgentExecutionObservationRouter {
 		dedupeKey: string;
 		line: string;
 		channel: 'stdout' | 'stderr';
-		heuristic: 'progress' | 'needs_input' | 'blocked';
+		heuristic: TerminalHeuristicKind;
 		summary: string;
 	}): AgentExecutionSignalCandidate {
 		return {

@@ -96,6 +96,30 @@ describe('MissionDossierFilesystem', () => {
 		}
 	});
 
+	it('uses default mission worktree root while Repository settings are in setup-recoverable invalid state', async () => {
+		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-invalid-settings-'));
+		try {
+			git(workspaceRoot, ['init']);
+			git(workspaceRoot, ['remote', 'add', 'origin', 'git@github.com:Flying-Pillow/connect-four.git']);
+			await fs.mkdir(path.join(workspaceRoot, '.mission'), { recursive: true });
+			await fs.writeFile(path.join(workspaceRoot, '.mission', 'settings.json'), JSON.stringify({
+				missionsRoot: path.join(workspaceRoot, 'legacy-worktrees'),
+				trackingProvider: 'github',
+				instructionsPath: '.agents',
+				skillsPath: '.agents/skills',
+				agentRunner: 'copilot-cli'
+			}), 'utf8');
+
+			const adapter = new MissionDossierFilesystem(workspaceRoot);
+			expect(adapter.getMissionWorktreePath('mission-101')).toBe(
+				path.join(Repository.resolveMissionsRoot(), 'Flying-Pillow', 'connect-four', 'mission-101')
+			);
+			await expect(adapter.listMissions()).resolves.toEqual([]);
+		} finally {
+			await fs.rm(workspaceRoot, { recursive: true, force: true });
+		}
+	});
+
 	it('rematerializes a missing but still registered Mission worktree', async () => {
 		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-stale-worktree-'));
 		const worktreePath = path.join(workspaceRoot, '..', 'mission-worktree');

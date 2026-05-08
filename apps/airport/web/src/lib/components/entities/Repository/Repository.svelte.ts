@@ -1,11 +1,14 @@
 // /apps/airport/web/src/lib/components/entities/Repository/Repository.svelte.ts: OO browser entity for repository data with remote issue and mission commands.
 import type { MissionCatalogEntryType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
+import { AgentExecutionDataSchema, type AgentExecutionDataType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import { RepositoryDataSchema, RepositoryIssueDetailSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformRepositorySchema, RepositorySetupResultSchema, RepositorySyncStatusSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import type { RepositoryDataType, RepositoryIssueDetailType, RepositorySetupResultType, RepositorySettingsType, RepositorySyncStatusType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import { z } from 'zod/v4';
 import { getApp } from '$lib/client/globals';
+import { cmd } from '../../../../routes/api/entities/remote/command.remote';
 import { qry } from '../../../../routes/api/entities/remote/query.remote';
+import { AgentExecution } from '$lib/components/entities/AgentExecution/AgentExecution.svelte.js';
 import { Entity } from '$lib/components/entities/shared/Entity.svelte.js';
 
 export type RepositoryDataLoader = (input: {
@@ -18,6 +21,8 @@ export class Repository extends Entity<RepositoryDataType> {
     private readonly loadData: RepositoryDataLoader;
     private commandDescriptors = $state<EntityCommandDescriptorType[]>([]);
     private syncStatusValue = $state<RepositorySyncStatusType | undefined>();
+    private setupAgentExecutionValue = $state<AgentExecutionDataType | undefined>();
+    private setupAgentExecutionEntity = $state<AgentExecution | undefined>();
     public missions = $state<MissionCatalogEntryType[]>([]);
 
     public constructor(
@@ -50,6 +55,10 @@ export class Repository extends Entity<RepositoryDataType> {
     public get syncStatus(): RepositorySyncStatusType | undefined {
         const status = $state.snapshot(this.syncStatusValue);
         return status ? structuredClone(status) : undefined;
+    }
+
+    public get setupAgentExecution(): AgentExecution | undefined {
+        return this.setupAgentExecutionEntity;
     }
 
     protected get entityLocator(): Record<string, unknown> {
@@ -190,6 +199,81 @@ export class Repository extends Entity<RepositoryDataType> {
         await this.refresh();
         await this.refreshCommands();
         return result;
+    }
+
+    public async ensureSetupAgentExecution(): Promise<AgentExecutionDataType> {
+        const result = AgentExecutionDataSchema.parse(await this.executeCommand(
+            this.commandIdFor('ensureSetupAgentExecution')
+        ));
+        return this.updateSetupAgentExecution(result);
+    }
+
+    public async commandSetupAgentExecution(input: {
+        ownerId: string;
+        sessionId: string;
+        commandId: string;
+        input?: unknown;
+    }): Promise<AgentExecutionDataType> {
+        await cmd({
+            entity: 'AgentExecution',
+            method: 'command',
+            payload: {
+                ownerId: input.ownerId,
+                sessionId: input.sessionId,
+                commandId: input.commandId,
+                ...(input.input !== undefined ? { input: input.input } : {})
+            }
+        });
+        return this.updateSetupAgentExecution(AgentExecutionDataSchema.parse(await qry({
+            entity: 'AgentExecution',
+            method: 'read',
+            payload: {
+                ownerId: input.ownerId,
+                sessionId: input.sessionId
+            }
+        }).run()));
+    }
+
+    public async refreshSetupAgentExecution(): Promise<AgentExecutionDataType | undefined> {
+        const execution = this.setupAgentExecutionEntity;
+        if (!execution) {
+            return undefined;
+        }
+
+        return this.updateSetupAgentExecution(AgentExecutionDataSchema.parse(await qry({
+            entity: 'AgentExecution',
+            method: 'read',
+            payload: {
+                ownerId: execution.ownerId,
+                sessionId: execution.sessionId
+            }
+        }).run()));
+    }
+
+    public applySetupAgentExecutionData(data: AgentExecutionDataType): void {
+        this.updateSetupAgentExecution(data);
+    }
+
+    private updateSetupAgentExecution(data: AgentExecutionDataType): AgentExecutionDataType {
+        const nextData = AgentExecutionDataSchema.parse(data);
+        this.setupAgentExecutionValue = nextData;
+        if (this.setupAgentExecutionEntity?.sessionId === nextData.sessionId) {
+            this.setupAgentExecutionEntity.updateFromData(nextData);
+            return nextData;
+        }
+
+        this.setupAgentExecutionEntity = new AgentExecution(nextData, {
+            resolveCommands: () => [],
+            executeCommand: async (ownerId, sessionId, commandId, input) => {
+                await this.commandSetupAgentExecution({
+                    ownerId,
+                    sessionId,
+                    commandId,
+                    ...(input !== undefined ? { input } : {})
+                });
+            }
+        });
+        return nextData;
     }
 
     public async startMissionFromBrief(input: {

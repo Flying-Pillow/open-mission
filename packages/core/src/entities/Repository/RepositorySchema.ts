@@ -277,6 +277,8 @@ export const RepositorySetupSchema = RepositoryLocatorSchema.extend({
     settings: RepositorySettingsSchema
 }).strict();
 
+export const RepositoryPrepareSchema = RepositoryLocatorSchema;
+
 export const TrackedIssueSummarySchema = z.object({
     number: z.number().int().positive(),
     title: z.string().trim().min(1),
@@ -338,6 +340,16 @@ export const RepositorySetupResultSchema = EntityCommandAcknowledgementSchema.ex
     autoMergeError: z.string().trim().min(1).optional()
 }).strict();
 
+export const RepositoryPrepareResultSchema = EntityCommandAcknowledgementSchema.extend({
+    entity: z.literal(repositoryEntityName),
+    method: z.literal('prepare'),
+    id: z.string().trim().min(1),
+    state: z.enum(['prepared', 'already-prepared', 'skipped-invalid-settings']),
+    settingsPath: z.string().trim().min(1).optional(),
+    defaultAgentAdapter: AgentIdSchema.optional(),
+    enabledAgentAdapters: z.array(AgentIdSchema)
+}).strict();
+
 export type RepositoryInputType = z.infer<typeof RepositoryInputSchema>;
 export type RepositoryStorageType = z.infer<typeof RepositoryStorageSchema>;
 export type RepositoryPlatformKindType = z.infer<typeof RepositoryPlatformKindSchema>;
@@ -355,6 +367,7 @@ export type RepositorySyncCommandAcknowledgementType = z.infer<typeof Repository
 export type RepositoryStartMissionFromIssueType = z.infer<typeof RepositoryStartMissionFromIssueSchema>;
 export type RepositoryStartMissionFromBriefType = z.infer<typeof RepositoryStartMissionFromBriefSchema>;
 export type RepositorySetupType = z.infer<typeof RepositorySetupSchema>;
+export type RepositoryPrepareType = z.infer<typeof RepositoryPrepareSchema>;
 export type RepositoryOperationalModeType = z.infer<typeof RepositoryOperationalModeSchema>;
 export type RepositoryInvalidStateType = z.infer<typeof RepositoryInvalidStateSchema>;
 export type RepositoryDataType = z.infer<typeof RepositoryDataSchema>;
@@ -363,6 +376,7 @@ export type TrackedIssueSummaryType = z.infer<typeof TrackedIssueSummarySchema>;
 export type RepositoryMissionStartAcknowledgementType = z.infer<typeof RepositoryMissionStartAcknowledgementSchema>;
 export type RepositoryRemoveAcknowledgementType = z.infer<typeof RepositoryRemoveAcknowledgementSchema>;
 export type RepositorySetupResultType = z.infer<typeof RepositorySetupResultSchema>;
+export type RepositoryPrepareResultType = z.infer<typeof RepositoryPrepareResultSchema>;
 export type RepositorySettingsType = z.infer<typeof RepositorySettingsSchema>;
 
 export function createDefaultRepositoryConfiguration(): Pick<RepositoryStorageType, 'settings' | 'workflowConfiguration' | 'isInitialized'> {

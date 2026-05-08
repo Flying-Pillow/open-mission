@@ -23,7 +23,7 @@ export type TerminalLease = {
 export type TerminalOwner =
     | { kind: 'mission'; missionId: string }
     | { kind: 'task'; missionId?: string; taskId: string }
-    | { kind: 'agent-execution'; missionId?: string; taskId?: string; agentExecutionId: string }
+    | { kind: 'agent-execution'; ownerId: string; agentExecutionId: string }
     | { kind: 'repository'; repositoryRootPath: string }
     | { kind: 'system'; label?: string };
 
@@ -392,6 +392,13 @@ export class TerminalRegistry {
                 this.recordingListeners.delete(listener);
             }
         };
+    }
+
+    public async dispose(): Promise<void> {
+        await Promise.all([...this.terminals.values()].map((terminal) => this.terminateTerminal(terminal)));
+        this.terminals.clear();
+        this.listeners.clear();
+        this.recordingListeners.clear();
     }
 
     private emit(event: TerminalUpdate): void {

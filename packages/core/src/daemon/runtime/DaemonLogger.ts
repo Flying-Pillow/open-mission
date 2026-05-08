@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { getDaemonLogPath } from '../daemonPaths.js';
 
-export type DaemonLogLevel = 'info' | 'warn' | 'error';
+export type DaemonLogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export type DaemonLogEntry = {
     timestamp: string;
@@ -15,6 +15,10 @@ export class DaemonLogger {
     private queue: Promise<void> = Promise.resolve();
 
     public constructor(private readonly logPath = getDaemonLogPath()) { }
+
+    public debug(message: string, metadata?: Record<string, unknown>): void {
+        this.write('debug', message, metadata);
+    }
 
     public info(message: string, metadata?: Record<string, unknown>): void {
         this.write('info', message, metadata);

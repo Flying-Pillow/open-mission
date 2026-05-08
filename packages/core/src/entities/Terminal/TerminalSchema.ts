@@ -38,8 +38,7 @@ export const TerminalOwnerSchema = z.discriminatedUnion('kind', [
     }).strict(),
     z.object({
         kind: z.literal('agent-execution'),
-        missionId: z.string().trim().min(1).optional(),
-        taskId: z.string().trim().min(1).optional(),
+        ownerId: z.string().trim().min(1),
         agentExecutionId: z.string().trim().min(1)
     }).strict(),
     z.object({

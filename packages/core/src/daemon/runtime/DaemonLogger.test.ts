@@ -20,13 +20,15 @@ describe('DaemonLogger', () => {
         const logPath = path.join(root, 'daemon.log');
         const logger = new DaemonLogger(logPath);
 
+        logger.debug('Mission daemon debug detail.', { source: 'test' });
         logger.info('Mission daemon started.', { pid: 123 });
         logger.warn('Mission hydration skipped invalid mission.', { missionId: 'mission-bad' });
         await logger.flush();
 
         const lines = (await fs.readFile(logPath, 'utf8')).trim().split(/\r?\n/u);
-        expect(lines).toHaveLength(2);
-        expect(lines[0]).toMatch(/^\[.+\] INFO Mission daemon started\. \{"pid":123\}$/u);
-        expect(lines[1]).toMatch(/^\[.+\] WARN Mission hydration skipped invalid mission\. \{"missionId":"mission-bad"\}$/u);
+        expect(lines).toHaveLength(3);
+        expect(lines[0]).toMatch(/^\[.+\] DEBUG Mission daemon debug detail\. \{"source":"test"\}$/u);
+        expect(lines[1]).toMatch(/^\[.+\] INFO Mission daemon started\. \{"pid":123\}$/u);
+        expect(lines[2]).toMatch(/^\[.+\] WARN Mission hydration skipped invalid mission\. \{"missionId":"mission-bad"\}$/u);
     });
 });

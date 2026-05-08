@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { Repository } from './Repository.js';
 import { createDefaultRepositorySettings, RepositoryDataSchema } from './RepositorySchema.js';
+import { AgentExecutionDataSchema } from '../AgentExecution/AgentExecutionSchema.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
 import type { EntityExecutionContext } from '../Entity/Entity.js';
 import { MissionDossierFilesystem } from '../Mission/MissionDossierFilesystem.js';
@@ -91,7 +92,6 @@ describe('Repository', () => {
     it('starts a mission when repo-native setup exists but persisted Entity state is stale', async () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-start-stale-'));
         const repositoryRootPath = path.join(tempRoot, 'example');
-        const settingsPath = path.join(repositoryRootPath, '.mission', 'settings.json');
         const repository = Repository.create({
             repositoryRootPath,
             platformRepositoryRef: 'Flying-Pillow/example',
@@ -126,8 +126,9 @@ describe('Repository', () => {
             });
 
         try {
-            await fsp.mkdir(path.dirname(settingsPath), { recursive: true });
-            await fsp.writeFile(settingsPath, JSON.stringify(createDefaultRepositorySettings()), 'utf8');
+            await Repository.initializeScaffolding(repositoryRootPath, {
+                settings: createDefaultRepositorySettings()
+            });
 
             await expect(repository.startMissionFromIssue({
                 id: repository.id,
@@ -146,6 +147,144 @@ describe('Repository', () => {
         } finally {
             requireRepositoryPlatformAdapterSpy.mockRestore();
             prepareMissionSpy.mockRestore();
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('treats an invalid legacy settings document as Repository setup state', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-legacy-settings-'));
+        const repositoryRootPath = path.join(tempRoot, 'example');
+        const settingsPath = path.join(repositoryRootPath, '.mission', 'settings.json');
+        const repository = Repository.create({
+            repositoryRootPath,
+            platformRepositoryRef: 'Flying-Pillow/example'
+        });
+
+        try {
+            await fsp.mkdir(path.dirname(settingsPath), { recursive: true });
+            await fsp.writeFile(settingsPath, JSON.stringify({
+                missionsRoot: path.join(repositoryRootPath, 'mission-worktrees'),
+                trackingProvider: 'github',
+                instructionsPath: '.agents',
+                skillsPath: '.agents/skills',
+                agentRunner: 'copilot-cli'
+            }), 'utf8');
+
+            const data = await repository.read({
+                id: repository.id,
+                repositoryRootPath
+            });
+
+            expect(data.operationalMode).toBe('setup');
+            expect(data.invalidState).toBeUndefined();
+            expect(data.isInitialized).toBe(false);
+            expect(repository.canSetup()).toEqual({ available: true });
+        } finally {
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('prepares settings after clone without completing Repository setup', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-prepare-'));
+        const repositoryRootPath = path.join(tempRoot, 'example');
+
+        try {
+            git(tempRoot, ['init', repositoryRootPath]);
+            const repository = Repository.create({
+                repositoryRootPath,
+                platformRepositoryRef: 'Flying-Pillow/example'
+            });
+
+            const result = await repository.prepare({
+                id: repository.id,
+                repositoryRootPath
+            });
+            const settings = Repository.requireSettingsDocument(repositoryRootPath, {
+                resolveWorkspaceRoot: false
+            });
+            const data = await repository.read({
+                id: repository.id,
+                repositoryRootPath
+            });
+
+            expect(result).toMatchObject({
+                ok: true,
+                entity: 'Repository',
+                method: 'prepare',
+                id: repository.id,
+                state: 'prepared',
+                defaultAgentAdapter: settings.agentAdapter
+            });
+            expect(result.enabledAgentAdapters).toEqual(settings.agentAdapters.map((adapter) => adapter.id));
+            expect(settings.agentAdapter).toBeTruthy();
+            expect(await exists(Repository.getMissionWorkflowDefinitionPath(repositoryRootPath))).toBe(false);
+            expect(data.operationalMode).toBe('setup');
+            expect(data.isInitialized).toBe(false);
+        } finally {
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('ensures setup AgentExecution for an initialized Repository', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-setup-agent-'));
+        const repositoryRootPath = path.join(tempRoot, 'example');
+        const settings = createDefaultRepositorySettings();
+        const execution = AgentExecutionDataSchema.parse({
+            id: 'agent_execution:setup-test',
+            ownerId: repositoryRootPath,
+            sessionId: 'setup-test',
+            agentId: settings.agentAdapter,
+            adapterLabel: 'Test Agent',
+            lifecycleState: 'running',
+            interactionCapabilities: {
+                mode: 'agent-message',
+                canSendTerminalInput: false,
+                canSendStructuredPrompt: true,
+                canSendStructuredCommand: true
+            },
+            context: {
+                artifacts: [],
+                instructions: []
+            },
+            runtimeMessages: [],
+            scope: {
+                kind: 'repository',
+                repositoryRootPath
+            }
+        });
+        const ensureExecution = vi.fn().mockResolvedValue(execution);
+
+        try {
+            git(tempRoot, ['init', repositoryRootPath]);
+            await Repository.initializeScaffolding(repositoryRootPath, { settings });
+            const repository = Repository.create({
+                repositoryRootPath,
+                platformRepositoryRef: 'Flying-Pillow/example',
+                settings,
+                isInitialized: true
+            });
+
+            const result = await repository.ensureSetupAgentExecution({
+                id: repository.id,
+                repositoryRootPath
+            }, {
+                surfacePath: repositoryRootPath,
+                agentExecutionRegistry: { ensureExecution }
+            } as unknown as EntityExecutionContext);
+
+            expect(result).toEqual(execution);
+            expect(ensureExecution).toHaveBeenCalledWith(expect.objectContaining({
+                ownerKey: `Repository.setup:${repositoryRootPath}`,
+                config: expect.objectContaining({
+                    requestedAdapterId: settings.agentAdapter,
+                    workingDirectory: repositoryRootPath,
+                    scope: {
+                        kind: 'repository',
+                        repositoryRootPath
+                    }
+                })
+            }));
+        } finally {
             await fsp.rm(tempRoot, { recursive: true, force: true });
         }
     });
@@ -384,7 +523,7 @@ describe('Repository', () => {
             expect(view.commands).toEqual([
                 expect.objectContaining({
                     commandId: 'repository.add',
-                    label: 'Clone Repository',
+                    label: 'Clone',
                     disabled: true,
                     disabledReason: `Repository 'Flying-Pillow/already-cloned' is already checked out at '${repositoryRootPath}'.`
                 })
@@ -431,7 +570,7 @@ describe('Repository', () => {
             disabled: false,
             confirmation: {
                 required: true,
-                prompt: 'Remove this Repository from Mission and delete its Repository root from disk? This cannot be undone.'
+                prompt: 'Remove this repository from Mission and delete its files from this computer? This cannot be undone.'
             }
         });
         expect(view.commands.find((command) => command.commandId === 'repository.fetchExternalState')).toMatchObject({
@@ -477,7 +616,16 @@ describe('Repository', () => {
             })).resolves.toMatchObject({
                 branchRef: 'main',
                 worktree: { clean: true },
-                external: { status: 'behind', aheadCount: 0, behindCount: 1 }
+                external: { status: 'up-to-date', aheadCount: 0, behindCount: 0 }
+            });
+
+            const commandsBeforeFetch = await repository.commands({
+                id: repository.id,
+                repositoryRootPath: repository.repositoryRootPath
+            });
+            expect(commandsBeforeFetch.commands.find((command) => command.commandId === 'repository.fastForwardFromExternal')).toMatchObject({
+                disabled: true,
+                disabledReason: 'Repository is already up to date with its external tracking branch.'
             });
 
             await expect(repository.fetchExternalState({
@@ -607,4 +755,11 @@ function git(cwd: string, args: string[]): string {
         throw new Error([result.stdout, result.stderr].filter(Boolean).join('\n'));
     }
     return result.stdout.trim();
+}
+
+async function exists(filePath: string): Promise<boolean> {
+    return fsp.access(filePath).then(
+        () => true,
+        () => false
+    );
 }

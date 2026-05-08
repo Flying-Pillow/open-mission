@@ -26,7 +26,7 @@ An **Agent execution message** is structured daemon-to-AgentExecution input. It 
 
 An **Agent execution message descriptor** describes one daemon-to-AgentExecution message that is available for a specific execution. It names the message type, label, input shape, delivery behavior, and context effect so Airport and daemon modules can present and send messages from the same source of truth.
 
-An **Agent-declared signal** is structured text emitted by the Agent process to the Entity that owns the execution scope. The signal marker prefix is derived from the owning Entity, such as `task::`, `mission::`, `repository::`, or `artifact::`, followed by strict JSON on the same line. The current `mission::` marker is the first implementation of this owner-addressed pattern for Mission/task work and should converge into the owner-derived prefix model as scope support broadens.
+An **Agent-declared signal** is structured text emitted by the Agent process to the Entity that owns the execution scope. The signal marker prefix is derived from the owning Entity, such as `@task::`, `@mission::`, `@repository::`, or `@artifact::`, followed by strict JSON on the same line. The current `@mission::` marker is the first implementation of this owner-addressed pattern for Mission/task work and should converge into the owner-derived prefix model as scope support broadens.
 
 An **Agent-declared signal descriptor** describes one structured signal payload that the owning Entity accepts for a specific Agent execution. It names the marker prefix, signal type, payload shape, validation limits, policy behavior, and possible accepted outcomes.
 
@@ -62,7 +62,11 @@ AgentExecutionScope
 
 For task-scoped executions, the immediate owning Entity is the Task, while the Running Mission aggregate remains the delegate for workflow state changes. For mission-scoped executions, the owning Entity is Mission. For repository-scoped executions, the owning Entity is Repository. For artifact-scoped executions, the owning Entity is Artifact, with optional Mission or Task context carried by scope data when present.
 
-AgentExecutor is the daemon runtime orchestrator for launch, terminal attachment, provider output parsing, and observation routing. Scoped meaning belongs to the owning Entity. When an observation can affect scoped behavior, AgentExecutor routes the observation to the owning Entity path and applies the accepted result from that Entity path.
+AgentExecutor is the daemon runtime orchestrator and manager for launch, terminal attachment, provider output parsing, and observation routing. AgentExecutionRegistry is only the daemon collection and lookup boundary for active AgentExecution Entity instances. Scoped meaning belongs to the owning Entity. When an observation can affect scoped behavior, AgentExecutor routes the observation to the owning Entity path and applies the accepted result from that Entity path.
+
+Owning Entities may expose commands that start, ensure, or select an AgentExecution for their scope. Those commands return an AgentExecution reference or schema-validated AgentExecution data, but the ongoing structured interaction remains AgentExecution-addressed. Repository setup, Mission work, Task work, and Artifact work must not each invent duplicate `sendPrompt`, `sendRuntimeMessage`, `cancel`, or `complete` owner commands for their child executions.
+
+The implementation must not add owner-specific AgentExecution classes such as RepositoryAgentExecution, MissionAgentExecution, TaskAgentExecution, or ArtifactAgentExecution. Scope is data on AgentExecution, not a reason to create another execution model. Owner Entities may store workflow references to AgentExecution ids when their own state needs to remember participation, but the executable interaction state remains the single AgentExecution Entity state.
 
 ## Mapping Rules
 
@@ -96,6 +100,11 @@ Entity events publish accepted facts. Owning Entity methods and policies validat
 - Agent launch instructions are generated from Agent execution protocol descriptors.
 - AgentExecution exposes both message descriptors and signal descriptors in its protocol snapshot or data model.
 - AgentExecutor routes accepted observations through owner-Entity resolution.
+- AgentExecutionRegistry indexes active AgentExecution instances by AgentExecution id and owner-derived key. It must not duplicate AgentExecutor lifecycle management or become an owner-specific session controller.
+- AgentExecution command, query, terminal snapshot, and terminal input locators use `ownerId` plus `sessionId`. Scope-specific fields such as Mission id, task id, artifact id, and repository root path stay inside `AgentExecutionScope`; they must not leak into owner-specific AgentExecution locator branches.
+- AgentExecution launch requests carry `workingDirectory` separately from `ownerId`. Repository-owned executions start in the repository root; Mission/task executions start in the launch-selected Mission worktree or other explicit working directory. Terminal interaction after launch addresses the execution by `ownerId` and `sessionId`, not by recomputing a process location.
+- Owner Entities may initiate scoped Agent executions, but they do not persist full AgentExecution data inside their own Entity data schemas unless a separate ADR explicitly makes that Entity the durable owner of that child record. Runtime attachment is represented by AgentExecution scope and daemon runtime lookup, not by owner-specific session maps.
+- Owner-specific AgentExecution wrapper classes and owner-specific execution record models are forbidden. They multiply layers for every future owner and obscure the single AgentExecution contract.
 - The Agent signal parser remains strict and deterministic. Domain acceptance happens in the owning Entity path.
 - The word `command` names Entity commands and intentional daemon/operator-to-AgentExecution command messages. Agent-authored stdout markers are signals, observations, or claims.
 - The word `event` names accepted daemon-published facts. Raw Agent stdout becomes an event only after daemon code accepts and publishes it as one.

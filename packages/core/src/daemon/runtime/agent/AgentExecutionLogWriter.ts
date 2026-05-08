@@ -234,7 +234,7 @@ export class AgentExecutionLogWriter {
             type: 'header',
             version: 1,
             kind: 'agent-execution-terminal-recording',
-            missionId: this.missionId,
+            ownerId: this.missionId,
             sessionId: execution.sessionId,
             terminalName: execution.terminalHandle?.terminalName ?? execution.sessionId,
             cols: terminalSnapshot?.cols ?? 120,

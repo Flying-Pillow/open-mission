@@ -6,6 +6,8 @@ import * as path from 'node:path';
 import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import { EntityClassCommandViewSchema, EntityCommandViewSchema, type EntityClassCommandViewType, type EntityCommandViewType } from '../Entity/EntitySchema.js';
 import { AgentRegistry } from '../Agent/AgentRegistry.js';
+import { getDefaultAgentExecutionRegistry } from '../../daemon/runtime/agent/AgentExecutionRegistry.js';
+import type { AgentExecutionDataType } from '../AgentExecution/AgentExecutionSchema.js';
 import type { Mission, MissionWorkflowBindings } from '../Mission/Mission.js';
 import {
 	getMissionGitHubCliBinary,
@@ -40,6 +42,8 @@ import {
 	type RepositoryLocatorType,
 	type RepositoryAddType,
 	type RepositoryRemoveAcknowledgementType,
+	type RepositoryPrepareResultType,
+	type RepositoryPrepareType,
 	type RepositorySetupResultType,
 	type RepositorySetupType,
 	type RepositorySyncCommandAcknowledgementType,
@@ -58,6 +62,8 @@ import {
 	RepositoryMissionStartAcknowledgementSchema,
 	RepositoryAddSchema,
 	RepositoryRemoveAcknowledgementSchema,
+	RepositoryPrepareResultSchema,
+	RepositoryPrepareSchema,
 	RepositorySetupResultSchema,
 	RepositorySetupSchema,
 	RepositorySyncCommandAcknowledgementSchema,
@@ -92,6 +98,11 @@ type RepositorySettingsDocumentState =
 	| { kind: 'missing'; settingsPath: string }
 	| { kind: 'valid'; settingsPath: string; settings: RepositorySettingsType }
 	| { kind: 'invalid'; settingsPath: string; invalidState: RepositoryInvalidStateType };
+
+type RepositorySettingsDocumentReadOptions = {
+	resolveWorkspaceRoot?: boolean;
+	invalidDocument?: 'throw' | 'missing';
+};
 
 export class Repository extends Entity<RepositoryDataType, string> {
 	public static override readonly entityName = repositoryEntityName;
@@ -184,7 +195,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	public async canFastForwardFromExternal(context?: EntityExecutionContext) {
-		const status = this.buildSyncStatus(context?.authToken, { refreshExternalState: true });
+		const status = this.buildSyncStatus(context?.authToken);
 		if (status.external.status !== 'behind') {
 			return { available: false, reason: Repository.describeExternalSyncState(status) };
 		}
@@ -262,10 +273,18 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		context?: EntityExecutionContext
 	): Promise<RepositoryDataType> {
 		const args = RepositoryAddSchema.parse(input);
+		const shouldPrepare = 'repositoryRef' in args;
 		const repositoryRootPath = 'repositoryRef' in args
 			? await Repository.checkoutPlatformRepositoryAfterDuplicateCheck(args, context)
 			: args.repositoryPath;
 		const repository = await Repository.addLocalRepository(repositoryRootPath, context);
+		if (shouldPrepare) {
+			await repository.prepare({
+				id: repository.id,
+				repositoryRootPath: repository.repositoryRootPath
+			}, context);
+			await Repository.getRepositoryFactory(context).save(Repository, repository.toStorage());
+		}
 		return await repository.read({
 			id: repository.id,
 			repositoryRootPath: repository.repositoryRootPath
@@ -356,6 +375,10 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 	public static getMissionWorkflowDefinitionPath(repositoryRootPath: string): string {
 		return path.join(Repository.getMissionWorkflowPath(repositoryRootPath), Repository.missionWorkflowDefinitionFileName);
+	}
+
+	public static hasWorkflowDefinition(repositoryRootPath: string): boolean {
+		return fs.existsSync(Repository.getMissionWorkflowDefinitionPath(repositoryRootPath));
 	}
 
 	public static getMissionWorkflowTemplatesPath(repositoryRootPath: string): string {
@@ -470,13 +493,16 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 	public static readSettingsDocument(
 		repositoryRootPath = process.cwd(),
-		options: { resolveWorkspaceRoot?: boolean } = {}
+		options: RepositorySettingsDocumentReadOptions = {}
 	): RepositorySettingsType | undefined {
 		const documentState = Repository.inspectSettingsDocument(repositoryRootPath, options);
 		if (documentState.kind === 'missing') {
 			return undefined;
 		}
 		if (documentState.kind === 'invalid') {
+			if (options.invalidDocument === 'missing') {
+				return undefined;
+			}
 			throw new Error(
 				`Repository settings document '${documentState.settingsPath}' is invalid: ${documentState.invalidState.message}`
 			);
@@ -502,6 +528,31 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		}
 
 		return Repository.writeSettingsDocument(createDefaultRepositorySettings(), repositoryRootPath);
+	}
+
+	private static async createPreparedRepositorySettings(repositoryRootPath: string): Promise<RepositorySettingsType> {
+		const defaultSettings = createDefaultRepositorySettings();
+		const registry = await AgentRegistry.createConfigured({ repositoryRootPath });
+		const availableAgentIds = registry.listAgents()
+			.filter((agent) => agent.toData().availability.available)
+			.map((agent) => agent.agentId);
+
+		if (availableAgentIds.length === 0) {
+			return defaultSettings;
+		}
+
+		const enabledAdapters = defaultSettings.agentAdapters.filter((adapter) =>
+			availableAgentIds.includes(adapter.id)
+		);
+		const defaultAgentAdapter = availableAgentIds.includes(defaultSettings.agentAdapter)
+			? defaultSettings.agentAdapter
+			: enabledAdapters[0]?.id ?? availableAgentIds[0] ?? defaultSettings.agentAdapter;
+
+		return RepositorySettingsSchema.parse({
+			...defaultSettings,
+			agentAdapter: defaultAgentAdapter,
+			agentAdapters: enabledAdapters.length > 0 ? enabledAdapters : defaultSettings.agentAdapters
+		});
 	}
 
 	public static async writeSettingsDocument(
@@ -726,7 +777,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	public canSetup() {
-		if (this.invalidState) {
+		if (this.invalidState && !this.isRecoverableSetupState()) {
 			return this.unavailable(Repository.describeInvalidState(this.invalidState));
 		}
 		if (!this.platformRepositoryRef) {
@@ -736,6 +787,106 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			return this.unavailable('Repository control state is already initialized.');
 		}
 		return this.available();
+	}
+
+	public canPrepare() {
+		if (this.invalidState && !this.isRecoverableSetupState()) {
+			return this.unavailable(Repository.describeInvalidState(this.invalidState));
+		}
+		return this.available();
+	}
+
+	public async prepare(
+		input: RepositoryPrepareType,
+		_context?: EntityExecutionContext
+	): Promise<RepositoryPrepareResultType> {
+		const args = RepositoryPrepareSchema.parse(input);
+		this.assertRepositoryIdentity(args);
+		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
+		if (settingsState.kind === 'invalid') {
+			return RepositoryPrepareResultSchema.parse({
+				ok: true,
+				entity: repositoryEntityName,
+				method: 'prepare',
+				id: this.id,
+				state: 'skipped-invalid-settings',
+				settingsPath: settingsState.settingsPath,
+				enabledAgentAdapters: []
+			});
+		}
+
+		if (settingsState.kind === 'valid') {
+			this.updateSettings(settingsState.settings);
+			return RepositoryPrepareResultSchema.parse({
+				ok: true,
+				entity: repositoryEntityName,
+				method: 'prepare',
+				id: this.id,
+				state: 'already-prepared',
+				settingsPath: settingsState.settingsPath,
+				defaultAgentAdapter: settingsState.settings.agentAdapter,
+				enabledAgentAdapters: settingsState.settings.agentAdapters.map((adapter) => adapter.id)
+			});
+		}
+
+		const settings = await Repository.createPreparedRepositorySettings(this.repositoryRootPath);
+		await Repository.writeSettingsDocument(settings, this.repositoryRootPath, { resolveWorkspaceRoot: false });
+		this.updateSettings(settings).markInitialized(false);
+		return RepositoryPrepareResultSchema.parse({
+			ok: true,
+			entity: repositoryEntityName,
+			method: 'prepare',
+			id: this.id,
+			state: 'prepared',
+			settingsPath: Repository.getSettingsDocumentPath(this.repositoryRootPath, { resolveWorkspaceRoot: false }),
+			defaultAgentAdapter: settings.agentAdapter,
+			enabledAgentAdapters: settings.agentAdapters.map((adapter) => adapter.id)
+		});
+	}
+
+	public async ensureSetupAgentExecution(
+		input: RepositoryPrepareType,
+		context?: EntityExecutionContext
+	): Promise<AgentExecutionDataType> {
+		const args = RepositoryPrepareSchema.parse(input);
+		this.assertRepositoryIdentity(args);
+		this.assertCanLaunchSetupAgentExecution();
+		await this.ensurePreparedForSetupAgentExecution(context);
+
+		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
+		const setupSettings = settingsState.kind === 'valid'
+			? settingsState.settings
+			: createDefaultRepositorySettings();
+		const agentRegistry = await AgentRegistry.createConfigured({
+			repositoryRootPath: this.repositoryRootPath,
+			settings: setupSettings
+		});
+		const agentId = agentRegistry.resolveStartAgentId(setupSettings.agentAdapter);
+		if (!agentId) {
+			throw new Error(`Repository '${this.id}' does not have an available setup agent.`);
+		}
+		const agentExecutionRegistry = context?.agentExecutionRegistry ?? getDefaultAgentExecutionRegistry();
+		return agentExecutionRegistry.ensureExecution({
+			ownerKey: Repository.createSetupAgentExecutionOwnerKey(this.repositoryRootPath),
+			agentRegistry,
+			config: {
+				scope: {
+					kind: 'repository',
+					repositoryRootPath: this.repositoryRootPath
+				},
+				workingDirectory: this.repositoryRootPath,
+				specification: {
+					summary: `Set up repository ${this.platformRepositoryRef ?? this.repoName}.`,
+					documents: []
+				},
+				requestedAdapterId: agentId,
+				resume: { mode: 'new' },
+				initialPrompt: {
+					source: 'system',
+					text: Repository.buildSetupAgentPrompt(this)
+				}
+			}
+		});
 	}
 
 	public canRemove(): boolean {
@@ -752,10 +903,11 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		if (!platformRepositoryRef) {
 			throw new Error(`Repository '${this.id}' does not have a platform repository ref configured.`);
 		}
-		if (this.invalidState) {
+		if (this.invalidState && !this.isRecoverableSetupState()) {
 			throw new Error(Repository.describeInvalidState(this.invalidState));
 		}
-		if (this.isInitialized || Repository.readSettingsDocument(this.repositoryRootPath)) {
+		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
+		if (this.isInitialized || (settingsState.kind === 'valid' && Repository.hasWorkflowDefinition(this.repositoryRootPath))) {
 			throw new Error(`Repository '${this.id}' already has Repository setup state.`);
 		}
 
@@ -838,30 +990,30 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		const store = new MissionDossierFilesystem(this.repositoryRootPath);
 		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
 		const currentBranch = store.isGitRepository() ? store.getCurrentBranch() : undefined;
-
 		if (settingsState.kind === 'invalid') {
 			this.data = RepositoryDataSchema.parse({
 				...this.toStorage(),
-				operationalMode: 'invalid',
-				invalidState: settingsState.invalidState,
+				operationalMode: 'setup',
 				...(currentBranch ? { currentBranch } : {}),
 				isInitialized: false
 			});
 			return this.toData();
 		}
 
+		const hasRepositorySetupState = settingsState.kind === 'valid'
+			&& Repository.hasWorkflowDefinition(this.repositoryRootPath);
 		this.data = RepositoryDataSchema.parse({
 			...this.toStorage(),
-			operationalMode: settingsState.kind === 'valid' ? 'repository' : 'setup',
+			operationalMode: this.isInitialized || hasRepositorySetupState ? 'repository' : 'setup',
 			...(currentBranch ? { currentBranch } : {}),
-			isInitialized: this.isInitialized || settingsState.kind === 'valid'
+			isInitialized: this.isInitialized || hasRepositorySetupState
 		});
 		return this.toData();
 	}
 
 	public async syncStatus(input: RepositoryLocatorType, context?: EntityExecutionContext): Promise<RepositorySyncStatusType> {
 		this.assertRepositoryIdentity(RepositoryLocatorSchema.parse(input));
-		return RepositorySyncStatusSchema.parse(this.buildSyncStatus(context?.authToken, { refreshExternalState: true }));
+		return RepositorySyncStatusSchema.parse(this.buildSyncStatus(context?.authToken));
 	}
 
 	public async fetchExternalState(
@@ -889,9 +1041,6 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		const status = this.buildSyncStatus(context?.authToken);
 		if (!status.branchRef) {
 			throw new Error('Repository has no current branch to fast-forward.');
-		}
-		if (!status.worktree.clean) {
-			throw new Error('Repository has local changes and cannot be fast-forwarded safely.');
 		}
 		if (status.external.status !== 'behind') {
 			throw new Error(Repository.describeExternalSyncState(status));
@@ -991,6 +1140,35 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 	private static describeInvalidState(invalidState: RepositoryInvalidStateType): string {
 		return `Repository control state is invalid at '${invalidState.path}': ${invalidState.message}`;
+	}
+
+	private isRecoverableSetupState(): boolean {
+		return this.invalidState?.code === 'invalid-settings-document';
+	}
+
+	private assertCanLaunchSetupAgentExecution(): void {
+		if (this.invalidState && !this.isRecoverableSetupState()) {
+			throw new Error(Repository.describeInvalidState(this.invalidState));
+		}
+	}
+
+	private async ensurePreparedForSetupAgentExecution(context?: EntityExecutionContext): Promise<void> {
+		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
+		if (settingsState.kind !== 'valid') {
+			await this.prepare({ id: this.id, repositoryRootPath: this.repositoryRootPath }, context);
+		}
+	}
+
+	private static buildSetupAgentPrompt(repository: Repository): string {
+		return [
+			`Help set up ${repository.platformRepositoryRef ?? repository.repoName} for Mission.`,
+			'Report setup progress, input requests, blockers, and completion claims through the AgentExecution structured interaction protocol.',
+			'Keep the conversation concise and focused on completing repository setup.'
+		].join('\n');
+	}
+
+	private static createSetupAgentExecutionOwnerKey(repositoryRootPath: string): string {
+		return `Repository.setup:${repositoryRootPath}`;
 	}
 
 	private async refreshRepositoryControlState(input: RepositoryLocatorType): Promise<void> {

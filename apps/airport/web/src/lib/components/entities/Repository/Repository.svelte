@@ -1,14 +1,17 @@
 <script lang="ts">
+    import { goto } from "$app/navigation";
     import type { RepositoryIssueDetailType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import { page } from "$app/state";
     import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { setAgentExecutionSurfaceContext } from "$lib/client/context/agent-execution-surface-context.svelte.js";
     import { setScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
+    import AgentChat from "$lib/components/entities/AgentExecution/AgentChat.svelte";
     import IssueList from "$lib/components/entities/Issue/IssueList.svelte";
     import IssuePreview from "$lib/components/entities/Issue/IssuePreview.svelte";
     import MissionList from "$lib/components/entities/Mission/MissionList.svelte";
     import RepositoryPanel from "$lib/components/entities/Repository/RepositoryPanel.svelte";
-    import RepositorySetup from "$lib/components/entities/Repository/RepositorySetup.svelte";
+    import RepositoryCommandbar from "$lib/components/entities/Repository/RepositoryCommandbar.svelte";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import type { AirportRepositoryListItem } from "$lib/components/entities/types";
 
@@ -22,12 +25,25 @@
     }>({
         loading: true,
     });
+    const agentExecutionSurfaceState = $state<{
+        surfaceId?: string;
+        surfacePath?: string;
+        loading: boolean;
+        error?: string | null;
+    }>({ loading: true });
     const repositoryScope = setScopedRepositoryContext(repositoryScopeState);
+    const agentExecutionSurface = setAgentExecutionSurfaceContext(
+        agentExecutionSurfaceState,
+    );
 
     let selectedIssue = $state<RepositoryIssueDetailType | null>(null);
     let issuePreviewOpen = $state(false);
     let issueError = $state<string | null>(null);
     let issueLoadingNumber = $state<number | null>(null);
+    let routeRepositoryResolved = $state(false);
+    let setupAgentExecutionRequestKey = $state("");
+    let setupAgentExecutionRefreshNonce = $state(0);
+    let setupAgentExecutionError = $state<string | null>(null);
 
     $effect(() => {
         const activeRepository = appContext.airport.activeRepository;
@@ -39,12 +55,23 @@
         repositoryScope.loading = appContext.airport.activeRepositoryLoading;
         repositoryScope.error =
             appContext.airport.activeRepositoryError ?? null;
+        agentExecutionSurface.surfaceId = repositoryScope.repositoryId;
+        agentExecutionSurface.surfacePath =
+            repositoryScope.repository?.data.repositoryRootPath;
+        agentExecutionSurface.loading = repositoryScope.loading;
+        agentExecutionSurface.error = repositoryScope.error;
     });
 
     const activeRepository = $derived(repositoryScope.repository);
     const repositoryLoading = $derived(repositoryScope.loading);
     const repositoryError = $derived(repositoryScope.error);
     const invalidState = $derived(activeRepository?.data.invalidState);
+    const setupRoute = $derived(page.url.pathname.endsWith("/setup"));
+    const showSetupSurface = $derived(
+        setupRoute ||
+            Boolean(invalidState) ||
+            !activeRepository?.data.isInitialized,
+    );
     const activeRepositoryPanelItem = $derived.by(
         (): AirportRepositoryListItem | undefined => {
             if (!activeRepository) {
@@ -89,6 +116,60 @@
     async function refreshRepositories(): Promise<void> {
         await appContext.application.loadRepositories({ force: true });
     }
+
+    async function refreshSetupAgentExecution(): Promise<void> {
+        setupAgentExecutionRefreshNonce += 1;
+        await activeRepository?.refreshSetupAgentExecution();
+    }
+
+    $effect(() => {
+        repositoryId;
+        routeRepositoryResolved = false;
+    });
+
+    $effect(() => {
+        if (activeRepository?.id === repositoryId) {
+            routeRepositoryResolved = true;
+        }
+    });
+
+    $effect(() => {
+        if (
+            !repositoryId ||
+            !routeRepositoryResolved ||
+            repositoryLoading ||
+            repositoryError ||
+            activeRepository ||
+            appContext.airport.activeRepositoryId
+        ) {
+            return;
+        }
+
+        void goto("/airport");
+    });
+
+    $effect(() => {
+        if (!activeRepository || !showSetupSurface) {
+            return;
+        }
+
+        const requestKey = `${activeRepository.id}:${activeRepository.data.repositoryRootPath}`;
+        if (setupAgentExecutionRequestKey === requestKey) {
+            return;
+        }
+
+        setupAgentExecutionRequestKey = requestKey;
+        setupAgentExecutionError = null;
+        void activeRepository
+            .ensureSetupAgentExecution()
+            .then(() => {
+                setupAgentExecutionRefreshNonce += 1;
+            })
+            .catch((error) => {
+                setupAgentExecutionError =
+                    error instanceof Error ? error.message : String(error);
+            });
+    });
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col">
@@ -106,7 +187,7 @@
             </p>
         </section>
     {:else}
-        {#if activeRepositoryPanelItem}
+        {#if activeRepositoryPanelItem && activeRepository.data.isInitialized && !setupRoute}
             <RepositoryPanel
                 repository={activeRepositoryPanelItem}
                 localRepository={activeRepository}
@@ -118,19 +199,34 @@
             <section
                 class="border-y border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
             >
-                <p class="font-medium">Repository control state is invalid.</p>
-                <p class="mt-1 break-all text-destructive/85">
-                    {invalidState.path}
-                </p>
-                <p class="mt-2 break-words text-destructive/85">
-                    {invalidState.message}
+                <p class="font-medium">This repository needs setup.</p>
+                <p class="mt-1 text-destructive/85">
+                    Use the setup chat to review it and continue.
                 </p>
             </section>
-        {:else if !activeRepository.data.isInitialized}
-            <RepositorySetup
-                repository={activeRepository}
-                onSetupSubmitted={refreshRepositories}
+        {/if}
+
+        {#if showSetupSurface}
+            <AgentChat
+                agentExecution={activeRepository.setupAgentExecution}
+                refreshNonce={setupAgentExecutionRefreshNonce}
+                onCommandExecuted={refreshSetupAgentExecution}
             />
+            {#if setupAgentExecutionError}
+                <div
+                    class="border-t px-4 py-3 text-sm text-muted-foreground md:px-5"
+                >
+                    The assistant is not available right now.
+                </div>
+            {/if}
+            <div class="border-t bg-background/95 px-4 py-3 md:px-5">
+                <RepositoryCommandbar
+                    repository={activeRepository}
+                    onCommandExecuted={refreshRepositories}
+                    class="min-h-9"
+                    showEmptyState
+                />
+            </div>
         {:else}
             <div class="grid min-h-0 flex-1 overflow-hidden sm:grid-cols-2">
                 <section class="flex min-h-0 w-full overflow-hidden">

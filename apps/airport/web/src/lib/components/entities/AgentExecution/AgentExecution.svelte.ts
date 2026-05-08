@@ -5,7 +5,7 @@ import type { EntityModel } from '$lib/components/entities/shared/EntityModel.sv
 
 export type AgentExecutionDependencies = {
     resolveCommands(sessionId: string): EntityCommandDescriptorType[];
-    executeCommand(sessionId: string, commandId: string, input?: unknown): Promise<void>;
+    executeCommand(ownerId: string, sessionId: string, commandId: string, input?: unknown): Promise<void>;
 };
 
 export class AgentExecution implements EntityModel<AgentExecutionDataType> {
@@ -32,6 +32,10 @@ export class AgentExecution implements EntityModel<AgentExecutionDataType> {
 
     public get sessionId(): string {
         return this.data.sessionId;
+    }
+
+    public get ownerId(): string {
+        return this.data.ownerId;
     }
 
     public get id(): string {
@@ -94,6 +98,10 @@ export class AgentExecution implements EntityModel<AgentExecutionDataType> {
         return this.data.runtimeMessages;
     }
 
+    public get chatMessages(): AgentExecutionDataType['chatMessages'] {
+        return this.data.chatMessages;
+    }
+
     public get canSendTerminalInput(): boolean {
         return this.interactionCapabilities.canSendTerminalInput;
     }
@@ -131,7 +139,7 @@ export class AgentExecution implements EntityModel<AgentExecutionDataType> {
     }
 
     public async executeCommand(commandId: string, input?: unknown): Promise<void> {
-        await this.dependencies.executeCommand(this.sessionId, commandId, input);
+        await this.dependencies.executeCommand(this.ownerId, this.sessionId, commandId, input);
     }
 
     public async sendCommand(command: AgentExecutionCommandType): Promise<this> {

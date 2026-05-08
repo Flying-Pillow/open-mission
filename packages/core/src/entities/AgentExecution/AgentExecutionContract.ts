@@ -13,6 +13,7 @@ import {
     AgentExecutionCommandAcknowledgementSchema,
     AgentExecutionDataChangedSchema
 } from './AgentExecutionSchema.js';
+import type { AgentExecutionDataType } from './AgentExecutionSchema.js';
 
 export const AgentExecutionContract: EntityContractType = {
     entity: agentExecutionEntityName,
@@ -57,22 +58,41 @@ export const AgentExecutionContract: EntityContractType = {
 };
 
 export function createAgentExecutionTerminalEvent(input: {
-    missionId: string;
+    ownerId: string;
     sessionId: string;
     state: unknown;
 }): EntityEventEnvelopeType {
-    const missionId = input.missionId.trim();
+    const ownerId = input.ownerId.trim();
     const sessionId = input.sessionId.trim();
     const payload = AgentExecutionTerminalSnapshotSchema.parse({
-        missionId,
+        ownerId,
         sessionId,
         ...(typeof input.state === 'object' && input.state !== null ? input.state : {})
     });
     return createEntityEventEnvelope({
-        entityId: createEntityId('agent_execution', `${missionId}/${sessionId}`),
+        entityId: createEntityId('agent_execution', `${ownerId}/${sessionId}`),
         eventName: 'terminal',
         type: 'execution.terminal',
-        missionId,
+        payload
+    });
+}
+
+export function createAgentExecutionDataChangedEvent(input: {
+    data: AgentExecutionDataType;
+}): EntityEventEnvelopeType {
+    const data = AgentExecutionDataSchema.parse(input.data);
+    const payload = AgentExecutionDataChangedSchema.parse({
+        reference: {
+            entity: agentExecutionEntityName,
+            ownerId: data.ownerId,
+            sessionId: data.sessionId
+        },
+        data
+    });
+    return createEntityEventEnvelope({
+        entityId: createEntityId('agent_execution', `${data.ownerId}/${data.sessionId}`),
+        eventName: 'data.changed',
+        type: 'agentExecution.data.changed',
         payload
     });
 }

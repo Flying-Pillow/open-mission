@@ -1,15 +1,15 @@
 // /apps/airport/web/src/routes/api/runtime/sessions/[sessionId]/terminal/+server.ts: Session terminal snapshot/input relay over Airport web runtime routes.
 import { json } from '@sveltejs/kit';
-import { AgentExecutionTerminalRouteInputSchema as missionSessionTerminalInputSchema, AgentExecutionTerminalQuerySchema as missionSessionTerminalQuerySchema, AgentExecutionTerminalRouteParamsSchema as missionSessionTerminalRouteParamsSchema } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
+import { AgentExecutionTerminalRouteInputSchema as agentExecutionTerminalInputSchema, AgentExecutionTerminalRouteQuerySchema as agentExecutionTerminalQuerySchema, AgentExecutionTerminalRouteParamsSchema as agentExecutionTerminalRouteParamsSchema } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import { resolveMissionTerminalRuntimeError } from '$lib/server/mission-terminal-errors';
 import { resolveRepositoryRootPath } from '$lib/server/repository-root-path.server';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, params, url }) => {
-    const { sessionId } = missionSessionTerminalRouteParamsSchema.parse(params);
-    const query = missionSessionTerminalQueryWithRepositorySchema.parse({
-        missionId: url.searchParams.get('missionId'),
+    const { sessionId } = agentExecutionTerminalRouteParamsSchema.parse(params);
+    const query = agentExecutionTerminalQueryWithRepositorySchema.parse({
+        ownerId: url.searchParams.get('ownerId'),
         repositoryId: url.searchParams.get('repositoryId') ?? undefined,
         repositoryRootPath: url.searchParams.get('repositoryRootPath') ?? undefined
     });
@@ -21,8 +21,8 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
             repositoryId: query.repositoryId,
             repositoryRootPath: query.repositoryRootPath
         });
-        const snapshot = await gateway.getMissionSessionTerminalSnapshot({
-            missionId: query.missionId,
+        const snapshot = await gateway.getAgentExecutionTerminalSnapshot({
+            ownerId: query.ownerId,
             sessionId,
             ...(surfacePath ? { surfacePath } : {})
         });
@@ -44,14 +44,14 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
 };
 
 export const POST: RequestHandler = async ({ locals, params, request }) => {
-    const { sessionId } = missionSessionTerminalRouteParamsSchema.parse(params);
+    const { sessionId } = agentExecutionTerminalRouteParamsSchema.parse(params);
     const requestUrl = new URL(request.url);
-    const query = missionSessionTerminalQueryWithRepositorySchema.parse({
-        missionId: requestUrl.searchParams.get('missionId'),
+    const query = agentExecutionTerminalQueryWithRepositorySchema.parse({
+        ownerId: requestUrl.searchParams.get('ownerId'),
         repositoryId: requestUrl.searchParams.get('repositoryId') ?? undefined,
         repositoryRootPath: requestUrl.searchParams.get('repositoryRootPath') ?? undefined
     });
-    const body = missionSessionTerminalInputSchema.parse(await request.json());
+    const body = agentExecutionTerminalInputSchema.parse(await request.json());
 
     const gateway = new DaemonGateway(locals);
     try {
@@ -60,8 +60,8 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
             repositoryId: query.repositoryId,
             repositoryRootPath: query.repositoryRootPath
         });
-        const snapshot = await gateway.sendMissionSessionTerminalInput({
-            missionId: body.missionId,
+        const snapshot = await gateway.sendAgentExecutionTerminalInput({
+            ownerId: body.ownerId,
             sessionId,
             ...(body.data !== undefined ? { data: body.data } : {}),
             ...(body.literal !== undefined ? { literal: body.literal } : {}),
@@ -86,7 +86,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
     }
 };
 
-const missionSessionTerminalQueryWithRepositorySchema = missionSessionTerminalQuerySchema.extend({
-    repositoryId: missionSessionTerminalQuerySchema.shape.missionId.optional(),
-    repositoryRootPath: missionSessionTerminalQuerySchema.shape.missionId.optional()
+const agentExecutionTerminalQueryWithRepositorySchema = agentExecutionTerminalQuerySchema.extend({
+    repositoryId: agentExecutionTerminalQuerySchema.shape.ownerId.optional(),
+    repositoryRootPath: agentExecutionTerminalQuerySchema.shape.ownerId.optional()
 });

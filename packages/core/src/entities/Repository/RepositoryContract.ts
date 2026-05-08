@@ -1,4 +1,5 @@
 import { EntityClassCommandViewSchema, EntityCommandViewSchema, type EntityContractType } from '../Entity/EntitySchema.js';
+import { AgentExecutionDataSchema } from '../AgentExecution/AgentExecutionSchema.js';
 import { Repository } from './Repository.js';
 import {
     RepositoryAddSchema,
@@ -15,6 +16,8 @@ import {
     RepositoryMissionStartAcknowledgementSchema,
     RepositoryIssueDetailSchema,
     RepositoryRemoveAcknowledgementSchema,
+    RepositoryPrepareResultSchema,
+    RepositoryPrepareSchema,
     RepositorySetupResultSchema,
     RepositorySetupSchema,
     RepositorySyncCommandAcknowledgementSchema,
@@ -111,7 +114,7 @@ export const RepositoryContract: EntityContractType = {
                 icon: 'trash-2',
                 confirmation: {
                     required: true,
-                    prompt: 'Remove this Repository from Mission and delete its Repository root from disk? This cannot be undone.'
+                    prompt: 'Remove this repository from Mission and delete its files from this computer? This cannot be undone.'
                 },
                 presentationOrder: 90
             }
@@ -122,6 +125,18 @@ export const RepositoryContract: EntityContractType = {
             result: RepositorySetupResultSchema,
             execution: 'entity'
         },
+        prepare: {
+            kind: 'mutation',
+            payload: RepositoryPrepareSchema,
+            result: RepositoryPrepareResultSchema,
+            execution: 'entity'
+        },
+        ensureSetupAgentExecution: {
+            kind: 'mutation',
+            payload: RepositoryPrepareSchema,
+            result: AgentExecutionDataSchema,
+            execution: 'entity'
+        },
         fetchExternalState: {
             kind: 'mutation',
             payload: RepositoryLocatorSchema,
@@ -129,7 +144,7 @@ export const RepositoryContract: EntityContractType = {
             execution: 'entity',
             ui: {
                 variant: 'outline',
-                label: 'Refresh state',
+                label: 'Refresh',
                 icon: 'refresh-cw',
                 presentationOrder: 20
             }

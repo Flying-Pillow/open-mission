@@ -1,6 +1,7 @@
 <!-- /apps/airport/web/src/routes/(app)/airport/[repositoryId]/+page.svelte: Repository route for selecting missions and creating new missions. -->
 <script lang="ts">
     import { afterNavigate } from "$app/navigation";
+    import { goto } from "$app/navigation";
     import { page } from "$app/state";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import Repository from "$lib/components/entities/Repository/Repository.svelte";
@@ -14,6 +15,25 @@
         }
 
         void appContext.loadRepositoryPage({ repositoryId });
+    });
+
+    $effect(() => {
+        const repositoryId = page.params.repositoryId?.trim();
+        const activeRepository = appContext.airport.activeRepository;
+
+        if (
+            !repositoryId ||
+            appContext.airport.activeRepositoryLoading ||
+            appContext.airport.activeRepositoryError ||
+            activeRepository?.id !== repositoryId ||
+            activeRepository.data.isInitialized
+        ) {
+            return;
+        }
+
+        void goto(`/airport/${encodeURIComponent(repositoryId)}/setup`, {
+            replaceState: true,
+        });
     });
 </script>
 

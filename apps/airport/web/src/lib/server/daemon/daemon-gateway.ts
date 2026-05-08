@@ -97,8 +97,8 @@ export class DaemonGateway {
         };
     }
 
-    public async getMissionSessionTerminalSnapshot(input: {
-        missionId: string;
+    public async getAgentExecutionTerminalSnapshot(input: {
+        ownerId: string;
         sessionId: string;
         surfacePath?: string;
     }): Promise<AgentExecutionTerminalSnapshotType> {
@@ -108,18 +108,18 @@ export class DaemonGateway {
                     entity: 'AgentExecution',
                     method: 'readTerminal',
                     payload: {
-                        missionId: input.missionId,
+                        ownerId: input.ownerId,
                         sessionId: input.sessionId,
                     }
                 }),
                 2500,
-                'Mission terminal snapshot request timed out.'
+                'AgentExecution terminal snapshot request timed out.'
             )
         ));
     }
 
-    public async sendMissionSessionTerminalInput(input: {
-        missionId: string;
+    public async sendAgentExecutionTerminalInput(input: {
+        ownerId: string;
         sessionId: string;
         data?: string;
         literal?: boolean;
@@ -133,7 +133,7 @@ export class DaemonGateway {
                     entity: 'AgentExecution',
                     method: 'sendTerminalInput',
                     payload: {
-                        missionId: input.missionId,
+                        ownerId: input.ownerId,
                         sessionId: input.sessionId,
                         ...(input.data !== undefined ? { data: input.data } : {}),
                         ...(input.literal !== undefined ? { literal: input.literal } : {}),
@@ -142,7 +142,7 @@ export class DaemonGateway {
                     }
                 }),
                 2500,
-                'Mission terminal input request timed out.'
+                'AgentExecution terminal input request timed out.'
             )
         ));
     }

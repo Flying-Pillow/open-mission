@@ -13,6 +13,7 @@ const DAEMON_CONNECT_TIMEOUT_MS = 12_000;
 const SLOW_ENTITY_REMOTE_REQUEST_MS = 1_000;
 const LONG_REPOSITORY_COMMAND_METHODS = new Set([
     'add',
+    'ensureSetupAgentExecution',
     'setup',
     'startMissionFromIssue',
     'startMissionFromBrief'

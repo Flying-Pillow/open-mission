@@ -2,7 +2,8 @@ import { z } from 'zod/v4';
 import {
     EntityCommandAcknowledgementSchema,
     EntityCommandInputDescriptorSchema,
-    EntityIdSchema
+    EntityIdSchema,
+    EntityPresentationToneSchema
 } from '../Entity/EntitySchema.js';
 
 export const agentExecutionEntityName = 'AgentExecution' as const;
@@ -35,7 +36,7 @@ const agentExecutionMetadataValueSchema = z.union([
     z.null()
 ]);
 
-export type MissionAgentPrimitiveValue = string | number | boolean | null;
+export type AgentExecutionPrimitiveValue = string | number | boolean | null;
 
 const agentExecutionMetadataSchema = z.record(z.string(), agentExecutionMetadataValueSchema);
 
@@ -90,8 +91,7 @@ export const AgentExecutionInteractionCapabilitiesSchema = z.object({
 }).strict();
 
 export const AgentExecutionLocatorSchema = z.object({
-    missionId: z.string().trim().min(1),
-    repositoryRootPath: z.string().trim().min(1).optional(),
+    ownerId: z.string().trim().min(1),
     sessionId: z.string().trim().min(1)
 }).strict();
 
@@ -109,7 +109,7 @@ export const AgentExecutionSendTerminalInputSchema = AgentExecutionLocatorSchema
     literal: z.boolean().optional(),
     cols: z.number().int().positive().optional(),
     rows: z.number().int().positive().optional()
-}).strict().refine((value) => {
+}).refine((value) => {
     const hasData = typeof value.data === 'string';
     const hasResize = value.cols !== undefined && value.rows !== undefined;
     return hasData || hasResize;
@@ -128,11 +128,16 @@ export const AgentExecutionTerminalRouteParamsSchema = z.object({
 }).strict();
 
 export const AgentExecutionTerminalQuerySchema = z.object({
-    missionId: z.string().trim().min(1)
+    ownerId: z.string().trim().min(1),
+    sessionId: z.string().trim().min(1)
+}).strict();
+
+export const AgentExecutionTerminalRouteQuerySchema = z.object({
+    ownerId: z.string().trim().min(1)
 }).strict();
 
 export const AgentExecutionTerminalRouteInputSchema = z.object({
-    missionId: z.string().trim().min(1),
+    ownerId: z.string().trim().min(1),
     data: z.string().optional(),
     literal: z.boolean().optional(),
     cols: z.number().int().positive().optional(),
@@ -146,7 +151,7 @@ export const AgentExecutionTerminalRouteInputSchema = z.object({
 });
 
 export const AgentExecutionTerminalSnapshotSchema = z.object({
-    missionId: z.string().trim().min(1),
+    ownerId: z.string().trim().min(1),
     sessionId: z.string().trim().min(1),
     connected: z.boolean(),
     dead: z.boolean(),
@@ -164,7 +169,7 @@ export const AgentExecutionTerminalRecordingHeaderEventSchema = z.object({
     type: z.literal('header'),
     version: z.literal(1),
     kind: z.literal('agent-execution-terminal-recording'),
-    missionId: z.string().trim().min(1),
+    ownerId: z.string().trim().min(1),
     sessionId: z.string().trim().min(1),
     terminalName: z.string().trim().min(1),
     cols: z.number().int().positive(),
@@ -219,7 +224,7 @@ export const AgentExecutionTerminalSocketClientMessageSchema = z.discriminatedUn
 ]);
 
 export const AgentExecutionTerminalOutputSchema = z.object({
-    missionId: z.string().trim().min(1),
+    ownerId: z.string().trim().min(1),
     sessionId: z.string().trim().min(1),
     chunk: z.string(),
     dead: z.boolean(),
@@ -276,6 +281,8 @@ export const AgentExecutionMessageDescriptorSchema = z.object({
     type: z.string().trim().min(1),
     label: z.string().trim().min(1),
     description: z.string().trim().min(1).optional(),
+    icon: z.string().trim().min(1).optional(),
+    tone: EntityPresentationToneSchema.optional(),
     delivery: z.enum(['best-effort']),
     mutatesContext: z.boolean(),
     input: EntityCommandInputDescriptorSchema.optional()
@@ -321,11 +328,11 @@ export const AgentExecutionProtocolOwnerEntitySchema = z.enum([
 ]);
 
 export const AgentExecutionOwnerMarkerPrefixSchema = z.enum([
-    'system::',
-    'repository::',
-    'mission::',
-    'task::',
-    'artifact::'
+    '@system::',
+    '@repository::',
+    '@mission::',
+    '@task::',
+    '@artifact::'
 ]);
 
 export const AgentDeclaredSignalDeliverySchema = z.enum(['stdout-marker']);
@@ -349,6 +356,8 @@ export const AgentDeclaredSignalDescriptorSchema = z.object({
     type: z.string().trim().min(1),
     label: z.string().trim().min(1),
     description: z.string().trim().min(1).optional(),
+    icon: z.string().trim().min(1),
+    tone: EntityPresentationToneSchema,
     payloadSchemaKey: z.string().trim().min(1),
     delivery: AgentDeclaredSignalDeliverySchema,
     policy: AgentDeclaredSignalPolicySchema,
@@ -411,6 +420,19 @@ export const AgentDeclaredSignalMarkerPayloadSchema = z.object({
     signal: AgentDeclaredSignalPayloadSchema
 }).strict();
 
+export const AgentExecutionChatMessageSchema = z.object({
+    id: z.string().trim().min(1),
+    role: z.enum(['agent', 'operator', 'system']),
+    kind: z.enum(['message', 'progress', 'needs-input', 'blocked', 'claim', 'failure', 'status']),
+    tone: EntityPresentationToneSchema,
+    title: z.string().trim().min(1).optional(),
+    text: z.string().trim().min(1),
+    detail: z.string().trim().min(1).optional(),
+    signalType: z.string().trim().min(1).optional(),
+    choices: z.array(AgentDeclaredSignalInputChoiceSchema).optional(),
+    at: z.string().trim().min(1)
+}).strict();
+
 export const AgentExecutionProtocolOwnerSchema = z.object({
     entity: AgentExecutionProtocolOwnerEntitySchema,
     entityId: z.string().trim().min(1),
@@ -457,6 +479,7 @@ export type AgentDeclaredSignalDescriptorType = z.infer<typeof AgentDeclaredSign
 export type AgentDeclaredSignalInputChoiceType = z.infer<typeof AgentDeclaredSignalInputChoiceSchema>;
 export type AgentDeclaredSignalPayloadType = z.infer<typeof AgentDeclaredSignalPayloadSchema>;
 export type AgentDeclaredSignalMarkerPayloadType = z.infer<typeof AgentDeclaredSignalMarkerPayloadSchema>;
+export type AgentExecutionChatMessageType = z.infer<typeof AgentExecutionChatMessageSchema>;
 export type AgentExecutionProtocolOwnerType = z.infer<typeof AgentExecutionProtocolOwnerSchema>;
 export type AgentExecutionProtocolDescriptorType = z.infer<typeof AgentExecutionProtocolDescriptorSchema>;
 export type AgentExecutionRuntimeCommandType = z.infer<typeof AgentExecutionRuntimeCommandTypeSchema>;
@@ -475,101 +498,61 @@ export type AgentExecutionLifecycleStateType = z.infer<typeof AgentExecutionLife
 export type AgentExecutionInteractionModeType = z.infer<typeof AgentExecutionInteractionModeSchema>;
 export type AgentExecutionInteractionCapabilitiesType = z.infer<typeof AgentExecutionInteractionCapabilitiesSchema>;
 
-export type MissionAgentLifecycleState = AgentExecutionLifecycleStateType;
-
-export type MissionAgentPermissionKind =
+export type AgentExecutionPermissionKind =
     | 'input'
     | 'tool'
     | 'filesystem'
     | 'command'
     | 'unknown';
 
-export type MissionAgentPermissionRequest = {
+export type AgentExecutionPermissionRequest = {
     id: string;
-    kind: MissionAgentPermissionKind;
+    kind: AgentExecutionPermissionKind;
     prompt: string;
     options: string[];
-    providerDetails?: Record<string, MissionAgentPrimitiveValue>;
+    providerDetails?: Record<string, AgentExecutionPrimitiveValue>;
 };
 
-export type MissionAgentModelInfo = {
-    id?: string;
-    family?: string;
-    provider?: string;
-    displayName?: string;
-};
+export const AgentExecutionPermissionRequestSchema = z.object({
+    id: z.string().trim().min(1),
+    kind: z.enum(['input', 'tool', 'filesystem', 'command', 'unknown']),
+    prompt: z.string().trim().min(1),
+    options: z.array(z.string().trim().min(1)),
+    providerDetails: z.record(z.string(), agentExecutionMetadataValueSchema).optional()
+}).strict();
 
-export type MissionAgentTelemetrySnapshot = {
-    model?: MissionAgentModelInfo;
-    providerSessionId?: string;
-    tokenUsage?: {
-        inputTokens?: number;
-        outputTokens?: number;
-        totalTokens?: number;
-    };
-    contextWindow?: {
-        usedTokens?: number;
-        maxTokens?: number;
-        utilization?: number;
-    };
-    estimatedCostUsd?: number;
-    activeToolName?: string;
-    updatedAt: string;
-};
+export const AgentExecutionModelInfoSchema = z.object({
+    id: z.string().trim().min(1).optional(),
+    family: z.string().trim().min(1).optional(),
+    provider: z.string().trim().min(1).optional(),
+    displayName: z.string().trim().min(1).optional()
+}).strict();
 
-export type MissionAgentScope =
-    | {
-        kind: 'control';
-        workspaceRoot?: string;
-        repoName?: string;
-        branch?: string;
-    }
-    | {
-        kind: 'mission';
-        missionId?: string;
-        stage?: string;
-        currentSlice?: string;
-        readyTaskIds?: string[];
-        readyTaskTitle?: string;
-        readyTaskInstruction?: string;
-    }
-    | {
-        kind: 'artifact';
-        missionId?: string;
-        stage?: string;
-        artifactKey: string;
-        artifactPath?: string;
-        checkpoint?: string;
-        validation?: string;
-    }
-    | {
-        kind: 'slice';
-        missionId?: string;
-        missionDir?: string;
-        stage?: string;
-        sliceTitle: string;
-        sliceId?: string;
-        taskId?: string;
-        taskTitle?: string;
-        taskSummary?: string;
-        taskInstruction?: string;
-        doneWhen?: string[];
-        stopCondition?: string;
-        verificationTargets: string[];
-        requiredSkills: string[];
-        dependsOn: string[];
-    }
-    | {
-        kind: 'gate';
-        missionId?: string;
-        stage?: string;
-        intent: string;
-    };
+export const AgentExecutionTelemetrySnapshotSchema = z.object({
+    model: AgentExecutionModelInfoSchema.optional(),
+    providerSessionId: z.string().trim().min(1).optional(),
+    tokenUsage: z.object({
+        inputTokens: z.number().int().nonnegative().optional(),
+        outputTokens: z.number().int().nonnegative().optional(),
+        totalTokens: z.number().int().nonnegative().optional()
+    }).strict().optional(),
+    contextWindow: z.object({
+        usedTokens: z.number().int().nonnegative().optional(),
+        maxTokens: z.number().int().positive().optional(),
+        utilization: z.number().nonnegative().optional()
+    }).strict().optional(),
+    estimatedCostUsd: z.number().nonnegative().optional(),
+    activeToolName: z.string().trim().min(1).optional(),
+    updatedAt: z.string().trim().min(1)
+}).strict();
 
-export type MissionAgentTurnRequest = {
+export type AgentExecutionModelInfo = z.infer<typeof AgentExecutionModelInfoSchema>;
+export type AgentExecutionTelemetrySnapshot = z.infer<typeof AgentExecutionTelemetrySnapshotSchema>;
+
+export type AgentExecutionTurnRequest = {
     workingDirectory: string;
     prompt: string;
-    scope?: MissionAgentScope;
+    scope?: AgentExecutionScopeType;
     title?: string;
     operatorIntent?: string;
     startFreshSession?: boolean;
@@ -582,15 +565,15 @@ export type AgentExecutionState = {
     sessionId: string;
     sessionLogPath?: string;
     terminalHandle?: AgentExecutionTerminalHandleType;
-    lifecycleState: MissionAgentLifecycleState;
+    lifecycleState: AgentExecutionLifecycleStateType;
     workingDirectory?: string;
     currentTurnTitle?: string;
     interactionCapabilities: AgentExecutionInteractionCapabilitiesType;
     runtimeMessages: AgentExecutionMessageDescriptorType[];
     protocolDescriptor?: AgentExecutionProtocolDescriptorType;
-    scope?: MissionAgentScope;
-    awaitingPermission?: MissionAgentPermissionRequest;
-    telemetry?: MissionAgentTelemetrySnapshot;
+    scope?: AgentExecutionScopeType;
+    awaitingPermission?: AgentExecutionPermissionRequest;
+    telemetry?: AgentExecutionTelemetrySnapshot;
     failureMessage?: string;
     lastUpdatedAt: string;
 };
@@ -602,7 +585,7 @@ export type AgentExecutionRecord = {
     adapterLabel: string;
     sessionLogPath?: string;
     terminalHandle?: AgentExecutionTerminalHandleType;
-    lifecycleState: MissionAgentLifecycleState;
+    lifecycleState: AgentExecutionLifecycleStateType;
     taskId?: string;
     assignmentLabel?: string;
     workingDirectory?: string;
@@ -610,14 +593,14 @@ export type AgentExecutionRecord = {
     interactionCapabilities: AgentExecutionInteractionCapabilitiesType;
     runtimeMessages: AgentExecutionMessageDescriptorType[];
     protocolDescriptor?: AgentExecutionProtocolDescriptorType;
-    scope?: MissionAgentScope;
-    telemetry?: MissionAgentTelemetrySnapshot;
+    scope?: AgentExecutionScopeType;
+    telemetry?: AgentExecutionTelemetrySnapshot;
     failureMessage?: string;
     createdAt: string;
     lastUpdatedAt: string;
 };
 
-export type AgentExecutionLaunchRequest = MissionAgentTurnRequest & {
+export type AgentExecutionLaunchRequest = AgentExecutionTurnRequest & {
     agentId: string;
     terminalName?: string;
     transportId?: string;
@@ -628,6 +611,7 @@ export type AgentExecutionLaunchRequest = MissionAgentTurnRequest & {
 
 export const AgentExecutionStorageSchema = z.object({
     id: EntityIdSchema,
+    ownerId: z.string().trim().min(1),
     sessionId: z.string().trim().min(1),
     agentId: z.string().trim().min(1),
     transportId: z.string().trim().min(1).optional(),
@@ -641,10 +625,11 @@ export const AgentExecutionStorageSchema = z.object({
     taskId: z.string().trim().min(1).optional(),
     interactionCapabilities: AgentExecutionInteractionCapabilitiesSchema,
     context: AgentExecutionContextSchema,
+    chatMessages: z.array(AgentExecutionChatMessageSchema).default([]),
     runtimeMessages: z.array(AgentExecutionMessageDescriptorSchema),
     protocolDescriptor: AgentExecutionProtocolDescriptorSchema.optional(),
-    scope: z.unknown().optional(),
-    telemetry: z.unknown().optional(),
+    scope: AgentExecutionScopeSchema.optional(),
+    telemetry: AgentExecutionTelemetrySnapshotSchema.optional(),
     failureMessage: z.string().trim().min(1).optional(),
     createdAt: z.string().trim().min(1).optional(),
     lastUpdatedAt: z.string().trim().min(1).optional()
@@ -658,7 +643,7 @@ export const AgentExecutionCommandAcknowledgementSchema = EntityCommandAcknowled
     entity: z.literal(agentExecutionEntityName),
     method: z.literal('command'),
     id: z.string().trim().min(1),
-    missionId: z.string().trim().min(1),
+    ownerId: z.string().trim().min(1),
     sessionId: z.string().trim().min(1),
     commandId: AgentExecutionCommandIdSchema.optional()
 }).strict();

@@ -28,8 +28,8 @@ import {
     AgentExecutionLifecycleStateSchema,
     type AgentExecutionRecord,
     type AgentExecutionState,
-    type MissionAgentPermissionRequest,
-    type MissionAgentTelemetrySnapshot
+    type AgentExecutionPermissionRequest,
+    type AgentExecutionTelemetrySnapshot
 } from '../AgentExecution/AgentExecutionSchema.js';
 import {
     ArtifactEventLocatorSchema,
@@ -397,7 +397,7 @@ export type MissionAgentEvent =
     }
     | {
         type: 'permission-requested';
-        request: MissionAgentPermissionRequest;
+        request: AgentExecutionPermissionRequest;
         state: AgentExecutionState;
     }
     | {
@@ -414,17 +414,17 @@ export type MissionAgentEvent =
     }
     | {
         type: 'telemetry-updated';
-        telemetry: MissionAgentTelemetrySnapshot;
+        telemetry: AgentExecutionTelemetrySnapshot;
         state: AgentExecutionState;
     }
     | {
         type: 'context-updated';
-        telemetry: MissionAgentTelemetrySnapshot;
+        telemetry: AgentExecutionTelemetrySnapshot;
         state: AgentExecutionState;
     }
     | {
         type: 'cost-updated';
-        telemetry: MissionAgentTelemetrySnapshot;
+        telemetry: AgentExecutionTelemetrySnapshot;
         state: AgentExecutionState;
     }
     | {

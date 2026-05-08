@@ -1,3 +1,4 @@
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { AgentRegistry } from '../../../entities/Agent/AgentRegistry.js';
 import { AgentExecution } from '../../../entities/AgentExecution/AgentExecution.js';
 import type {
@@ -35,16 +36,30 @@ import type { AgentExecutionObservation } from '../../../entities/AgentExecution
 
 export type AgentExecutorOptions = {
     agentRegistry: AgentRegistry;
+    logger?: {
+        debug(message: string, metadata?: Record<string, unknown>): void;
+    };
 };
 
 type ManagedAgentExecution = {
     execution: AgentExecution;
-    terminalController: AgentExecutionTerminalController;
+    runtimeController: AgentExecutionRuntimeController;
     adapter: AgentAdapter;
     eventSubscription: { dispose(): void };
     outputLines: string[];
+    parseAgentDeclaredSignals: boolean;
     observationPolicy: AgentExecutionObservationPolicy;
     cleanup?: () => Promise<void>;
+};
+
+type AgentExecutionRuntimeController = {
+    readonly execution: AgentExecution;
+    submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionSnapshot>;
+    submitCommand(command: AgentCommand): Promise<AgentExecutionSnapshot>;
+    complete(): Promise<AgentExecutionSnapshot>;
+    cancel(reason?: string): Promise<AgentExecutionSnapshot>;
+    terminate(reason?: string): Promise<AgentExecutionSnapshot>;
+    dispose(): void;
 };
 
 type AgentExecutionTerminalOptions = SharedTerminalRegistryOptions & {
@@ -54,6 +69,7 @@ type AgentExecutionTerminalOptions = SharedTerminalRegistryOptions & {
 type AgentExecutionLaunch = {
     command: string;
     args?: string[];
+    stdin?: string;
     env?: NodeJS.ProcessEnv;
     sessionId?: string;
     terminalPrefix?: string;
@@ -74,11 +90,14 @@ type AgentExecutionTerminalReconcileOptions = AgentExecutionTerminalOptions & {
 
 export class AgentExecutor {
     private readonly agentRegistry: AgentRegistry;
-    private readonly observationRouter = new AgentExecutionObservationRouter();
+    private readonly observationRouter: AgentExecutionObservationRouter;
     private readonly managedExecutions = new Map<string, ManagedAgentExecution>();
 
     public constructor(options: AgentExecutorOptions) {
         this.agentRegistry = options.agentRegistry;
+        this.observationRouter = new AgentExecutionObservationRouter({
+            ...(options.logger ? { logger: options.logger } : {})
+        });
     }
 
     public dispose(): void {
@@ -102,62 +121,76 @@ export class AgentExecutor {
         const prepared = await this.prepareLaunch(config, adapter.id);
         const adapterPrepared = await adapter.prepareLaunchConfig(prepared.config);
         const launchPlan = adapter.createLaunchPlan(adapterPrepared.config);
-        const terminalController = AgentExecutionTerminalController.start({
-            ...adapter.terminalOptions,
-            agentId: adapter.id,
-            displayName: adapter.displayName,
-            config: adapterPrepared.config,
-            launch: {
-                sessionId: prepared.executionId,
-                command: launchPlan.command,
-                args: launchPlan.args,
-                skipInitialPromptSubmission: true,
-                ...(launchPlan.env ? { env: launchPlan.env } : {})
-            }
-        });
+        const runtimeController = launchPlan.mode === 'print'
+            ? AgentExecutionProcessController.start({
+                agentId: adapter.id,
+                displayName: adapter.displayName,
+                config: adapterPrepared.config,
+                launch: {
+                    sessionId: prepared.executionId,
+                    command: launchPlan.command,
+                    args: launchPlan.args,
+                    ...(launchPlan.stdin ? { stdin: launchPlan.stdin } : {}),
+                    ...(launchPlan.env ? { env: launchPlan.env } : {})
+                }
+            })
+            : AgentExecutionTerminalController.start({
+                ...adapter.terminalOptions,
+                agentId: adapter.id,
+                displayName: adapter.displayName,
+                config: adapterPrepared.config,
+                launch: {
+                    sessionId: prepared.executionId,
+                    command: launchPlan.command,
+                    args: launchPlan.args,
+                    skipInitialPromptSubmission: true,
+                    ...(launchPlan.env ? { env: launchPlan.env } : {})
+                }
+            });
         const cleanup = adapterPrepared.cleanup;
         this.trackExecution({
-            terminalController,
+            runtimeController,
             adapter,
+            parseAgentDeclaredSignals: launchPlan.mode === 'print',
             ...(cleanup ? { cleanup } : {})
         });
-        return terminalController.execution;
+        return runtimeController.execution;
     }
 
     public async reconcileExecution(reference: AgentExecutionReference): Promise<AgentExecution> {
         const adapter = this.agentRegistry.requireAgentAdapter(reference.agentId);
-        const terminalController = AgentExecutionTerminalController.reconcile({
+        const runtimeController = AgentExecutionTerminalController.reconcile({
             ...adapter.terminalOptions,
             agentId: adapter.id,
             reference
         });
-        this.trackExecution({ terminalController, adapter });
-        return terminalController.execution;
+        this.trackExecution({ runtimeController, adapter, parseAgentDeclaredSignals: false });
+        return runtimeController.execution;
     }
 
     public async submitPrompt(sessionId: string, prompt: AgentPrompt): Promise<AgentExecutionSnapshot> {
         const managed = this.requireManagedExecution(sessionId);
-        return managed.terminalController.submitPrompt(prompt);
+        return managed.runtimeController.submitPrompt(prompt);
     }
 
     public async submitCommand(sessionId: string, command: AgentCommand): Promise<AgentExecutionSnapshot> {
         const managed = this.requireManagedExecution(sessionId);
-        return managed.terminalController.submitCommand(command);
+        return managed.runtimeController.submitCommand(command);
     }
 
     public async completeExecution(sessionId: string): Promise<AgentExecutionSnapshot> {
         const managed = this.requireManagedExecution(sessionId);
-        return managed.terminalController.complete();
+        return managed.runtimeController.complete();
     }
 
     public async cancelExecution(sessionId: string, reason?: string): Promise<AgentExecutionSnapshot> {
         const managed = this.requireManagedExecution(sessionId);
-        return managed.terminalController.cancel(reason);
+        return managed.runtimeController.cancel(reason);
     }
 
     public async terminateExecution(sessionId: string, reason?: string): Promise<AgentExecutionSnapshot> {
         const managed = this.requireManagedExecution(sessionId);
-        return managed.terminalController.terminate(reason);
+        return managed.runtimeController.terminate(reason);
     }
 
     public getExecutionSnapshot(sessionId: string): AgentExecutionSnapshot | undefined {
@@ -169,10 +202,6 @@ export class AgentExecutor {
         executionId: string;
     }> {
         const executionId = AgentExecution.createFreshExecutionId(config, agentId);
-        const instructionScope = toSignalInstructionScope(config);
-        if (!instructionScope) {
-            return { config, executionId };
-        }
         const protocolDescriptor = AgentExecution.createProtocolDescriptorForSnapshot({
             agentId,
             sessionId: executionId,
@@ -224,20 +253,22 @@ export class AgentExecutor {
     }
 
     private trackExecution(input: {
-        terminalController: AgentExecutionTerminalController;
+        runtimeController: AgentExecutionRuntimeController;
         adapter: AgentAdapter;
+        parseAgentDeclaredSignals: boolean;
         cleanup?: () => Promise<void>;
     }): void {
-        const execution = input.terminalController.execution;
+        const execution = input.runtimeController.execution;
         const sessionId = execution.getSnapshot().sessionId;
         this.disposeManagedExecution(sessionId);
         const eventSubscription = execution.onDidEvent((event) => this.handleExecutionEvent(sessionId, event));
         this.managedExecutions.set(sessionId, {
             execution,
-            terminalController: input.terminalController,
+            runtimeController: input.runtimeController,
             adapter: input.adapter,
             eventSubscription,
             outputLines: [],
+            parseAgentDeclaredSignals: input.parseAgentDeclaredSignals,
             observationPolicy: new AgentExecutionObservationPolicy(),
             ...(input.cleanup ? { cleanup: input.cleanup } : {})
         });
@@ -280,6 +311,25 @@ export class AgentExecutor {
         line: string
     ): void {
         const observationAddress = toObservationAddress(snapshot);
+        const markerPrefix = AgentExecution.createProtocolDescriptorForSnapshot(snapshot).owner.markerPrefix;
+        if (managed.parseAgentDeclaredSignals && channel === 'stdout') {
+            const observations = this.observationRouter.route({
+                kind: 'agent-declared-signal',
+                line,
+                address: observationAddress,
+                markerPrefix,
+                observedAt: snapshot.updatedAt
+            });
+            this.applyObservations(managed, observations);
+            if (observations.length === 0 && isDirectAgentProseLine(line)) {
+                managed.execution.emitEvent({
+                    type: 'execution.message',
+                    channel: 'agent',
+                    text: line,
+                    snapshot: managed.execution.getSnapshot()
+                });
+            }
+        }
         for (const observation of managed.adapter.parseRuntimeOutputLine(line)) {
             this.applyObservations(managed, this.observationRouter.route({
                 kind: 'provider-output',
@@ -293,7 +343,7 @@ export class AgentExecutor {
             line,
             channel,
             address: observationAddress,
-            markerPrefix: AgentExecution.createProtocolDescriptorForSnapshot(snapshot).owner.markerPrefix,
+            markerPrefix,
             observedAt: snapshot.updatedAt
         }));
     }
@@ -319,7 +369,7 @@ export class AgentExecutor {
                 observation
             });
             if (decision.action !== 'reject') {
-                managed.execution.applySignalDecision(decision);
+                managed.execution.applySignalObservation(observation, decision);
             }
         }
     }
@@ -338,9 +388,152 @@ export class AgentExecutor {
             return;
         }
         managed.eventSubscription.dispose();
-        managed.terminalController.dispose();
+        managed.runtimeController.dispose();
         this.managedExecutions.delete(sessionId);
         void managed.cleanup?.();
+    }
+}
+
+class AgentExecutionProcessController implements AgentExecutionRuntimeController {
+    public readonly execution: AgentExecution;
+    private child: ChildProcessWithoutNullStreams | undefined;
+    private readonly lineBuffers: Record<'stdout' | 'stderr', string> = { stdout: '', stderr: '' };
+    private disposed = false;
+
+    private constructor(input: {
+        execution: AgentExecution;
+        command: string;
+        args?: string[];
+        workingDirectory: string;
+        env?: NodeJS.ProcessEnv;
+        stdin?: string;
+    }) {
+        this.execution = input.execution;
+        queueMicrotask(() => this.startProcess(input));
+    }
+
+    public static start(options: AgentExecutionTerminalStartOptions): AgentExecutionProcessController {
+        const agentId = options.agentId.trim();
+        const sessionId = options.launch.sessionId?.trim() || AgentExecution.createFreshExecutionId(options.config, agentId);
+        const execution = AgentExecution.createLive(createProcessRunningSnapshot({
+            agentId,
+            sessionId,
+            scope: options.config.scope,
+            workingDirectory: options.config.workingDirectory,
+            ...(options.config.task ? { task: options.config.task } : {})
+        }));
+        return new AgentExecutionProcessController({
+            execution,
+            command: options.launch.command,
+            args: options.launch.args ?? [],
+            workingDirectory: options.config.workingDirectory,
+            ...(options.launch.env ? { env: options.launch.env } : {}),
+            ...(options.launch.stdin ?? options.config.initialPrompt?.text
+                ? { stdin: options.launch.stdin ?? options.config.initialPrompt?.text ?? '' }
+                : {})
+        });
+    }
+
+    public submitPrompt(_prompt: AgentPrompt): Promise<AgentExecutionSnapshot> {
+        throw new Error(`AgentExecution '${this.execution.sessionId}' is running in direct stdout mode and does not accept follow-up prompts.`);
+    }
+
+    public submitCommand(command: AgentCommand): Promise<AgentExecutionSnapshot> {
+        if (command.type === 'interrupt') {
+            return this.cancel(command.reason);
+        }
+        throw new Error(`AgentExecution '${this.execution.sessionId}' is running in direct stdout mode and only supports interruption.`);
+    }
+
+    public complete(): Promise<AgentExecutionSnapshot> {
+        return this.execution.complete();
+    }
+
+    public async cancel(reason?: string): Promise<AgentExecutionSnapshot> {
+        this.disposed = true;
+        this.child?.kill('SIGINT');
+        return this.execution.cancelRuntime(reason);
+    }
+
+    public async terminate(reason?: string): Promise<AgentExecutionSnapshot> {
+        this.disposed = true;
+        this.child?.kill('SIGTERM');
+        return this.execution.terminateRuntime(reason);
+    }
+
+    public dispose(): void {
+        this.disposed = true;
+    }
+
+    private startProcess(input: {
+        command: string;
+        args?: string[];
+        workingDirectory: string;
+        env?: NodeJS.ProcessEnv;
+        stdin?: string;
+    }): void {
+        if (this.disposed) {
+            return;
+        }
+        const child = spawn(input.command, input.args ?? [], {
+            cwd: input.workingDirectory,
+            env: input.env,
+            stdio: 'pipe'
+        });
+        this.child = child;
+        child.stdout.setEncoding('utf8');
+        child.stderr.setEncoding('utf8');
+        child.stdout.on('data', (chunk: string | Buffer) => this.consumeChunk('stdout', chunk));
+        child.stderr.on('data', (chunk: string | Buffer) => this.consumeChunk('stderr', chunk));
+        child.once('error', (error) => {
+            void this.execution.terminateRuntime(error.message);
+        });
+        child.once('close', (code) => {
+            this.flushBufferedLines();
+            if (this.disposed) {
+                return;
+            }
+            if (code === 0) {
+                void this.execution.complete();
+                return;
+            }
+            void this.execution.terminateRuntime(`Process exited with status ${String(code ?? 'unknown')}.`);
+        });
+        if (input.stdin !== undefined) {
+            child.stdin.write(input.stdin);
+        }
+        child.stdin.end();
+    }
+
+    private consumeChunk(channel: 'stdout' | 'stderr', chunk: string | Buffer): void {
+        const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+        const segments = `${this.lineBuffers[channel]}${text}`.split(/\r?\n/u);
+        this.lineBuffers[channel] = segments.pop() ?? '';
+        for (const segment of segments) {
+            this.emitOutputLine(channel, segment);
+        }
+    }
+
+    private flushBufferedLines(): void {
+        for (const channel of ['stdout', 'stderr'] as const) {
+            const line = this.lineBuffers[channel];
+            if (line) {
+                this.emitOutputLine(channel, line);
+            }
+            this.lineBuffers[channel] = '';
+        }
+    }
+
+    private emitOutputLine(channel: 'stdout' | 'stderr', line: string): void {
+        if (!line) {
+            return;
+        }
+        this.execution.emitEvent({
+            type: 'execution.message',
+            channel,
+            text: line,
+            snapshot: this.execution.getSnapshot()
+        });
     }
 }
 
@@ -512,13 +705,6 @@ class AgentExecutionTerminalController {
     }
 }
 
-function toSignalInstructionScope(config: AgentLaunchConfig): { missionId: string; taskId: string } | undefined {
-    if (config.scope.kind === 'task') {
-        return { missionId: config.scope.missionId, taskId: config.scope.taskId };
-    }
-    return undefined;
-}
-
 function toObservationAddress(snapshot: AgentExecutionSnapshot): AgentExecutionObservationAddress {
     return {
         agentExecutionId: snapshot.sessionId,
@@ -549,42 +735,38 @@ function buildAgentExecutionTerminalName(
 }
 
 function toAgentExecutionTerminalOwner(scope: AgentExecutionScope, agentExecutionId: string): TerminalOwner {
+    return {
+        kind: 'agent-execution',
+        ownerId: getAgentExecutionTerminalOwnerId(scope),
+        agentExecutionId
+    };
+}
+
+function getAgentExecutionTerminalOwnerId(scope: AgentExecutionScope): string {
     switch (scope.kind) {
         case 'system':
+            return scope.label?.trim() || 'system';
         case 'repository':
-            return {
-                kind: 'agent-execution',
-                agentExecutionId
-            };
+            return scope.repositoryRootPath;
         case 'mission':
-            return {
-                kind: 'agent-execution',
-                missionId: scope.missionId,
-                agentExecutionId
-            };
         case 'task':
-            return {
-                kind: 'agent-execution',
-                missionId: scope.missionId,
-                taskId: scope.taskId,
-                agentExecutionId
-            };
+            return scope.missionId;
         case 'artifact':
-            return {
-                kind: 'agent-execution',
-                ...(scope.missionId ? { missionId: scope.missionId } : {}),
-                ...(scope.taskId ? { taskId: scope.taskId } : {}),
-                agentExecutionId
-            };
+            return scope.artifactId;
     }
 }
 
-function createDetachedAgentExecutionScope(owner: TerminalOwner | undefined): AgentExecutionScope {
-    if (owner?.kind === 'agent-execution' && owner.missionId?.trim() && owner.taskId?.trim()) {
-        return { kind: 'task', missionId: owner.missionId.trim(), taskId: owner.taskId.trim() };
+function isDirectAgentProseLine(line: string): boolean {
+    const trimmed = line.trim();
+    if (!trimmed) {
+        return false;
     }
-    if (owner?.kind === 'agent-execution' && owner.missionId?.trim()) {
-        return { kind: 'mission', missionId: owner.missionId.trim() };
+    return !/^@(system|repository|mission|task|artifact)::/u.test(trimmed);
+}
+
+function createDetachedAgentExecutionScope(owner: TerminalOwner | undefined): AgentExecutionScope {
+    if (owner?.kind === 'agent-execution') {
+        return { kind: 'system', label: owner.ownerId.trim() || 'detached' };
     }
     return { kind: 'system', label: 'detached' };
 }
@@ -604,6 +786,48 @@ function createRunningSnapshot(input: {
         acceptsPrompts: true,
         acceptedCommands: ['interrupt', 'checkpoint', 'nudge']
     });
+}
+
+function createProcessRunningSnapshot(input: {
+    agentId: string;
+    sessionId: string;
+    scope: AgentExecutionScope;
+    workingDirectory: string;
+    task?: AgentTaskContext;
+}): AgentExecutionSnapshot {
+    const timestamp = new Date().toISOString();
+    const missionId = getAgentExecutionScopeMissionId(input.scope);
+    const taskId = getAgentExecutionScopeTaskId(input.scope) ?? input.task?.taskId;
+    const stageId = getAgentExecutionScopeStageId(input.scope) ?? input.task?.stageId;
+    return {
+        agentId: input.agentId,
+        sessionId: input.sessionId,
+        scope: input.scope,
+        workingDirectory: input.workingDirectory,
+        ...(taskId ? { taskId } : {}),
+        ...(missionId ? { missionId } : {}),
+        ...(stageId ? { stageId } : {}),
+        status: 'running',
+        attention: 'autonomous',
+        progress: {
+            state: 'working',
+            updatedAt: timestamp
+        },
+        waitingForInput: false,
+        acceptsPrompts: false,
+        acceptedCommands: ['interrupt'],
+        interactionCapabilities: deriveAgentExecutionInteractionCapabilities({
+            status: 'running',
+            acceptsPrompts: false,
+            acceptedCommands: ['interrupt']
+        }),
+        reference: {
+            agentId: input.agentId,
+            sessionId: input.sessionId
+        },
+        startedAt: timestamp,
+        updatedAt: timestamp
+    };
 }
 
 function createTerminalSnapshot(input: {

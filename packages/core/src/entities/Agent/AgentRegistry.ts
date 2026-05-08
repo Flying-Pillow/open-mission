@@ -20,6 +20,7 @@ export type AgentRegistryOptions = {
 
 export type ConfiguredAgentRegistryOptions = {
     repositoryRootPath: string;
+    settings?: RepositorySettingsType;
     logLine?: (line: string) => void;
 };
 
@@ -36,7 +37,7 @@ export class AgentRegistry {
     }
 
     public static async createConfigured(options: ConfiguredAgentRegistryOptions): Promise<AgentRegistry> {
-        const settings = Repository.readSettingsDocument(options.repositoryRootPath) ?? createDefaultRepositorySettings();
+        const settings = options.settings ?? Repository.readSettingsDocument(options.repositoryRootPath) ?? createDefaultRepositorySettings();
         const resolveSettings = createProviderSettingsResolver({ settings });
         const adapterContext = {
             resolveSettings,

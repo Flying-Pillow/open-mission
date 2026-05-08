@@ -156,24 +156,24 @@ export function subscribeMissionTerminalTransport(
     }, listener);
 }
 
-export function subscribeMissionSessionTerminalTransport(
+export function subscribeAgentExecutionTerminalTransport(
     input: {
-        missionId: string;
+        ownerId: string;
         repositoryId: string;
         repositoryRootPath?: string;
         sessionId: string;
     },
     listener: TerminalBrokerListener<AgentExecutionTerminalSnapshotType>,
 ): SharedTerminalTransportSubscription<AgentExecutionTerminalSnapshotType> {
-    const missionId = input.missionId.trim();
+    const ownerId = input.ownerId.trim();
     const repositoryId = input.repositoryId.trim();
     const repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
     const sessionId = input.sessionId.trim();
-    const transportKey = [missionId, repositoryId, repositoryRootPath ?? '', sessionId].join(':');
-    const query = buildTerminalQuery({ missionId, repositoryId, repositoryRootPath });
+    const transportKey = [ownerId, repositoryId, repositoryRootPath ?? '', sessionId].join(':');
+    const query = buildTerminalQuery({ ownerId, repositoryId, repositoryRootPath });
 
     return subscribeSharedTerminalTransport({
-        key: `mission-session-terminal:${transportKey}`,
+        key: `agent-execution-terminal:${transportKey}`,
         loadData: async () => {
             const response = await fetch(
                 `/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal?${query}`,
@@ -198,13 +198,13 @@ export function subscribeMissionSessionTerminalTransport(
 }
 
 function buildTerminalQuery(input: {
-    missionId?: string;
+    ownerId?: string;
     repositoryId: string;
     repositoryRootPath?: string;
 }): string {
     const query = new URLSearchParams();
-    if (input.missionId?.trim()) {
-        query.set('missionId', input.missionId.trim());
+    if (input.ownerId?.trim()) {
+        query.set('ownerId', input.ownerId.trim());
     }
     query.set('repositoryId', input.repositoryId.trim());
     if (input.repositoryRootPath?.trim()) {

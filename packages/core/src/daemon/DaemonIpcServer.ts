@@ -11,7 +11,7 @@ import {
 import type { MissionRegistry } from './MissionRegistry.js';
 import { MissionRegistry as MissionRegistryClass } from './MissionRegistry.js';
 import { observeMissionTerminalUpdates } from './MissionTerminal.js';
-import { createAgentExecutionTerminalEvent } from '../entities/AgentExecution/AgentExecutionContract.js';
+import { createAgentExecutionDataChangedEvent, createAgentExecutionTerminalEvent } from '../entities/AgentExecution/AgentExecutionContract.js';
 import { createMissionTerminalEvent } from '../entities/Mission/MissionContract.js';
 import { matchesEntityChannel } from '../entities/Entity/Entity.js';
 import type { EntityEventEnvelopeType } from '../entities/Entity/EntitySchema.js';
@@ -33,6 +33,7 @@ import {
 import { DaemonLogger } from './runtime/DaemonLogger.js';
 import type { MissionAgentDisposable } from './runtime/agent/events.js';
 import { TerminalRegistry } from '../entities/Terminal/TerminalRegistry.js';
+import { getDefaultAgentExecutionRegistry } from './runtime/agent/AgentExecutionRegistry.js';
 
 export type MissionDaemonHandle = {
 	manifest: Manifest;
@@ -77,9 +78,10 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 	await assertNoReachableDaemon(socketPath);
 	const runtimeLock = await acquireDaemonRuntimeLock(socketPath);
 	const missionRegistry = new MissionRegistryClass({ logger });
+	const agentExecutionRegistry = getDefaultAgentExecutionRegistry({ logger });
 	const ipcServer = createDaemonIpcServer({ startedAt, missionRegistry });
 	const notificationSources = startEntityEventSources(ipcServer.broadcastEvent);
-	let shuttingDown = false;
+	let shutdownPromise: Promise<void> | undefined;
 	let closeResolve: (() => void) | undefined;
 	let closeReject: ((error: unknown) => void) | undefined;
 	const closed = new Promise<void>((resolve, reject) => {
@@ -131,22 +133,27 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 		socketPath
 	});
 
-	const shutdown = async (): Promise<void> => {
-		if (shuttingDown) {
-			return;
+	const shutdown = (): Promise<void> => {
+		if (shutdownPromise) {
+			return shutdownPromise;
 		}
-		shuttingDown = true;
-		logger.info('Mission daemon shutting down.');
-		missionRegistry.dispose();
-		notificationSources.dispose();
-		ipcServer.destroyConnections();
-		await closeServer(ipcServer.server);
-		await fs.rm(manifestPath, { force: true }).catch(() => undefined);
-		if (!isNamedPipePath(socketPath)) {
-			await fs.rm(socketPath, { force: true }).catch(() => undefined);
-		}
-		await runtimeLock.release();
-		await logger.flush();
+
+		shutdownPromise = (async () => {
+			logger.info('Mission daemon shutting down.');
+			missionRegistry.dispose();
+			agentExecutionRegistry.dispose();
+			notificationSources.dispose();
+			await TerminalRegistry.shared().dispose();
+			ipcServer.destroyConnections();
+			await closeServer(ipcServer.server);
+			await fs.rm(manifestPath, { force: true }).catch(() => undefined);
+			if (!isNamedPipePath(socketPath)) {
+				await fs.rm(socketPath, { force: true }).catch(() => undefined);
+			}
+			await runtimeLock.release();
+			await logger.flush();
+		})();
+		return shutdownPromise;
 	};
 
 	const handleTerminationSignal = () => {
@@ -426,20 +433,25 @@ function createEntityExecutionContext(request: Request, missionRegistry: Mission
 	return {
 		surfacePath: resolveSurfacePath(request.surfacePath),
 		missionRegistry,
+		agentExecutionRegistry: getDefaultAgentExecutionRegistry(),
 		...(request.authToken?.trim() ? { authToken: request.authToken.trim() } : {})
 	};
 }
 
 function startEntityEventSources(publish: (event: EntityEventEnvelopeType) => void): MissionAgentDisposable {
+	const agentExecutionRegistry = getDefaultAgentExecutionRegistry();
+	const agentExecutionDataChanges = agentExecutionRegistry.onDidExecutionDataChange((data) => {
+		publish(createAgentExecutionDataChangedEvent({ data }));
+	});
 	const missionTerminalUpdates = observeMissionTerminalUpdates((event) => {
 		publish(createMissionTerminalEvent(event));
 	});
 	const sessionTerminalUpdates = TerminalRegistry.shared().onDidTerminalUpdate((event) => {
-		if (event.owner?.kind !== 'agent-execution' || !event.owner.missionId) {
+		if (event.owner?.kind !== 'agent-execution') {
 			return;
 		}
 		publish(createAgentExecutionTerminalEvent({
-			missionId: event.owner.missionId,
+			ownerId: event.owner.ownerId,
 			sessionId: event.owner.agentExecutionId,
 			state: {
 				connected: event.connected,
@@ -459,6 +471,7 @@ function startEntityEventSources(publish: (event: EntityEventEnvelopeType) => vo
 
 	return {
 		dispose: () => {
+			agentExecutionDataChanges.dispose();
 			missionTerminalUpdates.dispose();
 			sessionTerminalUpdates.dispose();
 		}

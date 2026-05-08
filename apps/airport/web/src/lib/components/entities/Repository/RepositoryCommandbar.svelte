@@ -1,6 +1,10 @@
 <script lang="ts">
+    import { goto } from "$app/navigation";
+    import Icon from "@iconify/svelte";
+    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import EntityCommandbar from "$lib/components/entities/Commandbar/EntityCommandbar.svelte";
     import type { Repository } from "$lib/components/entities/Repository/Repository.svelte.js";
+    import { Button } from "$lib/components/ui/button/index.js";
     import type { EntityCommandDescriptorType } from "@flying-pillow/mission-core/entities/Entity/EntitySchema";
 
     let {
@@ -15,7 +19,23 @@
         showEmptyState?: boolean;
     } = $props();
 
+    const appContext = getAppContext();
+
     let refreshNonce = $state(0);
+
+    const setupHref = $derived(
+        repository
+            ? `/airport/${encodeURIComponent(repository.id)}/setup`
+            : undefined,
+    );
+
+    async function openSetup(): Promise<void> {
+        if (!setupHref) {
+            return;
+        }
+
+        await goto(setupHref);
+    }
 
     async function handleCommandExecuted(
         result: unknown,
@@ -32,7 +52,12 @@
             );
         }
 
-        if (command.commandId === "repository.remove") {
+        await onCommandExecuted();
+
+        if (
+            !repository ||
+            !appContext.application.resolveRepository(repository.id)
+        ) {
             refreshNonce += 1;
             return;
         }
@@ -43,11 +68,26 @@
             await repository.refreshCommands();
         }
         refreshNonce += 1;
-        await onCommandExecuted();
     }
 </script>
 
-<div class="space-y-2">
+<div class="flex flex-wrap items-center gap-2">
+    {#if repository}
+        <Button
+            variant="outline"
+            size="sm"
+            onclick={() => void openSetup()}
+            aria-label="Open repository setup"
+            title="Open repository setup"
+        >
+            <Icon
+                icon="lucide:wrench"
+                class="size-4"
+                data-icon="inline-start"
+            />
+            <span>Setup</span>
+        </Button>
+    {/if}
     <EntityCommandbar
         {refreshNonce}
         entity={repository}

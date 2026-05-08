@@ -527,8 +527,8 @@ export function deriveAgentExecutionInteractionCapabilities(input: Pick<
         return {
             mode: 'pty-terminal',
             canSendTerminalInput: true,
-            canSendStructuredPrompt: false,
-            canSendStructuredCommand: false
+            canSendStructuredPrompt: input.acceptsPrompts,
+            canSendStructuredCommand: input.acceptedCommands.length > 0
         };
     }
 
