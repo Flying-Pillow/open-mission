@@ -29,6 +29,7 @@
     "build"
   ],
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "gray-matter": "^4.0.3",
     "node-pty": "^1.1.0",
     "zod": "^4.3.6"

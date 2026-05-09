@@ -110,6 +110,62 @@ describe('AgentExecution', () => {
         })).toThrow();
     });
 
+    it('materializes selected signal transport state', () => {
+        const data = AgentExecution.toDataFromRecord(createAgentExecutionRecord({
+            transportState: {
+                selected: 'mcp-tool',
+                degraded: false
+            }
+        }));
+        expect(data.transportState).toEqual({
+            selected: 'mcp-tool',
+            degraded: false
+        });
+        expect(AgentExecutionDataSchema.parse({
+            ...data,
+            transportState: {
+                selected: 'mcp-tool'
+            }
+        }).transportState).toEqual({
+            selected: 'mcp-tool',
+            degraded: false
+        });
+    });
+
+    it('treats a live task session as incompatible when the requested agent changes', async () => {
+        await expect(AgentExecution.isCompatibleForLaunch({
+            session: createAgentExecutionRecord({ agentId: 'copilot-cli' }),
+            request: {
+                agentId: 'codex',
+                taskId: 'task-1',
+                workingDirectory: '/repo',
+                prompt: 'Continue.'
+            },
+            resolveLiveSession: async () => createRuntimeSnapshot({
+                agentId: 'copilot-cli',
+                taskId: 'task-1',
+                workingDirectory: '/repo'
+            })
+        })).resolves.toBe(false);
+    });
+
+    it('keeps a live task session compatible when task, agent, and working directory match', async () => {
+        await expect(AgentExecution.isCompatibleForLaunch({
+            session: createAgentExecutionRecord({ agentId: 'codex' }),
+            request: {
+                agentId: 'codex',
+                taskId: 'task-1',
+                workingDirectory: '/repo',
+                prompt: 'Continue.'
+            },
+            resolveLiveSession: async () => createRuntimeSnapshot({
+                agentId: 'codex',
+                taskId: 'task-1',
+                workingDirectory: '/repo'
+            })
+        })).resolves.toBe(true);
+    });
+
     it('advertises concrete AgentExecution contract events only', () => {
         expect(Object.keys(AgentExecutionContract.events ?? {})).toEqual(['data.changed', 'terminal']);
     });
@@ -162,6 +218,7 @@ describe('AgentExecution', () => {
         ]);
         expect(descriptor.signals.map((signal) => signal.type)).toEqual([
             'progress',
+            'status',
             'needs_input',
             'blocked',
             'ready_for_verification',
@@ -171,6 +228,7 @@ describe('AgentExecution', () => {
         ]);
         expect(descriptor.signals.map((signal) => signal.icon)).toEqual([
             'lucide:activity',
+            'lucide:circle-dot',
             'lucide:message-circle-question',
             'lucide:octagon-alert',
             'lucide:badge-check',
@@ -180,6 +238,7 @@ describe('AgentExecution', () => {
         ]);
         expect(descriptor.signals.map((signal) => signal.tone)).toEqual([
             'progress',
+            'neutral',
             'attention',
             'danger',
             'success',
@@ -187,7 +246,39 @@ describe('AgentExecution', () => {
             'danger',
             'neutral'
         ]);
-        expect(new Set(descriptor.signals.map((signal) => signal.delivery))).toEqual(new Set(['stdout-marker']));
+        expect(new Set(descriptor.signals.flatMap((signal) => signal.deliveries))).toEqual(new Set(['stdout-marker', 'mcp-tool']));
+        expect(descriptor.mcp).toEqual({
+            serverName: 'mission-mcp',
+            exposure: 'session-scoped',
+            publicApi: false
+        });
+    });
+
+    it('rejects singular Agent-declared signal delivery descriptors', () => {
+        expect(() => AgentExecutionProtocolDescriptorSchema.parse({
+            version: 1,
+            owner: {
+                entity: 'Task',
+                entityId: 'task-2',
+                markerPrefix: '@task::'
+            },
+            scope: {
+                kind: 'task',
+                missionId: 'mission-1',
+                taskId: 'task-2'
+            },
+            messages: [],
+            signals: [{
+                type: 'progress',
+                label: 'Progress',
+                icon: 'lucide:activity',
+                tone: 'progress',
+                payloadSchemaKey: 'agent-declared-signal.progress.v1',
+                delivery: 'stdout-marker',
+                policy: 'progress',
+                outcomes: ['agent-execution-state']
+            }]
+        })).toThrow();
     });
 
     it('materializes protocol descriptors on live AgentExecution data', () => {
@@ -245,6 +336,52 @@ describe('AgentExecution', () => {
                 title: 'Needs input',
                 text: 'Which setup profile should I use?',
                 choices: [{ kind: 'fixed', label: 'Default', value: 'default' }]
+            })
+        ]);
+    });
+
+    it('materializes status signals as status chat messages', () => {
+        const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const observation = {
+            observationId: 'observation-status-1',
+            sessionId: 'session-2',
+            source: 'agent-signal' as const,
+            signal: {
+                type: 'status' as const,
+                phase: 'idle' as const,
+                summary: 'Ready for the next structured prompt.',
+                source: 'agent-declared' as const,
+                confidence: 'medium' as const
+            },
+            route: {
+                origin: 'agent-declared-signal' as const,
+                address: {
+                    agentExecutionId: 'session-2',
+                    scope: execution.getSnapshot().scope
+                }
+            },
+            claimedAddress: {
+                agentExecutionId: 'session-2',
+                scope: execution.getSnapshot().scope
+            },
+            rawText: 'status payload',
+            observedAt: '2026-05-04T00:01:00.000Z'
+        };
+        const policy = new AgentExecutionObservationPolicy();
+        const decision = policy.evaluate({ snapshot: execution.getSnapshot(), observation });
+
+        if (decision.action === 'reject') {
+            throw new Error(decision.reason);
+        }
+        execution.applySignalObservation(observation, decision);
+
+        expect(execution.toData().chatMessages).toEqual([
+            expect.objectContaining({
+                id: 'observation-status-1',
+                role: 'agent',
+                kind: 'status',
+                title: 'Idle',
+                text: 'Ready for the next structured prompt.'
             })
         ]);
     });
@@ -366,7 +503,7 @@ function createAgentExecutionRecord(overrides: Partial<AgentExecutionRecord> = {
     };
 }
 
-function createRuntimeSnapshot(): AgentExecutionSnapshot {
+function createRuntimeSnapshot(overrides: Partial<AgentExecutionSnapshot> = {}): AgentExecutionSnapshot {
     return {
         agentId: 'codex',
         sessionId: 'session-2',
@@ -414,6 +551,7 @@ function createRuntimeSnapshot(): AgentExecutionSnapshot {
             }
         },
         startedAt: '2026-05-04T00:00:00.000Z',
-        updatedAt: '2026-05-04T00:00:00.000Z'
+        updatedAt: '2026-05-04T00:00:00.000Z',
+        ...overrides
     };
 }

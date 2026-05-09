@@ -43,7 +43,7 @@
 
         if (!canStartMission) {
             submitError =
-                "Complete Repository setup before starting regular missions.";
+                "Complete Repository initialization before starting regular missions.";
             return;
         }
 
@@ -194,7 +194,7 @@
                 ? "Creating mission..."
                 : canStartMission
                   ? "Create mission"
-                  : "Setup required"}
+                  : "Initialization required"}
         </Button>
     </form>
 </section>

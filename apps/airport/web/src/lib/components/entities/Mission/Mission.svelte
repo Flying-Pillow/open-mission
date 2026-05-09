@@ -840,8 +840,9 @@
                     >
                         <Task
                             refreshNonce={commandRefreshNonce}
-                            agentAdapters={activeRepository?.data.settings
-                                .agentAdapters ?? []}
+                            availableAgents={[]}
+                            enabledAgentAdapters={activeRepository?.data
+                                .settings.enabledAgentAdapters ?? []}
                             artifacts={displayArtifacts}
                             selectedArtifactId={activeArtifactSelection}
                             task={displayTask}

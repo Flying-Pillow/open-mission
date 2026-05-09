@@ -37,12 +37,13 @@ The prefix must be immediately followed by strict JSON on the same line. The JSO
 Supported `signal` payloads:
 
 1. `{"type":"progress","summary":"...","detail":"..."}` (`detail` optional)
-2. `{"type":"needs_input","question":"...","choices":[{"kind":"fixed","label":"...","value":"..."},{"kind":"manual","label":"Other","placeholder":"..."}]}` (`placeholder` optional)
-3. `{"type":"blocked","reason":"..."}`
-4. `{"type":"ready_for_verification","summary":"..."}`
-5. `{"type":"completed_claim","summary":"..."}`
-6. `{"type":"failed_claim","reason":"..."}`
-7. `{"type":"message","channel":"agent|system|stdout|stderr","text":"..."}`
+2. `{"type":"status","phase":"initializing|idle","summary":"..."}` (`summary` optional)
+3. `{"type":"needs_input","question":"...","choices":[{"kind":"fixed","label":"...","value":"..."},{"kind":"manual","label":"Other","placeholder":"..."}]}` (`placeholder` optional)
+4. `{"type":"blocked","reason":"..."}`
+5. `{"type":"ready_for_verification","summary":"..."}`
+6. `{"type":"completed_claim","summary":"..."}`
+7. `{"type":"failed_claim","reason":"..."}`
+8. `{"type":"message","channel":"agent|system|stdout|stderr","text":"..."}`
 
 Protocol markers are agent-declared claims and always require Mission signal-policy evaluation.
 
@@ -53,3 +54,4 @@ Protocol markers are agent-declared claims and always require Mission signal-pol
 3. Keep markers one line, valid JSON, and session-scoped.
 4. Emit markers on stdout, not stderr.
 5. Use normal prose for explanation if helpful, but do not replace protocol markers with prose alone when reporting structured state.
+6. Emit `{"type":"status","phase":"initializing"}` when you begin a turn and `{"type":"status","phase":"idle"}` when the turn is complete but the session remains live.

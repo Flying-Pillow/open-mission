@@ -1,9 +1,12 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
+import type { AgentLaunchConfig } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import {
     type AgentInput,
+    type AgentExecutionMcpAccess,
     type AgentAdapterTerminalOptions
 } from '../AgentAdapter.js';
+import { provisionAgentExecutionMcpConfig } from '../mcp/AgentExecutionMcpProvisioner.js';
 
 const COPILOT_AGENT_ID = 'copilot-cli' as const;
 
@@ -29,12 +32,24 @@ export function createCopilot(input: CopilotInput = {}): AgentInput {
         id: `agent:${COPILOT_AGENT_ID}`,
         agentId: COPILOT_AGENT_ID,
         displayName: 'Copilot CLI',
-        default: true,
         adapter: {
             command: command?.trim() || process.env['MISSION_COPILOT_CLI_COMMAND']?.trim() || 'copilot',
             providerSettings: false,
             defaultLaunchMode: resolvedLaunchMode,
             trustedFolders: { configDir: resolvedTrustedConfigDir },
+            transportCapabilities: {
+                supported: ['stdout-marker', 'mcp-tool'],
+                preferred: {
+                    interactive: 'mcp-tool',
+                    print: 'stdout-marker'
+                },
+                provisioning: {
+                    requiresRuntimeConfig: true,
+                    supportsStdioBridge: true,
+                    supportsSessionScopedTools: true
+                }
+            },
+            prepareLaunchConfig: prepareCopilotLaunchConfig,
             ...(env ? { runtimeEnv: env } : {}),
             terminalOptions,
             interactive: {
@@ -42,6 +57,7 @@ export function createCopilot(input: CopilotInput = {}): AgentInput {
                     '--allow-all-paths',
                     '--allow-all-tools',
                     '--allow-all-urls',
+                    { launchEnv: 'MISSION_AGENT_MCP_CONFIG', flag: '--additional-mcp-config' },
                     { trustedConfigDir: true, flag: '--config-dir' },
                     { trustedDirectories: true, flag: '--add-dir' },
                     { prompt: 'initial', flag: '-i', trim: true, omitWhenEmpty: true }
@@ -74,5 +90,28 @@ function resolveTrustedConfigDir(): string {
 
 function resolveLaunchMode(): 'interactive' | 'print' {
     const fromEnv = process.env['MISSION_COPILOT_LAUNCH_MODE']?.trim();
-    return fromEnv === 'interactive' ? 'interactive' : 'print';
+    return fromEnv === 'print' ? 'print' : 'interactive';
+}
+
+async function prepareCopilotLaunchConfig(
+    config: AgentLaunchConfig,
+    _agent: AgentInput,
+    mcpAccess?: AgentExecutionMcpAccess
+) {
+    if (!mcpAccess) {
+        return { config };
+    }
+
+    return provisionAgentExecutionMcpConfig({
+        config,
+        access: mcpAccess,
+        launchEnvName: 'MISSION_AGENT_MCP_CONFIG',
+        configFileName: 'mission-mcp.json',
+        referenceConfigPath: (configPath) => `@${configPath}`,
+        createDocument: (bridge) => ({
+            mcpServers: {
+                [mcpAccess.serverName]: bridge
+            }
+        })
+    });
 }

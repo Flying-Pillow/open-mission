@@ -7,6 +7,7 @@ import { runAirportStatusCommand } from './runAirportStatusCommand.js';
 import { runAirportWebCommand } from './runAirportWebCommand.js';
 import { runDaemonStopCommand } from './runDaemonStopCommand.js';
 import { runInstallCommand } from './runInstallCommand.js';
+import { runMissionMcpCommand } from './runMissionMcpCommand.js';
 
 export async function routeMissionEntry(argv: string[] = process.argv.slice(2)): Promise<void> {
 	const [firstArg, ...restArgs] = argv;
@@ -20,7 +21,7 @@ export async function routeMissionEntry(argv: string[] = process.argv.slice(2)):
 		return;
 	}
 
-	if (!json) {
+	if (!json && command !== 'mcp') {
 		intro('Mission');
 	}
 
@@ -42,6 +43,7 @@ export async function routeMissionEntry(argv: string[] = process.argv.slice(2)):
 
 	const handlers: Record<string, MissionEntryHandler> = {
 		web: runAirportWebCommand,
+		mcp: runMissionMcpCommand,
 		install: runInstallCommand,
 		'airport:status': runAirportStatusCommand,
 		'daemon:stop': runDaemonStopCommand
@@ -71,6 +73,6 @@ function resolveDefaultEntryCommand(): 'web' {
 
 export function printHelp(): void {
 	process.stdout.write(
-		`Mission\n\nCommands:\n  mission\n  mission web\n  mission native:dev\n  mission native:build\n  mission install [--json]\n  mission airport:status [--json]\n  mission daemon:stop [--json]\n\nRelated commands:\n  missiond [--socket <path>]\n\nNotes:\n  Bare 'mission' starts the local Mission Airport web host.\n  The web host serves the shared SvelteKit Airport application from the installed npm package.\n  Native commands remain available for local Tauri development.\n  Mission expects Node 24.\n  Starting Mission scaffolds config automatically and prompts only when setup cannot be inferred safely.\n  Starting Mission will scaffold control-repo state automatically if it is missing.\n  On Linux, 'mission install' provisions the Mission-managed GitHub CLI dependency when it is missing.\n  Agent terminal sessions now run through the daemon-backed PTY transport instead of a required external multiplexer.\n  Install '@flying-pillow/mission' globally if you want persistent 'mission' and 'missiond' commands.\n`
+		`Mission\n\nCommands:\n  mission\n  mission web\n  mission mcp connect --agent-execution <id>\n  mission native:dev\n  mission native:build\n  mission install [--json]\n  mission airport:status [--json]\n  mission daemon:stop [--json]\n\nRelated commands:\n  missiond [--socket <path>]\n\nNotes:\n  Bare 'mission' starts the local Mission Airport web host.\n  The web host serves the shared SvelteKit Airport application from the installed npm package.\n  Native commands remain available for local Tauri development.\n  Mission expects Node 24.\n  Starting Mission scaffolds config automatically and prompts only when setup cannot be inferred safely.\n  Starting Mission will scaffold control-repo state automatically if it is missing.\n  On Linux, 'mission install' provisions the Mission-managed GitHub CLI dependency when it is missing.\n  Agent terminal sessions now run through the daemon-backed PTY transport instead of a required external multiplexer.\n  Install '@flying-pillow/mission' globally if you want persistent 'mission' and 'missiond' commands.\n`
 	);
 }

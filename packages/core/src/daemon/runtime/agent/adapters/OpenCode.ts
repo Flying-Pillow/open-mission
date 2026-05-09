@@ -6,6 +6,13 @@ export const openCode = {
     id: `agent:${OPENCODE_AGENT_ID}`,
     agentId: OPENCODE_AGENT_ID,
     displayName: 'OpenCode',
+    optionCatalog: {
+        models: [
+            { value: 'openai/gpt-5.5', label: 'OpenAI GPT-5.5' },
+            { value: 'openai/gpt-5.4', label: 'OpenAI GPT-5.4' }
+        ],
+        reasoningEfforts: []
+    },
     adapter: {
         command: 'opencode',
         interactive: {

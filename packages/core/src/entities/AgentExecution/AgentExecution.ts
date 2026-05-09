@@ -45,6 +45,7 @@ import {
 	type AgentExecutionCommandType,
 	type AgentExecutionMessageDescriptorType,
 	type AgentExecutionProtocolDescriptorType,
+	type AgentExecutionTransportStateType,
 	type AgentExecutionContextType,
 	type AgentExecutionInteractionCapabilitiesType,
 	type AgentExecutionPromptType,
@@ -132,6 +133,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			context: AgentExecution.createContext(record),
 			runtimeMessages: AgentExecution.cloneRuntimeMessages(record.runtimeMessages),
 			...(record.protocolDescriptor ? { protocolDescriptor: AgentExecution.cloneProtocolDescriptor(record.protocolDescriptor) } : {}),
+			...(record.transportState ? { transportState: AgentExecution.cloneTransportState(record.transportState) } : {}),
 			...(record.scope ? { scope: record.scope } : {}),
 			...(record.telemetry ? { telemetry: record.telemetry } : {}),
 			createdAt: record.createdAt,
@@ -249,6 +251,9 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				return false;
 			}
 			if (liveSession.taskId !== input.request.taskId) {
+				return false;
+			}
+			if (liveSession.agentId !== input.request.agentId) {
 				return false;
 			}
 			if (liveSession.workingDirectory && liveSession.workingDirectory !== input.request.workingDirectory) {
@@ -458,6 +463,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				acceptedCommands: snapshot.acceptedCommands
 			}),
 			protocolDescriptor,
+			...(record?.transportState ? { transportState: AgentExecution.cloneTransportState(record.transportState) } : {}),
 			...(record?.scope ? { scope: record.scope } : {}),
 			...(snapshot.failureMessage
 				? { failureMessage: snapshot.failureMessage }
@@ -485,6 +491,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			interactionCapabilities: { ...record.interactionCapabilities },
 			runtimeMessages: AgentExecution.cloneRuntimeMessages(record.runtimeMessages),
 			...(record.protocolDescriptor ? { protocolDescriptor: AgentExecution.cloneProtocolDescriptor(record.protocolDescriptor) } : {}),
+			...(record.transportState ? { transportState: AgentExecution.cloneTransportState(record.transportState) } : {}),
 			...(record.scope ? { scope: { ...record.scope } } : {}),
 			...(record.telemetry ? { telemetry: cloneStructured(record.telemetry) } : {}),
 			...(record.failureMessage ? { failureMessage: record.failureMessage } : {})
@@ -506,6 +513,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			interactionCapabilities: { ...state.interactionCapabilities },
 			runtimeMessages: AgentExecution.cloneRuntimeMessages(state.runtimeMessages),
 			...(state.protocolDescriptor ? { protocolDescriptor: AgentExecution.cloneProtocolDescriptor(state.protocolDescriptor) } : {}),
+			...(state.transportState ? { transportState: AgentExecution.cloneTransportState(state.transportState) } : {}),
 			...(state.scope ? { scope: { ...state.scope } } : {}),
 			...(state.awaitingPermission
 				? {
@@ -542,8 +550,19 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			messages: AgentExecution.cloneRuntimeMessages(protocolDescriptor.messages),
 			signals: protocolDescriptor.signals.map((descriptor) => ({
 				...descriptor,
+				deliveries: [...descriptor.deliveries],
 				outcomes: [...descriptor.outcomes]
-			}))
+			})),
+			...(protocolDescriptor.mcp ? { mcp: { ...protocolDescriptor.mcp } } : {})
+		};
+	}
+
+	private static cloneTransportState(
+		transportState: AgentExecutionTransportStateType
+	): AgentExecutionTransportStateType {
+		return {
+			selected: transportState.selected,
+			degraded: false
 		};
 	}
 
@@ -594,13 +613,13 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	private liveSnapshot: AgentExecutionSnapshot | undefined;
 	private disposed = false;
 
-	public static createLive(snapshot: AgentExecutionSnapshot): AgentExecution {
-		const execution = new AgentExecution(AgentExecution.toDataFromRuntimeSnapshot(snapshot));
+	public static createLive(snapshot: AgentExecutionSnapshot, options: { protocolDescriptor?: AgentExecutionProtocolDescriptorType; transportState?: AgentExecutionTransportStateType } = {}): AgentExecution {
+		const execution = new AgentExecution(AgentExecution.toDataFromRuntimeSnapshot(snapshot, options));
 		execution.liveSnapshot = cloneRuntimeSnapshot(snapshot);
 		return execution;
 	}
 
-	private static toDataFromRuntimeSnapshot(snapshot: AgentExecutionSnapshot): AgentExecutionDataType {
+	private static toDataFromRuntimeSnapshot(snapshot: AgentExecutionSnapshot, options: { protocolDescriptor?: AgentExecutionProtocolDescriptorType; transportState?: AgentExecutionTransportStateType } = {}): AgentExecutionDataType {
 		return AgentExecutionDataSchema.parse({
 			id: AgentExecution.createEntityId(getAgentExecutionEntityScopeId(snapshot), snapshot.sessionId),
 			ownerId: getAgentExecutionOwnerId(snapshot.scope),
@@ -633,7 +652,8 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				acceptsPrompts: snapshot.acceptsPrompts,
 				acceptedCommands: snapshot.acceptedCommands
 			}),
-			protocolDescriptor: AgentExecution.createProtocolDescriptorForSnapshot(snapshot),
+			protocolDescriptor: options.protocolDescriptor ?? AgentExecution.createProtocolDescriptorForSnapshot(snapshot),
+			...(options.transportState ? { transportState: AgentExecution.cloneTransportState(options.transportState) } : {}),
 			scope: { ...snapshot.scope },
 			createdAt: snapshot.startedAt,
 			lastUpdatedAt: snapshot.updatedAt,
@@ -938,6 +958,16 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		switch (signal.type) {
 			case 'progress':
 				return this.appendChatMessage({ ...base, kind: 'progress', tone: 'progress', title: 'Progress', text: signal.summary, ...(signal.detail ? { detail: signal.detail } : {}) });
+			case 'status':
+				return this.appendChatMessage({
+					...base,
+					kind: 'status',
+					tone: signal.phase === 'idle' ? 'neutral' : 'progress',
+					title: signal.phase === 'idle' ? 'Idle' : 'Initializing',
+					text: signal.summary ?? (signal.phase === 'idle'
+						? 'Idle and ready for the next structured prompt.'
+						: 'Initializing the next agent turn.')
+				});
 			case 'needs_input':
 				return this.appendChatMessage({ ...base, kind: 'needs-input', tone: 'attention', title: 'Needs input', text: signal.question, choices: cloneInputChoices(signal.choices) });
 			case 'blocked':
@@ -1029,6 +1059,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			interactionCapabilities: { ...data.interactionCapabilities },
 			runtimeMessages: AgentExecution.cloneRuntimeMessages(data.runtimeMessages),
 			...(data.protocolDescriptor ? { protocolDescriptor: AgentExecution.cloneProtocolDescriptor(data.protocolDescriptor) } : {}),
+			...(data.transportState ? { transportState: AgentExecution.cloneTransportState(data.transportState) } : {}),
 			...(data.scope ? { scope: { ...data.scope } } : {}),
 			...(data.telemetry ? { telemetry: cloneStructured(data.telemetry) } : {}),
 			...(data.failureMessage ? { failureMessage: data.failureMessage } : {}),
@@ -1057,6 +1088,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				interactionCapabilities: { ...record.interactionCapabilities },
 				runtimeMessages: AgentExecution.cloneRuntimeMessages(record.runtimeMessages),
 				...(record.protocolDescriptor ? { protocolDescriptor: AgentExecution.cloneProtocolDescriptor(record.protocolDescriptor) } : {}),
+				...(record.transportState ? { transportState: AgentExecution.cloneTransportState(record.transportState) } : {}),
 				...(record.scope ? { scope: record.scope } : {}),
 				...(record.failureMessage ? { failureMessage: record.failureMessage } : {})
 			});

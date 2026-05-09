@@ -14,8 +14,10 @@
 
     let {
         repository,
+        compact = false,
     }: {
         repository: RepositoryPlatformRepositoryType;
+        compact?: boolean;
     } = $props();
 
     const appContext = getAppContext();
@@ -82,20 +84,28 @@
 </script>
 
 <article
-    class="rounded-lg border bg-card px-4 py-4 shadow-xs transition-colors hover:bg-muted/20"
+    class={compact
+        ? "border bg-card px-4 py-4 shadow-xs transition-colors hover:bg-muted/20 dark:bg-[#111317]"
+        : "rounded-lg border bg-card px-4 py-4 shadow-xs transition-colors hover:bg-muted/20"}
 >
     <div
-        class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"
+        class={compact
+            ? "flex flex-col gap-3"
+            : "flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"}
     >
         <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
                 <span
-                    class="inline-flex size-7 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground"
+                    class={compact
+                        ? "inline-flex size-7 shrink-0 items-center justify-center border bg-background text-muted-foreground dark:bg-[#171a20]"
+                        : "inline-flex size-7 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground"}
                 >
                     <Icon icon="lucide:github" class="size-4" />
                 </span>
                 <h3
-                    class="min-w-0 truncate text-sm font-semibold text-foreground"
+                    class={compact
+                        ? "min-w-0 truncate text-sm font-semibold text-foreground"
+                        : "min-w-0 truncate text-sm font-semibold text-foreground"}
                 >
                     {repository.repositoryRef}
                 </h3>
@@ -106,11 +116,15 @@
                     <Badge variant="secondary">Archived</Badge>
                 {/if}
             </div>
-            <p class="mt-2 text-sm text-muted-foreground">
+            <p
+                class={compact
+                    ? "mt-2 text-xs leading-5 text-muted-foreground"
+                    : "mt-2 text-sm text-muted-foreground"}
+            >
                 {repositoryDescription}
             </p>
             <div class="mt-2 flex flex-wrap gap-2">
-                {#each repository.topics.slice(0, 4) as topic (`${repository.repositoryRef}:${topic}`)}
+                {#each repository.topics.slice(0, compact ? 2 : 4) as topic (`${repository.repositoryRef}:${topic}`)}
                     <Badge variant="secondary">{topic}</Badge>
                 {/each}
                 {#if repositoryLicense}
@@ -122,18 +136,25 @@
             </div>
         </div>
 
-        <div class="flex flex-wrap gap-2 lg:justify-end">
+        <div
+            class={compact
+                ? "flex flex-wrap gap-2"
+                : "flex flex-wrap gap-2 lg:justify-end"}
+        >
             {#if repository.htmlUrl}
                 <Button
                     href={repository.htmlUrl}
                     target="_blank"
                     rel="noreferrer"
                     variant="outline"
-                    size="icon-sm"
+                    size={compact ? "sm" : "icon-sm"}
                     aria-label={`Open ${repository.repositoryRef} on GitHub`}
                     title="Open on GitHub"
                 >
                     <Icon icon="lucide:github" class="size-4" />
+                    {#if compact}
+                        <span>Open</span>
+                    {/if}
                 </Button>
             {/if}
             <EntityClassCommandbar
@@ -145,7 +166,7 @@
                 loadError={repositoryClassCommandsError}
                 executeCommand={executeRepositoryClassCommand}
                 onCommandExecuted={async () => undefined}
-                buttonClass="shadow-sm"
+                buttonClass={compact ? "shadow-none" : "shadow-sm"}
                 showEmptyState={false}
             />
             <Dialog.Root bind:open={detailsOpen}>

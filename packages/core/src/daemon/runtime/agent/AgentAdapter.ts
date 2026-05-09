@@ -8,6 +8,24 @@ import type {
     AgentLaunchConfig,
     AgentMetadata
 } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import type { AgentDeclaredSignalDeliveryType } from '../../../entities/AgentExecution/AgentExecutionSchema.js';
+
+export type AgentAdapterTransportCapabilities = {
+    supported: AgentDeclaredSignalDeliveryType[];
+    preferred: Partial<Record<'interactive' | 'print', AgentDeclaredSignalDeliveryType>>;
+    provisioning: {
+        requiresRuntimeConfig: boolean;
+        supportsStdioBridge: boolean;
+        supportsSessionScopedTools: boolean;
+    };
+};
+
+export type AgentExecutionMcpAccess = {
+    serverName: 'mission-mcp';
+    agentExecutionId: string;
+    token: string;
+    tools: Array<{ name: string }>;
+};
 
 export class ProviderInitializationError extends Error {
     public readonly agentId: string;
@@ -83,6 +101,9 @@ export type AgentAdapterArgument = string | {
 } | {
     trustedDirectories: true;
     flag: string;
+} | {
+    launchEnv: string;
+    flag?: string;
 };
 
 export type AgentAdapterLaunchInput = {
@@ -137,6 +158,8 @@ export type AgentAdapterInput = {
     trustedFolders?: AgentAdapterTrustedFoldersInput;
     parseRuntimeOutputLine?: (line: string, agent: AgentInput) => AgentAdapterRuntimeOutput[];
     parseSessionUsageContent?: (content: string, agent: AgentInput) => AgentAdapterRuntimeOutput | undefined;
+    prepareLaunchConfig?: (config: AgentLaunchConfig, agent: AgentInput, mcpAccess?: AgentExecutionMcpAccess) => AgentAdapterLaunchPreparation | Promise<AgentAdapterLaunchPreparation>;
+    transportCapabilities?: AgentAdapterTransportCapabilities;
     terminalOptions?: Partial<AgentAdapterTerminalOptions>;
 };
 
@@ -149,7 +172,8 @@ export type AgentAdapterOptions = {
     createLaunchPlan(config: AgentLaunchConfig): AgentAdapterLaunchPlan;
     parseRuntimeOutputLine?: (line: string) => AgentAdapterRuntimeOutput[];
     parseSessionUsageContent?: (content: string) => AgentAdapterRuntimeOutput | undefined;
-    prepareLaunchConfig?: (config: AgentLaunchConfig) => AgentAdapterLaunchPreparation | Promise<AgentAdapterLaunchPreparation>;
+    prepareLaunchConfig?: (config: AgentLaunchConfig, mcpAccess?: AgentExecutionMcpAccess) => AgentAdapterLaunchPreparation | Promise<AgentAdapterLaunchPreparation>;
+    transportCapabilities?: AgentAdapterTransportCapabilities;
     terminalOptions?: Partial<AgentAdapterTerminalOptions>;
 };
 
@@ -159,7 +183,8 @@ export class AgentAdapter {
     private readonly createLaunchPlanHook: (config: AgentLaunchConfig) => AgentAdapterLaunchPlan;
     private readonly parseRuntimeOutputLineHook: ((line: string) => AgentAdapterRuntimeOutput[]) | undefined;
     private readonly parseSessionUsageContentHook: ((content: string) => AgentAdapterRuntimeOutput | undefined) | undefined;
-    private readonly prepareLaunchConfigHook: ((config: AgentLaunchConfig) => AgentAdapterLaunchPreparation | Promise<AgentAdapterLaunchPreparation>) | undefined;
+    private readonly prepareLaunchConfigHook: ((config: AgentLaunchConfig, mcpAccess?: AgentExecutionMcpAccess) => AgentAdapterLaunchPreparation | Promise<AgentAdapterLaunchPreparation>) | undefined;
+    private readonly transportCapabilities: AgentAdapterTransportCapabilities;
     public readonly terminalOptions: Partial<AgentAdapterTerminalOptions>;
 
     public constructor(options: AgentAdapterOptions) {
@@ -175,11 +200,31 @@ export class AgentAdapter {
         this.parseRuntimeOutputLineHook = options.parseRuntimeOutputLine;
         this.parseSessionUsageContentHook = options.parseSessionUsageContent;
         this.prepareLaunchConfigHook = options.prepareLaunchConfig;
+        this.transportCapabilities = options.transportCapabilities ?? {
+            supported: ['stdout-marker'],
+            preferred: {
+                interactive: 'stdout-marker',
+                print: 'stdout-marker'
+            },
+            provisioning: {
+                requiresRuntimeConfig: false,
+                supportsStdioBridge: false,
+                supportsSessionScopedTools: false
+            }
+        };
         this.terminalOptions = { ...(options.terminalOptions ?? {}) };
     }
 
     public getCapabilities(): Promise<AgentCapabilities> {
         return Promise.resolve(AgentExecution.capabilities());
+    }
+
+    public getTransportCapabilities(): AgentAdapterTransportCapabilities {
+        return {
+            supported: [...this.transportCapabilities.supported],
+            preferred: { ...this.transportCapabilities.preferred },
+            provisioning: { ...this.transportCapabilities.provisioning }
+        };
     }
 
     public isAvailable(): Promise<{ available: boolean; reason?: string }> {
@@ -205,8 +250,8 @@ export class AgentAdapter {
         return this.parseSessionUsageContentHook?.(content);
     }
 
-    public async prepareLaunchConfig(config: AgentLaunchConfig): Promise<AgentAdapterLaunchPreparation> {
-        return this.prepareLaunchConfigHook ? this.prepareLaunchConfigHook(config) : { config };
+    public async prepareLaunchConfig(config: AgentLaunchConfig, mcpAccess?: AgentExecutionMcpAccess): Promise<AgentAdapterLaunchPreparation> {
+        return this.prepareLaunchConfigHook ? this.prepareLaunchConfigHook(config, mcpAccess) : { config };
     }
 }
 
@@ -223,14 +268,36 @@ export function createAgentAdapter(agent: AgentInput, context: AgentAdapterConte
         ...(agent.adapter.parseSessionUsageContent
             ? { parseSessionUsageContent: (content: string) => agent.adapter.parseSessionUsageContent?.(content, agent) }
             : {}),
-        ...(trustedFolders
-            ? { prepareLaunchConfig: (config: AgentLaunchConfig) => prepareConfiguredLaunchConfig(config, trustedFolders) }
-            : {}),
+        prepareLaunchConfig: (config: AgentLaunchConfig, mcpAccess?: AgentExecutionMcpAccess) => prepareAgentLaunchConfig(config, agent, trustedFolders, mcpAccess),
+        ...(agent.adapter.transportCapabilities ? { transportCapabilities: agent.adapter.transportCapabilities } : {}),
         terminalOptions: {
             ...(agent.adapter.terminalOptions ?? {}),
             ...(context.logLine ? { logLine: context.logLine } : {})
         }
     });
+}
+
+async function prepareAgentLaunchConfig(
+    config: AgentLaunchConfig,
+    agent: AgentInput,
+    trustedFolders: AgentAdapterTrustedFoldersInput | undefined,
+    mcpAccess: AgentExecutionMcpAccess | undefined
+): Promise<AgentAdapterLaunchPreparation> {
+    let prepared: AgentAdapterLaunchPreparation = { config };
+    if (trustedFolders) {
+        prepared = await prepareConfiguredLaunchConfig(prepared.config, trustedFolders);
+    }
+    if (agent.adapter.prepareLaunchConfig) {
+        const adapterPrepared = await agent.adapter.prepareLaunchConfig(prepared.config, agent, mcpAccess);
+        const cleanup = combineCleanup(prepared.cleanup, adapterPrepared.cleanup);
+        prepared = {
+            config: adapterPrepared.config,
+            ...(cleanup
+                ? { cleanup }
+                : {})
+        };
+    }
+    return prepared;
 }
 
 function validateCommonLaunchConfig(config: AgentLaunchConfig, displayName: string): void {
@@ -375,6 +442,16 @@ function buildLaunchArgs(input: { config: AgentLaunchConfig; agent: AgentInput; 
             args.push(configDir);
             continue;
         }
+        if ('launchEnv' in argument) {
+            const value = input.settings.launchEnv[argument.launchEnv]?.trim();
+            if (value) {
+                if (argument.flag) {
+                    args.push(argument.flag);
+                }
+                args.push(value);
+            }
+            continue;
+        }
         const trustedDirectories = resolveTrustedDirectories(input.config.workingDirectory);
         for (const directory of trustedDirectories) {
             args.push(argument.flag, directory);
@@ -384,6 +461,22 @@ function buildLaunchArgs(input: { config: AgentLaunchConfig; agent: AgentInput; 
         throw new ProviderInitializationError(input.agent.agentId, `Adapter '${input.agent.agentId}' does not support resumeSession for interactive launch plans.`);
     }
     return args;
+}
+
+function combineCleanup(
+    first: (() => Promise<void>) | undefined,
+    second: (() => Promise<void>) | undefined
+): (() => Promise<void>) | undefined {
+    if (!first) {
+        return second;
+    }
+    if (!second) {
+        return first;
+    }
+    return async () => {
+        await second();
+        await first();
+    };
 }
 
 async function prepareConfiguredLaunchConfig(config: AgentLaunchConfig, trustedFolders: AgentAdapterTrustedFoldersInput): Promise<AgentAdapterLaunchPreparation> {

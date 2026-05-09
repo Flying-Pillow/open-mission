@@ -12,6 +12,13 @@ export const pi = {
     id: `agent:${PI_AGENT_ID}`,
     agentId: PI_AGENT_ID,
     displayName: 'Pi',
+    optionCatalog: {
+        models: [
+            { value: 'gpt-5.5', label: 'GPT-5.5' },
+            { value: 'gpt-5.4', label: 'GPT-5.4' }
+        ],
+        reasoningEfforts: []
+    },
     adapter: {
         command: 'pi',
         interactive: {

@@ -6,6 +6,7 @@ import { renderTemplate } from '../../engine/templates/templateRenderer.js';
 import { renderMissionTitle } from './common.js';
 import { parseFrontmatterDocument } from '../../../lib/frontmatter.js';
 import { Repository } from '../../../entities/Repository/Repository.js';
+import { DEFAULT_REPOSITORY_AGENT_ADAPTER_ID } from '../../../entities/Repository/RepositorySchema.js';
 import { getMissionArtifactDefinition, getMissionStageDefinition, type MissionArtifactKey } from '../../manifest.js';
 import type {
     MissionProductTemplate,
@@ -67,7 +68,7 @@ export async function renderMissionTaskTemplate(
         fileName,
         subject: String(subjectAttr || ''),
         instruction: document.body.trim(),
-        agent: String(typeof agentAttr === 'string' && agentAttr.trim() ? agentAttr.trim() : 'copilot-cli') as MissionTaskAgent,
+        agent: String(typeof agentAttr === 'string' && agentAttr.trim() ? agentAttr.trim() : DEFAULT_REPOSITORY_AGENT_ADAPTER_ID) as MissionTaskAgent,
     };
 
     if (Array.isArray(dependsOnAttr)) {

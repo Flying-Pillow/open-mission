@@ -8,7 +8,7 @@ description: Accepted architectural decisions that constrain Mission changes.
 
 ADRs are the durable architecture register for Mission.
 
-Read them when a change touches ownership, naming, state, runtime behavior, repository setup, Airport surfaces, compatibility policy, or documentation authority. Each ADR carries frontmatter so the docs site and architecture skills can treat decisions as structured records.
+Read them when a change touches ownership, naming, state, runtime behavior, repository initialization, Airport surfaces, compatibility policy, or documentation authority. Each ADR carries frontmatter so the docs site and architecture skills can treat decisions as structured records.
 
 `CONTEXT.md` defines the canonical language and relationships. ADRs define the durable rules and trade-offs behind that language. The old specifications corpus has been removed from the active docs tree after its relevant architecture was registered here.
 
@@ -37,7 +37,7 @@ Read them when a change touches ownership, naming, state, runtime behavior, repo
 - [Daemon-Owned State Store With Surface Replication Path](0009-daemon-owned-state-store-with-surface-replication-path.md)
 - [State Store Transactions As Canonical Write Interface](0010-state-store-transactions-as-canonical-write-interface.md)
 - [Mission Workflow Definition Seam](0014-mission-workflow-definition-seam.md)
-- [Repository Setup Before Mission Start](0016-repository-setup-before-mission-start.md)
+- [Repository Initialization Before Mission Start](0016-repository-setup-before-mission-start.md)
 - [Repository Workflow Settings Control Contract](0021-repository-workflow-settings-control-contract.md)
 
 ### Agent Execution
@@ -48,6 +48,7 @@ Read them when a change touches ownership, naming, state, runtime behavior, repo
 - [Prompt-Scoped Agent Execution Signals](0017-prompt-scoped-agent-execution-signals.md)
 - [Agent Execution And Agent Adapter Vocabulary](0018-agent-execution-and-agent-adapter-vocabulary.md)
 - [Agent Execution Structured Interaction Vocabulary](0022-agent-execution-structured-interaction-vocabulary.md)
+- [Mission MCP Server Agent Signal Transport](0024-mission-mcp-server-agent-signal-transport.md)
 
 ### Mission Control And Surfaces
 

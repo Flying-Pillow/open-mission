@@ -510,9 +510,9 @@ export class AirportApplication {
                 if (payload.type === 'agentExecution.data.changed') {
                     const eventPayload = AgentExecutionDataChangedSchema.parse(payload.payload);
                     const repository = this.activeRepository;
-                    const setupExecution = repository?.setupAgentExecution;
-                    if (setupExecution?.sessionId === eventPayload.data.sessionId) {
-                        repository?.applySetupAgentExecutionData(eventPayload.data);
+                    const repositoryExecution = repository?.repositoryAgentExecution;
+                    if (repositoryExecution?.sessionId === eventPayload.data.sessionId) {
+                        repository?.applyRepositoryAgentExecutionData(eventPayload.data);
                     }
                 }
             } catch {

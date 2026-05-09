@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { createAgentExecutionProtocolDescriptor } from '../../../entities/AgentExecution/AgentExecutionProtocolDescriptor.js';
 import type { AgentRegistry } from '../../../entities/Agent/AgentRegistry.js';
 import { AgentExecution } from '../../../entities/AgentExecution/AgentExecution.js';
 import type {
@@ -19,6 +20,13 @@ import {
     getAgentExecutionScopeStageId,
     getAgentExecutionScopeTaskId
 } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import {
+    AgentExecutionObservationAckSchema,
+    type AgentDeclaredSignalDeliveryType,
+    type AgentExecutionProtocolDescriptorType,
+    type AgentExecutionTransportStateType,
+    type AgentExecutionObservationAckType
+} from '../../../entities/AgentExecution/AgentExecutionSchema.js';
 import { Repository } from '../../../entities/Repository/Repository.js';
 import {
     TerminalRegistry,
@@ -28,14 +36,16 @@ import {
     type TerminalSnapshot,
     type TerminalState
 } from '../../../entities/Terminal/TerminalRegistry.js';
-import type { AgentAdapter } from './AgentAdapter.js';
+import type { AgentAdapter, AgentExecutionMcpAccess } from './AgentAdapter.js';
 import { AgentExecutionObservationPolicy } from '../../../entities/AgentExecution/AgentExecutionObservationPolicy.js';
 import { buildAgentExecutionSignalLaunchContext } from './signals/AgentExecutionSignalLaunchContext.js';
 import { AgentExecutionObservationRouter } from './signals/AgentExecutionObservationRouter.js';
 import type { AgentExecutionObservation } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import type { MissionMcpServer } from './mcp/MissionMcpServer.js';
 
 export type AgentExecutorOptions = {
     agentRegistry: AgentRegistry;
+    missionMcpServer?: MissionMcpServer;
     logger?: {
         debug(message: string, metadata?: Record<string, unknown>): void;
     };
@@ -72,6 +82,8 @@ type AgentExecutionLaunch = {
     stdin?: string;
     env?: NodeJS.ProcessEnv;
     sessionId?: string;
+    protocolDescriptor?: AgentExecutionProtocolDescriptorType;
+    transportState?: AgentExecutionTransportStateType;
     terminalPrefix?: string;
     skipInitialPromptSubmission?: boolean;
 };
@@ -90,11 +102,13 @@ type AgentExecutionTerminalReconcileOptions = AgentExecutionTerminalOptions & {
 
 export class AgentExecutor {
     private readonly agentRegistry: AgentRegistry;
+    private readonly missionMcpServer: MissionMcpServer | undefined;
     private readonly observationRouter: AgentExecutionObservationRouter;
     private readonly managedExecutions = new Map<string, ManagedAgentExecution>();
 
     public constructor(options: AgentExecutorOptions) {
         this.agentRegistry = options.agentRegistry;
+        this.missionMcpServer = options.missionMcpServer;
         this.observationRouter = new AgentExecutionObservationRouter({
             ...(options.logger ? { logger: options.logger } : {})
         });
@@ -118,8 +132,14 @@ export class AgentExecutor {
             throw new Error(availability.reason ?? `Agent '${agentId}' is unavailable.`);
         }
 
-        const prepared = await this.prepareLaunch(config, adapter.id);
-        const adapterPrepared = await adapter.prepareLaunchConfig(prepared.config);
+        const executionId = AgentExecution.createFreshExecutionId(config, adapter.id);
+        const preliminaryLaunchPlan = adapter.createLaunchPlan(config);
+        const selectedDelivery = this.selectSignalDelivery(adapter, preliminaryLaunchPlan.mode);
+        const prepared = await this.prepareLaunch(config, executionId, selectedDelivery);
+        const mcpAccess = selectedDelivery === 'mcp-tool'
+            ? this.registerMcpAccess(prepared.executionId, prepared.protocolDescriptor)
+            : undefined;
+        const adapterPrepared = await adapter.prepareLaunchConfig(prepared.config, mcpAccess);
         const launchPlan = adapter.createLaunchPlan(adapterPrepared.config);
         const runtimeController = launchPlan.mode === 'print'
             ? AgentExecutionProcessController.start({
@@ -128,6 +148,8 @@ export class AgentExecutor {
                 config: adapterPrepared.config,
                 launch: {
                     sessionId: prepared.executionId,
+                    protocolDescriptor: prepared.protocolDescriptor,
+                    transportState: prepared.transportState,
                     command: launchPlan.command,
                     args: launchPlan.args,
                     ...(launchPlan.stdin ? { stdin: launchPlan.stdin } : {}),
@@ -141,17 +163,21 @@ export class AgentExecutor {
                 config: adapterPrepared.config,
                 launch: {
                     sessionId: prepared.executionId,
+                    protocolDescriptor: prepared.protocolDescriptor,
+                    transportState: prepared.transportState,
                     command: launchPlan.command,
                     args: launchPlan.args,
                     skipInitialPromptSubmission: true,
                     ...(launchPlan.env ? { env: launchPlan.env } : {})
                 }
             });
-        const cleanup = adapterPrepared.cleanup;
+        const cleanup = combineCleanup(adapterPrepared.cleanup, mcpAccess ? async () => {
+            this.missionMcpServer?.unregisterAccess(prepared.executionId);
+        } : undefined);
         this.trackExecution({
             runtimeController,
             adapter,
-            parseAgentDeclaredSignals: launchPlan.mode === 'print',
+            parseAgentDeclaredSignals: selectedDelivery === 'stdout-marker',
             ...(cleanup ? { cleanup } : {})
         });
         return runtimeController.execution;
@@ -197,42 +223,43 @@ export class AgentExecutor {
         return this.managedExecutions.get(sessionId)?.execution.getSnapshot();
     }
 
-    private async prepareLaunch(config: AgentLaunchConfig, agentId: string): Promise<{
+    public routeTransportObservation(input: {
+        agentExecutionId: string;
+        observation: AgentExecutionObservation;
+    }): AgentExecutionObservationAckType {
+        const managed = this.requireManagedExecution(input.agentExecutionId);
+        return this.applyObservation(managed, input.observation);
+    }
+
+    private async prepareLaunch(
+        config: AgentLaunchConfig,
+        executionId: string,
+        selectedDelivery: AgentDeclaredSignalDeliveryType
+    ): Promise<{
         config: AgentLaunchConfig;
         executionId: string;
+        protocolDescriptor: AgentExecutionProtocolDescriptorType;
+        transportState: AgentExecutionTransportStateType;
     }> {
-        const executionId = AgentExecution.createFreshExecutionId(config, agentId);
-        const protocolDescriptor = AgentExecution.createProtocolDescriptorForSnapshot({
-            agentId,
-            sessionId: executionId,
+        const protocolDescriptor = createAgentExecutionProtocolDescriptor({
             scope: config.scope,
-            workingDirectory: config.workingDirectory,
-            ...(config.scope.kind === 'mission' ? { missionId: config.scope.missionId } : {}),
-            ...(config.scope.kind === 'task' ? { missionId: config.scope.missionId, taskId: config.scope.taskId, stageId: config.scope.stageId } : {}),
-            ...(config.scope.kind === 'artifact' ? { missionId: config.scope.missionId, taskId: config.scope.taskId, stageId: config.scope.stageId } : {}),
-            status: 'starting',
-            attention: 'autonomous',
-            progress: {
-                state: 'working',
-                updatedAt: new Date().toISOString()
-            },
-            waitingForInput: false,
-            acceptsPrompts: true,
-            acceptedCommands: ['interrupt', 'checkpoint', 'nudge'],
-            reference: {
-                agentId,
-                sessionId: executionId
-            },
-            startedAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+            deliveries: [selectedDelivery],
+            messages: AgentExecution.createRuntimeMessageDescriptorsForCommands(['interrupt', 'checkpoint', 'nudge'])
         });
+        const transportState: AgentExecutionTransportStateType = {
+            selected: selectedDelivery,
+            degraded: false
+        };
 
         const launchContext = buildAgentExecutionSignalLaunchContext({
             agentExecutionId: executionId,
             protocolDescriptor
         });
+
         return {
             executionId,
+            protocolDescriptor,
+            transportState,
             config: {
                 ...config,
                 initialPrompt: config.initialPrompt
@@ -249,6 +276,43 @@ export class AgentExecutor {
                     ...launchContext.launchEnv
                 }
             }
+        };
+    }
+
+    private selectSignalDelivery(adapter: AgentAdapter, launchMode: 'interactive' | 'print'): AgentDeclaredSignalDeliveryType {
+        const capabilities = adapter.getTransportCapabilities();
+        const preferredDelivery = capabilities.preferred[launchMode];
+        if (preferredDelivery) {
+            if (!capabilities.supported.includes(preferredDelivery)) {
+                throw new Error(`AgentAdapter '${adapter.id}' prefers unsupported AgentExecution signal delivery '${preferredDelivery}'.`);
+            }
+            if (preferredDelivery === 'mcp-tool' && !this.missionMcpServer) {
+                throw new Error(`AgentAdapter '${adapter.id}' selected mcp-tool delivery but mission-mcp is unavailable.`);
+            }
+            return preferredDelivery;
+        }
+        if (capabilities.supported.includes('stdout-marker')) {
+            return 'stdout-marker';
+        }
+        if (capabilities.supported.includes('mcp-tool')) {
+            if (!this.missionMcpServer) {
+                throw new Error(`AgentAdapter '${adapter.id}' selected mcp-tool delivery but mission-mcp is unavailable.`);
+            }
+            return 'mcp-tool';
+        }
+        throw new Error(`AgentAdapter '${adapter.id}' does not support an AgentExecution signal delivery for launch mode '${launchMode}'.`);
+    }
+
+    private registerMcpAccess(agentExecutionId: string, protocolDescriptor: AgentExecutionProtocolDescriptorType): AgentExecutionMcpAccess {
+        if (!this.missionMcpServer) {
+            throw new Error(`AgentExecution '${agentExecutionId}' selected mcp-tool delivery but mission-mcp is unavailable.`);
+        }
+        const access = this.missionMcpServer.registerAccess({ agentExecutionId, protocolDescriptor });
+        return {
+            serverName: access.serverName,
+            agentExecutionId: access.agentExecutionId,
+            token: access.token,
+            tools: access.tools.map((tool) => ({ name: tool.name }))
         };
     }
 
@@ -364,14 +428,33 @@ export class AgentExecutor {
 
     private applyObservations(managed: ManagedAgentExecution, observations: AgentExecutionObservation[]): void {
         for (const observation of observations) {
-            const decision = managed.observationPolicy.evaluate({
-                snapshot: managed.execution.getSnapshot(),
-                observation
-            });
-            if (decision.action !== 'reject') {
-                managed.execution.applySignalObservation(observation, decision);
-            }
+            this.applyObservation(managed, observation);
         }
+    }
+
+    private applyObservation(managed: ManagedAgentExecution, observation: AgentExecutionObservation): AgentExecutionObservationAckType {
+        const eventId = readObservationEventId(observation);
+        const decision = managed.observationPolicy.evaluate({
+            snapshot: managed.execution.getSnapshot(),
+            observation
+        });
+        if (decision.action === 'reject') {
+            return AgentExecutionObservationAckSchema.parse({
+                status: isDuplicateObservationRejection(decision.reason) ? 'duplicate' : 'rejected',
+                agentExecutionId: managed.execution.sessionId,
+                eventId,
+                observationId: observation.observationId,
+                reason: decision.reason
+            });
+        }
+        managed.execution.applySignalObservation(observation, decision);
+        return AgentExecutionObservationAckSchema.parse({
+            status: decision.action === 'record-observation-only' ? 'recorded-only' : 'promoted',
+            agentExecutionId: managed.execution.sessionId,
+            eventId,
+            observationId: observation.observationId,
+            ...(decision.action === 'record-observation-only' ? { reason: decision.reason } : {})
+        });
     }
 
     private requireManagedExecution(sessionId: string): ManagedAgentExecution {
@@ -421,7 +504,7 @@ class AgentExecutionProcessController implements AgentExecutionRuntimeController
             scope: options.config.scope,
             workingDirectory: options.config.workingDirectory,
             ...(options.config.task ? { task: options.config.task } : {})
-        }));
+        }), createAgentExecutionLiveOptions(options.launch));
         return new AgentExecutionProcessController({
             execution,
             command: options.launch.command,
@@ -589,7 +672,7 @@ class AgentExecutionTerminalController {
             workingDirectory: options.config.workingDirectory,
             ...(options.config.task ? { task: options.config.task } : {}),
             transport: toSnapshotTransport(terminalHandle)
-        }));
+        }), createAgentExecutionLiveOptions(options.launch));
         const controller = new AgentExecutionTerminalController({ registry, execution, terminalHandle });
 
         if (!options.launch.skipInitialPromptSubmission && options.config.initialPrompt?.text) {
@@ -762,6 +845,50 @@ function isDirectAgentProseLine(line: string): boolean {
         return false;
     }
     return !/^@(system|repository|mission|task|artifact)::/u.test(trimmed);
+}
+
+function combineCleanup(
+    first: (() => Promise<void>) | undefined,
+    second: (() => Promise<void>) | undefined
+): (() => Promise<void>) | undefined {
+    if (!first) {
+        return second;
+    }
+    if (!second) {
+        return first;
+    }
+    return async () => {
+        try {
+            await first();
+        } finally {
+            await second();
+        }
+    };
+}
+
+function readObservationEventId(observation: AgentExecutionObservation): string {
+    const prefix = 'agent-declared-signal:';
+    if (observation.observationId.startsWith(prefix)) {
+        const eventId = observation.observationId.slice(prefix.length).trim();
+        if (eventId) {
+            return eventId;
+        }
+    }
+    return observation.observationId;
+}
+
+function isDuplicateObservationRejection(reason: string): boolean {
+    return /was already processed/u.test(reason);
+}
+
+function createAgentExecutionLiveOptions(launch: AgentExecutionLaunch): {
+    protocolDescriptor?: AgentExecutionProtocolDescriptorType;
+    transportState?: AgentExecutionTransportStateType;
+} {
+    return {
+        ...(launch.protocolDescriptor ? { protocolDescriptor: launch.protocolDescriptor } : {}),
+        ...(launch.transportState ? { transportState: launch.transportState } : {})
+    };
 }
 
 function createDetachedAgentExecutionScope(owner: TerminalOwner | undefined): AgentExecutionScope {

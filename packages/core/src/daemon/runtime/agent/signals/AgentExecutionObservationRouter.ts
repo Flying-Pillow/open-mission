@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { AgentAdapterRuntimeOutput } from '../AgentAdapter.js';
 import {
 	cloneSignal,
-	cloneAgentExecutionInputChoice,
 	cloneObservationAddress,
+	createAgentDeclaredSignalFromPayload,
 	MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH,
 	MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH,
 	type AgentExecutionObservation,
@@ -14,7 +14,6 @@ import {
 } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import {
 	AgentDeclaredSignalMarkerPayloadSchema,
-	type AgentDeclaredSignalPayloadType,
 	AgentExecutionOwnerMarkerPrefixSchema,
 	type AgentExecutionOwnerMarkerPrefixType
 } from '../../../../entities/AgentExecution/AgentExecutionSchema.js';
@@ -227,7 +226,7 @@ export class AgentExecutionObservationRouter {
 			dedupeKey: result.data.eventId,
 			claimedAgentExecutionId: result.data.agentExecutionId,
 			rawText: line,
-			signal: toAgentDeclaredSignal(result.data.signal)
+			signal: createAgentDeclaredSignalFromPayload(result.data.signal)
 		}];
 	}
 
@@ -376,63 +375,6 @@ function toProviderDiagnosticCandidate(observation: Extract<AgentAdapterRuntimeO
 			confidence: observation.signal.confidence
 		}
 	};
-}
-
-function toAgentDeclaredSignal(signal: AgentDeclaredSignalPayloadType): AgentExecutionSignalCandidate['signal'] {
-	switch (signal.type) {
-		case 'progress':
-			return {
-				type: 'progress',
-				summary: signal.summary,
-				...(signal.detail ? { detail: signal.detail } : {}),
-				source: 'agent-declared',
-				confidence: 'medium'
-			};
-		case 'needs_input':
-			return {
-				type: 'needs_input',
-				question: signal.question,
-				choices: signal.choices.map(cloneAgentExecutionInputChoice),
-				source: 'agent-declared',
-				confidence: 'medium'
-			};
-		case 'blocked':
-			return {
-				type: 'blocked',
-				reason: signal.reason,
-				source: 'agent-declared',
-				confidence: 'medium'
-			};
-		case 'ready_for_verification':
-			return {
-				type: 'ready_for_verification',
-				summary: signal.summary,
-				source: 'agent-declared',
-				confidence: 'medium'
-			};
-		case 'completed_claim':
-			return {
-				type: 'completed_claim',
-				summary: signal.summary,
-				source: 'agent-declared',
-				confidence: 'medium'
-			};
-		case 'failed_claim':
-			return {
-				type: 'failed_claim',
-				reason: signal.reason,
-				source: 'agent-declared',
-				confidence: 'medium'
-			};
-		case 'message':
-			return {
-				type: 'message',
-				channel: signal.channel,
-				text: signal.text,
-				source: 'agent-declared',
-				confidence: 'medium'
-			};
-	}
 }
 
 function createEphemeralObservationId(payload: {

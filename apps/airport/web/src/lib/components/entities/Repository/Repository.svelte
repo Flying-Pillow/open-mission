@@ -2,6 +2,7 @@
     import { goto } from "$app/navigation";
     import type { RepositoryIssueDetailType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import { page } from "$app/state";
+    import Icon from "@iconify/svelte";
     import type { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { setAgentExecutionSurfaceContext } from "$lib/client/context/agent-execution-surface-context.svelte.js";
@@ -11,7 +12,7 @@
     import IssuePreview from "$lib/components/entities/Issue/IssuePreview.svelte";
     import MissionList from "$lib/components/entities/Mission/MissionList.svelte";
     import RepositoryPanel from "$lib/components/entities/Repository/RepositoryPanel.svelte";
-    import RepositoryCommandbar from "$lib/components/entities/Repository/RepositoryCommandbar.svelte";
+    import { Button } from "$lib/components/ui/button/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import type { AirportRepositoryListItem } from "$lib/components/entities/types";
 
@@ -41,9 +42,10 @@
     let issueError = $state<string | null>(null);
     let issueLoadingNumber = $state<number | null>(null);
     let routeRepositoryResolved = $state(false);
-    let setupAgentExecutionRequestKey = $state("");
-    let setupAgentExecutionRefreshNonce = $state(0);
-    let setupAgentExecutionError = $state<string | null>(null);
+    let repositoryChatRequestKey = $state("");
+    let repositoryChatRefreshNonce = $state(0);
+    let repositoryChatError = $state<string | null>(null);
+    let showTerminalPanel = $state(false);
 
     $effect(() => {
         const activeRepository = appContext.airport.activeRepository;
@@ -66,11 +68,11 @@
     const repositoryLoading = $derived(repositoryScope.loading);
     const repositoryError = $derived(repositoryScope.error);
     const invalidState = $derived(activeRepository?.data.invalidState);
-    const setupRoute = $derived(page.url.pathname.endsWith("/setup"));
-    const showSetupSurface = $derived(
-        setupRoute ||
-            Boolean(invalidState) ||
-            !activeRepository?.data.isInitialized,
+    const repositoryAgentExecution = $derived(
+        activeRepository?.repositoryAgentExecution,
+    );
+    const canShowTerminalPanel = $derived(
+        Boolean(repositoryAgentExecution?.isTerminalBacked()),
     );
     const activeRepositoryPanelItem = $derived.by(
         (): AirportRepositoryListItem | undefined => {
@@ -117,9 +119,17 @@
         await appContext.application.loadRepositories({ force: true });
     }
 
-    async function refreshSetupAgentExecution(): Promise<void> {
-        setupAgentExecutionRefreshNonce += 1;
-        await activeRepository?.refreshSetupAgentExecution();
+    async function refreshRepositoryChat(): Promise<void> {
+        repositoryChatRefreshNonce += 1;
+        await activeRepository?.refreshRepositoryAgentExecution();
+    }
+
+    function toggleTerminalPanel(): void {
+        if (!canShowTerminalPanel) {
+            return;
+        }
+
+        showTerminalPanel = !showTerminalPanel;
     }
 
     $effect(() => {
@@ -149,26 +159,32 @@
     });
 
     $effect(() => {
-        if (!activeRepository || !showSetupSurface) {
+        if (!activeRepository) {
             return;
         }
 
         const requestKey = `${activeRepository.id}:${activeRepository.data.repositoryRootPath}`;
-        if (setupAgentExecutionRequestKey === requestKey) {
+        if (repositoryChatRequestKey === requestKey) {
             return;
         }
 
-        setupAgentExecutionRequestKey = requestKey;
-        setupAgentExecutionError = null;
+        repositoryChatRequestKey = requestKey;
+        repositoryChatError = null;
         void activeRepository
-            .ensureSetupAgentExecution()
+            .ensureRepositoryAgentExecution()
             .then(() => {
-                setupAgentExecutionRefreshNonce += 1;
+                repositoryChatRefreshNonce += 1;
             })
             .catch((error) => {
-                setupAgentExecutionError =
+                repositoryChatError =
                     error instanceof Error ? error.message : String(error);
             });
+    });
+
+    $effect(() => {
+        if (!canShowTerminalPanel) {
+            showTerminalPanel = false;
+        }
     });
 </script>
 
@@ -187,53 +203,92 @@
             </p>
         </section>
     {:else}
-        {#if activeRepositoryPanelItem && activeRepository.data.isInitialized && !setupRoute}
+        {#if activeRepositoryPanelItem}
             <RepositoryPanel
                 repository={activeRepositoryPanelItem}
                 localRepository={activeRepository}
                 onCommandExecuted={refreshRepositories}
-            />
-        {/if}
-
-        {#if invalidState}
-            <section
-                class="border-y border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
             >
-                <p class="font-medium">This repository needs setup.</p>
-                <p class="mt-1 text-destructive/85">
-                    Use the setup chat to review it and continue.
-                </p>
-            </section>
+                {#snippet leadingAction()}
+                    <Button
+                        type="button"
+                        variant={showTerminalPanel ? "secondary" : "outline"}
+                        size="sm"
+                        class="h-9 max-w-48 rounded-md border-white/15 bg-white/[0.04] px-3 text-slate-100 shadow-none hover:bg-white/[0.08]"
+                        disabled={!canShowTerminalPanel}
+                        aria-label={showTerminalPanel
+                            ? "Hide AgentExecution terminal"
+                            : "Show AgentExecution terminal"}
+                        title={showTerminalPanel
+                            ? "Hide AgentExecution terminal"
+                            : canShowTerminalPanel
+                              ? "Show AgentExecution terminal"
+                              : "AgentExecution terminal is not available"}
+                        onclick={toggleTerminalPanel}
+                    >
+                        <Icon
+                            icon={repositoryAgentExecution?.agentId
+                                ?.toLowerCase()
+                                .includes("copilot")
+                                ? "simple-icons:githubcopilot"
+                                : repositoryAgentExecution?.agentId
+                                        ?.toLowerCase()
+                                        .includes("openai") ||
+                                    repositoryAgentExecution?.agentId
+                                        ?.toLowerCase()
+                                        .includes("codex")
+                                  ? "simple-icons:openai"
+                                  : repositoryAgentExecution?.agentId
+                                          ?.toLowerCase()
+                                          .includes("claude") ||
+                                      repositoryAgentExecution?.agentId
+                                          ?.toLowerCase()
+                                          .includes("anthropic")
+                                    ? "simple-icons:anthropic"
+                                    : repositoryAgentExecution?.agentId
+                                            ?.toLowerCase()
+                                            .includes("opencode")
+                                      ? "lucide:code-2"
+                                      : repositoryAgentExecution?.agentId
+                                              ?.toLowerCase()
+                                              .includes("pi")
+                                        ? "lucide:message-circle"
+                                        : "lucide:bot"}
+                            class="size-4 text-emerald-200"
+                            data-icon="inline-start"
+                        />
+                        <span class="min-w-0 truncate">
+                            {repositoryAgentExecution?.adapterLabel ?? "Agent"}
+                        </span>
+                    </Button>
+                {/snippet}
+            </RepositoryPanel>
         {/if}
 
-        {#if showSetupSurface}
-            <AgentChat
-                agentExecution={activeRepository.setupAgentExecution}
-                refreshNonce={setupAgentExecutionRefreshNonce}
-                onCommandExecuted={refreshSetupAgentExecution}
-            />
-            {#if setupAgentExecutionError}
-                <div
-                    class="border-t px-4 py-3 text-sm text-muted-foreground md:px-5"
-                >
-                    The assistant is not available right now.
-                </div>
-            {/if}
-            <div class="border-t bg-background/95 px-4 py-3 md:px-5">
-                <RepositoryCommandbar
-                    repository={activeRepository}
-                    onCommandExecuted={refreshRepositories}
-                    class="min-h-9"
-                    showEmptyState
-                />
-            </div>
-        {:else}
-            <div class="grid min-h-0 flex-1 overflow-hidden sm:grid-cols-2">
-                <section class="flex min-h-0 w-full overflow-hidden">
+        <div
+            class="mt-4 grid min-h-0 flex-1 gap-5 overflow-hidden xl:grid-cols-[20dvw_minmax(0,1fr)]"
+        >
+            <div class="flex min-h-0 flex-col gap-5 overflow-hidden xl:pr-2">
+                {#if invalidState || !activeRepository.data.isInitialized}
+                    <section
+                        class="rounded-2xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+                    >
+                        <p class="font-medium">
+                            Repository manager attention required.
+                        </p>
+                        <p class="mt-1 text-destructive/85">
+                            Regular mission start stays gated until the
+                            repository control state is ready. Use the
+                            repository chat to review and continue.
+                        </p>
+                    </section>
+                {/if}
+
+                <section class="flex min-h-0 w-full flex-1 overflow-hidden">
                     <MissionList />
                 </section>
 
-                <section class="flex min-h-0 w-full overflow-hidden">
+                <section class="flex min-h-0 w-full flex-1 overflow-hidden">
                     <IssueList
                         bind:selectedIssue
                         bind:issuePreviewOpen
@@ -241,6 +296,27 @@
                         bind:issueLoadingNumber
                     />
                 </section>
+            </div>
+
+            <section
+                class="flex min-h-0 min-w-0 overflow-hidden rounded-2xl border border-white/10"
+            >
+                <AgentChat
+                    agentExecution={repositoryAgentExecution}
+                    refreshNonce={repositoryChatRefreshNonce}
+                    onCommandExecuted={refreshRepositoryChat}
+                    loadingTitle="Starting repository chat"
+                    loadingPlaceholder="Starting repository chat"
+                    bind:showTerminalPanel
+                    showHeader={false}
+                />
+            </section>
+        </div>
+        {#if repositoryChatError}
+            <div
+                class="border-t px-4 py-3 text-sm text-muted-foreground md:px-5"
+            >
+                The repository assistant is not available right now.
             </div>
         {/if}
 

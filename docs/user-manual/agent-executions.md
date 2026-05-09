@@ -13,6 +13,7 @@ The selected Agent adapter receives bounded context: task instructions, relevant
 Supported signal markers include:
 
 - `progress` — structured progress report
+- `status` — machine-readable status phase such as `initializing` or `idle`
 - `needs_input` — ask the operator for a decision
 - `blocked` — report a blocker
 - `ready_for_verification` — report ready-for-verification

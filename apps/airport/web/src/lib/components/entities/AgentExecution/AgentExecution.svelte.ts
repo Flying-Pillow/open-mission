@@ -62,6 +62,14 @@ export class AgentExecution implements EntityModel<AgentExecutionDataType> {
         return this.data.sessionLogPath;
     }
 
+    public get agentId(): string {
+        return this.data.agentId;
+    }
+
+    public get adapterLabel(): string {
+        return this.data.adapterLabel;
+    }
+
     public get transportId(): string | undefined {
         return this.data.transportId;
     }

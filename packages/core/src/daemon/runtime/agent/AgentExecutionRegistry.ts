@@ -2,16 +2,20 @@ import type { AgentRegistry } from '../../../entities/Agent/AgentRegistry.js';
 import { AgentExecution } from '../../../entities/AgentExecution/AgentExecution.js';
 import type {
     AgentCommand,
+    AgentExecutionObservation,
     AgentLaunchConfig,
     AgentPrompt
 } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import {
     AgentExecutionCommandSchema,
     AgentExecutionDataSchema,
+    AgentExecutionObservationAckSchema,
     AgentExecutionPromptSchema,
+    type AgentExecutionObservationAckType,
     type AgentExecutionDataType
 } from '../../../entities/AgentExecution/AgentExecutionSchema.js';
 import { AgentExecutor } from './AgentExecutor.js';
+import type { MissionMcpServer } from './mcp/MissionMcpServer.js';
 
 type AgentExecutionRegistryEntry = {
     ownerKey: string;
@@ -27,6 +31,7 @@ export type AgentExecutionRegistryCommand =
     | { commandId: 'agentExecution.sendRuntimeMessage'; input?: unknown };
 
 type AgentExecutionRegistryOptions = {
+    missionMcpServer?: MissionMcpServer;
     logger?: {
         debug(message: string, metadata?: Record<string, unknown>): void;
     };
@@ -36,15 +41,20 @@ export class AgentExecutionRegistry {
     private readonly executionsBySessionId = new Map<string, AgentExecutionRegistryEntry>();
     private readonly sessionIdsByOwnerKey = new Map<string, string>();
     private readonly dataChangeListeners = new Set<(data: AgentExecutionDataType) => void>();
+    private missionMcpServer: MissionMcpServer | undefined;
     private logger: AgentExecutionRegistryOptions['logger'];
 
     public constructor(options: AgentExecutionRegistryOptions = {}) {
         this.logger = options.logger;
+        this.missionMcpServer = options.missionMcpServer;
     }
 
     public configure(options: AgentExecutionRegistryOptions = {}): void {
         if (options.logger) {
             this.logger = options.logger;
+        }
+        if (options.missionMcpServer) {
+            this.missionMcpServer = options.missionMcpServer;
         }
     }
 
@@ -53,19 +63,69 @@ export class AgentExecutionRegistry {
         agentRegistry: AgentRegistry;
         config: AgentLaunchConfig;
     }): Promise<AgentExecutionDataType> {
+        const requestedAgentId = input.agentRegistry.resolveStartAgentId(input.config.requestedAdapterId);
         const existingSessionId = this.sessionIdsByOwnerKey.get(input.ownerKey);
         if (existingSessionId) {
             const existing = this.executionsBySessionId.get(existingSessionId);
             if (existing) {
                 const snapshot = existing.execution.getSnapshot();
                 if (!AgentExecution.isTerminalFinalStatus(snapshot.status)) {
-                    return this.toExecutionData(existing.execution);
+                    if (snapshot.agentId === requestedAgentId) {
+                        return this.toExecutionData(existing.execution);
+                    }
+                    await existing.agentExecutor.terminateExecution(
+                        existingSessionId,
+                        `replaced by ${requestedAgentId ?? 'requested'} Agent adapter`
+                    );
                 }
+                this.disposeSession(existingSessionId);
             }
         }
 
+        return this.startExecution(input);
+    }
+
+    public async replaceActiveExecution(input: {
+        ownerKey: string;
+        agentRegistry: AgentRegistry;
+        config: AgentLaunchConfig;
+    }): Promise<AgentExecutionDataType | undefined> {
+        const existingSessionId = this.sessionIdsByOwnerKey.get(input.ownerKey);
+        if (!existingSessionId) {
+            return undefined;
+        }
+        const existing = this.executionsBySessionId.get(existingSessionId);
+        if (!existing) {
+            this.sessionIdsByOwnerKey.delete(input.ownerKey);
+            return undefined;
+        }
+        const snapshot = existing.execution.getSnapshot();
+        if (AgentExecution.isTerminalFinalStatus(snapshot.status)) {
+            this.disposeSession(existingSessionId);
+            return undefined;
+        }
+
+        const requestedAgentId = input.agentRegistry.resolveStartAgentId(input.config.requestedAdapterId);
+        if (snapshot.agentId === requestedAgentId) {
+            return this.toExecutionData(existing.execution);
+        }
+
+        await existing.agentExecutor.terminateExecution(
+            existingSessionId,
+            `replaced by ${requestedAgentId ?? 'requested'} Agent adapter`
+        );
+        this.disposeSession(existingSessionId);
+        return this.startExecution(input);
+    }
+
+    private async startExecution(input: {
+        ownerKey: string;
+        agentRegistry: AgentRegistry;
+        config: AgentLaunchConfig;
+    }): Promise<AgentExecutionDataType> {
         const agentExecutor = new AgentExecutor({
             agentRegistry: input.agentRegistry,
+            ...(this.missionMcpServer ? { missionMcpServer: this.missionMcpServer } : {}),
             ...(this.logger ? { logger: this.logger } : {})
         });
         const execution = await agentExecutor.startExecution(input.config);
@@ -109,6 +169,23 @@ export class AgentExecutionRegistry {
 
     public hasExecution(sessionId: string): boolean {
         return this.executionsBySessionId.has(sessionId);
+    }
+
+    public routeTransportObservation(input: {
+        agentExecutionId: string;
+        observation: AgentExecutionObservation;
+    }): AgentExecutionObservationAckType {
+        const entry = this.executionsBySessionId.get(input.agentExecutionId);
+        if (!entry) {
+            return AgentExecutionObservationAckSchema.parse({
+                status: 'rejected',
+                agentExecutionId: input.agentExecutionId,
+                eventId: readObservationEventId(input.observation),
+                observationId: input.observation.observationId,
+                reason: `AgentExecution '${input.agentExecutionId}' is not registered in the daemon AgentExecutionRegistry.`
+            });
+        }
+        return AgentExecutionObservationAckSchema.parse(entry.agentExecutor.routeTransportObservation(input));
     }
 
     public onDidExecutionDataChange(listener: (data: AgentExecutionDataType) => void): { dispose(): void } {
@@ -199,4 +276,15 @@ function normalizeCommand(input: { type: AgentCommand['type']; reason?: string |
 
 function isRecord(input: unknown): input is Record<string, unknown> {
     return typeof input === 'object' && input !== null && !Array.isArray(input);
+}
+
+function readObservationEventId(observation: AgentExecutionObservation): string {
+    const prefix = 'agent-declared-signal:';
+    if (observation.observationId.startsWith(prefix)) {
+        const eventId = observation.observationId.slice(prefix.length).trim();
+        if (eventId) {
+            return eventId;
+        }
+    }
+    return observation.observationId;
 }

@@ -37,15 +37,17 @@ import {
 	type TrackedIssueSummaryType,
 	type RepositoryFindType,
 	type RepositoryFindAvailableType,
+	type RepositoryEnsureSystemAgentExecutionType,
 	type RepositoryClassCommandsType,
 	type RepositoryGetIssueType,
 	type RepositoryLocatorType,
 	type RepositoryAddType,
 	type RepositoryRemoveAcknowledgementType,
-	type RepositoryPrepareResultType,
-	type RepositoryPrepareType,
+	type RepositoryInitializeResultType,
+	type RepositoryInitializeType,
 	type RepositorySetupResultType,
 	type RepositorySetupType,
+	type RepositoryConfigureAgentsType,
 	type RepositorySyncCommandAcknowledgementType,
 	type RepositorySyncStatusType,
 	type RepositorySettingsType,
@@ -56,14 +58,16 @@ import {
 	createDefaultRepositorySettings,
 	RepositoryFindSchema,
 	RepositoryFindAvailableSchema,
+	RepositoryEnsureSystemAgentExecutionSchema,
 	RepositoryClassCommandsSchema,
 	RepositoryGetIssueSchema,
 	RepositoryLocatorSchema,
 	RepositoryMissionStartAcknowledgementSchema,
 	RepositoryAddSchema,
 	RepositoryRemoveAcknowledgementSchema,
-	RepositoryPrepareResultSchema,
-	RepositoryPrepareSchema,
+	RepositoryInitializeResultSchema,
+	RepositoryInitializeSchema,
+	RepositoryConfigureAgentsSchema,
 	RepositorySetupResultSchema,
 	RepositorySetupSchema,
 	RepositorySyncCommandAcknowledgementSchema,
@@ -147,6 +151,45 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		});
 
 		return await adapter.listRepositories();
+	}
+
+	public static async ensureSystemAgentExecution(
+		input: RepositoryEnsureSystemAgentExecutionType = {},
+		context?: EntityExecutionContext
+	): Promise<AgentExecutionDataType> {
+		RepositoryEnsureSystemAgentExecutionSchema.parse(input);
+		const repositoriesRootPath = resolveRepositoriesRoot(readMissionConfig());
+		const settings = createDefaultRepositorySettings();
+		const agentRegistry = await AgentRegistry.createConfigured({
+			repositoryRootPath: repositoriesRootPath,
+			settings
+		});
+		const agentId = agentRegistry.resolveStartAgentId(settings.agentAdapter);
+		if (!agentId) {
+			throw new Error('No repository manager agent is available for the repositories surface.');
+		}
+		const agentExecutionRegistry = context?.agentExecutionRegistry ?? getDefaultAgentExecutionRegistry();
+		return await agentExecutionRegistry.ensureExecution({
+			ownerKey: Repository.createSystemAgentExecutionOwnerKey(repositoriesRootPath),
+			agentRegistry,
+			config: {
+				scope: {
+					kind: 'system',
+					label: '/repositories'
+				},
+				workingDirectory: repositoriesRootPath,
+				specification: {
+					summary: 'Manage the repositories surface for Airport.',
+					documents: []
+				},
+				requestedAdapterId: agentId,
+				resume: { mode: 'new' },
+				initialPrompt: {
+					source: 'system',
+					text: await Repository.buildSystemAgentPrompt(context, repositoriesRootPath)
+				}
+			}
+		});
 	}
 
 	public static async classCommands(
@@ -273,18 +316,15 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		context?: EntityExecutionContext
 	): Promise<RepositoryDataType> {
 		const args = RepositoryAddSchema.parse(input);
-		const shouldPrepare = 'repositoryRef' in args;
 		const repositoryRootPath = 'repositoryRef' in args
 			? await Repository.checkoutPlatformRepositoryAfterDuplicateCheck(args, context)
 			: args.repositoryPath;
 		const repository = await Repository.addLocalRepository(repositoryRootPath, context);
-		if (shouldPrepare) {
-			await repository.prepare({
-				id: repository.id,
-				repositoryRootPath: repository.repositoryRootPath
-			}, context);
-			await Repository.getRepositoryFactory(context).save(Repository, repository.toStorage());
-		}
+		await repository.initialize({
+			id: repository.id,
+			repositoryRootPath: repository.repositoryRootPath
+		}, context);
+		await Repository.getRepositoryFactory(context).save(Repository, repository.toStorage());
 		return await repository.read({
 			id: repository.id,
 			repositoryRootPath: repository.repositoryRootPath
@@ -541,17 +581,15 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			return defaultSettings;
 		}
 
-		const enabledAdapters = defaultSettings.agentAdapters.filter((adapter) =>
-			availableAgentIds.includes(adapter.id)
-		);
+		const enabledAdapters = [...availableAgentIds];
 		const defaultAgentAdapter = availableAgentIds.includes(defaultSettings.agentAdapter)
 			? defaultSettings.agentAdapter
-			: enabledAdapters[0]?.id ?? availableAgentIds[0] ?? defaultSettings.agentAdapter;
+			: enabledAdapters[0] ?? defaultSettings.agentAdapter;
 
 		return RepositorySettingsSchema.parse({
 			...defaultSettings,
 			agentAdapter: defaultAgentAdapter,
-			agentAdapters: enabledAdapters.length > 0 ? enabledAdapters : defaultSettings.agentAdapters
+			enabledAgentAdapters: enabledAdapters
 		});
 	}
 
@@ -789,25 +827,25 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return this.available();
 	}
 
-	public canPrepare() {
+	public canInitialize() {
 		if (this.invalidState && !this.isRecoverableSetupState()) {
 			return this.unavailable(Repository.describeInvalidState(this.invalidState));
 		}
 		return this.available();
 	}
 
-	public async prepare(
-		input: RepositoryPrepareType,
+	public async initialize(
+		input: RepositoryInitializeType,
 		_context?: EntityExecutionContext
-	): Promise<RepositoryPrepareResultType> {
-		const args = RepositoryPrepareSchema.parse(input);
+	): Promise<RepositoryInitializeResultType> {
+		const args = RepositoryInitializeSchema.parse(input);
 		this.assertRepositoryIdentity(args);
 		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
 		if (settingsState.kind === 'invalid') {
-			return RepositoryPrepareResultSchema.parse({
+			return RepositoryInitializeResultSchema.parse({
 				ok: true,
 				entity: repositoryEntityName,
-				method: 'prepare',
+				method: 'initialize',
 				id: this.id,
 				state: 'skipped-invalid-settings',
 				settingsPath: settingsState.settingsPath,
@@ -817,41 +855,96 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 		if (settingsState.kind === 'valid') {
 			this.updateSettings(settingsState.settings);
-			return RepositoryPrepareResultSchema.parse({
+			return RepositoryInitializeResultSchema.parse({
 				ok: true,
 				entity: repositoryEntityName,
-				method: 'prepare',
+				method: 'initialize',
 				id: this.id,
-				state: 'already-prepared',
+				state: 'already-initialized',
 				settingsPath: settingsState.settingsPath,
 				defaultAgentAdapter: settingsState.settings.agentAdapter,
-				enabledAgentAdapters: settingsState.settings.agentAdapters.map((adapter) => adapter.id)
+				enabledAgentAdapters: settingsState.settings.enabledAgentAdapters
 			});
 		}
 
 		const settings = await Repository.createPreparedRepositorySettings(this.repositoryRootPath);
 		await Repository.writeSettingsDocument(settings, this.repositoryRootPath, { resolveWorkspaceRoot: false });
 		this.updateSettings(settings).markInitialized(false);
-		return RepositoryPrepareResultSchema.parse({
+		return RepositoryInitializeResultSchema.parse({
 			ok: true,
 			entity: repositoryEntityName,
-			method: 'prepare',
+			method: 'initialize',
 			id: this.id,
-			state: 'prepared',
+			state: 'initialized',
 			settingsPath: Repository.getSettingsDocumentPath(this.repositoryRootPath, { resolveWorkspaceRoot: false }),
 			defaultAgentAdapter: settings.agentAdapter,
-			enabledAgentAdapters: settings.agentAdapters.map((adapter) => adapter.id)
+			enabledAgentAdapters: settings.enabledAgentAdapters
 		});
 	}
 
-	public async ensureSetupAgentExecution(
-		input: RepositoryPrepareType,
+	public async configureAgents(
+		input: RepositoryConfigureAgentsType,
+		context?: EntityExecutionContext
+	): Promise<RepositoryDataType> {
+		const args = RepositoryConfigureAgentsSchema.parse(input);
+		this.assertRepositoryIdentity(args);
+
+		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
+		if (settingsState.kind === 'invalid') {
+			throw new Error(Repository.describeInvalidState(settingsState.invalidState));
+		}
+
+		const currentSettings = settingsState.kind === 'valid'
+			? settingsState.settings
+			: await Repository.createPreparedRepositorySettings(this.repositoryRootPath);
+		const agentRegistry = await AgentRegistry.createConfigured({
+			repositoryRootPath: this.repositoryRootPath,
+			settings: currentSettings
+		});
+		const availableAgentIds = agentRegistry.listAgents()
+			.filter((agent) => agent.toData().availability.available)
+			.map((agent) => agent.agentId);
+		if (availableAgentIds.length === 0) {
+			throw new Error(`Repository '${this.id}' does not have any available agents to configure.`);
+		}
+
+		const requestedEnabledAgentIds = [...new Set(args.enabledAgentAdapters.map((agentId) => agentId.trim()).filter(Boolean))];
+		const invalidAgentId = requestedEnabledAgentIds.find((agentId) => !availableAgentIds.includes(agentId));
+		if (invalidAgentId) {
+			throw new Error(`Repository '${this.id}' cannot enable unavailable agent '${invalidAgentId}'.`);
+		}
+		if (requestedEnabledAgentIds.length === 0) {
+			throw new Error(`Repository '${this.id}' must enable at least one available agent.`);
+		}
+		if (!requestedEnabledAgentIds.includes(args.defaultAgentAdapter)) {
+			throw new Error(`Repository '${this.id}' must select a default agent from the enabled agents.`);
+		}
+
+		const nextSettings = RepositorySettingsSchema.parse({
+			...currentSettings,
+			agentAdapter: args.defaultAgentAdapter,
+			enabledAgentAdapters: requestedEnabledAgentIds
+		});
+		await Repository.writeSettingsDocument(nextSettings, this.repositoryRootPath, { resolveWorkspaceRoot: false });
+		this.updateSettings(nextSettings);
+		await Repository.getRepositoryFactory(context).save(Repository, this.toStorage());
+		if (currentSettings.agentAdapter !== nextSettings.agentAdapter) {
+			await this.replaceActiveRepositoryAgentExecution(nextSettings, context);
+		}
+		return await this.read({
+			id: this.id,
+			repositoryRootPath: this.repositoryRootPath
+		});
+	}
+
+	public async ensureRepositoryAgentExecution(
+		input: RepositoryInitializeType,
 		context?: EntityExecutionContext
 	): Promise<AgentExecutionDataType> {
-		const args = RepositoryPrepareSchema.parse(input);
+		const args = RepositoryInitializeSchema.parse(input);
 		this.assertRepositoryIdentity(args);
-		this.assertCanLaunchSetupAgentExecution();
-		await this.ensurePreparedForSetupAgentExecution(context);
+		this.assertCanLaunchRepositoryAgentExecution();
+		await this.ensurePreparedForRepositoryAgentExecution(context);
 
 		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
 		const setupSettings = settingsState.kind === 'valid'
@@ -861,13 +954,21 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			repositoryRootPath: this.repositoryRootPath,
 			settings: setupSettings
 		});
-		const agentId = agentRegistry.resolveStartAgentId(setupSettings.agentAdapter);
+		const enabledAgentIds = setupSettings.enabledAgentAdapters.length > 0
+			? setupSettings.enabledAgentAdapters
+			: agentRegistry.listAgents()
+				.filter((agent) => agent.toData().availability.available)
+				.map((agent) => agent.agentId);
+		const agentId = enabledAgentIds.includes(setupSettings.agentAdapter)
+			? agentRegistry.resolveStartAgentId(setupSettings.agentAdapter)
+			: enabledAgentIds[0];
 		if (!agentId) {
-			throw new Error(`Repository '${this.id}' does not have an available setup agent.`);
+			throw new Error(`Repository '${this.id}' does not have an available repository agent.`);
 		}
 		const agentExecutionRegistry = context?.agentExecutionRegistry ?? getDefaultAgentExecutionRegistry();
+		const initialPromptText = await this.buildRepositoryAgentPrompt(context);
 		return agentExecutionRegistry.ensureExecution({
-			ownerKey: Repository.createSetupAgentExecutionOwnerKey(this.repositoryRootPath),
+			ownerKey: Repository.createRepositoryAgentExecutionOwnerKey(this.repositoryRootPath),
 			agentRegistry,
 			config: {
 				scope: {
@@ -876,17 +977,92 @@ export class Repository extends Entity<RepositoryDataType, string> {
 				},
 				workingDirectory: this.repositoryRootPath,
 				specification: {
-					summary: `Set up repository ${this.platformRepositoryRef ?? this.repoName}.`,
+					summary: `Manage repository ${this.platformRepositoryRef ?? this.repoName}.`,
 					documents: []
 				},
 				requestedAdapterId: agentId,
 				resume: { mode: 'new' },
 				initialPrompt: {
 					source: 'system',
-					text: Repository.buildSetupAgentPrompt(this)
+					text: initialPromptText
 				}
 			}
 		});
+	}
+
+	private async replaceActiveRepositoryAgentExecution(
+		settings: RepositorySettingsType,
+		context?: EntityExecutionContext
+	): Promise<void> {
+		const agentRegistry = await AgentRegistry.createConfigured({
+			repositoryRootPath: this.repositoryRootPath,
+			settings
+		});
+		const enabledAgentIds = settings.enabledAgentAdapters.length > 0
+			? settings.enabledAgentAdapters
+			: agentRegistry.listAgents()
+				.filter((agent) => agent.toData().availability.available)
+				.map((agent) => agent.agentId);
+		const agentId = enabledAgentIds.includes(settings.agentAdapter)
+			? agentRegistry.resolveStartAgentId(settings.agentAdapter)
+			: enabledAgentIds[0];
+		if (!agentId) {
+			return;
+		}
+
+		const agentExecutionRegistry = context?.agentExecutionRegistry ?? getDefaultAgentExecutionRegistry();
+		const initialPromptText = await this.buildRepositoryAgentPrompt(context);
+		await agentExecutionRegistry.replaceActiveExecution({
+			ownerKey: Repository.createRepositoryAgentExecutionOwnerKey(this.repositoryRootPath),
+			agentRegistry,
+			config: {
+				scope: {
+					kind: 'repository',
+					repositoryRootPath: this.repositoryRootPath
+				},
+				workingDirectory: this.repositoryRootPath,
+				specification: {
+					summary: `Manage repository ${this.platformRepositoryRef ?? this.repoName}.`,
+					documents: []
+				},
+				requestedAdapterId: agentId,
+				resume: { mode: 'new' },
+				initialPrompt: {
+					source: 'system',
+					text: initialPromptText
+				}
+			}
+		});
+	}
+
+	private static async buildSystemAgentPrompt(
+		context: EntityExecutionContext | undefined,
+		repositoriesRootPath: string
+	): Promise<string> {
+		const repositories = await Repository.find({}, context);
+		const localRepositoryLines = repositories.length > 0
+			? repositories
+				.map((repository) => `- ${repository.platformRepositoryRef ?? repository.repoName} (${repository.repositoryRootPath})`)
+				.join('\n')
+			: '- none';
+		let externalSummary = 'External repositories: unavailable.';
+		try {
+			const available = await Repository.findAvailable({ platform: 'github' }, context);
+			externalSummary = available.length > 0
+				? `External repositories visible: ${available.length}.`
+				: 'External repositories visible: none.';
+		} catch {
+			// Keep the repositories manager prompt resilient when GitHub discovery is unavailable.
+		}
+
+		return [
+			'You are the system-scoped repositories manager for Airport.',
+			`Repositories root: ${repositoriesRootPath}.`,
+			'Checked out repositories:',
+			localRepositoryLines,
+			externalSummary,
+			'First priority: summarize the current repository landscape, highlight missing local checkouts or repositories needing attention, and propose the next best repository-level action.'
+		].join('\n');
 	}
 
 	public canRemove(): boolean {
@@ -1004,6 +1180,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			&& Repository.hasWorkflowDefinition(this.repositoryRootPath);
 		this.data = RepositoryDataSchema.parse({
 			...this.toStorage(),
+			...(settingsState.kind === 'valid' ? { settings: settingsState.settings } : {}),
 			operationalMode: this.isInitialized || hasRepositorySetupState ? 'repository' : 'setup',
 			...(currentBranch ? { currentBranch } : {}),
 			isInitialized: this.isInitialized || hasRepositorySetupState
@@ -1146,29 +1323,115 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return this.invalidState?.code === 'invalid-settings-document';
 	}
 
-	private assertCanLaunchSetupAgentExecution(): void {
+	private assertCanLaunchRepositoryAgentExecution(): void {
 		if (this.invalidState && !this.isRecoverableSetupState()) {
 			throw new Error(Repository.describeInvalidState(this.invalidState));
 		}
 	}
 
-	private async ensurePreparedForSetupAgentExecution(context?: EntityExecutionContext): Promise<void> {
+	private async ensurePreparedForRepositoryAgentExecution(context?: EntityExecutionContext): Promise<void> {
 		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
 		if (settingsState.kind !== 'valid') {
-			await this.prepare({ id: this.id, repositoryRootPath: this.repositoryRootPath }, context);
+			await this.initialize({ id: this.id, repositoryRootPath: this.repositoryRootPath }, context);
 		}
 	}
 
-	private static buildSetupAgentPrompt(repository: Repository): string {
+	private async buildRepositoryAgentPrompt(context?: EntityExecutionContext): Promise<string> {
+		const syncStatus = this.buildSyncStatus(context?.authToken);
+		const missionStore = new MissionDossierFilesystem(this.repositoryRootPath);
+		const missions = await missionStore.listMissions().catch(() => []);
+		const issues = await this.listIssues({
+			id: this.id,
+			repositoryRootPath: this.repositoryRootPath
+		}, {
+			...(context?.authToken ? { authToken: context.authToken } : {})
+		}).catch(() => []);
+		const missionIssueIds = new Set(
+			missions
+				.map(({ descriptor }) => descriptor.brief.issueId)
+				.filter((issueId): issueId is number => issueId !== undefined)
+		);
+		const branchSummary = syncStatus.branchRef
+			? `Current branch: ${syncStatus.branchRef}.`
+			: 'Current branch is unavailable.';
+		const worktreeSummary = `Worktree status: ${syncStatus.worktree.clean ? 'clean' : 'dirty'} (${syncStatus.worktree.stagedCount} staged, ${syncStatus.worktree.unstagedCount} unstaged, ${syncStatus.worktree.untrackedCount} untracked).`;
+		const externalSummary = [
+			syncStatus.external.status !== 'unavailable'
+				? `Remote status: ${syncStatus.external.status}.`
+				: syncStatus.external.unavailableReason
+					? `Remote status unavailable: ${syncStatus.external.unavailableReason}.`
+					: 'Remote status is unavailable.',
+			syncStatus.external.aheadCount > 0 ? `Ahead by ${syncStatus.external.aheadCount} commit(s).` : undefined,
+			syncStatus.external.behindCount > 0 ? `Behind by ${syncStatus.external.behindCount} commit(s).` : undefined
+		].filter((part): part is string => Boolean(part));
+		const missionLines = missions.length === 0
+			? ['Tracked missions: none.']
+			: [
+				`Tracked missions (${missions.length}):`,
+				...missions.slice(0, 5).map(({ descriptor }) => {
+					const issueSegment = descriptor.brief.issueId !== undefined ? ` issue #${descriptor.brief.issueId}` : '';
+					return `- ${descriptor.missionId}: ${descriptor.brief.title} (${descriptor.branchRef}${issueSegment})`;
+				}),
+				...(missions.length > 5 ? [`- ${missions.length - 5} more mission(s) not listed.`] : [])
+			];
+		const issueLines = issues.length === 0
+			? [
+				this.platformRepositoryRef
+					? 'Open GitHub issues: none visible.'
+					: 'Open GitHub issues: unavailable because no platform repository ref is configured.'
+			]
+			: [
+				`Open GitHub issues (${issues.length}):`,
+				...issues.slice(0, 5).map((issue) => {
+					const trackedByMission = missionIssueIds.has(issue.number)
+						? 'already tracked by a Mission'
+						: 'no Mission yet';
+					const labels = issue.labels.length > 0 ? ` labels: ${issue.labels.join(', ')}` : '';
+					const updatedAt = issue.updatedAt ? ` updated: ${issue.updatedAt}` : '';
+					return `- #${issue.number} ${issue.title} (${trackedByMission};${updatedAt}${labels})`;
+				}),
+				...(issues.length > 5 ? [`- ${issues.length - 5} more open issue(s) not listed.`] : [])
+			];
+		const initializationSummary = this.invalidState
+			? `Repository control state is invalid at '${this.invalidState.path}': ${this.invalidState.message}`
+			: this.isInitialized
+				? 'Repository control state is initialized.'
+				: 'Repository control state is not fully initialized yet.';
+		const untrackedIssues = issues.filter((issue) => !missionIssueIds.has(issue.number));
+		const firstUntrackedIssue = untrackedIssues[0];
+		const firstPriority = this.invalidState || !this.isInitialized
+			? 'First priority: recover or complete Repository initialization before proposing regular mission work.'
+			: syncStatus.external.status === 'behind'
+				? 'First priority: review remote drift and decide whether to fetch or fast-forward before other repository work.'
+				: syncStatus.worktree.clean === false
+					? 'First priority: account for the dirty worktree before starting or changing repository work.'
+					: firstUntrackedIssue
+						? `First priority: review untracked open issues, starting with issue #${firstUntrackedIssue.number}.`
+						: missions.length > 0
+							? 'First priority: review active Mission coverage and identify the most useful repository-level follow-up.'
+							: 'First priority: identify the next repository-management action from the current status and issue context.';
 		return [
-			`Help set up ${repository.platformRepositoryRef ?? repository.repoName} for Mission.`,
-			'Report setup progress, input requests, blockers, and completion claims through the AgentExecution structured interaction protocol.',
-			'Keep the conversation concise and focused on completing repository setup.'
+			`Help manage ${this.platformRepositoryRef ?? this.repoName} for Mission.`,
+			'Repository initialization is part of repository management when repository control state is missing or invalid.',
+			initializationSummary,
+			branchSummary,
+			worktreeSummary,
+			...externalSummary,
+			...missionLines,
+			...issueLines,
+			firstPriority,
+			'Report progress, input requests, blockers, and completion claims through the AgentExecution structured interaction protocol.',
+			'In the first response, briefly summarize the repository situation and propose or begin the highest-priority action instead of asking generic opening questions.',
+			'Keep the conversation concise and focused on repository management tasks.'
 		].join('\n');
 	}
 
-	private static createSetupAgentExecutionOwnerKey(repositoryRootPath: string): string {
-		return `Repository.setup:${repositoryRootPath}`;
+	private static createRepositoryAgentExecutionOwnerKey(repositoryRootPath: string): string {
+		return `Repository.agentExecution:${repositoryRootPath}`;
+	}
+
+	private static createSystemAgentExecutionOwnerKey(repositoriesRootPath: string): string {
+		return `Repository.systemAgentExecution:${repositoriesRootPath}`;
 	}
 
 	private async refreshRepositoryControlState(input: RepositoryLocatorType): Promise<void> {

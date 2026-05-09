@@ -7,6 +7,7 @@ import { Repository } from './Repository.js';
 import { createDefaultRepositorySettings, RepositoryDataSchema } from './RepositorySchema.js';
 import { AgentExecutionDataSchema } from '../AgentExecution/AgentExecutionSchema.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
+import { resolveRepositoriesRoot } from '../../settings/MissionInstall.js';
 import type { EntityExecutionContext } from '../Entity/Entity.js';
 import { MissionDossierFilesystem } from '../Mission/MissionDossierFilesystem.js';
 
@@ -184,7 +185,7 @@ describe('Repository', () => {
         }
     });
 
-    it('prepares settings after clone without completing Repository setup', async () => {
+    it('initializes repository control state without completing Repository setup', async () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-prepare-'));
         const repositoryRootPath = path.join(tempRoot, 'example');
 
@@ -195,7 +196,7 @@ describe('Repository', () => {
                 platformRepositoryRef: 'Flying-Pillow/example'
             });
 
-            const result = await repository.prepare({
+            const result = await repository.initialize({
                 id: repository.id,
                 repositoryRootPath
             });
@@ -210,12 +211,12 @@ describe('Repository', () => {
             expect(result).toMatchObject({
                 ok: true,
                 entity: 'Repository',
-                method: 'prepare',
+                method: 'initialize',
                 id: repository.id,
-                state: 'prepared',
+                state: 'initialized',
                 defaultAgentAdapter: settings.agentAdapter
             });
-            expect(result.enabledAgentAdapters).toEqual(settings.agentAdapters.map((adapter) => adapter.id));
+            expect(result.enabledAgentAdapters).toEqual(settings.enabledAgentAdapters);
             expect(settings.agentAdapter).toBeTruthy();
             expect(await exists(Repository.getMissionWorkflowDefinitionPath(repositoryRootPath))).toBe(false);
             expect(data.operationalMode).toBe('setup');
@@ -225,7 +226,52 @@ describe('Repository', () => {
         }
     });
 
-    it('ensures setup AgentExecution for an initialized Repository', async () => {
+    it('initializes local repository control state when a Repository is added to Mission', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-add-local-'));
+        const repositoryRootPath = path.join(tempRoot, 'example');
+
+        try {
+            git(tempRoot, ['init', repositoryRootPath]);
+
+            const data = await Repository.add({
+                repositoryPath: repositoryRootPath
+            });
+            const settings = Repository.requireSettingsDocument(repositoryRootPath, {
+                resolveWorkspaceRoot: false
+            });
+
+            expect(data.repositoryRootPath).toBe(repositoryRootPath);
+            expect(settings.agentAdapter).toBeTruthy();
+            expect(data.isInitialized).toBe(false);
+        } finally {
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('reads Repository settings from the repository settings document for fresh instances', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-settings-read-'));
+        const repositoryRootPath = path.join(tempRoot, 'example');
+        const settings = createDefaultRepositorySettings();
+        settings.agentAdapter = 'codex';
+        settings.enabledAgentAdapters = ['codex', 'copilot'];
+
+        try {
+            git(tempRoot, ['init', repositoryRootPath]);
+            await Repository.initializeScaffolding(repositoryRootPath, { settings });
+
+            const data = await Repository.open(repositoryRootPath).read({
+                id: Repository.open(repositoryRootPath).id,
+                repositoryRootPath
+            });
+
+            expect(data.settings.agentAdapter).toBe('codex');
+            expect(data.settings.enabledAgentAdapters).toEqual(['codex', 'copilot']);
+        } finally {
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('ensures repository AgentExecution for an initialized Repository', async () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-setup-agent-'));
         const repositoryRootPath = path.join(tempRoot, 'example');
         const settings = createDefaultRepositorySettings();
@@ -264,7 +310,7 @@ describe('Repository', () => {
                 isInitialized: true
             });
 
-            const result = await repository.ensureSetupAgentExecution({
+            const result = await repository.ensureRepositoryAgentExecution({
                 id: repository.id,
                 repositoryRootPath
             }, {
@@ -274,19 +320,78 @@ describe('Repository', () => {
 
             expect(result).toEqual(execution);
             expect(ensureExecution).toHaveBeenCalledWith(expect.objectContaining({
-                ownerKey: `Repository.setup:${repositoryRootPath}`,
+                ownerKey: `Repository.agentExecution:${repositoryRootPath}`,
                 config: expect.objectContaining({
                     requestedAdapterId: settings.agentAdapter,
                     workingDirectory: repositoryRootPath,
+                    initialPrompt: expect.objectContaining({
+                        source: 'system',
+                        text: expect.stringContaining('First priority:')
+                    }),
                     scope: {
                         kind: 'repository',
                         repositoryRootPath
                     }
                 })
             }));
+            expect(ensureExecution.mock.calls[0]?.[0].config.initialPrompt.text).toContain('Tracked missions: none.');
+            expect(ensureExecution.mock.calls[0]?.[0].config.initialPrompt.text).toContain('Open GitHub issues: none visible.');
         } finally {
             await fsp.rm(tempRoot, { recursive: true, force: true });
         }
+    });
+
+    it('ensures a system-scoped repositories AgentExecution', async () => {
+        const repositoriesRootPath = resolveRepositoriesRoot({
+            version: 1,
+            missionsRoot: '/missions',
+            repositoriesRoot: '/repositories'
+        });
+        const execution = AgentExecutionDataSchema.parse({
+            id: 'agent_execution:repositories-system',
+            ownerId: '/repositories',
+            sessionId: 'repositories-system',
+            agentId: 'copilot-cli',
+            adapterLabel: 'Test Agent',
+            lifecycleState: 'running',
+            interactionCapabilities: {
+                mode: 'agent-message',
+                canSendTerminalInput: false,
+                canSendStructuredPrompt: true,
+                canSendStructuredCommand: true
+            },
+            context: {
+                artifacts: [],
+                instructions: []
+            },
+            runtimeMessages: [],
+            scope: {
+                kind: 'system',
+                label: '/repositories'
+            }
+        });
+        const ensureExecution = vi.fn().mockResolvedValue(execution);
+
+        const result = await Repository.ensureSystemAgentExecution({}, {
+            surfacePath: '/mission',
+            agentExecutionRegistry: { ensureExecution }
+        } as unknown as EntityExecutionContext);
+
+        expect(result).toEqual(execution);
+        expect(ensureExecution).toHaveBeenCalledWith(expect.objectContaining({
+            ownerKey: `Repository.systemAgentExecution:${repositoriesRootPath}`,
+            config: expect.objectContaining({
+                workingDirectory: repositoriesRootPath,
+                scope: {
+                    kind: 'system',
+                    label: '/repositories'
+                },
+                initialPrompt: expect.objectContaining({
+                    source: 'system',
+                    text: expect.stringContaining('Checked out repositories:')
+                })
+            })
+        }));
     });
 
     it('starts a mission when Mission worktrees live outside the Repository root', async () => {

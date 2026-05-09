@@ -1,6 +1,7 @@
 // /apps/airport/web/src/lib/components/entities/Repository/Repository.svelte.ts: OO browser entity for repository data with remote issue and mission commands.
 import type { MissionCatalogEntryType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
+import { AgentFindResultSchema, type AgentDataType } from '@flying-pillow/mission-core/entities/Agent/AgentSchema';
 import { AgentExecutionDataSchema, type AgentExecutionDataType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import { RepositoryDataSchema, RepositoryIssueDetailSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformRepositorySchema, RepositorySetupResultSchema, RepositorySyncStatusSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import type { RepositoryDataType, RepositoryIssueDetailType, RepositorySetupResultType, RepositorySettingsType, RepositorySyncStatusType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
@@ -21,8 +22,8 @@ export class Repository extends Entity<RepositoryDataType> {
     private readonly loadData: RepositoryDataLoader;
     private commandDescriptors = $state<EntityCommandDescriptorType[]>([]);
     private syncStatusValue = $state<RepositorySyncStatusType | undefined>();
-    private setupAgentExecutionValue = $state<AgentExecutionDataType | undefined>();
-    private setupAgentExecutionEntity = $state<AgentExecution | undefined>();
+    private repositoryAgentExecutionValue = $state<AgentExecutionDataType | undefined>();
+    private repositoryAgentExecutionEntity = $state<AgentExecution | undefined>();
     public missions = $state<MissionCatalogEntryType[]>([]);
 
     public constructor(
@@ -57,8 +58,8 @@ export class Repository extends Entity<RepositoryDataType> {
         return status ? structuredClone(status) : undefined;
     }
 
-    public get setupAgentExecution(): AgentExecution | undefined {
-        return this.setupAgentExecutionEntity;
+    public get repositoryAgentExecution(): AgentExecution | undefined {
+        return this.repositoryAgentExecutionEntity;
     }
 
     protected get entityLocator(): Record<string, unknown> {
@@ -201,14 +202,57 @@ export class Repository extends Entity<RepositoryDataType> {
         return result;
     }
 
-    public async ensureSetupAgentExecution(): Promise<AgentExecutionDataType> {
-        const result = AgentExecutionDataSchema.parse(await this.executeCommand(
-            this.commandIdFor('ensureSetupAgentExecution')
-        ));
-        return this.updateSetupAgentExecution(result);
+    public async configureAgents(input: {
+        defaultAgentAdapter: string;
+        enabledAgentAdapters: string[];
+    }): Promise<this> {
+        const commandInput = {
+            defaultAgentAdapter: input.defaultAgentAdapter,
+            enabledAgentAdapters: [...input.enabledAgentAdapters]
+        };
+        this.applyData(RepositoryDataSchema.parse(await this.executeCommand(
+            this.commandIdFor('configureAgents'),
+            commandInput
+        )));
+        await this.refreshCommands();
+        return this;
     }
 
-    public async commandSetupAgentExecution(input: {
+    public async findAgents(): Promise<AgentDataType[]> {
+        const agentsQuery = qry({
+            entity: 'Agent',
+            method: 'find',
+            payload: {
+                repositoryRootPath: this.data.repositoryRootPath
+            }
+        });
+        return AgentFindResultSchema.parse(await agentsQuery.run());
+    }
+
+    public findAgentsQuery() {
+        return qry({
+            entity: 'Agent',
+            method: 'find',
+            payload: {
+                repositoryRootPath: this.data.repositoryRootPath
+            }
+        });
+    }
+
+    public readAgentsQueryCurrent(input: { current?: unknown }): AgentDataType[] {
+        return Array.isArray(input.current)
+            ? AgentFindResultSchema.parse(input.current)
+            : [];
+    }
+
+    public async ensureRepositoryAgentExecution(): Promise<AgentExecutionDataType> {
+        const result = AgentExecutionDataSchema.parse(await this.executeCommand(
+            this.commandIdFor('ensureRepositoryAgentExecution')
+        ));
+        return this.updateRepositoryAgentExecution(result);
+    }
+
+    public async commandRepositoryAgentExecution(input: {
         ownerId: string;
         sessionId: string;
         commandId: string;
@@ -224,7 +268,7 @@ export class Repository extends Entity<RepositoryDataType> {
                 ...(input.input !== undefined ? { input: input.input } : {})
             }
         });
-        return this.updateSetupAgentExecution(AgentExecutionDataSchema.parse(await qry({
+        return this.updateRepositoryAgentExecution(AgentExecutionDataSchema.parse(await qry({
             entity: 'AgentExecution',
             method: 'read',
             payload: {
@@ -234,13 +278,13 @@ export class Repository extends Entity<RepositoryDataType> {
         }).run()));
     }
 
-    public async refreshSetupAgentExecution(): Promise<AgentExecutionDataType | undefined> {
-        const execution = this.setupAgentExecutionEntity;
+    public async refreshRepositoryAgentExecution(): Promise<AgentExecutionDataType | undefined> {
+        const execution = this.repositoryAgentExecutionEntity;
         if (!execution) {
             return undefined;
         }
 
-        return this.updateSetupAgentExecution(AgentExecutionDataSchema.parse(await qry({
+        return this.updateRepositoryAgentExecution(AgentExecutionDataSchema.parse(await qry({
             entity: 'AgentExecution',
             method: 'read',
             payload: {
@@ -250,22 +294,22 @@ export class Repository extends Entity<RepositoryDataType> {
         }).run()));
     }
 
-    public applySetupAgentExecutionData(data: AgentExecutionDataType): void {
-        this.updateSetupAgentExecution(data);
+    public applyRepositoryAgentExecutionData(data: AgentExecutionDataType): void {
+        this.updateRepositoryAgentExecution(data);
     }
 
-    private updateSetupAgentExecution(data: AgentExecutionDataType): AgentExecutionDataType {
+    private updateRepositoryAgentExecution(data: AgentExecutionDataType): AgentExecutionDataType {
         const nextData = AgentExecutionDataSchema.parse(data);
-        this.setupAgentExecutionValue = nextData;
-        if (this.setupAgentExecutionEntity?.sessionId === nextData.sessionId) {
-            this.setupAgentExecutionEntity.updateFromData(nextData);
+        this.repositoryAgentExecutionValue = nextData;
+        if (this.repositoryAgentExecutionEntity?.sessionId === nextData.sessionId) {
+            this.repositoryAgentExecutionEntity.updateFromData(nextData);
             return nextData;
         }
 
-        this.setupAgentExecutionEntity = new AgentExecution(nextData, {
+        this.repositoryAgentExecutionEntity = new AgentExecution(nextData, {
             resolveCommands: () => [],
             executeCommand: async (ownerId, sessionId, commandId, input) => {
-                await this.commandSetupAgentExecution({
+                await this.commandRepositoryAgentExecution({
                     ownerId,
                     sessionId,
                     commandId,
@@ -295,7 +339,7 @@ export class Repository extends Entity<RepositoryDataType> {
 
     private assertCanStartMission(): void {
         if (!this.data.isInitialized) {
-            throw new Error('Complete Repository setup before starting regular missions.');
+            throw new Error('Complete Repository initialization before starting regular missions.');
         }
     }
 }

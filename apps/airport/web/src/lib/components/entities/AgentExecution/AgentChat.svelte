@@ -1,26 +1,51 @@
 <script lang="ts">
+    import type { Snippet } from "svelte";
     import Icon from "@iconify/svelte";
     import type { AgentExecution as AgentExecutionEntity } from "$lib/components/entities/AgentExecution/AgentExecution.svelte.js";
     import AgentExecutionTerminalPanel from "$lib/components/entities/AgentExecution/AgentExecution.svelte";
-    import AgentExecutionCommandbar from "$lib/components/entities/AgentExecution/AgentExecutionCommandbar.svelte";
+    import AgentChatInputBar from "$lib/components/entities/AgentExecution/AgentChatInputBar.svelte";
+    import AgentChatMessages from "$lib/components/entities/AgentExecution/AgentChatMessages.svelte";
     import { Button } from "$lib/components/ui/button/index.js";
     import * as ScrollArea from "$lib/components/ui/scroll-area/index.js";
-    import { Textarea } from "$lib/components/ui/textarea/index.js";
+    import type { AgentExecutionDataType } from "@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema";
+
+    type ChatMessage = AgentExecutionDataType["chatMessages"][number];
 
     let {
         agentExecution,
         refreshNonce,
         onCommandExecuted,
+        showHeader = true,
+        showTerminalPanel = $bindable(false),
+        title = "Agent chat",
+        loadingTitle = "Starting agent chat",
+        loadingPlaceholder = "Starting agent chat",
+        headerActions,
     }: {
         agentExecution?: AgentExecutionEntity;
         refreshNonce: number;
         onCommandExecuted: () => Promise<void>;
+        showHeader?: boolean;
+        showTerminalPanel?: boolean;
+        title?: string;
+        loadingTitle?: string;
+        loadingPlaceholder?: string;
+        headerActions?: Snippet<
+            [
+                {
+                    agentExecution?: AgentExecutionEntity;
+                    showTerminalPanel: boolean;
+                    canShowTerminalPanel: boolean;
+                    toggleTerminalPanel: () => void;
+                },
+            ]
+        >;
     } = $props();
 
     let draft = $state("");
     let promptPending = $state(false);
     let promptError = $state<string | null>(null);
-    let showTerminalPanel = $state(false);
+    let messagesViewport = $state<HTMLElement | null>(null);
 
     const canSendPrompt = $derived(
         Boolean(agentExecution?.canSendStructuredPrompt),
@@ -28,46 +53,19 @@
     const canShowTerminalPanel = $derived(
         Boolean(agentExecution?.isTerminalBacked()),
     );
+    const resolvedShowTerminalPanel = $derived(
+        showTerminalPanel && canShowTerminalPanel,
+    );
     const chatMessages = $derived.by(() => {
         refreshNonce;
         return agentExecution?.chatMessages ?? [];
     });
-
-    $effect(() => {
-        if (!canShowTerminalPanel) {
-            showTerminalPanel = false;
-        }
+    const chatMessageListKey = $derived.by(() => {
+        return chatMessages.map((message) => message.id).join("|");
     });
 
-    async function submitPrompt(event: SubmitEvent): Promise<void> {
-        event.preventDefault();
-        const text = draft.trim();
-        if (!text || !agentExecution || !canSendPrompt || promptPending) {
-            return;
-        }
-
-        promptPending = true;
-        promptError = null;
-        try {
-            await agentExecution.sendPrompt({
-                source: "operator",
-                text,
-            });
-            draft = "";
-            await onCommandExecuted();
-        } catch {
-            promptError = "Your message could not be sent. Please try again.";
-        } finally {
-            promptPending = false;
-        }
-    }
-
-    function useChoice(value: string): void {
-        draft = value;
-    }
-
-    function messageIcon(kind: string): string {
-        switch (kind) {
+    function messageIcon(message: ChatMessage): string {
+        switch (message.kind) {
             case "progress":
                 return "lucide:activity";
             case "needs-input":
@@ -85,231 +83,258 @@
         }
     }
 
-    function messageToneClasses(tone: string): string {
-        switch (tone) {
+    function messageTitle(message: ChatMessage): string {
+        if (message.role === "operator") {
+            return "You";
+        }
+
+        if (message.role === "system") {
+            return message.title ?? "System";
+        }
+
+        return message.title ?? "Assistant";
+    }
+
+    function messageToneClasses(message: ChatMessage): string {
+        if (message.role === "operator") {
+            return "border-primary/35 bg-[#102017] text-slate-50 shadow-[inset_-3px_0_0_rgb(52_211_153)]";
+        }
+
+        switch (message.tone) {
             case "progress":
-                return "border-sky-200 bg-sky-50 text-sky-950";
+                return "border-sky-400/30 bg-[#0d1820] text-sky-50 shadow-[inset_3px_0_0_rgb(56_189_248)]";
             case "attention":
-                return "border-amber-200 bg-amber-50 text-amber-950";
+                return "border-amber-300/35 bg-[#20180b] text-amber-50 shadow-[inset_3px_0_0_rgb(251_191_36)]";
             case "success":
-                return "border-emerald-200 bg-emerald-50 text-emerald-950";
+                return "border-emerald-400/30 bg-[#0d1b15] text-emerald-50 shadow-[inset_3px_0_0_rgb(52_211_153)]";
             case "danger":
-                return "border-rose-200 bg-rose-50 text-rose-950";
+                return "border-rose-400/35 bg-[#211015] text-rose-50 shadow-[inset_3px_0_0_rgb(251_113_133)]";
             case "muted":
-                return "border-muted bg-muted/40 text-muted-foreground";
+                return "border-slate-500/25 bg-[#12151b] text-slate-300 shadow-[inset_3px_0_0_rgb(100_116_139)]";
             default:
-                return "border-border bg-card text-card-foreground";
+                return "border-white/10 bg-[#12151b] text-slate-100 shadow-[inset_3px_0_0_rgb(148_163_184)]";
         }
     }
 
-    function messageAlignClasses(role: string): string {
-        return role === "operator" ? "justify-end" : "justify-start";
+    function messageIconClasses(message: ChatMessage): string {
+        if (message.role === "operator") {
+            return "border-primary/30 bg-primary/15 text-emerald-200";
+        }
+
+        switch (message.tone) {
+            case "progress":
+                return "border-sky-300/25 bg-sky-400/10 text-sky-200";
+            case "attention":
+                return "border-amber-300/25 bg-amber-400/10 text-amber-200";
+            case "success":
+                return "border-emerald-300/25 bg-emerald-400/10 text-emerald-200";
+            case "danger":
+                return "border-rose-300/25 bg-rose-400/10 text-rose-200";
+            default:
+                return "border-white/10 bg-white/[0.04] text-slate-300";
+        }
     }
 
-    function messageBubbleClasses(role: string, tone: string): string {
-        if (role === "operator") {
-            return "border-primary/20 bg-primary text-primary-foreground";
+    function messageAlignClasses(message: ChatMessage): string {
+        if (message.role === "operator") {
+            return "justify-end";
         }
-        return messageToneClasses(tone);
+
+        if (message.role === "system" || message.kind === "status") {
+            return "justify-center";
+        }
+
+        return "justify-start";
+    }
+
+    function providerIcon(agentId: string | undefined): string {
+        const normalized = (agentId ?? "").toLowerCase();
+        if (normalized.includes("copilot")) {
+            return "simple-icons:githubcopilot";
+        }
+        if (normalized.includes("openai") || normalized.includes("codex")) {
+            return "simple-icons:openai";
+        }
+        if (normalized.includes("claude") || normalized.includes("anthropic")) {
+            return "simple-icons:anthropic";
+        }
+        if (normalized.includes("opencode")) {
+            return "lucide:code-2";
+        }
+        if (normalized.includes("pi")) {
+            return "lucide:message-circle";
+        }
+
+        return "lucide:bot";
+    }
+
+    function toggleTerminalPanel(): void {
+        if (!canShowTerminalPanel) {
+            return;
+        }
+
+        showTerminalPanel = !showTerminalPanel;
+    }
+
+    async function submitPrompt(event: SubmitEvent): Promise<void> {
+        event.preventDefault();
+
+        if (!agentExecution || !agentExecution.canSendStructuredPrompt) {
+            return;
+        }
+
+        const text = draft.trim();
+        if (!text) {
+            promptError = "Prompt text is required.";
+            return;
+        }
+
+        promptPending = true;
+        promptError = null;
+        try {
+            await agentExecution.sendPrompt({
+                source: "operator",
+                text,
+            });
+            draft = "";
+            await onCommandExecuted();
+        } catch (submitError) {
+            promptError =
+                submitError instanceof Error
+                    ? submitError.message
+                    : String(submitError);
+        } finally {
+            promptPending = false;
+        }
+    }
+
+    async function useChoice(value: string): Promise<void> {
+        draft = value;
+        await submitPrompt(new SubmitEvent("submit"));
     }
 </script>
 
 <section
-    class="flex min-h-0 flex-1 flex-col overflow-hidden bg-background lg:flex-row"
+    class="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#08090b] lg:flex-row"
 >
     <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div class="border-b bg-muted/15 px-4 py-4 md:px-5">
-            <div class="flex min-w-0 items-start justify-between gap-4">
-                <div class="flex min-w-0 items-start gap-3">
-                    <span
-                        class="inline-flex size-10 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground"
-                    >
-                        <Icon icon="lucide:bot-message-square" class="size-5" />
-                    </span>
-                    <div class="min-w-0">
-                        <h2
-                            class="min-w-0 truncate text-lg font-semibold leading-6 text-foreground"
+        {#if showHeader}
+            <div
+                class="border-b border-white/10 bg-[#0d0f13] px-4 py-4 md:px-5"
+            >
+                <div
+                    class="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"
+                >
+                    <div class="flex min-w-0 items-start gap-3">
+                        <span
+                            class="inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/[0.04] text-emerald-200"
                         >
-                            Setup chat
-                        </h2>
+                            <Icon
+                                icon="lucide:bot-message-square"
+                                class="size-5"
+                            />
+                        </span>
+                        <div class="min-w-0">
+                            <h2
+                                class="min-w-0 truncate text-lg font-semibold leading-6 text-slate-50"
+                            >
+                                {title}
+                            </h2>
+                            <p class="mt-1 truncate text-xs text-slate-400">
+                                {agentExecution?.adapterLabel ??
+                                    "Agent session"}
+                            </p>
+                        </div>
+                    </div>
+                    <div
+                        class="flex shrink-0 flex-wrap items-center justify-end gap-2"
+                    >
+                        {@render headerActions?.({
+                            agentExecution,
+                            showTerminalPanel: resolvedShowTerminalPanel,
+                            canShowTerminalPanel,
+                            toggleTerminalPanel,
+                        })}
                     </div>
                 </div>
-                <Button
-                    type="button"
-                    variant={showTerminalPanel ? "secondary" : "outline"}
-                    size="icon"
-                    disabled={!canShowTerminalPanel}
-                    aria-label={showTerminalPanel
-                        ? "Hide AgentExecution terminal"
-                        : "Show AgentExecution terminal"}
-                    title={showTerminalPanel
-                        ? "Hide AgentExecution terminal"
-                        : canShowTerminalPanel
-                          ? "Show AgentExecution terminal"
-                          : "AgentExecution terminal is not available"}
-                    onclick={() => {
-                        showTerminalPanel = !showTerminalPanel;
-                    }}
-                >
-                    <Icon
-                        icon={showTerminalPanel
-                            ? "lucide:panel-right-close"
-                            : "lucide:square-terminal"}
-                        class="size-4"
-                    />
-                </Button>
             </div>
-        </div>
+        {/if}
 
-        <ScrollArea.Root class="min-h-0 flex-1" scrollbarYClasses="py-2">
-            <div class="mx-auto grid w-full max-w-4xl gap-4 px-4 py-5 md:px-6">
+        <ScrollArea.Root
+            bind:viewportRef={messagesViewport}
+            class="min-h-0 flex-1"
+            scrollbarYClasses="py-2"
+        >
+            <div class="mx-auto w-full max-w-4xl px-4 py-5 md:px-6">
                 {#if !agentExecution}
                     <div
-                        class="rounded-lg border border-dashed bg-muted/20 px-5 py-8 text-center"
+                        class="rounded-lg border border-dashed border-white/15 bg-white/[0.03] px-5 py-8 text-center"
                     >
                         <Icon
                             icon="lucide:messages-square"
-                            class="mx-auto size-8 text-muted-foreground"
+                            class="mx-auto size-8 text-slate-500"
                         />
-                        <h3 class="mt-3 text-sm font-medium text-foreground">
-                            Starting setup chat
+                        <h3 class="mt-3 text-sm font-medium text-slate-200">
+                            {loadingTitle}
                         </h3>
                     </div>
                 {:else if chatMessages.length === 0}
                     <div class="flex justify-start">
                         <div
-                            class="max-w-[min(44rem,92%)] rounded-lg border bg-card px-4 py-3 text-card-foreground shadow-sm"
+                            class="max-w-[min(44rem,100%)] rounded-lg border border-white/10 bg-[#12151b] px-4 py-3 text-slate-100 shadow-[inset_3px_0_0_rgb(148_163_184)]"
                         >
                             <div
-                                class="flex items-center gap-2 text-sm font-medium"
+                                class="flex items-center gap-2 text-sm font-medium text-slate-200"
                             >
                                 <Icon icon="lucide:sparkles" class="size-4" />
                                 Assistant
                             </div>
-                            <p
-                                class="mt-2 text-sm leading-6 text-muted-foreground"
-                            >
+                            <p class="mt-2 text-sm leading-6 text-slate-400">
                                 Waiting for the first AgentExecution signal.
                             </p>
                         </div>
                     </div>
-                {:else}
-                    {#each chatMessages as message (message.id)}
-                        <div
-                            class={`flex ${messageAlignClasses(message.role)}`}
-                        >
-                            <article
-                                class={`max-w-[min(44rem,92%)] rounded-lg border px-4 py-3 shadow-sm ${messageBubbleClasses(message.role, message.tone)}`}
-                            >
-                                <div
-                                    class="flex items-center gap-2 text-sm font-medium"
-                                >
-                                    <Icon
-                                        icon={messageIcon(message.kind)}
-                                        class="size-4"
-                                    />
-                                    <span>
-                                        {message.role === "operator"
-                                            ? "You"
-                                            : (message.title ?? "Assistant")}
-                                    </span>
-                                </div>
-                                <p
-                                    class="mt-2 whitespace-pre-wrap text-sm leading-6"
-                                >
-                                    {message.text}
-                                </p>
-                                {#if message.detail}
-                                    <p
-                                        class="mt-2 whitespace-pre-wrap text-xs leading-5 opacity-80"
-                                    >
-                                        {message.detail}
-                                    </p>
-                                {/if}
-                                {#if message.choices?.length}
-                                    <div class="mt-3 flex flex-wrap gap-2">
-                                        {#each message.choices as choice (`${message.id}:${choice.kind}:${choice.label}`)}
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                class="bg-background/70"
-                                                onclick={() =>
-                                                    useChoice(
-                                                        choice.kind === "fixed"
-                                                            ? choice.value
-                                                            : "",
-                                                    )}
-                                            >
-                                                {choice.label}
-                                            </Button>
-                                        {/each}
-                                    </div>
-                                {/if}
-                            </article>
-                        </div>
-                    {/each}
+                {:else if messagesViewport}
+                    {#key chatMessageListKey}
+                        <AgentChatMessages
+                            messages={chatMessages}
+                            viewport={messagesViewport}
+                            {messageAlignClasses}
+                            {messageToneClasses}
+                            {messageIconClasses}
+                            {messageIcon}
+                            {messageTitle}
+                            {useChoice}
+                        />
+                    {/key}
                 {/if}
             </div>
         </ScrollArea.Root>
 
-        <div class="border-t bg-background/95 px-4 py-3 md:px-5">
-            <AgentExecutionCommandbar
-                {refreshNonce}
-                session={agentExecution}
-                {onCommandExecuted}
-            />
-        </div>
-
-        <form class="px-4 py-4 md:px-5" onsubmit={submitPrompt}>
-            <div
-                class="mx-auto flex max-w-4xl items-end gap-2 rounded-lg border bg-card p-2 shadow-sm"
-            >
-                <Textarea
-                    bind:value={draft}
-                    rows={2}
-                    class="max-h-32 min-h-12 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
-                    placeholder={agentExecution
-                        ? "Message the assistant"
-                        : "Starting setup chat"}
-                    disabled={!agentExecution ||
-                        !canSendPrompt ||
-                        promptPending}
-                />
-                <Button
-                    type="submit"
-                    size="icon"
-                    class="mb-0.5 shrink-0"
-                    disabled={!draft.trim() ||
-                        !agentExecution ||
-                        !canSendPrompt ||
-                        promptPending}
-                    aria-label="Send message"
-                    title="Send message"
-                >
-                    <Icon icon="lucide:send-horizontal" class="size-4" />
-                </Button>
-            </div>
-            {#if promptError}
-                <p class="mx-auto mt-2 max-w-4xl text-sm text-rose-600">
-                    {promptError}
-                </p>
-            {/if}
-        </form>
+        <AgentChatInputBar
+            bind:value={draft}
+            placeholder={agentExecution
+                ? "Message the assistant"
+                : loadingPlaceholder}
+            disabled={!agentExecution || !canSendPrompt || promptPending}
+            pending={promptPending}
+            error={promptError}
+            onSubmit={submitPrompt}
+        />
     </div>
 
-    {#if showTerminalPanel}
+    {#if resolvedShowTerminalPanel}
         <aside
-            class="flex min-h-80 min-w-0 flex-1 flex-col border-t bg-background lg:min-h-0 lg:border-l lg:border-t-0"
+            class="flex min-h-80 min-w-0 flex-1 flex-col border-t border-white/10 bg-[#08090b] lg:min-h-0 lg:border-l lg:border-t-0"
         >
             <div
-                class="flex h-[4.5625rem] shrink-0 items-center justify-between border-b bg-muted/15 px-4"
+                class="flex h-[4.5625rem] shrink-0 items-center justify-between border-b border-white/10 bg-[#0d0f13] px-4"
             >
                 <div class="min-w-0">
-                    <h3 class="truncate text-sm font-semibold text-foreground">
+                    <h3 class="truncate text-sm font-semibold text-slate-50">
                         AgentExecution terminal
                     </h3>
-                    <p class="truncate text-xs text-muted-foreground">
+                    <p class="truncate text-xs text-slate-400">
                         {agentExecution?.terminalName ??
                             agentExecution?.sessionId ??
                             "Terminal"}

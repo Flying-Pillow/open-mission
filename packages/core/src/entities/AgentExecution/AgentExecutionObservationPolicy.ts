@@ -14,9 +14,14 @@ import {
 	type AgentExecutionSignalDecision,
 	type AgentExecutionSnapshot
 } from './AgentExecutionProtocolTypes.js';
+import { AgentExecutionObservationLedger } from './AgentExecutionObservationLedger.js';
 
 export class AgentExecutionObservationPolicy {
-	private readonly seenObservationIds = new Set<string>();
+	private readonly observationLedger: AgentExecutionObservationLedger;
+
+	public constructor(observationLedger = new AgentExecutionObservationLedger()) {
+		this.observationLedger = observationLedger;
+	}
 
 	public evaluate(input: {
 		snapshot: AgentExecutionSnapshot;
@@ -26,7 +31,7 @@ export class AgentExecutionObservationPolicy {
 		if (rejection) {
 			return { action: 'reject', reason: rejection };
 		}
-		this.seenObservationIds.add(input.observation.observationId);
+		this.observationLedger.record(input.observation.observationId);
 		return this.decide(input.snapshot, input.observation);
 	}
 
@@ -37,7 +42,7 @@ export class AgentExecutionObservationPolicy {
 		if (!observation.observationId.trim()) {
 			return 'Observation id must not be empty.';
 		}
-		if (this.seenObservationIds.has(observation.observationId)) {
+		if (this.observationLedger.has(observation.observationId)) {
 			return `Observation '${observation.observationId}' was already processed.`;
 		}
 		const activeAddress: AgentExecutionObservationAddress = {
@@ -109,6 +114,24 @@ export class AgentExecutionObservationPolicy {
 							state: 'working',
 							summary: signal.summary,
 							...(signal.detail ? { detail: signal.detail } : {}),
+							updatedAt: observation.observedAt
+						}
+					}
+				};
+			case 'status':
+				if (!isPromotableProgressSignal(signal)) {
+					return { action: 'record-observation-only', reason: 'Low-confidence status stayed observational only.' };
+				}
+				return {
+					action: 'update-session',
+					eventType: 'execution.updated',
+					snapshotPatch: {
+						status: signal.phase === 'initializing' ? 'starting' : 'running',
+						attention: signal.phase === 'idle' ? 'awaiting-operator' : 'autonomous',
+						waitingForInput: false,
+						progress: {
+							state: signal.phase,
+							summary: signal.summary ?? defaultStatusSummary(signal.phase),
 							updatedAt: observation.observedAt
 						}
 					}
@@ -209,6 +232,8 @@ function validateSignalShape(signal: AgentExecutionSignal): string | undefined {
 		case 'progress':
 			return validateText(signal.summary, 'progress summary')
 				?? validateOptionalText(signal.detail, 'progress detail');
+		case 'status':
+			return validateOptionalText(signal.summary, 'status summary');
 		case 'needs_input':
 			return validateText(signal.question, 'needs-input question')
 				?? validateInputChoices(signal.choices);
@@ -293,6 +318,12 @@ function formatInputChoices(choices: AgentExecutionInputChoice[]): string {
 	}).join(', ');
 }
 
+function defaultStatusSummary(phase: 'initializing' | 'idle'): string {
+	return phase === 'initializing'
+		? 'Initializing the next agent turn.'
+		: 'Idle and ready for the next structured prompt.';
+}
+
 function validateUsagePayload(payload: Record<string, unknown>): string | undefined {
 	const entries = Object.entries(payload);
 	if (entries.length > MAX_AGENT_EXECUTION_USAGE_ENTRIES) {
@@ -310,7 +341,7 @@ function validateUsagePayload(payload: Record<string, unknown>): string | undefi
 }
 
 function isPromotableProgressSignal(
-	signal: Extract<AgentExecutionSignal, { type: 'progress' | 'needs_input' | 'blocked' }>
+	signal: Extract<AgentExecutionSignal, { type: 'progress' | 'status' | 'needs_input' | 'blocked' }>
 ): boolean {
 	return signal.confidence !== 'low'
 		&& signal.confidence !== 'diagnostic';
@@ -343,6 +374,7 @@ function validateObservationTypeBoundary(observation: AgentExecutionObservation)
 	> = {
 		daemon: [
 			'progress',
+			'status',
 			'needs_input',
 			'blocked',
 			'ready_for_verification',
@@ -355,6 +387,7 @@ function validateObservationTypeBoundary(observation: AgentExecutionObservation)
 		'provider-output': ['message', 'usage', 'diagnostic'],
 		'agent-declared-signal': [
 			'progress',
+			'status',
 			'needs_input',
 			'blocked',
 			'ready_for_verification',

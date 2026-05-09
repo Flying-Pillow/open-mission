@@ -66,6 +66,10 @@ describe('AgentExecutor', () => {
             });
 
             expect(data).toMatchObject({
+                transportState: {
+                    selected: 'stdout-marker',
+                    degraded: false
+                },
                 chatMessages: [
                     {
                         role: 'agent',

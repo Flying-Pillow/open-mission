@@ -12,6 +12,14 @@ export const claudeCode = {
     id: `agent:${CLAUDE_CODE_AGENT_ID}`,
     agentId: CLAUDE_CODE_AGENT_ID,
     displayName: 'Claude Code',
+    optionCatalog: {
+        models: [
+            { value: 'claude-opus-4-7-20260501', label: 'Claude Opus 4.7' },
+            { value: 'claude-sonnet-4-6-20260415', label: 'Claude Sonnet 4.6' },
+            { value: 'claude-haiku-4-5-20260310', label: 'Claude Haiku 4.5' }
+        ],
+        reasoningEfforts: ['low', 'medium', 'high']
+    },
     supportsDefaultReasoningEffort: true,
     adapter: {
         command: 'claude',

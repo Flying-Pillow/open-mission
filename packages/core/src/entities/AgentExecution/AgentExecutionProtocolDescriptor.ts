@@ -2,6 +2,7 @@ import type { AgentExecutionScope } from './AgentExecutionProtocolTypes.js';
 import {
     AgentDeclaredSignalDescriptorSchema,
     AgentExecutionProtocolDescriptorSchema,
+    type AgentDeclaredSignalDeliveryType,
     type AgentDeclaredSignalDescriptorType,
     type AgentExecutionMessageDescriptorType,
     type AgentExecutionProtocolDescriptorType,
@@ -16,7 +17,18 @@ export const baselineAgentDeclaredSignalDescriptors: AgentDeclaredSignalDescript
         icon: 'lucide:activity',
         tone: 'progress',
         payloadSchemaKey: 'agent-declared-signal.progress.v1',
-        delivery: 'stdout-marker',
+        deliveries: ['stdout-marker', 'mcp-tool'],
+        policy: 'progress',
+        outcomes: ['agent-execution-state', 'agent-execution-event']
+    },
+    {
+        type: 'status',
+        label: 'Status',
+        description: 'Reports a machine-readable Agent execution status phase such as initializing or idle.',
+        icon: 'lucide:circle-dot',
+        tone: 'neutral',
+        payloadSchemaKey: 'agent-declared-signal.status.v1',
+        deliveries: ['stdout-marker', 'mcp-tool'],
         policy: 'progress',
         outcomes: ['agent-execution-state', 'agent-execution-event']
     },
@@ -27,7 +39,7 @@ export const baselineAgentDeclaredSignalDescriptors: AgentDeclaredSignalDescript
         icon: 'lucide:message-circle-question',
         tone: 'attention',
         payloadSchemaKey: 'agent-declared-signal.needs-input.v1',
-        delivery: 'stdout-marker',
+        deliveries: ['stdout-marker', 'mcp-tool'],
         policy: 'input-request',
         outcomes: ['agent-execution-state', 'owner-entity-event']
     },
@@ -38,7 +50,7 @@ export const baselineAgentDeclaredSignalDescriptors: AgentDeclaredSignalDescript
         icon: 'lucide:octagon-alert',
         tone: 'danger',
         payloadSchemaKey: 'agent-declared-signal.blocked.v1',
-        delivery: 'stdout-marker',
+        deliveries: ['stdout-marker', 'mcp-tool'],
         policy: 'claim',
         outcomes: ['agent-execution-state', 'owner-entity-event']
     },
@@ -49,7 +61,7 @@ export const baselineAgentDeclaredSignalDescriptors: AgentDeclaredSignalDescript
         icon: 'lucide:badge-check',
         tone: 'success',
         payloadSchemaKey: 'agent-declared-signal.ready-for-verification.v1',
-        delivery: 'stdout-marker',
+        deliveries: ['stdout-marker', 'mcp-tool'],
         policy: 'claim',
         outcomes: ['agent-execution-event', 'owner-entity-event', 'workflow-event']
     },
@@ -60,7 +72,7 @@ export const baselineAgentDeclaredSignalDescriptors: AgentDeclaredSignalDescript
         icon: 'lucide:check-check',
         tone: 'success',
         payloadSchemaKey: 'agent-declared-signal.completed-claim.v1',
-        delivery: 'stdout-marker',
+        deliveries: ['stdout-marker', 'mcp-tool'],
         policy: 'claim',
         outcomes: ['agent-execution-event', 'owner-entity-event', 'workflow-event']
     },
@@ -71,7 +83,7 @@ export const baselineAgentDeclaredSignalDescriptors: AgentDeclaredSignalDescript
         icon: 'lucide:circle-x',
         tone: 'danger',
         payloadSchemaKey: 'agent-declared-signal.failed-claim.v1',
-        delivery: 'stdout-marker',
+        deliveries: ['stdout-marker', 'mcp-tool'],
         policy: 'claim',
         outcomes: ['agent-execution-state', 'agent-execution-event', 'owner-entity-event']
     },
@@ -82,7 +94,7 @@ export const baselineAgentDeclaredSignalDescriptors: AgentDeclaredSignalDescript
         icon: 'lucide:message-square',
         tone: 'neutral',
         payloadSchemaKey: 'agent-declared-signal.message.v1',
-        delivery: 'stdout-marker',
+        deliveries: ['stdout-marker', 'mcp-tool'],
         policy: 'audit-message',
         outcomes: ['agent-execution-event']
     }
@@ -92,13 +104,30 @@ export function createAgentExecutionProtocolDescriptor(input: {
     scope: AgentExecutionScope;
     messages: AgentExecutionMessageDescriptorType[];
     signals?: AgentDeclaredSignalDescriptorType[];
+    deliveries?: AgentDeclaredSignalDeliveryType[];
 }): AgentExecutionProtocolDescriptorType {
+    const signals = (input.signals ?? baselineAgentDeclaredSignalDescriptors).map((signal) => ({
+        ...signal,
+        deliveries: input.deliveries
+            ? signal.deliveries.filter((delivery) => input.deliveries?.includes(delivery))
+            : [...signal.deliveries],
+        outcomes: [...signal.outcomes]
+    })).filter((signal) => signal.deliveries.length > 0);
     return AgentExecutionProtocolDescriptorSchema.parse({
         version: 1,
         owner: deriveAgentExecutionProtocolOwner(input.scope),
         scope: input.scope,
         messages: input.messages,
-        signals: input.signals ?? baselineAgentDeclaredSignalDescriptors
+        signals,
+        ...(signals.some((signal) => signal.deliveries.includes('mcp-tool'))
+            ? {
+                mcp: {
+                    serverName: 'mission-mcp',
+                    exposure: 'session-scoped',
+                    publicApi: false
+                }
+            }
+            : {})
     });
 }
 

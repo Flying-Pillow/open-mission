@@ -1,12 +1,10 @@
 <script lang="ts">
     import Icon from "@iconify/svelte";
-    import type { AgentIdType } from "@flying-pillow/mission-core/entities/Agent/AgentSchema";
-    import { type MissionReasoningEffortType } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
     import {
-        createDefaultRepositoryAgentAdapterSettings,
-        readRepositoryAgentAdapterSettings,
-        type RepositoryAgentAdapterSettingsType,
-    } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
+        type AgentDataType,
+        type AgentIdType,
+    } from "@flying-pillow/mission-core/entities/Agent/AgentSchema";
+    import { type MissionReasoningEffortType } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
     import type { EntityCommandDescriptorType } from "@flying-pillow/mission-core/entities/Entity/EntitySchema";
     import {
         TaskCommandIds,
@@ -23,6 +21,14 @@
         value: TValue;
         label: string;
         description?: string;
+    };
+
+    type AgentOptionEntry = {
+        id: AgentIdType;
+        label: string;
+        models: AgentDataType["optionCatalog"]["models"];
+        reasoningEfforts: AgentDataType["optionCatalog"]["reasoningEfforts"];
+        available: boolean;
     };
 
     const defaultSelectionOption = {
@@ -47,28 +53,52 @@
 
     let {
         refreshNonce,
-        agentAdapters = createDefaultRepositoryAgentAdapterSettings(),
+        availableAgents = [],
+        enabledAgentAdapters = [],
         task,
         onCommandExecuted,
     }: {
         refreshNonce: number;
-        agentAdapters?: RepositoryAgentAdapterSettingsType[];
+        availableAgents?: AgentDataType[];
+        enabledAgentAdapters?: AgentIdType[];
         task?: Task;
         onCommandExecuted: () => Promise<void>;
     } = $props();
 
-    let initializedTaskId = $state<string | undefined>(undefined);
+    let initializedTaskKey = $state<string | undefined>(undefined);
     let persistedConfigurationSignature = $state<string | undefined>(undefined);
     let agentAdapter = $state<AgentIdType>("copilot-cli");
     let model = $state("");
     let customModel = $state("");
     let reasoningEffort = $state<"" | MissionReasoningEffortType>("");
 
-    const agentAdapterCatalog = $derived(
-        agentAdapters.length > 0
-            ? agentAdapters
-            : createDefaultRepositoryAgentAdapterSettings(),
+    const discoveredAgents = $derived(availableAgents.map(toAgentOptionEntry));
+
+    const enabledAgentIdSet = $derived(
+        new Set(enabledAgentAdapters.map((agentId) => agentId.trim())),
     );
+    const agentAdapterCatalog = $derived.by(() => {
+        const catalog = discoveredAgents.filter(
+            (candidate) =>
+                candidate.available &&
+                (enabledAgentIdSet.size === 0 ||
+                    enabledAgentIdSet.has(candidate.id)),
+        );
+        const currentAgentId = task?.agentAdapter?.trim() || agentAdapter;
+        const currentAgent = discoveredAgents.find(
+            (candidate) => candidate.id === currentAgentId,
+        );
+        if (
+            currentAgent &&
+            !catalog.some((candidate) => candidate.id === currentAgent.id)
+        ) {
+            catalog.unshift(currentAgent);
+        }
+        if (catalog.length === 0) {
+            catalog.push(createFallbackAgentOption(currentAgentId));
+        }
+        return catalog;
+    });
     const agentAdapterOptions = $derived(
         agentAdapterCatalog.map((entry) => ({
             value: entry.id,
@@ -77,10 +107,8 @@
     );
     const defaultAgentAdapter = $derived(agentAdapterCatalog[0]);
     const selectedAgentAdapter = $derived(
-        readRepositoryAgentAdapterSettings(
-            { agentAdapters: agentAdapterCatalog },
-            agentAdapter,
-        ) ?? defaultAgentAdapter,
+        agentAdapterCatalog.find((entry) => entry.id === agentAdapter) ??
+            defaultAgentAdapter,
     );
 
     const availableModelOptions = $derived.by(() => {
@@ -131,20 +159,20 @@
     );
 
     $effect(() => {
-        if (initializedTaskId === task?.taskId) {
+        const taskKey = `${task?.taskId ?? ""}:${agentAdapterCatalog.map((entry) => entry.id).join(",")}`;
+        if (initializedTaskKey === taskKey) {
             return;
         }
 
         const taskAgentAdapter = task?.agentAdapter;
         agentAdapter =
-            readRepositoryAgentAdapterSettings(
-                { agentAdapters: agentAdapterCatalog },
-                taskAgentAdapter,
+            agentAdapterCatalog.find(
+                (candidate) => candidate.id === taskAgentAdapter,
             )?.id ?? defaultAgentAdapter.id;
         model = task?.model ?? "";
         customModel = "";
         reasoningEffort = task?.reasoningEffort ?? "";
-        initializedTaskId = task?.taskId;
+        initializedTaskKey = taskKey;
         persistedConfigurationSignature =
             buildConfigurationSignature(readConfigureInput());
     });
@@ -166,7 +194,7 @@
     });
 
     $effect(() => {
-        if (!task || initializedTaskId !== task.taskId) {
+        if (!task || initializedTaskKey === undefined) {
             return;
         }
 
@@ -228,6 +256,29 @@
         }
 
         model = nextModel;
+    }
+
+    function toAgentOptionEntry(agent: AgentDataType): AgentOptionEntry {
+        return {
+            id: agent.agentId,
+            label: agent.displayName,
+            models: agent.optionCatalog.models,
+            reasoningEfforts: agent.optionCatalog.reasoningEfforts,
+            available: agent.availability.available,
+        };
+    }
+
+    function createFallbackAgentOption(
+        fallbackAgentId: string | undefined,
+    ): AgentOptionEntry {
+        const fallbackId = (fallbackAgentId?.trim() || "codex") as AgentIdType;
+        return {
+            id: fallbackId,
+            label: fallbackId,
+            models: [],
+            reasoningEfforts: [],
+            available: false,
+        };
     }
 </script>
 

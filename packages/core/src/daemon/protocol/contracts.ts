@@ -1,11 +1,13 @@
 import type { EntityEventEnvelopeType } from '../../entities/Entity/EntitySchema.js';
 
-export const PROTOCOL_VERSION = 29;
+export const PROTOCOL_VERSION = 30;
 
 export type Method =
 	| 'ping'
 	| 'event.subscribe'
 	| 'system.status'
+	| 'mission-mcp.listTools'
+	| 'mission-mcp.callTool'
 	| 'entity.query'
 	| 'entity.command';
 
@@ -20,6 +22,8 @@ export const METHOD_METADATA: Record<Method, MethodMetadata> = {
 	'ping': { includeSurfacePath: false, workspaceRoute: 'none' },
 	'event.subscribe': { includeSurfacePath: false, workspaceRoute: 'none' },
 	'system.status': { includeSurfacePath: true, workspaceRoute: 'none' },
+	'mission-mcp.listTools': { includeSurfacePath: false, workspaceRoute: 'none' },
+	'mission-mcp.callTool': { includeSurfacePath: false, workspaceRoute: 'none' },
 	'entity.query': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'entity.command': { includeSurfacePath: true, workspaceRoute: 'control' }
 };

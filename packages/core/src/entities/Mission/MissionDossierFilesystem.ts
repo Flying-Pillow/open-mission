@@ -8,6 +8,7 @@ import {
 	type FrontmatterValue
 } from '../../lib/frontmatter.js';
 import { Repository } from '../Repository/Repository.js';
+import { DEFAULT_REPOSITORY_AGENT_ADAPTER_ID } from '../Repository/RepositorySchema.js';
 import {
 	MISSION_RUNTIME_FILE_NAME,
 	MISSION_RUNTIME_EVENT_LOG_FILE_NAME,
@@ -988,7 +989,7 @@ export class MissionDossierFilesystem {
 		const pairedTaskId = this.readOptionalStringAttribute(document.attributes, 'pairedTaskId', filePath);
 		const agent = typeof agentAttribute === 'string' && agentAttribute.trim()
 			? agentAttribute.trim()
-			: 'copilot-cli';
+			: DEFAULT_REPOSITORY_AGENT_ADAPTER_ID;
 
 		return {
 			taskId,

@@ -5,7 +5,8 @@
     import type { Artifact as ArtifactEntity } from "$lib/components/entities/Artifact/Artifact.svelte.js";
     import type { Task as TaskEntity } from "$lib/components/entities/Task/Task.svelte.js";
     import TaskCommandbar from "$lib/components/entities/Task/TaskCommandbar.svelte";
-    import type { RepositoryAgentAdapterSettingsType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
+    import type { AgentDataType } from "@flying-pillow/mission-core/entities/Agent/AgentSchema";
+    import type { AgentIdType } from "@flying-pillow/mission-core/entities/Agent/AgentSchema";
     import {
         ResizableHandle,
         ResizablePane,
@@ -15,7 +16,8 @@
 
     let {
         refreshNonce,
-        agentAdapters = [],
+        availableAgents = [],
+        enabledAgentAdapters = [],
         artifacts = [],
         selectedArtifactId,
         task,
@@ -24,7 +26,8 @@
         onCommandExecuted,
     }: {
         refreshNonce: number;
-        agentAdapters?: RepositoryAgentAdapterSettingsType[];
+        availableAgents?: AgentDataType[];
+        enabledAgentAdapters?: AgentIdType[];
         artifacts?: ArtifactEntity[];
         selectedArtifactId?: string;
         task?: TaskEntity;
@@ -54,7 +57,8 @@
         for (const candidate of [...sessions, ...(session ? [session] : [])]) {
             if (
                 tabs.some(
-                    (agentExecutionTab) => agentExecutionTab.id === candidate.id,
+                    (agentExecutionTab) =>
+                        agentExecutionTab.id === candidate.id,
                 )
             ) {
                 continue;
@@ -153,7 +157,9 @@
         return artifact.label;
     }
 
-    function agentExecutionTabLabel(agentExecution: AgentExecutionEntity): string {
+    function agentExecutionTabLabel(
+        agentExecution: AgentExecutionEntity,
+    ): string {
         const snapshot = agentExecution.toData();
         const adapterLabel = snapshot.agentId.trim();
         const startTime = formatAgentExecutionStartTime(snapshot.createdAt);
@@ -195,7 +201,9 @@
             return rightTerminalRank - leftTerminalRank;
         }
 
-        return getAgentExecutionUpdatedAt(right) - getAgentExecutionUpdatedAt(left);
+        return (
+            getAgentExecutionUpdatedAt(right) - getAgentExecutionUpdatedAt(left)
+        );
     }
 
     function getAgentExecutionUpdatedAt(
@@ -222,7 +230,8 @@
         <div class="flex flex-wrap items-center gap-2">
             <TaskCommandbar
                 {refreshNonce}
-                {agentAdapters}
+                {availableAgents}
+                {enabledAgentAdapters}
                 {task}
                 {onCommandExecuted}
             />

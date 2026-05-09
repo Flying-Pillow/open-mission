@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { AgentExecutionObservationLedger } from './AgentExecutionObservationLedger.js';
 import { AgentExecutionObservationPolicy } from './AgentExecutionObservationPolicy.js';
 import {
 	MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH,
@@ -126,6 +127,65 @@ describe('AgentExecutionObservationPolicy', () => {
 		});
 	});
 
+	it('promotes status phases into machine-readable session state', () => {
+		const policy = new AgentExecutionObservationPolicy();
+		const initializingDecision = policy.evaluate({
+			snapshot: createSnapshot(),
+			observation: createObservation({
+				observationId: 'observation-status-1',
+				signal: {
+					type: 'status',
+					phase: 'initializing',
+					summary: 'Preparing the next turn.',
+					source: 'agent-declared',
+					confidence: 'medium'
+				}
+			})
+		});
+		const idleDecision = policy.evaluate({
+			snapshot: createSnapshot(),
+			observation: createObservation({
+				observationId: 'observation-status-2',
+				signal: {
+					type: 'status',
+					phase: 'idle',
+					summary: 'Ready for the next structured prompt.',
+					source: 'agent-declared',
+					confidence: 'medium'
+				}
+			})
+		});
+
+		expect(initializingDecision).toEqual({
+			action: 'update-session',
+			eventType: 'execution.updated',
+			snapshotPatch: {
+				status: 'starting',
+				attention: 'autonomous',
+				waitingForInput: false,
+				progress: {
+					state: 'initializing',
+					summary: 'Preparing the next turn.',
+					updatedAt: '2026-05-04T12:00:00.000Z'
+				}
+			}
+		});
+		expect(idleDecision).toEqual({
+			action: 'update-session',
+			eventType: 'execution.updated',
+			snapshotPatch: {
+				status: 'running',
+				attention: 'awaiting-operator',
+				waitingForInput: false,
+				progress: {
+					state: 'idle',
+					summary: 'Ready for the next structured prompt.',
+					updatedAt: '2026-05-04T12:00:00.000Z'
+				}
+			}
+		});
+	});
+
 	it('rejects spoofed addresses and duplicate observations', () => {
 		const policy = new AgentExecutionObservationPolicy();
 		const spoofed = policy.evaluate({
@@ -154,6 +214,24 @@ describe('AgentExecutionObservationPolicy', () => {
 		expect(duplicate).toEqual({
 			action: 'reject',
 			reason: "Observation 'observation-2' was already processed."
+		});
+	});
+
+	it('uses an explicit observation ledger for idempotency', () => {
+		const ledger = new AgentExecutionObservationLedger();
+		const firstPolicy = new AgentExecutionObservationPolicy(ledger);
+		const secondPolicy = new AgentExecutionObservationPolicy(ledger);
+
+		expect(firstPolicy.evaluate({
+			snapshot: createSnapshot(),
+			observation: createObservation({ observationId: 'shared-observation' })
+		}).action).toBe('update-session');
+		expect(secondPolicy.evaluate({
+			snapshot: createSnapshot(),
+			observation: createObservation({ observationId: 'shared-observation' })
+		})).toEqual({
+			action: 'reject',
+			reason: "Observation 'shared-observation' was already processed."
 		});
 	});
 

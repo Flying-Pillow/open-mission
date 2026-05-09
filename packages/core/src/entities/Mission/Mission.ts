@@ -582,9 +582,7 @@ export class Mission extends Entity<MissionDataType, string> {
 
 		await this.status();
 
-		const existingSession = this.sessionRecords.find(
-			(candidate) => candidate.taskId === request.taskId && Mission.isActiveAgentExecution(candidate.lifecycleState)
-		);
+		const existingSession = this.findActiveTaskAgentExecution(request.taskId);
 		if (existingSession) {
 			if (!(await AgentExecution.isCompatibleForLaunch({
 				session: existingSession,
@@ -766,14 +764,18 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	public async configureTask(taskId: string, input: TaskConfigureOptions): Promise<void> {
+		const requestedAgentAdapter = input.agentAdapter?.trim();
 		await this.applyWorkflowEvent(this.createWorkflowEvent('task.configured', {
 			taskId,
-			...(input.agentAdapter?.trim() ? { agentAdapter: input.agentAdapter.trim() } : {}),
+			...(requestedAgentAdapter ? { agentAdapter: requestedAgentAdapter } : {}),
 			...(Object.prototype.hasOwnProperty.call(input, 'model') ? { model: input.model?.trim() || null } : {}),
 			...(Object.prototype.hasOwnProperty.call(input, 'reasoningEffort') ? { reasoningEffort: input.reasoningEffort ?? null } : {}),
 			...(typeof input.autostart === 'boolean' ? { autostart: input.autostart } : {}),
 			...(input.context ? { context: input.context.map((contextArtifact) => ({ ...contextArtifact })) } : {})
 		}));
+		if (requestedAgentAdapter) {
+			await this.replaceActiveTaskAgentExecutionForAdapter(taskId, requestedAgentAdapter);
+		}
 	}
 
 	public async completeTask(taskId: string): Promise<void> {
@@ -954,6 +956,32 @@ export class Mission extends Entity<MissionDataType, string> {
 	private async requireTask(taskId: string): Promise<Task> {
 		const task = await this.requireTaskState(taskId);
 		return this.createTask(task);
+	}
+
+	private findActiveTaskAgentExecution(taskId: string): AgentExecutionRecord | undefined {
+		return this.sessionRecords.find(
+			(candidate) => candidate.taskId === taskId && Mission.isActiveAgentExecution(candidate.lifecycleState)
+		);
+	}
+
+	private async replaceActiveTaskAgentExecutionForAdapter(
+		taskId: string,
+		agentAdapter: string
+	): Promise<void> {
+		const activeSession = this.findActiveTaskAgentExecution(taskId);
+		if (!activeSession) {
+			return;
+		}
+		const agentId = this.agentRegistry.requireAgent(agentAdapter).agentId;
+		if (activeSession.agentId === agentId) {
+			return;
+		}
+
+		await this.terminateAgentExecution(
+			activeSession.sessionId,
+			`replaced by ${agentId} Agent adapter`
+		);
+		await this.startTask(taskId, { agentAdapter: agentId });
 	}
 
 	private requireAgentAdapter(agentId: string): AgentAdapter {

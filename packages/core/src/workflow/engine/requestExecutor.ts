@@ -17,6 +17,7 @@ import {
 import { renderMissionArtifactTitle } from '../mission/templates/common.js';
 import { getMissionArtifactDefinition } from '../mission/manifest.js';
 import { Repository } from '../../entities/Repository/Repository.js';
+import { DEFAULT_REPOSITORY_AGENT_ADAPTER_ID } from '../../entities/Repository/RepositorySchema.js';
 import {
 	type MissionWorkflowConfigurationSnapshot,
 	type MissionGeneratedTaskPayload,
@@ -740,7 +741,7 @@ export class MissionWorkflowRequestExecutor {
 					...(task.pairedTaskId ? { pairedTaskId: task.pairedTaskId } : {}),
 					...(task.dependsOn.length > 0 ? { dependsOn: task.dependsOn } : {}),
 					...(task.context && task.context.length > 0 ? { context: task.context } : {}),
-					agent: task.agentAdapter ?? 'copilot-cli'
+					agent: task.agentAdapter ?? DEFAULT_REPOSITORY_AGENT_ADAPTER_ID
 				}
 			);
 		}

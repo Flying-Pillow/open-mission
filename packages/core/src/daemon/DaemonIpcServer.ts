@@ -34,6 +34,11 @@ import { DaemonLogger } from './runtime/DaemonLogger.js';
 import type { MissionAgentDisposable } from './runtime/agent/events.js';
 import { TerminalRegistry } from '../entities/Terminal/TerminalRegistry.js';
 import { getDefaultAgentExecutionRegistry } from './runtime/agent/AgentExecutionRegistry.js';
+import {
+	MissionMcpCallToolInputSchema,
+	MissionMcpListToolsInputSchema,
+	MissionMcpServer
+} from './runtime/agent/mcp/MissionMcpServer.js';
 
 export type MissionDaemonHandle = {
 	manifest: Manifest;
@@ -79,7 +84,9 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 	const runtimeLock = await acquireDaemonRuntimeLock(socketPath);
 	const missionRegistry = new MissionRegistryClass({ logger });
 	const agentExecutionRegistry = getDefaultAgentExecutionRegistry({ logger });
-	const ipcServer = createDaemonIpcServer({ startedAt, missionRegistry });
+	const missionMcpServer = new MissionMcpServer({ agentExecutionRegistry, logger });
+	agentExecutionRegistry.configure({ missionMcpServer });
+	const ipcServer = createDaemonIpcServer({ startedAt, missionRegistry, missionMcpServer });
 	const notificationSources = startEntityEventSources(ipcServer.broadcastEvent);
 	let shutdownPromise: Promise<void> | undefined;
 	let closeResolve: (() => void) | undefined;
@@ -93,6 +100,7 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 	let startupCompleted = false;
 
 	try {
+		await missionMcpServer.start();
 		await missionRegistry.hydrateDaemonMissions({ surfacePath: resolveSurfacePath(options.surfacePath) });
 		logger.info('Mission daemon hydration completed.');
 		if (!isNamedPipePath(socketPath)) {
@@ -109,6 +117,7 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 		startupCompleted = true;
 	} finally {
 		if (!startupCompleted) {
+			await missionMcpServer.stop();
 			missionRegistry.dispose();
 			notificationSources.dispose();
 			await closeServer(ipcServer.server);
@@ -141,6 +150,7 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 		shutdownPromise = (async () => {
 			logger.info('Mission daemon shutting down.');
 			missionRegistry.dispose();
+			await missionMcpServer.stop();
 			agentExecutionRegistry.dispose();
 			notificationSources.dispose();
 			await TerminalRegistry.shared().dispose();
@@ -186,6 +196,7 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 export function createDaemonIpcServer(input: {
 	startedAt: string;
 	missionRegistry: MissionRegistry;
+	missionMcpServer: MissionMcpServer;
 }): DaemonIpcServer {
 	const sockets = new Set<net.Socket>();
 	const subscriptionsBySocket = new Map<net.Socket, EventSubscription[]>();
@@ -227,7 +238,7 @@ export function createDaemonIpcServer(input: {
 					continue;
 				}
 
-				void handleRequestLine(socket, line, input.startedAt, subscriptionsBySocket, input.missionRegistry);
+				void handleRequestLine(socket, line, input.startedAt, subscriptionsBySocket, input.missionRegistry, input.missionMcpServer);
 			}
 		});
 
@@ -258,7 +269,8 @@ async function handleRequestLine(
 	line: string,
 	startedAt: string,
 	subscriptionsBySocket: Map<net.Socket, EventSubscription[]>,
-	missionRegistry: MissionRegistry
+	missionRegistry: MissionRegistry,
+	missionMcpServer: MissionMcpServer
 ): Promise<void> {
 	let request: Request;
 	try {
@@ -271,7 +283,7 @@ async function handleRequestLine(
 		return;
 	}
 
-	const response = await createDaemonResponse(request, startedAt, missionRegistry);
+	const response = await createDaemonResponse(request, startedAt, missionRegistry, missionMcpServer);
 	if (!socket.destroyed) {
 		try {
 			socket.write(`${JSON.stringify(response)}\n`);
@@ -285,11 +297,12 @@ async function handleRequestLine(
 async function createDaemonResponse(
 	request: Request,
 	startedAt: string,
-	missionRegistry: MissionRegistry
+	missionRegistry: MissionRegistry,
+	missionMcpServer: MissionMcpServer
 ): Promise<Response> {
 	const requestStartedAt = performance.now();
 	try {
-		const response = await createDaemonResponseUnchecked(request, startedAt, missionRegistry);
+		const response = await createDaemonResponseUnchecked(request, startedAt, missionRegistry, missionMcpServer);
 		logSlowDaemonRequest(request, requestStartedAt);
 		return response;
 	} catch (error) {
@@ -301,7 +314,8 @@ async function createDaemonResponse(
 async function createDaemonResponseUnchecked(
 	request: Request,
 	startedAt: string,
-	missionRegistry: MissionRegistry
+	missionRegistry: MissionRegistry,
+	missionMcpServer: MissionMcpServer
 ): Promise<Response> {
 	switch (request.method) {
 		case 'ping': {
@@ -337,6 +351,20 @@ async function createDaemonResponseUnchecked(
 				})
 			};
 		}
+		case 'mission-mcp.listTools':
+			return {
+				type: 'response',
+				id: request.id,
+				ok: true,
+				result: missionMcpServer.listTools(MissionMcpListToolsInputSchema.parse(request.params))
+			};
+		case 'mission-mcp.callTool':
+			return {
+				type: 'response',
+				id: request.id,
+				ok: true,
+				result: await missionMcpServer.callTool(MissionMcpCallToolInputSchema.parse(request.params))
+			};
 		case 'entity.query':
 			return {
 				type: 'response',

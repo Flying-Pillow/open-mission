@@ -8,6 +8,7 @@ import type { AgentExecutionSnapshot } from '../AgentExecution/AgentExecutionPro
 import type { AgentExecutionLaunchRequest } from '../AgentExecution/AgentExecutionSchema.js';
 import type { AgentRegistry } from '../Agent/AgentRegistry.js';
 import { AgentExecution } from '../AgentExecution/AgentExecution.js';
+import { DEFAULT_REPOSITORY_AGENT_ADAPTER_ID } from '../Repository/RepositorySchema.js';
 import { buildTaskLaunchPrompt } from './taskLaunchPrompt.js';
 import {
 	evaluateMissionTaskStatusIntent,
@@ -192,7 +193,7 @@ export class Task extends Entity<TaskDataType, string> {
 			context: (task.context ?? []).map((contextArtifact) => ({ ...contextArtifact })),
 			waitingOn: [...task.waitingOnTaskIds],
 			status: task.lifecycle,
-			agent: task.agentAdapter ?? fileTask?.agent ?? 'copilot-cli',
+			agent: task.agentAdapter ?? fileTask?.agent ?? DEFAULT_REPOSITORY_AGENT_ADAPTER_ID,
 			autostart: task.runtime.autostart,
 			retries: task.retries,
 			fileName,

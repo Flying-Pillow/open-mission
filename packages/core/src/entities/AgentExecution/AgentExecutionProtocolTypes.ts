@@ -3,7 +3,8 @@ import {
     MAX_AGENT_EXECUTION_MESSAGE_LENGTH as AGENT_EXECUTION_MESSAGE_LENGTH,
     MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH as AGENT_EXECUTION_SIGNAL_TEXT_LENGTH,
     MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES as AGENT_EXECUTION_SUGGESTED_RESPONSES,
-    MAX_AGENT_EXECUTION_USAGE_ENTRIES as AGENT_EXECUTION_USAGE_ENTRIES
+    MAX_AGENT_EXECUTION_USAGE_ENTRIES as AGENT_EXECUTION_USAGE_ENTRIES,
+    type AgentDeclaredSignalPayloadType
 } from './AgentExecutionSchema.js';
 
 export type AgentId = string;
@@ -45,12 +46,16 @@ export type AgentExecutionStatus =
     | 'terminated';
 
 export type AgentProgressState =
+    | 'initializing'
     | 'unknown'
     | 'working'
+    | 'idle'
     | 'waiting-input'
     | 'blocked'
     | 'done'
     | 'failed';
+
+export type AgentExecutionStatusPhase = 'initializing' | 'idle';
 
 export type AgentAttentionState =
     | 'none'
@@ -338,6 +343,11 @@ export type AgentExecutionSignal =
         detail?: string;
     } & AgentExecutionSignalBase)
     | ({
+        type: 'status';
+        phase: AgentExecutionStatusPhase;
+        summary?: string;
+    } & AgentExecutionSignalBase)
+    | ({
         type: 'needs_input';
         question: string;
         choices: AgentExecutionInputChoice[];
@@ -474,6 +484,11 @@ export function cloneSignal(signal: AgentExecutionSignal): AgentExecutionSignal 
                 ...signal,
                 ...(signal.detail ? { detail: signal.detail } : {})
             };
+        case 'status':
+            return {
+                ...signal,
+                ...(signal.summary ? { summary: signal.summary } : {})
+            };
         case 'needs_input':
             return {
                 ...signal,
@@ -494,6 +509,71 @@ export function cloneSignal(signal: AgentExecutionSignal): AgentExecutionSignal 
             return {
                 ...signal,
                 ...(signal.payload ? { payload: { ...signal.payload } } : {})
+            };
+    }
+}
+
+export function createAgentDeclaredSignalFromPayload(payload: AgentDeclaredSignalPayloadType): AgentExecutionSignal {
+    switch (payload.type) {
+        case 'progress':
+            return {
+                type: 'progress',
+                summary: payload.summary,
+                ...(payload.detail ? { detail: payload.detail } : {}),
+                source: 'agent-declared',
+                confidence: 'medium'
+            };
+        case 'status':
+            return {
+                type: 'status',
+                phase: payload.phase,
+                ...(payload.summary ? { summary: payload.summary } : {}),
+                source: 'agent-declared',
+                confidence: 'medium'
+            };
+        case 'needs_input':
+            return {
+                type: 'needs_input',
+                question: payload.question,
+                choices: payload.choices.map(cloneAgentExecutionInputChoice),
+                source: 'agent-declared',
+                confidence: 'medium'
+            };
+        case 'blocked':
+            return {
+                type: 'blocked',
+                reason: payload.reason,
+                source: 'agent-declared',
+                confidence: 'medium'
+            };
+        case 'ready_for_verification':
+            return {
+                type: 'ready_for_verification',
+                summary: payload.summary,
+                source: 'agent-declared',
+                confidence: 'medium'
+            };
+        case 'completed_claim':
+            return {
+                type: 'completed_claim',
+                summary: payload.summary,
+                source: 'agent-declared',
+                confidence: 'medium'
+            };
+        case 'failed_claim':
+            return {
+                type: 'failed_claim',
+                reason: payload.reason,
+                source: 'agent-declared',
+                confidence: 'medium'
+            };
+        case 'message':
+            return {
+                type: 'message',
+                channel: payload.channel,
+                text: payload.text,
+                source: 'agent-declared',
+                confidence: 'medium'
             };
     }
 }

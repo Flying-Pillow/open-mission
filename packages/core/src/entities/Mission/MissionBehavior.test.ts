@@ -1351,7 +1351,11 @@ function createWorkflowBindings(adapter: FakeAgentAdapter): MissionWorkflowBindi
                     supportsResumeByReference: true,
                     supportsCheckpoint: true
                 },
-                availability: { available: true }
+                availability: { available: true },
+                optionCatalog: {
+                    models: [],
+                    reasoningEfforts: []
+                }
             }, adapter)]
         })
     };

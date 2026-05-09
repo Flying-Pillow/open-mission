@@ -17,4 +17,4 @@ Mission is built around strict ownership:
 
 Read [System Context](system-context.md), [Semantic Model](semantic-model.md), and [Entity Command Surface](entity-command-surface.md) first. ADR-0012 is the key architectural decision behind the current OOD model.
 
-Temporary working specs are allowed while a refactor is in flight. For Agent execution structured interaction, use [Agent Execution Structured Interaction Spec](agent-execution-structured-interaction-spec.md) as the current implementation reference until its durable decisions are folded back into `CONTEXT.md` and accepted ADRs.
+Temporary working specs are allowed while a refactor is in flight. For Agent execution structured interaction, use [Agent Execution Structured Interaction Spec](agent-execution-structured-interaction-spec.md) as the current implementation reference until its durable decisions are folded back into `CONTEXT.md` and accepted ADRs. For the daemon-owned MCP signal transport, use [Mission MCP Server Spec](mission-mcp-server-spec.md) as the current realization blueprint for ADR-0024.

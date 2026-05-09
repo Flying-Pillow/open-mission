@@ -60,7 +60,11 @@ function createAgentRegistry(agentAdapter: FakeAgentAdapter): AgentRegistry {
 				supportsResumeByReference: true,
 				supportsCheckpoint: true
 			},
-			availability: { available: true }
+			availability: { available: true },
+			optionCatalog: {
+				models: [],
+				reasoningEfforts: []
+			}
 		}, agentAdapter)]
 	});
 }

@@ -62,7 +62,7 @@ The repository-level workflow defaults stored under the `workflow` section of `.
 _Avoid_: Mission workflow snapshot, surface settings, daemon-local preference, adapter metadata
 
 **Control mode**:
-The operator mode where Repository setup and Repository policy operations such as workflow settings edits are available through daemon-owned commands.
+The operator mode where Repository initialization and Repository policy operations such as workflow settings edits are available through daemon-owned commands.
 _Avoid_: mission task mode, surface-only settings screen, direct file-edit mode
 
 **Mission branch ref**:
@@ -186,6 +186,10 @@ _Avoid_: context mutation, state acknowledgement, reliable command result
 **Mission protocol marker**:
 A strict one-line stdout marker emitted by an Agent execution and parsed by the daemon as an advisory Agent execution signal. The marker starts with the Mission protocol prefix and carries strict JSON with Mission id, task id, Agent execution id, event id, and signal payload.
 _Avoid_: prose state claim, hidden side channel, workflow authority, terminal heuristic
+
+**Mission MCP server**:
+The daemon-owned local MCP server named `mission-mcp` that exposes Agent-declared signal payloads as tools for running Agent executions. It is a structured signal transport into Agent execution observation routing, not a workflow authority, Entity command surface, repository API, or separate Agent execution model.
+_Avoid_: remote mission API, MCP-owned workflow, task session server, provider-specific signal model
 
 **Agent message shorthand**:
 Operator-facing syntax that parses into an Agent execution message, such as a slash command in an external prompt field.

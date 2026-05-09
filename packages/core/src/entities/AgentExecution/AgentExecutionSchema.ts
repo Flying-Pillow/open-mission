@@ -335,7 +335,7 @@ export const AgentExecutionOwnerMarkerPrefixSchema = z.enum([
     '@artifact::'
 ]);
 
-export const AgentDeclaredSignalDeliverySchema = z.enum(['stdout-marker']);
+export const AgentDeclaredSignalDeliverySchema = z.enum(['stdout-marker', 'mcp-tool']);
 
 export const AgentDeclaredSignalPolicySchema = z.enum([
     'progress',
@@ -359,7 +359,7 @@ export const AgentDeclaredSignalDescriptorSchema = z.object({
     icon: z.string().trim().min(1),
     tone: EntityPresentationToneSchema,
     payloadSchemaKey: z.string().trim().min(1),
-    delivery: AgentDeclaredSignalDeliverySchema,
+    deliveries: z.array(AgentDeclaredSignalDeliverySchema).min(1),
     policy: AgentDeclaredSignalPolicySchema,
     outcomes: z.array(AgentDeclaredSignalOutcomeSchema).min(1)
 }).strict();
@@ -379,45 +379,87 @@ export const AgentDeclaredSignalInputChoiceSchema = z.discriminatedUnion('kind',
     }).strict()
 ]);
 
+export const AgentDeclaredProgressSignalPayloadSchema = z.object({
+    type: z.literal('progress'),
+    summary: agentDeclaredSignalBoundedTextSchema,
+    detail: agentDeclaredSignalBoundedTextSchema.optional()
+}).strict();
+
+export const AgentDeclaredStatusSignalPhaseSchema = z.enum(['initializing', 'idle']);
+
+export const AgentDeclaredStatusSignalPayloadSchema = z.object({
+    type: z.literal('status'),
+    phase: AgentDeclaredStatusSignalPhaseSchema,
+    summary: agentDeclaredSignalBoundedTextSchema.optional()
+}).strict();
+
+export const AgentDeclaredNeedsInputSignalPayloadSchema = z.object({
+    type: z.literal('needs_input'),
+    question: agentDeclaredSignalBoundedTextSchema,
+    choices: z.array(AgentDeclaredSignalInputChoiceSchema).min(1).max(MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES)
+}).strict();
+
+export const AgentDeclaredBlockedSignalPayloadSchema = z.object({
+    type: z.literal('blocked'),
+    reason: agentDeclaredSignalBoundedTextSchema
+}).strict();
+
+export const AgentDeclaredReadyForVerificationSignalPayloadSchema = z.object({
+    type: z.literal('ready_for_verification'),
+    summary: agentDeclaredSignalBoundedTextSchema
+}).strict();
+
+export const AgentDeclaredCompletedClaimSignalPayloadSchema = z.object({
+    type: z.literal('completed_claim'),
+    summary: agentDeclaredSignalBoundedTextSchema
+}).strict();
+
+export const AgentDeclaredFailedClaimSignalPayloadSchema = z.object({
+    type: z.literal('failed_claim'),
+    reason: agentDeclaredSignalBoundedTextSchema
+}).strict();
+
+export const AgentDeclaredMessageSignalPayloadSchema = z.object({
+    type: z.literal('message'),
+    channel: z.enum(['agent', 'system', 'stdout', 'stderr']),
+    text: z.string().trim().min(1).max(MAX_AGENT_EXECUTION_MESSAGE_LENGTH)
+}).strict();
+
 export const AgentDeclaredSignalPayloadSchema = z.discriminatedUnion('type', [
-    z.object({
-        type: z.literal('progress'),
-        summary: agentDeclaredSignalBoundedTextSchema,
-        detail: agentDeclaredSignalBoundedTextSchema.optional()
-    }).strict(),
-    z.object({
-        type: z.literal('needs_input'),
-        question: agentDeclaredSignalBoundedTextSchema,
-        choices: z.array(AgentDeclaredSignalInputChoiceSchema).min(1).max(MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES)
-    }).strict(),
-    z.object({
-        type: z.literal('blocked'),
-        reason: agentDeclaredSignalBoundedTextSchema
-    }).strict(),
-    z.object({
-        type: z.literal('ready_for_verification'),
-        summary: agentDeclaredSignalBoundedTextSchema
-    }).strict(),
-    z.object({
-        type: z.literal('completed_claim'),
-        summary: agentDeclaredSignalBoundedTextSchema
-    }).strict(),
-    z.object({
-        type: z.literal('failed_claim'),
-        reason: agentDeclaredSignalBoundedTextSchema
-    }).strict(),
-    z.object({
-        type: z.literal('message'),
-        channel: z.enum(['agent', 'system', 'stdout', 'stderr']),
-        text: z.string().trim().min(1).max(MAX_AGENT_EXECUTION_MESSAGE_LENGTH)
-    }).strict()
+    AgentDeclaredProgressSignalPayloadSchema,
+    AgentDeclaredStatusSignalPayloadSchema,
+    AgentDeclaredNeedsInputSignalPayloadSchema,
+    AgentDeclaredBlockedSignalPayloadSchema,
+    AgentDeclaredReadyForVerificationSignalPayloadSchema,
+    AgentDeclaredCompletedClaimSignalPayloadSchema,
+    AgentDeclaredFailedClaimSignalPayloadSchema,
+    AgentDeclaredMessageSignalPayloadSchema
 ]);
+
+export const AgentDeclaredSignalToolPayloadSchemasByType = {
+    progress: AgentDeclaredProgressSignalPayloadSchema.omit({ type: true }),
+    status: AgentDeclaredStatusSignalPayloadSchema.omit({ type: true }),
+    needs_input: AgentDeclaredNeedsInputSignalPayloadSchema.omit({ type: true }),
+    blocked: AgentDeclaredBlockedSignalPayloadSchema.omit({ type: true }),
+    ready_for_verification: AgentDeclaredReadyForVerificationSignalPayloadSchema.omit({ type: true }),
+    completed_claim: AgentDeclaredCompletedClaimSignalPayloadSchema.omit({ type: true }),
+    failed_claim: AgentDeclaredFailedClaimSignalPayloadSchema.omit({ type: true }),
+    message: AgentDeclaredMessageSignalPayloadSchema.omit({ type: true })
+} as const;
 
 export const AgentDeclaredSignalMarkerPayloadSchema = z.object({
     version: z.literal(1),
     agentExecutionId: agentDeclaredSignalBoundedTextSchema,
     eventId: agentDeclaredSignalBoundedTextSchema,
     signal: AgentDeclaredSignalPayloadSchema
+}).strict();
+
+export const AgentExecutionObservationAckSchema = z.object({
+    status: z.enum(['accepted', 'duplicate', 'rejected', 'recorded-only', 'promoted']),
+    agentExecutionId: z.string().trim().min(1),
+    eventId: z.string().trim().min(1),
+    observationId: z.string().trim().min(1).optional(),
+    reason: z.string().trim().min(1).optional()
 }).strict();
 
 export const AgentExecutionChatMessageSchema = z.object({
@@ -439,12 +481,24 @@ export const AgentExecutionProtocolOwnerSchema = z.object({
     markerPrefix: AgentExecutionOwnerMarkerPrefixSchema
 }).strict();
 
+export const AgentExecutionProtocolMcpSchema = z.object({
+    serverName: z.literal('mission-mcp'),
+    exposure: z.literal('session-scoped'),
+    publicApi: z.literal(false)
+}).strict();
+
 export const AgentExecutionProtocolDescriptorSchema = z.object({
     version: z.literal(1),
     owner: AgentExecutionProtocolOwnerSchema,
     scope: AgentExecutionScopeSchema,
     messages: z.array(AgentExecutionMessageDescriptorSchema),
-    signals: z.array(AgentDeclaredSignalDescriptorSchema)
+    signals: z.array(AgentDeclaredSignalDescriptorSchema),
+    mcp: AgentExecutionProtocolMcpSchema.optional()
+}).strict();
+
+export const AgentExecutionTransportStateSchema = z.object({
+    selected: AgentDeclaredSignalDeliverySchema,
+    degraded: z.literal(false).default(false)
 }).strict();
 
 export const AgentExecutionRuntimeCommandTypeSchema = z.enum([
@@ -479,9 +533,12 @@ export type AgentDeclaredSignalDescriptorType = z.infer<typeof AgentDeclaredSign
 export type AgentDeclaredSignalInputChoiceType = z.infer<typeof AgentDeclaredSignalInputChoiceSchema>;
 export type AgentDeclaredSignalPayloadType = z.infer<typeof AgentDeclaredSignalPayloadSchema>;
 export type AgentDeclaredSignalMarkerPayloadType = z.infer<typeof AgentDeclaredSignalMarkerPayloadSchema>;
+export type AgentExecutionObservationAckType = z.infer<typeof AgentExecutionObservationAckSchema>;
 export type AgentExecutionChatMessageType = z.infer<typeof AgentExecutionChatMessageSchema>;
 export type AgentExecutionProtocolOwnerType = z.infer<typeof AgentExecutionProtocolOwnerSchema>;
+export type AgentExecutionProtocolMcpType = z.infer<typeof AgentExecutionProtocolMcpSchema>;
 export type AgentExecutionProtocolDescriptorType = z.infer<typeof AgentExecutionProtocolDescriptorSchema>;
+export type AgentExecutionTransportStateType = z.infer<typeof AgentExecutionTransportStateSchema>;
 export type AgentExecutionRuntimeCommandType = z.infer<typeof AgentExecutionRuntimeCommandTypeSchema>;
 
 export const AgentExecutionLifecycleStateSchema = z.enum([
@@ -571,6 +628,7 @@ export type AgentExecutionState = {
     interactionCapabilities: AgentExecutionInteractionCapabilitiesType;
     runtimeMessages: AgentExecutionMessageDescriptorType[];
     protocolDescriptor?: AgentExecutionProtocolDescriptorType;
+    transportState?: AgentExecutionTransportStateType;
     scope?: AgentExecutionScopeType;
     awaitingPermission?: AgentExecutionPermissionRequest;
     telemetry?: AgentExecutionTelemetrySnapshot;
@@ -593,6 +651,7 @@ export type AgentExecutionRecord = {
     interactionCapabilities: AgentExecutionInteractionCapabilitiesType;
     runtimeMessages: AgentExecutionMessageDescriptorType[];
     protocolDescriptor?: AgentExecutionProtocolDescriptorType;
+    transportState?: AgentExecutionTransportStateType;
     scope?: AgentExecutionScopeType;
     telemetry?: AgentExecutionTelemetrySnapshot;
     failureMessage?: string;
@@ -628,6 +687,7 @@ export const AgentExecutionStorageSchema = z.object({
     chatMessages: z.array(AgentExecutionChatMessageSchema).default([]),
     runtimeMessages: z.array(AgentExecutionMessageDescriptorSchema),
     protocolDescriptor: AgentExecutionProtocolDescriptorSchema.optional(),
+    transportState: AgentExecutionTransportStateSchema.optional(),
     scope: AgentExecutionScopeSchema.optional(),
     telemetry: AgentExecutionTelemetrySnapshotSchema.optional(),
     failureMessage: z.string().trim().min(1).optional(),

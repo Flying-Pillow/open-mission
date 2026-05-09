@@ -10,14 +10,16 @@ import {
     repositoryEntityName,
     RepositoryFindSchema,
     RepositoryFindAvailableSchema,
+    RepositoryEnsureSystemAgentExecutionSchema,
     RepositoryClassCommandsSchema,
     RepositoryGetIssueSchema,
     RepositoryLocatorSchema,
     RepositoryMissionStartAcknowledgementSchema,
     RepositoryIssueDetailSchema,
+    RepositoryConfigureAgentsSchema,
+    RepositoryInitializeResultSchema,
+    RepositoryInitializeSchema,
     RepositoryRemoveAcknowledgementSchema,
-    RepositoryPrepareResultSchema,
-    RepositoryPrepareSchema,
     RepositorySetupResultSchema,
     RepositorySetupSchema,
     RepositorySyncCommandAcknowledgementSchema,
@@ -53,6 +55,12 @@ export const RepositoryContract: EntityContractType = {
             kind: 'query',
             payload: RepositoryFindAvailableSchema,
             result: RepositoryPlatformRepositorySchema.array(),
+            execution: 'class'
+        },
+        ensureSystemAgentExecution: {
+            kind: 'mutation',
+            payload: RepositoryEnsureSystemAgentExecutionSchema,
+            result: AgentExecutionDataSchema,
             execution: 'class'
         },
         classCommands: {
@@ -125,15 +133,21 @@ export const RepositoryContract: EntityContractType = {
             result: RepositorySetupResultSchema,
             execution: 'entity'
         },
-        prepare: {
+        configureAgents: {
             kind: 'mutation',
-            payload: RepositoryPrepareSchema,
-            result: RepositoryPrepareResultSchema,
+            payload: RepositoryConfigureAgentsSchema,
+            result: RepositoryDataSchema,
             execution: 'entity'
         },
-        ensureSetupAgentExecution: {
+        initialize: {
             kind: 'mutation',
-            payload: RepositoryPrepareSchema,
+            payload: RepositoryInitializeSchema,
+            result: RepositoryInitializeResultSchema,
+            execution: 'entity'
+        },
+        ensureRepositoryAgentExecution: {
+            kind: 'mutation',
+            payload: RepositoryInitializeSchema,
             result: AgentExecutionDataSchema,
             execution: 'entity'
         },

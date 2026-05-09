@@ -4,7 +4,6 @@ import { Agent } from './Agent.js';
 import { Repository } from '../Repository/Repository.js';
 import {
     createDefaultRepositorySettings,
-    readRepositoryAgentAdapterSettings,
     type RepositorySettingsType
 } from '../Repository/RepositorySchema.js';
 import { AgentDataSchema, type AgentIdType } from './AgentSchema.js';
@@ -87,13 +86,14 @@ function createProviderSettingsResolver(
     defaults: { settings: RepositorySettingsType }
 ): AgentAdapterSettingsResolver<string> {
     return (config, agentId) => {
+        const optionCatalog = readAgentOptionCatalog(agentId);
         const defaultReasoningEffort = supportsDefaultReasoningEffort(agentId)
             ? readStringMetadata(config, 'reasoningEffort')
             ?? defaults.settings.defaultReasoningEffort?.trim()
-            ?? readRepositoryAgentAdapterSettings(defaults.settings, agentId)?.reasoningEfforts[0]
+            ?? optionCatalog.reasoningEfforts[0]
             : undefined;
         const defaultModel = defaults.settings.defaultModel?.trim()
-            ?? readRepositoryAgentAdapterSettings(defaults.settings, agentId)?.models[0]?.value;
+            ?? optionCatalog.models[0]?.value;
         const settings = {
             model: readStringMetadata(config, 'model') ?? defaultModel ?? '',
             launchMode: 'interactive' as const,
@@ -119,6 +119,13 @@ function supportsDefaultReasoningEffort(agentId: string): boolean {
 
 function isDefaultAgentId(agentId: string): boolean {
     return missionAgents.some((agentInput) => agentInput.default === true && agentInput.agentId === agentId);
+}
+
+function readAgentOptionCatalog(agentId: string) {
+    return missionAgents.find((agentInput) => agentInput.agentId === agentId)?.optionCatalog ?? {
+        models: [],
+        reasoningEfforts: []
+    };
 }
 
 function readStringMetadata(
@@ -151,6 +158,10 @@ async function createConfiguredAgent(
         agentId: agentInput.agentId,
         displayName: agentInput.displayName,
         capabilities,
+        optionCatalog: agentInput.optionCatalog ?? {
+            models: [],
+            reasoningEfforts: []
+        },
         availability: availability.available
             ? { available: true }
             : {

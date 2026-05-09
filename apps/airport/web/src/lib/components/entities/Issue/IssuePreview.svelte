@@ -41,7 +41,7 @@
         }
         if (!canStartMission) {
             startError =
-                "Complete Repository setup before starting regular missions.";
+                "Complete Repository initialization before starting regular missions.";
             return;
         }
         missionCreationPending = true;
@@ -109,7 +109,7 @@
                         disabled={missionCreationPending || !canStartMission}
                         title={canStartMission
                             ? "Start mission"
-                            : "Repository setup required"}
+                            : "Repository initialization required"}
                     >
                         <Icon icon="lucide:play" class="size-4" />
                         {missionCreationPending

@@ -12,11 +12,13 @@
         description,
         repositoryFilter = "all",
         eyebrow,
+        presentation = "panel",
     }: {
         heading?: string;
         description?: string;
         repositoryFilter?: "all" | "local" | "external";
         eyebrow?: string;
+        presentation?: "panel" | "rail";
     } = $props();
     const repositories = $derived(appContext.application.repositoryListItems);
     const checkedOutRepositories = $derived(
@@ -84,9 +86,15 @@
 </script>
 
 <section
-    class="flex h-full min-h-[24rem] w-full flex-col overflow-hidden rounded-lg border bg-card shadow-sm"
+    class={presentation === "rail"
+        ? "flex h-full min-h-0 w-full flex-col overflow-hidden"
+        : "flex h-full min-h-[24rem] w-full flex-col overflow-hidden rounded-lg border bg-card shadow-sm"}
 >
-    <div class="border-b bg-muted/25 px-4 py-3 sm:px-5">
+    <div
+        class={presentation === "rail"
+            ? "px-1 pb-3"
+            : "border-b bg-muted/25 px-4 py-3 sm:px-5"}
+    >
         <div class="min-w-0 space-y-2">
             <div class="flex items-center gap-2 text-muted-foreground">
                 {#if repositoryFilter === "external"}
@@ -98,33 +106,49 @@
                     {resolvedEyebrow}
                 </p>
             </div>
-            <h2 class="text-lg font-semibold text-foreground">
-                {resolvedHeading}
-            </h2>
-            <div
-                class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-            >
-                <div
-                    class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center"
-                >
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <h2
+                        class={presentation === "rail"
+                            ? "text-xs font-semibold uppercase tracking-[0.2em] text-foreground"
+                            : "text-lg font-semibold text-foreground"}
+                    >
+                        {resolvedHeading}
+                    </h2>
                     <p
-                        class="min-w-0 max-w-4xl text-sm leading-6 text-muted-foreground"
+                        class={presentation === "rail"
+                            ? "mt-2 text-xs leading-5 text-muted-foreground"
+                            : "mt-2 max-w-4xl text-sm leading-6 text-muted-foreground"}
                     >
                         {resolvedDescription}
                     </p>
                 </div>
-                <Badge variant="secondary" class="w-fit shrink-0"
-                    >{resolvedCountLabel}</Badge
-                >
+                {#if presentation === "rail"}
+                    <span
+                        class="shrink-0 text-[0.7rem] uppercase tracking-[0.16em] text-muted-foreground"
+                    >
+                        {visibleRepositories.length}
+                    </span>
+                {:else}
+                    <Badge variant="secondary" class="w-fit shrink-0">
+                        {resolvedCountLabel}
+                    </Badge>
+                {/if}
             </div>
         </div>
     </div>
 
     <ScrollArea class="min-h-0 flex-1">
-        <div class="grid gap-3 p-4">
+        <div
+            class={presentation === "rail"
+                ? "grid gap-3 pr-2"
+                : "grid gap-3 p-4"}
+        >
             {#if visibleRepositories.length === 0}
                 <div
-                    class="rounded-lg border border-dashed bg-background px-4 py-8 text-sm text-muted-foreground"
+                    class={presentation === "rail"
+                        ? "border border-dashed border-border/60 bg-card px-4 py-6 text-sm text-muted-foreground dark:bg-[#111317]"
+                        : "rounded-lg border border-dashed bg-background px-4 py-8 text-sm text-muted-foreground"}
                 >
                     {resolvedEmptyMessage}
                 </div>
@@ -150,6 +174,7 @@
                             {localRepository}
                             onCommandExecuted={refreshRepositories}
                             interactive
+                            compact={presentation === "rail"}
                         />
                     {/if}
                 {/each}
@@ -166,7 +191,10 @@
 
                 {#each repositoryFilter === "local" ? [] : availableGitHubRepositories as repository (repository.key)}
                     {#if repository.github}
-                        <GithubRepository repository={repository.github} />
+                        <GithubRepository
+                            repository={repository.github}
+                            compact={presentation === "rail"}
+                        />
                     {/if}
                 {/each}
             {/if}

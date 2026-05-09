@@ -13,8 +13,13 @@ import {
     AgentExecutionTerminalSocketServerMessageSchema,
     AgentExecutionTerminalRouteParamsSchema,
     AgentExecutionTerminalRouteQuerySchema,
+    type AgentExecutionTerminalHandleType,
     type AgentExecutionTerminalSnapshotType
 } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
+import {
+    TerminalSnapshotSchema,
+    type TerminalSnapshotType
+} from '@flying-pillow/mission-core/entities/Terminal/TerminalSchema';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, WebSocket as NodeWebSocket } from 'ws';
@@ -105,6 +110,7 @@ async function handleTerminalConnection(
     let closed = false;
     let subscription: { dispose(): void } | undefined;
     let terminalReady = false;
+    let terminalHandle: AgentExecutionTerminalHandleType | undefined;
     const pendingMessages: Buffer[] = [];
 
     const dispose = () => {
@@ -154,6 +160,42 @@ async function handleTerminalConnection(
         send(AgentExecutionTerminalSocketServerMessageSchema.parse({ type: 'output', output }));
     };
 
+    const updateTerminalHandle = (state: AgentExecutionTerminalSnapshotType): void => {
+        terminalHandle = state.terminalHandle ?? terminalHandle;
+    };
+
+    const createAgentExecutionTerminalState = (state: TerminalSnapshotType): AgentExecutionTerminalSnapshotType => AgentExecutionTerminalSnapshotSchema.parse({
+        ownerId: query.ownerId,
+        sessionId,
+        connected: state.connected,
+        dead: state.dead,
+        exitCode: state.dead ? state.exitCode : null,
+        ...(state.cols ? { cols: state.cols } : {}),
+        ...(state.rows ? { rows: state.rows } : {}),
+        screen: state.screen,
+        ...(typeof state.chunk === 'string' ? { chunk: state.chunk } : {}),
+        ...(state.truncated ? { truncated: true } : {}),
+        ...(terminalHandle ? { terminalHandle } : {})
+    });
+
+    const sendTerminalInput = async (input: { data?: string; literal?: boolean; cols?: number; rows?: number }) => {
+        if (!terminalHandle) {
+            throw new Error(`AgentExecution '${sessionId}' is not backed by a Terminal.`);
+        }
+        return TerminalSnapshotSchema.parse(await daemon?.client.request('entity.command', {
+            entity: 'Terminal',
+            method: 'sendInput',
+            payload: {
+                terminalName: terminalHandle.terminalName,
+                terminalPaneId: terminalHandle.terminalPaneId,
+                ...(input.data !== undefined ? { data: input.data } : {}),
+                ...(input.literal !== undefined ? { literal: input.literal } : {}),
+                ...(input.cols !== undefined ? { cols: input.cols } : {}),
+                ...(input.rows !== undefined ? { rows: input.rows } : {})
+            }
+        }, { timeoutMs: TERMINAL_SUBSCRIPTION_TIMEOUT_MS }));
+    };
+
     const sendError = (message: string) => {
         send(AgentExecutionTerminalSocketServerMessageSchema.parse({
             type: 'error',
@@ -165,27 +207,15 @@ async function handleTerminalConnection(
         try {
             const message = AgentExecutionTerminalSocketClientMessageSchema.parse(JSON.parse(rawMessage.toString()));
             if (message.type === 'input') {
-                daemon?.client.request('entity.command', {
-                    entity: 'AgentExecution',
-                    method: 'sendTerminalInput',
-                    payload: {
-                        ownerId: query.ownerId,
-                        sessionId,
-                        data: message.data,
-                        ...(message.literal !== undefined ? { literal: message.literal } : {})
-                    }
+                sendTerminalInput({
+                    data: message.data,
+                    ...(message.literal !== undefined ? { literal: message.literal } : {})
                 }).catch(() => { });
                 return;
             }
-            const nextState = AgentExecutionTerminalSnapshotSchema.parse(await daemon?.client.request('entity.command', {
-                entity: 'AgentExecution',
-                method: 'sendTerminalInput',
-                payload: {
-                    ownerId: query.ownerId,
-                    sessionId,
-                    cols: message.cols,
-                    rows: message.rows
-                }
+            const nextState = createAgentExecutionTerminalState(await sendTerminalInput({
+                cols: message.cols,
+                rows: message.rows
             }));
             if (message.type === 'resize' || nextState.dead || !nextState.connected) {
                 sendSnapshot(nextState, nextState.dead || !nextState.connected ? 'disconnected' : 'snapshot');
@@ -227,6 +257,7 @@ async function handleTerminalConnection(
         }, {
             timeoutMs: TERMINAL_INITIAL_SNAPSHOT_TIMEOUT_MS
         }));
+        updateTerminalHandle(initialState);
         sendSnapshot(initialState);
         if (!initialState.connected || initialState.dead) {
             sendSnapshot(initialState, 'disconnected');
@@ -242,6 +273,7 @@ async function handleTerminalConnection(
 
             void (async () => {
                 const snapshot = AgentExecutionTerminalSnapshotSchema.parse(event.payload);
+                updateTerminalHandle(snapshot);
                 if (!snapshot.connected || snapshot.dead) {
                     const completedSnapshot = AgentExecutionTerminalSnapshotSchema.parse(await daemon?.client.request('entity.query', {
                         entity: 'AgentExecution',
@@ -251,6 +283,7 @@ async function handleTerminalConnection(
                             sessionId
                         }
                     }));
+                    updateTerminalHandle(completedSnapshot);
                     sendSnapshot(completedSnapshot, 'disconnected');
                     dispose();
                     webSocket.close();

@@ -45,7 +45,11 @@ export class Agent extends Entity<AgentDataType, string> {
             agentId: adapter.id,
             displayName: adapter.displayName,
             capabilities: cloneCapabilities(capabilities),
-            availability: normalizeAvailability(availability)
+            availability: normalizeAvailability(availability),
+            optionCatalog: {
+                models: [],
+                reasoningEfforts: []
+            }
         }), adapter);
     }
 

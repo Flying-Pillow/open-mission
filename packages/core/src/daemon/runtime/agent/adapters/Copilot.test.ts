@@ -14,6 +14,7 @@ import { Agent } from '../../../../entities/Agent/Agent.js';
 import { AgentRegistry } from '../../../../entities/Agent/AgentRegistry.js';
 import { createAgentAdapter, type AgentAdapter } from '../AgentAdapter.js';
 import { AgentExecutor } from '../AgentExecutor.js';
+import { MissionMcpServer } from '../mcp/MissionMcpServer.js';
 import { createCopilot } from './Copilot.js';
 
 type MockTerminalState = {
@@ -70,10 +71,24 @@ async function startExecution(
 	adapter: AgentAdapter,
 	config: AgentLaunchConfig
 ): Promise<StartedTerminalExecution> {
+	const missionMcpServer = new MissionMcpServer({
+		agentExecutionRegistry: {
+			routeTransportObservation() {
+				return {
+					status: 'recorded-only',
+					agentExecutionId: 'test-agent-execution',
+					eventId: 'test-event',
+					observationId: 'test-observation'
+				};
+			}
+		}
+	});
+	await missionMcpServer.start();
 	const executor = new AgentExecutor({
 		agentRegistry: new AgentRegistry({
 			agents: [await Agent.fromAdapter(adapter)]
-		})
+		}),
+		missionMcpServer
 	});
 	const execution = await executor.startExecution(config);
 	const sessionId = execution.getSnapshot().sessionId;
@@ -109,6 +124,7 @@ describe('Copilot', () => {
 	afterEach(async () => {
 		await fs.rm(runtimeDirectory, { recursive: true, force: true });
 		await fs.rm(trustedConfigDir, { recursive: true, force: true });
+		vi.unstubAllEnvs();
 		vi.useRealTimers();
 	});
 
@@ -141,13 +157,108 @@ describe('Copilot', () => {
 		expect(state.spawnedArgs).toContain('/tmp/work');
 		expect(state.spawnedArgs).toContain('-i');
 		expect(state.spawnedArgs.some((arg) => arg.includes('Implement the task.'))).toBe(true);
-		expect(state.spawnedArgs.some((arg) => arg.includes('Structured status markers'))).toBe(true);
-		expect(state.spawnedArgs.some((arg) => arg.includes('@task::'))).toBe(true);
+		expect(state.spawnedArgs).toContain('--additional-mcp-config');
+		const mcpConfigReference = state.spawnedArgs[state.spawnedArgs.indexOf('--additional-mcp-config') + 1];
+		expect(mcpConfigReference?.startsWith('@')).toBe(true);
+		const mcpConfig = JSON.parse(await fs.readFile(mcpConfigReference?.slice(1) ?? '', 'utf8')) as {
+			mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
+		};
+		expect(mcpConfig.mcpServers?.['mission-mcp']?.args).toEqual(['mcp', 'connect', '--agent-execution', snapshot.sessionId]);
+		expect(mcpConfig.mcpServers?.['mission-mcp']?.env?.['MISSION_MCP_TOKEN']).toBeTruthy();
+		expect(state.spawnedArgs.some((arg) => arg.includes('Structured status markers'))).toBe(false);
+		expect(state.spawnedArgs.some((arg) => arg.includes('Structured status tools'))).toBe(true);
+		expect(state.spawnedArgs.some((arg) => arg.includes('Do not ask the operator for AgentExecution ids, event ids, tokens, or transport fields.'))).toBe(true);
+		expect(state.spawnedArgs.some((arg) => arg.includes('@task::'))).toBe(false);
 		expect(state.writes).not.toContain('Implement the task.');
 	});
 
-	it('uses non-interactive print mode by default for direct stdout parsing', async () => {
+	it('uses the source Mission CLI bridge for MCP config in source runtime mode', async () => {
+		vi.stubEnv('MISSION_DAEMON_RUNTIME_MODE', 'source');
 		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
+			command: 'copilot',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
+		}), {});
+
+		const execution = await startExecution(adapter, createLaunchConfig());
+		const snapshot = execution.getSnapshot();
+		const mcpConfigReference = state.spawnedArgs[state.spawnedArgs.indexOf('--additional-mcp-config') + 1];
+		const mcpConfig = JSON.parse(await fs.readFile(mcpConfigReference?.slice(1) ?? '', 'utf8')) as {
+			mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
+		};
+		const bridge = mcpConfig.mcpServers?.['mission-mcp'];
+
+		expect(bridge?.command).toBe('pnpm');
+		expect(bridge?.args).toEqual([
+			'--dir',
+			'/mission',
+			'--filter',
+			'@flying-pillow/mission',
+			'exec',
+			'tsx',
+			'--tsconfig',
+			'./tsconfig.dev.json',
+			'./src/mission.ts',
+			'mcp',
+			'connect',
+			'--agent-execution',
+			snapshot.sessionId
+		]);
+		expect(bridge?.env?.['MISSION_MCP_TOKEN']).toBeTruthy();
+	});
+
+	it('honors an explicit Mission CLI bridge command override', async () => {
+		vi.stubEnv('MISSION_DAEMON_RUNTIME_MODE', 'source');
+		vi.stubEnv('MISSION_CLI_COMMAND', '/opt/mission/bin/mission');
+		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'interactive',
+			command: 'copilot',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
+		}), {});
+
+		const execution = await startExecution(adapter, createLaunchConfig());
+		const snapshot = execution.getSnapshot();
+		const mcpConfigReference = state.spawnedArgs[state.spawnedArgs.indexOf('--additional-mcp-config') + 1];
+		const mcpConfig = JSON.parse(await fs.readFile(mcpConfigReference?.slice(1) ?? '', 'utf8')) as {
+			mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
+		};
+		const bridge = mcpConfig.mcpServers?.['mission-mcp'];
+
+		expect(bridge?.command).toBe('/opt/mission/bin/mission');
+		expect(bridge?.args).toEqual(['mcp', 'connect', '--agent-execution', snapshot.sessionId]);
+	});
+
+	it('uses interactive mode by default for terminal-backed MCP setup', async () => {
+		const adapter = createAgentAdapter(createCopilot({
+			command: 'copilot',
+			trustedConfigDir,
+			env: { PATH: runtimeDirectory },
+			spawn: createSpawn(state, () => createFakePty(state)),
+		}), {});
+
+		const plan = adapter.createLaunchPlan(createLaunchConfig());
+
+		expect(plan.mode).toBe('interactive');
+		expect(plan.command).toBe('copilot');
+		expect(plan.args).toContain('--allow-all-paths');
+		expect(plan.args).toContain('--allow-all-tools');
+		expect(plan.args).toContain('--allow-all-urls');
+		expect(plan.args).toContain('--config-dir');
+		expect(plan.args).toContain(trustedConfigDir);
+		expect(plan.args).toContain('--add-dir');
+		expect(plan.args).toContain('/tmp/work');
+		expect(plan.args).toContain('-i');
+		expect(plan.args.some((arg) => arg.includes('Implement the task.'))).toBe(true);
+		expect(plan.args).not.toContain('-p');
+	});
+
+	it('uses non-interactive print mode when explicitly requested for direct stdout parsing', async () => {
+		const adapter = createAgentAdapter(createCopilot({
+			launchMode: 'print',
 			command: 'copilot',
 			trustedConfigDir,
 			env: { PATH: runtimeDirectory },

@@ -1,6 +1,5 @@
 <script lang="ts">
     import Icon from "@iconify/svelte";
-    import { Badge } from "$lib/components/ui/badge/index.js";
     import BriefForm from "$lib/components/entities/Brief/BriefForm.svelte";
     import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
@@ -72,86 +71,69 @@
     }
 </script>
 
-<section
-    class="flex h-full min-h-[24rem] w-full flex-col overflow-hidden rounded-lg border bg-card shadow-sm"
->
-    <div class="border-b bg-muted/25 px-5 py-4">
-        <div class="min-w-0 space-y-3">
-            <div class="flex items-center gap-2 text-muted-foreground">
-                <Icon icon="lucide:github" class="size-4" />
-                <p class="text-xs font-medium uppercase tracking-[0.16em]">
-                    GitHub
-                </p>
-            </div>
-            <h2 class="text-lg font-semibold text-foreground">
-                Start from issue
-            </h2>
-            <div
-                class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+<section class="flex h-full min-h-[20rem] w-full flex-col overflow-hidden">
+    <div class="px-1 py-1">
+        <div class="flex items-center justify-between gap-3">
+            <h2
+                class="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground"
             >
-                <div class="flex min-w-0 items-center gap-3">
-                    <p class="min-w-0 text-sm leading-6 text-muted-foreground">
-                        Turn a tracked repository issue into a new mission with
-                        one step.
-                    </p>
-                    <Badge variant="secondary">
-                        {repositoryIssuesLoading
-                            ? "Loading issues..."
-                            : repositoryIssues.length === 1
-                              ? "1 open issue"
-                              : `${repositoryIssues.length} open issues`}
-                    </Badge>
-                </div>
-                <Dialog.Root bind:open={createMissionOpen}>
-                    <Dialog.Trigger>
-                        {#snippet child({ props })}
-                            <Button type="button" size="sm" {...props}>
+                Remote issues
+            </h2>
+            <Dialog.Root bind:open={createMissionOpen}>
+                <Dialog.Trigger>
+                    {#snippet child({ props })}
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            class="h-7 rounded-full px-2.5 text-xs text-muted-foreground"
+                            {...props}
+                        >
+                            <Icon icon="lucide:plus" class="size-4" />
+                            New mission
+                        </Button>
+                    {/snippet}
+                </Dialog.Trigger>
+                <Dialog.Content
+                    class="min-h-[80dvh] overflow-hidden sm:max-w-3xl flex flex-col"
+                >
+                    <div class="border-b bg-muted/25 px-5 py-4">
+                        <div class="min-w-0 space-y-3 pr-10">
+                            <div
+                                class="flex items-center gap-2 text-muted-foreground"
+                            >
                                 <Icon icon="lucide:plus" class="size-4" />
-                                New issue
-                            </Button>
-                        {/snippet}
-                    </Dialog.Trigger>
-                    <Dialog.Content
-                        class="min-h-[80dvh] overflow-hidden sm:max-w-3xl flex flex-col"
-                    >
-                        <div class="border-b bg-muted/25 px-5 py-4">
-                            <div class="min-w-0 space-y-3 pr-10">
-                                <div
-                                    class="flex items-center gap-2 text-muted-foreground"
+                                <p
+                                    class="text-xs font-medium uppercase tracking-[0.16em]"
                                 >
-                                    <Icon icon="lucide:plus" class="size-4" />
-                                    <p
-                                        class="text-xs font-medium uppercase tracking-[0.16em]"
-                                    >
-                                        Workflow
-                                    </p>
-                                </div>
-                                <Dialog.Title
-                                    class="text-lg font-semibold text-foreground"
+                                    Workflow
+                                </p>
+                            </div>
+                            <Dialog.Title
+                                class="text-lg font-semibold text-foreground"
+                            >
+                                Start from brief
+                            </Dialog.Title>
+                            <div class="flex min-w-0 items-center gap-3">
+                                <Dialog.Description
+                                    class="min-w-0 text-sm leading-6 text-muted-foreground"
                                 >
-                                    Start from brief
-                                </Dialog.Title>
-                                <div class="flex min-w-0 items-center gap-3">
-                                    <Dialog.Description
-                                        class="min-w-0 text-sm leading-6 text-muted-foreground"
-                                    >
-                                        Create a new mission from an authored
-                                        brief when the work is not tied to a
-                                        tracked repository issue.
-                                    </Dialog.Description>
-                                </div>
+                                    Create a new mission from an authored brief
+                                    when the work is not tied to a tracked
+                                    repository issue.
+                                </Dialog.Description>
                             </div>
                         </div>
+                    </div>
 
-                        <BriefForm embedded />
-                    </Dialog.Content>
-                </Dialog.Root>
-            </div>
+                    <BriefForm embedded />
+                </Dialog.Content>
+            </Dialog.Root>
         </div>
     </div>
 
     {#if issueError || remoteStartFromIssueError || repositoryIssueLoadError}
-        <div class="px-4 pt-4">
+        <div class="px-1 pt-3">
             <p class="text-sm text-rose-600">
                 {issueError ??
                     remoteStartFromIssueError ??
@@ -161,29 +143,30 @@
     {/if}
 
     <ScrollArea class="min-h-0 flex-1">
-        <div class="grid gap-3 p-4">
+        <div class="grid gap-3 px-1 pb-2 pt-1">
             {#if repositoryIssuesLoading}
                 <div
-                    class="rounded-lg border border-dashed bg-background px-4 py-8 text-sm text-muted-foreground"
+                    class="rounded-none border border-dashed border-border/70 bg-background/35 px-4 py-6 text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]"
                 >
                     Loading tracked issues for this repository...
                 </div>
             {:else if repositoryIssueLoadError}
                 <div
-                    class="rounded-lg border border-dashed bg-background px-4 py-8 text-sm text-rose-600"
+                    class="rounded-none border border-dashed border-rose-300/60 bg-rose-50/60 px-4 py-6 text-sm text-rose-600 dark:border-rose-400/40 dark:bg-rose-950/20 dark:text-rose-300"
                 >
                     {repositoryIssueLoadError}
                 </div>
             {:else if repositoryIssues.length === 0}
                 <div
-                    class="rounded-lg border border-dashed bg-background px-4 py-8 text-sm text-muted-foreground"
+                    class="rounded-none border border-dashed border-border/70 bg-background/35 px-4 py-6 text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]"
                 >
                     No tracked issues are available for this repository.
                 </div>
             {:else}
-                {#each repositoryIssues as issue (issue.number)}
+                {#each repositoryIssues as issue, index (issue.number)}
                     <Issue
                         {issue}
+                        cardIndex={index}
                         {issueLoadingNumber}
                         onViewIssue={(issueNumber) =>
                             void viewIssue(issueNumber)}
