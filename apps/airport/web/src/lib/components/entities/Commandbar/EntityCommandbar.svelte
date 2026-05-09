@@ -308,7 +308,8 @@
                                         disabled={commandPending !== null ||
                                             command.disabled}
                                         class={buttonClass}
-                                        onclick={() => void executeCommand(command)}
+                                        onclick={() =>
+                                            void executeCommand(command)}
                                         aria-label={command.label}
                                         title={command.disabledReason ||
                                             command.description ||
@@ -326,16 +327,17 @@
                             <Tooltip.Content>
                                 {commandPending === command.commandId
                                     ? `${command.label}...`
-                                    : (command.disabledReason ||
-                                          command.description ||
-                                          command.label)}
+                                    : command.disabledReason ||
+                                      command.description ||
+                                      command.label}
                             </Tooltip.Content>
                         </Tooltip.Root>
                     {:else}
                         <Button
                             variant={commandVariant(command)}
                             size="sm"
-                            disabled={commandPending !== null || command.disabled}
+                            disabled={commandPending !== null ||
+                                command.disabled}
                             class={buttonClass}
                             onclick={() => void executeCommand(command)}
                             aria-label={command.label}

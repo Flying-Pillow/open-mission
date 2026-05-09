@@ -67,8 +67,10 @@
             new Set(
                 missions
                     .map((mission) => mission.issueId)
-                    .filter((issueId): issueId is number =>
-                        typeof issueId === "number" && Number.isInteger(issueId),
+                    .filter(
+                        (issueId): issueId is number =>
+                            typeof issueId === "number" &&
+                            Number.isInteger(issueId),
                     ),
             ),
     );
@@ -207,7 +209,9 @@
         }
     }
 
-    async function startFromIssue(issue: TrackedIssueSummaryType): Promise<void> {
+    async function startFromIssue(
+        issue: TrackedIssueSummaryType,
+    ): Promise<void> {
         issueLoadingNumber = issue.number;
         remoteStartFromIssueError = null;
 
@@ -258,7 +262,8 @@
                 </h2>
                 <p class="mt-1 text-xs text-muted-foreground">
                     {missions.length} mission{missions.length === 1 ? "" : "s"}
-                    and {unmatchedIssues.length} issue{unmatchedIssues.length === 1
+                    and {unmatchedIssues.length} issue{unmatchedIssues.length ===
+                    1
                         ? ""
                         : "s"} without a mission
                 </p>
@@ -284,7 +289,9 @@
                 >
                     <div class="border-b bg-muted/25 px-5 py-4">
                         <div class="min-w-0 space-y-3 pr-10">
-                            <div class="flex items-center gap-2 text-muted-foreground">
+                            <div
+                                class="flex items-center gap-2 text-muted-foreground"
+                            >
                                 <Icon icon="lucide:plus" class="size-4" />
                                 <p
                                     class="text-xs font-medium uppercase tracking-[0.16em]"
@@ -292,7 +299,9 @@
                                     Workflow
                                 </p>
                             </div>
-                            <Dialog.Title class="text-lg font-semibold text-foreground">
+                            <Dialog.Title
+                                class="text-lg font-semibold text-foreground"
+                            >
                                 Start from brief
                             </Dialog.Title>
                             <div class="flex min-w-0 items-center gap-3">
@@ -354,8 +363,12 @@
                         >
                             <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0 flex-1">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <h3 class="truncate text-sm font-semibold">
+                                    <div
+                                        class="flex flex-wrap items-center gap-2"
+                                    >
+                                        <h3
+                                            class="truncate text-sm font-semibold"
+                                        >
                                             {mission.title}
                                         </h3>
                                         {#if mission.issueId}
@@ -376,14 +389,20 @@
                                     <p class="mt-2 truncate text-xs opacity-80">
                                         {mission.branchRef}
                                     </p>
-                                    <p class="mt-1 truncate font-mono text-[11px] opacity-70">
+                                    <p
+                                        class="mt-1 truncate font-mono text-[11px] opacity-70"
+                                    >
                                         {mission.missionId}
                                     </p>
                                 </div>
                             </div>
 
-                            <div class="mt-auto flex items-center justify-between gap-3 border-t border-current/10 pt-3">
-                                <p class="text-[11px] uppercase tracking-[0.18em] opacity-70">
+                            <div
+                                class="mt-auto flex items-center justify-between gap-3 border-t border-current/10 pt-3"
+                            >
+                                <p
+                                    class="text-[11px] uppercase tracking-[0.18em] opacity-70"
+                                >
                                     Mission
                                 </p>
                                 <div class="flex items-center gap-1.5">
@@ -405,7 +424,9 @@
                                                 </Button>
                                             {/snippet}
                                         </Tooltip.Trigger>
-                                        <Tooltip.Content>Open mission</Tooltip.Content>
+                                        <Tooltip.Content
+                                            >Open mission</Tooltip.Content
+                                        >
                                     </Tooltip.Root>
 
                                     <EntityCommandbar
@@ -433,7 +454,9 @@
                         >
                             <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0 flex-1">
-                                    <div class="flex flex-wrap items-center gap-2">
+                                    <div
+                                        class="flex flex-wrap items-center gap-2"
+                                    >
                                         <h3 class="text-sm font-semibold">
                                             #{issue.number}
                                         </h3>
@@ -452,17 +475,24 @@
                                             </Badge>
                                         {/each}
                                     </div>
-                                    <p class="mt-2 line-clamp-2 text-sm opacity-90">
+                                    <p
+                                        class="mt-2 line-clamp-2 text-sm opacity-90"
+                                    >
                                         {issue.title}
                                     </p>
                                     <p class="mt-2 text-xs opacity-70">
-                                        {issue.updatedAt ?? "Unknown update time"}
+                                        {issue.updatedAt ??
+                                            "Unknown update time"}
                                     </p>
                                 </div>
                             </div>
 
-                            <div class="mt-auto flex items-center justify-between gap-3 border-t border-current/10 pt-3">
-                                <p class="text-[11px] uppercase tracking-[0.18em] opacity-70">
+                            <div
+                                class="mt-auto flex items-center justify-between gap-3 border-t border-current/10 pt-3"
+                            >
+                                <p
+                                    class="text-[11px] uppercase tracking-[0.18em] opacity-70"
+                                >
                                     GitHub issue
                                 </p>
                                 <div class="flex items-center gap-1.5">
@@ -475,7 +505,9 @@
                                                     size="icon-sm"
                                                     class="rounded-full"
                                                     onclick={() =>
-                                                        void viewIssue(issue.number)}
+                                                        void viewIssue(
+                                                            issue.number,
+                                                        )}
                                                     disabled={issueLoadingNumber ===
                                                         issue.number}
                                                     aria-label={`View issue ${issue.number}`}
@@ -503,9 +535,11 @@
                                                     size="icon-sm"
                                                     class="rounded-full"
                                                     onclick={() =>
-                                                        void startFromIssue(issue)}
+                                                        void startFromIssue(
+                                                            issue,
+                                                        )}
                                                     disabled={issueLoadingNumber ===
-                                                            issue.number ||
+                                                        issue.number ||
                                                         !activeRepository.data
                                                             .isInitialized}
                                                     aria-label={`Start mission from issue ${issue.number}`}
@@ -520,7 +554,8 @@
                                         </Tooltip.Trigger>
                                         <Tooltip.Content>
                                             {activeRepository.data.isInitialized
-                                                ? issueLoadingNumber === issue.number
+                                                ? issueLoadingNumber ===
+                                                  issue.number
                                                     ? "Starting mission"
                                                     : "Start mission"
                                                 : "Repository initialization required"}
