@@ -49,10 +49,10 @@ type FakeAgentExecutionRecord = {
 };
 
 export class FakeAgentAdapter extends AgentAdapter {
-	private readonly sessionIds = new Set<string>();
+	private readonly agentExecutionIds = new Set<string>();
 	private readonly records = new Map<string, FakeAgentExecutionRecord>();
 	private readonly startRequests: FakeAgentStartRequest[] = [];
-	private nextSessionId = 0;
+	private nextAgentExecutionId = 0;
 
 	public constructor(
 		id: string,
@@ -83,39 +83,39 @@ export class FakeAgentAdapter extends AgentAdapter {
 	}
 
 	public async startExecution(config: AgentLaunchConfig): Promise<AgentExecution> {
-		const sessionId = `${this.id}-session-${String(++this.nextSessionId)}`;
-		const snapshot = createSnapshot(config, this.id, sessionId, this.transportId);
+		const agentExecutionId = `${this.id}-AgentExecution-${String(++this.nextAgentExecutionId)}`;
+		const snapshot = createSnapshot(config, this.id, agentExecutionId, this.transportId);
 		this.startRequests.push(cloneStartRequest(config));
-		this.sessionIds.add(sessionId);
-		this.records.set(sessionId, { snapshot, listeners: new Set() });
-		return this.createInspectableSession(sessionId) as unknown as AgentExecution;
+		this.agentExecutionIds.add(agentExecutionId);
+		this.records.set(agentExecutionId, { snapshot, listeners: new Set() });
+		return this.createInspectableAgentExecution(agentExecutionId) as unknown as AgentExecution;
 	}
 
 	public async reconcileExecution(reference: AgentExecutionReference): Promise<AgentExecution> {
-		if (this.sessionIds.has(reference.sessionId)) {
-			return this.createInspectableSession(reference.sessionId) as unknown as AgentExecution;
+		if (this.agentExecutionIds.has(reference.agentExecutionId)) {
+			return this.createInspectableAgentExecution(reference.agentExecutionId) as unknown as AgentExecution;
 		}
-		return createDetachedExecution(createDetachedSnapshot(this.id, reference, 'Session no longer exists in fake runtime.'));
+		return createDetachedExecution(createDetachedSnapshot(this.id, reference, 'AgentExecution no longer exists in fake runtime.'));
 	}
 
 	public listExecutions(): FakeAgentExecution[] {
-		return [...this.sessionIds].map((sessionId) => this.createInspectableSession(sessionId));
+		return [...this.agentExecutionIds].map((agentExecutionId) => this.createInspectableAgentExecution(agentExecutionId));
 	}
 
-	public getSession(sessionId: string): FakeAgentExecution | undefined {
-		return this.sessionIds.has(sessionId) ? this.createInspectableSession(sessionId) : undefined;
+	public getAgentExecution(agentExecutionId: string): FakeAgentExecution | undefined {
+		return this.agentExecutionIds.has(agentExecutionId) ? this.createInspectableAgentExecution(agentExecutionId) : undefined;
 	}
 
-	public deleteSession(sessionId: string): void {
-		if (!this.sessionIds.has(sessionId)) {
+	public deleteAgentExecution(agentExecutionId: string): void {
+		if (!this.agentExecutionIds.has(agentExecutionId)) {
 			return;
 		}
-		this.sessionIds.delete(sessionId);
-		this.records.delete(sessionId);
+		this.agentExecutionIds.delete(agentExecutionId);
+		this.records.delete(agentExecutionId);
 	}
 
-	public overrideSessionWorkingDirectory(sessionId: string, workingDirectory: string): void {
-		this.updateSnapshot(sessionId, {
+	public overrideAgentExecutionWorkingDirectory(agentExecutionId: string, workingDirectory: string): void {
+		this.updateSnapshot(agentExecutionId, {
 			workingDirectory,
 			status: 'running',
 			attention: 'autonomous',
@@ -129,7 +129,7 @@ export class FakeAgentAdapter extends AgentAdapter {
 		});
 		this.emitExecutionEvent({
 			type: 'execution.updated',
-			snapshot: this.requireSnapshot(sessionId)
+			snapshot: this.requireSnapshot(agentExecutionId)
 		});
 	}
 
@@ -138,27 +138,27 @@ export class FakeAgentAdapter extends AgentAdapter {
 		return request ? cloneStartRequest(request) : undefined;
 	}
 
-	private createInspectableSession(sessionId: string): FakeAgentExecution {
+	private createInspectableAgentExecution(agentExecutionId: string): FakeAgentExecution {
 		return new FakeManagedAgentExecution({
-			getSnapshot: () => toLegacySnapshot(this.requireSnapshot(sessionId), this.transportId),
-			observe: (listener) => this.observeSession(sessionId, listener),
-			done: () => this.completeSession(sessionId),
-			submitPrompt: (prompt) => this.submitPrompt(sessionId, prompt),
-			submitCommand: (command) => this.submitCommand(sessionId, command),
-			cancel: (reason) => this.cancelSession(sessionId, reason),
-			terminate: (reason) => this.terminateSession(sessionId, reason),
-			cancelRuntime: (reason) => this.cancelSession(sessionId, reason),
-			terminateRuntime: (reason) => this.terminateSession(sessionId, reason),
-			emitMessage: (text, channel) => this.emitMessage(sessionId, text, channel),
-			emitAwaitingInput: (reason) => this.emitAwaitingInput(sessionId, reason),
-			overrideWorkingDirectory: (workingDirectory) => this.overrideSessionWorkingDirectory(sessionId, workingDirectory),
-			complete: () => this.completeSession(sessionId),
-			fail: (reason) => this.failSession(sessionId, reason)
+			getSnapshot: () => toLegacySnapshot(this.requireSnapshot(agentExecutionId), this.transportId),
+			observe: (listener) => this.observeAgentExecution(agentExecutionId, listener),
+			done: () => this.completeAgentExecution(agentExecutionId),
+			submitPrompt: (prompt) => this.submitPrompt(agentExecutionId, prompt),
+			submitCommand: (command) => this.submitCommand(agentExecutionId, command),
+			cancel: (reason) => this.cancelAgentExecution(agentExecutionId, reason),
+			terminate: (reason) => this.terminateAgentExecution(agentExecutionId, reason),
+			cancelRuntime: (reason) => this.cancelAgentExecution(agentExecutionId, reason),
+			terminateRuntime: (reason) => this.terminateAgentExecution(agentExecutionId, reason),
+			emitMessage: (text, channel) => this.emitMessage(agentExecutionId, text, channel),
+			emitAwaitingInput: (reason) => this.emitAwaitingInput(agentExecutionId, reason),
+			overrideWorkingDirectory: (workingDirectory) => this.overrideAgentExecutionWorkingDirectory(agentExecutionId, workingDirectory),
+			complete: () => this.completeAgentExecution(agentExecutionId),
+			fail: (reason) => this.failAgentExecution(agentExecutionId, reason)
 		});
 	}
 
-	private async submitPrompt(sessionId: string, _prompt: AgentPrompt): Promise<AgentExecutionSnapshot> {
-		const snapshot = this.updateSnapshot(sessionId, {
+	private async submitPrompt(agentExecutionId: string, _prompt: AgentPrompt): Promise<AgentExecutionSnapshot> {
+		const snapshot = this.updateSnapshot(agentExecutionId, {
 			status: 'running',
 			attention: 'autonomous',
 			waitingForInput: false,
@@ -176,9 +176,9 @@ export class FakeAgentAdapter extends AgentAdapter {
 		return snapshot;
 	}
 
-	private async submitCommand(sessionId: string, command: AgentCommand): Promise<AgentExecutionSnapshot> {
+	private async submitCommand(agentExecutionId: string, command: AgentCommand): Promise<AgentExecutionSnapshot> {
 		if (command.type === 'interrupt') {
-			const snapshot = this.updateSnapshot(sessionId, {
+			const snapshot = this.updateSnapshot(agentExecutionId, {
 				status: 'awaiting-input',
 				attention: 'awaiting-operator',
 				waitingForInput: true,
@@ -197,12 +197,12 @@ export class FakeAgentAdapter extends AgentAdapter {
 			return snapshot;
 		}
 
-		return this.submitPrompt(sessionId, buildCommandPrompt(command));
+		return this.submitPrompt(agentExecutionId, buildCommandPrompt(command));
 	}
 
-	private async cancelSession(sessionId: string, reason?: string): Promise<AgentExecutionSnapshot> {
+	private async cancelAgentExecution(agentExecutionId: string, reason?: string): Promise<AgentExecutionSnapshot> {
 		const endedAt = now();
-		const snapshot = this.updateSnapshot(sessionId, {
+		const snapshot = this.updateSnapshot(agentExecutionId, {
 			status: 'cancelled',
 			attention: 'none',
 			waitingForInput: false,
@@ -224,9 +224,9 @@ export class FakeAgentAdapter extends AgentAdapter {
 		return snapshot;
 	}
 
-	private async terminateSession(sessionId: string, reason?: string): Promise<AgentExecutionSnapshot> {
+	private async terminateAgentExecution(agentExecutionId: string, reason?: string): Promise<AgentExecutionSnapshot> {
 		const endedAt = now();
-		const snapshot = this.updateSnapshot(sessionId, {
+		const snapshot = this.updateSnapshot(agentExecutionId, {
 			status: 'terminated',
 			attention: 'none',
 			waitingForInput: false,
@@ -249,11 +249,11 @@ export class FakeAgentAdapter extends AgentAdapter {
 	}
 
 	private emitMessage(
-		sessionId: string,
+		agentExecutionId: string,
 		text: string,
 		channel: 'stdout' | 'stderr' | 'system' | 'agent' = 'stdout'
 	): void {
-		const snapshot = this.updateSnapshot(sessionId, {
+		const snapshot = this.updateSnapshot(agentExecutionId, {
 			status: 'running',
 			attention: 'autonomous',
 			progress: {
@@ -269,8 +269,8 @@ export class FakeAgentAdapter extends AgentAdapter {
 		});
 	}
 
-	private emitAwaitingInput(sessionId: string, reason?: string): void {
-		const snapshot = this.updateSnapshot(sessionId, {
+	private emitAwaitingInput(agentExecutionId: string, reason?: string): void {
+		const snapshot = this.updateSnapshot(agentExecutionId, {
 			status: 'awaiting-input',
 			attention: 'awaiting-operator',
 			waitingForInput: true,
@@ -288,9 +288,9 @@ export class FakeAgentAdapter extends AgentAdapter {
 		});
 	}
 
-	private async completeSession(sessionId: string): Promise<AgentExecutionSnapshot> {
+	private async completeAgentExecution(agentExecutionId: string): Promise<AgentExecutionSnapshot> {
 		const endedAt = now();
-		const snapshot = this.updateSnapshot(sessionId, {
+		const snapshot = this.updateSnapshot(agentExecutionId, {
 			status: 'completed',
 			attention: 'none',
 			waitingForInput: false,
@@ -310,9 +310,9 @@ export class FakeAgentAdapter extends AgentAdapter {
 		return snapshot;
 	}
 
-	private failSession(sessionId: string, reason: string): void {
+	private failAgentExecution(agentExecutionId: string, reason: string): void {
 		const endedAt = now();
-		const snapshot = this.updateSnapshot(sessionId, {
+		const snapshot = this.updateSnapshot(agentExecutionId, {
 			status: 'failed',
 			attention: 'none',
 			waitingForInput: false,
@@ -333,8 +333,8 @@ export class FakeAgentAdapter extends AgentAdapter {
 		});
 	}
 
-	private updateSnapshot(sessionId: string, overrides: SnapshotOverrides): AgentExecutionSnapshot {
-		const record = this.requireRecord(sessionId);
+	private updateSnapshot(agentExecutionId: string, overrides: SnapshotOverrides): AgentExecutionSnapshot {
+		const record = this.requireRecord(agentExecutionId);
 		const nextSnapshot: AgentExecutionSnapshot = {
 			...record.snapshot,
 			acceptedCommands: overrides.acceptedCommands
@@ -364,20 +364,20 @@ export class FakeAgentAdapter extends AgentAdapter {
 		return cloneSnapshot(record.snapshot);
 	}
 
-	private requireRecord(sessionId: string): FakeAgentExecutionRecord {
-		const record = this.records.get(sessionId);
+	private requireRecord(agentExecutionId: string): FakeAgentExecutionRecord {
+		const record = this.records.get(agentExecutionId);
 		if (!record) {
-			throw new Error(`Fake agent execution '${sessionId}' is not attached.`);
+			throw new Error(`Fake agent execution '${agentExecutionId}' is not attached.`);
 		}
 		return record;
 	}
 
-	private requireSnapshot(sessionId: string): AgentExecutionSnapshot {
-		return cloneSnapshot(this.requireRecord(sessionId).snapshot);
+	private requireSnapshot(agentExecutionId: string): AgentExecutionSnapshot {
+		return cloneSnapshot(this.requireRecord(agentExecutionId).snapshot);
 	}
 
-	private observeSession(sessionId: string, listener: (event: AgentExecutionEvent) => void): { dispose(): void } {
-		const record = this.requireRecord(sessionId);
+	private observeAgentExecution(agentExecutionId: string, listener: (event: AgentExecutionEvent) => void): { dispose(): void } {
+		const record = this.requireRecord(agentExecutionId);
 		record.listeners.add(listener);
 		return {
 			dispose: () => {
@@ -387,7 +387,7 @@ export class FakeAgentAdapter extends AgentAdapter {
 	}
 
 	private emitExecutionEvent(event: AgentExecutionEvent): void {
-		const record = this.records.get(event.snapshot.sessionId);
+		const record = this.records.get(event.snapshot.agentExecutionId);
 		if (!record) {
 			return;
 		}
@@ -485,10 +485,10 @@ function createDetachedExecution(snapshot: AgentExecutionSnapshot): AgentExecuti
 		observe: () => ({ dispose() { } }),
 		done: async () => cloneSnapshot(snapshot),
 		submitPrompt: async () => {
-			throw new Error(`Fake agent execution '${snapshot.sessionId}' is no longer available.`);
+			throw new Error(`Fake agent execution '${snapshot.agentExecutionId}' is no longer available.`);
 		},
 		submitCommand: async () => {
-			throw new Error(`Fake agent execution '${snapshot.sessionId}' is no longer available.`);
+			throw new Error(`Fake agent execution '${snapshot.agentExecutionId}' is no longer available.`);
 		},
 		cancel: async () => cloneSnapshot(snapshot),
 		terminate: async () => cloneSnapshot(snapshot),
@@ -525,25 +525,25 @@ function now(): string {
 function createSnapshot(
 	request: AgentLaunchConfig,
 	agentId: string,
-	sessionId: string,
+	agentExecutionId: string,
 	transportId?: string
 ): AgentExecutionSnapshot {
 	const timestamp = now();
 	const transport = transportId === 'terminal'
 		? {
 			kind: 'terminal' as const,
-			terminalName: resolveTerminalName(request, sessionId),
+			terminalName: resolveTerminalName(request, agentExecutionId),
 			terminalPaneId: 'terminal_44'
 		}
 		: undefined;
 	const reference: AgentExecutionReference = {
 		agentId,
-		sessionId,
+		agentExecutionId: agentExecutionId,
 		...(transport ? { transport } : {})
 	};
 	return {
 		agentId,
-		sessionId,
+		agentExecutionId: agentExecutionId,
 		scope: request.scope,
 		workingDirectory: request.workingDirectory,
 		...(request.task?.taskId ? { taskId: request.task.taskId } : {}),
@@ -571,7 +571,7 @@ function createDetachedSnapshot(agentId: string, reference: AgentExecutionRefere
 	const timestamp = now();
 	return {
 		agentId,
-		sessionId: reference.sessionId,
+		agentExecutionId: reference.agentExecutionId,
 		scope: { kind: 'system', label: 'detached' },
 		workingDirectory: 'unknown',
 		taskId: 'unknown',
@@ -589,7 +589,7 @@ function createDetachedSnapshot(agentId: string, reference: AgentExecutionRefere
 		acceptedCommands: [],
 		reference: {
 			agentId,
-			sessionId: reference.sessionId,
+			agentExecutionId: reference.agentExecutionId,
 			...(reference.transport ? { transport: { ...reference.transport } } : {})
 		},
 		...(reference.transport ? { transport: { ...reference.transport } } : {}),
@@ -629,9 +629,9 @@ function toLegacySnapshot(snapshot: AgentExecutionSnapshot, transportId?: string
 	};
 }
 
-function resolveTerminalName(request: AgentLaunchConfig, sessionId: string): string {
+function resolveTerminalName(request: AgentLaunchConfig, agentExecutionId: string): string {
 	const value = request.metadata?.['terminalName'];
-	return typeof value === 'string' && value.trim() ? value.trim() : sessionId;
+	return typeof value === 'string' && value.trim() ? value.trim() : agentExecutionId;
 }
 
 function cloneStartRequest(request: AgentLaunchConfig): FakeAgentStartRequest {

@@ -17,7 +17,7 @@ type MissionTerminalRecord = {
     key: string;
     surfacePath: string;
     missionId: string;
-    sessionId: string;
+    missionTerminalId: string;
     workingDirectory: string;
     handle: TerminalHandle;
 };
@@ -31,7 +31,7 @@ export type MissionTerminalUpdate = {
 const missionTerminalRegistry = TerminalRegistry.shared();
 const missionTerminals = new Map<string, MissionTerminalRecord>();
 const missionTerminalEventEmitter = new MissionAgentEventEmitter<MissionTerminalUpdate>();
-const missionContextCache = new Map<string, { context: { key: string; surfacePath: string; missionId: string; sessionId: string; workingDirectory: string } | undefined; timestamp: number }>();
+const missionContextCache = new Map<string, { context: { key: string; surfacePath: string; missionId: string; missionTerminalId: string; workingDirectory: string } | undefined; timestamp: number }>();
 const CONTEXT_CACHE_TTL_MS = 60_000;
 
 missionTerminalRegistry.onDidTerminalUpdate((event) => {
@@ -148,13 +148,13 @@ async function ensureMissionTerminalRecord(input: {
         workingDirectory: context.workingDirectory,
         command: resolveShellCommand(),
         args: resolveShellArgs(),
-        terminalName: context.sessionId
+        terminalName: context.missionTerminalId
     });
     const record: MissionTerminalRecord = {
         key: context.key,
         surfacePath: context.surfacePath,
         missionId: context.missionId,
-        sessionId: context.sessionId,
+        missionTerminalId: context.missionTerminalId,
         workingDirectory: context.workingDirectory,
         handle
     };
@@ -170,7 +170,7 @@ async function resolveMissionTerminalContext(input: {
     key: string;
     surfacePath: string;
     missionId: string;
-    sessionId: string;
+    missionTerminalId: string;
     workingDirectory: string;
 } | undefined> {
     const surfacePath = path.resolve(input.surfacePath.trim());
@@ -193,12 +193,12 @@ async function resolveMissionTerminalContext(input: {
 
     const workingDirectory = adapter.getMissionWorkspacePath(mission.missionDir);
     const key = `${path.resolve(surfacePath)}:${missionId}`;
-    const sessionId = buildMissionTerminalId(surfacePath, missionId);
+    const missionTerminalId = buildMissionTerminalId(surfacePath, missionId);
     const context = {
         key,
         surfacePath,
         missionId,
-        sessionId,
+        missionTerminalId,
         workingDirectory
     };
     missionContextCache.set(cacheKey, { context, timestamp: Date.now() });

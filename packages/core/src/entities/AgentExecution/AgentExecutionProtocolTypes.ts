@@ -6,6 +6,13 @@ import {
     MAX_AGENT_EXECUTION_USAGE_ENTRIES as AGENT_EXECUTION_USAGE_ENTRIES,
     type AgentDeclaredSignalPayloadType
 } from './AgentExecutionSchema.js';
+import {
+    createAgentExecutionSignalFromDeclaredPayload,
+    type AgentExecutionJournalSignalConfidenceType,
+    type AgentExecutionJournalInputChoiceType,
+    type AgentExecutionJournalSignalSourceType,
+    type AgentExecutionJournalSignalType
+} from './AgentExecutionSignalRegistry.js';
 
 export type AgentId = string;
 export type AgentExecutionId = string;
@@ -92,13 +99,15 @@ export interface AgentProgressSnapshot {
 
 export interface AgentExecutionReference {
     agentId: AgentId;
-    sessionId: AgentExecutionId;
+    agentExecutionId: AgentExecutionId;
     processId?: number;
-    transport?: {
-        kind: 'terminal';
-        terminalName: string;
-        terminalPaneId?: string;
-    };
+    transport?: AgentExecutionTerminalTransport;
+}
+
+export interface AgentExecutionTerminalTransport {
+    kind: 'terminal';
+    terminalName: string;
+    terminalPaneId?: string;
 }
 
 export interface AgentCapabilities {
@@ -135,8 +144,8 @@ export interface AgentSpecificationContext {
 
 export type AgentResumePolicy =
     | { mode: 'new' }
-    | { mode: 'attach-or-create'; previousSessionId?: AgentExecutionId }
-    | { mode: 'attach-only'; previousSessionId: AgentExecutionId };
+    | { mode: 'attach-or-create'; previousAgentExecutionId?: AgentExecutionId }
+    | { mode: 'attach-only'; previousAgentExecutionId: AgentExecutionId };
 
 export interface AgentLaunchConfig {
     scope: AgentExecutionScope;
@@ -165,7 +174,7 @@ export type AgentCommand =
 
 export interface AgentExecutionSnapshot {
     agentId: AgentId;
-    sessionId: AgentExecutionId;
+    agentExecutionId: AgentExecutionId;
     scope: AgentExecutionScope;
     workingDirectory: string;
     taskId?: string;
@@ -178,11 +187,7 @@ export interface AgentExecutionSnapshot {
     acceptsPrompts: boolean;
     acceptedCommands: AgentCommand['type'][];
     interactionCapabilities?: AgentExecutionInteractionCapabilities;
-    transport?: {
-        kind: 'terminal';
-        terminalName: string;
-        terminalPaneId?: string;
-    };
+    transport?: AgentExecutionTerminalTransport;
     reference: AgentExecutionReference;
     failureMessage?: string;
     startedAt: string;
@@ -193,7 +198,7 @@ export interface AgentExecutionSnapshot {
 export interface AgentExecutionProtocolError extends Error {
     readonly code: AgentExecutionProtocolErrorCode;
     readonly agentId?: AgentId;
-    readonly sessionId?: AgentExecutionId;
+    readonly agentExecutionId?: AgentExecutionId;
 }
 
 export function getAgentExecutionScopeMissionId(scope: AgentExecutionScope): string | undefined {
@@ -299,91 +304,15 @@ export const MAX_AGENT_EXECUTION_USAGE_ENTRIES = AGENT_EXECUTION_USAGE_ENTRIES;
 export const MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES = AGENT_EXECUTION_SUGGESTED_RESPONSES;
 export const MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH = AGENT_DECLARED_SIGNAL_MARKER_LENGTH;
 
-export type AgentExecutionSignalSource =
-    | 'daemon-authoritative'
-    | 'provider-structured'
-    | 'agent-declared'
-    | 'terminal-heuristic';
+export type AgentExecutionSignalSource = AgentExecutionJournalSignalSourceType;
 
-export type AgentExecutionSignalConfidence =
-    | 'authoritative'
-    | 'high'
-    | 'medium'
-    | 'low'
-    | 'diagnostic';
+export type AgentExecutionSignalConfidence = AgentExecutionJournalSignalConfidenceType;
 
-export type AgentExecutionInputChoice =
-    | {
-        kind: 'fixed';
-        label: string;
-        value: string;
-    }
-    | {
-        kind: 'manual';
-        label: string;
-        placeholder?: string | undefined;
-    };
+export type AgentExecutionInputChoice = AgentExecutionJournalInputChoiceType;
 
-type AgentExecutionSignalBase = {
-    source: AgentExecutionSignalSource;
-    confidence: AgentExecutionSignalConfidence;
-};
+export type AgentExecutionDiagnosticCode = Extract<AgentExecutionJournalSignalType, { type: 'diagnostic' }>['code'];
 
-export type AgentExecutionDiagnosticCode =
-    | 'provider-session'
-    | 'tool-call'
-    | 'agent-declared-signal-malformed'
-    | 'agent-declared-signal-oversized'
-    | 'terminal-heuristic';
-
-export type AgentExecutionSignal =
-    | ({
-        type: 'progress';
-        summary: string;
-        detail?: string;
-    } & AgentExecutionSignalBase)
-    | ({
-        type: 'status';
-        phase: AgentExecutionStatusPhase;
-        summary?: string;
-    } & AgentExecutionSignalBase)
-    | ({
-        type: 'needs_input';
-        question: string;
-        choices: AgentExecutionInputChoice[];
-    } & AgentExecutionSignalBase)
-    | ({
-        type: 'blocked';
-        reason: string;
-    } & AgentExecutionSignalBase)
-    | ({
-        type: 'ready_for_verification';
-        summary: string;
-    } & AgentExecutionSignalBase)
-    | ({
-        type: 'completed_claim';
-        summary: string;
-    } & AgentExecutionSignalBase)
-    | ({
-        type: 'failed_claim';
-        reason: string;
-    } & AgentExecutionSignalBase)
-    | ({
-        type: 'message';
-        channel: 'agent' | 'system' | 'stdout' | 'stderr';
-        text: string;
-    } & AgentExecutionSignalBase)
-    | ({
-        type: 'usage';
-        payload: AgentMetadata;
-    } & AgentExecutionSignalBase)
-    | ({
-        type: 'diagnostic';
-        code: AgentExecutionDiagnosticCode;
-        summary: string;
-        detail?: string;
-        payload?: AgentMetadata;
-    } & AgentExecutionSignalBase);
+export type AgentExecutionSignal = AgentExecutionJournalSignalType;
 
 export type AgentExecutionObservationAddress = {
     agentExecutionId: AgentExecutionId;
@@ -421,7 +350,7 @@ export type AgentExecutionSignalDecision =
     | { action: 'record-observation-only'; reason: string }
     | { action: 'emit-message'; event: AgentExecutionEvent }
     | {
-        action: 'update-session';
+        action: 'update-execution';
         eventType: 'execution.updated' | 'execution.awaiting-input' | 'execution.completed' | 'execution.failed';
         snapshotPatch: Partial<AgentExecutionSnapshot>;
     };
@@ -478,116 +407,11 @@ export function sameAgentExecutionScope(left: AgentExecutionScope, right: AgentE
 }
 
 export function cloneSignal(signal: AgentExecutionSignal): AgentExecutionSignal {
-    switch (signal.type) {
-        case 'progress':
-            return {
-                ...signal,
-                ...(signal.detail ? { detail: signal.detail } : {})
-            };
-        case 'status':
-            return {
-                ...signal,
-                ...(signal.summary ? { summary: signal.summary } : {})
-            };
-        case 'needs_input':
-            return {
-                ...signal,
-                choices: signal.choices.map(cloneAgentExecutionInputChoice)
-            };
-        case 'blocked':
-        case 'ready_for_verification':
-        case 'completed_claim':
-        case 'failed_claim':
-        case 'message':
-            return { ...signal };
-        case 'usage':
-            return {
-                ...signal,
-                payload: { ...signal.payload }
-            };
-        case 'diagnostic':
-            return {
-                ...signal,
-                ...(signal.payload ? { payload: { ...signal.payload } } : {})
-            };
-    }
+    return structuredClone(signal);
 }
 
 export function createAgentDeclaredSignalFromPayload(payload: AgentDeclaredSignalPayloadType): AgentExecutionSignal {
-    switch (payload.type) {
-        case 'progress':
-            return {
-                type: 'progress',
-                summary: payload.summary,
-                ...(payload.detail ? { detail: payload.detail } : {}),
-                source: 'agent-declared',
-                confidence: 'medium'
-            };
-        case 'status':
-            return {
-                type: 'status',
-                phase: payload.phase,
-                ...(payload.summary ? { summary: payload.summary } : {}),
-                source: 'agent-declared',
-                confidence: 'medium'
-            };
-        case 'needs_input':
-            return {
-                type: 'needs_input',
-                question: payload.question,
-                choices: payload.choices.map(cloneAgentExecutionInputChoice),
-                source: 'agent-declared',
-                confidence: 'medium'
-            };
-        case 'blocked':
-            return {
-                type: 'blocked',
-                reason: payload.reason,
-                source: 'agent-declared',
-                confidence: 'medium'
-            };
-        case 'ready_for_verification':
-            return {
-                type: 'ready_for_verification',
-                summary: payload.summary,
-                source: 'agent-declared',
-                confidence: 'medium'
-            };
-        case 'completed_claim':
-            return {
-                type: 'completed_claim',
-                summary: payload.summary,
-                source: 'agent-declared',
-                confidence: 'medium'
-            };
-        case 'failed_claim':
-            return {
-                type: 'failed_claim',
-                reason: payload.reason,
-                source: 'agent-declared',
-                confidence: 'medium'
-            };
-        case 'message':
-            return {
-                type: 'message',
-                channel: payload.channel,
-                text: payload.text,
-                source: 'agent-declared',
-                confidence: 'medium'
-            };
-    }
-}
-
-export function cloneAgentExecutionInputChoice(choice: AgentExecutionInputChoice): AgentExecutionInputChoice {
-    switch (choice.kind) {
-        case 'fixed':
-            return { ...choice };
-        case 'manual':
-            return {
-                ...choice,
-                ...(choice.placeholder ? { placeholder: choice.placeholder } : {})
-            };
-    }
+    return createAgentExecutionSignalFromDeclaredPayload(payload);
 }
 
 export function isScalarAgentMetadataValue(value: unknown): value is AgentMetadata[string] {
@@ -638,7 +462,7 @@ export function deriveAgentExecutionInteractionCapabilities(input: Pick<
         canSendTerminalInput: false,
         canSendStructuredPrompt: false,
         canSendStructuredCommand: false,
-        reason: 'This session does not accept operator follow-up input.'
+        reason: 'This AgentExecution does not accept operator follow-up input.'
     };
 }
 

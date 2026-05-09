@@ -8,11 +8,18 @@ import {
 
 export const agentExecutionEntityName = 'AgentExecution' as const;
 
-export const AgentExecutionTerminalRecordingLogPathSchema = z.string()
+export const AgentExecutionTerminalRecordingPathSchema = z.string()
     .trim()
     .min(1)
-    .refine((value) => /^session-logs\/[^/]+\.terminal\.jsonl$/u.test(value), {
-        message: 'AgentExecution session logs must use session-logs/<sessionId>.terminal.jsonl.'
+    .refine((value) => /^terminal-recordings\/[^/]+\.terminal\.jsonl$/u.test(value), {
+        message: 'AgentExecution terminal recordings must use terminal-recordings/<agentExecutionId>.terminal.jsonl.'
+    });
+
+export const AgentExecutionJournalPathSchema = z.string()
+    .trim()
+    .min(1)
+    .refine((value) => /^agent-journals\/[^/]+\.interaction\.jsonl$/u.test(value), {
+        message: 'AgentExecution journals must use agent-journals/<agentExecutionId>.interaction.jsonl.'
     });
 
 export const AgentExecutionCommandIds = {
@@ -92,7 +99,7 @@ export const AgentExecutionInteractionCapabilitiesSchema = z.object({
 
 export const AgentExecutionLocatorSchema = z.object({
     ownerId: z.string().trim().min(1),
-    sessionId: z.string().trim().min(1)
+    agentExecutionId: z.string().trim().min(1)
 }).strict();
 
 export const AgentExecutionEventSubjectSchema = AgentExecutionLocatorSchema.extend({
@@ -124,12 +131,12 @@ export const AgentExecutionTerminalHandleSchema = z.object({
 }).strict();
 
 export const AgentExecutionTerminalRouteParamsSchema = z.object({
-    sessionId: z.string().trim().min(1)
+    agentExecutionId: z.string().trim().min(1)
 }).strict();
 
 export const AgentExecutionTerminalQuerySchema = z.object({
     ownerId: z.string().trim().min(1),
-    sessionId: z.string().trim().min(1)
+    agentExecutionId: z.string().trim().min(1)
 }).strict();
 
 export const AgentExecutionTerminalRouteQuerySchema = z.object({
@@ -152,7 +159,7 @@ export const AgentExecutionTerminalRouteInputSchema = z.object({
 
 export const AgentExecutionTerminalSnapshotSchema = z.object({
     ownerId: z.string().trim().min(1),
-    sessionId: z.string().trim().min(1),
+    agentExecutionId: z.string().trim().min(1),
     connected: z.boolean(),
     dead: z.boolean(),
     exitCode: z.number().int().nullable(),
@@ -170,7 +177,7 @@ export const AgentExecutionTerminalRecordingHeaderEventSchema = z.object({
     version: z.literal(1),
     kind: z.literal('agent-execution-terminal-recording'),
     ownerId: z.string().trim().min(1),
-    sessionId: z.string().trim().min(1),
+    agentExecutionId: z.string().trim().min(1),
     terminalName: z.string().trim().min(1),
     cols: z.number().int().positive(),
     rows: z.number().int().positive(),
@@ -225,7 +232,7 @@ export const AgentExecutionTerminalSocketClientMessageSchema = z.discriminatedUn
 
 export const AgentExecutionTerminalOutputSchema = z.object({
     ownerId: z.string().trim().min(1),
-    sessionId: z.string().trim().min(1),
+    agentExecutionId: z.string().trim().min(1),
     chunk: z.string(),
     dead: z.boolean(),
     exitCode: z.number().int().nullable(),
@@ -483,7 +490,7 @@ export const AgentExecutionProtocolOwnerSchema = z.object({
 
 export const AgentExecutionProtocolMcpSchema = z.object({
     serverName: z.literal('mission-mcp'),
-    exposure: z.literal('session-scoped'),
+    exposure: z.literal('agent-execution-scoped'),
     publicApi: z.literal(false)
 }).strict();
 
@@ -509,6 +516,7 @@ export const AgentExecutionRuntimeCommandTypeSchema = z.enum([
 ]);
 
 export type AgentExecutionTerminalRouteParamsType = z.infer<typeof AgentExecutionTerminalRouteParamsSchema>;
+export type AgentExecutionJournalPathType = z.infer<typeof AgentExecutionJournalPathSchema>;
 export type AgentExecutionTerminalQueryType = z.infer<typeof AgentExecutionTerminalQuerySchema>;
 export type AgentExecutionTerminalRouteInputType = z.infer<typeof AgentExecutionTerminalRouteInputSchema>;
 export type AgentExecutionTerminalRecordingHeaderEventType = z.infer<typeof AgentExecutionTerminalRecordingHeaderEventSchema>;
@@ -551,7 +559,28 @@ export const AgentExecutionLifecycleStateSchema = z.enum([
     'terminated'
 ]);
 
+export const AgentExecutionAttentionStateSchema = z.enum([
+    'none',
+    'autonomous',
+    'awaiting-operator',
+    'awaiting-system',
+    'blocked'
+]);
+
+export const AgentExecutionSemanticActivitySchema = z.enum([
+    'idle',
+    'planning',
+    'reasoning',
+    'communicating',
+    'editing',
+    'executing',
+    'testing',
+    'reviewing'
+]);
+
 export type AgentExecutionLifecycleStateType = z.infer<typeof AgentExecutionLifecycleStateSchema>;
+export type AgentExecutionAttentionStateType = z.infer<typeof AgentExecutionAttentionStateSchema>;
+export type AgentExecutionSemanticActivityType = z.infer<typeof AgentExecutionSemanticActivitySchema>;
 export type AgentExecutionInteractionModeType = z.infer<typeof AgentExecutionInteractionModeSchema>;
 export type AgentExecutionInteractionCapabilitiesType = z.infer<typeof AgentExecutionInteractionCapabilitiesSchema>;
 
@@ -587,7 +616,7 @@ export const AgentExecutionModelInfoSchema = z.object({
 
 export const AgentExecutionTelemetrySnapshotSchema = z.object({
     model: AgentExecutionModelInfoSchema.optional(),
-    providerSessionId: z.string().trim().min(1).optional(),
+    providerAgentExecutionId: z.string().trim().min(1).optional(),
     tokenUsage: z.object({
         inputTokens: z.number().int().nonnegative().optional(),
         outputTokens: z.number().int().nonnegative().optional(),
@@ -603,8 +632,43 @@ export const AgentExecutionTelemetrySnapshotSchema = z.object({
     updatedAt: z.string().trim().min(1)
 }).strict();
 
+export const AgentExecutionActivityProgressSchema = z.object({
+    summary: z.string().trim().min(1).optional(),
+    detail: z.string().trim().min(1).optional(),
+    units: z.object({
+        completed: z.number().nonnegative().optional(),
+        total: z.number().nonnegative().optional(),
+        unit: z.string().trim().min(1).optional()
+    }).strict().optional()
+}).strict();
+
+export const AgentExecutionCapabilitySnapshotSchema = z.object({
+    terminalAttached: z.boolean().optional(),
+    streaming: z.boolean().optional(),
+    toolCallActive: z.boolean().optional(),
+    filesystemMutating: z.boolean().optional()
+}).strict();
+
+export const AgentExecutionActivityTargetSchema = z.object({
+    kind: z.enum(['file', 'command', 'tool', 'artifact', 'unknown']),
+    label: z.string().trim().min(1).optional(),
+    path: z.string().trim().min(1).optional()
+}).strict();
+
+export const AgentExecutionRuntimeActivitySnapshotSchema = z.object({
+    activity: AgentExecutionSemanticActivitySchema.optional(),
+    progress: AgentExecutionActivityProgressSchema.optional(),
+    capabilities: AgentExecutionCapabilitySnapshotSchema.optional(),
+    currentTarget: AgentExecutionActivityTargetSchema.optional(),
+    updatedAt: z.string().trim().min(1)
+}).strict();
+
 export type AgentExecutionModelInfo = z.infer<typeof AgentExecutionModelInfoSchema>;
 export type AgentExecutionTelemetrySnapshot = z.infer<typeof AgentExecutionTelemetrySnapshotSchema>;
+export type AgentExecutionActivityProgressType = z.infer<typeof AgentExecutionActivityProgressSchema>;
+export type AgentExecutionCapabilitySnapshotType = z.infer<typeof AgentExecutionCapabilitySnapshotSchema>;
+export type AgentExecutionActivityTargetType = z.infer<typeof AgentExecutionActivityTargetSchema>;
+export type AgentExecutionRuntimeActivitySnapshotType = z.infer<typeof AgentExecutionRuntimeActivitySnapshotSchema>;
 
 export type AgentExecutionTurnRequest = {
     workingDirectory: string;
@@ -612,17 +676,21 @@ export type AgentExecutionTurnRequest = {
     scope?: AgentExecutionScopeType;
     title?: string;
     operatorIntent?: string;
-    startFreshSession?: boolean;
+    startFreshAgentExecution?: boolean;
 };
 
 export type AgentExecutionState = {
     agentId: string;
     transportId?: string;
     adapterLabel: string;
-    sessionId: string;
-    sessionLogPath?: string;
+    agentExecutionId: string;
+    agentJournalPath?: string;
+    terminalRecordingPath?: string;
     terminalHandle?: AgentExecutionTerminalHandleType;
     lifecycleState: AgentExecutionLifecycleStateType;
+    attention?: AgentExecutionAttentionStateType;
+    semanticActivity?: AgentExecutionSemanticActivityType;
+    currentInputRequestId?: string | null;
     workingDirectory?: string;
     currentTurnTitle?: string;
     interactionCapabilities: AgentExecutionInteractionCapabilitiesType;
@@ -630,6 +698,7 @@ export type AgentExecutionState = {
     protocolDescriptor?: AgentExecutionProtocolDescriptorType;
     transportState?: AgentExecutionTransportStateType;
     scope?: AgentExecutionScopeType;
+    runtimeActivity?: AgentExecutionRuntimeActivitySnapshotType;
     awaitingPermission?: AgentExecutionPermissionRequest;
     telemetry?: AgentExecutionTelemetrySnapshot;
     failureMessage?: string;
@@ -637,13 +706,17 @@ export type AgentExecutionState = {
 };
 
 export type AgentExecutionRecord = {
-    sessionId: string;
+    agentExecutionId: string;
     agentId: string;
     transportId?: string;
     adapterLabel: string;
-    sessionLogPath?: string;
+    agentJournalPath?: string;
+    terminalRecordingPath?: string;
     terminalHandle?: AgentExecutionTerminalHandleType;
     lifecycleState: AgentExecutionLifecycleStateType;
+    attention?: AgentExecutionAttentionStateType;
+    semanticActivity?: AgentExecutionSemanticActivityType;
+    currentInputRequestId?: string | null;
     taskId?: string;
     assignmentLabel?: string;
     workingDirectory?: string;
@@ -653,6 +726,7 @@ export type AgentExecutionRecord = {
     protocolDescriptor?: AgentExecutionProtocolDescriptorType;
     transportState?: AgentExecutionTransportStateType;
     scope?: AgentExecutionScopeType;
+    runtimeActivity?: AgentExecutionRuntimeActivitySnapshotType;
     telemetry?: AgentExecutionTelemetrySnapshot;
     failureMessage?: string;
     createdAt: string;
@@ -663,7 +737,7 @@ export type AgentExecutionLaunchRequest = AgentExecutionTurnRequest & {
     agentId: string;
     terminalName?: string;
     transportId?: string;
-    sessionId?: string;
+    agentExecutionId?: string;
     taskId?: string;
     assignmentLabel?: string;
 };
@@ -671,12 +745,16 @@ export type AgentExecutionLaunchRequest = AgentExecutionTurnRequest & {
 export const AgentExecutionStorageSchema = z.object({
     id: EntityIdSchema,
     ownerId: z.string().trim().min(1),
-    sessionId: z.string().trim().min(1),
+    agentExecutionId: z.string().trim().min(1),
     agentId: z.string().trim().min(1),
     transportId: z.string().trim().min(1).optional(),
     adapterLabel: z.string().trim().min(1),
-    sessionLogPath: AgentExecutionTerminalRecordingLogPathSchema.optional(),
+    agentJournalPath: AgentExecutionJournalPathSchema.optional(),
+    terminalRecordingPath: AgentExecutionTerminalRecordingPathSchema.optional(),
     lifecycleState: AgentExecutionLifecycleStateSchema,
+    attention: AgentExecutionAttentionStateSchema.optional(),
+    semanticActivity: AgentExecutionSemanticActivitySchema.optional(),
+    currentInputRequestId: z.string().trim().min(1).nullable().optional(),
     terminalHandle: AgentExecutionTerminalHandleSchema.optional(),
     assignmentLabel: z.string().trim().min(1).optional(),
     workingDirectory: z.string().trim().min(1).optional(),
@@ -689,6 +767,7 @@ export const AgentExecutionStorageSchema = z.object({
     protocolDescriptor: AgentExecutionProtocolDescriptorSchema.optional(),
     transportState: AgentExecutionTransportStateSchema.optional(),
     scope: AgentExecutionScopeSchema.optional(),
+    runtimeActivity: AgentExecutionRuntimeActivitySnapshotSchema.optional(),
     telemetry: AgentExecutionTelemetrySnapshotSchema.optional(),
     failureMessage: z.string().trim().min(1).optional(),
     createdAt: z.string().trim().min(1).optional(),
@@ -704,7 +783,7 @@ export const AgentExecutionCommandAcknowledgementSchema = EntityCommandAcknowled
     method: z.literal('command'),
     id: z.string().trim().min(1),
     ownerId: z.string().trim().min(1),
-    sessionId: z.string().trim().min(1),
+    agentExecutionId: z.string().trim().min(1),
     commandId: AgentExecutionCommandIdSchema.optional()
 }).strict();
 

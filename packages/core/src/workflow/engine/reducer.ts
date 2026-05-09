@@ -13,9 +13,9 @@ import { createInitialMissionWorkflowRuntimeState } from './document.js';
 import {
     buildReworkPendingLaunchContext,
     buildWorkflowTaskGenerationRequests,
-    countOccupiedSessionExecutionSlots,
+    countOccupiedAgentExecutionSlots,
     countOccupiedTaskExecutionSlots,
-    isActiveSessionLifecycle,
+    isActiveAgentExecutionLifecycle,
     isMissionCompleted,
     resolveTaskMaxReworkIterations,
     resolveDependentTaskIds
@@ -46,7 +46,7 @@ class MissionWorkflowReductionCycle {
     }
 
     public reduce(): MissionWorkflowReducerResult {
-        const suppressAutostart = isInactiveSessionLifecycleEvent(this.state, this.event);
+        const suppressAutostart = isInactiveAgentExecutionLifecycleEvent(this.state, this.event);
         new MissionWorkflowTransitionEngine(this.state, this.event, this.configuration).apply();
         new MissionWorkflowDerivationEngine(this.state, this.event, this.configuration, this.signals, this.requests, suppressAutostart).derive();
         return {
@@ -302,7 +302,7 @@ class MissionWorkflowTransitionEngine {
                         iteration,
                         maxIterations: resolveTaskMaxReworkIterations(task),
                         ...(event.sourceTaskId ? { sourceTaskId: event.sourceTaskId } : {}),
-                        ...(event.sourceSessionId ? { sourceSessionId: event.sourceSessionId } : {}),
+                        ...(event.sourceAgentExecutionId ? { sourceAgentExecutionId: event.sourceAgentExecutionId } : {}),
                         artifactRefs: event.artifactRefs.map((artifactRef) => ({ ...artifactRef }))
                     };
                     const reworkedRuntimeTask: MissionTaskRuntimeState = {
@@ -343,12 +343,13 @@ class MissionWorkflowTransitionEngine {
                         updatedAt: event.occurredAt
                     };
                 });
-                this.state.sessions = upsertSession(this.state.sessions, {
-                    sessionId: event.sessionId,
+                this.state.agentExecutions = upsertAgentExecution(this.state.agentExecutions, {
+                    agentExecutionId: event.agentExecutionId,
                     taskId: event.taskId,
                     agentId: event.agentId,
                     ...(event.transportId ? { transportId: event.transportId } : {}),
-                    ...(event.sessionLogPath ? { sessionLogPath: event.sessionLogPath } : {}),
+                    ...(event.agentJournalPath ? { agentJournalPath: event.agentJournalPath } : {}),
+                    ...(event.terminalRecordingPath ? { terminalRecordingPath: event.terminalRecordingPath } : {}),
                     ...(event.terminalHandle ? { terminalHandle: { ...event.terminalHandle } } : {}),
                     lifecycle: 'running',
                     launchedAt: event.occurredAt,
@@ -371,11 +372,11 @@ class MissionWorkflowTransitionEngine {
                 this.state.launchQueue = this.state.launchQueue.filter((request) => request.taskId !== event.taskId);
                 return;
             case 'execution.completed':
-                this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'completed', event.occurredAt);
+                this.state.agentExecutions = updateAgentExecutionLifecycle(this.state.agentExecutions, event.agentExecutionId, 'completed', event.occurredAt);
                 return;
             case 'execution.failed': {
-                const wasActive = hasActiveSession(this.state.sessions, event.sessionId);
-                this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'failed', event.occurredAt);
+                const wasActive = hasActiveAgentExecution(this.state.agentExecutions, event.agentExecutionId);
+                this.state.agentExecutions = updateAgentExecutionLifecycle(this.state.agentExecutions, event.agentExecutionId, 'failed', event.occurredAt);
                 if (!wasActive) {
                     return;
                 }
@@ -392,8 +393,8 @@ class MissionWorkflowTransitionEngine {
                 return;
             }
             case 'execution.cancelled': {
-                const wasActive = hasActiveSession(this.state.sessions, event.sessionId);
-                this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'cancelled', event.occurredAt);
+                const wasActive = hasActiveAgentExecution(this.state.agentExecutions, event.agentExecutionId);
+                this.state.agentExecutions = updateAgentExecutionLifecycle(this.state.agentExecutions, event.agentExecutionId, 'cancelled', event.occurredAt);
                 if (!wasActive) {
                     return;
                 }
@@ -405,8 +406,8 @@ class MissionWorkflowTransitionEngine {
                 return;
             }
             case 'execution.terminated': {
-                const wasActive = hasActiveSession(this.state.sessions, event.sessionId);
-                this.state.sessions = updateSessionLifecycle(this.state.sessions, event.sessionId, 'terminated', event.occurredAt);
+                const wasActive = hasActiveAgentExecution(this.state.agentExecutions, event.agentExecutionId);
+                this.state.agentExecutions = updateAgentExecutionLifecycle(this.state.agentExecutions, event.agentExecutionId, 'terminated', event.occurredAt);
                 if (!wasActive) {
                     return;
                 }
@@ -526,9 +527,9 @@ function queueAutostartTasks(
 
     let occupiedTaskSlots = countOccupiedTaskExecutionSlots(state);
     const queuedLaunchTaskIds = new Set(state.launchQueue.map((request) => request.taskId));
-    const activeSessionTaskIds = new Set(
-        state.sessions
-            .filter((execution) => isActiveSessionLifecycle(execution.lifecycle))
+    const activeAgentExecutionTaskIds = new Set(
+        state.agentExecutions
+            .filter((execution) => isActiveAgentExecutionLifecycle(execution.lifecycle))
             .map((execution) => execution.taskId)
     );
 
@@ -539,7 +540,7 @@ function queueAutostartTasks(
         if (occupiedTaskSlots >= _configuration.workflow.execution.maxParallelTasks) {
             break;
         }
-        if (queuedLaunchTaskIds.has(task.taskId) || activeSessionTaskIds.has(task.taskId)) {
+        if (queuedLaunchTaskIds.has(task.taskId) || activeAgentExecutionTaskIds.has(task.taskId)) {
             continue;
         }
         task.lifecycle = 'queued';
@@ -555,12 +556,12 @@ function queueAutostartTasks(
         occupiedTaskSlots += 1;
     }
 
-    let occupiedSessionSlots = countOccupiedSessionExecutionSlots(state);
+    let occupiedAgentExecutionSlots = countOccupiedAgentExecutionSlots(state);
     for (const launchRequest of state.launchQueue) {
-        if (launchRequest.dispatchedAt || activeSessionTaskIds.has(launchRequest.taskId)) {
+        if (launchRequest.dispatchedAt || activeAgentExecutionTaskIds.has(launchRequest.taskId)) {
             continue;
         }
-        if (occupiedSessionSlots >= _configuration.workflow.execution.maxParallelSessions) {
+        if (occupiedAgentExecutionSlots >= _configuration.workflow.execution.maxParallelAgentExecutions) {
             break;
         }
         const request = createRequest('execution.launch', event.occurredAt, {
@@ -575,33 +576,33 @@ function queueAutostartTasks(
         launchRequest.dispatchedAt = event.occurredAt;
         launchRequest.requestId = request.requestId;
         requests.push(request);
-        occupiedSessionSlots += 1;
+        occupiedAgentExecutionSlots += 1;
     }
 }
 
-function upsertSession(
-    sessions: AgentExecutionRuntimeState[],
-    session: AgentExecutionRuntimeState
+function upsertAgentExecution(
+    agentExecutions: AgentExecutionRuntimeState[],
+    AgentExecution: AgentExecutionRuntimeState
 ): AgentExecutionRuntimeState[] {
-    const existingIndex = sessions.findIndex((candidate) => candidate.sessionId === session.sessionId);
+    const existingIndex = agentExecutions.findIndex((candidate) => candidate.agentExecutionId === AgentExecution.agentExecutionId);
     if (existingIndex < 0) {
-        return [...sessions, session];
+        return [...agentExecutions, AgentExecution];
     }
-    const next = [...sessions];
-    next[existingIndex] = session;
+    const next = [...agentExecutions];
+    next[existingIndex] = AgentExecution;
     return next;
 }
 
-function updateSessionLifecycle(
-    sessions: AgentExecutionRuntimeState[],
-    sessionId: string,
+function updateAgentExecutionLifecycle(
+    agentExecutions: AgentExecutionRuntimeState[],
+    agentExecutionId: string,
     lifecycle: AgentExecutionRuntimeState['lifecycle'],
     occurredAt: string
 ): AgentExecutionRuntimeState[] {
-    return sessions.map((session) =>
-        session.sessionId === sessionId
+    return agentExecutions.map((AgentExecution) =>
+        AgentExecution.agentExecutionId === agentExecutionId
             ? {
-                ...session,
+                ...AgentExecution,
                 lifecycle,
                 updatedAt: occurredAt,
                 ...(lifecycle === 'completed' ? { completedAt: occurredAt } : {}),
@@ -609,15 +610,15 @@ function updateSessionLifecycle(
                 ...(lifecycle === 'cancelled' ? { cancelledAt: occurredAt } : {}),
                 ...(lifecycle === 'terminated' ? { terminatedAt: occurredAt } : {})
             }
-            : session
+            : AgentExecution
     );
 }
 
-function hasActiveSession(sessions: AgentExecutionRuntimeState[], sessionId: string): boolean {
-    return sessions.some((execution) => execution.sessionId === sessionId && isActiveSessionLifecycle(execution.lifecycle));
+function hasActiveAgentExecution(agentExecutions: AgentExecutionRuntimeState[], agentExecutionId: string): boolean {
+    return agentExecutions.some((execution) => execution.agentExecutionId === agentExecutionId && isActiveAgentExecutionLifecycle(execution.lifecycle));
 }
 
-function isInactiveSessionLifecycleEvent(
+function isInactiveAgentExecutionLifecycleEvent(
     state: MissionWorkflowRuntimeState,
     event: MissionWorkflowEvent
 ): boolean {
@@ -626,7 +627,7 @@ function isInactiveSessionLifecycleEvent(
         case 'execution.terminated':
             return true;
         case 'execution.failed':
-            return !hasActiveSession(state.sessions, event.sessionId);
+            return !hasActiveAgentExecution(state.agentExecutions, event.agentExecutionId);
         default:
             return false;
     }
@@ -703,7 +704,7 @@ function cloneRuntimeState(state: MissionWorkflowRuntimeState): MissionWorkflowR
                 }
                 : {})
         })),
-        sessions: state.sessions.map((session) => ({ ...session })),
+        agentExecutions: state.agentExecutions.map((AgentExecution) => ({ ...AgentExecution })),
         gates: state.gates.map((gate) => ({ ...gate, reasons: [...gate.reasons] })),
         launchQueue: state.launchQueue.map((request) => ({ ...request })),
         updatedAt: state.updatedAt

@@ -50,6 +50,7 @@ An MCP tool call produces the same daemon-side observation and the same accepted
 Agent runtime structured signal
   -> Agent execution observation
   -> AgentExecution observation policy
+  -> AgentExecution interaction journal record
   -> owning Entity behavior
   -> AgentExecution state, Entity event, workflow event, or rejection
 ```
@@ -79,7 +80,7 @@ Each tool call must carry or be bound to:
 
 Owner identity is not trusted from Agent-authored input. Mission, Task, Repository, Artifact, and System ownership are resolved by the daemon from the registered AgentExecution scope. Calls for unknown executions, mismatched execution identity, stopped executions, duplicate event ids, invalid payloads, oversized payloads, unsupported signal types, or unauthorized sessions are rejected or recorded as diagnostics according to the same policy discipline used for stdout marker parsing.
 
-Agent execution observations are append-only and idempotent. Every accepted transport input becomes, at most once, a normalized observation for its Agent execution and event id. Retries, reconnects, crashed Agent runtimes, MCP resend behavior, duplicated stdout markers, and adapter replay must not create repeated workflow effects, repeated owner Entity events, or repeated AgentExecution state transitions for the same event id. Duplicate detection belongs before policy effects are applied, and the acknowledgement for a duplicate must describe replay handling rather than pretending a new observation was accepted.
+Agent execution observations are append-only and idempotent. Every accepted transport input becomes, at most once, a normalized observation for its Agent execution and event id in the AgentExecution interaction journal. Retries, reconnects, crashed Agent runtimes, MCP resend behavior, duplicated stdout markers, and adapter replay must not create repeated workflow effects, repeated owner Entity events, or repeated AgentExecution state transitions for the same event id. Duplicate detection belongs before policy effects are applied, and the acknowledgement for a duplicate must describe replay handling rather than pretending a new observation was accepted.
 
 MCP acknowledgements are delivery feedback. They may report accepted, rejected, recorded-only, or policy-promoted outcomes, but they are not proof of workflow completion, verification success, or operator approval.
 
@@ -104,6 +105,7 @@ Tool exposure is least-privilege and session-scoped. An Agent execution sees onl
 - Mission becomes MCP-first for capable Agent runtimes while preserving stdout markers as the universal declared baseline transport.
 - MCP tool exposure is dynamically materialized per Agent execution, not a static public API surface.
 - Signal payload schemas, descriptor metadata, validation limits, idempotency, policy evaluation, and owner routing stay DRY and AgentExecution-owned.
+- MCP tool calls write the same semantic journal records as stdout-marker observations after transport validation.
 - AgentExecutor or its daemon runtime collaborators need a transport-neutral observation entry point so stdout markers, MCP tool calls, provider structured output, and terminal heuristics can converge before policy evaluation.
 - Agent adapters need a small MCP provisioning boundary that can inject `mission-mcp` into provider-specific launch configuration without leaking session secrets into tracked repository files.
 - Airport and logs can display whether an Agent execution has MCP-backed, marker-backed, or unavailable structured signaling.

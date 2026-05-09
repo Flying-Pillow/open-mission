@@ -347,7 +347,7 @@ export type MissionAgentConsoleState = {
     awaitingInput: boolean;
     agentId?: string;
     adapterLabel?: string;
-    sessionId?: string;
+    agentExecutionId?: string;
 };
 
 export type MissionAgentConsoleEvent =
@@ -367,7 +367,7 @@ export type MissionAgentConsoleEvent =
 
 export type MissionAgentEvent =
     | {
-        type: 'session-state-changed';
+        type: 'agent-execution-state-changed';
         state: AgentExecutionState;
     }
     | {
@@ -382,11 +382,11 @@ export type MissionAgentEvent =
         state: AgentExecutionState;
     }
     | {
-        type: 'session-started';
+        type: 'agent-execution-started';
         state: AgentExecutionState;
     }
     | {
-        type: 'session-resumed';
+        type: 'agent-execution-resumed';
         state: AgentExecutionState;
     }
     | {
@@ -428,18 +428,18 @@ export type MissionAgentEvent =
         state: AgentExecutionState;
     }
     | {
-        type: 'session-completed';
+        type: 'agent-execution-completed';
         exitCode: number;
         state: AgentExecutionState;
     }
     | {
-        type: 'session-failed';
+        type: 'agent-execution-failed';
         errorMessage: string;
         exitCode?: number;
         state: AgentExecutionState;
     }
     | {
-        type: 'session-cancelled';
+        type: 'agent-execution-cancelled';
         reason?: string;
         state: AgentExecutionState;
     };
@@ -533,7 +533,7 @@ export const MissionCommandOwnerSchema = z.discriminatedUnion('entity', [
     }).strict(),
     z.object({
         entity: z.literal('AgentExecution'),
-        sessionId: z.string().trim().min(1)
+        agentExecutionId: z.string().trim().min(1)
     }).strict()
 ]);
 
@@ -672,7 +672,7 @@ export const MissionCommandAcknowledgementSchema = EntityCommandAcknowledgementS
     id: z.string().trim().min(1),
     missionId: z.string().trim().min(1),
     taskId: z.string().trim().min(1).optional(),
-    sessionId: z.string().trim().min(1).optional()
+    agentExecutionId: z.string().trim().min(1).optional()
 }).strict();
 
 export const MissionDocumentWriteAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({

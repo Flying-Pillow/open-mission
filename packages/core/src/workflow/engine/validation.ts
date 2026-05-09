@@ -9,7 +9,7 @@ import type {
 import {
     countOccupiedTaskExecutionSlots,
     hasActiveDependentActivity,
-    isActiveSessionLifecycle,
+    isActiveAgentExecutionLifecycle,
     isReopenableTaskLifecycle,
     isTerminalTaskLifecycle,
     resolveTaskMaxReworkIterations,
@@ -50,8 +50,8 @@ export function getMissionWorkflowEventValidationErrors(
     const errors: string[] = [];
     const findTask = (taskId: string): MissionTaskRuntimeState | undefined =>
         runtime.tasks.find((task) => task.taskId === taskId);
-    const findSession = (sessionId: string): AgentExecutionRuntimeState | undefined =>
-        runtime.sessions.find((execution) => execution.sessionId === sessionId);
+    const findAgentExecution = (agentExecutionId: string): AgentExecutionRuntimeState | undefined =>
+        runtime.agentExecutions.find((execution) => execution.agentExecutionId === agentExecutionId);
     const eligibleStageId = resolveEligibleStageId(runtime, configuration);
 
     switch (event.type) {
@@ -185,7 +185,7 @@ export function getMissionWorkflowEventValidationErrors(
             if (task && task.lifecycle !== 'ready' && task.lifecycle !== 'queued' && task.lifecycle !== 'running') {
                 errors.push(`execution.started requires task '${event.taskId}' to be ready, queued or running, received '${task.lifecycle}'.`);
             }
-            if (runtime.sessions.some((execution) => execution.taskId === event.taskId && isActiveSessionLifecycle(execution.lifecycle))) {
+            if (runtime.agentExecutions.some((execution) => execution.taskId === event.taskId && isActiveAgentExecutionLifecycle(execution.lifecycle))) {
                 errors.push(`execution.started is not allowed while task '${event.taskId}' already has an active execution.`);
             }
             break;
@@ -195,7 +195,7 @@ export function getMissionWorkflowEventValidationErrors(
             if (task && task.lifecycle !== 'ready' && task.lifecycle !== 'queued' && task.lifecycle !== 'running') {
                 errors.push(`execution.launch-failed requires task '${event.taskId}' to be ready, queued or running, received '${task.lifecycle}'.`);
             }
-            if (runtime.sessions.some((execution) => execution.taskId === event.taskId && isActiveSessionLifecycle(execution.lifecycle))) {
+            if (runtime.agentExecutions.some((execution) => execution.taskId === event.taskId && isActiveAgentExecutionLifecycle(execution.lifecycle))) {
                 errors.push(`execution.launch-failed is not allowed while task '${event.taskId}' already has an active execution.`);
             }
             break;
@@ -204,10 +204,10 @@ export function getMissionWorkflowEventValidationErrors(
         case 'execution.failed':
         case 'execution.cancelled':
         case 'execution.terminated': {
-            const execution = requireExecution(findSession(event.sessionId), event.sessionId, errors, event.type);
+            const execution = requireExecution(findAgentExecution(event.agentExecutionId), event.agentExecutionId, errors, event.type);
             requireTask(findTask(event.taskId), event.taskId, errors, event.type);
-            if (execution && !isActiveSessionLifecycle(execution.lifecycle) && execution.lifecycle !== lifecycleForSessionEvent(event.type)) {
-                errors.push(`${event.type} requires session '${event.sessionId}' to be starting or running, received '${execution.lifecycle}'.`);
+            if (execution && !isActiveAgentExecutionLifecycle(execution.lifecycle) && execution.lifecycle !== lifecycleForAgentExecutionEvent(event.type)) {
+                errors.push(`${event.type} requires AgentExecution '${event.agentExecutionId}' to be starting or running, received '${execution.lifecycle}'.`);
             }
             break;
         }
@@ -216,7 +216,7 @@ export function getMissionWorkflowEventValidationErrors(
     return errors;
 }
 
-function lifecycleForSessionEvent(
+function lifecycleForAgentExecutionEvent(
     eventType: 'execution.completed' | 'execution.failed' | 'execution.cancelled' | 'execution.terminated'
 ): AgentExecutionRuntimeState['lifecycle'] {
     switch (eventType) {
@@ -255,13 +255,13 @@ function requireTask(
 }
 
 function requireExecution(
-    session: AgentExecutionRuntimeState | undefined,
-    sessionId: string,
+    AgentExecution: AgentExecutionRuntimeState | undefined,
+    agentExecutionId: string,
     errors: string[],
     eventType: string
 ): AgentExecutionRuntimeState | undefined {
-    if (!session) {
-        errors.push(`${eventType} references unknown session '${sessionId}'.`);
+    if (!AgentExecution) {
+        errors.push(`${eventType} references unknown AgentExecution '${agentExecutionId}'.`);
     }
-    return session;
+    return AgentExecution;
 }

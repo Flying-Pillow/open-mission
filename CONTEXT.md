@@ -172,12 +172,28 @@ A daemon-addressable Entity for one PTY-backed terminal resource. TerminalRegist
 _Avoid_: Agent execution, runtime session, adapter lifecycle owner
 
 **Agent execution log**:
-The durable daemon-owned audit record of interaction sent to and produced by an Agent execution runtime; it is not a Mission artifact by default.
-_Avoid_: Mission artifact, Agent execution message Entity, context state, transcript-only source of truth
+The durable daemon-owned audit material retained for an Agent execution. Agent execution logs include semantic interaction journals and raw terminal recordings, which have different authority. Logs are not Mission artifacts by default.
+_Avoid_: Mission artifact, Agent execution message Entity, context state, single transcript source of truth
+
+**Agent execution interaction journal**:
+The append-only semantic journal for one Agent execution. It records accepted Agent execution messages, normalized observations, policy decisions, state effects, owner effects, and projection material so AgentExecution state can be replayed deterministically. It is separate from raw terminal recordings and Mission workflow event logs.
+_Avoid_: terminal transcript, chat state, Mission workflow event log, Agent execution message Entity
+
+**Agent execution terminal recording**:
+The raw PTY audit record for one terminal-backed Agent execution, including input, output, resize, and exit records. It is transport truth, not semantic interaction truth.
+_Avoid_: interaction journal, chat transcript, workflow event log, Agent execution state
 
 **Agent execution message descriptor**:
 A daemon-published description of one supported Agent execution message, including its type, label, input shape, delivery behavior, and whether it mutates Agent execution context.
 _Avoid_: boolean capability, UI method, runtime method
+
+**AgentExecution projection**:
+A read model derived from AgentExecution semantic state and journal records for surfaces such as Airport chat, timeline, status badges, and grouped activity views. It is not durable AgentExecution truth.
+_Avoid_: source of truth, transcript store, workflow state
+
+**AgentExecution runtime snapshot**:
+A live daemon runtime overlay for an active Agent execution, such as attached terminal identity, active transport connections, current PTY state, active tool calls, in-flight delivery attempts, and heartbeat data. It is not replayable semantic truth unless promoted into Agent execution interaction journal records.
+_Avoid_: interaction journal, persisted lifecycle state, workflow event, projection truth
 
 **Agent adapter delivery**:
 A best-effort attempt to send an Agent execution message to an Agent adapter; it is not proof that the indeterministic Agent execution read, understood, applied, or structurally acknowledged the message.

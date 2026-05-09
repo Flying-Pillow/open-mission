@@ -26,7 +26,7 @@ function createWorkflowSettingsWithoutTaskAutostart() {
 }
 
 describe('workflow reducer delivery completion', () => {
-    it('persists terminal attachment metadata on started sessions', () => {
+    it('persists terminal attachment metadata on started agentExecutions', () => {
         const configuration = createMissionWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
@@ -53,12 +53,13 @@ describe('workflow reducer delivery completion', () => {
             type: 'execution.started',
             occurredAt: '2026-04-10T15:52:00.000Z',
             source: 'daemon',
-            sessionId: 'session-1',
+            agentExecutionId: 'AgentExecution-1',
             taskId: 'implementation/01',
             agentId: 'copilot-cli',
             transportId: 'terminal',
+            agentJournalPath: 'agent-journals/AgentExecution-1.interaction.jsonl',
             terminalHandle: {
-                terminalName: 'airport-terminal-session',
+                terminalName: 'airport-terminal-AgentExecution',
                 terminalPaneId: 'terminal_44'
             }
         };
@@ -66,20 +67,25 @@ describe('workflow reducer delivery completion', () => {
         validateMissionWorkflowEvent(runtime, event, configuration);
         runtime = reduceMissionWorkflowEvent(runtime, event, configuration).nextState;
 
-        expect(runtime.sessions).toContainEqual(expect.objectContaining({
-            sessionId: 'session-1',
+        expect(runtime.agentExecutions).toContainEqual(expect.objectContaining({
+            agentExecutionId: 'AgentExecution-1',
+            agentJournalPath: 'agent-journals/AgentExecution-1.interaction.jsonl',
             terminalHandle: {
-                terminalName: 'airport-terminal-session',
+                terminalName: 'airport-terminal-AgentExecution',
                 terminalPaneId: 'terminal_44'
             }
         }));
         expect(() => AgentExecutionRuntimeStateSchema.parse({
-            ...runtime.sessions[0],
-            terminalName: 'airport-terminal-session'
+            ...runtime.agentExecutions[0],
+            terminalName: 'airport-terminal-AgentExecution'
         })).toThrow();
+        expect(() => AgentExecutionRuntimeStateSchema.parse({
+            ...runtime.agentExecutions[0],
+            agentJournalPath: 'terminal-recordings/AgentExecution-1.terminal.jsonl'
+        })).toThrow('AgentExecution journals must use agent-journals/<agentExecutionId>.interaction.jsonl');
     });
 
-    it('queues and emits session launch requests for ready autostart tasks', () => {
+    it('queues and emits AgentExecution launch requests for ready autostart tasks', () => {
         const configuration = createMissionWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
@@ -156,7 +162,7 @@ describe('workflow reducer delivery completion', () => {
             type: 'execution.started',
             occurredAt: '2026-04-10T15:53:30.000Z',
             source: 'daemon',
-            sessionId: 'session-prd-01',
+            agentExecutionId: 'AgentExecution-prd-01',
             taskId: 'prd/01',
             agentId: 'copilot-cli'
         }, configuration);
@@ -169,25 +175,25 @@ describe('workflow reducer delivery completion', () => {
             payload: { taskId: 'prd/02' }
         }));
 
-        const sessionCompleted = reduceMissionWorkflowEvent(completed.nextState, {
+        const agentExecutionCompleted = reduceMissionWorkflowEvent(completed.nextState, {
             eventId: 'execution.completed:prd/01:2026-04-10T15:54:05.000Z',
             type: 'execution.completed',
             occurredAt: '2026-04-10T15:54:05.000Z',
             source: 'daemon',
-            sessionId: 'session-prd-01',
+            agentExecutionId: 'AgentExecution-prd-01',
             taskId: 'prd/01'
         }, configuration);
 
-        expect(sessionCompleted.requests).toContainEqual(expect.objectContaining({
+        expect(agentExecutionCompleted.requests).toContainEqual(expect.objectContaining({
             type: 'execution.launch',
             payload: { taskId: 'prd/02' }
         }));
     });
 
-    it('enforces execution limits for autostart queueing and session dispatch', () => {
+    it('enforces execution limits for autostart queueing and AgentExecution dispatch', () => {
         const workflow = createDefaultWorkflowSettings();
         workflow.execution.maxParallelTasks = 2;
-        workflow.execution.maxParallelSessions = 1;
+        workflow.execution.maxParallelAgentExecutions = 1;
         const configuration = createMissionWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
@@ -324,7 +330,7 @@ describe('workflow reducer delivery completion', () => {
         }));
     });
 
-    it('accepts launch-failed after restart when prior task sessions are only historical', () => {
+    it('accepts launch-failed after restart when prior task agentExecutions are only historical', () => {
         const configuration = createMissionWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
@@ -347,8 +353,8 @@ describe('workflow reducer delivery completion', () => {
             createdAt: '2026-04-10T15:51:25.000Z',
             updatedAt: '2026-04-10T15:51:25.000Z'
         }];
-        runtime.sessions = [{
-            sessionId: 'session-1',
+        runtime.agentExecutions = [{
+            agentExecutionId: 'AgentExecution-1',
             taskId: 'audit/01',
             agentId: 'copilot-cli',
             lifecycle: 'terminated',
@@ -377,8 +383,8 @@ describe('workflow reducer delivery completion', () => {
 
         expect(result.nextState.tasks.find((task) => task.taskId === 'audit/01')?.lifecycle).toBe('failed');
         expect(result.nextState.launchQueue).toEqual([]);
-        expect(result.nextState.sessions).toContainEqual(expect.objectContaining({
-            sessionId: 'session-1',
+        expect(result.nextState.agentExecutions).toContainEqual(expect.objectContaining({
+            agentExecutionId: 'AgentExecution-1',
             lifecycle: 'terminated'
         }));
     });
@@ -406,8 +412,8 @@ describe('workflow reducer delivery completion', () => {
             createdAt: '2026-04-10T15:51:25.000Z',
             updatedAt: '2026-04-10T15:51:25.000Z'
         }];
-        runtime.sessions = [{
-            sessionId: 'session-1',
+        runtime.agentExecutions = [{
+            agentExecutionId: 'AgentExecution-1',
             taskId: 'prd/01',
             agentId: 'copilot-cli',
             lifecycle: 'terminated',
@@ -417,11 +423,11 @@ describe('workflow reducer delivery completion', () => {
         }];
 
         const event: MissionWorkflowEvent = {
-            eventId: 'runtime:session-1:execution.terminated:duplicate',
+            eventId: 'runtime:AgentExecution-1:execution.terminated:duplicate',
             type: 'execution.terminated',
             occurredAt: '2026-04-10T15:54:00.000Z',
             source: 'daemon',
-            sessionId: 'session-1',
+            agentExecutionId: 'AgentExecution-1',
             taskId: 'prd/01'
         };
 
@@ -433,7 +439,7 @@ describe('workflow reducer delivery completion', () => {
         expect(result.requests).toEqual([]);
     });
 
-    it('does not autostart tasks interrupted by session termination', () => {
+    it('does not autostart tasks interrupted by AgentExecution termination', () => {
         const configuration = createMissionWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
@@ -456,8 +462,8 @@ describe('workflow reducer delivery completion', () => {
             createdAt: '2026-04-10T15:51:25.000Z',
             updatedAt: '2026-04-10T15:52:00.000Z'
         }];
-        runtime.sessions = [{
-            sessionId: 'session-1',
+        runtime.agentExecutions = [{
+            agentExecutionId: 'AgentExecution-1',
             taskId: 'prd/01',
             agentId: 'copilot-cli',
             lifecycle: 'running',
@@ -466,11 +472,11 @@ describe('workflow reducer delivery completion', () => {
         }];
 
         const event: MissionWorkflowEvent = {
-            eventId: 'runtime:session-1:execution.terminated',
+            eventId: 'runtime:AgentExecution-1:execution.terminated',
             type: 'execution.terminated',
             occurredAt: '2026-04-10T15:53:00.000Z',
             source: 'daemon',
-            sessionId: 'session-1',
+            agentExecutionId: 'AgentExecution-1',
             taskId: 'prd/01'
         };
 
@@ -808,7 +814,7 @@ describe('workflow reducer delivery completion', () => {
                 type: 'execution.started',
                 occurredAt: '2026-04-10T15:57:30.000Z',
                 source: 'daemon',
-                sessionId: 'session-implementation-01',
+                agentExecutionId: 'AgentExecution-implementation-01',
                 taskId: 'implementation/01',
                 agentId: 'copilot-cli'
             },
@@ -817,7 +823,7 @@ describe('workflow reducer delivery completion', () => {
                 type: 'execution.cancelled',
                 occurredAt: '2026-04-10T15:58:00.000Z',
                 source: 'daemon',
-                sessionId: 'session-implementation-01',
+                agentExecutionId: 'AgentExecution-implementation-01',
                 taskId: 'implementation/01'
             },
             createTaskReopenedEvent('prd/01', '2026-04-10T15:59:00.000Z'),
@@ -1137,7 +1143,7 @@ describe('workflow reducer delivery completion', () => {
         expect(verifyTask?.lifecycle).toBe('pending');
     });
 
-    it('marks audited rework as launched when the restarted session begins', () => {
+    it('marks audited rework as launched when the restarted AgentExecution begins', () => {
         const configuration = createMissionWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
@@ -1190,7 +1196,7 @@ describe('workflow reducer delivery completion', () => {
             type: 'execution.started',
             occurredAt: '2026-04-10T15:57:00.000Z',
             source: 'daemon',
-            sessionId: 'session-implementation-02',
+            agentExecutionId: 'AgentExecution-implementation-02',
             taskId: 'implementation/02',
             agentId: 'copilot-cli'
         }, configuration);
@@ -1238,7 +1244,7 @@ describe('workflow reducer delivery completion', () => {
         }), configuration)).toThrow(/max rework iterations/);
     });
 
-    it('returns a task to ready when its running session is cancelled', () => {
+    it('returns a task to ready when its running AgentExecution is cancelled', () => {
         const configuration = createMissionWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
@@ -1291,8 +1297,8 @@ describe('workflow reducer delivery completion', () => {
                 updatedAt: '2026-04-10T15:57:30.000Z'
             }
         ];
-        runtime.sessions = [{
-            sessionId: 'session-implementation-01',
+        runtime.agentExecutions = [{
+            agentExecutionId: 'AgentExecution-implementation-01',
             taskId: 'implementation/01',
             agentId: 'copilot-cli',
             lifecycle: 'running',
@@ -1305,12 +1311,12 @@ describe('workflow reducer delivery completion', () => {
             type: 'execution.cancelled',
             occurredAt: '2026-04-10T15:58:00.000Z',
             source: 'daemon',
-            sessionId: 'session-implementation-01',
+            agentExecutionId: 'AgentExecution-implementation-01',
             taskId: 'implementation/01'
         }, configuration);
 
         expect(result.nextState.tasks.find((task) => task.taskId === 'implementation/01')?.lifecycle).toBe('ready');
-        expect(result.nextState.sessions.find((execution) => execution.sessionId === 'session-implementation-01')?.lifecycle).toBe('cancelled');
+        expect(result.nextState.agentExecutions.find((execution) => execution.agentExecutionId === 'AgentExecution-implementation-01')?.lifecycle).toBe('cancelled');
     });
 
 });
@@ -1361,7 +1367,7 @@ function createTaskReworkedEvent(
         reasonCode: string;
         summary: string;
         sourceTaskId?: string;
-        sourceSessionId?: string;
+        sourceAgentExecutionId?: string;
         artifactRefs: Array<{ path: string; title?: string }>;
     }
 ): MissionWorkflowEvent {
@@ -1375,7 +1381,7 @@ function createTaskReworkedEvent(
         reasonCode: input.reasonCode,
         summary: input.summary,
         ...(input.sourceTaskId ? { sourceTaskId: input.sourceTaskId } : {}),
-        ...(input.sourceSessionId ? { sourceSessionId: input.sourceSessionId } : {}),
+        ...(input.sourceAgentExecutionId ? { sourceAgentExecutionId: input.sourceAgentExecutionId } : {}),
         artifactRefs: input.artifactRefs.map((artifactRef) => ({ ...artifactRef }))
     };
 }

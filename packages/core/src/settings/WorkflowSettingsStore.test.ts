@@ -67,7 +67,7 @@ describe('WorkflowSettingsStore', () => {
 			rawWorkflow['execution'] = {
 				execution: {
 					maxParallelTasks: 3,
-					maxParallelSessions: 1
+					maxParallelAgentExecutions: 1
 				}
 			}['execution'];
 			await fs.writeFile(workflowPath, `${JSON.stringify(rawWorkflow, null, 2)}\n`, 'utf8');
@@ -78,7 +78,7 @@ describe('WorkflowSettingsStore', () => {
 					patch: [
 						{
 							op: 'replace',
-							path: '/execution/maxParallelSessions',
+							path: '/execution/maxParallelAgentExecutions',
 							value: 4
 						}
 					],

@@ -21,7 +21,7 @@ export const WorkflowHumanInLoopSettingsSchema = z.object({
 
 export const WorkflowExecutionSettingsSchema = z.object({
 	maxParallelTasks: z.number().int().min(1),
-	maxParallelSessions: z.number().int().min(1)
+	maxParallelAgentExecutions: z.number().int().min(1)
 }).strict();
 
 export const WorkflowStageTaskLaunchPolicySchema = z.object({

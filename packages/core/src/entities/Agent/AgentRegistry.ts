@@ -101,14 +101,14 @@ function createProviderSettingsResolver(
         };
         const reasoningEffort = defaultReasoningEffort;
         const dangerouslySkipPermissions = readBooleanMetadata(config, 'dangerouslySkipPermissions');
-        const resumeSession = readStringMetadata(config, 'resumeSession');
-        const captureSessions = readBooleanMetadata(config, 'captureSessions');
+        const resumeAgentExecution = readStringMetadata(config, 'resumeAgentExecution');
+        const captureAgentExecutions = readBooleanMetadata(config, 'captureAgentExecutions');
         return {
             ...settings,
             ...(reasoningEffort ? { reasoningEffort } : {}),
             ...(dangerouslySkipPermissions !== undefined ? { dangerouslySkipPermissions } : {}),
-            ...(resumeSession ? { resumeSession } : {}),
-            ...(captureSessions !== undefined ? { captureSessions } : {})
+            ...(resumeAgentExecution ? { resumeAgentExecution } : {}),
+            ...(captureAgentExecutions !== undefined ? { captureAgentExecutions } : {})
         };
     };
 }

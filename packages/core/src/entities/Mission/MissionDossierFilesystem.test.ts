@@ -33,21 +33,21 @@ describe('MissionDossierFilesystem', () => {
 		);
 	});
 
-	it('appends mission session terminal recording events through recorded relative log paths', async () => {
-		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-session-log-'));
+	it('appends mission AgentExecution terminal recording events through recorded relative log paths', async () => {
+		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-AgentExecution-log-'));
 		try {
 			const adapter = new MissionDossierFilesystem('/tmp/repo');
-			const sessionLogPath = adapter.getMissionSessionLogRelativePath('session-1');
+			const terminalRecordingPath = adapter.getMissionTerminalRecordingRelativePath('AgentExecution-1');
 
-			expect(sessionLogPath).toBe('session-logs/session-1.terminal.jsonl');
-			await adapter.ensureMissionSessionLogFile(missionDir, sessionLogPath);
-			await adapter.appendMissionSessionLogEvent(missionDir, sessionLogPath, {
+			expect(terminalRecordingPath).toBe('terminal-recordings/AgentExecution-1.terminal.jsonl');
+			await adapter.ensureMissionTerminalRecordingFile(missionDir, terminalRecordingPath);
+			await adapter.appendMissionTerminalRecordingEvent(missionDir, terminalRecordingPath, {
 				type: 'output',
 				at: '2026-05-07T00:00:00.000Z',
 				data: '\u001b[32mready\u001b[0m\n'
 			});
 
-			await expect(adapter.readMissionSessionLogEvents(missionDir, sessionLogPath)).resolves.toEqual([{
+			await expect(adapter.readMissionTerminalRecordingEvents(missionDir, terminalRecordingPath)).resolves.toEqual([{
 				type: 'output',
 				at: '2026-05-07T00:00:00.000Z',
 				data: '\u001b[32mready\u001b[0m\n'
@@ -57,15 +57,28 @@ describe('MissionDossierFilesystem', () => {
 		}
 	});
 
-	it('rejects legacy raw mission session log paths', async () => {
-		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-legacy-session-log-'));
+	it('rejects legacy raw mission AgentExecution log paths', async () => {
+		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-legacy-AgentExecution-log-'));
 		try {
 			const adapter = new MissionDossierFilesystem('/tmp/repo');
-			await expect(adapter.readMissionSessionLogEvents(missionDir, 'session-logs/session-1.log'))
-				.rejects.toThrow('must use session-logs/<sessionId>.terminal.jsonl');
+			await expect(adapter.readMissionTerminalRecordingEvents(missionDir, 'terminal-recordings/AgentExecution-1.log'))
+				.rejects.toThrow('must use terminal-recordings/<agentExecutionId>.terminal.jsonl');
 		} finally {
 			await fs.rm(missionDir, { recursive: true, force: true });
 		}
+	});
+
+	it('resolves Mission-backed Agent journal paths separately from terminal recordings', () => {
+		const adapter = new MissionDossierFilesystem('/tmp/repo');
+		const missionDir = path.join('/tmp/repo', '.mission', 'missions', 'mission-1');
+		const agentJournalPath = adapter.getMissionAgentJournalRelativePath('agent-execution-1');
+
+		expect(agentJournalPath).toBe('agent-journals/agent-execution-1.interaction.jsonl');
+		expect(adapter.resolveMissionAgentJournalPath(missionDir, agentJournalPath)).toBe(
+			path.join(missionDir, 'agent-journals', 'agent-execution-1.interaction.jsonl')
+		);
+		expect(() => adapter.resolveMissionAgentJournalPath(missionDir, 'terminal-recordings/AgentExecution-1.terminal.jsonl'))
+			.toThrow('must use agent-journals/<agentExecutionId>.interaction.jsonl');
 	});
 
 	it('nests mission worktrees under the full GitHub repository path', async () => {

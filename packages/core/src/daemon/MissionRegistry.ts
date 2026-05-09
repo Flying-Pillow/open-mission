@@ -95,20 +95,20 @@ export class MissionRegistry {
         this.missionLoads.clear();
     }
 
-    public getRuntimeSessionSnapshot(address: AgentExecutionObservationAddress): AgentExecutionSnapshot | undefined {
+    public getRuntimeAgentExecutionSnapshot(address: AgentExecutionObservationAddress): AgentExecutionSnapshot | undefined {
         const missionId = getAgentExecutionScopeMissionId(address.scope);
         const mission = missionId ? this.findLoadedMission(missionId) : undefined;
-        return mission?.getRuntimeSessionSnapshot(address.agentExecutionId);
+        return mission?.getRuntimeAgentExecutionSnapshot(address.agentExecutionId);
     }
 
-    public applyRuntimeSessionSignalDecision(input: {
+    public applyRuntimeAgentExecutionSignalDecision(input: {
         address: AgentExecutionObservationAddress;
         observation: AgentExecutionObservation;
         decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>;
     }): AgentExecutionSnapshot | undefined {
         const missionId = getAgentExecutionScopeMissionId(input.address.scope);
         const mission = missionId ? this.findLoadedMission(missionId) : undefined;
-        return mission?.applyRuntimeSessionSignalDecision(
+        return mission?.applyRuntimeAgentExecutionSignalDecision(
             input.address.agentExecutionId,
             input.observation,
             input.decision

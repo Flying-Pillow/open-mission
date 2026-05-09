@@ -18,7 +18,7 @@ export type MissionAvailableCommandsInput = {
     missionId: string;
     configuration: MissionStateData['configuration'];
     runtime: MissionStateData['runtime'];
-    sessions: AgentExecutionRecord[];
+    agentExecutions: AgentExecutionRecord[];
 };
 
 export function buildMissionAvailableCommands(input: MissionAvailableCommandsInput): MissionOwnedCommandDescriptorType[] {
@@ -45,8 +45,8 @@ export function buildMissionAvailableCommands(input: MissionAvailableCommandsInp
         commands.push(...buildTaskLaunchPolicyCommands(input, task));
     }
 
-    for (const session of getOrderedSessions(input)) {
-        commands.push(buildSessionCancelCommand(session));
+    for (const AgentExecution of getOrderedAgentExecutions(input)) {
+        commands.push(buildAgentExecutionCancelCommand(AgentExecution));
     }
 
     return commands;
@@ -237,12 +237,12 @@ function buildTaskLaunchPolicyCommands(input: MissionAvailableCommandsInput, tas
     return commands;
 }
 
-function buildSessionCancelCommand(execution: AgentExecutionRecord): MissionOwnedCommandDescriptorType {
-    const enabled = isActiveAgentExecution(execution.lifecycleState);
-    return ownedAgentExecutionCommand(execution.sessionId, missionCommand({
+function buildAgentExecutionCancelCommand(execution: AgentExecutionRecord): MissionOwnedCommandDescriptorType {
+    const enabled = isActiveAgentExecution(execution.lifecycleState) || hasSemanticInputRequest(execution);
+    return ownedAgentExecutionCommand(execution.agentExecutionId, missionCommand({
         commandId: AgentExecutionCommandIds.cancel,
         label: 'Stop agent',
-        ...buildAvailability(enabled, 'Session is not active.'),
+        ...buildAvailability(enabled, 'AgentExecution is not active.'),
         requiresConfirmation: true,
         confirmationPrompt: 'Stop the running agent execution?'
     }));
@@ -312,8 +312,8 @@ function getOrderedTasks(input: MissionAvailableCommandsInput) {
     });
 }
 
-function getOrderedSessions(input: MissionAvailableCommandsInput) {
-    return [...input.sessions].sort((left, right) => left.sessionId.localeCompare(right.sessionId));
+function getOrderedAgentExecutions(input: MissionAvailableCommandsInput) {
+    return [...input.agentExecutions].sort((left, right) => left.agentExecutionId.localeCompare(right.agentExecutionId));
 }
 
 function resolveEligibleStageId(input: MissionAvailableCommandsInput): MissionStageId | undefined {
@@ -335,6 +335,11 @@ function isActiveAgentExecution(lifecycleState: AgentExecutionRecord['lifecycleS
     return lifecycleState === 'starting' || lifecycleState === 'running' || lifecycleState === 'awaiting-input';
 }
 
+function hasSemanticInputRequest(agentExecution: Pick<AgentExecutionRecord, 'lifecycleState' | 'currentInputRequestId'>): boolean {
+    return agentExecution.lifecycleState === 'awaiting-input'
+        || agentExecution.currentInputRequestId !== undefined && agentExecution.currentInputRequestId !== null;
+}
+
 function getValidationErrors(
     input: MissionAvailableCommandsInput,
     event:
@@ -344,7 +349,7 @@ function getValidationErrors(
         | { type: 'task.queued'; taskId: string }
         | { type: 'task.completed'; taskId: string }
         | { type: 'task.reopened'; taskId: string }
-        | { type: 'task.reworked'; taskId: string; actor: 'human' | 'system' | 'workflow'; reasonCode: string; summary: string; sourceTaskId?: string; sourceSessionId?: string; artifactRefs: Array<{ path: string; title?: string }> }
+        | { type: 'task.reworked'; taskId: string; actor: 'human' | 'system' | 'workflow'; reasonCode: string; summary: string; sourceTaskId?: string; sourceAgentExecutionId?: string; artifactRefs: Array<{ path: string; title?: string }> }
         | { type: 'task.launch-policy.changed'; taskId: string; autostart: boolean }
 ): string[] {
     return getMissionWorkflowEventValidationErrors(

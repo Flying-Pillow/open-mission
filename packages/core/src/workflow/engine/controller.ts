@@ -119,63 +119,63 @@ export class MissionWorkflowController {
         return nextDocument;
     }
 
-    public listRuntimeSessions(): AgentExecutionSnapshot[] {
-        return this.requestExecutor.listRuntimeSessions();
+    public listRuntimeAgentExecutions(): AgentExecutionSnapshot[] {
+        return this.requestExecutor.listRuntimeAgentExecutions();
     }
 
-    public getRuntimeSession(sessionId: string): AgentExecutionSnapshot | undefined {
-        return this.requestExecutor.getRuntimeSession(sessionId);
+    public getRuntimeAgentExecution(agentExecutionId: string): AgentExecutionSnapshot | undefined {
+        return this.requestExecutor.getRuntimeAgentExecution(agentExecutionId);
     }
 
-    public applyRuntimeSessionSignalDecision(
-        sessionId: string,
+    public applyRuntimeAgentExecutionSignalDecision(
+        agentExecutionId: string,
         decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>
     ): AgentExecutionSnapshot | undefined {
-        return this.requestExecutor.applyRuntimeSessionSignalDecision(sessionId, decision);
+        return this.requestExecutor.applyRuntimeAgentExecutionSignalDecision(agentExecutionId, decision);
     }
 
-    public async attachRuntimeSession(reference: AgentExecutionReference): Promise<AgentExecutionSnapshot> {
+    public async attachRuntimeAgentExecution(reference: AgentExecutionReference): Promise<AgentExecutionSnapshot> {
         return this.requestExecutor.reconcileExecution(reference);
     }
 
-    public async startRuntimeSession(config: AgentLaunchConfig): Promise<AgentExecutionSnapshot> {
+    public async startRuntimeAgentExecution(config: AgentLaunchConfig): Promise<AgentExecutionSnapshot> {
         return this.requestExecutor.startExecution(config);
     }
 
-    public async cancelRuntimeSession(
-        sessionId: string,
+    public async cancelRuntimeAgentExecution(
+        agentExecutionId: string,
         reason?: string,
         fallbackTaskId?: string
     ): Promise<MissionStateData> {
         return this.ingestEmittedEvents(
-            await this.requestExecutor.cancelRuntimeSession(sessionId, reason, fallbackTaskId)
+            await this.requestExecutor.cancelRuntimeAgentExecution(agentExecutionId, reason, fallbackTaskId)
         );
     }
 
-    public async promptRuntimeSession(sessionId: string, prompt: AgentPrompt): Promise<MissionStateData> {
-        return this.ingestEmittedEvents(await this.requestExecutor.promptRuntimeSession(sessionId, prompt));
+    public async promptRuntimeAgentExecution(agentExecutionId: string, prompt: AgentPrompt): Promise<MissionStateData> {
+        return this.ingestEmittedEvents(await this.requestExecutor.promptRuntimeAgentExecution(agentExecutionId, prompt));
     }
 
-    public async completeRuntimeSession(
-        sessionId: string,
+    public async completeRuntimeAgentExecution(
+        agentExecutionId: string,
         fallbackTaskId?: string
     ): Promise<MissionStateData> {
         return this.ingestEmittedEvents(
-            await this.requestExecutor.completeRuntimeSession(sessionId, fallbackTaskId)
+            await this.requestExecutor.completeRuntimeAgentExecution(agentExecutionId, fallbackTaskId)
         );
     }
 
-    public async commandRuntimeSession(sessionId: string, command: AgentCommand): Promise<MissionStateData> {
-        return this.ingestEmittedEvents(await this.requestExecutor.commandRuntimeSession(sessionId, command));
+    public async commandRuntimeAgentExecution(agentExecutionId: string, command: AgentCommand): Promise<MissionStateData> {
+        return this.ingestEmittedEvents(await this.requestExecutor.commandRuntimeAgentExecution(agentExecutionId, command));
     }
 
-    public async terminateRuntimeSession(
-        sessionId: string,
+    public async terminateRuntimeAgentExecution(
+        agentExecutionId: string,
         reason?: string,
         fallbackTaskId?: string
     ): Promise<MissionStateData> {
         return this.ingestEmittedEvents(
-            await this.requestExecutor.terminateRuntimeSession(sessionId, reason, fallbackTaskId)
+            await this.requestExecutor.terminateRuntimeAgentExecution(agentExecutionId, reason, fallbackTaskId)
         );
     }
 
@@ -417,7 +417,7 @@ function pickWorkflowPayloadSummary(payload: Record<string, unknown>): Record<st
     for (const key of [
         'stageId',
         'taskId',
-        'sessionId',
+        'agentExecutionId',
         'agentId',
         'transportId',
         'reason',

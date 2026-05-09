@@ -14,7 +14,30 @@ import {
 	type AgentExecutionSignalDecision,
 	type AgentExecutionSnapshot
 } from './AgentExecutionProtocolTypes.js';
-import { AgentExecutionObservationLedger } from './AgentExecutionObservationLedger.js';
+
+export class AgentExecutionObservationLedger {
+	private readonly observedIds = new Set<string>();
+
+	public constructor(observationIds?: Iterable<string>) {
+		if (observationIds) {
+			this.recordMany(observationIds);
+		}
+	}
+
+	public has(observationId: string): boolean {
+		return this.observedIds.has(observationId);
+	}
+
+	public record(observationId: string): void {
+		this.observedIds.add(observationId);
+	}
+
+	public recordMany(observationIds: Iterable<string>): void {
+		for (const observationId of observationIds) {
+			this.record(observationId);
+		}
+	}
+}
 
 export class AgentExecutionObservationPolicy {
 	private readonly observationLedger: AgentExecutionObservationLedger;
@@ -46,7 +69,7 @@ export class AgentExecutionObservationPolicy {
 			return `Observation '${observation.observationId}' was already processed.`;
 		}
 		const activeAddress: AgentExecutionObservationAddress = {
-			agentExecutionId: snapshot.sessionId,
+			agentExecutionId: snapshot.agentExecutionId,
 			scope: snapshot.scope
 		};
 		if (!sameObservationAddress(observation.route.address, activeAddress)) {
@@ -75,7 +98,7 @@ export class AgentExecutionObservationPolicy {
 		if (claimBoundaryError) {
 			return claimBoundaryError;
 		}
-		const lifecycleBoundaryError = validateSessionLifecycleBoundary(snapshot, observation);
+		const lifecycleBoundaryError = validateAgentExecutionLifecycleBoundary(snapshot, observation);
 		if (lifecycleBoundaryError) {
 			return lifecycleBoundaryError;
 		}
@@ -86,7 +109,7 @@ export class AgentExecutionObservationPolicy {
 		const signal = observation.signal;
 		switch (signal.type) {
 			case 'diagnostic':
-				return { action: 'record-observation-only', reason: 'Diagnostic signals never mutate session state.' };
+				return { action: 'record-observation-only', reason: 'Diagnostic signals never mutate AgentExecution state.' };
 			case 'usage':
 				return { action: 'record-observation-only', reason: 'Usage signals are audit metadata, not workflow truth.' };
 			case 'message':
@@ -104,7 +127,7 @@ export class AgentExecutionObservationPolicy {
 					return { action: 'record-observation-only', reason: 'Low-confidence progress stayed observational only.' };
 				}
 				return {
-					action: 'update-session',
+					action: 'update-execution',
 					eventType: 'execution.updated',
 					snapshotPatch: {
 						status: 'running',
@@ -123,7 +146,7 @@ export class AgentExecutionObservationPolicy {
 					return { action: 'record-observation-only', reason: 'Low-confidence status stayed observational only.' };
 				}
 				return {
-					action: 'update-session',
+					action: 'update-execution',
 					eventType: 'execution.updated',
 					snapshotPatch: {
 						status: signal.phase === 'initializing' ? 'starting' : 'running',
@@ -141,7 +164,7 @@ export class AgentExecutionObservationPolicy {
 					return { action: 'record-observation-only', reason: 'Low-confidence needs-input stayed observational only.' };
 				}
 				return {
-					action: 'update-session',
+					action: 'update-execution',
 					eventType: 'execution.awaiting-input',
 					snapshotPatch: {
 						status: 'awaiting-input',
@@ -160,7 +183,7 @@ export class AgentExecutionObservationPolicy {
 					return { action: 'record-observation-only', reason: 'Low-confidence blocked state stayed observational only.' };
 				}
 				return {
-					action: 'update-session',
+					action: 'update-execution',
 					eventType: 'execution.updated',
 					snapshotPatch: {
 						status: 'running',
@@ -186,7 +209,7 @@ export class AgentExecutionObservationPolicy {
 					};
 				}
 				return {
-					action: 'update-session',
+					action: 'update-execution',
 					eventType: 'execution.completed',
 					snapshotPatch: {
 						status: 'completed',
@@ -208,7 +231,7 @@ export class AgentExecutionObservationPolicy {
 					};
 				}
 				return {
-					action: 'update-session',
+					action: 'update-execution',
 					eventType: 'execution.failed',
 					snapshotPatch: {
 						status: 'failed',
@@ -410,7 +433,7 @@ function validateObservationTypeBoundary(observation: AgentExecutionObservation)
 		readonly AgentExecutionDiagnosticCode[] | undefined
 	> = {
 		daemon: undefined,
-		'provider-output': ['provider-session', 'tool-call'],
+		'provider-output': ['provider-execution', 'tool-call'],
 		'agent-declared-signal': ['agent-declared-signal-malformed', 'agent-declared-signal-oversized'],
 		'terminal-output': ['terminal-heuristic']
 	};
@@ -444,7 +467,7 @@ function validateObservationPayloadBoundary(observation: AgentExecutionObservati
 	return undefined;
 }
 
-function validateSessionLifecycleBoundary(
+function validateAgentExecutionLifecycleBoundary(
 	snapshot: AgentExecutionSnapshot,
 	observation: AgentExecutionObservation
 ): string | undefined {
@@ -458,7 +481,7 @@ function validateSessionLifecycleBoundary(
 	) {
 		return undefined;
 	}
-	return `Agent execution '${snapshot.sessionId}' already ended with status '${snapshot.status}'.`;
+	return `Agent execution '${snapshot.agentExecutionId}' already ended with status '${snapshot.status}'.`;
 }
 
 function validateObservationConfidenceBoundary(observation: AgentExecutionObservation): string | undefined {
@@ -469,7 +492,7 @@ function validateObservationConfidenceBoundary(observation: AgentExecutionObserv
 	}
 	if (observation.route.origin === 'provider-output') {
 		if (observation.signal.type === 'diagnostic') {
-			const expectedConfidence = observation.signal.code === 'provider-session'
+			const expectedConfidence = observation.signal.code === 'provider-execution'
 				? 'high'
 				: observation.signal.code === 'tool-call'
 					? 'medium'

@@ -474,13 +474,13 @@ function startEntityEventSources(publish: (event: EntityEventEnvelopeType) => vo
 	const missionTerminalUpdates = observeMissionTerminalUpdates((event) => {
 		publish(createMissionTerminalEvent(event));
 	});
-	const sessionTerminalUpdates = TerminalRegistry.shared().onDidTerminalUpdate((event) => {
+	const agentExecutionTerminalUpdates = TerminalRegistry.shared().onDidTerminalUpdate((event) => {
 		if (event.owner?.kind !== 'agent-execution') {
 			return;
 		}
 		publish(createAgentExecutionTerminalEvent({
 			ownerId: event.owner.ownerId,
-			sessionId: event.owner.agentExecutionId,
+			agentExecutionId: event.owner.agentExecutionId,
 			state: {
 				connected: event.connected,
 				dead: event.dead,
@@ -501,7 +501,7 @@ function startEntityEventSources(publish: (event: EntityEventEnvelopeType) => vo
 		dispose: () => {
 			agentExecutionDataChanges.dispose();
 			missionTerminalUpdates.dispose();
-			sessionTerminalUpdates.dispose();
+			agentExecutionTerminalUpdates.dispose();
 		}
 	};
 }

@@ -26,7 +26,7 @@ export const claudeCode = {
         providerSettings: {
             reasoningEfforts: ['low', 'medium', 'high', 'max'],
             allowDangerouslySkipPermissions: true,
-            allowCaptureSessions: true
+            allowCaptureAgentExecutions: true
         },
         interactive: {
             args: [
@@ -40,7 +40,7 @@ export const claudeCode = {
             ]
         },
         parseRuntimeOutputLine,
-        parseSessionUsageContent
+        parseAgentExecutionUsageContent
     }
 } satisfies AgentInput;
 
@@ -52,14 +52,14 @@ function parseRuntimeOutputLine(line: string, agent: AgentInput): AgentAdapterRu
 
     if (getStringField(parsed, 'type') === 'system'
         && getStringField(parsed, 'subtype') === 'init') {
-        const sessionId = getStringField(parsed, 'session_id');
-        if (sessionId) {
+        const agentExecutionId = getStringField(parsed, 'session_id');
+        if (agentExecutionId) {
             return [{
                 kind: 'signal',
                 signal: {
-                    type: 'provider-session',
+                    type: 'provider-execution',
                     providerName: agent.agentId,
-                    sessionId,
+                    agentExecutionId,
                     source: 'provider-structured',
                     confidence: 'high'
                 }
@@ -79,7 +79,7 @@ function parseRuntimeOutputLine(line: string, agent: AgentInput): AgentAdapterRu
         : [{ kind: 'none' }];
 }
 
-function parseSessionUsageContent(content: string): AgentAdapterRuntimeOutput | undefined {
+function parseAgentExecutionUsageContent(content: string): AgentAdapterRuntimeOutput | undefined {
     let usageRecord: Record<string, unknown> | undefined;
     for (const line of content.split('\n')) {
         const parsed = parseJsonLine(line);

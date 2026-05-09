@@ -10,7 +10,7 @@ import type {
 } from './types.js';
 import { DEFAULT_TASK_MAX_REWORK_ITERATIONS } from './types.js';
 
-export function isActiveSessionLifecycle(lifecycle: AgentExecutionLifecycleState): boolean {
+export function isActiveAgentExecutionLifecycle(lifecycle: AgentExecutionLifecycleState): boolean {
     return lifecycle === 'starting' || lifecycle === 'running';
 }
 
@@ -164,15 +164,15 @@ export function countOccupiedTaskExecutionSlots(runtime: MissionWorkflowRuntimeS
     return runtime.tasks.filter((task) => task.lifecycle === 'queued' || task.lifecycle === 'running').length;
 }
 
-export function countOccupiedSessionExecutionSlots(runtime: MissionWorkflowRuntimeState): number {
-    const activeSessions = runtime.sessions.filter((execution) => isActiveSessionLifecycle(execution.lifecycle)).length;
+export function countOccupiedAgentExecutionSlots(runtime: MissionWorkflowRuntimeState): number {
+    const activeAgentExecutions = runtime.agentExecutions.filter((execution) => isActiveAgentExecutionLifecycle(execution.lifecycle)).length;
     const dispatchedLaunches = runtime.launchQueue.filter((request) =>
         Boolean(request.dispatchedAt) &&
-        !runtime.sessions.some((execution) =>
-            execution.taskId === request.taskId && isActiveSessionLifecycle(execution.lifecycle)
+        !runtime.agentExecutions.some((execution) =>
+            execution.taskId === request.taskId && isActiveAgentExecutionLifecycle(execution.lifecycle)
         )
     ).length;
-    return activeSessions + dispatchedLaunches;
+    return activeAgentExecutions + dispatchedLaunches;
 }
 
 export function hasAvailableTaskExecutionSlot(
@@ -182,11 +182,11 @@ export function hasAvailableTaskExecutionSlot(
     return countOccupiedTaskExecutionSlots(runtime) < configuration.workflow.execution.maxParallelTasks;
 }
 
-export function hasAvailableSessionExecutionSlot(
+export function hasAvailableAgentExecutionSlot(
     runtime: MissionWorkflowRuntimeState,
     configuration: MissionWorkflowConfigurationSnapshot
 ): boolean {
-    return countOccupiedSessionExecutionSlots(runtime) < configuration.workflow.execution.maxParallelSessions;
+    return countOccupiedAgentExecutionSlots(runtime) < configuration.workflow.execution.maxParallelAgentExecutions;
 }
 
 export function resolveDependentTaskIds(
@@ -238,8 +238,8 @@ export function hasActiveDependentActivity(
         return true;
     }
 
-    return runtime.sessions.some((execution) =>
-        dependentTaskIds.has(execution.taskId) && isActiveSessionLifecycle(execution.lifecycle)
+    return runtime.agentExecutions.some((execution) =>
+        dependentTaskIds.has(execution.taskId) && isActiveAgentExecutionLifecycle(execution.lifecycle)
     );
 }
 
@@ -249,5 +249,5 @@ export function isMissionCompleted(
 ): boolean {
     return configuration.workflow.stageOrder.every((stageId) => isStageCompletedFromTasks(runtime.tasks, stageId, configuration)) &&
         !runtime.tasks.some((task) => task.lifecycle === 'queued' || task.lifecycle === 'running') &&
-        !runtime.sessions.some((execution) => isActiveSessionLifecycle(execution.lifecycle));
+        !runtime.agentExecutions.some((execution) => isActiveAgentExecutionLifecycle(execution.lifecycle));
 }

@@ -15,6 +15,7 @@ import type {
 import { createAgentAdapter, type AgentAdapter } from '../AgentAdapter.js';
 import { AgentExecutor } from '../AgentExecutor.js';
 import { MissionMcpServer } from '../mcp/MissionMcpServer.js';
+import { createMemoryAgentExecutionJournalWriter } from '../testing/createMemoryAgentExecutionJournalWriter.js';
 import { createCodex } from './Codex.js';
 
 type MockTerminalState = {
@@ -78,20 +79,22 @@ async function startExecution(
         }
     });
     await missionMcpServer.start();
+    const { journalWriter } = createMemoryAgentExecutionJournalWriter();
     const executor = new AgentExecutor({
         agentRegistry: new AgentRegistry({
             agents: [await Agent.fromAdapter(adapter)]
         }),
-        missionMcpServer
+        missionMcpServer,
+        journalWriter
     });
     const execution = await executor.startExecution(config);
-    const sessionId = execution.getSnapshot().sessionId;
+    const agentExecutionId = execution.getSnapshot().agentExecutionId;
     return {
         getSnapshot: () => execution.getSnapshot(),
         onDidEvent: (listener) => execution.onDidEvent(listener),
-        submitPrompt: (prompt) => executor.submitPrompt(sessionId, prompt),
-        submitCommand: (command) => executor.submitCommand(sessionId, command),
-        terminate: (reason) => executor.terminateExecution(sessionId, reason)
+        submitPrompt: (prompt) => executor.submitPrompt(agentExecutionId, prompt),
+        submitCommand: (command) => executor.submitCommand(agentExecutionId, command),
+        terminate: (reason) => executor.terminateExecution(agentExecutionId, reason)
     };
 }
 
@@ -119,7 +122,7 @@ describe('Codex', () => {
         vi.useRealTimers();
     });
 
-    it('starts with session-scoped mission-mcp configuration overrides', async () => {
+    it('starts with agent-execution-scoped mission-mcp configuration overrides', async () => {
         const adapter = createAgentAdapter(createCodex({
             command: 'codex',
             env: { PATH: runtimeDirectory },
@@ -142,7 +145,7 @@ describe('Codex', () => {
         expect(state.spawnedArgs).toContain('--model');
         expect(state.spawnedArgs).toContain('gpt-5-codex');
         expect(configOverrides).toContain('mcp_servers."mission-mcp".command="mission"');
-        expect(configOverrides).toContain(`mcp_servers."mission-mcp".args=["mcp","connect","--agent-execution","${snapshot.sessionId}"]`);
+        expect(configOverrides).toContain(`mcp_servers."mission-mcp".args=["mcp","connect","--agent-execution","${snapshot.agentExecutionId}"]`);
         expect(configOverrides.some((override) => override.startsWith('mcp_servers."mission-mcp".env.MISSION_MCP_TOKEN='))).toBe(true);
         expect(state.spawnedArgs.some((arg) => arg.includes('Structured status markers'))).toBe(false);
         expect(state.spawnedArgs.some((arg) => arg.includes('Structured status tools'))).toBe(true);
@@ -168,7 +171,7 @@ describe('Codex', () => {
         const configOverrides = readCodexConfigOverrides(state.spawnedArgs);
 
         expect(configOverrides).toContain('mcp_servers."mission-mcp".command="pnpm"');
-        expect(configOverrides).toContain(`mcp_servers."mission-mcp".args=["--dir","/mission","--filter","@flying-pillow/mission","exec","tsx","--tsconfig","./tsconfig.dev.json","./src/mission.ts","mcp","connect","--agent-execution","${snapshot.sessionId}"]`);
+        expect(configOverrides).toContain(`mcp_servers."mission-mcp".args=["--dir","/mission","--filter","@flying-pillow/mission","exec","tsx","--tsconfig","./tsconfig.dev.json","./src/mission.ts","mcp","connect","--agent-execution","${snapshot.agentExecutionId}"]`);
     });
 });
 

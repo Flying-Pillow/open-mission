@@ -12,6 +12,11 @@
     import RepositoryList from "$lib/components/entities/Repository/RepositoryList.svelte";
     import { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
     import { Button } from "$lib/components/ui/button/index.js";
+    import {
+        ResizableHandle,
+        ResizablePane,
+        ResizablePaneGroup,
+    } from "$lib/components/ui/resizable";
 
     const agentExecutionSurface = setAgentExecutionSurfaceContext({
         surfaceId: "repositories",
@@ -188,10 +193,17 @@
         </div>
     </section>
 
-    <div
-        class="mt-4 grid min-h-0 flex-1 gap-5 overflow-hidden xl:grid-cols-[20dvw_minmax(0,1fr)]"
+    <ResizablePaneGroup
+        direction="horizontal"
+        autoSaveId="airport-repositories-surface"
+        class="mt-4 min-h-0 flex-1 overflow-hidden"
     >
-        <div class="flex min-h-0 flex-col gap-5 overflow-hidden xl:pr-2">
+        <ResizablePane
+            defaultSize={28}
+            minSize={18}
+            maxSize={44}
+            class="flex h-full min-h-0 flex-col gap-5 overflow-hidden pr-2"
+        >
             <section class="flex min-h-0 w-full flex-1 overflow-hidden">
                 <RepositoryList
                     repositoryFilter="local"
@@ -211,22 +223,30 @@
                     presentation="rail"
                 />
             </section>
-        </div>
+        </ResizablePane>
 
-        <section
-            class="flex min-h-0 min-w-0 overflow-hidden rounded-2xl border border-white/10"
+        <ResizableHandle withHandle />
+
+        <ResizablePane
+            defaultSize={72}
+            minSize={40}
+            class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden pl-5"
         >
-            <AgentChat
-                agentExecution={repositoriesAgentExecution}
-                refreshNonce={repositoriesAgentRefreshNonce}
-                onCommandExecuted={refreshRepositoriesAgentExecution}
-                loadingTitle="Starting repositories chat"
-                loadingPlaceholder="Starting repositories chat"
-                bind:showTerminalPanel
-                showHeader={false}
-            />
-        </section>
-    </div>
+            <section
+                class="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl border border-white/10"
+            >
+                <AgentChat
+                    agentExecution={repositoriesAgentExecution}
+                    refreshNonce={repositoriesAgentRefreshNonce}
+                    onCommandExecuted={refreshRepositoriesAgentExecution}
+                    loadingTitle="Starting repositories chat"
+                    loadingPlaceholder="Starting repositories chat"
+                    bind:showTerminalPanel
+                    showHeader={false}
+                />
+            </section>
+        </ResizablePane>
+    </ResizablePaneGroup>
 
     {#if repositoriesAgentError}
         <div class="border-t px-4 py-3 text-sm text-muted-foreground md:px-5">

@@ -4,7 +4,7 @@ import { AgentExecutionObservationRouter } from './AgentExecutionObservationRout
 const markerPrefix = '@task::';
 
 const address = {
-	agentExecutionId: 'session-7',
+	agentExecutionId: 'agent-execution-7',
 	scope: {
 		kind: 'task' as const,
 		missionId: 'mission-31',
@@ -70,8 +70,8 @@ describe('AgentExecutionObservationRouter', () => {
 			markerPrefix,
 			line: `${markerPrefix}${JSON.stringify({
 				version: 1,
-				agentExecutionId: 'other-session',
-				eventId: 'evt-wrong-session',
+				agentExecutionId: 'other-agent-execution',
+				eventId: 'evt-wrong-agent-execution',
 				signal: {
 					type: 'progress',
 					summary: 'This should be rejected by policy.'
@@ -81,7 +81,7 @@ describe('AgentExecutionObservationRouter', () => {
 
 		expect(observations).toEqual([expect.objectContaining({
 			claimedAddress: {
-				agentExecutionId: 'other-session',
+				agentExecutionId: 'other-agent-execution',
 				scope: address.scope
 			},
 			route: {

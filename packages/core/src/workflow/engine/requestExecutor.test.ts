@@ -335,11 +335,16 @@ describe('MissionWorkflowRequestExecutor', () => {
 		});
 	});
 
-	it('launches sessions from agentId request payloads and emits agentId session facts', async () => {
+	it('launches agentExecutions from agentId request payloads and emits agentId AgentExecution facts', async () => {
 		const agentAdapter = new FakeAgentAdapter('fake-adapter', 'Fake Adapter', 'terminal');
 
+		const adapter = {
+			getMissionAgentJournalRelativePath: (agentExecutionId: string) => `agent-journals/${agentExecutionId}.interaction.jsonl`,
+			getMissionTerminalRecordingRelativePath: (agentExecutionId: string) => `terminal-recordings/${agentExecutionId}.terminal.jsonl`
+		} as MissionDossierFilesystem;
+
 		const executor = new MissionWorkflowRequestExecutor({
-			adapter: {} as MissionDossierFilesystem,
+			adapter,
 			agentRegistry: createAgentRegistry(agentAdapter)
 		});
 		const configuration = createMissionWorkflowConfigurationSnapshot({
@@ -374,12 +379,14 @@ describe('MissionWorkflowRequestExecutor', () => {
 			type: 'execution.started',
 			taskId: task.taskId,
 			agentId: 'fake-adapter',
-			transportId: 'terminal'
+			transportId: 'terminal',
+			agentJournalPath: 'agent-journals/fake-adapter-agent-execution-1.interaction.jsonl',
+			terminalRecordingPath: 'terminal-recordings/fake-adapter-agent-execution-1.terminal.jsonl'
 		});
-		expect(startedEvent?.sessionId).toBe('fake-adapter-session-1');
+		expect(startedEvent?.agentExecutionId).toBe('fake-adapter-agent-execution-1');
 	});
 
-	it('starts a new runtime session id when relaunching the same task after termination', async () => {
+	it('starts a new runtime AgentExecution id when relaunching the same task after termination', async () => {
 		const agentAdapter = new FakeAgentAdapter('fake-adapter', 'Fake Adapter', 'terminal');
 		const executor = new MissionWorkflowRequestExecutor({
 			adapter: {} as MissionDossierFilesystem,
@@ -409,12 +416,12 @@ describe('MissionWorkflowRequestExecutor', () => {
 			} satisfies MissionWorkflowRequest]
 		});
 
-		const firstSessionId = firstLaunchEvents.find((event) => event.type === 'execution.started')?.sessionId;
-		if (!firstSessionId) {
+		const firstAgentExecutionId = firstLaunchEvents.find((event) => event.type === 'execution.started')?.agentExecutionId;
+		if (!firstAgentExecutionId) {
 			throw new Error('Expected first launch to emit execution.started.');
 		}
 
-		await executor.terminateRuntimeSession(firstSessionId, 'restart task', task.taskId);
+		await executor.terminateRuntimeAgentExecution(firstAgentExecutionId, 'restart task', task.taskId);
 
 		const secondLaunchEvents = await executor.executeRequests({
 			missionId: 'mission-17',
@@ -431,15 +438,15 @@ describe('MissionWorkflowRequestExecutor', () => {
 			} satisfies MissionWorkflowRequest]
 		});
 
-		const secondSessionId = secondLaunchEvents.find((event) => event.type === 'execution.started')?.sessionId;
-		if (!secondSessionId) {
+		const secondAgentExecutionId = secondLaunchEvents.find((event) => event.type === 'execution.started')?.agentExecutionId;
+		if (!secondAgentExecutionId) {
 			throw new Error('Expected second launch to emit execution.started.');
 		}
 
-		expect(secondSessionId).not.toBe(firstSessionId);
+		expect(secondAgentExecutionId).not.toBe(firstAgentExecutionId);
 	});
 
-	it('preserves canonical task identity when cancelling an unattached runtime session', async () => {
+	it('preserves canonical task identity when cancelling an unattached runtime AgentExecution', async () => {
 		const agentAdapter = new FakeAgentAdapter('fake-adapter', 'Fake Adapter', 'terminal');
 		const executor = new MissionWorkflowRequestExecutor({
 			adapter: {} as MissionDossierFilesystem,
@@ -448,27 +455,27 @@ describe('MissionWorkflowRequestExecutor', () => {
 
 		await executor.reconcileExecution({
 			agentId: 'fake-adapter',
-			sessionId: 'session-detached',
+			agentExecutionId: 'AgentExecution-detached',
 			transport: {
 				kind: 'terminal',
-				terminalName: 'session-detached'
+				terminalName: 'AgentExecution-detached'
 			}
 		});
 
-		const events = await executor.cancelRuntimeSession(
-			'session-detached',
+		const events = await executor.cancelRuntimeAgentExecution(
+			'AgentExecution-detached',
 			'cleanup detached runtime',
 			'implementation/03-align-workflow-request-execution-with-unified-runtime'
 		);
 
 		expect(events).toContainEqual(expect.objectContaining({
 			type: 'execution.cancelled',
-			sessionId: 'session-detached',
+			agentExecutionId: 'AgentExecution-detached',
 			taskId: 'implementation/03-align-workflow-request-execution-with-unified-runtime'
 		}));
 	});
 
-	it('emits task.completed when a task-scoped runtime session completes successfully', async () => {
+	it('emits task.completed when a task-scoped runtime AgentExecution completes successfully', async () => {
 		const agentAdapter = new FakeAgentAdapter('fake-adapter', 'Fake Adapter', 'terminal');
 		const executor = new MissionWorkflowRequestExecutor({
 			adapter: {} as MissionDossierFilesystem,
@@ -489,7 +496,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 			configuration,
 			runtime,
 			requests: [{
-				requestId: 'request-complete-session',
+				requestId: 'request-complete-AgentExecution',
 				type: 'execution.launch',
 				payload: {
 					taskId: task.taskId,
@@ -498,17 +505,17 @@ describe('MissionWorkflowRequestExecutor', () => {
 			} satisfies MissionWorkflowRequest]
 		});
 
-		const sessionId = agentAdapter.listExecutions()[0]?.reference.sessionId;
-		if (!sessionId) {
+		const agentExecutionId = agentAdapter.listExecutions()[0]?.reference.agentExecutionId;
+		if (!agentExecutionId) {
 			throw new Error('Expected a launched fake adapter execution.');
 		}
 
-		const events = await executor.completeRuntimeSession(sessionId, task.taskId);
+		const events = await executor.completeRuntimeAgentExecution(agentExecutionId, task.taskId);
 
 		expect(events).toEqual([
 			expect.objectContaining({
 				type: 'execution.completed',
-				sessionId,
+				agentExecutionId,
 				taskId: task.taskId
 			}),
 			expect.objectContaining({
@@ -651,7 +658,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 		expect(prompt).toContain('@artifacts/review-diff.md');
 	});
 
-	it('does not synthesize termination when runtime session reattach fails', async () => {
+	it('does not synthesize termination when runtime AgentExecution reattach fails', async () => {
 		class ThrowingReconcileAdapter extends FakeAgentAdapter {
 			public override async reconcileExecution(_reference: AgentExecutionReference): Promise<AgentExecution> {
 				throw new Error('runtime attach failed');
@@ -671,13 +678,13 @@ describe('MissionWorkflowRequestExecutor', () => {
 		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
 		const task = createTask();
 		runtime.tasks = [task];
-		runtime.sessions = [{
-			sessionId: 'stale-running-session',
+		runtime.agentExecutions = [{
+			agentExecutionId: 'stale-running-AgentExecution',
 			taskId: task.taskId,
 			agentId: 'fake-adapter',
 			transportId: 'terminal',
 			terminalHandle: {
-				terminalName: 'stale-running-session',
+				terminalName: 'stale-running-AgentExecution',
 				terminalPaneId: 'pty'
 			},
 			lifecycle: 'running',
@@ -781,7 +788,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 	it('does not reconcile persisted terminals that are already terminated', async () => {
 		class ThrowingReconcileAdapter extends FakeAgentAdapter {
 			public override async reconcileExecution(_reference: AgentExecutionReference): Promise<AgentExecution> {
-				throw new Error('terminated sessions should not be reconciled');
+				throw new Error('terminated agentExecutions should not be reconciled');
 			}
 		}
 
@@ -798,13 +805,13 @@ describe('MissionWorkflowRequestExecutor', () => {
 		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
 		const task = createTask();
 		runtime.tasks = [task];
-		runtime.sessions = [{
-			sessionId: 'terminated-session',
+		runtime.agentExecutions = [{
+			agentExecutionId: 'terminated-AgentExecution',
 			taskId: task.taskId,
 			agentId: 'fake-adapter',
 			transportId: 'terminal',
 			terminalHandle: {
-				terminalName: 'terminated-session',
+				terminalName: 'terminated-AgentExecution',
 				terminalPaneId: 'pty'
 			},
 			lifecycle: 'terminated',
@@ -821,14 +828,14 @@ describe('MissionWorkflowRequestExecutor', () => {
 		})).resolves.toEqual([]);
 	});
 
-	it('does not mark unattached sessions terminated without runtime confirmation', async () => {
+	it('does not mark unattached agentExecutions terminated without runtime confirmation', async () => {
 		const executor = new MissionWorkflowRequestExecutor({
 			adapter: {} as MissionDossierFilesystem,
 			agentRegistry: new AgentRegistry({ agents: [] })
 		});
 
-		const events = await executor.terminateRuntimeSession(
-			'detached-session',
+		const events = await executor.terminateRuntimeAgentExecution(
+			'detached-AgentExecution',
 			'terminated by operator request',
 			'spec/01'
 		);
@@ -850,13 +857,13 @@ describe('MissionWorkflowRequestExecutor', () => {
 		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
 		const task = createTask();
 		runtime.tasks = [task];
-		runtime.sessions = [{
-			sessionId: 'detached-session',
+		runtime.agentExecutions = [{
+			agentExecutionId: 'detached-AgentExecution',
 			taskId: task.taskId,
 			agentId: 'fake-adapter',
 			transportId: 'terminal',
 			terminalHandle: {
-				terminalName: 'detached-session',
+				terminalName: 'detached-AgentExecution',
 				terminalPaneId: 'pty'
 			},
 			lifecycle: 'running',
@@ -873,7 +880,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 
 		expect(events).toContainEqual(expect.objectContaining({
 			type: 'execution.terminated',
-			sessionId: 'detached-session',
+			agentExecutionId: 'detached-AgentExecution',
 			taskId: task.taskId
 		}));
 	});

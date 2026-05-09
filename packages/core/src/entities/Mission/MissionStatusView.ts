@@ -29,7 +29,7 @@ export type MissionStatusViewInput = {
 	descriptor: MissionDescriptor;
 	workflow: WorkflowDefinition;
 	document?: MissionStateData;
-	sessions: AgentExecutionRecord[];
+	agentExecutions: AgentExecutionRecord[];
 	hydrateRuntimeTasksForActions(tasks: MissionStateData['runtime']['tasks']): Promise<MissionStateData['runtime']['tasks']>;
 };
 
@@ -61,7 +61,7 @@ export async function buildMissionStatusView(input: MissionStatusViewInput): Pro
 		...(activeTasks.length > 0 ? { activeTasks } : {}),
 		...(readyTasks.length > 0 ? { readyTasks } : {}),
 		stages,
-		agentExecutions: input.sessions,
+		agentExecutions: input.agentExecutions,
 		workflow: {
 			lifecycle: input.document.runtime.lifecycle,
 			pause: { ...input.document.runtime.pause },

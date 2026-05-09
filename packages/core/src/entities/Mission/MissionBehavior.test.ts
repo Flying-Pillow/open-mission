@@ -60,15 +60,15 @@ describe('Mission', () => {
         }
     });
 
-    it('launches task sessions and translates runtime events into compatibility events', async () => {
+    it('launches task agentExecutions and translates runtime events into compatibility events', async () => {
         const workspaceRoot = await createTempRepo();
         const agentAdapter = new FakeAgentAdapter('test-adapter', 'Test Adapter');
 
         try {
             const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(201, 'Mission session compatibility'),
-                branchRef: adapter.deriveMissionBranchName(201, 'Mission session compatibility')
+                brief: createBrief(201, 'Mission AgentExecution compatibility'),
+                branchRef: adapter.deriveMissionBranchName(201, 'Mission AgentExecution compatibility')
             }, createWorkflowBindings(agentAdapter));
 
             try {
@@ -93,30 +93,30 @@ describe('Mission', () => {
                     throw new Error('Expected a ready task and mission working directory after workflow start.');
                 }
 
-                const sessionRecord = await mission.launchAgentExecution({
+                const agentExecutionRecord = await mission.launchAgentExecution({
                     agentId: agentAdapter.id,
                     taskId,
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'Complete the assigned task.'
                 });
                 expect(await agentAdapter.listExecutions()).toHaveLength(1);
-                const execution = agentAdapter.getSession(sessionRecord.sessionId);
+                const execution = agentAdapter.getAgentExecution(agentExecutionRecord.agentExecutionId);
                 if (!execution) {
-                    throw new Error(`Expected fake adapter execution '${sessionRecord.sessionId}' to exist.`);
+                    throw new Error(`Expected fake adapter execution '${agentExecutionRecord.agentExecutionId}' to exist.`);
                 }
 
                 execution.emitMessage('adapter output', 'stdout');
                 execution.emitAwaitingInput();
                 await flushMicrotasks();
 
-                const consoleState = mission.getAgentConsoleState(sessionRecord.sessionId);
-                expect(sessionRecord).toMatchObject({
+                const consoleState = mission.getAgentConsoleState(agentExecutionRecord.agentExecutionId);
+                expect(agentExecutionRecord).toMatchObject({
                     taskId,
                     agentId: agentAdapter.id,
                     assignmentLabel: expect.stringContaining('01-PRD/tasks/')
                 });
                 expect(events).toEqual(
-                    expect.arrayContaining(['session-started', 'agent-message', 'session-state-changed'])
+                    expect.arrayContaining(['agent-execution-started', 'agent-message', 'agent-execution-state-changed'])
                 );
                 expect(agentMessages).toContain('adapter output');
                 expect(consoleLines).toContain('adapter output');
@@ -132,15 +132,15 @@ describe('Mission', () => {
         }
     });
 
-    it('cancels sessions through orchestrator-backed mission controls', async () => {
+    it('cancels agentExecutions through orchestrator-backed mission controls', async () => {
         const workspaceRoot = await createTempRepo();
         const agentAdapter = new FakeAgentAdapter('test-adapter', 'Test Adapter');
 
         try {
             const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(202, 'Mission session cancel'),
-                branchRef: adapter.deriveMissionBranchName(202, 'Mission session cancel')
+                brief: createBrief(202, 'Mission AgentExecution cancel'),
+                branchRef: adapter.deriveMissionBranchName(202, 'Mission AgentExecution cancel')
             }, createWorkflowBindings(agentAdapter));
 
             try {
@@ -156,11 +156,11 @@ describe('Mission', () => {
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'Cancel me.'
                 });
-                const cancelled = await mission.cancelAgentExecution(launched.sessionId, 'operator cancelled');
+                const cancelled = await mission.cancelAgentExecution(launched.agentExecutionId, 'operator cancelled');
 
                 expect(cancelled.lifecycleState).toBe('cancelled');
-                expect(agentAdapter.getSession(launched.sessionId)?.getSnapshot().phase).toBe('cancelled');
-                expect(mission.getAgentExecution(launched.sessionId)?.lifecycleState).toBe('cancelled');
+                expect(agentAdapter.getAgentExecution(launched.agentExecutionId)?.getSnapshot().phase).toBe('cancelled');
+                expect(mission.getAgentExecution(launched.agentExecutionId)?.lifecycleState).toBe('cancelled');
             } finally {
                 mission.dispose();
             }
@@ -169,15 +169,15 @@ describe('Mission', () => {
         }
     });
 
-    it('reconciles stale task sessions before relaunching the same task', async () => {
+    it('reconciles stale task agentExecutions before relaunching the same task', async () => {
         const workspaceRoot = await createTempRepo();
         const agentAdapter = new FakeAgentAdapter('test-adapter', 'Test Adapter');
 
         try {
             const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(203, 'Mission stale session relaunch'),
-                branchRef: adapter.deriveMissionBranchName(203, 'Mission stale session relaunch')
+                brief: createBrief(203, 'Mission stale AgentExecution relaunch'),
+                branchRef: adapter.deriveMissionBranchName(203, 'Mission stale AgentExecution relaunch')
             }, createWorkflowBindings(agentAdapter));
 
             try {
@@ -187,24 +187,24 @@ describe('Mission', () => {
                     throw new Error('Expected a ready task and mission working directory after workflow start.');
                 }
 
-                const firstSession = await mission.launchAgentExecution({
+                const firstAgentExecution = await mission.launchAgentExecution({
                     agentId: agentAdapter.id,
                     taskId,
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'First attempt.'
                 });
-                agentAdapter.deleteSession(firstSession.sessionId);
+                agentAdapter.deleteAgentExecution(firstAgentExecution.agentExecutionId);
 
-                const relaunchedSession = await mission.launchAgentExecution({
+                const relaunchedAgentExecution = await mission.launchAgentExecution({
                     agentId: agentAdapter.id,
                     taskId,
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'Second attempt.'
                 });
 
-                expect(relaunchedSession.sessionId).not.toBe(firstSession.sessionId);
-                expect(mission.getAgentExecution(firstSession.sessionId)?.lifecycleState).toBe('terminated');
-                expect(mission.getAgentExecution(relaunchedSession.sessionId)?.lifecycleState).toBe('running');
+                expect(relaunchedAgentExecution.agentExecutionId).not.toBe(firstAgentExecution.agentExecutionId);
+                expect(mission.getAgentExecution(firstAgentExecution.agentExecutionId)?.lifecycleState).toBe('terminated');
+                expect(mission.getAgentExecution(relaunchedAgentExecution.agentExecutionId)?.lifecycleState).toBe('running');
             } finally {
                 mission.dispose();
             }
@@ -213,15 +213,15 @@ describe('Mission', () => {
         }
     });
 
-    it('replaces a live task session when its working directory no longer matches the launch request', async () => {
+    it('replaces a live task AgentExecution when its working directory no longer matches the launch request', async () => {
         const workspaceRoot = await createTempRepo();
         const agentAdapter = new FakeAgentAdapter('test-adapter', 'Test Adapter');
 
         try {
             const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(204, 'Mission mismatched session workspace'),
-                branchRef: adapter.deriveMissionBranchName(204, 'Mission mismatched session workspace')
+                brief: createBrief(204, 'Mission mismatched AgentExecution workspace'),
+                branchRef: adapter.deriveMissionBranchName(204, 'Mission mismatched AgentExecution workspace')
             }, createWorkflowBindings(agentAdapter));
 
             try {
@@ -231,24 +231,24 @@ describe('Mission', () => {
                     throw new Error('Expected a ready task and mission working directory after workflow start.');
                 }
 
-                const firstSession = await mission.launchAgentExecution({
+                const firstAgentExecution = await mission.launchAgentExecution({
                     agentId: agentAdapter.id,
                     taskId,
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'First attempt.'
                 });
-                agentAdapter.overrideSessionWorkingDirectory(firstSession.sessionId, path.join(workspaceRoot, 'wrong-workspace'));
+                agentAdapter.overrideAgentExecutionWorkingDirectory(firstAgentExecution.agentExecutionId, path.join(workspaceRoot, 'wrong-workspace'));
 
-                const relaunchedSession = await mission.launchAgentExecution({
+                const relaunchedAgentExecution = await mission.launchAgentExecution({
                     agentId: agentAdapter.id,
                     taskId,
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'Second attempt.'
                 });
 
-                expect(relaunchedSession.sessionId).not.toBe(firstSession.sessionId);
-                expect(mission.getAgentExecution(firstSession.sessionId)?.lifecycleState).toBe('terminated');
-                expect(mission.getAgentExecution(relaunchedSession.sessionId)?.lifecycleState).toBe('running');
+                expect(relaunchedAgentExecution.agentExecutionId).not.toBe(firstAgentExecution.agentExecutionId);
+                expect(mission.getAgentExecution(firstAgentExecution.agentExecutionId)?.lifecycleState).toBe('terminated');
+                expect(mission.getAgentExecution(relaunchedAgentExecution.agentExecutionId)?.lifecycleState).toBe('running');
             } finally {
                 mission.dispose();
             }
@@ -257,15 +257,15 @@ describe('Mission', () => {
         }
     });
 
-    it('terminates sessions through orchestrator-backed mission controls', async () => {
+    it('terminates agentExecutions through orchestrator-backed mission controls', async () => {
         const workspaceRoot = await createTempRepo();
         const agentAdapter = new FakeAgentAdapter('test-adapter', 'Test Adapter');
 
         try {
             const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(203, 'Mission session terminate'),
-                branchRef: adapter.deriveMissionBranchName(203, 'Mission session terminate')
+                brief: createBrief(203, 'Mission AgentExecution terminate'),
+                branchRef: adapter.deriveMissionBranchName(203, 'Mission AgentExecution terminate')
             }, createWorkflowBindings(agentAdapter));
 
             try {
@@ -281,11 +281,11 @@ describe('Mission', () => {
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'Terminate me.'
                 });
-                const terminated = await mission.terminateAgentExecution(launched.sessionId, 'operator terminated');
+                const terminated = await mission.terminateAgentExecution(launched.agentExecutionId, 'operator terminated');
 
                 expect(terminated.lifecycleState).toBe('terminated');
-                expect(agentAdapter.getSession(launched.sessionId)?.getSnapshot().phase).toBe('terminated');
-                expect(mission.getAgentExecution(launched.sessionId)?.lifecycleState).toBe('terminated');
+                expect(agentAdapter.getAgentExecution(launched.agentExecutionId)?.getSnapshot().phase).toBe('terminated');
+                expect(mission.getAgentExecution(launched.agentExecutionId)?.lifecycleState).toBe('terminated');
             } finally {
                 mission.dispose();
             }
@@ -326,12 +326,12 @@ describe('Mission', () => {
 
                 await mission.startTask(taskId, {
                     agentAdapter: agentAdapter.id,
-                    terminalName: 'airport-terminal-session'
+                    terminalName: 'airport-terminal-AgentExecution'
                 });
                 const nextStatus = await mission.status();
                 expect(await agentAdapter.listExecutions()).toHaveLength(1);
                 expect(agentAdapter.getLastStartRequest()?.workingDirectory).toBe(startedStatus.missionDir);
-                expect(agentAdapter.getLastStartRequest()?.terminalName).toBe('airport-terminal-session');
+                expect(agentAdapter.getLastStartRequest()?.terminalName).toBe('airport-terminal-AgentExecution');
                 expect(agentAdapter.getLastStartRequest()?.initialPrompt?.text).toContain(
                     `Stay strictly within this mission workspace: ${startedStatus.missionDir}`
                 );
@@ -377,14 +377,14 @@ describe('Mission', () => {
                     agentAdapter: agentAdapter.id,
                     model: 'gpt-5-codex',
                     reasoningEffort: 'high',
-                    terminalName: 'airport-terminal-session'
+                    terminalName: 'airport-terminal-AgentExecution'
                 });
 
                 expect(agentAdapter.getLastStartRequest()?.requestedAdapterId).toBe(agentAdapter.id);
                 expect(agentAdapter.getLastStartRequest()?.metadata).toMatchObject({
                     model: 'gpt-5-codex',
                     reasoningEffort: 'high',
-                    terminalName: 'airport-terminal-session'
+                    terminalName: 'airport-terminal-AgentExecution'
                 });
                 const persisted = await Mission.readStateData(adapter, mission.getMissionDir());
                 const persistedTask = persisted?.runtime.tasks.find((task) => task.taskId === taskId);
@@ -799,7 +799,7 @@ describe('Mission', () => {
         }
     });
 
-    it('falls back to task artifact launch instructions when session prompt is empty', async () => {
+    it('falls back to task artifact launch instructions when AgentExecution prompt is empty', async () => {
         const workspaceRoot = await createTempRepo();
         const agentAdapter = new FakeAgentAdapter('test-adapter', 'Test Adapter');
 
@@ -962,8 +962,8 @@ describe('Mission', () => {
         try {
             const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(209, 'Mission completes active session on task done'),
-                branchRef: adapter.deriveMissionBranchName(209, 'Mission completes active session on task done')
+                brief: createBrief(209, 'Mission completes active AgentExecution on task done'),
+                branchRef: adapter.deriveMissionBranchName(209, 'Mission completes active AgentExecution on task done')
             }, createWorkflowBindings(agentAdapter));
 
             try {
@@ -984,9 +984,9 @@ describe('Mission', () => {
 
                 await mission.completeTask(taskId);
 
-                const completedSession = mission.getAgentExecution(launched.sessionId);
-                expect(completedSession?.lifecycleState).toBe('completed');
-                expect(agentAdapter.getSession(launched.sessionId)?.getSnapshot().status).toBe('completed');
+                const completedAgentExecution = mission.getAgentExecution(launched.agentExecutionId);
+                expect(completedAgentExecution?.lifecycleState).toBe('completed');
+                expect(agentAdapter.getAgentExecution(launched.agentExecutionId)?.getSnapshot().status).toBe('completed');
             } finally {
                 mission.dispose();
             }
@@ -995,7 +995,7 @@ describe('Mission', () => {
         }
     });
 
-    it('does not rewrite missing transport identity for persisted runtime sessions', async () => {
+    it('does not rewrite missing transport identity for persisted runtime agentExecutions', async () => {
         const workspaceRoot = await createTempRepo();
         const agentAdapter = new FakeAgentAdapter('copilot-cli', 'Copilot CLI', 'terminal');
 
@@ -1029,16 +1029,16 @@ describe('Mission', () => {
                 if (!persisted) {
                     throw new Error('Expected persisted mission runtime data.');
                 }
-                persisted.runtime.sessions = persisted.runtime.sessions.map((execution) =>
-                    execution.sessionId === launched.sessionId
+                persisted.runtime.agentExecutions = persisted.runtime.agentExecutions.map((execution) =>
+                    execution.agentExecutionId === launched.agentExecutionId
                         ? {
                             ...execution,
                             agentId: 'copilot-cli'
                         }
                         : execution
                 );
-                for (const session of persisted.runtime.sessions) {
-                    delete (session as { transportId?: string }).transportId;
+                for (const AgentExecution of persisted.runtime.agentExecutions) {
+                    delete (AgentExecution as { transportId?: string }).transportId;
                 }
                 await Mission.writeStateData(adapter, missionDir, persisted);
 
@@ -1049,18 +1049,18 @@ describe('Mission', () => {
 
                 try {
                     const status = await reloaded.status();
-                    const migratedSession = status.agentExecutions?.find((execution: AgentExecutionRecord) => execution.sessionId === launched.sessionId);
-                    expect(migratedSession).toMatchObject({
+                    const migratedAgentExecution = status.agentExecutions?.find((execution: AgentExecutionRecord) => execution.agentExecutionId === launched.agentExecutionId);
+                    expect(migratedAgentExecution).toMatchObject({
                         agentId: 'copilot-cli',
                         transportId: 'terminal'
                     });
 
                     const persistedDocument = await Mission.readStateData(adapter, missionDir);
-                    const persistedSession = persistedDocument?.runtime.sessions.find((execution) => execution.sessionId === launched.sessionId);
-                    expect(persistedSession).toMatchObject({
+                    const persistedAgentExecution = persistedDocument?.runtime.agentExecutions.find((execution) => execution.agentExecutionId === launched.agentExecutionId);
+                    expect(persistedAgentExecution).toMatchObject({
                         agentId: 'copilot-cli'
                     });
-                    expect(persistedSession).not.toHaveProperty('transportId');
+                    expect(persistedAgentExecution).not.toHaveProperty('transportId');
                 } finally {
                     reloaded.dispose();
                 }
@@ -1073,7 +1073,7 @@ describe('Mission', () => {
         }
     });
 
-    it('keeps persisted sessions visible when status reconciliation fails', async () => {
+    it('keeps persisted agentExecutions visible when status reconciliation fails', async () => {
         const workspaceRoot = await createTempRepo();
         const agentAdapter = new FakeAgentAdapter('test-adapter', 'Test Adapter');
 
@@ -1106,8 +1106,8 @@ describe('Mission', () => {
                 };
 
                 const status = await mission.status();
-                expect(status.agentExecutions?.find((execution: AgentExecutionRecord) => execution.sessionId === launched.sessionId)).toMatchObject({
-                    sessionId: launched.sessionId,
+                expect(status.agentExecutions?.find((execution: AgentExecutionRecord) => execution.agentExecutionId === launched.agentExecutionId)).toMatchObject({
+                    agentExecutionId: launched.agentExecutionId,
                     agentId: agentAdapter.id,
                     lifecycleState: 'running'
                 });
@@ -1200,15 +1200,15 @@ describe('Mission', () => {
         }
     });
 
-    it('keeps session stop commands enabled while an agent is awaiting input', async () => {
+    it('keeps AgentExecution stop commands enabled while an agent is awaiting input', async () => {
         const workspaceRoot = await createTempRepo();
         const agentAdapter = new FakeAgentAdapter('test-adapter', 'Test Adapter');
 
         try {
             const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(210, 'Mission awaiting-input session commands'),
-                branchRef: adapter.deriveMissionBranchName(210, 'Mission awaiting-input session commands')
+                brief: createBrief(210, 'Mission awaiting-input AgentExecution commands'),
+                branchRef: adapter.deriveMissionBranchName(210, 'Mission awaiting-input AgentExecution commands')
             }, createWorkflowBindings(agentAdapter));
 
             try {
@@ -1224,17 +1224,17 @@ describe('Mission', () => {
                     workingDirectory: startedStatus.missionDir,
                     prompt: 'Need operator input.'
                 });
-                const execution = agentAdapter.getSession(launched.sessionId);
+                const execution = agentAdapter.getAgentExecution(launched.agentExecutionId);
                 if (!execution) {
-                    throw new Error(`Expected fake adapter execution '${launched.sessionId}' to exist.`);
+                    throw new Error(`Expected fake adapter execution '${launched.agentExecutionId}' to exist.`);
                 }
 
                 execution.emitAwaitingInput();
                 await flushMicrotasks();
 
                 const commands = await mission.listAvailableCommandSnapshot();
-                expect(findSessionCommand(commands.commands, launched.sessionId, AgentExecutionCommandIds.cancel)?.disabled).toBe(false);
-                expect(commands.commands.filter((command) => command.owner.entity === 'AgentExecution' && command.owner.sessionId === launched.sessionId)).toHaveLength(1);
+                expect(findAgentExecutionCommand(commands.commands, launched.agentExecutionId, AgentExecutionCommandIds.cancel)?.disabled).toBe(false);
+                expect(commands.commands.filter((command) => command.owner.entity === 'AgentExecution' && command.owner.agentExecutionId === launched.agentExecutionId)).toHaveLength(1);
             } finally {
                 mission.dispose();
             }
@@ -1306,10 +1306,10 @@ function findMissionCommand(commands: TestOwnedCommand[], commandId: string) {
     return commands.find((command) => command.owner.entity === 'Mission' && command.command.commandId === commandId)?.command;
 }
 
-function findSessionCommand(commands: TestOwnedCommand[], sessionId: string, commandId: string) {
+function findAgentExecutionCommand(commands: TestOwnedCommand[], agentExecutionId: string, commandId: string) {
     return commands.find((command) =>
         command.owner.entity === 'AgentExecution'
-        && command.owner.sessionId === sessionId
+        && command.owner.agentExecutionId === agentExecutionId
         && command.command.commandId === commandId
     )?.command;
 }

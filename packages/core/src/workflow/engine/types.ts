@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { AgentExecutionTerminalHandleSchema, AgentExecutionTerminalRecordingLogPathSchema, type AgentExecutionTerminalHandleType } from '../../entities/AgentExecution/AgentExecutionSchema.js';
+import { AgentExecutionJournalPathSchema, AgentExecutionTerminalHandleSchema, AgentExecutionTerminalRecordingPathSchema, type AgentExecutionTerminalHandleType } from '../../entities/AgentExecution/AgentExecutionSchema.js';
 import { type AgentIdType } from '../../entities/Agent/AgentSchema.js';
 import { MissionReasoningEffortSchema, type MissionReasoningEffortType } from '../../entities/Mission/MissionSchema.js';
 import { TaskContextArtifactReferenceSchema, type TaskContextArtifactReferenceType } from '../../entities/Task/TaskSchema.js';
@@ -89,7 +89,7 @@ export const MissionTaskReworkRequestSchema = z.object({
     iteration: z.number().int().min(0),
     maxIterations: z.number().int().min(0),
     sourceTaskId: nonEmptyStringSchema.optional(),
-    sourceSessionId: nonEmptyStringSchema.optional(),
+    sourceAgentExecutionId: nonEmptyStringSchema.optional(),
     launchedAt: nonEmptyStringSchema.optional(),
     resolvedAt: nonEmptyStringSchema.optional(),
     artifactRefs: z.array(MissionTaskArtifactReferenceSchema)
@@ -142,7 +142,7 @@ export type MissionTaskRuntimeState = z.infer<typeof MissionTaskRuntimeStateSche
 export const MissionPauseStateSchema = z.object({
     paused: z.boolean(),
     reason: z.enum(['human-requested', 'checkpoint', 'agent-failure', 'system']).optional(),
-    targetType: z.enum(['mission', 'task', 'session']).optional(),
+    targetType: z.enum(['mission', 'task', 'AgentExecution']).optional(),
     targetId: nonEmptyStringSchema.optional(),
     requestedAt: nonEmptyStringSchema.optional()
 }).strict();
@@ -181,11 +181,12 @@ export const MissionStageRuntimeProjectionSchema = z.object({
 export type MissionStageRuntimeProjection = z.infer<typeof MissionStageRuntimeProjectionSchema>;
 
 export const AgentExecutionRuntimeStateSchema = z.object({
-    sessionId: nonEmptyStringSchema,
+    agentExecutionId: nonEmptyStringSchema,
     taskId: nonEmptyStringSchema,
     agentId: nonEmptyStringSchema,
     transportId: nonEmptyStringSchema.optional(),
-    sessionLogPath: AgentExecutionTerminalRecordingLogPathSchema.optional(),
+    agentJournalPath: AgentExecutionJournalPathSchema.optional(),
+    terminalRecordingPath: AgentExecutionTerminalRecordingPathSchema.optional(),
     terminalHandle: AgentExecutionTerminalHandleSchema.optional(),
     lifecycle: z.enum(MISSION_AGENT_EXECUTION_LIFECYCLE_STATES),
     launchedAt: nonEmptyStringSchema,
@@ -237,7 +238,7 @@ export const MissionWorkflowRuntimeStateSchema = z.object({
     pause: MissionPauseStateSchema,
     stages: z.array(MissionStageRuntimeProjectionSchema),
     tasks: z.array(MissionTaskRuntimeStateSchema),
-    sessions: z.array(AgentExecutionRuntimeStateSchema),
+    agentExecutions: z.array(AgentExecutionRuntimeStateSchema),
     gates: z.array(MissionGateProjectionSchema),
     launchQueue: z.array(MissionTaskLaunchRequestSchema),
     updatedAt: nonEmptyStringSchema
@@ -281,7 +282,7 @@ export interface MissionResumedEvent extends MissionWorkflowEventBase {
 export interface MissionPausedEvent extends MissionWorkflowEventBase {
     type: 'mission.paused';
     reason: MissionPauseReason;
-    targetType?: 'mission' | 'task' | 'session';
+    targetType?: 'mission' | 'task' | 'AgentExecution';
     targetId?: string;
 }
 
@@ -348,17 +349,18 @@ export interface TaskReworkedEvent extends MissionWorkflowEventBase {
     reasonCode: string;
     summary: string;
     sourceTaskId?: string;
-    sourceSessionId?: string;
+    sourceAgentExecutionId?: string;
     artifactRefs: MissionTaskArtifactReference[];
 }
 
 export interface AgentExecutionStartedEvent extends MissionWorkflowEventBase {
     type: 'execution.started';
-    sessionId: string;
+    agentExecutionId: string;
     taskId: string;
     agentId: string;
     transportId?: string;
-    sessionLogPath?: string;
+    agentJournalPath?: string;
+    terminalRecordingPath?: string;
     terminalHandle?: AgentExecutionTerminalHandleType;
 }
 
@@ -370,25 +372,25 @@ export interface AgentExecutionLaunchFailedEvent extends MissionWorkflowEventBas
 
 export interface AgentExecutionCompletedEvent extends MissionWorkflowEventBase {
     type: 'execution.completed';
-    sessionId: string;
+    agentExecutionId: string;
     taskId: string;
 }
 
 export interface AgentExecutionFailedEvent extends MissionWorkflowEventBase {
     type: 'execution.failed';
-    sessionId: string;
+    agentExecutionId: string;
     taskId: string;
 }
 
 export interface AgentExecutionCancelledEvent extends MissionWorkflowEventBase {
     type: 'execution.cancelled';
-    sessionId: string;
+    agentExecutionId: string;
     taskId: string;
 }
 
 export interface AgentExecutionTerminatedEvent extends MissionWorkflowEventBase {
     type: 'execution.terminated';
-    sessionId: string;
+    agentExecutionId: string;
     taskId: string;
 }
 

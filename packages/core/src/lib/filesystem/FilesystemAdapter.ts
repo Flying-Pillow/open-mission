@@ -21,6 +21,16 @@ export class FilesystemAdapter {
         await fs.rename(temporaryPath, filePath);
     }
 
+    public async ensureTextFile(filePath: string): Promise<void> {
+        await fs.mkdir(path.dirname(filePath), { recursive: true });
+        await fs.appendFile(filePath, '', 'utf8');
+    }
+
+    public async appendTextFile(filePath: string, content: string): Promise<void> {
+        await fs.mkdir(path.dirname(filePath), { recursive: true });
+        await fs.appendFile(filePath, content, 'utf8');
+    }
+
     protected isMissingFileError(error: unknown): boolean {
         return error instanceof Error && 'code' in error && error.code === 'ENOENT';
     }

@@ -49,6 +49,7 @@ Read them when a change touches ownership, naming, state, runtime behavior, repo
 - [Agent Execution And Agent Adapter Vocabulary](0018-agent-execution-and-agent-adapter-vocabulary.md)
 - [Agent Execution Structured Interaction Vocabulary](0022-agent-execution-structured-interaction-vocabulary.md)
 - [Mission MCP Server Agent Signal Transport](0024-mission-mcp-server-agent-signal-transport.md)
+- [Agent Execution Interaction Journal](0025-agent-execution-interaction-journal.md)
 
 ### Mission Control And Surfaces
 

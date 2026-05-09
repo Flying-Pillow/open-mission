@@ -23,7 +23,7 @@ export function normalizeWorkflowSettings(input: unknown): WorkflowDefinition {
 		},
 		execution: {
 			maxParallelTasks: asNumber(source.execution?.maxParallelTasks, defaults.execution.maxParallelTasks),
-			maxParallelSessions: asNumber(source.execution?.maxParallelSessions, defaults.execution.maxParallelSessions)
+			maxParallelAgentExecutions: asNumber(source.execution?.maxParallelAgentExecutions, defaults.execution.maxParallelAgentExecutions)
 		},
 		stageOrder: Array.isArray(source.stageOrder)
 			? source.stageOrder.filter((value): value is string => typeof value === 'string')

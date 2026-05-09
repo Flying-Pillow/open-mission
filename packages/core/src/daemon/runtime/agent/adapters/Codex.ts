@@ -56,7 +56,7 @@ export function createCodex(input: CodexInput = {}): AgentInput {
                 provisioning: {
                     requiresRuntimeConfig: true,
                     supportsStdioBridge: true,
-                    supportsSessionScopedTools: true
+                    supportsAgentExecutionScopedTools: true
                 }
             },
             prepareLaunchConfig: prepareCodexLaunchConfig,

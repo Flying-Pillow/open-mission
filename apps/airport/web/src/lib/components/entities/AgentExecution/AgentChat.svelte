@@ -6,6 +6,11 @@
     import AgentChatInputBar from "$lib/components/entities/AgentExecution/AgentChatInputBar.svelte";
     import AgentChatMessages from "$lib/components/entities/AgentExecution/AgentChatMessages.svelte";
     import { Button } from "$lib/components/ui/button/index.js";
+    import {
+        ResizableHandle,
+        ResizablePane,
+        ResizablePaneGroup,
+    } from "$lib/components/ui/resizable";
     import * as ScrollArea from "$lib/components/ui/scroll-area/index.js";
     import type { AgentExecutionDataType } from "@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema";
 
@@ -214,153 +219,172 @@
     }
 </script>
 
-<section
-    class="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#08090b] lg:flex-row"
->
-    <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {#if showHeader}
+{#snippet chatPanel()}
+    {#if showHeader}
+        <div class="border-b border-white/10 bg-[#0d0f13] px-4 py-4 md:px-5">
             <div
-                class="border-b border-white/10 bg-[#0d0f13] px-4 py-4 md:px-5"
+                class="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"
             >
-                <div
-                    class="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"
-                >
-                    <div class="flex min-w-0 items-start gap-3">
-                        <span
-                            class="inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/[0.04] text-emerald-200"
-                        >
-                            <Icon
-                                icon="lucide:bot-message-square"
-                                class="size-5"
-                            />
-                        </span>
-                        <div class="min-w-0">
-                            <h2
-                                class="min-w-0 truncate text-lg font-semibold leading-6 text-slate-50"
-                            >
-                                {title}
-                            </h2>
-                            <p class="mt-1 truncate text-xs text-slate-400">
-                                {agentExecution?.adapterLabel ??
-                                    "Agent session"}
-                            </p>
-                        </div>
-                    </div>
-                    <div
-                        class="flex shrink-0 flex-wrap items-center justify-end gap-2"
+                <div class="flex min-w-0 items-start gap-3">
+                    <span
+                        class="inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/[0.04] text-emerald-200"
                     >
-                        {@render headerActions?.({
-                            agentExecution,
-                            showTerminalPanel: resolvedShowTerminalPanel,
-                            canShowTerminalPanel,
-                            toggleTerminalPanel,
-                        })}
+                        <Icon icon="lucide:bot-message-square" class="size-5" />
+                    </span>
+                    <div class="min-w-0">
+                        <h2
+                            class="min-w-0 truncate text-lg font-semibold leading-6 text-slate-50"
+                        >
+                            {title}
+                        </h2>
+                        <p class="mt-1 truncate text-xs text-slate-400">
+                            {agentExecution?.adapterLabel ?? "Agent session"}
+                        </p>
                     </div>
                 </div>
+                <div
+                    class="flex shrink-0 flex-wrap items-center justify-end gap-2"
+                >
+                    {@render headerActions?.({
+                        agentExecution,
+                        showTerminalPanel: resolvedShowTerminalPanel,
+                        canShowTerminalPanel,
+                        toggleTerminalPanel,
+                    })}
+                </div>
             </div>
-        {/if}
+        </div>
+    {/if}
 
-        <ScrollArea.Root
-            bind:viewportRef={messagesViewport}
-            class="min-h-0 flex-1"
-            scrollbarYClasses="py-2"
-        >
-            <div class="mx-auto w-full max-w-4xl px-4 py-5 md:px-6">
-                {#if !agentExecution}
+    <ScrollArea.Root
+        bind:viewportRef={messagesViewport}
+        class="min-h-0 flex-1"
+        scrollbarYClasses="py-2"
+    >
+        <div class="mx-auto w-full max-w-4xl px-4 py-5 md:px-6">
+            {#if !agentExecution}
+                <div
+                    class="rounded-lg border border-dashed border-white/15 bg-white/[0.03] px-5 py-8 text-center"
+                >
+                    <Icon
+                        icon="lucide:messages-square"
+                        class="mx-auto size-8 text-slate-500"
+                    />
+                    <h3 class="mt-3 text-sm font-medium text-slate-200">
+                        {loadingTitle}
+                    </h3>
+                </div>
+            {:else if chatMessages.length === 0}
+                <div class="flex justify-start">
                     <div
-                        class="rounded-lg border border-dashed border-white/15 bg-white/[0.03] px-5 py-8 text-center"
+                        class="max-w-[min(44rem,100%)] rounded-lg border border-white/10 bg-[#12151b] px-4 py-3 text-slate-100 shadow-[inset_3px_0_0_rgb(148_163_184)]"
                     >
-                        <Icon
-                            icon="lucide:messages-square"
-                            class="mx-auto size-8 text-slate-500"
-                        />
-                        <h3 class="mt-3 text-sm font-medium text-slate-200">
-                            {loadingTitle}
-                        </h3>
-                    </div>
-                {:else if chatMessages.length === 0}
-                    <div class="flex justify-start">
                         <div
-                            class="max-w-[min(44rem,100%)] rounded-lg border border-white/10 bg-[#12151b] px-4 py-3 text-slate-100 shadow-[inset_3px_0_0_rgb(148_163_184)]"
+                            class="flex items-center gap-2 text-sm font-medium text-slate-200"
                         >
-                            <div
-                                class="flex items-center gap-2 text-sm font-medium text-slate-200"
-                            >
-                                <Icon icon="lucide:sparkles" class="size-4" />
-                                Assistant
-                            </div>
-                            <p class="mt-2 text-sm leading-6 text-slate-400">
-                                Waiting for the first AgentExecution signal.
-                            </p>
+                            <Icon icon="lucide:sparkles" class="size-4" />
+                            Assistant
                         </div>
+                        <p class="mt-2 text-sm leading-6 text-slate-400">
+                            Waiting for the first AgentExecution signal.
+                        </p>
                     </div>
-                {:else if messagesViewport}
-                    {#key chatMessageListKey}
-                        <AgentChatMessages
-                            messages={chatMessages}
-                            viewport={messagesViewport}
-                            {messageAlignClasses}
-                            {messageToneClasses}
-                            {messageIconClasses}
-                            {messageIcon}
-                            {messageTitle}
-                            {useChoice}
-                        />
-                    {/key}
-                {/if}
-            </div>
-        </ScrollArea.Root>
+                </div>
+            {:else if messagesViewport}
+                {#key chatMessageListKey}
+                    <AgentChatMessages
+                        messages={chatMessages}
+                        viewport={messagesViewport}
+                        {messageAlignClasses}
+                        {messageToneClasses}
+                        {messageIconClasses}
+                        {messageIcon}
+                        {messageTitle}
+                        {useChoice}
+                    />
+                {/key}
+            {/if}
+        </div>
+    </ScrollArea.Root>
 
-        <AgentChatInputBar
-            bind:value={draft}
-            placeholder={agentExecution
-                ? "Message the assistant"
-                : loadingPlaceholder}
-            disabled={!agentExecution || !canSendPrompt || promptPending}
-            pending={promptPending}
-            error={promptError}
-            onSubmit={submitPrompt}
+    <AgentChatInputBar
+        bind:value={draft}
+        placeholder={agentExecution
+            ? "Message the assistant"
+            : loadingPlaceholder}
+        disabled={!agentExecution || !canSendPrompt || promptPending}
+        pending={promptPending}
+        error={promptError}
+        onSubmit={submitPrompt}
+    />
+{/snippet}
+
+{#snippet terminalPanel()}
+    <div
+        class="flex h-[4.5625rem] shrink-0 items-center justify-between border-b border-white/10 bg-[#0d0f13] px-4"
+    >
+        <div class="min-w-0">
+            <h3 class="truncate text-sm font-semibold text-slate-50">
+                AgentExecution terminal
+            </h3>
+            <p class="truncate text-xs text-slate-400">
+                {agentExecution?.terminalName ??
+                    agentExecution?.sessionId ??
+                    "Terminal"}
+            </p>
+        </div>
+        <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Close AgentExecution terminal"
+            title="Close AgentExecution terminal"
+            onclick={() => {
+                showTerminalPanel = false;
+            }}
+        >
+            <Icon icon="lucide:x" class="size-4" />
+        </Button>
+    </div>
+    <div class="min-h-0 flex-1">
+        <AgentExecutionTerminalPanel
+            {refreshNonce}
+            session={agentExecution}
+            {onCommandExecuted}
+            panelMode="terminal"
         />
     </div>
+{/snippet}
 
+<section class="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#08090b]">
     {#if resolvedShowTerminalPanel}
-        <aside
-            class="flex min-h-80 min-w-0 flex-1 flex-col border-t border-white/10 bg-[#08090b] lg:min-h-0 lg:border-l lg:border-t-0"
+        <ResizablePaneGroup
+            direction="horizontal"
+            autoSaveId={`agent-chat:${agentExecution?.sessionId ?? "pending"}`}
+            class="min-h-0 flex-1 overflow-hidden"
         >
-            <div
-                class="flex h-[4.5625rem] shrink-0 items-center justify-between border-b border-white/10 bg-[#0d0f13] px-4"
+            <ResizablePane
+                defaultSize={58}
+                minSize={35}
+                class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
             >
-                <div class="min-w-0">
-                    <h3 class="truncate text-sm font-semibold text-slate-50">
-                        AgentExecution terminal
-                    </h3>
-                    <p class="truncate text-xs text-slate-400">
-                        {agentExecution?.terminalName ??
-                            agentExecution?.sessionId ??
-                            "Terminal"}
-                    </p>
-                </div>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Close AgentExecution terminal"
-                    title="Close AgentExecution terminal"
-                    onclick={() => {
-                        showTerminalPanel = false;
-                    }}
-                >
-                    <Icon icon="lucide:x" class="size-4" />
-                </Button>
-            </div>
-            <div class="min-h-0 flex-1">
-                <AgentExecutionTerminalPanel
-                    {refreshNonce}
-                    session={agentExecution}
-                    {onCommandExecuted}
-                    panelMode="terminal"
-                />
-            </div>
-        </aside>
+                {@render chatPanel()}
+            </ResizablePane>
+
+            <ResizableHandle withHandle />
+
+            <ResizablePane
+                defaultSize={42}
+                minSize={24}
+                maxSize={65}
+                class="flex h-full min-h-0 min-w-0 flex-col border-l border-white/10 bg-[#08090b]"
+            >
+                {@render terminalPanel()}
+            </ResizablePane>
+        </ResizablePaneGroup>
+    {:else}
+        <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            {@render chatPanel()}
+        </div>
     {/if}
 </section>

@@ -47,6 +47,6 @@ export function ownedTaskCommand(taskId: string, command: EntityCommandDescripto
 	return { owner: { entity: 'Task', taskId }, command };
 }
 
-export function ownedAgentExecutionCommand(sessionId: string, command: EntityCommandDescriptorType): MissionOwnedCommandDescriptorType {
-	return { owner: { entity: 'AgentExecution', sessionId }, command };
+export function ownedAgentExecutionCommand(agentExecutionId: string, command: EntityCommandDescriptorType): MissionOwnedCommandDescriptorType {
+	return { owner: { entity: 'AgentExecution', agentExecutionId }, command };
 }

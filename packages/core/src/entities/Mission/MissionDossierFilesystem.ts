@@ -101,7 +101,7 @@ export type GitWorktreeStatus = {
 	untrackedCount: number;
 };
 
-export type MissionSessionLogMetadataRecord = {
+export type MissionTerminalRecordingMetadataRecord = {
 	[key: string]: unknown;
 };
 
@@ -543,35 +543,35 @@ export class MissionDossierFilesystem {
 		return path.join(missionDir, MISSION_RUNTIME_EVENT_LOG_FILE_NAME);
 	}
 
-	public getMissionSessionLogDirectoryPath(missionDir: string): string {
-		return path.join(missionDir, 'session-logs');
+	public getMissionTerminalRecordingDirectoryPath(missionDir: string): string {
+		return path.join(missionDir, 'terminal-recordings');
 	}
 
-	public getMissionSessionLogRelativePath(sessionId: string): string {
-		return path.posix.join('session-logs', `${encodeURIComponent(sessionId)}.terminal.jsonl`);
+	public getMissionTerminalRecordingRelativePath(agentExecutionId: string): string {
+		return path.posix.join('terminal-recordings', `${encodeURIComponent(agentExecutionId)}.terminal.jsonl`);
 	}
 
-	public getMissionSessionMetadataRelativePath(sessionId: string): string {
-		return path.posix.join('session-logs', `${encodeURIComponent(sessionId)}.metadata.json`);
+	public getMissionAgentJournalRelativePath(agentExecutionId: string): string {
+		return path.posix.join('agent-journals', `${encodeURIComponent(agentExecutionId)}.interaction.jsonl`);
 	}
 
-	public getMissionSessionLogPath(missionDir: string, sessionId: string): string {
-		return path.join(this.getMissionSessionLogDirectoryPath(missionDir), `${encodeURIComponent(sessionId)}.terminal.jsonl`);
+	public getMissionTerminalRecordingMetadataRelativePath(agentExecutionId: string): string {
+		return path.posix.join('terminal-recordings', `${encodeURIComponent(agentExecutionId)}.metadata.json`);
 	}
 
-	public getMissionSessionLogPathFromRelativePath(missionDir: string, sessionLogPath: string): string | undefined {
-		return this.resolveMissionSessionLogPath(missionDir, sessionLogPath);
+	public getMissionTerminalRecordingPath(missionDir: string, agentExecutionId: string): string {
+		return path.join(this.getMissionTerminalRecordingDirectoryPath(missionDir), `${encodeURIComponent(agentExecutionId)}.terminal.jsonl`);
 	}
 
-	public getMissionSessionMetadataPath(missionDir: string, sessionId: string): string {
-		return path.join(this.getMissionSessionLogDirectoryPath(missionDir), `${encodeURIComponent(sessionId)}.metadata.json`);
+	public getMissionTerminalRecordingPathFromRelativePath(missionDir: string, terminalRecordingPath: string): string | undefined {
+		return this.resolveMissionTerminalRecordingPath(missionDir, terminalRecordingPath);
 	}
 
-	public resolveMissionSessionLogPath(missionDir: string, sessionLogPath: string): string | undefined {
-		if (!this.isMissionTerminalRecordingLogPath(sessionLogPath)) {
-			throw new ArtifactFormatError(`Mission session log path '${sessionLogPath}' must use session-logs/<sessionId>.terminal.jsonl.`);
+	public resolveMissionAgentJournalPath(missionDir: string, agentJournalPath: string): string | undefined {
+		if (!this.isMissionAgentJournalPath(agentJournalPath)) {
+			throw new ArtifactFormatError(`Mission Agent journal path '${agentJournalPath}' must use agent-journals/<agentExecutionId>.interaction.jsonl.`);
 		}
-		const resolvedLogPath = path.resolve(missionDir, sessionLogPath);
+		const resolvedLogPath = path.resolve(missionDir, agentJournalPath);
 		const relativeLogPath = path.relative(missionDir, resolvedLogPath);
 		if (relativeLogPath.startsWith('..') || path.isAbsolute(relativeLogPath)) {
 			return undefined;
@@ -579,8 +579,28 @@ export class MissionDossierFilesystem {
 		return resolvedLogPath;
 	}
 
-	private isMissionTerminalRecordingLogPath(sessionLogPath: string): boolean {
-		return /^session-logs\/[^/]+\.terminal\.jsonl$/u.test(sessionLogPath.trim());
+	public getMissionTerminalRecordingMetadataPath(missionDir: string, agentExecutionId: string): string {
+		return path.join(this.getMissionTerminalRecordingDirectoryPath(missionDir), `${encodeURIComponent(agentExecutionId)}.metadata.json`);
+	}
+
+	public resolveMissionTerminalRecordingPath(missionDir: string, terminalRecordingPath: string): string | undefined {
+		if (!this.isMissionTerminalRecordingLogPath(terminalRecordingPath)) {
+			throw new ArtifactFormatError(`Mission AgentExecution log path '${terminalRecordingPath}' must use terminal-recordings/<agentExecutionId>.terminal.jsonl.`);
+		}
+		const resolvedLogPath = path.resolve(missionDir, terminalRecordingPath);
+		const relativeLogPath = path.relative(missionDir, resolvedLogPath);
+		if (relativeLogPath.startsWith('..') || path.isAbsolute(relativeLogPath)) {
+			return undefined;
+		}
+		return resolvedLogPath;
+	}
+
+	private isMissionTerminalRecordingLogPath(terminalRecordingPath: string): boolean {
+		return /^terminal-recordings\/[^/]+\.terminal\.jsonl$/u.test(terminalRecordingPath.trim());
+	}
+
+	private isMissionAgentJournalPath(agentJournalPath: string): boolean {
+		return /^agent-journals\/[^/]+\.interaction\.jsonl$/u.test(agentJournalPath.trim());
 	}
 
 	public async readMissionStateDataFile(
@@ -621,11 +641,11 @@ export class MissionDossierFilesystem {
 		await fs.appendFile(filePath, `${JSON.stringify(eventRecord)}\n`, 'utf8');
 	}
 
-	public async readMissionSessionMetadata<T extends MissionSessionLogMetadataRecord = MissionSessionLogMetadataRecord>(
+	public async readMissionTerminalRecordingMetadata<T extends MissionTerminalRecordingMetadataRecord = MissionTerminalRecordingMetadataRecord>(
 		missionDir: string,
-		sessionId: string
+		agentExecutionId: string
 	): Promise<T | undefined> {
-		const filePath = this.getMissionSessionMetadataPath(missionDir, sessionId);
+		const filePath = this.getMissionTerminalRecordingMetadataPath(missionDir, agentExecutionId);
 		try {
 			return JSON.parse(await fs.readFile(filePath, 'utf8')) as T;
 		} catch (error) {
@@ -633,30 +653,30 @@ export class MissionDossierFilesystem {
 				return undefined;
 			}
 			if (error instanceof SyntaxError) {
-				throw new ArtifactFormatError(`Mission session metadata '${filePath}' is not valid JSON.`);
+				throw new ArtifactFormatError(`Mission AgentExecution metadata '${filePath}' is not valid JSON.`);
 			}
 			throw error;
 		}
 	}
 
-	public async writeMissionSessionMetadata(
+	public async writeMissionTerminalRecordingMetadata(
 		missionDir: string,
-		sessionId: string,
-		metadata: MissionSessionLogMetadataRecord
+		agentExecutionId: string,
+		metadata: MissionTerminalRecordingMetadataRecord
 	): Promise<void> {
-		const filePath = this.getMissionSessionMetadataPath(missionDir, sessionId);
+		const filePath = this.getMissionTerminalRecordingMetadataPath(missionDir, agentExecutionId);
 		await fs.mkdir(path.dirname(filePath), { recursive: true });
 		const temporaryPath = `${filePath}.${process.pid.toString(36)}.${randomUUID()}.tmp`;
 		await fs.writeFile(temporaryPath, `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
 		await fs.rename(temporaryPath, filePath);
 	}
 
-	public async appendMissionSessionLogEvent(
+	public async appendMissionTerminalRecordingEvent(
 		missionDir: string,
-		sessionLogPath: string,
+		terminalRecordingPath: string,
 		event: unknown
 	): Promise<void> {
-		const filePath = this.getMissionSessionLogPathFromRelativePath(missionDir, sessionLogPath);
+		const filePath = this.getMissionTerminalRecordingPathFromRelativePath(missionDir, terminalRecordingPath);
 		if (!filePath) {
 			return;
 		}
@@ -664,11 +684,11 @@ export class MissionDossierFilesystem {
 		await fs.appendFile(filePath, `${JSON.stringify(event)}\n`, 'utf8');
 	}
 
-	public async ensureMissionSessionLogFile(
+	public async ensureMissionTerminalRecordingFile(
 		missionDir: string,
-		sessionLogPath: string
+		terminalRecordingPath: string
 	): Promise<void> {
-		const filePath = this.getMissionSessionLogPathFromRelativePath(missionDir, sessionLogPath);
+		const filePath = this.getMissionTerminalRecordingPathFromRelativePath(missionDir, terminalRecordingPath);
 		if (!filePath) {
 			return;
 		}
@@ -676,11 +696,11 @@ export class MissionDossierFilesystem {
 		await fs.appendFile(filePath, '', 'utf8');
 	}
 
-	public async readMissionSessionLogEvents(
+	public async readMissionTerminalRecordingEvents(
 		missionDir: string,
-		sessionLogPath: string
+		terminalRecordingPath: string
 	): Promise<unknown[] | undefined> {
-		const filePath = this.resolveMissionSessionLogPath(missionDir, sessionLogPath);
+		const filePath = this.resolveMissionTerminalRecordingPath(missionDir, terminalRecordingPath);
 		if (!filePath) {
 			return undefined;
 		}
@@ -694,7 +714,7 @@ export class MissionDossierFilesystem {
 						return JSON.parse(line) as unknown;
 					} catch (error) {
 						if (error instanceof SyntaxError) {
-							throw new ArtifactFormatError(`Mission session log '${filePath}' has invalid JSONL at line ${index + 1}.`);
+							throw new ArtifactFormatError(`Mission AgentExecution log '${filePath}' has invalid JSONL at line ${index + 1}.`);
 						}
 						throw error;
 					}

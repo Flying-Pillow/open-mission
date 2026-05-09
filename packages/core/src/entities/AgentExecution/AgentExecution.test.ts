@@ -18,9 +18,9 @@ describe('AgentExecution', () => {
         }));
 
         expect(data).toMatchObject({
-            id: 'agent_execution:mission-1/session-1',
+            id: 'agent_execution:mission-1/AgentExecution-1',
             ownerId: 'mission-1',
-            sessionId: 'session-1',
+            agentExecutionId: 'AgentExecution-1',
             transportId: 'terminal',
             interactionCapabilities: {
                 mode: 'pty-terminal',
@@ -45,7 +45,7 @@ describe('AgentExecution', () => {
     it('derives agent-message capabilities for non-terminals that accept structured follow-up input', () => {
         const snapshot: AgentExecutionSnapshot = {
             agentId: 'codex',
-            sessionId: 'session-2',
+            agentExecutionId: 'AgentExecution-2',
             scope: {
                 kind: 'task',
                 missionId: 'mission-1',
@@ -72,7 +72,7 @@ describe('AgentExecution', () => {
             }),
             reference: {
                 agentId: 'codex',
-                sessionId: 'session-2'
+                agentExecutionId: 'AgentExecution-2'
             },
             startedAt: '2026-05-04T00:00:00.000Z',
             updatedAt: '2026-05-04T00:00:00.000Z'
@@ -91,6 +91,53 @@ describe('AgentExecution', () => {
         });
         expect(state.runtimeMessages.map((message) => message.type)).toEqual([
             'checkpoint',
+            'resume'
+        ]);
+    });
+
+    it('treats a replayed input request as structured follow-up input even when lifecycle stays running', async () => {
+        const execution = new AgentExecution(AgentExecutionDataSchema.parse({
+            id: 'agent_execution:mission-1/AgentExecution-1',
+            ownerId: 'mission-1',
+            agentExecutionId: 'AgentExecution-1',
+            agentId: 'codex',
+            adapterLabel: 'Codex',
+            lifecycleState: 'running',
+            currentInputRequestId: 'observation-1',
+            interactionCapabilities: {
+                mode: 'agent-message',
+                canSendTerminalInput: false,
+                canSendStructuredPrompt: true,
+                canSendStructuredCommand: true
+            },
+            context: { artifacts: [], instructions: [] },
+            runtimeMessages: [],
+            scope: {
+                kind: 'task',
+                missionId: 'mission-1',
+                taskId: 'task-1'
+            },
+            createdAt: '2026-05-09T00:00:00.000Z',
+            lastUpdatedAt: '2026-05-09T00:00:00.000Z',
+            chatMessages: []
+        }));
+
+        const privateCtor = AgentExecution as typeof AgentExecution & {
+            hydrateDataFromJournal(data: AgentExecutionDataType, missionDir: string | undefined): Promise<AgentExecutionDataType>;
+        };
+
+        const hydrated = await privateCtor['applyDerivedInteractionState'](execution.toData());
+
+        expect(hydrated.interactionCapabilities).toEqual({
+            mode: 'agent-message',
+            canSendTerminalInput: false,
+            canSendStructuredPrompt: true,
+            canSendStructuredCommand: true
+        });
+        expect(hydrated.runtimeMessages.map((message) => message.type)).toEqual([
+            'interrupt',
+            'checkpoint',
+            'nudge',
             'resume'
         ]);
     });
@@ -132,16 +179,16 @@ describe('AgentExecution', () => {
         });
     });
 
-    it('treats a live task session as incompatible when the requested agent changes', async () => {
+    it('treats a live task AgentExecution as incompatible when the requested agent changes', async () => {
         await expect(AgentExecution.isCompatibleForLaunch({
-            session: createAgentExecutionRecord({ agentId: 'copilot-cli' }),
+            AgentExecution: createAgentExecutionRecord({ agentId: 'copilot-cli' }),
             request: {
                 agentId: 'codex',
                 taskId: 'task-1',
                 workingDirectory: '/repo',
                 prompt: 'Continue.'
             },
-            resolveLiveSession: async () => createRuntimeSnapshot({
+            resolveLiveAgentExecution: async () => createRuntimeSnapshot({
                 agentId: 'copilot-cli',
                 taskId: 'task-1',
                 workingDirectory: '/repo'
@@ -149,16 +196,16 @@ describe('AgentExecution', () => {
         })).resolves.toBe(false);
     });
 
-    it('keeps a live task session compatible when task, agent, and working directory match', async () => {
+    it('keeps a live task AgentExecution compatible when task, agent, and working directory match', async () => {
         await expect(AgentExecution.isCompatibleForLaunch({
-            session: createAgentExecutionRecord({ agentId: 'codex' }),
+            AgentExecution: createAgentExecutionRecord({ agentId: 'codex' }),
             request: {
                 agentId: 'codex',
                 taskId: 'task-1',
                 workingDirectory: '/repo',
                 prompt: 'Continue.'
             },
-            resolveLiveSession: async () => createRuntimeSnapshot({
+            resolveLiveAgentExecution: async () => createRuntimeSnapshot({
                 agentId: 'codex',
                 taskId: 'task-1',
                 workingDirectory: '/repo'
@@ -249,7 +296,7 @@ describe('AgentExecution', () => {
         expect(new Set(descriptor.signals.flatMap((signal) => signal.deliveries))).toEqual(new Set(['stdout-marker', 'mcp-tool']));
         expect(descriptor.mcp).toEqual({
             serverName: 'mission-mcp',
-            exposure: 'session-scoped',
+            exposure: 'agent-execution-scoped',
             publicApi: false
         });
     });
@@ -296,7 +343,7 @@ describe('AgentExecution', () => {
         const execution = AgentExecution.createLive(createRuntimeSnapshot());
         const observation = {
             observationId: 'observation-1',
-            sessionId: 'session-2',
+            agentExecutionId: 'AgentExecution-2',
             source: 'agent-signal' as const,
             signal: {
                 type: 'needs_input' as const,
@@ -308,12 +355,12 @@ describe('AgentExecution', () => {
             route: {
                 origin: 'agent-declared-signal' as const,
                 address: {
-                    agentExecutionId: 'session-2',
+                    agentExecutionId: 'AgentExecution-2',
                     scope: execution.getSnapshot().scope
                 }
             },
             claimedAddress: {
-                agentExecutionId: 'session-2',
+                agentExecutionId: 'AgentExecution-2',
                 scope: execution.getSnapshot().scope
             },
             rawText: 'signal payload',
@@ -344,7 +391,7 @@ describe('AgentExecution', () => {
         const execution = AgentExecution.createLive(createRuntimeSnapshot());
         const observation = {
             observationId: 'observation-status-1',
-            sessionId: 'session-2',
+            agentExecutionId: 'AgentExecution-2',
             source: 'agent-signal' as const,
             signal: {
                 type: 'status' as const,
@@ -356,12 +403,12 @@ describe('AgentExecution', () => {
             route: {
                 origin: 'agent-declared-signal' as const,
                 address: {
-                    agentExecutionId: 'session-2',
+                    agentExecutionId: 'AgentExecution-2',
                     scope: execution.getSnapshot().scope
                 }
             },
             claimedAddress: {
-                agentExecutionId: 'session-2',
+                agentExecutionId: 'AgentExecution-2',
                 scope: execution.getSnapshot().scope
             },
             rawText: 'status payload',
@@ -392,7 +439,7 @@ describe('AgentExecution', () => {
         execution.onDidDataChange((data) => dataChanges.push(data));
         const observation = {
             observationId: 'observation-ready-1',
-            sessionId: 'session-2',
+            agentExecutionId: 'AgentExecution-2',
             source: 'agent-signal' as const,
             signal: {
                 type: 'ready_for_verification' as const,
@@ -403,12 +450,12 @@ describe('AgentExecution', () => {
             route: {
                 origin: 'agent-declared-signal' as const,
                 address: {
-                    agentExecutionId: 'session-2',
+                    agentExecutionId: 'AgentExecution-2',
                     scope: execution.getSnapshot().scope
                 }
             },
             claimedAddress: {
-                agentExecutionId: 'session-2',
+                agentExecutionId: 'AgentExecution-2',
                 scope: execution.getSnapshot().scope
             },
             rawText: 'signal payload',
@@ -438,15 +485,15 @@ describe('AgentExecution', () => {
         const event = createAgentExecutionDataChangedEvent({ data });
 
         expect(event).toMatchObject({
-            entityId: 'agent_execution:mission-1/session-2',
-            channel: 'agent_execution:mission-1/session-2.data.changed',
+            entityId: 'agent_execution:mission-1/AgentExecution-2',
+            channel: 'agent_execution:mission-1/AgentExecution-2.data.changed',
             eventName: 'data.changed',
             type: 'agentExecution.data.changed',
             payload: {
                 reference: {
                     entity: 'AgentExecution',
                     ownerId: 'mission-1',
-                    sessionId: 'session-2'
+                    agentExecutionId: 'AgentExecution-2'
                 },
                 data
             }
@@ -474,7 +521,7 @@ describe('AgentExecution', () => {
 
 function createAgentExecutionRecord(overrides: Partial<AgentExecutionRecord> = {}): AgentExecutionRecord {
     return {
-        sessionId: 'session-1',
+        agentExecutionId: 'AgentExecution-1',
         agentId: 'copilot-cli',
         adapterLabel: 'Copilot CLI',
         lifecycleState: 'running',
@@ -506,7 +553,7 @@ function createAgentExecutionRecord(overrides: Partial<AgentExecutionRecord> = {
 function createRuntimeSnapshot(overrides: Partial<AgentExecutionSnapshot> = {}): AgentExecutionSnapshot {
     return {
         agentId: 'codex',
-        sessionId: 'session-2',
+        agentExecutionId: 'AgentExecution-2',
         scope: {
             kind: 'task',
             missionId: 'mission-1',
@@ -543,7 +590,7 @@ function createRuntimeSnapshot(overrides: Partial<AgentExecutionSnapshot> = {}):
         },
         reference: {
             agentId: 'codex',
-            sessionId: 'session-2',
+            agentExecutionId: 'AgentExecution-2',
             transport: {
                 kind: 'terminal',
                 terminalName: 'mission-agent-execution',

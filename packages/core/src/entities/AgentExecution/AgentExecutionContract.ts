@@ -59,18 +59,18 @@ export const AgentExecutionContract: EntityContractType = {
 
 export function createAgentExecutionTerminalEvent(input: {
     ownerId: string;
-    sessionId: string;
+    agentExecutionId: string;
     state: unknown;
 }): EntityEventEnvelopeType {
     const ownerId = input.ownerId.trim();
-    const sessionId = input.sessionId.trim();
+    const agentExecutionId = input.agentExecutionId.trim();
     const payload = AgentExecutionTerminalSnapshotSchema.parse({
         ownerId,
-        sessionId,
+        agentExecutionId,
         ...(typeof input.state === 'object' && input.state !== null ? input.state : {})
     });
     return createEntityEventEnvelope({
-        entityId: createEntityId('agent_execution', `${ownerId}/${sessionId}`),
+        entityId: createEntityId('agent_execution', `${ownerId}/${agentExecutionId}`),
         eventName: 'terminal',
         type: 'execution.terminal',
         payload
@@ -85,12 +85,12 @@ export function createAgentExecutionDataChangedEvent(input: {
         reference: {
             entity: agentExecutionEntityName,
             ownerId: data.ownerId,
-            sessionId: data.sessionId
+            agentExecutionId: data.agentExecutionId
         },
         data
     });
     return createEntityEventEnvelope({
-        entityId: createEntityId('agent_execution', `${data.ownerId}/${data.sessionId}`),
+        entityId: createEntityId('agent_execution', `${data.ownerId}/${data.agentExecutionId}`),
         eventName: 'data.changed',
         type: 'agentExecution.data.changed',
         payload

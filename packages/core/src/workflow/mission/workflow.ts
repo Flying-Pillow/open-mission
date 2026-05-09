@@ -13,7 +13,7 @@ export function createDefaultWorkflowSettings(): WorkflowDefinition {
         },
         execution: {
             maxParallelTasks: 1,
-            maxParallelSessions: 1
+            maxParallelAgentExecutions: 1
         },
         stageOrder: ['prd', 'spec', 'implementation', 'audit', 'delivery'],
         stages: {

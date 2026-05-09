@@ -15,6 +15,7 @@ import { AgentRegistry } from '../../../../entities/Agent/AgentRegistry.js';
 import { createAgentAdapter, type AgentAdapter } from '../AgentAdapter.js';
 import { AgentExecutor } from '../AgentExecutor.js';
 import { MissionMcpServer } from '../mcp/MissionMcpServer.js';
+import { createMemoryAgentExecutionJournalWriter } from '../testing/createMemoryAgentExecutionJournalWriter.js';
 import { createCopilot } from './Copilot.js';
 
 type MockTerminalState = {
@@ -84,20 +85,22 @@ async function startExecution(
 		}
 	});
 	await missionMcpServer.start();
+	const { journalWriter } = createMemoryAgentExecutionJournalWriter();
 	const executor = new AgentExecutor({
 		agentRegistry: new AgentRegistry({
 			agents: [await Agent.fromAdapter(adapter)]
 		}),
-		missionMcpServer
+		missionMcpServer,
+		journalWriter
 	});
 	const execution = await executor.startExecution(config);
-	const sessionId = execution.getSnapshot().sessionId;
+	const agentExecutionId = execution.getSnapshot().agentExecutionId;
 	return {
 		getSnapshot: () => execution.getSnapshot(),
 		onDidEvent: (listener) => execution.onDidEvent(listener),
-		submitPrompt: (prompt) => executor.submitPrompt(sessionId, prompt),
-		submitCommand: (command) => executor.submitCommand(sessionId, command),
-		terminate: (reason) => executor.terminateExecution(sessionId, reason)
+		submitPrompt: (prompt) => executor.submitPrompt(agentExecutionId, prompt),
+		submitCommand: (command) => executor.submitCommand(agentExecutionId, command),
+		terminate: (reason) => executor.terminateExecution(agentExecutionId, reason)
 	};
 }
 
@@ -128,7 +131,7 @@ describe('Copilot', () => {
 		vi.useRealTimers();
 	});
 
-	it('starts a PTY-backed session and passes the initial prompt via launch args', async () => {
+	it('starts a PTY-backed AgentExecution and passes the initial prompt via launch args', async () => {
 		const adapter = createAgentAdapter(createCopilot({
 			launchMode: 'interactive',
 			command: 'copilot',
@@ -142,8 +145,8 @@ describe('Copilot', () => {
 
 		expect(snapshot.agentId).toBe('copilot-cli');
 		expect(snapshot.transport?.kind).toBe('terminal');
-		expect(snapshot.sessionId).toMatch(/^task-1-copilot-cli-[a-z0-9]{8}$/);
-		expect(snapshot.transport?.terminalName.endsWith(`:task:task-1:${snapshot.sessionId}`)).toBe(true);
+		expect(snapshot.agentExecutionId).toMatch(/^task-1-copilot-cli-[a-z0-9]{8}$/);
+		expect(snapshot.transport?.terminalName.endsWith(`:task:task-1:${snapshot.agentExecutionId}`)).toBe(true);
 		expect(snapshot.transport?.terminalPaneId).toBe('pty');
 		expect(snapshot.status).toBe('running');
 		expect(state.spawnedCommand).toBe('/bin/sh');
@@ -163,7 +166,7 @@ describe('Copilot', () => {
 		const mcpConfig = JSON.parse(await fs.readFile(mcpConfigReference?.slice(1) ?? '', 'utf8')) as {
 			mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
 		};
-		expect(mcpConfig.mcpServers?.['mission-mcp']?.args).toEqual(['mcp', 'connect', '--agent-execution', snapshot.sessionId]);
+		expect(mcpConfig.mcpServers?.['mission-mcp']?.args).toEqual(['mcp', 'connect', '--agent-execution', snapshot.agentExecutionId]);
 		expect(mcpConfig.mcpServers?.['mission-mcp']?.env?.['MISSION_MCP_TOKEN']).toBeTruthy();
 		expect(state.spawnedArgs.some((arg) => arg.includes('Structured status markers'))).toBe(false);
 		expect(state.spawnedArgs.some((arg) => arg.includes('Structured status tools'))).toBe(true);
@@ -204,7 +207,7 @@ describe('Copilot', () => {
 			'mcp',
 			'connect',
 			'--agent-execution',
-			snapshot.sessionId
+			snapshot.agentExecutionId
 		]);
 		expect(bridge?.env?.['MISSION_MCP_TOKEN']).toBeTruthy();
 	});
@@ -229,7 +232,7 @@ describe('Copilot', () => {
 		const bridge = mcpConfig.mcpServers?.['mission-mcp'];
 
 		expect(bridge?.command).toBe('/opt/mission/bin/mission');
-		expect(bridge?.args).toEqual(['mcp', 'connect', '--agent-execution', snapshot.sessionId]);
+		expect(bridge?.args).toEqual(['mcp', 'connect', '--agent-execution', snapshot.agentExecutionId]);
 	});
 
 	it('uses interactive mode by default for terminal-backed MCP setup', async () => {
@@ -318,7 +321,7 @@ describe('Copilot', () => {
 		expect(persistedSettings.trusted_folders).toContain('/tmp/work');
 	});
 
-	it('derives the session name from the explicit task execution scope on launch', async () => {
+	it('derives the AgentExecution name from the explicit task execution scope on launch', async () => {
 		const adapter = createAgentAdapter(createCopilot({
 			launchMode: 'interactive',
 			command: 'copilot',
@@ -343,10 +346,10 @@ describe('Copilot', () => {
 			}
 		}));
 
-		expect(execution.getSnapshot().sessionId).toMatch(/^01-spec-from-prd-copilot-cli-[a-z0-9]{8}$/);
+		expect(execution.getSnapshot().agentExecutionId).toMatch(/^01-spec-from-prd-copilot-cli-[a-z0-9]{8}$/);
 	});
 
-	it('creates a fresh session id for each new launch of the same task', async () => {
+	it('creates a fresh AgentExecution id for each new launch of the same task', async () => {
 		const adapter = createAgentAdapter(createCopilot({
 			launchMode: 'interactive',
 			command: 'copilot',
@@ -355,10 +358,10 @@ describe('Copilot', () => {
 			spawn: createSpawn(state, () => createFakePty(state)),
 		}), {});
 
-		const firstSession = await startExecution(adapter, createLaunchConfig());
-		const secondSession = await startExecution(adapter, createLaunchConfig());
+		const firstAgentExecution = await startExecution(adapter, createLaunchConfig());
+		const secondAgentExecution = await startExecution(adapter, createLaunchConfig());
 
-		expect(firstSession.getSnapshot().sessionId).not.toBe(secondSession.getSnapshot().sessionId);
+		expect(firstAgentExecution.getSnapshot().agentExecutionId).not.toBe(secondAgentExecution.getSnapshot().agentExecutionId);
 	});
 
 	it('submits prompts by sending literal keys into terminal transport', async () => {
@@ -403,7 +406,7 @@ describe('Copilot', () => {
 		expect(events.find((event) => event.type === 'execution.awaiting-input')).toBeDefined();
 	});
 
-	it('terminates a session through the adapter API', async () => {
+	it('terminates a AgentExecution through the adapter API', async () => {
 		const adapter = createAgentAdapter(createCopilot({
 			launchMode: 'interactive',
 			command: 'copilot',

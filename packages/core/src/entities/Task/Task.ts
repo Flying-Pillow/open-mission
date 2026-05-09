@@ -49,7 +49,7 @@ export type TaskOwner = {
 		reasonCode: string;
 		summary: string;
 		sourceTaskId?: string;
-		sourceSessionId?: string;
+		sourceAgentExecutionId?: string;
 		artifactRefs?: MissionTaskArtifactReference[];
 	}): Promise<void>;
 	updateTaskLaunchPolicy(taskId: string, launchPolicy: TaskLaunchPolicy): Promise<void>;
@@ -59,8 +59,8 @@ export type TaskOwner = {
 		adapter: AgentAdapter,
 		request: AgentExecutionLaunchRequest
 	): Promise<AgentExecutionSnapshot>;
-	recordStartedTaskSession(snapshot: AgentExecutionSnapshot): Promise<AgentExecution>;
-	recordTaskSessionLaunchFailure(taskId: string, error: unknown): Promise<void>;
+	recordStartedTaskAgentExecution(snapshot: AgentExecutionSnapshot): Promise<AgentExecution>;
+	recordTaskAgentExecutionLaunchFailure(taskId: string, error: unknown): Promise<void>;
 };
 
 export type TaskConfigureOptions = {
@@ -332,7 +332,7 @@ export class Task extends Entity<TaskDataType, string> {
 		reasonCode: string;
 		summary: string;
 		sourceTaskId?: string;
-		sourceSessionId?: string;
+		sourceAgentExecutionId?: string;
 		artifactRefs?: MissionTaskArtifactReference[];
 	}): Promise<MissionTaskState> {
 		await this.refresh();
@@ -350,10 +350,10 @@ export class Task extends Entity<TaskDataType, string> {
 		return this.toState();
 	}
 
-	public async launchSession(
+	public async launchAgentExecution(
 		request: AgentExecutionLaunchRequest
 	): Promise<AgentExecution> {
-		await this.prepareForSessionLaunch();
+		await this.prepareForAgentExecutionLaunch();
 		const owner = this.requireOwner();
 		const state = this.requireState();
 		const adapter = owner.requireAgentAdapter(request.agentId);
@@ -370,10 +370,10 @@ export class Task extends Entity<TaskDataType, string> {
 					prompt: buildTaskLaunchPrompt(state, request.workingDirectory)
 				};
 			const snapshot = await owner.startTaskAgentExecution(state, adapter, launchRequest);
-			return owner.recordStartedTaskSession(snapshot);
+			return owner.recordStartedTaskAgentExecution(snapshot);
 		} catch (error) {
 			try {
-				await owner.recordTaskSessionLaunchFailure(state.taskId, error);
+				await owner.recordTaskAgentExecutionLaunchFailure(state.taskId, error);
 			} catch {
 				// Preserve the original launch failure when the failure-record side effect cannot be applied.
 			}
@@ -472,7 +472,7 @@ export class Task extends Entity<TaskDataType, string> {
 		}
 	}
 
-	private async prepareForSessionLaunch(): Promise<void> {
+	private async prepareForAgentExecutionLaunch(): Promise<void> {
 		await this.refresh();
 		const state = this.requireState();
 		if (state.status === 'queued' || state.status === 'running') {

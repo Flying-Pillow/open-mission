@@ -16,7 +16,7 @@ export type AgentAdapterTransportCapabilities = {
     provisioning: {
         requiresRuntimeConfig: boolean;
         supportsStdioBridge: boolean;
-        supportsSessionScopedTools: boolean;
+        supportsAgentExecutionScopedTools: boolean;
     };
 };
 
@@ -55,8 +55,8 @@ export type AgentAdapterSettings = {
     launchMode?: 'interactive' | 'print';
     reasoningEffort?: string;
     dangerouslySkipPermissions?: boolean;
-    resumeSession?: string;
-    captureSessions?: boolean;
+    resumeAgentExecution?: string;
+    captureAgentExecutions?: boolean;
     providerEnv?: Record<string, string>;
     runtimeEnv?: NodeJS.ProcessEnv;
     launchEnv?: Record<string, string>;
@@ -67,8 +67,8 @@ export type ResolvedAgentAdapterSettings = {
     launchMode: 'interactive' | 'print';
     reasoningEffort?: string;
     dangerouslySkipPermissions: boolean;
-    resumeSession?: string;
-    captureSessions?: boolean;
+    resumeAgentExecution?: string;
+    captureAgentExecutions?: boolean;
     providerEnv: Record<string, string>;
     runtimeEnv: NodeJS.ProcessEnv;
     launchEnv: Record<string, string>;
@@ -114,8 +114,8 @@ export type AgentAdapterLaunchInput = {
 export type AgentAdapterProviderSettingsInput = {
     reasoningEfforts?: readonly string[];
     allowDangerouslySkipPermissions?: boolean;
-    allowCaptureSessions?: boolean;
-    allowResumeSession?: boolean;
+    allowCaptureAgentExecutions?: boolean;
+    allowResumeAgentExecution?: boolean;
 };
 
 export type AgentAdapterTrustedFoldersInput = {
@@ -128,9 +128,9 @@ export type AgentAdapterTerminalOptions = SharedTerminalRegistryOptions & {
 
 export type AgentAdapterRuntimeSignal =
     | {
-        type: 'provider-session';
+        type: 'provider-execution';
         providerName: string;
-        sessionId: string;
+        agentExecutionId: string;
         source: 'provider-structured';
         confidence: 'high';
     }
@@ -157,7 +157,7 @@ export type AgentAdapterInput = {
     runtimeEnv?: NodeJS.ProcessEnv;
     trustedFolders?: AgentAdapterTrustedFoldersInput;
     parseRuntimeOutputLine?: (line: string, agent: AgentInput) => AgentAdapterRuntimeOutput[];
-    parseSessionUsageContent?: (content: string, agent: AgentInput) => AgentAdapterRuntimeOutput | undefined;
+    parseAgentExecutionUsageContent?: (content: string, agent: AgentInput) => AgentAdapterRuntimeOutput | undefined;
     prepareLaunchConfig?: (config: AgentLaunchConfig, agent: AgentInput, mcpAccess?: AgentExecutionMcpAccess) => AgentAdapterLaunchPreparation | Promise<AgentAdapterLaunchPreparation>;
     transportCapabilities?: AgentAdapterTransportCapabilities;
     terminalOptions?: Partial<AgentAdapterTerminalOptions>;
@@ -171,7 +171,7 @@ export type AgentAdapterOptions = {
     displayName?: string;
     createLaunchPlan(config: AgentLaunchConfig): AgentAdapterLaunchPlan;
     parseRuntimeOutputLine?: (line: string) => AgentAdapterRuntimeOutput[];
-    parseSessionUsageContent?: (content: string) => AgentAdapterRuntimeOutput | undefined;
+    parseAgentExecutionUsageContent?: (content: string) => AgentAdapterRuntimeOutput | undefined;
     prepareLaunchConfig?: (config: AgentLaunchConfig, mcpAccess?: AgentExecutionMcpAccess) => AgentAdapterLaunchPreparation | Promise<AgentAdapterLaunchPreparation>;
     transportCapabilities?: AgentAdapterTransportCapabilities;
     terminalOptions?: Partial<AgentAdapterTerminalOptions>;
@@ -182,7 +182,7 @@ export class AgentAdapter {
     public readonly displayName: string;
     private readonly createLaunchPlanHook: (config: AgentLaunchConfig) => AgentAdapterLaunchPlan;
     private readonly parseRuntimeOutputLineHook: ((line: string) => AgentAdapterRuntimeOutput[]) | undefined;
-    private readonly parseSessionUsageContentHook: ((content: string) => AgentAdapterRuntimeOutput | undefined) | undefined;
+    private readonly parseAgentExecutionUsageContentHook: ((content: string) => AgentAdapterRuntimeOutput | undefined) | undefined;
     private readonly prepareLaunchConfigHook: ((config: AgentLaunchConfig, mcpAccess?: AgentExecutionMcpAccess) => AgentAdapterLaunchPreparation | Promise<AgentAdapterLaunchPreparation>) | undefined;
     private readonly transportCapabilities: AgentAdapterTransportCapabilities;
     public readonly terminalOptions: Partial<AgentAdapterTerminalOptions>;
@@ -198,7 +198,7 @@ export class AgentAdapter {
         }
         this.createLaunchPlanHook = options.createLaunchPlan;
         this.parseRuntimeOutputLineHook = options.parseRuntimeOutputLine;
-        this.parseSessionUsageContentHook = options.parseSessionUsageContent;
+        this.parseAgentExecutionUsageContentHook = options.parseAgentExecutionUsageContent;
         this.prepareLaunchConfigHook = options.prepareLaunchConfig;
         this.transportCapabilities = options.transportCapabilities ?? {
             supported: ['stdout-marker'],
@@ -209,7 +209,7 @@ export class AgentAdapter {
             provisioning: {
                 requiresRuntimeConfig: false,
                 supportsStdioBridge: false,
-                supportsSessionScopedTools: false
+                supportsAgentExecutionScopedTools: false
             }
         };
         this.terminalOptions = { ...(options.terminalOptions ?? {}) };
@@ -246,8 +246,8 @@ export class AgentAdapter {
         return this.parseRuntimeOutputLineHook?.(line) ?? [{ kind: 'none' }];
     }
 
-    public parseSessionUsageContent(content: string): AgentAdapterRuntimeOutput | undefined {
-        return this.parseSessionUsageContentHook?.(content);
+    public parseAgentExecutionUsageContent(content: string): AgentAdapterRuntimeOutput | undefined {
+        return this.parseAgentExecutionUsageContentHook?.(content);
     }
 
     public async prepareLaunchConfig(config: AgentLaunchConfig, mcpAccess?: AgentExecutionMcpAccess): Promise<AgentAdapterLaunchPreparation> {
@@ -265,8 +265,8 @@ export function createAgentAdapter(agent: AgentInput, context: AgentAdapterConte
         ...(agent.adapter.parseRuntimeOutputLine
             ? { parseRuntimeOutputLine: (line: string) => agent.adapter.parseRuntimeOutputLine?.(line, agent) ?? [{ kind: 'none' }] }
             : {}),
-        ...(agent.adapter.parseSessionUsageContent
-            ? { parseSessionUsageContent: (content: string) => agent.adapter.parseSessionUsageContent?.(content, agent) }
+        ...(agent.adapter.parseAgentExecutionUsageContent
+            ? { parseAgentExecutionUsageContent: (content: string) => agent.adapter.parseAgentExecutionUsageContent?.(content, agent) }
             : {}),
         prepareLaunchConfig: (config: AgentLaunchConfig, mcpAccess?: AgentExecutionMcpAccess) => prepareAgentLaunchConfig(config, agent, trustedFolders, mcpAccess),
         ...(agent.adapter.transportCapabilities ? { transportCapabilities: agent.adapter.transportCapabilities } : {}),
@@ -385,13 +385,13 @@ function resolveConfiguredProviderSettings(config: AgentLaunchConfig, context: A
     if (settings.dangerouslySkipPermissions && !settingsInput.allowDangerouslySkipPermissions) {
         throw new ProviderInitializationError(agent.agentId, `Adapter '${agent.agentId}' does not support configurable permission bypass.`);
     }
-    if (settings.captureSessions && !settingsInput.allowCaptureSessions) {
-        throw new ProviderInitializationError(agent.agentId, `Adapter '${agent.agentId}' does not support session capture.`);
+    if (settings.captureAgentExecutions && !settingsInput.allowCaptureAgentExecutions) {
+        throw new ProviderInitializationError(agent.agentId, `Adapter '${agent.agentId}' does not support AgentExecution capture.`);
     }
-    if (settings.resumeSession && !settingsInput.allowResumeSession) {
-        throw new ProviderInitializationError(agent.agentId, `Adapter '${agent.agentId}' does not support session resume.`);
+    if (settings.resumeAgentExecution && !settingsInput.allowResumeAgentExecution) {
+        throw new ProviderInitializationError(agent.agentId, `Adapter '${agent.agentId}' does not support AgentExecution resume.`);
     }
-    validateCaptureSessions(agent.agentId, settings.captureSessions);
+    validateCaptureAgentExecutions(agent.agentId, settings.captureAgentExecutions);
     validateDangerouslySkipPermissions(agent.agentId, settings.dangerouslySkipPermissions);
     return settings;
 }
@@ -457,8 +457,8 @@ function buildLaunchArgs(input: { config: AgentLaunchConfig; agent: AgentInput; 
             args.push(argument.flag, directory);
         }
     }
-    if (input.settings.resumeSession) {
-        throw new ProviderInitializationError(input.agent.agentId, `Adapter '${input.agent.agentId}' does not support resumeSession for interactive launch plans.`);
+    if (input.settings.resumeAgentExecution) {
+        throw new ProviderInitializationError(input.agent.agentId, `Adapter '${input.agent.agentId}' does not support resumeAgentExecution for interactive launch plans.`);
     }
     return args;
 }
@@ -497,8 +497,8 @@ function resolveAgentAdapterSettings<TAgentId extends string>(input: { config: A
         launchMode: raw.launchMode ?? 'interactive',
         ...(raw.reasoningEffort ? { reasoningEffort: raw.reasoningEffort.trim() } : {}),
         dangerouslySkipPermissions: raw.dangerouslySkipPermissions ?? false,
-        ...(raw.resumeSession?.trim() ? { resumeSession: raw.resumeSession.trim() } : {}),
-        ...(raw.captureSessions !== undefined ? { captureSessions: raw.captureSessions } : {}),
+        ...(raw.resumeAgentExecution?.trim() ? { resumeAgentExecution: raw.resumeAgentExecution.trim() } : {}),
+        ...(raw.captureAgentExecutions !== undefined ? { captureAgentExecutions: raw.captureAgentExecutions } : {}),
         providerEnv: validateStringRecord(input.agentId, raw.providerEnv, 'resolved provider env'),
         runtimeEnv: sanitizeProcessEnv(raw.runtimeEnv),
         launchEnv: validateStringRecord(input.agentId, { ...(raw.launchEnv ?? {}), ...(input.config.launchEnv ?? {}) }, 'launch env')
@@ -517,9 +517,9 @@ function validateReasoningEffort(agentId: string, value: string | undefined, all
     }
 }
 
-function validateCaptureSessions(agentId: string, value: boolean | undefined): void {
+function validateCaptureAgentExecutions(agentId: string, value: boolean | undefined): void {
     if (value !== undefined && agentId !== 'claude-code' && value) {
-        throw new ProviderInitializationError(agentId, `Adapter '${agentId}' does not support enabling session capture.`);
+        throw new ProviderInitializationError(agentId, `Adapter '${agentId}' does not support enabling AgentExecution capture.`);
     }
 }
 

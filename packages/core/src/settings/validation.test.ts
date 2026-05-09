@@ -7,12 +7,12 @@ describe('workflow settings validation', () => {
 	it('reports invalid concurrency values', () => {
 		const settings = createDefaultWorkflowSettings();
 		settings.execution.maxParallelTasks = 0;
-		settings.execution.maxParallelSessions = -1;
+		settings.execution.maxParallelAgentExecutions = -1;
 
 		expect(validateWorkflowSettings(settings)).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({ path: '/execution/maxParallelTasks' }),
-				expect.objectContaining({ path: '/execution/maxParallelSessions' })
+				expect.objectContaining({ path: '/execution/maxParallelAgentExecutions' })
 			])
 		);
 	});

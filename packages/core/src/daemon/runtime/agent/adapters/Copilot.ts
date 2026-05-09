@@ -46,7 +46,7 @@ export function createCopilot(input: CopilotInput = {}): AgentInput {
                 provisioning: {
                     requiresRuntimeConfig: true,
                     supportsStdioBridge: true,
-                    supportsSessionScopedTools: true
+                    supportsAgentExecutionScopedTools: true
                 }
             },
             prepareLaunchConfig: prepareCopilotLaunchConfig,

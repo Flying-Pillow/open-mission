@@ -5,7 +5,7 @@ import { createAgentExecutionProtocolDescriptor } from '../../../../entities/Age
 describe('AgentExecutionSignalLaunchContext', () => {
     it('builds mandatory stdout marker instructions without transport env', () => {
         const context = buildAgentExecutionSignalLaunchContext({
-            agentExecutionId: 'session-1',
+            agentExecutionId: 'agent-execution-1',
             protocolDescriptor: createAgentExecutionProtocolDescriptor({
                 scope: {
                     kind: 'task',
@@ -17,24 +17,24 @@ describe('AgentExecutionSignalLaunchContext', () => {
         });
 
         expect(context.launchEnv).toEqual({});
-        expect(context.sessionInstructions).toContain('Structured status markers');
-        expect(context.sessionInstructions).toContain('@task::');
-        expect(context.sessionInstructions).not.toContain('missionId: mission-31');
-        expect(context.sessionInstructions).not.toContain('taskId: task-6');
-        expect(context.sessionInstructions).toContain('agentExecutionId: session-1');
-        expect(context.sessionInstructions).not.toContain('daemon');
-        expect(context.sessionInstructions).not.toContain('owning Entity');
-        expect(context.sessionInstructions).toContain('progress: Progress');
-        expect(context.sessionInstructions).toContain('status: Status');
-        expect(context.sessionInstructions).toContain('phase "idle"');
-        expect(context.sessionInstructions).toContain('For needs_input, include a question and choices');
-        expect(context.sessionInstructions).toContain('"kind":"fixed"');
-        expect(context.sessionInstructions).toContain('"kind":"manual"');
+        expect(context.agentExecutionInstructions).toContain('Structured status markers');
+        expect(context.agentExecutionInstructions).toContain('@task::');
+        expect(context.agentExecutionInstructions).not.toContain('missionId: mission-31');
+        expect(context.agentExecutionInstructions).not.toContain('taskId: task-6');
+        expect(context.agentExecutionInstructions).toContain('agentExecutionId: agent-execution-1');
+        expect(context.agentExecutionInstructions).not.toContain('daemon');
+        expect(context.agentExecutionInstructions).not.toContain('owning Entity');
+        expect(context.agentExecutionInstructions).toContain('progress: Progress');
+        expect(context.agentExecutionInstructions).toContain('status: Status');
+        expect(context.agentExecutionInstructions).toContain('phase "idle"');
+        expect(context.agentExecutionInstructions).toContain('For needs_input, include a question and choices');
+        expect(context.agentExecutionInstructions).toContain('"kind":"fixed"');
+        expect(context.agentExecutionInstructions).toContain('"kind":"manual"');
     });
 
     it('derives repository owner marker instructions from repository scope', () => {
         const context = buildAgentExecutionSignalLaunchContext({
-            agentExecutionId: 'repository-session-1',
+            agentExecutionId: 'repository-agent-execution-1',
             protocolDescriptor: createAgentExecutionProtocolDescriptor({
                 scope: {
                     kind: 'repository',
@@ -44,14 +44,14 @@ describe('AgentExecutionSignalLaunchContext', () => {
             })
         });
 
-        expect(context.sessionInstructions).not.toContain("Repository '/repositories/Flying-Pillow/connect-four'");
-        expect(context.sessionInstructions).toContain('@repository::');
-        expect(context.sessionInstructions).toContain('agentExecutionId: repository-session-1');
+        expect(context.agentExecutionInstructions).not.toContain("Repository '/repositories/Flying-Pillow/connect-four'");
+        expect(context.agentExecutionInstructions).toContain('@repository::');
+        expect(context.agentExecutionInstructions).toContain('agentExecutionId: repository-agent-execution-1');
     });
 
     it('builds MCP tool instructions without asking the Agent to choose event ids', () => {
         const context = buildAgentExecutionSignalLaunchContext({
-            agentExecutionId: 'repository-session-1',
+            agentExecutionId: 'repository-agent-execution-1',
             protocolDescriptor: createAgentExecutionProtocolDescriptor({
                 scope: {
                     kind: 'repository',
@@ -63,12 +63,12 @@ describe('AgentExecutionSignalLaunchContext', () => {
         });
 
         expect(context.launchEnv).toEqual({});
-        expect(context.sessionInstructions).toContain('Structured status tools');
-        expect(context.sessionInstructions).toContain('mission-mcp MCP tools');
-        expect(context.sessionInstructions).toContain('Do not ask the operator for AgentExecution ids, event ids, tokens, or transport fields.');
-        expect(context.sessionInstructions).toContain('Omit eventId unless you are intentionally retrying the exact same signal.');
-        expect(context.sessionInstructions).not.toContain('@repository::');
-        expect(context.sessionInstructions).toContain('status: Status');
-        expect(context.sessionInstructions).toContain('needs_input: Needs Input');
+        expect(context.agentExecutionInstructions).toContain('Structured status tools');
+        expect(context.agentExecutionInstructions).toContain('mission-mcp MCP tools');
+        expect(context.agentExecutionInstructions).toContain('Do not ask the operator for AgentExecution ids, event ids, tokens, or transport fields.');
+        expect(context.agentExecutionInstructions).toContain('Omit eventId unless you are intentionally retrying the exact same signal.');
+        expect(context.agentExecutionInstructions).not.toContain('@repository::');
+        expect(context.agentExecutionInstructions).toContain('status: Status');
+        expect(context.agentExecutionInstructions).toContain('needs_input: Needs Input');
     });
 });

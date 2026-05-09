@@ -211,18 +211,18 @@ function createRequestExecutor() {
             );
         },
         reconcileExecutions: async () => [],
-        listRuntimeSessions: () => [],
-        getRuntimeSession: () => undefined,
+        listRuntimeAgentExecutions: () => [],
+        getRuntimeAgentExecution: () => undefined,
         attachTerminal: async () => {
             throw new Error('not implemented for test');
         },
         startExecution: async () => {
             throw new Error('not implemented for test');
         },
-        cancelRuntimeSession: async () => [],
-        promptRuntimeSession: async () => [],
-        commandRuntimeSession: async () => [],
-        terminateRuntimeSession: async () => [],
+        cancelRuntimeAgentExecution: async () => [],
+        promptRuntimeAgentExecution: async () => [],
+        commandRuntimeAgentExecution: async () => [],
+        terminateRuntimeAgentExecution: async () => [],
         getExecutedRequestTypes: () => executedRequestTypes
     } as unknown as MissionWorkflowRequestExecutor & {
         getExecutedRequestTypes(): string[];

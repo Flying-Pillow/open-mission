@@ -5,6 +5,7 @@
         type ButtonVariant,
     } from "$lib/components/ui/button/index.js";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
+    import * as Tooltip from "$lib/components/ui/tooltip/index.js";
     import { cn } from "$lib/utils.js";
     import Icon from "@iconify/svelte";
     import type { EntityCommandDescriptorType } from "@flying-pillow/mission-core/entities/Entity/EntitySchema";
@@ -297,30 +298,63 @@
                 >
             {:else}
                 {#each availableCommands as command (command.commandId)}
-                    <Button
-                        variant={commandVariant(command)}
-                        size={iconOnly ? "icon-sm" : "sm"}
-                        disabled={commandPending !== null || command.disabled}
-                        class={buttonClass}
-                        onclick={() => void executeCommand(command)}
-                        aria-label={command.label}
-                        title={command.disabledReason ||
-                            command.description ||
-                            command.label}
-                    >
-                        <Icon
-                            icon={getCommandIcon(command)}
-                            class="size-4"
-                            data-icon="inline-start"
-                        />
-                        {#if !iconOnly}
+                    {#if iconOnly}
+                        <Tooltip.Root>
+                            <Tooltip.Trigger>
+                                {#snippet child({ props })}
+                                    <Button
+                                        variant={commandVariant(command)}
+                                        size="icon-sm"
+                                        disabled={commandPending !== null ||
+                                            command.disabled}
+                                        class={buttonClass}
+                                        onclick={() => void executeCommand(command)}
+                                        aria-label={command.label}
+                                        title={command.disabledReason ||
+                                            command.description ||
+                                            command.label}
+                                        {...props}
+                                    >
+                                        <Icon
+                                            icon={getCommandIcon(command)}
+                                            class="size-4"
+                                            data-icon="inline-start"
+                                        />
+                                    </Button>
+                                {/snippet}
+                            </Tooltip.Trigger>
+                            <Tooltip.Content>
+                                {commandPending === command.commandId
+                                    ? `${command.label}...`
+                                    : (command.disabledReason ||
+                                          command.description ||
+                                          command.label)}
+                            </Tooltip.Content>
+                        </Tooltip.Root>
+                    {:else}
+                        <Button
+                            variant={commandVariant(command)}
+                            size="sm"
+                            disabled={commandPending !== null || command.disabled}
+                            class={buttonClass}
+                            onclick={() => void executeCommand(command)}
+                            aria-label={command.label}
+                            title={command.disabledReason ||
+                                command.description ||
+                                command.label}
+                        >
+                            <Icon
+                                icon={getCommandIcon(command)}
+                                class="size-4"
+                                data-icon="inline-start"
+                            />
                             <span>
                                 {commandPending === command.commandId
                                     ? `${command.label}...`
                                     : command.label}
                             </span>
-                        {/if}
-                    </Button>
+                        </Button>
+                    {/if}
                 {/each}
             {/if}
         </div>

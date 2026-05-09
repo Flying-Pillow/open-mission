@@ -49,7 +49,7 @@ export function createDraftMissionWorkflowRuntimeState(
             createEmptyStageProjection(stageId, index === 0 ? 'ready' : 'pending')
         ),
         tasks: [],
-        sessions: [],
+        agentExecutions: [],
         gates: configuration.workflow.gates.map((gate) => ({
             gateId: gate.gateId,
             intent: gate.intent,
@@ -109,11 +109,12 @@ export function toAgentExecutionRuntimeState(
     execution: AgentExecutionRuntimeState
 ): AgentExecutionRuntimeState {
     return {
-        sessionId: execution.sessionId,
+        agentExecutionId: execution.agentExecutionId,
         taskId: execution.taskId,
         agentId: execution.agentId,
         ...(execution.transportId ? { transportId: execution.transportId } : {}),
-        ...(execution.sessionLogPath ? { sessionLogPath: execution.sessionLogPath } : {}),
+        ...(execution.agentJournalPath ? { agentJournalPath: execution.agentJournalPath } : {}),
+        ...(execution.terminalRecordingPath ? { terminalRecordingPath: execution.terminalRecordingPath } : {}),
         ...(execution.terminalHandle ? { terminalHandle: { ...execution.terminalHandle } } : {}),
         lifecycle: execution.lifecycle,
         launchedAt: execution.launchedAt,

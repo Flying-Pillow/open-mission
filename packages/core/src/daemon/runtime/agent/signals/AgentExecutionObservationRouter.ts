@@ -343,16 +343,16 @@ function parseAdapterRuntimeOutput(observation: AgentAdapterRuntimeOutput): Agen
 }
 
 function toProviderDiagnosticCandidate(observation: Extract<AgentAdapterRuntimeOutput, { kind: 'signal' }>): AgentExecutionSignalCandidate {
-	if (observation.signal.type === 'provider-session') {
+	if (observation.signal.type === 'provider-execution') {
 		return {
-			dedupeKey: `provider-session:${observation.signal.providerName}:${observation.signal.sessionId}`,
+			dedupeKey: `provider-execution:${observation.signal.providerName}:${observation.signal.agentExecutionId}`,
 			signal: {
 				type: 'diagnostic',
-				code: 'provider-session',
-				summary: `Provider '${observation.signal.providerName}' reported session '${observation.signal.sessionId}'.`,
+				code: 'provider-execution',
+				summary: `Provider '${observation.signal.providerName}' reported execution '${observation.signal.agentExecutionId}'.`,
 				payload: {
 					providerName: observation.signal.providerName,
-					sessionId: observation.signal.sessionId
+					agentExecutionId: observation.signal.agentExecutionId
 				},
 				source: observation.signal.source,
 				confidence: observation.signal.confidence

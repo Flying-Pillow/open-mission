@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AgentExecutionObservationLedger } from './AgentExecutionObservationLedger.js';
-import { AgentExecutionObservationPolicy } from './AgentExecutionObservationPolicy.js';
+import { AgentExecutionObservationLedger, AgentExecutionObservationPolicy } from './AgentExecutionObservationPolicy.js';
 import {
 	MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH,
 	type AgentExecutionObservation,
@@ -10,7 +9,7 @@ import {
 const markerPrefix = '@task::';
 
 const address = {
-	agentExecutionId: 'session-7',
+	agentExecutionId: 'agent-execution-7',
 	scope: {
 		kind: 'task' as const,
 		missionId: 'mission-31',
@@ -22,7 +21,7 @@ const address = {
 function createSnapshot(): AgentExecutionSnapshot {
 	return {
 		agentId: 'claude-code',
-		sessionId: 'session-7',
+		agentExecutionId: 'agent-execution-7',
 		scope: {
 			kind: 'task',
 			missionId: 'mission-31',
@@ -45,7 +44,7 @@ function createSnapshot(): AgentExecutionSnapshot {
 		acceptedCommands: [],
 		reference: {
 			agentId: 'claude-code',
-			sessionId: 'session-7'
+			agentExecutionId: 'agent-execution-7'
 		},
 		startedAt: '2026-05-04T11:58:00.000Z',
 		updatedAt: '2026-05-04T11:59:00.000Z'
@@ -97,7 +96,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		});
 
 		expect(progressDecision).toEqual({
-			action: 'update-session',
+			action: 'update-execution',
 			eventType: 'execution.updated',
 			snapshotPatch: {
 				status: 'running',
@@ -111,7 +110,7 @@ describe('AgentExecutionObservationPolicy', () => {
 			}
 		});
 		expect(needsInputDecision).toEqual({
-			action: 'update-session',
+			action: 'update-execution',
 			eventType: 'execution.awaiting-input',
 			snapshotPatch: {
 				status: 'awaiting-input',
@@ -127,7 +126,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		});
 	});
 
-	it('promotes status phases into machine-readable session state', () => {
+	it('promotes status phases into machine-readable AgentExecution state', () => {
 		const policy = new AgentExecutionObservationPolicy();
 		const initializingDecision = policy.evaluate({
 			snapshot: createSnapshot(),
@@ -157,7 +156,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		});
 
 		expect(initializingDecision).toEqual({
-			action: 'update-session',
+			action: 'update-execution',
 			eventType: 'execution.updated',
 			snapshotPatch: {
 				status: 'starting',
@@ -171,7 +170,7 @@ describe('AgentExecutionObservationPolicy', () => {
 			}
 		});
 		expect(idleDecision).toEqual({
-			action: 'update-session',
+			action: 'update-execution',
 			eventType: 'execution.updated',
 			snapshotPatch: {
 				status: 'running',
@@ -210,7 +209,7 @@ describe('AgentExecutionObservationPolicy', () => {
 			action: 'reject',
 			reason: 'Agent-declared signal address did not match the active Agent execution.'
 		});
-		expect(accepted.action).toBe('update-session');
+		expect(accepted.action).toBe('update-execution');
 		expect(duplicate).toEqual({
 			action: 'reject',
 			reason: "Observation 'observation-2' was already processed."
@@ -225,7 +224,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		expect(firstPolicy.evaluate({
 			snapshot: createSnapshot(),
 			observation: createObservation({ observationId: 'shared-observation' })
-		}).action).toBe('update-session');
+		}).action).toBe('update-execution');
 		expect(secondPolicy.evaluate({
 			snapshot: createSnapshot(),
 			observation: createObservation({ observationId: 'shared-observation' })
@@ -274,7 +273,7 @@ describe('AgentExecutionObservationPolicy', () => {
 
 		expect(heuristic).toEqual({
 			action: 'record-observation-only',
-			reason: 'Diagnostic signals never mutate session state.'
+			reason: 'Diagnostic signals never mutate AgentExecution state.'
 		});
 		expect(completedClaim).toEqual({
 			action: 'record-observation-only',
@@ -303,7 +302,7 @@ describe('AgentExecutionObservationPolicy', () => {
 				route: {
 					origin: 'agent-declared-signal',
 					address: {
-						agentExecutionId: 'session-7',
+						agentExecutionId: 'agent-execution-7',
 						scope: {
 							kind: 'task',
 							missionId: 'mission-31',
@@ -349,7 +348,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		});
 	});
 
-	it('rejects unaddressed agent-declared signals before they can promote session state', () => {
+	it('rejects unaddressed agent-declared signals before they can promote AgentExecution state', () => {
 		const policy = new AgentExecutionObservationPolicy();
 		const observation = createObservation({
 			observationId: 'observation-unscoped-marker'
@@ -390,7 +389,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		});
 	});
 
-	it('rejects terminal output that tries to claim promotable session state directly', () => {
+	it('rejects terminal output that tries to claim promotable AgentExecution state directly', () => {
 		const policy = new AgentExecutionObservationPolicy();
 
 		expect(policy.evaluate({
@@ -478,7 +477,7 @@ describe('AgentExecutionObservationPolicy', () => {
 				}
 			})
 		})).toEqual({
-			action: 'update-session',
+			action: 'update-execution',
 			eventType: 'execution.completed',
 			snapshotPatch: {
 				status: 'completed',
@@ -523,7 +522,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		});
 	});
 
-	it('rejects oversized agent-declared signal claims before they can promote session state', () => {
+	it('rejects oversized agent-declared signal claims before they can promote AgentExecution state', () => {
 		const policy = new AgentExecutionObservationPolicy();
 
 		expect(policy.evaluate({
@@ -538,7 +537,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		});
 	});
 
-	it('rejects promotable claims after the session has already ended', () => {
+	it('rejects promotable claims after the AgentExecution has already ended', () => {
 		const policy = new AgentExecutionObservationPolicy();
 
 		expect(policy.evaluate({
@@ -549,11 +548,11 @@ describe('AgentExecutionObservationPolicy', () => {
 				endedAt: '2026-05-04T12:00:00.000Z'
 			},
 			observation: createObservation({
-				observationId: 'observation-terminal-session-progress'
+				observationId: 'observation-terminal-agent-execution-progress'
 			})
 		})).toEqual({
 			action: 'reject',
-			reason: "Agent execution 'session-7' already ended with status 'completed'."
+			reason: "Agent execution 'agent-execution-7' already ended with status 'completed'."
 		});
 	});
 });

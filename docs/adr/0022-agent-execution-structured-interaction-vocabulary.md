@@ -3,8 +3,8 @@ layout: default
 title: Agent Execution Structured Interaction Vocabulary
 parent: Architecture Decisions
 nav_order: 22
-status: proposed
-date: 2026-05-07
+status: accepted
+date: 2026-05-09
 decision_area: agent-runtime
 owners:
   - maintainers
@@ -32,13 +32,19 @@ An **Agent-declared signal descriptor** describes one structured signal payload 
 
 An **Agent execution observation** is the daemon-normalized representation of something observed from the Agent runtime, such as an Agent-declared signal, provider-structured output, terminal output heuristic, or daemon-authored observation. Observations are evaluated by policy before they can affect AgentExecution state, owner Entity state, or published Entity events.
 
+An **AgentExecution decision** is the durable result of policy evaluation for a message or observation. It may reject input, record it without state effects, emit an AgentExecution event, update AgentExecution state, or route an owner effect. Decisions are recorded before their effects are applied so replay and audit can explain why state changed.
+
+An **AgentExecution interaction journal** is the append-only semantic journal for one AgentExecution. It records accepted AgentExecution messages, observations, decisions, state effects, owner effects, and projection material. It is separate from terminal recordings and Mission workflow event logs.
+
 An **Agent execution claim** is an accepted observation where the Agent declares readiness, completion, failure, or another state assertion that requires Mission or operator verification. A claim may publish an Entity event or update AgentExecution audit state. Mission task completion follows the owning Entity's workflow rules.
 
 An **Agent execution protocol descriptor** is the complete structured interaction contract for one Agent execution. It combines the available Agent execution message descriptors and Agent-declared signal descriptors for the execution's scope, owner Entity, selected Agent, and Agent adapter.
 
 ## Source Of Truth
 
-The source of truth for structured Agent execution interaction is the Agent execution protocol descriptor owned by the daemon for that AgentExecution scope. The descriptor is derived from the AgentExecution Entity, the selected Agent adapter, and the owning Entity resolved from `AgentExecutionScope`.
+The source of truth for supported structured Agent execution interaction is the Agent execution protocol descriptor owned by the daemon for that AgentExecution scope. The descriptor is derived from the AgentExecution Entity, the selected Agent adapter, and the owning Entity resolved from `AgentExecutionScope`.
+
+The source of truth for what happened during one AgentExecution is the AgentExecution interaction journal defined by ADR-0025. The descriptor defines what can be sent or accepted; the journal records what was accepted, observed, decided, and applied.
 
 The descriptor has two distinct halves:
 
@@ -87,7 +93,9 @@ AgentExecution lifecycle truth remains daemon-owned. `completed_claim` and `fail
 
 `needs_input` is an observation that can put AgentExecution into an awaiting-input state and publish an Entity event. Its signal payload carries a required `question` and required `choices` array. Each choice is either `kind: "fixed"` with `label` and `value`, or `kind: "manual"` with `label` and optional `placeholder` for freeform operator input. The operator response is a separate Agent execution message or Entity command.
 
-`progress`, `blocked`, and `message` can update AgentExecution progress or audit-facing state after policy evaluation. Any Mission workflow effect flows through an explicit owning Entity rule covered by tests.
+`progress` can update AgentExecution runtime activity or telemetry after policy evaluation. It should not be modeled as a semantic state transition unless it changes lifecycle, attention, activity, or current input request. `blocked` can update attention or owner-visible claim state. `message` can update audit-facing projection state. Any Mission workflow effect flows through an explicit owning Entity rule covered by tests.
+
+AgentExecution status must separate lifecycle, attention, activity, and runtime capabilities. `awaiting-input` is collaboration attention and input-request state, not a long-term lifecycle state. During convergence, compatibility with existing `awaiting-input` values must be handled through an explicit runtime migration or clean-sheet state reset, not tolerant readers.
 
 ## Event Listener Discipline
 
@@ -99,6 +107,8 @@ Entity events publish accepted facts. Owning Entity methods and policies validat
 
 - Agent launch instructions are generated from Agent execution protocol descriptors.
 - AgentExecution exposes both message descriptors and signal descriptors in its protocol snapshot or data model.
+- AgentExecution persists semantic interaction in an AgentExecution interaction journal, while Terminal persists raw PTY recordings and Mission workflow runtime persists orchestration events.
+- AgentExecution chat or timeline views are projections over journal records and live runtime state, not source-of-truth transcripts.
 - AgentExecutor routes accepted observations through owner-Entity resolution.
 - AgentExecutionRegistry indexes active AgentExecution instances by AgentExecution id and owner-derived key. It must not duplicate AgentExecutor lifecycle management or become an owner-specific session controller.
 - AgentExecution command, query, terminal snapshot, and terminal input locators use `ownerId` plus `sessionId`. Scope-specific fields such as Mission id, task id, artifact id, and repository root path stay inside `AgentExecutionScope`; they must not leak into owner-specific AgentExecution locator branches.
@@ -110,9 +120,8 @@ Entity events publish accepted facts. Owning Entity methods and policies validat
 - The word `event` names accepted daemon-published facts. Raw Agent stdout becomes an event only after daemon code accepts and publishes it as one.
 - The word `signal` names the structured line of Agent-authored text and its parsed payload. Implementation names should prefer `AgentDeclaredSignal` where precision helps.
 
-## Open Questions
+## Remaining Open Questions
 
-1. Should Agent-declared signal descriptors live in `AgentExecutionSchema.ts` beside message descriptors, or in a separate protocol schema owned by the AgentExecution Entity module?
-2. Should owner-Entity observation handling be exposed as normal Entity contract methods, or through daemon-internal owner methods until there is a client-facing need?
-3. Which accepted observations should publish first-class AgentExecution Entity events beyond `data.changed` and terminal updates?
-4. Should artifact-scoped execution choose Artifact as the immediate owner even when it carries Mission and Task scope data, or should Task own artifact-scoped execution when `taskId` is present?
+1. Should owner-Entity observation handling be exposed as normal Entity contract methods, or through daemon-internal owner methods until there is a client-facing need?
+2. Which accepted observations should publish first-class AgentExecution Entity events beyond `data.changed` and terminal updates?
+3. Should artifact-scoped execution choose Artifact as the immediate owner even when it carries Mission and Task scope data, or should Task own artifact-scoped execution when `taskId` is present?

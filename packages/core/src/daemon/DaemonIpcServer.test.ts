@@ -11,7 +11,6 @@ import { startMissionDaemon } from './DaemonIpcServer.js';
 vi.mock('./MissionTerminal.js', () => ({
     ensureMissionTerminalState: vi.fn(async () => ({
         missionId: '1-initial-setup',
-        sessionId: 'mission-shell:connect-four:fixture:1-initial-setup',
         connected: true,
         dead: false,
         exitCode: null,
@@ -23,7 +22,6 @@ vi.mock('./MissionTerminal.js', () => ({
     })),
     sendMissionTerminalInput: vi.fn(async () => ({
         missionId: '1-initial-setup',
-        sessionId: 'mission-shell:connect-four:fixture:1-initial-setup',
         connected: true,
         dead: false,
         exitCode: null,

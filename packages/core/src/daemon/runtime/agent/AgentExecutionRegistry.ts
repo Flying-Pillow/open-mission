@@ -38,8 +38,8 @@ type AgentExecutionRegistryOptions = {
 };
 
 export class AgentExecutionRegistry {
-    private readonly executionsBySessionId = new Map<string, AgentExecutionRegistryEntry>();
-    private readonly sessionIdsByOwnerKey = new Map<string, string>();
+    private readonly executionsByAgentExecutionId = new Map<string, AgentExecutionRegistryEntry>();
+    private readonly agentExecutionIdsByOwnerKey = new Map<string, string>();
     private readonly dataChangeListeners = new Set<(data: AgentExecutionDataType) => void>();
     private missionMcpServer: MissionMcpServer | undefined;
     private logger: AgentExecutionRegistryOptions['logger'];
@@ -64,9 +64,9 @@ export class AgentExecutionRegistry {
         config: AgentLaunchConfig;
     }): Promise<AgentExecutionDataType> {
         const requestedAgentId = input.agentRegistry.resolveStartAgentId(input.config.requestedAdapterId);
-        const existingSessionId = this.sessionIdsByOwnerKey.get(input.ownerKey);
-        if (existingSessionId) {
-            const existing = this.executionsBySessionId.get(existingSessionId);
+        const existingAgentExecutionId = this.agentExecutionIdsByOwnerKey.get(input.ownerKey);
+        if (existingAgentExecutionId) {
+            const existing = this.executionsByAgentExecutionId.get(existingAgentExecutionId);
             if (existing) {
                 const snapshot = existing.execution.getSnapshot();
                 if (!AgentExecution.isTerminalFinalStatus(snapshot.status)) {
@@ -74,11 +74,11 @@ export class AgentExecutionRegistry {
                         return this.toExecutionData(existing.execution);
                     }
                     await existing.agentExecutor.terminateExecution(
-                        existingSessionId,
+                        existingAgentExecutionId,
                         `replaced by ${requestedAgentId ?? 'requested'} Agent adapter`
                     );
                 }
-                this.disposeSession(existingSessionId);
+                this.disposeAgentExecution(existingAgentExecutionId);
             }
         }
 
@@ -90,18 +90,18 @@ export class AgentExecutionRegistry {
         agentRegistry: AgentRegistry;
         config: AgentLaunchConfig;
     }): Promise<AgentExecutionDataType | undefined> {
-        const existingSessionId = this.sessionIdsByOwnerKey.get(input.ownerKey);
-        if (!existingSessionId) {
+        const existingAgentExecutionId = this.agentExecutionIdsByOwnerKey.get(input.ownerKey);
+        if (!existingAgentExecutionId) {
             return undefined;
         }
-        const existing = this.executionsBySessionId.get(existingSessionId);
+        const existing = this.executionsByAgentExecutionId.get(existingAgentExecutionId);
         if (!existing) {
-            this.sessionIdsByOwnerKey.delete(input.ownerKey);
+            this.agentExecutionIdsByOwnerKey.delete(input.ownerKey);
             return undefined;
         }
         const snapshot = existing.execution.getSnapshot();
         if (AgentExecution.isTerminalFinalStatus(snapshot.status)) {
-            this.disposeSession(existingSessionId);
+            this.disposeAgentExecution(existingAgentExecutionId);
             return undefined;
         }
 
@@ -111,10 +111,10 @@ export class AgentExecutionRegistry {
         }
 
         await existing.agentExecutor.terminateExecution(
-            existingSessionId,
+            existingAgentExecutionId,
             `replaced by ${requestedAgentId ?? 'requested'} Agent adapter`
         );
-        this.disposeSession(existingSessionId);
+        this.disposeAgentExecution(existingAgentExecutionId);
         return this.startExecution(input);
     }
 
@@ -129,11 +129,11 @@ export class AgentExecutionRegistry {
             ...(this.logger ? { logger: this.logger } : {})
         });
         const execution = await agentExecutor.startExecution(input.config);
-        const sessionId = execution.sessionId;
-        this.disposeSession(sessionId);
+        const agentExecutionId = execution.agentExecutionId;
+        this.disposeAgentExecution(agentExecutionId);
         const dataChangeSubscription = execution.onDidDataChange((data) => this.emitDataChanged(data));
-        this.sessionIdsByOwnerKey.set(input.ownerKey, sessionId);
-        this.executionsBySessionId.set(sessionId, {
+        this.agentExecutionIdsByOwnerKey.set(input.ownerKey, agentExecutionId);
+        this.executionsByAgentExecutionId.set(agentExecutionId, {
             ownerKey: input.ownerKey,
             agentExecutor,
             execution,
@@ -143,39 +143,39 @@ export class AgentExecutionRegistry {
         return this.toExecutionData(execution);
     }
 
-    public readExecution(sessionId: string): AgentExecutionDataType {
-        const entry = this.requireExecution(sessionId);
+    public readExecution(agentExecutionId: string): AgentExecutionDataType {
+        const entry = this.requireExecution(agentExecutionId);
         return this.toExecutionData(entry.execution);
     }
 
-    public async commandExecution(sessionId: string, command: AgentExecutionRegistryCommand): Promise<AgentExecutionDataType> {
-        const entry = this.requireExecution(sessionId);
+    public async commandExecution(agentExecutionId: string, command: AgentExecutionRegistryCommand): Promise<AgentExecutionDataType> {
+        const entry = this.requireExecution(agentExecutionId);
         switch (command.commandId) {
             case 'agentExecution.complete':
-                await entry.agentExecutor.completeExecution(sessionId);
+                await entry.agentExecutor.completeExecution(agentExecutionId);
                 break;
             case 'agentExecution.cancel':
-                await entry.agentExecutor.cancelExecution(sessionId, readReason(command.input));
+                await entry.agentExecutor.cancelExecution(agentExecutionId, readReason(command.input));
                 break;
             case 'agentExecution.sendPrompt':
-                await entry.agentExecutor.submitPrompt(sessionId, normalizePrompt(AgentExecutionPromptSchema.parse(command.input)));
+                await entry.agentExecutor.submitPrompt(agentExecutionId, normalizePrompt(AgentExecutionPromptSchema.parse(command.input)));
                 break;
             case 'agentExecution.sendRuntimeMessage':
-                await entry.agentExecutor.submitCommand(sessionId, normalizeCommand(AgentExecutionCommandSchema.parse(command.input)));
+                await entry.agentExecutor.submitCommand(agentExecutionId, normalizeCommand(AgentExecutionCommandSchema.parse(command.input)));
                 break;
         }
         return this.toExecutionData(entry.execution);
     }
 
-    public hasExecution(sessionId: string): boolean {
-        return this.executionsBySessionId.has(sessionId);
+    public hasExecution(agentExecutionId: string): boolean {
+        return this.executionsByAgentExecutionId.has(agentExecutionId);
     }
 
-    public routeTransportObservation(input: {
+    public async routeTransportObservation(input: {
         agentExecutionId: string;
         observation: AgentExecutionObservation;
-    }): AgentExecutionObservationAckType {
-        const entry = this.executionsBySessionId.get(input.agentExecutionId);
+    }): Promise<AgentExecutionObservationAckType> {
+        const entry = this.executionsByAgentExecutionId.get(input.agentExecutionId);
         if (!entry) {
             return AgentExecutionObservationAckSchema.parse({
                 status: 'rejected',
@@ -185,7 +185,7 @@ export class AgentExecutionRegistry {
                 reason: `AgentExecution '${input.agentExecutionId}' is not registered in the daemon AgentExecutionRegistry.`
             });
         }
-        return AgentExecutionObservationAckSchema.parse(entry.agentExecutor.routeTransportObservation(input));
+        return AgentExecutionObservationAckSchema.parse(await entry.agentExecutor.routeTransportObservation(input));
     }
 
     public onDidExecutionDataChange(listener: (data: AgentExecutionDataType) => void): { dispose(): void } {
@@ -198,30 +198,30 @@ export class AgentExecutionRegistry {
     }
 
     public dispose(): void {
-        for (const sessionId of [...this.executionsBySessionId.keys()]) {
-            this.disposeSession(sessionId);
+        for (const agentExecutionId of [...this.executionsByAgentExecutionId.keys()]) {
+            this.disposeAgentExecution(agentExecutionId);
         }
-        this.sessionIdsByOwnerKey.clear();
+        this.agentExecutionIdsByOwnerKey.clear();
     }
 
-    private requireExecution(sessionId: string): AgentExecutionRegistryEntry {
-        const entry = this.executionsBySessionId.get(sessionId);
+    private requireExecution(agentExecutionId: string): AgentExecutionRegistryEntry {
+        const entry = this.executionsByAgentExecutionId.get(agentExecutionId);
         if (!entry) {
-            throw new Error(`AgentExecution '${sessionId}' is not registered in the daemon AgentExecutionRegistry.`);
+            throw new Error(`AgentExecution '${agentExecutionId}' is not registered in the daemon AgentExecutionRegistry.`);
         }
         return entry;
     }
 
-    private disposeSession(sessionId: string): void {
-        const entry = this.executionsBySessionId.get(sessionId);
+    private disposeAgentExecution(agentExecutionId: string): void {
+        const entry = this.executionsByAgentExecutionId.get(agentExecutionId);
         if (!entry) {
             return;
         }
         entry.agentExecutor.dispose();
         entry.dataChangeSubscription.dispose();
-        this.executionsBySessionId.delete(sessionId);
-        if (this.sessionIdsByOwnerKey.get(entry.ownerKey) === sessionId) {
-            this.sessionIdsByOwnerKey.delete(entry.ownerKey);
+        this.executionsByAgentExecutionId.delete(agentExecutionId);
+        if (this.agentExecutionIdsByOwnerKey.get(entry.ownerKey) === agentExecutionId) {
+            this.agentExecutionIdsByOwnerKey.delete(entry.ownerKey);
         }
     }
 

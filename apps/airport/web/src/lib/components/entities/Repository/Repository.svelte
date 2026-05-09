@@ -8,12 +8,16 @@
     import { setAgentExecutionSurfaceContext } from "$lib/client/context/agent-execution-surface-context.svelte.js";
     import { setScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import AgentChat from "$lib/components/entities/AgentExecution/AgentChat.svelte";
-    import IssueList from "$lib/components/entities/Issue/IssueList.svelte";
     import IssuePreview from "$lib/components/entities/Issue/IssuePreview.svelte";
-    import MissionList from "$lib/components/entities/Mission/MissionList.svelte";
     import RepositoryPanel from "$lib/components/entities/Repository/RepositoryPanel.svelte";
+    import RepositoryWorkList from "$lib/components/entities/Repository/RepositoryWorkList.svelte";
     import { Button } from "$lib/components/ui/button/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
+    import {
+        ResizableHandle,
+        ResizablePane,
+        ResizablePaneGroup,
+    } from "$lib/components/ui/resizable";
     import type { AirportRepositoryListItem } from "$lib/components/entities/types";
 
     const appContext = getAppContext();
@@ -265,10 +269,17 @@
             </RepositoryPanel>
         {/if}
 
-        <div
-            class="mt-4 grid min-h-0 flex-1 gap-5 overflow-hidden xl:grid-cols-[20dvw_minmax(0,1fr)]"
+        <ResizablePaneGroup
+            direction="horizontal"
+            autoSaveId={`airport-repository:${repositoryId}`}
+            class="mt-4 min-h-0 flex-1 overflow-hidden"
         >
-            <div class="flex min-h-0 flex-col gap-5 overflow-hidden xl:pr-2">
+            <ResizablePane
+                defaultSize={28}
+                minSize={18}
+                maxSize={44}
+                class="flex h-full min-h-0 flex-col gap-5 overflow-hidden pr-2"
+            >
                 {#if invalidState || !activeRepository.data.isInitialized}
                     <section
                         class="rounded-2xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive"
@@ -285,33 +296,37 @@
                 {/if}
 
                 <section class="flex min-h-0 w-full flex-1 overflow-hidden">
-                    <MissionList />
-                </section>
-
-                <section class="flex min-h-0 w-full flex-1 overflow-hidden">
-                    <IssueList
+                    <RepositoryWorkList
                         bind:selectedIssue
                         bind:issuePreviewOpen
                         bind:issueError
                         bind:issueLoadingNumber
                     />
                 </section>
-            </div>
+            </ResizablePane>
 
-            <section
-                class="flex min-h-0 min-w-0 overflow-hidden rounded-2xl border border-white/10"
+            <ResizableHandle withHandle />
+
+            <ResizablePane
+                defaultSize={72}
+                minSize={40}
+                class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden pl-5"
             >
-                <AgentChat
-                    agentExecution={repositoryAgentExecution}
-                    refreshNonce={repositoryChatRefreshNonce}
-                    onCommandExecuted={refreshRepositoryChat}
-                    loadingTitle="Starting repository chat"
-                    loadingPlaceholder="Starting repository chat"
-                    bind:showTerminalPanel
-                    showHeader={false}
-                />
-            </section>
-        </div>
+                <section
+                    class="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl border border-white/10"
+                >
+                    <AgentChat
+                        agentExecution={repositoryAgentExecution}
+                        refreshNonce={repositoryChatRefreshNonce}
+                        onCommandExecuted={refreshRepositoryChat}
+                        loadingTitle="Starting repository chat"
+                        loadingPlaceholder="Starting repository chat"
+                        bind:showTerminalPanel
+                        showHeader={false}
+                    />
+                </section>
+            </ResizablePane>
+        </ResizablePaneGroup>
         {#if repositoryChatError}
             <div
                 class="border-t px-4 py-3 text-sm text-muted-foreground md:px-5"

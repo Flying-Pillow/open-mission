@@ -1,12 +1,12 @@
-import { TerminalRegistry, type TerminalRecordingUpdate, type TerminalSnapshot } from '../../../entities/Terminal/TerminalRegistry.js';
+import { TerminalRegistry, type TerminalRecordingUpdate, type TerminalSnapshot } from '../Terminal/TerminalRegistry.js';
 import {
     AgentExecutionTerminalRecordingEventSchema,
     type AgentExecutionRecord,
     type AgentExecutionTerminalRecordingEventType
-} from '../../../entities/AgentExecution/AgentExecutionSchema.js';
-import type { MissionDossierFilesystem } from '../../../entities/Mission/MissionDossierFilesystem.js';
+} from './AgentExecutionSchema.js';
+import type { MissionDossierFilesystem } from '../Mission/MissionDossierFilesystem.js';
 
-type AgentExecutionLogWriterState = {
+type AgentExecutionTerminalRecordingWriterState = {
     execution: AgentExecutionRecord;
     events: AgentExecutionTerminalRecordingEventType[];
     bufferBytes: number;
@@ -15,14 +15,14 @@ type AgentExecutionLogWriterState = {
     wroteExit: boolean;
 };
 
-const SESSION_LOG_FLUSH_THRESHOLD_BYTES = 4096;
-const SESSION_LOG_FLUSH_DELAY_MS = 250;
+const TERMINAL_RECORDING_FLUSH_THRESHOLD_BYTES = 4096;
+const TERMINAL_RECORDING_FLUSH_DELAY_MS = 250;
 
-export class AgentExecutionLogWriter {
+export class AgentExecutionTerminalRecordingWriter {
     private readonly terminalSubscription: { dispose(): void };
     private readonly terminalRecordingSubscription: { dispose(): void };
-    private readonly writers = new Map<string, AgentExecutionLogWriterState>();
-    private readonly sessionIdsByTerminalName = new Map<string, string>();
+    private readonly writers = new Map<string, AgentExecutionTerminalRecordingWriterState>();
+    private readonly agentExecutionIdsByTerminalName = new Map<string, string>();
     private readonly terminalRegistry = TerminalRegistry.shared();
     private disposed = false;
 
@@ -39,17 +39,17 @@ export class AgentExecutionLogWriter {
         });
     }
 
-    public reconcile(sessions: AgentExecutionRecord[]): void {
+    public reconcile(agentExecutions: AgentExecutionRecord[]): void {
         if (this.disposed) {
             return;
         }
 
-        const activeSessionIds = new Set<string>();
-        this.sessionIdsByTerminalName.clear();
-        for (const execution of sessions) {
-            activeSessionIds.add(execution.sessionId);
+        const activeAgentExecutionIds = new Set<string>();
+        this.agentExecutionIdsByTerminalName.clear();
+        for (const execution of agentExecutions) {
+            activeAgentExecutionIds.add(execution.agentExecutionId);
             if (execution.terminalHandle) {
-                this.sessionIdsByTerminalName.set(execution.terminalHandle.terminalName, execution.sessionId);
+                this.agentExecutionIdsByTerminalName.set(execution.terminalHandle.terminalName, execution.agentExecutionId);
             }
             const writer = this.ensureWriter(execution);
             if (writer) {
@@ -57,12 +57,12 @@ export class AgentExecutionLogWriter {
             }
         }
 
-        for (const [sessionId, writer] of this.writers) {
-            if (activeSessionIds.has(sessionId)) {
+        for (const [agentExecutionId, writer] of this.writers) {
+            if (activeAgentExecutionIds.has(agentExecutionId)) {
                 continue;
             }
             this.flush(writer);
-            this.writers.delete(sessionId);
+            this.writers.delete(agentExecutionId);
         }
     }
 
@@ -71,7 +71,7 @@ export class AgentExecutionLogWriter {
             return;
         }
         if (execution.terminalHandle) {
-            this.sessionIdsByTerminalName.set(execution.terminalHandle.terminalName, execution.sessionId);
+            this.agentExecutionIdsByTerminalName.set(execution.terminalHandle.terminalName, execution.agentExecutionId);
         }
         const writer = this.ensureWriter(execution);
         if (writer) {
@@ -90,7 +90,7 @@ export class AgentExecutionLogWriter {
             this.flush(writer);
         }
         this.writers.clear();
-        this.sessionIdsByTerminalName.clear();
+        this.agentExecutionIdsByTerminalName.clear();
     }
 
     private handleTerminalUpdate(event: TerminalSnapshot & { chunk: string }): void {
@@ -98,12 +98,12 @@ export class AgentExecutionLogWriter {
             return;
         }
 
-        const sessionId = this.sessionIdsByTerminalName.get(event.terminalName);
-        if (!sessionId) {
+        const agentExecutionId = this.agentExecutionIdsByTerminalName.get(event.terminalName);
+        if (!agentExecutionId) {
             return;
         }
 
-        const writer = this.writers.get(sessionId);
+        const writer = this.writers.get(agentExecutionId);
         if (!writer) {
             return;
         }
@@ -123,7 +123,7 @@ export class AgentExecutionLogWriter {
                 exitCode: event.exitCode
             });
         }
-        if (writer.bufferBytes >= SESSION_LOG_FLUSH_THRESHOLD_BYTES || event.dead) {
+        if (writer.bufferBytes >= TERMINAL_RECORDING_FLUSH_THRESHOLD_BYTES || event.dead) {
             this.flush(writer);
             return;
         }
@@ -135,11 +135,11 @@ export class AgentExecutionLogWriter {
         if (this.disposed) {
             return;
         }
-        const sessionId = this.sessionIdsByTerminalName.get(update.terminalName);
-        if (!sessionId) {
+        const agentExecutionId = this.agentExecutionIdsByTerminalName.get(update.terminalName);
+        if (!agentExecutionId) {
             return;
         }
-        const writer = this.writers.get(sessionId);
+        const writer = this.writers.get(agentExecutionId);
         if (!writer) {
             return;
         }
@@ -147,17 +147,17 @@ export class AgentExecutionLogWriter {
         this.scheduleFlush(writer);
     }
 
-    private ensureWriter(execution: AgentExecutionRecord): AgentExecutionLogWriterState | undefined {
+    private ensureWriter(execution: AgentExecutionRecord): AgentExecutionTerminalRecordingWriterState | undefined {
         if (!execution.terminalHandle || execution.transportId !== 'terminal') {
             return undefined;
         }
 
-        const existing = this.writers.get(execution.sessionId);
+        const existing = this.writers.get(execution.agentExecutionId);
         if (existing) {
             return existing;
         }
 
-        const writer: AgentExecutionLogWriterState = {
+        const writer: AgentExecutionTerminalRecordingWriterState = {
             execution,
             events: [],
             bufferBytes: 0,
@@ -165,31 +165,31 @@ export class AgentExecutionLogWriter {
             flushTimer: undefined,
             wroteExit: false
         };
-        this.writers.set(execution.sessionId, writer);
-        const sessionLogPath = this.adapter.getMissionSessionLogRelativePath(execution.sessionId);
+        this.writers.set(execution.agentExecutionId, writer);
+        const terminalRecordingPath = this.adapter.getMissionTerminalRecordingRelativePath(execution.agentExecutionId);
         writer.queue = writer.queue
-            .then(() => this.adapter.ensureMissionSessionLogFile(this.missionDir, sessionLogPath))
-            .then(() => this.adapter.appendMissionSessionLogEvent(this.missionDir, sessionLogPath, this.createHeaderEvent(execution)))
+            .then(() => this.adapter.ensureMissionTerminalRecordingFile(this.missionDir, terminalRecordingPath))
+            .then(() => this.adapter.appendMissionTerminalRecordingEvent(this.missionDir, terminalRecordingPath, this.createHeaderEvent(execution)))
             .catch((error) => {
                 console.error(
-                    `Failed to create session log for mission '${this.missionId}' session '${execution.sessionId}'.`,
+                    `Failed to create AgentExecution terminal recording for mission '${this.missionId}' AgentExecution '${execution.agentExecutionId}'.`,
                     error
                 );
             });
         return writer;
     }
 
-    private scheduleFlush(writer: AgentExecutionLogWriterState): void {
+    private scheduleFlush(writer: AgentExecutionTerminalRecordingWriterState): void {
         if (writer.flushTimer) {
             return;
         }
         writer.flushTimer = setTimeout(() => {
             writer.flushTimer = undefined;
             this.flush(writer);
-        }, SESSION_LOG_FLUSH_DELAY_MS);
+        }, TERMINAL_RECORDING_FLUSH_DELAY_MS);
     }
 
-    private flush(writer: AgentExecutionLogWriterState): void {
+    private flush(writer: AgentExecutionTerminalRecordingWriterState): void {
         if (writer.flushTimer) {
             clearTimeout(writer.flushTimer);
             writer.flushTimer = undefined;
@@ -202,23 +202,23 @@ export class AgentExecutionLogWriter {
         writer.events = [];
         writer.bufferBytes = 0;
         const execution = writer.execution;
-        const sessionLogPath = this.adapter.getMissionSessionLogRelativePath(execution.sessionId);
+        const terminalRecordingPath = this.adapter.getMissionTerminalRecordingRelativePath(execution.agentExecutionId);
         const appendEvents = async () => {
             for (const event of events) {
-                await this.adapter.appendMissionSessionLogEvent(this.missionDir, sessionLogPath, event);
+                await this.adapter.appendMissionTerminalRecordingEvent(this.missionDir, terminalRecordingPath, event);
             }
         };
         const next = writer.queue.then(appendEvents, appendEvents);
         writer.queue = next.catch((error) => {
             console.error(
-                `Failed to persist session log for mission '${this.missionId}' session '${execution.sessionId}'.`,
+                `Failed to persist AgentExecution terminal recording for mission '${this.missionId}' AgentExecution '${execution.agentExecutionId}'.`,
                 error
             );
         });
     }
 
     private enqueueEvent(
-        writer: AgentExecutionLogWriterState,
+        writer: AgentExecutionTerminalRecordingWriterState,
         event: AgentExecutionTerminalRecordingEventType
     ): void {
         const parsedEvent = AgentExecutionTerminalRecordingEventSchema.parse(event);
@@ -235,8 +235,8 @@ export class AgentExecutionLogWriter {
             version: 1,
             kind: 'agent-execution-terminal-recording',
             ownerId: this.missionId,
-            sessionId: execution.sessionId,
-            terminalName: execution.terminalHandle?.terminalName ?? execution.sessionId,
+            agentExecutionId: execution.agentExecutionId,
+            terminalName: execution.terminalHandle?.terminalName ?? execution.agentExecutionId,
             cols: terminalSnapshot?.cols ?? 120,
             rows: terminalSnapshot?.rows ?? 32,
             createdAt: execution.createdAt
