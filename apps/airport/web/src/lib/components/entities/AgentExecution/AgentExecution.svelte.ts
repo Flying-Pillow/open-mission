@@ -4,8 +4,8 @@ import { AgentExecutionCommandIds, type AgentExecutionCommandType, type AgentExe
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
 export type AgentExecutionDependencies = {
-    resolveCommands(sessionId: string): EntityCommandDescriptorType[];
-    executeCommand(ownerId: string, sessionId: string, commandId: string, input?: unknown): Promise<void>;
+    resolveCommands(agentExecutionId: string): EntityCommandDescriptorType[];
+    executeCommand(ownerId: string, agentExecutionId: string, commandId: string, input?: unknown): Promise<void>;
 };
 
 export class AgentExecution implements EntityModel<AgentExecutionDataType> {
@@ -30,8 +30,8 @@ export class AgentExecution implements EntityModel<AgentExecutionDataType> {
         this.dataState = structuredClone(data);
     }
 
-    public get sessionId(): string {
-        return this.data.sessionId;
+    public get agentExecutionId(): string {
+        return this.data.agentExecutionId;
     }
 
     public get ownerId(): string {
@@ -39,7 +39,7 @@ export class AgentExecution implements EntityModel<AgentExecutionDataType> {
     }
 
     public get id(): string {
-        return this.sessionId;
+        return this.agentExecutionId;
     }
 
     public get entityName(): 'AgentExecution' {
@@ -47,7 +47,7 @@ export class AgentExecution implements EntityModel<AgentExecutionDataType> {
     }
 
     public get entityId(): string {
-        return this.sessionId;
+        return this.agentExecutionId;
     }
 
     public get taskId(): string | undefined {
@@ -58,8 +58,8 @@ export class AgentExecution implements EntityModel<AgentExecutionDataType> {
         return this.data.lifecycleState;
     }
 
-    public get sessionLogPath(): string | undefined {
-        return this.data.sessionLogPath;
+    public get terminalRecordingPath(): string | undefined {
+        return this.data.terminalRecordingPath;
     }
 
     public get agentId(): string {
@@ -106,8 +106,12 @@ export class AgentExecution implements EntityModel<AgentExecutionDataType> {
         return this.data.runtimeMessages;
     }
 
-    public get chatMessages(): AgentExecutionDataType['chatMessages'] {
-        return this.data.chatMessages;
+    public get projection(): AgentExecutionDataType['projection'] {
+        return this.data.projection;
+    }
+
+    public get timelineItems(): AgentExecutionDataType['projection']['timelineItems'] {
+        return this.data.projection.timelineItems;
     }
 
     public get canSendTerminalInput(): boolean {
@@ -124,8 +128,7 @@ export class AgentExecution implements EntityModel<AgentExecutionDataType> {
 
     public isRunning(): boolean {
         return this.lifecycleState === 'starting'
-            || this.lifecycleState === 'running'
-            || this.lifecycleState === 'awaiting-input';
+            || this.lifecycleState === 'running';
     }
 
     public isTerminalBacked(): boolean {
@@ -134,11 +137,11 @@ export class AgentExecution implements EntityModel<AgentExecutionDataType> {
     }
 
     public hasPersistedTerminalLog(): boolean {
-        return typeof this.sessionLogPath === 'string' && this.sessionLogPath.trim().length > 0;
+        return typeof this.terminalRecordingPath === 'string' && this.terminalRecordingPath.trim().length > 0;
     }
 
     public get commands(): EntityCommandDescriptorType[] {
-        return this.dependencies.resolveCommands(this.sessionId);
+        return this.dependencies.resolveCommands(this.agentExecutionId);
     }
 
     public async sendPrompt(prompt: AgentExecutionPromptType): Promise<this> {
@@ -147,7 +150,7 @@ export class AgentExecution implements EntityModel<AgentExecutionDataType> {
     }
 
     public async executeCommand(commandId: string, input?: unknown): Promise<void> {
-        await this.dependencies.executeCommand(this.ownerId, this.sessionId, commandId, input);
+        await this.dependencies.executeCommand(this.ownerId, this.agentExecutionId, commandId, input);
     }
 
     public async sendCommand(command: AgentExecutionCommandType): Promise<this> {

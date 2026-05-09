@@ -1329,25 +1329,6 @@ export class Mission extends Entity<MissionDataType, string> {
 				});
 				return;
 			}
-			case 'execution.awaiting-input': {
-				const nextState = Mission.cloneAgentConsoleState({
-					...currentConsole,
-					awaitingInput: true
-				});
-				this.consoleStates.set(state.agentExecutionId, nextState);
-				this.agentConsoleEventEmitter.fire({
-					type: 'prompt',
-					state: nextState
-				});
-				this.agentEventEmitter.fire({
-					type: 'agent-execution-state-changed',
-					state: {
-						...state,
-						lifecycleState: 'awaiting-input'
-					}
-				});
-				return;
-			}
 			case 'execution.completed':
 				this.agentEventEmitter.fire({
 					type: 'agent-execution-completed',
@@ -1840,16 +1821,14 @@ export class Mission extends Entity<MissionDataType, string> {
 
 	private static isActiveAgentExecution(lifecycleState: AgentExecutionLifecycleStateType): boolean {
 		return lifecycleState === 'starting'
-			|| lifecycleState === 'running'
-			|| lifecycleState === 'awaiting-input';
+			|| lifecycleState === 'running';
 	}
 
 	private static hasSemanticInputRequest(input: {
 		lifecycleState: AgentExecutionLifecycleStateType;
 		currentInputRequestId?: string | null;
 	}): boolean {
-		return input.lifecycleState === 'awaiting-input'
-			|| input.currentInputRequestId !== undefined && input.currentInputRequestId !== null;
+		return input.currentInputRequestId !== undefined && input.currentInputRequestId !== null;
 	}
 
 	private static isRecord(value: unknown): value is Record<string, unknown> {

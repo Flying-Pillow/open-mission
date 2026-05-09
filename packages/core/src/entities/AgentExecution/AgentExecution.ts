@@ -29,7 +29,6 @@ import {
 	AgentExecutionCommandAcknowledgementSchema,
 	AgentExecutionCommandInputSchema,
 	AgentExecutionContextSchema,
-	AgentExecutionChatMessageSchema,
 	AgentExecutionMessageDescriptorSchema,
 	AgentExecutionLocatorSchema,
 	AgentExecutionPromptSchema,
@@ -38,13 +37,15 @@ import {
 	AgentExecutionTerminalRecordingSchema,
 	AgentExecutionTerminalSnapshotSchema,
 	AgentExecutionDataSchema,
+	AgentExecutionProjectionSchema,
+	AgentExecutionTimelineItemSchema,
 	AgentExecutionCommandIds,
 	agentExecutionEntityName,
-	type AgentDeclaredSignalInputChoiceType,
-	type AgentExecutionChatMessageType,
 	type AgentExecutionCommandType,
 	type AgentExecutionMessageDescriptorType,
+	type AgentExecutionProjectionType,
 	type AgentExecutionProtocolDescriptorType,
+	type AgentExecutionTimelineItemType,
 	type AgentExecutionTransportStateType,
 	type AgentExecutionContextType,
 	type AgentExecutionInteractionCapabilitiesType,
@@ -60,6 +61,7 @@ import { Terminal } from '../Terminal/Terminal.js';
 import { hydrateAgentExecutionDataFromJournal } from './AgentExecutionJournalReplayer.js';
 import { AgentExecutionJournalFileStore } from './AgentExecutionJournalFileStore.js';
 import { createAgentExecutionJournalReference } from './AgentExecutionJournalWriter.js';
+import { projectAgentExecutionObservationSignalToTimelineItem } from './AgentExecutionSignalRegistry.js';
 
 type LocatedAgentExecutionData = {
 	data: AgentExecutionDataType;
@@ -638,7 +640,6 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		currentInputRequestId?: string | null
 	): boolean {
 		return lifecycleState === 'running'
-			|| lifecycleState === 'awaiting-input'
 			|| currentInputRequestId !== undefined && currentInputRequestId !== null;
 	}
 
@@ -646,7 +647,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		lifecycleState: AgentExecutionRecord['lifecycleState'] | AgentExecutionSnapshot['status'],
 		currentInputRequestId?: string | null
 	): AgentCommand['type'][] {
-		if (lifecycleState === 'awaiting-input' || currentInputRequestId !== undefined && currentInputRequestId !== null) {
+		if (currentInputRequestId !== undefined && currentInputRequestId !== null) {
 			return ['interrupt', 'checkpoint', 'nudge', 'resume'];
 		}
 		if (lifecycleState === 'starting' || lifecycleState === 'running') {
@@ -657,7 +658,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 
 	private readonly listeners = new Set<(event: AgentExecutionEvent) => void>();
 	private readonly dataChangeListeners = new Set<(data: AgentExecutionDataType) => void>();
-	private chatMessages: AgentExecutionChatMessageType[] = [];
+	private projection: AgentExecutionProjectionType = AgentExecutionProjectionSchema.parse({ timelineItems: [] });
 	private liveSnapshot: AgentExecutionSnapshot | undefined;
 	private disposed = false;
 
@@ -716,19 +717,19 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 
 	public constructor(data: AgentExecutionDataType) {
 		super(AgentExecutionDataSchema.parse(data));
-		this.chatMessages = cloneChatMessages(this.data.chatMessages);
+		this.projection = cloneProjection(this.data.projection);
 	}
 
 	public override updateFromData(data: AgentExecutionDataType): this {
 		super.updateFromData(data);
-		this.chatMessages = cloneChatMessages(this.data.chatMessages);
+		this.projection = cloneProjection(this.data.projection);
 		return this;
 	}
 
 	public override toData(): AgentExecutionDataType {
 		return AgentExecutionDataSchema.parse({
 			...super.toData(),
-			chatMessages: cloneChatMessages(this.chatMessages)
+			projection: cloneProjection(this.projection)
 		});
 	}
 
@@ -817,13 +818,21 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			}
 		});
 		if (prompt.source === 'operator') {
-			this.appendChatMessage({
-				id: createChatMessageId(snapshot.agentExecutionId, snapshot.updatedAt, 'operator', prompt.text),
-				role: 'operator',
-				kind: 'message',
-				tone: 'neutral',
-				text: prompt.text,
-				at: snapshot.updatedAt
+			this.appendTimelineItem({
+				id: createProjectionItemId(snapshot.agentExecutionId, snapshot.updatedAt, 'operator', prompt.text),
+				occurredAt: snapshot.updatedAt,
+				zone: 'conversation',
+				primitive: 'conversation.operator-message',
+				behavior: createProjectionBehavior('conversational'),
+				provenance: {
+					durable: false,
+					sourceRecordIds: [],
+					liveOverlay: true,
+					confidence: 'medium'
+				},
+				payload: {
+					text: prompt.text
+				}
 			});
 		}
 		this.emitEvent({ type: 'execution.updated', snapshot });
@@ -840,7 +849,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		this.requireActiveSnapshot(`perform '${command.type}'`);
 		if (command.type === 'interrupt') {
 			const snapshot = this.updateSnapshot({
-				status: 'awaiting-input',
+				status: 'running',
 				attention: 'awaiting-operator',
 				waitingForInput: true,
 				acceptsPrompts: true,
@@ -851,7 +860,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 					updatedAt: new Date().toISOString()
 				}
 			});
-			this.emitEvent({ type: 'execution.awaiting-input', snapshot });
+			this.emitEvent({ type: 'execution.updated', snapshot });
 			return snapshot;
 		}
 		return this.submitPrompt(buildCommandPrompt(command));
@@ -952,7 +961,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		if (this.disposed) {
 			return;
 		}
-		this.appendChatMessageFromEvent(event);
+		this.appendTimelineItemFromEvent(event);
 		this.liveSnapshot = cloneRuntimeSnapshot(event.snapshot);
 		for (const listener of this.listeners) {
 			listener(event);
@@ -964,9 +973,9 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		observation: AgentExecutionObservation,
 		decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>
 	): AgentExecutionSnapshot | void {
-		const appendedChatMessage = this.appendChatMessageFromObservation(observation, decision);
+		const appendedTimelineItem = this.appendTimelineItemFromObservation(observation, decision);
 		const snapshot = this.applySignalDecision(decision);
-		if (appendedChatMessage && decision.action === 'record-observation-only') {
+		if (appendedTimelineItem && decision.action === 'record-observation-only') {
 			this.notifyDataChanged();
 		}
 		return snapshot;
@@ -992,7 +1001,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		}
 	}
 
-	private appendChatMessageFromObservation(
+	private appendTimelineItemFromObservation(
 		observation: AgentExecutionObservation,
 		decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>
 	): boolean {
@@ -1001,86 +1010,99 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			return false;
 		}
 
-		const base = {
-			id: observation.observationId,
-			role: 'agent' as const,
-			signalType: signal.type,
-			at: observation.observedAt
-		};
-
-		switch (signal.type) {
-			case 'progress':
-				return this.appendChatMessage({ ...base, kind: 'progress', tone: 'progress', title: 'Progress', text: signal.summary, ...(signal.detail ? { detail: signal.detail } : {}) });
-			case 'status':
-				return this.appendChatMessage({
-					...base,
-					kind: 'status',
-					tone: signal.phase === 'idle' ? 'neutral' : 'progress',
-					title: signal.phase === 'idle' ? 'Idle' : 'Initializing',
-					text: signal.summary ?? (signal.phase === 'idle'
-						? 'Idle and ready for the next structured prompt.'
-						: 'Initializing the next agent turn.')
-				});
-			case 'needs_input':
-				return this.appendChatMessage({ ...base, kind: 'needs-input', tone: 'attention', title: 'Needs input', text: signal.question, choices: cloneInputChoices(signal.choices) });
-			case 'blocked':
-				return this.appendChatMessage({ ...base, kind: 'blocked', tone: 'danger', title: 'Blocked', text: signal.reason });
-			case 'ready_for_verification':
-				return this.appendChatMessage({ ...base, kind: 'claim', tone: 'success', title: 'Ready for verification', text: signal.summary });
-			case 'completed_claim':
-				return this.appendChatMessage({ ...base, kind: 'claim', tone: 'success', title: 'Completed claim', text: signal.summary });
-			case 'failed_claim':
-				return this.appendChatMessage({ ...base, kind: 'failure', tone: 'danger', title: 'Failed claim', text: signal.reason });
-		}
-		return false;
+		return this.appendTimelineItem(projectAgentExecutionObservationSignalToTimelineItem({
+			itemId: observation.observationId,
+			occurredAt: observation.observedAt,
+			signal,
+			provenance: {
+				durable: false,
+				sourceRecordIds: [],
+				liveOverlay: true,
+				confidence: signal.confidence
+			}
+		}));
 	}
 
-	private appendChatMessageFromEvent(event: AgentExecutionEvent): boolean {
+	private appendTimelineItemFromEvent(event: AgentExecutionEvent): boolean {
 		if (event.type === 'execution.message' && event.channel === 'agent') {
-			return this.appendChatMessage({
-				id: createChatMessageId(event.snapshot.agentExecutionId, event.snapshot.updatedAt, event.channel, event.text),
-				role: 'agent',
-				kind: 'message',
-				tone: 'neutral',
-				text: event.text,
-				at: event.snapshot.updatedAt
+			return this.appendTimelineItem({
+				id: createProjectionItemId(event.snapshot.agentExecutionId, event.snapshot.updatedAt, event.channel, event.text),
+				occurredAt: event.snapshot.updatedAt,
+				zone: 'conversation',
+				primitive: 'conversation.agent-message',
+				behavior: createProjectionBehavior('conversational'),
+				provenance: {
+					durable: false,
+					sourceRecordIds: [],
+					liveOverlay: true,
+					confidence: 'medium'
+				},
+				payload: {
+					text: event.text
+				}
 			});
 		}
 		if (event.type === 'execution.completed' && event.snapshot.progress.summary) {
-			return this.appendChatMessage({
-				id: createChatMessageId(event.snapshot.agentExecutionId, event.snapshot.updatedAt, 'completed'),
-				role: 'system',
-				kind: 'status',
-				tone: 'success',
-				title: 'Completed',
-				text: event.snapshot.progress.summary,
-				at: event.snapshot.updatedAt
+			return this.appendTimelineItem({
+				id: createProjectionItemId(event.snapshot.agentExecutionId, event.snapshot.updatedAt, 'completed'),
+				occurredAt: event.snapshot.updatedAt,
+				zone: 'workflow',
+				primitive: 'attention.verification-result',
+				behavior: createProjectionBehavior('approval'),
+				severity: 'success',
+				provenance: {
+					durable: false,
+					sourceRecordIds: [],
+					liveOverlay: true,
+					confidence: 'high'
+				},
+				payload: {
+					title: 'Completed',
+					text: event.snapshot.progress.summary,
+					result: 'passed'
+				}
 			});
 		}
 		if (event.type === 'execution.failed') {
-			return this.appendChatMessage({
-				id: createChatMessageId(event.snapshot.agentExecutionId, event.snapshot.updatedAt, 'failed'),
-				role: 'system',
-				kind: 'failure',
-				tone: 'danger',
-				title: 'Failed',
-				text: event.reason,
-				at: event.snapshot.updatedAt
+			return this.appendTimelineItem({
+				id: createProjectionItemId(event.snapshot.agentExecutionId, event.snapshot.updatedAt, 'failed'),
+				occurredAt: event.snapshot.updatedAt,
+				zone: 'workflow',
+				primitive: 'attention.verification-result',
+				behavior: createProjectionBehavior('approval', { sticky: true }),
+				severity: 'error',
+				provenance: {
+					durable: false,
+					sourceRecordIds: [],
+					liveOverlay: true,
+					confidence: 'high'
+				},
+				payload: {
+					title: 'Failed',
+					text: event.reason,
+					result: 'failed'
+				}
 			});
 		}
 		return false;
 	}
 
-	private appendChatMessage(message: AgentExecutionChatMessageType): boolean {
-		const parsed = AgentExecutionChatMessageSchema.parse(message);
-		if (this.chatMessages.some((existing) => existing.id === parsed.id)) {
+	private appendTimelineItem(item: AgentExecutionTimelineItemType | undefined): boolean {
+		if (!item) {
 			return false;
 		}
-		this.chatMessages = [...this.chatMessages, parsed];
+		const parsed = AgentExecutionTimelineItemSchema.parse(item);
+		if (this.projection.timelineItems.some((existing) => existing.id === parsed.id)) {
+			return false;
+		}
+		this.projection = AgentExecutionProjectionSchema.parse({
+			...this.projection,
+			timelineItems: [...this.projection.timelineItems, parsed]
+		});
 		this.data = AgentExecutionDataSchema.parse({
 			...super.toData(),
-			chatMessages: cloneChatMessages(this.chatMessages),
-			lastUpdatedAt: parsed.at
+			projection: cloneProjection(this.projection),
+			lastUpdatedAt: parsed.occurredAt
 		});
 		return true;
 	}
@@ -1557,31 +1579,39 @@ function cloneStructured<T>(input: T): T {
 	return JSON.parse(JSON.stringify(input)) as T;
 }
 
-function cloneChatMessages(messages: AgentExecutionChatMessageType[]): AgentExecutionChatMessageType[] {
-	return messages.map((message) => AgentExecutionChatMessageSchema.parse({
-		...message,
-		...(message.choices ? { choices: cloneInputChoices(message.choices) } : {})
-	}));
+function cloneProjection(projection: AgentExecutionProjectionType): AgentExecutionProjectionType {
+	return AgentExecutionProjectionSchema.parse(cloneStructured(projection));
 }
 
-function cloneInputChoices(choices: AgentDeclaredSignalInputChoiceType[]): AgentDeclaredSignalInputChoiceType[] {
-	return choices.map((choice) => ({ ...choice }));
-}
-
-function createChatMessageId(agentExecutionId: string, at: string, kind: string, text = ''): string {
+function createProjectionItemId(agentExecutionId: string, at: string, kind: string, text = ''): string {
 	const normalizedText = Repository.slugIdentitySegment(text).slice(0, 32);
 	return [agentExecutionId, at, kind, normalizedText].filter(Boolean).join(':');
 }
 
+function createProjectionBehavior(
+	behaviorClass: AgentExecutionTimelineItemType['behavior']['class'],
+	overrides: Partial<AgentExecutionTimelineItemType['behavior']> = {}
+): AgentExecutionTimelineItemType['behavior'] {
+	return {
+		class: behaviorClass,
+		compactable: false,
+		collapsible: false,
+		sticky: false,
+		actionable: false,
+		replayRelevant: true,
+		transient: false,
+		defaultExpanded: true,
+		...overrides
+	};
+}
+
 function toRuntimeExecutionEvent(
-	eventType: 'execution.updated' | 'execution.awaiting-input' | 'execution.completed' | 'execution.failed',
+	eventType: 'execution.updated' | 'execution.completed' | 'execution.failed',
 	snapshot: AgentExecutionSnapshot
 ): AgentExecutionEvent {
 	switch (eventType) {
 		case 'execution.updated':
 			return { type: 'execution.updated', snapshot };
-		case 'execution.awaiting-input':
-			return { type: 'execution.awaiting-input', snapshot };
 		case 'execution.completed':
 			return { type: 'execution.completed', snapshot };
 		case 'execution.failed':

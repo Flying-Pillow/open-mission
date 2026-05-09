@@ -57,13 +57,13 @@ describe('AgentExecutor', () => {
             });
 
             const data = await new Promise((resolve, reject) => {
-                if (execution.toData().chatMessages.length > 1 || AgentExecution.isTerminalFinalStatus(execution.getSnapshot().status)) {
+                if (execution.toData().projection.timelineItems.length > 1 || AgentExecution.isTerminalFinalStatus(execution.getSnapshot().status)) {
                     resolve(execution.toData());
                     return;
                 }
                 const timeout = setTimeout(() => reject(new Error('Timed out waiting for direct stdout marker.')), 2_000);
                 const dataSubscription = execution.onDidDataChange((nextData) => {
-                    if (nextData.chatMessages.length > 1) {
+                    if (nextData.projection.timelineItems.length > 1) {
                         clearTimeout(timeout);
                         dataSubscription.dispose();
                         eventSubscription.dispose();
@@ -85,18 +85,22 @@ describe('AgentExecutor', () => {
                     selected: 'stdout-marker',
                     degraded: false
                 },
-                chatMessages: [
-                    {
-                        role: 'agent',
-                        kind: 'message',
-                        text: 'I will inspect the repository.'
-                    },
-                    {
-                        role: 'agent',
-                        kind: 'progress',
-                        text: 'Inspecting repository.'
-                    }
-                ]
+                projection: {
+                    timelineItems: [
+                        {
+                            primitive: 'conversation.agent-message',
+                            payload: {
+                                text: 'I will inspect the repository.'
+                            }
+                        },
+                        {
+                            primitive: 'activity.progress',
+                            payload: {
+                                text: 'Inspecting repository.'
+                            }
+                        }
+                    ]
+                }
             });
         } finally {
             executor.dispose();

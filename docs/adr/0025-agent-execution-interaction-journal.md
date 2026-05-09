@@ -24,7 +24,7 @@ The current implementation records useful facts in several places:
 
 - Mission workflow runtime stores AgentExecution lifecycle participation and terminal recording references.
 - Terminal recordings store raw PTY input, output, resize, and exit records.
-- AgentExecution data can include `chatMessages`, but those are projection material rather than durable semantic authority.
+- AgentExecution data can include timeline projection material, but that projection is not durable semantic authority.
 - AgentExecution observation duplicate detection is currently runtime-local.
 - Mission workflow event logs record orchestration facts, not interaction transcripts.
 
@@ -86,7 +86,7 @@ Capabilities are runtime affordances and observed activity flags, such as termin
 
 Live process state is represented by an AgentExecution runtime snapshot overlay when the execution is active. That snapshot may include attached terminal identity, active transport connections, current PTY state, active tool calls, in-flight delivery attempts, and heartbeat data. The snapshot is not a substitute for journal replay; live facts that must survive restart need explicit journal records.
 
-`awaiting-input` should converge out of lifecycle. It is represented as a running execution with `attention: awaiting-operator` and a current input-request journal record.
+`awaiting-input` is not a lifecycle state. Input requests are represented as a running execution with `attention: awaiting-operator` and a current input-request journal record.
 
 ## Consequences
 

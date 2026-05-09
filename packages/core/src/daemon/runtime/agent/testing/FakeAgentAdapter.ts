@@ -179,7 +179,7 @@ export class FakeAgentAdapter extends AgentAdapter {
 	private async submitCommand(agentExecutionId: string, command: AgentCommand): Promise<AgentExecutionSnapshot> {
 		if (command.type === 'interrupt') {
 			const snapshot = this.updateSnapshot(agentExecutionId, {
-				status: 'awaiting-input',
+				status: 'running',
 				attention: 'awaiting-operator',
 				waitingForInput: true,
 				acceptsPrompts: true,
@@ -191,7 +191,7 @@ export class FakeAgentAdapter extends AgentAdapter {
 				}
 			});
 			this.emitExecutionEvent({
-				type: 'execution.awaiting-input',
+				type: 'execution.updated',
 				snapshot
 			});
 			return snapshot;
@@ -271,7 +271,7 @@ export class FakeAgentAdapter extends AgentAdapter {
 
 	private emitAwaitingInput(agentExecutionId: string, reason?: string): void {
 		const snapshot = this.updateSnapshot(agentExecutionId, {
-			status: 'awaiting-input',
+			status: 'running',
 			attention: 'awaiting-operator',
 			waitingForInput: true,
 			acceptsPrompts: true,
@@ -283,7 +283,7 @@ export class FakeAgentAdapter extends AgentAdapter {
 			}
 		});
 		this.emitExecutionEvent({
-			type: 'execution.awaiting-input',
+			type: 'execution.updated',
 			snapshot
 		});
 	}

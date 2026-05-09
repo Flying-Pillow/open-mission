@@ -27,7 +27,7 @@ import { connectDedicatedAuthenticatedDaemonClient } from './daemon/connections.
 import { resolveMissionTerminalRuntimeError } from './mission-terminal-errors';
 import { resolveRepositoryRootPath } from './repository-root-path.server';
 
-const TERMINAL_WS_PATH_PATTERN = /^\/api\/runtime\/sessions\/([^/]+)\/terminal\/ws$/u;
+const TERMINAL_WS_PATH_PATTERN = /^\/api\/runtime\/agent-executions\/([^/]+)\/terminal\/ws$/u;
 const MISSION_TERMINAL_WS_PATH_PATTERN = /^\/api\/runtime\/missions\/([^/]+)\/terminal\/ws$/u;
 const AIRPORT_WEB_TERMINAL_SCREEN_LIMIT = 40_000;
 const TERMINAL_SUBSCRIPTION_TIMEOUT_MS = 5_000;
@@ -57,26 +57,26 @@ export function attachTerminalWebSocketServer(server: UpgradeCapableServer): voi
         });
     });
 
-    webSocketServer.on('connection', (webSocket: NodeWebSocket, request: IncomingMessage, context: { kind: 'mission'; missionId: string } | { kind: 'session'; sessionId: string }) => {
+    webSocketServer.on('connection', (webSocket: NodeWebSocket, request: IncomingMessage, context: { kind: 'mission'; missionId: string } | { kind: 'agent-execution'; agentExecutionId: string }) => {
         if (context.kind === 'mission') {
             void handleMissionTerminalConnection(webSocket, request, context.missionId);
             return;
         }
-        void handleTerminalConnection(webSocket, request, context.sessionId);
+        void handleTerminalConnection(webSocket, request, context.agentExecutionId);
     });
 }
 
-function resolveTerminalContext(request: IncomingMessage): { kind: 'mission'; missionId: string } | { kind: 'session'; sessionId: string } | undefined {
+function resolveTerminalContext(request: IncomingMessage): { kind: 'mission'; missionId: string } | { kind: 'agent-execution'; agentExecutionId: string } | undefined {
     const requestUrl = request.url?.trim();
     if (!requestUrl) {
         return undefined;
     }
     const parsedUrl = new URL(requestUrl, 'http://localhost');
-    const sessionMatch = parsedUrl.pathname.match(TERMINAL_WS_PATH_PATTERN);
-    if (sessionMatch?.[1]) {
+    const agentExecutionMatch = parsedUrl.pathname.match(TERMINAL_WS_PATH_PATTERN);
+    if (agentExecutionMatch?.[1]) {
         return {
-            kind: 'session',
-            sessionId: AgentExecutionTerminalRouteParamsSchema.parse({ sessionId: decodeURIComponent(sessionMatch[1]) }).sessionId
+            kind: 'agent-execution',
+            agentExecutionId: AgentExecutionTerminalRouteParamsSchema.parse({ agentExecutionId: decodeURIComponent(agentExecutionMatch[1]) }).agentExecutionId
         };
     }
 
@@ -94,7 +94,7 @@ function resolveTerminalContext(request: IncomingMessage): { kind: 'mission'; mi
 async function handleTerminalConnection(
     webSocket: NodeWebSocket,
     request: IncomingMessage,
-    sessionId: string
+    agentExecutionId: string
 ): Promise<void> {
     const requestUrl = new URL(request.url ?? '/', 'http://localhost');
     const query = AgentExecutionTerminalRouteQuerySchema.extend({
@@ -133,7 +133,7 @@ async function handleTerminalConnection(
         const terminalScreen = clipTerminalScreen(state.screen);
         const snapshot = AgentExecutionTerminalSnapshotSchema.parse({
             ownerId: query.ownerId,
-            sessionId,
+            agentExecutionId,
             connected: state.connected,
             dead: state.dead,
             exitCode: state.dead ? state.exitCode : null,
@@ -150,7 +150,7 @@ async function handleTerminalConnection(
     const sendOutput = (state: AgentExecutionTerminalSnapshotType) => {
         const output = AgentExecutionTerminalOutputSchema.parse({
             ownerId: query.ownerId,
-            sessionId,
+            agentExecutionId,
             chunk: state.chunk ?? '',
             dead: state.dead,
             exitCode: state.dead ? state.exitCode : null,
@@ -166,7 +166,7 @@ async function handleTerminalConnection(
 
     const createAgentExecutionTerminalState = (state: TerminalSnapshotType): AgentExecutionTerminalSnapshotType => AgentExecutionTerminalSnapshotSchema.parse({
         ownerId: query.ownerId,
-        sessionId,
+        agentExecutionId,
         connected: state.connected,
         dead: state.dead,
         exitCode: state.dead ? state.exitCode : null,
@@ -180,7 +180,7 @@ async function handleTerminalConnection(
 
     const sendTerminalInput = async (input: { data?: string; literal?: boolean; cols?: number; rows?: number }) => {
         if (!terminalHandle) {
-            throw new Error(`AgentExecution '${sessionId}' is not backed by a Terminal.`);
+            throw new Error(`AgentExecution '${agentExecutionId}' is not backed by a Terminal.`);
         }
         return TerminalSnapshotSchema.parse(await daemon?.client.request('entity.command', {
             entity: 'Terminal',
@@ -242,7 +242,7 @@ async function handleTerminalConnection(
             ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {})
         });
         await daemon.client.request<null>('event.subscribe', {
-            channels: [`agent_execution:${query.ownerId}/${sessionId}.terminal`]
+            channels: [`agent_execution:${query.ownerId}/${agentExecutionId}.terminal`]
         }, {
             timeoutMs: TERMINAL_SUBSCRIPTION_TIMEOUT_MS
         });
@@ -252,7 +252,7 @@ async function handleTerminalConnection(
             method: 'readTerminal',
             payload: {
                 ownerId: query.ownerId,
-                sessionId
+                agentExecutionId
             }
         }, {
             timeoutMs: TERMINAL_INITIAL_SNAPSHOT_TIMEOUT_MS
@@ -267,7 +267,7 @@ async function handleTerminalConnection(
         }
 
         subscription = daemon.client.onDidEvent((event: DaemonNotification) => {
-            if (event.type !== 'execution.terminal' || event.entityId !== `agent_execution:${query.ownerId}/${sessionId}`) {
+            if (event.type !== 'execution.terminal' || event.entityId !== `agent_execution:${query.ownerId}/${agentExecutionId}`) {
                 return;
             }
 
@@ -280,7 +280,7 @@ async function handleTerminalConnection(
                         method: 'readTerminal',
                         payload: {
                             ownerId: query.ownerId,
-                            sessionId
+                            agentExecutionId
                         }
                     }));
                     updateTerminalHandle(completedSnapshot);

@@ -92,7 +92,7 @@
                 method: "read",
                 payload: {
                     ownerId: execution.ownerId,
-                    sessionId: execution.sessionId,
+                    agentExecutionId: execution.agentExecutionId,
                 },
             }).run(),
         );
@@ -104,20 +104,28 @@
         data: AgentExecutionDataType,
     ): void {
         const nextData = AgentExecutionDataSchema.parse(data);
-        if (repositoriesAgentExecution?.sessionId === nextData.sessionId) {
+        if (
+            repositoriesAgentExecution?.agentExecutionId ===
+            nextData.agentExecutionId
+        ) {
             repositoriesAgentExecution.updateFromData(nextData);
             return;
         }
 
         repositoriesAgentExecution = new AgentExecution(nextData, {
             resolveCommands: () => [],
-            executeCommand: async (ownerId, sessionId, commandId, input) => {
+            executeCommand: async (
+                ownerId,
+                agentExecutionId,
+                commandId,
+                input,
+            ) => {
                 await cmd({
                     entity: "AgentExecution",
                     method: "command",
                     payload: {
                         ownerId,
-                        sessionId,
+                        agentExecutionId,
                         commandId,
                         ...(input !== undefined ? { input } : {}),
                     },

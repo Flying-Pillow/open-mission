@@ -359,7 +359,7 @@ type AgentExecutionStateChangedRecord = AgentExecutionJournalRecordBase & {
 
 Do not put noisy progress percentages, token counts, streaming summaries, active file paths, or transient tool metadata inside `state.changed`. Those facts are runtime activity and telemetry, not semantic state transitions.
 
-`awaiting-input` should be migrated out of lifecycle once the journal replay path is in place.
+`awaiting-input` is not a valid lifecycle state. Input requests are represented as `lifecycle: running` plus `attention: awaiting-operator` and `currentInputRequestId`.
 
 ### Runtime Activity Records
 
@@ -420,12 +420,12 @@ Projection records are optional durable material for efficient UI reconstruction
 ```ts
 type AgentExecutionProjectionRecord = AgentExecutionJournalRecordBase & {
   type: 'projection.recorded';
-  projection: 'chat-message' | 'timeline-item';
+  projection: 'timeline-item';
   payload: Record<string, unknown>;
 };
 ```
 
-Phase one derives `chatMessages` directly during replay from message, observation, decision, state, and activity records. It should not write `projection.recorded` records until a measured read-performance need appears. Keep the record type in the schema so the format has an explicit future compaction/materialization path.
+Phase one derives `timelineItems` directly during replay from message, observation, decision, state, and activity records. It should not write `projection.recorded` records until a measured read-performance need appears. Keep the record type in the schema so the format has an explicit future compaction/materialization path.
 
 ## Replay
 
@@ -443,11 +443,11 @@ Replay output:
 - processed observation id set.
 - current lifecycle, attention, semantic activity, and current input request.
 - latest retained runtime activity and telemetry snapshot when present.
-- projected chat/timeline items.
+- projected timeline items.
 
 Replay must be deterministic for the same ordered records. Invalid records fail clean-slate validation; do not add fallback parsing or compatibility aliases without a Mission runtime migration ADR.
 
-Replay should route observation signal projection through the signal registry so descriptor metadata, journal signal variants, and chat projection behavior stay aligned.
+Replay should route observation signal projection through the signal registry so descriptor metadata, journal signal variants, and timeline projection behavior stay aligned.
 
 Live runtime snapshots are composed after replay for active read models. They must not change replay output, idempotency hydration, or semantic state reconstruction.
 
@@ -483,7 +483,7 @@ Duplicate observations must return an acknowledgement based on the durable journ
 
 AgentExecution data should expose projection fields derived from replay, not stored independently as authority:
 
-- `chatMessages` as recent or bounded projection.
+- `projection.timelineItems` as recent or bounded projection data.
 - `journal` metadata with path, cursor, record count, and last sequence.
 - `status` dimensions for lifecycle, attention, and semantic activity.
 - latest journaled runtime activity, telemetry, and capabilities.
@@ -551,6 +551,6 @@ Repository and System journal roots are file-store path policy, not Mission runt
 9. Route observations and decisions through journal writes.
 10. Route noisy progress, telemetry, and transient target updates into `activity.updated` rather than `state.changed`.
 11. Add Agent journal location references to Mission workflow runtime AgentExecution records through an explicit runtime data change.
-12. Convert `chatMessages` to a replay-derived projection without writing `projection.recorded` records in phase one.
-13. Split `awaiting-input` out of lifecycle in AgentExecution data after replay covers active and persisted AgentExecutions.
+12. Keep `timelineItems` as a replay-derived projection without writing `projection.recorded` records in phase one.
+13. Keep input-request semantics out of lifecycle by representing them as `running` plus `attention` and `currentInputRequestId` in AgentExecution data.
 14. Update Airport readers to consume projection fields rather than inventing local transcript truth.

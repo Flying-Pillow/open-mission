@@ -332,12 +332,11 @@ function isRuntimeDelivered(runtime: MissionStateData['runtime']): boolean {
 }
 
 function isActiveAgentExecution(lifecycleState: AgentExecutionRecord['lifecycleState']): boolean {
-    return lifecycleState === 'starting' || lifecycleState === 'running' || lifecycleState === 'awaiting-input';
+    return lifecycleState === 'starting' || lifecycleState === 'running';
 }
 
 function hasSemanticInputRequest(agentExecution: Pick<AgentExecutionRecord, 'lifecycleState' | 'currentInputRequestId'>): boolean {
-    return agentExecution.lifecycleState === 'awaiting-input'
-        || agentExecution.currentInputRequestId !== undefined && agentExecution.currentInputRequestId !== null;
+    return agentExecution.currentInputRequestId !== undefined && agentExecution.currentInputRequestId !== null;
 }
 
 function getValidationErrors(

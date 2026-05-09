@@ -20,12 +20,12 @@
 
     let {
         refreshNonce,
-        session,
+        agentExecution,
         onCommandExecuted,
         panelMode = "full",
     }: {
         refreshNonce: number;
-        session?: AgentExecutionEntity;
+        agentExecution?: AgentExecutionEntity;
         onCommandExecuted: () => Promise<void>;
         panelMode?: "full" | "terminal";
     } = $props();
@@ -58,19 +58,21 @@
     let interactionPending = $state<"prompt" | "command" | null>(null);
     let interactionError = $state<string | null>(null);
 
-    const canAttachTerminal = $derived(Boolean(session?.isTerminalBacked()));
+    const canAttachTerminal = $derived(
+        Boolean(agentExecution?.isTerminalBacked()),
+    );
     const showFullControls = $derived(panelMode === "full");
-    const runtimeMessages = $derived(session?.runtimeMessages ?? []);
+    const runtimeMessages = $derived(agentExecution?.runtimeMessages ?? []);
     const canShowStructuredComposer = $derived(
         Boolean(
-            session &&
-                session.interactionMode === "agent-message" &&
-                (session.canSendStructuredPrompt ||
-                    session.canSendStructuredCommand),
+            agentExecution &&
+                agentExecution.interactionMode === "agent-message" &&
+                (agentExecution.canSendStructuredPrompt ||
+                    agentExecution.canSendStructuredCommand),
         ),
     );
     const interactionModeLabel = $derived.by(() => {
-        switch (session?.interactionMode) {
+        switch (agentExecution?.interactionMode) {
             case "pty-terminal":
                 return "terminal";
             case "agent-message":
@@ -82,30 +84,30 @@
         }
     });
     const interactionSummary = $derived.by(() => {
-        if (!session) {
+        if (!agentExecution) {
             return null;
         }
-        if (session.interactionMode === "pty-terminal") {
+        if (agentExecution.interactionMode === "pty-terminal") {
             return "Mission is attached to the live PTY terminal for this execution.";
         }
-        if (session.interactionMode === "agent-message") {
+        if (agentExecution.interactionMode === "agent-message") {
             return "Mission can continue this session through structured prompts and commands.";
         }
         return (
-            session.interactionReason ??
+            agentExecution.interactionReason ??
             "This session is read-only and cannot accept follow-up input."
         );
     });
-    const terminalId = $derived(session?.sessionId ?? null);
-    const ownerId = $derived(session?.ownerId ?? "");
+    const terminalId = $derived(agentExecution?.agentExecutionId ?? null);
+    const ownerId = $derived(agentExecution?.ownerId ?? "");
     const surfaceId = $derived(executionSurface?.surfaceId ?? "");
     const surfacePath = $derived(executionSurface?.surfacePath ?? "");
     const isPersistedTranscriptSnapshot = $derived(
-        Boolean(session && !session.isRunning()) ||
+        Boolean(agentExecution && !agentExecution.isRunning()) ||
             Boolean(terminalSnapshot?.dead && !terminalSnapshot?.connected),
     );
     const terminalStateLabel = $derived.by(() => {
-        if (!session) {
+        if (!agentExecution) {
             return "No session";
         }
         if (!canAttachTerminal) {
@@ -122,7 +124,7 @@
         if (terminalSnapshot?.connected) {
             return "Attached";
         }
-        if (session.lifecycleState === "failed") {
+        if (agentExecution.lifecycleState === "failed") {
             return "Failed";
         }
         return "Connecting";
@@ -194,7 +196,7 @@
                 ownerId,
                 repositoryId: surfaceId,
                 repositoryRootPath: surfacePath,
-                sessionId: terminalId,
+                agentExecutionId: terminalId,
             },
             (state) => {
                 terminalSnapshot = state.snapshot;
@@ -279,8 +281,8 @@
 
     async function submitStructuredPrompt(): Promise<void> {
         if (
-            !session ||
-            !session.canSendStructuredPrompt ||
+            !agentExecution ||
+            !agentExecution.canSendStructuredPrompt ||
             interactionPending !== null
         ) {
             return;
@@ -295,7 +297,7 @@
         interactionPending = "prompt";
         interactionError = null;
         try {
-            await session.sendPrompt({
+            await agentExecution.sendPrompt({
                 source: "operator",
                 text,
             });
@@ -313,8 +315,8 @@
 
     async function submitStructuredCommand(): Promise<void> {
         if (
-            !session ||
-            !session.canSendStructuredCommand ||
+            !agentExecution ||
+            !agentExecution.canSendStructuredCommand ||
             interactionPending !== null
         ) {
             return;
@@ -328,7 +330,7 @@
         interactionPending = "command";
         interactionError = null;
         try {
-            await session.sendCommand({
+            await agentExecution.sendCommand({
                 type: selectedCommandType,
                 ...(commandReason.trim()
                     ? { reason: commandReason.trim() }
@@ -347,7 +349,11 @@
     }
 
     async function flushPendingInput(): Promise<void> {
-        if (!session || !canAttachTerminal || pendingInput.length === 0) {
+        if (
+            !agentExecution ||
+            !canAttachTerminal ||
+            pendingInput.length === 0
+        ) {
             return;
         }
         if (!terminalTransport) {
@@ -383,7 +389,11 @@
             target,
             isDisposed,
             onResize: ({ cols, rows }) => {
-                if (!session || !canAttachTerminal || terminalSnapshot?.dead) {
+                if (
+                    !agentExecution ||
+                    !canAttachTerminal ||
+                    terminalSnapshot?.dead
+                ) {
                     return;
                 }
                 if (
@@ -396,7 +406,11 @@
                 void flushPendingResize();
             },
             onData: (data) => {
-                if (!session || !canAttachTerminal || terminalSnapshot?.dead) {
+                if (
+                    !agentExecution ||
+                    !canAttachTerminal ||
+                    terminalSnapshot?.dead
+                ) {
                     return;
                 }
                 const sanitizedData = sanitizeTerminalInputData(data);
@@ -417,7 +431,7 @@
     }
 
     async function flushPendingResize(): Promise<void> {
-        if (!session || !canAttachTerminal || !pendingResize) {
+        if (!agentExecution || !canAttachTerminal || !pendingResize) {
             return;
         }
         if (!terminalTransport) {
@@ -512,26 +526,26 @@
             <div class="flex flex-wrap items-start gap-2">
                 <div class="min-w-0 flex-1">
                     <h2 class="truncate text-sm font-semibold text-foreground">
-                        {session?.sessionId ?? "Agent execution"}
+                        {agentExecution?.agentExecutionId ?? "Agent execution"}
                     </h2>
                     <p class="truncate text-xs text-muted-foreground">
-                        {session?.currentTurnTitle ??
-                            session?.workingDirectory ??
+                        {agentExecution?.currentTurnTitle ??
+                            agentExecution?.workingDirectory ??
                             "Select a task or session row to pin the runtime console."}
                     </p>
                 </div>
 
                 <!-- <div class="text-right text-xs text-muted-foreground">
                     <p>{terminalStateLabel}</p>
-                    {#if session}
-                        <p class="mt-1">{session.lifecycleState}</p>
+                    {#if agentExecution}
+                        <p class="mt-1">{agentExecution.lifecycleState}</p>
                         <p class="mt-1">{interactionModeLabel}</p>
                     {/if}
                 </div> -->
 
                 <AgentExecutionCommandbar
                     {refreshNonce}
-                    {session}
+                    {agentExecution}
                     {onCommandExecuted}
                 />
             </div>
@@ -550,7 +564,7 @@
     {/if}
 
     <div class="flex-1 min-h-0">
-        {#if !session}
+        {#if !agentExecution}
             <div
                 class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
             >
@@ -564,7 +578,7 @@
                     Mission is not attached to a live PTY for this execution.
                     Use the structured input controls below to continue the run.
                 {:else}
-                    {session.interactionReason ??
+                    {agentExecution.interactionReason ??
                         "This session is not terminal-backed, so Mission Control cannot attach an interactive console."}
                 {/if}
             </div>
@@ -589,7 +603,7 @@
     {#if showFullControls && canShowStructuredComposer}
         <section class="border-t border-border/60 px-3 py-3">
             <div class="grid gap-4 lg:grid-cols-2">
-                {#if session?.canSendStructuredPrompt}
+                {#if agentExecution?.canSendStructuredPrompt}
                     <form
                         class="space-y-2"
                         onsubmit={(event) => {
@@ -625,7 +639,7 @@
                     </form>
                 {/if}
 
-                {#if session?.canSendStructuredCommand}
+                {#if agentExecution?.canSendStructuredCommand}
                     <form
                         class="space-y-2"
                         onsubmit={(event) => {

@@ -75,10 +75,14 @@ describe('Mission', () => {
                 const events: string[] = [];
                 const agentMessages: string[] = [];
                 const consoleLines: string[] = [];
+                const agentExecutionStateChanges: AgentExecutionRecord[] = [];
                 mission.onDidAgentEvent((event) => {
                     events.push(event.type);
                     if (event.type === 'agent-message') {
                         agentMessages.push(event.text);
+                    }
+                    if (event.type === 'agent-execution-state-changed') {
+                        agentExecutionStateChanges.push(event.state);
                     }
                 });
                 mission.onDidAgentConsoleEvent((event) => {
@@ -124,6 +128,7 @@ describe('Mission', () => {
                     awaitingInput: true,
                     lines: ['adapter output']
                 });
+                expect(agentExecutionStateChanges.at(-1)?.lifecycleState).toBe('running');
             } finally {
                 mission.dispose();
             }
@@ -1200,15 +1205,15 @@ describe('Mission', () => {
         }
     });
 
-    it('keeps AgentExecution stop commands enabled while an agent is awaiting input', async () => {
+    it('keeps AgentExecution stop commands enabled while an agent has a semantic input request', async () => {
         const workspaceRoot = await createTempRepo();
         const agentAdapter = new FakeAgentAdapter('test-adapter', 'Test Adapter');
 
         try {
             const adapter = new MissionDossierFilesystem(workspaceRoot);
             const mission = await Mission.create(adapter, {
-                brief: createBrief(210, 'Mission awaiting-input AgentExecution commands'),
-                branchRef: adapter.deriveMissionBranchName(210, 'Mission awaiting-input AgentExecution commands')
+                brief: createBrief(210, 'Mission semantic input-request AgentExecution commands'),
+                branchRef: adapter.deriveMissionBranchName(210, 'Mission semantic input-request AgentExecution commands')
             }, createWorkflowBindings(agentAdapter));
 
             try {

@@ -42,7 +42,7 @@ describe('AgentExecution', () => {
         expect('terminalPaneId' in data).toBe(false);
     });
 
-    it('derives agent-message capabilities for non-terminals that accept structured follow-up input', () => {
+    it('derives agent-message capabilities for non-terminals that accept semantic structured follow-up input', () => {
         const snapshot: AgentExecutionSnapshot = {
             agentId: 'codex',
             agentExecutionId: 'AgentExecution-2',
@@ -56,8 +56,9 @@ describe('AgentExecution', () => {
             taskId: 'task-2',
             missionId: 'mission-1',
             stageId: 'implementation',
-            status: 'awaiting-input',
+            status: 'running',
             attention: 'awaiting-operator',
+            currentInputRequestId: 'observation-1',
             progress: {
                 state: 'waiting-input',
                 updatedAt: '2026-05-04T00:00:00.000Z'
@@ -66,7 +67,7 @@ describe('AgentExecution', () => {
             acceptsPrompts: true,
             acceptedCommands: ['resume', 'checkpoint'],
             interactionCapabilities: deriveAgentExecutionInteractionCapabilities({
-                status: 'awaiting-input',
+                status: 'running',
                 acceptsPrompts: true,
                 acceptedCommands: ['resume', 'checkpoint']
             }),
@@ -119,7 +120,7 @@ describe('AgentExecution', () => {
             },
             createdAt: '2026-05-09T00:00:00.000Z',
             lastUpdatedAt: '2026-05-09T00:00:00.000Z',
-            chatMessages: []
+            projection: { timelineItems: [] }
         }));
 
         const privateCtor = AgentExecution as typeof AgentExecution & {
@@ -339,8 +340,10 @@ describe('AgentExecution', () => {
         expect(data.protocolDescriptor?.messages).toEqual(data.runtimeMessages);
     });
 
-    it('materializes accepted AgentExecution signals as chat messages', () => {
+    it('materializes accepted AgentExecution signals as timeline items', () => {
         const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const events: string[] = [];
+        execution.onDidEvent((event) => events.push(event.type));
         const observation = {
             observationId: 'observation-1',
             agentExecutionId: 'AgentExecution-2',
@@ -372,22 +375,26 @@ describe('AgentExecution', () => {
         if (decision.action === 'reject') {
             throw new Error(decision.reason);
         }
-        execution.applySignalObservation(observation, decision);
+        const snapshot = execution.applySignalObservation(observation, decision);
 
-        expect(execution.toData().chatMessages).toEqual([
+        expect(execution.toData().projection.timelineItems).toEqual([
             expect.objectContaining({
                 id: 'observation-1',
-                role: 'agent',
-                kind: 'needs-input',
-                tone: 'attention',
-                title: 'Needs input',
-                text: 'Which setup profile should I use?',
-                choices: [{ kind: 'fixed', label: 'Default', value: 'default' }]
+                primitive: 'attention.input-request',
+                payload: expect.objectContaining({
+                    title: 'Needs input',
+                    text: 'Which setup profile should I use?',
+                    choices: [{ kind: 'fixed', label: 'Default', value: 'default' }]
+                })
             })
         ]);
+        expect(snapshot?.status).toBe('running');
+        expect(snapshot?.attention).toBe('awaiting-operator');
+        expect(snapshot?.waitingForInput).toBe(true);
+        expect(events).toContain('execution.updated');
     });
 
-    it('materializes status signals as status chat messages', () => {
+    it('materializes status signals as activity timeline items', () => {
         const execution = AgentExecution.createLive(createRuntimeSnapshot());
         const observation = {
             observationId: 'observation-status-1',
@@ -422,18 +429,19 @@ describe('AgentExecution', () => {
         }
         execution.applySignalObservation(observation, decision);
 
-        expect(execution.toData().chatMessages).toEqual([
+        expect(execution.toData().projection.timelineItems).toEqual([
             expect.objectContaining({
                 id: 'observation-status-1',
-                role: 'agent',
-                kind: 'status',
-                title: 'Idle',
-                text: 'Ready for the next structured prompt.'
+                primitive: 'activity.status',
+                payload: expect.objectContaining({
+                    title: 'Idle',
+                    text: 'Ready for the next structured prompt.'
+                })
             })
         ]);
     });
 
-    it('notifies data changes for record-only claims that append chat messages', () => {
+    it('notifies data changes for record-only claims that append timeline items', () => {
         const execution = AgentExecution.createLive(createRuntimeSnapshot());
         const dataChanges: AgentExecutionDataType[] = [];
         execution.onDidDataChange((data) => dataChanges.push(data));
@@ -470,12 +478,14 @@ describe('AgentExecution', () => {
         execution.applySignalObservation(observation, decision);
 
         expect(dataChanges).toHaveLength(1);
-        expect(dataChanges.at(0)?.chatMessages).toEqual([
+        expect(dataChanges.at(0)?.projection.timelineItems).toEqual([
             expect.objectContaining({
                 id: 'observation-ready-1',
-                kind: 'claim',
-                title: 'Ready for verification',
-                text: 'Setup files are ready.'
+                primitive: 'attention.verification-requested',
+                payload: expect.objectContaining({
+                    title: 'Ready for verification',
+                    text: 'Setup files are ready.'
+                })
             })
         ]);
     });
@@ -500,7 +510,7 @@ describe('AgentExecution', () => {
         });
     });
 
-    it('materializes operator prompts as chat messages', async () => {
+    it('materializes operator prompts as timeline items', async () => {
         const execution = AgentExecution.createLive(createRuntimeSnapshot());
 
         await execution.submitPrompt({
@@ -508,12 +518,12 @@ describe('AgentExecution', () => {
             text: 'Use the default setup profile.'
         });
 
-        expect(execution.toData().chatMessages).toEqual([
+        expect(execution.toData().projection.timelineItems).toEqual([
             expect.objectContaining({
-                role: 'operator',
-                kind: 'message',
-                tone: 'neutral',
-                text: 'Use the default setup profile.'
+                primitive: 'conversation.operator-message',
+                payload: expect.objectContaining({
+                    text: 'Use the default setup profile.'
+                })
             })
         ]);
     });

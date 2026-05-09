@@ -165,9 +165,9 @@ export class AgentExecutionObservationPolicy {
 				}
 				return {
 					action: 'update-execution',
-					eventType: 'execution.awaiting-input',
+					eventType: 'execution.updated',
 					snapshotPatch: {
-						status: 'awaiting-input',
+						status: 'running',
 						attention: 'awaiting-operator',
 						waitingForInput: true,
 						progress: {

@@ -46,7 +46,7 @@
             stageId?: string;
             taskId?: string;
         };
-        activeSessionId?: string;
+        activeAgentExecutionId?: string;
     };
 
     const appContext = getAppContext();
@@ -184,9 +184,9 @@
                       selectedTarget.stageId,
                   )
                 : undefined;
-        const companionStageSession =
+        const companionStageAgentExecution =
             activeMission && selectedTarget?.kind === "stage"
-                ? resolvePreferredStageSession(
+                ? resolvePreferredStageAgentExecution(
                       activeMission,
                       selectedTarget.stageId,
                   )
@@ -207,8 +207,11 @@
                       },
                   }
                 : {}),
-            ...(companionStageSession?.sessionId
-                ? { activeSessionId: companionStageSession.sessionId }
+            ...(companionStageAgentExecution?.agentExecutionId
+                ? {
+                      activeAgentExecutionId:
+                          companionStageAgentExecution.agentExecutionId,
+                  }
                 : {}),
         };
     });
@@ -266,10 +269,12 @@
         return [...artifactById.values()];
     });
     const resolvedSession = $derived(
-        selectionState.activeSessionId && activeMission
-            ? activeMission.getSession(selectionState.activeSessionId)
+        selectionState.activeAgentExecutionId && activeMission
+            ? activeMission.getAgentExecution(
+                  selectionState.activeAgentExecutionId,
+              )
             : activeMission
-              ? resolvePreferredTaskSession(
+              ? resolvePreferredTaskAgentExecution(
                     activeMission,
                     selectionState.resolvedSelection?.taskId,
                 )
@@ -529,7 +534,7 @@
         selectedWorktreeNode = node.kind === "file" ? node : null;
     }
 
-    function resolvePreferredTaskSession(
+    function resolvePreferredTaskAgentExecution(
         currentMission: MissionEntity,
         taskId: string | undefined,
     ): AgentExecutionModel | undefined {
@@ -570,7 +575,7 @@
         );
     }
 
-    function resolvePreferredStageSession(
+    function resolvePreferredStageAgentExecution(
         currentMission: MissionEntity,
         stageId: string | undefined,
     ): AgentExecutionModel | undefined {
@@ -846,8 +851,8 @@
                             artifacts={displayArtifacts}
                             selectedArtifactId={activeArtifactSelection}
                             task={displayTask}
-                            session={resolvedSession}
-                            sessions={displayTaskSessions}
+                            agentExecution={resolvedSession}
+                            agentExecutions={displayTaskSessions}
                             onCommandExecuted={handleMissionMutated}
                         />
                     </ResizablePane>

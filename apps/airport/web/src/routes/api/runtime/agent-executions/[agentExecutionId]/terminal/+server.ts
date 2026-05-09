@@ -1,4 +1,4 @@
-// /apps/airport/web/src/routes/api/runtime/sessions/[sessionId]/terminal/+server.ts: Session terminal snapshot/input relay over Airport web runtime routes.
+// /apps/airport/web/src/routes/api/runtime/agent-executions/[agentExecutionId]/terminal/+server.ts: AgentExecution terminal snapshot/input relay over Airport web runtime routes.
 import { json } from '@sveltejs/kit';
 import { AgentExecutionTerminalRouteInputSchema as agentExecutionTerminalInputSchema, AgentExecutionTerminalRouteQuerySchema as agentExecutionTerminalQuerySchema, AgentExecutionTerminalRouteParamsSchema as agentExecutionTerminalRouteParamsSchema } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
@@ -7,7 +7,7 @@ import { resolveRepositoryRootPath } from '$lib/server/repository-root-path.serv
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, params, url }) => {
-    const { sessionId } = agentExecutionTerminalRouteParamsSchema.parse(params);
+    const { agentExecutionId } = agentExecutionTerminalRouteParamsSchema.parse(params);
     const query = agentExecutionTerminalQueryWithRepositorySchema.parse({
         ownerId: url.searchParams.get('ownerId'),
         repositoryId: url.searchParams.get('repositoryId') ?? undefined,
@@ -23,7 +23,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
         });
         const snapshot = await gateway.getAgentExecutionTerminalSnapshot({
             ownerId: query.ownerId,
-            sessionId,
+            agentExecutionId,
             ...(surfacePath ? { surfacePath } : {})
         });
 
@@ -44,7 +44,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
 };
 
 export const POST: RequestHandler = async ({ locals, params, request }) => {
-    const { sessionId } = agentExecutionTerminalRouteParamsSchema.parse(params);
+    const { agentExecutionId } = agentExecutionTerminalRouteParamsSchema.parse(params);
     const requestUrl = new URL(request.url);
     const query = agentExecutionTerminalQueryWithRepositorySchema.parse({
         ownerId: requestUrl.searchParams.get('ownerId'),
@@ -62,7 +62,7 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
         });
         const snapshot = await gateway.sendAgentExecutionTerminalInput({
             ownerId: body.ownerId,
-            sessionId,
+            agentExecutionId,
             ...(body.data !== undefined ? { data: body.data } : {}),
             ...(body.literal !== undefined ? { literal: body.literal } : {}),
             ...(body.cols !== undefined ? { cols: body.cols } : {}),

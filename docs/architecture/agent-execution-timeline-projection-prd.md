@@ -18,9 +18,16 @@ AgentExecution interaction journal -> AgentExecution projection -> Airport timel
 
 Airport must render a projection derived from AgentExecution semantic state, AgentExecution journal records, and live runtime snapshot overlays. It must not interpret raw terminal output, local component state, or provider-specific events as semantic interaction truth.
 
+The AgentExecution projection must stay aligned with the two phase-one registries defined by the interaction journal specification:
+
+- the journal record registry owns top-level journal record families, record discrimination, schema validation, and replay routing.
+- the signal registry owns `observation.recorded.signal` payload variants, signal descriptors, and signal-specific projection behavior.
+
+Airport consumes the resulting AgentExecution projection. It does not duplicate either registry in component code.
+
 ## Problem
 
-The current Airport AgentExecution surface is useful but chat-shaped. It renders bounded `chatMessages` and can show a terminal panel, but the emerging AgentExecution journal contains richer semantic material:
+The current Airport AgentExecution surface is useful but still too conversation-weighted. It renders bounded timeline items and can show a terminal panel, but the emerging AgentExecution journal contains richer semantic material:
 
 - operator and daemon messages.
 - Agent-authored observations and claims.
@@ -47,7 +54,7 @@ The projection must allow Airport to present:
 - artifact previews, diffs, and structured outputs when those projection records exist.
 - replay, compaction, and summary boundaries in future journal windows.
 
-The first implementation should preserve the existing chat experience while improving its semantic rendering. The target model is a Mission execution timeline with chat-like regions inside it.
+The first implementation should preserve the existing operator workflow while improving the semantic rendering of current `timelineItems`. The target model is a Mission execution timeline with chat-like conversation regions inside it.
 
 ## Non-Goals
 
@@ -68,6 +75,10 @@ Airport presents an AgentExecution timeline. Conversation is one timeline region
 ### Projection Before Component
 
 Airport components should render projection primitives and behavior classes. They should not infer domain meaning directly from journal record internals or terminal text.
+
+### Registry-Driven Semantics
+
+Projection semantics come from AgentExecution-owned replay and registries. The journal record registry decides which record families exist and how replay dispatches them. The signal registry decides which structured signal types exist, what descriptors are advertised to Agents, and how signals project into operator-facing material. Airport may adapt projection items for layout, but it must not maintain a parallel switch table for journal record or signal meaning.
 
 ### Intelligent Timeline, Not Journal List
 
@@ -187,11 +198,11 @@ This inventory is a projection vocabulary. It must not be copied into journal tr
 
 ## Current Experience Requirements
 
-Phase one should adapt the current AgentExecution chat surface rather than replacing it wholesale.
+Phase one should adapt the current AgentExecution timeline surface rather than replacing it wholesale.
 
 The current screen should continue to support:
 
-- existing `chatMessages` rendering.
+- existing timeline rendering.
 - structured prompt submission when allowed by AgentExecution interaction capabilities.
 - structured runtime commands when exposed by message descriptors.
 - optional terminal inspection panel for terminal-backed executions.
@@ -199,7 +210,7 @@ The current screen should continue to support:
 
 The improved phase-one screen should add or prepare for:
 
-- a product title that can shift from Agent chat toward Agent execution or Agent timeline.
+- a product title that can shift from Agent chat toward Agent execution or Agent timeline where the host surface still uses chat-shaped component names.
 - stronger visual separation between conversation, activity, input requests, claims, failures, and system status.
 - a sticky current activity row when activity projection data is available.
 - inline attention cards for input requests and blocked states.
@@ -222,7 +233,7 @@ The mature AgentExecution timeline should support the following UX capabilities 
 
 ## Future Experience Requirements
 
-When `timelineItems` are available, Airport should support:
+As `timelineItems` mature beyond the bounded phase-one projection, Airport should support:
 
 - zone filters.
 - severity filters.
@@ -243,7 +254,7 @@ Beyond multi-agent timeline composition, Mission may need execution graph visual
 
 ## Acceptance Criteria
 
-- Airport can render current `chatMessages` without losing existing operator workflows.
+- Airport can render current `timelineItems` without losing existing operator workflows.
 - The documented target model can express non-message timeline items.
 - Timeline items have a required zone.
 - Timeline items can carry optional severity.
@@ -253,14 +264,16 @@ Beyond multi-agent timeline composition, Mission may need execution graph visual
 - High-frequency activity can be collapsed or summarized without changing durable semantic state.
 - The UI model remains provider-neutral and scope-neutral.
 - Projection material is derived from AgentExecution data and journal replay, not locally invented by Airport components.
+- Projection semantics are registry-driven: record-family coverage comes from the journal record registry, and signal-family coverage comes from the AgentExecution signal registry.
+- Every descriptor-backed signal that can produce operator-facing material has a projection path into `timelineItems` or another explicit projection family.
 - Airport defines component shapes for each projection behavior class and journal-derived primitive family.
 - Airport can navigate, replay, collapse, expand, and synchronize timeline regions without treating journal records as raw UI rows.
 
 ## Phase Plan
 
-1. Adapt current chat presentation with better semantic shapes for message kinds already present in `chatMessages`.
-2. Add a shared AgentExecution timeline projection contract with zones, behavior, severity, provenance, and payloads.
-3. Render `timelineItems` when present, while retaining `chatMessages` as a phase-one compatibility projection.
+1. Keep `timelineItems` as the canonical operator-facing projection and improve their current semantic presentation.
+2. Refactor the current AgentExecution UI around behavior-class components while preserving operator workflows.
+3. Extend AgentExecution-owned replay/projection coverage from the current registry-backed `timelineItems` projection toward richer grouping, replay, and artifact presentation.
 4. Add grouping and compaction rules for activity, progress, telemetry, diagnostics, and runtime overlay updates.
 5. Add cursor-based journal windows and timeline virtualization after measured volume requires it.
 6. Add rich artifact, diff, terminal snippet, delegation, and multi-agent execution items as backend projection support lands.
@@ -276,3 +289,4 @@ Beyond multi-agent timeline composition, Mission may need execution graph visual
 6. What is the minimum projection shape needed for multi-agent timeline composition without prematurely building a global timeline engine?
 7. Which operator interaction affordances should become explicit projection semantics instead of generic `actionable` rendering hints?
 8. What is the first execution graph visualization that adds value without turning timeline projection into a graph engine too early?
+9. Should signal registry entries eventually expose timeline primitive, zone, severity, and behavior metadata directly, or should those remain in a separate AgentExecution projection registry layered over the signal registry?

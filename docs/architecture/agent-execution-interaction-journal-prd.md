@@ -25,10 +25,10 @@ AgentExecution interaction is currently split across several useful but incomple
 
 - Mission workflow runtime persists AgentExecution lifecycle participation and terminal recording references, but not semantic interaction.
 - Terminal recordings persist raw input/output, but not normalized messages, observations, policy decisions, or owner effects.
-- AgentExecution `chatMessages` provide a UI-friendly view, but they are not a durable source of truth for Mission-backed executions.
+- AgentExecution timeline projection provides a UI-friendly view, but it is not a durable source of truth for Mission-backed executions.
 - Observation idempotency is held in memory, so daemon restart or adapter replay can lose the durable duplicate ledger.
 - `execution.message` events carry loose text rather than a schema-backed semantic interaction record.
-- `awaiting-input` currently behaves like lifecycle in some places, even though it is collaboration attention plus input-request state.
+- Input requests must not be modeled as lifecycle. They are collaboration attention plus current input-request state.
 
 Without a canonical semantic journal, Airport timelines, recovery, audit, replay, and future provider integrations will each be tempted to derive truth from different sources.
 
@@ -143,7 +143,7 @@ type AgentExecutionCapabilitySnapshot = {
 };
 ```
 
-`awaiting-input` should converge from lifecycle into:
+Input-request state is represented as:
 
 ```text
 lifecycle: running
@@ -201,7 +201,7 @@ The Mission dossier path is a file-store choice, not a Mission-specific journal 
 - Semantic state transitions are distinct from runtime activity or telemetry updates.
 - Terminal recordings remain raw transport audit and are not used as semantic source of truth.
 - Mission workflow event logs remain orchestration truth and do not become transcripts.
-- `chatMessages` and Airport timelines are projections over the journal.
+- AgentExecution projection data and Airport timelines are projections over the journal.
 - Observation duplicate detection survives daemon restart and replay.
 - `needs_input` creates a durable input-request record; operator response is a separate AgentExecutionMessage record.
 - AgentExecution state can be reconstructed from journal records in deterministic tests.
@@ -211,7 +211,7 @@ The Mission dossier path is a file-store choice, not a Mission-specific journal 
 
 ## Phase-One Product Decisions
 
-1. Airport reads the bounded `chatMessages` projection on AgentExecution data. Cursor-based older journal windows can be added after the replay path is stable.
+1. Airport reads the bounded `projection.timelineItems` projection on AgentExecution data. Cursor-based older journal windows can be added after the replay path is stable.
 2. Owner effect records are written only when an accepted observation actually emits an Entity event or Mission workflow event. No placeholder owner-effect records in phase one.
 3. Filesystem and git observations wait until the interaction journal, replay path, and observation idempotency hydration are stable.
 4. Journal compaction waits until there is measured read or storage pressure. Phase one keeps append-only records and derives projection at replay time.

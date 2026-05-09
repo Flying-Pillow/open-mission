@@ -385,7 +385,7 @@ describe('Copilot', () => {
 		expect(events.some((event) => event.type === 'execution.updated')).toBe(true);
 	});
 
-	it('maps interrupt commands to Ctrl+C and awaiting-input state', async () => {
+	it('maps interrupt commands to Ctrl+C and semantic input-request state', async () => {
 		const adapter = createAgentAdapter(createCopilot({
 			launchMode: 'interactive',
 			command: 'copilot',
@@ -403,7 +403,7 @@ describe('Copilot', () => {
 
 		expect(state.writes).toContain('\x03');
 		expect(snapshot.waitingForInput).toBe(true);
-		expect(events.find((event) => event.type === 'execution.awaiting-input')).toBeDefined();
+		expect(events.find((event) => event.type === 'execution.updated')).toBeDefined();
 	});
 
 	it('terminates a AgentExecution through the adapter API', async () => {

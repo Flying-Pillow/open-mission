@@ -20,6 +20,9 @@ The implementation defines a projection contract and Airport rendering architect
 - ADR-0025: AgentExecution interaction journal persistence.
 - [Agent Execution Interaction Journal PRD](agent-execution-interaction-journal-prd.md).
 - [Agent Execution Interaction Journal Spec](agent-execution-interaction-journal-spec.md).
+- `packages/core/src/entities/AgentExecution/AgentExecutionJournalSchema.ts`: current top-level journal record family schemas and discriminated journal record contract.
+- `packages/core/src/entities/AgentExecution/AgentExecutionSignalRegistry.ts`: current signal registry, descriptor source, signal payload schema source, and signal-to-timeline projection source.
+- `packages/core/src/entities/AgentExecution/AgentExecutionJournalReplayer.ts`: current replay owner for hydrating AgentExecution state and AgentExecution projection data from journal records.
 
 ## Ownership
 
@@ -32,6 +35,8 @@ AgentExecution owns:
 - preserving provenance from projection items back to source journal records when available.
 - marking whether projection items are durable journal-derived material or live runtime overlay material.
 - providing zone, primitive, behavior, and severity data when it can do so from canonical state.
+- using the journal record registry as the source of top-level journal record family coverage and replay dispatch.
+- using the AgentExecution signal registry as the source of signal payload variants, signal descriptors, and signal-specific projection behavior.
 
 ### Airport Application
 
@@ -45,6 +50,8 @@ Airport owns:
 Airport does not own:
 
 - AgentExecution journal records.
+- AgentExecution journal record registry semantics.
+- AgentExecution signal registry semantics.
 - semantic replay.
 - workflow legality.
 - terminal transport truth.
@@ -54,9 +61,25 @@ Airport does not own:
 
 Terminal remains the owner of raw PTY screen state, terminal input, resize, exit, and terminal recordings. Airport may embed terminal replay or selected terminal snippets, but those views are inspectable runtime evidence, not semantic interaction truth.
 
+## Registry-Driven Projection Semantics
+
+AgentExecution projection must be driven by the same registries and schemas that govern journal replay.
+
+The journal record registry is the canonical source for top-level journal entry families. In the current implementation, that registry is represented by `AgentExecutionJournalRecordTypeSchema` and `AgentExecutionJournalRecordSchema`; if the implementation later exposes a named `AgentExecutionJournalRecordRegistry`, the projection layer should consume that named registry rather than preserve a parallel mapping. Record-family coverage includes `journal.header`, `message.accepted`, `message.delivery`, `observation.recorded`, `decision.recorded`, `state.changed`, `activity.updated`, `owner-effect.recorded`, and `projection.recorded`.
+
+The AgentExecution signal registry is the canonical source for structured signals inside `observation.recorded.signal`. It owns signal payload validation, descriptor publication through `baselineAgentDeclaredSignalDescriptors`, and signal-specific timeline projection through `projectAgentExecutionObservationSignalToTimelineItem`. Timeline projection should extend this ownership model rather than introduce a second signal switch in Airport.
+
+Registry ownership rules:
+
+- New journal record families must be added to the journal record registry/schema before projection code or Airport components can treat them as first-class timeline sources.
+- New signal families must be added to the signal registry before projection code can render them as first-class signal-derived timeline items.
+- Projection code may map registry-backed records and signals into timeline primitives, zones, behavior, severity, payloads, and provenance.
+- Airport components must select render components from projection behavior and primitive metadata, not directly from raw journal record type or signal type.
+- Coverage tests must fail when a registry-backed record or descriptor-backed signal has no intentional projection behavior, explicit hidden/collapsed behavior, or documented non-UI reason.
+
 ## Projection Contract
 
-The target AgentExecution read model should expose timeline projection data in addition to phase-one `chatMessages`.
+The AgentExecution read model should expose timeline projection data directly.
 
 ```ts
 type AgentExecutionProjection = {
@@ -64,11 +87,10 @@ type AgentExecutionProjection = {
   currentActivity?: AgentExecutionActivityProjection;
   currentAttention?: AgentExecutionAttentionProjection;
   runtimeOverlay?: AgentExecutionRuntimeOverlayProjection;
-  journal?: AgentExecutionProjectionJournalWindow;
 };
 ```
 
-Phase one may expose only `chatMessages`. Airport should structure components so `chatMessages` can be adapted into timeline-like presentation without requiring the full projection contract immediately.
+The initial implementation should expose `timelineItems` directly rather than preserve a parallel message transcript projection.
 
 ## Timeline Item Core Shape
 
@@ -80,13 +102,12 @@ type AgentExecutionTimelineItem = {
   primitive: AgentExecutionTimelinePrimitive;
   behavior: AgentExecutionRenderBehavior;
   severity?: AgentExecutionTimelineSeverity;
-  affordance?: AgentExecutionInteractionAffordance;
   provenance: AgentExecutionTimelineProvenance;
   payload: AgentExecutionTimelinePayload;
 };
 ```
 
-`zone` is required because it controls layout, grouping, filtering, summarization, and mobile ordering. `severity` is optional because ordinary conversation and neutral activity should not need explicit urgency. `affordance` is optional in phase one, but should become the explicit operator-action contract once projection data needs more than the generic `behavior.actionable` hint.
+`zone` is required because it controls layout, grouping, filtering, summarization, and mobile ordering. `severity` is optional because ordinary conversation and neutral activity should not need explicit urgency. Explicit affordances are intentionally not part of the current item schema; they should be added only when AgentExecution can expose operator-action authority without collapsing permissions into presentation state.
 
 ## Zone Type
 
@@ -191,7 +212,7 @@ Attention is represented through `behavior.class: 'approval'`, selected `attenti
 
 ## Interaction Affordance
 
-Projection items may expose explicit operator affordances when actionability needs to be more precise than a boolean render hint.
+Projection items may expose explicit operator affordances in a future contract version when actionability needs to be more precise than a boolean render hint. The current phase-one `AgentExecutionTimelineItem` schema does not include this field.
 
 ```ts
 type AgentExecutionInteractionAffordance = {
@@ -215,7 +236,7 @@ Affordance rules:
 - `canExpandTerminal` applies only when terminal inspection is available through Terminal-owned data.
 - `canInspectArtifact` applies only when an artifact reference or structured output reference is available.
 
-Phase one can continue using `behavior.actionable`. Future Airport work should migrate control rendering to affordances so permissions, capabilities, runtime state, ownership, and execution mode are not collapsed into one generic flag.
+Phase one should continue using `behavior.actionable` as a render hint only. Future Airport work should migrate control rendering to affordances so permissions, capabilities, runtime state, ownership, and execution mode are not collapsed into one generic flag.
 
 ## Provenance
 
@@ -289,9 +310,9 @@ type ArtifactPayload = {
 };
 ```
 
-## Journal-To-Projection Mapping
+## Registry-Backed Journal-To-Projection Mapping
 
-Baseline mapping from semantic journal records:
+Baseline mapping from semantic journal records. This table defines required registry coverage, not an Airport-owned switch table.
 
 | Source | Projection |
 | --- | --- |
@@ -312,24 +333,7 @@ Baseline mapping from semantic journal records:
 
 Projection mapping must be implemented in an AgentExecution-owned projection/replay module or shared contract layer, not in Svelte components.
 
-## Phase-One Chat Adapter
-
-Until `timelineItems` exist, Airport should adapt `chatMessages` into timeline-like render groups.
-
-Mapping:
-
-| Current `chatMessages` field | Timeline interpretation |
-| --- | --- |
-| `role: operator` | `zone: conversation`, `primitive: conversation.operator-message` |
-| `kind: message` and `role: agent` | `zone: conversation`, `primitive: conversation.agent-message` |
-| `kind: progress` | `zone: activity`, `primitive: activity.progress` |
-| `kind: needs-input` | `zone: conversation`, `primitive: attention.input-request`, `behavior: approval` |
-| `kind: blocked` | `zone: workflow` by default, `primitive: attention.blocked`, `severity: warning` |
-| `kind: claim` | `zone: workflow`, `primitive: attention.verification-requested` or `attention.verification-result` |
-| `kind: failure` | `zone: workflow`, `primitive: attention.verification-result`, `severity: error` |
-| `kind: status` | `zone: workflow` or `runtime`, depending on title/signal type |
-
-This adapter is a temporary Airport presentation bridge. It must not become durable truth or a second backend projection implementation.
+The backend projects `observation.recorded.signal` directly to `timelineItems` through `AgentExecutionSignalRegistry.ts`. Timeline projection should continue to reuse that registry-driven dispatch model and add timeline-specific projection metadata either to the signal registry entry or to an AgentExecution-owned projection registry keyed by signal type. It must not re-create the signal mapping inside Airport.
 
 ## Airport Component Architecture
 
@@ -365,7 +369,9 @@ Phase one can keep the existing component files and introduce these names gradua
 
 ## Journal Entry Component Matrix
 
-Airport must not render journal records one-to-one as raw rows. It should render projection items produced from journal records through specialized components.
+Airport must not render journal records one-to-one as raw rows. It should render projection items produced from registry-backed journal replay through specialized components.
+
+This matrix is a component coverage matrix for projection families. It is not a replacement for the journal record registry or the signal registry.
 
 | Journal Source | Projection Shape | Primary Component | UX Behavior |
 | --- | --- | --- | --- |
@@ -507,12 +513,11 @@ Do not build a full timeline engine before projection volume requires it.
 
 Phase sequencing:
 
-1. Render bounded `chatMessages` with improved semantic presentation.
-2. Render bounded `timelineItems` when the projection contract exists.
-3. Add cursor-based older journal windows.
-4. Add grouping and compaction summaries for high-volume activity.
-5. Add virtualization when measured item volume causes rendering or scroll performance problems.
-6. Add durable `projection.recorded` materialization only after measured read cost justifies it.
+1. Render bounded `timelineItems` from AgentExecution-owned replay.
+2. Add cursor-based older journal windows.
+3. Add grouping and compaction summaries for high-volume activity.
+4. Add virtualization when measured item volume causes rendering or scroll performance problems.
+5. Add durable `projection.recorded` materialization only after measured read cost justifies it.
 
 Virtualization must preserve keyboard navigation, scroll anchoring, item measurement, and unresolved attention visibility.
 
@@ -550,7 +555,9 @@ Implementation should add deterministic coverage when code changes begin:
 
 - projection schema tests for zone, primitive, severity, behavior, provenance, and payload families.
 - mapping tests from representative journal records into timeline items.
-- phase-one chat adapter tests from `chatMessages` into timeline interpretations.
+- journal record registry coverage tests proving every appendable record family has intentional projection, grouping, hidden-detail, or non-UI treatment.
+- signal registry coverage tests proving every descriptor-backed signal has intentional timeline projection behavior.
+- tests proving `usage` and `diagnostic` signals are intentionally projected, collapsed, or excluded according to severity and operator value.
 - grouping tests that preserve highest severity and unresolved actionable items.
 - Airport component tests for input request, blocked, runtime warning, verification result, activity, and normal conversation rendering.
 - accessibility checks for severity labels and actionable controls.
@@ -564,16 +571,13 @@ Implementation should add deterministic coverage when code changes begin:
 
 ## Implementation Sequence
 
-1. Keep existing `chatMessages` projection rendering operational.
-2. Introduce TypeScript types or schemas for timeline zones, severity, primitive, behavior, provenance, and payload families in the AgentExecution contract layer.
-3. Add a temporary Airport chat-to-timeline interpretation adapter for current `chatMessages`.
-4. Refactor Airport AgentExecution presentation around behavior-class components while preserving visual parity.
-5. Add current activity and attention presentation surfaces when backend data exposes them.
-6. Add `timelineItems` to AgentExecution read data once backend replay can derive them.
-7. Switch Airport to render `timelineItems` preferentially, retaining `chatMessages` as a compatibility projection during convergence.
-8. Add grouping, filtering, and compaction once item volume and product workflows justify the complexity.
-9. Add cursor windows and virtualization after measured performance need.
-10. Add journal-driven component mapping for reasoning summaries, sticky progress, replay, branch navigation, streaming diffs, and synchronized terminal evidence as projection provenance becomes available.
+1. Keep the AgentExecution signal registry and journal replay as the only projection sources.
+2. Add AgentExecution-owned projection coverage tests for the journal record registry and signal registry.
+3. Refactor Airport AgentExecution presentation around behavior-class components while preserving visual parity.
+4. Add current activity and attention presentation surfaces when backend data exposes them.
+5. Add grouping, filtering, and compaction once item volume and product workflows justify the complexity.
+6. Add cursor windows and virtualization after measured performance need.
+7. Add journal-driven component mapping for reasoning summaries, sticky progress, replay, branch navigation, streaming diffs, and synchronized terminal evidence as projection provenance becomes available.
 
 ## Open Questions
 
@@ -589,3 +593,4 @@ Implementation should add deterministic coverage when code changes begin:
 10. Which timeline replay controls are necessary for operators before cursor-based replay windows exist?
 11. What provenance is required before terminal synchronization can be authoritative rather than timestamp-approximate?
 12. Should streaming diffs be represented as repeated projection items, grouped revisions, or one live artifact projection with revision metadata?
+13. Should timeline projection metadata live directly on `AgentExecutionSignalRegistryEntry`, or in a separate AgentExecution projection registry that composes signal entries with journal record families?

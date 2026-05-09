@@ -161,22 +161,22 @@ export function subscribeAgentExecutionTerminalTransport(
         ownerId: string;
         repositoryId: string;
         repositoryRootPath?: string;
-        sessionId: string;
+        agentExecutionId: string;
     },
     listener: TerminalBrokerListener<AgentExecutionTerminalSnapshotType>,
 ): SharedTerminalTransportSubscription<AgentExecutionTerminalSnapshotType> {
     const ownerId = input.ownerId.trim();
     const repositoryId = input.repositoryId.trim();
     const repositoryRootPath = input.repositoryRootPath?.trim() || undefined;
-    const sessionId = input.sessionId.trim();
-    const transportKey = [ownerId, repositoryId, repositoryRootPath ?? '', sessionId].join(':');
+    const agentExecutionId = input.agentExecutionId.trim();
+    const transportKey = [ownerId, repositoryId, repositoryRootPath ?? '', agentExecutionId].join(':');
     const query = buildTerminalQuery({ ownerId, repositoryId, repositoryRootPath });
 
     return subscribeSharedTerminalTransport({
         key: `agent-execution-terminal:${transportKey}`,
         loadData: async () => {
             const response = await fetch(
-                `/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal?${query}`,
+                `/api/runtime/agent-executions/${encodeURIComponent(agentExecutionId)}/terminal?${query}`,
             );
             if (!response.ok) {
                 throw new Error(`Terminal data request failed (${response.status}).`);
@@ -187,7 +187,7 @@ export function subscribeAgentExecutionTerminalTransport(
         createSocket: () => {
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = new URL(
-                `/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminal/ws?${query}`,
+                `/api/runtime/agent-executions/${encodeURIComponent(agentExecutionId)}/terminal/ws?${query}`,
                 `${wsProtocol}//${window.location.host}`,
             );
             return new WebSocket(wsUrl);

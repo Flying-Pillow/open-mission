@@ -257,7 +257,7 @@ The exact TypeScript names can change during implementation. The source of truth
 Every owner can contribute a different signal set, but the first clean implementation should support these shared Agent-declared signals:
 
 - `progress`: update AgentExecution progress after owner policy acceptance.
-- `needs_input`: move AgentExecution into awaiting-input and publish an owner-visible event. Payload must include `question` and `choices`, where each choice is either a fixed label/value choice or a manual freeform-input choice with label and optional placeholder.
+- `needs_input`: keep AgentExecution lifecycle `running`, set attention to `awaiting-operator`, attach the current input-request id, and publish an owner-visible event when useful. Payload must include `question` and `choices`, where each choice is either a fixed label/value choice or a manual freeform-input choice with label and optional placeholder.
 - `blocked`: update AgentExecution progress/attention and publish an owner-visible event when useful.
 - `ready_for_verification`: create a verification claim for owner/operator handling.
 - `completed_claim`: create a completion claim for owner/operator handling.

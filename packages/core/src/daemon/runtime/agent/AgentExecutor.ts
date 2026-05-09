@@ -463,7 +463,6 @@ export class AgentExecutor {
                 this.disposeManagedExecution(agentExecutionId);
                 return;
             case 'execution.attached':
-            case 'execution.awaiting-input':
             case 'execution.started':
             case 'execution.updated':
                 return;
@@ -576,7 +575,7 @@ export class AgentExecutor {
             });
         }
         if (decision.action === 'update-execution') {
-            const currentInputRequestId = decision.eventType === 'execution.awaiting-input'
+            const currentInputRequestId = decision.snapshotPatch.waitingForInput === true
                 ? observation.observationId
                 : decision.snapshotPatch.waitingForInput === false
                     ? null

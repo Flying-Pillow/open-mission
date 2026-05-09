@@ -5,34 +5,35 @@
     import { Button } from "$lib/components/ui/button/index.js";
     import type { AgentExecutionDataType } from "@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema";
 
-    type ChatMessage = AgentExecutionDataType["chatMessages"][number];
+    type TimelineItem =
+        AgentExecutionDataType["projection"]["timelineItems"][number];
 
     let {
-        messages,
+        items,
         viewport,
-        messageAlignClasses,
-        messageToneClasses,
-        messageIconClasses,
-        messageIcon,
-        messageTitle,
+        itemAlignClasses,
+        itemToneClasses,
+        itemIconClasses,
+        itemIcon,
+        itemTitle,
         useChoice,
     }: {
-        messages: ChatMessage[];
+        items: TimelineItem[];
         viewport: HTMLElement;
-        messageAlignClasses: (message: ChatMessage) => string;
-        messageToneClasses: (message: ChatMessage) => string;
-        messageIconClasses: (message: ChatMessage) => string;
-        messageIcon: (message: ChatMessage) => string;
-        messageTitle: (message: ChatMessage) => string;
+        itemAlignClasses: (item: TimelineItem) => string;
+        itemToneClasses: (item: TimelineItem) => string;
+        itemIconClasses: (item: TimelineItem) => string;
+        itemIcon: (item: TimelineItem) => string;
+        itemTitle: (item: TimelineItem) => string;
         useChoice: (value: string) => Promise<void>;
     } = $props();
 
-    const initialMessageCount = untrack(() => messages.length);
+    const initialMessageCount = untrack(() => items.length);
     const messageVirtualizer = createVirtualizer<HTMLElement, HTMLDivElement>({
         count: initialMessageCount,
         getScrollElement: () => viewport,
         estimateSize: () => 128,
-        getItemKey: (index) => messages[index]?.id ?? index,
+        getItemKey: (index) => items[index]?.id ?? index,
         overscan: 6,
     });
 
@@ -54,48 +55,45 @@
     style={`height: ${$messageVirtualizer.getTotalSize()}px;`}
 >
     {#each $messageVirtualizer.getVirtualItems() as virtualMessage (virtualMessage.key)}
-        {@const message = messages[virtualMessage.index]}
+        {@const item = items[virtualMessage.index]}
         <div
             data-index={virtualMessage.index}
             class="absolute left-0 top-0 w-full pb-4"
             style={`transform: translateY(${virtualMessage.start}px);`}
             use:measureMessageElement
         >
-            {#if message}
-                <div class={`flex ${messageAlignClasses(message)}`}>
+            {#if item}
+                <div class={`flex ${itemAlignClasses(item)}`}>
                     <article
-                        class={`w-4/5 rounded-lg border px-4 py-3 ${messageToneClasses(message)}`}
+                        class={`w-4/5 rounded-lg border px-4 py-3 ${itemToneClasses(item)}`}
                     >
                         <div
                             class="flex items-center gap-2 text-sm font-semibold"
                         >
                             <span
-                                class={`inline-flex size-7 shrink-0 items-center justify-center rounded-md border ${messageIconClasses(message)}`}
+                                class={`inline-flex size-7 shrink-0 items-center justify-center rounded-md border ${itemIconClasses(item)}`}
                             >
-                                <Icon
-                                    icon={messageIcon(message)}
-                                    class="size-4"
-                                />
+                                <Icon icon={itemIcon(item)} class="size-4" />
                             </span>
                             <span>
-                                {messageTitle(message)}
+                                {itemTitle(item)}
                             </span>
                         </div>
                         <p
                             class="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-100"
                         >
-                            {message.text}
+                            {item.payload.text ?? item.payload.summary ?? ""}
                         </p>
-                        {#if message.detail}
+                        {#if item.payload.detail}
                             <p
                                 class="mt-3 whitespace-pre-wrap border-t border-white/10 pt-3 text-xs leading-5 text-slate-300"
                             >
-                                {message.detail}
+                                {item.payload.detail}
                             </p>
                         {/if}
-                        {#if message.choices?.length}
+                        {#if item.payload.choices?.length}
                             <div class="mt-3 flex flex-wrap gap-2">
-                                {#each message.choices as choice (`${message.id}:${choice.kind}:${choice.label}`)}
+                                {#each item.payload.choices as choice (`${item.id}:${choice.kind}:${choice.label}`)}
                                     <Button
                                         type="button"
                                         variant="outline"

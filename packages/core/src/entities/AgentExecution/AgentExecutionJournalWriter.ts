@@ -397,9 +397,6 @@ function mapStateChangedLifecycle(
     if (!status) {
         return undefined;
     }
-    if (status === 'awaiting-input') {
-        return 'running';
-    }
     return status;
 }
 

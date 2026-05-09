@@ -284,7 +284,7 @@
                     </p>
                 {:else}
                     <div class="mt-3 grid gap-2">
-                        {#each mission.listExecutions() as execution (execution.sessionId)}
+                        {#each mission.listExecutions() as execution (execution.agentExecutionId)}
                             <div
                                 class="rounded-lg border bg-background px-3 py-2"
                             >
@@ -294,7 +294,7 @@
                                     <p
                                         class="text-sm font-medium text-foreground"
                                     >
-                                        {execution.sessionId}
+                                        {execution.agentExecutionId}
                                     </p>
                                     <Badge variant="outline"
                                         >{execution.lifecycleState}</Badge
@@ -309,7 +309,7 @@
                                 {/if}
                                 <div class="mt-2 flex flex-wrap gap-2">
                                     {#each execution.commands as command (command.commandId)}
-                                        {@const pendingCommandId = `${execution.sessionId}:${command.commandId}`}
+                                        {@const pendingCommandId = `${execution.agentExecutionId}:${command.commandId}`}
                                         <Button
                                             size="sm"
                                             variant={command.variant ??

@@ -511,7 +511,7 @@ export class AirportApplication {
                     const eventPayload = AgentExecutionDataChangedSchema.parse(payload.payload);
                     const repository = this.activeRepository;
                     const repositoryExecution = repository?.repositoryAgentExecution;
-                    if (repositoryExecution?.sessionId === eventPayload.data.sessionId) {
+                    if (repositoryExecution?.agentExecutionId === eventPayload.data.agentExecutionId) {
                         repository?.applyRepositoryAgentExecutionData(eventPayload.data);
                     }
                 }
@@ -782,8 +782,40 @@ export class AirportApplication {
             }
         }));
         repository.setMissionCatalog(missions);
+        await this.loadMissionCatalogStatuses(repository);
         this.repositoryVersion += 1;
         return missions;
+    }
+
+    private async loadMissionCatalogStatuses(repository: Repository): Promise<Record<string, string | undefined>> {
+        const missions = [...repository.missions];
+        if (missions.length === 0) {
+            repository.setMissionStatuses({});
+            return {};
+        }
+
+        const results = await Promise.allSettled(
+            missions.map(async (mission) => {
+                const missionEntity = await this.refreshMission({
+                    missionId: mission.missionId,
+                    repositoryRootPath: mission.repositoryRootPath ?? repository.data.repositoryRootPath,
+                });
+
+                return [mission.missionId, missionEntity.workflowLifecycle] as const;
+            }),
+        );
+
+        const statuses: Record<string, string | undefined> = {};
+        for (const result of results) {
+            if (result.status !== 'fulfilled') {
+                continue;
+            }
+
+            statuses[result.value[0]] = result.value[1];
+        }
+
+        repository.setMissionStatuses(statuses);
+        return statuses;
     }
 
 }

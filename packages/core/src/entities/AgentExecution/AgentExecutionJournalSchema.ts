@@ -174,7 +174,7 @@ export const AgentExecutionOwnerEffectRecordSchema = AgentExecutionJournalRecord
 
 export const AgentExecutionProjectionRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
     type: z.literal('projection.recorded'),
-    projection: z.enum(['chat-message', 'timeline-item']),
+    projection: z.literal('timeline-item'),
     payload: journalPayloadSchema
 }).strict();
 

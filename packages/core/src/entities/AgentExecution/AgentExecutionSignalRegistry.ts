@@ -10,12 +10,13 @@ import {
     AgentDeclaredSignalDescriptorSchema,
     AgentDeclaredSignalInputChoiceSchema,
     AgentDeclaredStatusSignalPayloadSchema,
-    AgentExecutionChatMessageSchema,
+    AgentExecutionTimelineItemSchema,
     MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH,
     MAX_AGENT_EXECUTION_USAGE_ENTRIES,
     type AgentDeclaredSignalDescriptorType,
     type AgentDeclaredSignalInputChoiceType,
-    type AgentExecutionChatMessageType
+    type AgentExecutionTimelineItemType,
+    type AgentExecutionTimelineProvenanceType
 } from './AgentExecutionSchema.js';
 
 const journalSignalTextSchema = z.string().trim().min(1).max(MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH);
@@ -46,11 +47,12 @@ type AgentExecutionSignalRegistryEntry = {
     type: string;
     descriptor?: AgentDeclaredSignalDescriptorType;
     journalSchema: z.ZodTypeAny;
-    projectToChat?: (input: {
-        observationId: string;
+    projectToTimelineItem?: (input: {
+        itemId: string;
         occurredAt: string;
         signal: ProjectableObservationSignal;
-    }) => AgentExecutionChatMessageType | undefined;
+        provenance: AgentExecutionTimelineProvenanceType;
+    }) => AgentExecutionTimelineItemType | undefined;
 };
 
 const signalSourceFields = {
@@ -89,10 +91,22 @@ const diagnosticJournalSignalSchema = z.object({
     ...signalSourceFields
 }).strict();
 
-function toAgentChatMessage(message: Omit<AgentExecutionChatMessageType, 'role'> & {
-    role: AgentExecutionChatMessageType['role'];
-}): AgentExecutionChatMessageType {
-    return AgentExecutionChatMessageSchema.parse(message);
+function createBehavior(behaviorClass: AgentExecutionTimelineItemType['behavior']['class'], overrides: Partial<AgentExecutionTimelineItemType['behavior']> = {}): AgentExecutionTimelineItemType['behavior'] {
+    return {
+        class: behaviorClass,
+        compactable: false,
+        collapsible: false,
+        sticky: false,
+        actionable: false,
+        replayRelevant: true,
+        transient: false,
+        defaultExpanded: true,
+        ...overrides
+    };
+}
+
+function toTimelineItem(item: AgentExecutionTimelineItemType): AgentExecutionTimelineItemType {
+    return AgentExecutionTimelineItemSchema.parse(item);
 }
 
 function cloneInputChoices(choices: AgentDeclaredSignalInputChoiceType[]): AgentDeclaredSignalInputChoiceType[] {
@@ -123,21 +137,24 @@ const signalRegistryEntries = [
             outcomes: ['agent-execution-state', 'agent-execution-event']
         }),
         journalSchema: progressJournalSignalSchema,
-        projectToChat: ({ observationId, occurredAt, signal }) => {
+        projectToTimelineItem: ({ itemId, occurredAt, signal, provenance }) => {
             const progress = signal as z.infer<typeof AgentDeclaredProgressSignalPayloadSchema> & {
                 source: z.infer<typeof AgentExecutionJournalSignalSourceSchema>;
                 confidence: z.infer<typeof AgentExecutionJournalSignalConfidenceSchema>;
             };
-            return toAgentChatMessage({
-                id: observationId,
-                role: 'agent',
-                kind: 'progress',
-                tone: 'progress',
-                title: 'Progress',
-                text: progress.summary,
-                ...(progress.detail ? { detail: progress.detail } : {}),
-                at: occurredAt,
-                signalType: progress.type
+            return toTimelineItem({
+                id: itemId,
+                occurredAt,
+                zone: 'activity',
+                primitive: 'activity.progress',
+                behavior: createBehavior('live-activity', { compactable: true }),
+                provenance,
+                payload: {
+                    title: 'Progress',
+                    text: progress.summary,
+                    summary: progress.summary,
+                    ...(progress.detail ? { detail: progress.detail } : {})
+                }
             });
         }
     },
@@ -155,20 +172,24 @@ const signalRegistryEntries = [
             outcomes: ['agent-execution-state', 'agent-execution-event']
         }),
         journalSchema: statusJournalSignalSchema,
-        projectToChat: ({ observationId, occurredAt, signal }) => {
+        projectToTimelineItem: ({ itemId, occurredAt, signal, provenance }) => {
             const status = signal as z.infer<typeof AgentDeclaredStatusSignalPayloadSchema> & {
                 source: z.infer<typeof AgentExecutionJournalSignalSourceSchema>;
                 confidence: z.infer<typeof AgentExecutionJournalSignalConfidenceSchema>;
             };
-            return toAgentChatMessage({
-                id: observationId,
-                role: 'agent',
-                kind: 'status',
-                tone: status.phase === 'idle' ? 'neutral' : 'progress',
-                title: status.phase === 'idle' ? 'Idle' : 'Initializing',
-                text: defaultStatusText(status.phase, status.summary),
-                at: occurredAt,
-                signalType: status.type
+            const text = defaultStatusText(status.phase, status.summary);
+            return toTimelineItem({
+                id: itemId,
+                occurredAt,
+                zone: 'activity',
+                primitive: 'activity.status',
+                behavior: createBehavior('live-activity', { compactable: true, transient: true }),
+                provenance,
+                payload: {
+                    title: status.phase === 'idle' ? 'Idle' : 'Initializing',
+                    text,
+                    summary: text
+                }
             });
         }
     },
@@ -186,21 +207,23 @@ const signalRegistryEntries = [
             outcomes: ['agent-execution-state', 'owner-entity-event']
         }),
         journalSchema: needsInputJournalSignalSchema,
-        projectToChat: ({ observationId, occurredAt, signal }) => {
+        projectToTimelineItem: ({ itemId, occurredAt, signal, provenance }) => {
             const needsInput = signal as z.infer<typeof AgentDeclaredNeedsInputSignalPayloadSchema> & {
                 source: z.infer<typeof AgentExecutionJournalSignalSourceSchema>;
                 confidence: z.infer<typeof AgentExecutionJournalSignalConfidenceSchema>;
             };
-            return toAgentChatMessage({
-                id: observationId,
-                role: 'agent',
-                kind: 'needs-input',
-                tone: 'attention',
-                title: 'Needs input',
-                text: needsInput.question,
-                choices: cloneInputChoices(needsInput.choices),
-                at: occurredAt,
-                signalType: needsInput.type
+            return toTimelineItem({
+                id: itemId,
+                occurredAt,
+                zone: 'conversation',
+                primitive: 'attention.input-request',
+                behavior: createBehavior('approval', { sticky: true, actionable: true }),
+                provenance,
+                payload: {
+                    title: 'Needs input',
+                    text: needsInput.question,
+                    choices: cloneInputChoices(needsInput.choices)
+                }
             });
         }
     },
@@ -218,20 +241,23 @@ const signalRegistryEntries = [
             outcomes: ['agent-execution-state', 'owner-entity-event']
         }),
         journalSchema: blockedJournalSignalSchema,
-        projectToChat: ({ observationId, occurredAt, signal }) => {
+        projectToTimelineItem: ({ itemId, occurredAt, signal, provenance }) => {
             const blocked = signal as z.infer<typeof AgentDeclaredBlockedSignalPayloadSchema> & {
                 source: z.infer<typeof AgentExecutionJournalSignalSourceSchema>;
                 confidence: z.infer<typeof AgentExecutionJournalSignalConfidenceSchema>;
             };
-            return toAgentChatMessage({
-                id: observationId,
-                role: 'agent',
-                kind: 'blocked',
-                tone: 'danger',
-                title: 'Blocked',
-                text: blocked.reason,
-                at: occurredAt,
-                signalType: blocked.type
+            return toTimelineItem({
+                id: itemId,
+                occurredAt,
+                zone: 'workflow',
+                primitive: 'attention.blocked',
+                behavior: createBehavior('approval', { sticky: true }),
+                severity: 'warning',
+                provenance,
+                payload: {
+                    title: 'Blocked',
+                    text: blocked.reason
+                }
             });
         }
     },
@@ -249,20 +275,23 @@ const signalRegistryEntries = [
             outcomes: ['agent-execution-event', 'owner-entity-event', 'workflow-event']
         }),
         journalSchema: readyForVerificationJournalSignalSchema,
-        projectToChat: ({ observationId, occurredAt, signal }) => {
+        projectToTimelineItem: ({ itemId, occurredAt, signal, provenance }) => {
             const ready = signal as z.infer<typeof AgentDeclaredReadyForVerificationSignalPayloadSchema> & {
                 source: z.infer<typeof AgentExecutionJournalSignalSourceSchema>;
                 confidence: z.infer<typeof AgentExecutionJournalSignalConfidenceSchema>;
             };
-            return toAgentChatMessage({
-                id: observationId,
-                role: 'agent',
-                kind: 'claim',
-                tone: 'success',
-                title: 'Ready for verification',
-                text: ready.summary,
-                at: occurredAt,
-                signalType: ready.type
+            return toTimelineItem({
+                id: itemId,
+                occurredAt,
+                zone: 'workflow',
+                primitive: 'attention.verification-requested',
+                behavior: createBehavior('approval', { sticky: true, actionable: true }),
+                severity: 'info',
+                provenance,
+                payload: {
+                    title: 'Ready for verification',
+                    text: ready.summary
+                }
             });
         }
     },
@@ -280,20 +309,24 @@ const signalRegistryEntries = [
             outcomes: ['agent-execution-event', 'owner-entity-event', 'workflow-event']
         }),
         journalSchema: completedClaimJournalSignalSchema,
-        projectToChat: ({ observationId, occurredAt, signal }) => {
+        projectToTimelineItem: ({ itemId, occurredAt, signal, provenance }) => {
             const completed = signal as z.infer<typeof AgentDeclaredCompletedClaimSignalPayloadSchema> & {
                 source: z.infer<typeof AgentExecutionJournalSignalSourceSchema>;
                 confidence: z.infer<typeof AgentExecutionJournalSignalConfidenceSchema>;
             };
-            return toAgentChatMessage({
-                id: observationId,
-                role: 'agent',
-                kind: 'claim',
-                tone: 'success',
-                title: 'Completed claim',
-                text: completed.summary,
-                at: occurredAt,
-                signalType: completed.type
+            return toTimelineItem({
+                id: itemId,
+                occurredAt,
+                zone: 'workflow',
+                primitive: 'attention.verification-result',
+                behavior: createBehavior('approval'),
+                severity: 'success',
+                provenance,
+                payload: {
+                    title: 'Completed claim',
+                    text: completed.summary,
+                    result: 'passed'
+                }
             });
         }
     },
@@ -311,20 +344,24 @@ const signalRegistryEntries = [
             outcomes: ['agent-execution-state', 'agent-execution-event', 'owner-entity-event']
         }),
         journalSchema: failedClaimJournalSignalSchema,
-        projectToChat: ({ observationId, occurredAt, signal }) => {
+        projectToTimelineItem: ({ itemId, occurredAt, signal, provenance }) => {
             const failed = signal as z.infer<typeof AgentDeclaredFailedClaimSignalPayloadSchema> & {
                 source: z.infer<typeof AgentExecutionJournalSignalSourceSchema>;
                 confidence: z.infer<typeof AgentExecutionJournalSignalConfidenceSchema>;
             };
-            return toAgentChatMessage({
-                id: observationId,
-                role: 'agent',
-                kind: 'failure',
-                tone: 'danger',
-                title: 'Failed claim',
-                text: failed.reason,
-                at: occurredAt,
-                signalType: failed.type
+            return toTimelineItem({
+                id: itemId,
+                occurredAt,
+                zone: 'workflow',
+                primitive: 'attention.verification-result',
+                behavior: createBehavior('approval', { sticky: true }),
+                severity: 'error',
+                provenance,
+                payload: {
+                    title: 'Failed claim',
+                    text: failed.reason,
+                    result: 'failed'
+                }
             });
         }
     },
@@ -342,18 +379,23 @@ const signalRegistryEntries = [
             outcomes: ['agent-execution-event']
         }),
         journalSchema: messageJournalSignalSchema,
-        projectToChat: ({ observationId, occurredAt, signal }) => {
+        projectToTimelineItem: ({ itemId, occurredAt, signal, provenance }) => {
             const message = signal as z.infer<typeof AgentDeclaredMessageSignalPayloadSchema> & {
                 source: z.infer<typeof AgentExecutionJournalSignalSourceSchema>;
                 confidence: z.infer<typeof AgentExecutionJournalSignalConfidenceSchema>;
             };
-            return toAgentChatMessage({
-                id: observationId,
-                role: message.channel === 'agent' ? 'agent' : 'system',
-                kind: 'message',
-                tone: 'neutral',
-                text: message.text,
-                at: occurredAt
+            return toTimelineItem({
+                id: itemId,
+                occurredAt,
+                zone: 'conversation',
+                primitive: message.channel === 'agent'
+                    ? 'conversation.agent-message'
+                    : 'conversation.system-message',
+                behavior: createBehavior('conversational'),
+                provenance,
+                payload: {
+                    text: message.text
+                }
             });
         }
     },
@@ -391,13 +433,14 @@ export const baselineAgentDeclaredSignalDescriptors: AgentDeclaredSignalDescript
     .array()
     .parse(signalRegistryEntries.flatMap((entry) => entry.descriptor ? [entry.descriptor] : []));
 
-export function projectAgentExecutionObservationSignalToChatMessage(input: {
-    observationId: string;
+export function projectAgentExecutionObservationSignalToTimelineItem(input: {
+    itemId: string;
     occurredAt: string;
     signal: z.infer<typeof AgentExecutionJournalSignalSchema>;
-}): AgentExecutionChatMessageType | undefined {
+    provenance: AgentExecutionTimelineProvenanceType;
+}): AgentExecutionTimelineItemType | undefined {
     const entry = agentExecutionSignalRegistry[input.signal.type];
-    return entry?.projectToChat?.(input);
+    return entry?.projectToTimelineItem?.(input);
 }
 
 export function createAgentExecutionSignalFromDeclaredPayload(

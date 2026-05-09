@@ -4,11 +4,10 @@
         RepositoryIssueDetailType,
         TrackedIssueSummaryType,
     } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
+    import type { MissionCatalogEntryType } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
     import Icon from "@iconify/svelte";
     import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
     import BriefForm from "$lib/components/entities/Brief/BriefForm.svelte";
-    import EntityCommandbar from "$lib/components/entities/Commandbar/EntityCommandbar.svelte";
-    import type { Mission } from "$lib/components/entities/Mission/Mission.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
@@ -41,10 +40,9 @@
 
     let remoteStartFromIssueError = $state<string | null>(null);
     let createMissionOpen = $state(false);
-    let missionCommandRefreshNonce = $state(0);
-    let missionCommandError = $state<string | null>(null);
 
     const missions = $derived(activeRepository.missions ?? []);
+    const missionStatuses = $derived(activeRepository.missionStatuses);
     const repositoryIssuesQuery = $derived(activeRepository.listIssuesQuery());
     const repositoryIssues = $derived(
         (repositoryIssuesQuery.current as
@@ -234,20 +232,10 @@
         }
     }
 
-    async function handleMissionCommandExecuted(
-        mission: Mission,
-        _result: unknown,
-    ): Promise<void> {
-        missionCommandError = null;
-
-        try {
-            await mission.refresh();
-            await activeRepository.refresh();
-            missionCommandRefreshNonce += 1;
-        } catch (error) {
-            missionCommandError =
-                error instanceof Error ? error.message : String(error);
-        }
+    function missionStatus(
+        mission: MissionCatalogEntryType,
+    ): string | undefined {
+        return missionStatuses[mission.missionId];
     }
 </script>
 
@@ -322,13 +310,12 @@
         </div>
     </div>
 
-    {#if issueError || remoteStartFromIssueError || repositoryIssueLoadError || missionCommandError}
+    {#if issueError || remoteStartFromIssueError || repositoryIssueLoadError}
         <div class="px-1 pt-3">
             <p class="text-sm text-rose-600">
                 {issueError ??
                     remoteStartFromIssueError ??
-                    repositoryIssueLoadError ??
-                    missionCommandError}
+                    repositoryIssueLoadError}
             </p>
         </div>
     {/if}
@@ -357,9 +344,9 @@
                     </div>
                 {:else}
                     {#each missions as mission, index (mission.missionId)}
-                        {@const missionStatus = mission.workflowLifecycle}
+                        {@const missionLifecycle = missionStatus(mission)}
                         <article
-                            class={`flex flex-col gap-4 rounded-2xl border px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.1)] ${index % 2 === 0 ? "rotate-[0.25deg]" : "-rotate-[0.2deg]"} ${missionTone(missionStatus)}`}
+                            class={`flex flex-col gap-4 rounded-2xl border px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.1)] ${index % 2 === 0 ? "rotate-[0.25deg]" : "-rotate-[0.2deg]"} ${missionTone(missionLifecycle)}`}
                         >
                             <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0 flex-1">
@@ -381,9 +368,9 @@
                                         {/if}
                                         <Badge
                                             variant="outline"
-                                            class={`rounded-full ${missionStatusBadgeTone(missionStatus)}`}
+                                            class={`rounded-full ${missionStatusBadgeTone(missionLifecycle)}`}
                                         >
-                                            {missionStatus ?? "pending"}
+                                            {missionLifecycle ?? "pending"}
                                         </Badge>
                                     </div>
                                     <p class="mt-2 truncate text-xs opacity-80">
@@ -428,21 +415,6 @@
                                             >Open mission</Tooltip.Content
                                         >
                                     </Tooltip.Root>
-
-                                    <EntityCommandbar
-                                        refreshNonce={missionCommandRefreshNonce}
-                                        entity={mission}
-                                        presentation="buttons"
-                                        iconOnly={true}
-                                        showEmptyState={false}
-                                        defaultVariant="outline"
-                                        buttonClass="rounded-full border-current/15 bg-white/35 text-current shadow-none hover:bg-white/50 dark:bg-black/10 dark:hover:bg-black/20"
-                                        onCommandExecuted={(result) =>
-                                            handleMissionCommandExecuted(
-                                                mission,
-                                                result,
-                                            )}
-                                    />
                                 </div>
                             </div>
                         </article>

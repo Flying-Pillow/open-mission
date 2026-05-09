@@ -100,8 +100,29 @@ describe('AgentExecutionJournalSchema', () => {
             }),
             AgentExecutionProjectionRecordSchema.parse({
                 ...baseRecord('projection.recorded', 8),
-                projection: 'chat-message',
-                payload: { text: 'Working through the first task.' }
+                projection: 'timeline-item',
+                payload: {
+                    id: 'timeline-item-1',
+                    occurredAt: '2026-05-09T00:00:08.000Z',
+                    zone: 'conversation',
+                    primitive: 'conversation.agent-message',
+                    behavior: {
+                        class: 'conversational',
+                        compactable: false,
+                        collapsible: false,
+                        sticky: false,
+                        actionable: false,
+                        replayRelevant: true,
+                        transient: false,
+                        defaultExpanded: true
+                    },
+                    provenance: {
+                        durable: true,
+                        sourceRecordIds: ['record-8'],
+                        confidence: 'authoritative'
+                    },
+                    payload: { text: 'Working through the first task.' }
+                }
             })
         ];
 

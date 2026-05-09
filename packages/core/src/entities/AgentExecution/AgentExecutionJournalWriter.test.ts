@@ -105,7 +105,7 @@ describe('AgentExecutionJournalWriter', () => {
         });
     });
 
-    it('normalizes awaiting-input into running semantic state records', async () => {
+    it('records semantic input-request state as running state records', async () => {
         const repositoryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-journal-state-'));
         temporaryDirectories.add(repositoryRoot);
         const writer = new AgentExecutionJournalWriter();
@@ -128,9 +128,9 @@ describe('AgentExecutionJournalWriter', () => {
 
         const decision: Extract<AgentExecutionSignalDecision, { action: 'update-execution' }> = {
             action: 'update-execution',
-            eventType: 'execution.awaiting-input',
+            eventType: 'execution.updated',
             snapshotPatch: {
-                status: 'awaiting-input',
+                status: 'running',
                 attention: 'awaiting-operator',
                 waitingForInput: true,
                 progress: {

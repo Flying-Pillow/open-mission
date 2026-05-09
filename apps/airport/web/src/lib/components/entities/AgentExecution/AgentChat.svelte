@@ -14,7 +14,8 @@
     import * as ScrollArea from "$lib/components/ui/scroll-area/index.js";
     import type { AgentExecutionDataType } from "@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema";
 
-    type ChatMessage = AgentExecutionDataType["chatMessages"][number];
+    type TimelineItem =
+        AgentExecutionDataType["projection"]["timelineItems"][number];
 
     let {
         agentExecution,
@@ -61,91 +62,115 @@
     const resolvedShowTerminalPanel = $derived(
         showTerminalPanel && canShowTerminalPanel,
     );
-    const chatMessages = $derived.by(() => {
+    const timelineItems = $derived.by(() => {
         refreshNonce;
-        return agentExecution?.chatMessages ?? [];
+        return agentExecution?.timelineItems ?? [];
     });
-    const chatMessageListKey = $derived.by(() => {
-        return chatMessages.map((message) => message.id).join("|");
+    const timelineItemListKey = $derived.by(() => {
+        return timelineItems.map((item) => item.id).join("|");
     });
 
-    function messageIcon(message: ChatMessage): string {
-        switch (message.kind) {
-            case "progress":
+    function itemIcon(item: TimelineItem): string {
+        switch (item.primitive) {
+            case "activity.progress":
                 return "lucide:activity";
-            case "needs-input":
+            case "attention.input-request":
                 return "lucide:message-circle-question";
-            case "blocked":
+            case "attention.blocked":
                 return "lucide:octagon-alert";
-            case "claim":
+            case "attention.verification-requested":
+            case "attention.verification-result":
                 return "lucide:badge-check";
-            case "failure":
+            case "runtime.warning":
                 return "lucide:circle-x";
-            case "status":
+            case "activity.status":
+            case "workflow.state-changed":
                 return "lucide:check-check";
             default:
                 return "lucide:message-square";
         }
     }
 
-    function messageTitle(message: ChatMessage): string {
-        if (message.role === "operator") {
+    function itemTitle(item: TimelineItem): string {
+        if (item.payload.title) {
+            return item.payload.title;
+        }
+
+        if (item.primitive === "conversation.operator-message") {
             return "You";
         }
 
-        if (message.role === "system") {
-            return message.title ?? "System";
+        if (item.primitive === "conversation.system-message") {
+            return "System";
         }
 
-        return message.title ?? "Assistant";
+        return "Assistant";
     }
 
-    function messageToneClasses(message: ChatMessage): string {
-        if (message.role === "operator") {
+    function itemToneClasses(item: TimelineItem): string {
+        if (item.primitive === "conversation.operator-message") {
             return "border-primary/35 bg-[#102017] text-slate-50 shadow-[inset_-3px_0_0_rgb(52_211_153)]";
         }
 
-        switch (message.tone) {
-            case "progress":
-                return "border-sky-400/30 bg-[#0d1820] text-sky-50 shadow-[inset_3px_0_0_rgb(56_189_248)]";
-            case "attention":
-                return "border-amber-300/35 bg-[#20180b] text-amber-50 shadow-[inset_3px_0_0_rgb(251_191_36)]";
+        switch (item.severity) {
             case "success":
                 return "border-emerald-400/30 bg-[#0d1b15] text-emerald-50 shadow-[inset_3px_0_0_rgb(52_211_153)]";
-            case "danger":
+            case "warning":
+                return "border-amber-300/35 bg-[#20180b] text-amber-50 shadow-[inset_3px_0_0_rgb(251_191_36)]";
+            case "error":
+            case "critical":
                 return "border-rose-400/35 bg-[#211015] text-rose-50 shadow-[inset_3px_0_0_rgb(251_113_133)]";
-            case "muted":
+        }
+
+        switch (item.primitive) {
+            case "activity.progress":
+            case "activity.status":
+            case "activity.tool":
+            case "activity.target":
+                return "border-sky-400/30 bg-[#0d1820] text-sky-50 shadow-[inset_3px_0_0_rgb(56_189_248)]";
+            case "workflow.state-changed":
+            case "workflow.event":
                 return "border-slate-500/25 bg-[#12151b] text-slate-300 shadow-[inset_3px_0_0_rgb(100_116_139)]";
             default:
                 return "border-white/10 bg-[#12151b] text-slate-100 shadow-[inset_3px_0_0_rgb(148_163_184)]";
         }
     }
 
-    function messageIconClasses(message: ChatMessage): string {
-        if (message.role === "operator") {
+    function itemIconClasses(item: TimelineItem): string {
+        if (item.primitive === "conversation.operator-message") {
             return "border-primary/30 bg-primary/15 text-emerald-200";
         }
 
-        switch (message.tone) {
-            case "progress":
-                return "border-sky-300/25 bg-sky-400/10 text-sky-200";
-            case "attention":
-                return "border-amber-300/25 bg-amber-400/10 text-amber-200";
+        switch (item.severity) {
             case "success":
                 return "border-emerald-300/25 bg-emerald-400/10 text-emerald-200";
-            case "danger":
+            case "warning":
+                return "border-amber-300/25 bg-amber-400/10 text-amber-200";
+            case "error":
+            case "critical":
                 return "border-rose-300/25 bg-rose-400/10 text-rose-200";
+        }
+
+        switch (item.primitive) {
+            case "activity.progress":
+            case "activity.status":
+            case "activity.tool":
+            case "activity.target":
+                return "border-sky-300/25 bg-sky-400/10 text-sky-200";
             default:
                 return "border-white/10 bg-white/[0.04] text-slate-300";
         }
     }
 
-    function messageAlignClasses(message: ChatMessage): string {
-        if (message.role === "operator") {
+    function itemAlignClasses(item: TimelineItem): string {
+        if (item.primitive === "conversation.operator-message") {
             return "justify-end";
         }
 
-        if (message.role === "system" || message.kind === "status") {
+        if (
+            item.primitive === "conversation.system-message" ||
+            item.zone === "workflow"
+        ) {
             return "justify-center";
         }
 
@@ -274,7 +299,7 @@
                         {loadingTitle}
                     </h3>
                 </div>
-            {:else if chatMessages.length === 0}
+            {:else if timelineItems.length === 0}
                 <div class="flex justify-start">
                     <div
                         class="max-w-[min(44rem,100%)] rounded-lg border border-white/10 bg-[#12151b] px-4 py-3 text-slate-100 shadow-[inset_3px_0_0_rgb(148_163_184)]"
@@ -286,20 +311,20 @@
                             Assistant
                         </div>
                         <p class="mt-2 text-sm leading-6 text-slate-400">
-                            Waiting for the first AgentExecution signal.
+                            Waiting for the first AgentExecution timeline item.
                         </p>
                     </div>
                 </div>
             {:else if messagesViewport}
-                {#key chatMessageListKey}
+                {#key timelineItemListKey}
                     <AgentChatMessages
-                        messages={chatMessages}
+                        items={timelineItems}
                         viewport={messagesViewport}
-                        {messageAlignClasses}
-                        {messageToneClasses}
-                        {messageIconClasses}
-                        {messageIcon}
-                        {messageTitle}
+                        {itemAlignClasses}
+                        {itemToneClasses}
+                        {itemIconClasses}
+                        {itemIcon}
+                        {itemTitle}
                         {useChoice}
                     />
                 {/key}
@@ -329,7 +354,7 @@
             </h3>
             <p class="truncate text-xs text-slate-400">
                 {agentExecution?.terminalName ??
-                    agentExecution?.sessionId ??
+                    agentExecution?.agentExecutionId ??
                     "Terminal"}
             </p>
         </div>
@@ -349,7 +374,7 @@
     <div class="min-h-0 flex-1">
         <AgentExecutionTerminalPanel
             {refreshNonce}
-            session={agentExecution}
+            {agentExecution}
             {onCommandExecuted}
             panelMode="terminal"
         />
@@ -360,7 +385,7 @@
     {#if resolvedShowTerminalPanel}
         <ResizablePaneGroup
             direction="horizontal"
-            autoSaveId={`agent-chat:${agentExecution?.sessionId ?? "pending"}`}
+            autoSaveId={`agent-chat:${agentExecution?.agentExecutionId ?? "pending"}`}
             class="min-h-0 flex-1 overflow-hidden"
         >
             <ResizablePane

@@ -99,7 +99,7 @@ export class DaemonGateway {
 
     public async getAgentExecutionTerminalSnapshot(input: {
         ownerId: string;
-        sessionId: string;
+        agentExecutionId: string;
         surfacePath?: string;
     }): Promise<AgentExecutionTerminalSnapshotType> {
         return this.withSharedClient(input.surfacePath, async (daemon) => AgentExecutionTerminalSnapshotSchema.parse(
@@ -109,7 +109,7 @@ export class DaemonGateway {
                     method: 'readTerminal',
                     payload: {
                         ownerId: input.ownerId,
-                        sessionId: input.sessionId,
+                        agentExecutionId: input.agentExecutionId,
                     }
                 }),
                 2500,
@@ -120,7 +120,7 @@ export class DaemonGateway {
 
     public async sendAgentExecutionTerminalInput(input: {
         ownerId: string;
-        sessionId: string;
+        agentExecutionId: string;
         data?: string;
         literal?: boolean;
         cols?: number;
@@ -134,7 +134,7 @@ export class DaemonGateway {
                     method: 'sendTerminalInput',
                     payload: {
                         ownerId: input.ownerId,
-                        sessionId: input.sessionId,
+                        agentExecutionId: input.agentExecutionId,
                         ...(input.data !== undefined ? { data: input.data } : {}),
                         ...(input.literal !== undefined ? { literal: input.literal } : {}),
                         ...(input.cols !== undefined ? { cols: input.cols } : {}),

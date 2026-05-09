@@ -8,7 +8,7 @@ import { AgentExecutionDataSchema, type AgentExecutionDataType } from './AgentEx
 import type { AgentExecutionJournalRecordType } from './AgentExecutionJournalSchema.js';
 
 describe('AgentExecutionJournalReplayer', () => {
-    it('replays chat projection and processed ids from semantic journal records', () => {
+    it('replays timeline projection and processed ids from semantic journal records', () => {
         const replay = replayAgentExecutionJournal([
             createHeaderRecord(),
             {
@@ -69,10 +69,36 @@ describe('AgentExecutionJournalReplayer', () => {
 
         expect([...replay.processedMessageIds]).toEqual(['message-1']);
         expect([...replay.processedObservationIds]).toEqual(['observation-1']);
-        expect(replay.chatMessages).toEqual([
-            expect.objectContaining({ id: 'message-1', role: 'operator', text: 'Continue.' }),
-            expect.objectContaining({ id: 'observation-1', kind: 'progress', text: 'Working through the next slice.' })
+        expect(replay.projection.timelineItems).toEqual([
+            expect.objectContaining({ id: 'message-1', primitive: 'conversation.operator-message', payload: expect.objectContaining({ text: 'Continue.' }) }),
+            expect.objectContaining({ id: 'observation-1', primitive: 'activity.progress', payload: expect.objectContaining({ text: 'Working through the next slice.' }) }),
+            expect.objectContaining({ id: 'record-3:state', primitive: 'workflow.state-changed' }),
+            expect.objectContaining({ id: 'record-4:activity', primitive: 'activity.progress' })
         ]);
+        expect(replay.projection.currentActivity).toEqual({
+            lifecycleState: 'running',
+            attention: 'awaiting-operator',
+            activity: 'reviewing',
+            summary: 'Reviewing the generated patch.',
+            units: {
+                completed: 1,
+                total: 2,
+                unit: 'steps'
+            },
+            currentTarget: {
+                kind: 'file',
+                path: '/repo/file.ts',
+                label: 'file.ts'
+            },
+            activeToolName: 'apply_patch',
+            updatedAt: '2026-05-09T00:00:04.000Z'
+        });
+        expect(replay.projection.currentAttention).toEqual({
+            state: 'awaiting-operator',
+            primitive: 'attention.input-request',
+            currentInputRequestId: 'observation-2',
+            updatedAt: '2026-05-09T00:00:04.000Z'
+        });
         expect(replay.protocolDescriptor).toBeDefined();
         expect(replay.transportState).toEqual({ selected: 'stdout-marker', degraded: false });
         expect(replay.lifecycleState).toBe('running');
@@ -133,7 +159,7 @@ describe('AgentExecutionJournalReplayer', () => {
                 taskId: 'task-1'
             },
             agentJournalPath: 'agent-journals/agent-execution-1.interaction.jsonl',
-            chatMessages: []
+            projection: { timelineItems: [] }
         } satisfies Partial<AgentExecutionDataType>);
 
         const hydrated = hydrateAgentExecutionDataFromJournal(baseData, [
@@ -181,8 +207,10 @@ describe('AgentExecutionJournalReplayer', () => {
             },
             updatedAt: '2026-05-09T00:00:03.000Z'
         });
-        expect(hydrated.chatMessages).toEqual([
-            expect.objectContaining({ id: 'message-1', role: 'system', text: 'Start here.' })
+        expect(hydrated.projection.timelineItems).toEqual([
+            expect.objectContaining({ id: 'message-1', primitive: 'conversation.system-message', payload: expect.objectContaining({ text: 'Start here.' }) }),
+            expect.objectContaining({ id: 'record-2:state', primitive: 'workflow.state-changed' }),
+            expect.objectContaining({ id: 'record-3:activity', primitive: 'activity.progress' })
         ]);
     });
 });

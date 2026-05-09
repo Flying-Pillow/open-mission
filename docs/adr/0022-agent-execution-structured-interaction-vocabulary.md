@@ -91,11 +91,11 @@ An Agent-declared signal may produce an AgentExecution Entity event after policy
 
 AgentExecution lifecycle truth remains daemon-owned. `completed_claim` and `failed_claim` are claims that become lifecycle transitions through daemon-authoritative owner behavior. `ready_for_verification` is a claim that the owning Entity or operator may use to surface verification work.
 
-`needs_input` is an observation that can put AgentExecution into an awaiting-input state and publish an Entity event. Its signal payload carries a required `question` and required `choices` array. Each choice is either `kind: "fixed"` with `label` and `value`, or `kind: "manual"` with `label` and optional `placeholder` for freeform operator input. The operator response is a separate Agent execution message or Entity command.
+`needs_input` is an observation that keeps AgentExecution lifecycle `running`, sets `attention: awaiting-operator`, attaches a current input-request id, and may publish an Entity event. Its signal payload carries a required `question` and required `choices` array. Each choice is either `kind: "fixed"` with `label` and `value`, or `kind: "manual"` with `label` and optional `placeholder` for freeform operator input. The operator response is a separate Agent execution message or Entity command.
 
 `progress` can update AgentExecution runtime activity or telemetry after policy evaluation. It should not be modeled as a semantic state transition unless it changes lifecycle, attention, activity, or current input request. `blocked` can update attention or owner-visible claim state. `message` can update audit-facing projection state. Any Mission workflow effect flows through an explicit owning Entity rule covered by tests.
 
-AgentExecution status must separate lifecycle, attention, activity, and runtime capabilities. `awaiting-input` is collaboration attention and input-request state, not a long-term lifecycle state. During convergence, compatibility with existing `awaiting-input` values must be handled through an explicit runtime migration or clean-sheet state reset, not tolerant readers.
+AgentExecution status must separate lifecycle, attention, activity, and runtime capabilities. `awaiting-input` is collaboration attention and input-request state, not a lifecycle state. Clean-sheet implementations must reject old `awaiting-input` lifecycle values rather than preserve compatibility readers or aliases.
 
 ## Event Listener Discipline
 

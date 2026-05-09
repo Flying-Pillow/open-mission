@@ -25,6 +25,7 @@ export class Repository extends Entity<RepositoryDataType> {
     private repositoryAgentExecutionValue = $state<AgentExecutionDataType | undefined>();
     private repositoryAgentExecutionEntity = $state<AgentExecution | undefined>();
     public missions = $state<MissionCatalogEntryType[]>([]);
+    private missionStatusesValue = $state<Record<string, string | undefined>>({});
 
     public constructor(
         data: RepositoryDataType,
@@ -60,6 +61,10 @@ export class Repository extends Entity<RepositoryDataType> {
 
     public get repositoryAgentExecution(): AgentExecution | undefined {
         return this.repositoryAgentExecutionEntity;
+    }
+
+    public get missionStatuses(): Record<string, string | undefined> {
+        return structuredClone($state.snapshot(this.missionStatusesValue));
     }
 
     protected get entityLocator(): Record<string, unknown> {
@@ -106,6 +111,25 @@ export class Repository extends Entity<RepositoryDataType> {
 
     public setMissionCatalog(missions: MissionCatalogEntryType[]): this {
         this.missions = structuredClone(missions);
+        const missionIds = new Set(missions.map((mission) => mission.missionId));
+        this.missionStatusesValue = Object.fromEntries(
+            Object.entries($state.snapshot(this.missionStatusesValue)).filter(
+                ([missionId]) => missionIds.has(missionId),
+            ),
+        );
+        return this;
+    }
+
+    public setMissionStatuses(statuses: Record<string, string | undefined>): this {
+        this.missionStatusesValue = structuredClone(statuses);
+        return this;
+    }
+
+    public setMissionStatus(missionId: string, status: string | undefined): this {
+        this.missionStatusesValue = {
+            ...$state.snapshot(this.missionStatusesValue),
+            [missionId]: status,
+        };
         return this;
     }
 
@@ -254,7 +278,7 @@ export class Repository extends Entity<RepositoryDataType> {
 
     public async commandRepositoryAgentExecution(input: {
         ownerId: string;
-        sessionId: string;
+        agentExecutionId: string;
         commandId: string;
         input?: unknown;
     }): Promise<AgentExecutionDataType> {
@@ -263,7 +287,7 @@ export class Repository extends Entity<RepositoryDataType> {
             method: 'command',
             payload: {
                 ownerId: input.ownerId,
-                sessionId: input.sessionId,
+                agentExecutionId: input.agentExecutionId,
                 commandId: input.commandId,
                 ...(input.input !== undefined ? { input: input.input } : {})
             }
@@ -273,7 +297,7 @@ export class Repository extends Entity<RepositoryDataType> {
             method: 'read',
             payload: {
                 ownerId: input.ownerId,
-                sessionId: input.sessionId
+                agentExecutionId: input.agentExecutionId
             }
         }).run()));
     }
@@ -289,7 +313,7 @@ export class Repository extends Entity<RepositoryDataType> {
             method: 'read',
             payload: {
                 ownerId: execution.ownerId,
-                sessionId: execution.sessionId
+                agentExecutionId: execution.agentExecutionId
             }
         }).run()));
     }
@@ -301,17 +325,17 @@ export class Repository extends Entity<RepositoryDataType> {
     private updateRepositoryAgentExecution(data: AgentExecutionDataType): AgentExecutionDataType {
         const nextData = AgentExecutionDataSchema.parse(data);
         this.repositoryAgentExecutionValue = nextData;
-        if (this.repositoryAgentExecutionEntity?.sessionId === nextData.sessionId) {
+        if (this.repositoryAgentExecutionEntity?.agentExecutionId === nextData.agentExecutionId) {
             this.repositoryAgentExecutionEntity.updateFromData(nextData);
             return nextData;
         }
 
         this.repositoryAgentExecutionEntity = new AgentExecution(nextData, {
             resolveCommands: () => [],
-            executeCommand: async (ownerId, sessionId, commandId, input) => {
+            executeCommand: async (ownerId, agentExecutionId, commandId, input) => {
                 await this.commandRepositoryAgentExecution({
                     ownerId,
-                    sessionId,
+                    agentExecutionId,
                     commandId,
                     ...(input !== undefined ? { input } : {})
                 });

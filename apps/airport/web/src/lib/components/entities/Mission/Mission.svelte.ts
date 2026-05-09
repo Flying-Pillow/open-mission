@@ -105,7 +105,7 @@ type MissionChildEntityCommandGateway = {
     }): Promise<TaskCommandAcknowledgementType>;
     executeAgentExecutionCommand(input: {
         ownerId: string;
-        sessionId: string;
+        agentExecutionId: string;
         commandId: string;
         input?: unknown;
     }): Promise<AgentExecutionCommandAcknowledgementType>;
@@ -230,16 +230,16 @@ function createMissionChildEntityCommandGateway(input: MissionGatewayDependencie
                 }
             }));
         },
-        executeAgentExecutionCommand: async ({ ownerId, sessionId, commandId, input: commandInput }) => {
-            const normalizedOwnerId = requireNonEmptyValue(ownerId, 'AgentExecution commands require ownerId, sessionId, and commandId.');
-            const normalizedSessionId = requireNonEmptyValue(sessionId, 'AgentExecution commands require ownerId, sessionId, and commandId.');
-            const normalizedCommandId = requireNonEmptyValue(commandId, 'AgentExecution commands require ownerId, sessionId, and commandId.');
+        executeAgentExecutionCommand: async ({ ownerId, agentExecutionId, commandId, input: commandInput }) => {
+            const normalizedOwnerId = requireNonEmptyValue(ownerId, 'AgentExecution commands require ownerId, agentExecutionId, and commandId.');
+            const normalizedAgentExecutionId = requireNonEmptyValue(agentExecutionId, 'AgentExecution commands require ownerId, agentExecutionId, and commandId.');
+            const normalizedCommandId = requireNonEmptyValue(commandId, 'AgentExecution commands require ownerId, agentExecutionId, and commandId.');
             return AgentExecutionCommandAcknowledgementSchema.parse(await commandRemote({
                 entity: agentExecutionEntityName,
                 method: 'command',
                 payload: {
                     ownerId: normalizedOwnerId,
-                    sessionId: normalizedSessionId,
+                    agentExecutionId: normalizedAgentExecutionId,
                     commandId: normalizedCommandId,
                     ...(commandInput !== undefined ? { input: commandInput } : {})
                 }
@@ -291,7 +291,7 @@ export class Mission implements EntityModel<MissionSnapshotType> {
         this.loadData = input.loadData;
         this.commandGateway = createMissionCommandGateway(input.gatewayDependencies);
         this.childCommands = createMissionChildEntityCommandGateway(input.gatewayDependencies);
-        this.applySessionSnapshots(input.snapshot.agentExecutions);
+        this.applyAgentExecutionSnapshots(input.snapshot.agentExecutions);
         this.applyTaskSnapshots(input.snapshot);
         this.applyStageSnapshots(input.snapshot);
         this.applyArtifactDataFromMission(input.snapshot);
@@ -459,8 +459,8 @@ export class Mission implements EntityModel<MissionSnapshotType> {
         return this.getStage(stageId)?.listTasks() ?? [];
     }
 
-    public getSession(sessionId: string): AgentExecution | undefined {
-        return this.terminals.get(sessionId);
+    public getAgentExecution(agentExecutionId: string): AgentExecution | undefined {
+        return this.terminals.get(agentExecutionId);
     }
 
     public getArtifact(id: string): Artifact | undefined {
@@ -474,7 +474,7 @@ export class Mission implements EntityModel<MissionSnapshotType> {
 
     public updateFromData(snapshot: MissionSnapshotType): this {
         this.snapshot = snapshot;
-        this.applySessionSnapshots(snapshot.agentExecutions);
+        this.applyAgentExecutionSnapshots(snapshot.agentExecutions);
         this.applyTaskSnapshots(snapshot);
         this.applyStageSnapshots(snapshot);
         this.applyArtifactDataFromMission(snapshot);
@@ -542,15 +542,15 @@ export class Mission implements EntityModel<MissionSnapshotType> {
     }
 
     public applyAgentExecutionData(data: AgentExecutionDataType): this {
-        const nextSessions = [
+        const nextAgentExecutions = [
             ...this.terminals
                 .values()
                 .map((execution) => execution.toData())
-                .filter((execution) => execution.sessionId !== data.sessionId),
+                .filter((execution) => execution.agentExecutionId !== data.agentExecutionId),
             data
         ];
 
-        this.applySessionSnapshots(nextSessions);
+        this.applyAgentExecutionSnapshots(nextAgentExecutions);
         return this;
     }
 
@@ -569,16 +569,16 @@ export class Mission implements EntityModel<MissionSnapshotType> {
         return this.toData();
     }
 
-    private applySessionSnapshots(sessionSnapshots: AgentExecutionDataType[]): void {
+    private applyAgentExecutionSnapshots(agentExecutionSnapshots: AgentExecutionDataType[]): void {
         this.terminals.reconcile(
-            sessionSnapshots,
-            (sessionSnapshot) => sessionSnapshot.sessionId,
-            (sessionSnapshot) => new AgentExecution(sessionSnapshot, {
-                resolveCommands: (sessionId) => this.resolveCommandsForOwner({ entity: 'AgentExecution', sessionId }),
-                executeCommand: async (ownerId, sessionId, commandId, input) => {
+            agentExecutionSnapshots,
+            (agentExecutionSnapshot) => agentExecutionSnapshot.agentExecutionId,
+            (agentExecutionSnapshot) => new AgentExecution(agentExecutionSnapshot, {
+                resolveCommands: (agentExecutionId) => this.resolveCommandsForOwner({ entity: 'AgentExecution', agentExecutionId }),
+                executeCommand: async (ownerId, agentExecutionId, commandId, input) => {
                     await this.childCommands.executeAgentExecutionCommand({
                         ownerId,
-                        sessionId,
+                        agentExecutionId,
                         commandId,
                         ...(input !== undefined ? { input } : {})
                     });
@@ -900,7 +900,7 @@ function matchesCommandOwner(candidate: MissionCommandOwnerType, owner: MissionC
         return candidate.taskId === owner.taskId;
     }
     if (candidate.entity === 'AgentExecution' && owner.entity === 'AgentExecution') {
-        return candidate.sessionId === owner.sessionId;
+        return candidate.agentExecutionId === owner.agentExecutionId;
     }
     return candidate.entity === 'Mission';
 }

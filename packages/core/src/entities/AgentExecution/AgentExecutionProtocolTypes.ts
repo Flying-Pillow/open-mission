@@ -46,7 +46,6 @@ export type AgentExecutionProtocolErrorCode =
 export type AgentExecutionStatus =
     | 'starting'
     | 'running'
-    | 'awaiting-input'
     | 'completed'
     | 'failed'
     | 'cancelled'
@@ -275,10 +274,6 @@ export type AgentExecutionEvent =
         snapshot: AgentExecutionSnapshot;
     }
     | {
-        type: 'execution.awaiting-input';
-        snapshot: AgentExecutionSnapshot;
-    }
-    | {
         type: 'execution.completed';
         snapshot: AgentExecutionSnapshot;
     }
@@ -351,7 +346,7 @@ export type AgentExecutionSignalDecision =
     | { action: 'emit-message'; event: AgentExecutionEvent }
     | {
         action: 'update-execution';
-        eventType: 'execution.updated' | 'execution.awaiting-input' | 'execution.completed' | 'execution.failed';
+        eventType: 'execution.updated' | 'execution.completed' | 'execution.failed';
         snapshotPatch: Partial<AgentExecutionSnapshot>;
     };
 

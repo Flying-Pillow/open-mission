@@ -4,23 +4,23 @@
 
     let {
         refreshNonce,
-        session,
+        agentExecution,
         onCommandExecuted,
     }: {
         refreshNonce: number;
-        session?: CommandableEntity;
+        agentExecution?: CommandableEntity;
         onCommandExecuted: () => Promise<void>;
     } = $props();
 
     const availableCommands = $derived(
-        session?.commands.filter((command) => !command.disabled) ?? [],
+        agentExecution?.commands.filter((command) => !command.disabled) ?? [],
     );
 </script>
 
 {#if availableCommands.length > 0}
     <EntityCommandbar
         {refreshNonce}
-        entity={session}
+        entity={agentExecution}
         defaultVariant="outline"
         buttonClass="border-white/15 bg-white/[0.04] text-slate-100 shadow-none hover:bg-white/[0.08]"
         showEmptyState={false}

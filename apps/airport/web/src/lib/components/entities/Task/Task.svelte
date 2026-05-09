@@ -21,8 +21,8 @@
         artifacts = [],
         selectedArtifactId,
         task,
-        session,
-        sessions = [],
+        agentExecution,
+        agentExecutions = [],
         onCommandExecuted,
     }: {
         refreshNonce: number;
@@ -31,8 +31,8 @@
         artifacts?: ArtifactEntity[];
         selectedArtifactId?: string;
         task?: TaskEntity;
-        session?: AgentExecutionEntity;
-        sessions?: AgentExecutionEntity[];
+        agentExecution?: AgentExecutionEntity;
+        agentExecutions?: AgentExecutionEntity[];
         onCommandExecuted: () => Promise<void>;
     } = $props();
 
@@ -54,7 +54,10 @@
     });
     const agentExecutionTabs = $derived.by(() => {
         const tabs: AgentExecutionEntity[] = [];
-        for (const candidate of [...sessions, ...(session ? [session] : [])]) {
+        for (const candidate of [
+            ...agentExecutions,
+            ...(agentExecution ? [agentExecution] : []),
+        ]) {
             if (
                 tabs.some(
                     (agentExecutionTab) =>
@@ -108,7 +111,7 @@
         }
     });
     $effect(() => {
-        const selectedAgentExecutionId = session?.sessionId;
+        const selectedAgentExecutionId = agentExecution?.agentExecutionId;
         const selectedAgentExecutionChanged =
             selectedAgentExecutionId !== lastSelectedAgentExecutionId;
         if (selectedAgentExecutionChanged) {
@@ -307,7 +310,7 @@
                         >
                             <AgentExecution
                                 {refreshNonce}
-                                session={agentExecutionTab}
+                                agentExecution={agentExecutionTab}
                                 {onCommandExecuted}
                             />
                         </Tabs.Content>
@@ -316,7 +319,7 @@
             {:else}
                 <AgentExecution
                     {refreshNonce}
-                    session={undefined}
+                    agentExecution={undefined}
                     {onCommandExecuted}
                 />
             {/if}
