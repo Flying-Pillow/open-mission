@@ -110,5 +110,5 @@ Live process state is represented by an AgentExecution runtime snapshot overlay 
 - Do not encode filesystem backend kinds such as Mission dossier, Repository control state, or local config folder as AgentExecution journal domain identity.
 - Do not fork AgentExecution journal storage behavior by owning Entity scope; only storage adapter path/table resolution may vary by scope.
 - Do not start a new AgentExecution when durable journal storage or the journal header cannot be written.
-- Do keep AgentDeclaredSignal as the precise name for Agent-authored structured signals; use AgentExecutionObservation for the broader normalized observed fact.
+- Do keep AgentSignal as the precise name for Agent-authored structured signals; use AgentExecutionObservation for the broader normalized observed fact.
 - Do keep journal replay deterministic and covered by tests.

@@ -215,7 +215,15 @@
                 : {}),
         };
     });
-    const activeArtifactSelection = $derived(undefined);
+    const activeArtifactSelection = $derived.by(() => {
+        const selectedArtifactId =
+            appContext.airport.activeMissionSelectedArtifactId;
+        return displayArtifacts.some(
+            (artifact) => artifact.id === selectedArtifactId,
+        )
+            ? selectedArtifactId
+            : undefined;
+    });
     const selectedWorktreeFile = $derived(
         selectedWorktreeNode?.kind === "file" ? selectedWorktreeNode : null,
     );

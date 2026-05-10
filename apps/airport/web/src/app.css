@@ -243,6 +243,59 @@
 }
 
 @layer components {
+	.fp-shimmer-thinking {
+		position: relative;
+		display: inline-block;
+	}
+
+	.fp-shimmer-thinking::after {
+		content: attr(data-fp-shimmer-text);
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		background-image: repeating-linear-gradient(
+			90deg,
+			rgba(148, 163, 184, 0) 0px,
+			rgba(148, 163, 184, 0) 132px,
+			rgba(255, 255, 255, 0.1) 152px,
+			rgba(255, 255, 255, 0.82) 170px,
+			rgba(186, 230, 253, 1) 176px,
+			rgba(255, 255, 255, 0.82) 182px,
+			rgba(255, 255, 255, 0.12) 200px,
+			rgba(148, 163, 184, 0) 220px,
+			rgba(148, 163, 184, 0) 320px
+		);
+		background-size: 320px 100%;
+		background-position: 0% center;
+		background-repeat: repeat-x;
+		-webkit-background-clip: text;
+		background-clip: text;
+		-webkit-text-fill-color: transparent;
+		color: transparent;
+		will-change: background-position;
+		transform: translateZ(0);
+		animation: fp-shimmer-thinking-animation
+			var(--fp-shimmer-duration, 1.5s)
+			linear infinite;
+	}
+
+	@keyframes fp-shimmer-thinking-animation {
+		0% {
+			background-position: 0px center;
+		}
+
+		100% {
+			background-position: 320px center;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.fp-shimmer-thinking::after {
+			animation: none;
+			background-position: 50% center;
+		}
+	}
+
 	.docs-shell {
 		background:
 			radial-gradient(

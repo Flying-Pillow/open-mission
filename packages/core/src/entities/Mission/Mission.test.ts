@@ -74,6 +74,11 @@ const missionData = {
     id: 'mission:mission-1',
     missionId: 'mission-1',
     title: 'Mission entity strict schema',
+    assignee: {
+        githubLogin: 'octocat',
+        githubUserId: 1,
+        source: 'manual'
+    },
     type: 'refactor',
     branchRef: 'mission/mission-1',
     missionDir: '/mission/.mission/missions/mission-1',

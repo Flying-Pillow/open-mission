@@ -18,7 +18,8 @@ import type {
     AgentExecutionActivityUpdatedRecordType,
     AgentExecutionJournalHeaderRecordType,
     AgentExecutionJournalRecordType,
-    AgentExecutionObservationRecordType
+    AgentExecutionObservationRecordType,
+    AgentExecutionRuntimeFactRecordType
 } from './AgentExecutionJournalSchema.js';
 import { projectAgentExecutionObservationSignalToTimelineItem } from './AgentExecutionSignalRegistry.js';
 
@@ -30,6 +31,7 @@ export type AgentExecutionJournalReplayState = {
     attention?: AgentExecutionAttentionStateType;
     semanticActivity?: AgentExecutionSemanticActivityType;
     currentInputRequestId?: string | null;
+    awaitingResponseToMessageId?: string | null;
     runtimeActivity?: AgentExecutionRuntimeActivitySnapshotType;
     protocolDescriptor?: AgentExecutionProtocolDescriptorType;
     transportState?: AgentExecutionTransportStateType;
@@ -47,6 +49,7 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
     let attention: AgentExecutionAttentionStateType | undefined;
     let semanticActivity: AgentExecutionSemanticActivityType | undefined;
     let currentInputRequestId: string | null | undefined;
+    let awaitingResponseToMessageId: string | null | undefined;
     let runtimeActivity: AgentExecutionRuntimeActivitySnapshotType | undefined;
     let telemetry: AgentExecutionTelemetrySnapshot | undefined;
     let lastOccurredAt: string | undefined;
@@ -57,13 +60,16 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
             case 'journal.header':
                 header = record;
                 break;
-            case 'message.accepted':
+            case 'turn.accepted':
                 processedMessageIds.add(record.messageId);
                 appendUniqueTimelineItem(timelineItems, toTimelineItemFromAcceptedMessage(record));
                 break;
-            case 'observation.recorded':
+            case 'agent-observation':
                 processedObservationIds.add(record.observationId);
                 appendUniqueTimelineItem(timelineItems, toTimelineItemFromObservation(record));
+                break;
+            case 'runtime-fact':
+                appendUniqueTimelineItem(timelineItems, toTimelineItemFromRuntimeFact(record));
                 break;
             case 'state.changed':
                 lifecycleState = record.lifecycle ?? lifecycleState;
@@ -71,6 +77,9 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
                 semanticActivity = record.activity ?? semanticActivity;
                 if (record.currentInputRequestId !== undefined) {
                     currentInputRequestId = record.currentInputRequestId;
+                }
+                if (record.awaitingResponseToMessageId !== undefined) {
+                    awaitingResponseToMessageId = record.awaitingResponseToMessageId;
                 }
                 appendUniqueTimelineItem(timelineItems, toTimelineItemFromStateChangedRecord(record));
                 break;
@@ -90,15 +99,23 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
         }
     }
 
+    const derivedSemanticActivity = deriveSemanticActivity({
+        lifecycleState,
+        awaitingResponseToMessageId,
+        semanticActivity,
+        runtimeActivity,
+    });
+    const projectedRuntimeActivity = applySemanticActivityOverride(runtimeActivity, derivedSemanticActivity);
+
     const projection = AgentExecutionProjectionSchema.parse({
         timelineItems,
-        ...(runtimeActivity || lifecycleState || attention || semanticActivity || telemetry
+        ...(projectedRuntimeActivity || lifecycleState || attention || derivedSemanticActivity || telemetry
             ? {
                 currentActivity: createCurrentActivityProjection({
                     lifecycleState,
                     attention,
-                    semanticActivity,
-                    runtimeActivity,
+                    semanticActivity: derivedSemanticActivity,
+                    runtimeActivity: projectedRuntimeActivity,
                     telemetry,
                     lastOccurredAt
                 })
@@ -122,9 +139,10 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
         processedObservationIds,
         ...(lifecycleState ? { lifecycleState } : {}),
         ...(attention ? { attention } : {}),
-        ...(semanticActivity ? { semanticActivity } : {}),
+        ...(derivedSemanticActivity ? { semanticActivity: derivedSemanticActivity } : {}),
         ...(currentInputRequestId !== undefined ? { currentInputRequestId } : {}),
-        ...(runtimeActivity ? { runtimeActivity } : {}),
+        ...(awaitingResponseToMessageId !== undefined ? { awaitingResponseToMessageId } : {}),
+        ...(projectedRuntimeActivity ? { runtimeActivity: projectedRuntimeActivity } : {}),
         ...(header?.protocolDescriptor ? { protocolDescriptor: header.protocolDescriptor } : {}),
         ...(header?.transportState ? { transportState: header.transportState } : {}),
         ...(header?.workingDirectory ? { workingDirectory: header.workingDirectory } : {}),
@@ -138,14 +156,47 @@ export function hydrateAgentExecutionDataFromJournal(
     records: AgentExecutionJournalRecordType[]
 ): AgentExecutionDataType {
     const replay = replayAgentExecutionJournal(records);
+    const lifecycleState = replay.lifecycleState ?? data.lifecycleState;
+    const attention = replay.attention ?? data.attention;
+    const semanticActivity = deriveSemanticActivity({
+        lifecycleState,
+        awaitingResponseToMessageId: replay.awaitingResponseToMessageId ?? data.awaitingResponseToMessageId,
+        semanticActivity: replay.semanticActivity ?? data.semanticActivity,
+        runtimeActivity: replay.runtimeActivity ?? data.runtimeActivity,
+    });
+    const runtimeActivity = applySemanticActivityOverride(replay.runtimeActivity ?? data.runtimeActivity, semanticActivity);
+    const projection = AgentExecutionProjectionSchema.parse({
+        ...replay.projection,
+        ...(createCurrentActivityProjection({
+            lifecycleState,
+            attention,
+            semanticActivity,
+            runtimeActivity,
+            telemetry: replay.telemetry ?? data.telemetry,
+            lastOccurredAt: replay.lastOccurredAt ?? data.lastUpdatedAt
+        })
+            ? {
+                currentActivity: createCurrentActivityProjection({
+                    lifecycleState,
+                    attention,
+                    semanticActivity,
+                    runtimeActivity,
+                    telemetry: replay.telemetry ?? data.telemetry,
+                    lastOccurredAt: replay.lastOccurredAt ?? data.lastUpdatedAt
+                })
+            }
+            : {})
+    });
     return {
         ...data,
-        projection: replay.projection,
+        journalRecords: structuredClone(records),
+        projection,
         ...(replay.lifecycleState ? { lifecycleState: replay.lifecycleState } : {}),
         ...(replay.attention ? { attention: replay.attention } : {}),
-        ...(replay.semanticActivity ? { semanticActivity: replay.semanticActivity } : {}),
+        ...(semanticActivity ? { semanticActivity } : {}),
         ...(replay.currentInputRequestId !== undefined ? { currentInputRequestId: replay.currentInputRequestId } : {}),
-        ...(replay.runtimeActivity ? { runtimeActivity: replay.runtimeActivity } : {}),
+        ...(replay.awaitingResponseToMessageId !== undefined ? { awaitingResponseToMessageId: replay.awaitingResponseToMessageId } : {}),
+        ...(runtimeActivity ? { runtimeActivity } : {}),
         ...(replay.protocolDescriptor ? { protocolDescriptor: replay.protocolDescriptor } : {}),
         ...(replay.transportState ? { transportState: replay.transportState } : {}),
         ...(replay.workingDirectory && !data.workingDirectory ? { workingDirectory: replay.workingDirectory } : {}),
@@ -154,7 +205,7 @@ export function hydrateAgentExecutionDataFromJournal(
     };
 }
 
-function toTimelineItemFromAcceptedMessage(record: Extract<AgentExecutionJournalRecordType, { type: 'message.accepted' }>): AgentExecutionTimelineItemType | undefined {
+function toTimelineItemFromAcceptedMessage(record: Extract<AgentExecutionJournalRecordType, { type: 'turn.accepted' }>): AgentExecutionTimelineItemType | undefined {
     const text = readMessageText(record.payload);
     if (!text) {
         return undefined;
@@ -196,6 +247,44 @@ function toTimelineItemFromObservation(record: AgentExecutionObservationRecordTy
     });
 }
 
+function toTimelineItemFromRuntimeFact(record: AgentExecutionRuntimeFactRecordType): AgentExecutionTimelineItemType | undefined {
+    if (record.replayClass === 'evidence-only') {
+        return undefined;
+    }
+
+    if (record.factType === 'artifact-read' && record.path) {
+        return AgentExecutionTimelineItemSchema.parse({
+            id: record.factId,
+            occurredAt: record.occurredAt,
+            zone: 'activity',
+            primitive: 'activity.tool',
+            behavior: createBehavior('live-activity', { compactable: true }),
+            provenance: {
+                durable: true,
+                sourceRecordIds: [record.recordId],
+                confidence: record.assertionLevel === 'authoritative' ? 'authoritative' : 'medium'
+            },
+            payload: {
+                title: 'Reading artifact',
+                ...(record.detail ? { text: record.detail } : {}),
+                path: record.path,
+                currentTarget: {
+                    kind: 'artifact',
+                    path: record.path,
+                    label: record.path.split('/').at(-1) ?? record.path
+                },
+                artifacts: [{
+                    ...(record.artifactId ? { artifactId: record.artifactId } : {}),
+                    path: record.path,
+                    activity: 'read'
+                }]
+            }
+        });
+    }
+
+    return undefined;
+}
+
 function toTimelineItemFromStateChangedRecord(
     record: Extract<AgentExecutionJournalRecordType, { type: 'state.changed' }>
 ): AgentExecutionTimelineItemType | undefined {
@@ -205,6 +294,9 @@ function toTimelineItemFromStateChangedRecord(
         record.activity ? `Activity: ${record.activity}` : undefined,
         record.currentInputRequestId !== undefined
             ? `Input request: ${record.currentInputRequestId ?? 'cleared'}`
+            : undefined,
+        record.awaitingResponseToMessageId !== undefined
+            ? `Awaiting response to: ${record.awaitingResponseToMessageId ?? 'cleared'}`
             : undefined
     ].filter((value): value is string => Boolean(value));
     if (parts.length === 0) {
@@ -354,6 +446,41 @@ function createCurrentActivityProjection(input: {
     };
 }
 
+function deriveSemanticActivity(input: {
+    lifecycleState: AgentExecutionLifecycleStateType | undefined;
+    awaitingResponseToMessageId: string | null | undefined;
+    semanticActivity: AgentExecutionSemanticActivityType | undefined;
+    runtimeActivity: AgentExecutionRuntimeActivitySnapshotType | undefined;
+}): AgentExecutionSemanticActivityType | undefined {
+    const baseActivity = input.runtimeActivity?.activity ?? input.semanticActivity;
+    if (input.lifecycleState !== 'running' && input.lifecycleState !== 'starting') {
+        return baseActivity;
+    }
+    if (input.awaitingResponseToMessageId !== undefined && input.awaitingResponseToMessageId !== null) {
+        return 'awaiting-agent-response';
+    }
+    return baseActivity;
+}
+
+function applySemanticActivityOverride(
+    runtimeActivity: AgentExecutionRuntimeActivitySnapshotType | undefined,
+    semanticActivity: AgentExecutionSemanticActivityType | undefined
+): AgentExecutionRuntimeActivitySnapshotType | undefined {
+    if (!runtimeActivity) {
+        return runtimeActivity;
+    }
+    if (!semanticActivity || runtimeActivity.activity === semanticActivity) {
+        return runtimeActivity;
+    }
+    if (runtimeActivity.activity !== 'executing') {
+        return runtimeActivity;
+    }
+    return {
+        ...runtimeActivity,
+        activity: semanticActivity
+    };
+}
+
 function createCurrentAttentionProjection(input: {
     attention: AgentExecutionAttentionStateType;
     currentInputRequestId: string | null | undefined;
@@ -363,8 +490,8 @@ function createCurrentAttentionProjection(input: {
     if (input.attention === 'none' || input.attention === 'autonomous') {
         return undefined;
     }
-    const latestAttentionItem = [...input.timelineItems].reverse().find((item) => item.primitive.startsWith('attention.'));
-    const primitive = latestAttentionItem?.primitive;
+    const attentionItem = resolveCurrentAttentionProjectionItem(input.timelineItems, input.currentInputRequestId);
+    const primitive = attentionItem?.primitive;
     if (
         primitive !== 'attention.input-request'
         && primitive !== 'attention.blocked'
@@ -381,14 +508,33 @@ function createCurrentAttentionProjection(input: {
     return {
         state: input.attention,
         primitive,
-        ...(latestAttentionItem?.severity ? { severity: latestAttentionItem.severity } : {}),
-        ...(latestAttentionItem?.payload.title ? { title: latestAttentionItem.payload.title } : {}),
-        ...(latestAttentionItem?.payload.text ? { text: latestAttentionItem.payload.text } : {}),
-        ...(latestAttentionItem?.payload.detail ? { detail: latestAttentionItem.payload.detail } : {}),
-        ...(latestAttentionItem?.payload.choices ? { choices: latestAttentionItem.payload.choices } : {}),
+        ...(attentionItem?.severity ? { severity: attentionItem.severity } : {}),
+        ...(attentionItem?.payload.title ? { title: attentionItem.payload.title } : {}),
+        ...(attentionItem?.payload.text ? { text: attentionItem.payload.text } : {}),
+        ...(attentionItem?.payload.detail ? { detail: attentionItem.payload.detail } : {}),
+        ...(attentionItem?.payload.choices ? { choices: attentionItem.payload.choices } : {}),
         ...(input.currentInputRequestId !== undefined ? { currentInputRequestId: input.currentInputRequestId } : {}),
-        updatedAt: latestAttentionItem?.occurredAt ?? input.lastOccurredAt
+        updatedAt: attentionItem?.occurredAt ?? input.lastOccurredAt
     };
+}
+
+function resolveCurrentAttentionProjectionItem(
+    timelineItems: AgentExecutionTimelineItemType[],
+    currentInputRequestId: string | null | undefined
+): AgentExecutionTimelineItemType | undefined {
+    if (currentInputRequestId) {
+        const inputRequestItem = timelineItems.find((item) => item.id === currentInputRequestId);
+        if (inputRequestItem?.primitive === 'attention.input-request') {
+            return inputRequestItem;
+        }
+    }
+    return [...timelineItems]
+        .reverse()
+        .find(
+            (item) =>
+                item.primitive.startsWith('attention.') &&
+                item.primitive !== 'attention.input-request',
+        );
 }
 
 function mergeTelemetry(

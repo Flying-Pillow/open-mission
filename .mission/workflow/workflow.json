@@ -8,7 +8,7 @@
   },
   "execution": {
     "maxParallelTasks": 1,
-    "maxParallelSessions": 1
+    "maxParallelAgentExecutions": 1
   },
   "stageOrder": [
     "prd",

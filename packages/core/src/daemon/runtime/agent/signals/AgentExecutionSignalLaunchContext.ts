@@ -21,7 +21,8 @@ export function buildAgentExecutionSignalLaunchContext(input: {
         eventId: 'replace-with-unique-event-id',
         signal: {
             type: 'progress',
-            summary: 'Working on the next implementation step.'
+            summary: 'Working on the next implementation step.',
+            artifacts: [{ path: 'apps/airport/web/src/app.css', activity: 'edit' }]
         }
     })}`;
     const statusExample = `${markerPrefix}${JSON.stringify({
@@ -58,6 +59,8 @@ export function buildAgentExecutionSignalLaunchContext(input: {
             '- Use a fresh eventId for each marker.',
             '- Keep each marker on one line.',
             '- Use normal prose for explanation; use markers only for status, input requests, blockers, or completion claims.',
+            '- Markers are cooperative protocol signals, not authoritative runtime facts.',
+            '- When a signal is about a specific tracked file, include artifacts with artifactId when known or a repository-relative path when that is what you have.',
             '- Emit status with phase "initializing" when you start a turn and phase "idle" when the turn is complete but the AgentExecution remains live.',
             '- Supported signal payloads:',
             ...input.protocolDescriptor.signals.map((signal) => `- ${signal.type}: ${signal.label} (${signal.policy})`),
@@ -84,11 +87,17 @@ function buildMcpToolLaunchContext(input: {
         agentExecutionInstructions: [
             'Structured status tools:',
             `- Use the ${serverName} MCP tools to report machine-readable AgentExecution signals.`,
+            '- Prefer Mission-owned MCP tools and access surfaces for replay-critical operations whenever possible.',
+            '- Use Mission-owned access for repository documents, workflow actions, verification, and structured operator communication instead of relying on opaque provider-native actions.',
             '- Call the tool named for the signal you need to emit.',
             '- Do not ask the operator for AgentExecution ids, event ids, tokens, or transport fields.',
             '- Provide only the signal payload fields requested by the tool, such as summary, question, choices, reason, channel, or text.',
+            '- When answering an operator/user question or providing a final operator-facing response, call the message tool with channel "agent" and put the canonical response in text as concise GitHub-flavored Markdown.',
+            '- Do not duplicate final operator-facing responses in stdout, stderr, terminal prose, or provider-native chat text. Those streams are transport evidence and do not appear in AgentChat.',
+            '- When the signal concerns a tracked file, include artifacts with artifactId when known or a repository-relative path when that is what you have.',
             '- Omit eventId unless you are intentionally retrying the exact same signal.',
-            '- Use normal prose for explanation; use tools only for status, input requests, blockers, or completion claims.',
+            '- Use MCP tools for semantic AgentExecution material: canonical user-facing responses, status, progress, input requests, blockers, completion claims, and other Mission-owned semantic operations.',
+            '- Treat passive stdout, stderr, and provider-specific payloads as auxiliary evidence rather than canonical replay truth.',
             '- Emit status with phase "initializing" when you start a turn and phase "idle" when the turn is complete but the AgentExecution remains live.',
             '- Supported signal tools:',
             ...input.protocolDescriptor.signals.map((signal) => `- ${signal.type}: ${signal.label} (${signal.policy})`),

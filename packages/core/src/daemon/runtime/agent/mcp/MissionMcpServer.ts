@@ -3,27 +3,36 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import {
-    AgentDeclaredSignalMarkerPayloadSchema,
-    AgentDeclaredSignalPayloadSchema,
-    AgentDeclaredSignalToolPayloadSchemasByType,
+    AgentSignalMarkerPayloadSchema,
+    AgentSignalPayloadSchema,
+    AgentSignalToolPayloadSchemasByType,
     AgentExecutionObservationAckSchema,
     AgentExecutionProtocolDescriptorSchema,
     MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH,
-    type AgentDeclaredSignalDescriptorType,
-    type AgentDeclaredSignalPayloadType,
+    type AgentSignalDescriptorType,
+    type AgentSignalPayloadType,
     type AgentExecutionObservationAckType,
     type AgentExecutionProtocolDescriptorType
 } from '../../../../entities/AgentExecution/AgentExecutionSchema.js';
 import {
     cloneAgentExecutionScope,
-    createAgentDeclaredSignalFromPayload,
+    createAgentSignalFromPayload,
     type AgentExecutionScope,
     type AgentExecutionObservation
 } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import {
+    AgentExecutionSemanticOperationDescriptors,
+    type AgentExecutionReadArtifactOperationInputType,
+    type AgentExecutionSemanticOperationInvoker,
+    type AgentExecutionSemanticOperationName,
+    type AgentExecutionSemanticOperationResultType,
+    readAgentExecutionSemanticOperationDescriptor,
+    readAgentExecutionSemanticOperationInputSchema
+} from '../AgentExecutionSemanticOperations.js';
 
 const MISSION_MCP_SERVER_NAME = 'mission-mcp';
 
-const MissionMcpToolCallInputSchema = AgentDeclaredSignalMarkerPayloadSchema.extend({
+const MissionMcpToolCallInputSchema = AgentSignalMarkerPayloadSchema.extend({
     token: z.string().trim().min(1)
 }).strict();
 
@@ -63,9 +72,10 @@ type MissionMcpToolDescriptor = {
     name: string;
     title: string;
     description?: string;
-    payloadSchemaKey: string;
-    policy: AgentDeclaredSignalDescriptorType['policy'];
-    outcomes: AgentDeclaredSignalDescriptorType['outcomes'];
+    kind: 'signal' | 'semantic-operation';
+    payloadSchemaKey?: string;
+    policy?: AgentSignalDescriptorType['policy'];
+    outcomes?: AgentSignalDescriptorType['outcomes'];
 };
 
 type AgentExecutionTransportObservationRouter = {
@@ -73,6 +83,7 @@ type AgentExecutionTransportObservationRouter = {
         agentExecutionId: string;
         observation: AgentExecutionObservation;
     }): AgentExecutionObservationAckType | Promise<AgentExecutionObservationAckType>;
+    invokeSemanticOperation?: AgentExecutionSemanticOperationInvoker['invokeSemanticOperation'];
 };
 
 export type MissionMcpRegisterAccessInput = {
@@ -88,6 +99,8 @@ export type MissionMcpRegisteredAccess = {
     serverName: 'mission-mcp';
     tools: MissionMcpToolDescriptor[];
 };
+
+export type MissionMcpCallToolResultType = AgentExecutionObservationAckType | AgentExecutionSemanticOperationResultType;
 
 export class MissionMcpServer {
     public readonly serverName = MISSION_MCP_SERVER_NAME;
@@ -172,8 +185,12 @@ export class MissionMcpServer {
         return mcpServer;
     }
 
-    public async callTool(input: MissionMcpCallToolInputType): Promise<AgentExecutionObservationAckType> {
+    public async callTool(input: MissionMcpCallToolInputType): Promise<MissionMcpCallToolResultType> {
         this.requireStarted();
+        const semanticOperationDescriptor = readAgentExecutionSemanticOperationDescriptor(input.name);
+        if (semanticOperationDescriptor) {
+            return this.callSemanticOperationTool(semanticOperationDescriptor.name, input.input);
+        }
         const toolCall = MissionMcpToolCall.parse(MissionMcpCallToolInputSchema.parse(input));
         if (!toolCall.accepted) {
             return toolCall.ack;
@@ -201,6 +218,32 @@ export class MissionMcpServer {
         }));
     }
 
+    private async callSemanticOperationTool(
+        operationName: AgentExecutionSemanticOperationName,
+        input: unknown
+    ): Promise<MissionMcpCallToolResultType> {
+        const parsedInput = parseMissionMcpSemanticOperationInput(operationName, input);
+        if (!parsedInput.success) {
+            return rejectedAck(readAgentExecutionId(input), readEventId(input), parsedInput.reason ?? `Mission MCP semantic operation '${operationName}' input failed schema validation.`);
+        }
+        const accessRecord = this.sessions.read(parsedInput.input.agentExecutionId);
+        if (!accessRecord) {
+            return rejectedAck(parsedInput.input.agentExecutionId, parsedInput.input.eventId, 'AgentExecution is not registered for mission-mcp access.');
+        }
+        const authorization = this.sessions.authorize(accessRecord, parsedInput.input.token);
+        if (!authorization.authorized) {
+            return rejectedAck(parsedInput.input.agentExecutionId, parsedInput.input.eventId, authorization.reason);
+        }
+        if (!this.agentExecutionRegistry.invokeSemanticOperation) {
+            return rejectedAck(parsedInput.input.agentExecutionId, parsedInput.input.eventId, `Mission semantic operation '${operationName}' is unavailable.`);
+        }
+        return this.agentExecutionRegistry.invokeSemanticOperation({
+            agentExecutionId: parsedInput.input.agentExecutionId,
+            name: operationName,
+            input: parsedInput.input.input
+        });
+    }
+
     private toRegisteredAccess(accessRecord: MissionMcpAccessRecord): MissionMcpRegisteredAccess {
         return {
             accessId: accessRecord.accessId,
@@ -222,7 +265,7 @@ export class MissionMcpServer {
         return {
             observationId: `agent-declared-signal:${input.eventId}`,
             observedAt: new Date().toISOString(),
-            signal: createAgentDeclaredSignalFromPayload(input.signal),
+            signal: createAgentSignalFromPayload(input.signal),
             route: {
                 origin: 'agent-declared-signal',
                 address
@@ -240,11 +283,11 @@ export class MissionMcpServer {
         };
     }
 
-    private toCallToolResult(ack: AgentExecutionObservationAckType): CallToolResult {
+    private toCallToolResult(result: MissionMcpCallToolResultType): CallToolResult {
         return {
-            content: [{ type: 'text', text: JSON.stringify(ack) }],
-            structuredContent: ack,
-            isError: ack.status === 'rejected'
+            content: [{ type: 'text', text: JSON.stringify(result) }],
+            structuredContent: result,
+            isError: isObservationAckResult(result) ? result.status === 'rejected' : false
         };
     }
 
@@ -297,22 +340,31 @@ class MissionMcpSessionRegistry {
 
 class MissionMcpToolCatalog {
     public materialize(protocolDescriptor: AgentExecutionProtocolDescriptorType): MissionMcpToolDescriptor[] {
-        return protocolDescriptor.signals
-            .filter((signal) => signal.deliveries.includes('mcp-tool'))
-            .map((signal) => ({
-                name: signal.type,
-                title: signal.label,
-                ...(signal.description ? { description: signal.description } : {}),
-                payloadSchemaKey: signal.payloadSchemaKey,
-                policy: signal.policy,
-                outcomes: [...signal.outcomes]
-            }));
+        return [
+            ...AgentExecutionSemanticOperationDescriptors.map((descriptor) => ({
+                name: descriptor.name,
+                title: descriptor.title,
+                description: descriptor.description,
+                kind: 'semantic-operation' as const
+            })),
+            ...protocolDescriptor.signals
+                .filter((signal) => signal.deliveries.includes('mcp-tool'))
+                .map((signal) => ({
+                    name: signal.type,
+                    title: signal.label,
+                    kind: 'signal' as const,
+                    ...(signal.description ? { description: signal.description } : {}),
+                    payloadSchemaKey: signal.payloadSchemaKey,
+                    policy: signal.policy,
+                    outcomes: [...signal.outcomes]
+                }))
+        ];
     }
 
     public readSignalDescriptor(
         protocolDescriptor: AgentExecutionProtocolDescriptorType,
         toolName: string
-    ): AgentDeclaredSignalDescriptorType | undefined {
+    ): AgentSignalDescriptorType | undefined {
         return protocolDescriptor.signals.find((signal) => signal.type === toolName && signal.deliveries.includes('mcp-tool'));
     }
 }
@@ -349,8 +401,42 @@ class MissionMcpToolCall {
 }
 
 function createMissionMcpDirectToolInputSchema(toolName: string) {
+    const semanticOperationDescriptor = readAgentExecutionSemanticOperationDescriptor(toolName);
+    if (semanticOperationDescriptor) {
+        const operationInputSchema = readAgentExecutionSemanticOperationInputSchema(semanticOperationDescriptor.name);
+        return operationInputSchema
+            ? MissionMcpDirectToolInputBaseSchema.extend(operationInputSchema.shape).strict()
+            : MissionMcpDirectToolInputBaseSchema;
+    }
     const payloadSchema = readSignalToolPayloadSchema(toolName);
     return payloadSchema ? MissionMcpDirectToolInputBaseSchema.extend(payloadSchema.shape).strict() : MissionMcpDirectToolInputBaseSchema;
+}
+
+function parseMissionMcpSemanticOperationInput(operationName: AgentExecutionSemanticOperationName, input: unknown):
+    | { success: true; input: { agentExecutionId: string; token: string; eventId: string; input: AgentExecutionReadArtifactOperationInputType } }
+    | { success: false; reason?: string } {
+    const operationInputSchema = readAgentExecutionSemanticOperationInputSchema(operationName);
+    if (!operationInputSchema) {
+        return { success: false, reason: `Semantic operation '${operationName}' is not registered.` };
+    }
+
+    const result = MissionMcpDirectToolInputBaseSchema.extend(operationInputSchema.shape).extend({
+        agentExecutionId: z.string().trim().min(1)
+    }).strict().safeParse(input);
+    if (!result.success) {
+        const reason = result.error.issues[0]?.message;
+        return reason ? { success: false, reason } : { success: false };
+    }
+
+    return {
+        success: true,
+        input: {
+            agentExecutionId: result.data.agentExecutionId,
+            token: result.data.token,
+            eventId: result.data.eventId ?? createMissionMcpEventId(operationName),
+            input: operationInputSchema.parse(omitTransportFields(result.data)) as AgentExecutionReadArtifactOperationInputType
+        }
+    };
 }
 
 function parseMissionMcpDirectToolInput(toolName: string, input: unknown):
@@ -368,10 +454,10 @@ function parseMissionMcpDirectToolInput(toolName: string, input: unknown):
         return reason ? { success: false, reason } : { success: false };
     }
     const payloadInput = omitTransportFields(result.data);
-    const signal = AgentDeclaredSignalPayloadSchema.parse({
+    const signal = AgentSignalPayloadSchema.parse({
         type: toolName,
         ...payloadSchema.parse(payloadInput)
-    }) as AgentDeclaredSignalPayloadType;
+    }) as AgentSignalPayloadType;
     return {
         success: true,
         input: MissionMcpToolCallInputSchema.parse({
@@ -394,11 +480,15 @@ function omitTransportFields(input: Record<string, unknown>): Record<string, unk
 }
 
 function readSignalToolPayloadSchema(toolName: string) {
-    return isSignalToolName(toolName) ? AgentDeclaredSignalToolPayloadSchemasByType[toolName] : undefined;
+    return isSignalToolName(toolName) ? AgentSignalToolPayloadSchemasByType[toolName] : undefined;
 }
 
-function isSignalToolName(toolName: string): toolName is keyof typeof AgentDeclaredSignalToolPayloadSchemasByType {
-    return toolName in AgentDeclaredSignalToolPayloadSchemasByType;
+function isSignalToolName(toolName: string): toolName is keyof typeof AgentSignalToolPayloadSchemasByType {
+    return toolName in AgentSignalToolPayloadSchemasByType;
+}
+
+function isObservationAckResult(result: MissionMcpCallToolResultType): result is AgentExecutionObservationAckType {
+    return 'status' in result;
 }
 
 function rejectedAck(agentExecutionId: string, eventId: string, reason: string): AgentExecutionObservationAckType {

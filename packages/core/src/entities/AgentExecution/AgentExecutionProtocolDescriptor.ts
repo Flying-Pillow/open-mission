@@ -1,21 +1,21 @@
 import type { AgentExecutionScope } from './AgentExecutionProtocolTypes.js';
 import {
     AgentExecutionProtocolDescriptorSchema,
-    type AgentDeclaredSignalDeliveryType,
-    type AgentDeclaredSignalDescriptorType,
+    type AgentSignalDeliveryType,
+    type AgentSignalDescriptorType,
     type AgentExecutionMessageDescriptorType,
     type AgentExecutionProtocolDescriptorType,
     type AgentExecutionProtocolOwnerType
 } from './AgentExecutionSchema.js';
-import { baselineAgentDeclaredSignalDescriptors } from './AgentExecutionSignalRegistry.js';
+import { baselineAgentSignalDescriptors } from './AgentExecutionSignalRegistry.js';
 
 export function createAgentExecutionProtocolDescriptor(input: {
     scope: AgentExecutionScope;
     messages: AgentExecutionMessageDescriptorType[];
-    signals?: AgentDeclaredSignalDescriptorType[];
-    deliveries?: AgentDeclaredSignalDeliveryType[];
+    signals?: AgentSignalDescriptorType[];
+    deliveries?: AgentSignalDeliveryType[];
 }): AgentExecutionProtocolDescriptorType {
-    const signals = (input.signals ?? baselineAgentDeclaredSignalDescriptors).map((signal) => ({
+    const signals = (input.signals ?? baselineAgentSignalDescriptors).map((signal) => ({
         ...signal,
         deliveries: input.deliveries
             ? signal.deliveries.filter((delivery) => input.deliveries?.includes(delivery))

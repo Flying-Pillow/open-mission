@@ -3,7 +3,7 @@ import type { AgentAdapterRuntimeOutput } from '../AgentAdapter.js';
 import {
 	cloneSignal,
 	cloneObservationAddress,
-	createAgentDeclaredSignalFromPayload,
+	createAgentSignalFromPayload,
 	MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH,
 	MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH,
 	type AgentExecutionObservation,
@@ -13,10 +13,11 @@ import {
 	type AgentExecutionObservationAddress
 } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import {
-	AgentDeclaredSignalMarkerPayloadSchema,
+	AgentSignalMarkerPayloadSchema,
 	AgentExecutionOwnerMarkerPrefixSchema,
 	type AgentExecutionOwnerMarkerPrefixType
 } from '../../../../entities/AgentExecution/AgentExecutionSchema.js';
+import { sanitizeTerminalTextForHeuristics } from '../../terminal/TerminalTextSanitizer.js';
 
 const NEEDS_INPUT_PATTERNS = [
 	/\b(waiting for input|awaiting input|needs input|need input)\b/i,
@@ -89,7 +90,7 @@ export class AgentExecutionObservationRouter {
 		}
 		if (input.kind === 'agent-declared-signal') {
 			return this.toObservations(
-				this.parseAgentDeclaredSignals(input.line, input.markerPrefix),
+				this.parseAgentSignals(input.line, input.markerPrefix),
 				'agent-declared-signal',
 				input.address,
 				observedAt
@@ -97,12 +98,12 @@ export class AgentExecutionObservationRouter {
 		}
 
 		const markerCandidates = input.channel === 'stdout' && input.markerPrefix
-			? this.parseAgentDeclaredSignals(input.line, input.markerPrefix)
+			? this.parseAgentSignals(input.line, input.markerPrefix)
 			: [];
 		if (markerCandidates.length > 0) {
 			return this.toObservations(markerCandidates, 'agent-declared-signal', input.address, observedAt);
 		}
-		if (isAgentDeclaredSignalMarkerLine(input.line)) {
+		if (isAgentSignalMarkerLine(input.line)) {
 			return [];
 		}
 		return this.toObservations(
@@ -117,53 +118,56 @@ export class AgentExecutionObservationRouter {
 		line: string,
 		channel: 'stdout' | 'stderr'
 	): AgentExecutionSignalCandidate[] {
-		const trimmed = line.trim();
-		if (!trimmed) {
+		const heuristicText = sanitizeTerminalTextForHeuristics(line);
+		if (!heuristicText) {
 			return [];
 		}
-		const needsInputPattern = NEEDS_INPUT_PATTERNS.find((pattern) => pattern.test(trimmed));
+		const needsInputPattern = NEEDS_INPUT_PATTERNS.find((pattern) => pattern.test(heuristicText));
 		if (needsInputPattern) {
 			this.logTerminalHeuristicPatternMatch({
 				pattern: needsInputPattern,
-				line: trimmed,
+				line: heuristicText,
 				channel,
 				heuristic: 'needs_input'
 			});
 			return [this.createTerminalHeuristicDiagnostic({
-				dedupeKey: `heuristic-needs-input:${trimmed.toLowerCase()}`,
-				line,
+				dedupeKey: `heuristic-needs-input:${heuristicText.toLowerCase()}`,
+				rawText: line,
+				detail: heuristicText,
 				channel,
 				heuristic: 'needs_input',
 				summary: 'Terminal output suggested the agent is waiting for operator input.'
 			})];
 		}
-		const blockedPattern = BLOCKED_PATTERNS.find((pattern) => pattern.test(trimmed));
+		const blockedPattern = BLOCKED_PATTERNS.find((pattern) => pattern.test(heuristicText));
 		if (blockedPattern) {
 			this.logTerminalHeuristicPatternMatch({
 				pattern: blockedPattern,
-				line: trimmed,
+				line: heuristicText,
 				channel,
 				heuristic: 'blocked'
 			});
 			return [this.createTerminalHeuristicDiagnostic({
-				dedupeKey: `heuristic-blocked:${trimmed.toLowerCase()}`,
-				line,
+				dedupeKey: `heuristic-blocked:${heuristicText.toLowerCase()}`,
+				rawText: line,
+				detail: heuristicText,
 				channel,
 				heuristic: 'blocked',
 				summary: 'Terminal output suggested the agent is blocked.'
 			})];
 		}
-		const progressPattern = PROGRESS_PATTERNS.find((pattern) => pattern.test(trimmed));
+		const progressPattern = PROGRESS_PATTERNS.find((pattern) => pattern.test(heuristicText));
 		if (progressPattern) {
 			this.logTerminalHeuristicPatternMatch({
 				pattern: progressPattern,
-				line: trimmed,
+				line: heuristicText,
 				channel,
 				heuristic: 'progress'
 			});
 			return [this.createTerminalHeuristicDiagnostic({
-				dedupeKey: `heuristic-progress:${trimmed.toLowerCase()}`,
-				line,
+				dedupeKey: `heuristic-progress:${heuristicText.toLowerCase()}`,
+				rawText: line,
+				detail: heuristicText,
 				channel,
 				heuristic: 'progress',
 				summary: 'Terminal output suggested the agent is making progress.'
@@ -186,7 +190,7 @@ export class AgentExecutionObservationRouter {
 		});
 	}
 
-	private parseAgentDeclaredSignals(
+	private parseAgentSignals(
 		line: string,
 		markerPrefix: AgentExecutionOwnerMarkerPrefixType
 	): AgentExecutionSignalCandidate[] {
@@ -195,7 +199,7 @@ export class AgentExecutionObservationRouter {
 			return [];
 		}
 		if (trimmed.length > MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH) {
-			return [this.createAgentDeclaredSignalDiagnostic(
+			return [this.createAgentSignalDiagnostic(
 				'agent-declared-signal-oversized',
 				'Agent-declared signal marker exceeded the maximum length.',
 				line
@@ -206,15 +210,15 @@ export class AgentExecutionObservationRouter {
 		try {
 			parsed = JSON.parse(payload);
 		} catch {
-			return [this.createAgentDeclaredSignalDiagnostic(
+			return [this.createAgentSignalDiagnostic(
 				'agent-declared-signal-malformed',
 				'Agent-declared signal marker did not contain valid JSON.',
 				line
 			)];
 		}
-		const result = AgentDeclaredSignalMarkerPayloadSchema.safeParse(parsed);
+		const result = AgentSignalMarkerPayloadSchema.safeParse(parsed);
 		if (!result.success) {
-			return [this.createAgentDeclaredSignalDiagnostic(
+			return [this.createAgentSignalDiagnostic(
 				'agent-declared-signal-malformed',
 				'Agent-declared signal marker failed schema validation.',
 				line,
@@ -226,11 +230,11 @@ export class AgentExecutionObservationRouter {
 			dedupeKey: result.data.eventId,
 			claimedAgentExecutionId: result.data.agentExecutionId,
 			rawText: line,
-			signal: createAgentDeclaredSignalFromPayload(result.data.signal)
+			signal: createAgentSignalFromPayload(result.data.signal)
 		}];
 	}
 
-	private createAgentDeclaredSignalDiagnostic(
+	private createAgentSignalDiagnostic(
 		code: 'agent-declared-signal-malformed' | 'agent-declared-signal-oversized',
 		summary: string,
 		rawText: string,
@@ -251,19 +255,20 @@ export class AgentExecutionObservationRouter {
 
 	private createTerminalHeuristicDiagnostic(input: {
 		dedupeKey: string;
-		line: string;
+		rawText: string;
+		detail: string;
 		channel: 'stdout' | 'stderr';
 		heuristic: TerminalHeuristicKind;
 		summary: string;
 	}): AgentExecutionSignalCandidate {
 		return {
 			dedupeKey: input.dedupeKey,
-			rawText: input.line,
+			rawText: input.rawText,
 			signal: {
 				type: 'diagnostic',
 				code: 'terminal-heuristic',
 				summary: input.summary,
-				detail: toBoundedSignalText(input.line.trim()),
+				detail: toBoundedSignalText(input.detail),
 				payload: {
 					heuristic: input.heuristic,
 					channel: input.channel
@@ -310,7 +315,7 @@ export class AgentExecutionObservationRouter {
 	}
 }
 
-function isAgentDeclaredSignalMarkerLine(line: string): boolean {
+function isAgentSignalMarkerLine(line: string): boolean {
 	return AgentExecutionOwnerMarkerPrefixSchema.options.some((prefix) => line.startsWith(prefix));
 }
 

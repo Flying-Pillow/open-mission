@@ -9,7 +9,7 @@ import { Repository } from '../Repository/Repository.js';
 import { Agent } from '../Agent/Agent.js';
 import { AgentRegistry } from '../Agent/AgentRegistry.js';
 import { FakeAgentAdapter } from '../../daemon/runtime/agent/testing/FakeAgentAdapter.js';
-import type { AgentExecutionRecord } from '../AgentExecution/AgentExecutionSchema.js';
+import type { AgentExecutionState } from '../AgentExecution/AgentExecutionSchema.js';
 import type { MissionStageStatus } from './MissionSchema.js';
 import { AgentExecutionCommandIds } from '../AgentExecution/AgentExecutionSchema.js';
 import { TaskCommandIds } from '../Task/TaskSchema.js';
@@ -75,7 +75,7 @@ describe('Mission', () => {
                 const events: string[] = [];
                 const agentMessages: string[] = [];
                 const consoleLines: string[] = [];
-                const agentExecutionStateChanges: AgentExecutionRecord[] = [];
+                const agentExecutionStateChanges: AgentExecutionState[] = [];
                 mission.onDidAgentEvent((event) => {
                     events.push(event.type);
                     if (event.type === 'agent-message') {
@@ -1054,7 +1054,7 @@ describe('Mission', () => {
 
                 try {
                     const status = await reloaded.status();
-                    const migratedAgentExecution = status.agentExecutions?.find((execution: AgentExecutionRecord) => execution.agentExecutionId === launched.agentExecutionId);
+                    const migratedAgentExecution = status.agentExecutions?.find((execution: AgentExecutionState) => execution.agentExecutionId === launched.agentExecutionId);
                     expect(migratedAgentExecution).toMatchObject({
                         agentId: 'copilot-cli',
                         transportId: 'terminal'
@@ -1111,7 +1111,7 @@ describe('Mission', () => {
                 };
 
                 const status = await mission.status();
-                expect(status.agentExecutions?.find((execution: AgentExecutionRecord) => execution.agentExecutionId === launched.agentExecutionId)).toMatchObject({
+                expect(status.agentExecutions?.find((execution: AgentExecutionState) => execution.agentExecutionId === launched.agentExecutionId)).toMatchObject({
                     agentExecutionId: launched.agentExecutionId,
                     agentId: agentAdapter.id,
                     lifecycleState: 'running'

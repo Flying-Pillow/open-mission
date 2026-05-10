@@ -7,6 +7,7 @@ import type { Manifest } from './protocol/contracts.js';
 const MISSION_RUNTIME_DIRECTORY = 'mission';
 const MISSION_DAEMON_MANIFEST_FILE = 'daemon.json';
 const MISSION_DAEMON_LOCK_FILE = 'daemon.lock';
+const MISSION_DAEMON_TERMINAL_LEASES_FILE = 'daemon-terminal-leases.json';
 const MISSION_DAEMON_SESSIONS_DIRECTORY = 'sessions';
 const MISSION_DAEMON_SOCKET_FILE = 'daemon.sock';
 const MISSION_DAEMON_LOG_FILE = 'daemon.log';
@@ -22,6 +23,10 @@ export function getDaemonManifestPath(): string {
 
 export function getDaemonLockPath(): string {
 	return path.join(getDaemonRuntimePath(), MISSION_DAEMON_LOCK_FILE);
+}
+
+export function getDaemonTerminalLeaseStatePath(): string {
+	return path.join(getDaemonRuntimePath(), MISSION_DAEMON_TERMINAL_LEASES_FILE);
 }
 
 export function getDaemonLogPath(): string {

@@ -142,6 +142,7 @@ describe('Codex', () => {
         expect(snapshot.transport?.kind).toBe('terminal');
         expect(state.spawnedCommand).toBe('/bin/sh');
         expect(state.spawnedArgs).toContain(codexScriptPath);
+        expect(state.spawnedArgs).toContain('--no-alt-screen');
         expect(state.spawnedArgs).toContain('--model');
         expect(state.spawnedArgs).toContain('gpt-5-codex');
         expect(configOverrides).toContain('mcp_servers."mission-mcp".command="mission"');
@@ -172,6 +173,30 @@ describe('Codex', () => {
 
         expect(configOverrides).toContain('mcp_servers."mission-mcp".command="pnpm"');
         expect(configOverrides).toContain(`mcp_servers."mission-mcp".args=["--dir","/mission","--filter","@flying-pillow/mission","exec","tsx","--tsconfig","./tsconfig.dev.json","./src/mission.ts","mcp","connect","--agent-execution","${snapshot.agentExecutionId}"]`);
+    });
+
+    it('fails fast when Codex is not logged in', async () => {
+        await fs.writeFile(
+            codexScriptPath,
+            '#!/bin/sh\nif [ "$1" = "login" ] && [ "$2" = "status" ]; then\n  echo "Not logged in" >&2\n  exit 1\nfi\nexit 0\n',
+            { encoding: 'utf8', mode: 0o755 }
+        );
+
+        const adapter = createAgentAdapter(createCodex({
+            command: 'codex',
+            env: { PATH: runtimeDirectory },
+            spawn: createSpawn(state, () => createFakePty(state))
+        }), {
+            resolveSettings: () => ({
+                model: 'gpt-5-codex',
+                runtimeEnv: { PATH: runtimeDirectory }
+            })
+        });
+
+        await expect(startExecution(adapter, createLaunchConfig())).rejects.toThrow(
+            'Codex is not logged in. Run `codex login` in the Mission runtime environment, then retry the AgentExecution.'
+        );
+        expect(state.spawnedArgs).toEqual([]);
     });
 });
 

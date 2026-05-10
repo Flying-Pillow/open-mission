@@ -153,6 +153,52 @@ describe('AgentExecutionObservationRouter', () => {
 		}]);
 	});
 
+
+	it('ignores control-heavy terminal repaint frames during heuristic detection', () => {
+		const router = new AgentExecutionObservationRouter();
+
+		expect(router.route({
+			kind: 'terminal-output',
+			channel: 'stdout',
+			address,
+			observedAt: '2026-05-10T15:37:23.619Z',
+			line: '\u001b[?2026h\u001b[1;1H\u001b[2K  - failed_claim: Failed Claim (claim)\u001b[2;1H\u001b[2K  - message: Message (audit-message)\u001b[3;1H\u001b[2K  - For needs_input, include a question and choices.\u001b[4;1H\u001b[2K  Worktree status: dirty (1 staged, 1 unstaged, 0 untracked).\u001b[5;1H\u001b[2K  Remote status: up-to-date.\u001b[6;1H\u001b[2K  Open GitHub issues: none visible.\u001b[?2026l'
+		})).toEqual([]);
+	});
+
+	it('matches heuristics after stripping safe ANSI text decoration', () => {
+		const router = new AgentExecutionObservationRouter();
+		const observations = router.route({
+			kind: 'terminal-output',
+			channel: 'stderr',
+			address,
+			observedAt: '2026-05-10T15:41:00.000Z',
+			line: '\u001b[31mCannot continue: missing token.\u001b[39m'
+		});
+
+		expect(observations).toEqual([{
+			observationId: 'terminal-output:heuristic-blocked:cannot continue: missing token.',
+			observedAt: '2026-05-10T15:41:00.000Z',
+			rawText: '\u001b[31mCannot continue: missing token.\u001b[39m',
+			route: {
+				origin: 'terminal-output',
+				address
+			},
+			signal: {
+				type: 'diagnostic',
+				code: 'terminal-heuristic',
+				summary: 'Terminal output suggested the agent is blocked.',
+				detail: 'Cannot continue: missing token.',
+				payload: {
+					heuristic: 'blocked',
+					channel: 'stderr'
+				},
+				source: 'terminal-heuristic',
+				confidence: 'diagnostic'
+			}
+		}]);
+	});
+
 	it('logs active and matched terminal heuristic patterns for daemon debugging', () => {
 		const logger = { debug: vi.fn() };
 		const router = new AgentExecutionObservationRouter({ logger });

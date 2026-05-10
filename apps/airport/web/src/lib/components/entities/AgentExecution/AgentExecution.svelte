@@ -231,7 +231,7 @@
 
         if (typeof chunk === "string" && chunk.length > 0) {
             lastRenderedScreen = preparedScreen;
-            terminal.write(chunk);
+            writeToTerminalSafely(chunk, preparedScreen);
             return;
         }
 
@@ -240,13 +240,13 @@
         if (nextRender.startsWith(previousRender)) {
             const appendedOutput = nextRender.slice(previousRender.length);
             lastRenderedScreen = preparedScreen;
-            terminal.write(appendedOutput);
+            writeToTerminalSafely(appendedOutput, nextRender);
             return;
         }
 
         lastRenderedScreen = preparedScreen;
         terminal.reset();
-        terminal.write(nextRender);
+        writeToTerminalSafely(nextRender, nextRender);
     });
 
     $effect(() => {
@@ -518,6 +518,26 @@
 
         return sanitizedData;
     }
+
+    function writeToTerminalSafely(data: string, fallbackScreen: string): void {
+        if (!terminal || data.length === 0) {
+            return;
+        }
+
+        try {
+            terminal.write(data);
+        } catch (writeError) {
+            terminal.reset();
+            const normalizedFallback = normalizeScreen(fallbackScreen);
+            if (normalizedFallback.length > 0) {
+                terminal.write(normalizedFallback);
+            }
+            error =
+                writeError instanceof Error
+                    ? writeError.message
+                    : String(writeError);
+        }
+    }
 </script>
 
 <section class="flex h-full min-h-0 flex-col overflow-hidden">
@@ -616,8 +636,7 @@
                                 Prompt
                             </h3>
                             <p class="text-xs text-muted-foreground">
-                                Send a structured operator reply through Mission
-                                runtime APIs.
+                                Send a message to the agent.
                             </p>
                         </div>
                         <textarea

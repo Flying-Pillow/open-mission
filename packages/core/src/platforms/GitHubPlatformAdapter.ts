@@ -97,7 +97,7 @@ export class GitHubPlatformAdapter {
 			'view',
 			issueId,
 			'--json',
-			'number,title,body,url,labels',
+			'number,title,body,url,labels,assignees',
 			...(this.repository ? ['--repo', this.repository] : [])
 		]);
 
@@ -394,6 +394,14 @@ export class GitHubPlatformAdapter {
 			body: payload.body?.trim() || 'Issue body not captured yet.',
 			type,
 			...(payload.url ? { url: payload.url } : {}),
+			...((payload.assignees ?? []).map((assignee) => String(assignee.login ?? '').trim()).filter(Boolean)[0]
+				? {
+					assignee: {
+						githubLogin: (payload.assignees ?? []).map((assignee) => String(assignee.login ?? '').trim()).filter(Boolean)[0],
+						source: 'issue-assignee' as const
+					}
+				}
+				: {}),
 			...(labels.length > 0 ? { labels } : {})
 		} satisfies MissionBrief;
 	}

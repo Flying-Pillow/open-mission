@@ -6,6 +6,7 @@ import { AgentExecutionContract, createAgentExecutionDataChangedEvent } from './
 import { AgentExecutionObservationPolicy } from './AgentExecutionObservationPolicy.js';
 import { AgentExecutionDataSchema, AgentExecutionProtocolDescriptorSchema } from './AgentExecutionSchema.js';
 import type { AgentExecutionDataType, AgentExecutionRecord } from './AgentExecutionSchema.js';
+import type { AgentExecutionJournalRecordType } from './AgentExecutionJournalSchema.js';
 
 describe('AgentExecution', () => {
     it('materializes terminal identity through terminalHandle only', () => {
@@ -58,7 +59,6 @@ describe('AgentExecution', () => {
             stageId: 'implementation',
             status: 'running',
             attention: 'awaiting-operator',
-            currentInputRequestId: 'observation-1',
             progress: {
                 state: 'waiting-input',
                 updatedAt: '2026-05-04T00:00:00.000Z'
@@ -96,6 +96,60 @@ describe('AgentExecution', () => {
         ]);
     });
 
+    it('uses the provided adapter label when materializing live runtime data', () => {
+        const data = AgentExecution.createLive(createRuntimeSnapshot(), {
+            adapterLabel: 'Copilot CLI'
+        }).toData();
+
+        expect(data.adapterLabel).toBe('Copilot CLI');
+    });
+
+    it('surfaces awaiting-agent-response after an operator prompt until the agent replies', async () => {
+        const execution = AgentExecution.createLive(createRuntimeSnapshot(), {
+            adapterLabel: 'Copilot CLI'
+        });
+
+        await execution.submitPrompt({
+            source: 'operator',
+            text: 'Please continue with the next slice.'
+        });
+
+        execution.setAwaitingResponseToMessageId('message-1');
+
+        expect(execution.toData()).toMatchObject({
+            semanticActivity: 'awaiting-agent-response',
+            projection: {
+                currentActivity: {
+                    activity: 'awaiting-agent-response'
+                }
+            },
+            runtimeActivity: {
+                activity: 'awaiting-agent-response'
+            }
+        });
+
+        execution.emitEvent({
+            type: 'execution.message',
+            channel: 'agent',
+            text: 'I am continuing now.',
+            snapshot: execution.getSnapshot()
+        });
+
+        execution.setAwaitingResponseToMessageId(null);
+
+        expect(execution.toData()).toMatchObject({
+            semanticActivity: 'executing',
+            projection: {
+                currentActivity: {
+                    activity: 'executing'
+                }
+            },
+            runtimeActivity: {
+                activity: 'executing'
+            }
+        });
+    });
+
     it('treats a replayed input request as structured follow-up input even when lifecycle stays running', async () => {
         const execution = new AgentExecution(AgentExecutionDataSchema.parse({
             id: 'agent_execution:mission-1/AgentExecution-1',
@@ -123,11 +177,11 @@ describe('AgentExecution', () => {
             projection: { timelineItems: [] }
         }));
 
-        const privateCtor = AgentExecution as typeof AgentExecution & {
-            hydrateDataFromJournal(data: AgentExecutionDataType, missionDir: string | undefined): Promise<AgentExecutionDataType>;
+        const privateCtor = AgentExecution as unknown as {
+            applyDerivedInteractionState(data: AgentExecutionDataType): AgentExecutionDataType;
         };
 
-        const hydrated = await privateCtor['applyDerivedInteractionState'](execution.toData());
+        const hydrated = privateCtor.applyDerivedInteractionState(execution.toData());
 
         expect(hydrated.interactionCapabilities).toEqual({
             mode: 'agent-message',
@@ -135,7 +189,7 @@ describe('AgentExecution', () => {
             canSendStructuredPrompt: true,
             canSendStructuredCommand: true
         });
-        expect(hydrated.runtimeMessages.map((message) => message.type)).toEqual([
+        expect(hydrated.runtimeMessages.map((message: { type: string }) => message.type)).toEqual([
             'interrupt',
             'checkpoint',
             'nudge',
@@ -394,6 +448,122 @@ describe('AgentExecution', () => {
         expect(events).toContain('execution.updated');
     });
 
+    it('carries artifact references into projected signal timeline items', () => {
+        const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const observation = {
+            observationId: 'observation-progress-1',
+            agentExecutionId: 'AgentExecution-2',
+            source: 'agent-signal' as const,
+            signal: {
+                type: 'progress' as const,
+                summary: 'Editing the implementation file.',
+                artifacts: [{
+                    artifactId: 'artifact-1',
+                    path: 'apps/airport/web/src/app.css',
+                    activity: 'edit' as const
+                }],
+                source: 'agent-declared' as const,
+                confidence: 'medium' as const
+            },
+            route: {
+                origin: 'agent-declared-signal' as const,
+                address: {
+                    agentExecutionId: 'AgentExecution-2',
+                    scope: execution.getSnapshot().scope
+                }
+            },
+            claimedAddress: {
+                agentExecutionId: 'AgentExecution-2',
+                scope: execution.getSnapshot().scope
+            },
+            rawText: 'signal payload',
+            observedAt: '2026-05-04T00:02:00.000Z'
+        };
+        const policy = new AgentExecutionObservationPolicy();
+        const decision = policy.evaluate({ snapshot: execution.getSnapshot(), observation });
+
+        if (decision.action === 'reject') {
+            throw new Error(decision.reason);
+        }
+
+        execution.applySignalObservation(observation, decision);
+
+        expect(execution.toData().projection.timelineItems).toEqual([
+            expect.objectContaining({
+                id: 'observation-progress-1',
+                primitive: 'activity.progress',
+                payload: expect.objectContaining({
+                    artifactId: 'artifact-1',
+                    path: 'apps/airport/web/src/app.css',
+                    artifacts: [expect.objectContaining({
+                        artifactId: 'artifact-1',
+                        path: 'apps/airport/web/src/app.css',
+                        activity: 'edit'
+                    })]
+                })
+            })
+        ]);
+    });
+
+    it('keeps artifact-bearing agent messages in the live timeline projection', () => {
+        const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const observation = {
+            observationId: 'observation-message-1',
+            agentExecutionId: 'AgentExecution-2',
+            source: 'agent-signal' as const,
+            signal: {
+                type: 'message' as const,
+                channel: 'agent' as const,
+                text: 'Re-read the workflow artifacts so their attachments are reported back visibly.',
+                artifacts: [{
+                    path: '.mission/workflow/workflow.json',
+                    label: 'Workflow definition',
+                    activity: 'read' as const
+                }],
+                source: 'agent-declared' as const,
+                confidence: 'medium' as const
+            },
+            route: {
+                origin: 'agent-declared-signal' as const,
+                address: {
+                    agentExecutionId: 'AgentExecution-2',
+                    scope: execution.getSnapshot().scope
+                }
+            },
+            claimedAddress: {
+                agentExecutionId: 'AgentExecution-2',
+                scope: execution.getSnapshot().scope
+            },
+            rawText: 'signal payload',
+            observedAt: '2026-05-04T00:03:00.000Z'
+        };
+        const policy = new AgentExecutionObservationPolicy();
+        const decision = policy.evaluate({ snapshot: execution.getSnapshot(), observation });
+
+        if (decision.action === 'reject') {
+            throw new Error(decision.reason);
+        }
+
+        execution.applySignalObservation(observation, decision);
+
+        expect(execution.toData().projection.timelineItems).toEqual([
+            expect.objectContaining({
+                id: 'observation-message-1',
+                primitive: 'conversation.agent-message',
+                payload: expect.objectContaining({
+                    title: 'Investigated artifact',
+                    text: 'Re-read the workflow artifacts so their attachments are reported back visibly.',
+                    path: '.mission/workflow/workflow.json',
+                    artifacts: [expect.objectContaining({
+                        path: '.mission/workflow/workflow.json',
+                        label: 'Workflow definition',
+                        activity: 'read'
+                    })]
+                })
+            })
+        ]);
+    });
+
     it('materializes status signals as activity timeline items', () => {
         const execution = AgentExecution.createLive(createRuntimeSnapshot());
         const observation = {
@@ -439,6 +609,186 @@ describe('AgentExecution', () => {
                 })
             })
         ]);
+    });
+
+    it('does not keep a stale input request in currentAttention after an idle status update', () => {
+        const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const policy = new AgentExecutionObservationPolicy();
+        const needsInputObservation = {
+            observationId: 'observation-needs-input-1',
+            agentExecutionId: 'AgentExecution-2',
+            source: 'agent-signal' as const,
+            signal: {
+                type: 'needs_input' as const,
+                source: 'agent-declared' as const,
+                confidence: 'medium' as const,
+                question: 'Which kind of task do you feel like doing next?',
+                choices: [
+                    { kind: 'fixed' as const, label: 'Build something', value: 'build-something' },
+                    { kind: 'manual' as const, label: 'Something else', placeholder: 'Type your own answer' }
+                ]
+            },
+            route: {
+                origin: 'agent-declared-signal' as const,
+                address: {
+                    agentExecutionId: 'AgentExecution-2',
+                    scope: execution.getSnapshot().scope
+                }
+            },
+            claimedAddress: {
+                agentExecutionId: 'AgentExecution-2',
+                scope: execution.getSnapshot().scope
+            },
+            rawText: 'needs input payload',
+            observedAt: '2026-05-04T00:01:00.000Z'
+        };
+        const needsInputDecision = policy.evaluate({
+            snapshot: execution.getSnapshot(),
+            observation: needsInputObservation
+        });
+
+        if (needsInputDecision.action === 'reject') {
+            throw new Error(needsInputDecision.reason);
+        }
+
+        execution.applySignalObservation(needsInputObservation, needsInputDecision);
+
+        const idleObservation = {
+            observationId: 'observation-status-idle-1',
+            agentExecutionId: 'AgentExecution-2',
+            source: 'agent-signal' as const,
+            signal: {
+                type: 'status' as const,
+                phase: 'idle' as const,
+                summary: "Waiting for the user's choice or manual answer.",
+                source: 'agent-declared' as const,
+                confidence: 'medium' as const
+            },
+            route: {
+                origin: 'agent-declared-signal' as const,
+                address: {
+                    agentExecutionId: 'AgentExecution-2',
+                    scope: execution.getSnapshot().scope
+                }
+            },
+            claimedAddress: {
+                agentExecutionId: 'AgentExecution-2',
+                scope: execution.getSnapshot().scope
+            },
+            rawText: 'idle status payload',
+            observedAt: '2026-05-04T00:01:05.000Z'
+        };
+        const idleDecision = policy.evaluate({
+            snapshot: execution.getSnapshot(),
+            observation: idleObservation
+        });
+
+        if (idleDecision.action === 'reject') {
+            throw new Error(idleDecision.reason);
+        }
+
+        execution.applySignalObservation(idleObservation, idleDecision);
+
+        expect(execution.toData().projection.currentAttention).toEqual(
+            expect.objectContaining({
+                state: 'awaiting-operator',
+                primitive: 'attention.blocked'
+            })
+        );
+    });
+
+    it('keeps the active input request question when later attention items are appended', () => {
+        const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const policy = new AgentExecutionObservationPolicy();
+        const needsInputObservation = {
+            observationId: 'observation-needs-input-2',
+            agentExecutionId: 'AgentExecution-2',
+            source: 'agent-signal' as const,
+            signal: {
+                type: 'needs_input' as const,
+                source: 'agent-declared' as const,
+                confidence: 'medium' as const,
+                question: 'What should I focus on next?',
+                choices: [
+                    { kind: 'fixed' as const, label: 'Repository initialization', value: 'repo-init' },
+                    { kind: 'fixed' as const, label: 'Mission task work', value: 'mission-task' },
+                    { kind: 'manual' as const, label: 'Other', placeholder: 'Type your own answer' }
+                ]
+            },
+            route: {
+                origin: 'agent-declared-signal' as const,
+                address: {
+                    agentExecutionId: 'AgentExecution-2',
+                    scope: execution.getSnapshot().scope
+                }
+            },
+            claimedAddress: {
+                agentExecutionId: 'AgentExecution-2',
+                scope: execution.getSnapshot().scope
+            },
+            rawText: 'needs input payload',
+            observedAt: '2026-05-04T00:02:00.000Z'
+        };
+        const needsInputDecision = policy.evaluate({
+            snapshot: execution.getSnapshot(),
+            observation: needsInputObservation
+        });
+
+        if (needsInputDecision.action === 'reject') {
+            throw new Error(needsInputDecision.reason);
+        }
+
+        execution.applySignalObservation(needsInputObservation, needsInputDecision);
+
+        const reviewObservation = {
+            observationId: 'observation-review-1',
+            agentExecutionId: 'AgentExecution-2',
+            source: 'agent-signal' as const,
+            signal: {
+                type: 'ready_for_verification' as const,
+                source: 'agent-declared' as const,
+                confidence: 'medium' as const,
+                summary: 'Ready for review.'
+            },
+            route: {
+                origin: 'agent-declared-signal' as const,
+                address: {
+                    agentExecutionId: 'AgentExecution-2',
+                    scope: execution.getSnapshot().scope
+                }
+            },
+            claimedAddress: {
+                agentExecutionId: 'AgentExecution-2',
+                scope: execution.getSnapshot().scope
+            },
+            rawText: 'ready for verification',
+            observedAt: '2026-05-04T00:02:30.000Z'
+        };
+        const reviewDecision = policy.evaluate({
+            snapshot: execution.getSnapshot(),
+            observation: reviewObservation
+        });
+
+        if (reviewDecision.action === 'reject') {
+            throw new Error(reviewDecision.reason);
+        }
+
+        execution.applySignalObservation(reviewObservation, reviewDecision);
+
+        expect(execution.toData().projection.currentAttention).toEqual(
+            expect.objectContaining({
+                state: 'awaiting-operator',
+                primitive: 'attention.input-request',
+                title: 'Needs input',
+                text: 'What should I focus on next?',
+                currentInputRequestId: 'observation-needs-input-2',
+                choices: [
+                    { kind: 'fixed', label: 'Repository initialization', value: 'repo-init' },
+                    { kind: 'fixed', label: 'Mission task work', value: 'mission-task' },
+                    { kind: 'manual', label: 'Other', placeholder: 'Type your own answer' }
+                ]
+            })
+        );
     });
 
     it('notifies data changes for record-only claims that append timeline items', () => {
@@ -508,6 +858,19 @@ describe('AgentExecution', () => {
                 data
             }
         });
+    });
+
+    it('publishes appended journal records in canonical data changes', () => {
+        const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const dataChanges: AgentExecutionDataType[] = [];
+        execution.onDidDataChange((data) => dataChanges.push(data));
+
+        execution.appendJournalRecord(createJournalRecord(), { notify: true });
+
+        expect(dataChanges).toHaveLength(1);
+        expect(dataChanges[0]?.journalRecords).toEqual([
+            expect.objectContaining({ recordId: 'record-journal-1', type: 'turn.accepted' })
+        ]);
     });
 
     it('materializes operator prompts as timeline items', async () => {
@@ -610,5 +973,47 @@ function createRuntimeSnapshot(overrides: Partial<AgentExecutionSnapshot> = {}):
         startedAt: '2026-05-04T00:00:00.000Z',
         updatedAt: '2026-05-04T00:00:00.000Z',
         ...overrides
+    };
+}
+
+function createJournalRecord(): AgentExecutionJournalRecordType {
+    return {
+        recordId: 'record-journal-1',
+        sequence: 1,
+        type: 'turn.accepted',
+        family: 'turn.accepted',
+        entrySemantics: 'event',
+        authority: 'operator',
+        assertionLevel: 'authoritative',
+        replayClass: 'replay-critical',
+        origin: 'operator',
+        schemaVersion: 1,
+        agentExecutionId: 'AgentExecution-2',
+        executionContext: {
+            owner: {
+                entityType: 'Task',
+                entityId: 'task-2'
+            },
+            mission: {
+                missionId: 'mission-1',
+                taskId: 'task-2',
+                stageId: 'implementation'
+            },
+            runtime: {
+                agentAdapter: 'codex'
+            },
+            daemon: {
+                runtimeVersion: 'test-runtime',
+                protocolVersion: '2026-05-10'
+            }
+        },
+        occurredAt: '2026-05-04T00:00:01.000Z',
+        messageId: 'message-1',
+        source: 'operator',
+        messageType: 'prompt',
+        payload: {
+            text: 'Continue with the next slice.'
+        },
+        mutatesContext: false
     };
 }

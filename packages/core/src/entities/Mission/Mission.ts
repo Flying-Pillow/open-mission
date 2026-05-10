@@ -782,6 +782,10 @@ export class Mission extends Entity<MissionDataType, string> {
 		await (await this.requireTask(taskId)).complete();
 	}
 
+	public async cancelTask(taskId: string, reason?: string): Promise<void> {
+		await (await this.requireTask(taskId)).cancel(reason);
+	}
+
 	public async reopenTask(taskId: string): Promise<void> {
 		await (await this.requireTask(taskId)).reopen();
 	}
@@ -1164,6 +1168,7 @@ export class Mission extends Entity<MissionDataType, string> {
 			refreshTaskState: (taskId) => this.requireTaskState(taskId),
 			configureTask: (taskId, input) => this.configureTask(taskId, input),
 			queueTask: (taskId, options) => this.queueTask(taskId, options),
+			cancelTask: (taskId, reason) => this.cancelTaskExecution(taskId, reason),
 			completeTask: (taskId) => this.completeTaskExecution(taskId),
 			reopenTask: (taskId) => this.reopenTaskExecution(taskId),
 			reworkTask: (taskId, input) => this.reworkTaskExecution(taskId, input),
@@ -1452,6 +1457,22 @@ export class Mission extends Entity<MissionDataType, string> {
 		}
 	}
 
+	private async cancelTaskExecution(taskId: string, reason?: string): Promise<void> {
+		const activeAgentExecutions = this.agentExecutionRecords.filter(
+			(candidate) => candidate.taskId === taskId && Mission.isActiveAgentExecution(candidate.lifecycleState)
+		);
+		for (const execution of activeAgentExecutions) {
+			await this.cancelAgentExecutionRecord(execution.agentExecutionId, reason ?? 'task cancelled');
+		}
+		if (activeAgentExecutions.length === 0) {
+			await this.applyWorkflowEvent(this.createWorkflowEvent('task.cancelled', {
+				taskId,
+				...(reason ? { reason } : {})
+			}));
+			await this.status();
+		}
+	}
+
 	private async reopenTaskExecution(taskId: string): Promise<void> {
 		await this.applyWorkflowEvent(this.createWorkflowEvent('task.reopened', { taskId }));
 	}
@@ -1714,6 +1735,7 @@ export class Mission extends Entity<MissionDataType, string> {
 			missionId,
 			title: Mission.requireTrimmedString(status.title, 'Mission status title'),
 			...(status.issueId !== undefined ? { issueId: status.issueId } : {}),
+			...(status.assignee ? { assignee: status.assignee } : {}),
 			type: Mission.parseEntityTypeFromStatus(status.type),
 			...(status.operationalMode ? { operationalMode: status.operationalMode } : {}),
 			branchRef: Mission.requireTrimmedString(status.branchRef, 'Mission status branchRef'),
@@ -1748,6 +1770,7 @@ export class Mission extends Entity<MissionDataType, string> {
 			missionId: descriptor.missionId,
 			title: descriptor.brief.title,
 			...(descriptor.brief.issueId !== undefined ? { issueId: descriptor.brief.issueId } : {}),
+			...(descriptor.brief.assignee ? { assignee: descriptor.brief.assignee } : {}),
 			type: descriptor.brief.type,
 			branchRef: descriptor.branchRef,
 			missionDir: adapter.getMissionWorkspacePath(missionDir),

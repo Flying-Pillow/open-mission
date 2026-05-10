@@ -9,7 +9,8 @@
     } from "./ArtifactPresentation.js";
 
     const MONACO_VERSION = "0.52.2";
-    const MONACO_BASE_URL = `https://cdn.jsdelivr.net/npm/monaco-editor@${MONACO_VERSION}/min/vs`;
+    const MONACO_CDN_ROOT = `https://cdn.jsdelivr.net/npm/monaco-editor@${MONACO_VERSION}/min`;
+    const MONACO_BASE_URL = `${MONACO_CDN_ROOT}/vs`;
 
     type MonacoEditorInstance = {
         getValue(): string;
@@ -317,7 +318,7 @@
             lineHeight: 22,
             glyphMargin: false,
             lineNumbersMinChars: 3,
-            padding: { top: 16, bottom: 16 },
+            padding: { top: 0, bottom: 0 },
         });
 
         monaco.editor.setTheme(resolveMonacoTheme());
@@ -362,7 +363,7 @@
                                 label: string,
                             ) => {
                                 return `data:text/javascript;charset=utf-8,${encodeURIComponent(
-                                    `self.MonacoEnvironment={baseUrl:'${MONACO_BASE_URL}/'};importScripts('${MONACO_BASE_URL}/base/worker/workerMain.js');`,
+                                    `self.MonacoEnvironment={baseUrl:'${MONACO_CDN_ROOT}/'};importScripts('${MONACO_BASE_URL}/base/worker/workerMain.js');`,
                                 )}`;
                             },
                         };
@@ -485,9 +486,9 @@
 </script>
 
 <section
-    class="h-full grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-2xl border bg-card/70 px-5 py-4 backdrop-blur-sm"
+    class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden border bg-card/70 backdrop-blur-sm"
 >
-    <header class="space-y-2 border-b pb-3">
+    <header class="space-y-2 border-b px-5 py-4">
         <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
                 <h2 class="text-sm font-semibold text-foreground">
@@ -542,17 +543,17 @@
         {/if}
     </header>
 
-    <div class="min-h-0 pt-3">
+    <div class="min-h-0">
         {#if id && isEditableTextArtifact}
             {#if monacoLoadError}
                 <div
-                    class="flex h-full min-h-[24rem] items-center justify-center rounded-xl border bg-background/60 px-6 py-8 text-center text-sm text-rose-600"
+                    class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-rose-600"
                 >
                     {monacoLoadError}
                 </div>
             {:else}
                 <div
-                    class="relative h-full min-h-[24rem] overflow-hidden rounded-xl border bg-background/80"
+                    class="relative h-full min-h-[24rem] overflow-hidden bg-background/80"
                 >
                     {#if !monacoReady}
                         <div
@@ -570,7 +571,7 @@
             {/if}
         {:else}
             <div
-                class="flex h-full min-h-[24rem] items-center justify-center rounded-xl border border-dashed bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
+                class="flex h-full min-h-[24rem] items-center justify-center border-dashed bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
             >
                 No Monaco editor is available for this artifact.
             </div>

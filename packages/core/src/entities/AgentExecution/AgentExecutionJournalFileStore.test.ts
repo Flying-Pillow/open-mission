@@ -31,7 +31,7 @@ describe('AgentExecutionJournalFileStore', () => {
                 })
             });
             await store.appendRecord(reference, {
-                ...baseRecord('message.accepted', 1),
+                ...baseRecord('turn.accepted', 1),
                 messageId: 'message-1',
                 source: 'operator',
                 messageType: 'prompt',
@@ -41,7 +41,7 @@ describe('AgentExecutionJournalFileStore', () => {
 
             expect(await store.readRecords(reference)).toEqual([
                 expect.objectContaining({ type: 'journal.header', sequence: 0 }),
-                expect.objectContaining({ type: 'message.accepted', sequence: 1 })
+                expect.objectContaining({ type: 'turn.accepted', sequence: 1 })
             ]);
         } finally {
             await fs.rm(rootPath, { recursive: true, force: true });
@@ -118,13 +118,34 @@ function baseRecord<const TType extends AgentExecutionJournalRecordType['type']>
         recordId: `record-${sequence}`,
         sequence,
         type,
+        family: type === 'journal.header'
+            ? 'journal.header'
+            : type === 'turn.accepted'
+                ? 'turn.accepted'
+                : type,
+        entrySemantics: 'event' as const,
+        authority: type === 'turn.accepted' ? 'operator' : 'daemon',
+        assertionLevel: type === 'turn.accepted' ? 'authoritative' : 'authoritative',
+        replayClass: 'replay-critical' as const,
+        origin: 'daemon' as const,
         schemaVersion: 1 as const,
         agentExecutionId: 'agent-execution-1',
-        ownerId: 'mission-1',
-        scope: {
-            kind: 'task' as const,
-            missionId: 'mission-1',
-            taskId: 'task-1'
+        executionContext: {
+            owner: {
+                entityType: 'Task' as const,
+                entityId: 'task-1'
+            },
+            mission: {
+                missionId: 'mission-1',
+                taskId: 'task-1'
+            },
+            runtime: {
+                agentAdapter: 'copilot-cli'
+            },
+            daemon: {
+                runtimeVersion: 'test-runtime',
+                protocolVersion: '2026-05-10'
+            }
         },
         occurredAt: '2026-05-09T00:00:00.000Z'
     };

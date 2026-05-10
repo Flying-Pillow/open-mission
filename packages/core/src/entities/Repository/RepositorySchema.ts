@@ -3,6 +3,7 @@ import { WorkflowDefinitionSchema } from '../../workflow/WorkflowSchema.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
 import { parsePersistedWorkflowSettings } from '../../settings/validation.js';
 import {
+    MissionAssigneeSchema,
     MissionDefaultAgentModeSchema,
     MissionReasoningEffortSchema,
     MissionEntityTypeSchema
@@ -64,11 +65,22 @@ export const RepositoryPlatformRepositorySchema = z.object({
     pushedAt: z.string().trim().min(1).optional()
 }).strict();
 
+export const RepositoryIconSchema = z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .regex(
+        /^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$/iu,
+        'Repository icon must be an Iconify id like "lucide:folder-git-2".'
+    );
+
 export const RepositorySettingsSchema = z.object({
     missionsRoot: z.string().trim().min(1),
     trackingProvider: z.literal('github'),
     instructionsPath: z.string().trim().min(1),
     skillsPath: z.string().trim().min(1),
+    icon: RepositoryIconSchema.optional(),
     agentAdapter: AgentIdSchema,
     enabledAgentAdapters: z.array(AgentIdSchema).default([]),
     defaultAgentMode: MissionDefaultAgentModeSchema.optional(),
@@ -191,7 +203,8 @@ export const MissionFromIssueInputSchema = z.object({
 export const MissionFromBriefInputSchema = z.object({
     title: z.string().trim().min(1),
     body: z.string().trim().min(1),
-    type: MissionEntityTypeSchema
+    type: MissionEntityTypeSchema,
+    assignee: MissionAssigneeSchema.optional()
 }).strict();
 
 export const RepositoryStartMissionFromIssueSchema = RepositoryLocatorSchema.extend({
@@ -209,6 +222,10 @@ export const RepositorySetupSchema = RepositoryLocatorSchema.extend({
 export const RepositoryConfigureAgentsSchema = RepositoryLocatorSchema.extend({
     defaultAgentAdapter: AgentIdSchema,
     enabledAgentAdapters: z.array(AgentIdSchema)
+}).strict();
+
+export const RepositoryConfigureDisplaySchema = RepositoryLocatorSchema.extend({
+    icon: RepositoryIconSchema.nullable()
 }).strict();
 
 export const RepositoryInitializeSchema = RepositoryLocatorSchema;
@@ -301,6 +318,7 @@ export type RepositoryStartMissionFromIssueType = z.infer<typeof RepositoryStart
 export type RepositoryStartMissionFromBriefType = z.infer<typeof RepositoryStartMissionFromBriefSchema>;
 export type RepositorySetupType = z.infer<typeof RepositorySetupSchema>;
 export type RepositoryConfigureAgentsType = z.infer<typeof RepositoryConfigureAgentsSchema>;
+export type RepositoryConfigureDisplayType = z.infer<typeof RepositoryConfigureDisplaySchema>;
 export type RepositoryInitializeType = z.infer<typeof RepositoryInitializeSchema>;
 export type RepositoryOperationalModeType = z.infer<typeof RepositoryOperationalModeSchema>;
 export type RepositoryInvalidStateType = z.infer<typeof RepositoryInvalidStateSchema>;

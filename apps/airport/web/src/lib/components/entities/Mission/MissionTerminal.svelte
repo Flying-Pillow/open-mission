@@ -306,11 +306,17 @@
         chunk: string,
         truncated: boolean,
     ): string {
-        const nextScreen = `${currentScreen}${chunk}`;
-        if (truncated || nextScreen.length > MAX_TERMINAL_SNAPSHOT_LENGTH) {
-            return nextScreen.slice(-MAX_TERMINAL_SNAPSHOT_LENGTH);
+        if (!chunk) {
+            return currentScreen;
         }
-        return nextScreen;
+
+        if (truncated || chunk.length >= MAX_TERMINAL_SNAPSHOT_LENGTH) {
+            return chunk.slice(-MAX_TERMINAL_SNAPSHOT_LENGTH);
+        }
+
+        const overflow = currentScreen.length + chunk.length - MAX_TERMINAL_SNAPSHOT_LENGTH;
+        const preservedScreen = overflow > 0 ? currentScreen.slice(overflow) : currentScreen;
+        return `${preservedScreen}${chunk}`;
     }
 </script>
 

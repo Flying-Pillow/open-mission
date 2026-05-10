@@ -14,6 +14,7 @@ import {
 	type AgentExecutionSignalDecision,
 	type AgentExecutionSnapshot
 } from './AgentExecutionProtocolTypes.js';
+import { projectAgentExecutionObservationSignalToTimelineItem } from './AgentExecutionSignalRegistry.js';
 
 export class AgentExecutionObservationLedger {
 	private readonly observedIds = new Set<string>();
@@ -113,12 +114,24 @@ export class AgentExecutionObservationPolicy {
 			case 'usage':
 				return { action: 'record-observation-only', reason: 'Usage signals are audit metadata, not workflow truth.' };
 			case 'message':
+				const timelineItem = projectAgentExecutionObservationSignalToTimelineItem({
+					itemId: observation.observationId,
+					occurredAt: observation.observedAt,
+					signal,
+					provenance: {
+						durable: false,
+						sourceRecordIds: [],
+						liveOverlay: true,
+						confidence: signal.confidence
+					}
+				});
 				return {
 					action: 'emit-message',
 					event: {
 						type: 'execution.message',
 						channel: signal.channel,
 						text: signal.text,
+						...(timelineItem ? { timelineItem } : {}),
 						snapshot
 					}
 				};
@@ -169,6 +182,7 @@ export class AgentExecutionObservationPolicy {
 					snapshotPatch: {
 						status: 'running',
 						attention: 'awaiting-operator',
+						currentInputRequestId: observation.observationId,
 						waitingForInput: true,
 						progress: {
 							state: 'waiting-input',

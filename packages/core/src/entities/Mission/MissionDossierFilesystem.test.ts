@@ -221,6 +221,11 @@ describe('MissionDossierFilesystem', () => {
 					title: 'Filesystem mission model',
 					body: 'Rewrite Mission around structured artifact records.',
 					type: 'refactor',
+					assignee: {
+						githubLogin: 'octocat',
+						githubUserId: 1,
+						source: 'manual'
+					},
 					labels: ['enhancement', 'semantic-model'],
 					metadata: {
 						owner: 'core',
@@ -240,6 +245,11 @@ describe('MissionDossierFilesystem', () => {
 					title: 'Filesystem mission model',
 					body: 'Rewrite Mission around structured artifact records.',
 					type: 'refactor',
+					assignee: {
+						githubLogin: 'octocat',
+						githubUserId: 1,
+						source: 'manual'
+					},
 					labels: ['enhancement', 'semantic-model'],
 					metadata: {
 						owner: 'core',

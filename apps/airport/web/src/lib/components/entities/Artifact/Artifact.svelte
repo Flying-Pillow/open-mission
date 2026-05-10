@@ -7,9 +7,11 @@
     let {
         refreshNonce,
         artifact,
+        onCloseRequested,
     }: {
         refreshNonce: number;
         artifact?: ArtifactEntity;
+        onCloseRequested?: () => void;
     } = $props();
 
     let editing = $state(false);
@@ -42,5 +44,6 @@
         {refreshNonce}
         {artifact}
         onEditRequested={handleEditRequested}
+        {onCloseRequested}
     />
 {/if}

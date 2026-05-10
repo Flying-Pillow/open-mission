@@ -1,4 +1,3 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createAgentExecutionProtocolDescriptor } from '../../../entities/AgentExecution/AgentExecutionProtocolDescriptor.js';
 import type { AgentRegistry } from '../../../entities/Agent/AgentRegistry.js';
 import { AgentExecution } from '../../../entities/AgentExecution/AgentExecution.js';
@@ -6,50 +5,48 @@ import {
     createDefaultAgentExecutionJournalWriter,
     type AgentExecutionJournalWriter
 } from '../../../entities/AgentExecution/AgentExecutionJournalWriter.js';
-import type {
-    AgentCommand,
-    AgentExecutionEvent,
-    AgentExecutionObservationAddress,
-    AgentExecutionReference,
-    AgentExecutionScope,
-    AgentExecutionSnapshot,
-    AgentLaunchConfig,
-    AgentPrompt,
-    AgentTaskContext
-} from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
-import {
-    deriveAgentExecutionInteractionCapabilities,
-    describeAgentExecutionScope,
-    getAgentExecutionScopeMissionId,
-    getAgentExecutionScopeStageId,
-    getAgentExecutionScopeTaskId
-} from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
-import {
-    AgentExecutionObservationAckSchema,
-    type AgentDeclaredSignalDeliveryType,
-    type AgentExecutionProtocolDescriptorType,
-    type AgentExecutionTransportStateType,
-    type AgentExecutionObservationAckType
-} from '../../../entities/AgentExecution/AgentExecutionSchema.js';
-import { Repository } from '../../../entities/Repository/Repository.js';
-import {
-    TerminalRegistry,
-    type SharedTerminalRegistryOptions,
-    type TerminalHandle,
-    type TerminalOwner,
-    type TerminalSnapshot,
-    type TerminalState
-} from '../../../entities/Terminal/TerminalRegistry.js';
-import type { AgentAdapter, AgentExecutionMcpAccess } from './AgentAdapter.js';
+import type { AgentExecutionJournalRecordType } from '../../../entities/AgentExecution/AgentExecutionJournalSchema.js';
 import {
     AgentExecutionObservationLedger,
     AgentExecutionObservationPolicy
 } from '../../../entities/AgentExecution/AgentExecutionObservationPolicy.js';
+import type {
+    AgentCommand,
+    AgentExecutionEvent,
+    AgentExecutionObservation,
+    AgentExecutionReference,
+    AgentExecutionScope,
+    AgentExecutionSnapshot,
+    AgentLaunchConfig,
+    AgentPrompt
+} from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import type {
+    AgentExecutionObservationAckType,
+    AgentExecutionProtocolDescriptorType,
+    AgentExecutionTransportStateType,
+    AgentSignalDeliveryType
+} from '../../../entities/AgentExecution/AgentExecutionSchema.js';
+import type { AgentAdapter, AgentExecutionMcpAccess } from './AgentAdapter.js';
+import {
+    AgentExecutionObservationCoordinator
+} from './AgentExecutionObservationCoordinator.js';
+import { AgentExecutionFactRecorder } from './AgentExecutionFactRecorder.js';
+import { AgentExecutionProcessController } from './AgentExecutionProcessController.js';
+import {
+    AgentExecutionSemanticOperations,
+    type AgentExecutionSemanticOperationInvocationType,
+    type AgentExecutionSemanticOperationResultType
+} from './AgentExecutionSemanticOperations.js';
+import { AgentExecutionTerminalController } from './AgentExecutionTerminalController.js';
+import type {
+    AgentExecutionRuntimeController
+} from './AgentExecutionRuntimeController.js';
+import { ArtifactService } from './ArtifactService.js';
+import type { MissionMcpServer } from './mcp/MissionMcpServer.js';
 import { buildAgentExecutionSignalLaunchContext } from './signals/AgentExecutionSignalLaunchContext.js';
 import { AgentExecutionObservationRouter } from './signals/AgentExecutionObservationRouter.js';
-import type { AgentExecutionObservation } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
-import type { MissionMcpServer } from './mcp/MissionMcpServer.js';
-import { replayAgentExecutionJournal } from '../../../entities/AgentExecution/AgentExecutionJournalReplayer.js';
+
+export { AGENT_EXECUTION_IDLE_QUIET_PERIOD_MS } from './AgentExecutionObservationCoordinator.js';
 
 export type AgentExecutorOptions = {
     agentRegistry: AgentRegistry;
@@ -65,66 +62,41 @@ type ManagedAgentExecution = {
     runtimeController: AgentExecutionRuntimeController;
     adapter: AgentAdapter;
     eventSubscription: { dispose(): void };
-    outputLines: string[];
+    retainedRuntimeOutput: string;
+    retainRuntimeOutput: boolean;
     journalScope: AgentExecutionScope;
-    parseAgentDeclaredSignals: boolean;
+    parseAgentSignals: boolean;
     observationLedger: AgentExecutionObservationLedger;
     observationPolicy: AgentExecutionObservationPolicy;
     observationQueue: Promise<void>;
+    idleObservationTimer: NodeJS.Timeout | undefined;
     cleanup?: () => Promise<void>;
-};
-
-type AgentExecutionRuntimeController = {
-    readonly execution: AgentExecution;
-    submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionSnapshot>;
-    submitCommand(command: AgentCommand): Promise<AgentExecutionSnapshot>;
-    complete(): Promise<AgentExecutionSnapshot>;
-    cancel(reason?: string): Promise<AgentExecutionSnapshot>;
-    terminate(reason?: string): Promise<AgentExecutionSnapshot>;
-    dispose(): void;
-};
-
-type AgentExecutionTerminalOptions = SharedTerminalRegistryOptions & {
-    terminalPrefix?: string;
-};
-
-type AgentExecutionLaunch = {
-    command: string;
-    args?: string[];
-    stdin?: string;
-    env?: NodeJS.ProcessEnv;
-    agentExecutionId?: string;
-    protocolDescriptor?: AgentExecutionProtocolDescriptorType;
-    transportState?: AgentExecutionTransportStateType;
-    terminalPrefix?: string;
-    skipInitialPromptSubmission?: boolean;
-};
-
-type AgentExecutionTerminalStartOptions = AgentExecutionTerminalOptions & {
-    agentId: string;
-    displayName: string;
-    config: AgentLaunchConfig;
-    launch: AgentExecutionLaunch;
-};
-
-type AgentExecutionTerminalReconcileOptions = AgentExecutionTerminalOptions & {
-    agentId: string;
-    reference: AgentExecutionReference;
 };
 
 export class AgentExecutor {
     private readonly agentRegistry: AgentRegistry;
     private readonly journalWriter: AgentExecutionJournalWriter;
     private readonly missionMcpServer: MissionMcpServer | undefined;
-    private readonly observationRouter: AgentExecutionObservationRouter;
+    private readonly observationCoordinator: AgentExecutionObservationCoordinator;
+    private readonly semanticOperations: AgentExecutionSemanticOperations;
     private readonly managedExecutions = new Map<string, ManagedAgentExecution>();
 
     public constructor(options: AgentExecutorOptions) {
         this.agentRegistry = options.agentRegistry;
         this.journalWriter = options.journalWriter ?? createDefaultAgentExecutionJournalWriter();
         this.missionMcpServer = options.missionMcpServer;
-        this.observationRouter = new AgentExecutionObservationRouter({
+        const observationRouter = new AgentExecutionObservationRouter({
             ...(options.logger ? { logger: options.logger } : {})
+        });
+        this.observationCoordinator = new AgentExecutionObservationCoordinator({
+            journalWriter: this.journalWriter,
+            observationRouter
+        });
+        this.semanticOperations = new AgentExecutionSemanticOperations({
+            artifactService: new ArtifactService(),
+            factRecorder: new AgentExecutionFactRecorder({
+                journalWriter: this.journalWriter
+            })
         });
     }
 
@@ -200,10 +172,28 @@ export class AgentExecutor {
             runtimeController,
             adapter,
             journalScope: adapterPrepared.config.scope,
-            parseAgentDeclaredSignals: selectedDelivery === 'stdout-marker',
-            observationLedger: await this.hydrateObservationLedger(prepared.executionId, adapterPrepared.config.scope),
+            parseAgentSignals: selectedDelivery === 'stdout-marker',
+            observationLedger: await this.observationCoordinator.hydrateObservationLedger(prepared.executionId, adapterPrepared.config.scope),
             ...(cleanup ? { cleanup } : {})
         });
+        runtimeController.execution.replaceJournalRecords(
+            await this.journalWriter.readRecords({
+                agentExecutionId: prepared.executionId,
+                scope: adapterPrepared.config.scope
+            })
+        );
+        if (adapterPrepared.config.initialPrompt) {
+            try {
+                await this.recordInitialPromptDelivery(
+                    this.requireManagedExecution(prepared.executionId),
+                    adapterPrepared.config.initialPrompt
+                );
+            } catch (error) {
+                await runtimeController.terminate('Failed to record initial AgentExecution turn state.').catch(() => undefined);
+                this.disposeManagedExecution(prepared.executionId);
+                throw error;
+            }
+        }
         return runtimeController.execution;
     }
 
@@ -212,6 +202,7 @@ export class AgentExecutor {
         const runtimeController = AgentExecutionTerminalController.reconcile({
             ...adapter.terminalOptions,
             agentId: adapter.id,
+            displayName: adapter.displayName,
             reference
         });
         const scope = runtimeController.execution.getSnapshot().scope;
@@ -219,9 +210,15 @@ export class AgentExecutor {
             runtimeController,
             adapter,
             journalScope: scope,
-            parseAgentDeclaredSignals: false,
-            observationLedger: await this.hydrateObservationLedger(reference.agentExecutionId, scope)
+            parseAgentSignals: false,
+            observationLedger: await this.observationCoordinator.hydrateObservationLedger(reference.agentExecutionId, scope)
         });
+        runtimeController.execution.replaceJournalRecords(
+            await this.journalWriter.readRecords({
+                agentExecutionId: reference.agentExecutionId,
+                scope
+            })
+        );
         return runtimeController.execution;
     }
 
@@ -233,32 +230,34 @@ export class AgentExecutor {
             scope: managed.journalScope,
             prompt
         });
-        await this.journalWriter.appendMessageDelivery({
+        this.publishJournalRecord(managed, accepted);
+        this.publishJournalRecord(managed, await this.journalWriter.appendMessageDelivery({
             agentExecutionId,
             scope: managed.journalScope,
             messageId: accepted.messageId,
             status: 'attempted',
             transport: deliveryTransport
-        });
+        }));
         try {
             const snapshot = await managed.runtimeController.submitPrompt(prompt);
-            await this.journalWriter.appendMessageDelivery({
+            this.publishJournalRecord(managed, await this.journalWriter.appendMessageDelivery({
                 agentExecutionId,
                 scope: managed.journalScope,
                 messageId: accepted.messageId,
                 status: 'delivered',
                 transport: deliveryTransport
-            });
+            }));
+            await this.promoteDeliveredTurnMessage(managed, accepted.messageId, snapshot, prompt);
             return snapshot;
         } catch (error) {
-            await this.journalWriter.appendMessageDelivery({
+            this.publishJournalRecord(managed, await this.journalWriter.appendMessageDelivery({
                 agentExecutionId,
                 scope: managed.journalScope,
                 messageId: accepted.messageId,
                 status: 'failed',
                 transport: deliveryTransport,
                 reason: error instanceof Error ? error.message : String(error)
-            });
+            }));
             throw error;
         }
     }
@@ -271,32 +270,34 @@ export class AgentExecutor {
             scope: managed.journalScope,
             command
         });
-        await this.journalWriter.appendMessageDelivery({
+        this.publishJournalRecord(managed, accepted);
+        this.publishJournalRecord(managed, await this.journalWriter.appendMessageDelivery({
             agentExecutionId,
             scope: managed.journalScope,
             messageId: accepted.messageId,
             status: 'attempted',
             transport: deliveryTransport
-        });
+        }));
         try {
             const snapshot = await managed.runtimeController.submitCommand(command);
-            await this.journalWriter.appendMessageDelivery({
+            this.publishJournalRecord(managed, await this.journalWriter.appendMessageDelivery({
                 agentExecutionId,
                 scope: managed.journalScope,
                 messageId: accepted.messageId,
                 status: 'delivered',
                 transport: deliveryTransport
-            });
+            }));
+            await this.promoteDeliveredTurnMessage(managed, accepted.messageId, snapshot, command);
             return snapshot;
         } catch (error) {
-            await this.journalWriter.appendMessageDelivery({
+            this.publishJournalRecord(managed, await this.journalWriter.appendMessageDelivery({
                 agentExecutionId,
                 scope: managed.journalScope,
                 messageId: accepted.messageId,
                 status: 'failed',
                 transport: deliveryTransport,
                 reason: error instanceof Error ? error.message : String(error)
-            });
+            }));
             throw error;
         }
     }
@@ -325,13 +326,41 @@ export class AgentExecutor {
         observation: AgentExecutionObservation;
     }): Promise<AgentExecutionObservationAckType> {
         const managed = this.requireManagedExecution(input.agentExecutionId);
-        return this.enqueueObservation(managed, input.observation);
+        return this.observationCoordinator.routeTransportObservation(managed, input.observation, {
+            publishJournalRecord: (record) => {
+                this.publishJournalRecord(managed, record);
+            },
+            disposeManagedExecution: () => {
+                this.disposeManagedExecution(input.agentExecutionId);
+            }
+        });
+    }
+
+    public async invokeSemanticOperation(input: AgentExecutionSemanticOperationInvocationType): Promise<AgentExecutionSemanticOperationResultType> {
+        const managed = this.requireManagedExecution(input.agentExecutionId);
+        return this.semanticOperations.invoke({
+            ...input,
+            scope: managed.journalScope,
+            onRecordAppended: (record) => {
+                this.publishJournalRecord(managed, record);
+            }
+        });
+    }
+
+    public async readArtifact(agentExecutionId: string, artifactPath: string): Promise<AgentExecutionSemanticOperationResultType> {
+        return this.invokeSemanticOperation({
+            agentExecutionId,
+            name: 'read_artifact',
+            input: {
+                path: artifactPath
+            }
+        });
     }
 
     private async prepareLaunch(
         config: AgentLaunchConfig,
         executionId: string,
-        selectedDelivery: AgentDeclaredSignalDeliveryType
+        selectedDelivery: AgentSignalDeliveryType
     ): Promise<{
         config: AgentLaunchConfig;
         executionId: string;
@@ -376,7 +405,7 @@ export class AgentExecutor {
         };
     }
 
-    private selectSignalDelivery(adapter: AgentAdapter, launchMode: 'interactive' | 'print'): AgentDeclaredSignalDeliveryType {
+    private selectSignalDelivery(adapter: AgentAdapter, launchMode: 'interactive' | 'print'): AgentSignalDeliveryType {
         const capabilities = adapter.getTransportCapabilities();
         const preferredDelivery = capabilities.preferred[launchMode];
         if (preferredDelivery) {
@@ -418,7 +447,7 @@ export class AgentExecutor {
         adapter: AgentAdapter;
         journalScope: AgentExecutionScope;
         observationLedger: AgentExecutionObservationLedger;
-        parseAgentDeclaredSignals: boolean;
+        parseAgentSignals: boolean;
         cleanup?: () => Promise<void>;
     }): void {
         const execution = input.runtimeController.execution;
@@ -430,13 +459,26 @@ export class AgentExecutor {
             runtimeController: input.runtimeController,
             adapter: input.adapter,
             eventSubscription,
-            outputLines: [],
+            retainedRuntimeOutput: '',
+            retainRuntimeOutput: input.adapter.supportsUsageParsing(),
             journalScope: input.journalScope,
-            parseAgentDeclaredSignals: input.parseAgentDeclaredSignals,
+            parseAgentSignals: input.parseAgentSignals,
             observationLedger: input.observationLedger,
             observationPolicy: new AgentExecutionObservationPolicy(input.observationLedger),
             observationQueue: Promise.resolve(),
+            idleObservationTimer: undefined,
             ...(input.cleanup ? { cleanup: input.cleanup } : {})
+        });
+        this.observationCoordinator.syncIdleObservationTimer(this.requireManagedExecution(agentExecutionId), execution.getSnapshot(), {
+            publishJournalRecord: (record) => {
+                const managed = this.managedExecutions.get(agentExecutionId);
+                if (managed) {
+                    this.publishJournalRecord(managed, record);
+                }
+            },
+            disposeManagedExecution: () => {
+                this.disposeManagedExecution(agentExecutionId);
+            }
         });
     }
 
@@ -445,170 +487,81 @@ export class AgentExecutor {
         if (!managed) {
             return;
         }
-        switch (event.type) {
-            case 'execution.message':
-                if (event.channel !== 'stdout' && event.channel !== 'stderr') {
-                    return;
+        this.observationCoordinator.handleExecutionEvent(managed, event, {
+            publishJournalRecord: (record) => {
+                const currentManaged = this.managedExecutions.get(agentExecutionId);
+                if (currentManaged) {
+                    this.publishJournalRecord(currentManaged, record);
                 }
-                managed.outputLines.push(event.text);
-                this.routeRuntimeOutput(managed, event.snapshot, event.channel, event.text);
-                return;
-            case 'execution.completed':
-            case 'execution.failed':
-                void this.routeUsageObservation(managed, event.snapshot)
-                    .finally(() => this.disposeManagedExecution(agentExecutionId));
-                return;
-            case 'execution.cancelled':
-            case 'execution.terminated':
+            },
+            disposeManagedExecution: () => {
                 this.disposeManagedExecution(agentExecutionId);
-                return;
-            case 'execution.attached':
-            case 'execution.started':
-            case 'execution.updated':
-                return;
-        }
-    }
-
-    private routeRuntimeOutput(
-        managed: ManagedAgentExecution,
-        snapshot: AgentExecutionSnapshot,
-        channel: 'stdout' | 'stderr',
-        line: string
-    ): void {
-        const observationAddress = toObservationAddress(snapshot);
-        const markerPrefix = AgentExecution.createProtocolDescriptorForSnapshot(snapshot).owner.markerPrefix;
-        if (managed.parseAgentDeclaredSignals && channel === 'stdout') {
-            const observations = this.observationRouter.route({
-                kind: 'agent-declared-signal',
-                line,
-                address: observationAddress,
-                markerPrefix,
-                observedAt: snapshot.updatedAt
-            });
-            void this.applyObservations(managed, observations);
-            if (observations.length === 0 && isDirectAgentProseLine(line)) {
-                managed.execution.emitEvent({
-                    type: 'execution.message',
-                    channel: 'agent',
-                    text: line,
-                    snapshot: managed.execution.getSnapshot()
-                });
             }
-        }
-        for (const observation of managed.adapter.parseRuntimeOutputLine(line)) {
-            void this.applyObservations(managed, this.observationRouter.route({
-                kind: 'provider-output',
-                observation,
-                address: observationAddress,
-                observedAt: snapshot.updatedAt
-            }));
-        }
-        void this.applyObservations(managed, this.observationRouter.route({
-            kind: 'terminal-output',
-            line,
-            channel,
-            address: observationAddress,
-            markerPrefix,
-            observedAt: snapshot.updatedAt
-        }));
-    }
-
-    private async routeUsageObservation(managed: ManagedAgentExecution, snapshot: AgentExecutionSnapshot): Promise<void> {
-        const observationAddress = toObservationAddress(snapshot);
-        const usageObservation = managed.adapter.parseAgentExecutionUsageContent(managed.outputLines.join('\n'));
-        if (!usageObservation) {
-            return;
-        }
-        await this.applyObservations(managed, this.observationRouter.route({
-            kind: 'provider-output',
-            observation: usageObservation,
-            address: observationAddress,
-            observedAt: snapshot.updatedAt
-        }));
-    }
-
-    private async applyObservations(managed: ManagedAgentExecution, observations: AgentExecutionObservation[]): Promise<void> {
-        for (const observation of observations) {
-            await this.enqueueObservation(managed, observation);
-        }
-    }
-
-    private enqueueObservation(managed: ManagedAgentExecution, observation: AgentExecutionObservation): Promise<AgentExecutionObservationAckType> {
-        const queued = managed.observationQueue.then(() => this.applyObservation(managed, observation));
-        managed.observationQueue = queued.then(() => undefined, () => undefined);
-        return queued;
-    }
-
-    private async applyObservation(managed: ManagedAgentExecution, observation: AgentExecutionObservation): Promise<AgentExecutionObservationAckType> {
-        const eventId = readObservationEventId(observation);
-        if (managed.observationLedger.has(observation.observationId)) {
-            return AgentExecutionObservationAckSchema.parse({
-                status: 'duplicate',
-                agentExecutionId: managed.execution.agentExecutionId,
-                eventId,
-                observationId: observation.observationId,
-                reason: `Observation '${observation.observationId}' was already processed.`
-            });
-        }
-        await this.journalWriter.appendObservation({
-            agentExecutionId: managed.execution.agentExecutionId,
-            scope: managed.journalScope,
-            observation
         });
-        const decision = managed.observationPolicy.evaluate({
-            snapshot: managed.execution.getSnapshot(),
-            observation
-        });
-        await this.journalWriter.appendDecision({
-            agentExecutionId: managed.execution.agentExecutionId,
-            scope: managed.journalScope,
-            observationId: observation.observationId,
-            decision
-        });
-        if (decision.action === 'reject') {
-            return AgentExecutionObservationAckSchema.parse({
-                status: isDuplicateObservationRejection(decision.reason) ? 'duplicate' : 'rejected',
-                agentExecutionId: managed.execution.agentExecutionId,
-                eventId,
-                observationId: observation.observationId,
-                reason: decision.reason
-            });
-        }
-        if (decision.action === 'update-execution') {
-            const currentInputRequestId = decision.snapshotPatch.waitingForInput === true
-                ? observation.observationId
-                : decision.snapshotPatch.waitingForInput === false
-                    ? null
-                    : undefined;
-            await this.journalWriter.appendStateChanged({
-                agentExecutionId: managed.execution.agentExecutionId,
-                scope: managed.journalScope,
-                decision,
-                ...(currentInputRequestId !== undefined ? { currentInputRequestId } : {})
-            });
-            await this.journalWriter.appendActivityUpdated({
-                agentExecutionId: managed.execution.agentExecutionId,
-                scope: managed.journalScope,
-                decision
-            });
-        }
-        managed.execution.applySignalObservation(observation, decision);
-        return AgentExecutionObservationAckSchema.parse({
-            status: decision.action === 'record-observation-only' ? 'recorded-only' : 'promoted',
-            agentExecutionId: managed.execution.agentExecutionId,
-            eventId,
-            observationId: observation.observationId,
-            ...(decision.action === 'record-observation-only' ? { reason: decision.reason } : {})
-        });
-    }
-
-    private async hydrateObservationLedger(agentExecutionId: string, scope: AgentExecutionScope): Promise<AgentExecutionObservationLedger> {
-        const records = await this.journalWriter.readRecords({ agentExecutionId, scope });
-        return new AgentExecutionObservationLedger(replayAgentExecutionJournal(records).processedObservationIds);
     }
 
     private resolveDeliveryTransport(managed: ManagedAgentExecution): 'pty-terminal' | 'agent-message' {
         return managed.execution.getSnapshot().transport?.kind === 'terminal' ? 'pty-terminal' : 'agent-message';
+    }
+
+    private async recordInitialPromptDelivery(
+        managed: ManagedAgentExecution,
+        prompt: AgentPrompt
+    ): Promise<void> {
+        const deliveryTransport = this.resolveDeliveryTransport(managed);
+        const accepted = await this.journalWriter.appendPromptAccepted({
+            agentExecutionId: managed.execution.agentExecutionId,
+            scope: managed.journalScope,
+            prompt
+        });
+        this.publishJournalRecord(managed, accepted);
+        this.publishJournalRecord(managed, await this.journalWriter.appendMessageDelivery({
+            agentExecutionId: managed.execution.agentExecutionId,
+            scope: managed.journalScope,
+            messageId: accepted.messageId,
+            status: 'attempted',
+            transport: deliveryTransport
+        }));
+        const snapshot = managed.execution.getSnapshot();
+        this.publishJournalRecord(managed, await this.journalWriter.appendMessageDelivery({
+            agentExecutionId: managed.execution.agentExecutionId,
+            scope: managed.journalScope,
+            messageId: accepted.messageId,
+            status: 'delivered',
+            transport: deliveryTransport
+        }));
+        await this.promoteDeliveredTurnMessage(managed, accepted.messageId, snapshot, prompt);
+    }
+
+    private async promoteDeliveredTurnMessage(
+        managed: ManagedAgentExecution,
+        messageId: string,
+        snapshot: AgentExecutionSnapshot,
+        message: AgentPrompt | AgentCommand
+    ): Promise<void> {
+        if (!startsAgentExecutionTurn(message)) {
+            return;
+        }
+        this.publishJournalRecord(managed, await this.journalWriter.appendExecutionStateChanged({
+            agentExecutionId: managed.execution.agentExecutionId,
+            scope: managed.journalScope,
+            lifecycle: snapshot.status,
+            attention: snapshot.attention,
+            activity: 'awaiting-agent-response',
+            awaitingResponseToMessageId: messageId
+        }));
+        managed.execution.setAwaitingResponseToMessageId(messageId, snapshot.updatedAt);
+    }
+
+    private publishJournalRecord(
+        managed: ManagedAgentExecution,
+        record: AgentExecutionJournalRecordType | undefined
+    ): void {
+        if (!record) {
+            return;
+        }
+
+        managed.execution.appendJournalRecord(record, { notify: true });
     }
 
     private requireManagedExecution(agentExecutionId: string): ManagedAgentExecution {
@@ -624,6 +577,7 @@ export class AgentExecutor {
         if (!managed) {
             return;
         }
+        this.observationCoordinator.dispose(managed);
         managed.eventSubscription.dispose();
         managed.runtimeController.dispose();
         this.managedExecutions.delete(agentExecutionId);
@@ -631,374 +585,11 @@ export class AgentExecutor {
     }
 }
 
-class AgentExecutionProcessController implements AgentExecutionRuntimeController {
-    public readonly execution: AgentExecution;
-    private child: ChildProcessWithoutNullStreams | undefined;
-    private readonly lineBuffers: Record<'stdout' | 'stderr', string> = { stdout: '', stderr: '' };
-    private disposed = false;
-
-    private constructor(input: {
-        execution: AgentExecution;
-        command: string;
-        args?: string[];
-        workingDirectory: string;
-        env?: NodeJS.ProcessEnv;
-        stdin?: string;
-    }) {
-        this.execution = input.execution;
-        queueMicrotask(() => this.startProcess(input));
+function startsAgentExecutionTurn(message: AgentPrompt | AgentCommand): boolean {
+    if ('source' in message) {
+        return true;
     }
-
-    public static start(options: AgentExecutionTerminalStartOptions): AgentExecutionProcessController {
-        const agentId = options.agentId.trim();
-        const agentExecutionId = options.launch.agentExecutionId?.trim() || AgentExecution.createFreshExecutionId(options.config, agentId);
-        const execution = AgentExecution.createLive(createProcessRunningSnapshot({
-            agentId,
-            agentExecutionId,
-            scope: options.config.scope,
-            workingDirectory: options.config.workingDirectory,
-            ...(options.config.task ? { task: options.config.task } : {})
-        }), createAgentExecutionLiveOptions(options.launch));
-        return new AgentExecutionProcessController({
-            execution,
-            command: options.launch.command,
-            args: options.launch.args ?? [],
-            workingDirectory: options.config.workingDirectory,
-            ...(options.launch.env ? { env: options.launch.env } : {}),
-            ...(options.launch.stdin ?? options.config.initialPrompt?.text
-                ? { stdin: options.launch.stdin ?? options.config.initialPrompt?.text ?? '' }
-                : {})
-        });
-    }
-
-    public submitPrompt(_prompt: AgentPrompt): Promise<AgentExecutionSnapshot> {
-        throw new Error(`AgentExecution '${this.execution.agentExecutionId}' is running in direct stdout mode and does not accept follow-up prompts.`);
-    }
-
-    public submitCommand(command: AgentCommand): Promise<AgentExecutionSnapshot> {
-        if (command.type === 'interrupt') {
-            return this.cancel(command.reason);
-        }
-        throw new Error(`AgentExecution '${this.execution.agentExecutionId}' is running in direct stdout mode and only supports interruption.`);
-    }
-
-    public complete(): Promise<AgentExecutionSnapshot> {
-        return this.execution.complete();
-    }
-
-    public async cancel(reason?: string): Promise<AgentExecutionSnapshot> {
-        this.disposed = true;
-        this.child?.kill('SIGINT');
-        return this.execution.cancelRuntime(reason);
-    }
-
-    public async terminate(reason?: string): Promise<AgentExecutionSnapshot> {
-        this.disposed = true;
-        this.child?.kill('SIGTERM');
-        return this.execution.terminateRuntime(reason);
-    }
-
-    public dispose(): void {
-        this.disposed = true;
-    }
-
-    private startProcess(input: {
-        command: string;
-        args?: string[];
-        workingDirectory: string;
-        env?: NodeJS.ProcessEnv;
-        stdin?: string;
-    }): void {
-        if (this.disposed) {
-            return;
-        }
-        const child = spawn(input.command, input.args ?? [], {
-            cwd: input.workingDirectory,
-            env: input.env,
-            stdio: 'pipe'
-        });
-        this.child = child;
-        child.stdout.setEncoding('utf8');
-        child.stderr.setEncoding('utf8');
-        child.stdout.on('data', (chunk: string | Buffer) => this.consumeChunk('stdout', chunk));
-        child.stderr.on('data', (chunk: string | Buffer) => this.consumeChunk('stderr', chunk));
-        child.once('error', (error) => {
-            void this.execution.terminateRuntime(error.message);
-        });
-        child.once('close', (code) => {
-            this.flushBufferedLines();
-            if (this.disposed) {
-                return;
-            }
-            if (code === 0) {
-                void this.execution.complete();
-                return;
-            }
-            void this.execution.terminateRuntime(`Process exited with status ${String(code ?? 'unknown')}.`);
-        });
-        if (input.stdin !== undefined) {
-            child.stdin.write(input.stdin);
-        }
-        child.stdin.end();
-    }
-
-    private consumeChunk(channel: 'stdout' | 'stderr', chunk: string | Buffer): void {
-        const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-        const segments = `${this.lineBuffers[channel]}${text}`.split(/\r?\n/u);
-        this.lineBuffers[channel] = segments.pop() ?? '';
-        for (const segment of segments) {
-            this.emitOutputLine(channel, segment);
-        }
-    }
-
-    private flushBufferedLines(): void {
-        for (const channel of ['stdout', 'stderr'] as const) {
-            const line = this.lineBuffers[channel];
-            if (line) {
-                this.emitOutputLine(channel, line);
-            }
-            this.lineBuffers[channel] = '';
-        }
-    }
-
-    private emitOutputLine(channel: 'stdout' | 'stderr', line: string): void {
-        if (!line) {
-            return;
-        }
-        this.execution.emitEvent({
-            type: 'execution.message',
-            channel,
-            text: line,
-            snapshot: this.execution.getSnapshot()
-        });
-    }
-}
-
-class AgentExecutionTerminalController {
-    public readonly execution: AgentExecution;
-    private readonly registry: TerminalRegistry;
-    private readonly terminalHandle: TerminalHandle | undefined;
-    private readonly subscription: { dispose(): void } | undefined;
-
-    private constructor(input: {
-        registry: TerminalRegistry;
-        execution: AgentExecution;
-        terminalHandle?: TerminalHandle;
-    }) {
-        this.registry = input.registry;
-        this.execution = input.execution;
-        this.terminalHandle = input.terminalHandle;
-        this.subscription = input.terminalHandle
-            ? this.execution.attachTerminal({
-                terminalName: input.terminalHandle.terminalName,
-                source: this.registry
-            })
-            : undefined;
-    }
-
-    public static start(options: AgentExecutionTerminalStartOptions): AgentExecutionTerminalController {
-        const agentId = options.agentId.trim();
-        const displayName = options.displayName.trim();
-        const command = options.launch.command.trim();
-        if (!agentId || !displayName || !command) {
-            throw new Error('AgentExecution requires agent id, display name, and command.');
-        }
-
-        const registry = TerminalRegistry.shared(options);
-        const agentExecutionId = options.launch.agentExecutionId?.trim() || AgentExecution.createFreshExecutionId(options.config, agentId);
-        const terminalHandle = registry.openTerminal({
-            workingDirectory: options.config.workingDirectory,
-            command,
-            args: options.launch.args ?? [],
-            ...(options.launch.env ? { env: options.launch.env } : {}),
-            terminalPrefix: options.launch.terminalPrefix?.trim() || options.terminalPrefix?.trim() || 'mission-agent',
-            terminalName: buildAgentExecutionTerminalName(
-                options.config.workingDirectory,
-                options.config.scope,
-                agentExecutionId
-            ),
-            owner: toAgentExecutionTerminalOwner(options.config.scope, agentExecutionId)
-        });
-        const execution = AgentExecution.createLive(createRunningSnapshot({
-            agentId,
-            agentExecutionId,
-            scope: options.config.scope,
-            workingDirectory: options.config.workingDirectory,
-            ...(options.config.task ? { task: options.config.task } : {}),
-            transport: toSnapshotTransport(terminalHandle)
-        }), createAgentExecutionLiveOptions(options.launch));
-        const controller = new AgentExecutionTerminalController({ registry, execution, terminalHandle });
-
-        if (!options.launch.skipInitialPromptSubmission && options.config.initialPrompt?.text) {
-            void controller.submitPrompt(options.config.initialPrompt);
-        }
-        return controller;
-    }
-
-    public static reconcile(options: AgentExecutionTerminalReconcileOptions): AgentExecutionTerminalController {
-        const agentId = options.agentId.trim();
-        const registry = TerminalRegistry.shared(options);
-        const terminalName = options.reference.transport?.terminalName ?? options.reference.agentExecutionId;
-        const terminalHandle = registry.attachTerminal(terminalName);
-        if (!terminalHandle) {
-            return new AgentExecutionTerminalController({
-                registry,
-                execution: AgentExecution.createLive(createDetachedTerminalControllerSnapshot(
-                    agentId,
-                    options.reference,
-                    'Terminal is no longer registered.'
-                ))
-            });
-        }
-
-        const terminalSnapshot = registry.readSnapshot(terminalHandle.terminalName);
-        const owner = terminalSnapshot?.owner?.kind === 'agent-execution' ? terminalSnapshot.owner : undefined;
-        const snapshot = terminalSnapshot?.dead
-            ? createTerminalSnapshot({
-                agentId,
-                agentExecutionId: options.reference.agentExecutionId,
-                scope: createDetachedAgentExecutionScope(owner),
-                workingDirectory: terminalSnapshot.workingDirectory ?? 'unknown',
-                transport: toSnapshotTransport(terminalHandle),
-                status: terminalSnapshot.exitCode === 0 ? 'completed' : 'failed',
-                progressState: terminalSnapshot.exitCode === 0 ? 'done' : 'failed',
-                acceptsPrompts: false,
-                acceptedCommands: [],
-                ...(terminalSnapshot.exitCode === 0
-                    ? {}
-                    : { failureMessage: `terminal command exited with status ${String(terminalSnapshot.exitCode)}.` }),
-                endedAt: new Date().toISOString()
-            })
-            : createRunningSnapshot({
-                agentId,
-                agentExecutionId: options.reference.agentExecutionId,
-                scope: createDetachedAgentExecutionScope(owner),
-                workingDirectory: terminalSnapshot?.workingDirectory ?? 'unknown',
-                transport: toSnapshotTransport(terminalHandle)
-            });
-        return new AgentExecutionTerminalController({
-            registry,
-            execution: AgentExecution.createLive(snapshot),
-            terminalHandle
-        });
-    }
-
-    public complete(): Promise<AgentExecutionSnapshot> {
-        this.requireTerminalHandle('mark the execution done');
-        return this.execution.complete();
-    }
-
-    public submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionSnapshot> {
-        const terminalHandle = this.requireTerminalHandle('submit a prompt');
-        sendTerminalText(this.registry, terminalHandle, prompt.text);
-        return this.execution.submitPrompt(prompt);
-    }
-
-    public submitCommand(command: AgentCommand): Promise<AgentExecutionSnapshot> {
-        const terminalHandle = this.requireTerminalHandle(`perform '${command.type}'`);
-        if (command.type === 'interrupt') {
-            this.registry.sendKeys(terminalHandle.terminalName, 'C-c');
-            return this.execution.submitCommand(command);
-        }
-        return this.submitPrompt(buildTerminalCommandPrompt(command));
-    }
-
-    public async cancel(reason?: string): Promise<AgentExecutionSnapshot> {
-        const terminalHandle = this.requireTerminalHandle('cancel');
-        this.registry.sendKeys(terminalHandle.terminalName, 'C-c');
-        let terminalState = await waitForTerminalExit(this.registry, terminalHandle, 1_500);
-        if (!terminalState.dead) {
-            terminalState = await this.registry.killTerminal(terminalHandle.terminalName);
-        }
-        if (!terminalState.dead) {
-            throw new Error(`Terminal '${terminalHandle.terminalName}' did not exit after cancellation was requested.`);
-        }
-        this.dispose();
-        return this.execution.cancelRuntime(reason);
-    }
-
-    public async terminate(reason?: string): Promise<AgentExecutionSnapshot> {
-        const terminalHandle = this.requireTerminalHandle('terminate');
-        let terminalState = await this.registry.killTerminal(terminalHandle.terminalName);
-        if (!terminalState.dead) {
-            terminalState = await waitForTerminalExit(this.registry, terminalHandle, 5_000);
-        }
-        if (!terminalState.dead) {
-            throw new Error(`Terminal '${terminalHandle.terminalName}' did not exit after termination was requested.`);
-        }
-        this.dispose();
-        return this.execution.terminateRuntime(reason);
-    }
-
-    public dispose(): void {
-        this.subscription?.dispose();
-    }
-
-    private requireTerminalHandle(action: string): TerminalHandle {
-        if (!this.terminalHandle) {
-            throw new Error(`Cannot ${action} for execution '${this.execution.agentExecutionId}' because it is not backed by an active terminal.`);
-        }
-        return this.terminalHandle;
-    }
-}
-
-function toObservationAddress(snapshot: AgentExecutionSnapshot): AgentExecutionObservationAddress {
-    return {
-        agentExecutionId: snapshot.agentExecutionId,
-        scope: snapshot.scope
-    };
-}
-
-function toSnapshotTransport(handle: TerminalHandle): NonNullable<AgentExecutionSnapshot['transport']> {
-    return {
-        kind: 'terminal',
-        terminalName: handle.terminalName,
-        ...(handle.terminalPaneId !== handle.terminalName ? { terminalPaneId: handle.terminalPaneId } : {})
-    };
-}
-
-function buildAgentExecutionTerminalName(
-    workingDirectory: string,
-    scope: AgentExecutionScope,
-    agentExecutionId: string
-): string {
-    const repositoryId = Repository.deriveIdentity(workingDirectory).id;
-    return [
-        repositoryId,
-        Repository.slugIdentitySegment(scope.kind) || 'scope',
-        Repository.slugIdentitySegment(describeAgentExecutionScope(scope)) || 'execution',
-        Repository.slugIdentitySegment(agentExecutionId) || 'execution'
-    ].join(':');
-}
-
-function toAgentExecutionTerminalOwner(scope: AgentExecutionScope, agentExecutionId: string): TerminalOwner {
-    return {
-        kind: 'agent-execution',
-        ownerId: getAgentExecutionTerminalOwnerId(scope),
-        agentExecutionId
-    };
-}
-
-function getAgentExecutionTerminalOwnerId(scope: AgentExecutionScope): string {
-    switch (scope.kind) {
-        case 'system':
-            return scope.label?.trim() || 'system';
-        case 'repository':
-            return scope.repositoryRootPath;
-        case 'mission':
-        case 'task':
-            return scope.missionId;
-        case 'artifact':
-            return scope.artifactId;
-    }
-}
-
-function isDirectAgentProseLine(line: string): boolean {
-    const trimmed = line.trim();
-    if (!trimmed) {
-        return false;
-    }
-    return !/^@(system|repository|mission|task|artifact)::/u.test(trimmed);
+    return message.type !== 'interrupt';
 }
 
 function combineCleanup(
@@ -1018,248 +609,5 @@ function combineCleanup(
             await second();
         }
     };
-}
-
-function readObservationEventId(observation: AgentExecutionObservation): string {
-    const prefix = 'agent-declared-signal:';
-    if (observation.observationId.startsWith(prefix)) {
-        const eventId = observation.observationId.slice(prefix.length).trim();
-        if (eventId) {
-            return eventId;
-        }
-    }
-    return observation.observationId;
-}
-
-function isDuplicateObservationRejection(reason: string): boolean {
-    return /was already processed/u.test(reason);
-}
-
-function createAgentExecutionLiveOptions(launch: AgentExecutionLaunch): {
-    protocolDescriptor?: AgentExecutionProtocolDescriptorType;
-    transportState?: AgentExecutionTransportStateType;
-} {
-    return {
-        ...(launch.protocolDescriptor ? { protocolDescriptor: launch.protocolDescriptor } : {}),
-        ...(launch.transportState ? { transportState: launch.transportState } : {})
-    };
-}
-
-function createDetachedAgentExecutionScope(owner: TerminalOwner | undefined): AgentExecutionScope {
-    if (owner?.kind === 'agent-execution') {
-        return { kind: 'system', label: owner.ownerId.trim() || 'detached' };
-    }
-    return { kind: 'system', label: 'detached' };
-}
-
-function createRunningSnapshot(input: {
-    agentId: string;
-    agentExecutionId: string;
-    scope: AgentExecutionScope;
-    workingDirectory: string;
-    task?: AgentTaskContext;
-    transport: NonNullable<AgentExecutionSnapshot['transport']>;
-}): AgentExecutionSnapshot {
-    return createTerminalSnapshot({
-        ...input,
-        status: 'running',
-        progressState: 'working',
-        acceptsPrompts: true,
-        acceptedCommands: ['interrupt', 'checkpoint', 'nudge']
-    });
-}
-
-function createProcessRunningSnapshot(input: {
-    agentId: string;
-    agentExecutionId: string;
-    scope: AgentExecutionScope;
-    workingDirectory: string;
-    task?: AgentTaskContext;
-}): AgentExecutionSnapshot {
-    const timestamp = new Date().toISOString();
-    const missionId = getAgentExecutionScopeMissionId(input.scope);
-    const taskId = getAgentExecutionScopeTaskId(input.scope) ?? input.task?.taskId;
-    const stageId = getAgentExecutionScopeStageId(input.scope) ?? input.task?.stageId;
-    return {
-        agentId: input.agentId,
-        agentExecutionId: input.agentExecutionId,
-        scope: input.scope,
-        workingDirectory: input.workingDirectory,
-        ...(taskId ? { taskId } : {}),
-        ...(missionId ? { missionId } : {}),
-        ...(stageId ? { stageId } : {}),
-        status: 'running',
-        attention: 'autonomous',
-        progress: {
-            state: 'working',
-            updatedAt: timestamp
-        },
-        waitingForInput: false,
-        acceptsPrompts: false,
-        acceptedCommands: ['interrupt'],
-        interactionCapabilities: deriveAgentExecutionInteractionCapabilities({
-            status: 'running',
-            acceptsPrompts: false,
-            acceptedCommands: ['interrupt']
-        }),
-        reference: {
-            agentId: input.agentId,
-            agentExecutionId: input.agentExecutionId
-        },
-        startedAt: timestamp,
-        updatedAt: timestamp
-    };
-}
-
-function createTerminalSnapshot(input: {
-    agentId: string;
-    agentExecutionId: string;
-    scope: AgentExecutionScope;
-    workingDirectory: string;
-    task?: AgentTaskContext;
-    transport: NonNullable<AgentExecutionSnapshot['transport']>;
-    status: AgentExecutionSnapshot['status'];
-    progressState: AgentExecutionSnapshot['progress']['state'];
-    acceptsPrompts: boolean;
-    acceptedCommands: AgentCommand['type'][];
-    failureMessage?: string;
-    endedAt?: string;
-}): AgentExecutionSnapshot {
-    const timestamp = new Date().toISOString();
-    const missionId = getAgentExecutionScopeMissionId(input.scope);
-    const taskId = getAgentExecutionScopeTaskId(input.scope) ?? input.task?.taskId;
-    const stageId = getAgentExecutionScopeStageId(input.scope) ?? input.task?.stageId;
-    const reference: AgentExecutionReference = {
-        agentId: input.agentId,
-        agentExecutionId: input.agentExecutionId,
-        transport: {
-            kind: 'terminal',
-            terminalName: input.transport.terminalName,
-            ...(input.transport.terminalPaneId ? { terminalPaneId: input.transport.terminalPaneId } : {})
-        }
-    };
-    return {
-        agentId: input.agentId,
-        agentExecutionId: input.agentExecutionId,
-        scope: input.scope,
-        workingDirectory: input.workingDirectory,
-        ...(taskId ? { taskId } : {}),
-        ...(missionId ? { missionId } : {}),
-        ...(stageId ? { stageId } : {}),
-        status: input.status,
-        attention: input.status === 'running' ? 'autonomous' : 'none',
-        progress: {
-            state: input.progressState,
-            updatedAt: timestamp
-        },
-        waitingForInput: false,
-        acceptsPrompts: input.acceptsPrompts,
-        acceptedCommands: [...input.acceptedCommands],
-        interactionCapabilities: deriveAgentExecutionInteractionCapabilities({
-            status: input.status,
-            transport: input.transport,
-            acceptsPrompts: input.acceptsPrompts,
-            acceptedCommands: input.acceptedCommands
-        }),
-        transport: input.transport,
-        reference,
-        startedAt: timestamp,
-        updatedAt: timestamp,
-        ...(input.failureMessage ? { failureMessage: input.failureMessage } : {}),
-        ...(input.endedAt ? { endedAt: input.endedAt } : {})
-    };
-}
-
-function createDetachedTerminalControllerSnapshot(
-    agentId: string,
-    reference: AgentExecutionReference,
-    reason: string
-): AgentExecutionSnapshot {
-    const timestamp = new Date().toISOString();
-    return {
-        agentId,
-        agentExecutionId: reference.agentExecutionId,
-        scope: { kind: 'system', label: 'detached' },
-        workingDirectory: 'unknown',
-        status: 'terminated',
-        attention: 'none',
-        progress: {
-            state: 'failed',
-            detail: reason,
-            updatedAt: timestamp
-        },
-        waitingForInput: false,
-        acceptsPrompts: false,
-        acceptedCommands: [],
-        interactionCapabilities: deriveAgentExecutionInteractionCapabilities({
-            status: 'terminated',
-            ...(reference.transport ? { transport: { ...reference.transport } } : {}),
-            acceptsPrompts: false,
-            acceptedCommands: []
-        }),
-        reference: {
-            agentId,
-            agentExecutionId: reference.agentExecutionId,
-            ...(reference.transport ? { transport: { ...reference.transport } } : {})
-        },
-        ...(reference.transport ? { transport: { ...reference.transport } } : {}),
-        failureMessage: reason,
-        startedAt: timestamp,
-        updatedAt: timestamp,
-        endedAt: timestamp
-    };
-}
-
-function sendTerminalText(registry: TerminalRegistry, handle: TerminalHandle, text: string): void {
-    const normalized = text.replace(/\r\n/g, '\n');
-    const lines = normalized.split('\n');
-    for (let index = 0; index < lines.length; index += 1) {
-        const line = lines[index] ?? '';
-        if (line.length > 0) {
-            registry.sendKeys(handle.terminalName, line, { literal: true });
-        }
-        if (index < lines.length - 1 || normalized.length === 0 || line.length > 0) {
-            registry.sendKeys(handle.terminalName, 'Enter');
-        }
-    }
-}
-
-async function waitForTerminalExit(
-    registry: TerminalRegistry,
-    handle: TerminalHandle,
-    timeoutMs: number
-): Promise<TerminalState> {
-    const deadline = Date.now() + Math.max(0, timeoutMs);
-    let state = readTerminalState(registry, handle);
-    while (!state.dead && Date.now() <= deadline) {
-        await delay(50);
-        state = readTerminalState(registry, handle);
-    }
-    return state;
-}
-
-function readTerminalState(registry: TerminalRegistry, handle: TerminalHandle): TerminalState {
-    const snapshot: TerminalSnapshot | undefined = registry.readSnapshot(handle.terminalName);
-    return snapshot
-        ? { dead: snapshot.dead, exitCode: snapshot.exitCode }
-        : { dead: true, exitCode: null };
-}
-
-function delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function buildTerminalCommandPrompt(command: Exclude<AgentCommand, { type: 'interrupt' }>): AgentPrompt {
-    switch (command.type) {
-        case 'resume':
-            return { source: 'system', text: command.reason?.trim() || 'Resume execution.' };
-        case 'checkpoint':
-            return {
-                source: 'system',
-                text: command.reason?.trim() || 'Provide a concise checkpoint, then continue with the task.'
-            };
-        case 'nudge':
-            return { source: 'system', text: command.reason?.trim() || 'Continue with the assigned task.' };
-    }
 }
 

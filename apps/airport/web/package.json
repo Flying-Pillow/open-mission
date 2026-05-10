@@ -46,6 +46,7 @@
     "@flying-pillow/mission-core": "workspace:*",
     "@iconify/svelte": "^5.2.1",
     "@tanstack/svelte-virtual": "^3.13.24",
+    "anser": "^2.3.5",
     "bits-ui": "^2.16.3",
     "ghostty-web": "^0.4.0",
     "github-markdown-css": "^5.9.0",

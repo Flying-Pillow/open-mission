@@ -9,9 +9,15 @@ export const githubSystemStateSchema = z.object({
     detail: z.string().trim().min(1).optional()
 }).strict();
 
+export const missionSystemConfigSchema = z.object({
+    repositoriesRoot: z.string().trim().min(1)
+}).strict();
+
 export const systemStateSchema = z.object({
-    github: githubSystemStateSchema
+    github: githubSystemStateSchema,
+    config: missionSystemConfigSchema
 }).strict();
 
 export type GithubSystemState = z.infer<typeof githubSystemStateSchema>;
+export type MissionSystemConfig = z.infer<typeof missionSystemConfigSchema>;
 export type SystemState = z.infer<typeof systemStateSchema>;

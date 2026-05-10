@@ -93,7 +93,7 @@ Mission must preserve these directional terms:
 | --- | --- | --- |
 | owner/operator/daemon to AgentExecution | AgentExecutionMessage | structured input accepted by the daemon for delivery or context mutation |
 | Agent runtime to Mission system | Observation | normalized observed thing from a transport, adapter, runtime, filesystem, git, or daemon source |
-| Agent-authored structured output | AgentDeclaredSignal | one possible observation payload authored by the Agent |
+| Agent-authored structured output | AgentSignal | one possible observation payload authored by the Agent |
 | policy result | AgentExecutionDecision | accepted, rejected, recorded-only, promoted, or state-changing interpretation |
 | durable audit | AgentExecutionJournalRecord | append-only semantic interaction record |
 | UI | projection | derived chat/timeline/status view |

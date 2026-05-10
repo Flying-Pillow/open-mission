@@ -15,7 +15,7 @@ export const ArtifactCommandIdSchema = z.enum([
 ]);
 
 export const ArtifactLocatorSchema = z.object({
-    missionId: z.string().trim().min(1),
+    missionId: z.string().trim().min(1).optional(),
     repositoryRootPath: z.string().trim().min(1).optional(),
     id: z.string().trim().min(1)
 }).strict();
@@ -35,10 +35,13 @@ export const ArtifactCommandInputSchema = ArtifactLocatorSchema.extend({
 
 export const ArtifactStorageSchema = z.object({
     id: EntityIdSchema,
-    kind: z.enum(['mission', 'stage', 'task']),
+    kind: z.enum(['repository', 'worktree', 'mission', 'stage', 'task']),
     label: z.string().trim().min(1),
     fileName: z.string().trim().min(1),
     key: z.string().trim().min(1).optional(),
+    missionId: z.string().trim().min(1).optional(),
+    repositoryRootPath: z.string().trim().min(1).optional(),
+    rootPath: z.string().trim().min(1).optional(),
     stageId: z.string().trim().min(1).optional(),
     taskId: z.string().trim().min(1).optional(),
     filePath: z.string().trim().min(1).optional(),
@@ -53,7 +56,7 @@ export const ArtifactCommandAcknowledgementSchema = EntityCommandAcknowledgement
     entity: z.literal(artifactEntityName),
     method: z.literal('command'),
     id: z.string().trim().min(1),
-    missionId: z.string().trim().min(1),
+    missionId: z.string().trim().min(1).optional(),
     commandId: ArtifactCommandIdSchema
 }).strict();
 

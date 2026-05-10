@@ -39,6 +39,7 @@ export function buildMissionAvailableCommands(input: MissionAvailableCommandsInp
 
     for (const task of getOrderedTasks(input)) {
         commands.push(buildTaskStartCommand(input, task));
+        commands.push(buildTaskCancelCommand(input, task));
         commands.push(buildTaskDoneCommand(input, task));
         commands.push(buildTaskReopenCommand(input, task));
         commands.push(buildTaskReworkCommand(input, task));
@@ -133,6 +134,17 @@ function buildTaskStartCommand(input: MissionAvailableCommandsInput, task: Missi
         label: 'Start task',
         ...buildAvailability(enabled, describeTaskStartUnavailable(input, task, errors)),
         requiresConfirmation: false
+    }));
+}
+
+function buildTaskCancelCommand(input: MissionAvailableCommandsInput, task: MissionStateData['runtime']['tasks'][number]): MissionOwnedCommandDescriptorType {
+    const enabled = task.lifecycle === 'queued' || task.lifecycle === 'running' || hasActiveTaskAgentExecution(input, task.taskId);
+    return ownedTaskCommand(task.taskId, missionCommand({
+        commandId: TaskCommandIds.cancel,
+        label: 'Stop task',
+        ...buildAvailability(enabled, 'Task is not queued or running.'),
+        requiresConfirmation: true,
+        confirmationPrompt: 'Stop this task and release its running agent resources?'
     }));
 }
 
@@ -339,6 +351,10 @@ function hasSemanticInputRequest(agentExecution: Pick<AgentExecutionRecord, 'lif
     return agentExecution.currentInputRequestId !== undefined && agentExecution.currentInputRequestId !== null;
 }
 
+function hasActiveTaskAgentExecution(input: MissionAvailableCommandsInput, taskId: string): boolean {
+    return input.agentExecutions.some((execution) => execution.taskId === taskId && isActiveAgentExecution(execution.lifecycleState));
+}
+
 function getValidationErrors(
     input: MissionAvailableCommandsInput,
     event:
@@ -346,6 +362,7 @@ function getValidationErrors(
         | { type: 'mission.launch-queue.restarted' }
         | { type: 'mission.delivered' }
         | { type: 'task.queued'; taskId: string }
+        | { type: 'task.cancelled'; taskId: string; reason?: string }
         | { type: 'task.completed'; taskId: string }
         | { type: 'task.reopened'; taskId: string }
         | { type: 'task.reworked'; taskId: string; actor: 'human' | 'system' | 'workflow'; reasonCode: string; summary: string; sourceTaskId?: string; sourceAgentExecutionId?: string; artifactRefs: Array<{ path: string; title?: string }> }

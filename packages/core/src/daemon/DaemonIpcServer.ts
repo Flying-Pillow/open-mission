@@ -4,6 +4,7 @@ import {
 	getDaemonLockPath,
 	getDaemonManifestPath,
 	getDaemonRuntimePath,
+	getDaemonTerminalLeaseStatePath,
 	isNamedPipePath,
 	readDaemonManifest,
 	resolveDaemonSocketPath
@@ -33,6 +34,7 @@ import {
 import { DaemonLogger } from './runtime/DaemonLogger.js';
 import type { MissionAgentDisposable } from './runtime/agent/events.js';
 import { TerminalRegistry } from '../entities/Terminal/TerminalRegistry.js';
+import { DaemonRuntimeSupervisor } from './runtime/DaemonRuntimeSupervisor.js';
 import { getDefaultAgentExecutionRegistry } from './runtime/agent/AgentExecutionRegistry.js';
 import {
 	MissionMcpCallToolInputSchema,
@@ -77,17 +79,28 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 	const argv = options.argv ?? process.argv.slice(2);
 	const socketPath = resolveDaemonSocketPath(options.socketPath ?? readSocketOverride(argv));
 	const manifestPath = getDaemonManifestPath();
+	const terminalLeaseStatePath = getDaemonTerminalLeaseStatePath();
 	const startedAt = new Date().toISOString();
 	const logger = new DaemonLogger();
 	await fs.mkdir(getDaemonRuntimePath(), { recursive: true });
 	await assertNoReachableDaemon(socketPath);
+	TerminalRegistry.cleanupPersistedLeases({ statePath: terminalLeaseStatePath });
 	const runtimeLock = await acquireDaemonRuntimeLock(socketPath);
+	const terminalRegistry = TerminalRegistry.shared({
+		daemonProcessId: process.pid,
+		persistedLeaseStatePath: terminalLeaseStatePath,
+	});
+		const runtimeSupervisor = new DaemonRuntimeSupervisor({
+			daemonProcessId: process.pid,
+			startedAt,
+			terminalRegistry
+		});
 	const missionRegistry = new MissionRegistryClass({ logger });
 	const agentExecutionRegistry = getDefaultAgentExecutionRegistry({ logger });
 	const missionMcpServer = new MissionMcpServer({ agentExecutionRegistry, logger });
 	agentExecutionRegistry.configure({ missionMcpServer });
 	const ipcServer = createDaemonIpcServer({ startedAt, missionRegistry, missionMcpServer });
-	const notificationSources = startEntityEventSources(ipcServer.broadcastEvent);
+	const notificationSources = startEntityEventSources(ipcServer.broadcastEvent, terminalRegistry);
 	let shutdownPromise: Promise<void> | undefined;
 	let closeResolve: (() => void) | undefined;
 	let closeReject: ((error: unknown) => void) | undefined;
@@ -120,6 +133,7 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 			await missionMcpServer.stop();
 			missionRegistry.dispose();
 			notificationSources.dispose();
+			await runtimeSupervisor.releaseAll();
 			await closeServer(ipcServer.server);
 			await runtimeLock.release();
 			await logger.flush();
@@ -153,7 +167,7 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 			await missionMcpServer.stop();
 			agentExecutionRegistry.dispose();
 			notificationSources.dispose();
-			await TerminalRegistry.shared().dispose();
+			await runtimeSupervisor.releaseAll();
 			ipcServer.destroyConnections();
 			await closeServer(ipcServer.server);
 			await fs.rm(manifestPath, { force: true }).catch(() => undefined);
@@ -466,7 +480,10 @@ function createEntityExecutionContext(request: Request, missionRegistry: Mission
 	};
 }
 
-function startEntityEventSources(publish: (event: EntityEventEnvelopeType) => void): MissionAgentDisposable {
+function startEntityEventSources(
+	publish: (event: EntityEventEnvelopeType) => void,
+	terminalRegistry: TerminalRegistry
+): MissionAgentDisposable {
 	const agentExecutionRegistry = getDefaultAgentExecutionRegistry();
 	const agentExecutionDataChanges = agentExecutionRegistry.onDidExecutionDataChange((data) => {
 		publish(createAgentExecutionDataChangedEvent({ data }));
@@ -474,7 +491,7 @@ function startEntityEventSources(publish: (event: EntityEventEnvelopeType) => vo
 	const missionTerminalUpdates = observeMissionTerminalUpdates((event) => {
 		publish(createMissionTerminalEvent(event));
 	});
-	const agentExecutionTerminalUpdates = TerminalRegistry.shared().onDidTerminalUpdate((event) => {
+	const agentExecutionTerminalUpdates = terminalRegistry.onDidTerminalUpdate((event) => {
 		if (event.owner?.kind !== 'agent-execution') {
 			return;
 		}

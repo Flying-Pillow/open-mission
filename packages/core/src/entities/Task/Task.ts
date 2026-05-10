@@ -42,6 +42,7 @@ export type TaskOwner = {
 	refreshTaskState(taskId: string): Promise<MissionTaskState>;
 	configureTask(taskId: string, input: TaskConfigureOptions): Promise<void>;
 	queueTask(taskId: string, options?: { agentId?: string; prompt?: string; workingDirectory?: string; model?: string; reasoningEffort?: string; terminalName?: string }): Promise<void>;
+	cancelTask(taskId: string, reason?: string): Promise<void>;
 	completeTask(taskId: string): Promise<void>;
 	reopenTask(taskId: string): Promise<void>;
 	reworkTask(taskId: string, input: {
@@ -319,6 +320,13 @@ export class Task extends Entity<TaskDataType, string> {
 		return this.toState();
 	}
 
+	public async cancel(reason?: string): Promise<MissionTaskState> {
+		await this.refresh();
+		await this.requireOwner().cancelTask(this.requireState().taskId, reason);
+		await this.refresh();
+		return this.toState();
+	}
+
 	public async reopen(): Promise<MissionTaskState> {
 		await this.refresh();
 		this.assertCanTransition('reopen');
@@ -393,6 +401,9 @@ export class Task extends Entity<TaskDataType, string> {
 					break;
 				case TaskCommandIds.start:
 					await mission.startTask(input.taskId, Task.readStartCommandOptions(input.input));
+					break;
+				case TaskCommandIds.cancel:
+					await mission.cancelTask(input.taskId, 'operator cancelled task');
 					break;
 				case TaskCommandIds.complete:
 					await mission.completeTask(input.taskId);

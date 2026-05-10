@@ -1,5 +1,6 @@
 import {
     type AgentAdapterRuntimeOutput,
+    type AgentAdapterTerminalOptions,
     type AgentInput,
     getNestedRecord,
     getStringField,
@@ -8,28 +9,72 @@ import {
 
 const PI_AGENT_ID = 'pi' as const;
 
-export const pi = {
-    id: `agent:${PI_AGENT_ID}`,
-    agentId: PI_AGENT_ID,
-    displayName: 'Pi',
-    optionCatalog: {
-        models: [
-            { value: 'gpt-5.5', label: 'GPT-5.5' },
-            { value: 'gpt-5.4', label: 'GPT-5.4' }
-        ],
-        reasoningEfforts: []
-    },
-    adapter: {
-        command: 'pi',
-        interactive: {
-            args: [
-                { setting: 'model', flag: '--model' },
-                { prompt: 'initial' }
-            ]
+export type PiInput = {
+    command?: string;
+    env?: NodeJS.ProcessEnv;
+} & Partial<Pick<AgentAdapterTerminalOptions,
+    | 'terminalPrefix'
+    | 'spawn'
+    | 'processController'
+    | 'terminationGraceMs'
+    | 'terminationPollIntervalMs'
+    | 'screenFactory'
+>>;
+
+export function createPi(input: PiInput = {}): AgentInput {
+    const { command, env, ...terminalOptions } = input;
+    return {
+        id: `agent:${PI_AGENT_ID}`,
+        agentId: PI_AGENT_ID,
+        displayName: 'Pi',
+        optionCatalog: {
+            models: [
+                { value: 'gpt-5.5', label: 'GPT-5.5' },
+                { value: 'gpt-5.4', label: 'GPT-5.4' }
+            ],
+            reasoningEfforts: ['low', 'medium', 'high', 'xhigh']
         },
-        parseRuntimeOutputLine
-    }
-} satisfies AgentInput;
+        adapter: {
+            command: command?.trim() || process.env['MISSION_PI_CLI_COMMAND']?.trim() || 'pi',
+            providerSettings: {
+                reasoningEfforts: ['low', 'medium', 'high', 'xhigh']
+            },
+            defaultLaunchMode: 'print',
+            transportCapabilities: {
+                supported: ['stdout-marker'],
+                preferred: {
+                    interactive: 'stdout-marker',
+                    print: 'stdout-marker'
+                },
+                provisioning: {
+                    requiresRuntimeConfig: false,
+                    supportsStdioBridge: false,
+                    supportsAgentExecutionScopedTools: false
+                }
+            },
+            ...(env ? { runtimeEnv: env } : {}),
+            terminalOptions,
+            interactive: {
+                args: [
+                    { setting: 'model', flag: '--model' },
+                    { setting: 'reasoningEffort', flag: '--thinking' },
+                    { prompt: 'initial', omitWhenEmpty: true }
+                ]
+            },
+            print: {
+                args: [
+                    '--print',
+                    { setting: 'model', flag: '--model' },
+                    { setting: 'reasoningEffort', flag: '--thinking' },
+                    { prompt: 'initial', omitWhenEmpty: true }
+                ]
+            },
+            parseRuntimeOutputLine
+        }
+    } satisfies AgentInput;
+}
+
+export const pi = createPi();
 
 function parseRuntimeOutputLine(line: string): AgentAdapterRuntimeOutput[] {
     const parsed = parseJsonLine(line);

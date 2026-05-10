@@ -69,7 +69,7 @@ Owning Entities receive the same accepted result they would receive from stdout 
 
 ## Tool Contract
 
-The tool contract is descriptor-driven. The Agent execution protocol descriptor must be able to describe each signal delivery option without forking the signal definition. If the implementation extends `AgentDeclaredSignalDelivery`, it should model MCP as another delivery capability for the same descriptor, such as `mcp-tool`, rather than creating separate MCP signal descriptors.
+The tool contract is descriptor-driven. The Agent execution protocol descriptor must be able to describe each signal delivery option without forking the signal definition. If the implementation extends `AgentSignalDelivery`, it should model MCP as another delivery capability for the same descriptor, such as `mcp-tool`, rather than creating separate MCP signal descriptors.
 
 Each tool call must carry or be bound to:
 

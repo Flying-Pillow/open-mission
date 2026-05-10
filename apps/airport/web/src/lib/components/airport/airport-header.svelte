@@ -1,6 +1,7 @@
 <script lang="ts">
     import Icon from "@iconify/svelte";
     import NavUser from "$lib/components/nav-user.svelte";
+    import AirportNotificationsBell from "$lib/components/airport/airport-notifications-bell.svelte";
     import { Separator } from "$lib/components/ui/separator/index.js";
     import * as Sidebar from "$lib/components/ui/sidebar/index.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
@@ -19,9 +20,9 @@
 </script>
 
 <header
-    class="flex-none flex h-(--header-height) shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)"
+    class="flex-none flex h-(--header-height) shrink-0 items-center gap-2 pt-2 bg-foreground/5 backdrop-blur transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)"
 >
-    <div class="flex w-full items-center gap-2 px-4 lg:px-6">
+    <div class="flex w-full items-center gap-2 px-4 lg:px-6 py-2">
         <Sidebar.Trigger class="-ml-1" />
         <Separator
             orientation="vertical"
@@ -52,6 +53,7 @@
                     <Icon icon="lucide:unplug" class="size-4" />
                 {/if}
             </button>
+            <AirportNotificationsBell />
             <a
                 href={missionRepositoryUrl}
                 target="_blank"
@@ -62,9 +64,7 @@
             >
                 <Icon icon="lucide:github" class="size-4" />
             </a>
-            <div class="w-56 max-w-[calc(100vw-8rem)]">
-                <NavUser contentSide="bottom" />
-            </div>
+            <NavUser avatarOnly contentSide="bottom" />
         </div>
     </div>
 </header>

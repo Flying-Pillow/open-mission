@@ -18,13 +18,17 @@
     let { children }: { children: Snippet } = $props();
     const appContext = getAppContext();
     let daemonLogsOpen = $state(false);
+    let sidebarOpen = $state(false);
 
     onDestroy(() => {
         appContext.application.clearAirportSelection();
     });
 </script>
 
-<SidebarProvider style="--sidebar-width: 19rem; --sidebar-width-mobile: 20rem;">
+<SidebarProvider
+    bind:open={sidebarOpen}
+    style="--sidebar-width: 19rem; --sidebar-width-mobile: 20rem; --sidebar-width-icon: 5rem;"
+>
     <AirportSidebar variant="inset" />
 
     <SidebarInset

@@ -337,6 +337,12 @@ export interface TaskMarkedDoneEvent extends MissionWorkflowEventBase {
     taskId: string;
 }
 
+export interface TaskCancelledEvent extends MissionWorkflowEventBase {
+    type: 'task.cancelled';
+    taskId: string;
+    reason?: string;
+}
+
 export interface TaskReopenedEvent extends MissionWorkflowEventBase {
     type: 'task.reopened';
     taskId: string;
@@ -407,6 +413,7 @@ export type MissionWorkflowEvent =
     | TaskQueuedEvent
     | TaskStartedEvent
     | TaskMarkedDoneEvent
+    | TaskCancelledEvent
     | TaskReopenedEvent
     | TaskReworkedEvent
     | AgentExecutionStartedEvent

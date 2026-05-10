@@ -1,6 +1,6 @@
 // /packages/core/src/system/SystemStatus.ts: Resolves GitHub CLI authentication state and GitHub account identity for Mission surfaces.
 import { spawnSync } from 'node:child_process';
-import { getMissionGitHubCliBinary } from '../settings/MissionInstall.js';
+import { getMissionGitHubCliBinary, readMissionConfig, resolveRepositoriesRoot } from '../settings/MissionInstall.js';
 import { systemStateSchema, type SystemState } from './SystemContract.js';
 
 const GITHUB_CLI_TIMEOUT_MS = 1_500;
@@ -92,7 +92,8 @@ function readCliBackedSystemStatus(input: { cwd: string; ghBinary: string }): Sy
 					: authenticated
 						? { detail: 'GitHub CLI authenticated.' }
 						: { detail: 'GitHub CLI authentication is required.' })
-		}
+		},
+		config: buildMissionSystemConfig()
 	});
 }
 
@@ -140,7 +141,8 @@ function readTokenBackedSystemStatus(input: {
 					: authResult.status === 0
 						? { detail: `GitHub token authenticated${user ? ` as ${user}` : ''}.` }
 						: { detail: 'GitHub token is invalid or missing required scopes.' })
-		}
+		},
+		config: buildMissionSystemConfig()
 	});
 }
 
@@ -213,8 +215,15 @@ function buildUnknownSystemStatus(): SystemState {
 			cliAvailable: false,
 			authenticated: false,
 			detail: 'GitHub status has not been checked by the daemon yet.'
-		}
+		},
+		config: buildMissionSystemConfig()
 	});
+}
+
+function buildMissionSystemConfig(): { repositoriesRoot: string } {
+	return {
+		repositoriesRoot: resolveRepositoriesRoot(readMissionConfig())
+	};
 }
 
 function resolveGitHubCliFailureDetail(

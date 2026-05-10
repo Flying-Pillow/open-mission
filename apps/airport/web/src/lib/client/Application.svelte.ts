@@ -36,6 +36,54 @@ type EventSourceFactory = (url: string) => EventSource;
 type EntityQueryExecutionContext = 'event' | 'render';
 type EntityCommandExecutor = (input: EntityCommandInvocation) => Promise<EntityRemoteResult>;
 
+export type AirportNotificationTone = 'info' | 'success' | 'warning' | 'error';
+
+export type AirportNotificationRecord = {
+    id: string;
+    title: string;
+    message: string;
+    tone: AirportNotificationTone;
+    createdAt: string;
+    read: boolean;
+    linkHref?: string;
+    linkLabel?: string;
+};
+
+const airportNotificationStorageKey = 'mission.airport.notifications.v1';
+const maxAirportNotifications = 50;
+
+const airportNotificationRecordSchema = z.object({
+    id: z.string().trim().min(1),
+    title: z.string().trim().min(1),
+    message: z.string().trim().min(1),
+    tone: z.enum(['info', 'success', 'warning', 'error']),
+    createdAt: z.string().trim().min(1),
+    read: z.boolean(),
+    linkHref: z.string().trim().min(1).optional(),
+    linkLabel: z.string().trim().min(1).optional()
+});
+
+function canUseBrowserStorage(): boolean {
+    return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+}
+
+function readStoredAirportNotifications(): AirportNotificationRecord[] {
+    if (!canUseBrowserStorage()) {
+        return [];
+    }
+
+    try {
+        const stored = window.localStorage.getItem(airportNotificationStorageKey);
+        if (!stored) {
+            return [];
+        }
+
+        return z.array(airportNotificationRecordSchema).parse(JSON.parse(stored));
+    } catch {
+        return [];
+    }
+}
+
 const applicationEntityEventSchema = z.object({
     type: z.string().trim().min(1),
     entityId: z.string().trim().min(1),
@@ -66,6 +114,7 @@ export class AirportApplication {
     private repositoryVersion = $state(0);
     private repositorySummaries = $state<SidebarRepositoryData[]>([]);
     private applicationEventSubscription: RuntimeSubscription | undefined;
+    private notificationsState = $state<AirportNotificationRecord[]>(readStoredAirportNotifications());
     private activeMissionState = $state<Mission | undefined>();
     #selectionRequestId = 0;
     #isInitialized = false;
@@ -86,6 +135,7 @@ export class AirportApplication {
     public activeMissionError = $state<string | undefined>();
     public activeMissionId = $state<string | undefined>();
     public activeMissionSelectedFocusId = $state<string | undefined>();
+    public activeMissionSelectedArtifactId = $state<string | undefined>();
 
     public constructor(private readonly input: {
         fetch?: typeof fetch;
@@ -173,6 +223,79 @@ export class AirportApplication {
         return structuredClone($state.snapshot(this.repositoryClassCommandsState));
     }
 
+    public get notifications(): AirportNotificationRecord[] {
+        return structuredClone($state.snapshot(this.notificationsState));
+    }
+
+    public get unreadNotificationCount(): number {
+        return this.notificationsState.filter((notification) => !notification.read).length;
+    }
+
+    public publishNotification(input: {
+        title: string;
+        message: string;
+        tone?: AirportNotificationTone;
+        linkHref?: string;
+        linkLabel?: string;
+    }): AirportNotificationRecord {
+        const notification: AirportNotificationRecord = {
+            id: crypto.randomUUID(),
+            title: input.title.trim(),
+            message: input.message.trim(),
+            tone: input.tone ?? 'info',
+            createdAt: new Date().toISOString(),
+            read: false,
+            linkHref: input.linkHref?.trim() || undefined,
+            linkLabel: input.linkLabel?.trim() || undefined
+        };
+
+        this.notificationsState = [notification, ...this.notificationsState].slice(0, maxAirportNotifications);
+        this.persistNotifications();
+        return notification;
+    }
+
+    public markNotificationRead(notificationId: string): void {
+        const normalizedNotificationId = notificationId.trim();
+        if (!normalizedNotificationId) {
+            return;
+        }
+
+        let changed = false;
+        this.notificationsState = this.notificationsState.map((notification) => {
+            if (notification.id !== normalizedNotificationId || notification.read) {
+                return notification;
+            }
+
+            changed = true;
+            return { ...notification, read: true };
+        });
+
+        if (changed) {
+            this.persistNotifications();
+        }
+    }
+
+    public markAllNotificationsRead(): void {
+        if (this.notificationsState.every((notification) => notification.read)) {
+            return;
+        }
+
+        this.notificationsState = this.notificationsState.map((notification) => ({
+            ...notification,
+            read: true
+        }));
+        this.persistNotifications();
+    }
+
+    public clearNotifications(): void {
+        if (this.notificationsState.length === 0) {
+            return;
+        }
+
+        this.notificationsState = [];
+        this.persistNotifications();
+    }
+
     public hydrateRepositoryData(
         data: RepositoryDataType
     ): Repository {
@@ -203,6 +326,7 @@ export class AirportApplication {
             this.setActiveMissionSelection(undefined);
             this.activeMissionState = undefined;
             this.setActiveMissionSelectedFocusId(undefined);
+            this.setActiveMissionSelectedArtifactId(undefined);
         }
         this.syncRepositorySummaries();
         this.repositoryVersion += 1;
@@ -554,6 +678,10 @@ export class AirportApplication {
         this.activeMissionSelectedFocusId = focusId;
     }
 
+    public setActiveMissionSelectedArtifactId(artifactId?: string): void {
+        this.activeMissionSelectedArtifactId = artifactId?.trim() || undefined;
+    }
+
     private async applyRepositoryPageState(input: {
         repositoryId: string;
         skipMissionCatalogLoad?: boolean;
@@ -569,6 +697,7 @@ export class AirportApplication {
         this.activeMissionError = undefined;
         this.setActiveMissionSelection(undefined);
         this.setActiveMissionSelectedFocusId(undefined);
+        this.setActiveMissionSelectedArtifactId(undefined);
 
         let repository: Repository;
         try {
@@ -694,6 +823,7 @@ export class AirportApplication {
         this.setActiveMissionSelection(undefined);
         this.activeMissionState = undefined;
         this.setActiveMissionSelectedFocusId(undefined);
+        this.setActiveMissionSelectedArtifactId(undefined);
     }
 
     private isCurrentSelectionRequest(requestId: number): boolean {
@@ -737,6 +867,21 @@ export class AirportApplication {
             commandRemote: cmd as EntityCommandExecutor,
             queryRemote: executeDefaultQueryRemote
         };
+    }
+
+    private persistNotifications(): void {
+        if (!canUseBrowserStorage()) {
+            return;
+        }
+
+        try {
+            window.localStorage.setItem(
+                airportNotificationStorageKey,
+                JSON.stringify(this.notificationsState)
+            );
+        } catch {
+            // Ignore persistence failures and keep in-memory notifications available.
+        }
     }
 
     private async loadMissionData(missionId: string, repositoryRootPath?: string): Promise<MissionSnapshotType> {

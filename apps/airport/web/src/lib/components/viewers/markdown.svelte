@@ -7,7 +7,13 @@
     import { renderMermaidDiagrams } from "../../utils/mermaid.ts";
     import { tick } from "svelte";
 
-    let { source }: { source: string } = $props();
+    let {
+        source,
+        compact = false,
+    }: {
+        source: string;
+        compact?: boolean;
+    } = $props();
     let containerElement = $state<HTMLElement | null>(null);
 
     type MarkdownDocument = {
@@ -149,7 +155,7 @@
 
 <div
     bind:this={containerElement}
-    class="markdown-viewer max-w-none break-words p-2 pb-6 text-sm text-foreground"
+    class={`markdown-viewer max-w-none break-words text-sm text-foreground ${compact ? "p-0" : "p-2 pb-6"}`}
 >
     {#if markdownDocument.frontmatterRows.length}
         <table class="markdown-frontmatter" aria-label="Frontmatter">

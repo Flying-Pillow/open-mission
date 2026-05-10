@@ -21,7 +21,6 @@ export const AgentExecutionJournalPathSchema = z.string()
     .refine((value) => /^agent-journals\/[^/]+\.interaction\.jsonl$/u.test(value), {
         message: 'AgentExecution journals must use agent-journals/<agentExecutionId>.interaction.jsonl.'
     });
-
 export const AgentExecutionCommandIds = {
     complete: 'agentExecution.complete',
     cancel: 'agentExecution.cancel',
@@ -51,6 +50,7 @@ export const MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH = 2_000;
 export const MAX_AGENT_EXECUTION_MESSAGE_LENGTH = 8_000;
 export const MAX_AGENT_EXECUTION_USAGE_ENTRIES = 32;
 export const MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES = 6;
+export const MAX_AGENT_EXECUTION_SIGNAL_ARTIFACT_REFERENCES = 64;
 export const MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH = 4_096;
 
 export const AgentExecutionPromptSchema = z.object({
@@ -342,9 +342,9 @@ export const AgentExecutionOwnerMarkerPrefixSchema = z.enum([
     '@artifact::'
 ]);
 
-export const AgentDeclaredSignalDeliverySchema = z.enum(['stdout-marker', 'mcp-tool']);
+export const AgentSignalDeliverySchema = z.enum(['stdout-marker', 'mcp-tool']);
 
-export const AgentDeclaredSignalPolicySchema = z.enum([
+export const AgentSignalPolicySchema = z.enum([
     'progress',
     'claim',
     'input-request',
@@ -352,113 +352,142 @@ export const AgentDeclaredSignalPolicySchema = z.enum([
     'diagnostic'
 ]);
 
-export const AgentDeclaredSignalOutcomeSchema = z.enum([
+export const AgentSignalOutcomeSchema = z.enum([
     'agent-execution-event',
     'agent-execution-state',
     'owner-entity-event',
     'workflow-event'
 ]);
 
-export const AgentDeclaredSignalDescriptorSchema = z.object({
+export const AgentSignalDescriptorSchema = z.object({
     type: z.string().trim().min(1),
     label: z.string().trim().min(1),
     description: z.string().trim().min(1).optional(),
     icon: z.string().trim().min(1),
     tone: EntityPresentationToneSchema,
     payloadSchemaKey: z.string().trim().min(1),
-    deliveries: z.array(AgentDeclaredSignalDeliverySchema).min(1),
-    policy: AgentDeclaredSignalPolicySchema,
-    outcomes: z.array(AgentDeclaredSignalOutcomeSchema).min(1)
+    deliveries: z.array(AgentSignalDeliverySchema).min(1),
+    policy: AgentSignalPolicySchema,
+    outcomes: z.array(AgentSignalOutcomeSchema).min(1)
 }).strict();
 
-const agentDeclaredSignalBoundedTextSchema = z.string().trim().min(1).max(MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH);
+const agentSignalBoundedTextSchema = z.string().trim().min(1).max(MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH);
 
-export const AgentDeclaredSignalInputChoiceSchema = z.discriminatedUnion('kind', [
+export const AgentSignalArtifactActivitySchema = z.enum([
+    'read',
+    'edit',
+    'write',
+    'reference',
+    'output'
+]);
+
+export const AgentSignalArtifactReferenceSchema = z.object({
+    artifactId: z.string().trim().min(1).optional(),
+    path: z.string().trim().min(1).optional(),
+    label: agentSignalBoundedTextSchema.optional(),
+    activity: AgentSignalArtifactActivitySchema.optional()
+}).strict().refine((value) => Boolean(value.artifactId || value.path), {
+    message: 'Agent-declared artifact references require artifactId or path.'
+});
+
+const agentSignalArtifactReferencesField = {
+    artifacts: z.array(AgentSignalArtifactReferenceSchema).min(1).max(MAX_AGENT_EXECUTION_SIGNAL_ARTIFACT_REFERENCES).optional()
+} as const;
+
+export const AgentSignalInputChoiceSchema = z.discriminatedUnion('kind', [
     z.object({
         kind: z.literal('fixed'),
-        label: agentDeclaredSignalBoundedTextSchema,
-        value: agentDeclaredSignalBoundedTextSchema
+        label: agentSignalBoundedTextSchema,
+        value: agentSignalBoundedTextSchema
     }).strict(),
     z.object({
         kind: z.literal('manual'),
-        label: agentDeclaredSignalBoundedTextSchema,
-        placeholder: agentDeclaredSignalBoundedTextSchema.optional()
+        label: agentSignalBoundedTextSchema,
+        placeholder: agentSignalBoundedTextSchema.optional()
     }).strict()
 ]);
 
-export const AgentDeclaredProgressSignalPayloadSchema = z.object({
+export const AgentProgressSignalPayloadSchema = z.object({
     type: z.literal('progress'),
-    summary: agentDeclaredSignalBoundedTextSchema,
-    detail: agentDeclaredSignalBoundedTextSchema.optional()
+    summary: agentSignalBoundedTextSchema,
+    detail: agentSignalBoundedTextSchema.optional(),
+    ...agentSignalArtifactReferencesField
 }).strict();
 
-export const AgentDeclaredStatusSignalPhaseSchema = z.enum(['initializing', 'idle']);
+export const AgentStatusSignalPhaseSchema = z.enum(['initializing', 'idle']);
 
-export const AgentDeclaredStatusSignalPayloadSchema = z.object({
+export const AgentStatusSignalPayloadSchema = z.object({
     type: z.literal('status'),
-    phase: AgentDeclaredStatusSignalPhaseSchema,
-    summary: agentDeclaredSignalBoundedTextSchema.optional()
+    phase: AgentStatusSignalPhaseSchema,
+    summary: agentSignalBoundedTextSchema.optional(),
+    ...agentSignalArtifactReferencesField
 }).strict();
 
-export const AgentDeclaredNeedsInputSignalPayloadSchema = z.object({
+export const AgentNeedsInputSignalPayloadSchema = z.object({
     type: z.literal('needs_input'),
-    question: agentDeclaredSignalBoundedTextSchema,
-    choices: z.array(AgentDeclaredSignalInputChoiceSchema).min(1).max(MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES)
+    question: agentSignalBoundedTextSchema,
+    choices: z.array(AgentSignalInputChoiceSchema).min(1).max(MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES),
+    ...agentSignalArtifactReferencesField
 }).strict();
 
-export const AgentDeclaredBlockedSignalPayloadSchema = z.object({
+export const AgentBlockedSignalPayloadSchema = z.object({
     type: z.literal('blocked'),
-    reason: agentDeclaredSignalBoundedTextSchema
+    reason: agentSignalBoundedTextSchema,
+    ...agentSignalArtifactReferencesField
 }).strict();
 
-export const AgentDeclaredReadyForVerificationSignalPayloadSchema = z.object({
+export const AgentReadyForVerificationSignalPayloadSchema = z.object({
     type: z.literal('ready_for_verification'),
-    summary: agentDeclaredSignalBoundedTextSchema
+    summary: agentSignalBoundedTextSchema,
+    ...agentSignalArtifactReferencesField
 }).strict();
 
-export const AgentDeclaredCompletedClaimSignalPayloadSchema = z.object({
+export const AgentCompletedClaimSignalPayloadSchema = z.object({
     type: z.literal('completed_claim'),
-    summary: agentDeclaredSignalBoundedTextSchema
+    summary: agentSignalBoundedTextSchema,
+    ...agentSignalArtifactReferencesField
 }).strict();
 
-export const AgentDeclaredFailedClaimSignalPayloadSchema = z.object({
+export const AgentFailedClaimSignalPayloadSchema = z.object({
     type: z.literal('failed_claim'),
-    reason: agentDeclaredSignalBoundedTextSchema
+    reason: agentSignalBoundedTextSchema,
+    ...agentSignalArtifactReferencesField
 }).strict();
 
-export const AgentDeclaredMessageSignalPayloadSchema = z.object({
+export const AgentMessageSignalPayloadSchema = z.object({
     type: z.literal('message'),
     channel: z.enum(['agent', 'system', 'stdout', 'stderr']),
-    text: z.string().trim().min(1).max(MAX_AGENT_EXECUTION_MESSAGE_LENGTH)
+    text: z.string().trim().min(1).max(MAX_AGENT_EXECUTION_MESSAGE_LENGTH),
+    ...agentSignalArtifactReferencesField
 }).strict();
 
-export const AgentDeclaredSignalPayloadSchema = z.discriminatedUnion('type', [
-    AgentDeclaredProgressSignalPayloadSchema,
-    AgentDeclaredStatusSignalPayloadSchema,
-    AgentDeclaredNeedsInputSignalPayloadSchema,
-    AgentDeclaredBlockedSignalPayloadSchema,
-    AgentDeclaredReadyForVerificationSignalPayloadSchema,
-    AgentDeclaredCompletedClaimSignalPayloadSchema,
-    AgentDeclaredFailedClaimSignalPayloadSchema,
-    AgentDeclaredMessageSignalPayloadSchema
+export const AgentSignalPayloadSchema = z.discriminatedUnion('type', [
+    AgentProgressSignalPayloadSchema,
+    AgentStatusSignalPayloadSchema,
+    AgentNeedsInputSignalPayloadSchema,
+    AgentBlockedSignalPayloadSchema,
+    AgentReadyForVerificationSignalPayloadSchema,
+    AgentCompletedClaimSignalPayloadSchema,
+    AgentFailedClaimSignalPayloadSchema,
+    AgentMessageSignalPayloadSchema
 ]);
 
-export const AgentDeclaredSignalToolPayloadSchemasByType = {
-    progress: AgentDeclaredProgressSignalPayloadSchema.omit({ type: true }),
-    status: AgentDeclaredStatusSignalPayloadSchema.omit({ type: true }),
-    needs_input: AgentDeclaredNeedsInputSignalPayloadSchema.omit({ type: true }),
-    blocked: AgentDeclaredBlockedSignalPayloadSchema.omit({ type: true }),
-    ready_for_verification: AgentDeclaredReadyForVerificationSignalPayloadSchema.omit({ type: true }),
-    completed_claim: AgentDeclaredCompletedClaimSignalPayloadSchema.omit({ type: true }),
-    failed_claim: AgentDeclaredFailedClaimSignalPayloadSchema.omit({ type: true }),
-    message: AgentDeclaredMessageSignalPayloadSchema.omit({ type: true })
+export const AgentSignalToolPayloadSchemasByType = {
+    progress: AgentProgressSignalPayloadSchema.omit({ type: true }),
+    status: AgentStatusSignalPayloadSchema.omit({ type: true }),
+    needs_input: AgentNeedsInputSignalPayloadSchema.omit({ type: true }),
+    blocked: AgentBlockedSignalPayloadSchema.omit({ type: true }),
+    ready_for_verification: AgentReadyForVerificationSignalPayloadSchema.omit({ type: true }),
+    completed_claim: AgentCompletedClaimSignalPayloadSchema.omit({ type: true }),
+    failed_claim: AgentFailedClaimSignalPayloadSchema.omit({ type: true }),
+    message: AgentMessageSignalPayloadSchema.omit({ type: true })
 } as const;
 
-export const AgentDeclaredSignalMarkerPayloadSchema = z.object({
+export const AgentSignalMarkerPayloadSchema = z.object({
     version: z.literal(1),
-    agentExecutionId: agentDeclaredSignalBoundedTextSchema,
-    eventId: agentDeclaredSignalBoundedTextSchema,
-    signal: AgentDeclaredSignalPayloadSchema
+    agentExecutionId: agentSignalBoundedTextSchema,
+    eventId: agentSignalBoundedTextSchema,
+    signal: AgentSignalPayloadSchema
 }).strict();
 
 export const AgentExecutionObservationAckSchema = z.object({
@@ -554,12 +583,12 @@ export const AgentExecutionProtocolDescriptorSchema = z.object({
     owner: AgentExecutionProtocolOwnerSchema,
     scope: AgentExecutionScopeSchema,
     messages: z.array(AgentExecutionMessageDescriptorSchema),
-    signals: z.array(AgentDeclaredSignalDescriptorSchema),
+    signals: z.array(AgentSignalDescriptorSchema),
     mcp: AgentExecutionProtocolMcpSchema.optional()
 }).strict();
 
 export const AgentExecutionTransportStateSchema = z.object({
-    selected: AgentDeclaredSignalDeliverySchema,
+    selected: AgentSignalDeliverySchema,
     degraded: z.literal(false).default(false)
 }).strict();
 
@@ -589,13 +618,15 @@ export type AgentExecutionMessageDescriptorType = z.infer<typeof AgentExecutionM
 export type AgentExecutionScopeType = z.infer<typeof AgentExecutionScopeSchema>;
 export type AgentExecutionProtocolOwnerEntityType = z.infer<typeof AgentExecutionProtocolOwnerEntitySchema>;
 export type AgentExecutionOwnerMarkerPrefixType = z.infer<typeof AgentExecutionOwnerMarkerPrefixSchema>;
-export type AgentDeclaredSignalDeliveryType = z.infer<typeof AgentDeclaredSignalDeliverySchema>;
-export type AgentDeclaredSignalPolicyType = z.infer<typeof AgentDeclaredSignalPolicySchema>;
-export type AgentDeclaredSignalOutcomeType = z.infer<typeof AgentDeclaredSignalOutcomeSchema>;
-export type AgentDeclaredSignalDescriptorType = z.infer<typeof AgentDeclaredSignalDescriptorSchema>;
-export type AgentDeclaredSignalInputChoiceType = z.infer<typeof AgentDeclaredSignalInputChoiceSchema>;
-export type AgentDeclaredSignalPayloadType = z.infer<typeof AgentDeclaredSignalPayloadSchema>;
-export type AgentDeclaredSignalMarkerPayloadType = z.infer<typeof AgentDeclaredSignalMarkerPayloadSchema>;
+export type AgentSignalDeliveryType = z.infer<typeof AgentSignalDeliverySchema>;
+export type AgentSignalPolicyType = z.infer<typeof AgentSignalPolicySchema>;
+export type AgentSignalOutcomeType = z.infer<typeof AgentSignalOutcomeSchema>;
+export type AgentSignalDescriptorType = z.infer<typeof AgentSignalDescriptorSchema>;
+export type AgentSignalArtifactActivityType = z.infer<typeof AgentSignalArtifactActivitySchema>;
+export type AgentSignalArtifactReferenceType = z.infer<typeof AgentSignalArtifactReferenceSchema>;
+export type AgentSignalInputChoiceType = z.infer<typeof AgentSignalInputChoiceSchema>;
+export type AgentSignalPayloadType = z.infer<typeof AgentSignalPayloadSchema>;
+export type AgentSignalMarkerPayloadType = z.infer<typeof AgentSignalMarkerPayloadSchema>;
 export type AgentExecutionObservationAckType = z.infer<typeof AgentExecutionObservationAckSchema>;
 export type AgentExecutionTimelineZoneType = z.infer<typeof AgentExecutionTimelineZoneSchema>;
 export type AgentExecutionTimelineSeverityType = z.infer<typeof AgentExecutionTimelineSeveritySchema>;
@@ -633,6 +664,7 @@ export const AgentExecutionAttentionStateSchema = z.enum([
 
 export const AgentExecutionSemanticActivitySchema = z.enum([
     'idle',
+    'awaiting-agent-response',
     'planning',
     'reasoning',
     'communicating',
@@ -732,7 +764,7 @@ export const AgentExecutionTimelinePayloadSchema = z.object({
     text: z.string().trim().min(1).optional(),
     detail: z.string().trim().min(1).optional(),
     markdown: z.boolean().optional(),
-    choices: z.array(AgentDeclaredSignalInputChoiceSchema).optional(),
+    choices: z.array(AgentSignalInputChoiceSchema).optional(),
     summary: z.string().trim().min(1).optional(),
     units: AgentExecutionActivityProgressSchema.shape.units.optional(),
     currentTarget: AgentExecutionActivityTargetSchema.optional(),
@@ -746,6 +778,7 @@ export const AgentExecutionTimelinePayloadSchema = z.object({
     terminalAttached: z.boolean().optional(),
     diagnosticCode: z.string().trim().min(1).optional(),
     artifactId: z.string().trim().min(1).optional(),
+    artifacts: z.array(AgentSignalArtifactReferenceSchema).optional(),
     path: z.string().trim().min(1).optional(),
     mediaType: z.string().trim().min(1).optional(),
     diffRef: z.string().trim().min(1).optional()
@@ -786,7 +819,7 @@ export const AgentExecutionAttentionProjectionSchema = z.object({
     title: z.string().trim().min(1).optional(),
     text: z.string().trim().min(1).optional(),
     detail: z.string().trim().min(1).optional(),
-    choices: z.array(AgentDeclaredSignalInputChoiceSchema).optional(),
+    choices: z.array(AgentSignalInputChoiceSchema).optional(),
     currentInputRequestId: z.string().trim().min(1).nullable().optional(),
     updatedAt: z.string().trim().min(1)
 }).strict();
@@ -830,6 +863,7 @@ export type AgentExecutionState = {
     attention?: AgentExecutionAttentionStateType;
     semanticActivity?: AgentExecutionSemanticActivityType;
     currentInputRequestId?: string | null;
+    awaitingResponseToMessageId?: string | null;
     workingDirectory?: string;
     currentTurnTitle?: string;
     interactionCapabilities: AgentExecutionInteractionCapabilitiesType;
@@ -856,6 +890,7 @@ export type AgentExecutionRecord = {
     attention?: AgentExecutionAttentionStateType;
     semanticActivity?: AgentExecutionSemanticActivityType;
     currentInputRequestId?: string | null;
+    awaitingResponseToMessageId?: string | null;
     taskId?: string;
     assignmentLabel?: string;
     workingDirectory?: string;
@@ -889,11 +924,13 @@ export const AgentExecutionStorageSchema = z.object({
     transportId: z.string().trim().min(1).optional(),
     adapterLabel: z.string().trim().min(1),
     agentJournalPath: AgentExecutionJournalPathSchema.optional(),
+    journalRecords: z.array(z.any()).optional(),
     terminalRecordingPath: AgentExecutionTerminalRecordingPathSchema.optional(),
     lifecycleState: AgentExecutionLifecycleStateSchema,
     attention: AgentExecutionAttentionStateSchema.optional(),
     semanticActivity: AgentExecutionSemanticActivitySchema.optional(),
     currentInputRequestId: z.string().trim().min(1).nullable().optional(),
+    awaitingResponseToMessageId: z.string().trim().min(1).nullable().optional(),
     terminalHandle: AgentExecutionTerminalHandleSchema.optional(),
     assignmentLabel: z.string().trim().min(1).optional(),
     workingDirectory: z.string().trim().min(1).optional(),

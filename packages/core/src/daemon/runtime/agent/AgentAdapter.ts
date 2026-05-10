@@ -8,11 +8,11 @@ import type {
     AgentLaunchConfig,
     AgentMetadata
 } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
-import type { AgentDeclaredSignalDeliveryType } from '../../../entities/AgentExecution/AgentExecutionSchema.js';
+import type { AgentSignalDeliveryType } from '../../../entities/AgentExecution/AgentExecutionSchema.js';
 
 export type AgentAdapterTransportCapabilities = {
-    supported: AgentDeclaredSignalDeliveryType[];
-    preferred: Partial<Record<'interactive' | 'print', AgentDeclaredSignalDeliveryType>>;
+    supported: AgentSignalDeliveryType[];
+    preferred: Partial<Record<'interactive' | 'print', AgentSignalDeliveryType>>;
     provisioning: {
         requiresRuntimeConfig: boolean;
         supportsStdioBridge: boolean;
@@ -248,6 +248,10 @@ export class AgentAdapter {
 
     public parseAgentExecutionUsageContent(content: string): AgentAdapterRuntimeOutput | undefined {
         return this.parseAgentExecutionUsageContentHook?.(content);
+    }
+
+    public supportsUsageParsing(): boolean {
+        return this.parseAgentExecutionUsageContentHook !== undefined;
     }
 
     public async prepareLaunchConfig(config: AgentLaunchConfig, mcpAccess?: AgentExecutionMcpAccess): Promise<AgentAdapterLaunchPreparation> {

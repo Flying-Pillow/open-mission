@@ -4,6 +4,7 @@
     import Icon from "@iconify/svelte";
     import type { AirportRepositoryListItem } from "$lib/components/entities/types";
     import type { Repository } from "$lib/components/entities/Repository/Repository.svelte.js";
+    import { getRepositoryIconIdentifier } from "$lib/components/entities/Repository/Repository.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import RepositoryCommandbar from "$lib/components/entities/Repository/RepositoryCommandbar.svelte";
     import { cn } from "$lib/utils.js";
@@ -39,6 +40,9 @@
             localRepository?.data.currentBranch ??
             repository.github?.defaultBranch ??
             "Unavailable",
+    );
+    const iconIdentifier = $derived(
+        getRepositoryIconIdentifier(localRepository?.data ?? repository.local),
     );
 
     async function openRepository(): Promise<void> {
@@ -86,8 +90,8 @@
 {#snippet panelContent()}
     <div
         class={compact
-            ? "flex min-h-0 flex-col gap-3 px-4 py-4"
-            : "flex min-h-14 flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between"}
+            ? "flex min-h-0 flex-col gap-3 px-4 py-4 bg-foreground/5"
+            : "flex min-h-14 flex-col gap-3 px-4 py-3 bg-foreground/5 md:flex-row md:items-center md:justify-between"}
         role="group"
         aria-label={`${repository.displayName} commands`}
         data-repository-row-action
@@ -102,7 +106,7 @@
                     ? "inline-flex size-8 shrink-0 items-center justify-center border bg-background text-muted-foreground dark:bg-[#171a20]"
                     : "inline-flex size-9 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground"}
             >
-                <Icon icon="lucide:folder-git-2" class="size-4" />
+                <Icon icon={iconIdentifier} class="size-6" />
             </span>
             <div class="min-w-0 flex-1">
                 <h2

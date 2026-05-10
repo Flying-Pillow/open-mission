@@ -99,7 +99,12 @@ describe('AgentExecutionJournalWriter', () => {
             type: 'journal.header',
             sequence: 0,
             agentExecutionId: 'agent-execution-1',
-            ownerId: repositoryRoot,
+            executionContext: {
+                owner: {
+                    entityType: 'Repository',
+                    entityId: repositoryRoot
+                }
+            },
             agentId: 'agent-1',
             workingDirectory: repositoryRoot
         });
@@ -148,7 +153,8 @@ describe('AgentExecutionJournalWriter', () => {
                 repositoryRootPath: repositoryRoot
             },
             decision,
-            currentInputRequestId: 'observation-1'
+            currentInputRequestId: 'observation-1',
+            awaitingResponseToMessageId: null
         });
 
         expect(record).toMatchObject({
@@ -156,7 +162,61 @@ describe('AgentExecutionJournalWriter', () => {
             lifecycle: 'running',
             attention: 'awaiting-operator',
             activity: 'communicating',
-            currentInputRequestId: 'observation-1'
+            currentInputRequestId: 'observation-1',
+            awaitingResponseToMessageId: null
+        });
+    });
+
+    it('records daemon-observed runtime facts as top-level journal entries', async () => {
+        const repositoryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-journal-runtime-fact-'));
+        temporaryDirectories.add(repositoryRoot);
+        const writer = new AgentExecutionJournalWriter();
+
+        await writer.ensureLaunchJournal({
+            agentExecutionId: 'agent-execution-1',
+            agentId: 'agent-1',
+            scope: {
+                kind: 'repository',
+                repositoryRootPath: repositoryRoot
+            },
+            protocolDescriptor: createAgentExecutionProtocolDescriptor({
+                scope: {
+                    kind: 'repository',
+                    repositoryRootPath: repositoryRoot
+                },
+                messages: []
+            })
+        });
+
+        const record = await writer.appendRuntimeFact({
+            agentExecutionId: 'agent-execution-1',
+            scope: {
+                kind: 'repository',
+                repositoryRootPath: repositoryRoot
+            },
+            factType: 'artifact-read',
+            path: 'BRIEF.md',
+            detail: 'Mission artifact body was read through a Mission-owned surface.'
+        });
+
+        expect(record).toMatchObject({
+            type: 'runtime-fact',
+            family: 'runtime-fact',
+            authority: 'daemon',
+            assertionLevel: 'authoritative',
+            replayClass: 'replay-critical',
+            origin: 'daemon',
+            factType: 'artifact-read',
+            path: 'BRIEF.md',
+            executionContext: {
+                runtime: {
+                    agentAdapter: 'agent-1'
+                },
+                daemon: {
+                    runtimeVersion: '0.1.0-alpha.1',
+                    protocolVersion: '2026-05-10'
+                }
+            }
         });
     });
 });

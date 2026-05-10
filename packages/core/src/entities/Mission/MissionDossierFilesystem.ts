@@ -483,6 +483,9 @@ export class MissionDossierFilesystem {
 			?? path.basename(missionDir);
 		const type = this.readMissionTypeAttribute(brief.attributes, 'type', brief.filePath) ?? 'task';
 		const labels = this.readOptionalStringArrayAttribute(brief.attributes, 'labels', brief.filePath);
+		const assigneeGithubLogin = this.readOptionalStringAttribute(brief.attributes, 'assigneeGithubLogin', brief.filePath);
+		const assigneeGithubUserId = this.readOptionalNumberAttribute(brief.attributes, 'assigneeGithubUserId', brief.filePath);
+		const assigneeSource = this.readOptionalStringAttribute(brief.attributes, 'assigneeSource', brief.filePath);
 		const metadata = this.readOptionalStringRecordAttribute(brief.attributes, 'metadata', brief.filePath);
 		const branchRef =
 			this.readOptionalStringAttribute(brief.attributes, 'branchRef', brief.filePath) ??
@@ -503,6 +506,17 @@ export class MissionDossierFilesystem {
 				type,
 				...(issueId !== undefined ? { issueId } : {}),
 				...(labels ? { labels } : {}),
+				...(assigneeGithubLogin && assigneeSource
+					? {
+						assignee: {
+							githubLogin: assigneeGithubLogin,
+							...(assigneeGithubUserId !== undefined ? { githubUserId: assigneeGithubUserId } : {}),
+							source: assigneeSource === 'manual' || assigneeSource === 'issue-assignee' || assigneeSource === 'repository-default'
+								? assigneeSource
+								: 'manual'
+						}
+					}
+					: {}),
 				...(metadata ? { metadata } : {}),
 				...(url ? { url } : {})
 			},
@@ -518,6 +532,9 @@ export class MissionDossierFilesystem {
 				...(descriptor.brief.issueId !== undefined ? { issueId: descriptor.brief.issueId } : {}),
 				title: descriptor.brief.title,
 				type: descriptor.brief.type,
+				...(descriptor.brief.assignee?.githubLogin ? { assigneeGithubLogin: descriptor.brief.assignee.githubLogin } : {}),
+				...(descriptor.brief.assignee?.githubUserId !== undefined ? { assigneeGithubUserId: descriptor.brief.assignee.githubUserId } : {}),
+				...(descriptor.brief.assignee?.source ? { assigneeSource: descriptor.brief.assignee.source } : {}),
 				...(descriptor.brief.labels && descriptor.brief.labels.length > 0 ? { labels: descriptor.brief.labels } : {}),
 				...(descriptor.brief.metadata ? { metadata: descriptor.brief.metadata } : {}),
 				branchRef: descriptor.branchRef,

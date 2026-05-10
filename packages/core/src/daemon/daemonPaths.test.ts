@@ -7,6 +7,7 @@ import {
 	getDaemonLockPath,
 	getDaemonManifestPath,
 	getDaemonRuntimePath,
+	getDaemonTerminalLeaseStatePath,
 	getDaemonSessionStatePath,
 	getDaemonStdoutLogPath,
 	isNamedPipePath,
@@ -26,6 +27,7 @@ describe('daemonPaths', () => {
 			const stdoutLogPath = getDaemonStdoutLogPath();
 			const manifestPath = getDaemonManifestPath();
 			const lockPath = getDaemonLockPath();
+			const terminalLeaseStatePath = getDaemonTerminalLeaseStatePath();
 			const sessionPath = getDaemonSessionStatePath(workspaceRoot, 'mission-123');
 			const socketPath = resolveDaemonSocketPath();
 
@@ -34,6 +36,7 @@ describe('daemonPaths', () => {
 			expect(stdoutLogPath).toBe(path.join(runtimePath, 'daemon.stdout.log'));
 			expect(manifestPath).toBe(path.join(runtimePath, 'daemon.json'));
 			expect(lockPath).toBe(path.join(runtimePath, 'daemon.lock'));
+			expect(terminalLeaseStatePath).toBe(path.join(runtimePath, 'daemon-terminal-leases.json'));
 			expect(sessionPath.startsWith(path.join(runtimePath, 'workspaces'))).toBe(true);
 			expect(sessionPath.endsWith(path.join('sessions', 'mission-123.json'))).toBe(true);
 			expect(logPath.startsWith(workspaceRoot)).toBe(false);

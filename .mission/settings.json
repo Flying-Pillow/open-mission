@@ -3,7 +3,8 @@
   "trackingProvider": "github",
   "instructionsPath": ".agents",
   "skillsPath": ".agents/skills",
-  "agentAdapter": "codex",
+  "icon": "covid:transmission-virus-cough",
+  "agentAdapter": "copilot-cli",
   "enabledAgentAdapters": [
     "copilot-cli",
     "claude-code",

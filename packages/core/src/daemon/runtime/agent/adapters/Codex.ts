@@ -1,3 +1,5 @@
+import { execFile as execFileCallback } from 'node:child_process';
+import { promisify } from 'node:util';
 import {
     type AgentAdapterRuntimeOutput,
     type AgentAdapterTerminalOptions,
@@ -14,6 +16,7 @@ const CODEX_AGENT_ID = 'codex' as const;
 const CODEX_MCP_COMMAND_CONFIG_ENV = 'MISSION_CODEX_MCP_COMMAND_CONFIG';
 const CODEX_MCP_ARGS_CONFIG_ENV = 'MISSION_CODEX_MCP_ARGS_CONFIG';
 const CODEX_MCP_TOKEN_CONFIG_ENV = 'MISSION_CODEX_MCP_TOKEN_CONFIG';
+const execFile = promisify(execFileCallback);
 
 export type CodexInput = {
     command?: string;
@@ -64,6 +67,7 @@ export function createCodex(input: CodexInput = {}): AgentInput {
             terminalOptions,
             interactive: {
                 args: [
+                    '--no-alt-screen',
                     { setting: 'model', flag: '--model' },
                     { launchEnv: CODEX_MCP_COMMAND_CONFIG_ENV, flag: '-c' },
                     { launchEnv: CODEX_MCP_ARGS_CONFIG_ENV, flag: '-c' },
@@ -93,11 +97,13 @@ function parseRuntimeOutputLine(line: string): AgentAdapterRuntimeOutput[] {
     return [{ kind: 'none' }];
 }
 
-function prepareCodexLaunchConfig(
+async function prepareCodexLaunchConfig(
     config: AgentLaunchConfig,
-    _agent: AgentInput,
+    agent: AgentInput,
     mcpAccess?: AgentExecutionMcpAccess
 ) {
+    await assertCodexAuthenticated(agent, config);
+
     if (!mcpAccess) {
         return { config };
     }
@@ -122,4 +128,33 @@ function prepareCodexLaunchConfig(
 
 function createCodexMcpConfigOverride(field: string, value: string | string[]): string {
     return `mcp_servers."mission-mcp".${field}=${JSON.stringify(value)}`;
+}
+
+async function assertCodexAuthenticated(agent: AgentInput, config: AgentLaunchConfig): Promise<void> {
+    const command = agent.adapter.command.trim();
+    const env = {
+        ...(agent.adapter.runtimeEnv ?? process.env),
+        ...(config.launchEnv ?? {})
+    };
+
+    try {
+        await execFile(command, ['login', 'status'], {
+            env,
+            timeout: 10000,
+            windowsHide: true
+        });
+    } catch (error) {
+        const statusOutput = [
+            error instanceof Error && 'stdout' in error ? String(error.stdout ?? '') : '',
+            error instanceof Error && 'stderr' in error ? String(error.stderr ?? '') : ''
+        ].join('\n').trim();
+
+        if (statusOutput.includes('Not logged in')) {
+            throw new Error('Codex is not logged in. Run `codex login` in the Mission runtime environment, then retry the AgentExecution.');
+        }
+
+        throw new Error(statusOutput
+            ? `Codex authentication check failed: ${statusOutput}`
+            : 'Codex authentication check failed before launch.');
+    }
 }

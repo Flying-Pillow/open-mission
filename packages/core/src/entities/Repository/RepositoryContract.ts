@@ -17,6 +17,7 @@ import {
     RepositoryMissionStartAcknowledgementSchema,
     RepositoryIssueDetailSchema,
     RepositoryConfigureAgentsSchema,
+    RepositoryConfigureDisplaySchema,
     RepositoryInitializeResultSchema,
     RepositoryInitializeSchema,
     RepositoryRemoveAcknowledgementSchema,
@@ -139,6 +140,12 @@ export const RepositoryContract: EntityContractType = {
             result: RepositoryDataSchema,
             execution: 'entity'
         },
+        configureDisplay: {
+            kind: 'mutation',
+            payload: RepositoryConfigureDisplaySchema,
+            result: RepositoryDataSchema,
+            execution: 'entity'
+        },
         initialize: {
             kind: 'mutation',
             payload: RepositoryInitializeSchema,
@@ -146,6 +153,12 @@ export const RepositoryContract: EntityContractType = {
             execution: 'entity'
         },
         ensureRepositoryAgentExecution: {
+            kind: 'mutation',
+            payload: RepositoryInitializeSchema,
+            result: AgentExecutionDataSchema,
+            execution: 'entity'
+        },
+        refreshRepositoryAgentExecution: {
             kind: 'mutation',
             payload: RepositoryInitializeSchema,
             result: AgentExecutionDataSchema,

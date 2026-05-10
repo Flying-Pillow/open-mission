@@ -11,13 +11,7 @@
     import IssuePreview from "$lib/components/entities/Issue/IssuePreview.svelte";
     import RepositoryPanel from "$lib/components/entities/Repository/RepositoryPanel.svelte";
     import RepositoryWorkList from "$lib/components/entities/Repository/RepositoryWorkList.svelte";
-    import { Button } from "$lib/components/ui/button/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
-    import {
-        ResizableHandle,
-        ResizablePane,
-        ResizablePaneGroup,
-    } from "$lib/components/ui/resizable";
     import type { AirportRepositoryListItem } from "$lib/components/entities/types";
 
     const appContext = getAppContext();
@@ -49,7 +43,6 @@
     let repositoryChatRequestKey = $state("");
     let repositoryChatRefreshNonce = $state(0);
     let repositoryChatError = $state<string | null>(null);
-    let showTerminalPanel = $state(false);
 
     $effect(() => {
         const activeRepository = appContext.airport.activeRepository;
@@ -74,9 +67,6 @@
     const invalidState = $derived(activeRepository?.data.invalidState);
     const repositoryAgentExecution = $derived(
         activeRepository?.repositoryAgentExecution,
-    );
-    const canShowTerminalPanel = $derived(
-        Boolean(repositoryAgentExecution?.isTerminalBacked()),
     );
     const activeRepositoryPanelItem = $derived.by(
         (): AirportRepositoryListItem | undefined => {
@@ -128,14 +118,6 @@
         await activeRepository?.refreshRepositoryAgentExecution();
     }
 
-    function toggleTerminalPanel(): void {
-        if (!canShowTerminalPanel) {
-            return;
-        }
-
-        showTerminalPanel = !showTerminalPanel;
-    }
-
     $effect(() => {
         repositoryId;
         routeRepositoryResolved = false;
@@ -184,12 +166,6 @@
                     error instanceof Error ? error.message : String(error);
             });
     });
-
-    $effect(() => {
-        if (!canShowTerminalPanel) {
-            showTerminalPanel = false;
-        }
-    });
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col">
@@ -212,77 +188,29 @@
                 repository={activeRepositoryPanelItem}
                 localRepository={activeRepository}
                 onCommandExecuted={refreshRepositories}
-            >
-                {#snippet leadingAction()}
-                    <Button
-                        type="button"
-                        variant={showTerminalPanel ? "secondary" : "outline"}
-                        size="sm"
-                        class="h-9 max-w-48 rounded-md border-white/15 bg-white/[0.04] px-3 text-slate-100 shadow-none hover:bg-white/[0.08]"
-                        disabled={!canShowTerminalPanel}
-                        aria-label={showTerminalPanel
-                            ? "Hide AgentExecution terminal"
-                            : "Show AgentExecution terminal"}
-                        title={showTerminalPanel
-                            ? "Hide AgentExecution terminal"
-                            : canShowTerminalPanel
-                              ? "Show AgentExecution terminal"
-                              : "AgentExecution terminal is not available"}
-                        onclick={toggleTerminalPanel}
-                    >
-                        <Icon
-                            icon={repositoryAgentExecution?.agentId
-                                ?.toLowerCase()
-                                .includes("copilot")
-                                ? "simple-icons:githubcopilot"
-                                : repositoryAgentExecution?.agentId
-                                        ?.toLowerCase()
-                                        .includes("openai") ||
-                                    repositoryAgentExecution?.agentId
-                                        ?.toLowerCase()
-                                        .includes("codex")
-                                  ? "simple-icons:openai"
-                                  : repositoryAgentExecution?.agentId
-                                          ?.toLowerCase()
-                                          .includes("claude") ||
-                                      repositoryAgentExecution?.agentId
-                                          ?.toLowerCase()
-                                          .includes("anthropic")
-                                    ? "simple-icons:anthropic"
-                                    : repositoryAgentExecution?.agentId
-                                            ?.toLowerCase()
-                                            .includes("opencode")
-                                      ? "lucide:code-2"
-                                      : repositoryAgentExecution?.agentId
-                                              ?.toLowerCase()
-                                              .includes("pi")
-                                        ? "lucide:message-circle"
-                                        : "lucide:bot"}
-                            class="size-4 text-emerald-200"
-                            data-icon="inline-start"
-                        />
-                        <span class="min-w-0 truncate">
-                            {repositoryAgentExecution?.adapterLabel ?? "Agent"}
-                        </span>
-                    </Button>
-                {/snippet}
-            </RepositoryPanel>
+            />
         {/if}
 
-        <ResizablePaneGroup
-            direction="horizontal"
-            autoSaveId={`airport-repository:${repositoryId}`}
-            class="mt-4 min-h-0 flex-1 overflow-hidden"
-        >
-            <ResizablePane
-                defaultSize={28}
-                minSize={18}
-                maxSize={44}
-                class="flex h-full min-h-0 flex-col gap-5 overflow-hidden pr-2"
+        <div class="flex min-h-0 flex-1 overflow-hidden gap-2">
+            <section
+                class="flex h-full min-h-0 w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)] shrink-0 flex-col gap-5 overflow-hidden"
+            >
+                <section class="flex min-h-0 w-full flex-1 overflow-hidden">
+                    <RepositoryWorkList
+                        bind:selectedIssue
+                        bind:issuePreviewOpen
+                        bind:issueError
+                        bind:issueLoadingNumber
+                    />
+                </section>
+            </section>
+
+            <section
+                class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
             >
                 {#if invalidState || !activeRepository.data.isInitialized}
                     <section
-                        class="rounded-2xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+                        class="mb-2 rounded-2xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive"
                     >
                         <p class="font-medium">
                             Repository manager attention required.
@@ -295,23 +223,6 @@
                     </section>
                 {/if}
 
-                <section class="flex min-h-0 w-full flex-1 overflow-hidden">
-                    <RepositoryWorkList
-                        bind:selectedIssue
-                        bind:issuePreviewOpen
-                        bind:issueError
-                        bind:issueLoadingNumber
-                    />
-                </section>
-            </ResizablePane>
-
-            <ResizableHandle withHandle />
-
-            <ResizablePane
-                defaultSize={72}
-                minSize={40}
-                class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden pl-5"
-            >
                 <section
                     class="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl border border-white/10"
                 >
@@ -321,17 +232,15 @@
                         onCommandExecuted={refreshRepositoryChat}
                         loadingTitle="Starting repository chat"
                         loadingPlaceholder="Starting repository chat"
-                        bind:showTerminalPanel
-                        showHeader={false}
                     />
                 </section>
-            </ResizablePane>
-        </ResizablePaneGroup>
+            </section>
+        </div>
         {#if repositoryChatError}
             <div
                 class="border-t px-4 py-3 text-sm text-muted-foreground md:px-5"
             >
-                The repository assistant is not available right now.
+                {repositoryChatError}
             </div>
         {/if}
 

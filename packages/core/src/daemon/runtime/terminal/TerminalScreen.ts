@@ -32,13 +32,24 @@ export class PlainTerminalScreen implements TerminalScreen {
     ) { }
 
     public write(chunk: string): TerminalScreenSnapshot {
-        const next = `${this.buffer}${chunk}`;
-        if (next.length <= this.options.maxBufferSize) {
-            this.buffer = next;
+        if (!chunk) {
             return this.snapshot();
         }
 
-        this.buffer = next.slice(next.length - this.options.maxBufferSize);
+        if (chunk.length >= this.options.maxBufferSize) {
+            this.buffer = chunk.slice(chunk.length - this.options.maxBufferSize);
+            this.isTruncated = true;
+            return this.snapshot();
+        }
+
+        const nextLength = this.buffer.length + chunk.length;
+        if (nextLength <= this.options.maxBufferSize) {
+            this.buffer += chunk;
+            return this.snapshot();
+        }
+
+        const overflow = nextLength - this.options.maxBufferSize;
+        this.buffer = `${this.buffer.slice(overflow)}${chunk}`;
         this.isTruncated = true;
         return this.snapshot();
     }

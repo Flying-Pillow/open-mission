@@ -147,6 +147,13 @@ export function getMissionWorkflowEventValidationErrors(
             }
             break;
         }
+        case 'task.cancelled': {
+            const task = requireTask(findTask(event.taskId), event.taskId, errors, event.type);
+            if (task && task.lifecycle !== 'queued' && task.lifecycle !== 'running') {
+                errors.push(`task.cancelled requires task '${event.taskId}' to be queued or running, received '${task.lifecycle}'.`);
+            }
+            break;
+        }
         case 'task.reopened': {
             const task = requireTask(findTask(event.taskId), event.taskId, errors, event.type);
             if (task) {

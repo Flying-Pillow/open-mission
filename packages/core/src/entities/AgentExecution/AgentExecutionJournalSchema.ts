@@ -8,7 +8,6 @@ import {
     AgentExecutionProtocolDescriptorSchema,
     AgentExecutionProtocolOwnerEntitySchema,
     AgentExecutionSemanticActivitySchema,
-    AgentExecutionScopeSchema,
     AgentExecutionTransportStateSchema
 } from './AgentExecutionSchema.js';
 import {
@@ -26,15 +25,126 @@ const journalPayloadSchema = z.record(z.string(), z.unknown());
 
 export const AgentExecutionJournalSchemaVersionSchema = z.literal(1);
 
-export const AgentExecutionJournalRecordTypeSchema = z.enum([
+export const AgentExecutionJournalEntrySemanticsSchema = z.enum([
+    'event',
+    'snapshot',
+    'assessment',
+    'evidence'
+]);
+
+export const AgentExecutionJournalReasoningLevelSchema = z.enum([
+    'low',
+    'medium',
+    'high',
+    'max',
+    'unknown'
+]);
+
+export const AgentExecutionJournalExecutionModeSchema = z.enum([
+    'interactive',
+    'batch',
+    'verification',
+    'audit'
+]);
+
+export const AgentExecutionJournalExecutionContextSchema = z.object({
+    owner: z.object({
+        entityType: AgentExecutionProtocolOwnerEntitySchema,
+        entityId: journalTextSchema
+    }).strict(),
+    mission: z.object({
+        missionId: journalTextSchema,
+        stageId: journalTextSchema.optional(),
+        taskId: journalTextSchema.optional(),
+        sessionId: journalTextSchema.optional()
+    }).strict().optional(),
+    repository: z.object({
+        repositoryId: journalTextSchema,
+        worktreeId: journalTextSchema.optional(),
+        branch: journalTextSchema.optional()
+    }).strict().optional(),
+    runtime: z.object({
+        agentAdapter: journalTextSchema,
+        provider: journalTextSchema.optional(),
+        model: journalTextSchema.optional(),
+        reasoningLevel: AgentExecutionJournalReasoningLevelSchema.optional(),
+        executionMode: AgentExecutionJournalExecutionModeSchema.optional(),
+        workflowStage: journalTextSchema.optional(),
+        executionProfile: journalTextSchema.optional(),
+        verifier: z.boolean().optional()
+    }).strict(),
+    daemon: z.object({
+        runtimeVersion: journalTextSchema,
+        protocolVersion: journalTextSchema
+    }).strict()
+}).strict();
+
+export const AgentExecutionJournalRecordFamilySchema = z.enum([
     'journal.header',
-    'message.accepted',
-    'message.delivery',
-    'observation.recorded',
+    'turn.accepted',
+    'turn.delivery',
+    'agent-observation',
+    'runtime-fact',
+    'execution-assessment',
+    'transport-evidence',
     'decision.recorded',
     'state.changed',
     'activity.updated',
     'owner-effect.recorded',
+    'checkpoint.recorded',
+    'projection.recorded'
+]);
+
+export const AgentExecutionJournalRecordAuthoritySchema = z.enum([
+    'daemon',
+    'agent',
+    'operator',
+    'owner',
+    'system',
+    'derived'
+]);
+
+export const AgentExecutionJournalAssertionLevelSchema = z.enum([
+    'authoritative',
+    'advisory',
+    'informational',
+    'diagnostic'
+]);
+
+export const AgentExecutionJournalReplayClassSchema = z.enum([
+    'replay-critical',
+    'replay-optional',
+    'evidence-only'
+]);
+
+export const AgentExecutionJournalOriginSchema = z.enum([
+    'daemon',
+    'operator',
+    'system',
+    'owner',
+    'mcp',
+    'sdk',
+    'pty',
+    'provider-output',
+    'terminal-heuristic',
+    'filesystem',
+    'git',
+    'projection'
+]);
+
+export const AgentExecutionJournalRecordTypeSchema = z.enum([
+    'journal.header',
+    'turn.accepted',
+    'turn.delivery',
+    'agent-observation',
+    'runtime-fact',
+    'execution-assessment',
+    'transport-evidence',
+    'decision.recorded',
+    'state.changed',
+    'activity.updated',
+    'owner-effect.recorded',
+    'checkpoint.recorded',
     'projection.recorded'
 ]);
 
@@ -42,10 +152,15 @@ export const AgentExecutionJournalRecordBaseSchema = z.object({
     recordId: journalTextSchema,
     sequence: z.number().int().nonnegative(),
     type: AgentExecutionJournalRecordTypeSchema,
+    family: AgentExecutionJournalRecordFamilySchema,
+    entrySemantics: AgentExecutionJournalEntrySemanticsSchema,
+    authority: AgentExecutionJournalRecordAuthoritySchema,
+    assertionLevel: AgentExecutionJournalAssertionLevelSchema,
+    replayClass: AgentExecutionJournalReplayClassSchema,
+    origin: AgentExecutionJournalOriginSchema,
     schemaVersion: AgentExecutionJournalSchemaVersionSchema,
     agentExecutionId: journalTextSchema,
-    ownerId: journalTextSchema,
-    scope: AgentExecutionScopeSchema,
+    executionContext: AgentExecutionJournalExecutionContextSchema,
     occurredAt: journalTextSchema
 }).strict();
 
@@ -53,6 +168,8 @@ export const AgentExecutionJournalKindSchema = z.literal('agent-execution-intera
 
 export const AgentExecutionJournalHeaderRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
     type: z.literal('journal.header'),
+    family: z.literal('journal.header'),
+    entrySemantics: z.literal('event'),
     kind: AgentExecutionJournalKindSchema,
     agentId: journalTextSchema,
     protocolDescriptor: AgentExecutionProtocolDescriptorSchema,
@@ -63,7 +180,9 @@ export const AgentExecutionJournalHeaderRecordSchema = AgentExecutionJournalReco
 export const AgentExecutionMessageSourceSchema = z.enum(['operator', 'daemon', 'system', 'owner']);
 
 export const AgentExecutionMessageAcceptedRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
-    type: z.literal('message.accepted'),
+    type: z.literal('turn.accepted'),
+    family: z.literal('turn.accepted'),
+    entrySemantics: z.literal('event'),
     messageId: journalTextSchema,
     source: AgentExecutionMessageSourceSchema,
     messageType: journalTextSchema,
@@ -86,7 +205,9 @@ export const AgentExecutionMessageDeliveryStatusSchema = z.enum([
 ]);
 
 export const AgentExecutionMessageDeliveryRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
-    type: z.literal('message.delivery'),
+    type: z.literal('turn.delivery'),
+    family: z.literal('turn.delivery'),
+    entrySemantics: z.literal('event'),
     messageId: journalTextSchema,
     status: AgentExecutionMessageDeliveryStatusSchema,
     transport: AgentExecutionMessageDeliveryTransportSchema,
@@ -113,12 +234,76 @@ export const AgentExecutionObservationConfidenceSchema = z.enum([
 ]);
 
 export const AgentExecutionObservationRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
-    type: z.literal('observation.recorded'),
+    type: z.literal('agent-observation'),
+    family: z.literal('agent-observation'),
+    entrySemantics: z.literal('event'),
     observationId: journalTextSchema,
     source: AgentExecutionObservationSourceSchema,
     confidence: AgentExecutionObservationConfidenceSchema,
     signal: AgentExecutionJournalSignalSchema.optional(),
     rawText: z.string().optional(),
+    payload: journalPayloadSchema.optional()
+}).strict();
+
+export const AgentExecutionRuntimeFactTypeSchema = z.enum([
+    'artifact-read',
+    'artifact-written',
+    'tool-invoked',
+    'tool-result',
+    'filesystem-change',
+    'provider-event'
+]);
+
+export const AgentExecutionRuntimeFactRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
+    type: z.literal('runtime-fact'),
+    family: z.literal('runtime-fact'),
+    entrySemantics: z.literal('event'),
+    factId: journalTextSchema,
+    factType: AgentExecutionRuntimeFactTypeSchema,
+    path: z.string().trim().min(1).optional(),
+    artifactId: z.string().trim().min(1).optional(),
+    detail: z.string().trim().min(1).optional(),
+    payload: journalPayloadSchema.optional()
+}).strict();
+
+export const AgentExecutionAssessmentTypeSchema = z.enum([
+    'self-confidence',
+    'verification-confidence',
+    'retry-pressure',
+    'instability',
+    'contradiction-risk',
+    'hallucination-risk',
+    'task-stall-risk',
+    'unresolved-concern',
+    'verification-gap'
+]);
+
+export const AgentExecutionAssessmentRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
+    type: z.literal('execution-assessment'),
+    family: z.literal('execution-assessment'),
+    entrySemantics: z.literal('assessment'),
+    assessmentId: journalTextSchema,
+    assessmentType: AgentExecutionAssessmentTypeSchema,
+    detail: journalTextSchema.optional(),
+    score: z.number().finite().optional(),
+    payload: journalPayloadSchema.optional()
+}).strict();
+
+export const AgentExecutionTransportEvidenceTypeSchema = z.enum([
+    'stdout-chunk',
+    'stderr-chunk',
+    'provider-payload',
+    'pty-snippet',
+    'adapter-event'
+]);
+
+export const AgentExecutionTransportEvidenceRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
+    type: z.literal('transport-evidence'),
+    family: z.literal('transport-evidence'),
+    entrySemantics: z.literal('evidence'),
+    evidenceId: journalTextSchema,
+    evidenceType: AgentExecutionTransportEvidenceTypeSchema,
+    content: z.string().optional(),
     payload: journalPayloadSchema.optional()
 }).strict();
 
@@ -132,6 +317,8 @@ export const AgentExecutionDecisionActionSchema = z.enum([
 
 export const AgentExecutionDecisionRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
     type: z.literal('decision.recorded'),
+    family: z.literal('decision.recorded'),
+    entrySemantics: z.literal('event'),
     decisionId: journalTextSchema,
     observationId: journalTextSchema.optional(),
     messageId: journalTextSchema.optional(),
@@ -141,14 +328,19 @@ export const AgentExecutionDecisionRecordSchema = AgentExecutionJournalRecordBas
 
 export const AgentExecutionStateChangedRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
     type: z.literal('state.changed'),
+    family: z.literal('state.changed'),
+    entrySemantics: z.literal('event'),
     lifecycle: AgentExecutionLifecycleStateSchema.optional(),
     attention: AgentExecutionAttentionStateSchema.optional(),
     activity: AgentExecutionSemanticActivitySchema.optional(),
-    currentInputRequestId: journalTextSchema.nullable().optional()
+    currentInputRequestId: journalTextSchema.nullable().optional(),
+    awaitingResponseToMessageId: journalTextSchema.nullable().optional()
 }).strict();
 
 export const AgentExecutionActivityUpdatedRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
     type: z.literal('activity.updated'),
+    family: z.literal('activity.updated'),
+    entrySemantics: z.literal('snapshot'),
     activity: AgentExecutionSemanticActivitySchema.optional(),
     progress: AgentExecutionActivityProgressSchema.optional(),
     telemetry: z.object({
@@ -163,6 +355,8 @@ export const AgentExecutionActivityUpdatedRecordSchema = AgentExecutionJournalRe
 
 export const AgentExecutionOwnerEffectRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
     type: z.literal('owner-effect.recorded'),
+    family: z.literal('owner-effect.recorded'),
+    entrySemantics: z.literal('event'),
     effectId: journalTextSchema,
     observationId: journalTextSchema.optional(),
     ownerEntity: z.enum(['System', 'Repository', 'Mission', 'Task', 'Artifact']),
@@ -172,8 +366,19 @@ export const AgentExecutionOwnerEffectRecordSchema = AgentExecutionJournalRecord
     payload: journalPayloadSchema.optional()
 }).strict();
 
+export const AgentExecutionCheckpointRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
+    type: z.literal('checkpoint.recorded'),
+    family: z.literal('checkpoint.recorded'),
+    entrySemantics: z.literal('snapshot'),
+    checkpointId: journalTextSchema,
+    detail: journalTextSchema.optional(),
+    payload: journalPayloadSchema.optional()
+}).strict();
+
 export const AgentExecutionProjectionRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
     type: z.literal('projection.recorded'),
+    family: z.literal('projection.recorded'),
+    entrySemantics: z.literal('snapshot'),
     projection: z.literal('timeline-item'),
     payload: journalPayloadSchema
 }).strict();
@@ -183,10 +388,14 @@ export const AgentExecutionJournalRecordSchema = z.discriminatedUnion('type', [
     AgentExecutionMessageAcceptedRecordSchema,
     AgentExecutionMessageDeliveryRecordSchema,
     AgentExecutionObservationRecordSchema,
+    AgentExecutionRuntimeFactRecordSchema,
+    AgentExecutionAssessmentRecordSchema,
+    AgentExecutionTransportEvidenceRecordSchema,
     AgentExecutionDecisionRecordSchema,
     AgentExecutionStateChangedRecordSchema,
     AgentExecutionActivityUpdatedRecordSchema,
     AgentExecutionOwnerEffectRecordSchema,
+    AgentExecutionCheckpointRecordSchema,
     AgentExecutionProjectionRecordSchema
 ]);
 
@@ -200,6 +409,13 @@ export const AgentExecutionJournalReferenceSchema = z.object({
 }).strict();
 
 export type AgentExecutionJournalSchemaVersionType = z.infer<typeof AgentExecutionJournalSchemaVersionSchema>;
+export type AgentExecutionJournalEntrySemanticsType = z.infer<typeof AgentExecutionJournalEntrySemanticsSchema>;
+export type AgentExecutionJournalExecutionContextType = z.infer<typeof AgentExecutionJournalExecutionContextSchema>;
+export type AgentExecutionJournalRecordFamilyType = z.infer<typeof AgentExecutionJournalRecordFamilySchema>;
+export type AgentExecutionJournalRecordAuthorityType = z.infer<typeof AgentExecutionJournalRecordAuthoritySchema>;
+export type AgentExecutionJournalAssertionLevelType = z.infer<typeof AgentExecutionJournalAssertionLevelSchema>;
+export type AgentExecutionJournalReplayClassType = z.infer<typeof AgentExecutionJournalReplayClassSchema>;
+export type AgentExecutionJournalOriginType = z.infer<typeof AgentExecutionJournalOriginSchema>;
 export type AgentExecutionJournalRecordTypeType = z.infer<typeof AgentExecutionJournalRecordTypeSchema>;
 export type AgentExecutionJournalRecordBaseType = z.infer<typeof AgentExecutionJournalRecordBaseSchema>;
 export type AgentExecutionJournalKindType = z.infer<typeof AgentExecutionJournalKindSchema>;
@@ -212,6 +428,12 @@ export type AgentExecutionMessageDeliveryRecordType = z.infer<typeof AgentExecut
 export type AgentExecutionObservationSourceType = z.infer<typeof AgentExecutionObservationSourceSchema>;
 export type AgentExecutionObservationConfidenceType = z.infer<typeof AgentExecutionObservationConfidenceSchema>;
 export type AgentExecutionObservationRecordType = z.infer<typeof AgentExecutionObservationRecordSchema>;
+export type AgentExecutionRuntimeFactType = z.infer<typeof AgentExecutionRuntimeFactTypeSchema>;
+export type AgentExecutionRuntimeFactRecordType = z.infer<typeof AgentExecutionRuntimeFactRecordSchema>;
+export type AgentExecutionAssessmentType = z.infer<typeof AgentExecutionAssessmentTypeSchema>;
+export type AgentExecutionAssessmentRecordType = z.infer<typeof AgentExecutionAssessmentRecordSchema>;
+export type AgentExecutionTransportEvidenceType = z.infer<typeof AgentExecutionTransportEvidenceTypeSchema>;
+export type AgentExecutionTransportEvidenceRecordType = z.infer<typeof AgentExecutionTransportEvidenceRecordSchema>;
 export type AgentExecutionDecisionActionType = z.infer<typeof AgentExecutionDecisionActionSchema>;
 export type AgentExecutionDecisionRecordType = z.infer<typeof AgentExecutionDecisionRecordSchema>;
 export type AgentExecutionAttentionStateType = z.infer<typeof AgentExecutionAttentionStateSchema>;
@@ -219,6 +441,7 @@ export type AgentExecutionSemanticActivityType = z.infer<typeof AgentExecutionSe
 export type AgentExecutionStateChangedRecordType = z.infer<typeof AgentExecutionStateChangedRecordSchema>;
 export type AgentExecutionActivityUpdatedRecordType = z.infer<typeof AgentExecutionActivityUpdatedRecordSchema>;
 export type AgentExecutionOwnerEffectRecordType = z.infer<typeof AgentExecutionOwnerEffectRecordSchema>;
+export type AgentExecutionCheckpointRecordType = z.infer<typeof AgentExecutionCheckpointRecordSchema>;
 export type AgentExecutionProjectionRecordType = z.infer<typeof AgentExecutionProjectionRecordSchema>;
 export type AgentExecutionJournalRecordType = z.infer<typeof AgentExecutionJournalRecordSchema>;
 export type AgentExecutionJournalReferenceType = z.infer<typeof AgentExecutionJournalReferenceSchema>;

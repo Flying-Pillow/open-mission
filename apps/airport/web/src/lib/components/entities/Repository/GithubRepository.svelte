@@ -2,12 +2,12 @@
     import { RepositoryDataSchema } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import type { RepositoryPlatformRepositoryType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import { goto } from "$app/navigation";
+    import { page } from "$app/state";
     import Icon from "@iconify/svelte";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
-    import { Input } from "$lib/components/ui/input/index.js";
     import { Separator } from "$lib/components/ui/separator/index.js";
     import EntityClassCommandbar from "$lib/components/entities/Commandbar/EntityClassCommandbar.svelte";
     import { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
@@ -22,12 +22,13 @@
 
     const appContext = getAppContext();
     const uid = $props.id();
-    const defaultRepositoryPath = "/repositories";
+    const configuredRepositoriesRoot = $derived(
+        page.data.systemState?.config?.repositoriesRoot?.trim() ||
+            "/repositories",
+    );
     let detailsOpen = $state(false);
-    let repositoryPath = $state(defaultRepositoryPath);
-    let commandRefreshNonce = $state(0);
     const cloneTargetPath = $derived(
-        `${repositoryPath.replace(/\/+$/u, "") || "/"}/${repository.repositoryRef}`,
+        `${configuredRepositoriesRoot.replace(/\/+$/u, "") || "/"}/${repository.repositoryRef}`,
     );
     const repositoryDescription = $derived(
         repository.description?.trim() ||
@@ -61,13 +62,8 @@
     const commandInput = $derived({
         platform: "github" as const,
         repositoryRef: repository.repositoryRef,
-        destinationPath: repositoryPath,
+        destinationPath: configuredRepositoriesRoot,
     });
-
-    function handleUseRepository(): void {
-        repositoryPath = defaultRepositoryPath;
-        commandRefreshNonce += 1;
-    }
 
     async function executeRepositoryClassCommand(
         commandId: string,
@@ -158,7 +154,7 @@
                 </Button>
             {/if}
             <EntityClassCommandbar
-                refreshNonce={commandRefreshNonce}
+                refreshNonce={0}
                 entityName="Repository"
                 {commandInput}
                 commands={repositoryClassCommands}
@@ -172,12 +168,7 @@
             <Dialog.Root bind:open={detailsOpen}>
                 <Dialog.Trigger>
                     {#snippet child({ props })}
-                        <Button
-                            type="button"
-                            size="sm"
-                            onclick={handleUseRepository}
-                            {...props}
-                        >
+                        <Button type="button" size="sm" {...props}>
                             Details
                             <Icon icon="lucide:arrow-right" class="size-4" />
                         </Button>
@@ -316,21 +307,17 @@
                         </div>
 
                         <div class="grid gap-2">
-                            <label
-                                class="text-sm font-medium text-foreground"
-                                for={`${uid}-repository-path`}
-                            >
+                            <p class="text-sm font-medium text-foreground">
                                 Clone base folder
-                            </label>
-                            <Input
-                                id={`${uid}-repository-path`}
-                                name="repositoryPath"
-                                placeholder="/repositories"
-                                bind:value={repositoryPath}
-                            />
+                            </p>
+                            <div
+                                class="rounded-2xl border bg-background px-4 py-3 font-mono text-sm text-foreground"
+                            >
+                                {configuredRepositoriesRoot}
+                            </div>
                             <p class="text-sm text-muted-foreground">
-                                Airport sends this absolute base folder to the
-                                daemon, which then clones into:
+                                Airport reads this path from Mission settings.
+                                The daemon will clone into:
                                 <span
                                     class="mt-1 block font-mono text-xs text-foreground"
                                 >
@@ -368,7 +355,7 @@
                                     {/snippet}
                                 </Dialog.Close>
                                 <EntityClassCommandbar
-                                    refreshNonce={commandRefreshNonce}
+                                    refreshNonce={0}
                                     entityName="Repository"
                                     {commandInput}
                                     commands={repositoryClassCommands}

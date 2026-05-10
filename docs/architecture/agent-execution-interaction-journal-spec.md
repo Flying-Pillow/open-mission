@@ -313,7 +313,7 @@ type AgentExecutionObservationRecord = AgentExecutionJournalRecordBase & {
 };
 ```
 
-An AgentDeclaredSignal remains a structured Agent-authored signal payload. It is one kind of observation payload, not the umbrella term for all runtime observations.
+An AgentSignal remains a structured Agent-authored signal payload. It is one kind of observation payload, not the umbrella term for all runtime observations.
 
 The `signal` field should derive from the canonical AgentExecution signal registry. The registry owns signal payload variants, descriptor metadata, and replay projection rules. `observation.recorded` still belongs to the journal record registry; only its signal payload family derives from the signal registry.
 

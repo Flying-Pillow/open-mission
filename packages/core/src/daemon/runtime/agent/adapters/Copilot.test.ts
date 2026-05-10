@@ -175,6 +175,7 @@ describe('Copilot', () => {
 		expect(state.writes).not.toContain('Implement the task.');
 	});
 
+
 	it('uses the source Mission CLI bridge for MCP config in source runtime mode', async () => {
 		vi.stubEnv('MISSION_DAEMON_RUNTIME_MODE', 'source');
 		const adapter = createAgentAdapter(createCopilot({

@@ -3,6 +3,7 @@ import { MissionMcpServer } from './MissionMcpServer.js';
 import { createAgentExecutionProtocolDescriptor } from '../../../../entities/AgentExecution/AgentExecutionProtocolDescriptor.js';
 import type { AgentExecutionObservation } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import type { AgentExecutionObservationAckType } from '../../../../entities/AgentExecution/AgentExecutionSchema.js';
+import type { AgentExecutionSemanticOperationResultType } from '../AgentExecutionSemanticOperations.js';
 
 function createDescriptor() {
     return createAgentExecutionProtocolDescriptor({
@@ -41,6 +42,7 @@ describe('MissionMcpServer', () => {
 
         expect(access.serverName).toBe('mission-mcp');
         expect(access.tools.map((tool) => tool.name)).toEqual([
+            'read_artifact',
             'progress',
             'status',
             'needs_input',
@@ -75,6 +77,49 @@ describe('MissionMcpServer', () => {
             source: 'agent-declared',
             confidence: 'medium',
             summary: 'Working through MCP.'
+        });
+    });
+
+    it('reads repository artifacts through Mission-owned MCP operations', async () => {
+        const server = new MissionMcpServer({
+            agentExecutionRegistry: {
+                routeTransportObservation(): AgentExecutionObservationAckType {
+                    throw new Error('unexpected route');
+                },
+                invokeSemanticOperation(input): AgentExecutionSemanticOperationResultType {
+                    return {
+                        operationName: 'read_artifact',
+                        agentExecutionId: input.agentExecutionId,
+                        eventId: input.input.eventId?.trim() || 'event-1',
+                        path: input.input.path,
+                        content: '# Brief\n',
+                        factType: 'artifact-read'
+                    };
+                }
+            }
+        });
+        await server.start();
+        server.registerAccess({
+            agentExecutionId: 'agent-execution-1',
+            token: 'token-1',
+            protocolDescriptor: createDescriptor()
+        });
+
+        const result = await server.callTool({
+            name: 'read_artifact',
+            input: {
+                agentExecutionId: 'agent-execution-1',
+                token: 'token-1',
+                path: 'missions/1-initial-setup/BRIEF.md'
+            }
+        });
+
+        expect(result).toMatchObject({
+            operationName: 'read_artifact',
+            agentExecutionId: 'agent-execution-1',
+            path: 'missions/1-initial-setup/BRIEF.md',
+            content: '# Brief\n',
+            factType: 'artifact-read'
         });
     });
 

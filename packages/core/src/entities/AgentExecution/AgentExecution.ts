@@ -42,6 +42,8 @@ import {
 	AgentExecutionCommandIds,
 	agentExecutionEntityName,
 	type AgentExecutionCommandType,
+	type AgentExecutionAttentionProjectionType,
+	type AgentExecutionActivityProjectionType,
 	type AgentExecutionMessageDescriptorType,
 	type AgentExecutionProjectionType,
 	type AgentExecutionProtocolDescriptorType,
@@ -62,6 +64,7 @@ import { hydrateAgentExecutionDataFromJournal } from './AgentExecutionJournalRep
 import { AgentExecutionJournalFileStore } from './AgentExecutionJournalFileStore.js';
 import { createAgentExecutionJournalReference } from './AgentExecutionJournalWriter.js';
 import { projectAgentExecutionObservationSignalToTimelineItem } from './AgentExecutionSignalRegistry.js';
+import type { AgentExecutionJournalRecordType } from './AgentExecutionJournalSchema.js';
 
 type LocatedAgentExecutionData = {
 	data: AgentExecutionDataType;
@@ -136,6 +139,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			...(record.attention ? { attention: record.attention } : {}),
 			...(record.semanticActivity ? { semanticActivity: record.semanticActivity } : {}),
 			...(record.currentInputRequestId !== undefined ? { currentInputRequestId: record.currentInputRequestId } : {}),
+			...(record.awaitingResponseToMessageId !== undefined ? { awaitingResponseToMessageId: record.awaitingResponseToMessageId } : {}),
 			...(record.terminalHandle ? { terminalHandle: { ...record.terminalHandle } } : {}),
 			...(record.taskId ? { taskId: record.taskId } : {}),
 			...(record.assignmentLabel ? { assignmentLabel: record.assignmentLabel } : {}),
@@ -382,6 +386,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			: undefined;
 		const terminalFields = getTerminalFields(input.snapshot);
 		const semanticActivity = mapSemanticActivityFromProgressState(input.snapshot?.progress.state);
+		const effectiveSemanticActivity = deriveSemanticActivityState(semanticActivity, undefined);
 		const protocolDescriptor = input.snapshot
 			? AgentExecution.createProtocolDescriptorForSnapshot(input.snapshot)
 			: undefined;
@@ -400,8 +405,8 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			adapterLabel: input.adapterLabel,
 			lifecycleState: input.snapshot?.status ?? input.launch.lifecycle,
 			...(input.snapshot?.attention ? { attention: input.snapshot.attention } : {}),
-			...(semanticActivity
-				? { semanticActivity }
+			...(effectiveSemanticActivity
+				? { semanticActivity: effectiveSemanticActivity }
 				: {}),
 			createdAt: input.launch.launchedAt,
 			lastUpdatedAt: input.snapshot?.updatedAt ?? input.launch.updatedAt,
@@ -437,7 +442,14 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			}),
 			...(protocolDescriptor ? { protocolDescriptor } : {}),
 			...(scope ? { scope } : {}),
-			...(input.snapshot?.progress ? { runtimeActivity: createRuntimeActivityFromProgress(input.snapshot.progress) } : {}),
+			...(input.snapshot?.progress
+				? {
+					runtimeActivity: createRuntimeActivityFromProgress(
+						input.snapshot.progress,
+						effectiveSemanticActivity
+					)
+				}
+				: {}),
 			...(input.snapshot?.failureMessage ? { failureMessage: input.snapshot.failureMessage } : {})
 		});
 	}
@@ -450,6 +462,8 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		const { snapshot, adapterLabel, record } = input;
 		const terminalFields = getTerminalFields(snapshot);
 		const semanticActivity = mapSemanticActivityFromProgressState(snapshot.progress.state);
+		const awaitingResponseToMessageId = record?.awaitingResponseToMessageId;
+		const effectiveSemanticActivity = deriveSemanticActivityState(semanticActivity, awaitingResponseToMessageId);
 		const protocolDescriptor = AgentExecution.createProtocolDescriptorForSnapshot(snapshot);
 		return AgentExecution.cloneState({
 			agentId: snapshot.agentId,
@@ -465,12 +479,13 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 					: {}),
 			lifecycleState: snapshot.status,
 			attention: snapshot.attention,
-			...(semanticActivity
-				? { semanticActivity }
+			...(effectiveSemanticActivity
+				? { semanticActivity: effectiveSemanticActivity }
 				: record?.semanticActivity
 					? { semanticActivity: record.semanticActivity }
 					: {}),
 			...(record?.currentInputRequestId !== undefined ? { currentInputRequestId: record.currentInputRequestId } : {}),
+			...(awaitingResponseToMessageId !== undefined ? { awaitingResponseToMessageId } : {}),
 			lastUpdatedAt: snapshot.updatedAt,
 			...(snapshot.workingDirectory
 				? { workingDirectory: snapshot.workingDirectory }
@@ -495,7 +510,12 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			...(record?.transportState ? { transportState: AgentExecution.cloneTransportState(record.transportState) } : {}),
 			...(record?.scope ? { scope: record.scope } : {}),
 			...(snapshot.progress
-				? { runtimeActivity: createRuntimeActivityFromProgress(snapshot.progress) }
+				? {
+					runtimeActivity: createRuntimeActivityFromProgress(
+						snapshot.progress,
+						effectiveSemanticActivity
+					)
+				}
 				: record?.runtimeActivity
 					? { runtimeActivity: cloneStructured(record.runtimeActivity) }
 					: {}),
@@ -520,6 +540,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			...(record.attention ? { attention: record.attention } : {}),
 			...(record.semanticActivity ? { semanticActivity: record.semanticActivity } : {}),
 			...(record.currentInputRequestId !== undefined ? { currentInputRequestId: record.currentInputRequestId } : {}),
+			...(record.awaitingResponseToMessageId !== undefined ? { awaitingResponseToMessageId: record.awaitingResponseToMessageId } : {}),
 			createdAt: record.createdAt,
 			lastUpdatedAt: record.lastUpdatedAt,
 			...(record.taskId ? { taskId: record.taskId } : {}),
@@ -550,6 +571,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			...(state.attention ? { attention: state.attention } : {}),
 			...(state.semanticActivity ? { semanticActivity: state.semanticActivity } : {}),
 			...(state.currentInputRequestId !== undefined ? { currentInputRequestId: state.currentInputRequestId } : {}),
+			...(state.awaitingResponseToMessageId !== undefined ? { awaitingResponseToMessageId: state.awaitingResponseToMessageId } : {}),
 			lastUpdatedAt: state.lastUpdatedAt,
 			...(state.workingDirectory ? { workingDirectory: state.workingDirectory } : {}),
 			...(state.currentTurnTitle ? { currentTurnTitle: state.currentTurnTitle } : {}),
@@ -662,20 +684,20 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	private liveSnapshot: AgentExecutionSnapshot | undefined;
 	private disposed = false;
 
-	public static createLive(snapshot: AgentExecutionSnapshot, options: { protocolDescriptor?: AgentExecutionProtocolDescriptorType; transportState?: AgentExecutionTransportStateType } = {}): AgentExecution {
+	public static createLive(snapshot: AgentExecutionSnapshot, options: { adapterLabel?: string; protocolDescriptor?: AgentExecutionProtocolDescriptorType; transportState?: AgentExecutionTransportStateType } = {}): AgentExecution {
 		const execution = new AgentExecution(AgentExecution.toDataFromRuntimeSnapshot(snapshot, options));
 		execution.liveSnapshot = cloneRuntimeSnapshot(snapshot);
 		return execution;
 	}
 
-	private static toDataFromRuntimeSnapshot(snapshot: AgentExecutionSnapshot, options: { protocolDescriptor?: AgentExecutionProtocolDescriptorType; transportState?: AgentExecutionTransportStateType } = {}): AgentExecutionDataType {
+	private static toDataFromRuntimeSnapshot(snapshot: AgentExecutionSnapshot, options: { adapterLabel?: string; protocolDescriptor?: AgentExecutionProtocolDescriptorType; transportState?: AgentExecutionTransportStateType } = {}): AgentExecutionDataType {
 		return AgentExecutionDataSchema.parse({
 			id: AgentExecution.createEntityId(getAgentExecutionEntityScopeId(snapshot), snapshot.agentExecutionId),
 			ownerId: getAgentExecutionOwnerId(snapshot.scope),
 			agentExecutionId: snapshot.agentExecutionId,
 			agentId: snapshot.agentId,
 			...(snapshot.transport?.kind === 'terminal' ? { transportId: 'terminal' } : {}),
-			adapterLabel: snapshot.agentId,
+			adapterLabel: options.adapterLabel?.trim() || snapshot.agentId,
 			lifecycleState: snapshot.status,
 			attention: snapshot.attention,
 			...(mapSemanticActivityFromProgressState(snapshot.progress.state)
@@ -731,6 +753,28 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			...super.toData(),
 			projection: cloneProjection(this.projection)
 		});
+	}
+
+	public replaceJournalRecords(records: AgentExecutionJournalRecordType[]): this {
+		this.data.journalRecords = cloneStructured(records) as AgentExecutionDataType['journalRecords'];
+		return this;
+	}
+
+	public appendJournalRecord(record: AgentExecutionJournalRecordType, options: { notify?: boolean } = {}): this {
+		const existingRecords = (this.data.journalRecords ?? []) as AgentExecutionJournalRecordType[];
+		if (existingRecords.some((existingRecord) => existingRecord.recordId === record.recordId)) {
+			return this;
+		}
+
+		existingRecords.push(cloneStructured(record));
+		this.data.journalRecords = existingRecords as AgentExecutionDataType['journalRecords'];
+		this.data.lastUpdatedAt = record.occurredAt;
+
+		if (options.notify) {
+			this.notifyDataChanged();
+		}
+
+		return this;
 	}
 
 	public get id(): string {
@@ -845,6 +889,28 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		return snapshot;
 	}
 
+	public setAwaitingResponseToMessageId(messageId: string | null, updatedAt = new Date().toISOString()): AgentExecutionDataType {
+		const baseData = super.toData();
+		const nextSemanticActivity = deriveSemanticActivityState(
+			this.liveSnapshot ? mapSemanticActivityFromProgressState(this.liveSnapshot.progress.state) : baseData.semanticActivity,
+			messageId
+		);
+		const nextRuntimeActivity = this.liveSnapshot?.progress
+			? createRuntimeActivityFromProgress(this.liveSnapshot.progress, nextSemanticActivity)
+			: applySemanticActivityToRuntimeActivity(baseData.runtimeActivity, nextSemanticActivity);
+		this.data = AgentExecutionDataSchema.parse({
+			...baseData,
+			...(messageId !== undefined ? { awaitingResponseToMessageId: messageId } : {}),
+			...(nextSemanticActivity ? { semanticActivity: nextSemanticActivity } : {}),
+			...(nextRuntimeActivity ? { runtimeActivity: cloneStructured(nextRuntimeActivity) } : {}),
+			lastUpdatedAt: updatedAt,
+			projection: cloneProjection(this.projection)
+		});
+		this.refreshProjectionState(updatedAt);
+		this.notifyDataChanged();
+		return this.toData();
+	}
+
 	public async submitCommand(command: AgentCommand): Promise<AgentExecutionSnapshot> {
 		this.requireActiveSnapshot(`perform '${command.type}'`);
 		if (command.type === 'interrupt') {
@@ -952,6 +1018,12 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		if ('failureMessage' in overrides && overrides.failureMessage === undefined) {
 			delete nextSnapshot.failureMessage;
 		}
+		if (
+			overrides.waitingForInput === false
+			&& overrides.currentInputRequestId === undefined
+		) {
+			nextSnapshot.currentInputRequestId = null;
+		}
 		nextSnapshot.interactionCapabilities = deriveAgentExecutionInteractionCapabilities(nextSnapshot);
 		this.liveSnapshot = nextSnapshot;
 		return this.getSnapshot();
@@ -963,6 +1035,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		}
 		this.appendTimelineItemFromEvent(event);
 		this.liveSnapshot = cloneRuntimeSnapshot(event.snapshot);
+		this.refreshProjectionState(event.snapshot.updatedAt);
 		for (const listener of this.listeners) {
 			listener(event);
 		}
@@ -1025,6 +1098,9 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 
 	private appendTimelineItemFromEvent(event: AgentExecutionEvent): boolean {
 		if (event.type === 'execution.message' && event.channel === 'agent') {
+			if (event.timelineItem) {
+				return this.appendTimelineItem(event.timelineItem);
+			}
 			return this.appendTimelineItem({
 				id: createProjectionItemId(event.snapshot.agentExecutionId, event.snapshot.updatedAt, event.channel, event.text),
 				occurredAt: event.snapshot.updatedAt,
@@ -1104,7 +1180,74 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			projection: cloneProjection(this.projection),
 			lastUpdatedAt: parsed.occurredAt
 		});
+		this.refreshProjectionState(parsed.occurredAt);
 		return true;
+	}
+
+	private refreshProjectionState(updatedAt: string): void {
+		const baseData = super.toData();
+		const snapshot = this.liveSnapshot ? this.getSnapshot() : undefined;
+		const lifecycleState = snapshot?.status ?? baseData.lifecycleState;
+		const attention = snapshot?.attention ?? baseData.attention;
+		const semanticActivity = snapshot
+			? deriveSemanticActivityState(
+				mapSemanticActivityFromProgressState(snapshot.progress.state) ?? baseData.semanticActivity,
+				baseData.awaitingResponseToMessageId
+			)
+			: baseData.semanticActivity;
+		const runtimeActivity = snapshot?.progress
+			? createRuntimeActivityFromProgress(snapshot.progress, semanticActivity)
+			: applySemanticActivityToRuntimeActivity(baseData.runtimeActivity, semanticActivity);
+		const currentActivity = createLiveCurrentActivityProjection({
+			lifecycleState,
+			attention,
+			semanticActivity,
+			runtimeActivity,
+			telemetry: baseData.telemetry,
+			updatedAt: snapshot?.updatedAt ?? updatedAt
+		});
+		const currentAttention = createLiveCurrentAttentionProjection({
+			attention,
+			currentInputRequestId: snapshot?.currentInputRequestId ?? baseData.currentInputRequestId,
+			timelineItems: this.projection.timelineItems,
+			updatedAt: snapshot?.updatedAt ?? updatedAt
+		});
+		this.projection = AgentExecutionProjectionSchema.parse({
+			timelineItems: [...this.projection.timelineItems],
+			...(currentActivity ? { currentActivity } : {}),
+			...(currentAttention ? { currentAttention } : {}),
+			...(this.projection.runtimeOverlay
+				? { runtimeOverlay: cloneStructured(this.projection.runtimeOverlay) }
+				: {})
+		});
+		this.data = AgentExecutionDataSchema.parse({
+			...baseData,
+			lifecycleState,
+			...(attention !== undefined ? { attention } : {}),
+			...(semanticActivity ? { semanticActivity } : {}),
+			...(baseData.awaitingResponseToMessageId !== undefined ? { awaitingResponseToMessageId: baseData.awaitingResponseToMessageId } : {}),
+			...(runtimeActivity ? { runtimeActivity: cloneStructured(runtimeActivity) } : {}),
+			...(snapshot?.failureMessage ? { failureMessage: snapshot.failureMessage } : {}),
+			...(snapshot
+				? {
+					interactionCapabilities: snapshot.interactionCapabilities
+						? { ...snapshot.interactionCapabilities }
+						: AgentExecution.resolveInteractionCapabilities({
+							lifecycleState: snapshot.status,
+							...(snapshot.transport ? { transport: snapshot.transport } : {}),
+							acceptsPrompts: snapshot.acceptsPrompts,
+							acceptedCommands: snapshot.acceptedCommands
+						}),
+					runtimeMessages: AgentExecution.resolveRuntimeMessages({
+						lifecycleState: snapshot.status,
+						acceptsPrompts: snapshot.acceptsPrompts,
+						acceptedCommands: snapshot.acceptedCommands
+					})
+				}
+				: {}),
+			projection: cloneProjection(this.projection),
+			lastUpdatedAt: snapshot?.updatedAt ?? updatedAt
+		});
 	}
 
 	private notifyDataChanged(): void {
@@ -1525,12 +1668,22 @@ function mapSemanticActivityFromProgressState(
 	}
 }
 
+function deriveSemanticActivityState(
+	baseActivity: AgentExecutionSemanticActivityType | undefined,
+	awaitingResponseToMessageId: string | null | undefined
+): AgentExecutionSemanticActivityType | undefined {
+	return awaitingResponseToMessageId !== undefined && awaitingResponseToMessageId !== null
+		? 'awaiting-agent-response'
+		: baseActivity;
+}
+
 function createRuntimeActivityFromProgress(
-	progress: AgentExecutionSnapshot['progress']
+	progress: AgentExecutionSnapshot['progress'],
+	semanticActivityOverride?: AgentExecutionSemanticActivityType
 ): AgentExecutionRuntimeActivitySnapshotType {
 	return {
-		...(mapSemanticActivityFromProgressState(progress.state)
-			? { activity: mapSemanticActivityFromProgressState(progress.state) }
+		...(semanticActivityOverride ?? mapSemanticActivityFromProgressState(progress.state)
+			? { activity: semanticActivityOverride ?? mapSemanticActivityFromProgressState(progress.state) }
 			: {}),
 		progress: {
 			...(progress.summary ? { summary: progress.summary } : {}),
@@ -1538,6 +1691,22 @@ function createRuntimeActivityFromProgress(
 			...(progress.units ? { units: cloneStructured(progress.units) } : {})
 		},
 		updatedAt: progress.updatedAt
+	};
+}
+
+function applySemanticActivityToRuntimeActivity(
+	runtimeActivity: AgentExecutionRuntimeActivitySnapshotType | undefined,
+	semanticActivity: AgentExecutionSemanticActivityType | undefined
+): AgentExecutionRuntimeActivitySnapshotType | undefined {
+	if (!runtimeActivity) {
+		return runtimeActivity;
+	}
+	if (!semanticActivity || runtimeActivity.activity === semanticActivity) {
+		return runtimeActivity;
+	}
+	return {
+		...runtimeActivity,
+		activity: semanticActivity
 	};
 }
 
@@ -1581,6 +1750,90 @@ function cloneStructured<T>(input: T): T {
 
 function cloneProjection(projection: AgentExecutionProjectionType): AgentExecutionProjectionType {
 	return AgentExecutionProjectionSchema.parse(cloneStructured(projection));
+}
+
+function createLiveCurrentActivityProjection(input: {
+	lifecycleState: AgentExecutionDataType['lifecycleState'];
+	attention: AgentExecutionDataType['attention'] | undefined;
+	semanticActivity: AgentExecutionDataType['semanticActivity'] | undefined;
+	runtimeActivity: AgentExecutionDataType['runtimeActivity'] | undefined;
+	telemetry: AgentExecutionDataType['telemetry'] | undefined;
+	updatedAt: string;
+}): AgentExecutionActivityProjectionType | undefined {
+	if (
+		!input.lifecycleState
+		&& !input.attention
+		&& !input.semanticActivity
+		&& !input.runtimeActivity
+		&& !input.telemetry
+	) {
+		return undefined;
+	}
+	return {
+		updatedAt: input.updatedAt,
+		...(input.lifecycleState ? { lifecycleState: input.lifecycleState } : {}),
+		...(input.attention ? { attention: input.attention } : {}),
+		...(input.runtimeActivity?.activity ?? input.semanticActivity
+			? { activity: input.runtimeActivity?.activity ?? input.semanticActivity }
+			: {}),
+		...(input.runtimeActivity?.progress?.summary ? { summary: input.runtimeActivity.progress.summary } : {}),
+		...(input.runtimeActivity?.progress?.detail ? { detail: input.runtimeActivity.progress.detail } : {}),
+		...(input.runtimeActivity?.progress?.units ? { units: input.runtimeActivity.progress.units } : {}),
+		...(input.runtimeActivity?.currentTarget ? { currentTarget: input.runtimeActivity.currentTarget } : {}),
+		...(input.telemetry?.activeToolName ? { activeToolName: input.telemetry.activeToolName } : {})
+	};
+}
+
+function createLiveCurrentAttentionProjection(input: {
+	attention: AgentExecutionDataType['attention'] | undefined;
+	currentInputRequestId: AgentExecutionDataType['currentInputRequestId'] | undefined;
+	timelineItems: AgentExecutionTimelineItemType[];
+	updatedAt: string;
+}): AgentExecutionAttentionProjectionType | undefined {
+	if (!input.attention || input.attention === 'none' || input.attention === 'autonomous') {
+		return undefined;
+	}
+	const attentionItem = resolveCurrentAttentionProjectionItem(input.timelineItems, input.currentInputRequestId);
+	const primitive = attentionItem?.primitive;
+	if (
+		primitive !== 'attention.input-request'
+		&& primitive !== 'attention.blocked'
+		&& primitive !== 'attention.verification-requested'
+		&& primitive !== 'attention.verification-result'
+	) {
+		return {
+			state: input.attention,
+			primitive: input.currentInputRequestId ? 'attention.input-request' : 'attention.blocked',
+			...(input.currentInputRequestId !== undefined ? { currentInputRequestId: input.currentInputRequestId } : {}),
+			updatedAt: input.updatedAt
+		};
+	}
+	return {
+		state: input.attention,
+		primitive,
+		...(attentionItem?.severity ? { severity: attentionItem.severity } : {}),
+		...(attentionItem?.payload.title ? { title: attentionItem.payload.title } : {}),
+		...(attentionItem?.payload.text ? { text: attentionItem.payload.text } : {}),
+		...(attentionItem?.payload.detail ? { detail: attentionItem.payload.detail } : {}),
+		...(attentionItem?.payload.choices ? { choices: attentionItem.payload.choices } : {}),
+		...(input.currentInputRequestId !== undefined ? { currentInputRequestId: input.currentInputRequestId } : {}),
+		updatedAt: attentionItem?.occurredAt ?? input.updatedAt
+	};
+}
+
+function resolveCurrentAttentionProjectionItem(
+	timelineItems: AgentExecutionTimelineItemType[],
+	currentInputRequestId: AgentExecutionDataType['currentInputRequestId'] | undefined
+): AgentExecutionTimelineItemType | undefined {
+	if (currentInputRequestId) {
+		const inputRequestItem = timelineItems.find((item) => item.id === currentInputRequestId);
+		if (inputRequestItem?.primitive === 'attention.input-request') {
+			return inputRequestItem;
+		}
+	}
+	return [...timelineItems].reverse().find(
+		(item) => item.primitive.startsWith('attention.') && item.primitive !== 'attention.input-request'
+	);
 }
 
 function createProjectionItemId(agentExecutionId: string, at: string, kind: string, text = ''): string {

@@ -50,6 +50,8 @@ Read them when a change touches ownership, naming, state, runtime behavior, repo
 - [Agent Execution Structured Interaction Vocabulary](0022-agent-execution-structured-interaction-vocabulary.md)
 - [Mission MCP Server Agent Signal Transport](0024-mission-mcp-server-agent-signal-transport.md)
 - [Agent Execution Interaction Journal](0025-agent-execution-interaction-journal.md)
+- [Typed Agent Execution Journal Ledger](0027-typed-agent-execution-journal-ledger.md)
+- [Daemon-Owned Runtime Supervision Graph](0028-daemon-owned-runtime-supervision-graph.md)
 
 ### Mission Control And Surfaces
 

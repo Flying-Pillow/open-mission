@@ -26,6 +26,17 @@ describe('PlainTerminalScreen', () => {
         });
     });
 
+    it('keeps only the tail when a single chunk exceeds the buffer limit', () => {
+        const screen = new PlainTerminalScreen({ cols: 120, rows: 32, maxBufferSize: 8 });
+
+        screen.write('abcdefghijklmnop');
+
+        expect(screen.snapshot()).toEqual({
+            screen: 'ijklmnop',
+            truncated: true
+        });
+    });
+
     it('serializes and restores completed terminal output state', () => {
         const original = new PlainTerminalScreen({ cols: 80, rows: 24, maxBufferSize: 10 });
         original.write('0123456789');

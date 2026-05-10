@@ -16,6 +16,11 @@ import {
 } from '../../../entities/AgentExecution/AgentExecutionSchema.js';
 import { AgentExecutor } from './AgentExecutor.js';
 import type { MissionMcpServer } from './mcp/MissionMcpServer.js';
+import type {
+    AgentExecutionSemanticOperationInvocationType,
+    AgentExecutionSemanticOperationInvoker,
+    AgentExecutionSemanticOperationResultType
+} from './AgentExecutionSemanticOperations.js';
 
 type AgentExecutionRegistryEntry = {
     ownerKey: string;
@@ -37,7 +42,7 @@ type AgentExecutionRegistryOptions = {
     };
 };
 
-export class AgentExecutionRegistry {
+export class AgentExecutionRegistry implements AgentExecutionSemanticOperationInvoker {
     private readonly executionsByAgentExecutionId = new Map<string, AgentExecutionRegistryEntry>();
     private readonly agentExecutionIdsByOwnerKey = new Map<string, string>();
     private readonly dataChangeListeners = new Set<(data: AgentExecutionDataType) => void>();
@@ -83,6 +88,34 @@ export class AgentExecutionRegistry {
         }
 
         return this.startExecution(input);
+    }
+
+    public readReusableExecution(input: {
+        ownerKey: string;
+        requestedAgentId?: string;
+    }): AgentExecutionDataType | undefined {
+        const existingAgentExecutionId = this.agentExecutionIdsByOwnerKey.get(input.ownerKey);
+        if (!existingAgentExecutionId) {
+            return undefined;
+        }
+
+        const existing = this.executionsByAgentExecutionId.get(existingAgentExecutionId);
+        if (!existing) {
+            this.agentExecutionIdsByOwnerKey.delete(input.ownerKey);
+            return undefined;
+        }
+
+        const snapshot = existing.execution.getSnapshot();
+        if (AgentExecution.isTerminalFinalStatus(snapshot.status)) {
+            this.disposeAgentExecution(existingAgentExecutionId);
+            return undefined;
+        }
+
+        if (input.requestedAgentId && snapshot.agentId !== input.requestedAgentId) {
+            return undefined;
+        }
+
+        return this.toExecutionData(existing.execution);
     }
 
     public async replaceActiveExecution(input: {
@@ -186,6 +219,14 @@ export class AgentExecutionRegistry {
             });
         }
         return AgentExecutionObservationAckSchema.parse(await entry.agentExecutor.routeTransportObservation(input));
+    }
+
+    public async invokeSemanticOperation(input: AgentExecutionSemanticOperationInvocationType): Promise<AgentExecutionSemanticOperationResultType> {
+        const entry = this.executionsByAgentExecutionId.get(input.agentExecutionId);
+        if (!entry) {
+            throw new Error(`AgentExecution '${input.agentExecutionId}' is not registered in the daemon AgentExecutionRegistry.`);
+        }
+        return entry.agentExecutor.invokeSemanticOperation(input);
     }
 
     public onDidExecutionDataChange(listener: (data: AgentExecutionDataType) => void): { dispose(): void } {

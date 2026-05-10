@@ -48,6 +48,7 @@ import {
 	type RepositorySetupResultType,
 	type RepositorySetupType,
 	type RepositoryConfigureAgentsType,
+	type RepositoryConfigureDisplayType,
 	type RepositorySyncCommandAcknowledgementType,
 	type RepositorySyncStatusType,
 	type RepositorySettingsType,
@@ -68,6 +69,7 @@ import {
 	RepositoryInitializeResultSchema,
 	RepositoryInitializeSchema,
 	RepositoryConfigureAgentsSchema,
+	RepositoryConfigureDisplaySchema,
 	RepositorySetupResultSchema,
 	RepositorySetupSchema,
 	RepositorySyncCommandAcknowledgementSchema,
@@ -253,7 +255,9 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 		const repositoriesRoot = resolveRepositoriesRoot(config);
 		const repositoryRootPaths = await Repository.findGitRepositoryRoots(repositoriesRoot);
-		return repositoryRootPaths.map((repositoryRootPath) => Repository.open(repositoryRootPath));
+		return repositoryRootPaths
+			.filter((repositoryRootPath) => Repository.isCanonicalCheckoutRoot(repositoryRootPath))
+			.map((repositoryRootPath) => Repository.open(repositoryRootPath));
 	}
 
 	private static async findGitRepositoryRoots(rootPath: string): Promise<string[]> {
@@ -286,6 +290,12 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 		await visit(rootPath, 3);
 		return [...discovered].sort((left, right) => left.localeCompare(right));
+	}
+
+	private static isCanonicalCheckoutRoot(repositoryRootPath: string): boolean {
+		const resolvedRepositoryRootPath = path.resolve(repositoryRootPath);
+		const canonicalRepositoryRootPath = Repository.resolveRepositoryRoot(resolvedRepositoryRootPath);
+		return canonicalRepositoryRootPath === resolvedRepositoryRootPath;
 	}
 
 	private static async assertRemovableRepositoryRoot(repositoryRootPath: string): Promise<string> {
@@ -937,6 +947,35 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		});
 	}
 
+	public async configureDisplay(
+		input: RepositoryConfigureDisplayType,
+		context?: EntityExecutionContext
+	): Promise<RepositoryDataType> {
+		const args = RepositoryConfigureDisplaySchema.parse(input);
+		this.assertRepositoryIdentity(args);
+
+		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
+		if (settingsState.kind === 'invalid') {
+			throw new Error(Repository.describeInvalidState(settingsState.invalidState));
+		}
+
+		const currentSettings = settingsState.kind === 'valid'
+			? settingsState.settings
+			: await Repository.createPreparedRepositorySettings(this.repositoryRootPath);
+		const { icon: _currentIcon, ...baseSettings } = currentSettings;
+		const nextSettings = RepositorySettingsSchema.parse({
+			...baseSettings,
+			...(args.icon ? { icon: args.icon } : {})
+		});
+		await Repository.writeSettingsDocument(nextSettings, this.repositoryRootPath, { resolveWorkspaceRoot: false });
+		this.updateSettings(nextSettings);
+		await Repository.getRepositoryFactory(context).save(Repository, this.toStorage());
+		return await this.read({
+			id: this.id,
+			repositoryRootPath: this.repositoryRootPath
+		});
+	}
+
 	public async ensureRepositoryAgentExecution(
 		input: RepositoryInitializeType,
 		context?: EntityExecutionContext
@@ -966,9 +1005,19 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			throw new Error(`Repository '${this.id}' does not have an available repository agent.`);
 		}
 		const agentExecutionRegistry = context?.agentExecutionRegistry ?? getDefaultAgentExecutionRegistry();
+		const ownerKey = Repository.createRepositoryAgentExecutionOwnerKey(this.repositoryRootPath);
+		const reusableExecution = typeof agentExecutionRegistry.readReusableExecution === 'function'
+			? agentExecutionRegistry.readReusableExecution({
+				ownerKey,
+				requestedAgentId: agentId
+			})
+			: undefined;
+		if (reusableExecution) {
+			return reusableExecution;
+		}
 		const initialPromptText = await this.buildRepositoryAgentPrompt(context);
 		return agentExecutionRegistry.ensureExecution({
-			ownerKey: Repository.createRepositoryAgentExecutionOwnerKey(this.repositoryRootPath),
+			ownerKey,
 			agentRegistry,
 			config: {
 				scope: {
@@ -990,10 +1039,31 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		});
 	}
 
+	public async refreshRepositoryAgentExecution(
+		input: RepositoryInitializeType,
+		context?: EntityExecutionContext
+	): Promise<AgentExecutionDataType> {
+		const args = RepositoryInitializeSchema.parse(input);
+		this.assertRepositoryIdentity(args);
+		this.assertCanLaunchRepositoryAgentExecution();
+		await this.ensurePreparedForRepositoryAgentExecution(context);
+
+		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
+		const setupSettings = settingsState.kind === 'valid'
+			? settingsState.settings
+			: createDefaultRepositorySettings();
+		const replacedExecution = await this.replaceActiveRepositoryAgentExecution(setupSettings, context);
+		if (replacedExecution) {
+			return replacedExecution;
+		}
+
+		return this.ensureRepositoryAgentExecution(args, context);
+	}
+
 	private async replaceActiveRepositoryAgentExecution(
 		settings: RepositorySettingsType,
 		context?: EntityExecutionContext
-	): Promise<void> {
+	): Promise<AgentExecutionDataType | undefined> {
 		const agentRegistry = await AgentRegistry.createConfigured({
 			repositoryRootPath: this.repositoryRootPath,
 			settings
@@ -1007,12 +1077,12 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			? agentRegistry.resolveStartAgentId(settings.agentAdapter)
 			: enabledAgentIds[0];
 		if (!agentId) {
-			return;
+			return undefined;
 		}
 
 		const agentExecutionRegistry = context?.agentExecutionRegistry ?? getDefaultAgentExecutionRegistry();
 		const initialPromptText = await this.buildRepositoryAgentPrompt(context);
-		await agentExecutionRegistry.replaceActiveExecution({
+		return await agentExecutionRegistry.replaceActiveExecution({
 			ownerKey: Repository.createRepositoryAgentExecutionOwnerKey(this.repositoryRootPath),
 			agentRegistry,
 			config: {
@@ -1327,6 +1397,11 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		if (this.invalidState && !this.isRecoverableSetupState()) {
 			throw new Error(Repository.describeInvalidState(this.invalidState));
 		}
+		if (!Repository.isCanonicalCheckoutRoot(this.repositoryRootPath)) {
+			throw new Error(
+				`Repository '${this.id}' is a linked worktree. Repository-level AgentExecution is only allowed from the canonical repository checkout at '${Repository.resolveRepositoryRoot(this.repositoryRootPath)}'.`
+			);
+		}
 	}
 
 	private async ensurePreparedForRepositoryAgentExecution(context?: EntityExecutionContext): Promise<void> {
@@ -1337,6 +1412,10 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	private async buildRepositoryAgentPrompt(context?: EntityExecutionContext): Promise<string> {
+		await this.read({
+			id: this.id,
+			repositoryRootPath: this.repositoryRootPath
+		});
 		const syncStatus = this.buildSyncStatus(context?.authToken);
 		const missionStore = new MissionDossierFilesystem(this.repositoryRootPath);
 		const missions = await missionStore.listMissions().catch(() => []);

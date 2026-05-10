@@ -226,7 +226,7 @@ type AgentExecutionProtocolDescriptor = {
   };
   scope: AgentExecutionScope;
   messages: AgentExecutionMessageDescriptor[];
-  signals: AgentDeclaredSignalDescriptor[];
+  signals: AgentSignalDescriptor[];
   mcp?: {
     serverName: 'mission-mcp';
     exposure: 'session-scoped';
@@ -238,7 +238,7 @@ type AgentExecutionProtocolDescriptor = {
 Suggested signal descriptor shape:
 
 ```ts
-type AgentDeclaredSignalDescriptor = {
+type AgentSignalDescriptor = {
   type: string;
   label: string;
   payloadSchemaKey: string;

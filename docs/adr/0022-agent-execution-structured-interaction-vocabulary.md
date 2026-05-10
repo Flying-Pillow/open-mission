@@ -24,6 +24,8 @@ An **Entity event** is a daemon-emitted fact that an Entity publishes after acce
 
 An **Agent execution message** is structured daemon-to-AgentExecution input. It can be operator-authored or daemon-authored. It may deliver a prompt, runtime control request, or context operation to an Agent execution. If the message changes durable Agent execution context, the context mutation is canonical when accepted by the owning daemon Entity; runtime delivery to the Agent adapter remains best effort.
 
+An **Agent execution turn** is one accepted and delivered turn-starting Agent execution message. Launch prompts, follow-up prompts, and turn-starting runtime messages such as `resume`, `checkpoint`, or `nudge` each begin a new turn. A turn begins from daemon-owned acceptance and delivery records, not from Agent-authored acknowledgement text.
+
 An **Agent execution message descriptor** describes one daemon-to-AgentExecution message that is available for a specific execution. It names the message type, label, input shape, delivery behavior, and context effect so Airport and daemon modules can present and send messages from the same source of truth.
 
 An **Agent-declared signal** is structured text emitted by the Agent process to the Entity that owns the execution scope. The signal marker prefix is derived from the owning Entity, such as `@task::`, `@mission::`, `@repository::`, or `@artifact::`, followed by strict JSON on the same line. The current `@mission::` marker is the first implementation of this owner-addressed pattern for Mission/task work and should converge into the owner-derived prefix model as scope support broadens.
@@ -87,9 +89,23 @@ Agent stdout line with owner prefix
   -> AgentExecution state change, Entity event, workflow event, or rejection
 ```
 
+The structured delivery path for daemon-to-AgentExecution turns is:
+
+```text
+Agent execution message accepted by the daemon
+  -> delivery attempted
+  -> delivery recorded
+  -> AgentExecution semantic activity set to awaiting-agent-response
+  -> later Agent observation clears or refines the turn state
+```
+
+Surface attachment is not a turn. Attaching Airport or another surface to an existing AgentExecution only resolves transport and live state. If a surface-triggered action also starts work, it must do so by sending an explicit Agent execution message that begins a new turn and therefore enters `awaiting-agent-response` through the same daemon-owned delivery path as any other turn.
+
 An Agent-declared signal may produce an AgentExecution Entity event after policy acceptance. When a signal represents a request for owner action, the owning Entity evaluates it as an observation or claim and decides the resulting domain behavior through its own methods, policies, and workflow delegate. The Agent is not asked to echo Mission, Task, Artifact, Repository, or owner ids in the marker payload; the daemon attaches the active route scope and rejects markers whose `agentExecutionId` does not match the active execution.
 
 AgentExecution lifecycle truth remains daemon-owned. `completed_claim` and `failed_claim` are claims that become lifecycle transitions through daemon-authoritative owner behavior. `ready_for_verification` is a claim that the owning Entity or operator may use to surface verification work.
+
+Turn state is separate from lifecycle truth. When the daemon accepts and delivers an Agent execution turn, AgentExecution enters semantic activity `awaiting-agent-response` immediately and remains there until a meaningful Agent observation clears it, replaces it with another activity, or requests input. Surfaces must not wait for an Agent-declared `initializing` marker before showing that a turn is in flight.
 
 `needs_input` is an observation that keeps AgentExecution lifecycle `running`, sets `attention: awaiting-operator`, attaches a current input-request id, and may publish an Entity event. Its signal payload carries a required `question` and required `choices` array. Each choice is either `kind: "fixed"` with `label` and `value`, or `kind: "manual"` with `label` and optional `placeholder` for freeform operator input. The operator response is a separate Agent execution message or Entity command.
 
@@ -118,7 +134,7 @@ Entity events publish accepted facts. Owning Entity methods and policies validat
 - The Agent signal parser remains strict and deterministic. Domain acceptance happens in the owning Entity path.
 - The word `command` names Entity commands and intentional daemon/operator-to-AgentExecution command messages. Agent-authored stdout markers are signals, observations, or claims.
 - The word `event` names accepted daemon-published facts. Raw Agent stdout becomes an event only after daemon code accepts and publishes it as one.
-- The word `signal` names the structured line of Agent-authored text and its parsed payload. Implementation names should prefer `AgentDeclaredSignal` where precision helps.
+- The word `signal` names the structured line of Agent-authored text and its parsed payload. Implementation names should prefer `AgentSignal` where precision helps.
 
 ## Remaining Open Questions
 

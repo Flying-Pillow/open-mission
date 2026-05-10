@@ -1,25 +1,67 @@
-import type { AgentInput } from '../AgentAdapter.js';
+import type { AgentAdapterTerminalOptions, AgentInput } from '../AgentAdapter.js';
 
 const OPENCODE_AGENT_ID = 'opencode' as const;
 
-export const openCode = {
-    id: `agent:${OPENCODE_AGENT_ID}`,
-    agentId: OPENCODE_AGENT_ID,
-    displayName: 'OpenCode',
-    optionCatalog: {
-        models: [
-            { value: 'openai/gpt-5.5', label: 'OpenAI GPT-5.5' },
-            { value: 'openai/gpt-5.4', label: 'OpenAI GPT-5.4' }
-        ],
-        reasoningEfforts: []
-    },
-    adapter: {
-        command: 'opencode',
-        interactive: {
-            args: [
-                { setting: 'model', flag: '--model' },
-                { prompt: 'initial', flag: '-p' }
-            ]
+export type OpenCodeInput = {
+    command?: string;
+    env?: NodeJS.ProcessEnv;
+} & Partial<Pick<AgentAdapterTerminalOptions,
+    | 'terminalPrefix'
+    | 'spawn'
+    | 'processController'
+    | 'terminationGraceMs'
+    | 'terminationPollIntervalMs'
+    | 'screenFactory'
+>>;
+
+export function createOpenCode(input: OpenCodeInput = {}): AgentInput {
+    const { command, env, ...terminalOptions } = input;
+    return {
+        id: `agent:${OPENCODE_AGENT_ID}`,
+        agentId: OPENCODE_AGENT_ID,
+        displayName: 'OpenCode',
+        optionCatalog: {
+            models: [
+                { value: 'openai/gpt-5.5', label: 'OpenAI GPT-5.5' },
+                { value: 'openai/gpt-5.4', label: 'OpenAI GPT-5.4' }
+            ],
+            reasoningEfforts: []
+        },
+        adapter: {
+            command: command?.trim() || process.env['MISSION_OPENCODE_CLI_COMMAND']?.trim() || 'opencode',
+            providerSettings: {},
+            defaultLaunchMode: 'interactive',
+            transportCapabilities: {
+                supported: ['stdout-marker'],
+                preferred: {
+                    interactive: 'stdout-marker',
+                    print: 'stdout-marker'
+                },
+                provisioning: {
+                    requiresRuntimeConfig: false,
+                    supportsStdioBridge: false,
+                    supportsAgentExecutionScopedTools: false
+                }
+            },
+            ...(env ? { runtimeEnv: env } : {}),
+            terminalOptions,
+            interactive: {
+                args: [
+                    { setting: 'model', flag: '--model' },
+                    { prompt: 'initial', flag: '--prompt', omitWhenEmpty: true }
+                ]
+            },
+            print: {
+                args: [
+                    'run',
+                    '--format',
+                    'json',
+                    { setting: 'model', flag: '--model' },
+                    { prompt: 'initial', omitWhenEmpty: true }
+                ]
+            }
         }
-    }
-} satisfies AgentInput;
+    } satisfies AgentInput;
+}
+
+export const openCode = createOpenCode();

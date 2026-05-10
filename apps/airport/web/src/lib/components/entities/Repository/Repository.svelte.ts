@@ -242,6 +242,17 @@ export class Repository extends Entity<RepositoryDataType> {
         return this;
     }
 
+    public async configureDisplay(input: {
+        icon: string | null;
+    }): Promise<this> {
+        this.applyData(RepositoryDataSchema.parse(await this.executeCommand(
+            this.commandIdFor('configureDisplay'),
+            input
+        )));
+        await this.refreshCommands();
+        return this;
+    }
+
     public async findAgents(): Promise<AgentDataType[]> {
         const agentsQuery = qry({
             entity: 'Agent',
@@ -303,19 +314,10 @@ export class Repository extends Entity<RepositoryDataType> {
     }
 
     public async refreshRepositoryAgentExecution(): Promise<AgentExecutionDataType | undefined> {
-        const execution = this.repositoryAgentExecutionEntity;
-        if (!execution) {
-            return undefined;
-        }
-
-        return this.updateRepositoryAgentExecution(AgentExecutionDataSchema.parse(await qry({
-            entity: 'AgentExecution',
-            method: 'read',
-            payload: {
-                ownerId: execution.ownerId,
-                agentExecutionId: execution.agentExecutionId
-            }
-        }).run()));
+        const result = AgentExecutionDataSchema.parse(await this.executeCommand(
+            this.commandIdFor('refreshRepositoryAgentExecution')
+        ));
+        return this.updateRepositoryAgentExecution(result);
     }
 
     public applyRepositoryAgentExecutionData(data: AgentExecutionDataType): void {
@@ -374,4 +376,12 @@ export function getRepositoryDisplayName(repository: Pick<RepositoryDataType, 'p
 
 export function getRepositoryDisplayDescription(repository: Pick<RepositoryDataType, 'platformRepositoryRef' | 'repositoryRootPath'>): string {
     return repository.platformRepositoryRef ?? repository.repositoryRootPath;
+}
+
+export function getRepositoryIconIdentifier(
+    repository: { settings?: { icon?: string | undefined } } | undefined,
+    fallback = 'lucide:folder-git-2'
+): string {
+    const configuredIcon = repository?.settings?.icon?.trim();
+    return configuredIcon && configuredIcon.length > 0 ? configuredIcon : fallback;
 }

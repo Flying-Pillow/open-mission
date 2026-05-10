@@ -3,7 +3,10 @@
     import Icon from "@iconify/svelte";
     import { ArtifactBodySchema } from "@flying-pillow/mission-core/entities/Artifact/ArtifactSchema";
     import { Button } from "$lib/components/ui/button/index.js";
+    import ImageViewer from "$lib/components/viewers/image.svelte";
     import MarkdownViewer from "$lib/components/viewers/markdown.svelte";
+    import SvgViewer from "$lib/components/viewers/svg.svelte";
+    import TextViewer from "$lib/components/viewers/text.svelte";
     import {
         isArtifactTextEditable,
         resolveArtifactViewerKind,
@@ -13,10 +16,12 @@
         refreshNonce,
         artifact,
         onEditRequested,
+        onCloseRequested,
     }: {
         refreshNonce: number;
         artifact?: Artifact;
         onEditRequested: () => void | Promise<void>;
+        onCloseRequested?: () => void | Promise<void>;
     } = $props();
 
     const panelLabel = $derived(artifact?.label ?? "");
@@ -29,20 +34,15 @@
     );
     const canReadArtifactBody = $derived.by(() => {
         refreshNonce;
-        return Boolean(
-            artifact && viewerKind !== "unsupported" && viewerKind !== "image",
-        );
+        return Boolean(artifact && viewerKind !== "unsupported");
     });
     const artifactBodyKey = $derived(
         artifact ? `${artifact.id}:${refreshNonce}` : "none",
     );
-    const artifactBodyQuery = $derived(
-        artifact ? artifact.readForRender() : undefined,
-    );
 </script>
 
 <section
-    class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-2xl border bg-card/70 backdrop-blur-sm"
+    class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden border bg-card/70 backdrop-blur-sm"
 >
     <header class="flex min-h-11 flex-wrap items-center gap-2 px-3 py-2">
         <div class="min-w-0 flex-1">
@@ -57,13 +57,20 @@
                 Edit
             </Button>
         {/if}
+
+        {#if onCloseRequested}
+            <Button variant="ghost" size="icon" onclick={onCloseRequested}>
+                <Icon icon="lucide:x" />
+                <span class="sr-only">Close artifact viewer</span>
+            </Button>
+        {/if}
     </header>
 
-    <div class="min-h-0 overflow-auto p-2">
+    <div class="min-h-0 overflow-auto">
         {#if artifact}
-            {#if canReadArtifactBody && artifactBodyQuery}
+            {#if canReadArtifactBody}
                 {#key artifactBodyKey}
-                    {#await artifactBodyQuery}
+                    {#await artifact?.readForRender()}
                         <div
                             class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
                         >
@@ -72,29 +79,20 @@
                     {:then artifactBodyResult}
                         {@const artifactBody =
                             ArtifactBodySchema.parse(artifactBodyResult)}
-                        {#if viewerKind === "markdown"}
-                            {#if typeof artifactBody.body !== "string"}
-                                <div
-                                    class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-rose-600"
-                                >
-                                    This artifact body is not text.
-                                </div>
-                            {:else}
-                                <div class="bg-background/80">
-                                    <MarkdownViewer
-                                        source={artifactBody.body}
-                                    />
-                                </div>
-                            {/if}
-                        {:else if typeof artifactBody.body !== "string"}
+                        {#if typeof artifactBody.body !== "string"}
                             <div
                                 class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-rose-600"
                             >
-                                This artifact body is not text.
+                                This artifact body is not renderable.
                             </div>
+                        {:else if viewerKind === "image"}
+                            <ImageViewer source={artifactBody.body} />
+                        {:else if viewerKind === "markdown"}
+                            <MarkdownViewer source={artifactBody.body} />
+                        {:else if viewerKind === "svg"}
+                            <SvgViewer source={artifactBody.body} />
                         {:else}
-                            <pre
-                                class="min-h-[24rem] overflow-auto rounded border bg-background/80 p-4 font-mono text-sm leading-6 text-foreground whitespace-pre-wrap">{artifactBody.body}</pre>
+                            <TextViewer source={artifactBody.body} />
                         {/if}
                     {:catch loadError}
                         <div
@@ -110,11 +108,7 @@
                 <div
                     class="flex h-full min-h-[24rem] items-center justify-center bg-background/60 px-6 py-8 text-center text-sm text-muted-foreground"
                 >
-                    {#if viewerKind === "image"}
-                        Image preview is selected for this artifact.
-                    {:else}
-                        Preview is unavailable for this artifact.
-                    {/if}
+                    Preview is unavailable for this artifact.
                 </div>
             {/if}
         {:else}

@@ -119,17 +119,25 @@ _Avoid_: UI session mission, workflow controller, mission projection, surface-ow
 The repository-owned validated workflow law that a Running Mission instance applies for stage order, task generation, gate rules, artifact expectations, and execution constraints. Different repositories may use different Mission workflow definitions without introducing different Mission classes or alternate Mission instance models.
 _Avoid_: workflow implementation, mission subclass, fallback settings blob, surface workflow
 
+**Mission assignee**:
+The optional Mission metadata naming the GitHub account currently responsible for first-response operator attention on that Mission. It is assignment metadata, not authorization, tenancy, billing identity, or a proof that the assignee is the only operator allowed to act.
+_Avoid_: Mission owner, organization member, permission grant, billing account
+
 **Mission stage**:
 A derived Mission phase whose status comes from the progress of its Mission tasks.
 _Avoid_: folder, independent state, milestone
 
-**Mission artifact**:
-A tracked operator-facing file produced or consumed by a Mission at mission, stage, or task level.
-_Avoid_: document, file, output
+**Artifact**:
+A file-backed operator-facing file rooted at one filesystem root such as a Repository root or Mission worktree root. Artifact identity comes from file root and path; Mission, stage, task, and Agent execution relationships are explicit metadata, not the reason the Artifact exists.
+_Avoid_: document, Mission-only file, output
 
 **Artifact body**:
-The transferable payload of a Mission artifact, presented according to Artifact metadata such as file name and path.
+The transferable payload of an Artifact, presented according to Artifact metadata such as file name and path.
 _Avoid_: document content, file content, output body
+
+**Mission artifact**:
+An Artifact related to a Mission at mission, stage, or task level.
+_Avoid_: the only kind of Artifact, generic file
 
 **Mission-level artifact**:
 A Mission artifact that belongs directly to a Mission, such as `BRIEF.md`.
@@ -167,6 +175,14 @@ _Avoid_: taskId env var, agentExecutionId env var, routing secret
 A structured non-terminal message sent to an Agent execution through the Mission system. The payload carries only message-specific fields. Base Agent execution messages are common, and Agent child adapters may advertise additional supported messages.
 _Avoid_: terminal input, raw prompt, CLI text injection, reliable state acknowledgement, transport envelope, hardcoded UI command, slash command
 
+**Agent execution turn**:
+One delivered Agent execution message that asks the Agent execution to continue work, such as a launch prompt, follow-up prompt, resume, checkpoint, or nudge. A turn starts when the daemon accepts and delivers the message, and it remains awaiting agent response until a meaningful Agent observation clears it.
+_Avoid_: chat turn, terminal turn, agent-authored acknowledgement, lifecycle state
+
+**Awaiting agent response**:
+The semantic AgentExecution activity where the daemon has delivered a turn-starting message and is waiting for the Agent execution's next meaningful observation. It is an activity state, not a lifecycle state or a proof that the Agent understood the message.
+_Avoid_: running synonym, idle opposite, lifecycle state, transport acknowledgement
+
 **Terminal**:
 A daemon-addressable Entity for one PTY-backed terminal resource. TerminalRegistry lives in the Terminal Entity boundary and remains the in-memory authority for process leases, screen state, input, resize, exit state, and update publication; daemon runtime terminal modules provide screen substrate helpers.
 _Avoid_: Agent execution, runtime session, adapter lifecycle owner
@@ -178,6 +194,14 @@ _Avoid_: Mission artifact, Agent execution message Entity, context state, single
 **Agent execution interaction journal**:
 The append-only semantic journal for one Agent execution. It records accepted Agent execution messages, normalized observations, policy decisions, state effects, owner effects, and projection material so AgentExecution state can be replayed deterministically. It is separate from raw terminal recordings and Mission workflow event logs.
 _Avoid_: terminal transcript, chat state, Mission workflow event log, Agent execution message Entity
+
+**Agent execution runtime fact**:
+A daemon-observed structured fact about an Agent execution, such as an artifact read, artifact write, tool invocation, tool result, filesystem change, or structured provider event. A runtime fact is not an Agent-authored signal and not raw transport evidence.
+_Avoid_: inferred terminal text, Agent claim, UI hint
+
+**Agent execution transport evidence**:
+Raw or near-raw adapter, provider, or terminal material retained for audit and optional operator expansion, such as output chunks, stderr excerpts, provider payloads, or PTY snippets. Transport evidence is not semantic truth unless separately promoted into a journaled runtime fact or accepted observation.
+_Avoid_: canonical replay state, inferred fact, chat message
 
 **Agent execution terminal recording**:
 The raw PTY audit record for one terminal-backed Agent execution, including input, output, resize, and exit records. It is transport truth, not semantic interaction truth.
@@ -194,6 +218,18 @@ _Avoid_: source of truth, transcript store, workflow state
 **AgentExecution runtime snapshot**:
 A live daemon runtime overlay for an active Agent execution, such as attached terminal identity, active transport connections, current PTY state, active tool calls, in-flight delivery attempts, and heartbeat data. It is not replayable semantic truth unless promoted into Agent execution interaction journal records.
 _Avoid_: interaction journal, persisted lifecycle state, workflow event, projection truth
+
+**Daemon runtime supervisor**:
+The daemon-owned runtime coordination authority for live Repository, Mission, Task, Agent execution, and runtime lease relationships started by the Mission system. It owns runtime cleanup, cascading cancellation, startup reconciliation, and shutdown hygiene for daemon-started resources.
+_Avoid_: surface manager, log reader, process poller, UI coordinator
+
+**Daemon runtime ownership graph**:
+The daemon-owned runtime structure that records which live runtime resources belong together, for example which Task owns an Agent execution and which Agent execution owns one or more runtime leases such as PTY terminals or child processes. It is the source for cascading lifecycle handling, not the OS process table or logs.
+_Avoid_: transcript tree, surface selection state, ad hoc registry map, log-derived process list
+
+**Runtime lease**:
+A daemon-owned claim over one live runtime resource started by the Mission system, such as a PTY terminal, child process, socket, or future provider session. A Runtime lease records ownership, lifecycle, and cleanup responsibility so the daemon can reconcile stale resources after crashes and release them during shutdown or cancellation.
+_Avoid_: raw PID, terminal tab, adapter state, audit log line
 
 **Agent adapter delivery**:
 A best-effort attempt to send an Agent execution message to an Agent adapter; it is not proof that the indeterministic Agent execution read, understood, applied, or structurally acknowledged the message.
@@ -441,6 +477,8 @@ _Avoid_: workflow projection, stage projection
 - A **Mission runtime migration**, if introduced by an explicit future decision, belongs to the daemon persistence layer and must run outside ordinary State store hydration.
 - A **Mission** has one or more **Mission stages**.
 - A **Mission stage** status is derived from its **Mission tasks**.
+- An **Artifact** is rooted at one filesystem root such as a **Repository root** or **Mission worktree root**.
+- An **Artifact** may exist without any **Mission** relationship.
 - A **Mission artifact** may belong to a **Mission**, a **Mission stage**, or a **Mission task**.
 - A **Mission-level artifact** belongs directly to one **Mission**.
 - A **Stage-level artifact** belongs to one **Mission stage**.
@@ -455,7 +493,7 @@ _Avoid_: workflow projection, stage projection
 - **Agent adapter delivery** is best-effort and must not be treated as proof that an **Agent execution** applied a context change.
 - An **Agent execution message** is not a first-class durable Entity unless the Mission system later needs queryable structured message history.
 - An **Agent execution log** records delivered Agent execution interaction, while **Agent execution context** records lasting context state.
-- An **Agent execution log** is daemon-owned audit material, not a **Mission artifact** by default.
+- An **Agent execution log** is daemon-owned audit material, not an **Artifact** by default.
 - An **Agent-session artifact** may reference or extract from an **Agent execution log** when the daemon or operator promotes useful material into Mission work.
 - An **Agent execution message** describes a structured message supported by an Agent execution's Agent adapter.
 - An **Agent execution token** is the daemon-issued identifier used for structured transport and registration.
@@ -470,8 +508,8 @@ _Avoid_: workflow projection, stage projection
 - **Terminal input** is reserved for direct CLI interaction and does not define canonical Agent execution context.
 - An **External agent prompt field** always submits an **Agent execution message**; only focused terminal interaction sends **Terminal input**.
 - An **Agent-session artifact** belongs to one **Agent execution**.
-- Raw **Agent execution logs** do not appear as Mission artifacts by default.
-- An **Agent-session artifact** remains the same canonical **Mission artifact** when it becomes useful beyond its producing **Agent execution**; Mission records relationships instead of copying it.
+- Raw **Agent execution logs** do not appear as Artifacts by default.
+- An **Agent-session artifact** remains the same canonical **Artifact** when it becomes useful beyond its producing **Agent execution**; Mission records relationships instead of copying it.
 - An **Entity** has exactly one canonical `id` field in its **Entity schema**.
 - An **Entity storage schema** carries the canonical `id`, entity type, audit fields, and storage-facing **Field metadata**.
 - An **Entity data schema** may include computed or linked fields described by **Field metadata**.

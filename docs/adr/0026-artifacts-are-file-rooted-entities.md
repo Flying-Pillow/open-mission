@@ -1,0 +1,27 @@
+---
+layout: default
+title: Artifacts Are File-Rooted Entities
+parent: Architecture Decisions
+nav_order: 26
+status: accepted
+date: 2026-05-09
+decision_area: artifact-identity
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
+
+Artifact is the canonical Entity for a file-backed operator-facing file. Artifact identity is rooted at a filesystem root plus relative path. A Repository root, Mission worktree root, or other explicit file root may anchor the same Artifact model. Mission, stage, task, and Agent execution relationships are metadata on Artifact usage; they do not define whether a file is an Artifact.
+
+Mission still uses Mission artifacts, Stage-level artifacts, and Task-level artifacts as relationship terms, but those are scoped relationships over the general Artifact Entity. A file mentioned by a repository-scoped AgentExecution is still an Artifact even when no Mission exists. A file mentioned by a mission-scoped AgentExecution is still an Artifact even when it is not one of the Mission's curated workflow artifacts.
+
+Artifact body reads and writes remain on the Artifact Entity contract. Artifact body transport still depends only on Artifact metadata such as file name and path. Surfaces must not route repository-scoped or worktree-scoped file references through Mission-only artifact resolution.
+
+Consequences:
+
+- Artifact identity must be resolvable without requiring Mission ownership.
+- Repository-scoped and worktree-scoped AgentExecution surfaces may open file-backed Artifacts directly from file-root metadata.
+- Mission artifact selection and workflow relationships remain valid, but they are layered on top of Artifact instead of defining Artifact existence.
+- AgentExecution signal payloads may reference Artifacts by canonical artifact id or by path when only file-root context is available.
+- Surfaces should treat unresolved file references as missing file-root context, not as proof that the reference is not an Artifact.

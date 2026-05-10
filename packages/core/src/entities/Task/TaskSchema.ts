@@ -11,6 +11,7 @@ export const TaskIdSchema = z.string().trim().min(1);
 export const TaskCommandIds = {
     configure: 'task.configure',
     start: 'task.start',
+    cancel: 'task.cancel',
     complete: 'task.complete',
     reopen: 'task.reopen',
     rework: 'task.rework',
@@ -22,6 +23,7 @@ export const TaskCommandIds = {
 export const TaskCommandIdSchema = z.enum([
     TaskCommandIds.configure,
     TaskCommandIds.start,
+    TaskCommandIds.cancel,
     TaskCommandIds.complete,
     TaskCommandIds.reopen,
     TaskCommandIds.rework,

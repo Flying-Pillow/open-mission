@@ -41,6 +41,32 @@ describe('Repository', () => {
         }
     });
 
+    it('classifies linked worktrees as non-repository discovery roots', async () => {
+        const repositoryRootPath = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-root-'));
+        const linkedWorktreePath = path.join(repositoryRootPath, '..', 'linked-worktree');
+
+        try {
+            git(repositoryRootPath, ['init']);
+            await fsp.writeFile(path.join(repositoryRootPath, 'README.md'), '# Mission Test\n', 'utf8');
+            git(repositoryRootPath, ['add', 'README.md']);
+            git(repositoryRootPath, ['commit', '-m', 'init']);
+            git(repositoryRootPath, ['worktree', 'add', linkedWorktreePath, '-b', 'linked/test']);
+
+            const repositoryInternals = Repository as unknown as {
+                isCanonicalCheckoutRoot(repositoryRootPath: string): boolean;
+            };
+            expect(repositoryInternals.isCanonicalCheckoutRoot(repositoryRootPath)).toBe(true);
+            expect(repositoryInternals.isCanonicalCheckoutRoot(linkedWorktreePath)).toBe(false);
+        } finally {
+            try {
+                git(repositoryRootPath, ['worktree', 'remove', '--force', linkedWorktreePath]);
+            } catch {
+                // Ignore cleanup failures after partial setup.
+            }
+            await fsp.rm(repositoryRootPath, { recursive: true, force: true });
+        }
+    });
+
     it('falls back to the provided path when no Git Repository can be resolved', async () => {
         const directoryPath = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-non-git-root-'));
 
@@ -254,6 +280,7 @@ describe('Repository', () => {
         const settings = createDefaultRepositorySettings();
         settings.agentAdapter = 'codex';
         settings.enabledAgentAdapters = ['codex', 'copilot'];
+        settings.icon = 'logos:github-icon';
 
         try {
             git(tempRoot, ['init', repositoryRootPath]);
@@ -266,6 +293,32 @@ describe('Repository', () => {
 
             expect(data.settings.agentAdapter).toBe('codex');
             expect(data.settings.enabledAgentAdapters).toEqual(['codex', 'copilot']);
+            expect(data.settings.icon).toBe('logos:github-icon');
+        } finally {
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('updates repository icon in the repository settings document', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-display-config-'));
+        const repositoryRootPath = path.join(tempRoot, 'example');
+        const settings = createDefaultRepositorySettings();
+
+        try {
+            git(tempRoot, ['init', repositoryRootPath]);
+            await Repository.initializeScaffolding(repositoryRootPath, { settings });
+            const repository = Repository.open(repositoryRootPath);
+
+            const data = await repository.configureDisplay({
+                id: repository.id,
+                repositoryRootPath,
+                icon: 'logos:github-icon'
+            });
+
+            expect(data.settings.icon).toBe('logos:github-icon');
+            expect(Repository.requireSettingsDocument(repositoryRootPath, {
+                resolveWorkspaceRoot: false
+            }).icon).toBe('logos:github-icon');
         } finally {
             await fsp.rm(tempRoot, { recursive: true, force: true });
         }
@@ -278,7 +331,7 @@ describe('Repository', () => {
         const execution = AgentExecutionDataSchema.parse({
             id: 'agent_execution:setup-test',
             ownerId: repositoryRootPath,
-            sessionId: 'setup-test',
+            agentExecutionId: 'setup-test',
             agentId: settings.agentAdapter,
             adapterLabel: 'Test Agent',
             lifecycleState: 'running',
@@ -341,6 +394,233 @@ describe('Repository', () => {
         }
     });
 
+    it('hydrates repository AgentExecution prompt from repo-native setup when persisted state is stale', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-stale-setup-agent-'));
+        const repositoryRootPath = path.join(tempRoot, 'example');
+        const settings = createDefaultRepositorySettings();
+        const execution = AgentExecutionDataSchema.parse({
+            id: 'agent_execution:stale-setup-test',
+            ownerId: repositoryRootPath,
+            agentExecutionId: 'stale-setup-test',
+            agentId: settings.agentAdapter,
+            adapterLabel: 'Test Agent',
+            lifecycleState: 'running',
+            interactionCapabilities: {
+                mode: 'agent-message',
+                canSendTerminalInput: false,
+                canSendStructuredPrompt: true,
+                canSendStructuredCommand: true
+            },
+            context: {
+                artifacts: [],
+                instructions: []
+            },
+            runtimeMessages: [],
+            scope: {
+                kind: 'repository',
+                repositoryRootPath
+            }
+        });
+        const ensureExecution = vi.fn().mockResolvedValue(execution);
+
+        try {
+            git(tempRoot, ['init', repositoryRootPath]);
+            await Repository.initializeScaffolding(repositoryRootPath, { settings });
+            const repository = Repository.create({
+                repositoryRootPath,
+                platformRepositoryRef: 'Flying-Pillow/example',
+                isInitialized: false
+            });
+
+            await repository.ensureRepositoryAgentExecution({
+                id: repository.id,
+                repositoryRootPath
+            }, {
+                surfacePath: repositoryRootPath,
+                agentExecutionRegistry: { ensureExecution }
+            } as unknown as EntityExecutionContext);
+
+            expect(ensureExecution.mock.calls[0]?.[0].config.initialPrompt.text).toContain('Repository control state is initialized.');
+            expect(ensureExecution.mock.calls[0]?.[0].config.initialPrompt.text).not.toContain('Repository control state is not fully initialized yet.');
+        } finally {
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('reuses an active repository AgentExecution without rebuilding the prompt', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-reuse-agent-'));
+        const repositoryRootPath = path.join(tempRoot, 'example');
+        const settings = createDefaultRepositorySettings();
+        const execution = AgentExecutionDataSchema.parse({
+            id: 'agent_execution:setup-test',
+            ownerId: repositoryRootPath,
+            agentExecutionId: 'setup-test',
+            agentId: settings.agentAdapter,
+            adapterLabel: 'Test Agent',
+            lifecycleState: 'running',
+            interactionCapabilities: {
+                mode: 'agent-message',
+                canSendTerminalInput: false,
+                canSendStructuredPrompt: true,
+                canSendStructuredCommand: true
+            },
+            context: {
+                artifacts: [],
+                instructions: []
+            },
+            runtimeMessages: [],
+            scope: {
+                kind: 'repository',
+                repositoryRootPath
+            }
+        });
+        const readReusableExecution = vi.fn().mockReturnValue(execution);
+        const ensureExecution = vi.fn();
+
+        try {
+            git(tempRoot, ['init', repositoryRootPath]);
+            await Repository.initializeScaffolding(repositoryRootPath, { settings });
+            const repository = Repository.create({
+                repositoryRootPath,
+                platformRepositoryRef: 'Flying-Pillow/example',
+                settings,
+                isInitialized: true
+            });
+            const buildPromptSpy = vi.spyOn(repository as unknown as {
+                buildRepositoryAgentPrompt: (context?: EntityExecutionContext) => Promise<string>;
+            }, 'buildRepositoryAgentPrompt');
+
+            const result = await repository.ensureRepositoryAgentExecution({
+                id: repository.id,
+                repositoryRootPath
+            }, {
+                surfacePath: repositoryRootPath,
+                agentExecutionRegistry: {
+                    readReusableExecution,
+                    ensureExecution
+                } as unknown as EntityExecutionContext['agentExecutionRegistry']
+            } as EntityExecutionContext);
+
+            expect(result).toEqual(execution);
+            expect(readReusableExecution).toHaveBeenCalledWith({
+                ownerKey: `Repository.agentExecution:${repositoryRootPath}`,
+                requestedAgentId: settings.agentAdapter
+            });
+            expect(buildPromptSpy).not.toHaveBeenCalled();
+            expect(ensureExecution).not.toHaveBeenCalled();
+        } finally {
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('refreshes repository AgentExecution by replacing the active execution', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-refresh-agent-'));
+        const repositoryRootPath = path.join(tempRoot, 'example');
+        const settings = createDefaultRepositorySettings();
+        const execution = AgentExecutionDataSchema.parse({
+            id: 'agent_execution:refresh-test',
+            ownerId: repositoryRootPath,
+            agentExecutionId: 'refresh-test',
+            agentId: settings.agentAdapter,
+            adapterLabel: 'Test Agent',
+            lifecycleState: 'running',
+            interactionCapabilities: {
+                mode: 'agent-message',
+                canSendTerminalInput: false,
+                canSendStructuredPrompt: true,
+                canSendStructuredCommand: true
+            },
+            context: {
+                artifacts: [],
+                instructions: []
+            },
+            runtimeMessages: [],
+            scope: {
+                kind: 'repository',
+                repositoryRootPath
+            }
+        });
+        const replaceActiveExecution = vi.fn().mockResolvedValue(execution);
+        const ensureExecution = vi.fn();
+
+        try {
+            git(tempRoot, ['init', repositoryRootPath]);
+            await Repository.initializeScaffolding(repositoryRootPath, { settings });
+            const repository = Repository.create({
+                repositoryRootPath,
+                platformRepositoryRef: 'Flying-Pillow/example',
+                settings,
+                isInitialized: true
+            });
+
+            const result = await repository.refreshRepositoryAgentExecution({
+                id: repository.id,
+                repositoryRootPath
+            }, {
+                surfacePath: repositoryRootPath,
+                agentExecutionRegistry: {
+                    replaceActiveExecution,
+                    ensureExecution
+                } as unknown as EntityExecutionContext['agentExecutionRegistry']
+            } as EntityExecutionContext);
+
+            expect(result).toEqual(execution);
+            expect(replaceActiveExecution).toHaveBeenCalledWith(expect.objectContaining({
+                ownerKey: `Repository.agentExecution:${repositoryRootPath}`,
+                config: expect.objectContaining({
+                    requestedAdapterId: settings.agentAdapter,
+                    workingDirectory: repositoryRootPath,
+                    initialPrompt: expect.objectContaining({
+                        source: 'system',
+                        text: expect.stringContaining('First priority:')
+                    }),
+                    scope: {
+                        kind: 'repository',
+                        repositoryRootPath
+                    }
+                })
+            }));
+            expect(ensureExecution).not.toHaveBeenCalled();
+        } finally {
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('rejects repository AgentExecution from a linked worktree root', async () => {
+        const repositoryRootPath = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-agent-worktree-'));
+        const linkedWorktreePath = path.join(repositoryRootPath, '..', 'linked-worktree');
+
+        try {
+            git(repositoryRootPath, ['init']);
+            await fsp.writeFile(path.join(repositoryRootPath, 'README.md'), '# Mission Test\n', 'utf8');
+            git(repositoryRootPath, ['add', 'README.md']);
+            git(repositoryRootPath, ['commit', '-m', 'init']);
+            git(repositoryRootPath, ['worktree', 'add', linkedWorktreePath, '-b', 'linked/test']);
+            await Repository.initializeScaffolding(linkedWorktreePath, {
+                settings: createDefaultRepositorySettings()
+            });
+
+            const repository = Repository.create({
+                repositoryRootPath: linkedWorktreePath,
+                platformRepositoryRef: 'Flying-Pillow/example',
+                settings: createDefaultRepositorySettings(),
+                isInitialized: true
+            });
+
+            await expect(repository.ensureRepositoryAgentExecution({
+                id: repository.id,
+                repositoryRootPath: linkedWorktreePath
+            })).rejects.toThrow(/linked worktree/i);
+        } finally {
+            try {
+                git(repositoryRootPath, ['worktree', 'remove', '--force', linkedWorktreePath]);
+            } catch {
+                // Ignore cleanup failures after partial setup.
+            }
+            await fsp.rm(repositoryRootPath, { recursive: true, force: true });
+        }
+    });
+
     it('ensures a system-scoped repositories AgentExecution', async () => {
         const repositoriesRootPath = resolveRepositoriesRoot({
             version: 1,
@@ -350,7 +630,7 @@ describe('Repository', () => {
         const execution = AgentExecutionDataSchema.parse({
             id: 'agent_execution:repositories-system',
             ownerId: '/repositories',
-            sessionId: 'repositories-system',
+            agentExecutionId: 'repositories-system',
             agentId: 'copilot-cli',
             adapterLabel: 'Test Agent',
             lifecycleState: 'running',

@@ -1,6 +1,7 @@
 // /apps/airport/web/src/lib/components/entities/AgentExecution/AgentExecution.svelte.ts: OO browser entity for a mission agent execution hydrated from validated runtime snapshots.
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 import { AgentExecutionCommandIds, type AgentExecutionCommandType, type AgentExecutionPromptType, type AgentExecutionDataType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
+import type { AgentExecutionJournalRecordType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionJournalSchema';
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
 
 export type AgentExecutionDependencies = {
@@ -52,6 +53,14 @@ export class AgentExecution implements EntityModel<AgentExecutionDataType> {
 
     public get taskId(): string | undefined {
         return this.data.taskId;
+    }
+
+    public get assignmentLabel(): string | undefined {
+        return this.data.assignmentLabel;
+    }
+
+    public get scope(): AgentExecutionDataType["scope"] {
+        return this.data.scope;
     }
 
     public get lifecycleState(): AgentExecutionDataType['lifecycleState'] {
@@ -110,8 +119,20 @@ export class AgentExecution implements EntityModel<AgentExecutionDataType> {
         return this.data.projection;
     }
 
+    public get currentActivity(): AgentExecutionDataType['projection']['currentActivity'] {
+        return this.data.projection.currentActivity;
+    }
+
+    public get currentAttention(): AgentExecutionDataType['projection']['currentAttention'] {
+        return this.data.projection.currentAttention;
+    }
+
     public get timelineItems(): AgentExecutionDataType['projection']['timelineItems'] {
         return this.data.projection.timelineItems;
+    }
+
+    public get journalRecords(): AgentExecutionJournalRecordType[] {
+        return (this.data.journalRecords ?? []) as AgentExecutionJournalRecordType[];
     }
 
     public get canSendTerminalInput(): boolean {

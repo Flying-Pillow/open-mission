@@ -4,13 +4,12 @@
     import { asset } from "$app/paths";
     import Icon from "@iconify/svelte";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
-    import { getAirportSidebarNavigation } from "./airport-sidebar-navigation";
-    import NavSecondary from "$lib/components/nav-secondary.svelte";
     import NavUser from "$lib/components/nav-user.svelte";
     import * as Sidebar from "$lib/components/ui/sidebar/index.js";
     import {
         getRepositoryDisplayDescription,
         getRepositoryDisplayName,
+        getRepositoryIconIdentifier,
     } from "$lib/components/entities/Repository/Repository.svelte.js";
     import type { ComponentProps } from "svelte";
     import type { MissionCatalogEntryType } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
@@ -24,28 +23,34 @@
     const bottomMenu = [
         {
             title: "Settings",
+            description: "Repository and Mission system source settings.",
             url: "https://github.com/Flying-Pillow/mission",
             icon: "lucide:settings",
         },
         {
-            title: "Get Help",
-            url: "https://github.com/Flying-Pillow/mission/issues",
-            icon: "lucide:circle-help",
+            title: "Documentation",
+            description:
+                "Architecture, operator guidance, and reference material.",
+            url: "/docs",
+            icon: "lucide:book-open",
         },
         {
             title: "Search",
+            description: "Search the Mission repository on GitHub.",
             url: "https://github.com/Flying-Pillow/mission/search",
             icon: "lucide:search",
         },
-    ] satisfies { title: string; url: string; icon: string }[];
+    ] satisfies {
+        title: string;
+        description: string;
+        url: string;
+        icon: string;
+    }[];
 
     let { ...restProps }: ComponentProps<typeof Sidebar.Root> = $props();
 
     const routeSegments = $derived(
         page.url.pathname.split("/").filter((segment) => segment.length > 0),
-    );
-    const primaryNavigation = $derived(
-        getAirportSidebarNavigation(page.url.pathname),
     );
     const activeRepositoryId = $derived(
         routeSegments[0] === "airport"
@@ -69,7 +74,7 @@
                 ...repository,
                 displayName: getRepositoryDisplayName(repository),
                 displayDescription: getRepositoryDisplayDescription(repository),
-                icon: isSelected ? "lucide:layout-dashboard" : "lucide:folder",
+                icon: getRepositoryIconIdentifier(repository, "lucide:folder"),
                 href: `/airport/${encodeURIComponent(repository.id)}`,
                 missions: (repository.missions ?? []).map(
                     (mission: MissionCatalogEntryType) => ({
@@ -84,22 +89,31 @@
     });
 </script>
 
-<Sidebar.Root collapsible="offcanvas" {...restProps}>
-    <Sidebar.Header>
+<Sidebar.Root
+    collapsible="icon"
+    class="border-sidebar-border/70 bg-sidebar/95"
+    {...restProps}
+>
+    <Sidebar.Header class="items-center px-3 py-4">
         <Sidebar.Menu>
             <Sidebar.MenuItem>
                 <Sidebar.MenuButton
-                    class="data-[slot=sidebar-menu-button]:!p-1.5"
+                    class="mx-auto size-14 justify-center rounded-xl border border-sidebar-border bg-sidebar-accent/50 p-0! shadow-sm group-data-[collapsible=icon]:size-14! group-data-[collapsible=icon]:p-0! [&_svg]:size-6"
+                    tooltipContent="Airport"
+                    tooltipContentProps={{
+                        sideOffset: 14,
+                        class: "border border-border bg-popover px-4 py-3 text-popover-foreground shadow-xl",
+                    }}
                 >
                     {#snippet child({ props })}
                         <a href="/airport" {...props}>
                             <img
                                 src={logo}
                                 alt="Flying-Pillow logo"
-                                class="size-8 shrink-0 rounded-md object-contain"
+                                class="size-10 shrink-0 rounded-md object-contain"
                             />
                             <span
-                                class="grid flex-1 text-left text-sm leading-tight"
+                                class="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden"
                             >
                                 <span class="font-semibold">Airport</span>
                                 <span class="text-muted-foreground text-xs"
@@ -113,36 +127,19 @@
         </Sidebar.Menu>
     </Sidebar.Header>
 
-    <Sidebar.Content>
-        <Sidebar.Group>
-            <Sidebar.GroupLabel>Navigate</Sidebar.GroupLabel>
-            <Sidebar.GroupContent>
-                <Sidebar.Menu>
-                    {#each primaryNavigation as item (item.href)}
-                        <Sidebar.MenuItem>
-                            <Sidebar.MenuButton isActive={item.isActive}>
-                                {#snippet child({ props })}
-                                    <a href={item.href} {...props}>
-                                        <Icon icon="lucide:book-open" />
-                                        <span>{item.title}</span>
-                                    </a>
-                                {/snippet}
-                            </Sidebar.MenuButton>
-                        </Sidebar.MenuItem>
-                    {/each}
-                </Sidebar.Menu>
-            </Sidebar.GroupContent>
-        </Sidebar.Group>
-
+    <Sidebar.Content class="gap-3 px-3 pb-3">
         {#if showRepositoryNavigation}
-            <Sidebar.Group>
-                <Sidebar.GroupLabel>Repositories</Sidebar.GroupLabel>
+            <Sidebar.Group class="min-h-0 px-0">
+                <Sidebar.GroupLabel
+                    class="px-2 group-data-[collapsible=icon]:sr-only"
+                    >Repositories</Sidebar.GroupLabel
+                >
                 <Sidebar.GroupContent>
-                    <Sidebar.Menu>
+                    <Sidebar.Menu class="gap-2">
                         {#if sidebarRepositories.length === 0}
                             <Sidebar.MenuItem>
                                 <div
-                                    class="text-muted-foreground px-2 py-1.5 text-xs"
+                                    class="text-muted-foreground px-2 py-1.5 text-xs group-data-[collapsible=icon]:sr-only"
                                 >
                                     No repositories available
                                 </div>
@@ -151,9 +148,13 @@
                             {#each sidebarRepositories as repository (repository.id)}
                                 <Sidebar.MenuItem>
                                     <Sidebar.MenuButton
-                                        class="h-auto py-2"
+                                        class="h-auto min-h-14 rounded-xl border border-transparent px-3 py-3 group-data-[collapsible=icon]:size-14! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! [&_svg]:size-6"
                                         isActive={repository.id ===
                                             activeRepositoryId}
+                                        tooltipContentProps={{
+                                            sideOffset: 14,
+                                            class: "w-80 max-w-80 border border-border bg-popover px-4 py-4 text-popover-foreground shadow-xl",
+                                        }}
                                     >
                                         {#snippet child({ props })}
                                             <a
@@ -162,7 +163,7 @@
                                             >
                                                 <Icon icon={repository.icon} />
                                                 <span
-                                                    class="grid min-w-0 flex-1 text-left leading-tight"
+                                                    class="grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden"
                                                 >
                                                     <span
                                                         class="truncate text-sm font-medium"
@@ -176,10 +177,56 @@
                                                 </span>
                                             </a>
                                         {/snippet}
+                                        {#snippet tooltipContent()}
+                                            <div
+                                                class="grid min-w-0 gap-3 text-left"
+                                            >
+                                                <div
+                                                    class="flex items-start gap-3"
+                                                >
+                                                    <span
+                                                        class="inline-flex size-10 shrink-0 items-center justify-center rounded-md border bg-muted text-primary"
+                                                    >
+                                                        <Icon
+                                                            icon={repository.icon}
+                                                            class="size-5"
+                                                        />
+                                                    </span>
+                                                    <div class="min-w-0">
+                                                        <p
+                                                            class="truncate text-sm font-semibold text-foreground"
+                                                        >
+                                                            {repository.displayName}
+                                                        </p>
+                                                        <p
+                                                            class="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground"
+                                                        >
+                                                            {repository.displayDescription}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div
+                                                    class="flex items-center justify-between border-t pt-3 text-xs text-muted-foreground"
+                                                >
+                                                    <span>Local repository</span
+                                                    >
+                                                    <span
+                                                        >{repository.missions
+                                                            .length}
+                                                        {repository.missions
+                                                            .length === 1
+                                                            ? "mission"
+                                                            : "missions"}</span
+                                                    >
+                                                </div>
+                                            </div>
+                                        {/snippet}
                                     </Sidebar.MenuButton>
 
                                     {#if repository.missions.length > 0}
-                                        <Sidebar.MenuSub>
+                                        <Sidebar.MenuSub
+                                            class="group-data-[collapsible=icon]:hidden"
+                                        >
                                             {#each repository.missions as mission (mission.missionId)}
                                                 <Sidebar.MenuSubItem>
                                                     <Sidebar.MenuSubButton
@@ -213,11 +260,50 @@
                 </Sidebar.GroupContent>
             </Sidebar.Group>
         {/if}
-
-        <NavSecondary items={bottomMenu} class="mt-auto" />
     </Sidebar.Content>
 
-    <Sidebar.Footer>
-        <NavUser />
+    <Sidebar.Footer class="gap-2 px-3 pb-4">
+        <Sidebar.Group class="px-0">
+            <Sidebar.GroupContent>
+                <Sidebar.Menu class="gap-2">
+                    {#each bottomMenu as item (item.title)}
+                        <Sidebar.MenuItem>
+                            <Sidebar.MenuButton
+                                class="h-12 rounded-xl border border-transparent px-3 group-data-[collapsible=icon]:size-14! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! [&_svg]:size-6"
+                                tooltipContentProps={{
+                                    sideOffset: 14,
+                                    class: "w-72 max-w-72 border border-border bg-popover px-4 py-4 text-popover-foreground shadow-xl",
+                                }}
+                            >
+                                {#snippet child({ props })}
+                                    <a href={item.url} {...props}>
+                                        <Icon icon={item.icon} />
+                                        <span
+                                            class="group-data-[collapsible=icon]:hidden"
+                                            >{item.title}</span
+                                        >
+                                    </a>
+                                {/snippet}
+                                {#snippet tooltipContent()}
+                                    <div class="grid gap-1.5 text-left">
+                                        <p
+                                            class="text-sm font-semibold text-foreground"
+                                        >
+                                            {item.title}
+                                        </p>
+                                        <p
+                                            class="text-xs leading-5 text-muted-foreground"
+                                        >
+                                            {item.description}
+                                        </p>
+                                    </div>
+                                {/snippet}
+                            </Sidebar.MenuButton>
+                        </Sidebar.MenuItem>
+                    {/each}
+                </Sidebar.Menu>
+            </Sidebar.GroupContent>
+        </Sidebar.Group>
+        <NavUser compact contentSide="right" contentAlign="end" />
     </Sidebar.Footer>
 </Sidebar.Root>

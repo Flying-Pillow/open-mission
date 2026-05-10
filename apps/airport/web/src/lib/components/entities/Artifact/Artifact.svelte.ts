@@ -1,10 +1,62 @@
 import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
-import type {
-    ArtifactCommandAcknowledgementType,
-    ArtifactBodyType,
-    ArtifactDataType
+import {
+    ArtifactCommandAcknowledgementSchema,
+    ArtifactBodySchema,
+    ArtifactCommandIds,
+    type ArtifactCommandAcknowledgementType,
+    type ArtifactBodyType,
+    type ArtifactDataType
 } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
+import { cmd } from '../../../../routes/api/entities/remote/command.remote';
+import { qry } from '../../../../routes/api/entities/remote/query.remote';
+
+const FILE_ARTIFACT_UNIQUE_PREFIX = 'file:';
+
+function requireTrimmedValue(value: string, label: string): string {
+    const normalizedValue = value.trim();
+    if (!normalizedValue) {
+        throw new Error(`${label} is required.`);
+    }
+    return normalizedValue;
+}
+
+function normalizeRelativePath(relativePath: string): string {
+    return requireTrimmedValue(relativePath, 'Artifact relativePath')
+        .replace(/\\/g, '/')
+        .replace(/^\.\//, '');
+}
+
+function createFileArtifactEntityId(rootPath: string, relativePath: string): string {
+    const normalizedRootPath = requireTrimmedValue(rootPath, 'Artifact rootPath');
+    const normalizedRelativePath = normalizeRelativePath(relativePath);
+    return `artifact:${FILE_ARTIFACT_UNIQUE_PREFIX}${encodeURIComponent(normalizedRootPath)}:${encodeURIComponent(normalizedRelativePath)}`;
+}
+
+function inferArtifactKind(rootPath: string, repositoryRootPath?: string): 'repository' | 'worktree' {
+    return repositoryRootPath?.trim() === rootPath.trim() ? 'repository' : 'worktree';
+}
+
+function createFileArtifactData(input: {
+    rootPath: string;
+    relativePath: string;
+    repositoryRootPath?: string;
+    label?: string;
+}): ArtifactDataType {
+    const normalizedRootPath = requireTrimmedValue(input.rootPath, 'Artifact rootPath');
+    const normalizedRelativePath = normalizeRelativePath(input.relativePath);
+    const fileName = normalizedRelativePath.split('/').at(-1) ?? normalizedRelativePath;
+    return {
+        id: createFileArtifactEntityId(normalizedRootPath, normalizedRelativePath),
+        kind: inferArtifactKind(normalizedRootPath, input.repositoryRootPath),
+        label: input.label?.trim() || fileName,
+        fileName,
+        ...(input.repositoryRootPath ? { repositoryRootPath: input.repositoryRootPath.trim() } : {}),
+        rootPath: normalizedRootPath,
+        relativePath: normalizedRelativePath,
+        filePath: `${normalizedRootPath}/${normalizedRelativePath}`,
+    };
+}
 
 export type ArtifactDependencies = {
     body(id: string, input?: ArtifactReadOptions): Promise<ArtifactBodyType>;
@@ -17,6 +69,59 @@ export type ArtifactReadOptions = {
 };
 
 export type ArtifactBodyStatus = 'idle' | 'loading' | 'loaded' | 'error';
+
+export function createFileArtifact(input: {
+    repositoryRootPath: string;
+    relativePath: string;
+    rootPath?: string;
+    label?: string;
+}): Artifact {
+    const repositoryRootPath = input.repositoryRootPath.trim();
+    const relativePath = input.relativePath.trim().replace(/\\/g, '/').replace(/^\.\//, '');
+    const rootPath = input.rootPath?.trim() || repositoryRootPath;
+    const data = createFileArtifactData({
+        repositoryRootPath,
+        rootPath,
+        relativePath,
+        label: input.label,
+    });
+
+    return new Artifact(data, {
+        body: async (id, readInput) => {
+            return ArtifactBodySchema.parse(await qry({
+                entity: 'Artifact',
+                method: 'body',
+                payload: {
+                    id,
+                    repositoryRootPath,
+                    ...(readInput?.executionContext ? { executionContext: readInput.executionContext } : {}),
+                },
+            }).run());
+        },
+        bodyForRender: (id) => {
+            return qry({
+                entity: 'Artifact',
+                method: 'body',
+                payload: {
+                    id,
+                    repositoryRootPath,
+                },
+            });
+        },
+        commandBody: async (id, body) => {
+            return ArtifactCommandAcknowledgementSchema.parse(await cmd({
+                entity: 'Artifact',
+                method: 'command',
+                payload: {
+                    id,
+                    repositoryRootPath,
+                    commandId: ArtifactCommandIds.body,
+                    input: body,
+                },
+            }));
+        },
+    });
+}
 
 export class Artifact implements EntityModel<ArtifactDataType> {
     private dataState = $state<ArtifactDataType | undefined>();
@@ -58,6 +163,10 @@ export class Artifact implements EntityModel<ArtifactDataType> {
 
     public get filePath(): string | undefined {
         return this.data.filePath;
+    }
+
+    public get rootPath(): string | undefined {
+        return this.data.rootPath;
     }
 
     public get relativePath(): string | undefined {

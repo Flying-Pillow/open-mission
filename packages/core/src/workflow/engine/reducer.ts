@@ -247,6 +247,14 @@ class MissionWorkflowTransitionEngine {
                         : task
                 );
                 return;
+            case 'task.cancelled':
+                this.state.tasks = this.state.tasks.map((task) =>
+                    task.taskId === event.taskId
+                        ? resetInterruptedTask(task, event.occurredAt)
+                        : task
+                );
+                this.state.launchQueue = this.state.launchQueue.filter((request) => request.taskId !== event.taskId);
+                return;
             case 'task.reopened': {
                 const reopenedTask = this.state.tasks.find((candidate) => candidate.taskId === event.taskId);
                 const resetTaskIds = reopenedTask

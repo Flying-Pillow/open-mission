@@ -1,10 +1,12 @@
 import {
     MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH as AGENT_DECLARED_SIGNAL_MARKER_LENGTH,
     MAX_AGENT_EXECUTION_MESSAGE_LENGTH as AGENT_EXECUTION_MESSAGE_LENGTH,
+    MAX_AGENT_EXECUTION_SIGNAL_ARTIFACT_REFERENCES as AGENT_EXECUTION_SIGNAL_ARTIFACT_REFERENCES,
     MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH as AGENT_EXECUTION_SIGNAL_TEXT_LENGTH,
     MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES as AGENT_EXECUTION_SUGGESTED_RESPONSES,
     MAX_AGENT_EXECUTION_USAGE_ENTRIES as AGENT_EXECUTION_USAGE_ENTRIES,
-    type AgentDeclaredSignalPayloadType
+    type AgentExecutionTimelineItemType,
+    type AgentSignalPayloadType
 } from './AgentExecutionSchema.js';
 import {
     createAgentExecutionSignalFromDeclaredPayload,
@@ -181,6 +183,7 @@ export interface AgentExecutionSnapshot {
     stageId?: string;
     status: AgentExecutionStatus;
     attention: AgentAttentionState;
+    currentInputRequestId?: string | null;
     progress: AgentProgressSnapshot;
     waitingForInput: boolean;
     acceptsPrompts: boolean;
@@ -271,6 +274,7 @@ export type AgentExecutionEvent =
         type: 'execution.message';
         channel: 'stdout' | 'stderr' | 'system' | 'agent';
         text: string;
+        timelineItem?: AgentExecutionTimelineItemType;
         snapshot: AgentExecutionSnapshot;
     }
     | {
@@ -295,6 +299,7 @@ export type AgentExecutionEvent =
 
 export const MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH = AGENT_EXECUTION_SIGNAL_TEXT_LENGTH;
 export const MAX_AGENT_EXECUTION_MESSAGE_LENGTH = AGENT_EXECUTION_MESSAGE_LENGTH;
+export const MAX_AGENT_EXECUTION_SIGNAL_ARTIFACT_REFERENCES = AGENT_EXECUTION_SIGNAL_ARTIFACT_REFERENCES;
 export const MAX_AGENT_EXECUTION_USAGE_ENTRIES = AGENT_EXECUTION_USAGE_ENTRIES;
 export const MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES = AGENT_EXECUTION_SUGGESTED_RESPONSES;
 export const MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH = AGENT_DECLARED_SIGNAL_MARKER_LENGTH;
@@ -405,7 +410,7 @@ export function cloneSignal(signal: AgentExecutionSignal): AgentExecutionSignal 
     return structuredClone(signal);
 }
 
-export function createAgentDeclaredSignalFromPayload(payload: AgentDeclaredSignalPayloadType): AgentExecutionSignal {
+export function createAgentSignalFromPayload(payload: AgentSignalPayloadType): AgentExecutionSignal {
     return createAgentExecutionSignalFromDeclaredPayload(payload);
 }
 

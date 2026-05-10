@@ -92,18 +92,18 @@ AgentExecution owns the canonical protocol data and signal semantics:
 Required schema changes:
 
 ```ts
-type AgentDeclaredSignalDelivery = 'stdout-marker' | 'mcp-tool';
+type AgentSignalDelivery = 'stdout-marker' | 'mcp-tool';
 
-type AgentDeclaredSignalDescriptor = {
+type AgentSignalDescriptor = {
   type: string;
   label: string;
   description?: string;
   icon: string;
   tone: EntityPresentationTone;
   payloadSchemaKey: string;
-  deliveries: AgentDeclaredSignalDelivery[];
+  deliveries: AgentSignalDelivery[];
   policy: 'progress' | 'claim' | 'input-request' | 'audit-message' | 'diagnostic';
-  outcomes: AgentDeclaredSignalOutcome[];
+  outcomes: AgentSignalOutcome[];
 };
 ```
 
@@ -210,11 +210,11 @@ Separate provider capability from launch selection. The adapter advertises what 
 Suggested adapter capability shape:
 
 ```ts
-type AgentDeclaredSignalDelivery = 'stdout-marker' | 'mcp-tool';
+type AgentSignalDelivery = 'stdout-marker' | 'mcp-tool';
 
 type AgentAdapterTransportCapabilities = {
-  supported: AgentDeclaredSignalDelivery[];
-  preferred?: AgentDeclaredSignalDelivery;
+  supported: AgentSignalDelivery[];
+  preferred?: AgentSignalDelivery;
   provisioning: {
     requiresRuntimeConfig: boolean;
     supportsStdioBridge: boolean;
@@ -223,7 +223,7 @@ type AgentAdapterTransportCapabilities = {
 };
 
 type AgentExecutionTransportState = {
-  selected: AgentDeclaredSignalDelivery;
+  selected: AgentSignalDelivery;
   degraded: false;
 };
 ```
@@ -286,7 +286,7 @@ type AgentExecutionProtocolDescriptor = {
   owner: AgentExecutionProtocolOwner;
   scope: AgentExecutionScope;
   messages: AgentExecutionMessageDescriptor[];
-  signals: AgentDeclaredSignalDescriptor[];
+  signals: AgentSignalDescriptor[];
   mcp?: {
     serverName: 'mission-mcp';
     exposure: 'session-scoped';
@@ -344,8 +344,8 @@ Acknowledgements are delivery feedback only. They are not verification success, 
 
 ### 1. Update AgentExecution Protocol Schemas
 
-- Replace `AgentDeclaredSignalDeliverySchema = z.enum(['stdout-marker'])` with `z.enum(['stdout-marker', 'mcp-tool'])`.
-- Replace singular `delivery` with `deliveries` in `AgentDeclaredSignalDescriptorSchema`.
+- Replace `AgentSignalDeliverySchema = z.enum(['stdout-marker'])` with `z.enum(['stdout-marker', 'mcp-tool'])`.
+- Replace singular `delivery` with `deliveries` in `AgentSignalDescriptorSchema`.
 - Update baseline descriptors to use `deliveries`.
 - Add descriptor metadata for `mission-mcp` when any signal supports `mcp-tool`.
 - Update tests without keeping old field aliases.

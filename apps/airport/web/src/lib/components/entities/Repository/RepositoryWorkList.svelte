@@ -12,7 +12,11 @@
     import { Button } from "$lib/components/ui/button/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
+    import SidebarMenu from "$lib/components/ui/sidebar/sidebar-menu.svelte";
+    import SidebarMenuButton from "$lib/components/ui/sidebar/sidebar-menu-button.svelte";
+    import SidebarMenuItem from "$lib/components/ui/sidebar/sidebar-menu-item.svelte";
     import * as Tooltip from "$lib/components/ui/tooltip/index.js";
+    import { cn } from "$lib/utils.js";
 
     let {
         selectedIssue = $bindable<RepositoryIssueDetailType | null>(null),
@@ -77,6 +81,12 @@
             (issue) => !missionIssueNumbers.has(issue.number),
         ),
     );
+    const trackedIssuesByNumber = $derived.by(
+        () =>
+            new Map(
+                repositoryIssues.map((issue) => [issue.number, issue] as const),
+            ),
+    );
     const combinedItemsEmpty = $derived(
         missions.length === 0 && unmatchedIssues.length === 0,
     );
@@ -85,21 +95,21 @@
         return statusLabel?.trim().toLowerCase() ?? "";
     }
 
-    function missionTone(statusLabel: string | undefined): string {
+    function missionStatusIconTone(statusLabel: string | undefined): string {
         switch (normalizeStatus(statusLabel)) {
             case "running":
-                return "border-sky-500/40 bg-sky-500/12 text-sky-950 dark:border-sky-400/35 dark:bg-sky-500/12 dark:text-sky-100";
+                return "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300";
             case "completed":
             case "delivered":
-                return "border-emerald-500/40 bg-emerald-500/12 text-emerald-950 dark:border-emerald-400/35 dark:bg-emerald-500/12 dark:text-emerald-100";
+                return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
             case "failed":
-                return "border-rose-500/40 bg-rose-500/12 text-rose-950 dark:border-rose-400/35 dark:bg-rose-500/12 dark:text-rose-100";
+                return "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300";
             case "paused":
             case "cancelled":
             case "terminated":
-                return "border-slate-500/35 bg-slate-500/12 text-slate-900 dark:border-slate-400/30 dark:bg-slate-500/12 dark:text-slate-100";
+                return "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300";
             default:
-                return "border-amber-500/40 bg-amber-500/12 text-amber-950 dark:border-amber-400/35 dark:bg-amber-500/12 dark:text-amber-100";
+                return "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300";
         }
     }
 
@@ -119,18 +129,6 @@
             default:
                 return "border-amber-500/30 bg-amber-500/15 text-amber-800 dark:text-amber-200";
         }
-    }
-
-    function issueTone(index: number): string {
-        if (index % 3 === 0) {
-            return "border-zinc-300/80 bg-zinc-50/80 text-zinc-950 dark:border-zinc-700/70 dark:bg-zinc-900/60 dark:text-zinc-100";
-        }
-
-        if (index % 3 === 1) {
-            return "border-stone-300/80 bg-stone-50/80 text-stone-950 dark:border-stone-700/70 dark:bg-stone-900/60 dark:text-stone-100";
-        }
-
-        return "border-neutral-300/80 bg-neutral-50/80 text-neutral-950 dark:border-neutral-700/70 dark:bg-neutral-900/60 dark:text-neutral-100";
     }
 
     function issueType(issue: TrackedIssueSummaryType): string {
@@ -193,6 +191,36 @@
         }
     }
 
+    function issueTypeIconTone(issue: TrackedIssueSummaryType): string {
+        switch (issueType(issue)) {
+            case "bug":
+                return "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300";
+            case "feature":
+                return "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+            case "docs":
+                return "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+            case "task":
+                return "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+            default:
+                return "border-zinc-500/20 bg-zinc-500/10 text-zinc-700 dark:text-zinc-300";
+        }
+    }
+
+    function issueTypeIcon(issue: TrackedIssueSummaryType): string {
+        switch (issueType(issue)) {
+            case "bug":
+                return "lucide:bug";
+            case "feature":
+                return "lucide:sparkles";
+            case "docs":
+                return "lucide:file-text";
+            case "task":
+                return "lucide:wrench";
+            default:
+                return "lucide:circle-dot";
+        }
+    }
+
     async function viewIssue(issueNumber: number): Promise<void> {
         issueLoadingNumber = issueNumber;
         issueError = null;
@@ -237,79 +265,33 @@
     ): string | undefined {
         return missionStatuses[mission.missionId];
     }
+
+    function missionHref(mission: MissionCatalogEntryType): string {
+        return `/airport/${encodeURIComponent(activeRepository.id)}/${encodeURIComponent(mission.missionId)}`;
+    }
+
+    function linkedIssue(
+        mission: MissionCatalogEntryType,
+    ): TrackedIssueSummaryType | undefined {
+        if (typeof mission.issueId !== "number") {
+            return undefined;
+        }
+
+        return trackedIssuesByNumber.get(mission.issueId);
+    }
+
+    function missionIcon(mission: MissionCatalogEntryType): string {
+        const issue = linkedIssue(mission);
+
+        if (issue) {
+            return issueTypeIcon(issue);
+        }
+
+        return "lucide:sparkles";
+    }
 </script>
 
 <section class="flex h-full min-h-[20rem] w-full flex-col overflow-hidden">
-    <div class="px-1 py-1">
-        <div class="flex items-center justify-between gap-3">
-            <div class="min-w-0">
-                <h2
-                    class="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground"
-                >
-                    Repository work
-                </h2>
-                <p class="mt-1 text-xs text-muted-foreground">
-                    {missions.length} mission{missions.length === 1 ? "" : "s"}
-                    and {unmatchedIssues.length} issue{unmatchedIssues.length ===
-                    1
-                        ? ""
-                        : "s"} without a mission
-                </p>
-            </div>
-
-            <Dialog.Root bind:open={createMissionOpen}>
-                <Dialog.Trigger>
-                    {#snippet child({ props })}
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            class="h-8 rounded-full px-2.5 text-xs text-muted-foreground"
-                            {...props}
-                        >
-                            <Icon icon="lucide:plus" class="size-4" />
-                            New mission
-                        </Button>
-                    {/snippet}
-                </Dialog.Trigger>
-                <Dialog.Content
-                    class="min-h-[80dvh] overflow-hidden sm:max-w-3xl flex flex-col"
-                >
-                    <div class="border-b bg-muted/25 px-5 py-4">
-                        <div class="min-w-0 space-y-3 pr-10">
-                            <div
-                                class="flex items-center gap-2 text-muted-foreground"
-                            >
-                                <Icon icon="lucide:plus" class="size-4" />
-                                <p
-                                    class="text-xs font-medium uppercase tracking-[0.16em]"
-                                >
-                                    Workflow
-                                </p>
-                            </div>
-                            <Dialog.Title
-                                class="text-lg font-semibold text-foreground"
-                            >
-                                Start from brief
-                            </Dialog.Title>
-                            <div class="flex min-w-0 items-center gap-3">
-                                <Dialog.Description
-                                    class="min-w-0 text-sm leading-6 text-muted-foreground"
-                                >
-                                    Create a new mission from an authored brief
-                                    when the work is not tied to a tracked
-                                    repository issue.
-                                </Dialog.Description>
-                            </div>
-                        </div>
-                    </div>
-
-                    <BriefForm embedded />
-                </Dialog.Content>
-            </Dialog.Root>
-        </div>
-    </div>
-
     {#if issueError || remoteStartFromIssueError || repositoryIssueLoadError}
         <div class="px-1 pt-3">
             <p class="text-sm text-rose-600">
@@ -320,9 +302,9 @@
         </div>
     {/if}
 
-    <ScrollArea class="min-h-0 flex-1">
+    <ScrollArea class="min-h-0 flex-1 bg-foreground/5">
         <Tooltip.Provider delayDuration={100}>
-            <div class="grid gap-3 px-1 pb-2 pt-1">
+            <div class="px-1 pb-3">
                 {#if repositoryIssuesLoading}
                     <div
                         class="rounded-2xl border border-dashed border-border/70 bg-background/35 px-4 py-6 text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]"
@@ -335,142 +317,334 @@
                     >
                         {repositoryIssueLoadError}
                     </div>
-                {:else if combinedItemsEmpty}
-                    <div
-                        class="rounded-2xl border border-dashed border-border/70 bg-background/35 px-4 py-6 text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]"
-                    >
-                        No active missions or tracked issues are available for
-                        this repository.
-                    </div>
                 {:else}
-                    {#each missions as mission, index (mission.missionId)}
-                        {@const missionLifecycle = missionStatus(mission)}
-                        <article
-                            class={`flex flex-col gap-4 rounded-2xl border px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.1)] ${index % 2 === 0 ? "rotate-[0.25deg]" : "-rotate-[0.2deg]"} ${missionTone(missionLifecycle)}`}
-                        >
-                            <div class="flex items-start justify-between gap-3">
-                                <div class="min-w-0 flex-1">
-                                    <div
-                                        class="flex flex-wrap items-center gap-2"
-                                    >
-                                        <h3
-                                            class="truncate text-sm font-semibold"
+                    <SidebarMenu class="gap-2">
+                        <SidebarMenuItem>
+                            <Dialog.Root bind:open={createMissionOpen}>
+                                <Dialog.Trigger>
+                                    {#snippet child({ props })}
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            class={cn(
+                                                String(props.class ?? ""),
+                                                "flex min-h-28 w-full flex-col items-center justify-start gap-2 rounded-xl border border-transparent px-2 py-3 text-center text-foreground hover:border-border/70 hover:bg-muted/30",
+                                            )}
+                                            aria-label="Start a mission from brief"
+                                            {...props}
                                         >
-                                            {mission.title}
-                                        </h3>
-                                        {#if mission.issueId}
-                                            <Badge
-                                                variant="outline"
-                                                class="rounded-full border-current/15 bg-white/35 text-current dark:bg-black/10"
+                                            <span
+                                                class="inline-flex size-14 shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-primary"
                                             >
-                                                #{mission.issueId}
-                                            </Badge>
-                                        {/if}
-                                        <Badge
-                                            variant="outline"
-                                            class={`rounded-full ${missionStatusBadgeTone(missionLifecycle)}`}
-                                        >
-                                            {missionLifecycle ?? "pending"}
-                                        </Badge>
-                                    </div>
-                                    <p class="mt-2 truncate text-xs opacity-80">
-                                        {mission.branchRef}
-                                    </p>
-                                    <p
-                                        class="mt-1 truncate font-mono text-[11px] opacity-70"
-                                    >
-                                        {mission.missionId}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div
-                                class="mt-auto flex items-center justify-between gap-3 border-t border-current/10 pt-3"
-                            >
-                                <p
-                                    class="text-[11px] uppercase tracking-[0.18em] opacity-70"
+                                                <Icon
+                                                    icon="lucide:plus"
+                                                    class="size-8"
+                                                />
+                                            </span>
+                                            <span
+                                                class="line-clamp-2 max-w-full pt-1 text-xs font-medium"
+                                            >
+                                                new issue
+                                            </span>
+                                        </Button>
+                                    {/snippet}
+                                </Dialog.Trigger>
+                                <Dialog.Content
+                                    class="min-h-[80dvh] overflow-hidden sm:max-w-3xl flex flex-col"
                                 >
-                                    Mission
-                                </p>
-                                <div class="flex items-center gap-1.5">
-                                    <Tooltip.Root>
-                                        <Tooltip.Trigger>
-                                            {#snippet child({ props })}
+                                    <div class="border-b bg-muted/25 px-5 py-4">
+                                        <div class="min-w-0 space-y-3 pr-10">
+                                            <div
+                                                class="flex items-center gap-2 text-muted-foreground"
+                                            >
+                                                <Icon
+                                                    icon="lucide:plus"
+                                                    class="size-4"
+                                                />
+                                                <p
+                                                    class="text-xs font-medium uppercase tracking-[0.16em]"
+                                                >
+                                                    Workflow
+                                                </p>
+                                            </div>
+                                            <Dialog.Title
+                                                class="text-lg font-semibold text-foreground"
+                                            >
+                                                Start from brief
+                                            </Dialog.Title>
+                                            <div
+                                                class="flex min-w-0 items-center gap-3"
+                                            >
+                                                <Dialog.Description
+                                                    class="min-w-0 text-sm leading-6 text-muted-foreground"
+                                                >
+                                                    Create a new mission from an
+                                                    authored brief when the work
+                                                    is not tied to a tracked
+                                                    repository issue.
+                                                </Dialog.Description>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <BriefForm embedded />
+                                </Dialog.Content>
+                            </Dialog.Root>
+                        </SidebarMenuItem>
+
+                        {#each missions as mission (mission.missionId)}
+                            {@const missionLifecycle = missionStatus(mission)}
+                            <SidebarMenuItem>
+                                <SidebarMenuButton
+                                    class="h-auto min-h-34 justify-start rounded-xl border border-transparent px-2 py-3 [&_svg]:size-8"
+                                    tooltipContentProps={{
+                                        hidden: false,
+                                        sideOffset: 14,
+                                        class: "w-80 max-w-80 border border-border bg-popover px-4 py-4 text-popover-foreground shadow-xl",
+                                    }}
+                                    aria-label={`Open mission ${mission.title}`}
+                                >
+                                    {#snippet child({ props })}
+                                        <a
+                                            href={missionHref(mission)}
+                                            {...props}
+                                            class={cn(
+                                                String(props.class ?? ""),
+                                                "flex min-h-28 flex-col items-center justify-start gap-2 text-center",
+                                            )}
+                                        >
+                                            <span
+                                                class={`inline-flex size-14 shrink-0 items-center justify-center rounded-xl border ${missionStatusIconTone(missionLifecycle)}`}
+                                            >
+                                                <Icon
+                                                    icon={missionIcon(mission)}
+                                                    class="size-8"
+                                                />
+                                            </span>
+                                            <span
+                                                class="grid min-w-0 flex-1 justify-items-center text-center leading-tight"
+                                            >
+                                                <span
+                                                    class="mt-2 truncate text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground"
+                                                >
+                                                    {mission.issueId
+                                                        ? `#${mission.issueId}`
+                                                        : "Mission"}
+                                                </span>
+                                                <span
+                                                    class="line-clamp-2 max-w-full pt-1 text-xs font-medium"
+                                                >
+                                                    {mission.title?.trim() ||
+                                                        mission.missionId}
+                                                </span>
+                                            </span>
+                                        </a>
+                                    {/snippet}
+                                    {#snippet tooltipContent()}
+                                        <div
+                                            class="grid min-w-0 gap-3 text-left"
+                                        >
+                                            <div class="flex items-start gap-3">
+                                                <span
+                                                    class={`inline-flex size-10 shrink-0 items-center justify-center rounded-md border ${missionStatusIconTone(missionLifecycle)}`}
+                                                >
+                                                    <Icon
+                                                        icon={missionIcon(
+                                                            mission,
+                                                        )}
+                                                        class="size-5"
+                                                    />
+                                                </span>
+                                                <div class="min-w-0 flex-1">
+                                                    <div
+                                                        class="flex items-start justify-between gap-2"
+                                                    >
+                                                        <div class="min-w-0">
+                                                            <p
+                                                                class="truncate text-sm font-semibold text-foreground"
+                                                            >
+                                                                {mission.title?.trim() ||
+                                                                    mission.missionId}
+                                                            </p>
+                                                            <p
+                                                                class="mt-1 truncate text-xs text-muted-foreground"
+                                                            >
+                                                                {mission.issueId
+                                                                    ? `Issue #${mission.issueId}`
+                                                                    : "Mission"}
+                                                            </p>
+                                                        </div>
+                                                        <Badge
+                                                            variant="outline"
+                                                            class={`rounded-full ${missionStatusBadgeTone(missionLifecycle)}`}
+                                                        >
+                                                            {missionLifecycle ??
+                                                                "pending"}
+                                                        </Badge>
+                                                    </div>
+                                                    <p
+                                                        class="mt-2 truncate text-xs text-muted-foreground"
+                                                    >
+                                                        {mission.branchRef}
+                                                    </p>
+                                                    <p
+                                                        class="mt-1 truncate font-mono text-[11px] text-muted-foreground"
+                                                    >
+                                                        {mission.missionId}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div
+                                                class="flex items-center justify-end gap-1.5 border-t pt-3"
+                                            >
+                                                {#if mission.issueId}
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon-sm"
+                                                        class="rounded-full"
+                                                        onclick={() =>
+                                                            void viewIssue(
+                                                                mission.issueId!,
+                                                            )}
+                                                        disabled={issueLoadingNumber ===
+                                                            mission.issueId}
+                                                        aria-label={`View issue ${mission.issueId}`}
+                                                    >
+                                                        <Icon
+                                                            icon="lucide:eye"
+                                                            class="size-4"
+                                                        />
+                                                    </Button>
+                                                {/if}
                                                 <Button
-                                                    href={`/airport/${encodeURIComponent(activeRepository.id)}/${encodeURIComponent(mission.missionId)}`}
+                                                    href={missionHref(mission)}
                                                     variant="ghost"
                                                     size="icon-sm"
                                                     class="rounded-full"
                                                     aria-label={`Open mission ${mission.title}`}
-                                                    {...props}
                                                 >
                                                     <Icon
                                                         icon="lucide:arrow-up-right"
                                                         class="size-4"
                                                     />
                                                 </Button>
-                                            {/snippet}
-                                        </Tooltip.Trigger>
-                                        <Tooltip.Content
-                                            >Open mission</Tooltip.Content
-                                        >
-                                    </Tooltip.Root>
-                                </div>
-                            </div>
-                        </article>
-                    {/each}
+                                            </div>
+                                        </div>
+                                    {/snippet}
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                        {/each}
 
-                    {#each unmatchedIssues as issue, index (issue.number)}
-                        <article
-                            class={`flex flex-col gap-4 rounded-2xl border px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.08)] ${index % 2 === 0 ? "-rotate-[0.18deg]" : "rotate-[0.15deg]"} ${issueTone(index)}`}
-                        >
-                            <div class="flex items-start justify-between gap-3">
-                                <div class="min-w-0 flex-1">
-                                    <div
-                                        class="flex flex-wrap items-center gap-2"
-                                    >
-                                        <h3 class="text-sm font-semibold">
-                                            #{issue.number}
-                                        </h3>
-                                        <Badge
-                                            variant="outline"
-                                            class={`rounded-full ${issueTypeBadgeTone(issue)}`}
-                                        >
-                                            {issueType(issue)}
-                                        </Badge>
-                                        {#each issue.labels.slice(0, 2) as label (`${issue.number}:${label}`)}
-                                            <Badge
-                                                variant="secondary"
-                                                class="rounded-full bg-white/60 text-current shadow-none dark:bg-white/10"
-                                            >
-                                                {label}
-                                            </Badge>
-                                        {/each}
-                                    </div>
-                                    <p
-                                        class="mt-2 line-clamp-2 text-sm opacity-90"
-                                    >
-                                        {issue.title}
-                                    </p>
-                                    <p class="mt-2 text-xs opacity-70">
-                                        {issue.updatedAt ??
-                                            "Unknown update time"}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div
-                                class="mt-auto flex items-center justify-between gap-3 border-t border-current/10 pt-3"
-                            >
-                                <p
-                                    class="text-[11px] uppercase tracking-[0.18em] opacity-70"
+                        {#each unmatchedIssues as issue (issue.number)}
+                            <SidebarMenuItem>
+                                <SidebarMenuButton
+                                    class="h-auto min-h-34 justify-start rounded-xl border border-transparent px-2 py-3 [&_svg]:size-8"
+                                    tooltipContentProps={{
+                                        hidden: false,
+                                        sideOffset: 14,
+                                        class: "w-80 max-w-80 border border-border bg-popover px-4 py-4 text-popover-foreground shadow-xl",
+                                    }}
+                                    aria-label={`View issue ${issue.number}`}
                                 >
-                                    GitHub issue
-                                </p>
-                                <div class="flex items-center gap-1.5">
-                                    <Tooltip.Root>
-                                        <Tooltip.Trigger>
-                                            {#snippet child({ props })}
+                                    {#snippet child({ props })}
+                                        <button
+                                            type="button"
+                                            onclick={() =>
+                                                void viewIssue(issue.number)}
+                                            disabled={issueLoadingNumber ===
+                                                issue.number}
+                                            {...props}
+                                            class={cn(
+                                                String(props.class ?? ""),
+                                                "flex min-h-28 flex-col items-center justify-start gap-2 text-center",
+                                            )}
+                                        >
+                                            <span
+                                                class={`inline-flex size-14 shrink-0 items-center justify-center rounded-xl border ${issueTypeIconTone(issue)}`}
+                                            >
+                                                <Icon
+                                                    icon={issueTypeIcon(issue)}
+                                                    class="size-8"
+                                                />
+                                            </span>
+                                            <span
+                                                class="grid min-w-0 flex-1 justify-items-center text-center leading-tight"
+                                            >
+                                                <span
+                                                    class="mt-2 truncate text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground"
+                                                >
+                                                    #{issue.number}
+                                                </span>
+                                                <span
+                                                    class="line-clamp-2 max-w-full pt-1 text-xs font-medium"
+                                                >
+                                                    {issue.title}
+                                                </span>
+                                            </span>
+                                        </button>
+                                    {/snippet}
+                                    {#snippet tooltipContent()}
+                                        <div
+                                            class="grid min-w-0 gap-3 text-left"
+                                        >
+                                            <div class="flex items-start gap-3">
+                                                <span
+                                                    class={`inline-flex size-10 shrink-0 items-center justify-center rounded-md border ${issueTypeIconTone(issue)}`}
+                                                >
+                                                    <Icon
+                                                        icon={issueTypeIcon(
+                                                            issue,
+                                                        )}
+                                                        class="size-5"
+                                                    />
+                                                </span>
+                                                <div class="min-w-0 flex-1">
+                                                    <div
+                                                        class="flex items-start justify-between gap-2"
+                                                    >
+                                                        <div class="min-w-0">
+                                                            <p
+                                                                class="truncate text-sm font-semibold text-foreground"
+                                                            >
+                                                                #{issue.number}
+                                                            </p>
+                                                            <p
+                                                                class="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground"
+                                                            >
+                                                                {issue.title}
+                                                            </p>
+                                                        </div>
+                                                        <Badge
+                                                            variant="outline"
+                                                            class={`rounded-full ${issueTypeBadgeTone(issue)}`}
+                                                        >
+                                                            {issueType(issue)}
+                                                        </Badge>
+                                                    </div>
+                                                    <div
+                                                        class="mt-3 flex flex-wrap gap-1.5"
+                                                    >
+                                                        {#each issue.labels.slice(0, 3) as label (`${issue.number}:${label}`)}
+                                                            <Badge
+                                                                variant="secondary"
+                                                                class="rounded-full bg-muted text-muted-foreground shadow-none"
+                                                            >
+                                                                {label}
+                                                            </Badge>
+                                                        {/each}
+                                                    </div>
+                                                    <p
+                                                        class="mt-3 text-xs text-muted-foreground"
+                                                    >
+                                                        {issue.updatedAt ??
+                                                            "Unknown update time"}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div
+                                                class="flex items-center justify-end gap-1.5 border-t pt-3"
+                                            >
                                                 <Button
                                                     type="button"
                                                     variant="ghost"
@@ -483,25 +657,12 @@
                                                     disabled={issueLoadingNumber ===
                                                         issue.number}
                                                     aria-label={`View issue ${issue.number}`}
-                                                    {...props}
                                                 >
                                                     <Icon
                                                         icon="lucide:eye"
                                                         class="size-4"
                                                     />
                                                 </Button>
-                                            {/snippet}
-                                        </Tooltip.Trigger>
-                                        <Tooltip.Content>
-                                            {issueLoadingNumber === issue.number
-                                                ? "Loading issue"
-                                                : "View issue"}
-                                        </Tooltip.Content>
-                                    </Tooltip.Root>
-
-                                    <Tooltip.Root>
-                                        <Tooltip.Trigger>
-                                            {#snippet child({ props })}
                                                 <Button
                                                     type="button"
                                                     size="icon-sm"
@@ -515,28 +676,19 @@
                                                         !activeRepository.data
                                                             .isInitialized}
                                                     aria-label={`Start mission from issue ${issue.number}`}
-                                                    {...props}
                                                 >
                                                     <Icon
                                                         icon="lucide:play"
                                                         class="size-4"
                                                     />
                                                 </Button>
-                                            {/snippet}
-                                        </Tooltip.Trigger>
-                                        <Tooltip.Content>
-                                            {activeRepository.data.isInitialized
-                                                ? issueLoadingNumber ===
-                                                  issue.number
-                                                    ? "Starting mission"
-                                                    : "Start mission"
-                                                : "Repository initialization required"}
-                                        </Tooltip.Content>
-                                    </Tooltip.Root>
-                                </div>
-                            </div>
-                        </article>
-                    {/each}
+                                            </div>
+                                        </div>
+                                    {/snippet}
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                        {/each}
+                    </SidebarMenu>
                 {/if}
             </div>
         </Tooltip.Provider>

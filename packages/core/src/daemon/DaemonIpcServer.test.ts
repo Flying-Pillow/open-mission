@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
-import { getDaemonLockPath, getDaemonRuntimePath } from './daemonPaths.js';
+import { getDaemonLockPath, getDaemonRuntimePath, getDaemonTerminalLeaseStatePath } from './daemonPaths.js';
 import { MissionRegistry } from './MissionRegistry.js';
 import { executeEntityCommandInDaemon } from '../entities/Entity/EntityRemote.js';
 import { startMissionDaemon } from './DaemonIpcServer.js';
@@ -125,6 +125,59 @@ describe('minimal source daemon request handling', () => {
         }
     });
 
+    it('reaps stale persisted terminal leases before starting a new daemon', async () => {
+        if (process.platform === 'win32') {
+            return;
+        }
+
+        const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-stale-terminal-workspace-'));
+        const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-stale-terminal-runtime-'));
+        const previousRuntimeDirectory = process.env['XDG_RUNTIME_DIR'];
+        process.env['XDG_RUNTIME_DIR'] = runtimeRoot;
+        const staleTerminalProcess = spawnDetachedStaleTerminalProcess();
+        const hydrateDaemonMissions = vi.spyOn(MissionRegistry.prototype, 'hydrateDaemonMissions').mockResolvedValue(undefined);
+        await fs.mkdir(getDaemonRuntimePath(), { recursive: true });
+        await fs.writeFile(getDaemonTerminalLeaseStatePath(), `${JSON.stringify({
+            daemonProcessId: 999999999,
+            updatedAt: '2026-05-04T00:00:00.000Z',
+            terminals: [{
+                terminalName: 'mission-agent-stale',
+                terminalPaneId: 'pty',
+                workingDirectory: workspaceRoot,
+                processLease: {
+                    pid: staleTerminalProcess.pid,
+                    processGroupId: staleTerminalProcess.pid,
+                    command: process.execPath,
+                    args: ['-e', 'setInterval(() => undefined, 1000);'],
+                    workingDirectory: workspaceRoot,
+                    startedAt: '2026-05-04T00:00:00.000Z',
+                },
+                owner: {
+                    kind: 'agent-execution',
+                    ownerId: 'repository:mission',
+                    agentExecutionId: 'stale-agent',
+                },
+            }],
+        }, null, 2)}\n`, 'utf8');
+
+        const daemon = await startMissionDaemon({
+            socketPath: path.join(runtimeRoot, 'daemon.sock'),
+            surfacePath: workspaceRoot
+        });
+
+        try {
+            await expect(waitForChildExit(staleTerminalProcess)).resolves.toBe(true);
+            await expect(fs.readFile(getDaemonTerminalLeaseStatePath(), 'utf8')).rejects.toThrow();
+        } finally {
+            await daemon.dispose();
+            terminateChild(staleTerminalProcess);
+            hydrateDaemonMissions.mockRestore();
+            restoreRuntimeDirectory(previousRuntimeDirectory);
+            await fs.rm(runtimeRoot, { recursive: true, force: true });
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
     it('returns a mission terminal snapshot for mission entity ensure requests', async () => {
         const context = createMissionTerminalContext();
         const result = await executeEntityCommandInDaemon({
@@ -201,6 +254,18 @@ function spawnStaleDaemonProcess(): ChildProcess & { pid: number } {
     if (!child.pid) {
         throw new Error('Failed to spawn stale daemon fixture process.');
     }
+    return child as ChildProcess & { pid: number };
+}
+
+function spawnDetachedStaleTerminalProcess(): ChildProcess & { pid: number } {
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => undefined, 1000);'], {
+        stdio: 'ignore',
+        detached: true,
+    });
+    if (!child.pid) {
+        throw new Error('Failed to spawn detached stale terminal fixture process.');
+    }
+    child.unref();
     return child as ChildProcess & { pid: number };
 }
 

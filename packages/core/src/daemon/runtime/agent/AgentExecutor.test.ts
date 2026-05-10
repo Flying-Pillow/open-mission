@@ -1,12 +1,14 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../../entities/Agent/Agent.js';
 import { AgentExecution } from '../../../entities/AgentExecution/AgentExecution.js';
 import { AgentRegistry } from '../../../entities/Agent/AgentRegistry.js';
 import { AgentAdapter } from './AgentAdapter.js';
-import { AgentExecutor } from './AgentExecutor.js';
+import { AGENT_EXECUTION_IDLE_QUIET_PERIOD_MS, AgentExecutor } from './AgentExecutor.js';
+import type { AgentExecutionSemanticOperationInvocationType } from './AgentExecutionSemanticOperations.js';
+import { MissionMcpServer } from './mcp/MissionMcpServer.js';
 import { createMemoryAgentExecutionJournalWriter } from './testing/createMemoryAgentExecutionJournalWriter.js';
 
 describe('AgentExecutor', () => {
@@ -35,7 +37,7 @@ describe('AgentExecutor', () => {
             }
         });
         const agent = await Agent.fromAdapter(adapter);
-        const { journalWriter } = createMemoryAgentExecutionJournalWriter();
+        const { journalWriter, recordsByJournalId } = createMemoryAgentExecutionJournalWriter();
         const executor = new AgentExecutor({
             agentRegistry: new AgentRegistry({ agents: [agent] }),
             journalWriter
@@ -102,12 +104,209 @@ describe('AgentExecutor', () => {
                     ]
                 }
             });
+
+            const journalRecords = recordsByJournalId.get(`agent-execution-journal:Repository/${process.cwd()}/${execution.agentExecutionId}`) ?? [];
+            expect(journalRecords).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    type: 'agent-observation',
+                    source: 'daemon',
+                    signal: expect.objectContaining({
+                        type: 'message',
+                        channel: 'agent',
+                        text: 'I will inspect the repository.',
+                        source: 'daemon-authoritative',
+                        confidence: 'authoritative'
+                    })
+                })
+            ]));
         } finally {
             executor.dispose();
         }
     });
 
-    it('appends a journal.header before runtime start', async () => {
+    it('keeps mcp-delivered terminal output out of agent chat messages', async () => {
+        const mcpServer = new MissionMcpServer({
+            agentExecutionRegistry: {
+                routeTransportObservation: (input) => ({
+                    status: 'accepted',
+                    agentExecutionId: input.agentExecutionId,
+                    eventId: 'test-event',
+                    observationId: input.observation.observationId
+                })
+            }
+        });
+        await mcpServer.start();
+        const adapter = new AgentAdapter({
+            id: 'mcp-prose-agent',
+            command: process.execPath,
+            displayName: 'MCP Prose Agent',
+            transportCapabilities: {
+                supported: ['mcp-tool'],
+                preferred: {
+                    print: 'mcp-tool',
+                    interactive: 'mcp-tool'
+                },
+                provisioning: {
+                    requiresRuntimeConfig: false,
+                    supportsStdioBridge: false,
+                    supportsAgentExecutionScopedTools: true
+                }
+            },
+            createLaunchPlan: () => ({
+                mode: 'print',
+                command: process.execPath,
+                args: ['-e', "setTimeout(() => { console.log('Help manage Flying-Pillow/connect-four for Mission.'); console.log('◎ Thinking (Esc to cancel)'); console.log('I will outline the safe paths from the current dirty main state.'); console.log('Inspect git worktree state (shell)'); }, 25); setTimeout(() => process.exit(0), 60);"]
+            })
+        });
+        const agent = await Agent.fromAdapter(adapter);
+        const { journalWriter, recordsByJournalId } = createMemoryAgentExecutionJournalWriter();
+        const executor = new AgentExecutor({
+            agentRegistry: new AgentRegistry({ agents: [agent] }),
+            journalWriter,
+            missionMcpServer: mcpServer
+        });
+
+        try {
+            const execution = await executor.startExecution({
+                scope: {
+                    kind: 'repository',
+                    repositoryRootPath: process.cwd()
+                },
+                workingDirectory: process.cwd(),
+                requestedAdapterId: 'mcp-prose-agent',
+                resume: { mode: 'new' },
+                initialPrompt: {
+                    source: 'operator',
+                    text: 'Summarize the brief.'
+                }
+            });
+
+            await new Promise<void>((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error('Timed out waiting for MCP terminal execution to finish.')), 2_000);
+                const eventSubscription = execution.onDidEvent((event) => {
+                    if (event.type === 'execution.completed' || event.type === 'execution.failed' || event.type === 'execution.terminated') {
+                        clearTimeout(timeout);
+                        eventSubscription.dispose();
+                        resolve();
+                    }
+                });
+            });
+
+            expect(execution.toData()).toMatchObject({
+                transportState: {
+                    selected: 'mcp-tool',
+                    degraded: false
+                }
+            });
+            expect(execution.toData().projection.timelineItems).not.toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    primitive: 'conversation.agent-message'
+                })
+            ]));
+
+            const journalRecords = recordsByJournalId.get(`agent-execution-journal:Repository/${process.cwd()}/${execution.agentExecutionId}`) ?? [];
+            expect(journalRecords).not.toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    type: 'agent-observation',
+                    signal: expect.objectContaining({
+                        type: 'message',
+                        channel: 'agent'
+                    })
+                })
+            ]));
+            expect(journalRecords).not.toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    type: 'runtime-fact',
+                    fact: expect.objectContaining({ type: 'artifact-read' })
+                })
+            ]));
+        } finally {
+            executor.dispose();
+            await mcpServer.stop();
+        }
+    });
+
+    it('emits an authoritative idle status after runtime output goes quiet', async () => {
+        vi.useFakeTimers();
+        const { journalWriter, recordsByJournalId } = createMemoryAgentExecutionJournalWriter();
+        const adapter = new AgentAdapter({
+            id: 'quiet-agent',
+            command: process.execPath,
+            displayName: 'Quiet Agent',
+            createLaunchPlan: () => ({
+                mode: 'print',
+                command: process.execPath,
+                args: ['-e', 'setTimeout(() => {}, 60_000)']
+            })
+        });
+        const agent = await Agent.fromAdapter(adapter);
+        const executor = new AgentExecutor({
+            agentRegistry: new AgentRegistry({ agents: [agent] }),
+            journalWriter
+        });
+
+        try {
+            const execution = await executor.startExecution({
+                scope: {
+                    kind: 'repository',
+                    repositoryRootPath: process.cwd()
+                },
+                workingDirectory: process.cwd(),
+                requestedAdapterId: 'quiet-agent',
+                resume: { mode: 'new' },
+                initialPrompt: {
+                    source: 'system',
+                    text: 'Start.'
+                }
+            });
+
+            const idleEvent = new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error('Timed out waiting for idle status.')), 5_000);
+                const subscription = execution.onDidEvent((event) => {
+                    if (event.type === 'execution.updated' && event.snapshot.progress.state === 'idle') {
+                        clearTimeout(timeout);
+                        subscription.dispose();
+                        resolve(event);
+                    }
+                });
+            });
+
+            await vi.advanceTimersByTimeAsync(AGENT_EXECUTION_IDLE_QUIET_PERIOD_MS + 1);
+            await idleEvent;
+
+            expect(execution.getSnapshot()).toMatchObject({
+                status: 'running',
+                attention: 'awaiting-operator',
+                waitingForInput: false,
+                progress: {
+                    state: 'idle',
+                    summary: 'No further agent output observed; execution is idle.'
+                }
+            });
+
+            const journalRecords = recordsByJournalId.get(`agent-execution-journal:Repository/${process.cwd()}/${execution.agentExecutionId}`) ?? [];
+            expect(journalRecords).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    type: 'agent-observation',
+                    source: 'daemon',
+                    signal: expect.objectContaining({
+                        type: 'status',
+                        phase: 'idle',
+                        summary: 'No further agent output observed; execution is idle.',
+                        source: 'daemon-authoritative',
+                        confidence: 'authoritative'
+                    })
+                })
+            ]));
+
+            await executor.terminateExecution(execution.agentExecutionId, 'test cleanup');
+        } finally {
+            vi.useRealTimers();
+            executor.dispose();
+        }
+    });
+
+    it('appends a journal.header before launch-turn records', async () => {
         const { journalWriter, recordsByJournalId } = createMemoryAgentExecutionJournalWriter();
         const adapter = new AgentAdapter({
             id: 'header-agent',
@@ -141,16 +340,41 @@ describe('AgentExecutor', () => {
             });
 
             const journalRecords = recordsByJournalId.get(`agent-execution-journal:Repository/${process.cwd()}/${execution.agentExecutionId}`);
-            expect(journalRecords).toHaveLength(1);
             expect(journalRecords?.[0]).toMatchObject({
                 type: 'journal.header',
                 sequence: 0,
                 agentExecutionId: execution.agentExecutionId,
                 agentId: 'header-agent',
                 workingDirectory: process.cwd(),
-                scope: {
-                    kind: 'repository',
-                    repositoryRootPath: process.cwd()
+                executionContext: {
+                    owner: {
+                        entityType: 'Repository',
+                        entityId: process.cwd()
+                    },
+                    repository: {
+                        repositoryId: process.cwd()
+                    }
+                }
+            });
+            expect(journalRecords).toEqual(expect.arrayContaining([
+                expect.objectContaining({ type: 'turn.accepted', source: 'system', messageType: 'prompt' }),
+                expect.objectContaining({ type: 'turn.delivery', status: 'attempted', transport: 'agent-message' }),
+                expect.objectContaining({ type: 'turn.delivery', status: 'delivered', transport: 'agent-message' }),
+                expect.objectContaining({
+                    type: 'state.changed',
+                    lifecycle: 'running',
+                    attention: 'autonomous',
+                    activity: 'awaiting-agent-response',
+                    awaitingResponseToMessageId: expect.any(String)
+                })
+            ]));
+            expect(execution.toData()).toMatchObject({
+                semanticActivity: 'awaiting-agent-response',
+                awaitingResponseToMessageId: expect.any(String),
+                projection: {
+                    currentActivity: {
+                        activity: 'awaiting-agent-response'
+                    }
                 }
             });
         } finally {
@@ -280,10 +504,21 @@ describe('AgentExecutor', () => {
 
             const journalRecords = recordsByJournalId.get(`agent-execution-journal:Repository/${process.cwd()}/${execution.agentExecutionId}`) ?? [];
             expect(journalRecords).toEqual(expect.arrayContaining([
-                expect.objectContaining({ type: 'message.accepted', source: 'operator', messageType: 'prompt' }),
-                expect.objectContaining({ type: 'message.delivery', status: 'attempted', transport: 'pty-terminal' }),
-                expect.objectContaining({ type: 'message.delivery', status: 'delivered', transport: 'pty-terminal' })
+                expect.objectContaining({ type: 'turn.accepted', source: 'operator', messageType: 'prompt' }),
+                expect.objectContaining({ type: 'turn.delivery', status: 'attempted', transport: 'pty-terminal' }),
+                expect.objectContaining({ type: 'turn.delivery', status: 'delivered', transport: 'pty-terminal' }),
+                expect.objectContaining({
+                    type: 'state.changed',
+                    lifecycle: 'running',
+                    attention: 'autonomous',
+                    activity: 'awaiting-agent-response',
+                    awaitingResponseToMessageId: expect.any(String)
+                })
             ]));
+            expect(execution.toData()).toMatchObject({
+                semanticActivity: 'awaiting-agent-response',
+                awaitingResponseToMessageId: expect.any(String)
+            });
 
             await executor.terminateExecution(execution.agentExecutionId, 'test cleanup');
         } finally {
@@ -327,10 +562,73 @@ describe('AgentExecutor', () => {
 
             const journalRecords = recordsByJournalId.get(`agent-execution-journal:Repository/${process.cwd()}/${execution.agentExecutionId}`) ?? [];
             expect(journalRecords).toEqual(expect.arrayContaining([
-                expect.objectContaining({ type: 'message.accepted', source: 'operator', messageType: 'command.interrupt' }),
-                expect.objectContaining({ type: 'message.delivery', status: 'attempted', transport: 'agent-message' }),
-                expect.objectContaining({ type: 'message.delivery', status: 'delivered', transport: 'agent-message' })
+                expect.objectContaining({ type: 'turn.accepted', source: 'operator', messageType: 'command.interrupt' }),
+                expect.objectContaining({ type: 'turn.delivery', status: 'attempted', transport: 'agent-message' }),
+                expect.objectContaining({ type: 'turn.delivery', status: 'delivered', transport: 'agent-message' })
             ]));
+        } finally {
+            executor.dispose();
+        }
+    });
+
+    it('promotes turn-starting commands to awaiting-agent-response', async () => {
+        const { journalWriter, recordsByJournalId } = createMemoryAgentExecutionJournalWriter();
+        const adapter = new AgentAdapter({
+            id: 'resume-agent',
+            command: '/bin/sh',
+            displayName: 'Resume Agent',
+            createLaunchPlan: () => ({
+                mode: 'interactive',
+                command: '/bin/sh',
+                args: ['-lc', 'cat >/dev/null']
+            })
+        });
+        const agent = await Agent.fromAdapter(adapter);
+        const executor = new AgentExecutor({
+            agentRegistry: new AgentRegistry({ agents: [agent] }),
+            journalWriter
+        });
+
+        try {
+            const execution = await executor.startExecution({
+                scope: {
+                    kind: 'repository',
+                    repositoryRootPath: process.cwd()
+                },
+                workingDirectory: process.cwd(),
+                requestedAdapterId: 'resume-agent',
+                resume: { mode: 'new' }
+            });
+
+            await executor.submitCommand(execution.agentExecutionId, {
+                type: 'resume',
+                reason: 'Continue with the repository turn.'
+            });
+
+            const journalRecords = recordsByJournalId.get(`agent-execution-journal:Repository/${process.cwd()}/${execution.agentExecutionId}`) ?? [];
+            expect(journalRecords).toEqual(expect.arrayContaining([
+                expect.objectContaining({ type: 'turn.accepted', source: 'operator', messageType: 'command.resume' }),
+                expect.objectContaining({ type: 'turn.delivery', status: 'attempted', transport: 'pty-terminal' }),
+                expect.objectContaining({ type: 'turn.delivery', status: 'delivered', transport: 'pty-terminal' }),
+                expect.objectContaining({
+                    type: 'state.changed',
+                    lifecycle: 'running',
+                    attention: 'autonomous',
+                    activity: 'awaiting-agent-response',
+                    awaitingResponseToMessageId: expect.any(String)
+                })
+            ]));
+            expect(execution.toData()).toMatchObject({
+                semanticActivity: 'awaiting-agent-response',
+                awaitingResponseToMessageId: expect.any(String),
+                projection: {
+                    currentActivity: {
+                        activity: 'awaiting-agent-response'
+                    }
+                }
+            });
+
+            await executor.terminateExecution(execution.agentExecutionId, 'test cleanup');
         } finally {
             executor.dispose();
         }
@@ -401,10 +699,153 @@ describe('AgentExecutor', () => {
 
             const journalRecords = recordsByJournalId.get(`agent-execution-journal:Repository/${process.cwd()}/${execution.agentExecutionId}`) ?? [];
             expect(journalRecords).toEqual(expect.arrayContaining([
-                expect.objectContaining({ type: 'observation.recorded', observationId: 'observation-1', source: 'pty' }),
+                expect.objectContaining({ type: 'agent-observation', observationId: 'observation-1', source: 'pty' }),
                 expect.objectContaining({ type: 'decision.recorded', observationId: 'observation-1', action: 'update-state' }),
                 expect.objectContaining({ type: 'state.changed', lifecycle: 'running', attention: 'autonomous', currentInputRequestId: null }),
                 expect.objectContaining({ type: 'activity.updated', progress: expect.objectContaining({ summary: 'Inspecting repository.' }) })
+            ]));
+        } finally {
+            executor.dispose();
+        }
+    });
+
+    it('records provider tool-call observations without promoting them into runtime facts', async () => {
+        const { journalWriter, recordsByJournalId } = createMemoryAgentExecutionJournalWriter();
+        const adapter = new AgentAdapter({
+            id: 'provider-tool-agent',
+            command: process.execPath,
+            displayName: 'Provider Tool Agent',
+            createLaunchPlan: () => ({
+                mode: 'print',
+                command: process.execPath,
+                args: ['-e', "console.log('ready')"]
+            })
+        });
+        const agent = await Agent.fromAdapter(adapter);
+        const executor = new AgentExecutor({
+            agentRegistry: new AgentRegistry({ agents: [agent] }),
+            journalWriter
+        });
+
+        try {
+            const execution = await executor.startExecution({
+                scope: {
+                    kind: 'repository',
+                    repositoryRootPath: process.cwd()
+                },
+                workingDirectory: process.cwd(),
+                requestedAdapterId: 'provider-tool-agent',
+                resume: { mode: 'new' }
+            });
+
+            const ack = await executor.routeTransportObservation({
+                agentExecutionId: execution.agentExecutionId,
+                observation: {
+                    observationId: 'provider-observation-1',
+                    observedAt: '2026-05-09T00:00:10.000Z',
+                    route: {
+                        origin: 'provider-output',
+                        address: {
+                            agentExecutionId: execution.agentExecutionId,
+                            scope: {
+                                kind: 'repository',
+                                repositoryRootPath: process.cwd()
+                            }
+                        }
+                    },
+                    signal: {
+                        type: 'diagnostic',
+                        code: 'tool-call',
+                        summary: "Provider invoked tool 'read_file'.",
+                        payload: {
+                            toolName: 'read_file',
+                            args: 'missions/1-initial-setup/BRIEF.md'
+                        },
+                        source: 'provider-structured',
+                        confidence: 'medium'
+                    }
+                }
+            });
+
+            expect(ack.status).toBe('recorded-only');
+
+            const journalRecords = recordsByJournalId.get(`agent-execution-journal:Repository/${process.cwd()}/${execution.agentExecutionId}`) ?? [];
+            expect(journalRecords).toEqual(expect.arrayContaining([
+                expect.objectContaining({ type: 'agent-observation', observationId: 'provider-observation-1', source: 'provider-output' }),
+                expect.objectContaining({
+                    type: 'transport-evidence',
+                    evidenceType: 'provider-payload',
+                    origin: 'provider-output',
+                    payload: expect.objectContaining({
+                        observationId: 'provider-observation-1',
+                        signalType: 'diagnostic',
+                        signalCode: 'tool-call'
+                    })
+                })
+            ]));
+            expect(journalRecords.some((record) => record.type === 'runtime-fact')).toBe(false);
+        } finally {
+            executor.dispose();
+        }
+    });
+
+    it('records Mission-owned artifact reads as authoritative runtime facts', async () => {
+        const { journalWriter, recordsByJournalId } = createMemoryAgentExecutionJournalWriter();
+        const adapter = new AgentAdapter({
+            id: 'artifact-reader-agent',
+            command: process.execPath,
+            displayName: 'Artifact Reader Agent',
+            createLaunchPlan: () => ({
+                mode: 'print',
+                command: process.execPath,
+                args: ['-e', "console.log('ready')"]
+            })
+        });
+        const agent = await Agent.fromAdapter(adapter);
+        const executor = new AgentExecutor({
+            agentRegistry: new AgentRegistry({ agents: [agent] }),
+            journalWriter
+        });
+
+        try {
+            const repositoryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-agent-executor-artifact-read-'));
+            await fs.mkdir(path.join(repositoryRoot, 'missions', '1-initial-setup'), { recursive: true });
+            await fs.writeFile(path.join(repositoryRoot, 'missions', '1-initial-setup', 'BRIEF.md'), '# Brief\n', 'utf8');
+
+            const execution = await executor.startExecution({
+                scope: {
+                    kind: 'repository',
+                    repositoryRootPath: repositoryRoot
+                },
+                workingDirectory: repositoryRoot,
+                requestedAdapterId: 'artifact-reader-agent',
+                resume: { mode: 'new' }
+            });
+
+            const result = await executor.invokeSemanticOperation({
+                agentExecutionId: execution.agentExecutionId,
+                name: 'read_artifact',
+                input: {
+                    path: 'missions/1-initial-setup/BRIEF.md'
+                }
+            } satisfies AgentExecutionSemanticOperationInvocationType);
+
+            expect(result).toMatchObject({
+                operationName: 'read_artifact',
+                agentExecutionId: execution.agentExecutionId,
+                path: 'missions/1-initial-setup/BRIEF.md',
+                content: '# Brief\n',
+                factType: 'artifact-read'
+            });
+
+            const journalRecords = recordsByJournalId.get(`agent-execution-journal:Repository/${repositoryRoot}/${execution.agentExecutionId}`) ?? [];
+            expect(journalRecords).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    type: 'runtime-fact',
+                    factType: 'artifact-read',
+                    path: 'missions/1-initial-setup/BRIEF.md',
+                    payload: expect.objectContaining({ operationName: 'read_artifact' })
+                })
             ]));
         } finally {
             executor.dispose();
@@ -480,7 +921,7 @@ describe('AgentExecutor', () => {
 
             const journalRecords = recordsByJournalId.get(`agent-execution-journal:Repository/${process.cwd()}/${execution.agentExecutionId}`) ?? [];
             expect(journalRecords).toEqual(expect.arrayContaining([
-                expect.objectContaining({ type: 'observation.recorded', observationId: 'observation-needs-input-1', source: 'pty' }),
+                expect.objectContaining({ type: 'agent-observation', observationId: 'observation-needs-input-1', source: 'pty' }),
                 expect.objectContaining({ type: 'decision.recorded', observationId: 'observation-needs-input-1', action: 'update-state' }),
                 expect.objectContaining({
                     type: 'state.changed',
@@ -495,6 +936,67 @@ describe('AgentExecutor', () => {
                     progress: expect.objectContaining({ summary: 'Should I run the verification slice?' })
                 })
             ]));
+        } finally {
+            executor.dispose();
+        }
+    });
+
+    it('caps retained runtime output for usage parsing on high-volume streams', async () => {
+        let retainedContentLength = 0;
+        const line = 'x'.repeat(1024);
+        const adapter = new AgentAdapter({
+            id: 'stream-agent',
+            command: process.execPath,
+            displayName: 'Stream Agent',
+            createLaunchPlan: () => ({
+                mode: 'print',
+                command: process.execPath,
+                args: ['-e', `for (let index = 0; index < 400; index += 1) console.log(${JSON.stringify(line + '-')} + index);`]
+            }),
+            parseAgentExecutionUsageContent: (content) => {
+                retainedContentLength = content.length;
+                return undefined;
+            }
+        });
+        const agent = await Agent.fromAdapter(adapter);
+        const { journalWriter } = createMemoryAgentExecutionJournalWriter();
+        const executor = new AgentExecutor({
+            agentRegistry: new AgentRegistry({ agents: [agent] }),
+            journalWriter
+        });
+
+        try {
+            const execution = await executor.startExecution({
+                scope: {
+                    kind: 'repository',
+                    repositoryRootPath: process.cwd()
+                },
+                workingDirectory: process.cwd(),
+                requestedAdapterId: 'stream-agent',
+                resume: { mode: 'new' },
+                initialPrompt: {
+                    source: 'system',
+                    text: 'Start.'
+                }
+            });
+
+            await new Promise<void>((resolve, reject) => {
+                if (AgentExecution.isTerminalFinalStatus(execution.getSnapshot().status)) {
+                    resolve();
+                    return;
+                }
+                const timeout = setTimeout(() => reject(new Error('Timed out waiting for stream agent completion.')), 2_000);
+                const subscription = execution.onDidEvent((event) => {
+                    if (event.type === 'execution.completed' || event.type === 'execution.failed' || event.type === 'execution.terminated') {
+                        clearTimeout(timeout);
+                        subscription.dispose();
+                        resolve();
+                    }
+                });
+            });
+
+            expect(retainedContentLength).toBeGreaterThan(0);
+            expect(retainedContentLength).toBeLessThanOrEqual(262_144);
         } finally {
             executor.dispose();
         }

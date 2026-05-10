@@ -166,8 +166,23 @@ export type MissionBrief = {
     type: MissionType;
     url?: string;
     labels?: string[];
+    assignee?: MissionAssignee;
     metadata?: Record<string, string>;
 };
+
+export const MissionAssigneeSourceSchema = z.enum([
+    'manual',
+    'issue-assignee',
+    'repository-default'
+]);
+
+export const MissionAssigneeSchema = z.object({
+    githubLogin: z.string().trim().min(1),
+    githubUserId: z.number().int().positive().optional(),
+    source: MissionAssigneeSourceSchema
+}).strict();
+
+export type MissionAssignee = z.infer<typeof MissionAssigneeSchema>;
 
 export type MissionSelector = {
     missionId?: string;
@@ -247,6 +262,7 @@ export type MissionSelectionCandidate = {
     branchRef: string;
     createdAt: string;
     issueId?: number;
+    assignee?: MissionAssignee;
 };
 
 export type RepositoryCandidate = {
@@ -312,6 +328,7 @@ export type OperatorStatus = {
     missionId?: string;
     title?: string;
     issueId?: number;
+    assignee?: MissionAssignee;
     type?: MissionType;
     stage?: MissionStageId;
     branchRef?: string;
@@ -486,6 +503,7 @@ export const MissionStatusSnapshotSchema = z.object({
     missionId: z.string().trim().min(1),
     title: z.string().trim().min(1).optional(),
     issueId: z.number().int().positive().optional(),
+    assignee: MissionAssigneeSchema.optional(),
     type: MissionEntityTypeSchema.optional(),
     operationalMode: z.string().trim().min(1).optional(),
     branchRef: z.string().trim().min(1).optional(),
@@ -501,6 +519,7 @@ export const MissionStorageSchema = z.object({
     missionId: z.string().trim().min(1),
     title: z.string().trim().min(1),
     issueId: z.number().int().positive().optional(),
+    assignee: MissionAssigneeSchema.optional(),
     type: MissionEntityTypeSchema,
     operationalMode: z.string().trim().min(1).optional(),
     branchRef: z.string().trim().min(1),

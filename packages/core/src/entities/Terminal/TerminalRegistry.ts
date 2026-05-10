@@ -3,6 +3,12 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawn as spawnPty, type IPty } from 'node-pty';
+import type {
+    DaemonRuntimeLease,
+    DaemonRuntimeOwnerReference,
+    DaemonRuntimeRelationship,
+    DaemonRuntimeSupervisionSnapshot
+} from '../../daemon/runtime/DaemonRuntimeSupervisionSchema.js';
 import { createPlainTerminalScreen, type TerminalScreen } from '../../daemon/runtime/terminal/TerminalScreen.js';
 
 export type TerminalHandle = {
@@ -74,6 +80,11 @@ export type TerminalRecordingUpdate = {
     | { type: 'resize'; at: string; cols: number; rows: number };
 };
 
+export type TerminalRuntimeSupervisionSnapshotOptions = {
+    daemonProcessId?: number;
+    startedAt?: string;
+};
+
 export type TerminalState = {
     dead: boolean;
     exitCode: number | null;
@@ -92,6 +103,22 @@ export type TerminalRegistryOptions = {
     terminationGraceMs?: number;
     terminationPollIntervalMs?: number;
     screenFactory?: TerminalScreenFactory;
+    daemonProcessId?: number;
+    persistedLeaseStatePath?: string;
+};
+
+type PersistedTerminalLeaseRecord = {
+    terminalName: string;
+    terminalPaneId: string;
+    workingDirectory: string;
+    processLease: TerminalLease;
+    owner?: TerminalOwner;
+};
+
+type PersistedTerminalLeaseState = {
+    daemonProcessId: number;
+    updatedAt: string;
+    terminals: PersistedTerminalLeaseRecord[];
 };
 
 type LiveTerminalOptions = {
@@ -233,12 +260,13 @@ export class TerminalRegistry {
     private readonly listeners = new Set<(event: TerminalUpdate) => void>();
     private readonly recordingListeners = new Set<(event: TerminalRecordingUpdate) => void>();
 
-    public constructor(private readonly options: TerminalRegistryOptions) { }
+    public constructor(private options: TerminalRegistryOptions) { }
 
     public static shared(options: SharedTerminalRegistryOptions = {}): TerminalRegistry {
         const spawnImpl = options.spawn ?? spawnPty;
         const existing = this.sharedBySpawn.get(spawnImpl);
         if (existing) {
+            existing.configure(options);
             return existing;
         }
 
@@ -248,10 +276,86 @@ export class TerminalRegistry {
             ...(options.processController ? { processController: options.processController } : {}),
             ...(options.terminationGraceMs !== undefined ? { terminationGraceMs: options.terminationGraceMs } : {}),
             ...(options.terminationPollIntervalMs !== undefined ? { terminationPollIntervalMs: options.terminationPollIntervalMs } : {}),
-            ...(options.screenFactory ? { screenFactory: options.screenFactory } : {})
+            ...(options.screenFactory ? { screenFactory: options.screenFactory } : {}),
+            ...(options.daemonProcessId !== undefined ? { daemonProcessId: options.daemonProcessId } : {}),
+            ...(options.persistedLeaseStatePath ? { persistedLeaseStatePath: options.persistedLeaseStatePath } : {})
         });
         this.sharedBySpawn.set(spawnImpl, created);
         return created;
+    }
+
+    public static cleanupPersistedLeases(input: {
+        statePath: string;
+        processController?: ProcessController;
+    }): void {
+        const state = readPersistedTerminalLeaseState(input.statePath);
+        if (!state) {
+            return;
+        }
+
+        const processController = input.processController ?? defaultProcessController;
+        if (processController.isProcessRunning(state.daemonProcessId)) {
+            return;
+        }
+
+        for (const terminal of state.terminals) {
+            const processGroupId = terminal.processLease.processGroupId;
+            if (processGroupId && process.platform !== 'win32') {
+                try {
+                    processController.killProcessGroup(processGroupId, 'SIGTERM');
+                } catch {
+                    // Fall through to the direct process kill path.
+                }
+                try {
+                    processController.killProcessGroup(processGroupId, 'SIGKILL');
+                    continue;
+                } catch {
+                    // Fall through to the direct process kill path.
+                }
+            }
+
+            const processId = terminal.processLease.pid;
+            if (!Number.isInteger(processId) || processId <= 1) {
+                continue;
+            }
+
+            try {
+                processController.killProcess(processId, 'SIGTERM');
+            } catch {
+                // Best effort.
+            }
+            try {
+                processController.killProcess(processId, 'SIGKILL');
+            } catch {
+                // Best effort.
+            }
+        }
+
+        removePersistedTerminalLeaseState(input.statePath);
+    }
+
+    public configure(options: Omit<SharedTerminalRegistryOptions, 'spawn'> = {}): void {
+        if (options.logLine) {
+            this.options.logLine = options.logLine;
+        }
+        if (options.processController) {
+            this.options.processController = options.processController;
+        }
+        if (options.terminationGraceMs !== undefined) {
+            this.options.terminationGraceMs = options.terminationGraceMs;
+        }
+        if (options.terminationPollIntervalMs !== undefined) {
+            this.options.terminationPollIntervalMs = options.terminationPollIntervalMs;
+        }
+        if (options.screenFactory) {
+            this.options.screenFactory = options.screenFactory;
+        }
+        if (options.daemonProcessId !== undefined) {
+            this.options.daemonProcessId = options.daemonProcessId;
+        }
+        if (options.persistedLeaseStatePath) {
+            this.options.persistedLeaseStatePath = options.persistedLeaseStatePath;
+        }
     }
 
     public openTerminal(request: TerminalOpenRequest): TerminalHandle {
@@ -298,6 +402,7 @@ export class TerminalRegistry {
             ...(request.owner ? { owner: cloneTerminalOwner(request.owner) } : {})
         });
         this.terminals.set(terminalName, terminal);
+        this.syncPersistedLeaseState();
 
         pty.onData((chunk) => {
             this.emit(terminal.write(chunk));
@@ -305,6 +410,7 @@ export class TerminalRegistry {
 
         pty.onExit(({ exitCode }) => {
             this.emit(terminal.markExited(exitCode));
+            this.syncPersistedLeaseState();
         });
 
         return terminal.handle();
@@ -325,6 +431,38 @@ export class TerminalRegistry {
     public readSnapshot(terminalName: string): TerminalSnapshot | undefined {
         const terminal = this.terminals.get(terminalName);
         return terminal?.snapshot();
+    }
+
+    public readRuntimeSupervisionSnapshot(options: TerminalRuntimeSupervisionSnapshotOptions = {}): DaemonRuntimeSupervisionSnapshot {
+        const startedAt = options.startedAt?.trim() || new Date().toISOString();
+        const daemonProcessId = options.daemonProcessId ?? this.options.daemonProcessId ?? process.pid;
+        const owners = new Map<string, DaemonRuntimeOwnerReference>();
+        const leases: DaemonRuntimeLease[] = [];
+        const relationships: DaemonRuntimeRelationship[] = [];
+
+        for (const terminal of this.terminals.values()) {
+            const owner = toDaemonRuntimeOwnerReference(terminal.owner);
+            owners.set(stableRuntimeReferenceKey(owner), owner);
+
+            const lease = toDaemonRuntimeLease(terminal, owner);
+            leases.push(lease);
+            relationships.push({
+                parent: owner,
+                child: {
+                    kind: 'runtime-lease',
+                    leaseId: lease.leaseId
+                },
+                relationship: 'owns-runtime-lease'
+            });
+        }
+
+        return {
+            daemonProcessId,
+            startedAt,
+            owners: [...owners.values()],
+            relationships,
+            leases
+        };
     }
 
     public sendKeys(terminalName: string, keys: string, options: { literal?: boolean } = {}): void {
@@ -373,6 +511,7 @@ export class TerminalRegistry {
             return terminal.state;
         }
         await this.terminateTerminal(terminal);
+        this.syncPersistedLeaseState();
         return terminal.state;
     }
 
@@ -397,6 +536,7 @@ export class TerminalRegistry {
     public async dispose(): Promise<void> {
         await Promise.all([...this.terminals.values()].map((terminal) => this.terminateTerminal(terminal)));
         this.terminals.clear();
+        this.syncPersistedLeaseState();
         this.listeners.clear();
         this.recordingListeners.clear();
     }
@@ -513,6 +653,132 @@ export class TerminalRegistry {
     private get processController(): ProcessController {
         return this.options.processController ?? defaultProcessController;
     }
+
+    private syncPersistedLeaseState(): void {
+        const statePath = this.options.persistedLeaseStatePath?.trim();
+        if (!statePath) {
+            return;
+        }
+
+        const liveTerminals = [...this.terminals.values()].filter((terminal) => !terminal.isDead);
+        if (liveTerminals.length === 0) {
+            removePersistedTerminalLeaseState(statePath);
+            return;
+        }
+
+        const daemonProcessId = this.options.daemonProcessId ?? process.pid;
+        writePersistedTerminalLeaseState(statePath, {
+            daemonProcessId,
+            updatedAt: new Date().toISOString(),
+            terminals: liveTerminals.map((terminal) => ({
+                terminalName: terminal.terminalName,
+                terminalPaneId: terminal.terminalPaneId,
+                workingDirectory: terminal.workingDirectory,
+                processLease: { ...terminal.processLease },
+                ...(terminal.owner ? { owner: cloneTerminalOwner(terminal.owner) } : {})
+            }))
+        });
+    }
+}
+
+function readPersistedTerminalLeaseState(statePath: string): PersistedTerminalLeaseState | undefined {
+    try {
+        const content = fs.readFileSync(statePath, 'utf8');
+        const parsed = JSON.parse(content) as PersistedTerminalLeaseState;
+        if (!parsed || !Array.isArray(parsed.terminals) || !Number.isInteger(parsed.daemonProcessId)) {
+            return undefined;
+        }
+        return parsed;
+    } catch {
+        return undefined;
+    }
+}
+
+function writePersistedTerminalLeaseState(statePath: string, state: PersistedTerminalLeaseState): void {
+    try {
+        fs.mkdirSync(path.dirname(statePath), { recursive: true });
+        fs.writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+    } catch {
+        // Runtime cleanup persistence is best effort and must not break terminal startup.
+    }
+}
+
+function removePersistedTerminalLeaseState(statePath: string): void {
+    try {
+        fs.rmSync(statePath, { force: true });
+    } catch {
+        // Best effort.
+    }
+}
+
+function toDaemonRuntimeOwnerReference(owner: TerminalOwner | undefined): DaemonRuntimeOwnerReference {
+    if (!owner) {
+        return {
+            kind: 'system',
+            label: 'terminal-registry'
+        };
+    }
+
+    switch (owner.kind) {
+        case 'system':
+            return {
+                kind: 'system',
+                label: owner.label?.trim() || 'system'
+            };
+        case 'repository':
+            return {
+                kind: 'repository',
+                repositoryRootPath: owner.repositoryRootPath
+            };
+        case 'mission':
+            return {
+                kind: 'mission',
+                missionId: owner.missionId
+            };
+        case 'task':
+            if (owner.missionId?.trim()) {
+                return {
+                    kind: 'task',
+                    missionId: owner.missionId,
+                    taskId: owner.taskId
+                };
+            }
+            return {
+                kind: 'system',
+                label: `task:${owner.taskId}`
+            };
+        case 'agent-execution':
+            return {
+                kind: 'agent-execution',
+                ownerId: owner.ownerId,
+                agentExecutionId: owner.agentExecutionId
+            };
+    }
+}
+
+function toDaemonRuntimeLease(terminal: LiveTerminal, owner: DaemonRuntimeOwnerReference): DaemonRuntimeLease {
+    return {
+        leaseId: `terminal:${terminal.terminalName}:${terminal.terminalPaneId}`,
+        kind: 'terminal',
+        owner,
+        acquiredAt: terminal.processLease.startedAt,
+        state: terminal.isDead ? 'released' : 'active',
+        ...(terminal.processLease.pid > 0 ? { processId: terminal.processLease.pid } : {}),
+        ...(terminal.processLease.processGroupId && terminal.processLease.processGroupId > 0
+            ? { processGroupId: terminal.processLease.processGroupId }
+            : {}),
+        terminalName: terminal.terminalName,
+        metadata: {
+            terminalPaneId: terminal.terminalPaneId,
+            command: terminal.processLease.command,
+            args: [...terminal.processLease.args],
+            workingDirectory: terminal.workingDirectory
+        }
+    };
+}
+
+function stableRuntimeReferenceKey(reference: DaemonRuntimeOwnerReference): string {
+    return JSON.stringify(reference);
 }
 
 export const defaultProcessController: ProcessController = {

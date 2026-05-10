@@ -43,6 +43,7 @@ export type AppContextValue = {
         activeMissionId?: string;
         activeMission?: Mission;
         activeMissionSelectedFocusId?: string;
+        activeMissionSelectedArtifactId?: string;
     };
     syncServerContext(next: AppContextServerValue): void;
     loadAirportRepositories(): Promise<void>;
@@ -71,6 +72,7 @@ export type AppContextValue = {
     }): void;
     setActiveMission(missionId?: string): void;
     setActiveMissionSelectedFocusId(focusId?: string): void;
+    setActiveMissionSelectedArtifactId(artifactId?: string): void;
 };
 
 const [getAppContext, setAppContext] = createContext<AppContextValue>();
@@ -119,6 +121,7 @@ export function createAppContext(
                 activeMissionId: state.application.activeMissionId,
                 activeMission: state.application.activeMission,
                 activeMissionSelectedFocusId: state.application.activeMissionSelectedFocusId,
+                activeMissionSelectedArtifactId: state.application.activeMissionSelectedArtifactId,
             };
         },
         syncServerContext(next) {
@@ -167,6 +170,11 @@ export function createAppContext(
         setActiveMissionSelectedFocusId(focusId) {
             state.application.setActiveMissionSelectedFocusId(
                 focusId?.trim() || undefined,
+            );
+        },
+        setActiveMissionSelectedArtifactId(artifactId) {
+            state.application.setActiveMissionSelectedArtifactId(
+                artifactId?.trim() || undefined,
             );
         },
     };

@@ -96,7 +96,7 @@ function createProviderSettingsResolver(
             ?? optionCatalog.models[0]?.value;
         const settings = {
             model: readStringMetadata(config, 'model') ?? defaultModel ?? '',
-            launchMode: 'interactive' as const,
+            launchMode: readLaunchModeMetadata(config) ?? readAgentDefaultLaunchMode(agentId) ?? 'interactive' as const,
             runtimeEnv: process.env
         };
         const reasoningEffort = defaultReasoningEffort;
@@ -128,6 +128,10 @@ function readAgentOptionCatalog(agentId: string) {
     };
 }
 
+function readAgentDefaultLaunchMode(agentId: string): 'interactive' | 'print' | undefined {
+    return missionAgents.find((agentInput) => agentInput.agentId === agentId)?.adapter.defaultLaunchMode;
+}
+
 function readStringMetadata(
     config: Parameters<AgentAdapterSettingsResolver<string>>[0],
     key: string
@@ -142,6 +146,13 @@ function readBooleanMetadata(
 ): boolean | undefined {
     const value = config.metadata?.[key];
     return typeof value === 'boolean' ? value : undefined;
+}
+
+function readLaunchModeMetadata(
+    config: Parameters<AgentAdapterSettingsResolver<string>>[0]
+): 'interactive' | 'print' | undefined {
+    const value = config.metadata?.['launchMode'];
+    return value === 'interactive' || value === 'print' ? value : undefined;
 }
 
 async function createConfiguredAgent(

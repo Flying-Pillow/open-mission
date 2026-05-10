@@ -4,8 +4,8 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'node:crypto';
 import { DaemonClient } from '@flying-pillow/mission-core/daemon/client/DaemonClient';
 import {
-    AgentDeclaredSignalPayloadSchema,
-    AgentDeclaredSignalToolPayloadSchemasByType
+    AgentSignalPayloadSchema,
+    AgentSignalToolPayloadSchemasByType
 } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import { z } from 'zod/v4';
 import type { EntryContext } from './entryContext.js';
@@ -52,7 +52,7 @@ export async function runMissionMcpCommand(context: EntryContext): Promise<void>
             inputSchema: inputSchema.shape
         }, async (input: unknown): Promise<CallToolResult> => {
             const parsed = inputSchema.parse(input);
-            const signal = AgentDeclaredSignalPayloadSchema.parse({
+            const signal = AgentSignalPayloadSchema.parse({
                 type: tool.name,
                 ...readMissionMcpBridgeSignalPayload(tool.name, parsed)
             });
@@ -102,11 +102,11 @@ function omitTransportFields(input: unknown): Record<string, unknown> {
 }
 
 function readSignalToolPayloadSchema(toolName: string) {
-    return isSignalToolName(toolName) ? AgentDeclaredSignalToolPayloadSchemasByType[toolName] : undefined;
+    return isSignalToolName(toolName) ? AgentSignalToolPayloadSchemasByType[toolName] : undefined;
 }
 
-function isSignalToolName(toolName: string): toolName is Extract<keyof typeof AgentDeclaredSignalToolPayloadSchemasByType, string> {
-    return toolName in AgentDeclaredSignalToolPayloadSchemasByType;
+function isSignalToolName(toolName: string): toolName is Extract<keyof typeof AgentSignalToolPayloadSchemasByType, string> {
+    return toolName in AgentSignalToolPayloadSchemasByType;
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {

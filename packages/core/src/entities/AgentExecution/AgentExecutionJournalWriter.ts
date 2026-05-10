@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import type { AgentExecutionScope, AgentLaunchConfig } from './AgentExecutionProtocolTypes.js';
 import type {
@@ -10,12 +11,18 @@ import type {
     AgentExecutionActivityUpdatedRecordType,
     AgentExecutionDecisionRecordType,
     AgentExecutionJournalHeaderRecordType,
+    AgentExecutionJournalOriginType,
     AgentExecutionJournalReferenceType,
+    AgentExecutionJournalRecordAuthorityType,
+    AgentExecutionJournalRecordBaseType,
+    AgentExecutionJournalExecutionContextType,
     AgentExecutionJournalRecordType,
     AgentExecutionJournalStore,
     AgentExecutionMessageAcceptedRecordType,
     AgentExecutionMessageDeliveryRecordType,
     AgentExecutionObservationRecordType,
+    AgentExecutionRuntimeFactRecordType,
+    AgentExecutionTransportEvidenceRecordType,
     AgentExecutionStateChangedRecordType
 } from './AgentExecutionJournalSchema.js';
 import { AgentExecutionJournalFileStore, type AgentExecutionJournalFileStorePath } from './AgentExecutionJournalFileStore.js';
@@ -53,6 +60,7 @@ export class AgentExecutionJournalWriter {
     }) => AgentExecutionJournalStore;
     private readonly createRecordId: () => string;
     private readonly now: () => string;
+    private readonly journalStateById = new Map<string, JournalAppendState>();
 
     public constructor(options: AgentExecutionJournalWriterOptions = {}) {
         this.resolveReference = options.resolveReference ?? createAgentExecutionJournalReference;
@@ -64,7 +72,18 @@ export class AgentExecutionJournalWriter {
     public async ensureLaunchJournal(input: AgentExecutionJournalLaunchInput): Promise<AgentExecutionJournalReferenceType> {
         const { reference, store } = this.resolveJournalContext(input);
         await store.ensureJournal(reference);
-        await store.appendRecord(reference, this.createHeaderRecord(input, reference));
+        const headerRecord = this.createHeaderRecord(input, reference);
+        await store.appendRecord(reference, headerRecord);
+        this.journalStateById.set(reference.journalId, {
+            reference,
+            lastSequence: headerRecord.sequence,
+            recordCount: 1,
+            executionContextSeed: {
+                agentAdapter: headerRecord.agentId,
+                runtimeVersion: headerRecord.executionContext.daemon.runtimeVersion,
+                protocolVersion: headerRecord.executionContext.daemon.protocolVersion
+            }
+        });
         return {
             ...reference,
             recordCount: 1,
@@ -74,7 +93,9 @@ export class AgentExecutionJournalWriter {
 
     public async readRecords(input: Pick<AgentExecutionJournalLaunchInput, 'agentExecutionId' | 'scope'>): Promise<AgentExecutionJournalRecordType[]> {
         const { reference, store } = this.resolveJournalContext(input);
-        return store.readRecords(reference);
+        const records = await store.readRecords(reference);
+        this.journalStateById.set(reference.journalId, buildJournalAppendState(reference, records));
+        return records;
     }
 
     public async appendPromptAccepted(input: {
@@ -82,10 +103,27 @@ export class AgentExecutionJournalWriter {
         scope: AgentExecutionScope;
         prompt: AgentPrompt;
     }): Promise<AgentExecutionMessageAcceptedRecordType> {
+        const source = mapPromptSource(input.prompt.source);
         return this.appendRecord(input, (context) => ({
-            ...this.createRecordBase(input, context.reference, context.sequence, 'message.accepted', context.recordId),
+            ...this.createRecordBase<AgentExecutionMessageAcceptedRecordType>(input, context.reference, context.sequence, context.recordId, context.existingRecords, context.executionContextSeed, {
+                type: 'turn.accepted',
+                family: 'turn.accepted',
+                entrySemantics: 'event',
+                authority: source === 'operator'
+                    ? 'operator'
+                    : source === 'system'
+                        ? 'system'
+                        : 'daemon',
+                assertionLevel: 'authoritative',
+                replayClass: 'replay-critical',
+                origin: source === 'operator'
+                    ? 'operator'
+                    : source === 'system'
+                        ? 'system'
+                        : 'daemon'
+            }),
             messageId: context.recordId,
-            source: mapPromptSource(input.prompt.source),
+            source,
             messageType: 'prompt',
             payload: { text: input.prompt.text },
             mutatesContext: false
@@ -98,10 +136,19 @@ export class AgentExecutionJournalWriter {
         command: AgentCommand;
         source?: AgentExecutionMessageAcceptedRecordType['source'];
     }): Promise<AgentExecutionMessageAcceptedRecordType> {
+        const source = input.source ?? 'operator';
         return this.appendRecord(input, (context) => ({
-            ...this.createRecordBase(input, context.reference, context.sequence, 'message.accepted', context.recordId),
+            ...this.createRecordBase<AgentExecutionMessageAcceptedRecordType>(input, context.reference, context.sequence, context.recordId, context.existingRecords, context.executionContextSeed, {
+                type: 'turn.accepted',
+                family: 'turn.accepted',
+                entrySemantics: 'event',
+                authority: source,
+                assertionLevel: 'authoritative',
+                replayClass: 'replay-critical',
+                origin: source
+            }),
             messageId: context.recordId,
-            source: input.source ?? 'operator',
+            source,
             messageType: `command.${input.command.type}`,
             payload: { ...input.command },
             mutatesContext: false
@@ -117,7 +164,15 @@ export class AgentExecutionJournalWriter {
         reason?: string;
     }): Promise<AgentExecutionMessageDeliveryRecordType> {
         return this.appendRecord(input, (context) => ({
-            ...this.createRecordBase(input, context.reference, context.sequence, 'message.delivery', context.recordId),
+            ...this.createRecordBase<AgentExecutionMessageDeliveryRecordType>(input, context.reference, context.sequence, context.recordId, context.existingRecords, context.executionContextSeed, {
+                type: 'turn.delivery',
+                family: 'turn.delivery',
+                entrySemantics: 'event',
+                authority: 'daemon',
+                assertionLevel: input.status === 'failed' ? 'diagnostic' : 'informational',
+                replayClass: 'replay-optional',
+                origin: 'daemon'
+            }),
             messageId: input.messageId,
             status: input.status,
             transport: input.transport,
@@ -131,12 +186,73 @@ export class AgentExecutionJournalWriter {
         observation: AgentExecutionObservation;
     }): Promise<AgentExecutionObservationRecordType> {
         return this.appendRecord(input, (context) => ({
-            ...this.createRecordBase(input, context.reference, context.sequence, 'observation.recorded', context.recordId),
+            ...this.createRecordBase<AgentExecutionObservationRecordType>(input, context.reference, context.sequence, context.recordId, context.existingRecords, context.executionContextSeed, {
+                type: 'agent-observation',
+                family: 'agent-observation',
+                entrySemantics: 'event',
+                authority: mapObservationAuthority(input.observation),
+                assertionLevel: mapObservationAssertionLevel(input.observation),
+                replayClass: 'replay-critical',
+                origin: mapObservationOrigin(input.observation)
+            }),
             observationId: input.observation.observationId,
             source: mapObservationSource(input.observation),
             confidence: mapObservationConfidence(input.observation.signal.confidence),
             signal: cloneStructured(input.observation.signal),
             ...(input.observation.rawText ? { rawText: input.observation.rawText } : {})
+        }));
+    }
+
+    public async appendRuntimeFact(input: {
+        agentExecutionId: string;
+        scope: AgentExecutionScope;
+        factType: AgentExecutionRuntimeFactRecordType['factType'];
+        path?: string;
+        artifactId?: string;
+        detail?: string;
+        payload?: AgentExecutionRuntimeFactRecordType['payload'];
+    }): Promise<AgentExecutionRuntimeFactRecordType> {
+        return this.appendRecord(input, (context) => ({
+            ...this.createRecordBase<AgentExecutionRuntimeFactRecordType>(input, context.reference, context.sequence, context.recordId, context.existingRecords, context.executionContextSeed, {
+                type: 'runtime-fact',
+                family: 'runtime-fact',
+                entrySemantics: 'event',
+                authority: 'daemon',
+                assertionLevel: 'authoritative',
+                replayClass: 'replay-critical',
+                origin: 'daemon'
+            }),
+            factId: context.recordId,
+            factType: input.factType,
+            ...(input.path ? { path: input.path } : {}),
+            ...(input.artifactId ? { artifactId: input.artifactId } : {}),
+            ...(input.detail ? { detail: input.detail } : {}),
+            ...(input.payload ? { payload: cloneStructured(input.payload) } : {})
+        }));
+    }
+
+    public async appendTransportEvidence(input: {
+        agentExecutionId: string;
+        scope: AgentExecutionScope;
+        evidenceType: AgentExecutionTransportEvidenceRecordType['evidenceType'];
+        origin: AgentExecutionJournalOriginType;
+        content?: string;
+        payload?: AgentExecutionTransportEvidenceRecordType['payload'];
+    }): Promise<AgentExecutionTransportEvidenceRecordType> {
+        return this.appendRecord(input, (context) => ({
+            ...this.createRecordBase<AgentExecutionTransportEvidenceRecordType>(input, context.reference, context.sequence, context.recordId, context.existingRecords, context.executionContextSeed, {
+                type: 'transport-evidence',
+                family: 'transport-evidence',
+                entrySemantics: 'evidence',
+                authority: 'daemon',
+                assertionLevel: 'diagnostic',
+                replayClass: 'evidence-only',
+                origin: input.origin
+            }),
+            evidenceId: context.recordId,
+            evidenceType: input.evidenceType,
+            ...(input.content ? { content: input.content } : {}),
+            ...(input.payload ? { payload: cloneStructured(input.payload) } : {})
         }));
     }
 
@@ -148,7 +264,15 @@ export class AgentExecutionJournalWriter {
         decision: AgentExecutionSignalDecision;
     }): Promise<AgentExecutionDecisionRecordType> {
         return this.appendRecord(input, (context) => ({
-            ...this.createRecordBase(input, context.reference, context.sequence, 'decision.recorded', context.recordId),
+            ...this.createRecordBase<AgentExecutionDecisionRecordType>(input, context.reference, context.sequence, context.recordId, context.existingRecords, context.executionContextSeed, {
+                type: 'decision.recorded',
+                family: 'decision.recorded',
+                entrySemantics: 'event',
+                authority: 'daemon',
+                assertionLevel: 'authoritative',
+                replayClass: 'replay-critical',
+                origin: 'daemon'
+            }),
             decisionId: context.recordId,
             ...(input.observationId ? { observationId: input.observationId } : {}),
             ...(input.messageId ? { messageId: input.messageId } : {}),
@@ -162,15 +286,45 @@ export class AgentExecutionJournalWriter {
         scope: AgentExecutionScope;
         decision: Extract<AgentExecutionSignalDecision, { action: 'update-execution' }>;
         currentInputRequestId?: string | null;
+        awaitingResponseToMessageId?: string | null;
+    }): Promise<AgentExecutionStateChangedRecordType> {
+        return this.appendExecutionStateChanged({
+            agentExecutionId: input.agentExecutionId,
+            scope: input.scope,
+            lifecycle: mapStateChangedLifecycle(input.decision),
+            attention: input.decision.snapshotPatch.attention,
+            activity: input.decision.snapshotPatch.progress?.state
+                ? mapSemanticActivity(input.decision.snapshotPatch.progress.state)
+                : undefined,
+            ...(input.currentInputRequestId !== undefined ? { currentInputRequestId: input.currentInputRequestId } : {}),
+            ...(input.awaitingResponseToMessageId !== undefined ? { awaitingResponseToMessageId: input.awaitingResponseToMessageId } : {})
+        });
+    }
+
+    public async appendExecutionStateChanged(input: {
+        agentExecutionId: string;
+        scope: AgentExecutionScope;
+        lifecycle?: AgentExecutionStateChangedRecordType['lifecycle'];
+        attention?: AgentExecutionStateChangedRecordType['attention'];
+        activity?: AgentExecutionStateChangedRecordType['activity'];
+        currentInputRequestId?: string | null;
+        awaitingResponseToMessageId?: string | null;
     }): Promise<AgentExecutionStateChangedRecordType> {
         return this.appendRecord(input, (context) => ({
-            ...this.createRecordBase(input, context.reference, context.sequence, 'state.changed', context.recordId),
-            ...(mapStateChangedLifecycle(input.decision) ? { lifecycle: mapStateChangedLifecycle(input.decision) } : {}),
-            ...(input.decision.snapshotPatch.attention ? { attention: input.decision.snapshotPatch.attention } : {}),
-            ...(input.decision.snapshotPatch.progress?.state && mapSemanticActivity(input.decision.snapshotPatch.progress.state)
-                ? { activity: mapSemanticActivity(input.decision.snapshotPatch.progress.state) }
-                : {}),
-            ...(input.currentInputRequestId !== undefined ? { currentInputRequestId: input.currentInputRequestId } : {})
+            ...this.createRecordBase<AgentExecutionStateChangedRecordType>(input, context.reference, context.sequence, context.recordId, context.existingRecords, context.executionContextSeed, {
+                type: 'state.changed',
+                family: 'state.changed',
+                entrySemantics: 'event',
+                authority: 'daemon',
+                assertionLevel: 'authoritative',
+                replayClass: 'replay-critical',
+                origin: 'daemon'
+            }),
+            ...(input.lifecycle ? { lifecycle: input.lifecycle } : {}),
+            ...(input.attention ? { attention: input.attention } : {}),
+            ...(input.activity ? { activity: input.activity } : {}),
+            ...(input.currentInputRequestId !== undefined ? { currentInputRequestId: input.currentInputRequestId } : {}),
+            ...(input.awaitingResponseToMessageId !== undefined ? { awaitingResponseToMessageId: input.awaitingResponseToMessageId } : {})
         }));
     }
 
@@ -184,7 +338,15 @@ export class AgentExecutionJournalWriter {
             return undefined;
         }
         return this.appendRecord(input, (context) => ({
-            ...this.createRecordBase(input, context.reference, context.sequence, 'activity.updated', context.recordId),
+            ...this.createRecordBase<AgentExecutionActivityUpdatedRecordType>(input, context.reference, context.sequence, context.recordId, context.existingRecords, context.executionContextSeed, {
+                type: 'activity.updated',
+                family: 'activity.updated',
+                entrySemantics: 'snapshot',
+                authority: 'daemon',
+                assertionLevel: 'informational',
+                replayClass: 'replay-optional',
+                origin: 'daemon'
+            }),
             ...(mapSemanticActivity(progress.state) ? { activity: mapSemanticActivity(progress.state) } : {}),
             progress: {
                 ...(progress.summary ? { summary: progress.summary } : {}),
@@ -199,14 +361,15 @@ export class AgentExecutionJournalWriter {
         reference: AgentExecutionJournalReferenceType
     ): AgentExecutionJournalHeaderRecordType {
         return {
-            recordId: this.createRecordId(),
-            sequence: 0,
-            type: 'journal.header',
-            schemaVersion: 1,
-            agentExecutionId: input.agentExecutionId,
-            ownerId: reference.ownerId,
-            scope: { ...input.scope },
-            occurredAt: this.now(),
+            ...this.createRecordBase<AgentExecutionJournalHeaderRecordType>(input, reference, 0, this.createRecordId(), [], undefined, {
+                type: 'journal.header',
+                family: 'journal.header',
+                entrySemantics: 'event',
+                authority: 'daemon',
+                assertionLevel: 'authoritative',
+                replayClass: 'replay-critical',
+                origin: 'daemon'
+            }),
             kind: 'agent-execution-interaction-journal',
             agentId: input.agentId,
             protocolDescriptor: input.protocolDescriptor,
@@ -232,48 +395,126 @@ export class AgentExecutionJournalWriter {
 
     private async appendRecord<TRecord extends AgentExecutionJournalRecordType>(
         input: Pick<AgentExecutionJournalLaunchInput, 'agentExecutionId' | 'scope'>,
-        createRecord: (context: { reference: AgentExecutionJournalReferenceType; sequence: number; recordId: string }) => TRecord
+        createRecord: (context: {
+            reference: AgentExecutionJournalReferenceType;
+            sequence: number;
+            recordId: string;
+            existingRecords: AgentExecutionJournalRecordType[];
+            executionContextSeed: JournalExecutionContextSeed;
+        }) => TRecord
     ): Promise<TRecord> {
         const { reference, store } = this.resolveJournalContext(input);
-        const existingRecords = await store.readRecords(reference);
-        const sequence = existingRecords.length;
+        const state = await this.readOrCreateJournalState(reference, store);
+        const sequence = state.lastSequence + 1;
         const recordId = this.createRecordId();
-        const record = createRecord({ reference, sequence, recordId });
+        const record = createRecord({
+            reference,
+            sequence,
+            recordId,
+            existingRecords: [],
+            executionContextSeed: state.executionContextSeed
+        });
         await store.appendRecord(reference, record);
+        this.journalStateById.set(reference.journalId, {
+            ...state,
+            lastSequence: sequence,
+            recordCount: state.recordCount + 1
+        });
         return record;
     }
 
-    private createRecordBase<TType extends TJournalRecordType>(
+    private async readOrCreateJournalState(
+        reference: AgentExecutionJournalReferenceType,
+        store: AgentExecutionJournalStore
+    ): Promise<JournalAppendState> {
+        const existing = this.journalStateById.get(reference.journalId);
+        if (existing) {
+            return existing;
+        }
+
+        const records = await store.readRecords(reference);
+        const state = buildJournalAppendState(reference, records);
+        this.journalStateById.set(reference.journalId, state);
+        return state;
+    }
+
+    private createRecordBase<TRecord extends AgentExecutionJournalRecordType>(
         input: Pick<AgentExecutionJournalLaunchInput, 'agentExecutionId' | 'scope'>,
         reference: AgentExecutionJournalReferenceType,
         sequence: number,
-        type: TType,
-        recordId: string
-    ): JournalRecordBase<TType> {
+        recordId: string,
+        existingRecords: AgentExecutionJournalRecordType[],
+        executionContextSeed: JournalExecutionContextSeed | undefined,
+        metadata: {
+            type: TRecord['type'];
+            family: TRecord['family'];
+            entrySemantics: TRecord['entrySemantics'];
+            authority: TRecord['authority'];
+            assertionLevel: TRecord['assertionLevel'];
+            replayClass: TRecord['replayClass'];
+            origin: TRecord['origin'];
+        }
+    ): JournalRecordBase<TRecord> {
         return {
             recordId,
             sequence,
-            type,
+            type: metadata.type,
+            family: metadata.family,
+            entrySemantics: metadata.entrySemantics,
+            authority: metadata.authority,
+            assertionLevel: metadata.assertionLevel,
+            replayClass: metadata.replayClass,
+            origin: metadata.origin,
             schemaVersion: 1,
             agentExecutionId: input.agentExecutionId,
-            ownerId: reference.ownerId,
-            scope: cloneStructured(input.scope),
+            executionContext: createExecutionContextDescriptor(
+                createExecutionContextInput({
+                    reference,
+                    scope: input.scope,
+                    type: metadata.type,
+                    ...(executionContextSeed ? { executionContextSeed } : {}),
+                    ...(metadata.type === 'journal.header'
+                        ? { launchInput: input as AgentExecutionJournalLaunchInput }
+                        : {}),
+                    existingRecords
+                })
+            ),
             occurredAt: this.now()
-        } as JournalRecordBase<TType>;
+        } as JournalRecordBase<TRecord>;
     }
 }
 
-type TJournalRecordType = AgentExecutionJournalRecordType['type'];
+const JOURNAL_PROTOCOL_VERSION = '2026-05-10';
+const MISSION_CORE_RUNTIME_VERSION = readMissionCoreRuntimeVersion();
 
-type JournalRecordBase<TType extends TJournalRecordType> = {
-    recordId: string;
-    sequence: number;
-    type: TType;
-    schemaVersion: 1;
-    agentExecutionId: string;
-    ownerId: string;
-    scope: AgentExecutionScope;
-    occurredAt: string;
+type JournalRecordBase<TRecord extends AgentExecutionJournalRecordType> = Pick<
+    TRecord,
+    | 'recordId'
+    | 'sequence'
+    | 'type'
+    | 'family'
+    | 'entrySemantics'
+    | 'authority'
+    | 'assertionLevel'
+    | 'replayClass'
+    | 'origin'
+    | 'schemaVersion'
+    | 'agentExecutionId'
+    | 'executionContext'
+    | 'occurredAt'
+>;
+
+type JournalExecutionContextSeed = {
+    agentAdapter: string;
+    runtimeVersion: string;
+    protocolVersion: string;
+};
+
+type JournalAppendState = {
+    reference: AgentExecutionJournalReferenceType;
+    lastSequence: number;
+    recordCount: number;
+    executionContextSeed: JournalExecutionContextSeed;
 };
 
 export function createDefaultAgentExecutionJournalWriter(): AgentExecutionJournalWriter {
@@ -340,6 +581,25 @@ function mapObservationSource(observation: AgentExecutionObservation): AgentExec
         case 'terminal-output':
             return 'terminal-heuristic';
     }
+}
+
+function mapObservationOrigin(observation: AgentExecutionObservation): AgentExecutionJournalOriginType {
+    return mapObservationSource(observation);
+}
+
+function mapObservationAuthority(observation: AgentExecutionObservation): AgentExecutionJournalRecordAuthorityType {
+    return observation.route.origin === 'agent-declared-signal' ? 'agent' : 'daemon';
+}
+
+function mapObservationAssertionLevel(observation: AgentExecutionObservation): AgentExecutionJournalRecordBaseType['assertionLevel'] {
+    if (observation.route.origin === 'terminal-output' && observation.signal.type === 'message') {
+        return 'informational';
+    }
+    return observation.signal.confidence === 'diagnostic'
+        ? 'diagnostic'
+        : observation.route.origin === 'agent-declared-signal'
+            ? 'advisory'
+            : 'authoritative';
 }
 
 function mapObservationConfidence(
@@ -434,6 +694,162 @@ function resolveAgentExecutionJournalOwner(scope: AgentExecutionScope): {
                 ownerEntity: 'Artifact',
                 ownerId: scope.artifactId.trim()
             };
+    }
+}
+
+function createExecutionContextDescriptor(input: {
+    reference: AgentExecutionJournalReferenceType;
+    scope: AgentExecutionScope;
+    agentAdapter: string;
+    runtimeVersion: string;
+    protocolVersion: string;
+}): AgentExecutionJournalExecutionContextType {
+    const repositoryId = readRepositoryIdFromScope(input.scope);
+    const missionId = readMissionIdFromScope(input.scope);
+    const taskId = input.scope.kind === 'task'
+        ? input.scope.taskId
+        : input.scope.kind === 'artifact'
+            ? input.scope.taskId
+            : undefined;
+    const stageId = input.scope.kind === 'task'
+        ? input.scope.stageId
+        : input.scope.kind === 'artifact'
+            ? input.scope.stageId
+            : undefined;
+
+    return {
+        owner: {
+            entityType: input.reference.ownerEntity,
+            entityId: input.reference.ownerId
+        },
+        ...(missionId
+            ? {
+                mission: {
+                    missionId,
+                    ...(stageId ? { stageId } : {}),
+                    ...(taskId ? { taskId } : {})
+                }
+            }
+            : {}),
+        ...(repositoryId
+            ? {
+                repository: {
+                    repositoryId
+                }
+            }
+            : {}),
+        runtime: {
+            agentAdapter: input.agentAdapter,
+            ...(stageId ? { workflowStage: stageId } : {})
+        },
+        daemon: {
+            runtimeVersion: input.runtimeVersion,
+            protocolVersion: input.protocolVersion
+        }
+    };
+}
+
+function createExecutionContextInput(input: {
+    reference: AgentExecutionJournalReferenceType;
+    scope: AgentExecutionScope;
+    type: AgentExecutionJournalRecordType['type'];
+    launchInput?: AgentExecutionJournalLaunchInput;
+    executionContextSeed?: JournalExecutionContextSeed;
+    existingRecords: AgentExecutionJournalRecordType[];
+}): {
+    reference: AgentExecutionJournalReferenceType;
+    scope: AgentExecutionScope;
+    agentAdapter: string;
+    runtimeVersion: string;
+    protocolVersion: string;
+} {
+    if (input.type === 'journal.header' && input.launchInput) {
+        return {
+            reference: input.reference,
+            scope: input.scope,
+            agentAdapter: input.launchInput.agentId,
+            runtimeVersion: MISSION_CORE_RUNTIME_VERSION,
+            protocolVersion: JOURNAL_PROTOCOL_VERSION
+        };
+    }
+
+    if (input.executionContextSeed) {
+        return {
+            reference: input.reference,
+            scope: input.scope,
+            agentAdapter: input.executionContextSeed.agentAdapter,
+            runtimeVersion: input.executionContextSeed.runtimeVersion,
+            protocolVersion: input.executionContextSeed.protocolVersion
+        };
+    }
+
+    const headerRecord = readHeaderRecord(input.existingRecords);
+    return {
+        reference: input.reference,
+        scope: input.scope,
+        agentAdapter: headerRecord?.agentId ?? 'unknown-agent',
+        runtimeVersion: headerRecord?.executionContext.daemon.runtimeVersion ?? MISSION_CORE_RUNTIME_VERSION,
+        protocolVersion: headerRecord?.executionContext.daemon.protocolVersion ?? JOURNAL_PROTOCOL_VERSION
+    };
+}
+
+function readHeaderRecord(records: AgentExecutionJournalRecordType[]): AgentExecutionJournalHeaderRecordType | undefined {
+    const headerRecord = records.find((record) => record.type === 'journal.header');
+    return headerRecord?.type === 'journal.header' ? headerRecord : undefined;
+}
+
+function buildJournalAppendState(
+    reference: AgentExecutionJournalReferenceType,
+    records: AgentExecutionJournalRecordType[]
+): JournalAppendState {
+    const headerRecord = readHeaderRecord(records);
+    return {
+        reference,
+        lastSequence: records.length > 0 ? records[records.length - 1]!.sequence : -1,
+        recordCount: records.length,
+        executionContextSeed: {
+            agentAdapter: headerRecord?.agentId ?? 'unknown-agent',
+            runtimeVersion: headerRecord?.executionContext.daemon.runtimeVersion ?? MISSION_CORE_RUNTIME_VERSION,
+            protocolVersion: headerRecord?.executionContext.daemon.protocolVersion ?? JOURNAL_PROTOCOL_VERSION
+        }
+    };
+}
+
+function readMissionCoreRuntimeVersion(): string {
+    try {
+        const packageJson = JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')) as { version?: unknown };
+        return typeof packageJson.version === 'string' && packageJson.version.trim().length > 0
+            ? packageJson.version.trim()
+            : 'unknown';
+    } catch {
+        return 'unknown';
+    }
+}
+
+function readRepositoryIdFromScope(scope: AgentExecutionScope): string | undefined {
+    switch (scope.kind) {
+        case 'repository':
+            return scope.repositoryRootPath;
+        case 'mission':
+        case 'task':
+            return scope.repositoryRootPath;
+        case 'artifact':
+            return scope.repositoryRootPath;
+        case 'system':
+            return undefined;
+    }
+}
+
+function readMissionIdFromScope(scope: AgentExecutionScope): string | undefined {
+    switch (scope.kind) {
+        case 'mission':
+        case 'task':
+            return scope.missionId;
+        case 'artifact':
+            return scope.missionId;
+        case 'repository':
+        case 'system':
+            return undefined;
     }
 }
 

@@ -67,7 +67,7 @@ AgentExecution projection must be driven by the same registries and schemas that
 
 The journal record registry is the canonical source for top-level journal entry families. In the current implementation, that registry is represented by `AgentExecutionJournalRecordTypeSchema` and `AgentExecutionJournalRecordSchema`; if the implementation later exposes a named `AgentExecutionJournalRecordRegistry`, the projection layer should consume that named registry rather than preserve a parallel mapping. Record-family coverage includes `journal.header`, `message.accepted`, `message.delivery`, `observation.recorded`, `decision.recorded`, `state.changed`, `activity.updated`, `owner-effect.recorded`, and `projection.recorded`.
 
-The AgentExecution signal registry is the canonical source for structured signals inside `observation.recorded.signal`. It owns signal payload validation, descriptor publication through `baselineAgentDeclaredSignalDescriptors`, and signal-specific timeline projection through `projectAgentExecutionObservationSignalToTimelineItem`. Timeline projection should extend this ownership model rather than introduce a second signal switch in Airport.
+The AgentExecution signal registry is the canonical source for structured signals inside `observation.recorded.signal`. It owns signal payload validation, descriptor publication through `baselineAgentSignalDescriptors`, and signal-specific timeline projection through `projectAgentExecutionObservationSignalToTimelineItem`. Timeline projection should extend this ownership model rather than introduce a second signal switch in Airport.
 
 Registry ownership rules:
 
