@@ -1319,6 +1319,53 @@ describe('workflow reducer delivery completion', () => {
         expect(result.nextState.agentExecutions.find((execution) => execution.agentExecutionId === 'AgentExecution-implementation-01')?.lifecycle).toBe('cancelled');
     });
 
+    it('returns a queued task to ready and removes its launch request when the task is cancelled', () => {
+        const configuration = createMissionWorkflowConfigurationSnapshot({
+            createdAt: '2026-04-10T15:51:25.000Z',
+            workflowVersion: DEFAULT_WORKFLOW_VERSION,
+            workflow: createDefaultWorkflowSettings()
+        });
+
+        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime.lifecycle = 'running';
+        runtime.pause = { paused: false };
+        runtime.tasks = [
+            {
+                taskId: 'prd/01',
+                stageId: 'prd',
+                title: 'PRD',
+                instruction: 'Draft PRD.',
+                dependsOn: [],
+                lifecycle: 'queued',
+                waitingOnTaskIds: [],
+                runtime: { autostart: true },
+                retries: 0,
+                createdAt: '2026-04-10T15:51:25.000Z',
+                updatedAt: '2026-04-10T15:54:00.000Z'
+            }
+        ];
+        runtime.launchQueue = [{
+            requestId: 'task.launch:prd/01:2026-04-10T15:54:00.000Z',
+            taskId: 'prd/01',
+            requestedAt: '2026-04-10T15:54:00.000Z',
+            requestedBy: 'human',
+            causedByEventId: 'task.queued:prd/01:2026-04-10T15:54:00.000Z'
+        }];
+
+        const result = reduceMissionWorkflowEvent(runtime, {
+            eventId: 'task.cancelled:prd/01:2026-04-10T15:55:00.000Z',
+            type: 'task.cancelled',
+            occurredAt: '2026-04-10T15:55:00.000Z',
+            source: 'human',
+            taskId: 'prd/01',
+            reason: 'operator cancelled task'
+        }, configuration);
+
+        expect(result.nextState.tasks.find((candidate) => candidate.taskId === 'prd/01')?.lifecycle).toBe('ready');
+        expect(result.nextState.tasks.find((candidate) => candidate.taskId === 'prd/01')?.runtime.autostart).toBe(false);
+        expect(result.nextState.launchQueue).toEqual([]);
+    });
+
 });
 
 function createGeneratedTasksEvent(

@@ -90,11 +90,11 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 		daemonProcessId: process.pid,
 		persistedLeaseStatePath: terminalLeaseStatePath,
 	});
-		const runtimeSupervisor = new DaemonRuntimeSupervisor({
-			daemonProcessId: process.pid,
-			startedAt,
-			terminalRegistry
-		});
+	const runtimeSupervisor = new DaemonRuntimeSupervisor({
+		daemonProcessId: process.pid,
+		startedAt,
+		terminalRegistry
+	});
 	const missionRegistry = new MissionRegistryClass({ logger });
 	const agentExecutionRegistry = getDefaultAgentExecutionRegistry({ logger });
 	const missionMcpServer = new MissionMcpServer({ agentExecutionRegistry, logger });
