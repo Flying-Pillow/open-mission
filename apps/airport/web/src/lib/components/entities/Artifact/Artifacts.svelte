@@ -87,13 +87,13 @@
             class="min-h-0 flex-1 overflow-hidden gap-0"
         >
             <Tabs.List
-                class="w-full overflow-x-auto overflow-y-hidden rounded-none border-b border-white/10 bg-transparent"
+                class="w-full justify-start overflow-x-auto overflow-y-hidden"
                 variant="line"
             >
                 {#each artifactTabs as artifactTab (artifactTab.id)}
                     <Tabs.Trigger
                         value={artifactTab.id}
-                        class="min-w-24 max-w-56 flex-none truncate rounded-lg px-3 py-1.5 text-slate-300 data-active:text-slate-100"
+                        class="min-w-24 max-w-56 flex-none truncate"
                     >
                         <span class="truncate">{artifactTab.label}</span>
                     </Tabs.Trigger>

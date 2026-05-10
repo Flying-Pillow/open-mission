@@ -75,15 +75,18 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
             if (existing) {
                 const snapshot = existing.execution.getSnapshot();
                 if (!AgentExecution.isTerminalFinalStatus(snapshot.status)) {
-                    if (snapshot.agentId === requestedAgentId) {
+                    if (this.isReusableExecution(existing.execution, requestedAgentId)) {
                         return this.toExecutionData(existing.execution);
                     }
-                    await existing.agentExecutor.terminateExecution(
+                    await this.retireExecution(
                         existingAgentExecutionId,
-                        `replaced by ${requestedAgentId ?? 'requested'} Agent adapter`
+                        snapshot.agentId === requestedAgentId
+                            ? 'replaced after runtime transport degradation'
+                            : `replaced by ${requestedAgentId ?? 'requested'} Agent adapter`
                     );
+                } else {
+                    this.disposeAgentExecution(existingAgentExecutionId);
                 }
-                this.disposeAgentExecution(existingAgentExecutionId);
             }
         }
 
@@ -111,7 +114,7 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
             return undefined;
         }
 
-        if (input.requestedAgentId && snapshot.agentId !== input.requestedAgentId) {
+        if (!this.isReusableExecution(existing.execution, input.requestedAgentId)) {
             return undefined;
         }
 
@@ -139,15 +142,12 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
         }
 
         const requestedAgentId = input.agentRegistry.resolveStartAgentId(input.config.requestedAdapterId);
-        if (snapshot.agentId === requestedAgentId) {
-            return this.toExecutionData(existing.execution);
-        }
-
-        await existing.agentExecutor.terminateExecution(
+        await this.retireExecution(
             existingAgentExecutionId,
-            `replaced by ${requestedAgentId ?? 'requested'} Agent adapter`
+            snapshot.agentId === requestedAgentId
+                ? 'restarted by explicit repository refresh'
+                : `replaced by ${requestedAgentId ?? 'requested'} Agent adapter`
         );
-        this.disposeAgentExecution(existingAgentExecutionId);
         return this.startExecution(input);
     }
 
@@ -204,6 +204,16 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
         return this.executionsByAgentExecutionId.has(agentExecutionId);
     }
 
+    public readRuntimeSummary(): { activeAgentExecutionCount: number } {
+        let activeAgentExecutionCount = 0;
+        for (const entry of this.executionsByAgentExecutionId.values()) {
+            if (!AgentExecution.isTerminalFinalStatus(entry.execution.getSnapshot().status)) {
+                activeAgentExecutionCount += 1;
+            }
+        }
+        return { activeAgentExecutionCount };
+    }
+
     public async routeTransportObservation(input: {
         agentExecutionId: string;
         observation: AgentExecutionObservation;
@@ -251,6 +261,33 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
             throw new Error(`AgentExecution '${agentExecutionId}' is not registered in the daemon AgentExecutionRegistry.`);
         }
         return entry;
+    }
+
+    private isReusableExecution(execution: AgentExecution, requestedAgentId?: string): boolean {
+        const data = this.toExecutionData(execution);
+        if (requestedAgentId && data.agentId !== requestedAgentId) {
+            return false;
+        }
+        return isReusableTransportState(data.transportState);
+    }
+
+    private async retireExecution(agentExecutionId: string, reason: string): Promise<void> {
+        const entry = this.executionsByAgentExecutionId.get(agentExecutionId);
+        if (!entry) {
+            return;
+        }
+
+        try {
+            await entry.agentExecutor.terminateExecution(agentExecutionId, reason);
+        } catch (error) {
+            this.logger?.debug('Failed to terminate AgentExecution before retirement.', {
+                agentExecutionId,
+                reason,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        } finally {
+            this.disposeAgentExecution(agentExecutionId);
+        }
     }
 
     private disposeAgentExecution(agentExecutionId: string): void {
@@ -313,6 +350,32 @@ function normalizeCommand(input: { type: AgentCommand['type']; reason?: string |
         ...(input.reason ? { reason: input.reason } : {}),
         ...(input.metadata ? { metadata: input.metadata } : {})
     };
+}
+
+function isReusableTransportState(transportState: AgentExecutionDataType['transportState']): boolean {
+    if (!transportState) {
+        return true;
+    }
+
+    if (transportState.degraded) {
+        return false;
+    }
+
+    if (transportState.health && transportState.health !== 'attached') {
+        return false;
+    }
+
+    if (
+        transportState.terminalAttached === false
+        || transportState.leaseAttached === false
+        || transportState.ownerMatched === false
+        || transportState.commandable === false
+        || transportState.signalCompatible === false
+    ) {
+        return false;
+    }
+
+    return true;
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {

@@ -85,7 +85,6 @@
     const isEditableTextArtifact = $derived(
         isArtifactTextEditable(artifactBodyLocation),
     );
-    const panelLabel = $derived(artifact?.label ?? "");
     const hasUnsavedChanges = $derived(
         id === loadedId && content !== originalContent,
     );
@@ -486,20 +485,10 @@
 </script>
 
 <section
-    class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden border bg-card/70 backdrop-blur-sm"
+    class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden border bg-card/70 backdrop-blur-sm"
 >
     <header class="space-y-2 border-b px-5 py-4">
-        <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0 flex-1">
-                <h2 class="text-sm font-semibold text-foreground">
-                    {panelLabel}
-                </h2>
-                <p class="mt-1 break-all text-xs text-muted-foreground">
-                    {artifactBodyLocation ??
-                        "No artifact body resolves from the current mission selection."}
-                </p>
-            </div>
-
+        <div class="flex items-start justify-end gap-3">
             <div class="flex items-center gap-2">
                 <Button
                     variant="outline"
@@ -577,4 +566,12 @@
             </div>
         {/if}
     </div>
+
+    {#if artifactBodyLocation}
+        <footer
+            class="border-t bg-background/40 px-5 py-2 text-[11px] text-muted-foreground"
+        >
+            <p class="break-all">{artifactBodyLocation}</p>
+        </footer>
+    {/if}
 </section>

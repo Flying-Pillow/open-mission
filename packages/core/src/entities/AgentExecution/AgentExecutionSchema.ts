@@ -589,7 +589,24 @@ export const AgentExecutionProtocolDescriptorSchema = z.object({
 
 export const AgentExecutionTransportStateSchema = z.object({
     selected: AgentSignalDeliverySchema,
-    degraded: z.literal(false).default(false)
+    degraded: z.boolean().default(false),
+    health: z.enum([
+        'attached',
+        'detached',
+        'degraded',
+        'orphaned',
+        'protocol-incompatible',
+        'reconciling'
+    ]).optional(),
+    reason: z.string().trim().min(1).optional(),
+    daemonProtocolVersion: z.number().int().positive().optional(),
+    executionProtocolVersion: z.number().int().positive().optional(),
+    terminalAttached: z.boolean().optional(),
+    leaseAttached: z.boolean().optional(),
+    ownerMatched: z.boolean().optional(),
+    commandable: z.boolean().optional(),
+    signalCompatible: z.boolean().optional(),
+    updatedAt: z.string().trim().min(1).optional()
 }).strict();
 
 export const AgentExecutionRuntimeCommandTypeSchema = z.enum([

@@ -1,6 +1,6 @@
 import type { EntityEventEnvelopeType } from '../../entities/Entity/EntitySchema.js';
 
-export const PROTOCOL_VERSION = 30;
+export const PROTOCOL_VERSION = 32;
 
 export type Method =
 	| 'ping'

@@ -123,6 +123,10 @@ export class AgentExecution implements EntityModel<AgentExecutionDataType> {
         return this.data.projection.currentActivity;
     }
 
+    public get transportState(): AgentExecutionDataType['transportState'] {
+        return this.data.transportState;
+    }
+
     public get currentAttention(): AgentExecutionDataType['projection']['currentAttention'] {
         return this.data.projection.currentAttention;
     }

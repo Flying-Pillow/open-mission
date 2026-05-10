@@ -24,7 +24,6 @@
         onCloseRequested?: () => void | Promise<void>;
     } = $props();
 
-    const panelLabel = $derived(artifact?.label ?? "");
     const artifactBodyLocation = $derived(artifact?.bodyLocationLabel);
     const viewerKind = $derived(
         resolveArtifactViewerKind(artifactBodyLocation),
@@ -42,15 +41,11 @@
 </script>
 
 <section
-    class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden border bg-card/70 backdrop-blur-sm"
+    class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden border bg-card/70 backdrop-blur-sm"
 >
-    <header class="flex min-h-11 flex-wrap items-center gap-2 px-3 py-2">
-        <div class="min-w-0 flex-1">
-            <h2 class="truncate text-sm font-semibold text-foreground">
-                {panelLabel}
-            </h2>
-        </div>
-
+    <header
+        class="flex min-h-11 flex-wrap items-center justify-end gap-2 px-3 py-2"
+    >
         {#if artifact && canEditArtifact}
             <Button variant="outline" size="sm" onclick={onEditRequested}>
                 <Icon icon="lucide:pencil" />
@@ -92,7 +87,10 @@
                         {:else if viewerKind === "svg"}
                             <SvgViewer source={artifactBody.body} />
                         {:else}
-                            <TextViewer source={artifactBody.body} />
+                            <TextViewer
+                                source={artifactBody.body}
+                                fileNameOrPath={artifactBodyLocation}
+                            />
                         {/if}
                     {:catch loadError}
                         <div
@@ -120,4 +118,12 @@
             </div>
         {/if}
     </div>
+
+    {#if artifactBodyLocation}
+        <footer
+            class="border-t bg-background/40 px-3 py-2 text-[11px] text-muted-foreground"
+        >
+            <p class="break-all">{artifactBodyLocation}</p>
+        </footer>
+    {/if}
 </section>

@@ -20,7 +20,7 @@
 </script>
 
 <header
-    class="flex-none flex h-(--header-height) shrink-0 items-center gap-2 pt-2 bg-foreground/5 backdrop-blur transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)"
+    class="flex-none flex h-(--header-height) shrink-0 items-center gap-2 pt-2 bg-foreground/10 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)"
 >
     <div class="flex w-full items-center gap-2 px-4 lg:px-6 py-2">
         <Sidebar.Trigger class="-ml-1" />

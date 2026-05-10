@@ -27,12 +27,13 @@
 
 <SidebarProvider
     bind:open={sidebarOpen}
+    class="has-data-[variant=inset]:bg-background"
     style="--sidebar-width: 19rem; --sidebar-width-mobile: 20rem; --sidebar-width-icon: 5rem;"
 >
     <AirportSidebar variant="inset" />
 
     <SidebarInset
-        class="min-h-0 overflow-hidden h-svh md:peer-data-[variant=inset]:my-0"
+        class="min-h-0 overflow-hidden h-svh md:peer-data-[variant=inset]:m-0 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:my-0 md:peer-data-[variant=inset]:rounded-none md:peer-data-[variant=inset]:shadow-none md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-0"
     >
         <AirportHeader bind:daemonLogsOpen />
         <ResizablePaneGroup

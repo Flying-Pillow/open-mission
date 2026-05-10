@@ -34,3 +34,7 @@ Shutdown uses authoritative cleanup through the daemon runtime supervisor. Befor
 This decision does not require a single monolithic class named `RuntimeManager`. The load-bearing rule is ownership consolidation, not a class name. Mission may use multiple daemon runtime modules internally, but those modules must converge on one typed runtime supervision graph and one cleanup policy owned by the daemon.
 
 Logs stay in their current role from ADR-0011 as daemon audit material. Process inspection stays a runtime reconciliation tool. Neither replaces daemon-owned runtime supervision state.
+
+The daemon may publish aggregate runtime supervision counts through the System status snapshot. Those counts are a diagnostic read model over the runtime supervision graph, not a second ownership model.
+
+The daemon may also publish AgentExecution runtime health derived from the graph and runtime registries. Runtime health describes attachment and communication posture such as attached, detached, degraded, orphaned, protocol-incompatible, or reconciling. It does not replace AgentExecution lifecycle state; it informs commandability, operator diagnostics, and cleanup decisions until semantic state is journaled.

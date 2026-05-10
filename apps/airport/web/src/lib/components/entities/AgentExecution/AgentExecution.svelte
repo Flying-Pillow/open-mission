@@ -190,6 +190,13 @@
         }
 
         activeTransportKey = nextTransportKey;
+        terminalSnapshot = null;
+        loading = true;
+        error = null;
+        pendingInput = "";
+        pendingTerminalResponseFragment = "";
+        lastRenderedScreen = "";
+        terminal?.reset();
         terminalTransport?.dispose();
         terminalTransport = subscribeAgentExecutionTerminalTransport(
             {
@@ -208,7 +215,6 @@
 
     $effect(() => {
         const screen = terminalSnapshot?.screen ?? "";
-        const chunk = terminalSnapshot?.chunk;
         if (
             !terminal ||
             typeof screen !== "string" ||
@@ -222,29 +228,12 @@
             isPersistedTranscriptSnapshot,
         );
 
-        if (
-            (!chunk || chunk.length === 0) &&
-            preparedScreen === lastRenderedScreen
-        ) {
-            return;
-        }
-
-        if (typeof chunk === "string" && chunk.length > 0) {
-            lastRenderedScreen = preparedScreen;
-            writeToTerminalSafely(chunk, preparedScreen);
-            return;
-        }
-
-        const nextRender = normalizeScreen(preparedScreen);
-        const previousRender = normalizeScreen(lastRenderedScreen);
-        if (nextRender.startsWith(previousRender)) {
-            const appendedOutput = nextRender.slice(previousRender.length);
-            lastRenderedScreen = preparedScreen;
-            writeToTerminalSafely(appendedOutput, nextRender);
+        if (preparedScreen === lastRenderedScreen) {
             return;
         }
 
         lastRenderedScreen = preparedScreen;
+        const nextRender = normalizeScreen(preparedScreen);
         terminal.reset();
         writeToTerminalSafely(nextRender, nextRender);
     });

@@ -219,6 +219,10 @@ _Avoid_: source of truth, transcript store, workflow state
 A live daemon runtime overlay for an active Agent execution, such as attached terminal identity, active transport connections, current PTY state, active tool calls, in-flight delivery attempts, and heartbeat data. It is not replayable semantic truth unless promoted into Agent execution interaction journal records.
 _Avoid_: interaction journal, persisted lifecycle state, workflow event, projection truth
 
+**AgentExecution runtime health**:
+A daemon-owned reconciliation assessment of whether an Agent execution is attached, detached, degraded, orphaned, protocol-incompatible, or currently reconciling with its runtime leases and transport. Runtime health governs commandability and diagnostics; it is not AgentExecution lifecycle failure unless daemon evidence proves the execution or its owned Runtime leases are dead.
+_Avoid_: terminal status, lifecycle state, agent claim, client protocol error
+
 **Daemon runtime supervisor**:
 The daemon-owned runtime coordination authority for live Repository, Mission, Task, Agent execution, and runtime lease relationships started by the Mission system. It owns runtime cleanup, cascading cancellation, startup reconciliation, and shutdown hygiene for daemon-started resources.
 _Avoid_: surface manager, log reader, process poller, UI coordinator
@@ -230,6 +234,10 @@ _Avoid_: transcript tree, surface selection state, ad hoc registry map, log-deri
 **Runtime lease**:
 A daemon-owned claim over one live runtime resource started by the Mission system, such as a PTY terminal, child process, socket, or future provider session. A Runtime lease records ownership, lifecycle, and cleanup responsibility so the daemon can reconcile stale resources after crashes and release them during shutdown or cancellation.
 _Avoid_: raw PID, terminal tab, adapter state, audit log line
+
+**System status snapshot**:
+A daemon-owned diagnostic read model for current Mission runtime posture, host process health, dependency readiness, runtime supervision counts, and runtime reconciliation counts. It is operator-facing status material, not durable workflow truth, audit history, or a metrics pipeline.
+_Avoid_: telemetry source of truth, observability backend, workflow state, log replay, Prometheus scrape target
 
 **Agent adapter delivery**:
 A best-effort attempt to send an Agent execution message to an Agent adapter; it is not proof that the indeterministic Agent execution read, understood, applied, or structurally acknowledged the message.

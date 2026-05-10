@@ -39,6 +39,8 @@ Read them when a change touches ownership, naming, state, runtime behavior, repo
 - [Mission Workflow Definition Seam](0014-mission-workflow-definition-seam.md)
 - [Repository Initialization Before Mission Start](0016-repository-setup-before-mission-start.md)
 - [Repository Workflow Settings Control Contract](0021-repository-workflow-settings-control-contract.md)
+- [Daemon-Owned Runtime Supervision Graph](0028-daemon-owned-runtime-supervision-graph.md)
+- [Daemon-Owned System Status Snapshot](0029-daemon-owned-system-status-snapshot.md)
 
 ### Agent Execution
 
@@ -51,7 +53,6 @@ Read them when a change touches ownership, naming, state, runtime behavior, repo
 - [Mission MCP Server Agent Signal Transport](0024-mission-mcp-server-agent-signal-transport.md)
 - [Agent Execution Interaction Journal](0025-agent-execution-interaction-journal.md)
 - [Typed Agent Execution Journal Ledger](0027-typed-agent-execution-journal-ledger.md)
-- [Daemon-Owned Runtime Supervision Graph](0028-daemon-owned-runtime-supervision-graph.md)
 
 ### Mission Control And Surfaces
 

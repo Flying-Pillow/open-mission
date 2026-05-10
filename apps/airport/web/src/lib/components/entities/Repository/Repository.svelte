@@ -115,7 +115,6 @@
 
     async function refreshRepositoryChat(): Promise<void> {
         repositoryChatRefreshNonce += 1;
-        await activeRepository?.refreshRepositoryAgentExecution();
     }
 
     $effect(() => {
@@ -191,7 +190,7 @@
             />
         {/if}
 
-        <div class="flex min-h-0 flex-1 overflow-hidden gap-2">
+        <div class="flex min-h-0 flex-1 overflow-hidden">
             <section
                 class="flex h-full min-h-0 w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)] shrink-0 flex-col gap-5 overflow-hidden"
             >
@@ -224,7 +223,7 @@
                 {/if}
 
                 <section
-                    class="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl border border-white/10"
+                    class="flex min-h-0 min-w-0 flex-1 overflow-hidden border border-white/10"
                 >
                     <AgentChat
                         agentExecution={repositoryAgentExecution}

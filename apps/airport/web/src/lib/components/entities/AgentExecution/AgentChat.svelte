@@ -60,7 +60,8 @@
     const appContext = getAppContext();
 
     const canSendPrompt = $derived(
-        Boolean(agentExecution?.canSendStructuredPrompt),
+        Boolean(agentExecution?.canSendStructuredPrompt) &&
+            isExecutionTransportCommandable(agentExecution),
     );
     const canShowTerminalPanel = $derived(
         Boolean(agentExecution?.isTerminalBacked()),
@@ -163,9 +164,48 @@
         }
     }
 
+    function formatTransportStatus(
+        execution: AgentExecutionEntity | undefined,
+    ): string | undefined {
+        const transportState = execution?.transportState;
+        if (!transportState) {
+            return undefined;
+        }
+
+        switch (transportState.health) {
+            case "reconciling":
+                return "Recovering";
+            case "protocol-incompatible":
+            case "detached":
+            case "degraded":
+            case "orphaned":
+                return "Disconnected";
+            default:
+                break;
+        }
+
+        if (
+            transportState.degraded ||
+            transportState.commandable === false ||
+            transportState.signalCompatible === false ||
+            transportState.terminalAttached === false ||
+            transportState.leaseAttached === false ||
+            transportState.ownerMatched === false
+        ) {
+            return "Disconnected";
+        }
+
+        return undefined;
+    }
+
     function formatExecutionStatus(
         execution: AgentExecutionEntity | undefined,
     ): string {
+        const transportLabel = formatTransportStatus(execution);
+        if (transportLabel) {
+            return transportLabel;
+        }
+
         const activityLabel = formatActivityLabel(execution?.currentActivity);
         if (activityLabel) {
             return activityLabel;
@@ -176,6 +216,16 @@
     function executionStatusSummary(
         execution: AgentExecutionEntity | undefined,
     ): string | undefined {
+        const transportState = execution?.transportState;
+        if (formatTransportStatus(execution)) {
+            return (
+                transportState?.reason ??
+                (transportState?.health === "reconciling"
+                    ? "Mission daemon is reconciling this agent execution."
+                    : "The runtime connection is no longer healthy. Refresh to launch a new agent execution.")
+            );
+        }
+
         return execution?.currentActivity?.summary;
     }
 
@@ -201,6 +251,10 @@
             return "border-white/10 bg-white/[0.05] text-slate-200";
         }
 
+        if (status === "recovering") {
+            return "border-amber-300/25 bg-amber-300/10 text-amber-100";
+        }
+
         if (status === "starting" || status === "initializing") {
             return "border-amber-300/25 bg-amber-300/10 text-amber-100";
         }
@@ -211,6 +265,7 @@
 
         if (
             status === "failed" ||
+            status === "disconnected" ||
             status === "cancelled" ||
             status === "terminated"
         ) {
@@ -435,7 +490,14 @@
     async function submitPrompt(event: SubmitEvent): Promise<void> {
         event.preventDefault();
 
-        if (!agentExecution || !agentExecution.canSendStructuredPrompt) {
+        if (
+            !agentExecution ||
+            !agentExecution.canSendStructuredPrompt ||
+            !isExecutionTransportCommandable(agentExecution)
+        ) {
+            promptError =
+                executionStatusSummary(agentExecution) ??
+                "Refresh to launch a new agent execution before sending another prompt.";
             return;
         }
 
@@ -470,6 +532,26 @@
         draft = value;
         await submitPrompt(new SubmitEvent("submit"));
     }
+
+    function isExecutionTransportCommandable(
+        execution: AgentExecutionEntity | undefined,
+    ): boolean {
+        const transportState = execution?.transportState;
+        if (!transportState) {
+            return true;
+        }
+
+        return !(
+            transportState.degraded ||
+            transportState.commandable === false ||
+            transportState.signalCompatible === false ||
+            transportState.terminalAttached === false ||
+            transportState.leaseAttached === false ||
+            transportState.ownerMatched === false ||
+            (transportState.health !== undefined &&
+                transportState.health !== "attached")
+        );
+    }
 </script>
 
 {#snippet chatPanel()}
@@ -486,44 +568,42 @@
             }
             class="flex min-h-0 flex-1 flex-col overflow-hidden gap-0"
         >
-            <Tabs.List
-                class="w-full overflow-x-auto overflow-y-hidden rounded-none border-b border-white/10 bg-transparent px-4 pt-3 md:px-6"
-                variant="line"
-            >
-                <Tabs.Trigger
-                    value="messages"
-                    class="flex-none rounded-lg px-3 py-1.5 text-slate-300 data-active:text-slate-100"
-                >
-                    Chat
-                </Tabs.Trigger>
-
-                <Tabs.Trigger
-                    value="journal"
-                    class="flex-none rounded-lg px-3 py-1.5 text-slate-300 data-active:text-slate-100"
-                >
-                    <span>Journal</span>
-                    <span class="ml-2 text-xs text-slate-400"
-                        >{journalRecords.length}</span
+            <div class="w-full">
+                <div class="mx-auto w-full max-w-5xl">
+                    <Tabs.List
+                        class="w-full justify-start overflow-x-auto overflow-y-hidden"
+                        variant="line"
                     >
-                </Tabs.Trigger>
+                        <Tabs.Trigger value="messages" class="flex-none">
+                            Chat
+                        </Tabs.Trigger>
 
-                {#if canShowTerminalPanel}
-                    <Tabs.Trigger
-                        value="terminal"
-                        class="max-w-48 flex-none rounded-lg px-3 py-1.5 text-slate-300 data-active:text-slate-100"
-                        aria-label={`${agentExecution?.adapterLabel ?? "Agent"} terminal`}
-                        title={agentExecution?.adapterLabel ?? "Agent"}
-                    >
-                        <Icon
-                            icon={providerIcon(agentExecution?.agentId)}
-                            class="size-4 shrink-0"
-                        />
-                        <span class="min-w-0 truncate">
-                            {agentExecution?.adapterLabel ?? "Agent"}
-                        </span>
-                    </Tabs.Trigger>
-                {/if}
-            </Tabs.List>
+                        <Tabs.Trigger value="journal" class="flex-none">
+                            <span>Journal</span>
+                            <span class="ml-2 text-xs text-slate-400"
+                                >{journalRecords.length}</span
+                            >
+                        </Tabs.Trigger>
+
+                        {#if canShowTerminalPanel}
+                            <Tabs.Trigger
+                                value="terminal"
+                                class="max-w-48 flex-none"
+                                aria-label={`${agentExecution?.adapterLabel ?? "Agent"} terminal`}
+                                title={agentExecution?.adapterLabel ?? "Agent"}
+                            >
+                                <Icon
+                                    icon={providerIcon(agentExecution?.agentId)}
+                                    class="size-4 shrink-0"
+                                />
+                                <span class="min-w-0 truncate">
+                                    {agentExecution?.adapterLabel ?? "Agent"}
+                                </span>
+                            </Tabs.Trigger>
+                        {/if}
+                    </Tabs.List>
+                </div>
+            </div>
 
             <Tabs.Content
                 value="messages"
@@ -534,67 +614,71 @@
                     class="min-h-0 flex-1"
                     scrollbarYClasses="py-2"
                 >
-                    <div class="mx-auto w-full max-w-5xl px-4 py-4 md:px-6">
-                        {#if !agentExecution}
-                            <div
-                                class="rounded-lg border border-dashed border-white/15 bg-white/[0.03] px-5 py-8 text-center"
-                            >
-                                <Icon
-                                    icon="lucide:messages-square"
-                                    class="mx-auto size-8 text-slate-500"
-                                />
-                                <h3
-                                    class="mt-3 text-sm font-medium text-slate-200"
-                                >
-                                    {loadingTitle}
-                                </h3>
-                            </div>
-                        {:else if timelineItems.length === 0}
-                            <div class="flex justify-start">
+                    <div class="min-h-full w-full">
+                        <div class="mx-auto min-h-full w-full max-w-5xl">
+                            {#if !agentExecution}
                                 <div
-                                    class="max-w-[min(44rem,100%)] rounded-lg border border-white/10 bg-[#12151b] px-4 py-3 text-slate-100 shadow-[inset_3px_0_0_rgb(148_163_184)]"
+                                    class="m-4 rounded-lg border border-dashed border-white/15 bg-white/[0.03] px-5 py-8 text-center md:m-6"
+                                >
+                                    <Icon
+                                        icon="lucide:messages-square"
+                                        class="mx-auto size-8 text-slate-500"
+                                    />
+                                    <h3
+                                        class="mt-3 text-sm font-medium text-slate-200"
+                                    >
+                                        {loadingTitle}
+                                    </h3>
+                                </div>
+                            {:else if timelineItems.length === 0}
+                                <div
+                                    class="flex justify-start px-4 py-4 md:px-6"
                                 >
                                     <div
-                                        class="flex items-center gap-2 text-sm font-medium text-slate-200"
+                                        class="max-w-[min(44rem,100%)] rounded-lg border border-white/10 bg-[#12151b] px-4 py-3 text-slate-100 shadow-[inset_3px_0_0_rgb(148_163_184)]"
                                     >
-                                        <Icon
-                                            icon="lucide:sparkles"
-                                            class="size-4"
-                                        />
-                                        Assistant
+                                        <div
+                                            class="flex items-center gap-2 text-sm font-medium text-slate-200"
+                                        >
+                                            <Icon
+                                                icon="lucide:sparkles"
+                                                class="size-4"
+                                            />
+                                            Assistant
+                                        </div>
+                                        <p
+                                            class="mt-2 text-sm leading-6 text-slate-400"
+                                        >
+                                            {#if currentActivity?.activity === "awaiting-agent-response"}
+                                                Waiting for the agent to answer
+                                                the current turn.
+                                            {:else}
+                                                Waiting for the first
+                                                AgentExecution timeline item.
+                                            {/if}
+                                        </p>
                                     </div>
-                                    <p
-                                        class="mt-2 text-sm leading-6 text-slate-400"
-                                    >
-                                        {#if currentActivity?.activity === "awaiting-agent-response"}
-                                            Waiting for the agent to answer the
-                                            current turn.
-                                        {:else}
-                                            Waiting for the first AgentExecution
-                                            timeline item.
-                                        {/if}
-                                    </p>
                                 </div>
-                            </div>
-                        {:else if messagesViewport}
-                            <div class="space-y-6">
-                                <AgentChatMessages
-                                    items={timelineItems}
-                                    viewport={messagesViewport}
-                                    {refreshNonce}
-                                    {currentActionTimelineItemId}
-                                    {selectedArtifact}
-                                    {openArtifactIds}
-                                    onSelectArtifact={handleArtifactSelected}
-                                    {itemAlignClasses}
-                                    {itemToneClasses}
-                                    {itemIconClasses}
-                                    {itemIcon}
-                                    {itemTitle}
-                                    {useChoice}
-                                />
-                            </div>
-                        {/if}
+                            {:else if messagesViewport}
+                                <div class="space-y-6 px-4 py-4 md:px-6">
+                                    <AgentChatMessages
+                                        items={timelineItems}
+                                        viewport={messagesViewport}
+                                        {refreshNonce}
+                                        {currentActionTimelineItemId}
+                                        {selectedArtifact}
+                                        {openArtifactIds}
+                                        onSelectArtifact={handleArtifactSelected}
+                                        {itemAlignClasses}
+                                        {itemToneClasses}
+                                        {itemIconClasses}
+                                        {itemIcon}
+                                        {itemTitle}
+                                        {useChoice}
+                                    />
+                                </div>
+                            {/if}
+                        </div>
                     </div>
                 </ScrollArea.Root>
             </Tabs.Content>
@@ -603,12 +687,10 @@
                 value="journal"
                 class="flex min-h-0 flex-1 flex-col overflow-hidden"
             >
-                <div
-                    class="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4 md:px-6"
-                >
+                <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
                     {#if !agentExecution}
                         <div
-                            class="rounded-lg border border-dashed border-white/15 bg-white/[0.03] px-5 py-8 text-center"
+                            class="m-4 rounded-lg border border-dashed border-white/15 bg-white/[0.03] px-5 py-8 text-center md:m-6"
                         >
                             <Icon
                                 icon="lucide:messages-square"
@@ -629,15 +711,17 @@
                     value="terminal"
                     class="flex min-h-0 flex-1 flex-col overflow-hidden"
                 >
-                    <div
-                        class="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col"
-                    >
-                        <AgentExecutionTerminalPanel
-                            {refreshNonce}
-                            {agentExecution}
-                            {onCommandExecuted}
-                            panelMode="terminal"
-                        />
+                    <div class="flex min-h-0 w-full flex-1 flex-col">
+                        <div
+                            class="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col"
+                        >
+                            <AgentExecutionTerminalPanel
+                                {refreshNonce}
+                                {agentExecution}
+                                {onCommandExecuted}
+                                panelMode="terminal"
+                            />
+                        </div>
                     </div>
                 </Tabs.Content>
             {/if}

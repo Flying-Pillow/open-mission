@@ -91,7 +91,7 @@
 
 <Sidebar.Root
     collapsible="icon"
-    class="border-sidebar-border/70 bg-sidebar/95"
+    class="border-sidebar-border/70 bg-foreground/10 [&>[data-slot=sidebar-inner]]:bg-transparent"
     {...restProps}
 >
     <Sidebar.Header class="items-center px-3 py-4">
@@ -148,7 +148,7 @@
                             {#each sidebarRepositories as repository (repository.id)}
                                 <Sidebar.MenuItem>
                                     <Sidebar.MenuButton
-                                        class="h-auto min-h-14 rounded-xl border border-transparent px-3 py-3 group-data-[collapsible=icon]:size-14! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! [&_svg]:size-6"
+                                        class="h-auto min-h-14 rounded-xl border border-transparent px-3 py-3 data-[active=true]:border-foreground/20 data-[active=true]:bg-foreground/20 data-[active=true]:shadow-sm group-data-[collapsible=icon]:size-14! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! [&_svg]:size-6"
                                         isActive={repository.id ===
                                             activeRepositoryId}
                                         tooltipContentProps={{
@@ -161,7 +161,10 @@
                                                 href={repository.href}
                                                 {...props}
                                             >
-                                                <Icon icon={repository.icon} />
+                                                <Icon
+                                                    icon={repository.icon}
+                                                    class="text-muted-foreground group-data-[active=true]/menu-button:text-foreground"
+                                                />
                                                 <span
                                                     class="grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden"
                                                 >

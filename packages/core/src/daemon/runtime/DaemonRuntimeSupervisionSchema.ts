@@ -1,6 +1,5 @@
 import { z } from 'zod/v4';
 import { AgentExecutionScopeSchema } from '../../entities/AgentExecution/AgentExecutionSchema.js';
-import { MissionStageIdSchema } from '../../entities/Mission/MissionSchema.js';
 
 export const DaemonRuntimeOwnerReferenceSchema = z.discriminatedUnion('kind', [
     z.object({
@@ -19,7 +18,7 @@ export const DaemonRuntimeOwnerReferenceSchema = z.discriminatedUnion('kind', [
         kind: z.literal('task'),
         missionId: z.string().trim().min(1),
         taskId: z.string().trim().min(1),
-        stageId: MissionStageIdSchema.optional(),
+        stageId: z.string().trim().min(1).optional(),
     }).strict(),
     z.object({
         kind: z.literal('agent-execution'),

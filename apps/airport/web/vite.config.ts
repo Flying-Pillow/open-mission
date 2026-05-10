@@ -50,10 +50,34 @@ function missionTerminalWebSocketPlugin() {
 	};
 }
 
+function missionCoreSourceResolvePlugin() {
+	return {
+		name: "mission-core-source-resolve",
+		enforce: "pre",
+		resolveId(source: string) {
+			if (!useSourcePackages) {
+				return null;
+			}
+
+			if (source === "@flying-pillow/mission-core") {
+				return path.join(missionCoreSourceRoot, "index.ts");
+			}
+
+			const missionCoreSubpath = source.match(/^@flying-pillow\/mission-core\/(.+)$/);
+			if (!missionCoreSubpath) {
+				return null;
+			}
+
+			return path.join(missionCoreSourceRoot, `${missionCoreSubpath[1]}.ts`);
+		}
+	};
+}
+
 export default defineConfig({
 	cacheDir: "/tmp/mission-airport-vite-cache",
 	plugins: [
 		...tailwindcss(),
+		missionCoreSourceResolvePlugin(),
 		sveltekit(),
 		missionTerminalWebSocketPlugin()
 	],

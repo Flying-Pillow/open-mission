@@ -95,6 +95,20 @@ export class MissionRegistry {
         this.missionLoads.clear();
     }
 
+    public readRuntimeSummary(): { loadedMissionCount: number; loadedRepositoryCount: number } {
+        const repositoryRoots = new Set<string>();
+        for (const key of this.missionHandles.keys()) {
+            const separatorIndex = key.lastIndexOf(':');
+            if (separatorIndex > 0) {
+                repositoryRoots.add(key.slice(0, separatorIndex));
+            }
+        }
+        return {
+            loadedMissionCount: this.missionHandles.size,
+            loadedRepositoryCount: repositoryRoots.size
+        };
+    }
+
     public getRuntimeAgentExecutionSnapshot(address: AgentExecutionObservationAddress): AgentExecutionSnapshot | undefined {
         const missionId = getAgentExecutionScopeMissionId(address.scope);
         const mission = missionId ? this.findLoadedMission(missionId) : undefined;

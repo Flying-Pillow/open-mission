@@ -108,6 +108,7 @@ export class AgentExecutionObservationPolicy {
 
 	private decide(snapshot: AgentExecutionSnapshot, observation: AgentExecutionObservation): AgentExecutionSignalDecision {
 		const signal = observation.signal;
+		const preservesInputRequest = hasActiveInputRequest(snapshot);
 		switch (signal.type) {
 			case 'diagnostic':
 				return { action: 'record-observation-only', reason: 'Diagnostic signals never mutate AgentExecution state.' };
@@ -144,8 +145,7 @@ export class AgentExecutionObservationPolicy {
 					eventType: 'execution.updated',
 					snapshotPatch: {
 						status: 'running',
-						attention: 'autonomous',
-						waitingForInput: false,
+						attention: preservesInputRequest ? 'awaiting-operator' : 'autonomous',
 						progress: {
 							state: 'working',
 							summary: signal.summary,
@@ -163,8 +163,7 @@ export class AgentExecutionObservationPolicy {
 					eventType: 'execution.updated',
 					snapshotPatch: {
 						status: signal.phase === 'initializing' ? 'starting' : 'running',
-						attention: signal.phase === 'idle' ? 'awaiting-operator' : 'autonomous',
-						waitingForInput: false,
+						attention: signal.phase === 'idle' || preservesInputRequest ? 'awaiting-operator' : 'autonomous',
 						progress: {
 							state: signal.phase,
 							summary: signal.summary ?? defaultStatusSummary(signal.phase),
@@ -382,6 +381,10 @@ function isPromotableProgressSignal(
 ): boolean {
 	return signal.confidence !== 'low'
 		&& signal.confidence !== 'diagnostic';
+}
+
+function hasActiveInputRequest(snapshot: AgentExecutionSnapshot): boolean {
+	return snapshot.currentInputRequestId !== undefined && snapshot.currentInputRequestId !== null;
 }
 
 function isAuthoritativeLifecycleClaim(

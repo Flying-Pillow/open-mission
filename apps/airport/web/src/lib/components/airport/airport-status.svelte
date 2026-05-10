@@ -4,17 +4,7 @@
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
-
-    type SystemState = {
-        github: {
-            cliAvailable: boolean;
-            authenticated: boolean;
-            user?: string;
-            email?: string;
-            avatarUrl?: string;
-            detail?: string;
-        };
-    };
+    import type { SystemState } from "@flying-pillow/mission-core/system/SystemContract";
 
     const appContext = getAppContext();
     const systemState = $derived(

@@ -2,6 +2,7 @@
     import { untrack } from "svelte";
     import Icon from "@iconify/svelte";
     import { Button } from "$lib/components/ui/button/index.js";
+    import DaemonSystemStatus from "./DaemonSystemStatus.svelte";
 
     const MAX_VISIBLE_LINES = 300;
 
@@ -97,7 +98,7 @@
 
 <section
     class={fill
-        ? "grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]"
+        ? "grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden"
         : embedded
           ? "grid min-h-0"
           : "border bg-card shadow-sm"}
@@ -141,10 +142,12 @@
         </Button>
     </div>
 
+    <DaemonSystemStatus {fill} />
+
     {#if enabled}
         <div
             class={fill
-                ? "min-h-0 overflow-hidden border bg-background"
+                ? "h-full min-h-0 overflow-hidden border bg-background"
                 : "mt-3 overflow-hidden border bg-background"}
         >
             <div

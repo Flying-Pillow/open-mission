@@ -611,7 +611,7 @@ describe('AgentExecution', () => {
         ]);
     });
 
-    it('does not keep a stale input request in currentAttention after an idle status update', () => {
+    it('keeps the active input request after an idle status update', () => {
         const execution = AgentExecution.createLive(createRuntimeSnapshot());
         const policy = new AgentExecutionObservationPolicy();
         const needsInputObservation = {
@@ -692,7 +692,96 @@ describe('AgentExecution', () => {
         expect(execution.toData().projection.currentAttention).toEqual(
             expect.objectContaining({
                 state: 'awaiting-operator',
-                primitive: 'attention.blocked'
+                primitive: 'attention.input-request',
+                text: 'Which kind of task do you feel like doing next?',
+                currentInputRequestId: 'observation-needs-input-1'
+            })
+        );
+    });
+
+    it('keeps the active input request after a progress update', () => {
+        const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const policy = new AgentExecutionObservationPolicy();
+        const needsInputObservation = {
+            observationId: 'observation-needs-input-progress-1',
+            agentExecutionId: 'AgentExecution-2',
+            source: 'agent-signal' as const,
+            signal: {
+                type: 'needs_input' as const,
+                source: 'agent-declared' as const,
+                confidence: 'medium' as const,
+                question: 'Which deepening opportunity would you like to explore?',
+                choices: [
+                    { kind: 'fixed' as const, label: 'Architecture', value: 'architecture' },
+                    { kind: 'manual' as const, label: 'Something else', placeholder: 'Type your own answer' }
+                ]
+            },
+            route: {
+                origin: 'agent-declared-signal' as const,
+                address: {
+                    agentExecutionId: 'AgentExecution-2',
+                    scope: execution.getSnapshot().scope
+                }
+            },
+            claimedAddress: {
+                agentExecutionId: 'AgentExecution-2',
+                scope: execution.getSnapshot().scope
+            },
+            rawText: 'needs input payload',
+            observedAt: '2026-05-04T00:03:00.000Z'
+        };
+        const needsInputDecision = policy.evaluate({
+            snapshot: execution.getSnapshot(),
+            observation: needsInputObservation
+        });
+
+        if (needsInputDecision.action === 'reject') {
+            throw new Error(needsInputDecision.reason);
+        }
+
+        execution.applySignalObservation(needsInputObservation, needsInputDecision);
+
+        const progressObservation = {
+            observationId: 'observation-progress-1',
+            agentExecutionId: 'AgentExecution-2',
+            source: 'agent-signal' as const,
+            signal: {
+                type: 'progress' as const,
+                source: 'agent-declared' as const,
+                confidence: 'medium' as const,
+                summary: 'Waiting for the operator to choose a deepening opportunity.'
+            },
+            route: {
+                origin: 'agent-declared-signal' as const,
+                address: {
+                    agentExecutionId: 'AgentExecution-2',
+                    scope: execution.getSnapshot().scope
+                }
+            },
+            claimedAddress: {
+                agentExecutionId: 'AgentExecution-2',
+                scope: execution.getSnapshot().scope
+            },
+            rawText: 'progress payload',
+            observedAt: '2026-05-04T00:03:05.000Z'
+        };
+        const progressDecision = policy.evaluate({
+            snapshot: execution.getSnapshot(),
+            observation: progressObservation
+        });
+
+        if (progressDecision.action === 'reject') {
+            throw new Error(progressDecision.reason);
+        }
+
+        execution.applySignalObservation(progressObservation, progressDecision);
+
+        expect(execution.toData().projection.currentAttention).toEqual(
+            expect.objectContaining({
+                state: 'awaiting-operator',
+                primitive: 'attention.input-request',
+                text: 'Which deepening opportunity would you like to explore?',
+                currentInputRequestId: 'observation-needs-input-progress-1'
             })
         );
     });

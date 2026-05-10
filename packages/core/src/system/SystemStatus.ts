@@ -1,7 +1,11 @@
 // /packages/core/src/system/SystemStatus.ts: Resolves GitHub CLI authentication state and GitHub account identity for Mission surfaces.
+import * as os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { getMissionGitHubCliBinary, readMissionConfig, resolveRepositoriesRoot } from '../settings/MissionInstall.js';
-import { systemStateSchema, type SystemState } from './SystemContract.js';
+import { getDaemonRuntimePath } from '../daemon/daemonPaths.js';
+import { PROTOCOL_VERSION } from '../daemon/protocol/contracts.js';
+import type { DaemonRuntimeSupervisionSnapshot } from '../daemon/runtime/DaemonRuntimeSupervisionSchema.js';
+import { systemStateSchema, type RuntimeSystemState, type SystemState } from './SystemContract.js';
 
 const GITHUB_CLI_TIMEOUT_MS = 1_500;
 const SYSTEM_STATUS_CACHE_TTL_MS = 10_000;
@@ -11,9 +15,29 @@ type CachedSystemStatusEntry = {
 	status: SystemState;
 };
 
+export type SystemStatusRuntimeOptions = {
+	daemon?: {
+		pid?: number;
+		startedAt?: string;
+		socketPath?: string;
+		runtimePath?: string;
+		protocolVersion?: number;
+	};
+	runtimeSupervision?: DaemonRuntimeSupervisionSnapshot;
+	loadedRepositoryCount?: number;
+	loadedMissionCount?: number;
+	activeAgentExecutionCount?: number;
+};
+
+export type SystemStatusReadOptions = {
+	cwd?: string;
+	authToken?: string;
+	runtime?: SystemStatusRuntimeOptions;
+};
+
 const cachedSystemStatusByKey = new Map<string, CachedSystemStatusEntry>();
 
-export function readSystemStatus(options: { cwd?: string; authToken?: string } = {}): SystemState {
+export function readSystemStatus(options: SystemStatusReadOptions = {}): SystemState {
 	const now = Date.now();
 	const authToken = options.authToken?.trim();
 	const cwd = options.cwd?.trim() || process.cwd();
@@ -25,13 +49,13 @@ export function readSystemStatus(options: { cwd?: string; authToken?: string } =
 	});
 	const cachedSystemStatus = cachedSystemStatusByKey.get(cacheKey);
 	if (cachedSystemStatus && now - cachedSystemStatus.checkedAt < SYSTEM_STATUS_CACHE_TTL_MS) {
-		return structuredClone(cachedSystemStatus.status);
+		return structuredClone(withVolatileSystemStatus(cachedSystemStatus.status, options.runtime));
 	}
 
-	return refreshSystemStatus({ cwd, ...(authToken ? { authToken } : {}) });
+	return refreshSystemStatus({ cwd, ...(authToken ? { authToken } : {}), ...(options.runtime ? { runtime: options.runtime } : {}) });
 }
 
-export function refreshSystemStatus(options: { cwd?: string; authToken?: string } = {}): SystemState {
+export function refreshSystemStatus(options: SystemStatusReadOptions = {}): SystemState {
 	const authToken = options.authToken?.trim();
 	const cwd = options.cwd?.trim() || process.cwd();
 	const ghBinary = getMissionGitHubCliBinary() ?? 'gh';
@@ -41,14 +65,14 @@ export function refreshSystemStatus(options: { cwd?: string; authToken?: string 
 		...(authToken ? { authToken } : {})
 	});
 
-	const status = authToken
+	const status = withVolatileSystemStatus(authToken
 		? readTokenBackedSystemStatus({ cwd, ghBinary, authToken })
-		: readCliBackedSystemStatus({ cwd, ghBinary });
+		: readCliBackedSystemStatus({ cwd, ghBinary }), options.runtime);
 	cacheSystemStatus(cacheKey, status);
 	return structuredClone(status);
 }
 
-export function peekCachedSystemStatus(options: { cwd?: string; authToken?: string } = {}): SystemState {
+export function peekCachedSystemStatus(options: SystemStatusReadOptions = {}): SystemState {
 	const authToken = options.authToken?.trim();
 	const cwd = options.cwd?.trim() || process.cwd();
 	const ghBinary = getMissionGitHubCliBinary() ?? 'gh';
@@ -58,7 +82,7 @@ export function peekCachedSystemStatus(options: { cwd?: string; authToken?: stri
 		...(authToken ? { authToken } : {})
 	});
 	const cachedSystemStatus = cachedSystemStatusByKey.get(cacheKey);
-	return structuredClone(cachedSystemStatus?.status ?? buildUnknownSystemStatus());
+	return structuredClone(withVolatileSystemStatus(cachedSystemStatus?.status ?? buildUnknownSystemStatus(), options.runtime));
 }
 
 function readCliBackedSystemStatus(input: { cwd: string; ghBinary: string }): SystemState {
@@ -79,6 +103,7 @@ function readCliBackedSystemStatus(input: { cwd: string; ghBinary: string }): Sy
 	const avatarUrl = identity?.avatarUrl;
 
 	return systemStateSchema.parse({
+		sampledAt: new Date().toISOString(),
 		github: {
 			cliAvailable: !(authResult.error && 'code' in authResult.error && authResult.error.code === 'ENOENT'),
 			authenticated,
@@ -93,7 +118,8 @@ function readCliBackedSystemStatus(input: { cwd: string; ghBinary: string }): Sy
 						? { detail: 'GitHub CLI authenticated.' }
 						: { detail: 'GitHub CLI authentication is required.' })
 		},
-		config: buildMissionSystemConfig()
+		config: buildMissionSystemConfig(),
+		...buildDefaultVolatileSystemStatus()
 	});
 }
 
@@ -128,6 +154,7 @@ function readTokenBackedSystemStatus(input: {
 	const avatarUrl = identity?.avatarUrl;
 
 	return systemStateSchema.parse({
+		sampledAt: new Date().toISOString(),
 		github: {
 			cliAvailable,
 			authenticated: authResult.status === 0,
@@ -142,7 +169,8 @@ function readTokenBackedSystemStatus(input: {
 						? { detail: `GitHub token authenticated${user ? ` as ${user}` : ''}.` }
 						: { detail: 'GitHub token is invalid or missing required scopes.' })
 		},
-		config: buildMissionSystemConfig()
+		config: buildMissionSystemConfig(),
+		...buildDefaultVolatileSystemStatus()
 	});
 }
 
@@ -211,13 +239,120 @@ function cacheSystemStatus(cacheKey: string, status: SystemState): void {
 
 function buildUnknownSystemStatus(): SystemState {
 	return systemStateSchema.parse({
+		sampledAt: new Date().toISOString(),
 		github: {
 			cliAvailable: false,
 			authenticated: false,
 			detail: 'GitHub status has not been checked by the daemon yet.'
 		},
-		config: buildMissionSystemConfig()
+		config: buildMissionSystemConfig(),
+		...buildDefaultVolatileSystemStatus()
 	});
+}
+
+function withVolatileSystemStatus(status: SystemState, runtimeOptions: SystemStatusRuntimeOptions | undefined): SystemState {
+	return systemStateSchema.parse({
+		...status,
+		sampledAt: new Date().toISOString(),
+		...buildVolatileSystemStatus(runtimeOptions)
+	});
+}
+
+function buildDefaultVolatileSystemStatus() {
+	return buildVolatileSystemStatus(undefined);
+}
+
+function buildVolatileSystemStatus(runtimeOptions: SystemStatusRuntimeOptions | undefined): Pick<SystemState, 'daemon' | 'host' | 'runtime' | 'diagnostics'> {
+	const sampledAt = new Date().toISOString();
+	const daemonStartedAt = runtimeOptions?.daemon?.startedAt ?? sampledAt;
+	return {
+		daemon: {
+			pid: runtimeOptions?.daemon?.pid ?? process.pid,
+			startedAt: daemonStartedAt,
+			uptimeMs: Math.max(0, Date.now() - Date.parse(daemonStartedAt)),
+			protocolVersion: runtimeOptions?.daemon?.protocolVersion ?? PROTOCOL_VERSION,
+			runtimePath: runtimeOptions?.daemon?.runtimePath ?? getDaemonRuntimePath(),
+			...(runtimeOptions?.daemon?.socketPath ? { socketPath: runtimeOptions.daemon.socketPath } : {})
+		},
+		host: buildHostSystemState(),
+		runtime: buildRuntimeSystemState(runtimeOptions),
+		diagnostics: {
+			sampledAt,
+			statusCacheTtlMs: SYSTEM_STATUS_CACHE_TTL_MS
+		}
+	};
+}
+
+function buildHostSystemState(): SystemState['host'] {
+	const memoryUsage = process.memoryUsage();
+	return {
+		platform: process.platform,
+		arch: process.arch,
+		nodeVersion: process.version,
+		loadAverage: os.loadavg(),
+		memory: {
+			rss: memoryUsage.rss,
+			heapTotal: memoryUsage.heapTotal,
+			heapUsed: memoryUsage.heapUsed,
+			external: memoryUsage.external,
+			systemTotal: os.totalmem(),
+			systemFree: os.freemem()
+		}
+	};
+}
+
+function buildRuntimeSystemState(runtimeOptions: SystemStatusRuntimeOptions | undefined): RuntimeSystemState {
+	const runtimeSupervision = runtimeOptions?.runtimeSupervision;
+	const leases = runtimeSupervision?.leases ?? [];
+	const activeLeases = leases.filter((lease) => lease.state === 'active');
+	const activeAgentExecutions = runtimeOptions?.activeAgentExecutionCount ?? 0;
+	const activeAgentExecutionOwners = runtimeSupervision?.owners.filter((owner) => owner.kind === 'agent-execution') ?? [];
+	const activeAgentExecutionOwnerKeys = new Set(
+		activeAgentExecutionOwners.map((owner) => createAgentExecutionOwnerKey(owner.ownerId, owner.agentExecutionId))
+	);
+	const activeAgentExecutionRuntimeLeaseOwnerKeys = new Set(
+		activeLeases
+			.filter((lease) => lease.owner.kind === 'agent-execution')
+			.map((lease) => createAgentExecutionOwnerKey(lease.owner.ownerId, lease.owner.agentExecutionId))
+	);
+	const runtimeLeasesWithoutAgentExecution = activeLeases.filter((lease) => {
+		if (lease.owner.kind !== 'agent-execution') {
+			return false;
+		}
+		return !activeAgentExecutionOwnerKeys.has(createAgentExecutionOwnerKey(lease.owner.ownerId, lease.owner.agentExecutionId));
+	}).length;
+	const agentExecutionsWithoutRuntimeLease = Math.max(0, activeAgentExecutions - activeAgentExecutionRuntimeLeaseOwnerKeys.size);
+	const terminalLeasesWithoutOwner = activeLeases.filter((lease) => lease.kind === 'terminal' && lease.owner.kind !== 'agent-execution').length;
+	const detachedAgentExecutions = Math.max(agentExecutionsWithoutRuntimeLease, Math.max(0, activeAgentExecutions - activeAgentExecutionOwners.length));
+	const protocolIncompatibleAgentExecutions = activeLeases.filter((lease) => lease.owner.kind === 'agent-execution' && lease.metadata?.['runtimeHealth'] === 'protocol-incompatible').length;
+	const degradedAgentExecutions = Math.max(detachedAgentExecutions, protocolIncompatibleAgentExecutions);
+	return {
+		loadedRepositories: runtimeOptions?.loadedRepositoryCount ?? 0,
+		loadedMissions: runtimeOptions?.loadedMissionCount ?? 0,
+		activeAgentExecutions,
+		attachedAgentExecutions: Math.max(0, activeAgentExecutions - detachedAgentExecutions),
+		detachedAgentExecutions,
+		degradedAgentExecutions,
+		protocolIncompatibleAgentExecutions,
+		agentExecutionsWithoutRuntimeLease,
+		runtimeLeasesWithoutAgentExecution,
+		terminalLeasesWithoutOwner,
+		reconciliationRequired: leases.some((lease) => lease.state === 'orphaned')
+			|| detachedAgentExecutions > 0
+			|| runtimeLeasesWithoutAgentExecution > 0
+			|| terminalLeasesWithoutOwner > 0
+			|| protocolIncompatibleAgentExecutions > 0,
+		supervisionOwners: runtimeSupervision?.owners.length ?? 0,
+		supervisionRelationships: runtimeSupervision?.relationships.length ?? 0,
+		runtimeLeases: leases.length,
+		activeRuntimeLeases: activeLeases.length,
+		activeTerminalLeases: activeLeases.filter((lease) => lease.kind === 'terminal').length,
+		orphanedRuntimeLeases: leases.filter((lease) => lease.state === 'orphaned').length
+	};
+}
+
+function createAgentExecutionOwnerKey(ownerId: string, agentExecutionId: string): string {
+	return `${ownerId}\u0000${agentExecutionId}`;
 }
 
 function buildMissionSystemConfig(): { repositoriesRoot: string } {

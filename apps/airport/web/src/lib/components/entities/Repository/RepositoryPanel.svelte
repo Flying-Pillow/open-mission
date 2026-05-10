@@ -35,12 +35,6 @@
         Boolean(localRepository && !localRepository.data.isInitialized),
     );
     const invalidState = $derived(localRepository?.data.invalidState);
-    const branchLabel = $derived(
-        localRepository?.syncStatus?.branchRef ??
-            localRepository?.data.currentBranch ??
-            repository.github?.defaultBranch ??
-            "Unavailable",
-    );
     const iconIdentifier = $derived(
         getRepositoryIconIdentifier(localRepository?.data ?? repository.local),
     );
@@ -116,9 +110,6 @@
                 >
                     {repositoryName}
                 </h2>
-                <p class="mt-1 text-xs text-muted-foreground">
-                    {branchLabel}
-                </p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
                 {#if invalidState}
