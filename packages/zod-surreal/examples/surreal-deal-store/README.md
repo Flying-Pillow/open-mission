@@ -9,3 +9,5 @@ https://datasets.surrealdb.com/datasets/surreal-deal-store/mini-v3.surql
 ```
 
 The local fixture keeps the official `DEFINE TABLE`, `DEFINE FIELD`, `DEFINE INDEX`, and `DEFINE ANALYZER` statements only. It intentionally omits users, functions, and table data so the example can compare `zod-surreal` DDL output against the public schema without vendoring the whole dataset export.
+
+Run `pnpm --filter @flying-pillow/zod-surreal generate:surreal-deal-store` from the workspace root to refresh `generated-schema.surql` from the Zod models.

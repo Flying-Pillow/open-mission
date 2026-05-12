@@ -9,6 +9,7 @@
   "scripts": {
     "build": "rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json",
     "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.examples.json",
+    "generate:surreal-deal-store": "tsx --tsconfig ./tsconfig.examples.json ./examples/surreal-deal-store/generate-schema.ts",
     "lint": "vp lint src",
     "test": "vp test run --config vitest.config.ts"
   },

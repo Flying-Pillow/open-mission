@@ -489,8 +489,12 @@ _Avoid_: workflow projection, stage projection
 - A **Mission worktree** is materialized from one **Mission branch ref**.
 - A **Mission worktree** has exactly one **Mission worktree root**.
 - A **Repository** uses a **Git adapter** for local Git operations at its **Repository root**.
+- A **Repository code intelligence index** may be derived from a **Repository root** for repository-scoped code intelligence.
 - A **Repository** uses a **GitHub adapter** for hosted operations against its **GitHub repository ref**.
 - A **Mission worktree** uses a **Git adapter** for local Git operations at its **Mission worktree root**.
+- A **Repository code intelligence index** may be derived from a **Mission worktree root** for Mission, Task, or worktree-backed Artifact Agent executions.
+- A **Repository code graph** belongs to exactly one **Repository code intelligence index** snapshot.
+- A **Repository code intelligence index** is derived read material and must not replace repository files, Git state, Mission dossiers, Entity storage records, or workflow events as source of truth.
 - Hosted pull request and issue operations use the **GitHub adapter** against a **GitHub repository ref**.
 - A **Mission** has exactly one **Mission dossier**.
 - A **Mission dossier** contains **Mission runtime data** and the Mission runtime event log.
@@ -518,6 +522,9 @@ _Avoid_: workflow projection, stage projection
 - An **Agent execution message** is not a first-class durable Entity unless the Mission system later needs queryable structured message history.
 - An **Agent execution log** records delivered Agent execution interaction, while **Agent execution context** records lasting context state.
 - An **Agent execution log** is daemon-owned audit material, not an **Artifact** by default.
+- An **Agent execution semantic operation** belongs to one registered **Agent execution** and is authorized through that Agent execution's `mission-mcp` access.
+- An **Agent execution semantic operation** records a bounded **Agent execution runtime fact** when it reads meaningful context.
+- A code intelligence semantic operation may read a **Repository code intelligence index** only for the Repository root or Mission worktree root allowed by the **Agent execution scope**.
 - An **Agent-session artifact** may reference or extract from an **Agent execution log** when the daemon or operator promotes useful material into Mission work.
 - An **Agent execution message** describes a structured message supported by an Agent execution's Agent adapter.
 - An **Agent execution token** is the daemon-issued identifier used for structured transport and registration.
@@ -603,6 +610,16 @@ _Avoid_: workflow projection, stage projection
 - Agent adapter delivery is optional, descriptor-defined, and best-effort.
 - Mission must distinguish daemon-accepted context mutation, runtime delivery attempt, runtime output observation, and operator/system interpretation of that output.
 - Agent adapter responses are observations in the Agent execution log unless a future daemon-validated state model explicitly promotes them.
+
+### Agent Execution Semantic Operations And Code Intelligence
+
+- `mission-mcp` may expose Agent execution semantic operations alongside Agent signal tools for registered Agent executions.
+- Agent execution semantic operations are read-only by default and must not mutate Entity storage records, Mission workflow state, repository files, Git refs, or Airport surface state.
+- Semantic operation availability is scoped by Agent execution scope, selected Agent adapter capability, daemon policy, and operation-specific requirements.
+- The Mission MCP bridge must proxy semantic operation inputs directly; it must not assume every MCP tool is an Agent signal payload.
+- Repository code intelligence belongs to a daemon-owned Repository code intelligence service and Repository code graph store, not to MCP handlers or Airport surfaces.
+- Repository code intelligence indexes are rebuildable read models over Repository roots or Mission worktree roots and must report staleness when stale data could affect the answer.
+- Code intelligence runtime facts record bounded audit summaries of semantic operation use; full source bodies and high-volume graph results are returned only in operation responses when allowed, not stored wholesale in runtime facts.
 
 ### Mission Control Task List
 
