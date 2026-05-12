@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { MissionTerminalInputSchema } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import { MissionTerminalInputSchema } from '@flying-pillow/mission-core/entities/Terminal/MissionTerminalSchema';
 import { z } from 'zod';
 import { DaemonGateway } from '$lib/server/daemon/daemon-gateway';
 import { resolveMissionTerminalRuntimeError } from '$lib/server/mission-terminal-errors';

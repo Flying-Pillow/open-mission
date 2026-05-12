@@ -3,7 +3,7 @@
     import Icon from "@iconify/svelte";
     import { goto } from "$app/navigation";
     import { onMount, type Component } from "svelte";
-    import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
+    import { app } from "$lib/client/Application.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
@@ -18,10 +18,8 @@
     } = $props();
 
     let MarkdownViewer = $state<Component<{ source: string }> | null>(null);
-    const repositoryScope = getScopedRepositoryContext();
-    const activeRepository = $derived(repositoryScope.repository);
     const canStartMission = $derived(
-        Boolean(activeRepository?.data.isInitialized),
+        Boolean(app.repository?.data.isInitialized),
     );
     let missionCreationPending = $state(false);
     let startError = $state<string | null>(null);
@@ -34,9 +32,8 @@
 
     async function startFromIssue(): Promise<void> {
         startError = null;
-        if (!activeRepository) {
-            startError =
-                "Repository context is unavailable until the repository route is loaded.";
+        if (!app.repository) {
+            startError = "Repository is unavailable.";
             return;
         }
         if (!canStartMission) {
@@ -46,7 +43,7 @@
         }
         missionCreationPending = true;
         try {
-            const result = await activeRepository.startMissionFromIssue(
+            const result = await app.repository.startMissionFromIssue(
                 selectedIssue.number,
             );
             await goto(result.redirectTo);

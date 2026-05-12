@@ -1,20 +1,16 @@
-<!-- /apps/airport/web/src/lib/components/entities/Brief/BriefForm.svelte: Brief creation form with mission type selector and body input. -->
+<!-- /apps/airport/web/src/lib/components/entities/Brief/BriefForm.svelte: Brief creation form with title and body input. -->
 <script lang="ts">
     import { goto } from "$app/navigation";
-    import Icon from "@iconify/svelte";
     import { MissionFromBriefInputSchema } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
-    import type { inferFlattenedErrors, z } from "zod/v4";
-    import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
+    import type { inferFlattenedErrors } from "zod/v4";
+    import { app } from "$lib/client/Application.svelte.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
-    import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
 
-    type BriefInput = z.infer<typeof MissionFromBriefInputSchema>;
     type BriefErrors = inferFlattenedErrors<
         typeof MissionFromBriefInputSchema
     >["fieldErrors"];
 
-    const repositoryScope = getScopedRepositoryContext();
     let {
         embedded = false,
     }: {
@@ -23,21 +19,20 @@
 
     let title = $state("");
     let briefBody = $state("");
-    let briefType = $state<BriefInput["type"]>("feature");
     let submitPending = $state(false);
     let submitError = $state<string | null>(null);
     let fieldErrors = $state<BriefErrors>({});
-    const repository = $derived(repositoryScope.repository);
-    const canStartMission = $derived(Boolean(repository?.data.isInitialized));
+    const canStartMission = $derived(
+        Boolean(app.repository?.data.isInitialized),
+    );
 
     async function handleSubmit(event: SubmitEvent): Promise<void> {
         event.preventDefault();
         submitError = null;
         fieldErrors = {};
 
-        if (!repository) {
-            submitError =
-                "Repository context is unavailable until the repository route is loaded.";
+        if (!app.repository) {
+            submitError = "Repository is unavailable.";
             return;
         }
 
@@ -50,7 +45,6 @@
         const parsed = MissionFromBriefInputSchema.safeParse({
             title,
             body: briefBody,
-            type: briefType,
         });
 
         if (!parsed.success) {
@@ -60,7 +54,9 @@
 
         submitPending = true;
         try {
-            const result = await repository.startMissionFromBrief(parsed.data);
+            const result = await app.repository.startMissionFromBrief(
+                parsed.data,
+            );
             await goto(result.redirectTo);
         } catch (error) {
             submitError =
@@ -98,74 +94,6 @@
                 placeholder="Improve repository mission selection"
             />
             {#each fieldErrors.title ?? [] as issue (`title:${issue}`)}
-                <p class="text-sm text-rose-600">{issue}</p>
-            {/each}
-        </div>
-
-        <div class="grid gap-2">
-            <label class="text-sm font-medium text-foreground" for="brief-type"
-                >Type</label
-            >
-            <input
-                id="brief-type"
-                name="brief-type"
-                type="hidden"
-                value={briefType}
-            />
-            <ToggleGroup.Root
-                type="single"
-                bind:value={briefType}
-                variant="outline"
-                spacing={2}
-                class="grid w-full grid-cols-2 gap-2 md:grid-cols-5"
-                aria-label="Select brief type"
-            >
-                <ToggleGroup.Item
-                    value="feature"
-                    class="justify-start gap-2 data-[state=on]:border-sky-300/70 data-[state=on]:bg-sky-500/10 data-[state=on]:text-sky-700"
-                >
-                    <Icon
-                        icon="lucide:layout-dashboard"
-                        class="size-4 text-sky-500"
-                    />
-                    Feature
-                </ToggleGroup.Item>
-                <ToggleGroup.Item
-                    value="fix"
-                    class="justify-start gap-2 data-[state=on]:border-rose-300/70 data-[state=on]:bg-rose-500/10 data-[state=on]:text-rose-700"
-                >
-                    <Icon icon="lucide:settings" class="size-4 text-rose-500" />
-                    Fix
-                </ToggleGroup.Item>
-                <ToggleGroup.Item
-                    value="docs"
-                    class="justify-start gap-2 data-[state=on]:border-amber-300/70 data-[state=on]:bg-amber-500/10 data-[state=on]:text-amber-700"
-                >
-                    <Icon
-                        icon="lucide:file-text"
-                        class="size-4 text-amber-500"
-                    />
-                    Docs
-                </ToggleGroup.Item>
-                <ToggleGroup.Item
-                    value="refactor"
-                    class="justify-start gap-2 data-[state=on]:border-violet-300/70 data-[state=on]:bg-violet-500/10 data-[state=on]:text-violet-700"
-                >
-                    <Icon
-                        icon="lucide:database"
-                        class="size-4 text-violet-500"
-                    />
-                    Refactor
-                </ToggleGroup.Item>
-                <ToggleGroup.Item
-                    value="task"
-                    class="justify-start gap-2 data-[state=on]:border-emerald-300/70 data-[state=on]:bg-emerald-500/10 data-[state=on]:text-emerald-700"
-                >
-                    <Icon icon="lucide:list" class="size-4 text-emerald-500" />
-                    Task
-                </ToggleGroup.Item>
-            </ToggleGroup.Root>
-            {#each fieldErrors.type ?? [] as issue (`type:${issue}`)}
                 <p class="text-sm text-rose-600">{issue}</p>
             {/each}
         </div>

@@ -81,28 +81,55 @@ function buildMcpToolLaunchContext(input: {
     agentExecutionId: string;
     protocolDescriptor: AgentExecutionProtocolDescriptorType;
 }): AgentExecutionSignalLaunchContext {
-    const serverName = input.protocolDescriptor.mcp?.serverName ?? 'mission-mcp';
+    const availableTools = input.protocolDescriptor.signals.map((signal) => signal.type).join(', ');
+
     return {
         launchEnv: {},
         agentExecutionInstructions: [
-            'Structured status tools:',
-            `- Use the ${serverName} MCP tools to report machine-readable AgentExecution signals.`,
-            '- Prefer Mission-owned MCP tools and access surfaces for replay-critical operations whenever possible.',
-            '- Use Mission-owned access for repository documents, workflow actions, verification, and structured operator communication instead of relying on opaque provider-native actions.',
-            '- Call the tool named for the signal you need to emit.',
-            '- Do not ask the operator for AgentExecution ids, event ids, tokens, or transport fields.',
-            '- Provide only the signal payload fields requested by the tool, such as summary, question, choices, reason, channel, or text.',
-            '- When answering an operator/user question or providing a final operator-facing response, call the message tool with channel "agent" and put the canonical response in text as concise GitHub-flavored Markdown.',
-            '- Do not duplicate final operator-facing responses in stdout, stderr, terminal prose, or provider-native chat text. Those streams are transport evidence and do not appear in AgentChat.',
-            '- When the signal concerns a tracked file, include artifacts with artifactId when known or a repository-relative path when that is what you have.',
-            '- Omit eventId unless you are intentionally retrying the exact same signal.',
-            '- Use MCP tools for semantic AgentExecution material: canonical user-facing responses, status, progress, input requests, blockers, completion claims, and other Mission-owned semantic operations.',
-            '- Treat passive stdout, stderr, and provider-specific payloads as auxiliary evidence rather than canonical replay truth.',
-            '- Emit status with phase "initializing" when you start a turn and phase "idle" when the turn is complete but the AgentExecution remains live.',
-            '- Supported signal tools:',
-            ...input.protocolDescriptor.signals.map((signal) => `- ${signal.type}: ${signal.label} (${signal.policy})`),
-            '- For status, use phase "initializing" or "idle" and include a concise summary when it helps the operator.',
-            '- For needs_input, include a question and choices. Choices use kind "fixed" with label/value or kind "manual" with label and optional placeholder.'
-        ].join('\n')
+            'Mission MCP is already connected and available.',
+            'Mission MCP is the authoritative operator interaction protocol for this session.',
+
+            'Do not start or configure MCP servers.',
+            'Do not attempt to provision infrastructure for this session.',
+            'Do not use provider-native approval UI, confirmation flows, terminal permission requests, or chat-native prompts for operator interaction.',
+            'Do not ask the operator for AgentExecution ids, event ids, tokens, or transport fields.',
+
+            'Use:',
+            '- progress for ongoing work updates.',
+            '- status for initializing or idle state changes.',
+            '- needs_input for approvals, clarification, permissions, or operator decisions.',
+            '- blocked when work cannot continue.',
+            '- ready_for_verification when work is ready for review.',
+            '- completed_claim when requested work is complete.',
+            '- failed_claim when requested work failed.',
+            '- message for canonical operator-facing responses.',
+
+            'If provider-native UI requests approval or confirmation, do not wait for provider-native interaction. Use needs_input instead.',
+
+            'Use needs_input whenever:',
+            '- a command requires approval.',
+            '- a destructive action needs confirmation.',
+            '- repository state is ambiguous.',
+            '- sandbox restrictions block execution.',
+            '- credentials or secrets are required.',
+            '- multiple safe paths require operator choice.',
+            '- the task cannot continue safely and autonomously.',
+
+            'For needs_input, include a question and choices. Choices use kind "fixed" with label/value or kind "manual" with label and optional placeholder.',
+
+            'When responding to the operator or providing a final operator-facing response, call the message tool with channel="agent" and provide concise GitHub-flavored Markdown.',
+
+            'Do not duplicate canonical operator-facing responses in stdout, stderr, terminal prose, or provider-native chat text.',
+
+            'When referring to tracked files, include artifacts with artifactId when known or a repository-relative path when available.',
+
+            'Provide only the payload fields requested by the tool.',
+            'Omit eventId unless intentionally retrying the exact same signal.',
+
+            'Emit status with phase="initializing" when starting work.',
+            'Emit status with phase="idle" when waiting for the next task while the AgentExecution remains live.',
+
+            `Available tools: ${availableTools}.`
+        ].join('\\n')
     };
 }

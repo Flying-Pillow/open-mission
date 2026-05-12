@@ -1,28 +1,29 @@
 import { z } from 'zod/v4';
-import type { SystemState as RuntimeSystemState } from '../../system/SystemContract.js';
-import type { Repository } from '../Repository/Repository.js';
-import type { RepositorySettingsType } from '../Repository/RepositorySchema.js';
-import type {
-    MissionGateProjection,
-    MissionLifecycleState,
-    MissionPauseState,
-    MissionStageDerivedState,
-    MissionStageRuntimeProjection,
-    MissionTaskLifecycleState,
-    MissionTaskRuntimeState,
-    MissionWorkflowConfigurationSnapshot
+import {
+    type AgentExecutionLaunchModeType,
+    AgentExecutionReasoningEffortSchema
+} from '../AgentExecution/AgentExecutionProtocolSchema.js';
+import {
+    WorkflowConfigurationSnapshotSchema,
+    WorkflowGateProjectionSchema,
+    WorkflowPauseStateSchema,
+    WorkflowStageRuntimeProjectionSchema,
+    WorkflowTaskRuntimeStateSchema,
+    type WorkflowTaskLifecycleState
 } from '../../workflow/engine/types.js';
-import type { MissionArtifactKey, MissionStageId } from '../../workflow/mission/manifest.js';
+import { MISSION_LIFECYCLE_STATES } from '../../workflow/engine/constants.js';
+import { type MissionArtifactKey } from '../../workflow/mission/manifest.js';
+import { MISSION_STAGE_IDS, type MissionStageId } from '../../workflow/stages.js';
 import {
     EntityCommandAcknowledgementSchema,
     EntityCommandDescriptorSchema,
-    EntityIdSchema,
+    EntitySchema,
+    EntityStorageSchema,
     EntityEventEnvelopeSchema
 } from '../Entity/EntitySchema.js';
 import {
     AgentExecutionEventSubjectSchema,
     AgentExecutionTerminalSnapshotSchema,
-    AgentExecutionTerminalHandleSchema,
     AgentExecutionDataSchema,
     AgentExecutionDataChangedSchema,
     AgentExecutionLifecycleStateSchema,
@@ -38,16 +39,39 @@ import {
 } from '../Artifact/ArtifactSchema.js';
 import {
     StageDataSchema,
+    StageSchema,
     StageEventSubjectSchema,
-    StageDataChangedSchema
+    StageDataChangedSchema,
+    StageStatusViewSchema
 } from '../Stage/StageSchema.js';
 import {
-    TaskDataSchema,
+    TaskSchema,
     TaskEventSubjectSchema,
     TaskDataChangedSchema,
-    type TaskContextArtifactReferenceType
+    TaskDossierRecordSchema
 } from '../Task/TaskSchema.js';
+import { MissionTerminalSnapshotSchema } from '../Terminal/MissionTerminalSchema.js';
 export const missionEntityName = 'Mission' as const;
+
+export const MissionTypeSchema = z.enum([
+    'task',
+    'feature',
+    'fix',
+    'docs',
+    'refactor'
+]);
+
+export const MissionAssigneeSourceSchema = z.enum([
+    'manual',
+    'issue-assignee',
+    'repository-default'
+]);
+
+export const MissionAssigneeSchema = z.object({
+    githubLogin: z.string().trim().min(1),
+    githubUserId: z.number().int().positive().optional(),
+    source: MissionAssigneeSourceSchema
+}).strict();
 
 export const MissionCommandIds = {
     pause: 'mission.pause',
@@ -63,99 +87,16 @@ export const MissionCommandIdSchema = z.enum([
     MissionCommandIds.deliver
 ]);
 
-export const MissionEntityTypeSchema = z.enum(['feature', 'fix', 'docs', 'refactor', 'task']);
-export const MissionDefaultAgentModeSchema = z.enum(['interactive', 'autonomous']);
-export const MissionReasoningEffortSchema = z.enum(['low', 'medium', 'high', 'xhigh']);
-export type MissionReasoningEffortType = z.infer<typeof MissionReasoningEffortSchema>;
-
-export const MissionCommandInvocationSchema = z.object({
-    commandId: MissionCommandIdSchema,
-    input: z.unknown().optional()
-}).strict();
-
 export const MissionLocatorSchema = z.object({
     missionId: z.string().trim().min(1),
     repositoryRootPath: z.string().trim().min(1).optional()
 }).strict();
 
-export const MissionTerminalInputSchema = z.object({
-    data: z.string().optional(),
-    literal: z.boolean().optional(),
-    cols: z.number().int().positive().optional(),
-    rows: z.number().int().positive().optional()
-}).strict().refine((value) => {
-    const hasData = typeof value.data === 'string';
-    const hasResize = value.cols !== undefined && value.rows !== undefined;
-    return hasData || hasResize;
-}, {
-    message: 'Mission terminal input requires data or a complete cols/rows resize payload.'
-});
-
-export const MissionTerminalSnapshotSchema = z.object({
-    missionId: z.string().trim().min(1),
-    connected: z.boolean(),
-    dead: z.boolean(),
-    exitCode: z.number().int().nullable(),
-    screen: z.string(),
-    chunk: z.string().optional(),
-    truncated: z.boolean().optional(),
-    terminalHandle: AgentExecutionTerminalHandleSchema.optional()
-}).strict();
-
-export const MissionTerminalSocketClientMessageSchema = z.discriminatedUnion('type', [
-    z.object({
-        type: z.literal('input'),
-        data: z.string(),
-        literal: z.boolean().optional()
-    }).strict(),
-    z.object({
-        type: z.literal('resize'),
-        cols: z.number().int().positive(),
-        rows: z.number().int().positive()
-    }).strict()
-]);
-
-export const MissionTerminalOutputSchema = z.object({
-    missionId: z.string().trim().min(1),
-    chunk: z.string(),
-    dead: z.boolean(),
-    exitCode: z.number().int().nullable(),
-    truncated: z.boolean().optional(),
-    terminalHandle: AgentExecutionTerminalHandleSchema.optional()
-}).strict();
-
-export const MissionTerminalSocketServerMessageSchema = z.discriminatedUnion('type', [
-    z.object({
-        type: z.literal('snapshot'),
-        snapshot: MissionTerminalSnapshotSchema
-    }).strict(),
-    z.object({
-        type: z.literal('output'),
-        output: MissionTerminalOutputSchema
-    }).strict(),
-    z.object({
-        type: z.literal('disconnected'),
-        snapshot: MissionTerminalSnapshotSchema
-    }).strict(),
-    z.object({
-        type: z.literal('error'),
-        message: z.string().trim().min(1)
-    }).strict()
-]);
-
-export type MissionTerminalInputType = z.infer<typeof MissionTerminalInputSchema>;
-export type MissionTerminalSnapshotType = z.infer<typeof MissionTerminalSnapshotSchema>;
-export type MissionTerminalSocketClientMessageType = z.infer<typeof MissionTerminalSocketClientMessageSchema>;
-export type MissionTerminalOutputType = z.infer<typeof MissionTerminalOutputSchema>;
-export type MissionTerminalSocketServerMessageType = z.infer<typeof MissionTerminalSocketServerMessageSchema>;
-
 export const MISSION_RUNTIME_FILE_NAME = 'mission.json';
 export const MISSION_RUNTIME_EVENT_LOG_FILE_NAME = 'mission.events.jsonl';
 
-export type MissionType = z.infer<typeof MissionEntityTypeSchema>;
 export type MissionProductKey = MissionArtifactKey;
-export type MissionTaskStatus = MissionTaskLifecycleState;
-export type MissionTaskAgent = string;
+export type MissionTaskStatus = WorkflowTaskLifecycleState;
 
 export type GateIntent = 'implement' | 'commit' | 'verify' | 'audit' | 'deliver';
 
@@ -163,26 +104,12 @@ export type MissionBrief = {
     issueId?: number;
     title: string;
     body: string;
-    type: MissionType;
+    type: MissionEntityTypeType;
     url?: string;
     labels?: string[];
     assignee?: MissionAssignee;
     metadata?: Record<string, string>;
 };
-
-export const MissionAssigneeSourceSchema = z.enum([
-    'manual',
-    'issue-assignee',
-    'repository-default'
-]);
-
-export const MissionAssigneeSchema = z.object({
-    githubLogin: z.string().trim().min(1),
-    githubUserId: z.number().int().positive().optional(),
-    source: MissionAssigneeSourceSchema
-}).strict();
-
-export type MissionAssignee = z.infer<typeof MissionAssigneeSchema>;
 
 export type MissionSelector = {
     missionId?: string;
@@ -198,268 +125,6 @@ export type MissionDescriptor = {
     createdAt: string;
     deliveredAt?: string;
 };
-
-export type MissionRecord = {
-    id: string;
-    brief: MissionBrief;
-    missionDir: string;
-    missionRootDir?: string;
-    branchRef: string;
-    createdAt: string;
-    stage: MissionStageId;
-    deliveredAt?: string;
-    agentExecutions: AgentExecutionRecord[];
-};
-
-export type MissionGateResult = {
-    allowed: boolean;
-    intent: GateIntent;
-    stage?: MissionStageId;
-    errors: string[];
-    warnings: string[];
-};
-
-export type MissionTaskState = {
-    taskId: string;
-    stage: MissionStageId;
-    sequence: number;
-    subject: string;
-    instruction: string;
-    body: string;
-    model?: string;
-    reasoningEffort?: MissionReasoningEffortType;
-    taskKind?: 'implementation' | 'verification';
-    pairedTaskId?: string;
-    dependsOn: string[];
-    context?: TaskContextArtifactReferenceType[];
-    waitingOn: string[];
-    status: MissionTaskStatus;
-    agent: MissionTaskAgent;
-    autostart?: boolean;
-    retries: number;
-    fileName: string;
-    filePath: string;
-    relativePath: string;
-};
-
-export type TaskData = MissionTaskState;
-export type MissionTaskUpdate = Partial<Pick<MissionTaskState, 'status' | 'agent' | 'retries'>>;
-
-export type MissionStageStatus = {
-    stage: MissionStageId;
-    folderName: string;
-    status: MissionStageDerivedState;
-    taskCount: number;
-    completedTaskCount: number;
-    activeTaskIds: string[];
-    readyTaskIds: string[];
-    tasks: MissionTaskState[];
-};
-
-export type MissionSelectionCandidate = {
-    missionId: string;
-    title: string;
-    branchRef: string;
-    createdAt: string;
-    issueId?: number;
-    assignee?: MissionAssignee;
-};
-
-export type RepositoryCandidate = {
-    repositoryId: string;
-    repositoryRootPath: string;
-    label: string;
-    description: string;
-    githubRepository?: string;
-};
-
-export type MissionPreparationStatus =
-    | {
-        kind: 'repository-bootstrap';
-        state: 'pull-request-opened';
-        branchRef: string;
-        baseBranch: string;
-        pullRequestUrl: string;
-        controlDirectoryPath: string;
-        settingsPath: string;
-        worktreesPath: string;
-        missionsPath: string;
-    }
-    | {
-        kind: 'mission';
-        state: 'branch-prepared';
-        missionId: string;
-        branchRef: string;
-        baseBranch: string;
-        worktreePath: string;
-        missionRootDir: string;
-        issueId?: number;
-        issueUrl?: string;
-    };
-
-export type MissionOperationalMode = 'setup' | 'root' | 'mission';
-export type SystemSnapshot = RuntimeSystemState;
-
-export type RepositoryControlStatus = {
-    repositoryRootPath: string;
-    missionDirectory: string;
-    settingsPath: string;
-    worktreesPath: string;
-    currentBranch?: string;
-    settings: RepositorySettingsType;
-    isGitRepository: boolean;
-    initialized: boolean;
-    settingsPresent: boolean;
-    trackingProvider?: 'github';
-    githubRepository?: string;
-    issuesConfigured: boolean;
-    availableMissionCount: number;
-    problems: string[];
-    warnings: string[];
-};
-
-export type StageData = MissionStageStatus;
-
-export type OperatorStatus = {
-    found: boolean;
-    operationalMode?: MissionOperationalMode;
-    control?: RepositoryControlStatus;
-    system?: SystemSnapshot;
-    missionId?: string;
-    title?: string;
-    issueId?: number;
-    assignee?: MissionAssignee;
-    type?: MissionType;
-    stage?: MissionStageId;
-    branchRef?: string;
-    missionDir?: string;
-    missionRootDir?: string;
-    productFiles?: Partial<Record<MissionArtifactKey, string>>;
-    activeTasks?: MissionTaskState[];
-    readyTasks?: MissionTaskState[];
-    stages?: MissionStageStatus[];
-    agentExecutions?: AgentExecutionRecord[];
-    workflow?: {
-        lifecycle: MissionLifecycleState;
-        pause: MissionPauseState;
-        currentStageId?: MissionStageId;
-        configuration: MissionWorkflowConfigurationSnapshot;
-        stages: MissionStageRuntimeProjection[];
-        tasks: MissionTaskRuntimeState[];
-        gates: MissionGateProjection[];
-        updatedAt: string;
-    };
-    recommendedAction?: string;
-    availableMissions?: MissionSelectionCandidate[];
-    availableRepositories?: Repository[];
-    preparation?: MissionPreparationStatus;
-};
-
-export type OperatorData = OperatorStatus;
-
-export type MissionAgentConsoleState = {
-    title?: string;
-    lines: string[];
-    promptOptions: string[] | null;
-    awaitingInput: boolean;
-    agentId?: string;
-    adapterLabel?: string;
-    agentExecutionId?: string;
-};
-
-export type MissionAgentConsoleEvent =
-    | {
-        type: 'reset';
-        state: MissionAgentConsoleState;
-    }
-    | {
-        type: 'lines';
-        lines: string[];
-        state: MissionAgentConsoleState;
-    }
-    | {
-        type: 'prompt';
-        state: MissionAgentConsoleState;
-    };
-
-export type MissionAgentEvent =
-    | {
-        type: 'agent-execution-state-changed';
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'prompt-accepted';
-        prompt: string;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'prompt-rejected';
-        prompt: string;
-        reason: string;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'agent-execution-started';
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'agent-execution-resumed';
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'agent-message';
-        channel: 'stdout' | 'stderr' | 'system';
-        text: string;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'permission-requested';
-        request: AgentExecutionPermissionRequest;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'tool-started';
-        toolName: string;
-        summary?: string;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'tool-finished';
-        toolName: string;
-        summary?: string;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'telemetry-updated';
-        telemetry: AgentExecutionTelemetrySnapshot;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'context-updated';
-        telemetry: AgentExecutionTelemetrySnapshot;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'cost-updated';
-        telemetry: AgentExecutionTelemetrySnapshot;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'agent-execution-completed';
-        exitCode: number;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'agent-execution-failed';
-        errorMessage: string;
-        exitCode?: number;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'agent-execution-cancelled';
-        reason?: string;
-        state: AgentExecutionState;
-    };
 
 export const MissionEventSubjectSchema = MissionLocatorSchema.extend({
     entity: z.literal(missionEntityName)
@@ -478,6 +143,35 @@ export const MissionCatalogEntrySchema = z.object({
     issueId: z.number().int().positive().optional()
 }).strict();
 
+export const MissionSelectionCandidateSchema = MissionCatalogEntrySchema.extend({
+    assignee: MissionAssigneeSchema.optional()
+}).strict();
+
+export const MissionPreparationStatusSchema = z.discriminatedUnion('kind', [
+    z.object({
+        kind: z.literal('repository-bootstrap'),
+        state: z.literal('pull-request-opened'),
+        branchRef: z.string().trim().min(1),
+        baseBranch: z.string().trim().min(1),
+        pullRequestUrl: z.string().trim().min(1),
+        controlDirectoryPath: z.string().trim().min(1),
+        settingsPath: z.string().trim().min(1),
+        worktreesPath: z.string().trim().min(1),
+        missionsPath: z.string().trim().min(1)
+    }).strict(),
+    z.object({
+        kind: z.literal('mission'),
+        state: z.literal('branch-prepared'),
+        missionId: z.string().trim().min(1),
+        branchRef: z.string().trim().min(1),
+        baseBranch: z.string().trim().min(1),
+        worktreePath: z.string().trim().min(1),
+        missionRootDir: z.string().trim().min(1),
+        issueId: z.number().int().positive().optional(),
+        issueUrl: z.string().trim().min(1).optional()
+    }).strict()
+]);
+
 export const MissionChildEventSubjectSchema = z.discriminatedUnion('entity', [
     MissionEventSubjectSchema,
     StageEventSubjectSchema,
@@ -486,41 +180,18 @@ export const MissionChildEventSubjectSchema = z.discriminatedUnion('entity', [
     AgentExecutionEventSubjectSchema
 ]);
 
-export const MissionDocumentSnapshotSchema = z.object({
+export const MissionDocumentSchema = z.object({
     filePath: z.string().trim().min(1),
     content: z.string(),
     updatedAt: z.string().trim().min(1).optional()
 }).strict();
 
-export const MissionWorkflowSnapshotSchema = z.object({
-    lifecycle: z.string().trim().min(1).optional(),
-    updatedAt: z.string().trim().min(1).optional(),
-    currentStageId: z.string().trim().min(1).optional(),
-    stages: z.array(StageDataSchema).optional()
-}).strict();
-
-export const MissionStatusSnapshotSchema = z.object({
-    missionId: z.string().trim().min(1),
-    title: z.string().trim().min(1).optional(),
-    issueId: z.number().int().positive().optional(),
-    assignee: MissionAssigneeSchema.optional(),
-    type: MissionEntityTypeSchema.optional(),
-    operationalMode: z.string().trim().min(1).optional(),
-    branchRef: z.string().trim().min(1).optional(),
-    missionDir: z.string().trim().min(1).optional(),
-    missionRootDir: z.string().trim().min(1).optional(),
-    artifacts: z.array(ArtifactDataSchema).optional(),
-    workflow: MissionWorkflowSnapshotSchema.optional(),
-    recommendedAction: z.string().trim().min(1).optional()
-}).strict();
-
-export const MissionStorageSchema = z.object({
-    id: EntityIdSchema,
+export const MissionStorageSchema = EntityStorageSchema.extend({
     missionId: z.string().trim().min(1),
     title: z.string().trim().min(1),
     issueId: z.number().int().positive().optional(),
     assignee: MissionAssigneeSchema.optional(),
-    type: MissionEntityTypeSchema,
+    type: MissionTypeSchema,
     operationalMode: z.string().trim().min(1).optional(),
     branchRef: z.string().trim().min(1),
     missionDir: z.string().trim().min(1),
@@ -534,45 +205,16 @@ export const MissionStorageSchema = z.object({
     recommendedAction: z.string().trim().min(1).optional()
 }).strict();
 
-export const MissionDataSchema = z.object({
-    ...MissionStorageSchema.shape
+export const MissionWorkflowStateSchema = MissionStorageSchema.pick({
+    lifecycle: true,
+    updatedAt: true,
+    currentStageId: true
+}).extend({
+    pause: WorkflowPauseStateSchema.optional(),
+    stages: z.array(WorkflowStageRuntimeProjectionSchema).optional(),
+    tasks: z.array(WorkflowTaskRuntimeStateSchema).optional(),
+    gates: z.array(WorkflowGateProjectionSchema).optional()
 }).strict();
-
-export const MissionCommandOwnerSchema = z.discriminatedUnion('entity', [
-    z.object({
-        entity: z.literal('Mission')
-    }).strict(),
-    z.object({
-        entity: z.literal('Stage'),
-        stageId: z.string().trim().min(1)
-    }).strict(),
-    z.object({
-        entity: z.literal('Task'),
-        taskId: z.string().trim().min(1)
-    }).strict(),
-    z.object({
-        entity: z.literal('AgentExecution'),
-        agentExecutionId: z.string().trim().min(1)
-    }).strict()
-]);
-
-export const MissionOwnedCommandDescriptorSchema = z.object({
-    owner: MissionCommandOwnerSchema,
-    command: EntityCommandDescriptorSchema
-}).strict();
-
-export const MissionCommandViewSnapshotSchema = z.object({
-    commands: z.array(MissionOwnedCommandDescriptorSchema),
-    revision: z.string().trim().min(1)
-}).strict();
-
-export type MissionWorktreeNodeData = {
-    name: string;
-    relativePath: string;
-    absolutePath: string;
-    kind: 'file' | 'directory';
-    children?: MissionWorktreeNodeData[] | undefined;
-};
 
 export const MissionWorktreeNodeSchema: z.ZodType<MissionWorktreeNodeData> = z.object({
     name: z.string().trim().min(1),
@@ -582,35 +224,31 @@ export const MissionWorktreeNodeSchema: z.ZodType<MissionWorktreeNodeData> = z.o
     children: z.array(z.lazy(() => MissionWorktreeNodeSchema)).optional()
 }).strict();
 
-export const MissionWorktreeSnapshotSchema = z.object({
+export const MissionWorktreeSchema = z.object({
     rootPath: z.string().trim().min(1),
     fetchedAt: z.string().trim().min(1),
     tree: z.array(MissionWorktreeNodeSchema)
 }).strict();
 
-export const MissionSnapshotSchema = z.object({
-    mission: MissionDataSchema,
-    commandView: MissionCommandViewSnapshotSchema.optional(),
-    status: MissionStatusSnapshotSchema.optional(),
-    workflow: MissionWorkflowSnapshotSchema.optional(),
-    stages: z.array(StageDataSchema),
-    tasks: z.array(TaskDataSchema),
-    artifacts: z.array(ArtifactDataSchema),
-    agentExecutions: z.array(AgentExecutionDataSchema),
-    control: z.record(z.string(), z.unknown()).optional(),
-    worktree: MissionWorktreeSnapshotSchema.optional()
+const MissionStoragePayloadSchema = MissionStorageSchema.omit({ id: true });
+
+export const MissionSchema = EntitySchema.extend({
+    ...MissionStoragePayloadSchema.shape,
+    workflow: MissionWorkflowStateSchema.optional(),
+    commands: z.array(EntityCommandDescriptorSchema).optional(),
+    stages: z.array(StageSchema),
+    tasks: z.array(TaskSchema),
 }).strict();
 
-export const MissionControlViewSnapshotSchema = z.object({
+export const MissionControlSchema = z.object({
     missionId: z.string().trim().min(1),
-    status: MissionStatusSnapshotSchema.optional(),
-    workflow: MissionWorkflowSnapshotSchema.optional(),
+    mission: MissionSchema,
     updatedAt: z.string().trim().min(1).optional()
 }).strict();
 
-export const MissionSnapshotChangedEventSchema = z.object({
+export const MissionChangedEventSchema = z.object({
     reference: MissionEventSubjectSchema,
-    snapshot: MissionSnapshotSchema
+    mission: MissionSchema
 }).strict();
 
 export const MissionAgentExecutionLifecycleNotificationSchema = z.object({
@@ -625,12 +263,8 @@ const MissionRuntimeEventEnvelopeBaseSchema = EntityEventEnvelopeSchema.omit({
 
 export const MissionRuntimeEventEnvelopeSchema = z.discriminatedUnion('type', [
     MissionRuntimeEventEnvelopeBaseSchema.extend({
-        type: z.literal('mission.snapshot.changed'),
-        payload: MissionSnapshotChangedEventSchema
-    }),
-    MissionRuntimeEventEnvelopeBaseSchema.extend({
-        type: z.literal('mission.status'),
-        payload: MissionStatusSnapshotSchema
+        type: z.literal('mission.changed'),
+        payload: MissionChangedEventSchema
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
         type: z.literal('mission.terminal'),
@@ -670,20 +304,12 @@ export const MissionReadDocumentInputSchema = MissionLocatorSchema.extend({
     path: z.string().trim().min(1)
 }).strict();
 
-export const MissionSendTerminalInputSchema = MissionLocatorSchema.extend({
-    ...MissionTerminalInputSchema.shape
-}).strict();
-
-export const MissionCommandInputSchema = MissionLocatorSchema.extend({
-    ...MissionCommandInvocationSchema.shape
-}).strict();
-
 export const MissionWriteDocumentInputSchema = MissionLocatorSchema.extend({
     path: z.string().trim().min(1),
     content: z.string()
 }).strict();
 
-export const MissionCommandMethodSchema = z.enum(['command']);
+export const MissionCommandMethodSchema = z.enum(['pause', 'resume', 'restartQueue', 'deliver']);
 
 export const MissionCommandAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
     entity: z.literal(missionEntityName),
@@ -703,29 +329,25 @@ export const MissionDocumentWriteAcknowledgementSchema = EntityCommandAcknowledg
 }).strict();
 
 export type MissionLocatorType = z.infer<typeof MissionLocatorSchema>;
-export type MissionDefaultAgentModeType = z.infer<typeof MissionDefaultAgentModeSchema>;
 export type MissionEventSubjectType = z.infer<typeof MissionEventSubjectSchema>;
 export type MissionChildEventSubjectType = z.infer<typeof MissionChildEventSubjectSchema>;
 export type MissionFindType = z.infer<typeof MissionFindSchema>;
 export type MissionCatalogEntryType = z.infer<typeof MissionCatalogEntrySchema>;
+export type MissionSelectionCandidateType = z.infer<typeof MissionSelectionCandidateSchema>;
+export type MissionPreparationStatusType = z.infer<typeof MissionPreparationStatusSchema>;
+export type MissionAssignee = z.infer<typeof MissionAssigneeSchema>;
 export type MissionReadDocumentInputType = z.infer<typeof MissionReadDocumentInputSchema>;
-export type MissionSendTerminalInputType = z.infer<typeof MissionSendTerminalInputSchema>;
-export type MissionCommandInputType = z.infer<typeof MissionCommandInputSchema>;
 export type MissionWriteDocumentInputType = z.infer<typeof MissionWriteDocumentInputSchema>;
-export type MissionSnapshotType = z.infer<typeof MissionSnapshotSchema>;
-export type MissionControlViewSnapshotType = z.infer<typeof MissionControlViewSnapshotSchema>;
+export type MissionType = z.infer<typeof MissionSchema>;
+export type MissionControlType = z.infer<typeof MissionControlSchema>;
 export type MissionRuntimeEventEnvelopeType = z.infer<typeof MissionRuntimeEventEnvelopeSchema>;
-export type MissionCommandOwnerType = z.infer<typeof MissionCommandOwnerSchema>;
-export type MissionOwnedCommandDescriptorType = z.infer<typeof MissionOwnedCommandDescriptorSchema>;
-export type MissionCommandViewSnapshotType = z.infer<typeof MissionCommandViewSnapshotSchema>;
 export type MissionCommandIdType = z.infer<typeof MissionCommandIdSchema>;
 export type MissionStorageType = z.infer<typeof MissionStorageSchema>;
-export type MissionDataType = z.infer<typeof MissionDataSchema>;
-export type MissionStatusSnapshotType = z.infer<typeof MissionStatusSnapshotSchema>;
-export type MissionWorkflowSnapshotType = z.infer<typeof MissionWorkflowSnapshotSchema>;
-export type MissionCommandInvocationType = z.infer<typeof MissionCommandInvocationSchema>;
-export type MissionDocumentSnapshotType = z.infer<typeof MissionDocumentSnapshotSchema>;
+export type MissionWorkflowStateType = z.infer<typeof MissionWorkflowStateSchema>;
+export type MissionEntityTypeType = z.infer<typeof MissionTypeSchema>;
+export type MissionDefaultAgentModeType = AgentExecutionLaunchModeType;
+export type MissionDocumentType = z.infer<typeof MissionDocumentSchema>;
 export type MissionWorktreeNodeType = z.infer<typeof MissionWorktreeNodeSchema>;
-export type MissionWorktreeSnapshotType = z.infer<typeof MissionWorktreeSnapshotSchema>;
+export type MissionWorktreeType = z.infer<typeof MissionWorktreeSchema>;
 export type MissionCommandAcknowledgementType = z.infer<typeof MissionCommandAcknowledgementSchema>;
 export type MissionDocumentWriteAcknowledgementType = z.infer<typeof MissionDocumentWriteAcknowledgementSchema>;

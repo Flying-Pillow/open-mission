@@ -24,12 +24,12 @@ The desired architecture is an Entity-addressed runtime conversation:
 AgentExecutionScope
   -> owning Entity
       -> Agent execution protocol descriptor
-      -> owner-addressed Agent-declared signals
+      -> owner-addressed Agent signals
       -> owner-owned observation handling
       -> AgentExecution state changes and Entity events
 ```
 
-The implementation must make the available structured interaction inspectable before launch, materialize the declared signal transports from that inspected contract, parse or receive Agent-declared signals against that same contract, and route accepted observations through the owning Entity path.
+The implementation must make the available structured interaction inspectable before launch, materialize the declared signal transports from that inspected contract, parse or receive Agent signals against that same contract, and route accepted observations through the owning Entity path.
 
 ## Authoritative Inputs
 
@@ -39,7 +39,7 @@ The implementation must make the available structured interaction inspectable be
 - ADR-0017: prompt-scoped Agent execution signals are the current transport baseline.
 - ADR-0018: Agent, AgentAdapter, AgentExecutor, AgentExecution, and Terminal vocabulary.
 - ADR-0022: structured Agent execution interaction vocabulary and owner-addressed signal model.
-- ADR-0024: `mission-mcp` is the daemon-owned MCP signal transport for Agent-declared signals.
+- ADR-0024: `mission-mcp` is the daemon-owned MCP signal transport for Agent signals.
 - Mission MCP Server Spec: subordinate realization blueprint for the MCP transport. It must not redefine descriptor, observation, owner-routing, or idempotency semantics independently of this spec.
 
 ## Vocabulary To Implement
@@ -51,7 +51,7 @@ The Agent execution protocol descriptor is the source of truth for one execution
 It combines:
 
 - Agent execution message descriptors: daemon/operator-to-AgentExecution input.
-- Agent-declared signal descriptors: Agent-to-owner structured signal payloads and their declared delivery transports.
+- Agent signal descriptors: Agent-to-owner structured signal payloads and their declared delivery transports.
 - Owner addressing metadata: marker prefix, owning Entity name, owning Entity id, and scope identifiers.
 - Policy metadata: which outcomes each accepted signal may produce.
 - Transport metadata: whether this execution exposes stdout-marker delivery, `mission-mcp` delivery, or both.
@@ -68,9 +68,9 @@ Message examples:
 - attach, remove, or reorder Agent execution context
 - answer an Agent `needs_input` observation
 
-### Agent-Declared Signal
+### Agent Signal
 
-An Agent-declared signal is structured Agent-authored input to the owning Entity path. It may arrive as a stdout marker or as a `mission-mcp` tool call. The signal payload shape is the same regardless of transport.
+An Agent signal is structured Agent-authored input to the owning Entity path. It may arrive as a stdout marker or as a `mission-mcp` tool call. The signal payload shape is the same regardless of transport.
 
 For stdout-marker delivery, the marker prefix is derived from the owning Entity, not from the transport or adapter.
 
@@ -90,11 +90,11 @@ The Mission MCP server is the daemon-owned local MCP service named `mission-mcp`
 
 ### Agent Execution Observation
 
-An Agent execution observation is the daemon-normalized form of runtime output or structured Agent-authored transport input. Observations come from parsed Agent-declared stdout markers, `mission-mcp` tool calls, provider-structured output, terminal diagnostics, or daemon-authored runtime facts.
+An Agent execution observation is the daemon-normalized form of runtime output or structured Agent-authored transport input. Observations come from parsed Agent signal stdout markers, `mission-mcp` tool calls, provider-structured output, terminal diagnostics, or daemon-authored runtime facts.
 
 Observation handling belongs to the owning Entity path. AgentExecutor can observe and route. The owning Entity decides scoped meaning.
 
-Agent execution observations are append-only and idempotent. An Agent-declared signal event id may produce policy effects at most once for one AgentExecution, regardless of whether it arrived through stdout-marker delivery, `mission-mcp`, adapter replay, or a transport retry.
+Agent execution observations are append-only and idempotent. An Agent signal event id may produce policy effects at most once for one AgentExecution, regardless of whether it arrived through stdout-marker delivery, `mission-mcp`, adapter replay, or a transport retry.
 
 ### Agent Execution Claim
 
@@ -118,7 +118,7 @@ Correction rule: the daemon may normalize output into observations, but it must 
 
 Current consolidation outcome:
 
-- Agent-declared marker payload schemas and limits live in the AgentExecution Entity schema boundary.
+- Agent signal marker payload schemas and limits live in the AgentExecution Entity schema boundary.
 - AgentExecution signal, observation, and decision types live in the AgentExecution protocol boundary, not in daemon runtime.
 - AgentExecution owns generic observation policy for session-safe promotion, duplicate rejection, lifecycle boundaries, and route/address validation.
 - Daemon runtime signal files are limited to launch instruction rendering and observation routing/normalization.
@@ -174,7 +174,7 @@ The owning Entity owns:
 AgentExecutor owns:
 
 - resolving Agent and AgentAdapter
-- selecting the Agent-declared signal delivery for the execution
+- selecting the Agent signal delivery for the execution
 - process launch and reconcile coordination
 - terminal attachment
 - provider output parsing
@@ -183,7 +183,7 @@ AgentExecutor owns:
 - routing observations to the owner path
 - delivery attempts for Agent execution messages
 
-AgentExecutor uses owner-Entity resolution and AgentAdapter transport capabilities to choose the selected Agent-declared signal delivery before launch. It renders prompt-scoped instructions when the selected delivery is `stdout-marker`, registers MCP access when the selected delivery is `mcp-tool`, records the small AgentExecution transport state, and routes transport-neutral observations back through the same owner path.
+AgentExecutor uses owner-Entity resolution and AgentAdapter transport capabilities to choose the selected Agent signal delivery before launch. It renders prompt-scoped instructions when the selected delivery is `stdout-marker`, registers MCP access when the selected delivery is `mcp-tool`, records the small AgentExecution transport state, and routes transport-neutral observations back through the same owner path.
 
 ### AgentAdapter
 
@@ -254,7 +254,7 @@ The exact TypeScript names can change during implementation. The source of truth
 
 ## Baseline Signals
 
-Every owner can contribute a different signal set, but the first clean implementation should support these shared Agent-declared signals:
+Every owner can contribute a different signal set, but the first clean implementation should support these shared Agent signals:
 
 - `progress`: update AgentExecution progress after owner policy acceptance.
 - `needs_input`: keep AgentExecution lifecycle `running`, set attention to `awaiting-operator`, attach the current input-request id, and publish an owner-visible event when useful. Payload must include `question` and `choices`, where each choice is either a fixed label/value choice or a manual freeform-input choice with label and optional placeholder.
@@ -309,7 +309,7 @@ For executions that declare `mcp-tool` delivery, `mission-mcp` materializes tool
 
 ### 4. Parse Owner-Addressed Signals
 
-Replace the single Mission protocol parser with owner-addressed Agent-declared signal parsing.
+Replace the single Mission protocol parser with owner-addressed Agent signal parsing.
 
 Parsing accepts the prefix from the descriptor for the active execution. It parses strict JSON, validates payload shape through the signal descriptor, preserves event id / observation id data, and returns Agent execution observations.
 
@@ -336,7 +336,7 @@ Change AgentExecutor observation application so it routes observations from ever
 
 The owner path evaluates observation policy, updates AgentExecution state through accepted owner behavior, publishes Entity events, and emits workflow events through the Running Mission aggregate when scope rules require it.
 
-Apply AgentExecution-owned idempotency before policy effects. Duplicate Agent-declared event ids must not repeat AgentExecution state changes, owner Entity events, or workflow effects.
+Apply AgentExecution-owned idempotency before policy effects. Duplicate Agent signal event ids must not repeat AgentExecution state changes, owner Entity events, or workflow effects.
 
 ### 6. Update Runtime Messages
 

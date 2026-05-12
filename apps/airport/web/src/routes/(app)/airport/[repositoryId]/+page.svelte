@@ -2,10 +2,8 @@
 <script lang="ts">
     import { afterNavigate } from "$app/navigation";
     import { page } from "$app/state";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { app } from "$lib/client/Application.svelte.js";
     import Repository from "$lib/components/entities/Repository/Repository.svelte";
-
-    const appContext = getAppContext();
 
     afterNavigate(() => {
         const repositoryId = page.params.repositoryId?.trim();
@@ -13,7 +11,7 @@
             return;
         }
 
-        void appContext.loadRepositoryPage({ repositoryId });
+        void app.loadRepositoryPage({ repositoryId });
     });
 </script>
 

@@ -1,7 +1,7 @@
 <script lang="ts">
     import Icon from "@iconify/svelte";
-    import EntityCommandbar from "$lib/components/entities/Commandbar/EntityCommandbar.svelte";
-    import type { Mission } from "$lib/components/entities/Mission/Mission.svelte.js";
+    import { app } from "$lib/client/Application.svelte.js";
+    import EntityCommandbar from "$lib/components/entities/Entity/EntityCommandbar.svelte";
     import type { Stage } from "$lib/components/entities/Stage/Stage.svelte.js";
     import type { Task } from "$lib/components/entities/Task/Task.svelte.js";
     import { Badge } from "$lib/components/ui/badge";
@@ -10,21 +10,13 @@
     import { cn } from "$lib/utils.js";
 
     let {
-        mission,
-        currentStageId,
-        activeFocusId,
         refreshNonce,
         class: className,
-        onSelectFocus,
         onTaskAutostartChange,
         onCommandExecuted,
     }: {
-        mission?: Mission;
-        currentStageId?: string;
-        activeFocusId?: string;
         refreshNonce: number;
         class?: string;
-        onSelectFocus: (focusId: string) => void;
         onTaskAutostartChange?: (
             taskId: string,
             autostart: boolean,
@@ -34,7 +26,10 @@
 
     let selectedStageOverrideId = $state<string | undefined>();
 
-    const stages = $derived(mission?.listStages() ?? []);
+    const stages = $derived(app.mission?.listStages() ?? []);
+    const currentStageId = $derived(
+        app.mission?.controlData?.workflow?.currentStageId,
+    );
     const defaultStageId = $derived(
         stages.find((stage) => stage.stageId === currentStageId)?.stageId ??
             stages[0]?.stageId,
@@ -71,12 +66,12 @@
         }
 
         selectedStageOverrideId = stage.stageId;
-        onSelectFocus(stageFocusId(stage.stageId));
+        app.selectStage(stage);
     }
 
     function selectTask(task: Task): void {
         selectedStageOverrideId = task.stageId;
-        onSelectFocus(taskFocusId(task.taskId));
+        app.selectTask(task);
     }
 
     function selectRelativeStage(offset: number): void {
@@ -152,7 +147,7 @@
         className,
     )}
 >
-    {#if mission && stages.length > 0 && selectedStage}
+    {#if app.mission && stages.length > 0 && selectedStage}
         <header class="border-b p-2">
             <div class="flex items-center gap-2">
                 <Button
@@ -171,7 +166,7 @@
                     type="button"
                     class={cn(
                         "min-w-0 flex-1 rounded-md border bg-background/70 px-2 py-1.5 text-left transition-colors hover:bg-accent/50",
-                        activeFocusId === stageFocusId(selectedStage.stageId) &&
+                        app.focusId === stageFocusId(selectedStage.stageId) &&
                             "bg-accent/70 ring-1 ring-border/60",
                     )}
                     onclick={() => selectStage(selectedStage)}
@@ -216,7 +211,7 @@
                 <div class="space-y-2">
                     {#each stageTasks as task (task.taskId)}
                         {@const selected =
-                            activeFocusId === taskFocusId(task.taskId)}
+                            app.focusId === taskFocusId(task.taskId)}
                         <article
                             class={cn(
                                 "rounded-lg border bg-background/70 p-2 shadow-sm transition-colors",

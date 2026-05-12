@@ -3,6 +3,7 @@ import type {
 } from '../Mission/MissionSchema.js';
 import type {
 	RepositoryPlatformKindType,
+	RepositoryPlatformOwnerType,
 	RepositoryPlatformRepositoryType,
 	RepositoryIssueDetailType,
 	TrackedIssueSummaryType
@@ -35,6 +36,13 @@ export type RepositoryPlatformCloneRequest = {
 	destinationPath: string;
 };
 
+export type RepositoryPlatformCreateRequest = {
+	ownerLogin: string;
+	repositoryName: string;
+	destinationPath: string;
+	visibility: 'private' | 'public' | 'internal';
+};
+
 export type RepositoryPlatformPullRequestRequest = {
 	title: string;
 	body: string;
@@ -59,8 +67,10 @@ export interface RepositoryPlatformAdapter {
 	fetchIssue(issueId: string): Promise<MissionBrief>;
 	listOpenIssues(limit: number): Promise<TrackedIssueSummaryType[]>;
 	listRepositories(): Promise<RepositoryPlatformRepositoryType[]>;
+	listRepositoryOwners(): Promise<RepositoryPlatformOwnerType[]>;
 	fetchIssueDetail(issueId: string): Promise<RepositoryIssueDetailType>;
 	cloneRepository(input: RepositoryPlatformCloneRequest): Promise<string>;
+	createRepository(input: RepositoryPlatformCreateRequest): Promise<string>;
 	createIssue(input: RepositoryPlatformIssueCreateRequest): Promise<MissionBrief>;
 	createPullRequest(input: RepositoryPlatformPullRequestRequest): Promise<string>;
 	mergePullRequest(input: RepositoryPlatformPullRequestMergeRequest): Promise<void>;

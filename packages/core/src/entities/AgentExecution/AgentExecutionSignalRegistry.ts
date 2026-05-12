@@ -26,7 +26,7 @@ const journalSignalPayloadValueSchema = z.union([z.string(), z.number(), z.boole
 export const AgentExecutionJournalSignalSourceSchema = z.enum([
     'daemon-authoritative',
     'provider-structured',
-    'agent-declared',
+    'agent-signal',
     'terminal-heuristic'
 ]);
 
@@ -82,8 +82,8 @@ const diagnosticJournalSignalSchema = z.object({
     code: z.enum([
         'provider-execution',
         'tool-call',
-        'agent-declared-signal-malformed',
-        'agent-declared-signal-oversized',
+        'agent-signal-malformed',
+        'agent-signal-oversized',
         'terminal-heuristic'
     ]),
     summary: journalSignalTextSchema,
@@ -290,7 +290,7 @@ const signalRegistryEntries = [
             description: 'Reports current Agent execution progress for owner review.',
             icon: 'lucide:activity',
             tone: 'progress',
-            payloadSchemaKey: 'agent-declared-signal.progress.v1',
+            payloadSchemaKey: 'agent-signal.progress.v1',
             deliveries: ['stdout-marker', 'mcp-tool'],
             policy: 'progress',
             outcomes: ['agent-execution-state', 'agent-execution-event']
@@ -327,7 +327,7 @@ const signalRegistryEntries = [
             description: 'Reports a machine-readable Agent execution status phase such as initializing or idle.',
             icon: 'lucide:circle-dot',
             tone: 'neutral',
-            payloadSchemaKey: 'agent-declared-signal.status.v1',
+            payloadSchemaKey: 'agent-signal.status.v1',
             deliveries: ['stdout-marker', 'mcp-tool'],
             policy: 'progress',
             outcomes: ['agent-execution-state', 'agent-execution-event']
@@ -363,7 +363,7 @@ const signalRegistryEntries = [
             description: 'Requests operator or owner input before the Agent execution can continue, with fixed choices or a manual input choice.',
             icon: 'lucide:message-circle-question',
             tone: 'attention',
-            payloadSchemaKey: 'agent-declared-signal.needs-input.v1',
+            payloadSchemaKey: 'agent-signal.needs-input.v1',
             deliveries: ['stdout-marker', 'mcp-tool'],
             policy: 'input-request',
             outcomes: ['agent-execution-state', 'owner-entity-event']
@@ -398,7 +398,7 @@ const signalRegistryEntries = [
             description: 'Declares that the Agent execution is blocked on a specific condition.',
             icon: 'lucide:octagon-alert',
             tone: 'danger',
-            payloadSchemaKey: 'agent-declared-signal.blocked.v1',
+            payloadSchemaKey: 'agent-signal.blocked.v1',
             deliveries: ['stdout-marker', 'mcp-tool'],
             policy: 'claim',
             outcomes: ['agent-execution-state', 'owner-entity-event']
@@ -433,7 +433,7 @@ const signalRegistryEntries = [
             description: 'Claims that the owner can begin verification.',
             icon: 'lucide:badge-check',
             tone: 'success',
-            payloadSchemaKey: 'agent-declared-signal.ready-for-verification.v1',
+            payloadSchemaKey: 'agent-signal.ready-for-verification.v1',
             deliveries: ['stdout-marker', 'mcp-tool'],
             policy: 'claim',
             outcomes: ['agent-execution-event', 'owner-entity-event', 'workflow-event']
@@ -468,7 +468,7 @@ const signalRegistryEntries = [
             description: 'Claims the scoped work is complete for owner evaluation.',
             icon: 'lucide:check-check',
             tone: 'success',
-            payloadSchemaKey: 'agent-declared-signal.completed-claim.v1',
+            payloadSchemaKey: 'agent-signal.completed-claim.v1',
             deliveries: ['stdout-marker', 'mcp-tool'],
             policy: 'claim',
             outcomes: ['agent-execution-event', 'owner-entity-event', 'workflow-event']
@@ -504,7 +504,7 @@ const signalRegistryEntries = [
             description: 'Claims the scoped work failed for owner evaluation.',
             icon: 'lucide:circle-x',
             tone: 'danger',
-            payloadSchemaKey: 'agent-declared-signal.failed-claim.v1',
+            payloadSchemaKey: 'agent-signal.failed-claim.v1',
             deliveries: ['stdout-marker', 'mcp-tool'],
             policy: 'claim',
             outcomes: ['agent-execution-state', 'agent-execution-event', 'owner-entity-event']
@@ -540,7 +540,7 @@ const signalRegistryEntries = [
             description: 'Appends an audit-facing Agent execution message.',
             icon: 'lucide:message-square',
             tone: 'neutral',
-            payloadSchemaKey: 'agent-declared-signal.message.v1',
+            payloadSchemaKey: 'agent-signal.message.v1',
             deliveries: ['stdout-marker', 'mcp-tool'],
             policy: 'audit-message',
             outcomes: ['agent-execution-event']
@@ -653,7 +653,7 @@ export function projectAgentExecutionObservationSignalToTimelineItem(input: {
     return entry?.projectToTimelineItem?.(input);
 }
 
-export function createAgentExecutionSignalFromDeclaredPayload(
+export function createAgentExecutionSignalFromPayload(
     payload: z.infer<
         typeof AgentProgressSignalPayloadSchema
         | typeof AgentStatusSignalPayloadSchema
@@ -672,7 +672,7 @@ export function createAgentExecutionSignalFromDeclaredPayload(
                 summary: payload.summary,
                 ...(payload.detail ? { detail: payload.detail } : {}),
                 ...(payload.artifacts ? { artifacts: cloneArtifactReferences(payload.artifacts) } : {}),
-                source: 'agent-declared',
+                source: 'agent-signal',
                 confidence: 'medium'
             };
         case 'status':
@@ -681,7 +681,7 @@ export function createAgentExecutionSignalFromDeclaredPayload(
                 phase: payload.phase,
                 ...(payload.summary ? { summary: payload.summary } : {}),
                 ...(payload.artifacts ? { artifacts: cloneArtifactReferences(payload.artifacts) } : {}),
-                source: 'agent-declared',
+                source: 'agent-signal',
                 confidence: 'medium'
             };
         case 'needs_input':
@@ -690,7 +690,7 @@ export function createAgentExecutionSignalFromDeclaredPayload(
                 question: payload.question,
                 choices: cloneInputChoices(payload.choices),
                 ...(payload.artifacts ? { artifacts: cloneArtifactReferences(payload.artifacts) } : {}),
-                source: 'agent-declared',
+                source: 'agent-signal',
                 confidence: 'medium'
             };
         case 'blocked':
@@ -698,7 +698,7 @@ export function createAgentExecutionSignalFromDeclaredPayload(
                 type: 'blocked',
                 reason: payload.reason,
                 ...(payload.artifacts ? { artifacts: cloneArtifactReferences(payload.artifacts) } : {}),
-                source: 'agent-declared',
+                source: 'agent-signal',
                 confidence: 'medium'
             };
         case 'ready_for_verification':
@@ -706,7 +706,7 @@ export function createAgentExecutionSignalFromDeclaredPayload(
                 type: 'ready_for_verification',
                 summary: payload.summary,
                 ...(payload.artifacts ? { artifacts: cloneArtifactReferences(payload.artifacts) } : {}),
-                source: 'agent-declared',
+                source: 'agent-signal',
                 confidence: 'medium'
             };
         case 'completed_claim':
@@ -714,7 +714,7 @@ export function createAgentExecutionSignalFromDeclaredPayload(
                 type: 'completed_claim',
                 summary: payload.summary,
                 ...(payload.artifacts ? { artifacts: cloneArtifactReferences(payload.artifacts) } : {}),
-                source: 'agent-declared',
+                source: 'agent-signal',
                 confidence: 'medium'
             };
         case 'failed_claim':
@@ -722,7 +722,7 @@ export function createAgentExecutionSignalFromDeclaredPayload(
                 type: 'failed_claim',
                 reason: payload.reason,
                 ...(payload.artifacts ? { artifacts: cloneArtifactReferences(payload.artifacts) } : {}),
-                source: 'agent-declared',
+                source: 'agent-signal',
                 confidence: 'medium'
             };
         case 'message':
@@ -731,7 +731,7 @@ export function createAgentExecutionSignalFromDeclaredPayload(
                 channel: payload.channel,
                 text: payload.text,
                 ...(payload.artifacts ? { artifacts: cloneArtifactReferences(payload.artifacts) } : {}),
-                source: 'agent-declared',
+                source: 'agent-signal',
                 confidence: 'medium'
             };
     }

@@ -18,7 +18,7 @@ import {
 	artifactEntityName,
 	type ArtifactDataType
 } from './ArtifactSchema.js';
-import type { MissionSnapshotType } from '../Mission/MissionSchema.js';
+import type { MissionType } from '../Mission/MissionSchema.js';
 
 export type ArtifactKind = 'repository' | 'worktree' | 'mission' | 'stage' | 'task';
 
@@ -71,22 +71,22 @@ export class Artifact extends Entity<ArtifactDataType, string> {
 			...(input.repositoryRootPath ? { repositoryRootPath: input.repositoryRootPath } : {})
 		}, context);
 		try {
-			return Artifact.requireData(await mission.buildMissionSnapshot(), input.id);
+			return Artifact.requireData(await mission.buildMission(), input.id);
 		} finally {
 			mission.dispose();
 		}
 	}
 
-	public static requireData(snapshot: MissionSnapshotType, id: string) {
-		const artifact = snapshot.artifacts.find((candidate) => candidate.id === id);
+	public static requireData(data: MissionType, id: string) {
+		const artifact = data.artifacts.find((candidate) => candidate.id === id);
 		if (!artifact) {
-			throw new Error(`Artifact '${id}' could not be resolved in Mission '${snapshot.mission.missionId}'.`);
+			throw new Error(`Artifact '${id}' could not be resolved in Mission '${data.missionId}'.`);
 		}
 		return ArtifactDataSchema.parse(artifact);
 	}
 
-	public static resolveBodyPath(snapshot: MissionSnapshotType, id: string): string {
-		const artifact = Artifact.requireData(snapshot, id);
+	public static resolveBodyPath(data: MissionType, id: string): string {
+		const artifact = Artifact.requireData(data, id);
 		return Artifact.resolveBodyPathFromData(artifact);
 	}
 
@@ -120,8 +120,8 @@ export class Artifact extends Entity<ArtifactDataType, string> {
 			...(input.repositoryRootPath ? { repositoryRootPath: input.repositoryRootPath } : {})
 		}, context);
 		try {
-			const snapshot = await mission.buildMissionSnapshot();
-			const artifact = Artifact.requireData(snapshot, input.id);
+			const data = await mission.buildMission();
+			const artifact = Artifact.requireData(data, input.id);
 			const filePath = Artifact.resolveBodyPathFromData(artifact);
 			const adapter = Artifact.createFilesystem({
 				rootPath: artifact.rootPath,
@@ -167,8 +167,8 @@ export class Artifact extends Entity<ArtifactDataType, string> {
 			...(input.repositoryRootPath ? { repositoryRootPath: input.repositoryRootPath } : {})
 		}, context);
 		try {
-			const snapshot = await mission.buildMissionSnapshot();
-			const artifact = Artifact.requireData(snapshot, input.id);
+			const data = await mission.buildMission();
+			const artifact = Artifact.requireData(data, input.id);
 			const filePath = Artifact.resolveBodyPathFromData(artifact);
 			const adapter = Artifact.createFilesystem({
 				rootPath: artifact.rootPath,

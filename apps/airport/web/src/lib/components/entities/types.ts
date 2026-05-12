@@ -6,7 +6,7 @@ import type {
 } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import type { MissionCatalogEntryType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { AgentExecutionDataType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
-import type { MissionSnapshotType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import type { MissionType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 
 export type SidebarRepositoryData = RepositoryDataType & {
     missions?: MissionCatalogEntryType[];
@@ -29,5 +29,5 @@ export type {
     RepositoryDataType,
     TrackedIssueSummaryType,
     AgentExecutionDataType,
-    MissionSnapshotType
+    MissionType
 };

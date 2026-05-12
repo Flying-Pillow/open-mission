@@ -137,6 +137,7 @@ describe('Codex', () => {
         const execution = await startExecution(adapter, createLaunchConfig());
         const snapshot = execution.getSnapshot();
         const configOverrides = readCodexConfigOverrides(state.spawnedArgs);
+        const mcpConfigOverride = configOverrides[0];
 
         expect(snapshot.agentId).toBe('codex');
         expect(snapshot.transport?.kind).toBe('terminal');
@@ -145,11 +146,17 @@ describe('Codex', () => {
         expect(state.spawnedArgs).toContain('--no-alt-screen');
         expect(state.spawnedArgs).toContain('--model');
         expect(state.spawnedArgs).toContain('gpt-5-codex');
-        expect(configOverrides).toContain('mcp_servers."mission-mcp".command="mission"');
-        expect(configOverrides).toContain(`mcp_servers."mission-mcp".args=["mcp","connect","--agent-execution","${snapshot.agentExecutionId}"]`);
-        expect(configOverrides.some((override) => override.startsWith('mcp_servers."mission-mcp".env.MISSION_MCP_TOKEN='))).toBe(true);
+        expect(configOverrides).toHaveLength(1);
+        expect(mcpConfigOverride).toContain('mcp_servers={"mission-mcp"={');
+        expect(mcpConfigOverride).toContain('command="mission"');
+        expect(mcpConfigOverride).toContain(`args=["mcp","connect","--agent-execution","${snapshot.agentExecutionId}"]`);
+        expect(mcpConfigOverride).toContain('env={');
+        expect(mcpConfigOverride).toContain('MISSION_AGENT_EXECUTION_OWNER_ID=');
+        expect(mcpConfigOverride).toContain('MISSION_MCP_TOKEN=');
+        expect(mcpConfigOverride).toContain('default_tools_approval_mode="approve"');
         expect(state.spawnedArgs.some((arg) => arg.includes('Structured status markers'))).toBe(false);
-        expect(state.spawnedArgs.some((arg) => arg.includes('Structured status tools'))).toBe(true);
+        expect(state.spawnedArgs.some((arg) => arg.includes('Mission MCP tools are already connected and available.'))).toBe(true);
+        expect(state.spawnedArgs.some((arg) => arg.includes('authoritative operator interaction protocol'))).toBe(true);
         expect(state.spawnedArgs.some((arg) => arg.includes('@task::'))).toBe(false);
         expect(state.writes).not.toContain('Implement the task.');
     });
@@ -170,9 +177,16 @@ describe('Codex', () => {
         const execution = await startExecution(adapter, createLaunchConfig());
         const snapshot = execution.getSnapshot();
         const configOverrides = readCodexConfigOverrides(state.spawnedArgs);
+        const mcpConfigOverride = configOverrides[0];
 
-        expect(configOverrides).toContain('mcp_servers."mission-mcp".command="pnpm"');
-        expect(configOverrides).toContain(`mcp_servers."mission-mcp".args=["--dir","/mission","--filter","@flying-pillow/mission","exec","tsx","--tsconfig","./tsconfig.dev.json","./src/mission.ts","mcp","connect","--agent-execution","${snapshot.agentExecutionId}"]`);
+        expect(configOverrides).toHaveLength(1);
+        expect(mcpConfigOverride).toContain('command="pnpm"');
+        expect(mcpConfigOverride).toContain(`args=["--dir","/mission","--filter","@flying-pillow/mission","exec","tsx","--tsconfig","./tsconfig.dev.json","./src/mission.ts","mcp","connect","--agent-execution","${snapshot.agentExecutionId}"]`);
+        expect(mcpConfigOverride).toContain('env={');
+        expect(mcpConfigOverride).toContain('MISSION_AGENT_EXECUTION_OWNER_ID=');
+        expect(mcpConfigOverride).toContain('MISSION_MCP_TOKEN=');
+        expect(mcpConfigOverride).toContain('MISSION_DAEMON_RUNTIME_MODE="source"');
+        expect(mcpConfigOverride).toContain('default_tools_approval_mode="approve"');
     });
 
     it('fails fast when Codex is not logged in', async () => {
@@ -198,6 +212,7 @@ describe('Codex', () => {
         );
         expect(state.spawnedArgs).toEqual([]);
     });
+
 });
 
 type FakePty = IPty & {

@@ -6,14 +6,16 @@ import {
     agentExecutionEntityName,
     AgentExecutionLocatorSchema,
     AgentExecutionCommandInputSchema,
-    AgentExecutionSendTerminalInputSchema,
+    AgentExecutionSendTerminalInputSchema
+} from './AgentExecutionProtocolSchema.js';
+import {
     AgentExecutionStorageSchema,
     AgentExecutionDataSchema,
-    AgentExecutionTerminalSnapshotSchema,
     AgentExecutionCommandAcknowledgementSchema,
     AgentExecutionDataChangedSchema
-} from './AgentExecutionSchema.js';
-import type { AgentExecutionDataType } from './AgentExecutionSchema.js';
+} from './AgentExecutionDataSchema.js';
+import { AgentExecutionTerminalSnapshotSchema } from './AgentExecutionTransportSchema.js';
+import type { AgentExecutionDataType } from './AgentExecutionDataSchema.js';
 
 export const AgentExecutionContract: EntityContractType = {
     entity: agentExecutionEntityName,

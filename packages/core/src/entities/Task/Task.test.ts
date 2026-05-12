@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { Task } from './Task.js';
 import { buildTaskLaunchPrompt } from './taskLaunchPrompt.js';
 import { TaskReworkCommandInputSchema, TaskStartCommandOptionsSchema } from './TaskSchema.js';
-import type { MissionTaskState } from '../Mission/MissionSchema.js';
+import type { TaskDossierRecordType } from './TaskSchema.js';
 
-const taskState: MissionTaskState = {
+const taskState: TaskDossierRecordType = {
     taskId: 'implementation/01',
     stage: 'implementation',
     sequence: 1,

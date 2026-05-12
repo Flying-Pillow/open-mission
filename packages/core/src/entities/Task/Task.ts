@@ -1,5 +1,5 @@
 import type {
-	MissionTaskArtifactReference
+	WorkflowTaskArtifactReference
 } from '../../workflow/engine/types.js';
 import * as path from 'node:path';
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
@@ -16,21 +16,25 @@ import {
 	type MissionStageId,
 	type MissionTaskStatusIntent
 } from '../../workflow/mission/manifest.js';
-import type { MissionTaskState } from '../Mission/MissionSchema.js';
-import type { MissionStateData } from '../../workflow/engine/index.js';
+import type { WorkflowStateData } from '../../workflow/engine/index.js';
 import {
 	TaskDataSchema,
 	TaskCommandAcknowledgementSchema,
 	TaskCommandInputSchema,
+	TaskConfigureInputSchema,
+	TaskStartInputSchema,
+	TaskCancelInputSchema,
+	TaskReworkInputSchema,
 	TaskConfigureCommandOptionsSchema,
 	TaskStartCommandOptionsSchema,
 	TaskReworkCommandInputSchema,
 	TaskLocatorSchema,
 	TaskCommandIds,
 	taskEntityName,
-	type TaskDataType
+	type TaskDataType,
+	type TaskDossierRecordType
 } from './TaskSchema.js';
-import type { MissionSnapshotType } from '../Mission/MissionSchema.js';
+import type { MissionType } from '../Mission/MissionSchema.js';
 
 export type TaskLaunchPolicy = {
 	autostart: boolean;
@@ -39,7 +43,7 @@ export type TaskLaunchPolicy = {
 export type TaskOwner = {
 	missionId: string;
 	isMissionDelivered(): boolean;
-	refreshTaskState(taskId: string): Promise<MissionTaskState>;
+	refreshTaskState(taskId: string): Promise<TaskDossierRecordType>;
 	configureTask(taskId: string, input: TaskConfigureOptions): Promise<void>;
 	queueTask(taskId: string, options?: { agentId?: string; prompt?: string; workingDirectory?: string; model?: string; reasoningEffort?: string; terminalName?: string }): Promise<void>;
 	cancelTask(taskId: string, reason?: string): Promise<void>;
@@ -51,12 +55,12 @@ export type TaskOwner = {
 		summary: string;
 		sourceTaskId?: string;
 		sourceAgentExecutionId?: string;
-		artifactRefs?: MissionTaskArtifactReference[];
+		artifactRefs?: WorkflowTaskArtifactReference[];
 	}): Promise<void>;
 	updateTaskLaunchPolicy(taskId: string, launchPolicy: TaskLaunchPolicy): Promise<void>;
 	requireAgentAdapter(agentId: string): AgentAdapter;
 	startTaskAgentExecution(
-		task: MissionTaskState,
+		task: TaskDossierRecordType,
 		adapter: AgentAdapter,
 		request: AgentExecutionLaunchRequest
 	): Promise<AgentExecutionSnapshot>;
@@ -69,7 +73,7 @@ export type TaskConfigureOptions = {
 	model?: string | null;
 	reasoningEffort?: string | null;
 	autostart?: boolean;
-	context?: NonNullable<MissionTaskState['context']>;
+	context?: NonNullable<TaskDossierRecordType['context']>;
 };
 
 export type TaskVerificationReworkRequest = {
@@ -90,7 +94,7 @@ export class Task extends Entity<TaskDataType, string> {
 		return createEntityId('task', `${missionId}/${taskId}`);
 	}
 
-	public static toDataFromState(task: MissionTaskState, missionId: string): TaskDataType {
+	public static toDataFromState(task: TaskDossierRecordType, missionId: string): TaskDataType {
 		return TaskDataSchema.parse({
 			id: Task.createEntityId(missionId, task.taskId),
 			taskId: task.taskId,
@@ -120,55 +124,58 @@ export class Task extends Entity<TaskDataType, string> {
 		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			return Task.requireData(await mission.buildMissionSnapshot(), input.taskId);
+			return Task.requireData(await mission.buildMission(), input.taskId);
 		} finally {
 			mission.dispose();
 		}
 	}
 
-	public static requireData(snapshot: MissionSnapshotType, taskId: string) {
-		const task = snapshot.tasks.find((candidate) => candidate.taskId === taskId);
+	public static requireData(data: MissionType, taskId: string) {
+		const task = data.tasks.find((candidate) => candidate.taskId === taskId);
 		if (!task) {
-			throw new Error(`Task '${taskId}' could not be resolved in Mission '${snapshot.mission.missionId}'.`);
+			throw new Error(`Task '${taskId}' could not be resolved in Mission '${data.missionId}'.`);
 		}
 		return TaskDataSchema.parse(task);
 	}
 
 	public static async resolve(payload: unknown, context: EntityExecutionContext): Promise<Task> {
-		const input = TaskCommandInputSchema.parse(payload);
+		const input = TaskLocatorSchema.parse(payload);
 		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			return new Task(Task.requireData(await mission.buildMissionSnapshot(), input.taskId));
+			return new Task(Task.requireData(await mission.buildMission(), input.taskId));
 		} finally {
 			mission.dispose();
 		}
 	}
 
-	public static isReady(task: MissionTaskState): boolean {
+	public static isReady(task: TaskDossierRecordType): boolean {
 		return task.status === 'ready' && task.waitingOn.length === 0;
 	}
-	public static isActive(task: MissionTaskState): boolean {
+	public static isActive(task: TaskDossierRecordType): boolean {
 		return task.status === 'queued' || task.status === 'running';
 	}
 
 	public static resolveStartAgentId(
-		task: MissionTaskState,
+		task: TaskDossierRecordType,
 		agentRegistry: AgentRegistry
 	): string | undefined {
 		const taskAdapterId = typeof task.agent === 'string' && task.agent.trim() ? task.agent.trim() : undefined;
 		if (taskAdapterId) {
-			return agentRegistry.requireAgent(taskAdapterId).agentId;
+			const configuredAgent = agentRegistry.resolveAgent(taskAdapterId);
+			if (configuredAgent) {
+				return configuredAgent.agentId;
+			}
 		}
 		return agentRegistry.resolveStartAgentId();
 	}
 
 	public static fromWorkflowState(input: {
-		task: MissionStateData['runtime']['tasks'][number];
+		task: WorkflowStateData['runtime']['tasks'][number];
 		index: number;
 		missionDir: string;
-		fileTask?: MissionTaskState;
-	}): MissionTaskState {
+		fileTask?: TaskDossierRecordType;
+	}): TaskDossierRecordType {
 		const { task, index, missionDir, fileTask } = input;
 		const fileName = fileTask?.fileName ?? `${task.taskId.split('/').pop() ?? task.taskId}.md`;
 		const relativePath = fileTask?.relativePath ?? [
@@ -207,7 +214,7 @@ export class Task extends Entity<TaskDataType, string> {
 		sourceTaskId: string;
 		sourceWorkflowTask: { taskId: string; stageId: string; title: string; taskKind?: 'implementation' | 'verification' | undefined; pairedTaskId?: string | undefined };
 		workflowTasks: Array<{ taskId: string; stageId: string; title: string; taskKind?: 'implementation' | 'verification' | undefined; pairedTaskId?: string | undefined }>;
-		sourceTask: MissionTaskState;
+		sourceTask: TaskDossierRecordType;
 		verificationArtifact?: { relativePath?: string; fileName?: string } | undefined;
 	}): TaskVerificationReworkRequest {
 		const targetTask = Task.resolveVerificationReworkTarget(input.workflowTasks, input.sourceWorkflowTask);
@@ -238,11 +245,11 @@ export class Task extends Entity<TaskDataType, string> {
 	}
 
 	private readonly owner: TaskOwner | undefined;
-	private state: MissionTaskState | undefined;
+	private state: TaskDossierRecordType | undefined;
 
 	public constructor(data: TaskDataType);
-	public constructor(owner: TaskOwner, state: MissionTaskState);
-	public constructor(ownerOrData: TaskOwner | TaskDataType, state?: MissionTaskState) {
+	public constructor(owner: TaskOwner, state: TaskDossierRecordType);
+	public constructor(ownerOrData: TaskOwner | TaskDataType, state?: TaskDossierRecordType) {
 		if (state) {
 			const owner = ownerOrData as TaskOwner;
 			super(Task.toDataFromState(state, owner.missionId));
@@ -264,11 +271,11 @@ export class Task extends Entity<TaskDataType, string> {
 		return this.state?.taskId ?? this.toData().taskId;
 	}
 
-	public toState(): MissionTaskState {
+	public toState(): TaskDossierRecordType {
 		return structuredClone(this.requireState());
 	}
 
-	public async start(options: { agentId?: string; prompt?: string; workingDirectory?: string; model?: string; reasoningEffort?: string; terminalName?: string } = {}): Promise<MissionTaskState> {
+	public async startOwned(options: { agentId?: string; prompt?: string; workingDirectory?: string; model?: string; reasoningEffort?: string; terminalName?: string } = {}): Promise<TaskDossierRecordType> {
 		await this.refresh();
 		this.assertCanTransition('start');
 		const state = this.requireState();
@@ -279,7 +286,7 @@ export class Task extends Entity<TaskDataType, string> {
 		return this.toState();
 	}
 
-	public async configure(options: TaskConfigureOptions): Promise<MissionTaskState> {
+	public async configureOwned(options: TaskConfigureOptions): Promise<TaskDossierRecordType> {
 		await this.refresh();
 		await this.requireOwner().configureTask(this.requireState().taskId, options);
 		await this.refresh();
@@ -293,7 +300,7 @@ export class Task extends Entity<TaskDataType, string> {
 		model?: string;
 		reasoningEffort?: string;
 		terminalName?: string;
-	}): Promise<MissionTaskState> {
+	}): Promise<TaskDossierRecordType> {
 		await this.refresh();
 		const taskState = this.toState();
 		const requestedAdapterId = input.agentId?.trim();
@@ -302,7 +309,7 @@ export class Task extends Entity<TaskDataType, string> {
 			: Task.resolveStartAgentId(taskState, input.agentRegistry);
 		const model = input.model?.trim() || taskState.model?.trim();
 		const reasoningEffort = input.reasoningEffort?.trim() || taskState.reasoningEffort?.trim();
-		return this.start({
+		return this.startOwned({
 			...(agentId ? { agentId } : {}),
 			prompt: buildTaskLaunchPrompt(taskState, input.missionWorkspacePath),
 			workingDirectory: input.missionWorkspacePath,
@@ -312,7 +319,7 @@ export class Task extends Entity<TaskDataType, string> {
 		});
 	}
 
-	public async complete(): Promise<MissionTaskState> {
+	public async completeOwned(): Promise<TaskDossierRecordType> {
 		await this.refresh();
 		this.assertCanTransition('done');
 		await this.requireOwner().completeTask(this.requireState().taskId);
@@ -320,14 +327,14 @@ export class Task extends Entity<TaskDataType, string> {
 		return this.toState();
 	}
 
-	public async cancel(reason?: string): Promise<MissionTaskState> {
+	public async cancelOwned(reason?: string): Promise<TaskDossierRecordType> {
 		await this.refresh();
 		await this.requireOwner().cancelTask(this.requireState().taskId, reason);
 		await this.refresh();
 		return this.toState();
 	}
 
-	public async reopen(): Promise<MissionTaskState> {
+	public async reopenOwned(): Promise<TaskDossierRecordType> {
 		await this.refresh();
 		this.assertCanTransition('reopen');
 		await this.requireOwner().reopenTask(this.requireState().taskId);
@@ -335,14 +342,14 @@ export class Task extends Entity<TaskDataType, string> {
 		return this.toState();
 	}
 
-	public async rework(input: {
+	public async reworkOwned(input: {
 		actor: 'human' | 'system' | 'workflow';
 		reasonCode: string;
 		summary: string;
 		sourceTaskId?: string;
 		sourceAgentExecutionId?: string;
-		artifactRefs?: MissionTaskArtifactReference[];
-	}): Promise<MissionTaskState> {
+		artifactRefs?: WorkflowTaskArtifactReference[];
+	}): Promise<TaskDossierRecordType> {
 		await this.refresh();
 		this.assertCanTransition('reopen');
 		await this.requireOwner().reworkTask(this.requireState().taskId, input);
@@ -350,7 +357,7 @@ export class Task extends Entity<TaskDataType, string> {
 		return this.toState();
 	}
 
-	public async setAutostart(autostart: boolean): Promise<MissionTaskState> {
+	public async setAutostartOwned(autostart: boolean): Promise<TaskDossierRecordType> {
 		await this.requireOwner().updateTaskLaunchPolicy(this.requireState().taskId, {
 			autostart
 		});
@@ -389,12 +396,164 @@ export class Task extends Entity<TaskDataType, string> {
 		}
 	}
 
+	public async canConfigure() {
+		return this.available();
+	}
+
+	public async canStart() {
+		return this.evaluateTransitionAvailability('start');
+	}
+
+	public async canCancel() {
+		const lifecycle = this.state?.status ?? this.data.lifecycle;
+		return lifecycle === 'queued' || lifecycle === 'running'
+			? this.available()
+			: this.unavailable('Task is not queued or running.');
+	}
+
+	public async canComplete() {
+		return this.evaluateTransitionAvailability('done');
+	}
+
+	public async canReopen() {
+		return this.evaluateTransitionAvailability('reopen');
+	}
+
+	public async canRework() {
+		return this.evaluateTransitionAvailability('reopen');
+	}
+
+	public async canReworkFromVerification() {
+		const state = this.state;
+		const data = this.data;
+		if ((state?.taskKind ?? data.taskKind) !== 'verification' || !(state?.pairedTaskId ?? data.pairedTaskId)) {
+			return this.unavailable('Task is not a paired verification task.');
+		}
+		return this.evaluateTransitionAvailability('reopen');
+	}
+
+	public async canEnableAutostart() {
+		return (this.state?.autostart ?? this.data.autostart ?? false)
+			? this.unavailable('Autostart is already enabled.')
+			: this.available();
+	}
+
+	public async canDisableAutostart() {
+		return (this.state?.autostart ?? this.data.autostart ?? false)
+			? this.available()
+			: this.unavailable('Autostart is already disabled.');
+	}
+
+	public async configure(payload: unknown, context: EntityExecutionContext) {
+		const input = TaskConfigureInputSchema.parse(payload);
+		const mission = await Task.loadRequiredMission(input, context);
+		try {
+			await mission.configureTask(input.taskId, Task.readConfigureCommandOptions(input));
+			return Task.buildCommandAcknowledgement(input, 'configure', TaskCommandIds.configure);
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public async start(payload: unknown, context: EntityExecutionContext) {
+		const input = TaskStartInputSchema.parse(payload);
+		const mission = await Task.loadRequiredMission(input, context);
+		try {
+			await mission.startTask(input.taskId, Task.readStartCommandOptions(input));
+			return Task.buildCommandAcknowledgement(input, 'start', TaskCommandIds.start);
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public async cancel(payload: unknown, context: EntityExecutionContext) {
+		const input = TaskCancelInputSchema.parse(payload);
+		const mission = await Task.loadRequiredMission(input, context);
+		try {
+			await mission.cancelTask(input.taskId, input.reason ?? 'operator cancelled task');
+			return Task.buildCommandAcknowledgement(input, 'cancel', TaskCommandIds.cancel);
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public async complete(payload: unknown, context: EntityExecutionContext) {
+		const input = TaskLocatorSchema.parse(payload);
+		const mission = await Task.loadRequiredMission(input, context);
+		try {
+			await mission.completeTask(input.taskId);
+			return Task.buildCommandAcknowledgement(input, 'complete', TaskCommandIds.complete);
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public async reopen(payload: unknown, context: EntityExecutionContext) {
+		const input = TaskLocatorSchema.parse(payload);
+		const mission = await Task.loadRequiredMission(input, context);
+		try {
+			await mission.reopenTask(input.taskId);
+			return Task.buildCommandAcknowledgement(input, 'reopen', TaskCommandIds.reopen);
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public async rework(payload: unknown, context: EntityExecutionContext) {
+		const input = TaskReworkInputSchema.parse(payload);
+		const mission = await Task.loadRequiredMission(input, context);
+		try {
+			await mission.reworkTask(input.taskId, {
+				actor: 'human',
+				reasonCode: 'manual.instruction',
+				summary: input.input,
+				artifactRefs: []
+			});
+			return Task.buildCommandAcknowledgement(input, 'rework', TaskCommandIds.rework);
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public async reworkFromVerification(payload: unknown, context: EntityExecutionContext) {
+		const input = TaskLocatorSchema.parse(payload);
+		const mission = await Task.loadRequiredMission(input, context);
+		try {
+			await mission.reworkTaskFromVerification(input.taskId);
+			return Task.buildCommandAcknowledgement(input, 'reworkFromVerification', TaskCommandIds.reworkFromVerification);
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public async enableAutostart(payload: unknown, context: EntityExecutionContext) {
+		const input = TaskLocatorSchema.parse(payload);
+		const mission = await Task.loadRequiredMission(input, context);
+		try {
+			await mission.setTaskAutostart(input.taskId, true);
+			return Task.buildCommandAcknowledgement(input, 'enableAutostart', TaskCommandIds.enableAutostart);
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public async disableAutostart(payload: unknown, context: EntityExecutionContext) {
+		const input = TaskLocatorSchema.parse(payload);
+		const mission = await Task.loadRequiredMission(input, context);
+		try {
+			await mission.setTaskAutostart(input.taskId, false);
+			return Task.buildCommandAcknowledgement(input, 'disableAutostart', TaskCommandIds.disableAutostart);
+		} finally {
+			mission.dispose();
+		}
+	}
+
 	public async command(payload: unknown, context: EntityExecutionContext) {
 		const input = TaskCommandInputSchema.parse(payload);
 		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			Task.requireData(await mission.buildMissionSnapshot(), input.taskId);
+			Task.requireData(await mission.buildMission(), input.taskId);
 			switch (input.commandId) {
 				case TaskCommandIds.configure:
 					await mission.configureTask(input.taskId, Task.readConfigureCommandOptions(input.input));
@@ -446,7 +605,13 @@ export class Task extends Entity<TaskDataType, string> {
 	}
 
 	private static readStartCommandOptions(input: unknown): { agentAdapter?: string; model?: string; reasoningEffort?: string; terminalName?: string } {
-		const options = TaskStartCommandOptionsSchema.optional().parse(input);
+		const record = Task.isRecord(input) ? input : {};
+		const options = TaskStartCommandOptionsSchema.optional().parse({
+			...(typeof record['agentAdapter'] === 'string' ? { agentAdapter: record['agentAdapter'] } : {}),
+			...(typeof record['model'] === 'string' ? { model: record['model'] } : {}),
+			...(typeof record['reasoningEffort'] === 'string' ? { reasoningEffort: record['reasoningEffort'] } : {}),
+			...(typeof record['terminalName'] === 'string' ? { terminalName: record['terminalName'] } : {})
+		});
 		return {
 			...(options?.agentAdapter ? { agentAdapter: options.agentAdapter } : {}),
 			...(options?.model ? { model: options.model } : {}),
@@ -456,7 +621,14 @@ export class Task extends Entity<TaskDataType, string> {
 	}
 
 	private static readConfigureCommandOptions(input: unknown): TaskConfigureOptions {
-		const options = TaskConfigureCommandOptionsSchema.parse(input);
+		const record = Task.isRecord(input) ? input : {};
+		const options = TaskConfigureCommandOptionsSchema.parse({
+			...(typeof record['agentAdapter'] === 'string' ? { agentAdapter: record['agentAdapter'] } : {}),
+			...(Object.prototype.hasOwnProperty.call(record, 'model') ? { model: record['model'] } : {}),
+			...(Object.prototype.hasOwnProperty.call(record, 'reasoningEffort') ? { reasoningEffort: record['reasoningEffort'] } : {}),
+			...(typeof record['autostart'] === 'boolean' ? { autostart: record['autostart'] } : {}),
+			...(Array.isArray(record['context']) ? { context: record['context'] } : {})
+		});
 		return {
 			...(options.agentAdapter ? { agentAdapter: options.agentAdapter } : {}),
 			...(Object.prototype.hasOwnProperty.call(options, 'model') ? { model: options.model ?? null } : {}),
@@ -464,6 +636,46 @@ export class Task extends Entity<TaskDataType, string> {
 			...(typeof options.autostart === 'boolean' ? { autostart: options.autostart } : {}),
 			...(options.context ? { context: options.context.map((contextArtifact) => ({ ...contextArtifact })) } : {})
 		};
+	}
+
+	private static isRecord(value: unknown): value is Record<string, unknown> {
+		return typeof value === 'object' && value !== null && !Array.isArray(value);
+	}
+
+	private static async loadRequiredMission(input: { missionId: string; repositoryRootPath?: string }, context: EntityExecutionContext) {
+		const service = await loadMissionRegistry(context);
+		return service.loadRequiredMission(input, context);
+	}
+
+	private static buildCommandAcknowledgement(
+		input: { missionId: string; taskId: string },
+		method: Exclude<import('./TaskSchema.js').TaskCommandMethodType, never>,
+		commandId: import('./TaskSchema.js').TaskCommandIdType
+	) {
+		return TaskCommandAcknowledgementSchema.parse({
+			ok: true,
+			entity: 'Task',
+			method,
+			id: input.taskId,
+			missionId: input.missionId,
+			taskId: input.taskId,
+			commandId
+		});
+	}
+
+	private evaluateTransitionAvailability(intent: MissionTaskStatusIntent) {
+		const state = this.state;
+		const currentStatus = state?.status ?? this.data.lifecycle;
+		const waitingOn = state?.waitingOn ?? this.data.waitingOnTaskIds;
+		const delivered = this.owner?.isMissionDelivered() ?? false;
+		const evaluation = evaluateMissionTaskStatusIntent(intent, {
+			currentStatus,
+			waitingOn,
+			delivered
+		});
+		return evaluation.enabled
+			? this.available()
+			: this.unavailable(evaluation.reason ?? `Task cannot transition via '${intent}'.`);
 	}
 
 	private assertCanTransition(intent: MissionTaskStatusIntent): void {
@@ -506,7 +718,7 @@ export class Task extends Entity<TaskDataType, string> {
 		return this.owner;
 	}
 
-	private requireState(): MissionTaskState {
+	private requireState(): TaskDossierRecordType {
 		if (!this.state) {
 			throw new Error(`Task '${this.taskId}' is not attached to Mission runtime state.`);
 		}
@@ -514,8 +726,8 @@ export class Task extends Entity<TaskDataType, string> {
 	}
 
 	private static resolveWorkflowSubject(
-		task: MissionStateData['runtime']['tasks'][number],
-		fileTask: MissionTaskState | undefined,
+		task: WorkflowStateData['runtime']['tasks'][number],
+		fileTask: TaskDossierRecordType | undefined,
 		fileName: string
 	): string {
 		const runtimeTitle = task.title.trim();

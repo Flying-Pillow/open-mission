@@ -51,7 +51,7 @@ export const TerminalOwnerSchema = z.discriminatedUnion('kind', [
     }).strict()
 ]);
 
-export const TerminalSnapshotSchema = z.object({
+export const TerminalSchema = z.object({
     terminalName: z.string().trim().min(1),
     terminalPaneId: z.string().trim().min(1),
     connected: z.boolean(),
@@ -71,4 +71,4 @@ export type TerminalHandleType = z.infer<typeof TerminalHandleSchema>;
 export type TerminalInputType = z.infer<typeof TerminalInputSchema>;
 export type TerminalLocatorType = z.infer<typeof TerminalLocatorSchema>;
 export type TerminalOwnerType = z.infer<typeof TerminalOwnerSchema>;
-export type TerminalSnapshotType = z.infer<typeof TerminalSnapshotSchema>;
+export type TerminalType = z.infer<typeof TerminalSchema>;

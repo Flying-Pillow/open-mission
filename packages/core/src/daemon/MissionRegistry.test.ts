@@ -120,6 +120,53 @@ describe('MissionRegistry', () => {
 			findRepositories.mockRestore();
 		}
 	});
+
+	it('skips mission hydration when the repository workflow definition is out of date', async () => {
+		const workspaceRoot = await createTempWorkspace();
+		const adapter = new MissionDossierFilesystem(workspaceRoot);
+		await fs.mkdir(path.join(workspaceRoot, '.mission', 'workflow'), { recursive: true });
+		await fs.writeFile(
+			path.join(workspaceRoot, '.mission', 'workflow', 'workflow.json'),
+			`${JSON.stringify({
+				autostart: { mission: false },
+				humanInLoop: { enabled: false, pauseOnMissionStart: false },
+				execution: {
+					maxParallelTasks: 1,
+					maxParallelSessions: 1
+				},
+				stageOrder: ['prd', 'spec', 'implementation', 'audit', 'delivery'],
+				stages: {
+					prd: { stageId: 'prd', displayName: 'PRD', taskLaunchPolicy: { defaultAutostart: false } },
+					spec: { stageId: 'spec', displayName: 'Spec', taskLaunchPolicy: { defaultAutostart: false } },
+					implementation: { stageId: 'implementation', displayName: 'Implementation', taskLaunchPolicy: { defaultAutostart: false } },
+					audit: { stageId: 'audit', displayName: 'Audit', taskLaunchPolicy: { defaultAutostart: false } },
+					delivery: { stageId: 'delivery', displayName: 'Delivery', taskLaunchPolicy: { defaultAutostart: false } }
+				},
+				taskGeneration: [],
+				gates: []
+			}, null, 2)}\n`,
+			'utf8'
+		);
+		await adapter.writeMissionDescriptor(adapter.getTrackedMissionDir('mission-stale-workflow'), createDescriptor('mission-stale-workflow'));
+		const loadMission = vi.fn(async () => undefined);
+		const logger = { info: vi.fn(), warn: vi.fn() };
+
+		await expect(new MissionRegistry({ loadMission, logger }).hydrateRepositoryMissions({
+			surfacePath: workspaceRoot
+		})).resolves.toBeUndefined();
+
+		expect(loadMission).not.toHaveBeenCalled();
+		expect(logger.warn).toHaveBeenCalledWith(
+			expect.stringContaining("Mission daemon skipped invalid Repository 'repository:local/"),
+			expect.objectContaining({
+				repositoryRootPath: workspaceRoot,
+				invalidState: expect.objectContaining({
+					code: 'invalid-workflow-definition',
+					path: path.join(workspaceRoot, '.mission', 'workflow', 'workflow.json')
+				})
+			})
+		);
+	});
 });
 
 async function createTempWorkspace(): Promise<string> {

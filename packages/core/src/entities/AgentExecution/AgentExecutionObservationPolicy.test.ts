@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AgentExecutionObservationLedger, AgentExecutionObservationPolicy } from './AgentExecutionObservationPolicy.js';
 import {
-	MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH,
+	MAX_AGENT_SIGNAL_MARKER_LENGTH,
 	type AgentExecutionObservation,
 	type AgentExecutionSnapshot
 } from './AgentExecutionProtocolTypes.js';
@@ -57,13 +57,13 @@ function createObservation(overrides: Partial<AgentExecutionObservation> = {}): 
 		observedAt: '2026-05-04T12:00:00.000Z',
 		claimedAddress: address,
 		route: {
-			origin: 'agent-declared-signal',
+			origin: 'agent-signal',
 			address
 		},
 		signal: {
 			type: 'progress',
 			summary: 'Implemented the router.',
-			source: 'agent-declared',
+			source: 'agent-signal',
 			confidence: 'medium'
 		},
 		...overrides
@@ -89,7 +89,7 @@ describe('AgentExecutionObservationPolicy', () => {
 						{ kind: 'fixed', label: 'No', value: 'no' },
 						{ kind: 'manual', label: 'Other', placeholder: 'Describe the verification command.' }
 					],
-					source: 'agent-declared',
+					source: 'agent-signal',
 					confidence: 'medium'
 				}
 			})
@@ -101,7 +101,6 @@ describe('AgentExecutionObservationPolicy', () => {
 			snapshotPatch: {
 				status: 'running',
 				attention: 'autonomous',
-				waitingForInput: false,
 				progress: {
 					state: 'working',
 					summary: 'Implemented the router.',
@@ -115,6 +114,7 @@ describe('AgentExecutionObservationPolicy', () => {
 			snapshotPatch: {
 				status: 'running',
 				attention: 'awaiting-operator',
+				currentInputRequestId: 'observation-2',
 				waitingForInput: true,
 				progress: {
 					state: 'waiting-input',
@@ -136,7 +136,7 @@ describe('AgentExecutionObservationPolicy', () => {
 					type: 'status',
 					phase: 'initializing',
 					summary: 'Preparing the next turn.',
-					source: 'agent-declared',
+					source: 'agent-signal',
 					confidence: 'medium'
 				}
 			})
@@ -149,7 +149,7 @@ describe('AgentExecutionObservationPolicy', () => {
 					type: 'status',
 					phase: 'idle',
 					summary: 'Ready for the next structured prompt.',
-					source: 'agent-declared',
+					source: 'agent-signal',
 					confidence: 'medium'
 				}
 			})
@@ -160,8 +160,7 @@ describe('AgentExecutionObservationPolicy', () => {
 			eventType: 'execution.updated',
 			snapshotPatch: {
 				status: 'starting',
-				attention: 'autonomous',
-				waitingForInput: false,
+				attention: 'none',
 				progress: {
 					state: 'initializing',
 					summary: 'Preparing the next turn.',
@@ -175,7 +174,6 @@ describe('AgentExecutionObservationPolicy', () => {
 			snapshotPatch: {
 				status: 'running',
 				attention: 'awaiting-operator',
-				waitingForInput: false,
 				progress: {
 					state: 'idle',
 					summary: 'Ready for the next structured prompt.',
@@ -207,7 +205,7 @@ describe('AgentExecutionObservationPolicy', () => {
 
 		expect(spoofed).toEqual({
 			action: 'reject',
-			reason: 'Agent-declared signal address did not match the active Agent execution.'
+			reason: 'Agent signal address did not match the active Agent execution.'
 		});
 		expect(accepted.action).toBe('update-execution');
 		expect(duplicate).toEqual({
@@ -265,7 +263,7 @@ describe('AgentExecutionObservationPolicy', () => {
 				signal: {
 					type: 'completed_claim',
 					summary: 'Task is complete.',
-					source: 'agent-declared',
+					source: 'agent-signal',
 					confidence: 'medium'
 				}
 			})
@@ -300,7 +298,7 @@ describe('AgentExecutionObservationPolicy', () => {
 			observation: createObservation({
 				observationId: 'observation-6',
 				route: {
-					origin: 'agent-declared-signal',
+					origin: 'agent-signal',
 					address: {
 						agentExecutionId: 'agent-execution-7',
 						scope: {
@@ -316,7 +314,7 @@ describe('AgentExecutionObservationPolicy', () => {
 
 		expect(mismatchedSource).toEqual({
 			action: 'reject',
-			reason: "Observation origin 'agent-declared-signal' requires signal source 'agent-declared'."
+			reason: "Observation origin 'agent-signal' requires signal source 'agent-signal'."
 		});
 		expect(mismatchedRouteAddress).toEqual({
 			action: 'reject',
@@ -348,7 +346,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		});
 	});
 
-	it('rejects unaddressed agent-declared signals before they can promote AgentExecution state', () => {
+	it('rejects unaddressed agent-signal signals before they can promote AgentExecution state', () => {
 		const policy = new AgentExecutionObservationPolicy();
 		const observation = createObservation({
 			observationId: 'observation-unscoped-marker'
@@ -360,7 +358,7 @@ describe('AgentExecutionObservationPolicy', () => {
 			observation
 		})).toEqual({
 			action: 'reject',
-			reason: 'Agent-declared signal observations must carry a claimed Agent execution address.'
+			reason: 'Agent signal observations must carry a claimed Agent execution address.'
 		});
 	});
 
@@ -413,7 +411,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		});
 	});
 
-	it('rejects agent-declared signals that spoof a stronger confidence than the boundary allows', () => {
+	it('rejects agent-signal signals that spoof a stronger confidence than the boundary allows', () => {
 		const policy = new AgentExecutionObservationPolicy();
 
 		expect(policy.evaluate({
@@ -423,13 +421,13 @@ describe('AgentExecutionObservationPolicy', () => {
 				signal: {
 					type: 'progress',
 					summary: 'Definitely complete.',
-					source: 'agent-declared',
+					source: 'agent-signal',
 					confidence: 'high'
 				}
 			})
 		})).toEqual({
 			action: 'reject',
-			reason: "Observation origin 'agent-declared-signal' requires signal confidence 'medium'."
+			reason: "Observation origin 'agent-signal' requires signal confidence 'medium'."
 		});
 	});
 
@@ -512,7 +510,7 @@ describe('AgentExecutionObservationPolicy', () => {
 						{ kind: 'fixed', label: '6', value: '6' },
 						{ kind: 'manual', label: 'Other' }
 					],
-					source: 'agent-declared',
+					source: 'agent-signal',
 					confidence: 'medium'
 				}
 			})
@@ -522,18 +520,18 @@ describe('AgentExecutionObservationPolicy', () => {
 		});
 	});
 
-	it('rejects oversized agent-declared signal claims before they can promote AgentExecution state', () => {
+	it('rejects oversized agent-signal signal claims before they can promote AgentExecution state', () => {
 		const policy = new AgentExecutionObservationPolicy();
 
 		expect(policy.evaluate({
 			snapshot: createSnapshot(),
 			observation: createObservation({
 				observationId: 'observation-oversized-marker',
-				rawText: `${markerPrefix}${'x'.repeat(MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH)}`
+				rawText: `${markerPrefix}${'x'.repeat(MAX_AGENT_SIGNAL_MARKER_LENGTH)}`
 			})
 		})).toEqual({
 			action: 'reject',
-			reason: 'Agent-declared signal marker exceeded the maximum length.'
+			reason: 'Agent signal marker exceeded the maximum length.'
 		});
 	});
 

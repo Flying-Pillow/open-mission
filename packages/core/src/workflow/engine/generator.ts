@@ -6,23 +6,23 @@ import { AgentIdSchema } from '../../entities/Agent/AgentSchema.js';
 import { Repository } from '../../entities/Repository/Repository.js';
 import type { MissionDescriptor } from '../../entities/Mission/MissionSchema.js';
 import type {
-    MissionGeneratedTaskPayload,
+    WorkflowGeneratedTaskPayload,
     MissionStageId,
-    MissionWorkflowConfigurationSnapshot,
+    WorkflowConfigurationSnapshot,
     WorkflowTaskGenerationRule
 } from './types.js';
 
-export interface MissionWorkflowTaskGenerationResult {
+export interface WorkflowTaskGenerationResult {
     stageId: MissionStageId;
-    tasks: MissionGeneratedTaskPayload[];
+    tasks: WorkflowGeneratedTaskPayload[];
     rule: WorkflowTaskGenerationRule;
 }
 
-export async function generateMissionWorkflowTasks(input: {
+export async function generateWorkflowTasks(input: {
     descriptor: MissionDescriptor;
-    configuration: MissionWorkflowConfigurationSnapshot;
+    configuration: WorkflowConfigurationSnapshot;
     stageId: MissionStageId;
-}): Promise<MissionWorkflowTaskGenerationResult> {
+}): Promise<WorkflowTaskGenerationResult> {
     const rule = input.configuration.workflow.taskGeneration.find(
         candidate => candidate.stageId === input.stageId
     );
@@ -72,7 +72,7 @@ export async function generateMissionWorkflowTasks(input: {
 function toGeneratedTaskPayload(
     stageId: MissionStageId,
     taskTemplate: MissionTaskTemplate
-): MissionGeneratedTaskPayload {
+): WorkflowGeneratedTaskPayload {
     const parsedAdapter = AgentIdSchema.safeParse(taskTemplate.agent);
 
     return {
@@ -91,9 +91,9 @@ function stripMarkdownExtension(fileName: string): string {
     return fileName.toLowerCase().endsWith('.md') ? fileName.slice(0, -3) : fileName;
 }
 
-function deduplicateGeneratedTasksByTaskId(tasks: MissionGeneratedTaskPayload[]): MissionGeneratedTaskPayload[] {
+function deduplicateGeneratedTasksByTaskId(tasks: WorkflowGeneratedTaskPayload[]): WorkflowGeneratedTaskPayload[] {
     const seen = new Set<string>();
-    const deduplicated: MissionGeneratedTaskPayload[] = [];
+    const deduplicated: WorkflowGeneratedTaskPayload[] = [];
     for (const task of tasks) {
         if (seen.has(task.taskId)) {
             continue;
@@ -104,7 +104,7 @@ function deduplicateGeneratedTasksByTaskId(tasks: MissionGeneratedTaskPayload[])
     return deduplicated;
 }
 
-export function normalizeGeneratedTaskDependencies(tasks: MissionGeneratedTaskPayload[]): MissionGeneratedTaskPayload[] {
+export function normalizeGeneratedTaskDependencies(tasks: WorkflowGeneratedTaskPayload[]): WorkflowGeneratedTaskPayload[] {
     const orderedTasks = [...tasks].sort(compareGeneratedTaskOrder);
     const orderedTaskIndexById = new Map(orderedTasks.map((task, index) => [task.taskId, index]));
 
@@ -118,7 +118,7 @@ export function normalizeGeneratedTaskDependencies(tasks: MissionGeneratedTaskPa
     }));
 }
 
-function compareGeneratedTaskOrder(left: MissionGeneratedTaskPayload, right: MissionGeneratedTaskPayload): number {
+function compareGeneratedTaskOrder(left: WorkflowGeneratedTaskPayload, right: WorkflowGeneratedTaskPayload): number {
     const leftTaskId = left.taskId;
     const rightTaskId = right.taskId;
     const leftStem = leftTaskId.split('/').at(-1) ?? leftTaskId;
@@ -148,9 +148,9 @@ function isVerificationTaskStem(taskStem: string): boolean {
 }
 
 function resolveGeneratedTaskDependencyReference(
-    task: MissionGeneratedTaskPayload,
+    task: WorkflowGeneratedTaskPayload,
     dependency: string,
-    tasks: MissionGeneratedTaskPayload[]
+    tasks: WorkflowGeneratedTaskPayload[]
 ): string {
     const trimmedDependency = dependency.trim();
     if (!trimmedDependency) {

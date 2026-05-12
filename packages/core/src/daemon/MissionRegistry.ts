@@ -60,6 +60,19 @@ export class MissionRegistry {
 
     public async hydrateRepositoryMissions(context: { surfacePath: string }): Promise<void> {
         const repositoryRoot = path.resolve(context.surfacePath);
+        const repository = Repository.open(repositoryRoot);
+        const repositoryData = await repository.read({
+            id: repository.id,
+            repositoryRootPath: repositoryRoot
+        });
+        if (repositoryData.invalidState) {
+            this.options.logger?.warn(`Mission daemon skipped invalid Repository '${repositoryData.id}'.`, {
+                repositoryId: repositoryData.id,
+                repositoryRootPath: repositoryData.repositoryRootPath,
+                invalidState: repositoryData.invalidState
+            });
+            return;
+        }
         const adapter = new MissionDossierFilesystem(repositoryRoot);
         const missions = await this.listKnownMissions(adapter);
         await Promise.all(
@@ -241,7 +254,7 @@ export class MissionRegistry {
     }
 
     private async shouldHydrateMission(adapter: MissionDossierFilesystem, missionDir: string): Promise<boolean> {
-        const stateData = await adapter.readMissionStateDataFile(missionDir);
+        const stateData = await adapter.readWorkflowStateDataFile(missionDir);
         if (!isRecord(stateData) || !isRecord(stateData['runtime'])) {
             return true;
         }

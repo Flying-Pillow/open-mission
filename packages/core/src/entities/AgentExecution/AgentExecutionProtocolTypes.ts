@@ -1,15 +1,30 @@
 import {
-    MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH as AGENT_DECLARED_SIGNAL_MARKER_LENGTH,
+    MAX_AGENT_SIGNAL_MARKER_LENGTH as AGENT_SIGNAL_MARKER_LENGTH,
     MAX_AGENT_EXECUTION_MESSAGE_LENGTH as AGENT_EXECUTION_MESSAGE_LENGTH,
     MAX_AGENT_EXECUTION_SIGNAL_ARTIFACT_REFERENCES as AGENT_EXECUTION_SIGNAL_ARTIFACT_REFERENCES,
     MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH as AGENT_EXECUTION_SIGNAL_TEXT_LENGTH,
     MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES as AGENT_EXECUTION_SUGGESTED_RESPONSES,
     MAX_AGENT_EXECUTION_USAGE_ENTRIES as AGENT_EXECUTION_USAGE_ENTRIES,
-    type AgentExecutionTimelineItemType,
-    type AgentSignalPayloadType
-} from './AgentExecutionSchema.js';
+    type AgentExecutionCommandType,
+    type AgentExecutionInteractionCapabilitiesType,
+    type AgentExecutionInteractionModeType,
+    type AgentExecutionPromptType,
+    type AgentExecutionScopeType,
+    type AgentStatusSignalPayloadType
+} from './AgentExecutionProtocolSchema.js';
+import type { AgentExecutionTimelineItemType } from './AgentExecutionProjectionSchema.js';
+import type {
+    AgentExecutionAttentionStateType,
+    AgentExecutionLifecycleStateType,
+    AgentExecutionSnapshotType,
+    AgentProgressSnapshotType,
+    AgentProgressStateType
+} from './AgentExecutionRuntimeSchema.js';
+import type {
+    AgentExecutionReferenceType,
+    AgentExecutionTerminalTransportType
+} from './AgentExecutionTransportSchema.js';
 import {
-    createAgentExecutionSignalFromDeclaredPayload,
     type AgentExecutionJournalSignalConfidenceType,
     type AgentExecutionJournalInputChoiceType,
     type AgentExecutionJournalSignalSourceType,
@@ -21,19 +36,7 @@ export type AgentExecutionId = string;
 export type AgentMetadataValue = string | number | boolean | null;
 export type AgentMetadata = Record<string, AgentMetadataValue>;
 
-export type AgentExecutionScope =
-    | { kind: 'system'; label?: string }
-    | { kind: 'repository'; repositoryRootPath: string }
-    | { kind: 'mission'; missionId: string; repositoryRootPath?: string }
-    | { kind: 'task'; missionId: string; taskId: string; stageId?: string; repositoryRootPath?: string }
-    | {
-        kind: 'artifact';
-        artifactId: string;
-        repositoryRootPath?: string;
-        missionId?: string;
-        taskId?: string;
-        stageId?: string;
-    };
+export type AgentExecutionScope = AgentExecutionScopeType;
 
 export type AgentExecutionProtocolErrorCode =
     | 'adapter-not-available'
@@ -45,71 +48,25 @@ export type AgentExecutionProtocolErrorCode =
     | 'launch-failed'
     | 'reconcile-failed';
 
-export type AgentExecutionStatus =
-    | 'starting'
-    | 'running'
-    | 'completed'
-    | 'failed'
-    | 'cancelled'
-    | 'terminated';
+export type AgentExecutionStatus = AgentExecutionLifecycleStateType;
 
-export type AgentProgressState =
-    | 'initializing'
-    | 'unknown'
-    | 'working'
-    | 'idle'
-    | 'waiting-input'
-    | 'blocked'
-    | 'done'
-    | 'failed';
+export type AgentProgressState = AgentProgressStateType;
 
-export type AgentExecutionStatusPhase = 'initializing' | 'idle';
+export type AgentExecutionStatusPhase = AgentStatusSignalPayloadType['phase'];
 
-export type AgentAttentionState =
-    | 'none'
-    | 'autonomous'
-    | 'awaiting-operator'
-    | 'awaiting-system';
+export type AgentAttentionState = AgentExecutionAttentionStateType;
 
-export type AgentPromptSource = 'engine' | 'operator' | 'system';
+export type AgentPromptSource = AgentExecutionPromptType['source'];
 
-export type AgentExecutionInteractionMode =
-    | 'pty-terminal'
-    | 'agent-message'
-    | 'read-only';
+export type AgentExecutionInteractionMode = AgentExecutionInteractionModeType;
 
-export interface AgentExecutionInteractionCapabilities {
-    mode: AgentExecutionInteractionMode;
-    canSendTerminalInput: boolean;
-    canSendStructuredPrompt: boolean;
-    canSendStructuredCommand: boolean;
-    reason?: string;
-}
+export type AgentExecutionInteractionCapabilities = AgentExecutionInteractionCapabilitiesType;
 
-export interface AgentProgressSnapshot {
-    state: AgentProgressState;
-    summary?: string;
-    detail?: string;
-    units?: {
-        completed?: number;
-        total?: number;
-        unit?: string;
-    };
-    updatedAt: string;
-}
+export type AgentProgressSnapshot = AgentProgressSnapshotType;
 
-export interface AgentExecutionReference {
-    agentId: AgentId;
-    agentExecutionId: AgentExecutionId;
-    processId?: number;
-    transport?: AgentExecutionTerminalTransport;
-}
+export type AgentExecutionReference = AgentExecutionReferenceType;
 
-export interface AgentExecutionTerminalTransport {
-    kind: 'terminal';
-    terminalName: string;
-    terminalPaneId?: string;
-}
+export type AgentExecutionTerminalTransport = AgentExecutionTerminalTransportType;
 
 export interface AgentCapabilities {
     acceptsPromptSubmission: boolean;
@@ -160,42 +117,11 @@ export interface AgentLaunchConfig {
     metadata?: AgentMetadata;
 }
 
-export interface AgentPrompt {
-    source: AgentPromptSource;
-    text: string;
-    title?: string;
-    metadata?: AgentMetadata;
-}
+export type AgentPrompt = AgentExecutionPromptType;
 
-export type AgentCommand =
-    | { type: 'interrupt'; reason?: string; metadata?: AgentMetadata }
-    | { type: 'checkpoint'; reason?: string; metadata?: AgentMetadata }
-    | { type: 'nudge'; reason?: string; metadata?: AgentMetadata }
-    | { type: 'resume'; reason?: string; metadata?: AgentMetadata };
+export type AgentCommand = AgentExecutionCommandType;
 
-export interface AgentExecutionSnapshot {
-    agentId: AgentId;
-    agentExecutionId: AgentExecutionId;
-    scope: AgentExecutionScope;
-    workingDirectory: string;
-    taskId?: string;
-    missionId?: string;
-    stageId?: string;
-    status: AgentExecutionStatus;
-    attention: AgentAttentionState;
-    currentInputRequestId?: string | null;
-    progress: AgentProgressSnapshot;
-    waitingForInput: boolean;
-    acceptsPrompts: boolean;
-    acceptedCommands: AgentCommand['type'][];
-    interactionCapabilities?: AgentExecutionInteractionCapabilities;
-    transport?: AgentExecutionTerminalTransport;
-    reference: AgentExecutionReference;
-    failureMessage?: string;
-    startedAt: string;
-    updatedAt: string;
-    endedAt?: string;
-}
+export type AgentExecutionSnapshot = AgentExecutionSnapshotType;
 
 export interface AgentExecutionProtocolError extends Error {
     readonly code: AgentExecutionProtocolErrorCode;
@@ -302,7 +228,7 @@ export const MAX_AGENT_EXECUTION_MESSAGE_LENGTH = AGENT_EXECUTION_MESSAGE_LENGTH
 export const MAX_AGENT_EXECUTION_SIGNAL_ARTIFACT_REFERENCES = AGENT_EXECUTION_SIGNAL_ARTIFACT_REFERENCES;
 export const MAX_AGENT_EXECUTION_USAGE_ENTRIES = AGENT_EXECUTION_USAGE_ENTRIES;
 export const MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES = AGENT_EXECUTION_SUGGESTED_RESPONSES;
-export const MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH = AGENT_DECLARED_SIGNAL_MARKER_LENGTH;
+export const MAX_AGENT_SIGNAL_MARKER_LENGTH = AGENT_SIGNAL_MARKER_LENGTH;
 
 export type AgentExecutionSignalSource = AgentExecutionJournalSignalSourceType;
 
@@ -322,7 +248,7 @@ export type AgentExecutionObservationAddress = {
 export type AgentExecutionObservationOrigin =
     | 'daemon'
     | 'provider-output'
-    | 'agent-declared-signal'
+    | 'agent-signal'
     | 'terminal-output';
 
 export type AgentExecutionSignalCandidate = {
@@ -410,10 +336,6 @@ export function cloneSignal(signal: AgentExecutionSignal): AgentExecutionSignal 
     return structuredClone(signal);
 }
 
-export function createAgentSignalFromPayload(payload: AgentSignalPayloadType): AgentExecutionSignal {
-    return createAgentExecutionSignalFromDeclaredPayload(payload);
-}
-
 export function isScalarAgentMetadataValue(value: unknown): value is AgentMetadata[string] {
     return value === null
         || typeof value === 'string'
@@ -426,7 +348,7 @@ export function deriveAgentExecutionInteractionCapabilities(input: Pick<
     'status' | 'transport' | 'acceptsPrompts' | 'acceptedCommands'
 >): AgentExecutionInteractionCapabilities {
     const terminalBacked = input.transport?.kind === 'terminal';
-    const liveTerminal = terminalBacked && !isTerminalStatus(input.status);
+    const liveTerminal = terminalBacked && !isTerminalFinalStatus(input.status);
     if (liveTerminal) {
         return {
             mode: 'pty-terminal',
@@ -466,7 +388,7 @@ export function deriveAgentExecutionInteractionCapabilities(input: Pick<
     };
 }
 
-function isTerminalStatus(status: AgentExecutionSnapshot['status']): boolean {
+export function isTerminalFinalStatus(status: AgentExecutionSnapshot['status']): boolean {
     return status === 'completed'
         || status === 'failed'
         || status === 'cancelled'

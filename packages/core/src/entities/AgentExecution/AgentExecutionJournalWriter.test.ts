@@ -219,4 +219,74 @@ describe('AgentExecutionJournalWriter', () => {
             }
         });
     });
+
+    it('records initializing status as idle bootstrap activity instead of planning', async () => {
+        const repositoryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-journal-initializing-'));
+        temporaryDirectories.add(repositoryRoot);
+        const writer = new AgentExecutionJournalWriter();
+
+        await writer.ensureLaunchJournal({
+            agentExecutionId: 'agent-execution-1',
+            agentId: 'agent-1',
+            scope: {
+                kind: 'repository',
+                repositoryRootPath: repositoryRoot
+            },
+            protocolDescriptor: createAgentExecutionProtocolDescriptor({
+                scope: {
+                    kind: 'repository',
+                    repositoryRootPath: repositoryRoot
+                },
+                messages: []
+            })
+        });
+
+        const decision = {
+            action: 'update-execution' as const,
+            eventType: 'execution.updated' as const,
+            snapshotPatch: {
+                status: 'starting' as const,
+                attention: 'none' as const,
+                waitingForInput: false,
+                progress: {
+                    state: 'initializing' as const,
+                    summary: 'Session initialized and waiting for the first task.',
+                    updatedAt: '2026-05-09T00:00:01.000Z'
+                }
+            }
+        };
+
+        const stateRecord = await writer.appendStateChanged({
+            agentExecutionId: 'agent-execution-1',
+            scope: {
+                kind: 'repository',
+                repositoryRootPath: repositoryRoot
+            },
+            decision,
+            currentInputRequestId: null,
+            awaitingResponseToMessageId: null
+        });
+        const activityRecord = await writer.appendActivityUpdated({
+            agentExecutionId: 'agent-execution-1',
+            scope: {
+                kind: 'repository',
+                repositoryRootPath: repositoryRoot
+            },
+            decision
+        });
+
+        expect(stateRecord).toMatchObject({
+            type: 'state.changed',
+            lifecycle: 'starting',
+            attention: 'none',
+            activity: 'idle'
+        });
+        expect(activityRecord).toMatchObject({
+            type: 'activity.updated',
+            activity: 'idle',
+            progress: {
+                summary: 'Session initialized and waiting for the first task.'
+            }
+        });
+    });
 });

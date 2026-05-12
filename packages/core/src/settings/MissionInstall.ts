@@ -2,6 +2,10 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {
+	parseSystemAgentSettings,
+	type SystemAgentSettingsType
+} from '../entities/System/SystemSchema.js';
 
 export const MISSION_CONFIG_DIRECTORY = 'mission';
 export const MISSION_CONFIG_FILE = 'config.json';
@@ -11,7 +15,7 @@ export type MissionConfig = {
 	missionsRoot: string;
 	repositoriesRoot: string;
 	ghBinary?: string;
-};
+} & SystemAgentSettingsType;
 
 export function getMissionConfigDirectory(): string {
 	const configuredPath = resolveConfiguredMissionConfigDirectory();
@@ -41,10 +45,15 @@ export function getDefaultMissionConfig(overrides: Partial<MissionConfig> = {}):
 	const missionsRoot = normalizeOptionalString(overrides.missionsRoot);
 	const repositoriesRoot = normalizeOptionalString(overrides.repositoriesRoot);
 	const ghBinary = normalizeOptionalString(overrides.ghBinary);
+	const systemAgentSettings = parseSystemAgentSettings({
+		...(overrides.defaultAgentAdapter !== undefined ? { defaultAgentAdapter: overrides.defaultAgentAdapter } : {}),
+		...(overrides.enabledAgentAdapters !== undefined ? { enabledAgentAdapters: overrides.enabledAgentAdapters } : {})
+	});
 	return {
 		version: 1,
 		missionsRoot: missionsRoot ?? defaultRootPath('MISSIONS_PATH', 'missions'),
 		repositoriesRoot: repositoriesRoot ?? defaultRootPath('REPOSITORIES_PATH', 'repositories'),
+		...systemAgentSettings,
 		...(ghBinary ? { ghBinary } : {})
 	};
 }
@@ -125,9 +134,19 @@ function normalizeResolvedConfig(rawConfig: unknown): MissionConfig | undefined 
 	if (typeof candidate['missionsRoot'] !== 'string' || typeof candidate['repositoriesRoot'] !== 'string') {
 		return undefined;
 	}
+	const enabledAgentAdapters = Array.isArray(candidate['enabledAgentAdapters']) && candidate['enabledAgentAdapters'].every((value) => typeof value === 'string')
+		? candidate['enabledAgentAdapters']
+		: undefined;
+	const systemAgentSettings = parseSystemAgentSettings({
+		...(typeof candidate['defaultAgentAdapter'] === 'string'
+			? { defaultAgentAdapter: candidate['defaultAgentAdapter'] }
+			: {}),
+		...(enabledAgentAdapters ? { enabledAgentAdapters } : {})
+	});
 	return getDefaultMissionConfig({
 		missionsRoot: candidate['missionsRoot'],
 		repositoriesRoot: candidate['repositoriesRoot'],
+		...systemAgentSettings,
 		...(typeof candidate['ghBinary'] === 'string'
 			? { ghBinary: candidate['ghBinary'] }
 			: {})

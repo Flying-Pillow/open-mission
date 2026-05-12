@@ -1,6 +1,5 @@
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import type { MissionStageId } from '../../workflow/mission/manifest.js';
-import type { MissionStageStatus, MissionTaskState } from '../Mission/MissionSchema.js';
 import { Task } from '../Task/Task.js';
 import {
 	StageDataSchema,
@@ -9,9 +8,11 @@ import {
 	StageLocatorSchema,
 	StageCommandIds,
 	stageEntityName,
-	type StageDataType
+	type StageDataType,
+	type StageStatusViewType
 } from './StageSchema.js';
-import type { MissionSnapshotType } from '../Mission/MissionSchema.js';
+import type { MissionType } from '../Mission/MissionSchema.js';
+import type { TaskDossierRecordType } from '../Task/TaskSchema.js';
 
 export class Stage extends Entity<StageDataType, string> {
 	public static override readonly entityName = stageEntityName;
@@ -28,15 +29,15 @@ export class Stage extends Entity<StageDataType, string> {
 		return createEntityId('stage', `${missionId}/${stageId}`);
 	}
 
-	public static isMissionDelivered(stages: MissionStageStatus[]): boolean {
+	public static isMissionDelivered(stages: StageStatusViewType[]): boolean {
 		return stages.some((stage) => stage.stage === 'delivery' && stage.status === 'completed');
 	}
 
-	public static resolveActiveTasks(stage: MissionStageStatus | undefined): MissionTaskState[] {
+	public static resolveActiveTasks(stage: StageStatusViewType | undefined): TaskDossierRecordType[] {
 		return stage ? stage.tasks.filter((task) => Task.isActive(task)) : [];
 	}
 
-	public static resolveReadyTasks(stage: MissionStageStatus | undefined): MissionTaskState[] {
+	public static resolveReadyTasks(stage: StageStatusViewType | undefined): TaskDossierRecordType[] {
 		return stage ? stage.tasks.filter((task) => Task.isReady(task)) : [];
 	}
 
@@ -57,26 +58,57 @@ export class Stage extends Entity<StageDataType, string> {
 		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			return Stage.requireData(await mission.buildMissionSnapshot(), input.stageId);
+			return Stage.requireData(await mission.buildMission(), input.stageId);
 		} finally {
 			mission.dispose();
 		}
 	}
 
-	public static requireData(snapshot: MissionSnapshotType, stageId: string) {
-		const stage = snapshot.stages.find((candidate) => candidate.stageId === stageId);
+	public static requireData(data: MissionType, stageId: string) {
+		const stage = data.stages.find((candidate) => candidate.stageId === stageId);
 		if (!stage) {
-			throw new Error(`Stage '${stageId}' could not be resolved in Mission '${snapshot.mission.missionId}'.`);
+			throw new Error(`Stage '${stageId}' could not be resolved in Mission '${data.missionId}'.`);
 		}
 		return StageDataSchema.parse(stage);
 	}
 
 	public static async resolve(payload: unknown, context: EntityExecutionContext): Promise<Stage> {
-		const input = StageCommandInputSchema.parse(payload);
+		const input = StageLocatorSchema.parse(payload);
 		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			return new Stage(Stage.requireData(await mission.buildMissionSnapshot(), input.stageId));
+			return new Stage(Stage.requireData(await mission.buildMission(), input.stageId));
+		} finally {
+			mission.dispose();
+		}
+	}
+
+	public async canGenerateTasks() {
+		if (!this.data.isCurrentStage) {
+			return this.unavailable('Stage is not the current Mission stage.');
+		}
+		if (this.data.tasks.length > 0) {
+			return this.unavailable('Stage already has tasks.');
+		}
+		return this.available();
+	}
+
+	public async generateTasks(payload: unknown, context: EntityExecutionContext) {
+		const input = StageLocatorSchema.parse(payload);
+		const service = await loadMissionRegistry(context);
+		const mission = await service.loadRequiredMission(input, context);
+		try {
+			Stage.requireData(await mission.buildMission(), input.stageId);
+			await mission.generateTasksForStage(input.stageId as MissionStageId);
+			return StageCommandAcknowledgementSchema.parse({
+				ok: true,
+				entity: 'Stage',
+				method: 'generateTasks',
+				id: input.stageId,
+				missionId: input.missionId,
+				stageId: input.stageId,
+				commandId: StageCommandIds.generateTasks
+			});
 		} finally {
 			mission.dispose();
 		}
@@ -87,7 +119,7 @@ export class Stage extends Entity<StageDataType, string> {
 		const service = await loadMissionRegistry(context);
 		const mission = await service.loadRequiredMission(input, context);
 		try {
-			Stage.requireData(await mission.buildMissionSnapshot(), input.stageId);
+			Stage.requireData(await mission.buildMission(), input.stageId);
 			if (input.commandId !== StageCommandIds.generateTasks) {
 				throw new Error(`Stage command '${input.commandId}' is not implemented in the daemon.`);
 			}

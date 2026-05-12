@@ -1,31 +1,31 @@
 import {
-    MISSION_WORKFLOW_RUNTIME_SCHEMA_VERSION,
+    WORKFLOW_RUNTIME_SCHEMA_VERSION,
     type AgentExecutionRuntimeState,
     type MissionStageId,
-    type MissionWorkflowConfigurationSnapshot,
-    type MissionWorkflowEvent,
-    type MissionWorkflowEventRecord,
-    type MissionWorkflowRequest,
-    type MissionStateData,
-    type MissionWorkflowSignal,
-    type MissionWorkflowRuntimeState,
+    type WorkflowConfigurationSnapshot,
+    type WorkflowEvent,
+    type WorkflowEventRecord,
+    type WorkflowRequest,
+    type WorkflowStateData,
+    type WorkflowSignal,
+    type WorkflowRuntimeState,
     type WorkflowDefinition
 } from './types.js';
-import { reduceMissionWorkflowEvent } from './reducer.js';
-import { ensureMissionWorkflowEventAccepted } from './validation.js';
+import { reduceWorkflowEvent } from './reducer.js';
+import { ensureWorkflowEventAccepted } from './validation.js';
 
-export interface MissionWorkflowIngestResult {
-    document: MissionStateData;
-    eventRecord: MissionWorkflowEventRecord;
-    signals: MissionWorkflowSignal[];
-    requests: MissionWorkflowRequest[];
+export interface WorkflowIngestResult {
+    document: WorkflowStateData;
+    eventRecord: WorkflowEventRecord;
+    signals: WorkflowSignal[];
+    requests: WorkflowRequest[];
 }
 
-export function createMissionWorkflowConfigurationSnapshot(input: {
+export function createWorkflowConfigurationSnapshot(input: {
     createdAt?: string;
     workflowVersion: string;
     workflow: WorkflowDefinition;
-}): MissionWorkflowConfigurationSnapshot {
+}): WorkflowConfigurationSnapshot {
     return {
         createdAt: input.createdAt ?? new Date().toISOString(),
         source: 'workflow-definition',
@@ -34,10 +34,10 @@ export function createMissionWorkflowConfigurationSnapshot(input: {
     };
 }
 
-export function createDraftMissionWorkflowRuntimeState(
-    configuration: MissionWorkflowConfigurationSnapshot,
+export function createDraftWorkflowRuntimeState(
+    configuration: WorkflowConfigurationSnapshot,
     createdAt = new Date().toISOString()
-): MissionWorkflowRuntimeState {
+): WorkflowRuntimeState {
     const activeStageId = configuration.workflow.stageOrder[0];
     return {
         lifecycle: 'draft',
@@ -63,37 +63,37 @@ export function createDraftMissionWorkflowRuntimeState(
     };
 }
 
-export function createInitialMissionWorkflowRuntimeState(
-    configuration: MissionWorkflowConfigurationSnapshot,
+export function createInitialWorkflowRuntimeState(
+    configuration: WorkflowConfigurationSnapshot,
     createdAt = new Date().toISOString()
-): MissionWorkflowRuntimeState {
-    return createDraftMissionWorkflowRuntimeState(configuration, createdAt);
+): WorkflowRuntimeState {
+    return createDraftWorkflowRuntimeState(configuration, createdAt);
 }
 
-export function createMissionStateData(input: {
+export function createWorkflowStateData(input: {
     missionId: string;
-    configuration: MissionWorkflowConfigurationSnapshot;
-    runtime?: MissionWorkflowRuntimeState;
+    configuration: WorkflowConfigurationSnapshot;
+    runtime?: WorkflowRuntimeState;
     createdAt?: string;
-}): MissionStateData {
+}): WorkflowStateData {
     const createdAt = input.createdAt ?? input.configuration.createdAt;
     return {
-        schemaVersion: MISSION_WORKFLOW_RUNTIME_SCHEMA_VERSION,
+        schemaVersion: WORKFLOW_RUNTIME_SCHEMA_VERSION,
         missionId: input.missionId,
         configuration: input.configuration,
         runtime:
             input.runtime ??
-            createInitialMissionWorkflowRuntimeState(input.configuration, createdAt)
+            createInitialWorkflowRuntimeState(input.configuration, createdAt)
     };
 }
 
-export function ingestMissionWorkflowEvent(
-    document: MissionStateData,
-    event: MissionWorkflowEvent
-): MissionWorkflowIngestResult {
-    ensureMissionWorkflowEventAccepted(document, event);
-    const reduction = reduceMissionWorkflowEvent(document.runtime, event, document.configuration);
-    const nextDocument: MissionStateData = {
+export function ingestWorkflowEvent(
+    document: WorkflowStateData,
+    event: WorkflowEvent
+): WorkflowIngestResult {
+    ensureWorkflowEventAccepted(document, event);
+    const reduction = reduceWorkflowEvent(document.runtime, event, document.configuration);
+    const nextDocument: WorkflowStateData = {
         ...document,
         runtime: reduction.nextState
     };
@@ -126,7 +126,7 @@ export function toAgentExecutionRuntimeState(
     };
 }
 
-function toEventRecord(event: MissionWorkflowEvent): MissionWorkflowEventRecord {
+function toEventRecord(event: WorkflowEvent): WorkflowEventRecord {
     const payloadEntries = Object.entries(event).filter(([key]) =>
         key !== 'eventId' && key !== 'type' && key !== 'occurredAt' && key !== 'source' && key !== 'causedByRequestId'
     );

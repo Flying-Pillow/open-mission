@@ -1,20 +1,14 @@
 <script lang="ts">
-    import { maybeGetScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { app } from "$lib/client/Application.svelte.js";
     import type { Mission } from "$lib/components/entities/Mission/Mission.svelte.js";
     import type { Stage } from "$lib/components/entities/Stage/Stage.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
 
-    const missionScope = maybeGetScopedMissionContext();
-    const appContext = getAppContext();
     const mission = $derived.by(() => {
-        const resolvedMission =
-            missionScope?.mission ?? appContext.airport.activeMission;
+        const resolvedMission = app.mission;
         if (!resolvedMission) {
-            throw new Error(
-                "Mission summary requires a scoped or active mission.",
-            );
+            throw new Error("Mission summary requires app.mission.");
         }
 
         return resolvedMission;
@@ -121,8 +115,8 @@
                             size="sm"
                             variant={command.variant ?? "outline"}
                             disabled={missionCommandPending !== null ||
-                                command.disabled}
-                            title={command.disabledReason}
+                                !command.available}
+                            title={command.unavailableReason}
                             onclick={() =>
                                 runMissionCommand(command.commandId, () =>
                                     mission.executeCommand(command.commandId),
@@ -238,8 +232,8 @@
                                                                 "outline"}
                                                             disabled={itemCommandPending !==
                                                                 null ||
-                                                                command.disabled}
-                                                            title={command.disabledReason}
+                                                                !command.available}
+                                                            title={command.unavailableReason}
                                                             onclick={() =>
                                                                 runItemCommand(
                                                                     pendingCommandId,
@@ -315,8 +309,8 @@
                                             variant={command.variant ??
                                                 "outline"}
                                             disabled={itemCommandPending !==
-                                                null || command.disabled}
-                                            title={command.disabledReason}
+                                                null || !command.available}
+                                            title={command.unavailableReason}
                                             onclick={() =>
                                                 runItemCommand(
                                                     pendingCommandId,

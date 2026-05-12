@@ -4,7 +4,13 @@ import {
     createMissionRuntimeEventSubscriptionChannels,
     MissionContract
 } from './MissionContract.js';
-import { MissionCommandIds, MissionDataSchema, MissionSnapshotSchema } from './MissionSchema.js';
+import {
+    MissionChangedEventSchema,
+    MissionCommandIds,
+    MissionControlSchema,
+    MissionSchema,
+    MissionStorageSchema
+} from './MissionSchema.js';
 import { AgentExecutionDataSchema } from '../AgentExecution/AgentExecutionSchema.js';
 import { ArtifactDataSchema } from '../Artifact/ArtifactSchema.js';
 import { StageDataSchema } from '../Stage/StageSchema.js';
@@ -92,7 +98,7 @@ const missionData = {
 
 describe('Mission schemas', () => {
     it('composes Mission data from the four child Entity schemas', () => {
-        const parsed = MissionDataSchema.parse(missionData);
+        const parsed = MissionStorageSchema.parse(missionData);
 
         expect(parsed.artifacts[0]).toEqual(artifact);
         expect(parsed.stages[0]).toEqual(stage);
@@ -101,7 +107,7 @@ describe('Mission schemas', () => {
     });
 
     it('rejects stale child AgentExecution runtime terminal fields', () => {
-        expect(() => MissionDataSchema.parse({
+        expect(() => MissionStorageSchema.parse({
             ...missionData,
             agentExecutions: [{
                 ...agentExecution,
@@ -111,55 +117,133 @@ describe('Mission schemas', () => {
     });
 
     it('rejects command descriptors embedded in Entity data', () => {
-        expect(() => MissionDataSchema.parse({
+        expect(() => MissionStorageSchema.parse({
             ...missionData,
-            commands: [{ commandId: MissionCommandIds.pause, label: 'Pause Mission', disabled: false }]
+            commands: [{ commandId: MissionCommandIds.pause, entity: 'Mission', method: 'pause', label: 'Pause Mission', available: true }]
         })).toThrow();
 
-        expect(() => MissionDataSchema.parse({
+        expect(() => MissionStorageSchema.parse({
             ...missionData,
             stages: [{
                 ...stage,
-                commands: [{ commandId: 'stage.generateTasks', label: 'Generate Tasks', disabled: false }]
+                commands: [{ commandId: 'stage.generateTasks', entity: 'Stage', method: 'generateTasks', label: 'Generate Tasks', available: true }]
             }]
         })).toThrow();
 
-        expect(() => MissionDataSchema.parse({
+        expect(() => MissionStorageSchema.parse({
             ...missionData,
             stages: [{
                 ...stage,
                 tasks: [{
                     ...task,
-                    commands: [{ commandId: TaskCommandIds.start, label: 'Start Task', disabled: false }]
+                    commands: [{ commandId: TaskCommandIds.start, entity: 'Task', method: 'start', label: 'Start Task', available: true }]
                 }]
             }]
         })).toThrow();
     });
 
-    it('keeps Mission read as an aggregate snapshot contract', () => {
-        const snapshot = MissionSnapshotSchema.parse({
-            mission: missionData,
-            commandView: {
-                revision: 'commands-1',
-                commands: [{
-                    owner: { entity: 'Mission' },
-                    command: { commandId: MissionCommandIds.pause, label: 'Pause Mission', disabled: false }
+    it('keeps Mission read as the canonical Mission entity contract', () => {
+        const data = MissionSchema.parse({
+            ...missionData,
+            workflow: {
+                lifecycle: 'running',
+                updatedAt: '2026-05-12T00:00:00.000Z',
+                currentStageId: 'implementation',
+                pause: {
+                    paused: false
+                },
+                stages: [{
+                    stageId: 'implementation',
+                    lifecycle: 'ready',
+                    taskIds: ['implementation/01'],
+                    readyTaskIds: ['implementation/01'],
+                    queuedTaskIds: [],
+                    runningTaskIds: [],
+                    completedTaskIds: []
+                }],
+                tasks: [{
+                    taskId: 'implementation/01',
+                    stageId: 'implementation',
+                    title: 'Implement task',
+                    instruction: 'Ship it.',
+                    dependsOn: [],
+                    lifecycle: 'ready',
+                    waitingOnTaskIds: [],
+                    runtime: {
+                        autostart: false
+                    },
+                    retries: 0,
+                    createdAt: '2026-05-12T00:00:00.000Z',
+                    updatedAt: '2026-05-12T00:00:00.000Z'
+                }],
+                gates: [{
+                    gateId: 'implement',
+                    intent: 'implement',
+                    state: 'passed',
+                    reasons: [],
+                    updatedAt: '2026-05-12T00:00:00.000Z'
                 }]
             },
-            stages: [stage],
-            tasks: [task],
-            artifacts: [artifact],
-            agentExecutions: [agentExecution]
+            commands: [{
+                commandId: MissionCommandIds.pause,
+                entity: 'Mission',
+                method: 'pause',
+                targetId: 'mission:mission-1',
+                label: 'Pause Mission',
+                available: true
+            }],
+            tasks: [task]
         });
 
-        expect(MissionContract.methods?.['read']?.result).toBe(MissionSnapshotSchema);
-        expect(snapshot.commandView?.commands[0]?.command.commandId).toBe(MissionCommandIds.pause);
-        expect(snapshot.mission.missionId).toBe('mission-1');
+        expect(MissionContract.methods?.['read']?.result).toBe(MissionSchema);
+        expect(MissionContract.methods?.['readControl']?.result).toBe(MissionControlSchema);
+        expect(MissionContract.events?.['changed']?.payload).toBe(MissionChangedEventSchema);
+        expect(data.id).toBe('mission:mission-1');
+        expect(data.missionId).toBe('mission-1');
+        expect(data.tasks[0]?.taskId).toBe('implementation/01');
+        expect(data.commands?.[0]?.commandId).toBe(MissionCommandIds.pause);
+        expect(data.workflow?.currentStageId).toBe('implementation');
+        expect(data.workflow?.tasks?.[0]?.taskId).toBe('implementation/01');
+
+        const control = MissionControlSchema.parse({
+            missionId: data.missionId,
+            mission: data,
+            updatedAt: '2026-05-12T00:00:00.000Z'
+        });
+
+        expect(control.mission.commands?.[0]?.commandId).toBe(MissionCommandIds.pause);
+    });
+
+    it('uses mission as the Mission changed event payload field', () => {
+        const mission = MissionSchema.parse({
+            ...missionData,
+            tasks: [task]
+        });
+
+        expect(MissionChangedEventSchema.parse({
+            reference: { entity: 'Mission', missionId: 'mission-1' },
+            mission
+        }).mission.missionId).toBe('mission-1');
+
+        expect(() => MissionChangedEventSchema.parse({
+            reference: { entity: 'Mission', missionId: 'mission-1' },
+            data: mission
+        })).toThrow();
+    });
+
+    it('rejects invalid commands in canonical Mission data', () => {
+        expect(() => MissionSchema.parse({
+            ...missionData,
+            commands: [{ label: 'Pause Mission', available: true }],
+            tasks: [task]
+        })).toThrow();
     });
 
     it('excludes terminal snapshot channels from runtime event subscriptions', () => {
         expect(createMissionRuntimeEventSubscriptionChannels('mission-1')).not.toContain('mission:mission-1.terminal');
         expect(createMissionRuntimeEventSubscriptionChannels('mission-1')).not.toContain('agent_execution:mission-1/*.terminal');
+        expect(createMissionRuntimeEventSubscriptionChannels('mission-1')).toContain('mission:mission-1.changed');
+        expect(createMissionRuntimeEventSubscriptionChannels('mission-1')).not.toContain('mission:mission-1.data.changed');
         expect(createMissionRuntimeEventSubscriptionChannels('mission-1')).toContain('agent_execution:mission-1/*.data.changed');
         expect(createAllRuntimeEventSubscriptionChannels()).not.toContain('mission:*.terminal');
         expect(createAllRuntimeEventSubscriptionChannels()).not.toContain('agent_execution:*.terminal');

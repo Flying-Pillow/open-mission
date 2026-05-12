@@ -2,22 +2,22 @@ import { describe, expect, it } from 'vitest';
 import type { MissionDescriptor } from '../../entities/Mission/MissionSchema.js';
 import type { MissionDossierFilesystem } from '../../entities/Mission/MissionDossierFilesystem.js';
 import {
-    createMissionWorkflowConfigurationSnapshot,
-    createMissionStateData,
-    ingestMissionWorkflowEvent,
-    MissionWorkflowController,
-    type MissionStateData,
-    type MissionWorkflowEvent,
-    type MissionWorkflowEventRecord
+    createWorkflowConfigurationSnapshot,
+    createWorkflowStateData,
+    ingestWorkflowEvent,
+    WorkflowController,
+    type WorkflowStateData,
+    type WorkflowEvent,
+    type WorkflowEventRecord
 } from './index.js';
 import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../mission/workflow.js';
-import type { MissionWorkflowRequestExecutor } from './requestExecutor.js';
+import type { WorkflowRequestExecutor } from './requestExecutor.js';
 
-describe('MissionWorkflowController', () => {
+describe('WorkflowController', () => {
     it('executes machine-emitted generation requests while creating Mission runtime data', async () => {
         const adapter = createAdapter();
         const executor = createRequestExecutor();
-        const controller = new MissionWorkflowController({
+        const controller = new WorkflowController({
             adapter,
             descriptor: createDescriptor(),
             workflow: createDefaultWorkflowSettings(),
@@ -43,14 +43,14 @@ describe('MissionWorkflowController', () => {
 
     it('replays machine-derived generation requests during refresh recovery', async () => {
         const adapter = createAdapter();
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-14T09:00:00.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createDefaultWorkflowSettings()
         });
         adapter.setPersistedDocument(
-            ingestMissionWorkflowEvent(
-                createMissionStateData({
+            ingestWorkflowEvent(
+                createWorkflowStateData({
                     missionId: 'mission-42',
                     configuration,
                     createdAt: configuration.createdAt
@@ -65,7 +65,7 @@ describe('MissionWorkflowController', () => {
         );
 
         const executor = createRequestExecutor();
-        const controller = new MissionWorkflowController({
+        const controller = new WorkflowController({
             adapter,
             descriptor: createDescriptor(),
             workflow: createDefaultWorkflowSettings(),
@@ -84,7 +84,7 @@ describe('MissionWorkflowController', () => {
     it('logs applied workflow events with useful event metadata', async () => {
         const adapter = createAdapter();
         const logger = createLogger();
-        const controller = new MissionWorkflowController({
+        const controller = new WorkflowController({
             adapter,
             descriptor: createDescriptor(),
             workflow: createDefaultWorkflowSettings(),
@@ -166,32 +166,32 @@ function createDescriptor(): MissionDescriptor {
 }
 
 function createAdapter() {
-    let persisted: MissionStateData | undefined;
-    const eventLog: MissionWorkflowEventRecord[] = [];
+    let persisted: WorkflowStateData | undefined;
+    const eventLog: WorkflowEventRecord[] = [];
 
     return {
-        readMissionStateDataFile: async () => persisted,
+        readWorkflowStateDataFile: async () => persisted,
         readMissionEventLogFile: async () => [...eventLog],
-        writeMissionStateDataFile: async (_missionDir: string, document: MissionStateData) => {
+        writeWorkflowStateDataFile: async (_missionDir: string, document: WorkflowStateData) => {
             persisted = document;
         },
-        appendMissionEventRecordFile: async (_missionDir: string, eventRecord: MissionWorkflowEventRecord) => {
+        appendMissionEventRecordFile: async (_missionDir: string, eventRecord: WorkflowEventRecord) => {
             eventLog.push(eventRecord);
         },
         listTaskStates: async () => [],
         getPersistedDocument: () => persisted,
         getPersistedEventLog: () => [...eventLog],
-        setPersistedDocument: (document: MissionStateData | undefined) => {
+        setPersistedDocument: (document: WorkflowStateData | undefined) => {
             persisted = document;
         },
-        setPersistedEventLog: (records: MissionWorkflowEventRecord[]) => {
+        setPersistedEventLog: (records: WorkflowEventRecord[]) => {
             eventLog.splice(0, eventLog.length, ...records);
         }
     } as unknown as MissionDossierFilesystem & {
-        getPersistedDocument(): MissionStateData | undefined;
-        getPersistedEventLog(): MissionWorkflowEventRecord[];
-        setPersistedDocument(document: MissionStateData | undefined): void;
-        setPersistedEventLog(records: MissionWorkflowEventRecord[]): void;
+        getPersistedDocument(): WorkflowStateData | undefined;
+        getPersistedEventLog(): WorkflowEventRecord[];
+        setPersistedDocument(document: WorkflowStateData | undefined): void;
+        setPersistedEventLog(records: WorkflowEventRecord[]): void;
     };
 }
 
@@ -224,12 +224,12 @@ function createRequestExecutor() {
         commandRuntimeAgentExecution: async () => [],
         terminateRuntimeAgentExecution: async () => [],
         getExecutedRequestTypes: () => executedRequestTypes
-    } as unknown as MissionWorkflowRequestExecutor & {
+    } as unknown as WorkflowRequestExecutor & {
         getExecutedRequestTypes(): string[];
     };
 }
 
-function createGeneratedTasksEvent(stageId: string, occurredAt: string): MissionWorkflowEvent {
+function createGeneratedTasksEvent(stageId: string, occurredAt: string): WorkflowEvent {
     return {
         eventId: `tasks.generated:${stageId}:${occurredAt}`,
         type: 'tasks.generated',

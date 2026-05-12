@@ -50,7 +50,7 @@ describe('entity remote invocation schemas', () => {
             entityFormInvocationSchema.parse({
                 entity: 'Repository',
                 method: 'startMissionFromBrief',
-                payload: { id: 'repo-1', title: 'Title', body: 'Body', type: 'feature' }
+                payload: { id: 'repo-1', title: 'Title', body: 'Body' }
             })
         ).not.toThrow();
     });
@@ -94,13 +94,13 @@ describe('entity remote dispatch', () => {
         const invocation: EntityFormInvocation = {
             entity: 'Repository',
             method: 'startMissionFromBrief',
-            payload: { id: 'repo-1', title: 'Title', body: 'Body', type: 'feature' }
+            payload: { id: 'repo-1', title: 'Title', body: 'Body' }
         };
 
         await expect(executeEntityForm(gateway, invocation)).resolves.toEqual({
             entity: 'Repository',
             method: 'startMissionFromBrief',
-            payload: { id: 'repo-1', title: 'Title', body: 'Body', type: 'feature' }
+            payload: { id: 'repo-1', title: 'Title', body: 'Body' }
         });
         expect(gateway.executeEntityCommand).toHaveBeenCalledWith(invocation);
     });

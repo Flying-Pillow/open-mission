@@ -2,18 +2,19 @@
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 import { AgentExecutionCommandIds, type AgentExecutionCommandType, type AgentExecutionPromptType, type AgentExecutionDataType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import type { AgentExecutionJournalRecordType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionJournalSchema';
-import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
+import { Entity } from '$lib/components/entities/Entity/Entity.svelte.js';
 
 export type AgentExecutionDependencies = {
     resolveCommands(agentExecutionId: string): EntityCommandDescriptorType[];
     executeCommand(ownerId: string, agentExecutionId: string, commandId: string, input?: unknown): Promise<void>;
 };
 
-export class AgentExecution implements EntityModel<AgentExecutionDataType> {
+export class AgentExecution extends Entity<AgentExecutionDataType> {
     private dataState = $state<AgentExecutionDataType | undefined>();
     private readonly dependencies: AgentExecutionDependencies;
 
     public constructor(data: AgentExecutionDataType, dependencies: AgentExecutionDependencies) {
+        super();
         this.data = data;
         this.dependencies = dependencies;
     }
@@ -49,6 +50,13 @@ export class AgentExecution implements EntityModel<AgentExecutionDataType> {
 
     public get entityId(): string {
         return this.agentExecutionId;
+    }
+
+    protected get entityLocator(): Record<string, unknown> {
+        return {
+            ownerId: this.ownerId,
+            agentExecutionId: this.agentExecutionId
+        };
     }
 
     public get taskId(): string | undefined {
@@ -174,8 +182,9 @@ export class AgentExecution implements EntityModel<AgentExecutionDataType> {
         return this;
     }
 
-    public async executeCommand(commandId: string, input?: unknown): Promise<void> {
+    public async executeCommand<TResult = unknown>(commandId: string, input?: unknown): Promise<TResult> {
         await this.dependencies.executeCommand(this.ownerId, this.agentExecutionId, commandId, input);
+        return undefined as TResult;
     }
 
     public async sendCommand(command: AgentExecutionCommandType): Promise<this> {

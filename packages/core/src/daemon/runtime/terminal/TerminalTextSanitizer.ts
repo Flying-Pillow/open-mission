@@ -23,7 +23,6 @@ export function sanitizeTerminalOutputChunkForSurface(chunk: string): string {
 
 export function sanitizeTerminalTextForSurface(value: string): string {
     return stripTerminalAlternateScreenSequences(stripTerminalOscSequences(value))
-        .replace(TERMINAL_ESCAPE_SEQUENCE_PATTERN, (sequence) => TERMINAL_SGR_SEQUENCE_PATTERN.test(sequence) ? sequence : '')
         .replace(TERMINAL_SURFACE_CONTROL_CHAR_PATTERN, '');
 }
 

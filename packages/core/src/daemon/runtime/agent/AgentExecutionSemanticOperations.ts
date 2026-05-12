@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { AgentExecutionScope } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import type { AgentExecutionJournalRecordType } from '../../../entities/AgentExecution/AgentExecutionJournalSchema.js';
-import { AgentExecutionFactRecorder } from './AgentExecutionFactRecorder.js';
+import type { AgentExecutionJournalWriter } from '../../../entities/AgentExecution/AgentExecutionJournalWriter.js';
 import { ArtifactService } from './ArtifactService.js';
 
 type AgentExecutionSemanticOperationHandler = {
@@ -67,12 +67,12 @@ export class AgentExecutionSemanticOperations {
 
     public constructor(input: {
         artifactService: ArtifactService;
-        factRecorder: AgentExecutionFactRecorder;
+        journalWriter: AgentExecutionJournalWriter;
     }) {
         const handlers = [
             createReadArtifactOperationHandler({
                 artifactService: input.artifactService,
-                factRecorder: input.factRecorder
+                journalWriter: input.journalWriter
             })
         ];
         this.handlersByName = new Map(handlers.map((handler) => [handler.name, handler]));
@@ -118,7 +118,7 @@ function requireRepositoryRootPathForSemanticAccess(scope: AgentExecutionScope, 
 
 function createReadArtifactOperationHandler(input: {
     artifactService: ArtifactService;
-    factRecorder: AgentExecutionFactRecorder;
+    journalWriter: AgentExecutionJournalWriter;
 }): AgentExecutionSemanticOperationHandler {
     return {
         name: READ_ARTIFACT_OPERATION_NAME,
@@ -128,17 +128,21 @@ function createReadArtifactOperationHandler(input: {
                 repositoryRootPath,
                 artifactPath: request.input.path
             });
-            const fact = await input.factRecorder.recordArtifactRead({
+            const fact = await input.journalWriter.appendRuntimeFact({
                 agentExecutionId: request.agentExecutionId,
                 scope: request.scope,
-                operationName: request.name,
+                factType: 'artifact-read',
                 path: artifact.path,
-                ...(request.onRecordAppended ? { onRecordAppended: request.onRecordAppended } : {})
+                detail: 'Mission recorded an artifact-read runtime fact.',
+                payload: {
+                    operationName: request.name
+                }
             });
+            await request.onRecordAppended?.(fact);
             return {
                 operationName: request.name,
                 agentExecutionId: request.agentExecutionId,
-                eventId: request.input.eventId?.trim() || fact.eventId,
+                eventId: request.input.eventId?.trim() || fact.factId,
                 path: artifact.path,
                 content: artifact.content,
                 factType: 'artifact-read'

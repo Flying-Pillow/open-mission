@@ -1,14 +1,14 @@
-// /apps/airport/web/src/lib/components/entities/shared/EntityModel.svelte.ts: Shared contracts and reconciliation registry for OO client entities.
-export interface EntityModel<TData, TId extends string = string> {
+// /apps/airport/web/src/lib/components/entities/Entity/EntityRegistry.svelte.ts: Reconciliation registry for OO client entities.
+type RegistryEntity<TData, TId extends string = string> = {
     readonly id: TId;
-    updateFromData(data: TData): this;
+    updateFromData(data: TData): RegistryEntity<TData, TId>;
     toData(): TData;
-}
+};
 
 export class EntityRegistry<
     TId extends string,
     TData,
-    TEntity extends EntityModel<TData, TId>
+    TEntity extends RegistryEntity<TData, TId>
 > {
     private entities = new Map<TId, TEntity>();
     private version = $state(0);

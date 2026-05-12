@@ -1,13 +1,12 @@
 import { z } from 'zod/v4';
-import { EntityIdSchema } from '../Entity/EntitySchema.js';
-import { MissionReasoningEffortSchema } from '../Mission/MissionSchema.js';
+import { EntityStorageSchema } from '../Entity/EntitySchema.js';
+import { AgentExecutionReasoningEffortSchema } from '../AgentExecution/AgentExecutionProtocolSchema.js';
 
 export const agentEntityName = 'Agent' as const;
 
 export const AgentIdSchema = z.string().trim().min(1);
 
-export const AgentPrimaryDataSchema = z.object({
-    id: EntityIdSchema,
+export const AgentPrimaryDataSchema = EntityStorageSchema.extend({
     agentId: AgentIdSchema,
     displayName: z.string().trim().min(1)
 }).strict();
@@ -34,7 +33,7 @@ export const AgentModelOptionSchema = z.object({
 
 export const AgentOptionCatalogSchema = z.object({
     models: z.array(AgentModelOptionSchema),
-    reasoningEfforts: z.array(MissionReasoningEffortSchema)
+    reasoningEfforts: z.array(AgentExecutionReasoningEffortSchema)
 }).strict();
 
 export const AgentLocatorSchema = z.object({
@@ -46,16 +45,13 @@ export const AgentFindSchema = z.object({
     repositoryRootPath: z.string().trim().min(1).optional()
 }).strict();
 
-export const AgentStorageSchema = z.object({
-    ...AgentPrimaryDataSchema.shape,
+export const AgentStorageSchema = AgentPrimaryDataSchema.extend({
     capabilities: AgentCapabilitySchema,
     availability: AgentAvailabilitySchema,
     optionCatalog: AgentOptionCatalogSchema
 }).strict();
 
-export const AgentDataSchema = z.object({
-    ...AgentStorageSchema.shape
-}).strict();
+export const AgentDataSchema = AgentStorageSchema.extend({}).strict();
 
 export const AgentFindResultSchema = z.array(AgentDataSchema);
 

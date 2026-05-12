@@ -4,19 +4,19 @@ import {
     terminalEntityName,
     TerminalInputSchema,
     TerminalLocatorSchema,
-    TerminalSnapshotSchema,
+    TerminalSchema,
     type TerminalInputType,
-    type TerminalSnapshotType
+    type TerminalType
 } from './TerminalSchema.js';
 
-export class Terminal extends Entity<TerminalSnapshotType, string> {
+export class Terminal extends Entity<TerminalType, string> {
     public static override readonly entityName = terminalEntityName;
 
     public static createEntityId(terminalName: string): string {
         return createEntityId('terminal', terminalName.trim());
     }
 
-    public static read(payload: unknown, _context?: EntityExecutionContext): TerminalSnapshotType {
+    public static read(payload: unknown, _context?: EntityExecutionContext): TerminalType {
         const input = TerminalLocatorSchema.parse(payload);
         const registry = TerminalRegistry.shared();
         const handle = registry.attachTerminal(input.terminalName);
@@ -28,7 +28,7 @@ export class Terminal extends Entity<TerminalSnapshotType, string> {
         );
     }
 
-    public static sendInput(payload: unknown, context?: EntityExecutionContext): TerminalSnapshotType {
+    public static sendInput(payload: unknown, context?: EntityExecutionContext): TerminalType {
         const input = TerminalInputSchema.parse(payload);
         const registry = TerminalRegistry.shared();
         const handle = registry.attachTerminal(input.terminalName);
@@ -41,8 +41,8 @@ export class Terminal extends Entity<TerminalSnapshotType, string> {
         }, context);
     }
 
-    public constructor(snapshot: TerminalSnapshotType) {
-        super(TerminalSnapshotSchema.parse(snapshot));
+    public constructor(snapshot: TerminalType) {
+        super(TerminalSchema.parse(snapshot));
     }
 
     public get id(): string {
@@ -63,8 +63,8 @@ function sendTerminalInput(registry: TerminalRegistry, terminalName: string, inp
     }
 }
 
-function createTerminalEntitySnapshot(snapshot: RegistryTerminalSnapshot): TerminalSnapshotType {
-    return TerminalSnapshotSchema.parse({
+function createTerminalEntitySnapshot(snapshot: RegistryTerminalSnapshot): TerminalType {
+    return TerminalSchema.parse({
         terminalName: snapshot.terminalName,
         terminalPaneId: snapshot.terminalPaneId,
         connected: snapshot.connected,
@@ -81,8 +81,8 @@ function createTerminalEntitySnapshot(snapshot: RegistryTerminalSnapshot): Termi
     });
 }
 
-function createDisconnectedTerminalSnapshot(terminalName: string, terminalPaneId: string): TerminalSnapshotType {
-    return TerminalSnapshotSchema.parse({
+function createDisconnectedTerminalSnapshot(terminalName: string, terminalPaneId: string): TerminalType {
+    return TerminalSchema.parse({
         terminalName,
         terminalPaneId,
         connected: false,

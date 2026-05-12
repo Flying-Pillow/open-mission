@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-	createMissionWorkflowConfigurationSnapshot,
-	createMissionStateData,
+	createWorkflowConfigurationSnapshot,
+	createWorkflowStateData,
 	resolvePendingTaskGenerationStageId
 } from './index.js';
 import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../mission/workflow.js';
@@ -9,12 +9,12 @@ import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../miss
 describe('resolvePendingTaskGenerationStageId', () => {
 	it('allows template-backed generation for an empty eligible stage', () => {
 		const workflow = createDefaultWorkflowSettings();
-		const configuration = createMissionWorkflowConfigurationSnapshot({
+		const configuration = createWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-21T18:00:00.000Z',
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow
 		});
-		const document = createMissionStateData({
+		const document = createWorkflowStateData({
 			missionId: 'mission-doom',
 			configuration,
 			createdAt: configuration.createdAt
@@ -36,12 +36,12 @@ describe('resolvePendingTaskGenerationStageId', () => {
 
 	it('allows artifact-backed generation for an empty eligible stage', () => {
 		const workflow = createDefaultWorkflowSettings();
-		const configuration = createMissionWorkflowConfigurationSnapshot({
+		const configuration = createWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-21T18:00:00.000Z',
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow
 		});
-		const document = createMissionStateData({
+		const document = createWorkflowStateData({
 			missionId: 'mission-implementation',
 			configuration,
 			createdAt: configuration.createdAt

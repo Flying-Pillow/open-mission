@@ -1,4 +1,5 @@
 <script lang="ts">
+    import type { Snippet } from "svelte";
     import * as AlertDialog from "$lib/components/ui/alert-dialog/index.js";
     import {
         Button,
@@ -17,6 +18,8 @@
         label,
         onCommandExecuted,
         resolveCommandInput,
+        loadCommandConfirmationContext,
+        commandConfirmationDetails,
         class: className,
         buttonClass = "",
         defaultVariant = "default",
@@ -33,6 +36,19 @@
             command: EntityCommandDescriptorType,
         ) => Promise<void>;
         resolveCommandInput?: (command: EntityCommandDescriptorType) => unknown;
+        loadCommandConfirmationContext?: (
+            command: EntityCommandDescriptorType,
+        ) => Promise<unknown>;
+        commandConfirmationDetails?: Snippet<
+            [
+                {
+                    command: EntityCommandDescriptorType;
+                    loading: boolean;
+                    error: string | null;
+                    context: unknown;
+                },
+            ]
+        >;
         class?: string;
         buttonClass?: string;
         defaultVariant?: ButtonVariant;
@@ -47,11 +63,15 @@
     let confirmationCommand = $state<EntityCommandDescriptorType | null>(null);
     let confirmationOpen = $state(false);
     let commandMenuOpen = $state(false);
+    let confirmationContext = $state<unknown>(undefined);
+    let confirmationContextLoading = $state(false);
+    let confirmationContextError = $state<string | null>(null);
     let confirmationResolver: ((confirmed: boolean) => void) | null = null;
+    let confirmationLoadVersion = 0;
 
     const commands = $derived(entity?.commands ?? []);
-    const availableCommands = $derived(
-        commands.filter((command) => !command.disabled),
+    const activeCommands = $derived(
+        commands.filter((command) => command.available),
     );
     $effect(() => {
         refreshNonce;
@@ -113,7 +133,7 @@
     async function executeCommand(
         command: EntityCommandDescriptorType,
     ): Promise<void> {
-        if (!entity || commandPending || command.disabled) {
+        if (!entity || commandPending || !command.available) {
             return;
         }
 
@@ -136,16 +156,59 @@
             resolveCommandConfirmation(false);
         }
 
+        resetConfirmationContext();
         confirmationCommand = command;
         confirmationOpen = true;
+        void hydrateConfirmationContext(command);
         return new Promise((resolve) => {
             confirmationResolver = resolve;
         });
     }
 
+    function resetConfirmationContext(): void {
+        confirmationLoadVersion += 1;
+        confirmationContext = undefined;
+        confirmationContextLoading = false;
+        confirmationContextError = null;
+    }
+
+    async function hydrateConfirmationContext(
+        command: EntityCommandDescriptorType,
+    ): Promise<void> {
+        if (!loadCommandConfirmationContext) {
+            return;
+        }
+
+        const currentLoadVersion = ++confirmationLoadVersion;
+        confirmationContextLoading = true;
+        confirmationContextError = null;
+        confirmationContext = undefined;
+
+        try {
+            const context = await loadCommandConfirmationContext(command);
+            if (currentLoadVersion !== confirmationLoadVersion) {
+                return;
+            }
+            confirmationContext = context;
+        } catch (loadError) {
+            if (currentLoadVersion !== confirmationLoadVersion) {
+                return;
+            }
+            confirmationContextError =
+                loadError instanceof Error
+                    ? loadError.message
+                    : String(loadError);
+        } finally {
+            if (currentLoadVersion === confirmationLoadVersion) {
+                confirmationContextLoading = false;
+            }
+        }
+    }
+
     function resolveCommandConfirmation(confirmed: boolean): void {
         const resolveConfirmation = confirmationResolver;
         confirmationResolver = null;
+        resetConfirmationContext();
         confirmationCommand = null;
         confirmationOpen = false;
         resolveConfirmation?.(confirmed);
@@ -178,7 +241,9 @@
 </script>
 
 <AlertDialog.Root bind:open={confirmationOpen}>
-    <AlertDialog.Content>
+    <AlertDialog.Content
+        class={commandConfirmationDetails ? "sm:max-w-2xl" : undefined}
+    >
         <AlertDialog.Header>
             <AlertDialog.Title>Confirm command</AlertDialog.Title>
             <AlertDialog.Description>
@@ -188,6 +253,14 @@
                         : "Confirm this command to continue.")}
             </AlertDialog.Description>
         </AlertDialog.Header>
+        {#if confirmationCommand && commandConfirmationDetails}
+            {@render commandConfirmationDetails({
+                command: confirmationCommand,
+                loading: confirmationContextLoading,
+                error: confirmationContextError,
+                context: confirmationContext,
+            })}
+        {/if}
         <AlertDialog.Footer>
             <AlertDialog.Cancel
                 onclick={() => resolveCommandConfirmation(false)}
@@ -198,6 +271,11 @@
                 variant={confirmationCommand
                     ? commandVariant(confirmationCommand)
                     : "default"}
+                disabled={confirmationContextLoading ||
+                    Boolean(
+                        loadCommandConfirmationContext &&
+                            confirmationContextError,
+                    )}
                 onclick={() => resolveCommandConfirmation(true)}
             >
                 Continue
@@ -217,11 +295,11 @@
                             size={presentation === "responsive"
                                 ? "icon-sm"
                                 : "sm"}
-                            disabled={availableCommands.length === 0 ||
+                            disabled={activeCommands.length === 0 ||
                                 commandPending !== null}
                             class={buttonClass}
                             aria-label={menuLabel}
-                            title={availableCommands.length === 0
+                            title={activeCommands.length === 0
                                 ? "No commands available"
                                 : menuLabel}
                             {...props}
@@ -247,16 +325,16 @@
                     </DropdownMenu.Label>
                     <DropdownMenu.Separator />
                     <DropdownMenu.Group>
-                        {#each availableCommands as command (command.commandId)}
+                        {#each activeCommands as command (command.commandId)}
                             <DropdownMenu.Item
                                 variant={commandVariant(command) ===
                                 "destructive"
                                     ? "destructive"
                                     : "default"}
                                 disabled={commandPending !== null ||
-                                    command.disabled}
+                                    !command.available}
                                 onclick={() => void executeCommand(command)}
-                                title={command.disabledReason ||
+                                title={command.unavailableReason ||
                                     command.description ||
                                     command.label}
                             >
@@ -275,7 +353,7 @@
                 </DropdownMenu.Content>
             </DropdownMenu.Root>
         </div>
-        {#if availableCommands.length === 0 && showEmptyState}
+        {#if activeCommands.length === 0 && showEmptyState}
             <Button variant="outline" size="sm" disabled
                 >No commands available</Button
             >
@@ -292,12 +370,12 @@
                 <Button variant="secondary" size="sm" disabled>{label}</Button>
             {/if}
 
-            {#if availableCommands.length === 0 && showEmptyState}
+            {#if activeCommands.length === 0 && showEmptyState}
                 <Button variant="outline" size="sm" disabled
                     >No commands available</Button
                 >
             {:else}
-                {#each availableCommands as command (command.commandId)}
+                {#each activeCommands as command (command.commandId)}
                     {#if iconOnly}
                         <Tooltip.Root>
                             <Tooltip.Trigger>
@@ -306,12 +384,12 @@
                                         variant={commandVariant(command)}
                                         size="icon-sm"
                                         disabled={commandPending !== null ||
-                                            command.disabled}
+                                            !command.available}
                                         class={buttonClass}
                                         onclick={() =>
                                             void executeCommand(command)}
                                         aria-label={command.label}
-                                        title={command.disabledReason ||
+                                        title={command.unavailableReason ||
                                             command.description ||
                                             command.label}
                                         {...props}
@@ -327,7 +405,7 @@
                             <Tooltip.Content>
                                 {commandPending === command.commandId
                                     ? `${command.label}...`
-                                    : command.disabledReason ||
+                                    : command.unavailableReason ||
                                       command.description ||
                                       command.label}
                             </Tooltip.Content>
@@ -337,11 +415,11 @@
                             variant={commandVariant(command)}
                             size="sm"
                             disabled={commandPending !== null ||
-                                command.disabled}
+                                !command.available}
                             class={buttonClass}
                             onclick={() => void executeCommand(command)}
                             aria-label={command.label}
-                            title={command.disabledReason ||
+                            title={command.unavailableReason ||
                                 command.description ||
                                 command.label}
                         >

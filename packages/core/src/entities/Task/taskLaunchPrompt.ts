@@ -1,6 +1,6 @@
-import type { MissionTaskState } from '../Mission/MissionSchema.js';
+import type { TaskDossierRecordType } from './TaskSchema.js';
 
-export function buildTaskLaunchPrompt(task: MissionTaskState, missionDir: string): string {
+export function buildTaskLaunchPrompt(task: TaskDossierRecordType, missionDir: string): string {
 	const instruction = task.instruction.trim();
 	const artifactName = task.fileName.trim();
 	const lines = [
@@ -22,7 +22,7 @@ export function buildTaskLaunchPrompt(task: MissionTaskState, missionDir: string
 
 export function appendTaskContextArtifactReferences(
 	lines: string[],
-	context: MissionTaskState['context']
+	context: TaskDossierRecordType['context']
 ): void {
 	const orderedContext = [...(context ?? [])].sort((left, right) => left.selectionPosition - right.selectionPosition);
 	if (orderedContext.length === 0) {

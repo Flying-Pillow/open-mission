@@ -418,6 +418,10 @@ type FakeManagedAgentExecutionOptions = {
 class FakeManagedAgentExecution implements FakeAgentExecution {
 	public constructor(private readonly options: FakeManagedAgentExecutionOptions) { }
 
+	public get agentExecutionId(): string {
+		return this.options.getSnapshot().agentExecutionId;
+	}
+
 	public get reference(): AgentExecutionReference {
 		return this.options.getSnapshot().reference;
 	}
@@ -476,6 +480,14 @@ class FakeManagedAgentExecution implements FakeAgentExecution {
 
 	public fail(reason: string): void {
 		this.options.fail(reason);
+	}
+
+	public replaceJournalRecords(): void {
+		return;
+	}
+
+	public setAwaitingResponseToMessageId(): void {
+		return;
 	}
 }
 
@@ -612,6 +624,7 @@ function buildCommandPrompt(command: Exclude<AgentCommand, { type: 'interrupt' }
 		case 'nudge':
 			return { source: 'system', text: command.reason?.trim() || 'Continue with the assigned task.' };
 	}
+	throw new Error(`Unsupported AgentExecution command '${String((command as { type: string }).type)}'.`);
 }
 
 function toLegacySnapshot(snapshot: AgentExecutionSnapshot, transportId?: string): FakeAgentExecutionSnapshot {

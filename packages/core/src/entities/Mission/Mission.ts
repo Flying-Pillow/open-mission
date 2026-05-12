@@ -1,22 +1,22 @@
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import {
-	MissionAgentEventEmitter,
-	type MissionAgentDisposable
+	AgentRuntimeEventEmitter,
+	type AgentRuntimeDisposable
 } from '../../daemon/runtime/agent/events.js';
+import type { EntityCommandDescriptorType } from '../Entity/EntitySchema.js';
 import {
-	type MissionAgentConsoleEvent,
-	type MissionAgentConsoleState,
-	type MissionAgentEvent,
-	type MissionTerminalSnapshotType,
-	type MissionDefaultAgentModeType,
-	type MissionReasoningEffortType,
 	type MissionCommandAcknowledgementType,
-	type MissionDataType,
-	type MissionLocatorType,
-	type MissionCommandViewSnapshotType,
-	type MissionOwnedCommandDescriptorType
+	type MissionStorageType,
+	type MissionLocatorType
 } from './MissionSchema.js';
 import type {
+	AgentExecutionLaunchModeType,
+	AgentExecutionReasoningEffortType
+} from '../AgentExecution/AgentExecutionProtocolSchema.js';
+import type {
+	AgentExecutionConsoleEvent,
+	AgentExecutionConsoleState,
+	AgentExecutionOwnerEvent,
 	AgentExecutionLifecycleStateType,
 	AgentExecutionLaunchRequest,
 	AgentExecutionRecord
@@ -28,31 +28,25 @@ import type {
 import { AgentExecution } from '../AgentExecution/AgentExecution.js';
 import { AgentExecutionTerminalRecordingWriter } from '../AgentExecution/AgentExecutionTerminalRecordingWriter.js';
 import {
-	type MissionTaskUpdate,
 	type GateIntent,
 	type MissionBrief,
 	type MissionDescriptor as MissionDossierDescriptor,
 	type MissionGateResult,
 	type MissionRecord,
 	type MissionSelector,
-	type MissionTaskState,
-	type MissionType,
-	type OperatorStatus
+	type MissionEntityTypeType
 } from './MissionSchema.js';
 import { MISSION_STAGES, type MissionStageId } from '../../workflow/mission/manifest.js';
 import { MissionDossierFilesystem } from './MissionDossierFilesystem.js';
-import { DEFAULT_WORKFLOW_VERSION } from '../../workflow/mission/workflow.js';
 import {
-	MissionWorkflowController,
-	MissionWorkflowRequestExecutor,
-	createDraftMissionWorkflowRuntimeState,
-	createMissionStateData,
-	createMissionWorkflowConfigurationSnapshot,
-	type MissionWorkflowConfigurationSnapshot,
-	type MissionWorkflowEvent,
-	type MissionWorkflowEventRecord,
-	type MissionStateData,
-	type MissionTaskArtifactReference,
+	WorkflowController,
+	WorkflowRequestExecutor,
+	createWorkflowStateData,
+	type WorkflowConfigurationSnapshot,
+	type WorkflowEvent,
+	type WorkflowEventRecord,
+	type WorkflowStateData,
+	type WorkflowTaskArtifactReference,
 	type WorkflowDefinition
 } from '../../workflow/engine/index.js';
 import type { AgentAdapter } from '../../daemon/runtime/agent/AgentAdapter.js';
@@ -68,40 +62,65 @@ import { Task, type TaskConfigureOptions } from '../Task/Task.js';
 import { AgentRegistry } from '../Agent/AgentRegistry.js';
 import { Repository } from '../Repository/Repository.js';
 import type { ArtifactDataType } from '../Artifact/ArtifactSchema.js';
-import type { TaskDataType } from '../Task/TaskSchema.js';
+import { TaskSchema, type TaskDataType, type TaskDossierRecordType, type TaskDossierRecordUpdateType, type TaskType } from '../Task/TaskSchema.js';
 import { Stage } from '../Stage/Stage.js';
-import type { StageDataType } from '../Stage/StageSchema.js';
+import { StageSchema, type StageDataType, type StageType } from '../Stage/StageSchema.js';
 import {
 	MissionCommandAcknowledgementSchema,
-	MissionCommandIds,
-	MissionCommandInputSchema,
-	MissionDataSchema,
-	MissionDocumentSnapshotSchema,
-	MissionEntityTypeSchema,
+	MissionStorageSchema,
+	MissionDocumentSchema,
+	MissionTypeSchema,
 	MissionFindSchema,
 	MissionCatalogEntrySchema,
 	missionEntityName,
 	MissionLocatorSchema,
 	MissionReadDocumentInputSchema,
-	MissionSendTerminalInputSchema,
-	MissionSnapshotSchema,
-	MissionTerminalSnapshotSchema,
-	MissionWorktreeSnapshotSchema,
+	MissionWorktreeSchema,
 	MissionWriteDocumentInputSchema,
 } from './MissionSchema.js';
 import {
-	MissionWorkflowEventRecordSchema,
-	MissionStateDataSchema
-} from '../../workflow/engine/types.js';
-import { buildMissionAvailableCommands } from './MissionAvailableCommands.js';
+	MissionSendTerminalInputSchema,
+	MissionTerminalSnapshotSchema,
+	type MissionTerminalSnapshotType
+} from '../Terminal/MissionTerminalSchema.js';
 import {
-	buildMissionControlViewSnapshot,
-	buildMissionSnapshot
+	WorkflowEventRecordSchema,
+	WorkflowStateDataSchema
+} from '../../workflow/engine/types.js';
+import { getWorkflowEventValidationErrors } from '../../workflow/engine/validation.js';
+import {
+	buildMissionControl,
+	buildMission
 } from './MissionControlView.js';
 import {
 	buildMissionStatusView,
 	resolveCurrentMissionStage
 } from './MissionStatusView.js';
+
+type MissionWorkflowStatusSnapshot = {
+	lifecycle: string;
+	currentStageId?: MissionStageId;
+	tasks: WorkflowStateData['runtime']['tasks'];
+	gates: WorkflowStateData['runtime']['gates'];
+};
+
+type MissionStatusSnapshot = {
+	stage?: MissionStageId;
+	stages?: Array<{ stage: MissionStageId; status: string; tasks: TaskDossierRecordType[] }>;
+	branchRef?: string;
+	workflow?: MissionWorkflowStatusSnapshot;
+	missionId?: string;
+	title?: string;
+	issueId?: number;
+	assignee?: MissionStorageType['assignee'];
+	type?: MissionEntityTypeType;
+	operationalMode?: string;
+	missionDir?: string;
+	missionRootDir?: string;
+	productFiles?: Record<string, string>;
+	agentExecutions?: AgentExecutionRecord[];
+	recommendedAction?: string;
+};
 
 export type MissionWorkflowBindings = {
 	workflow: WorkflowDefinition;
@@ -114,11 +133,11 @@ export type MissionWorkflowBindings = {
 	instructionsPath?: string;
 	skillsPath?: string;
 	defaultModel?: string;
-	defaultReasoningEffort?: MissionReasoningEffortType;
-	defaultMode?: MissionDefaultAgentModeType;
+	defaultReasoningEffort?: AgentExecutionReasoningEffortType;
+	defaultMode?: AgentExecutionLaunchModeType;
 };
 
-export class Mission extends Entity<MissionDataType, string> {
+export class Mission extends Entity<MissionStorageType, string> {
 	public static override readonly entityName = missionEntityName;
 	private static readonly AGENT_EXECUTION_RECONCILE_TIMEOUT_MS = 1_000;
 
@@ -154,13 +173,13 @@ export class Mission extends Entity<MissionDataType, string> {
 	public async read(payload: unknown, _context: EntityExecutionContext) {
 		const input = MissionLocatorSchema.parse(payload);
 		this.assertResolvedMissionId(input.missionId);
-		return this.buildMissionSnapshot();
+		return this.buildMission();
 	}
 
-	public async readControlView(payload: unknown, _context: EntityExecutionContext) {
+	public async readControl(payload: unknown, _context: EntityExecutionContext) {
 		const input = MissionLocatorSchema.parse(payload);
 		this.assertResolvedMissionId(input.missionId);
-		return this.buildMissionControlViewSnapshot();
+		return this.buildMissionControl();
 	}
 
 	public async readDocument(payload: unknown, _context: EntityExecutionContext) {
@@ -168,7 +187,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		this.assertResolvedMissionId(input.missionId);
 		await this.adapter.assertFilePath(input.path, 'read');
 		const fileBody = await this.adapter.readFileBody(input.path);
-		return MissionDocumentSnapshotSchema.parse({
+		return MissionDocumentSchema.parse({
 			filePath: fileBody.filePath,
 			content: fileBody.body,
 			...(fileBody.updatedAt ? { updatedAt: fileBody.updatedAt } : {})
@@ -179,7 +198,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		const input = MissionLocatorSchema.parse(payload);
 		const missionId = this.assertResolvedMissionId(input.missionId);
 		const rootPath = this.adapter.getMissionWorktreePath(missionId);
-		return MissionWorktreeSnapshotSchema.parse({
+		return MissionWorktreeSchema.parse({
 			rootPath,
 			fetchedAt: new Date().toISOString(),
 			tree: await this.adapter.readDirectoryTree(rootPath, rootPath)
@@ -200,26 +219,32 @@ export class Mission extends Entity<MissionDataType, string> {
 		return Mission.parseTerminalSnapshot(missionId, state);
 	}
 
-	public async command(payload: unknown, _context: EntityExecutionContext) {
-		const input = MissionCommandInputSchema.parse(payload);
+	public async pause(payload: unknown, _context: EntityExecutionContext): Promise<MissionCommandAcknowledgementType> {
+		const input = MissionLocatorSchema.parse(payload);
 		this.assertResolvedMissionId(input.missionId);
-		switch (input.commandId) {
-			case MissionCommandIds.pause:
-				await this.pauseMission();
-				break;
-			case MissionCommandIds.resume:
-				await this.resumeMission();
-				break;
-			case MissionCommandIds.restartQueue:
-				await this.restartLaunchQueue();
-				break;
-			case MissionCommandIds.deliver:
-				await this.deliver();
-				break;
-			default:
-				throw new Error(`Mission command '${input.commandId}' is not implemented in the daemon.`);
-		}
-		return Mission.buildCommandAcknowledgement(input, 'command');
+		await this.pauseMission();
+		return Mission.buildCommandAcknowledgement(input, 'pause');
+	}
+
+	public async resume(payload: unknown, _context: EntityExecutionContext): Promise<MissionCommandAcknowledgementType> {
+		const input = MissionLocatorSchema.parse(payload);
+		this.assertResolvedMissionId(input.missionId);
+		await this.resumeMission();
+		return Mission.buildCommandAcknowledgement(input, 'resume');
+	}
+
+	public async restartQueue(payload: unknown, _context: EntityExecutionContext): Promise<MissionCommandAcknowledgementType> {
+		const input = MissionLocatorSchema.parse(payload);
+		this.assertResolvedMissionId(input.missionId);
+		await this.restartLaunchQueue();
+		return Mission.buildCommandAcknowledgement(input, 'restartQueue');
+	}
+
+	public async deliver(payload: unknown, _context: EntityExecutionContext): Promise<MissionCommandAcknowledgementType> {
+		const input = MissionLocatorSchema.parse(payload);
+		this.assertResolvedMissionId(input.missionId);
+		await this.deliverMission();
+		return Mission.buildCommandAcknowledgement(input, 'deliver');
 	}
 
 	public async writeDocument(payload: unknown, _context: EntityExecutionContext) {
@@ -227,7 +252,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		this.assertResolvedMissionId(input.missionId);
 		await this.adapter.assertFilePath(input.path, 'write');
 		const fileBody = await this.adapter.writeFileBody(input.path, input.content);
-		return MissionDocumentSnapshotSchema.parse({
+		return MissionDocumentSchema.parse({
 			filePath: fileBody.filePath,
 			content: fileBody.body,
 			...(fileBody.updatedAt ? { updatedAt: fileBody.updatedAt } : {})
@@ -309,19 +334,19 @@ export class Mission extends Entity<MissionDataType, string> {
 		});
 	}
 
-	private readonly agentConsoleEventEmitter = new MissionAgentEventEmitter<MissionAgentConsoleEvent>();
-	private readonly agentEventEmitter = new MissionAgentEventEmitter<MissionAgentEvent>();
+	private readonly agentConsoleEventEmitter = new AgentRuntimeEventEmitter<AgentExecutionConsoleEvent>();
+	private readonly agentEventEmitter = new AgentRuntimeEventEmitter<AgentExecutionOwnerEvent>();
 	private readonly agentRegistry: AgentRegistry;
-	private readonly consoleStates = new Map<string, MissionAgentConsoleState>();
+	private readonly consoleStates = new Map<string, AgentExecutionConsoleState>();
 	private descriptor: MissionDossierDescriptor;
 	private agentExecutionRecords: AgentExecutionRecord[] = [];
-	private lastKnownStatus: OperatorStatus | undefined;
-	private lastKnownCommandSnapshot: MissionCommandViewSnapshotType | undefined;
-	private readonly workflowRequestExecutor: MissionWorkflowRequestExecutor;
-	private readonly workflowController: MissionWorkflowController;
+	private lastKnownStatus: MissionStatusSnapshot | undefined;
+	private lastKnownCommands: EntityCommandDescriptorType[] | undefined;
+	private readonly workflowRequestExecutor: WorkflowRequestExecutor;
+	private readonly workflowController: WorkflowController;
 	private readonly workflowResolver: () => WorkflowDefinition;
 	private readonly terminalRecordingWriter: AgentExecutionTerminalRecordingWriter;
-	private readonly agentExecutionEventSubscription: MissionAgentDisposable;
+	private readonly agentExecutionEventSubscription: AgentRuntimeDisposable;
 	private agentExecutionLifecycleIngestionQueue: Promise<void> = Promise.resolve();
 	private workflowEventApplicationQueue: Promise<void> = Promise.resolve();
 
@@ -333,14 +358,14 @@ export class Mission extends Entity<MissionDataType, string> {
 		private readonly missionDir: string,
 		descriptor: MissionDossierDescriptor,
 		workflowBindings: MissionWorkflowBindings,
-		initialData?: MissionDataType
+		initialData?: MissionStorageType
 	) {
 		super(Mission.cloneData(initialData ?? Mission.createDataFromDescriptor(adapter, missionDir, descriptor)));
 		this.descriptor = descriptor;
 		this.workflowResolver = workflowBindings.resolveWorkflow ?? (() => workflowBindings.workflow);
 		this.agentRegistry = workflowBindings.agentRegistry;
 		this.terminalRecordingWriter = new AgentExecutionTerminalRecordingWriter(this.adapter, this.missionDir, this.descriptor.missionId);
-		this.workflowRequestExecutor = new MissionWorkflowRequestExecutor({
+		this.workflowRequestExecutor = new WorkflowRequestExecutor({
 			adapter: this.adapter,
 			agentRegistry: workflowBindings.agentRegistry,
 			...(workflowBindings.instructionsPath
@@ -352,7 +377,13 @@ export class Mission extends Entity<MissionDataType, string> {
 				? { defaultReasoningEffort: workflowBindings.defaultReasoningEffort }
 				: {}),
 			...(workflowBindings.defaultMode ? { defaultMode: workflowBindings.defaultMode } : {}),
-			...(workflowBindings.logger?.debug ? { logger: { debug: workflowBindings.logger.debug } } : {})
+			...(workflowBindings.logger?.debug
+				? {
+					logger: {
+						debug: (message, metadata) => workflowBindings.logger?.debug?.(message, metadata)
+					}
+				}
+				: {})
 		});
 		this.agentExecutionEventSubscription = this.workflowRequestExecutor.onDidRuntimeEvent((event) => {
 			this.handleAgentExecutionRuntimeEvent(event);
@@ -360,7 +391,7 @@ export class Mission extends Entity<MissionDataType, string> {
 				this.enqueueAgentExecutionLifecycleIngestion();
 			}
 		});
-		this.workflowController = new MissionWorkflowController({
+		this.workflowController = new WorkflowController({
 			adapter: this.adapter,
 			descriptor,
 			workflow: workflowBindings.workflow,
@@ -455,12 +486,12 @@ export class Mission extends Entity<MissionDataType, string> {
 		this.descriptor = nextDescriptor;
 		const document = await this.workflowController.refresh();
 		this.syncAgentExecutions(document);
-		this.lastKnownCommandSnapshot = undefined;
+		this.lastKnownCommands = undefined;
 		this.lastKnownStatus = await this.buildStatus(document);
 		return this;
 	}
 
-	public async status(): Promise<OperatorStatus> {
+	private async readStatusView(): Promise<MissionStatusSnapshot> {
 		await this.agentExecutionLifecycleIngestionQueue;
 		if (
 			this.lastKnownStatus
@@ -474,28 +505,85 @@ export class Mission extends Entity<MissionDataType, string> {
 			reconcileExecutions: this.hasActiveAgentExecutions()
 		});
 		this.syncAgentExecutions(document);
-		this.lastKnownCommandSnapshot = undefined;
+		this.lastKnownCommands = undefined;
 		this.lastKnownStatus = await this.buildStatus(document);
 		return this.lastKnownStatus;
 	}
 
 	public async toEntity(): Promise<Mission> {
-		this.data = Mission.createDataFromStatus(await this.status());
+		this.data = Mission.createDataFromStatus(await this.readStatusView());
 		return this;
 	}
 
-	public async listAvailableCommands(): Promise<MissionOwnedCommandDescriptorType[]> {
-		return (await this.listAvailableCommandSnapshot()).commands;
+	public async canPause() {
+		const document = await this.readLiveWorkflowDocument({
+			reconcileExecutions: this.hasActiveAgentExecutions()
+		});
+		if (document.runtime.lifecycle !== 'running') {
+			return this.unavailable(describePauseUnavailable(document.runtime.lifecycle));
+		}
+		return this.available();
 	}
 
-	public async listAvailableCommandSnapshot(): Promise<MissionCommandViewSnapshotType> {
+	public async canResume() {
+		const document = await this.readLiveWorkflowDocument({
+			reconcileExecutions: this.hasActiveAgentExecutions()
+		});
+		const errors = this.getMissionCommandValidationErrors(document, { type: 'mission.resumed' });
+		if (document.runtime.lifecycle !== 'paused') {
+			return this.unavailable('Mission is not paused.');
+		}
+		if (errors.length > 0) {
+			return this.unavailable(errors[0] ?? 'Mission cannot be resumed.');
+		}
+		return this.available();
+	}
+
+	public async canRestartQueue() {
+		const document = await this.readLiveWorkflowDocument({
+			reconcileExecutions: this.hasActiveAgentExecutions()
+		});
+		const errors = this.getMissionCommandValidationErrors(document, { type: 'mission.launch-queue.restarted' });
+		if (document.runtime.pause.paused || document.runtime.lifecycle !== 'running') {
+			return this.unavailable('Mission must be running to restart the launch queue.');
+		}
+		const hasQueuedWork = document.runtime.launchQueue.length > 0
+			|| document.runtime.tasks.some((task) => task.lifecycle === 'queued');
+		if (!hasQueuedWork) {
+			return this.unavailable('There are no queued tasks to restart.');
+		}
+		if (errors.length > 0) {
+			return this.unavailable(errors[0] ?? 'Launch queue cannot be restarted right now.');
+		}
+		return this.available();
+	}
+
+	public async canDeliver() {
+		const document = await this.readLiveWorkflowDocument({
+			reconcileExecutions: this.hasActiveAgentExecutions()
+		});
+		const errors = this.getMissionCommandValidationErrors(document, { type: 'mission.delivered' });
+		if (Mission.isRuntimeDelivered(document.runtime)) {
+			return this.unavailable('Mission already delivered.');
+		}
+		if (errors.length > 0) {
+			return this.unavailable(errors[0] ?? 'Mission cannot be delivered.');
+		}
+		return this.available();
+	}
+
+	public async listCommands(): Promise<EntityCommandDescriptorType[]> {
+		return this.readCommands();
+	}
+
+	public async readCommands(): Promise<EntityCommandDescriptorType[]> {
 		await this.agentExecutionLifecycleIngestionQueue;
 		if (
-			this.lastKnownCommandSnapshot
+			this.lastKnownCommands
 			&& this.lastKnownStatus?.workflow?.lifecycle !== 'draft'
 			&& !this.hasActiveAgentExecutions()
 		) {
-			return this.lastKnownCommandSnapshot;
+			return this.lastKnownCommands;
 		}
 
 		const document = await this.readLiveWorkflowDocument({
@@ -503,29 +591,40 @@ export class Mission extends Entity<MissionDataType, string> {
 		});
 		this.syncAgentExecutions(document);
 		this.lastKnownStatus = await this.buildStatus(document);
-		const snapshot = {
-			commands: await this.buildCommandList(document),
-			revision: this.buildCommandRevision(document)
-		};
-		this.lastKnownCommandSnapshot = snapshot;
-		return snapshot;
+		const commands = await this.buildCommandList();
+		this.lastKnownCommands = commands;
+		return commands;
 	}
 
-	public async buildMissionSnapshot() {
+	public async buildMission() {
 		const missionId = this.descriptor.missionId;
-		const entity = await this.toEntity();
-		const commandView = await this.listAvailableCommandSnapshot();
-		return buildMissionSnapshot({
+		const document = await this.readLiveWorkflowDocument({
+			reconcileExecutions: this.hasActiveAgentExecutions()
+		});
+		this.syncAgentExecutions(document);
+		this.lastKnownStatus = await this.buildStatus(document);
+		const entity = Mission.createDataFromStatus(this.lastKnownStatus);
+		this.data = Mission.cloneData(entity);
+		const commands = this.lastKnownCommands
+			&& this.lastKnownStatus.workflow?.lifecycle !== 'draft'
+			&& !this.hasActiveAgentExecutions()
+				? this.lastKnownCommands
+				: await this.buildCommandList();
+		this.lastKnownCommands = commands;
+		const stages = await this.buildHydratedStagesWithCommands(entity.stages, this.lastKnownStatus);
+		return buildMission({
 			missionId,
-			mission: MissionSnapshotSchema.shape.mission.parse(entity.toData()),
-			commandView
+			mission: MissionStorageSchema.parse(entity),
+			commands,
+			stages,
+			...(document ? { workflowDocument: document } : {})
 		});
 	}
 
-	public async buildMissionControlViewSnapshot() {
-		const snapshot = await this.buildMissionSnapshot();
-		return buildMissionControlViewSnapshot({
-			snapshot
+	public async buildMissionControl() {
+		const data = await this.buildMission();
+		return buildMissionControl({
+			data
 		});
 	}
 
@@ -539,7 +638,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		return this.descriptor.missionId;
 	}
 
-	public async startWorkflow(): Promise<OperatorStatus> {
+	public async startWorkflow(): Promise<MissionStatusSnapshot> {
 		const document = await this.workflowController.startFromDraft({
 			occurredAt: new Date().toISOString(),
 			source: 'human',
@@ -568,7 +667,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		return record ? AgentExecution.cloneRecord(record) : undefined;
 	}
 
-	public getAgentConsoleState(agentExecutionId: string): MissionAgentConsoleState | undefined {
+	public getAgentConsoleState(agentExecutionId: string): AgentExecutionConsoleState | undefined {
 		const state = this.consoleStates.get(agentExecutionId);
 		return state ? Mission.cloneAgentConsoleState(state) : undefined;
 	}
@@ -580,7 +679,7 @@ export class Mission extends Entity<MissionDataType, string> {
 			throw new Error('Mission task agentExecutions require an explicit taskId.');
 		}
 
-		await this.status();
+		await this.readStatusView();
 
 		const existingAgentExecution = this.findActiveTaskAgentExecution(request.taskId);
 		if (existingAgentExecution) {
@@ -590,7 +689,7 @@ export class Mission extends Entity<MissionDataType, string> {
 				resolveLiveAgentExecution: () => this.resolveLiveAgentExecution(existingAgentExecution)
 			}))) {
 				await this.terminateAgentExecution(existingAgentExecution.agentExecutionId, 'replaced stale task AgentExecution before relaunch');
-				await this.status();
+				await this.readStatusView();
 			} else {
 				return AgentExecution.cloneRecord(existingAgentExecution);
 			}
@@ -681,7 +780,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	public async evaluateGate(intent: GateIntent): Promise<MissionGateResult> {
-		const status = await this.status();
+		const status = await this.readStatusView();
 		const errors: string[] = [];
 		const warnings: string[] = [];
 		const currentBranch = this.adapter.getCurrentBranch(this.adapter.getMissionWorkspacePath(this.missionDir));
@@ -710,27 +809,27 @@ export class Mission extends Entity<MissionDataType, string> {
 		};
 	}
 
-	public async deliver(): Promise<MissionRecord> {
+	private async deliverMission(): Promise<MissionRecord> {
 		const gate = await this.evaluateGate('deliver');
 		if (!gate.allowed) {
 			throw new Error(gate.errors.join(' | '));
 		}
 
 		await this.applyWorkflowEvent(this.createWorkflowEvent('mission.delivered', {}));
-		await this.status();
+		await this.readStatusView();
 		return this.getRecord();
 	}
 
-	public async updateTaskState(taskId: string, changes: MissionTaskUpdate): Promise<MissionTaskState> {
+	public async updateTaskState(taskId: string, changes: TaskDossierRecordUpdateType): Promise<TaskDossierRecordType> {
 		const task = await this.requireTask(taskId);
 		if (changes.status === 'ready' || changes.status === 'queued' || changes.status === 'running') {
-			return task.start();
+			return task.startOwned();
 		}
 		if (changes.status === 'completed') {
-			return task.complete();
+			return task.completeOwned();
 		}
 		if (changes.status === 'pending') {
-			return task.reopen();
+			return task.reopenOwned();
 		}
 		return task.toState();
 	}
@@ -739,17 +838,17 @@ export class Mission extends Entity<MissionDataType, string> {
 		await this.applyWorkflowEvent(
 			this.createWorkflowEvent('mission.paused', { reason: 'human-requested', targetType: 'mission' })
 		);
-		await this.status();
+		await this.readStatusView();
 	}
 
 	public async resumeMission(): Promise<void> {
 		await this.applyWorkflowEvent(this.createWorkflowEvent('mission.resumed', {}));
-		await this.status();
+		await this.readStatusView();
 	}
 
 	public async restartLaunchQueue(): Promise<void> {
 		await this.applyWorkflowEvent(this.createWorkflowEvent('mission.launch-queue.restarted', {}));
-		await this.status();
+		await this.readStatusView();
 	}
 
 	public async startTask(taskId: string, options: { agentAdapter?: string; model?: string; reasoningEffort?: string; terminalName?: string } = {}): Promise<void> {
@@ -779,15 +878,15 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	public async completeTask(taskId: string): Promise<void> {
-		await (await this.requireTask(taskId)).complete();
+		await (await this.requireTask(taskId)).completeOwned();
 	}
 
 	public async cancelTask(taskId: string, reason?: string): Promise<void> {
-		await (await this.requireTask(taskId)).cancel(reason);
+		await (await this.requireTask(taskId)).cancelOwned(reason);
 	}
 
 	public async reopenTask(taskId: string): Promise<void> {
-		await (await this.requireTask(taskId)).reopen();
+		await (await this.requireTask(taskId)).reopenOwned();
 	}
 
 	public async reworkTask(inputTaskId: string, input: {
@@ -800,7 +899,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	}): Promise<void> {
 		await this.requireTaskState(inputTaskId);
 		await this.reworkTaskExecution(inputTaskId, input);
-		await this.status();
+		await this.readStatusView();
 	}
 
 	public async reworkTaskFromVerification(sourceTaskId: string): Promise<void> {
@@ -809,7 +908,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	public async setTaskAutostart(taskId: string, autostart: boolean): Promise<void> {
-		await (await this.requireTask(taskId)).setAutostart(autostart);
+		await (await this.requireTask(taskId)).setAutostartOwned(autostart);
 	}
 
 	public async generateTasksForStage(stageId: MissionStageId): Promise<void> {
@@ -835,10 +934,10 @@ export class Mission extends Entity<MissionDataType, string> {
 		if (!refreshedDocument.runtime.tasks.some((task) => task.stageId === stageId)) {
 			throw new Error(`Task generation for stage '${stageId}' produced no runtime tasks.`);
 		}
-		await this.status();
+		await this.readStatusView();
 	}
 
-	private async buildStatus(document?: MissionStateData): Promise<OperatorStatus> {
+	private async buildStatus(document?: WorkflowStateData): Promise<MissionStatusSnapshot> {
 		const persistedDocument = document ?? await this.workflowController.getPersistedDocument();
 		return buildMissionStatusView({
 			adapter: this.adapter,
@@ -851,67 +950,80 @@ export class Mission extends Entity<MissionDataType, string> {
 		});
 	}
 
-	private async buildCommandList(document?: MissionStateData): Promise<MissionOwnedCommandDescriptorType[]> {
-		if (!document) {
-			const workflow = this.workflowResolver();
-			const configuration = createMissionWorkflowConfigurationSnapshot({
-				createdAt: this.descriptor.createdAt,
-				workflowVersion: DEFAULT_WORKFLOW_VERSION,
-				workflow
-			});
-			const runtime = createDraftMissionWorkflowRuntimeState(configuration, this.descriptor.createdAt);
-			return this.buildAvailableCommands(configuration, runtime, []);
-		}
-
-		return this.buildAvailableCommands(
-			document.configuration,
-			document.runtime,
-			this.getAgentExecutions()
-		);
-	}
-
-	private buildCommandRevision(document?: MissionStateData): string {
-		const runtimeUpdatedAt = document?.runtime.updatedAt?.trim();
-		if (runtimeUpdatedAt) {
-			return `mission:${this.descriptor.missionId}:${runtimeUpdatedAt}`;
-		}
-		return `mission:${this.descriptor.missionId}:${this.descriptor.createdAt}`;
+	private async buildCommandList(): Promise<EntityCommandDescriptorType[]> {
+		const { MissionContract } = await import('./MissionContract.js');
+		return this.commandDescriptors(MissionContract, this.createCommandDescriptorContext());
 	}
 
 	private createWorkflowEvent(
-		type: MissionWorkflowEvent['type'],
+		type: WorkflowEvent['type'],
 		payload: Record<string, unknown>
-	): MissionWorkflowEvent {
+	): WorkflowEvent {
 		return {
 			eventId: `${this.descriptor.missionId}:${type}:${Date.now().toString(36)}`,
 			type,
 			occurredAt: new Date().toISOString(),
 			source: 'human',
 			...payload
-		} as MissionWorkflowEvent;
+		} as WorkflowEvent;
 	}
 
-	private async buildAvailableCommands(
-		configuration: MissionStateData['configuration'],
-		runtime: MissionStateData['runtime'],
-		agentExecutions: AgentExecutionRecord[]
-	): Promise<MissionOwnedCommandDescriptorType[]> {
-		const runtimeTasksForActions = await this.hydrateRuntimeTasksForActions(runtime.tasks);
-		return buildMissionAvailableCommands({
-			missionId: this.descriptor.missionId,
-			configuration,
-			runtime: {
-				...runtime,
-				tasks: runtimeTasksForActions
-			},
-			agentExecutions
-		});
+	private getMissionCommandValidationErrors(
+		document: WorkflowStateData,
+		event: { type: 'mission.resumed' } | { type: 'mission.launch-queue.restarted' } | { type: 'mission.delivered' }
+	): string[] {
+		return getWorkflowEventValidationErrors(
+			document.runtime,
+			{
+				eventId: `${this.descriptor.missionId}:command-availability`,
+				occurredAt: document.runtime.updatedAt,
+				source: 'human',
+				...event
+			} as WorkflowEvent,
+			document.configuration
+		);
+	}
+
+	private static isRuntimeDelivered(runtime: WorkflowStateData['runtime']): boolean {
+		return runtime.stages.some((stage) => stage.stageId === 'delivery' && stage.lifecycle === 'completed');
+	}
+
+	private async buildHydratedStagesWithCommands(
+		stages: StageDataType[],
+		status: MissionStatusSnapshot | undefined
+	): Promise<StageType[]> {
+		const { StageContract } = await import('../Stage/StageContract.js');
+		const { TaskContract } = await import('../Task/TaskContract.js');
+		const context = this.createCommandDescriptorContext();
+		return Promise.all(stages.map(async (stageData) => {
+			const stageCommands = await new Stage(stageData).commandDescriptors(StageContract, context);
+			const statusStage = status?.stages?.find((stage) => stage.stage === stageData.stageId);
+			const tasks = await Promise.all(stageData.tasks.map(async (taskData) => {
+				const taskState = statusStage?.tasks.find((task) => task.taskId === taskData.taskId);
+				const taskEntity = taskState ? this.createTask(taskState) : new Task(taskData);
+				return TaskSchema.parse({
+					...taskData,
+					commands: await taskEntity.commandDescriptors(TaskContract, context)
+				}) satisfies TaskType;
+			}));
+			return StageSchema.parse({
+				...stageData,
+				commands: stageCommands,
+				tasks
+			}) satisfies StageType;
+		}));
+	}
+
+	private createCommandDescriptorContext(): EntityExecutionContext {
+		return {
+			surfacePath: this.adapter.getWorkspaceRoot()
+		};
 	}
 
 	private async hydrateRuntimeTasksForActions(
-		tasks: MissionStateData['runtime']['tasks']
-	): Promise<MissionStateData['runtime']['tasks']> {
-		const fileTasksById = new Map<string, MissionTaskState>();
+		tasks: WorkflowStateData['runtime']['tasks']
+	): Promise<WorkflowStateData['runtime']['tasks']> {
+		const fileTasksById = new Map<string, TaskDossierRecordType>();
 		const fileTaskGroups = await Promise.all(
 			MISSION_STAGES.map((stageId) => this.adapter.listTaskStates(this.missionDir, stageId).catch(() => []))
 		);
@@ -936,8 +1048,8 @@ export class Mission extends Entity<MissionDataType, string> {
 
 	private async requireWorkflowTask(
 		taskId: string
-	): Promise<NonNullable<OperatorStatus['workflow']>['tasks'][number]> {
-		const status = this.lastKnownStatus ?? (await this.status());
+	): Promise<NonNullable<MissionStatusSnapshot['workflow']>['tasks'][number]> {
+		const status = this.lastKnownStatus ?? (await this.readStatusView());
 		const task = status.workflow?.tasks.find((candidate: { taskId: string }) => candidate.taskId === taskId);
 		if (!task) {
 			throw new Error(`Mission workflow task '${taskId}' does not exist.`);
@@ -945,8 +1057,8 @@ export class Mission extends Entity<MissionDataType, string> {
 		return task;
 	}
 
-	private async requireTaskState(taskId: string): Promise<MissionTaskState> {
-		const status = this.lastKnownStatus ?? (await this.status());
+	private async requireTaskState(taskId: string): Promise<TaskDossierRecordType> {
+		const status = this.lastKnownStatus ?? (await this.readStatusView());
 		for (const stage of status.stages ?? []) {
 			const task = stage.tasks.find((candidate) => candidate.taskId === taskId);
 			if (task) {
@@ -993,7 +1105,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	private async startTaskAgentExecution(
-		task: MissionTaskState,
+		task: TaskDossierRecordType,
 		adapter: AgentAdapter,
 		request: AgentExecutionLaunchRequest
 	): Promise<AgentExecutionSnapshot> {
@@ -1139,7 +1251,7 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	private async ensureAgentExecutionLifecycleRecorded(
-		document: MissionStateData,
+		document: WorkflowStateData,
 		record: AgentExecutionRecord,
 		lifecycle: 'cancelled' | 'terminated'
 	): Promise<void> {
@@ -1161,7 +1273,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		);
 	}
 
-	private createTask(task: MissionTaskState): Task {
+	private createTask(task: TaskDossierRecordType): Task {
 		return new Task({
 			missionId: this.descriptor.missionId,
 			isMissionDelivered: () => Stage.isMissionDelivered(this.lastKnownStatus?.stages ?? []),
@@ -1203,7 +1315,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		});
 	}
 
-	private syncAgentExecutions(document: MissionStateData | undefined): void {
+	private syncAgentExecutions(document: WorkflowStateData | undefined): void {
 		if (!document) {
 			this.agentExecutionRecords = [];
 			this.consoleStates.clear();
@@ -1394,10 +1506,10 @@ export class Mission extends Entity<MissionDataType, string> {
 		this.syncAgentExecutions(document);
 	}
 
-	private async applyWorkflowEvent(event: MissionWorkflowEvent): Promise<void> {
+	private async applyWorkflowEvent(event: WorkflowEvent): Promise<void> {
 		const run = this.workflowEventApplicationQueue.then(async () => {
 			await this.workflowController.applyEvent(event);
-			this.invalidateCachedMissionSnapshots();
+			this.invalidateCachedMissionState();
 		});
 		this.workflowEventApplicationQueue = run.catch(() => undefined);
 		await run;
@@ -1405,12 +1517,13 @@ export class Mission extends Entity<MissionDataType, string> {
 
 	private async readLiveWorkflowDocument(
 		options: { reconcileExecutions?: boolean } = {}
-	): Promise<MissionStateData | undefined> {
+	): Promise<WorkflowStateData | undefined> {
 		const currentDocument = await this.workflowController.getPersistedDocument();
 		if (!currentDocument) {
 			return undefined;
 		}
-		if (!options.reconcileExecutions) {
+		const shouldReconcile = options.reconcileExecutions || currentDocument.runtime.launchQueue.length > 0;
+		if (!shouldReconcile) {
 			return currentDocument;
 		}
 		try {
@@ -1427,9 +1540,9 @@ export class Mission extends Entity<MissionDataType, string> {
 		return this.agentExecutionRecords.some((execution) => Mission.isActiveAgentExecution(execution.lifecycleState));
 	}
 
-	private invalidateCachedMissionSnapshots(): void {
+	private invalidateCachedMissionState(): void {
 		this.lastKnownStatus = undefined;
-		this.lastKnownCommandSnapshot = undefined;
+		this.lastKnownCommands = undefined;
 	}
 
 	private async queueTask(taskId: string, options: { agentId?: string; prompt?: string; workingDirectory?: string; model?: string; reasoningEffort?: string; terminalName?: string } = {}): Promise<void> {
@@ -1469,7 +1582,7 @@ export class Mission extends Entity<MissionDataType, string> {
 				taskId,
 				...(reason ? { reason } : {})
 			}));
-			await this.status();
+			await this.readStatusView();
 		}
 	}
 
@@ -1483,7 +1596,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		summary: string;
 		sourceTaskId?: string;
 		sourceAgentExecutionId?: string;
-		artifactRefs?: MissionTaskArtifactReference[];
+		artifactRefs?: WorkflowTaskArtifactReference[];
 	}): Promise<void> {
 		await this.applyWorkflowEvent(this.createWorkflowEvent('task.reworked', {
 			taskId,
@@ -1507,7 +1620,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		};
 	}> {
 		const sourceWorkflowTask = await this.requireWorkflowTask(sourceTaskId);
-		const status = this.lastKnownStatus ?? (await this.status());
+		const status = this.lastKnownStatus ?? (await this.readStatusView());
 		const sourceTask = await this.requireTaskState(sourceTaskId);
 		const verificationArtifact = await this.adapter.readArtifactRecord(this.missionDir, 'verify');
 		return Task.buildVerificationReworkRequest({
@@ -1532,23 +1645,23 @@ export class Mission extends Entity<MissionDataType, string> {
 	public static async readStateData(
 		adapter: MissionDossierFilesystem,
 		missionDir: string
-	): Promise<MissionStateData | undefined> {
-		const rawData = await adapter.readMissionStateDataFile(missionDir);
-		return rawData === undefined ? undefined : MissionStateDataSchema.parse(rawData);
+	): Promise<WorkflowStateData | undefined> {
+		const rawData = await adapter.readWorkflowStateDataFile(missionDir);
+		return rawData === undefined ? undefined : WorkflowStateDataSchema.parse(rawData);
 	}
 
 	public static async writeStateData(
 		adapter: MissionDossierFilesystem,
 		missionDir: string,
-		data: MissionStateData
+		data: WorkflowStateData
 	): Promise<void> {
-		await adapter.writeMissionStateDataFile(missionDir, MissionStateDataSchema.parse(data));
+		await adapter.writeWorkflowStateDataFile(missionDir, WorkflowStateDataSchema.parse(data));
 	}
 
 	public static async appendEventRecord(
 		adapter: MissionDossierFilesystem,
 		missionDir: string,
-		eventRecord: MissionWorkflowEventRecord
+		eventRecord: WorkflowEventRecord
 	): Promise<void> {
 		await adapter.appendMissionEventRecordFile(
 			missionDir,
@@ -1559,8 +1672,8 @@ export class Mission extends Entity<MissionDataType, string> {
 	public static async readEventLog(
 		adapter: MissionDossierFilesystem,
 		missionDir: string
-	): Promise<MissionWorkflowEventRecord[]> {
-		return MissionWorkflowEventRecordSchema.array()
+	): Promise<WorkflowEventRecord[]> {
+		return WorkflowEventRecordSchema.array()
 			.parse(await adapter.readMissionEventLogFile(missionDir))
 			.map(Mission.parseEventRecord);
 	}
@@ -1569,10 +1682,10 @@ export class Mission extends Entity<MissionDataType, string> {
 		adapter: MissionDossierFilesystem;
 		missionDir: string;
 		missionId: string;
-		configuration: MissionWorkflowConfigurationSnapshot;
+		configuration: WorkflowConfigurationSnapshot;
 		createdAt?: string;
-	}): Promise<MissionStateData> {
-		const data = createMissionStateData({
+	}): Promise<WorkflowStateData> {
+		const data = createWorkflowStateData({
 			missionId: input.missionId,
 			configuration: input.configuration,
 			...(input.createdAt ? { createdAt: input.createdAt } : {})
@@ -1597,7 +1710,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		return this.data.issueId;
 	}
 
-	public get type(): MissionType | undefined {
+	public get type(): MissionEntityTypeType | undefined {
 		return this.data.type;
 	}
 
@@ -1613,7 +1726,7 @@ export class Mission extends Entity<MissionDataType, string> {
 		return this.data.missionRootDir;
 	}
 
-	public get lifecycle(): MissionDataType['lifecycle'] {
+	public get lifecycle(): MissionStorageType['lifecycle'] {
 		return this.data.lifecycle;
 	}
 
@@ -1621,19 +1734,19 @@ export class Mission extends Entity<MissionDataType, string> {
 		return this.data.updatedAt;
 	}
 
-	public get currentStageId(): MissionDataType['currentStageId'] {
+	public get currentStageId(): MissionStorageType['currentStageId'] {
 		return this.data.currentStageId;
 	}
 
-	public get artifacts(): MissionDataType['artifacts'] {
+	public get artifacts(): MissionStorageType['artifacts'] {
 		return this.data.artifacts.map((artifact) => structuredClone(artifact));
 	}
 
-	public get stages(): MissionDataType['stages'] {
+	public get stages(): MissionStorageType['stages'] {
 		return this.data.stages.map((stage) => structuredClone(stage));
 	}
 
-	public get agentExecutions(): MissionDataType['agentExecutions'] {
+	public get agentExecutions(): MissionStorageType['agentExecutions'] {
 		return this.data.agentExecutions.map((AgentExecution) => structuredClone(AgentExecution));
 	}
 
@@ -1641,17 +1754,17 @@ export class Mission extends Entity<MissionDataType, string> {
 		return this.data.recommendedAction;
 	}
 
-	public findStage(stageId: MissionStageId): MissionDataType['stages'][number] | undefined {
+	public findStage(stageId: MissionStageId): MissionStorageType['stages'][number] | undefined {
 		const stage = this.data.stages.find((candidate) => candidate.stageId === stageId);
 		return stage ? structuredClone(stage) : undefined;
 	}
 
-	public findArtifact(id: string): MissionDataType['artifacts'][number] | undefined {
+	public findArtifact(id: string): MissionStorageType['artifacts'][number] | undefined {
 		const artifact = this.data.artifacts.find((candidate) => candidate.id === id);
 		return artifact ? structuredClone(artifact) : undefined;
 	}
 
-	public findTask(taskId: string): MissionDataType['stages'][number]['tasks'][number] | undefined {
+	public findTask(taskId: string): MissionStorageType['stages'][number]['tasks'][number] | undefined {
 		for (const stage of this.data.stages) {
 			const task = stage.tasks.find((candidate) => candidate.taskId === taskId);
 			if (task) {
@@ -1669,10 +1782,10 @@ export class Mission extends Entity<MissionDataType, string> {
 		return this.currentStageId === stageId;
 	}
 
-	private static createDataFromStatus(status: OperatorStatus): MissionDataType {
+	private static createDataFromStatus(status: MissionStatusSnapshot): MissionStorageType {
 		const missionId = status.missionId?.trim();
 		if (!missionId) {
-			throw new Error('Mission entity construction requires an OperatorStatus with missionId.');
+			throw new Error('Mission entity construction requires a mission snapshot with missionId.');
 		}
 
 		const missionRootDir = Mission.requireTrimmedString(status.missionRootDir, 'Mission status missionRootDir');
@@ -1730,7 +1843,7 @@ export class Mission extends Entity<MissionDataType, string> {
 			});
 		});
 
-		return MissionDataSchema.parse({
+		return MissionStorageSchema.parse({
 			id: createEntityId('mission', missionId),
 			missionId,
 			title: Mission.requireTrimmedString(status.title, 'Mission status title'),
@@ -1751,8 +1864,8 @@ export class Mission extends Entity<MissionDataType, string> {
 		});
 	}
 
-	private static cloneData(data: MissionDataType): MissionDataType {
-		return MissionDataSchema.parse({
+	private static cloneData(data: MissionStorageType): MissionStorageType {
+		return MissionStorageSchema.parse({
 			...data,
 			artifacts: data.artifacts.map((artifact) => structuredClone(artifact)),
 			stages: data.stages.map((stage) => structuredClone(stage)),
@@ -1764,8 +1877,8 @@ export class Mission extends Entity<MissionDataType, string> {
 		adapter: MissionDossierFilesystem,
 		missionDir: string,
 		descriptor: MissionDossierDescriptor
-	): MissionDataType {
-		return MissionDataSchema.parse({
+	): MissionStorageType {
+		return MissionStorageSchema.parse({
 			id: createEntityId('mission', descriptor.missionId),
 			missionId: descriptor.missionId,
 			title: descriptor.brief.title,
@@ -1781,8 +1894,8 @@ export class Mission extends Entity<MissionDataType, string> {
 		});
 	}
 
-	private static parseEventRecord(value: unknown): MissionWorkflowEventRecord {
-		const parsed = MissionWorkflowEventRecordSchema.parse(value);
+	private static parseEventRecord(value: unknown): WorkflowEventRecord {
+		const parsed = WorkflowEventRecordSchema.parse(value);
 		return {
 			eventId: parsed.eventId,
 			type: parsed.type,
@@ -1794,8 +1907,8 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	private static cloneAgentConsoleState(
-		state: MissionAgentConsoleState
-	): MissionAgentConsoleState {
+		state: AgentExecutionConsoleState
+	): AgentExecutionConsoleState {
 		return {
 			...(state.title ? { title: state.title } : {}),
 			lines: [...state.lines],
@@ -1808,8 +1921,8 @@ export class Mission extends Entity<MissionDataType, string> {
 	}
 
 	private static createEmptyAgentConsoleState(
-		overrides: Partial<MissionAgentConsoleState> = {}
-	): MissionAgentConsoleState {
+		overrides: Partial<AgentExecutionConsoleState> = {}
+	): AgentExecutionConsoleState {
 		return {
 			...Mission.cloneAgentConsoleState({
 				lines: overrides.lines ?? [],
@@ -1850,8 +1963,12 @@ export class Mission extends Entity<MissionDataType, string> {
 	private static hasSemanticInputRequest(input: {
 		lifecycleState: AgentExecutionLifecycleStateType;
 		currentInputRequestId?: string | null;
+		attention?: string | null;
+		activityState?: string | null;
 	}): boolean {
-		return input.currentInputRequestId !== undefined && input.currentInputRequestId !== null;
+		return (input.currentInputRequestId !== undefined && input.currentInputRequestId !== null)
+			|| input.attention === 'awaiting-operator'
+			|| input.activityState === 'awaiting-operator';
 	}
 
 	private static isRecord(value: unknown): value is Record<string, unknown> {
@@ -1873,7 +1990,15 @@ export class Mission extends Entity<MissionDataType, string> {
 		return value;
 	}
 
-	private static parseEntityTypeFromStatus(value: MissionType | undefined): MissionType {
-		return MissionEntityTypeSchema.parse(value);
+	private static parseEntityTypeFromStatus(value: MissionEntityTypeType | undefined): MissionEntityTypeType {
+		return MissionTypeSchema.parse(value);
+	}
+}
+
+function describePauseUnavailable(lifecycle: string): string {
+	switch (lifecycle) {
+		case 'paused': return 'Mission is already paused.';
+		case 'delivered': return 'Mission already delivered.';
+		default: return 'Mission is not running.';
 	}
 }

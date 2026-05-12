@@ -1,20 +1,20 @@
 import {
     MISSION_STAGE_DERIVED_STATES,
-    type MissionStageDerivedState,
-    type MissionTaskLifecycleState
+    type WorkflowStageDerivedState,
+    type WorkflowTaskLifecycleState
 } from './engine/types.js';
 import { MISSION_STAGE_IDS, type MissionStageId } from './stages.js';
 
 export type { MissionStageId };
 export { MISSION_STAGE_IDS };
 
-export type MissionWorkflowTaskStatus = MissionTaskLifecycleState;
+export type MissionWorkflowTaskStatus = WorkflowTaskLifecycleState;
 export type MissionTaskStatusIntent = 'start' | 'done' | 'reopen';
 export type MissionStageStatusIntent = 'start' | 'restart';
 
 export type MissionArtifactKey = 'brief' | 'prd' | 'spec' | 'verify' | 'audit' | 'delivery';
 
-export type MissionStageProgress = MissionStageDerivedState;
+export type MissionStageProgress = WorkflowStageDerivedState;
 
 export type MissionTaskPairingDefinition = {
     enabled: true;

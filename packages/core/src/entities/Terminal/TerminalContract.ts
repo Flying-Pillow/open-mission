@@ -4,31 +4,31 @@ import {
     terminalEntityName,
     TerminalInputSchema,
     TerminalLocatorSchema,
-    TerminalSnapshotSchema
+    TerminalSchema
 } from './TerminalSchema.js';
 
 export const TerminalContract: EntityContractType = {
     entity: terminalEntityName,
     entityClass: Terminal,
     inputSchema: TerminalLocatorSchema,
-    dataSchema: TerminalSnapshotSchema,
+    dataSchema: TerminalSchema,
     methods: {
         read: {
             kind: 'query',
             payload: TerminalLocatorSchema,
-            result: TerminalSnapshotSchema,
+            result: TerminalSchema,
             execution: 'class'
         },
         sendInput: {
             kind: 'mutation',
             payload: TerminalInputSchema,
-            result: TerminalSnapshotSchema,
+            result: TerminalSchema,
             execution: 'class'
         }
     },
     events: {
         data: {
-            payload: TerminalSnapshotSchema
+            payload: TerminalSchema
         }
     }
 };

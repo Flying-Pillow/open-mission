@@ -89,10 +89,13 @@ export abstract class Entity<
 					const availability = await Entity.resolveMethodAvailability(entity, methodName, execution, input.payload, context);
 					return {
 						commandId: createEntityMethodCommandId(contract.entity, methodName),
+						entity: contract.entity,
+						method: methodName,
+						...Entity.resolveCommandTarget(entity),
 						label: method.ui!.label,
 						...(method.ui!.description ? { description: method.ui!.description } : {}),
-						disabled: !availability.available,
-						...(!availability.available && availability.reason ? { disabledReason: availability.reason } : {}),
+						available: availability.available,
+						...(!availability.available && availability.reason ? { unavailableReason: availability.reason } : {}),
 						...(method.ui!.variant ? { variant: method.ui!.variant } : {}),
 						...(method.ui!.icon ? { icon: method.ui!.icon } : {}),
 						...(method.ui!.tone ? { tone: method.ui!.tone } : {}),
@@ -113,7 +116,7 @@ export abstract class Entity<
 		return context?.entityFactory ?? getDefaultEntityFactory();
 	}
 
-	public static async availableCommands(
+	public static async commandDescriptors(
 		contract: EntityContractType,
 		payload: unknown,
 		context: EntityExecutionContext
@@ -191,6 +194,8 @@ export abstract class Entity<
 			throw new Error(`Entity '${entity}' does not define class method '${methodName}'.`);
 		}
 
+		await Entity.assertMethodAvailable(entityClass, methodName, 'class', payload, context);
+
 		return implementation.call(entityClass, payload, context);
 	}
 
@@ -216,7 +221,22 @@ export abstract class Entity<
 			throw new Error(`Entity '${entity}' does not define instance method '${methodName}'.`);
 		}
 
+		await Entity.assertMethodAvailable(instance, methodName, 'entity', payload, context);
+
 		return implementation.call(instance, payload, context);
+	}
+
+	private static async assertMethodAvailable(
+		entity: object,
+		methodName: string,
+		execution: EntityMethodType['execution'],
+		payload: unknown,
+		context: EntityExecutionContext
+	): Promise<void> {
+		const availability = await Entity.resolveMethodAvailability(entity, methodName, execution, payload, context);
+		if (!availability.available) {
+			throw new Error(availability.reason ?? `Entity method '${methodName}' is not available.`);
+		}
 	}
 
 	private static async resolveMethodAvailability(
@@ -252,6 +272,15 @@ export abstract class Entity<
 			};
 	}
 
+	private static resolveCommandTarget(entity: object): { targetId?: EntityIdType } {
+		const candidate = (entity as { id?: unknown }).id;
+		if (typeof candidate !== 'string') {
+			return {};
+		}
+		const parsed = EntityIdSchema.safeParse(candidate);
+		return parsed.success ? { targetId: parsed.data } : {};
+	}
+
 	private dataValue: TData;
 	private uiValue: TUi | undefined;
 
@@ -277,7 +306,7 @@ export abstract class Entity<
 		return createEntityAvailabilityMethodName(methodName);
 	}
 
-	public async availableCommands(
+	public async commandDescriptors(
 		contract: EntityContractType,
 		context: EntityExecutionContext
 	): Promise<EntityCommandDescriptorType[]> {

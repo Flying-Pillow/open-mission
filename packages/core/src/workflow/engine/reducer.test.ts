@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-    createInitialMissionWorkflowRuntimeState,
-    createMissionWorkflowConfigurationSnapshot
+    createInitialWorkflowRuntimeState,
+    createWorkflowConfigurationSnapshot
 } from './document.js';
 import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../mission/workflow.js';
-import { reduceMissionWorkflowEvent } from './reducer.js';
-import { validateMissionWorkflowEvent } from './validation.js';
-import { AgentExecutionRuntimeStateSchema, type MissionWorkflowEvent } from './types.js';
+import { reduceWorkflowEvent } from './reducer.js';
+import { validateWorkflowEvent } from './validation.js';
+import { AgentExecutionRuntimeStateSchema, type WorkflowEvent } from './types.js';
 
 function createWorkflowSettingsWithoutTaskAutostart() {
     const workflow = createDefaultWorkflowSettings();
@@ -27,13 +27,13 @@ function createWorkflowSettingsWithoutTaskAutostart() {
 
 describe('workflow reducer delivery completion', () => {
     it('persists terminal attachment metadata on started agentExecutions', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createWorkflowSettingsWithoutTaskAutostart()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
         runtime.tasks = [{
             taskId: 'implementation/01',
             stageId: 'implementation',
@@ -48,7 +48,7 @@ describe('workflow reducer delivery completion', () => {
             updatedAt: '2026-04-10T15:51:25.000Z'
         }];
 
-        const event: MissionWorkflowEvent = {
+        const event: WorkflowEvent = {
             eventId: 'execution.started:implementation/01',
             type: 'execution.started',
             occurredAt: '2026-04-10T15:52:00.000Z',
@@ -64,8 +64,8 @@ describe('workflow reducer delivery completion', () => {
             }
         };
 
-        validateMissionWorkflowEvent(runtime, event, configuration);
-        runtime = reduceMissionWorkflowEvent(runtime, event, configuration).nextState;
+        validateWorkflowEvent(runtime, event, configuration);
+        runtime = reduceWorkflowEvent(runtime, event, configuration).nextState;
 
         expect(runtime.agentExecutions).toContainEqual(expect.objectContaining({
             agentExecutionId: 'AgentExecution-1',
@@ -86,27 +86,27 @@ describe('workflow reducer delivery completion', () => {
     });
 
     it('queues and emits AgentExecution launch requests for ready autostart tasks', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createDefaultWorkflowSettings()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
-        runtime = reduceMissionWorkflowEvent(runtime, {
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime = reduceWorkflowEvent(runtime, {
             eventId: 'mission.created',
             type: 'mission.created',
             occurredAt: '2026-04-10T15:51:25.000Z',
             source: 'human'
         }, configuration).nextState;
-        runtime = reduceMissionWorkflowEvent(runtime, {
+        runtime = reduceWorkflowEvent(runtime, {
             eventId: 'mission.started',
             type: 'mission.started',
             occurredAt: '2026-04-10T15:52:00.000Z',
             source: 'human'
         }, configuration).nextState;
 
-        const result = reduceMissionWorkflowEvent(runtime, createGeneratedTasksEvent('prd', '2026-04-10T15:53:00.000Z', [
+        const result = reduceWorkflowEvent(runtime, createGeneratedTasksEvent('prd', '2026-04-10T15:53:00.000Z', [
             { taskId: 'prd/01', title: 'PRD', instruction: 'Draft PRD.' }
         ]), configuration);
 
@@ -118,27 +118,27 @@ describe('workflow reducer delivery completion', () => {
     });
 
     it('does not autostart dependent tasks until prerequisites are completed', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createDefaultWorkflowSettings()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
-        runtime = reduceMissionWorkflowEvent(runtime, {
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime = reduceWorkflowEvent(runtime, {
             eventId: 'mission.created',
             type: 'mission.created',
             occurredAt: '2026-04-10T15:51:25.000Z',
             source: 'human'
         }, configuration).nextState;
-        runtime = reduceMissionWorkflowEvent(runtime, {
+        runtime = reduceWorkflowEvent(runtime, {
             eventId: 'mission.started',
             type: 'mission.started',
             occurredAt: '2026-04-10T15:52:00.000Z',
             source: 'human'
         }, configuration).nextState;
 
-        const generated = reduceMissionWorkflowEvent(runtime, createGeneratedTasksEvent('prd', '2026-04-10T15:53:00.000Z', [
+        const generated = reduceWorkflowEvent(runtime, createGeneratedTasksEvent('prd', '2026-04-10T15:53:00.000Z', [
             { taskId: 'prd/01', title: 'PRD', instruction: 'Draft PRD.' },
             { taskId: 'prd/02', title: 'PRD Follow-up', instruction: 'Refine PRD.', dependsOn: ['prd/01'] }
         ]), configuration);
@@ -157,7 +157,7 @@ describe('workflow reducer delivery completion', () => {
             payload: { taskId: 'prd/02' }
         }));
 
-        const started = reduceMissionWorkflowEvent(generated.nextState, {
+        const started = reduceWorkflowEvent(generated.nextState, {
             eventId: 'execution.started:prd/01:2026-04-10T15:53:30.000Z',
             type: 'execution.started',
             occurredAt: '2026-04-10T15:53:30.000Z',
@@ -167,7 +167,7 @@ describe('workflow reducer delivery completion', () => {
             agentId: 'copilot-cli'
         }, configuration);
 
-        const completed = reduceMissionWorkflowEvent(started.nextState, createTaskCompletedEvent('prd/01', '2026-04-10T15:54:00.000Z'), configuration);
+        const completed = reduceWorkflowEvent(started.nextState, createTaskCompletedEvent('prd/01', '2026-04-10T15:54:00.000Z'), configuration);
 
         expect(completed.nextState.tasks.find((task) => task.taskId === 'prd/02')?.lifecycle).toBe('queued');
         expect(completed.requests).not.toContainEqual(expect.objectContaining({
@@ -175,7 +175,7 @@ describe('workflow reducer delivery completion', () => {
             payload: { taskId: 'prd/02' }
         }));
 
-        const agentExecutionCompleted = reduceMissionWorkflowEvent(completed.nextState, {
+        const agentExecutionCompleted = reduceWorkflowEvent(completed.nextState, {
             eventId: 'execution.completed:prd/01:2026-04-10T15:54:05.000Z',
             type: 'execution.completed',
             occurredAt: '2026-04-10T15:54:05.000Z',
@@ -194,27 +194,27 @@ describe('workflow reducer delivery completion', () => {
         const workflow = createDefaultWorkflowSettings();
         workflow.execution.maxParallelTasks = 2;
         workflow.execution.maxParallelAgentExecutions = 1;
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
-        runtime = reduceMissionWorkflowEvent(runtime, {
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime = reduceWorkflowEvent(runtime, {
             eventId: 'mission.created',
             type: 'mission.created',
             occurredAt: '2026-04-10T15:51:25.000Z',
             source: 'human'
         }, configuration).nextState;
-        runtime = reduceMissionWorkflowEvent(runtime, {
+        runtime = reduceWorkflowEvent(runtime, {
             eventId: 'mission.started',
             type: 'mission.started',
             occurredAt: '2026-04-10T15:52:00.000Z',
             source: 'human'
         }, configuration).nextState;
 
-        const generated = reduceMissionWorkflowEvent(runtime, createGeneratedTasksEvent('prd', '2026-04-10T15:53:00.000Z', [
+        const generated = reduceWorkflowEvent(runtime, createGeneratedTasksEvent('prd', '2026-04-10T15:53:00.000Z', [
             { taskId: 'prd/01', title: 'PRD 1', instruction: 'Draft PRD 1.' },
             { taskId: 'prd/02', title: 'PRD 2', instruction: 'Draft PRD 2.' },
             { taskId: 'prd/03', title: 'PRD 3', instruction: 'Draft PRD 3.' }
@@ -233,13 +233,13 @@ describe('workflow reducer delivery completion', () => {
     it('rejects queueing a task beyond execution.maxParallelTasks', () => {
         const workflow = createDefaultWorkflowSettings();
         workflow.execution.maxParallelTasks = 1;
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow
         });
 
-        const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
         runtime.lifecycle = 'running';
         runtime.pause = { paused: false };
         runtime.tasks = [
@@ -271,7 +271,7 @@ describe('workflow reducer delivery completion', () => {
             }
         ];
 
-        expect(() => validateMissionWorkflowEvent(runtime, {
+        expect(() => validateWorkflowEvent(runtime, {
             eventId: 'task.queued:prd/02',
             type: 'task.queued',
             occurredAt: '2026-04-10T15:52:00.000Z',
@@ -281,13 +281,13 @@ describe('workflow reducer delivery completion', () => {
     });
 
     it('restarts a stale launch queue and re-emits launch requests for queued tasks', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createDefaultWorkflowSettings()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
         runtime.lifecycle = 'running';
         runtime.pause = { paused: false };
         runtime.tasks = [{
@@ -311,15 +311,15 @@ describe('workflow reducer delivery completion', () => {
             dispatchedAt: '2026-04-10T15:51:40.000Z'
         }];
 
-        const restartEvent: MissionWorkflowEvent = {
+        const restartEvent: WorkflowEvent = {
             eventId: 'mission.launch-queue.restarted',
             type: 'mission.launch-queue.restarted',
             occurredAt: '2026-04-10T15:52:00.000Z',
             source: 'human'
         };
 
-        validateMissionWorkflowEvent(runtime, restartEvent, configuration);
-        const result = reduceMissionWorkflowEvent(runtime, restartEvent, configuration);
+        validateWorkflowEvent(runtime, restartEvent, configuration);
+        const result = reduceWorkflowEvent(runtime, restartEvent, configuration);
 
         expect(result.nextState.launchQueue).toHaveLength(1);
         expect(result.nextState.launchQueue[0]?.taskId).toBe('prd/01');
@@ -331,13 +331,13 @@ describe('workflow reducer delivery completion', () => {
     });
 
     it('accepts launch-failed after restart when prior task agentExecutions are only historical', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createDefaultWorkflowSettings()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
         runtime.lifecycle = 'running';
         runtime.pause = { paused: false };
         runtime.tasks = [{
@@ -369,7 +369,7 @@ describe('workflow reducer delivery completion', () => {
             dispatchedAt: '2026-04-10T15:51:40.000Z'
         }];
 
-        const event: MissionWorkflowEvent = {
+        const event: WorkflowEvent = {
             eventId: 'execution.launch-failed:audit/01',
             type: 'execution.launch-failed',
             occurredAt: '2026-04-10T15:52:00.000Z',
@@ -378,8 +378,8 @@ describe('workflow reducer delivery completion', () => {
             reason: 'launch failed after restart'
         };
 
-        validateMissionWorkflowEvent(runtime, event, configuration);
-        const result = reduceMissionWorkflowEvent(runtime, event, configuration);
+        validateWorkflowEvent(runtime, event, configuration);
+        const result = reduceWorkflowEvent(runtime, event, configuration);
 
         expect(result.nextState.tasks.find((task) => task.taskId === 'audit/01')?.lifecycle).toBe('failed');
         expect(result.nextState.launchQueue).toEqual([]);
@@ -390,13 +390,13 @@ describe('workflow reducer delivery completion', () => {
     });
 
     it('treats duplicate terminal lifecycle events as idempotent', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createDefaultWorkflowSettings()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
         runtime.lifecycle = 'running';
         runtime.pause = { paused: false };
         runtime.tasks = [{
@@ -422,7 +422,7 @@ describe('workflow reducer delivery completion', () => {
             terminatedAt: '2026-04-10T15:53:00.000Z'
         }];
 
-        const event: MissionWorkflowEvent = {
+        const event: WorkflowEvent = {
             eventId: 'runtime:AgentExecution-1:execution.terminated:duplicate',
             type: 'execution.terminated',
             occurredAt: '2026-04-10T15:54:00.000Z',
@@ -431,8 +431,8 @@ describe('workflow reducer delivery completion', () => {
             taskId: 'prd/01'
         };
 
-        validateMissionWorkflowEvent(runtime, event, configuration);
-        const result = reduceMissionWorkflowEvent(runtime, event, configuration);
+        validateWorkflowEvent(runtime, event, configuration);
+        const result = reduceWorkflowEvent(runtime, event, configuration);
 
         expect(result.nextState.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('ready');
         expect(result.nextState.launchQueue).toEqual([]);
@@ -440,13 +440,13 @@ describe('workflow reducer delivery completion', () => {
     });
 
     it('does not autostart tasks interrupted by AgentExecution termination', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createDefaultWorkflowSettings()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
         runtime.lifecycle = 'running';
         runtime.pause = { paused: false };
         runtime.tasks = [{
@@ -471,7 +471,7 @@ describe('workflow reducer delivery completion', () => {
             updatedAt: '2026-04-10T15:52:00.000Z'
         }];
 
-        const event: MissionWorkflowEvent = {
+        const event: WorkflowEvent = {
             eventId: 'runtime:AgentExecution-1:execution.terminated',
             type: 'execution.terminated',
             occurredAt: '2026-04-10T15:53:00.000Z',
@@ -480,8 +480,8 @@ describe('workflow reducer delivery completion', () => {
             taskId: 'prd/01'
         };
 
-        validateMissionWorkflowEvent(runtime, event, configuration);
-        const result = reduceMissionWorkflowEvent(runtime, event, configuration);
+        validateWorkflowEvent(runtime, event, configuration);
+        const result = reduceWorkflowEvent(runtime, event, configuration);
 
         const interruptedTask = result.nextState.tasks.find((task) => task.taskId === 'prd/01');
         expect(interruptedTask?.lifecycle).toBe('ready');
@@ -489,7 +489,7 @@ describe('workflow reducer delivery completion', () => {
         expect(result.nextState.launchQueue).toEqual([]);
         expect(result.requests).toEqual([]);
 
-        const followUp = reduceMissionWorkflowEvent(result.nextState, {
+        const followUp = reduceWorkflowEvent(result.nextState, {
             eventId: 'mission.launch-queue.restarted:noop',
             type: 'mission.launch-queue.restarted',
             occurredAt: '2026-04-10T15:54:00.000Z',
@@ -502,16 +502,16 @@ describe('workflow reducer delivery completion', () => {
     });
 
     it('tracks the reducer-owned active stage id as work advances', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createDefaultWorkflowSettings()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
         expect(runtime.activeStageId).toBe('prd');
 
-        runtime = reduceMissionWorkflowEvent(runtime, {
+        runtime = reduceWorkflowEvent(runtime, {
             eventId: 'mission.created',
             type: 'mission.created',
             occurredAt: '2026-04-10T15:51:25.000Z',
@@ -519,38 +519,38 @@ describe('workflow reducer delivery completion', () => {
         }, configuration).nextState;
         expect(runtime.activeStageId).toBe('prd');
 
-        runtime = reduceMissionWorkflowEvent(runtime, createGeneratedTasksEvent('prd', '2026-04-10T15:53:00.000Z', [
+        runtime = reduceWorkflowEvent(runtime, createGeneratedTasksEvent('prd', '2026-04-10T15:53:00.000Z', [
             { taskId: 'prd/01', title: 'PRD', instruction: 'Draft PRD.' }
         ]), configuration).nextState;
         expect(runtime.activeStageId).toBe('prd');
 
-        validateMissionWorkflowEvent(runtime, createTaskCompletedEvent('prd/01', '2026-04-10T15:54:00.000Z'), configuration);
-        runtime = reduceMissionWorkflowEvent(runtime, createTaskCompletedEvent('prd/01', '2026-04-10T15:54:00.000Z'), configuration).nextState;
+        validateWorkflowEvent(runtime, createTaskCompletedEvent('prd/01', '2026-04-10T15:54:00.000Z'), configuration);
+        runtime = reduceWorkflowEvent(runtime, createTaskCompletedEvent('prd/01', '2026-04-10T15:54:00.000Z'), configuration).nextState;
         expect(runtime.activeStageId).toBe('spec');
     });
 
     it('records mission pause target metadata in runtime state', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createDefaultWorkflowSettings()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
-        runtime = reduceMissionWorkflowEvent(runtime, {
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
+        runtime = reduceWorkflowEvent(runtime, {
             eventId: 'mission.created',
             type: 'mission.created',
             occurredAt: '2026-04-10T15:51:25.000Z',
             source: 'human'
         }, configuration).nextState;
-        runtime = reduceMissionWorkflowEvent(runtime, {
+        runtime = reduceWorkflowEvent(runtime, {
             eventId: 'mission.started',
             type: 'mission.started',
             occurredAt: '2026-04-10T15:52:00.000Z',
             source: 'human'
         }, configuration).nextState;
 
-        const pauseEvent: MissionWorkflowEvent = {
+        const pauseEvent: WorkflowEvent = {
             eventId: 'mission.paused',
             type: 'mission.paused',
             occurredAt: '2026-04-10T15:53:00.000Z',
@@ -559,8 +559,8 @@ describe('workflow reducer delivery completion', () => {
             targetType: 'mission'
         };
 
-        validateMissionWorkflowEvent(runtime, pauseEvent, configuration);
-        runtime = reduceMissionWorkflowEvent(runtime, pauseEvent, configuration).nextState;
+        validateWorkflowEvent(runtime, pauseEvent, configuration);
+        runtime = reduceWorkflowEvent(runtime, pauseEvent, configuration).nextState;
 
         expect(runtime.lifecycle).toBe('paused');
         expect(runtime.pause).toEqual({
@@ -572,14 +572,14 @@ describe('workflow reducer delivery completion', () => {
     });
 
     it('auto-completes an empty final delivery stage after audit completion', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createWorkflowSettingsWithoutTaskAutostart()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
-        const events: MissionWorkflowEvent[] = [
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
+        const events: WorkflowEvent[] = [
             {
                 eventId: 'mission.created',
                 type: 'mission.created',
@@ -611,35 +611,35 @@ describe('workflow reducer delivery completion', () => {
         ];
 
         for (const event of events) {
-            validateMissionWorkflowEvent(runtime, event, configuration);
-            runtime = reduceMissionWorkflowEvent(runtime, event, configuration).nextState;
+            validateWorkflowEvent(runtime, event, configuration);
+            runtime = reduceWorkflowEvent(runtime, event, configuration).nextState;
         }
 
         expect(runtime.lifecycle).toBe('completed');
         expect(runtime.stages.find((stage) => stage.stageId === 'delivery')?.lifecycle).toBe('completed');
         expect(runtime.gates.find((gate) => gate.gateId === 'deliver')?.state).toBe('passed');
 
-        const deliveredEvent: MissionWorkflowEvent = {
+        const deliveredEvent: WorkflowEvent = {
             eventId: 'mission.delivered',
             type: 'mission.delivered',
             occurredAt: '2026-04-10T16:01:00.000Z',
             source: 'human'
         };
-        validateMissionWorkflowEvent(runtime, deliveredEvent, configuration);
+        validateWorkflowEvent(runtime, deliveredEvent, configuration);
 
-        runtime = reduceMissionWorkflowEvent(runtime, deliveredEvent, configuration).nextState;
+        runtime = reduceWorkflowEvent(runtime, deliveredEvent, configuration).nextState;
         expect(runtime.lifecycle).toBe('delivered');
     });
 
     it('does not emit decorative mission completion requests', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createWorkflowSettingsWithoutTaskAutostart()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
-        const events: MissionWorkflowEvent[] = [
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
+        const events: WorkflowEvent[] = [
             {
                 eventId: 'mission.created',
                 type: 'mission.created',
@@ -670,11 +670,11 @@ describe('workflow reducer delivery completion', () => {
             createTaskCompletedEvent('audit/01', '2026-04-10T16:00:00.000Z')
         ];
 
-        let finalResult = reduceMissionWorkflowEvent(runtime, events[0]!, configuration);
+        let finalResult = reduceWorkflowEvent(runtime, events[0]!, configuration);
         runtime = finalResult.nextState;
         for (const event of events.slice(1)) {
-            validateMissionWorkflowEvent(runtime, event, configuration);
-            finalResult = reduceMissionWorkflowEvent(runtime, event, configuration);
+            validateWorkflowEvent(runtime, event, configuration);
+            finalResult = reduceWorkflowEvent(runtime, event, configuration);
             runtime = finalResult.nextState;
         }
 
@@ -685,14 +685,14 @@ describe('workflow reducer delivery completion', () => {
     });
 
     it('does not auto-complete empty non-terminal stages', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createWorkflowSettingsWithoutTaskAutostart()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
-        const events: MissionWorkflowEvent[] = [
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
+        const events: WorkflowEvent[] = [
             {
                 eventId: 'mission.created',
                 type: 'mission.created',
@@ -716,8 +716,8 @@ describe('workflow reducer delivery completion', () => {
         ];
 
         for (const event of events) {
-            validateMissionWorkflowEvent(runtime, event, configuration);
-            runtime = reduceMissionWorkflowEvent(runtime, event, configuration).nextState;
+            validateWorkflowEvent(runtime, event, configuration);
+            runtime = reduceWorkflowEvent(runtime, event, configuration).nextState;
         }
 
         expect(runtime.lifecycle).toBe('running');
@@ -726,14 +726,14 @@ describe('workflow reducer delivery completion', () => {
     });
 
     it('keeps dependency references strict and blocks tasks with unresolved dependencies', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createWorkflowSettingsWithoutTaskAutostart()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
-        const events: MissionWorkflowEvent[] = [
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
+        const events: WorkflowEvent[] = [
             {
                 eventId: 'mission.created',
                 type: 'mission.created',
@@ -765,8 +765,8 @@ describe('workflow reducer delivery completion', () => {
         ];
 
         for (const event of events) {
-            validateMissionWorkflowEvent(runtime, event, configuration);
-            runtime = reduceMissionWorkflowEvent(runtime, event, configuration).nextState;
+            validateWorkflowEvent(runtime, event, configuration);
+            runtime = reduceWorkflowEvent(runtime, event, configuration).nextState;
         }
 
         const task = runtime.tasks.find((candidate) => candidate.taskId === 'implementation/01-derive-title');
@@ -778,14 +778,14 @@ describe('workflow reducer delivery completion', () => {
     });
 
     it('rewinds transitive dependent tasks when an upstream task is reopened', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createWorkflowSettingsWithoutTaskAutostart()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
-        const events: MissionWorkflowEvent[] = [
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
+        const events: WorkflowEvent[] = [
             {
                 eventId: 'mission.created',
                 type: 'mission.created',
@@ -831,8 +831,8 @@ describe('workflow reducer delivery completion', () => {
         ];
 
         for (const event of events) {
-            validateMissionWorkflowEvent(runtime, event, configuration);
-            runtime = reduceMissionWorkflowEvent(runtime, event, configuration).nextState;
+            validateWorkflowEvent(runtime, event, configuration);
+            runtime = reduceWorkflowEvent(runtime, event, configuration).nextState;
         }
 
         const specTask = runtime.tasks.find((task) => task.taskId === 'spec/01');
@@ -842,13 +842,13 @@ describe('workflow reducer delivery completion', () => {
     });
 
     it('rewinds same-stage transitive dependents when a completed task is reopened', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createWorkflowSettingsWithoutTaskAutostart()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
         runtime.lifecycle = 'running';
         runtime.pause = { paused: false };
         runtime.tasks = [
@@ -896,7 +896,7 @@ describe('workflow reducer delivery completion', () => {
             }
         ];
 
-        const result = reduceMissionWorkflowEvent(runtime, createTaskReopenedEvent('prd/01', '2026-04-10T15:57:00.000Z'), configuration);
+        const result = reduceWorkflowEvent(runtime, createTaskReopenedEvent('prd/01', '2026-04-10T15:57:00.000Z'), configuration);
 
         expect(result.nextState.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('ready');
         expect(result.nextState.tasks.find((task) => task.taskId === 'prd/02')?.lifecycle).toBe('pending');
@@ -904,13 +904,13 @@ describe('workflow reducer delivery completion', () => {
     });
 
     it('preserves independent later-stage tasks when a completed task is reopened', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createWorkflowSettingsWithoutTaskAutostart()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
         runtime.lifecycle = 'running';
         runtime.pause = { paused: false };
         runtime.tasks = [
@@ -944,20 +944,20 @@ describe('workflow reducer delivery completion', () => {
             }
         ];
 
-        const result = reduceMissionWorkflowEvent(runtime, createTaskReopenedEvent('prd/01', '2026-04-10T15:56:00.000Z'), configuration);
+        const result = reduceWorkflowEvent(runtime, createTaskReopenedEvent('prd/01', '2026-04-10T15:56:00.000Z'), configuration);
 
         expect(result.nextState.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('ready');
         expect(result.nextState.tasks.find((task) => task.taskId === 'spec/01')?.lifecycle).toBe('completed');
     });
 
     it('rejects reopening a task while a transitive dependent task is active', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createDefaultWorkflowSettings()
         });
 
-        const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
         runtime.lifecycle = 'running';
         runtime.pause = { paused: false };
         runtime.tasks = [
@@ -990,19 +990,19 @@ describe('workflow reducer delivery completion', () => {
             }
         ];
 
-        expect(() => validateMissionWorkflowEvent(runtime, createTaskReopenedEvent('prd/01', '2026-04-10T15:56:00.000Z'), configuration)).toThrow(
+        expect(() => validateWorkflowEvent(runtime, createTaskReopenedEvent('prd/01', '2026-04-10T15:56:00.000Z'), configuration)).toThrow(
             /downstream work is active/
         );
     });
 
     it('allows reopening a task while unrelated later-stage work is active', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createDefaultWorkflowSettings()
         });
 
-        const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
         runtime.lifecycle = 'running';
         runtime.pause = { paused: false };
         runtime.tasks = [
@@ -1035,17 +1035,17 @@ describe('workflow reducer delivery completion', () => {
             }
         ];
 
-        expect(() => validateMissionWorkflowEvent(runtime, createTaskReopenedEvent('prd/01', '2026-04-10T15:56:00.000Z'), configuration)).not.toThrow();
+        expect(() => validateWorkflowEvent(runtime, createTaskReopenedEvent('prd/01', '2026-04-10T15:56:00.000Z'), configuration)).not.toThrow();
     });
 
     it('records audited rework state and rewinds dependents', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createWorkflowSettingsWithoutTaskAutostart()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
         runtime.lifecycle = 'running';
         runtime.pause = { paused: false };
         runtime.tasks = [
@@ -1111,7 +1111,7 @@ describe('workflow reducer delivery completion', () => {
             }
         ];
 
-        const result = reduceMissionWorkflowEvent(runtime, createTaskReworkedEvent(
+        const result = reduceWorkflowEvent(runtime, createTaskReworkedEvent(
             'implementation/02-introduce-generic-entity-remote-boundary',
             '2026-04-10T15:56:00.000Z',
             {
@@ -1144,13 +1144,13 @@ describe('workflow reducer delivery completion', () => {
     });
 
     it('marks audited rework as launched when the restarted AgentExecution begins', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createWorkflowSettingsWithoutTaskAutostart()
         });
 
-        const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
         runtime.lifecycle = 'running';
         runtime.pause = { paused: false };
         runtime.tasks = [
@@ -1191,7 +1191,7 @@ describe('workflow reducer delivery completion', () => {
             }
         ];
 
-        const result = reduceMissionWorkflowEvent(runtime, {
+        const result = reduceWorkflowEvent(runtime, {
             eventId: 'execution.started:implementation/02:2026-04-10T15:57:00.000Z',
             type: 'execution.started',
             occurredAt: '2026-04-10T15:57:00.000Z',
@@ -1208,13 +1208,13 @@ describe('workflow reducer delivery completion', () => {
     });
 
     it('rejects audited rework after max iterations are exhausted', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createWorkflowSettingsWithoutTaskAutostart()
         });
 
-        const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
         runtime.lifecycle = 'running';
         runtime.pause = { paused: false };
         runtime.tasks = [
@@ -1235,7 +1235,7 @@ describe('workflow reducer delivery completion', () => {
             }
         ];
 
-        expect(() => validateMissionWorkflowEvent(runtime, createTaskReworkedEvent('implementation/02', '2026-04-10T15:57:00.000Z', {
+        expect(() => validateWorkflowEvent(runtime, createTaskReworkedEvent('implementation/02', '2026-04-10T15:57:00.000Z', {
             actor: 'workflow',
             reasonCode: 'verification.failed',
             sourceTaskId: 'implementation/02-verify',
@@ -1245,13 +1245,13 @@ describe('workflow reducer delivery completion', () => {
     });
 
     it('returns a task to ready when its running AgentExecution is cancelled', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createDefaultWorkflowSettings()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
         runtime.lifecycle = 'running';
         runtime.pause = { paused: false };
         runtime.tasks = [
@@ -1306,7 +1306,7 @@ describe('workflow reducer delivery completion', () => {
             updatedAt: '2026-04-10T15:57:30.000Z'
         }];
 
-        const result = reduceMissionWorkflowEvent(runtime, {
+        const result = reduceWorkflowEvent(runtime, {
             eventId: 'execution.cancelled:implementation/01:2026-04-10T15:58:00.000Z',
             type: 'execution.cancelled',
             occurredAt: '2026-04-10T15:58:00.000Z',
@@ -1320,13 +1320,13 @@ describe('workflow reducer delivery completion', () => {
     });
 
     it('returns a queued task to ready and removes its launch request when the task is cancelled', () => {
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-10T15:51:25.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createDefaultWorkflowSettings()
         });
 
-        let runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+        let runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
         runtime.lifecycle = 'running';
         runtime.pause = { paused: false };
         runtime.tasks = [
@@ -1352,7 +1352,7 @@ describe('workflow reducer delivery completion', () => {
             causedByEventId: 'task.queued:prd/01:2026-04-10T15:54:00.000Z'
         }];
 
-        const result = reduceMissionWorkflowEvent(runtime, {
+        const result = reduceWorkflowEvent(runtime, {
             eventId: 'task.cancelled:prd/01:2026-04-10T15:55:00.000Z',
             type: 'task.cancelled',
             occurredAt: '2026-04-10T15:55:00.000Z',
@@ -1372,7 +1372,7 @@ function createGeneratedTasksEvent(
     stageId: string,
     occurredAt: string,
     tasks: Array<{ taskId: string; title: string; instruction: string; dependsOn?: string[] }>
-): MissionWorkflowEvent {
+): WorkflowEvent {
     return {
         eventId: `tasks.generated:${stageId}:${occurredAt}`,
         type: 'tasks.generated',
@@ -1386,7 +1386,7 @@ function createGeneratedTasksEvent(
     };
 }
 
-function createTaskCompletedEvent(taskId: string, occurredAt: string): MissionWorkflowEvent {
+function createTaskCompletedEvent(taskId: string, occurredAt: string): WorkflowEvent {
     return {
         eventId: `task.completed:${taskId}:${occurredAt}`,
         type: 'task.completed',
@@ -1396,7 +1396,7 @@ function createTaskCompletedEvent(taskId: string, occurredAt: string): MissionWo
     };
 }
 
-function createTaskReopenedEvent(taskId: string, occurredAt: string): MissionWorkflowEvent {
+function createTaskReopenedEvent(taskId: string, occurredAt: string): WorkflowEvent {
     return {
         eventId: `task.reopened:${taskId}:${occurredAt}`,
         type: 'task.reopened',
@@ -1417,7 +1417,7 @@ function createTaskReworkedEvent(
         sourceAgentExecutionId?: string;
         artifactRefs: Array<{ path: string; title?: string }>;
     }
-): MissionWorkflowEvent {
+): WorkflowEvent {
     return {
         eventId: `task.reworked:${taskId}:${occurredAt}`,
         type: 'task.reworked',

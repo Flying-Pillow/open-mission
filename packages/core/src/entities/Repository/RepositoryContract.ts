@@ -3,17 +3,21 @@ import { AgentExecutionDataSchema } from '../AgentExecution/AgentExecutionSchema
 import { Repository } from './Repository.js';
 import {
     RepositoryAddSchema,
+    RepositoryCreateSchema,
     RepositoryDataSchema,
     RepositoryInputSchema,
     RepositoryStorageSchema,
+    RepositoryPlatformOwnerSchema,
     RepositoryPlatformRepositorySchema,
     repositoryEntityName,
     RepositoryFindSchema,
     RepositoryFindAvailableSchema,
+    RepositoryFindAvailableOwnersSchema,
     RepositoryEnsureSystemAgentExecutionSchema,
     RepositoryClassCommandsSchema,
     RepositoryGetIssueSchema,
     RepositoryLocatorSchema,
+    RepositoryReadRemovalSummarySchema,
     RepositoryMissionStartAcknowledgementSchema,
     RepositoryIssueDetailSchema,
     RepositoryConfigureAgentsSchema,
@@ -25,6 +29,7 @@ import {
     RepositorySetupSchema,
     RepositorySyncCommandAcknowledgementSchema,
     RepositorySyncStatusSchema,
+    RepositoryRemovalSummarySchema,
     RepositoryStartMissionFromBriefSchema,
     RepositoryStartMissionFromIssueSchema,
     TrackedIssueSummarySchema
@@ -56,6 +61,12 @@ export const RepositoryContract: EntityContractType = {
             kind: 'query',
             payload: RepositoryFindAvailableSchema,
             result: RepositoryPlatformRepositorySchema.array(),
+            execution: 'class'
+        },
+        findAvailableOwners: {
+            kind: 'query',
+            payload: RepositoryFindAvailableOwnersSchema,
+            result: RepositoryPlatformOwnerSchema.array(),
             execution: 'class'
         },
         ensureSystemAgentExecution: {
@@ -100,6 +111,12 @@ export const RepositoryContract: EntityContractType = {
             result: RepositoryIssueDetailSchema,
             execution: 'entity'
         },
+        readRemovalSummary: {
+            kind: 'query',
+            payload: RepositoryReadRemovalSummarySchema,
+            result: RepositoryRemovalSummarySchema,
+            execution: 'entity'
+        },
         add: {
             kind: 'mutation',
             payload: RepositoryAddSchema,
@@ -110,6 +127,18 @@ export const RepositoryContract: EntityContractType = {
                 variant: 'default',
                 icon: 'folder-plus',
                 presentationOrder: 0
+            }
+        },
+        createPlatformRepository: {
+            kind: 'mutation',
+            payload: RepositoryCreateSchema,
+            result: RepositoryDataSchema,
+            execution: 'class',
+            ui: {
+                label: 'Create repository',
+                variant: 'default',
+                icon: 'folder-plus',
+                presentationOrder: 1
             }
         },
         remove: {

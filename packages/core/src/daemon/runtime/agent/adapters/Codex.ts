@@ -13,9 +13,7 @@ import type { AgentLaunchConfig } from '../../../../entities/AgentExecution/Agen
 import { createAgentExecutionMcpBridge } from '../mcp/AgentExecutionMcpProvisioner.js';
 
 const CODEX_AGENT_ID = 'codex' as const;
-const CODEX_MCP_COMMAND_CONFIG_ENV = 'MISSION_CODEX_MCP_COMMAND_CONFIG';
-const CODEX_MCP_ARGS_CONFIG_ENV = 'MISSION_CODEX_MCP_ARGS_CONFIG';
-const CODEX_MCP_TOKEN_CONFIG_ENV = 'MISSION_CODEX_MCP_TOKEN_CONFIG';
+const CODEX_MCP_CONFIG_ENV = 'MISSION_CODEX_MCP_CONFIG';
 const execFile = promisify(execFileCallback);
 
 export type CodexInput = {
@@ -69,9 +67,7 @@ export function createCodex(input: CodexInput = {}): AgentInput {
                 args: [
                     '--no-alt-screen',
                     { setting: 'model', flag: '--model' },
-                    { launchEnv: CODEX_MCP_COMMAND_CONFIG_ENV, flag: '-c' },
-                    { launchEnv: CODEX_MCP_ARGS_CONFIG_ENV, flag: '-c' },
-                    { launchEnv: CODEX_MCP_TOKEN_CONFIG_ENV, flag: '-c' },
+                    { launchEnv: CODEX_MCP_CONFIG_ENV, flag: '-c' },
                     { prompt: 'initial' }
                 ]
             },
@@ -118,16 +114,30 @@ async function prepareCodexLaunchConfig(
             ...config,
             launchEnv: {
                 ...(config.launchEnv ?? {}),
-                [CODEX_MCP_COMMAND_CONFIG_ENV]: createCodexMcpConfigOverride('command', bridge.command),
-                [CODEX_MCP_ARGS_CONFIG_ENV]: createCodexMcpConfigOverride('args', bridge.args),
-                [CODEX_MCP_TOKEN_CONFIG_ENV]: createCodexMcpConfigOverride('env.MISSION_MCP_TOKEN', bridgeToken)
+                [CODEX_MCP_CONFIG_ENV]: createCodexMcpConfigOverride(bridge.command, bridge.args, bridge.env)
             }
         }
     };
 }
 
-function createCodexMcpConfigOverride(field: string, value: string | string[]): string {
-    return `mcp_servers."mission-mcp".${field}=${JSON.stringify(value)}`;
+function createCodexMcpConfigOverride(command: string, args: string[], env: Record<string, string>): string {
+    return [
+        'mcp_servers={',
+        '"mission-mcp"={',
+        `command=${JSON.stringify(command)},`,
+        `args=${JSON.stringify(args)},`,
+        `env=${createTomlInlineTable(env)},`,
+        'default_tools_approval_mode="approve"',
+        '}',
+        '}'
+    ].join('');
+}
+
+function createTomlInlineTable(values: Record<string, string>): string {
+    const entries = Object.entries(values)
+        .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+        .join(',');
+    return `{${entries}}`;
 }
 
 async function assertCodexAuthenticated(agent: AgentInput, config: AgentLaunchConfig): Promise<void> {

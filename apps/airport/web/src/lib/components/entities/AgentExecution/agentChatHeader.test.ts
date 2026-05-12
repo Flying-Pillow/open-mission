@@ -7,7 +7,7 @@ import {
 } from "./agentChatHeader";
 
 describe("agentChatHeader", () => {
-    it("uses the scoped repository owner in the chat title", () => {
+    it("uses the repository owner in the chat title", () => {
         const execution = createExecution({
             ownerId: "/repositories",
             scope: {

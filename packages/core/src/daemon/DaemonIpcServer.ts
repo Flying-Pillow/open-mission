@@ -32,11 +32,12 @@ import {
 	type Response
 } from './protocol/contracts.js';
 import { DaemonLogger } from './runtime/DaemonLogger.js';
-import type { MissionAgentDisposable } from './runtime/agent/events.js';
+import type { AgentRuntimeDisposable } from './runtime/agent/events.js';
 import { TerminalRegistry } from '../entities/Terminal/TerminalRegistry.js';
 import { DaemonRuntimeSupervisor } from './runtime/DaemonRuntimeSupervisor.js';
 import { getDefaultAgentExecutionRegistry, type AgentExecutionRegistry } from './runtime/agent/AgentExecutionRegistry.js';
 import {
+	MissionMcpRegisterAccessInputSchema,
 	MissionMcpCallToolInputSchema,
 	MissionMcpListToolsInputSchema,
 	MissionMcpServer
@@ -372,7 +373,7 @@ async function createDaemonResponseUnchecked(
 				result: null
 			};
 		case 'system.status': {
-			const { readSystemStatus } = await import('../system/SystemStatus.js');
+			const { readSystemStatus } = await import('../entities/System/SystemStatus.js');
 			const missionSummary = context.missionRegistry.readRuntimeSummary();
 			const agentExecutionSummary = context.agentExecutionRegistry?.readRuntimeSummary();
 			return {
@@ -396,6 +397,13 @@ async function createDaemonResponseUnchecked(
 				})
 			};
 		}
+		case 'mission-mcp.registerAccess':
+			return {
+				type: 'response',
+				id: request.id,
+				ok: true,
+				result: context.missionMcpServer.registerAccess(MissionMcpRegisterAccessInputSchema.parse(request.params))
+			};
 		case 'mission-mcp.listTools':
 			return {
 				type: 'response',
@@ -514,7 +522,7 @@ function createEntityExecutionContext(request: Request, missionRegistry: Mission
 function startEntityEventSources(
 	publish: (event: EntityEventEnvelopeType) => void,
 	terminalRegistry: TerminalRegistry
-): MissionAgentDisposable {
+): AgentRuntimeDisposable {
 	const agentExecutionRegistry = getDefaultAgentExecutionRegistry();
 	const agentExecutionDataChanges = agentExecutionRegistry.onDidExecutionDataChange((data) => {
 		publish(createAgentExecutionDataChangedEvent({ data }));

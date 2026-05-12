@@ -1,17 +1,13 @@
 <script lang="ts">
     import Icon from "@iconify/svelte";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
-    import { maybeGetScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
+    import { app } from "$lib/client/Application.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
 
-    const appContext = getAppContext();
-    const repositoryScope = maybeGetScopedRepositoryContext();
-    const activeRepository = $derived(repositoryScope?.repository);
-    const missions = $derived(activeRepository?.missions ?? []);
-    const repositoryId = $derived(activeRepository?.id ?? "");
-    const selectedMissionId = $derived(appContext.airport.activeMissionId);
+    const missions = $derived(app.repository?.missions ?? []);
+    const repositoryId = $derived(app.repository?.id ?? "");
+    const selectedMissionId = $derived(app.mission?.missionId);
 </script>
 
 <section class="flex h-full min-h-[20rem] w-full flex-col overflow-hidden">

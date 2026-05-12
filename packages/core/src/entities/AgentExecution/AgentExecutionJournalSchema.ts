@@ -1,15 +1,17 @@
 import { z } from 'zod/v4';
 import {
     AgentExecutionActivityProgressSchema,
+    AgentExecutionActivityStateSchema,
     AgentExecutionActivityTargetSchema,
     AgentExecutionAttentionStateSchema,
     AgentExecutionCapabilitySnapshotSchema,
     AgentExecutionLifecycleStateSchema,
-    AgentExecutionProtocolDescriptorSchema,
-    AgentExecutionProtocolOwnerEntitySchema,
-    AgentExecutionSemanticActivitySchema,
     AgentExecutionTransportStateSchema
-} from './AgentExecutionSchema.js';
+} from './AgentExecutionRuntimeSchema.js';
+import {
+    AgentExecutionProtocolDescriptorSchema,
+    AgentExecutionProtocolOwnerEntitySchema
+} from './AgentExecutionProtocolSchema.js';
 import {
     AgentExecutionJournalSignalSchema
 } from './AgentExecutionSignalRegistry.js';
@@ -332,7 +334,7 @@ export const AgentExecutionStateChangedRecordSchema = AgentExecutionJournalRecor
     entrySemantics: z.literal('event'),
     lifecycle: AgentExecutionLifecycleStateSchema.optional(),
     attention: AgentExecutionAttentionStateSchema.optional(),
-    activity: AgentExecutionSemanticActivitySchema.optional(),
+    activity: AgentExecutionActivityStateSchema.optional(),
     currentInputRequestId: journalTextSchema.nullable().optional(),
     awaitingResponseToMessageId: journalTextSchema.nullable().optional()
 }).strict();
@@ -341,7 +343,7 @@ export const AgentExecutionActivityUpdatedRecordSchema = AgentExecutionJournalRe
     type: z.literal('activity.updated'),
     family: z.literal('activity.updated'),
     entrySemantics: z.literal('snapshot'),
-    activity: AgentExecutionSemanticActivitySchema.optional(),
+    activity: AgentExecutionActivityStateSchema.optional(),
     progress: AgentExecutionActivityProgressSchema.optional(),
     telemetry: z.object({
         inputTokens: z.number().int().nonnegative().optional(),
@@ -437,7 +439,7 @@ export type AgentExecutionTransportEvidenceRecordType = z.infer<typeof AgentExec
 export type AgentExecutionDecisionActionType = z.infer<typeof AgentExecutionDecisionActionSchema>;
 export type AgentExecutionDecisionRecordType = z.infer<typeof AgentExecutionDecisionRecordSchema>;
 export type AgentExecutionAttentionStateType = z.infer<typeof AgentExecutionAttentionStateSchema>;
-export type AgentExecutionSemanticActivityType = z.infer<typeof AgentExecutionSemanticActivitySchema>;
+export type AgentExecutionActivityStateType = z.infer<typeof AgentExecutionActivityStateSchema>;
 export type AgentExecutionStateChangedRecordType = z.infer<typeof AgentExecutionStateChangedRecordSchema>;
 export type AgentExecutionActivityUpdatedRecordType = z.infer<typeof AgentExecutionActivityUpdatedRecordSchema>;
 export type AgentExecutionOwnerEffectRecordType = z.infer<typeof AgentExecutionOwnerEffectRecordSchema>;

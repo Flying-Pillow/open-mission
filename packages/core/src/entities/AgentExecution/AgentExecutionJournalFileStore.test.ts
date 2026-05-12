@@ -7,7 +7,10 @@ import {
     AgentExecutionJournalFileStore,
     resolveAgentExecutionJournalFilePath
 } from './AgentExecutionJournalFileStore.js';
-import type { AgentExecutionJournalRecordType, AgentExecutionJournalReferenceType } from './AgentExecutionJournalSchema.js';
+import type {
+    AgentExecutionJournalRecordType,
+    AgentExecutionJournalReferenceType
+} from './AgentExecutionJournalSchema.js';
 
 describe('AgentExecutionJournalFileStore', () => {
     it('ensures, appends, and reads schema-validated journal records', async () => {
@@ -113,7 +116,10 @@ function createTarget(rootPath: string) {
     };
 }
 
-function baseRecord<const TType extends AgentExecutionJournalRecordType['type']>(type: TType, sequence: number) {
+function baseRecord<const TType extends AgentExecutionJournalRecordType['type']>(
+    type: TType,
+    sequence: number
+): any {
     return {
         recordId: `record-${sequence}`,
         sequence,
@@ -148,5 +154,5 @@ function baseRecord<const TType extends AgentExecutionJournalRecordType['type']>
             }
         },
         occurredAt: '2026-05-09T00:00:00.000Z'
-    };
+    } as const;
 }

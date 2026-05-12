@@ -87,7 +87,7 @@
             class="min-h-0 flex-1 overflow-hidden gap-0"
         >
             <Tabs.List
-                class="w-full justify-start overflow-x-auto overflow-y-hidden"
+                class="w-full justify-start overflow-x-auto overflow-y-hidden pt-2"
                 variant="line"
             >
                 {#each artifactTabs as artifactTab (artifactTab.id)}

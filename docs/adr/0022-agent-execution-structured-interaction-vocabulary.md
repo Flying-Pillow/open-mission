@@ -28,11 +28,11 @@ An **Agent execution turn** is one accepted and delivered turn-starting Agent ex
 
 An **Agent execution message descriptor** describes one daemon-to-AgentExecution message that is available for a specific execution. It names the message type, label, input shape, delivery behavior, and context effect so Airport and daemon modules can present and send messages from the same source of truth.
 
-An **Agent-declared signal** is structured text emitted by the Agent process to the Entity that owns the execution scope. The signal marker prefix is derived from the owning Entity, such as `@task::`, `@mission::`, `@repository::`, or `@artifact::`, followed by strict JSON on the same line. The current `@mission::` marker is the first implementation of this owner-addressed pattern for Mission/task work and should converge into the owner-derived prefix model as scope support broadens.
+An **Agent signal** is structured text emitted by the Agent process to the Entity that owns the execution scope. The signal marker prefix is derived from the owning Entity, such as `@task::`, `@mission::`, `@repository::`, or `@artifact::`, followed by strict JSON on the same line. The current `@mission::` marker is the first implementation of this owner-addressed pattern for Mission/task work and should converge into the owner-derived prefix model as scope support broadens.
 
-An **Agent-declared signal descriptor** describes one structured signal payload that the owning Entity accepts for a specific Agent execution. It names the marker prefix, signal type, payload shape, validation limits, policy behavior, and possible accepted outcomes.
+An **Agent signal descriptor** describes one structured signal payload that the owning Entity accepts for a specific Agent execution. It names the marker prefix, signal type, payload shape, validation limits, policy behavior, and possible accepted outcomes.
 
-An **Agent execution observation** is the daemon-normalized representation of something observed from the Agent runtime, such as an Agent-declared signal, provider-structured output, terminal output heuristic, or daemon-authored observation. Observations are evaluated by policy before they can affect AgentExecution state, owner Entity state, or published Entity events.
+An **Agent execution observation** is the daemon-normalized representation of something observed from the Agent runtime, such as an Agent signal, provider-structured output, terminal output heuristic, or daemon-authored observation. Observations are evaluated by policy before they can affect AgentExecution state, owner Entity state, or published Entity events.
 
 An **AgentExecution decision** is the durable result of policy evaluation for a message or observation. It may reject input, record it without state effects, emit an AgentExecution event, update AgentExecution state, or route an owner effect. Decisions are recorded before their effects are applied so replay and audit can explain why state changed.
 
@@ -40,7 +40,7 @@ An **AgentExecution interaction journal** is the append-only semantic journal fo
 
 An **Agent execution claim** is an accepted observation where the Agent declares readiness, completion, failure, or another state assertion that requires Mission or operator verification. A claim may publish an Entity event or update AgentExecution audit state. Mission task completion follows the owning Entity's workflow rules.
 
-An **Agent execution protocol descriptor** is the complete structured interaction contract for one Agent execution. It combines the available Agent execution message descriptors and Agent-declared signal descriptors for the execution's scope, owner Entity, selected Agent, and Agent adapter.
+An **Agent execution protocol descriptor** is the complete structured interaction contract for one Agent execution. It combines the available Agent execution message descriptors and Agent signal descriptors for the execution's scope, owner Entity, selected Agent, and Agent adapter.
 
 ## Source Of Truth
 
@@ -50,12 +50,12 @@ The source of truth for what happened during one AgentExecution is the AgentExec
 
 The descriptor has two distinct halves:
 
-1. **Agent-declared signal descriptors**: the owner-addressed marker payloads that the daemon parses from Agent stdout for this execution.
+1. **Agent signal descriptors**: the owner-addressed marker payloads that the daemon parses from Agent stdout for this execution.
 2. **Agent execution message descriptors**: the structured daemon-to-AgentExecution messages that an operator or daemon module may send to the execution.
 
 Prompt-scoped instructions are rendered from this descriptor. The descriptor is the source of truth for supported marker payloads, and rendered prompt text is a delivery view of that descriptor. Marker JSON carries only the Agent execution id, event id, version, and signal payload; owner and scope context come from the active `AgentExecutionScope` and protocol descriptor.
 
-The current `AgentExecutionMessageDescriptor` concept is only one half of this source of truth. Mission also needs an explicit descriptor for accepted Agent-declared signals so the launch instructions, parser, policy, and surface documentation share one vocabulary.
+The current `AgentExecutionMessageDescriptor` concept is only one half of this source of truth. Mission also needs an explicit descriptor for accepted Agent signals so the launch instructions, parser, policy, and surface documentation share one vocabulary.
 
 ## Ownership
 
@@ -83,7 +83,7 @@ The structured runtime path is:
 ```text
 Agent stdout line with owner prefix
   -> owner-addressed signal parser
-  -> Agent-declared signal
+  -> Agent signal
   -> Agent execution observation
   -> owning Entity policy/method
   -> AgentExecution state change, Entity event, workflow event, or rejection
@@ -101,11 +101,11 @@ Agent execution message accepted by the daemon
 
 Surface attachment is not a turn. Attaching Airport or another surface to an existing AgentExecution only resolves transport and live state. If a surface-triggered action also starts work, it must do so by sending an explicit Agent execution message that begins a new turn and therefore enters `awaiting-agent-response` through the same daemon-owned delivery path as any other turn.
 
-An Agent-declared signal may produce an AgentExecution Entity event after policy acceptance. When a signal represents a request for owner action, the owning Entity evaluates it as an observation or claim and decides the resulting domain behavior through its own methods, policies, and workflow delegate. The Agent is not asked to echo Mission, Task, Artifact, Repository, or owner ids in the marker payload; the daemon attaches the active route scope and rejects markers whose `agentExecutionId` does not match the active execution.
+An Agent signal may produce an AgentExecution Entity event after policy acceptance. When a signal represents a request for owner action, the owning Entity evaluates it as an observation or claim and decides the resulting domain behavior through its own methods, policies, and workflow delegate. The Agent is not asked to echo Mission, Task, Artifact, Repository, or owner ids in the marker payload; the daemon attaches the active route scope and rejects markers whose `agentExecutionId` does not match the active execution.
 
 AgentExecution lifecycle truth remains daemon-owned. `completed_claim` and `failed_claim` are claims that become lifecycle transitions through daemon-authoritative owner behavior. `ready_for_verification` is a claim that the owning Entity or operator may use to surface verification work.
 
-Turn state is separate from lifecycle truth. When the daemon accepts and delivers an Agent execution turn, AgentExecution enters semantic activity `awaiting-agent-response` immediately and remains there until a meaningful Agent observation clears it, replaces it with another activity, or requests input. Surfaces must not wait for an Agent-declared `initializing` marker before showing that a turn is in flight.
+Turn state is separate from lifecycle truth. When the daemon accepts and delivers an Agent execution turn, AgentExecution enters semantic activity `awaiting-agent-response` immediately and remains there until a meaningful Agent observation clears it, replaces it with another activity, or requests input. Surfaces must not wait for an Agent signal `initializing` marker before showing that a turn is in flight.
 
 `needs_input` is an observation that keeps AgentExecution lifecycle `running`, sets `attention: awaiting-operator`, attaches a current input-request id, and may publish an Entity event. Its signal payload carries a required `question` and required `choices` array. Each choice is either `kind: "fixed"` with `label` and `value`, or `kind: "manual"` with `label` and optional `placeholder` for freeform operator input. The operator response is a separate Agent execution message or Entity command.
 

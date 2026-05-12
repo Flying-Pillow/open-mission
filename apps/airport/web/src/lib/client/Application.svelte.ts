@@ -2,18 +2,28 @@ import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 import { z } from 'zod/v4';
 import {
+    ArtifactDataSchema,
+} from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
+import {
     MissionCatalogEntrySchema,
+    MissionSchema,
     MissionRuntimeEventEnvelopeSchema,
-    MissionSnapshotSchema,
+    MissionStatusSchema,
     type MissionCatalogEntryType,
-    type MissionRuntimeEventEnvelopeType,
-    type MissionSnapshotType
+    type MissionType,
+    type MissionRuntimeEventEnvelopeType
 } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import { StageDataSchema } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
+import { TaskDataSchema } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import type { TaskConfigureCommandOptionsType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import { RepositoryDataSchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
-import { AgentExecutionDataChangedSchema } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
+import { AgentExecutionDataChangedSchema, AgentExecutionDataSchema } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import type { RepositoryPlatformRepositoryType, RepositoryDataType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { SystemState } from '@flying-pillow/mission-core/entities/System/SystemSchema';
 import { Repository } from '$lib/components/entities/Repository/Repository.svelte.js';
+import { System } from '$lib/components/entities/System/System.svelte.js';
+import type { Stage } from '$lib/components/entities/Stage/Stage.svelte.js';
+import type { Task } from '$lib/components/entities/Task/Task.svelte.js';
 import {
     getRepositoryDisplayDescription,
     getRepositoryDisplayName
@@ -110,12 +120,19 @@ async function executeDefaultQueryRemote(
 
 export class AirportApplication {
     private readonly repositories = new Map<string, Repository>();
-    private readonly missionStores = new Map<string, EntityRuntimeStore<string, MissionSnapshotType, Mission>>();
+    private readonly missions = new Map<string, Mission>();
+    private readonly missionStores = new Map<string, EntityRuntimeStore<string, MissionType, Mission>>();
     private repositoryVersion = $state(0);
+    private missionVersion = $state(0);
     private repositorySummaries = $state<SidebarRepositoryData[]>([]);
     private applicationEventSubscription: RuntimeSubscription | undefined;
+    private missionEventSubscription: RuntimeSubscription | undefined;
     private notificationsState = $state<AirportNotificationRecord[]>(readStoredAirportNotifications());
-    private activeMissionState = $state<Mission | undefined>();
+    public system = $state<System | undefined>();
+    public repository = $state<Repository | undefined>();
+    public mission = $state<Mission | undefined>();
+    public stage = $state<Stage | undefined>();
+    public task = $state<Task | undefined>();
     #selectionRequestId = 0;
     #isInitialized = false;
     #repositoryLoadPromise: Promise<Repository[]> | null = null;
@@ -127,15 +144,12 @@ export class AirportApplication {
     public githubRepositoriesState = $state<RepositoryPlatformRepositoryType[]>([]);
     public githubRepositoriesLoading = $state(false);
     public githubRepositoriesError = $state<string | undefined>();
-    public activeRepositoryLoading = $state(false);
-    public activeRepositoryError = $state<string | undefined>();
-    public activeRepositoryId = $state<string | undefined>();
-    public activeRepositoryRootPath = $state<string | undefined>();
-    public activeMissionLoading = $state(false);
-    public activeMissionError = $state<string | undefined>();
-    public activeMissionId = $state<string | undefined>();
-    public activeMissionSelectedFocusId = $state<string | undefined>();
-    public activeMissionSelectedArtifactId = $state<string | undefined>();
+    public repositoryLoading = $state(false);
+    public repositoryError = $state<string | undefined>();
+    public missionLoading = $state(false);
+    public missionError = $state<string | undefined>();
+    public focusId = $state<string | undefined>();
+    public artifactId = $state<string | undefined>();
 
     public constructor(private readonly input: {
         fetch?: typeof fetch;
@@ -187,20 +201,25 @@ export class AirportApplication {
         return items.sort((left, right) => Number(right.isLocal) - Number(left.isLocal) || left.displayName.localeCompare(right.displayName));
     }
 
-    public get activeRepository(): Repository | undefined {
-        const activeRepositoryId = this.activeRepositoryId;
-        if (!activeRepositoryId) {
-            return undefined;
+    public setSystemState(state?: SystemState): void {
+        if (!state) {
+            this.system = undefined;
+            return;
         }
 
-        return this.resolveRepository(activeRepositoryId);
+        if (this.system) {
+            this.system.applyData(state);
+            return;
+        }
+
+        this.system = new System(state);
     }
 
-    public async configureActiveMissionTask(input: {
+    public async configureTask(input: {
         taskId: string;
         options: TaskConfigureCommandOptionsType;
     }): Promise<void> {
-        const mission = this.activeMissionState;
+        const mission = this.mission;
         const taskId = input.taskId.trim();
         if (!mission || !taskId) {
             return;
@@ -212,11 +231,7 @@ export class AirportApplication {
         }
 
         await task.configure(input.options);
-        this.activeMissionState = mission;
-    }
-
-    public get activeMission(): Mission | undefined {
-        return this.activeMissionState;
+        this.mission = mission;
     }
 
     public get repositoryClassCommands(): EntityCommandDescriptorType[] {
@@ -309,7 +324,11 @@ export class AirportApplication {
         }
 
         const created = new Repository(data, {
-            loadData: (input) => this.loadRepositoryData(input)
+            loadData: (input) => this.loadRepositoryData(input),
+            onChanged: () => {
+                this.syncRepositorySummaries();
+                this.repositoryVersion += 1;
+            }
         });
         this.repositories.set(id, created);
         this.syncRepositorySummaries();
@@ -321,12 +340,8 @@ export class AirportApplication {
         if (!this.repositories.delete(repositoryId)) {
             return;
         }
-        if (this.activeRepositoryId === repositoryId) {
-            this.setActiveRepositorySelection(undefined);
-            this.setActiveMissionSelection(undefined);
-            this.activeMissionState = undefined;
-            this.setActiveMissionSelectedFocusId(undefined);
-            this.setActiveMissionSelectedArtifactId(undefined);
+        if (this.repository?.id === repositoryId) {
+            this.clearEntitySelection();
         }
         this.syncRepositorySummaries();
         this.repositoryVersion += 1;
@@ -340,11 +355,8 @@ export class AirportApplication {
             return repository;
         });
 
-        if (this.activeRepositoryId && !nextRepositories.has(this.activeRepositoryId)) {
-            this.setActiveRepositorySelection(undefined);
-            this.setActiveMissionSelection(undefined);
-            this.activeMissionState = undefined;
-            this.setActiveMissionSelectedFocusId(undefined);
+        if (this.repository && !nextRepositories.has(this.repository.id)) {
+            this.clearEntitySelection();
         }
 
         this.repositories.clear();
@@ -366,12 +378,22 @@ export class AirportApplication {
     }
 
     public hydrateMissionData(
-        data: MissionSnapshotType,
+        data: MissionType,
         input: {
             repositoryRootPath?: string;
         } = {}
     ) {
-        return this.getMissionStore(input.repositoryRootPath).upsertData(data);
+        const mission = this.getMissionStore(input.repositoryRootPath).upsertData(data);
+        this.syncTrackedMission(mission, input.repositoryRootPath);
+        return mission;
+    }
+
+    public resolveMission(input: {
+        missionId: string;
+        repositoryRootPath?: string;
+    }): Mission | undefined {
+        this.missionVersion;
+        return this.missions.get(createMissionRegistryKey(input.missionId, input.repositoryRootPath));
     }
 
     public resolveRepository(repositoryId: string): Repository | undefined {
@@ -519,7 +541,7 @@ export class AirportApplication {
 
     public clearAirportSelection(): void {
         this.#selectionRequestId += 1;
-        this.resetActiveRouteState();
+        this.resetRouteState();
     }
 
     public async loadAirportRepositories(): Promise<void> {
@@ -548,7 +570,9 @@ export class AirportApplication {
         missionId: string;
         repositoryRootPath?: string;
     }) {
-        return await this.getMissionStore(input.repositoryRootPath).refresh(input.missionId);
+        const mission = await this.getMissionStore(input.repositoryRootPath).refresh(input.missionId);
+        this.syncTrackedMission(mission, input.repositoryRootPath);
+        return mission;
     }
 
     public observeMission(input: {
@@ -625,15 +649,20 @@ export class AirportApplication {
                 }
                 if (payload.type === 'entity.changed' && payload.entity === 'Repository' && payload.id) {
                     const repository = this.repositories.get(payload.id);
-                    if (repository && this.activeRepositoryId === payload.id) {
+                    if (repository && repository.id === this.repository?.id) {
                         void repository.refreshSyncStatus().catch(() => undefined);
                         void repository.refreshCommands().catch(() => undefined);
                     }
                     void this.loadRepositories({ force: true }).catch(() => undefined);
                 }
+                const runtimeEvent = MissionRuntimeEventEnvelopeSchema.safeParse(payload);
+                if (runtimeEvent.success) {
+                    void this.applyApplicationMissionRuntimeEvent(runtimeEvent.data).catch(() => undefined);
+                    return;
+                }
                 if (payload.type === 'agentExecution.data.changed') {
                     const eventPayload = AgentExecutionDataChangedSchema.parse(payload.payload);
-                    const repository = this.activeRepository;
+                    const repository = this.repository;
                     const repositoryExecution = repository?.repositoryAgentExecution;
                     if (repositoryExecution?.agentExecutionId === eventPayload.data.agentExecutionId) {
                         repository?.applyRepositoryAgentExecutionData(eventPayload.data);
@@ -662,24 +691,40 @@ export class AirportApplication {
         };
     }
 
-    public setActiveRepositorySelection(input?: {
-        id?: string;
-        repositoryRootPath?: string;
-    }): void {
-        this.activeRepositoryId = input?.id?.trim() || undefined;
-        this.activeRepositoryRootPath = input?.repositoryRootPath?.trim() || undefined;
+    public selectStage(stage?: Stage): void {
+        this.stage = stage;
+        this.task = undefined;
+        this.focusId = stage ? `stage:${stage.stageId}` : undefined;
     }
 
-    public setActiveMissionSelection(missionId?: string): void {
-        this.activeMissionId = missionId?.trim() || undefined;
+    public selectTask(task?: Task): void {
+        this.task = task;
+        this.stage = task ? this.mission?.getStage(task.stageId) : undefined;
+        this.focusId = task ? `task:${task.taskId}` : this.stage ? `stage:${this.stage.stageId}` : undefined;
     }
 
-    public setActiveMissionSelectedFocusId(focusId?: string): void {
-        this.activeMissionSelectedFocusId = focusId;
+    public selectFocus(focusId: string): void {
+        const normalizedFocusId = focusId.trim();
+        if (!normalizedFocusId || !this.mission) {
+            this.selectStage(undefined);
+            return;
+        }
+
+        if (normalizedFocusId.startsWith('task:')) {
+            this.selectTask(this.mission.getTask(normalizedFocusId.slice('task:'.length)));
+            return;
+        }
+
+        if (normalizedFocusId.startsWith('stage:')) {
+            this.selectStage(this.mission.getStage(normalizedFocusId.slice('stage:'.length)));
+            return;
+        }
+
+        this.selectStage(undefined);
     }
 
-    public setActiveMissionSelectedArtifactId(artifactId?: string): void {
-        this.activeMissionSelectedArtifactId = artifactId?.trim() || undefined;
+    public selectArtifact(artifactId?: string): void {
+        this.artifactId = artifactId?.trim() || undefined;
     }
 
     private async applyRepositoryPageState(input: {
@@ -691,24 +736,24 @@ export class AirportApplication {
             return false;
         }
 
-        this.activeRepositoryLoading = true;
-        this.activeRepositoryError = undefined;
-        this.activeMissionLoading = false;
-        this.activeMissionError = undefined;
-        this.setActiveMissionSelection(undefined);
-        this.setActiveMissionSelectedFocusId(undefined);
-        this.setActiveMissionSelectedArtifactId(undefined);
+        this.repositoryLoading = true;
+        this.repositoryError = undefined;
+        this.missionLoading = false;
+        this.missionError = undefined;
+        this.mission = undefined;
+        this.selectStage(undefined);
+        this.selectArtifact(undefined);
 
         let repository: Repository;
         try {
-            repository = await this.loadActiveRepository(input.repositoryId);
+            repository = await this.loadRepositoryEntity(input.repositoryId);
         } catch (error) {
             if (!this.isCurrentSelectionRequest(requestId)) {
                 return false;
             }
 
-            this.resetActiveRouteState();
-            this.activeRepositoryError = error instanceof Error ? error.message : String(error);
+            this.resetRouteState();
+            this.repositoryError = error instanceof Error ? error.message : String(error);
             return false;
         }
 
@@ -716,11 +761,8 @@ export class AirportApplication {
             return false;
         }
 
-        this.setActiveRepositorySelection({
-            id: repository.id,
-            repositoryRootPath: repository.data.repositoryRootPath
-        });
-        this.activeRepositoryLoading = false;
+        this.repository = repository;
+        this.repositoryLoading = false;
 
         if (!input.skipMissionCatalogLoad) {
             void repository.refreshCommands().catch(() => undefined);
@@ -735,17 +777,17 @@ export class AirportApplication {
                     return false;
                 }
 
-                this.activeMissionError = error instanceof Error ? error.message : String(error);
+                this.missionError = error instanceof Error ? error.message : String(error);
             }
         }
 
         repository.applyData({
             ...repository.toData()
         });
-        this.activeMissionState = undefined;
-        this.activeMissionLoading = false;
-        if (!this.activeMissionError) {
-            this.activeMissionError = undefined;
+        this.mission = undefined;
+        this.missionLoading = false;
+        if (!this.missionError) {
+            this.missionError = undefined;
         }
         return true;
     }
@@ -762,9 +804,9 @@ export class AirportApplication {
             return;
         }
 
-        this.activeMissionLoading = true;
+        this.missionLoading = true;
         try {
-            const repository = this.activeRepository;
+            const repository = this.repository;
             if (!repository) {
                 throw new Error(`Repository '${input.repositoryId}' is unavailable.`);
             }
@@ -777,60 +819,160 @@ export class AirportApplication {
             mission.setRouteState({
                 worktreePath: missionRepositoryRootPath
             });
-            this.activeMissionState = mission;
+            this.mission = mission;
             if (!this.isCurrentSelectionRequest(requestId)) {
                 return;
             }
 
-            this.setActiveMissionSelection(mission.missionId);
-            this.activeMissionError = undefined;
-            const controlViewSnapshot = await mission.getControlViewSnapshot();
+            this.missionError = undefined;
+            const controlData = await mission.getControlData();
             if (!this.isCurrentSelectionRequest(requestId)) {
                 return;
             }
 
             mission.setRouteState({
-                controlViewSnapshot,
+                controlData,
                 worktreePath: missionRepositoryRootPath
             });
-            this.activeMissionState = mission;
+            this.mission = mission;
+            this.reconcileMissionSelection();
+            this.observeLoadedMission(missionRepositoryRootPath);
             if (!this.isCurrentSelectionRequest(requestId)) {
                 return;
             }
 
-            this.activeMissionError = undefined;
+            this.missionError = undefined;
         } catch (error) {
             if (!this.isCurrentSelectionRequest(requestId)) {
                 return;
             }
 
-            this.activeMissionState = undefined;
-            this.setActiveMissionSelection(undefined);
-            this.activeMissionError = error instanceof Error ? error.message : String(error);
+            this.mission = undefined;
+            this.selectStage(undefined);
+            this.missionError = error instanceof Error ? error.message : String(error);
         } finally {
             if (this.isCurrentSelectionRequest(requestId)) {
-                this.activeMissionLoading = false;
+                this.missionLoading = false;
             }
         }
     }
 
-    private resetActiveRouteState(): void {
-        this.activeRepositoryLoading = false;
-        this.activeRepositoryError = undefined;
-        this.activeMissionLoading = false;
-        this.activeMissionError = undefined;
-        this.setActiveRepositorySelection(undefined);
-        this.setActiveMissionSelection(undefined);
-        this.activeMissionState = undefined;
-        this.setActiveMissionSelectedFocusId(undefined);
-        this.setActiveMissionSelectedArtifactId(undefined);
+    private resetRouteState(): void {
+        this.repositoryLoading = false;
+        this.repositoryError = undefined;
+        this.missionLoading = false;
+        this.missionError = undefined;
+        this.missionEventSubscription?.dispose();
+        this.missionEventSubscription = undefined;
+        this.clearEntitySelection();
+    }
+
+    private clearEntitySelection(): void {
+        this.repository = undefined;
+        this.mission = undefined;
+        this.selectStage(undefined);
+        this.selectArtifact(undefined);
+    }
+
+    private observeLoadedMission(repositoryRootPath?: string): void {
+        this.missionEventSubscription?.dispose();
+        const mission = this.mission;
+        if (!mission) {
+            this.missionEventSubscription = undefined;
+            return;
+        }
+
+        this.missionEventSubscription = this.observeMission({
+            missionId: mission.missionId,
+            ...(repositoryRootPath ? { repositoryRootPath } : {}),
+            onConnected: (connectedMission) => {
+                this.mission = connectedMission;
+                this.reconcileMissionSelection();
+            },
+            onUpdate: (_, event) => {
+                this.applyMissionRuntimeEvent(event);
+                this.reconcileMissionSelection();
+            },
+            onError: (error) => {
+                this.missionError = error.message;
+            }
+        });
+    }
+
+    private applyMissionRuntimeEvent(event: MissionRuntimeEventEnvelopeType): void {
+        const mission = this.mission;
+        if (!mission) {
+            return;
+        }
+
+        switch (event.type) {
+            case 'mission.changed': {
+                const payload = event.payload as { mission?: unknown };
+                mission.applyMissionData(MissionSchema.parse(payload.mission));
+                return;
+            }
+            case 'mission.status': {
+                const payload = event.payload as { status?: unknown };
+                mission.applyMissionStatus(MissionStatusSchema.parse(payload.status));
+                return;
+            }
+            case 'stage.data.changed': {
+                const payload = event.payload as { data?: unknown };
+                mission.applyStageData(StageDataSchema.parse(payload.data));
+                return;
+            }
+            case 'task.data.changed': {
+                const payload = event.payload as { data?: unknown };
+                mission.applyTaskData(TaskDataSchema.parse(payload.data));
+                return;
+            }
+            case 'artifact.data.changed': {
+                const payload = event.payload as { data?: unknown };
+                mission.applyArtifactData(ArtifactDataSchema.parse(payload.data));
+                return;
+            }
+            case 'agentExecution.data.changed': {
+                const payload = event.payload as { data?: unknown };
+                mission.applyAgentExecutionData(AgentExecutionDataSchema.parse(payload.data));
+                return;
+            }
+            case 'execution.event': {
+                const payload = event.payload as { session?: unknown };
+                mission.applyAgentExecutionData(AgentExecutionDataSchema.parse(payload.session));
+                return;
+            }
+            case 'execution.lifecycle':
+            default:
+                return;
+        }
+    }
+
+    private reconcileMissionSelection(): void {
+        const mission = this.mission;
+        if (!mission) {
+            this.selectStage(undefined);
+            return;
+        }
+
+        if (this.task) {
+            this.selectTask(mission.getTask(this.task.taskId));
+            return;
+        }
+
+        if (this.stage) {
+            this.selectStage(mission.getStage(this.stage.stageId));
+            return;
+        }
+
+        const currentStageId = mission.controlData?.workflow?.currentStageId;
+        this.selectStage(currentStageId ? mission.getStage(currentStageId) : undefined);
     }
 
     private isCurrentSelectionRequest(requestId: number): boolean {
         return this.#selectionRequestId === requestId;
     }
 
-    private async loadActiveRepository(id: string): Promise<Repository> {
+    private async loadRepositoryEntity(id: string): Promise<Repository> {
         const repository = this.resolveRepository(id);
         if (repository) {
             return await repository.refresh();
@@ -841,7 +983,7 @@ export class AirportApplication {
         );
     }
 
-    private getMissionStore(repositoryRootPath?: string): EntityRuntimeStore<string, MissionSnapshotType, Mission> {
+    private getMissionStore(repositoryRootPath?: string): EntityRuntimeStore<string, MissionType, Mission> {
         const runtimeKey = repositoryRootPath?.trim() || '__default__';
         let store = this.missionStores.get(runtimeKey);
         if (!store) {
@@ -849,11 +991,11 @@ export class AirportApplication {
             store = new EntityRuntimeStore({
                 loadData: (missionId) => this.loadMissionData(missionId, normalizedRepositoryRootPath),
                 createEntity: (data, loadData) => new Mission({
-                    snapshot: data,
+                    data,
                     loadData,
                     gatewayDependencies: this.createMissionGatewayDependencies(normalizedRepositoryRootPath)
                 }),
-                selectId: (data) => data.mission.missionId
+                selectId: (data) => data.missionId
             });
             this.missionStores.set(runtimeKey, store);
         }
@@ -884,13 +1026,13 @@ export class AirportApplication {
         }
     }
 
-    private async loadMissionData(missionId: string, repositoryRootPath?: string): Promise<MissionSnapshotType> {
+    private async loadMissionData(missionId: string, repositoryRootPath?: string): Promise<MissionType> {
         const normalizedMissionId = missionId.trim();
         if (!normalizedMissionId) {
             throw new Error('Mission runtime operation requires a non-empty id.');
         }
 
-        return MissionSnapshotSchema.parse(await executeDefaultQueryRemote({
+        return MissionSchema.parse(await executeDefaultQueryRemote({
             entity: missionEntityName,
             method: 'read',
             payload: {
@@ -963,6 +1105,111 @@ export class AirportApplication {
         return statuses;
     }
 
+    private async applyApplicationMissionRuntimeEvent(event: MissionRuntimeEventEnvelopeType): Promise<void> {
+        const missionId = readMissionIdFromRuntimeEvent(event);
+        if (!missionId) {
+            return;
+        }
+
+        const repositoryRootPath = this.resolveMissionRepositoryRootPath(missionId);
+        const trackedMission = this.resolveMission({
+            missionId,
+            ...(repositoryRootPath ? { repositoryRootPath } : {})
+        });
+
+        switch (event.type) {
+            case 'mission.status': {
+                const lifecycle = event.payload.workflow?.lifecycle;
+                this.applyMissionCatalogStatus(missionId, lifecycle);
+
+                if (trackedMission) {
+                    trackedMission.applyMissionStatus(event.payload);
+                    this.syncTrackedMission(trackedMission, repositoryRootPath);
+                    return;
+                }
+
+                if (shouldTrackMissionLifecycle(lifecycle) && repositoryRootPath) {
+                    await this.refreshMission({ missionId, repositoryRootPath });
+                }
+                return;
+            }
+            case 'mission.changed': {
+                const data = event.payload.mission;
+                const mission = this.hydrateMissionData(data, {
+                    ...(repositoryRootPath ? { repositoryRootPath } : {})
+                });
+                this.applyMissionCatalogStatus(data.missionId, mission.workflowLifecycle);
+                this.syncTrackedMission(mission, repositoryRootPath);
+                return;
+            }
+            default:
+                return;
+        }
+    }
+
+    private applyMissionCatalogStatus(missionId: string, lifecycle: string | undefined): void {
+        for (const repository of this.repositories.values()) {
+            if (!repository.missions.some((mission) => mission.missionId === missionId)) {
+                continue;
+            }
+
+            repository.setMissionStatus(missionId, lifecycle);
+        }
+    }
+
+    private resolveMissionRepositoryRootPath(missionId: string): string | undefined {
+        for (const repository of this.repositories.values()) {
+            const mission = repository.missions.find((candidate) => candidate.missionId === missionId);
+            if (!mission) {
+                continue;
+            }
+
+            return mission.repositoryRootPath ?? repository.data.repositoryRootPath;
+        }
+
+        return undefined;
+    }
+
+    private syncTrackedMission(mission: Mission, repositoryRootPath?: string): void {
+        const key = createMissionRegistryKey(mission.missionId, repositoryRootPath);
+        if (!shouldTrackMissionLifecycle(mission.workflowLifecycle)) {
+            if (this.missions.delete(key)) {
+                this.missionVersion += 1;
+            }
+            return;
+        }
+
+        const existing = this.missions.get(key);
+        if (existing !== mission) {
+            this.missions.set(key, mission);
+            this.missionVersion += 1;
+        }
+    }
+
+}
+
+function createMissionRegistryKey(missionId: string, repositoryRootPath?: string): string {
+    return `${repositoryRootPath?.trim() || '__default__'}::${missionId.trim()}`;
+}
+
+function readMissionIdFromRuntimeEvent(event: MissionRuntimeEventEnvelopeType): string | undefined {
+    switch (event.type) {
+        case 'mission.status':
+            return event.payload.missionId;
+        case 'mission.changed':
+            return event.payload.mission.missionId;
+        default:
+            return undefined;
+    }
+}
+
+function shouldTrackMissionLifecycle(lifecycle: string | undefined): boolean {
+    const normalizedLifecycle = lifecycle?.trim().toLowerCase();
+    if (!normalizedLifecycle) {
+        return false;
+    }
+
+    return !new Set(['completed', 'failed', 'cancelled', 'terminated', 'delivered']).has(normalizedLifecycle);
 }
 
 function createRepositoryListItem(input: {

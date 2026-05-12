@@ -1,19 +1,21 @@
 import {
     AgentExecutionProjectionSchema,
     AgentExecutionTimelineItemSchema,
-    type AgentExecutionAttentionStateType,
     type AgentExecutionAttentionProjectionType,
-    type AgentExecutionDataType,
     type AgentExecutionActivityProjectionType,
-    type AgentExecutionLifecycleStateType,
     type AgentExecutionProjectionType,
-    type AgentExecutionProtocolDescriptorType,
+    type AgentExecutionTimelineItemType
+} from './AgentExecutionProjectionSchema.js';
+import {
+    type AgentExecutionActivityStateType,
+    type AgentExecutionAttentionStateType,
+    type AgentExecutionLifecycleStateType,
     type AgentExecutionRuntimeActivitySnapshotType,
-    type AgentExecutionSemanticActivityType,
-    type AgentExecutionTimelineItemType,
     type AgentExecutionTelemetrySnapshot,
     type AgentExecutionTransportStateType
-} from './AgentExecutionSchema.js';
+} from './AgentExecutionRuntimeSchema.js';
+import type { AgentExecutionProtocolDescriptorType } from './AgentExecutionProtocolSchema.js';
+import type { AgentExecutionDataType } from './AgentExecutionDataSchema.js';
 import type {
     AgentExecutionActivityUpdatedRecordType,
     AgentExecutionJournalHeaderRecordType,
@@ -29,7 +31,7 @@ export type AgentExecutionJournalReplayState = {
     processedObservationIds: Set<string>;
     lifecycleState?: AgentExecutionLifecycleStateType;
     attention?: AgentExecutionAttentionStateType;
-    semanticActivity?: AgentExecutionSemanticActivityType;
+    activityState?: AgentExecutionActivityStateType;
     currentInputRequestId?: string | null;
     awaitingResponseToMessageId?: string | null;
     runtimeActivity?: AgentExecutionRuntimeActivitySnapshotType;
@@ -47,7 +49,7 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
     let header: AgentExecutionJournalHeaderRecordType | undefined;
     let lifecycleState: AgentExecutionLifecycleStateType | undefined;
     let attention: AgentExecutionAttentionStateType | undefined;
-    let semanticActivity: AgentExecutionSemanticActivityType | undefined;
+    let activityState: AgentExecutionActivityStateType | undefined;
     let currentInputRequestId: string | null | undefined;
     let awaitingResponseToMessageId: string | null | undefined;
     let runtimeActivity: AgentExecutionRuntimeActivitySnapshotType | undefined;
@@ -74,7 +76,7 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
             case 'state.changed':
                 lifecycleState = record.lifecycle ?? lifecycleState;
                 attention = record.attention ?? attention;
-                semanticActivity = record.activity ?? semanticActivity;
+                activityState = record.activity ?? activityState;
                 if (record.currentInputRequestId !== undefined) {
                     currentInputRequestId = record.currentInputRequestId;
                 }
@@ -84,6 +86,7 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
                 appendUniqueTimelineItem(timelineItems, toTimelineItemFromStateChangedRecord(record));
                 break;
             case 'activity.updated':
+                activityState = record.activity ?? activityState;
                 runtimeActivity = mergeRuntimeActivity(runtimeActivity, record);
                 telemetry = mergeTelemetry(telemetry, record);
                 appendUniqueTimelineItem(timelineItems, toTimelineItemFromActivityRecord(record));
@@ -99,23 +102,21 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
         }
     }
 
-    const derivedSemanticActivity = deriveSemanticActivity({
+    const derivedActivityState = deriveActivityState({
         lifecycleState,
         awaitingResponseToMessageId,
-        semanticActivity,
-        runtimeActivity,
+        activityState,
     });
-    const projectedRuntimeActivity = applySemanticActivityOverride(runtimeActivity, derivedSemanticActivity);
 
     const projection = AgentExecutionProjectionSchema.parse({
         timelineItems,
-        ...(projectedRuntimeActivity || lifecycleState || attention || derivedSemanticActivity || telemetry
+        ...(runtimeActivity || lifecycleState || attention || derivedActivityState || telemetry
             ? {
                 currentActivity: createCurrentActivityProjection({
                     lifecycleState,
                     attention,
-                    semanticActivity: derivedSemanticActivity,
-                    runtimeActivity: projectedRuntimeActivity,
+                    activityState: derivedActivityState,
+                    runtimeActivity,
                     telemetry,
                     lastOccurredAt
                 })
@@ -139,10 +140,10 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
         processedObservationIds,
         ...(lifecycleState ? { lifecycleState } : {}),
         ...(attention ? { attention } : {}),
-        ...(derivedSemanticActivity ? { semanticActivity: derivedSemanticActivity } : {}),
+        ...(derivedActivityState ? { activityState: derivedActivityState } : {}),
         ...(currentInputRequestId !== undefined ? { currentInputRequestId } : {}),
         ...(awaitingResponseToMessageId !== undefined ? { awaitingResponseToMessageId } : {}),
-        ...(projectedRuntimeActivity ? { runtimeActivity: projectedRuntimeActivity } : {}),
+        ...(runtimeActivity ? { runtimeActivity } : {}),
         ...(header?.protocolDescriptor ? { protocolDescriptor: header.protocolDescriptor } : {}),
         ...(header?.transportState ? { transportState: header.transportState } : {}),
         ...(header?.workingDirectory ? { workingDirectory: header.workingDirectory } : {}),
@@ -158,19 +159,18 @@ export function hydrateAgentExecutionDataFromJournal(
     const replay = replayAgentExecutionJournal(records);
     const lifecycleState = replay.lifecycleState ?? data.lifecycleState;
     const attention = replay.attention ?? data.attention;
-    const semanticActivity = deriveSemanticActivity({
+    const activityState = deriveActivityState({
         lifecycleState,
         awaitingResponseToMessageId: replay.awaitingResponseToMessageId ?? data.awaitingResponseToMessageId,
-        semanticActivity: replay.semanticActivity ?? data.semanticActivity,
-        runtimeActivity: replay.runtimeActivity ?? data.runtimeActivity,
+        activityState: replay.activityState ?? data.activityState,
     });
-    const runtimeActivity = applySemanticActivityOverride(replay.runtimeActivity ?? data.runtimeActivity, semanticActivity);
+    const runtimeActivity = replay.runtimeActivity ?? data.runtimeActivity;
     const projection = AgentExecutionProjectionSchema.parse({
         ...replay.projection,
         ...(createCurrentActivityProjection({
             lifecycleState,
             attention,
-            semanticActivity,
+            activityState,
             runtimeActivity,
             telemetry: replay.telemetry ?? data.telemetry,
             lastOccurredAt: replay.lastOccurredAt ?? data.lastUpdatedAt
@@ -179,7 +179,7 @@ export function hydrateAgentExecutionDataFromJournal(
                 currentActivity: createCurrentActivityProjection({
                     lifecycleState,
                     attention,
-                    semanticActivity,
+                    activityState,
                     runtimeActivity,
                     telemetry: replay.telemetry ?? data.telemetry,
                     lastOccurredAt: replay.lastOccurredAt ?? data.lastUpdatedAt
@@ -193,7 +193,7 @@ export function hydrateAgentExecutionDataFromJournal(
         projection,
         ...(replay.lifecycleState ? { lifecycleState: replay.lifecycleState } : {}),
         ...(replay.attention ? { attention: replay.attention } : {}),
-        ...(semanticActivity ? { semanticActivity } : {}),
+        ...(activityState ? { activityState } : {}),
         ...(replay.currentInputRequestId !== undefined ? { currentInputRequestId: replay.currentInputRequestId } : {}),
         ...(replay.awaitingResponseToMessageId !== undefined ? { awaitingResponseToMessageId: replay.awaitingResponseToMessageId } : {}),
         ...(runtimeActivity ? { runtimeActivity } : {}),
@@ -321,14 +321,15 @@ function toTimelineItemFromStateChangedRecord(
 }
 
 function toTimelineItemFromActivityRecord(record: AgentExecutionActivityUpdatedRecordType): AgentExecutionTimelineItemType | undefined {
-    if (!record.activity && !record.progress && !record.currentTarget && !record.telemetry?.activeToolName) {
+    const currentTarget = record['currentTarget'];
+    if (!record.activity && !record.progress && !currentTarget && !record.telemetry?.activeToolName) {
         return undefined;
     }
     const primitive = record.progress
         ? 'activity.progress'
         : record.telemetry?.activeToolName
             ? 'activity.tool'
-            : record.currentTarget
+            : currentTarget
                 ? 'activity.target'
                 : 'activity.status';
     return AgentExecutionTimelineItemSchema.parse({
@@ -347,7 +348,7 @@ function toTimelineItemFromActivityRecord(record: AgentExecutionActivityUpdatedR
             ...(record.progress?.summary ? { text: record.progress.summary, summary: record.progress.summary } : {}),
             ...(record.progress?.detail ? { detail: record.progress.detail } : {}),
             ...(record.progress?.units ? { units: record.progress.units } : {}),
-            ...(record.currentTarget ? { currentTarget: record.currentTarget } : {}),
+            ...(currentTarget ? { currentTarget } : {}),
             ...(record.telemetry?.activeToolName ? { activeToolName: record.telemetry.activeToolName } : {})
         }
     });
@@ -422,7 +423,7 @@ function createBehavior(
 function createCurrentActivityProjection(input: {
     lifecycleState: AgentExecutionLifecycleStateType | undefined;
     attention: AgentExecutionAttentionStateType | undefined;
-    semanticActivity: AgentExecutionSemanticActivityType | undefined;
+    activityState: AgentExecutionActivityStateType | undefined;
     runtimeActivity: AgentExecutionRuntimeActivitySnapshotType | undefined;
     telemetry: AgentExecutionTelemetrySnapshot | undefined;
     lastOccurredAt: string | undefined;
@@ -435,8 +436,8 @@ function createCurrentActivityProjection(input: {
         updatedAt,
         ...(input.lifecycleState ? { lifecycleState: input.lifecycleState } : {}),
         ...(input.attention ? { attention: input.attention } : {}),
-        ...(input.runtimeActivity?.activity ?? input.semanticActivity
-            ? { activity: input.runtimeActivity?.activity ?? input.semanticActivity }
+        ...(input.activityState
+            ? { activity: input.activityState }
             : {}),
         ...(input.runtimeActivity?.progress?.summary ? { summary: input.runtimeActivity.progress.summary } : {}),
         ...(input.runtimeActivity?.progress?.detail ? { detail: input.runtimeActivity.progress.detail } : {}),
@@ -446,13 +447,12 @@ function createCurrentActivityProjection(input: {
     };
 }
 
-function deriveSemanticActivity(input: {
+function deriveActivityState(input: {
     lifecycleState: AgentExecutionLifecycleStateType | undefined;
     awaitingResponseToMessageId: string | null | undefined;
-    semanticActivity: AgentExecutionSemanticActivityType | undefined;
-    runtimeActivity: AgentExecutionRuntimeActivitySnapshotType | undefined;
-}): AgentExecutionSemanticActivityType | undefined {
-    const baseActivity = input.runtimeActivity?.activity ?? input.semanticActivity;
+    activityState: AgentExecutionActivityStateType | undefined;
+}): AgentExecutionActivityStateType | undefined {
+    const baseActivity = input.activityState;
     if (input.lifecycleState !== 'running' && input.lifecycleState !== 'starting') {
         return baseActivity;
     }
@@ -460,25 +460,6 @@ function deriveSemanticActivity(input: {
         return 'awaiting-agent-response';
     }
     return baseActivity;
-}
-
-function applySemanticActivityOverride(
-    runtimeActivity: AgentExecutionRuntimeActivitySnapshotType | undefined,
-    semanticActivity: AgentExecutionSemanticActivityType | undefined
-): AgentExecutionRuntimeActivitySnapshotType | undefined {
-    if (!runtimeActivity) {
-        return runtimeActivity;
-    }
-    if (!semanticActivity || runtimeActivity.activity === semanticActivity) {
-        return runtimeActivity;
-    }
-    if (runtimeActivity.activity !== 'executing') {
-        return runtimeActivity;
-    }
-    return {
-        ...runtimeActivity,
-        activity: semanticActivity
-    };
 }
 
 function createCurrentAttentionProjection(input: {
@@ -561,15 +542,15 @@ function mergeRuntimeActivity(
     current: AgentExecutionRuntimeActivitySnapshotType | undefined,
     record: AgentExecutionActivityUpdatedRecordType
 ): AgentExecutionRuntimeActivitySnapshotType | undefined {
-    if (!record.activity && !record.progress && !record.capabilities && !record.currentTarget) {
+    const currentTarget = record['currentTarget'];
+    if (!record.progress && !record.capabilities && !currentTarget) {
         return current;
     }
     return {
         ...(current ?? { updatedAt: record.occurredAt }),
-        ...(record.activity ? { activity: record.activity } : {}),
         ...(record.progress ? { progress: record.progress } : {}),
         ...(record.capabilities ? { capabilities: record.capabilities } : {}),
-        ...(record.currentTarget ? { currentTarget: record.currentTarget } : {}),
+        ...(currentTarget ? { currentTarget } : {}),
         updatedAt: record.occurredAt
     };
 }

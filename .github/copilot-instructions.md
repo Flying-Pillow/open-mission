@@ -1,6 +1,6 @@
 # Copilot Instructions for Mission
 
-use .agents/consitution.md and CONTEXT.md
+use .agents/constitution.md and CONTEXT.md
 
 all Architectural and Domain Modeling decisions are located in the docs/adr folder.
   

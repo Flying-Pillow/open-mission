@@ -51,6 +51,7 @@ export function createAgentExecutionMcpBridge(access: AgentExecutionMcpAccess): 
             command: explicitCommand,
             args: ['mcp', 'connect', '--agent-execution', access.agentExecutionId],
             env: {
+                MISSION_AGENT_EXECUTION_OWNER_ID: access.ownerId,
                 MISSION_MCP_TOKEN: access.token
             }
         };
@@ -65,6 +66,7 @@ export function createAgentExecutionMcpBridge(access: AgentExecutionMcpAccess): 
         command: 'mission',
         args: ['mcp', 'connect', '--agent-execution', access.agentExecutionId],
         env: {
+            MISSION_AGENT_EXECUTION_OWNER_ID: access.ownerId,
             MISSION_MCP_TOKEN: access.token
         }
     };
@@ -96,7 +98,9 @@ function createSourceRuntimeBridge(access: AgentExecutionMcpAccess): AgentExecut
             access.agentExecutionId
         ],
         env: {
-            MISSION_MCP_TOKEN: access.token
+            MISSION_AGENT_EXECUTION_OWNER_ID: access.ownerId,
+            MISSION_MCP_TOKEN: access.token,
+            MISSION_DAEMON_RUNTIME_MODE: 'source'
         }
     };
 }

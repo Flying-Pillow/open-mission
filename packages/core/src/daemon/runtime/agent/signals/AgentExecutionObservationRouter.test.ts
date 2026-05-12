@@ -13,7 +13,7 @@ const address = {
 };
 
 describe('AgentExecutionObservationRouter', () => {
-	it('routes strict stdout markers through the agent-declared signal boundary', () => {
+	it('routes strict stdout markers through the agent-signal signal boundary', () => {
 		const router = new AgentExecutionObservationRouter();
 		const observations = router.route({
 			kind: 'terminal-output',
@@ -38,12 +38,12 @@ describe('AgentExecutionObservationRouter', () => {
 		});
 
 		expect(observations).toEqual([{
-			observationId: 'agent-declared-signal:evt-7',
+			observationId: 'agent-signal:evt-7',
 			observedAt: '2026-05-04T12:00:00.000Z',
 			claimedAddress: address,
 			rawText: expect.stringContaining('"eventId":"evt-7"'),
 			route: {
-				origin: 'agent-declared-signal',
+				origin: 'agent-signal',
 				address
 			},
 			signal: {
@@ -54,7 +54,7 @@ describe('AgentExecutionObservationRouter', () => {
 					{ kind: 'fixed', label: 'No', value: 'no' },
 					{ kind: 'manual', label: 'Other', placeholder: 'Describe the preferred next step.' }
 				],
-				source: 'agent-declared',
+				source: 'agent-signal',
 				confidence: 'medium'
 			}
 		}]);
@@ -85,13 +85,13 @@ describe('AgentExecutionObservationRouter', () => {
 				scope: address.scope
 			},
 			route: {
-				origin: 'agent-declared-signal',
+				origin: 'agent-signal',
 				address
 			}
 		})]);
 	});
 
-	it('routes malformed stdout markers as agent-declared signal diagnostics', () => {
+	it('routes malformed stdout markers as agent-signal signal diagnostics', () => {
 		const router = new AgentExecutionObservationRouter();
 		const observations = router.route({
 			kind: 'terminal-output',
@@ -103,18 +103,18 @@ describe('AgentExecutionObservationRouter', () => {
 		});
 
 		expect(observations).toEqual([{
-			observationId: expect.stringMatching(/^agent-declared-signal:[a-f0-9]+:[0-9a-f-]+$/),
+			observationId: expect.stringMatching(/^agent-signal:[a-f0-9]+:[0-9a-f-]+$/),
 			observedAt: '2026-05-04T12:00:30.000Z',
 			rawText: `${markerPrefix}{not-json}`,
 			route: {
-				origin: 'agent-declared-signal',
+				origin: 'agent-signal',
 				address
 			},
 			signal: {
 				type: 'diagnostic',
-				code: 'agent-declared-signal-malformed',
-				summary: 'Agent-declared signal marker did not contain valid JSON.',
-				source: 'agent-declared',
+				code: 'agent-signal-malformed',
+				summary: 'Agent signal marker did not contain valid JSON.',
+				source: 'agent-signal',
 				confidence: 'diagnostic'
 			}
 		}]);
@@ -222,7 +222,7 @@ describe('AgentExecutionObservationRouter', () => {
 		});
 	});
 
-	it('does not trust stderr marker-looking lines as agent-declared signals', () => {
+	it('does not trust stderr marker-looking lines as agent-signal signals', () => {
 		const router = new AgentExecutionObservationRouter();
 
 		expect(router.route({

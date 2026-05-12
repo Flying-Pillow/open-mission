@@ -34,6 +34,7 @@ import type {
     AgentExecutionSignalDecision,
     AgentPrompt
 } from './AgentExecutionProtocolTypes.js';
+import { deriveActivityStateFromProgressState } from './AgentExecutionRuntimeSemantics.js';
 
 export type AgentExecutionJournalLaunchInput = {
     agentExecutionId: string;
@@ -294,7 +295,7 @@ export class AgentExecutionJournalWriter {
             lifecycle: mapStateChangedLifecycle(input.decision),
             attention: input.decision.snapshotPatch.attention,
             activity: input.decision.snapshotPatch.progress?.state
-                ? mapSemanticActivity(input.decision.snapshotPatch.progress.state)
+                ? deriveActivityStateFromProgressState(input.decision.snapshotPatch.progress.state)
                 : undefined,
             ...(input.currentInputRequestId !== undefined ? { currentInputRequestId: input.currentInputRequestId } : {}),
             ...(input.awaitingResponseToMessageId !== undefined ? { awaitingResponseToMessageId: input.awaitingResponseToMessageId } : {})
@@ -347,7 +348,7 @@ export class AgentExecutionJournalWriter {
                 replayClass: 'replay-optional',
                 origin: 'daemon'
             }),
-            ...(mapSemanticActivity(progress.state) ? { activity: mapSemanticActivity(progress.state) } : {}),
+            ...(deriveActivityStateFromProgressState(progress.state) ? { activity: deriveActivityStateFromProgressState(progress.state) } : {}),
             progress: {
                 ...(progress.summary ? { summary: progress.summary } : {}),
                 ...(progress.detail ? { detail: progress.detail } : {}),
@@ -576,7 +577,7 @@ function mapObservationSource(observation: AgentExecutionObservation): AgentExec
             return 'daemon';
         case 'provider-output':
             return 'provider-output';
-        case 'agent-declared-signal':
+        case 'agent-signal':
             return observation.rawText ? 'pty' : 'mcp';
         case 'terminal-output':
             return 'terminal-heuristic';
@@ -588,7 +589,7 @@ function mapObservationOrigin(observation: AgentExecutionObservation): AgentExec
 }
 
 function mapObservationAuthority(observation: AgentExecutionObservation): AgentExecutionJournalRecordAuthorityType {
-    return observation.route.origin === 'agent-declared-signal' ? 'agent' : 'daemon';
+    return observation.route.origin === 'agent-signal' ? 'agent' : 'daemon';
 }
 
 function mapObservationAssertionLevel(observation: AgentExecutionObservation): AgentExecutionJournalRecordBaseType['assertionLevel'] {
@@ -597,7 +598,7 @@ function mapObservationAssertionLevel(observation: AgentExecutionObservation): A
     }
     return observation.signal.confidence === 'diagnostic'
         ? 'diagnostic'
-        : observation.route.origin === 'agent-declared-signal'
+        : observation.route.origin === 'agent-signal'
             ? 'advisory'
             : 'authoritative';
 }
@@ -628,23 +629,6 @@ function readDecisionReason(decision: AgentExecutionSignalDecision): string | un
         case 'reject':
         case 'record-observation-only':
             return decision.reason;
-        default:
-            return undefined;
-    }
-}
-
-function mapSemanticActivity(progressState: string | undefined): AgentExecutionActivityUpdatedRecordType['activity'] | undefined {
-    switch (progressState) {
-        case 'idle':
-            return 'idle';
-        case 'initializing':
-            return 'planning';
-        case 'waiting-input':
-            return 'communicating';
-        case 'working':
-            return 'executing';
-        case 'blocked':
-            return 'executing';
         default:
             return undefined;
     }

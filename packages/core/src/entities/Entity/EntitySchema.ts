@@ -24,6 +24,9 @@ export const EntityIdSchema = nonEmptyStringSchema.refine((value) => {
     message: 'Entity ids must use the table:uniqueId shape.'
 });
 
+export const EntityStorageSchema = z.object({
+    id: EntityIdSchema
+}).strict();
 export const EntityChannelSchema = nonEmptyStringSchema.refine((value) => {
     const tableSeparatorIndex = value.indexOf(':');
     const eventSeparatorIndex = value.lastIndexOf('.');
@@ -114,16 +117,23 @@ export const EntityPresentationToneSchema = z.enum([
 
 export const EntityCommandDescriptorSchema = z.object({
     commandId: z.string().trim().min(1),
+    entity: EntityNameSchema,
+    method: EntityMethodNameSchema,
+    targetId: EntityIdSchema.optional(),
     label: z.string().trim().min(1),
     description: z.string().trim().min(1).optional(),
-    disabled: z.boolean(),
-    disabledReason: z.string().trim().min(1).optional(),
+    available: z.boolean(),
+    unavailableReason: z.string().trim().min(1).optional(),
     variant: EntityCommandButtonVariantSchema.optional(),
     icon: z.string().trim().min(1).optional(),
     tone: EntityPresentationToneSchema.optional(),
     confirmation: EntityCommandConfirmationSchema.optional(),
     input: EntityCommandInputDescriptorSchema.optional(),
     presentationOrder: z.number().int().optional()
+}).strict();
+
+export const EntitySchema = EntityStorageSchema.extend({
+    commands: z.array(EntityCommandDescriptorSchema).optional()
 }).strict();
 
 export const EntityCommandViewSchema = z.object({
@@ -197,6 +207,8 @@ export const EntityEventEnvelopeSchema = z.object({
 }).strict();
 
 export type EntityIdType = z.infer<typeof EntityIdSchema>;
+export type EntityStorageType = z.infer<typeof EntityStorageSchema>;
+export type EntityType = z.infer<typeof EntitySchema>;
 export type EntityChannelType = z.infer<typeof EntityChannelSchema>;
 export type EntityEventAddressType = z.infer<typeof EntityEventAddressSchema>;
 export type EntityCommandInputOptionType = z.infer<typeof EntityCommandInputOptionSchema>;

@@ -78,7 +78,7 @@ type AgentExecutionJournalEntry =
 
 The exact TypeScript names may differ, but the authority boundary must remain explicit:
 
-- `AgentObservationEntry`: agent-authored or agent-declared structured material.
+- `AgentObservationEntry`: agent-authored or agent-signal structured material.
 - `RuntimeFactEntry`: daemon-observed structured facts.
 - `ExecutionAssessmentEntry`: advisory or diagnostic evaluation material.
 - `TransportEvidenceEntry`: evidence only, never semantic truth by itself.
@@ -193,7 +193,7 @@ Minimum interpretation rules:
 
 ### AgentObservationEntry
 
-Use for structured agent-authored or agent-declared material such as:
+Use for structured agent-authored or agent-signal material such as:
 
 - `message`
 - `status`

@@ -3,14 +3,215 @@ import type { MissionCatalogEntryType } from '@flying-pillow/mission-core/entiti
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 import { AgentFindResultSchema, type AgentDataType } from '@flying-pillow/mission-core/entities/Agent/AgentSchema';
 import { AgentExecutionDataSchema, type AgentExecutionDataType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
-import { RepositoryDataSchema, RepositoryIssueDetailSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformRepositorySchema, RepositorySetupResultSchema, RepositorySyncStatusSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
-import type { RepositoryDataType, RepositoryIssueDetailType, RepositorySetupResultType, RepositorySettingsType, RepositorySyncStatusType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import { RepositoryDataSchema, RepositoryIssueDetailSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformOwnerSchema, RepositoryPlatformRepositorySchema, RepositoryRemovalSummarySchema, RepositorySetupResultSchema, RepositorySyncStatusSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { RepositoryDataType, RepositoryIssueDetailType, RepositoryPlatformOwnerType, RepositoryRemovalSummaryType, RepositorySetupResultType, RepositorySettingsType, RepositorySyncStatusType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import { z } from 'zod/v4';
 import { getApp } from '$lib/client/globals';
+import type { AirportApplication } from '$lib/client/Application.svelte.js';
 import { cmd } from '../../../../routes/api/entities/remote/command.remote';
 import { qry } from '../../../../routes/api/entities/remote/query.remote';
 import { AgentExecution } from '$lib/components/entities/AgentExecution/AgentExecution.svelte.js';
-import { Entity } from '$lib/components/entities/shared/Entity.svelte.js';
+import { Entity } from '$lib/components/entities/Entity/Entity.svelte.js';
+
+export type RepositoryNotificationTone = 'info' | 'success' | 'warning' | 'error';
+
+export type RepositoryProvisionNotification = {
+    message: string;
+    tone: RepositoryNotificationTone;
+    linkHref?: string;
+    linkLabel?: string;
+};
+
+export type RepositoryProvisionResult = {
+    ok: boolean;
+    href?: string;
+    repository?: Repository;
+    notification: RepositoryProvisionNotification;
+};
+
+export type RepositoryProvisioningMode = 'clone' | 'new';
+
+export class RepositoryProvisioningDialog {
+    public open = $state(false);
+    public mode = $state<RepositoryProvisioningMode>('clone');
+    public repositorySearchQuery = $state('');
+    public cloningRepositoryRef = $state<string | undefined>();
+    public creatingRepository = $state(false);
+    public availableGitHubOwners = $state<RepositoryPlatformOwnerType[]>([]);
+    public availableGitHubOwnersLoading = $state(false);
+    public availableGitHubOwnersError = $state<string | undefined>();
+    public newRepositoryOwnerLogin = $state('');
+    public newRepositoryName = $state('');
+    public newRepositoryVisibility = $state<'private' | 'public' | 'internal'>('private');
+
+    public readonly configuredRepositoriesRoot = $derived.by(() => {
+        const destinationPath = this.input.readDestinationPath().trim();
+        return destinationPath || '/repositories';
+    });
+
+    public readonly availableGitHubRepositories = $derived.by(() =>
+        this.input.application.githubRepositoriesState
+    );
+
+    public readonly selectedOwner = $derived(
+        this.availableGitHubOwners.find((owner) => owner.login === this.newRepositoryOwnerLogin)
+    );
+
+    public readonly newRepositoryRef = $derived.by(() => {
+        const ownerLogin = this.newRepositoryOwnerLogin.trim();
+        const repositoryName = this.newRepositoryName.trim();
+
+        return ownerLogin && repositoryName
+            ? `${ownerLogin}/${repositoryName}`
+            : undefined;
+    });
+
+    public readonly canCreateRepository = $derived(
+        Boolean(this.newRepositoryOwnerLogin.trim() && this.newRepositoryName.trim())
+        && !this.creatingRepository
+    );
+
+    public readonly visibleGitHubRepositories = $derived.by(() => {
+        const query = this.repositorySearchQuery.trim().toLowerCase();
+        if (!query) {
+            return this.availableGitHubRepositories;
+        }
+
+        return this.availableGitHubRepositories.filter((repository) =>
+            [
+                repository.repositoryRef,
+                repository.description,
+                repository.ownerLogin,
+                repository.defaultBranch,
+                ...(repository.topics ?? [])
+            ].some((value) => value?.toLowerCase().includes(query))
+        );
+    });
+
+    public constructor(private readonly input: {
+        application: AirportApplication;
+        readDestinationPath: () => string;
+        notify: (notification: RepositoryProvisionNotification) => void;
+        navigate: (href: string) => Promise<void> | void;
+    }) { }
+
+    public handleOpenChange = (open: boolean): void => {
+        this.open = open;
+        if (!open) {
+            this.reset();
+            return;
+        }
+
+        void this.ensureGitHubRepositoriesLoaded();
+        if (this.mode === 'new') {
+            void this.ensureGitHubOwnersLoaded();
+        }
+    };
+
+    public selectMode = (mode: RepositoryProvisioningMode): void => {
+        this.mode = mode;
+        if (mode === 'new') {
+            void this.ensureGitHubOwnersLoaded();
+        }
+    };
+
+    public retryOwnerLookup = async (): Promise<void> => {
+        await this.ensureGitHubOwnersLoaded(true);
+    };
+
+    public cloneRepository = async (repositoryRef: string): Promise<void> => {
+        this.cloningRepositoryRef = repositoryRef;
+
+        try {
+            const result = await Repository.cloneFromGitHub({
+                repositoryRef,
+                destinationPath: this.configuredRepositoriesRoot
+            });
+            await this.handleProvisionResult(result);
+        } finally {
+            this.cloningRepositoryRef = undefined;
+        }
+    };
+
+    public createRepository = async (): Promise<void> => {
+        if (!this.canCreateRepository || !this.newRepositoryRef) {
+            return;
+        }
+
+        this.creatingRepository = true;
+
+        try {
+            const result = await Repository.createOnGitHub({
+                ownerLogin: this.newRepositoryOwnerLogin.trim(),
+                repositoryName: this.newRepositoryName.trim(),
+                destinationPath: this.configuredRepositoriesRoot,
+                visibility: this.newRepositoryVisibility
+            });
+            await this.handleProvisionResult(result);
+        } finally {
+            this.creatingRepository = false;
+        }
+    };
+
+    private reset(): void {
+        this.mode = 'clone';
+        this.repositorySearchQuery = '';
+        this.cloningRepositoryRef = undefined;
+        this.creatingRepository = false;
+        this.newRepositoryOwnerLogin = this.availableGitHubOwners[0]?.login ?? '';
+        this.newRepositoryName = '';
+        this.newRepositoryVisibility = 'private';
+    }
+
+    private async ensureGitHubRepositoriesLoaded(): Promise<void> {
+        if (this.availableGitHubRepositories.length > 0) {
+            return;
+        }
+
+        await this.input.application.loadGitHubRepositories({ force: true });
+    }
+
+    private async ensureGitHubOwnersLoaded(force = false): Promise<void> {
+        if (!force) {
+            if (this.availableGitHubOwnersLoading) {
+                return;
+            }
+
+            if (this.availableGitHubOwners.length > 0 || this.availableGitHubOwnersError) {
+                return;
+            }
+        }
+
+        this.availableGitHubOwnersLoading = true;
+        this.availableGitHubOwnersError = undefined;
+
+        try {
+            this.availableGitHubOwners = await Repository.findAvailableGitHubOwners();
+            if (!this.newRepositoryOwnerLogin && this.availableGitHubOwners.length > 0) {
+                this.newRepositoryOwnerLogin = this.availableGitHubOwners[0].login;
+            }
+            if (
+                this.newRepositoryVisibility === 'internal'
+                && this.selectedOwner?.type !== 'Organization'
+            ) {
+                this.newRepositoryVisibility = 'private';
+            }
+        } catch (error) {
+            this.availableGitHubOwners = [];
+            this.availableGitHubOwnersError = error instanceof Error ? error.message : String(error);
+        } finally {
+            this.availableGitHubOwnersLoading = false;
+        }
+    }
+
+    private async handleProvisionResult(result: RepositoryProvisionResult): Promise<void> {
+        this.input.notify(result.notification);
+        if (result.ok && result.href) {
+            this.open = false;
+            await this.input.navigate(result.href);
+        }
+    }
+}
 
 export type RepositoryDataLoader = (input: {
     id: string;
@@ -20,7 +221,7 @@ export type RepositoryDataLoader = (input: {
 export class Repository extends Entity<RepositoryDataType> {
     public data = $state() as RepositoryDataType;
     private readonly loadData: RepositoryDataLoader;
-    private commandDescriptors = $state<EntityCommandDescriptorType[]>([]);
+    private readonly onChanged: (() => void) | undefined;
     private syncStatusValue = $state<RepositorySyncStatusType | undefined>();
     private repositoryAgentExecutionValue = $state<AgentExecutionDataType | undefined>();
     private repositoryAgentExecutionEntity = $state<AgentExecution | undefined>();
@@ -31,11 +232,17 @@ export class Repository extends Entity<RepositoryDataType> {
         data: RepositoryDataType,
         input: {
             loadData: RepositoryDataLoader;
+            onChanged?: () => void;
         }
     ) {
         super();
         this.data = structuredClone(data);
         this.loadData = input.loadData;
+        this.onChanged = input.onChanged;
+    }
+
+    private markChanged(): void {
+        this.onChanged?.();
     }
 
     public get entityName(): string {
@@ -50,10 +257,6 @@ export class Repository extends Entity<RepositoryDataType> {
         return this.id;
     }
 
-    public get commands(): EntityCommandDescriptorType[] {
-        return structuredClone($state.snapshot(this.commandDescriptors));
-    }
-
     public get syncStatus(): RepositorySyncStatusType | undefined {
         const status = $state.snapshot(this.syncStatusValue);
         return status ? structuredClone(status) : undefined;
@@ -61,6 +264,10 @@ export class Repository extends Entity<RepositoryDataType> {
 
     public get repositoryAgentExecution(): AgentExecution | undefined {
         return this.repositoryAgentExecutionEntity;
+    }
+
+    public get agentExecution(): AgentExecution | undefined {
+        return this.repositoryAgentExecution;
     }
 
     public get missionStatuses(): Record<string, string | undefined> {
@@ -101,12 +308,180 @@ export class Repository extends Entity<RepositoryDataType> {
         return RepositoryPlatformRepositorySchema.array().parse(input.run === false ? await query : await query.run());
     }
 
+    public static async findAvailableOwners(input: {
+        platform?: 'github';
+        run?: boolean;
+    } = {}): Promise<RepositoryPlatformOwnerType[]> {
+        const query = qry({
+            entity: 'Repository',
+            method: 'findAvailableOwners',
+            payload: input.platform ? { platform: input.platform } : {}
+        });
+        return RepositoryPlatformOwnerSchema.array().parse(input.run === false ? await query : await query.run());
+    }
+
+    public static async findAvailableGitHubOwners(): Promise<RepositoryPlatformOwnerType[]> {
+        return await Repository.findAvailableOwners({
+            platform: 'github'
+        });
+    }
+
+    public static async cloneFromGitHub(input: {
+        repositoryRef: string;
+        destinationPath: string;
+    }): Promise<RepositoryProvisionResult> {
+        const application = getApp();
+
+        try {
+            const data = RepositoryDataSchema.parse(
+                await Repository.executeClassCommand('repository.add', {
+                    platform: 'github',
+                    repositoryRef: input.repositoryRef,
+                    destinationPath: input.destinationPath
+                })
+            );
+            const repository = application.hydrateRepositoryData(data);
+            await application.loadRepositories({ force: true });
+            const href = `/airport/${encodeURIComponent(repository.id)}`;
+            const notification = Repository.publishProvisionNotification({
+                title: 'Repository cloned',
+                message: `${input.repositoryRef} was added to the Airport workspace.`,
+                tone: 'success',
+                linkHref: href,
+                linkLabel: 'Open repository'
+            });
+
+            return { ok: true, repository, href, notification };
+        } catch (error) {
+            const message = Repository.normalizeCommandErrorMessage(error);
+            const existingRepositoryHref = Repository.resolveLocalRepositoryHref(input.repositoryRef);
+            const isAlreadyCheckedOut = /already checked out/i.test(message);
+            const notification = Repository.publishProvisionNotification({
+                title: isAlreadyCheckedOut
+                    ? 'Repository already available'
+                    : 'Repository clone failed',
+                message,
+                tone: isAlreadyCheckedOut ? 'warning' : 'error',
+                linkHref: existingRepositoryHref,
+                linkLabel: isAlreadyCheckedOut ? 'Open repository' : undefined
+            });
+
+            return {
+                ok: false,
+                notification,
+                ...(existingRepositoryHref ? { href: existingRepositoryHref } : {})
+            };
+        }
+    }
+
+    public static async createOnGitHub(input: {
+        ownerLogin: string;
+        repositoryName: string;
+        destinationPath: string;
+        visibility: 'private' | 'public' | 'internal';
+    }): Promise<RepositoryProvisionResult> {
+        const application = getApp();
+        const repositoryRef = `${input.ownerLogin.trim()}/${input.repositoryName.trim()}`;
+
+        try {
+            const data = RepositoryDataSchema.parse(
+                await Repository.executeClassCommand('repository.createPlatformRepository', {
+                    platform: 'github',
+                    ownerLogin: input.ownerLogin,
+                    repositoryName: input.repositoryName,
+                    destinationPath: input.destinationPath,
+                    visibility: input.visibility
+                })
+            );
+            const repository = application.hydrateRepositoryData(data);
+            await Promise.all([
+                application.loadRepositories({ force: true }),
+                application.loadGitHubRepositories({ force: true })
+            ]);
+            const href = `/airport/${encodeURIComponent(repository.id)}`;
+            const notification = Repository.publishProvisionNotification({
+                title: 'Repository created',
+                message: `${repositoryRef} was created on GitHub and prepared in the Airport workspace.`,
+                tone: 'success',
+                linkHref: href,
+                linkLabel: 'Open repository'
+            });
+
+            return { ok: true, repository, href, notification };
+        } catch (error) {
+            const message = Repository.normalizeCommandErrorMessage(error);
+            const existingRepositoryHref = Repository.resolveLocalRepositoryHref(repositoryRef);
+            const isAlreadyCheckedOut = /already checked out/i.test(message);
+            const notification = Repository.publishProvisionNotification({
+                title: isAlreadyCheckedOut
+                    ? 'Repository already available'
+                    : 'Repository creation failed',
+                message,
+                tone: isAlreadyCheckedOut ? 'warning' : 'error',
+                linkHref: existingRepositoryHref,
+                linkLabel: isAlreadyCheckedOut ? 'Open repository' : undefined
+            });
+
+            return {
+                ok: false,
+                notification,
+                ...(existingRepositoryHref ? { href: existingRepositoryHref } : {})
+            };
+        }
+    }
+
     public static async classCommands(commandInput?: unknown, input: { run?: boolean } = {}): Promise<EntityCommandDescriptorType[]> {
         return Entity.classCommands('Repository', commandInput, input);
     }
 
     public static async executeClassCommand<TResult = unknown>(commandId: string, input?: unknown): Promise<TResult> {
         return Entity.executeClassCommand<TResult>('Repository', commandId, input);
+    }
+
+    private static publishProvisionNotification(input: {
+        title: string;
+        message: string;
+        tone: RepositoryNotificationTone;
+        linkHref?: string;
+        linkLabel?: string;
+    }): RepositoryProvisionNotification {
+        getApp().publishNotification(input);
+
+        return {
+            message: input.message,
+            tone: input.tone,
+            ...(input.linkHref ? { linkHref: input.linkHref } : {}),
+            ...(input.linkLabel ? { linkLabel: input.linkLabel } : {})
+        };
+    }
+
+    private static resolveLocalRepositoryHref(repositoryRef: string): string | undefined {
+        const normalizedRepositoryRef = repositoryRef.trim().toLowerCase();
+        if (!normalizedRepositoryRef) {
+            return undefined;
+        }
+
+        const repository = getApp().repositoryListItems.find((candidate) =>
+            candidate.isLocal
+            && candidate.platformRepositoryRef?.trim().toLowerCase() === normalizedRepositoryRef
+        );
+
+        return repository ? `/airport/${encodeURIComponent(repository.key)}` : undefined;
+    }
+
+    private static normalizeCommandErrorMessage(error: unknown): string {
+        const fallback = error instanceof Error ? error.message : String(error);
+
+        try {
+            const parsed = JSON.parse(fallback) as { message?: unknown };
+            if (typeof parsed.message === 'string' && parsed.message.trim()) {
+                return parsed.message.trim();
+            }
+        } catch {
+            return fallback;
+        }
+
+        return fallback;
     }
 
     public setMissionCatalog(missions: MissionCatalogEntryType[]): this {
@@ -117,11 +492,13 @@ export class Repository extends Entity<RepositoryDataType> {
                 ([missionId]) => missionIds.has(missionId),
             ),
         );
+        this.markChanged();
         return this;
     }
 
     public setMissionStatuses(statuses: Record<string, string | undefined>): this {
         this.missionStatusesValue = structuredClone(statuses);
+        this.markChanged();
         return this;
     }
 
@@ -130,11 +507,13 @@ export class Repository extends Entity<RepositoryDataType> {
             ...$state.snapshot(this.missionStatusesValue),
             [missionId]: status,
         };
+        this.markChanged();
         return this;
     }
 
     public updateFromData(data: RepositoryDataType): this {
         this.data = structuredClone(data);
+        this.markChanged();
         return this;
     }
 
@@ -151,13 +530,9 @@ export class Repository extends Entity<RepositoryDataType> {
         );
     }
 
-    public async refreshCommands(): Promise<this> {
-        this.commandDescriptors = await this.loadCommands();
-        return this;
-    }
-
     public applySyncStatus(input: unknown): this {
         this.syncStatusValue = RepositorySyncStatusSchema.parse(input);
+        this.markChanged();
         return this;
     }
 
@@ -200,6 +575,16 @@ export class Repository extends Entity<RepositoryDataType> {
                     repositoryRootPath: this.data.repositoryRootPath,
                     issueNumber
                 }
+            }).run()
+        );
+    }
+
+    public async readRemovalSummary(): Promise<RepositoryRemovalSummaryType> {
+        return RepositoryRemovalSummarySchema.parse(
+            await qry({
+                entity: 'Repository',
+                method: 'readRemovalSummary',
+                payload: this.entityLocator
             }).run()
         );
     }
@@ -329,6 +714,7 @@ export class Repository extends Entity<RepositoryDataType> {
         this.repositoryAgentExecutionValue = nextData;
         if (this.repositoryAgentExecutionEntity?.agentExecutionId === nextData.agentExecutionId) {
             this.repositoryAgentExecutionEntity.updateFromData(nextData);
+            this.markChanged();
             return nextData;
         }
 
@@ -343,6 +729,7 @@ export class Repository extends Entity<RepositoryDataType> {
                 });
             }
         });
+        this.markChanged();
         return nextData;
     }
 

@@ -68,13 +68,17 @@ describe('MissionMcpServer', () => {
             }
         });
 
+        expect('status' in ack).toBe(true);
+        if (!('status' in ack)) {
+            throw new Error('Expected an observation acknowledgement result.');
+        }
         expect(ack.status).toBe('promoted');
         expect(observations).toHaveLength(1);
-        expect(observations[0]?.route.origin).toBe('agent-declared-signal');
+        expect(observations[0]?.route.origin).toBe('agent-signal');
         expect(observations[0]?.route.address.agentExecutionId).toBe('agent-execution-1');
         expect(observations[0]?.signal).toMatchObject({
             type: 'progress',
-            source: 'agent-declared',
+            source: 'agent-signal',
             confidence: 'medium',
             summary: 'Working through MCP.'
         });
@@ -183,7 +187,7 @@ describe('MissionMcpServer', () => {
             agentExecutionRegistry: {
                 routeTransportObservation(input): AgentExecutionObservationAckType {
                     observations.push(input.observation);
-                    const eventId = input.observation.observationId.replace(/^agent-declared-signal:/, '');
+                    const eventId = input.observation.observationId.replace(/^agent-signal:/, '');
                     return {
                         status: 'promoted',
                         agentExecutionId: input.agentExecutionId,
@@ -212,13 +216,17 @@ describe('MissionMcpServer', () => {
             }
         });
 
+        expect('status' in ack).toBe(true);
+        if (!('status' in ack)) {
+            throw new Error('Expected an observation acknowledgement result.');
+        }
         expect(ack.status).toBe('promoted');
         expect(ack.eventId).toMatch(/^mcp:needs_input:/);
-        expect(observations[0]?.observationId).toBe(`agent-declared-signal:${ack.eventId}`);
+        expect(observations[0]?.observationId).toBe(`agent-signal:${ack.eventId}`);
         expect(observations[0]?.signal).toMatchObject({
             type: 'needs_input',
             question: 'Should I set the repository-local Git author identity?',
-            source: 'agent-declared',
+            source: 'agent-signal',
             confidence: 'medium'
         });
     });

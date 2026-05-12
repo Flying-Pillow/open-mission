@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 import {
     EntityCommandAcknowledgementSchema,
-    EntityIdSchema
+    EntityStorageSchema
 } from '../Entity/EntitySchema.js';
 
 export const artifactEntityName = 'Artifact' as const;
@@ -33,8 +33,7 @@ export const ArtifactCommandInputSchema = ArtifactLocatorSchema.extend({
     input: ArtifactBodySchema
 }).strict();
 
-export const ArtifactStorageSchema = z.object({
-    id: EntityIdSchema,
+export const ArtifactStorageSchema = EntityStorageSchema.extend({
     kind: z.enum(['repository', 'worktree', 'mission', 'stage', 'task']),
     label: z.string().trim().min(1),
     fileName: z.string().trim().min(1),
@@ -48,9 +47,7 @@ export const ArtifactStorageSchema = z.object({
     relativePath: z.string().trim().min(1).optional()
 }).strict();
 
-export const ArtifactDataSchema = z.object({
-    ...ArtifactStorageSchema.shape
-}).strict();
+export const ArtifactDataSchema = ArtifactStorageSchema.extend({}).strict();
 
 export const ArtifactCommandAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
     entity: z.literal(artifactEntityName),

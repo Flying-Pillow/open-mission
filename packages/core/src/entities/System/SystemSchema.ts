@@ -1,4 +1,12 @@
 import { z } from 'zod/v4';
+import { AgentIdSchema } from '../Agent/AgentSchema.js';
+
+export const DEFAULT_SYSTEM_AGENT_ADAPTER_ID = 'codex';
+
+export const SystemAgentSettingsSchema = z.object({
+    defaultAgentAdapter: AgentIdSchema,
+    enabledAgentAdapters: z.array(AgentIdSchema).default([])
+}).strict();
 
 export const githubSystemStateSchema = z.object({
     cliAvailable: z.boolean(),
@@ -9,7 +17,7 @@ export const githubSystemStateSchema = z.object({
     detail: z.string().trim().min(1).optional()
 }).strict();
 
-export const missionSystemConfigSchema = z.object({
+export const systemConfigSchema = SystemAgentSettingsSchema.extend({
     repositoriesRoot: z.string().trim().min(1)
 }).strict();
 
@@ -65,17 +73,44 @@ export const systemDiagnosticsStateSchema = z.object({
 export const systemStateSchema = z.object({
     sampledAt: z.string().trim().min(1),
     github: githubSystemStateSchema,
-    config: missionSystemConfigSchema,
+    config: systemConfigSchema,
     daemon: daemonSystemStateSchema,
     host: hostSystemStateSchema,
     runtime: runtimeSystemStateSchema,
     diagnostics: systemDiagnosticsStateSchema
 }).strict();
 
+const defaultSystemAgentSettings: SystemAgentSettingsType = {
+    defaultAgentAdapter: DEFAULT_SYSTEM_AGENT_ADAPTER_ID,
+    enabledAgentAdapters: []
+};
+
+export const systemEntityName = 'System' as const;
+
+export const SystemReadSchema = z.object({}).strict();
+export const SystemConfigureSchema = systemConfigSchema;
+export const SystemDataSchema = systemConfigSchema;
+
+export function createDefaultSystemAgentSettings(): SystemAgentSettingsType {
+    return structuredClone(defaultSystemAgentSettings);
+}
+
+export function parseSystemAgentSettings(input: Partial<SystemAgentSettingsType> = {}): SystemAgentSettingsType {
+    const defaults = createDefaultSystemAgentSettings();
+    return SystemAgentSettingsSchema.parse({
+        defaultAgentAdapter: input.defaultAgentAdapter ?? defaults.defaultAgentAdapter,
+        enabledAgentAdapters: input.enabledAgentAdapters ?? defaults.enabledAgentAdapters
+    });
+}
+
+export type SystemAgentSettingsType = z.infer<typeof SystemAgentSettingsSchema>;
 export type GithubSystemState = z.infer<typeof githubSystemStateSchema>;
-export type MissionSystemConfig = z.infer<typeof missionSystemConfigSchema>;
+export type SystemConfig = z.infer<typeof systemConfigSchema>;
 export type DaemonSystemState = z.infer<typeof daemonSystemStateSchema>;
 export type HostSystemState = z.infer<typeof hostSystemStateSchema>;
 export type RuntimeSystemState = z.infer<typeof runtimeSystemStateSchema>;
 export type SystemDiagnosticsState = z.infer<typeof systemDiagnosticsStateSchema>;
 export type SystemState = z.infer<typeof systemStateSchema>;
+export type SystemReadType = z.infer<typeof SystemReadSchema>;
+export type SystemConfigureType = z.infer<typeof SystemConfigureSchema>;
+export type SystemDataType = z.infer<typeof SystemDataSchema>;

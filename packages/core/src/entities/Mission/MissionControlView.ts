@@ -1,69 +1,67 @@
 import {
-    MissionControlViewSnapshotSchema,
-    MissionSnapshotSchema,
-    type MissionDataType,
-    type MissionCommandViewSnapshotType,
-    type MissionSnapshotType
+    MissionControlSchema,
+    MissionSchema,
+    MissionWorkflowStateSchema,
+    type MissionStorageType,
+    type MissionControlType,
+    type MissionType,
+    type MissionWorkflowStateType
 } from './MissionSchema.js';
+import { EntityCommandDescriptorSchema, type EntityCommandDescriptorType } from '../Entity/EntitySchema.js';
+import { StageSchema, type StageType } from '../Stage/StageSchema.js';
+import type { WorkflowStateData } from '../../workflow/engine/index.js';
 
-export function buildMissionSnapshot(input: {
+export function buildMission(input: {
     missionId: string;
-    mission: MissionDataType;
-    commandView: MissionCommandViewSnapshotType;
-}): MissionSnapshotType {
-    const workflow = toMissionWorkflowSnapshot(input.mission);
-    return MissionSnapshotSchema.parse({
-        mission: input.mission,
-        commandView: input.commandView,
-        status: toMissionStatusSnapshot(input.mission, input.missionId, workflow),
+    mission: MissionStorageType;
+    commands: EntityCommandDescriptorType[];
+    stages?: StageType[];
+    workflowDocument?: WorkflowStateData;
+}): MissionType {
+    EntityCommandDescriptorSchema.array().parse(input.commands);
+    const stages = input.stages
+        ? StageSchema.array().parse(input.stages)
+        : input.mission.stages;
+    const workflow = toMissionWorkflowState(input.mission, input.workflowDocument);
+    return MissionSchema.parse({
+        ...input.mission,
         ...(workflow ? { workflow } : {}),
-        stages: input.mission.stages,
-        tasks: input.mission.stages.flatMap((stage) => stage.tasks),
+        commands: input.commands,
+        stages,
+        tasks: stages.flatMap((stage) => stage.tasks),
         artifacts: input.mission.artifacts,
         agentExecutions: input.mission.agentExecutions
     });
 }
 
-export function buildMissionControlViewSnapshot(input: {
-    snapshot: MissionSnapshotType;
-}) {
-    return MissionControlViewSnapshotSchema.parse({
-        missionId: input.snapshot.mission.missionId,
-        ...(input.snapshot.status ? { status: input.snapshot.status } : {}),
-        ...(input.snapshot.workflow ? { workflow: input.snapshot.workflow } : {}),
-        updatedAt: input.snapshot.mission.updatedAt
+export function buildMissionControl(input: {
+    data: MissionType;
+}): MissionControlType {
+    return MissionControlSchema.parse({
+        missionId: input.data.missionId,
+        mission: input.data,
+        updatedAt: input.data.updatedAt
     });
 }
 
-function toMissionStatusSnapshot(
-    snapshot: MissionDataType,
-    missionId: string,
-    workflow: ReturnType<typeof toMissionWorkflowSnapshot>
-) {
-    return {
-        missionId: snapshot.missionId.trim() || missionId,
-        ...(snapshot.title ? { title: snapshot.title } : {}),
-        ...(snapshot.issueId !== undefined ? { issueId: snapshot.issueId } : {}),
-        ...(snapshot.type ? { type: snapshot.type } : {}),
-        ...(snapshot.operationalMode ? { operationalMode: snapshot.operationalMode } : {}),
-        ...(snapshot.branchRef ? { branchRef: snapshot.branchRef } : {}),
-        ...(snapshot.missionDir ? { missionDir: snapshot.missionDir } : {}),
-        ...(snapshot.missionRootDir ? { missionRootDir: snapshot.missionRootDir } : {}),
-        ...(snapshot.artifacts.length > 0 ? { artifacts: snapshot.artifacts } : {}),
-        ...(workflow ? { workflow } : {}),
-        ...(snapshot.recommendedAction ? { recommendedAction: snapshot.recommendedAction } : {})
-    };
-}
-
-function toMissionWorkflowSnapshot(snapshot: MissionDataType) {
-    if (!snapshot.lifecycle && !snapshot.updatedAt && !snapshot.currentStageId && snapshot.stages.length === 0) {
+function toMissionWorkflowState(
+    data: MissionStorageType,
+    workflowDocument?: WorkflowStateData
+): MissionWorkflowStateType | undefined {
+    const runtime = workflowDocument?.runtime;
+    if (!data.lifecycle && !data.updatedAt && !data.currentStageId && !runtime) {
         return undefined;
     }
 
-    return {
-        ...(snapshot.lifecycle ? { lifecycle: snapshot.lifecycle } : {}),
-        ...(snapshot.updatedAt ? { updatedAt: snapshot.updatedAt } : {}),
-        ...(snapshot.currentStageId ? { currentStageId: snapshot.currentStageId } : {}),
-        ...(snapshot.stages.length > 0 ? { stages: snapshot.stages } : {})
-    };
+    return MissionWorkflowStateSchema.parse({
+        ...(data.lifecycle ? { lifecycle: data.lifecycle } : {}),
+        ...(data.updatedAt ? { updatedAt: data.updatedAt } : {}),
+        ...(runtime?.activeStageId ?? data.currentStageId
+            ? { currentStageId: runtime?.activeStageId ?? data.currentStageId }
+            : {}),
+        ...(runtime?.pause ? { pause: runtime.pause } : {}),
+        ...(runtime?.stages ? { stages: runtime.stages } : {}),
+        ...(runtime?.tasks ? { tasks: runtime.tasks } : {}),
+        ...(runtime?.gates ? { gates: runtime.gates } : {})
+    });
 }

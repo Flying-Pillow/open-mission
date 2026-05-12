@@ -56,7 +56,7 @@ describe('AgentExecutionJournalSchema', () => {
                 confidence: 'medium',
                 signal: {
                     type: 'progress',
-                    source: 'agent-declared',
+                    source: 'agent-signal',
                     confidence: 'medium',
                     summary: 'Working through the first task.'
                 }

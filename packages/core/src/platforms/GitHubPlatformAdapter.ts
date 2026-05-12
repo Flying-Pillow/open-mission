@@ -2,8 +2,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { getMissionGitHubCliBinary } from '../settings/MissionInstall.js';
-import type { RepositoryIssueDetailType, RepositoryPlatformRepositoryType, TrackedIssueSummaryType } from '../entities/Repository/RepositorySchema.js';
-import type { MissionBrief, MissionType } from '../entities/Mission/MissionSchema.js';
+import type { RepositoryIssueDetailType, RepositoryPlatformOwnerType, RepositoryPlatformRepositoryType, TrackedIssueSummaryType } from '../entities/Repository/RepositorySchema.js';
+import type { MissionBrief } from '../entities/Mission/MissionSchema.js';
 
 export type GitHubBranchSyncStatus = {
 	branchRef: string;
@@ -66,23 +66,18 @@ type GitHubRepositoryPayload = {
 	owner?: {
 		login?: string;
 		type?: string;
+		avatar_url?: string;
 		html_url?: string;
 	};
 };
 
-function mapLabelsToMissionType(labels: string[]): MissionType | undefined {
-	const normalizedLabels = labels.map((label) => label.trim().toLowerCase());
-	if (normalizedLabels.includes('bug')) {
-		return 'fix';
-	}
-	if (normalizedLabels.includes('enhancement')) {
-		return 'feature';
-	}
-	if (normalizedLabels.includes('documentation')) {
-		return 'docs';
-	}
-	return undefined;
-}
+type GitHubOwnerPayload = {
+	login?: string;
+	name?: string | null;
+	avatar_url?: string;
+	html_url?: string;
+	type?: string;
+};
 
 export class GitHubPlatformAdapter {
 	public constructor(
@@ -227,6 +222,39 @@ export class GitHubPlatformAdapter {
 		return [...repositories.values()].sort((left, right) => left.repositoryRef.localeCompare(right.repositoryRef));
 	}
 
+	public async listRepositoryOwners(): Promise<RepositoryPlatformOwnerType[]> {
+		const [viewer, organizations] = await Promise.all([
+			this.runJsonProcess<GitHubOwnerPayload>(['api', '/user']),
+			this.runJsonProcess<GitHubOwnerPayload[][]>(['api', '/user/orgs?per_page=100', '--paginate', '--slurp'])
+		]);
+
+		const owners = new Map<string, RepositoryPlatformOwnerType>();
+		const register = (payload: GitHubOwnerPayload | undefined, fallbackType: 'User' | 'Organization') => {
+			const login = payload?.login?.trim();
+			if (!login) {
+				return;
+			}
+
+			owners.set(login.toLowerCase(), {
+				platform: 'github',
+				login,
+				type: payload?.type?.trim() === 'Organization' ? 'Organization' : fallbackType,
+				...(payload?.name?.trim() ? { displayName: payload.name.trim() } : {}),
+				...(payload?.html_url?.trim() ? { url: payload.html_url.trim() } : {}),
+				...(payload?.avatar_url?.trim() ? { avatarUrl: payload.avatar_url.trim() } : {})
+			});
+		};
+
+		register(viewer, 'User');
+		for (const page of organizations) {
+			for (const organization of page) {
+				register(organization, 'Organization');
+			}
+		}
+
+		return [...owners.values()].sort((left, right) => left.login.localeCompare(right.login));
+	}
+
 	public async cloneRepository(input: {
 		repositoryRef: string;
 		destinationPath: string;
@@ -243,6 +271,63 @@ export class GitHubPlatformAdapter {
 		const resolvedDestinationPath = resolveCloneDestinationPath(repositoryRef, destinationPath);
 		await fs.mkdir(path.dirname(resolvedDestinationPath), { recursive: true });
 		await this.runTextProcess(['repo', 'clone', repositoryRef, resolvedDestinationPath]);
+		return resolvedDestinationPath;
+	}
+
+	public async createRepository(input: {
+		ownerLogin: string;
+		repositoryName: string;
+		destinationPath: string;
+		visibility: 'private' | 'public' | 'internal';
+	}): Promise<string> {
+		const ownerLogin = input.ownerLogin.trim();
+		const repositoryName = input.repositoryName.trim();
+		const destinationPath = input.destinationPath.trim();
+		if (!ownerLogin) {
+			throw new Error('GitHub repository creation requires an owner login.');
+		}
+		if (!repositoryName) {
+			throw new Error('GitHub repository creation requires a repository name.');
+		}
+		if (!destinationPath) {
+			throw new Error('GitHub repository creation requires a destination path.');
+		}
+
+		const repositoryRef = `${ownerLogin}/${repositoryName}`;
+		const resolvedDestinationPath = resolveCloneDestinationPath(repositoryRef, destinationPath);
+		const owner = (await this.listRepositoryOwners()).find(
+			(candidate) => candidate.login.toLowerCase() === ownerLogin.toLowerCase()
+		);
+		if (!owner) {
+			throw new Error(`GitHub owner '${ownerLogin}' is not available for repository creation.`);
+		}
+		if (input.visibility === 'internal' && owner.type !== 'Organization') {
+			throw new Error(`GitHub owner '${ownerLogin}' does not support internal repository visibility.`);
+		}
+		await this.assertRepositoryDoesNotExist(repositoryRef);
+		await fs.mkdir(resolvedDestinationPath, { recursive: true });
+		assertGit(path.dirname(resolvedDestinationPath), ['init', '--initial-branch=main', resolvedDestinationPath]);
+		assertGit(resolvedDestinationPath, [
+			'-c',
+			'user.name=Mission',
+			'-c',
+			'user.email=mission@local',
+			'commit',
+			'--allow-empty',
+			'-m',
+			'chore: initial commit'
+		]);
+		await this.runTextProcess([
+			'repo',
+			'create',
+			repositoryRef,
+			`--${input.visibility}`,
+			'--source',
+			resolvedDestinationPath,
+			'--remote',
+			'origin',
+			'--push'
+		]);
 		return resolvedDestinationPath;
 	}
 
@@ -308,6 +393,22 @@ export class GitHubPlatformAdapter {
 			...(input.deleteBranch === false ? [] : ['--delete-branch']),
 			...(this.repository ? ['--repo', this.repository] : [])
 		]);
+	}
+
+	private async assertRepositoryDoesNotExist(repositoryRef: string): Promise<void> {
+		try {
+			await this.runJsonProcess<GitHubRepositoryPayload>(['api', `repos/${repositoryRef}`]);
+			throw new Error(`GitHub repository '${repositoryRef}' already exists.`);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			if (/already exists/i.test(message)) {
+				throw error;
+			}
+			if (/404|not found/i.test(message)) {
+				return;
+			}
+			throw error;
+		}
 	}
 
 	public fetchRemote(remoteName = 'origin'): void {
@@ -386,18 +487,19 @@ export class GitHubPlatformAdapter {
 		const labels = (payload.labels ?? [])
 			.map((label) => String(label.name ?? '').trim())
 			.filter(Boolean);
-		const type = mapLabelsToMissionType(labels) ?? 'task';
+		const assigneeLogin = (payload.assignees ?? [])
+			.map((assignee) => String(assignee.login ?? '').trim())
+			.filter(Boolean)[0];
 
 		return {
 			issueId: payload.number,
 			title: payload.title,
 			body: payload.body?.trim() || 'Issue body not captured yet.',
-			type,
 			...(payload.url ? { url: payload.url } : {}),
-			...((payload.assignees ?? []).map((assignee) => String(assignee.login ?? '').trim()).filter(Boolean)[0]
+			...(assigneeLogin
 				? {
 					assignee: {
-						githubLogin: (payload.assignees ?? []).map((assignee) => String(assignee.login ?? '').trim()).filter(Boolean)[0],
+						githubLogin: assigneeLogin,
 						source: 'issue-assignee' as const
 					}
 				}

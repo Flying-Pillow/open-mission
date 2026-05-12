@@ -1,6 +1,6 @@
 // /apps/airport/web/src/lib/server/daemon/daemon-gateway.ts: Daemon-backed gateway for mission runtime, terminal, and document operations.
 import type { Notification } from '@flying-pillow/mission-core/daemon/protocol/contracts';
-import type { SystemState } from '@flying-pillow/mission-core/system/SystemContract';
+import type { SystemState } from '@flying-pillow/mission-core/entities/System/SystemSchema';
 import {
     createAllRuntimeEventSubscriptionChannels,
     createMissionRuntimeEventSubscriptionChannels
@@ -11,10 +11,12 @@ import {
 } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import {
     MissionRuntimeEventEnvelopeSchema,
-    MissionTerminalSnapshotSchema,
     type MissionRuntimeEventEnvelopeType,
-    type MissionTerminalSnapshotType,
 } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import {
+    MissionTerminalSnapshotSchema,
+    type MissionTerminalSnapshotType,
+} from '@flying-pillow/mission-core/entities/Terminal/MissionTerminalSchema';
 import {
     connectDedicatedAuthenticatedDaemonClient,
     connectSharedAuthenticatedDaemonClient,

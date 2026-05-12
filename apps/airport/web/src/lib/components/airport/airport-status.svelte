@@ -1,25 +1,21 @@
 <script lang="ts">
     import Icon from "@iconify/svelte";
-    import { page } from "$app/state";
+    import { app } from "$lib/client/Application.svelte.js";
     import { getAppContext } from "$lib/client/context/app-context.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
-    import type { SystemState } from "@flying-pillow/mission-core/system/SystemContract";
 
     const appContext = getAppContext();
-    const systemState = $derived(
-        page.data.systemState as SystemState | undefined,
-    );
     const daemonStatusTone = $derived(
         appContext.daemon.running ? "connected" : "disconnected",
     );
     const githubStatusTone = $derived(
-        systemState?.github.authenticated
+        app.system?.github.authenticated
             ? "connected"
             : appContext.githubStatus,
     );
     const githubAccountLabel = $derived(
-        systemState?.github.user ??
+        app.system?.github.user ??
             appContext.user?.name ??
             (githubStatusTone === "connected"
                 ? "Authenticated GitHub account"
@@ -29,7 +25,7 @@
     const loginHref = "/login?redirectTo=/airport";
     const isGitHubConnected = $derived(githubStatusTone === "connected");
     const systemDetail = $derived(
-        systemState?.github.detail ?? "Daemon system status is pending.",
+        app.system?.github.detail ?? "Daemon system status is pending.",
     );
 </script>
 
@@ -46,7 +42,7 @@
                         : "Daemon unavailable"}
                 </Badge>
                 <Badge variant="outline">
-                    {systemState
+                    {app.system
                         ? "System schema loaded"
                         : "System schema pending"}
                 </Badge>
@@ -135,7 +131,7 @@
                 <div class="mt-3 flex items-center gap-2">
                     <Icon icon="lucide:activity" class="size-4 text-primary" />
                     <p class="text-sm font-medium text-foreground">
-                        {systemState ? "Schema available" : "Waiting"}
+                        {app.system ? "Schema available" : "Waiting"}
                     </p>
                 </div>
                 <p class="mt-2 text-sm text-muted-foreground">

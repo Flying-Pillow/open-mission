@@ -12,7 +12,7 @@ import { openCode } from './OpenCode.js';
 import { pi } from './Pi.js';
 import type { AgentInput } from '../AgentAdapter.js';
 
-export const missionAgents: readonly AgentInput[] = [
+export const agentAdapterInputs: readonly AgentInput[] = [
     copilot,
     claudeCode,
     pi,

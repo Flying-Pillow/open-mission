@@ -8,9 +8,9 @@ import { MissionDossierFilesystem } from './MissionDossierFilesystem.js';
 import { Repository } from '../Repository/Repository.js';
 import { Agent } from '../Agent/Agent.js';
 import { AgentRegistry } from '../Agent/AgentRegistry.js';
+import { DaemonLogger } from '../../daemon/runtime/DaemonLogger.js';
 import { FakeAgentAdapter } from '../../daemon/runtime/agent/testing/FakeAgentAdapter.js';
 import type { AgentExecutionState } from '../AgentExecution/AgentExecutionSchema.js';
-import type { MissionStageStatus } from './MissionSchema.js';
 import { AgentExecutionCommandIds } from '../AgentExecution/AgentExecutionSchema.js';
 import { TaskCommandIds } from '../Task/TaskSchema.js';
 import { Mission } from './Mission.js';
@@ -45,13 +45,13 @@ describe('Mission', () => {
                 await mission.startWorkflow();
                 const missionId = mission.getRecord().id;
 
-                const snapshot = await mission.buildMissionSnapshot();
-                const controlView = await mission.buildMissionControlViewSnapshot();
+                const data = await mission.buildMission();
+                const control = await mission.buildMissionControl();
 
-                expect(snapshot.mission.missionId).toBe(missionId);
-                expect(snapshot.commandView?.commands).toEqual(expect.any(Array));
-                expect(controlView.missionId).toBe(missionId);
-                expect(snapshot.commandView?.commands.length).toBeGreaterThan(0);
+                expect(data.missionId).toBe(missionId);
+                expect(data.commands).toEqual(expect.any(Array));
+                expect(control.missionId).toBe(missionId);
+                expect(data.commands?.length).toBeGreaterThan(0);
             } finally {
                 mission.dispose();
             }
@@ -318,22 +318,22 @@ describe('Mission', () => {
                     throw new Error('Expected a ready task after workflow start.');
                 }
 
-                const startCommand = (await mission.listAvailableCommands()).find(
-                    (command) => command.owner.entity === 'Task' && command.owner.taskId === taskId && command.command.commandId === TaskCommandIds.start
+                const startCommand = (await mission.listCommands()).find(
+                    (command) => command.entity === 'Task' && command.targetId?.endsWith(`/${taskId}`) && command.commandId === TaskCommandIds.start
                 );
-                expect(startCommand?.command).toMatchObject({
+                expect(startCommand).toMatchObject({
                     commandId: TaskCommandIds.start,
-                    disabled: false
+                    available: true
                 });
-                expect((await mission.listAvailableCommands()).some(
-                    (command) => command.owner.entity === 'Task' && command.owner.taskId === taskId && command.command.commandId === 'task.launch'
+                expect((await mission.listCommands()).some(
+                    (command) => command.entity === 'Task' && command.targetId?.endsWith(`/${taskId}`) && command.commandId === 'task.launch'
                 )).toBe(false);
 
                 await mission.startTask(taskId, {
                     agentAdapter: agentAdapter.id,
                     terminalName: 'airport-terminal-AgentExecution'
                 });
-                const nextStatus = await mission.status();
+                const nextMission = await mission.buildMission();
                 expect(await agentAdapter.listExecutions()).toHaveLength(1);
                 expect(agentAdapter.getLastStartRequest()?.workingDirectory).toBe(startedStatus.missionDir);
                 expect(agentAdapter.getLastStartRequest()?.terminalName).toBe('airport-terminal-AgentExecution');
@@ -346,8 +346,8 @@ describe('Mission', () => {
                 expect(agentAdapter.getLastStartRequest()?.initialPrompt?.text).toContain(
                     `Here are your instructions: @${task.filePath}`
                 );
-                expect(nextStatus.agentExecutions?.length ?? 0).toBe(1);
-                expect(nextStatus.agentExecutions?.[0]).toMatchObject({
+                expect(nextMission.agentExecutions.length).toBe(1);
+                expect(nextMission.agentExecutions[0]).toMatchObject({
                     taskId,
                     agentId: agentAdapter.id,
                     assignmentLabel: expect.stringContaining('01-PRD/tasks/')
@@ -432,14 +432,14 @@ describe('Mission', () => {
                     context: [{ name: 'Operator note', path: 'context/operator-note.md', selectionPosition: 0 }]
                 });
 
-                const configuredStatus = await mission.status();
-                const configuredTask = configuredStatus.workflow?.tasks.find((task) => task.taskId === taskId);
+                const configuredMission = await mission.buildMission();
+                const configuredTask = configuredMission.workflow?.tasks?.find((task) => task.taskId === taskId);
                 expect(configuredTask).toMatchObject({
                     taskId,
                     agentAdapter: agentAdapter.id,
                     model: 'gpt-5.5',
                     reasoningEffort: 'high',
-                    autostart: false,
+                    runtime: { autostart: false },
                     context: [{ name: 'Operator note', path: 'context/operator-note.md', selectionPosition: 0 }]
                 });
 
@@ -488,12 +488,12 @@ describe('Mission', () => {
 
                 await mission.completeTask(taskId);
 
-                const reworkCommand = (await mission.listAvailableCommands()).find(
-                    (command) => command.owner.entity === 'Task' && command.owner.taskId === taskId && command.command.commandId === 'task.rework'
+                const reworkCommand = (await mission.listCommands()).find(
+                    (command) => command.entity === 'Task' && command.targetId?.endsWith(`/${taskId}`) && command.commandId === 'task.rework'
                 );
-                expect(reworkCommand?.command).toMatchObject({
+                expect(reworkCommand).toMatchObject({
                     commandId: 'task.rework',
-                    disabled: false,
+                    available: true,
                     input: expect.objectContaining({ kind: 'text', required: true })
                 });
 
@@ -503,9 +503,9 @@ describe('Mission', () => {
                     summary: 'The previous output missed the requested review criteria.',
                     artifactRefs: []
                 });
-                const nextStatus = await mission.status();
+                const nextMission = await mission.buildMission();
 
-                const workflowTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === taskId);
+                const workflowTask = nextMission.workflow?.tasks?.find((task: { taskId: string }) => task.taskId === taskId);
                 expect(workflowTask).toMatchObject({
                     taskId,
                     lifecycle: 'ready',
@@ -632,21 +632,21 @@ describe('Mission', () => {
             }
 
             try {
-                const reworkCommand = (await reloaded.listAvailableCommands()).find(
-                    (command) => command.owner.entity === 'Task'
-                        && command.owner.taskId === 'implementation/02-boundary-verify'
-                        && command.command.commandId === 'task.reworkFromVerification'
+                const reworkCommand = (await reloaded.listCommands()).find(
+                    (command) => command.entity === 'Task'
+                        && command.targetId?.endsWith('/implementation/02-boundary-verify')
+                        && command.commandId === 'task.reworkFromVerification'
                 );
-                expect(reworkCommand?.command).toMatchObject({
+                expect(reworkCommand).toMatchObject({
                     commandId: 'task.reworkFromVerification',
-                    disabled: false,
+                    available: true,
                     label: 'Send Back'
                 });
 
                 await reloaded.reworkTaskFromVerification('implementation/02-boundary-verify');
-                const nextStatus = await reloaded.status();
-                const implementationTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary');
-                const verificationTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary-verify');
+                const nextMission = await reloaded.buildMission();
+                const implementationTask = nextMission.workflow?.tasks?.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary');
+                const verificationTask = nextMission.workflow?.tasks?.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary-verify');
 
                 expect(implementationTask).toMatchObject({
                     taskId: 'implementation/02-boundary',
@@ -768,21 +768,21 @@ describe('Mission', () => {
             }
 
             try {
-                const reworkCommand = (await reloaded.listAvailableCommands()).find(
-                    (command) => command.owner.entity === 'Task'
-                        && command.owner.taskId === 'implementation/02-boundary-verify'
-                        && command.command.commandId === 'task.reworkFromVerification'
+                const reworkCommand = (await reloaded.listCommands()).find(
+                    (command) => command.entity === 'Task'
+                        && command.targetId?.endsWith('/implementation/02-boundary-verify')
+                        && command.commandId === 'task.reworkFromVerification'
                 );
-                expect(reworkCommand?.command).toMatchObject({
+                expect(reworkCommand).toMatchObject({
                     commandId: 'task.reworkFromVerification',
-                    disabled: false,
+                    available: true,
                     label: 'Send Back'
                 });
 
                 await reloaded.reworkTaskFromVerification('implementation/02-boundary-verify');
-                const nextStatus = await reloaded.status();
-                const implementationTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary');
-                const verificationTask = nextStatus.workflow?.tasks.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary-verify');
+                const nextMission = await reloaded.buildMission();
+                const implementationTask = nextMission.workflow?.tasks?.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary');
+                const verificationTask = nextMission.workflow?.tasks?.find((task: { taskId: string }) => task.taskId === 'implementation/02-boundary-verify');
 
                 expect(implementationTask).toMatchObject({
                     taskId: 'implementation/02-boundary',
@@ -862,17 +862,17 @@ describe('Mission', () => {
                 }
 
                 await mission.startTask(taskId);
-                const runningStatus = await mission.status();
-                expect(runningStatus.stages?.flatMap((stage: MissionStageStatus) => stage.tasks).find((task: { taskId: string; status?: string }) => task.taskId === taskId)?.status).toBe('running');
+                const runningMission = await mission.buildMission();
+                expect(runningMission.tasks.find((task) => task.taskId === taskId)?.lifecycle).toBe('running');
                 expect(await agentAdapter.listExecutions()).toHaveLength(1);
-                expect(runningStatus.agentExecutions?.length ?? 0).toBe(1);
-                expect(runningStatus.agentExecutions?.[0]).toMatchObject({
+                expect(runningMission.agentExecutions.length).toBe(1);
+                expect(runningMission.agentExecutions[0]).toMatchObject({
                     taskId,
                     agentId: agentAdapter.id,
                     lifecycleState: 'running'
                 });
-                expect((await mission.listAvailableCommands()).some(
-                    (command) => command.owner.entity === 'Task' && command.owner.taskId === taskId && command.command.commandId === 'task.launch'
+                expect((await mission.listCommands()).some(
+                    (command) => command.entity === 'Task' && command.targetId?.endsWith(`/${taskId}`) && command.commandId === 'task.launch'
                 )).toBe(false);
             } finally {
                 mission.dispose();
@@ -901,25 +901,23 @@ describe('Mission', () => {
                 }
 
                 await mission.completeTask(prdTaskId);
-                let specStatus = await mission.status();
-                const specStages = specStatus.stages ?? [];
-                const specStage = specStages.find((stage: MissionStageStatus) => stage.stage === 'spec');
+                let specMission = await mission.buildMission();
+                const specStage = specMission.stages.find((stage) => stage.stageId === 'spec');
                 if (!specStage) {
                     throw new Error('Expected spec stage after completing PRD task.');
                 }
 
-                let planTask = specStage.tasks.find((task: { taskId: string; status: string }) => task.taskId === 'spec/02-plan');
+                let planTask = specStage.tasks.find((task) => task.taskId === 'spec/02-plan');
                 if (!planTask) {
                     throw new Error('Expected spec/02-plan task in spec stage.');
                 }
 
-                if (planTask.status !== 'ready') {
+                if (planTask.lifecycle !== 'ready') {
                     await mission.completeTask('spec/01-spec-from-prd');
-                    specStatus = await mission.status();
-                    const refreshedSpecStages = specStatus.stages ?? [];
-                    const refreshedSpecStage = refreshedSpecStages.find((stage: MissionStageStatus) => stage.stage === 'spec');
-                    planTask = refreshedSpecStage?.tasks.find((task: { taskId: string; status: string }) => task.taskId === 'spec/02-plan');
-                    if (!planTask || planTask.status !== 'ready') {
+                    specMission = await mission.buildMission();
+                    const refreshedSpecStage = specMission.stages.find((stage) => stage.stageId === 'spec');
+                    planTask = refreshedSpecStage?.tasks.find((task) => task.taskId === 'spec/02-plan');
+                    if (!planTask || planTask.lifecycle !== 'ready') {
                         throw new Error('Expected spec/02-plan to be ready after completing spec/01 task.');
                     }
                 }
@@ -942,16 +940,13 @@ describe('Mission', () => {
                     }
                 );
 
-                const statusDuringPlanning = await mission.status();
-                const planningStages = statusDuringPlanning.stages ?? [];
-                const runningPlanTask = planningStages
-                    .flatMap((stage: MissionStageStatus) => stage.tasks)
-                    .find((task: { taskId: string; status?: string }) => task.taskId === 'spec/02-plan');
-                expect(runningPlanTask?.status).toBe('running');
+                const missionDuringPlanning = await mission.buildMission();
+                const runningPlanTask = missionDuringPlanning.tasks.find((task) => task.taskId === 'spec/02-plan');
+                expect(runningPlanTask?.lifecycle).toBe('running');
 
-                const implementationStage = planningStages.find((stage: MissionStageStatus) => stage.stage === 'implementation');
-                expect(implementationStage?.tasks.map((task: { taskId: string }) => task.taskId)).toContain('implementation/01-visible-while-planning');
-                expect(implementationStage?.tasks.find((task: { taskId: string; status?: string }) => task.taskId === 'implementation/01-visible-while-planning')?.status).toBe('pending');
+                const implementationStage = missionDuringPlanning.stages.find((stage) => stage.stageId === 'implementation');
+                expect(implementationStage?.tasks.map((task) => task.taskId)).toContain('implementation/01-visible-while-planning');
+                expect(implementationStage?.tasks.find((task) => task.taskId === 'implementation/01-visible-while-planning')?.lifecycle).toBe('pending');
             } finally {
                 mission.dispose();
             }
@@ -1053,8 +1048,8 @@ describe('Mission', () => {
                 }
 
                 try {
-                    const status = await reloaded.status();
-                    const migratedAgentExecution = status.agentExecutions?.find((execution: AgentExecutionState) => execution.agentExecutionId === launched.agentExecutionId);
+                    const missionData = await reloaded.buildMission();
+                    const migratedAgentExecution = missionData.agentExecutions.find((execution: AgentExecutionState) => execution.agentExecutionId === launched.agentExecutionId);
                     expect(migratedAgentExecution).toMatchObject({
                         agentId: 'copilot-cli',
                         transportId: 'terminal'
@@ -1110,8 +1105,8 @@ describe('Mission', () => {
                     throw new Error('synthetic reconcile failure');
                 };
 
-                const status = await mission.status();
-                expect(status.agentExecutions?.find((execution: AgentExecutionState) => execution.agentExecutionId === launched.agentExecutionId)).toMatchObject({
+                const missionData = await mission.buildMission();
+                expect(missionData.agentExecutions.find((execution: AgentExecutionState) => execution.agentExecutionId === launched.agentExecutionId)).toMatchObject({
                     agentExecutionId: launched.agentExecutionId,
                     agentId: agentAdapter.id,
                     lifecycleState: 'running'
@@ -1159,9 +1154,9 @@ describe('Mission', () => {
                 );
                 await Mission.writeStateData(adapter, mission.getMissionDir(), persisted);
 
-                const status = await mission.status();
-                expect(status.readyTasks?.some((task: { taskId: string }) => task.taskId === taskId)).toBe(true);
-                expect(status.stages?.flatMap((stage: MissionStageStatus) => stage.tasks).find((task: { taskId: string; status?: string }) => task.taskId === taskId)?.status).toBe('ready');
+                const missionData = await mission.buildMission();
+                expect(missionData.tasks.some((task) => task.taskId === taskId && task.lifecycle === 'ready')).toBe(true);
+                expect(missionData.stages.flatMap((stage) => stage.tasks).find((task) => task.taskId === taskId)?.lifecycle).toBe('ready');
             } finally {
                 mission.dispose();
             }
@@ -1184,19 +1179,19 @@ describe('Mission', () => {
             try {
                 await mission.startWorkflow();
 
-                const runningCommands = await mission.listAvailableCommandSnapshot();
-                expect(findMissionCommand(runningCommands.commands, MissionCommandIds.pause)?.disabled).toBe(false);
-                expect(findMissionCommand(runningCommands.commands, MissionCommandIds.resume)?.disabled).toBe(true);
+                const runningCommands = await mission.readCommands();
+                expect(findMissionCommand(runningCommands, MissionCommandIds.pause)?.available).toBe(true);
+                expect(findMissionCommand(runningCommands, MissionCommandIds.resume)?.available).toBe(false);
 
                 await mission.pauseMission();
-                const pausedCommands = await mission.listAvailableCommandSnapshot();
-                expect(findMissionCommand(pausedCommands.commands, MissionCommandIds.resume)?.disabled).toBe(false);
-                expect(findMissionCommand(pausedCommands.commands, MissionCommandIds.pause)?.disabled).toBe(true);
+                const pausedCommands = await mission.readCommands();
+                expect(findMissionCommand(pausedCommands, MissionCommandIds.resume)?.available).toBe(true);
+                expect(findMissionCommand(pausedCommands, MissionCommandIds.pause)?.available).toBe(false);
 
                 await mission.resumeMission();
-                const resumedCommands = await mission.listAvailableCommandSnapshot();
-                expect(findMissionCommand(resumedCommands.commands, MissionCommandIds.pause)?.disabled).toBe(false);
-                expect(findMissionCommand(resumedCommands.commands, MissionCommandIds.resume)?.disabled).toBe(true);
+                const resumedCommands = await mission.readCommands();
+                expect(findMissionCommand(resumedCommands, MissionCommandIds.pause)?.available).toBe(true);
+                expect(findMissionCommand(resumedCommands, MissionCommandIds.resume)?.available).toBe(false);
             } finally {
                 mission.dispose();
             }
@@ -1237,9 +1232,9 @@ describe('Mission', () => {
                 execution.emitAwaitingInput();
                 await flushMicrotasks();
 
-                const commands = await mission.listAvailableCommandSnapshot();
-                expect(findAgentExecutionCommand(commands.commands, launched.agentExecutionId, AgentExecutionCommandIds.cancel)?.disabled).toBe(false);
-                expect(commands.commands.filter((command) => command.owner.entity === 'AgentExecution' && command.owner.agentExecutionId === launched.agentExecutionId)).toHaveLength(1);
+                const commands = await mission.readCommands();
+                expect(findAgentExecutionCommand(commands, launched.agentExecutionId, AgentExecutionCommandIds.cancel)?.available).toBe(true);
+                expect(commands.filter((command) => command.entity === 'AgentExecution' && command.targetId?.endsWith(`/${launched.agentExecutionId}`))).toHaveLength(1);
             } finally {
                 mission.dispose();
             }
@@ -1289,10 +1284,10 @@ describe('Mission', () => {
                     throw new Error('Expected mission to reload.');
                 }
 
-                const commands = await reloaded.listAvailableCommandSnapshot();
-                expect(findMissionCommand(commands.commands, 'mission.deliver')).toMatchObject({
-                    disabled: true,
-                    disabledReason: 'Mission already delivered.'
+                const commands = await reloaded.readCommands();
+                expect(findMissionCommand(commands, 'mission.deliver')).toMatchObject({
+                    available: false,
+                    unavailableReason: 'Mission already delivered.'
                 });
                 reloaded.dispose();
             } finally {
@@ -1303,20 +1298,47 @@ describe('Mission', () => {
         }
     });
 
+    it('keeps daemon logger context when Mission forwards debug logging to the request executor', async () => {
+        const workspaceRoot = await createTempRepo();
+        const agentAdapter = new FakeAgentAdapter('test-adapter', 'Test Adapter');
+
+        try {
+            const adapter = new MissionDossierFilesystem(workspaceRoot);
+            const logger = new DaemonLogger(path.join(workspaceRoot, 'daemon.log'));
+            const bindings = createWorkflowBindings(agentAdapter);
+            const mission = await Mission.create(adapter, {
+                brief: createBrief(211, 'Mission logger binding'),
+                branchRef: adapter.deriveMissionBranchName(211, 'Mission logger binding')
+            }, {
+                ...bindings,
+                logger
+            });
+
+            try {
+                await mission.startWorkflow();
+                await logger.flush();
+            } finally {
+                mission.dispose();
+            }
+        } finally {
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
 });
 
-type TestOwnedCommand = Awaited<ReturnType<Mission['listAvailableCommands']>>[number];
+type TestOwnedCommand = Awaited<ReturnType<Mission['listCommands']>>[number];
 
 function findMissionCommand(commands: TestOwnedCommand[], commandId: string) {
-    return commands.find((command) => command.owner.entity === 'Mission' && command.command.commandId === commandId)?.command;
+    return commands.find((command) => command.entity === 'Mission' && command.commandId === commandId);
 }
 
 function findAgentExecutionCommand(commands: TestOwnedCommand[], agentExecutionId: string, commandId: string) {
     return commands.find((command) =>
-        command.owner.entity === 'AgentExecution'
-        && command.owner.agentExecutionId === agentExecutionId
-        && command.command.commandId === commandId
-    )?.command;
+        command.entity === 'AgentExecution'
+        && command.targetId?.endsWith(`/${agentExecutionId}`)
+        && command.commandId === commandId
+    );
 }
 
 function createWorkflowBindings(adapter: FakeAgentAdapter): MissionWorkflowBindings {

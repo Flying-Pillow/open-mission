@@ -27,7 +27,7 @@ describe('AgentExecutionJournalReplayer', () => {
                 signal: {
                     type: 'progress',
                     summary: 'Working through the next slice.',
-                    source: 'agent-declared',
+                    source: 'agent-signal',
                     confidence: 'medium'
                 }
             },
@@ -113,11 +113,10 @@ describe('AgentExecutionJournalReplayer', () => {
         expect(replay.transportState).toEqual({ selected: 'stdout-marker', degraded: false });
         expect(replay.lifecycleState).toBe('running');
         expect(replay.attention).toBe('awaiting-operator');
-        expect(replay.semanticActivity).toBe('reviewing');
+        expect(replay.activityState).toBe('reviewing');
         expect(replay.currentInputRequestId).toBe('observation-2');
         expect(replay.awaitingResponseToMessageId).toBeNull();
         expect(replay.runtimeActivity).toEqual({
-            activity: 'reviewing',
             progress: {
                 summary: 'Reviewing the generated patch.',
                 units: {
@@ -212,10 +211,9 @@ describe('AgentExecutionJournalReplayer', () => {
         ]);
         expect(hydrated.lifecycleState).toBe('running');
         expect(hydrated.attention).toBe('autonomous');
-        expect(hydrated.semanticActivity).toBe('executing');
+        expect(hydrated.activityState).toBe('executing');
         expect(hydrated.currentInputRequestId).toBeNull();
         expect(hydrated.runtimeActivity).toEqual({
-            activity: 'executing',
             progress: {
                 summary: 'Running the first slice.'
             },
@@ -239,7 +237,7 @@ describe('AgentExecutionJournalReplayer', () => {
             agentId: 'copilot-cli',
             adapterLabel: 'Copilot CLI',
             lifecycleState: 'running',
-            semanticActivity: 'executing',
+            activityState: 'executing',
             interactionCapabilities: {
                 mode: 'agent-message',
                 canSendTerminalInput: false,
@@ -270,7 +268,7 @@ describe('AgentExecutionJournalReplayer', () => {
             }
         ]);
 
-        expect(hydrated.semanticActivity).toBe('awaiting-agent-response');
+        expect(hydrated.activityState).toBe('awaiting-agent-response');
         expect(hydrated.runtimeActivity).toBeUndefined();
         expect(hydrated.projection.currentActivity).toEqual({
             lifecycleState: 'running',
@@ -297,7 +295,7 @@ describe('AgentExecutionJournalReplayer', () => {
                         { kind: 'fixed', label: 'Mission task work', value: 'mission-task' },
                         { kind: 'manual', label: 'Other', placeholder: 'Type your own answer' }
                     ],
-                    source: 'agent-declared',
+                    source: 'agent-signal',
                     confidence: 'medium'
                 }
             },
@@ -317,7 +315,7 @@ describe('AgentExecutionJournalReplayer', () => {
                 signal: {
                     type: 'ready_for_verification',
                     summary: 'Ready for review.',
-                    source: 'agent-declared',
+                    source: 'agent-signal',
                     confidence: 'medium'
                 }
             }
@@ -353,7 +351,7 @@ describe('AgentExecutionJournalReplayer', () => {
                         { kind: 'fixed', label: 'Option A', value: 'a' },
                         { kind: 'manual', label: 'Something else', placeholder: 'Type your own answer' }
                     ],
-                    source: 'agent-declared',
+                    source: 'agent-signal',
                     confidence: 'medium'
                 }
             },
@@ -406,7 +404,10 @@ function createHeaderRecord(): AgentExecutionJournalRecordType {
     };
 }
 
-function baseRecord<TType extends AgentExecutionJournalRecordType['type']>(type: TType, sequence: number) {
+function baseRecord<TType extends AgentExecutionJournalRecordType['type']>(
+    type: TType,
+    sequence: number
+): any {
     return {
         recordId: `record-${sequence}`,
         sequence,
@@ -451,5 +452,5 @@ function baseRecord<TType extends AgentExecutionJournalRecordType['type']>(type:
             }
         },
         occurredAt: `2026-05-09T00:00:0${sequence}.000Z`
-    };
+    } as const;
 }

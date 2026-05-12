@@ -1,11 +1,15 @@
 import type { Notification as DaemonNotification } from '@flying-pillow/mission-core/daemon/protocol/contracts';
 import {
+    sanitizeTerminalOutputChunkForSurface,
+    sanitizeTerminalScreenForSurface
+} from '@flying-pillow/mission-core/daemon/runtime/terminal/TerminalTextSanitizer';
+import {
     MissionTerminalOutputSchema,
     MissionTerminalSnapshotSchema,
     MissionTerminalSocketClientMessageSchema,
     MissionTerminalSocketServerMessageSchema,
     type MissionTerminalSnapshotType
-} from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+} from '@flying-pillow/mission-core/entities/Terminal/MissionTerminalSchema';
 import {
     AgentExecutionTerminalOutputSchema,
     AgentExecutionTerminalSnapshotSchema,
@@ -130,7 +134,7 @@ async function handleTerminalConnection(
     };
 
     const sendSnapshot = (state: AgentExecutionTerminalSnapshotType, type: 'snapshot' | 'disconnected' = 'snapshot') => {
-        const terminalScreen = clipTerminalScreen(state.screen);
+        const terminalScreen = clipTerminalScreen(sanitizeTerminalScreen(state.screen));
         const snapshot = AgentExecutionTerminalSnapshotSchema.parse({
             ownerId: query.ownerId,
             agentExecutionId,
@@ -151,7 +155,7 @@ async function handleTerminalConnection(
         const output = AgentExecutionTerminalOutputSchema.parse({
             ownerId: query.ownerId,
             agentExecutionId,
-            chunk: state.chunk ?? '',
+            chunk: sanitizeTerminalChunk(state.chunk ?? ''),
             dead: state.dead,
             exitCode: state.dead ? state.exitCode : null,
             ...(state.truncated ? { truncated: true } : {}),
@@ -172,8 +176,8 @@ async function handleTerminalConnection(
         exitCode: state.dead ? state.exitCode : null,
         ...(state.cols ? { cols: state.cols } : {}),
         ...(state.rows ? { rows: state.rows } : {}),
-        screen: state.screen,
-        ...(typeof state.chunk === 'string' ? { chunk: state.chunk } : {}),
+        screen: sanitizeTerminalScreen(state.screen),
+        ...(typeof state.chunk === 'string' ? { chunk: sanitizeTerminalChunk(state.chunk) } : {}),
         ...(state.truncated ? { truncated: true } : {}),
         ...(terminalHandle ? { terminalHandle } : {})
     });
@@ -509,4 +513,12 @@ function clipMissionSessionTerminalScreen(
     }
 
     return clipTerminalScreen(state?.screen ?? '');
+}
+
+function sanitizeTerminalChunk(chunk: string): string {
+    return sanitizeTerminalOutputChunkForSurface(chunk);
+}
+
+function sanitizeTerminalScreen(screen: string): string {
+    return sanitizeTerminalScreenForSurface(screen);
 }

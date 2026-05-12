@@ -112,7 +112,7 @@ A deliberate, separately decided replacement of one Mission runtime data layout 
 _Avoid_: surface migration, per-field fallback, ad hoc compatibility shim
 
 **Running Mission instance**:
-The daemon-owned in-memory authoritative Mission Entity for one Mission. It owns Mission lifecycle behavior, child-entity coordination, workflow-definition application, and Mission read projection while the Mission is live, and it can run without any Airport surface connected.
+The daemon-owned in-memory authoritative Mission Entity for one Mission. It owns Mission lifecycle behavior, child-entity coordination, workflow-definition application, and hydration of the complete Mission Entity instance while the Mission is live, and it can run without any Airport surface connected.
 _Avoid_: UI session mission, workflow controller, mission projection, surface-owned mission state
 
 **Mission workflow definition**:
@@ -248,8 +248,24 @@ A strict one-line stdout marker emitted by an Agent execution and parsed by the 
 _Avoid_: prose state claim, hidden side channel, workflow authority, terminal heuristic
 
 **Mission MCP server**:
-The daemon-owned local MCP server named `mission-mcp` that exposes Agent-declared signal payloads as tools for running Agent executions. It is a structured signal transport into Agent execution observation routing, not a workflow authority, Entity command surface, repository API, or separate Agent execution model.
+The daemon-owned local MCP server named `mission-mcp` that exposes Agent signal payloads and Agent execution semantic operations as tools for running Agent executions. It is a structured transport into Agent execution observation routing and scoped semantic reads, not a workflow authority, Entity command surface, public repository API, or separate Agent execution model.
 _Avoid_: remote mission API, MCP-owned workflow, task session server, provider-specific signal model
+
+**Agent execution semantic operation**:
+A read-only daemon-owned operation exposed to one registered Agent execution through `mission-mcp`, such as Artifact reads, code search, symbol context, impact analysis, route impact, or tool context. It resolves authority from Agent execution scope, validates operation input, delegates to the owning daemon service, returns structured context, and records a bounded Agent execution runtime fact.
+_Avoid_: Entity command, raw repository API, workflow mutation, arbitrary filesystem tool, public MCP tool
+
+**Repository code intelligence index**:
+A daemon-owned derived read model over one Repository root or Mission worktree root that records source files, code symbols, routes, tools, heuristic processes, clusters, and typed code relationships for scoped Agent execution semantic operations. It is rebuildable from repository files and Git state, not canonical Mission state.
+_Avoid_: Entity storage records, Mission dossier, `.gitnexus` index, workflow truth, source of truth
+
+**Repository code graph**:
+The graph-shaped query model inside a Repository code intelligence index, containing code files, code symbols, code relations, code routes, code tools, code processes, code clusters, and index snapshot metadata. Its physical storage may use SurrealDB tables and relation records behind a Mission-owned graph store adapter.
+_Avoid_: raw SurrealDB client, public graph API, Entity relationship metadata, workflow graph
+
+**Code intelligence runtime fact**:
+A bounded Agent execution runtime fact recording that an Agent execution used a code intelligence semantic operation, including the operation name, scoped index, query summary, result summary, staleness, and confidence metadata. It is audit material, not the full query result or source body.
+_Avoid_: transcript, full code dump, persistent index record, workflow event
 
 **Agent message shorthand**:
 Operator-facing syntax that parses into an Agent execution message, such as a slash command in an external prompt field.
@@ -310,8 +326,8 @@ The hydrated Entity shape returned to clients, including storage fields and comp
 _Avoid_: view model, response model
 
 **Entity command view**:
-A first-class Entity query result that advertises currently available Entity commands for one target Entity id. It is not Entity data and must not be stored inside an Entity data schema.
-_Avoid_: commands data, command snapshot, command alias
+A first-class Entity query result or hydrated Entity `commands` field that advertises Entity method descriptors for one target Entity id. It is derived from `<Entity>Contract.ts` mutation methods with `ui` metadata and the owning Entity's optional `can<MethodName>` method; it is not persisted Entity storage data.
+_Avoid_: command snapshot, command alias, surface command registry, Mission child command list
 
 **Entity class command view**:
 A first-class Entity query result that advertises currently available class-level Entity commands, such as Repository registration or clone. It is returned by `classCommands` and is not tied to an existing Entity id.
@@ -555,7 +571,7 @@ _Avoid_: workflow projection, stage projection
 - A **Mission control view** is derived from Entity data, workflow definition, and runtime state for operator navigation.
 - A **Mission surface preference** belongs to the Airport surface/client layer, not the daemon.
 - A **Mission surface preference** must not encode durable Mission workflow ordering.
-- Mission Control task lists are rendered by Airport surfaces from Mission stage, Mission task, Artifact, Agent execution, and Entity command data.
+- Mission Control task lists are rendered by Airport surfaces from Mission stage, Mission task, Artifact, Agent execution, and Entity command descriptors.
 - Mission Control task lists must not duplicate canonical labels, lifecycle state, artifact paths, task status, or agent execution details owned by Entities.
 - A **Mission control selection** is controlled by one surface/operator session and resolved by Airport against Entity data.
 - A **Mission control selection** is not durable Mission coordination state and must not be shared as the current focus for every surface.

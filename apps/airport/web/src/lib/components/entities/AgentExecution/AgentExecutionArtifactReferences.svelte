@@ -7,15 +7,13 @@
     import { resolveArtifactIcon } from "$lib/components/entities/Artifact/ArtifactPresentation.js";
     import type { AgentExecutionDataType } from "@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema";
     import { Button } from "$lib/components/ui/button/index.js";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { app } from "$lib/client/Application.svelte.js";
 
     type TimelineItem =
         AgentExecutionDataType["projection"]["timelineItems"][number];
     type ArtifactReference = NonNullable<
         TimelineItem["payload"]["artifacts"]
     >[number];
-
-    const appContext = getAppContext();
 
     let {
         item,
@@ -53,7 +51,7 @@
     function resolveArtifact(
         reference: ArtifactReference,
     ): ArtifactEntity | undefined {
-        const mission = appContext.airport.activeMission;
+        const mission = app.mission;
         if (mission) {
             const artifacts = mission.listArtifacts();
             if (reference.artifactId) {
@@ -94,7 +92,7 @@
                 if (missionRootPath) {
                     return createFileArtifact({
                         repositoryRootPath:
-                            appContext.airport.activeRepositoryRootPath ??
+                            app.repository?.data.repositoryRootPath ??
                             missionRootPath,
                         rootPath: missionRootPath,
                         relativePath: referencePath,
@@ -105,7 +103,7 @@
         }
 
         const repositoryRootPath =
-            appContext.airport.activeRepositoryRootPath?.trim();
+            app.repository?.data.repositoryRootPath?.trim();
         const referencePath = reference.path
             ? normalizePath(reference.path)
             : undefined;

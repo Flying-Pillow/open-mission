@@ -1,9 +1,10 @@
-// /apps/airport/web/src/lib/components/entities/Task/Task.svelte.ts: OO browser entity for workflow tasks exposed by a mission snapshot.
+// /apps/airport/web/src/lib/components/entities/Task/Task.svelte.ts: OO browser entity for workflow tasks exposed by hydrated mission data.
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 import { TaskCommandIds, type TaskConfigureCommandOptionsType, type TaskDataType, type TaskStartCommandOptionsType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
-import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
+import type { AgentExecution } from '$lib/components/entities/AgentExecution/AgentExecution.svelte.js';
+import { Entity } from '$lib/components/entities/Entity/Entity.svelte.js';
 
-export type TaskSnapshot = {
+export type TaskHydratedData = {
     stageId: string;
     task: TaskDataType;
 };
@@ -19,33 +20,35 @@ export type TaskConfigureOptions = TaskConfigureCommandOptionsType;
 
 export type TaskDependencies = {
     resolveCommands(taskId: string): EntityCommandDescriptorType[];
+    resolveAgentExecution(taskId: string): AgentExecution | undefined;
     executeCommand(taskId: string, commandId: string, input?: unknown): Promise<void>;
 };
 
-export class Task implements EntityModel<TaskSnapshot> {
-    private snapshotState = $state<TaskSnapshot | undefined>();
+export class Task extends Entity<TaskHydratedData> {
+    private data = $state<TaskHydratedData | undefined>();
     private readonly dependencies: TaskDependencies;
 
-    public constructor(snapshot: TaskSnapshot, dependencies: TaskDependencies) {
-        this.snapshot = snapshot;
+    public constructor(data: TaskHydratedData, dependencies: TaskDependencies) {
+        super();
+        this.setData(data);
         this.dependencies = dependencies;
     }
 
-    private get snapshot(): TaskSnapshot {
-        const snapshot = this.snapshotState;
-        if (!snapshot) {
-            throw new Error('Task snapshot is not initialized.');
+    private requireData(): TaskHydratedData {
+        const data = this.data;
+        if (!data) {
+            throw new Error('Task data is not initialized.');
         }
 
-        return snapshot;
+        return data;
     }
 
-    private set snapshot(snapshot: TaskSnapshot) {
-        this.snapshotState = structuredClone(snapshot);
+    private setData(data: TaskHydratedData): void {
+        this.data = structuredClone(data);
     }
 
     public get taskId(): string {
-        return this.snapshot.task.taskId;
+        return this.requireData().task.taskId;
     }
 
     public get id(): string {
@@ -60,48 +63,58 @@ export class Task implements EntityModel<TaskSnapshot> {
         return this.taskId;
     }
 
+    protected get entityLocator(): Record<string, unknown> {
+        return {
+            taskId: this.taskId
+        };
+    }
+
     public get stageId(): string {
-        return this.snapshot.stageId;
+        return this.requireData().stageId;
     }
 
     public get title(): string {
-        return this.snapshot.task.title;
+        return this.requireData().task.title;
     }
 
     public get lifecycle(): string {
-        return this.snapshot.task.lifecycle;
+        return this.requireData().task.lifecycle;
     }
 
     public get agentAdapter(): string {
-        return this.snapshot.task.agentAdapter;
+        return this.requireData().task.agentAdapter;
     }
 
     public get model(): string | undefined {
-        return this.snapshot.task.model;
+        return this.requireData().task.model;
     }
 
     public get reasoningEffort(): TaskStartCommandOptionsType['reasoningEffort'] | undefined {
-        return this.snapshot.task.reasoningEffort;
+        return this.requireData().task.reasoningEffort;
     }
 
     public get autostart(): boolean {
-        return this.snapshot.task.autostart ?? false;
+        return this.requireData().task.autostart ?? false;
     }
 
     public get dependsOn(): string[] {
-        return [...this.snapshot.task.dependsOn];
+        return [...this.requireData().task.dependsOn];
     }
 
     public get context(): NonNullable<TaskDataType['context']> {
-        return this.snapshot.task.context?.map((contextArtifact) => ({ ...contextArtifact })) ?? [];
+        return this.requireData().task.context?.map((contextArtifact) => ({ ...contextArtifact })) ?? [];
     }
 
     public get waitingOnTaskIds(): string[] {
-        return [...this.snapshot.task.waitingOnTaskIds];
+        return [...this.requireData().task.waitingOnTaskIds];
     }
 
     public get commands(): EntityCommandDescriptorType[] {
         return this.dependencies.resolveCommands(this.taskId);
+    }
+
+    public get agentExecution(): AgentExecution | undefined {
+        return this.dependencies.resolveAgentExecution(this.taskId);
     }
 
     public async start(options: TaskStartOptions = {}): Promise<this> {
@@ -114,8 +127,9 @@ export class Task implements EntityModel<TaskSnapshot> {
         return this;
     }
 
-    public async executeCommand(commandId: string, input?: unknown): Promise<void> {
+    public async executeCommand<TResult = unknown>(commandId: string, input?: unknown): Promise<TResult> {
         await this.dependencies.executeCommand(this.taskId, commandId, input);
+        return undefined as TResult;
     }
 
     public async complete(): Promise<this> {
@@ -128,8 +142,8 @@ export class Task implements EntityModel<TaskSnapshot> {
         return this;
     }
 
-    public updateFromData(snapshot: TaskSnapshot): this {
-        this.snapshot = snapshot;
+    public updateFromData(data: TaskHydratedData): this {
+        this.setData(data);
         return this;
     }
 
@@ -140,24 +154,28 @@ export class Task implements EntityModel<TaskSnapshot> {
         });
     }
 
-    public toData(): TaskSnapshot {
-        return structuredClone($state.snapshot(this.snapshot));
+    public toData(): TaskHydratedData {
+        return structuredClone($state.snapshot(this.requireData()));
     }
 
-    public toJSON(): TaskDataType {
-        return structuredClone($state.snapshot(this.snapshot.task));
+    public toTaskData(): TaskDataType {
+        return structuredClone($state.snapshot(this.requireData().task));
     }
 
-    public toStageSnapshot(): TaskSnapshot {
+    public toStageData(): TaskHydratedData {
+        return this.toData();
+    }
+
+    public toJSON(): TaskHydratedData {
         return this.toData();
     }
 
     public withStage(stageId: string): this {
-        const snapshot = $state.snapshot(this.snapshot);
-        this.snapshot = {
-            ...snapshot,
+        const data = $state.snapshot(this.requireData());
+        this.setData({
+            ...data,
             stageId
-        };
+        });
         return this;
     }
 }

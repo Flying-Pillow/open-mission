@@ -198,14 +198,14 @@ The signal registry is narrower. It owns the canonical AgentExecution signal voc
 
 | Signal type | Payload schema key | Descriptor surfaced | Replay chat projection |
 | --- | --- | --- | --- |
-| `progress` | `agent-declared-signal.progress.v1` | yes | progress message |
-| `status` | `agent-declared-signal.status.v1` | yes | status message |
-| `needs_input` | `agent-declared-signal.needs-input.v1` | yes | needs-input message |
-| `blocked` | `agent-declared-signal.blocked.v1` | yes | blocked message |
-| `ready_for_verification` | `agent-declared-signal.ready-for-verification.v1` | yes | claim message |
-| `completed_claim` | `agent-declared-signal.completed-claim.v1` | yes | claim message |
-| `failed_claim` | `agent-declared-signal.failed-claim.v1` | yes | failure message |
-| `message` | `agent-declared-signal.message.v1` | yes | chat message |
+| `progress` | `agent-signal.progress.v1` | yes | progress message |
+| `status` | `agent-signal.status.v1` | yes | status message |
+| `needs_input` | `agent-signal.needs-input.v1` | yes | needs-input message |
+| `blocked` | `agent-signal.blocked.v1` | yes | blocked message |
+| `ready_for_verification` | `agent-signal.ready-for-verification.v1` | yes | claim message |
+| `completed_claim` | `agent-signal.completed-claim.v1` | yes | claim message |
+| `failed_claim` | `agent-signal.failed-claim.v1` | yes | failure message |
+| `message` | `agent-signal.message.v1` | yes | chat message |
 | `usage` | none | no | none |
 | `diagnostic` | none | no | none |
 

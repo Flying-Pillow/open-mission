@@ -1,10 +1,13 @@
 import { z } from 'zod/v4';
 import {
     EntityCommandAcknowledgementSchema,
-    EntityIdSchema
+    EntitySchema,
+    EntityStorageSchema
 } from '../Entity/EntitySchema.js';
 import { ArtifactDataSchema } from '../Artifact/ArtifactSchema.js';
-import { TaskDataSchema } from '../Task/TaskSchema.js';
+import { TaskDataSchema, TaskDossierRecordSchema, TaskSchema } from '../Task/TaskSchema.js';
+import { MISSION_STAGE_DERIVED_STATES } from '../../workflow/engine/constants.js';
+import { MISSION_STAGE_IDS } from '../../workflow/stages.js';
 
 export const stageEntityName = 'Stage' as const;
 
@@ -33,8 +36,9 @@ export const StageCommandInputSchema = StageLocatorSchema.extend({
     input: z.unknown().optional()
 }).strict();
 
-export const StageStorageSchema = z.object({
-    id: EntityIdSchema,
+export const StageCommandMethodSchema = z.enum(['generateTasks']);
+
+export const StageStorageSchema = EntityStorageSchema.extend({
     stageId: StageIdSchema,
     lifecycle: z.string().trim().min(1),
     isCurrentStage: z.boolean(),
@@ -42,13 +46,29 @@ export const StageStorageSchema = z.object({
     tasks: z.array(TaskDataSchema)
 }).strict();
 
-export const StageDataSchema = z.object({
-    ...StageStorageSchema.shape
+export const StageDataSchema = StageStorageSchema.extend({}).strict();
+
+const StageStoragePayloadSchema = StageStorageSchema.omit({ id: true });
+
+export const StageSchema = EntitySchema.extend({
+    ...StageStoragePayloadSchema.shape,
+    tasks: z.array(TaskSchema)
+}).strict();
+
+export const StageStatusViewSchema = z.object({
+    stage: z.enum(MISSION_STAGE_IDS),
+    folderName: z.string().trim().min(1),
+    status: z.enum(MISSION_STAGE_DERIVED_STATES),
+    taskCount: z.number().int().nonnegative(),
+    completedTaskCount: z.number().int().nonnegative(),
+    activeTaskIds: z.array(z.string().trim().min(1)),
+    readyTaskIds: z.array(z.string().trim().min(1)),
+    tasks: z.array(TaskDossierRecordSchema)
 }).strict();
 
 export const StageCommandAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
     entity: z.literal(stageEntityName),
-    method: z.literal('command'),
+    method: StageCommandMethodSchema.or(z.literal('command')),
     id: z.string().trim().min(1),
     missionId: z.string().trim().min(1),
     stageId: StageIdSchema,
@@ -63,9 +83,12 @@ export const StageDataChangedSchema = z.object({
 export type StageLocatorType = z.infer<typeof StageLocatorSchema>;
 export type StageEventSubjectType = z.infer<typeof StageEventSubjectSchema>;
 export type StageCommandIdType = z.infer<typeof StageCommandIdSchema>;
+export type StageCommandMethodType = z.infer<typeof StageCommandMethodSchema>;
 export type StageCommandInputType = z.infer<typeof StageCommandInputSchema>;
 export type StageStorageType = z.infer<typeof StageStorageSchema>;
 export type StageDataType = z.infer<typeof StageDataSchema>;
+export type StageType = z.infer<typeof StageSchema>;
+export type StageStatusViewType = z.infer<typeof StageStatusViewSchema>;
 export type StageCommandAcknowledgementType = z.infer<typeof StageCommandAcknowledgementSchema>;
 export type StageDataChangedType = z.infer<typeof StageDataChangedSchema>;
 

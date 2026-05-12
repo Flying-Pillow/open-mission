@@ -1,7 +1,7 @@
 <script lang="ts">
     import { goto } from "$app/navigation";
     import Icon from "@iconify/svelte";
-    import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
+    import { app } from "$lib/client/Application.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import type { TrackedIssueSummaryType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
@@ -19,20 +19,17 @@
         onViewIssue: (issueNumber: number) => void;
         onStartIssueError?: (message: string | null) => void;
     } = $props();
-    const repositoryScope = getScopedRepositoryContext();
-    const activeRepository = $derived.by(() => {
-        const repository = repositoryScope.repository;
+    const repository = $derived.by(() => {
+        const repository = app.repository;
         if (!repository) {
-            throw new Error(
-                "Issue commands require a scoped repository context.",
-            );
+            throw new Error("Issue commands require app.repository.");
         }
 
         return repository;
     });
 
     let missionCreationPending = $state(false);
-    const canStartMission = $derived(activeRepository.data.isInitialized);
+    const canStartMission = $derived(repository.data.isInitialized);
     const issueType = $derived.by(() => {
         const normalizedLabels = issue.labels.map((label) =>
             label.trim().toLowerCase(),
@@ -106,9 +103,7 @@
                     "Complete Repository initialization before starting regular missions.",
                 );
             }
-            const result = await activeRepository.startMissionFromIssue(
-                issue.number,
-            );
+            const result = await repository.startMissionFromIssue(issue.number);
             await goto(result.redirectTo);
         } catch (error) {
             onStartIssueError?.(

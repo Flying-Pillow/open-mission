@@ -1,10 +1,8 @@
 import type { AgentRegistry } from '../../../entities/Agent/AgentRegistry.js';
 import { AgentExecution } from '../../../entities/AgentExecution/AgentExecution.js';
 import type {
-    AgentCommand,
     AgentExecutionObservation,
-    AgentLaunchConfig,
-    AgentPrompt
+    AgentLaunchConfig
 } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import {
     AgentExecutionCommandSchema,
@@ -191,10 +189,10 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
                 await entry.agentExecutor.cancelExecution(agentExecutionId, readReason(command.input));
                 break;
             case 'agentExecution.sendPrompt':
-                await entry.agentExecutor.submitPrompt(agentExecutionId, normalizePrompt(AgentExecutionPromptSchema.parse(command.input)));
+                await entry.agentExecutor.submitPrompt(agentExecutionId, AgentExecutionPromptSchema.parse(command.input));
                 break;
             case 'agentExecution.sendRuntimeMessage':
-                await entry.agentExecutor.submitCommand(agentExecutionId, normalizeCommand(AgentExecutionCommandSchema.parse(command.input)));
+                await entry.agentExecutor.submitCommand(agentExecutionId, AgentExecutionCommandSchema.parse(command.input));
                 break;
         }
         return this.toExecutionData(entry.execution);
@@ -335,23 +333,6 @@ function readReason(input: unknown): string | undefined {
     return reason.length > 0 ? reason : undefined;
 }
 
-function normalizePrompt(input: { source: AgentPrompt['source']; text: string; title?: string | undefined; metadata?: AgentPrompt['metadata'] | undefined }): AgentPrompt {
-    return {
-        source: input.source,
-        text: input.text,
-        ...(input.title ? { title: input.title } : {}),
-        ...(input.metadata ? { metadata: input.metadata } : {})
-    };
-}
-
-function normalizeCommand(input: { type: AgentCommand['type']; reason?: string | undefined; metadata?: AgentCommand['metadata'] | undefined }): AgentCommand {
-    return {
-        type: input.type,
-        ...(input.reason ? { reason: input.reason } : {}),
-        ...(input.metadata ? { metadata: input.metadata } : {})
-    };
-}
-
 function isReusableTransportState(transportState: AgentExecutionDataType['transportState']): boolean {
     if (!transportState) {
         return true;
@@ -383,7 +364,7 @@ function isRecord(input: unknown): input is Record<string, unknown> {
 }
 
 function readObservationEventId(observation: AgentExecutionObservation): string {
-    const prefix = 'agent-declared-signal:';
+    const prefix = 'agent-signal:';
     if (observation.observationId.startsWith(prefix)) {
         const eventId = observation.observationId.slice(prefix.length).trim();
         if (eventId) {

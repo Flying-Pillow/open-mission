@@ -1,5 +1,5 @@
 <script lang="ts">
-    import EntityCommandbar from "$lib/components/entities/Commandbar/EntityCommandbar.svelte";
+    import EntityCommandbar from "$lib/components/entities/Entity/EntityCommandbar.svelte";
     import type { Mission } from "$lib/components/entities/Mission/Mission.svelte.js";
 
     let {

@@ -2,7 +2,6 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AgentExecutionFactRecorder } from './AgentExecutionFactRecorder.js';
 import { AgentExecutionSemanticOperations } from './AgentExecutionSemanticOperations.js';
 import { ArtifactService } from './ArtifactService.js';
 import { createMemoryAgentExecutionJournalWriter } from './testing/createMemoryAgentExecutionJournalWriter.js';
@@ -21,7 +20,7 @@ describe('AgentExecutionSemanticOperations', () => {
         const { journalWriter, recordsByJournalId } = createMemoryAgentExecutionJournalWriter();
         const semanticOperations = new AgentExecutionSemanticOperations({
             artifactService: new ArtifactService(),
-            factRecorder: new AgentExecutionFactRecorder({ journalWriter })
+            journalWriter
         });
         const repositoryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-semantic-read-artifact-'));
         temporaryDirectories.add(repositoryRoot);

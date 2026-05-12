@@ -3,17 +3,17 @@ import type { MissionDescriptor } from '../../entities/Mission/MissionSchema.js'
 import type { MissionDossierFilesystem } from '../../entities/Mission/MissionDossierFilesystem.js';
 import type { AgentCommand, AgentPrompt } from '../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import {
-    createMissionWorkflowConfigurationSnapshot,
-    createMissionStateData,
-    ingestMissionWorkflowEvent,
-    MissionWorkflowController,
-    type MissionGeneratedTaskPayload,
-    type MissionStateData,
-    type MissionWorkflowEvent,
-    type MissionWorkflowRequest
+    createWorkflowConfigurationSnapshot,
+    createWorkflowStateData,
+    ingestWorkflowEvent,
+    WorkflowController,
+    type WorkflowGeneratedTaskPayload,
+    type WorkflowStateData,
+    type WorkflowEvent,
+    type WorkflowRequest
 } from './index.js';
 import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../mission/workflow.js';
-import type { MissionWorkflowRequestExecutor } from './requestExecutor.js';
+import type { WorkflowRequestExecutor } from './requestExecutor.js';
 
 describe('workflow engine e2e', () => {
     it('runs a mission end to end through control, recovery, completion, and delivery', async () => {
@@ -35,7 +35,7 @@ describe('workflow engine e2e', () => {
                 audit: [createGeneratedTask('audit/01', 'audit', 'Run Audit')]
             }
         });
-        const controller = new MissionWorkflowController({
+        const controller = new WorkflowController({
             adapter,
             descriptor: createDescriptor('mission-e2e-happy'),
             workflow,
@@ -167,7 +167,7 @@ describe('workflow engine e2e', () => {
                 'prd/01': ['launch-failed', 'started', 'started']
             }
         });
-        const controller = new MissionWorkflowController({
+        const controller = new WorkflowController({
             adapter,
             descriptor: createDescriptor('mission-e2e-failure'),
             workflow,
@@ -215,14 +215,14 @@ describe('workflow engine e2e', () => {
 
     it('replays generation requests during refresh recovery', async () => {
         const adapter = createAdapter();
-        const configuration = createMissionWorkflowConfigurationSnapshot({
+        const configuration = createWorkflowConfigurationSnapshot({
             createdAt: '2026-04-14T12:00:00.000Z',
             workflowVersion: DEFAULT_WORKFLOW_VERSION,
             workflow: createDefaultWorkflowSettings()
         });
         adapter.setPersistedDocument(
-            ingestMissionWorkflowEvent(
-                createMissionStateData({
+            ingestWorkflowEvent(
+                createWorkflowStateData({
                     missionId: 'mission-e2e-refresh',
                     configuration,
                     createdAt: configuration.createdAt
@@ -241,7 +241,7 @@ describe('workflow engine e2e', () => {
                 prd: [createGeneratedTask('prd/01', 'prd', 'Draft PRD')]
             }
         });
-        const controller = new MissionWorkflowController({
+        const controller = new WorkflowController({
             adapter,
             descriptor: createDescriptor('mission-e2e-refresh'),
             workflow: createDefaultWorkflowSettings(),
@@ -268,7 +268,7 @@ describe('workflow engine e2e', () => {
             }
         });
         const descriptor = createDescriptor('mission-e2e-pause-recovery');
-        const controller = new MissionWorkflowController({
+        const controller = new WorkflowController({
             adapter,
             descriptor,
             workflow,
@@ -315,7 +315,7 @@ describe('workflow engine e2e', () => {
         });
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/02')?.lifecycle).toBe('ready');
 
-        const staleDocument: MissionStateData = {
+        const staleDocument: WorkflowStateData = {
             ...document,
             runtime: {
                 ...document.runtime,
@@ -343,7 +343,7 @@ describe('workflow engine e2e', () => {
         };
         adapter.setPersistedDocument(staleDocument);
 
-        const restartedController = new MissionWorkflowController({
+        const restartedController = new WorkflowController({
             adapter,
             descriptor,
             workflow,
@@ -383,13 +383,13 @@ function createDescriptor(missionId: string): MissionDescriptor {
 }
 
 function createAdapter() {
-    let persisted: MissionStateData | undefined;
+    let persisted: WorkflowStateData | undefined;
     const eventLog: Array<{ type: string }> = [];
 
     return {
-        readMissionStateDataFile: async () => persisted,
+        readWorkflowStateDataFile: async () => persisted,
         readMissionEventLogFile: async () => [...eventLog],
-        writeMissionStateDataFile: async (_missionDir: string, document: MissionStateData) => {
+        writeWorkflowStateDataFile: async (_missionDir: string, document: WorkflowStateData) => {
             persisted = document;
         },
         appendMissionEventRecordFile: async (_missionDir: string, eventRecord: { type: string }) => {
@@ -397,17 +397,17 @@ function createAdapter() {
         },
         getPersistedDocument: () => persisted,
         getPersistedEventLog: () => [...eventLog],
-        setPersistedDocument: (document: MissionStateData | undefined) => {
+        setPersistedDocument: (document: WorkflowStateData | undefined) => {
             persisted = document;
         }
     } as unknown as MissionDossierFilesystem & {
-        getPersistedDocument(): MissionStateData | undefined;
+        getPersistedDocument(): WorkflowStateData | undefined;
         getPersistedEventLog(): Array<{ type: string }>;
-        setPersistedDocument(document: MissionStateData | undefined): void;
+        setPersistedDocument(document: WorkflowStateData | undefined): void;
     };
 }
 
-function createGeneratedTask(taskId: string, stageId: string, title: string): MissionGeneratedTaskPayload {
+function createGeneratedTask(taskId: string, stageId: string, title: string): WorkflowGeneratedTaskPayload {
     return {
         taskId,
         title,
@@ -417,11 +417,11 @@ function createGeneratedTask(taskId: string, stageId: string, title: string): Mi
 }
 
 async function completeTask(
-    controller: MissionWorkflowController,
+    controller: WorkflowController,
     taskId: string,
     agentExecutionId: string,
     occurredAt: string
-): Promise<MissionStateData> {
+): Promise<WorkflowStateData> {
     const completedAgentExecutionDocument = await controller.applyEvent({
         eventId: `execution.completed:${agentExecutionId}:${occurredAt}`,
         type: 'execution.completed',
@@ -441,7 +441,7 @@ async function completeTask(
     });
 }
 
-function createTaskReopenedEvent(taskId: string, occurredAt: string): MissionWorkflowEvent {
+function createTaskReopenedEvent(taskId: string, occurredAt: string): WorkflowEvent {
     return {
         eventId: `task.reopened:${taskId}:${occurredAt}`,
         type: 'task.reopened',
@@ -451,7 +451,7 @@ function createTaskReopenedEvent(taskId: string, occurredAt: string): MissionWor
     };
 }
 
-function createMissionPausedEvent(occurredAt: string): MissionWorkflowEvent {
+function createMissionPausedEvent(occurredAt: string): WorkflowEvent {
     return {
         eventId: `mission.paused:${occurredAt}`,
         type: 'mission.paused',
@@ -467,7 +467,7 @@ function advanceTimestamp(iso: string, seconds: number): string {
 }
 
 function createScenarioExecutor(input: {
-    stageTasks: Record<string, MissionGeneratedTaskPayload[]>;
+    stageTasks: Record<string, WorkflowGeneratedTaskPayload[]>;
     launchPlans?: Record<string, Array<'started' | 'launch-failed'>>;
 }) {
     const executedRequestTypes: string[] = [];
@@ -478,8 +478,8 @@ function createScenarioExecutor(input: {
     let agentExecutionCounter = 0;
 
     const api = {
-        executeRequests: async (requestInput: { requests: MissionWorkflowRequest[] }) => {
-            const events: MissionWorkflowEvent[] = [];
+        executeRequests: async (requestInput: { requests: WorkflowRequest[] }) => {
+            const events: WorkflowEvent[] = [];
             for (const request of requestInput.requests) {
                 executedRequestTypes.push(request.type);
                 switch (request.type) {
@@ -573,7 +573,7 @@ function createScenarioExecutor(input: {
                 source: 'daemon',
                 agentExecutionId: agentExecutionId,
                 taskId
-            } satisfies MissionWorkflowEvent];
+            } satisfies WorkflowEvent];
         },
         promptRuntimeAgentExecution: async (agentExecutionId: string, prompt: AgentPrompt) => {
             promptCalls.push({ agentExecutionId, prompt });
@@ -594,9 +594,9 @@ function createScenarioExecutor(input: {
                 source: 'daemon',
                 agentExecutionId,
                 taskId
-            } satisfies MissionWorkflowEvent];
+            } satisfies WorkflowEvent];
         }
-    } as unknown as MissionWorkflowRequestExecutor;
+    } as unknown as WorkflowRequestExecutor;
 
     return {
         api,

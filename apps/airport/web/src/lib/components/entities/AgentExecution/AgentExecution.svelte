@@ -3,7 +3,7 @@
     import AgentExecutionTerminalReplay from "$lib/components/entities/AgentExecution/AgentExecutionTerminalReplay.svelte";
     import { Button } from "$lib/components/ui/button/index.js";
     import type { AgentExecution as AgentExecutionEntity } from "$lib/components/entities/AgentExecution/AgentExecution.svelte.js";
-    import { maybeGetAgentExecutionSurfaceContext } from "$lib/client/context/agent-execution-surface-context.svelte.js";
+    import { app } from "$lib/client/Application.svelte.js";
     import {
         createAirportTerminalRuntime,
         type AirportTerminal,
@@ -29,8 +29,6 @@
         onCommandExecuted: () => Promise<void>;
         panelMode?: "full" | "terminal";
     } = $props();
-    const executionSurface = maybeGetAgentExecutionSurfaceContext();
-
     let container = $state<HTMLDivElement | null>(null);
     let terminalSnapshot = $state<AgentExecutionTerminalSnapshotType | null>(
         null,
@@ -100,8 +98,12 @@
     });
     const terminalId = $derived(agentExecution?.agentExecutionId ?? null);
     const ownerId = $derived(agentExecution?.ownerId ?? "");
-    const surfaceId = $derived(executionSurface?.surfaceId ?? "");
-    const surfacePath = $derived(executionSurface?.surfacePath ?? "");
+    const surfaceId = $derived(app.repository?.id ?? "");
+    const surfacePath = $derived(
+        app.mission?.missionWorktreePath ??
+            app.repository?.data.repositoryRootPath ??
+            "",
+    );
     const isPersistedTranscriptSnapshot = $derived(
         Boolean(agentExecution && !agentExecution.isRunning()) ||
             Boolean(terminalSnapshot?.dead && !terminalSnapshot?.connected),

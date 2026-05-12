@@ -41,6 +41,7 @@ Read them when a change touches ownership, naming, state, runtime behavior, repo
 - [Repository Workflow Settings Control Contract](0021-repository-workflow-settings-control-contract.md)
 - [Daemon-Owned Runtime Supervision Graph](0028-daemon-owned-runtime-supervision-graph.md)
 - [Daemon-Owned System Status Snapshot](0029-daemon-owned-system-status-snapshot.md)
+- [SurrealDB Backed Repository Code Intelligence Index](0031-surrealdb-backed-repository-code-intelligence-index.md)
 
 ### Agent Execution
 
@@ -53,6 +54,7 @@ Read them when a change touches ownership, naming, state, runtime behavior, repo
 - [Mission MCP Server Agent Signal Transport](0024-mission-mcp-server-agent-signal-transport.md)
 - [Agent Execution Interaction Journal](0025-agent-execution-interaction-journal.md)
 - [Typed Agent Execution Journal Ledger](0027-typed-agent-execution-journal-ledger.md)
+- [Mission MCP Agent Execution Semantic Operations](0030-mission-mcp-agent-execution-semantic-operations.md)
 
 ### Mission Control And Surfaces
 

@@ -1,7 +1,7 @@
 <script lang="ts">
     import Icon from "@iconify/svelte";
     import BriefForm from "$lib/components/entities/Brief/BriefForm.svelte";
-    import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
+    import { app } from "$lib/client/Application.svelte.js";
     import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
     import Issue from "$lib/components/entities/Issue/Issue.svelte";
     import { Button } from "$lib/components/ui/button/index.js";
@@ -22,11 +22,10 @@
         issueError?: string | null;
         issueLoadingNumber?: number | null;
     } = $props();
-    const repositoryScope = getScopedRepositoryContext();
-    const activeRepository = $derived.by(() => {
-        const repository = repositoryScope.repository;
+    const repository = $derived.by(() => {
+        const repository = app.repository;
         if (!repository) {
-            throw new Error("Issue list requires a scoped repository context.");
+            throw new Error("Issue list requires app.repository.");
         }
 
         return repository;
@@ -34,7 +33,7 @@
 
     let remoteStartFromIssueError = $state<string | null>(null);
     let createMissionOpen = $state(false);
-    const repositoryIssuesQuery = $derived(activeRepository.listIssuesQuery());
+    const repositoryIssuesQuery = $derived(repository.listIssuesQuery());
     const repositoryIssues = $derived(
         (repositoryIssuesQuery.current as
             | TrackedIssueSummaryType[]
@@ -57,7 +56,7 @@
         issueError = null;
 
         try {
-            selectedIssue = await activeRepository.getIssue(issueNumber);
+            selectedIssue = await repository.getIssue(issueNumber);
             issuePreviewOpen = true;
         } catch (error) {
             issueError = error instanceof Error ? error.message : String(error);

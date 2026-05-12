@@ -1,10 +1,10 @@
 import type {
     AgentExecutionRuntimeState,
-    MissionTaskRuntimeState,
-    MissionWorkflowConfigurationSnapshot,
-    MissionWorkflowEvent,
-    MissionStateData,
-    MissionWorkflowRuntimeState
+    WorkflowTaskRuntimeState,
+    WorkflowConfigurationSnapshot,
+    WorkflowEvent,
+    WorkflowStateData,
+    WorkflowRuntimeState
 } from './types.js';
 import {
     countOccupiedTaskExecutionSlots,
@@ -16,39 +16,39 @@ import {
     resolveEligibleStageId
 } from './policy.js';
 
-export class MissionWorkflowValidationError extends Error {
+export class WorkflowValidationError extends Error {
     public constructor(message: string) {
         super(message);
-        this.name = 'MissionWorkflowValidationError';
+        this.name = 'WorkflowValidationError';
     }
 }
 
-export function validateMissionWorkflowEvent(
-    runtime: MissionWorkflowRuntimeState,
-    event: MissionWorkflowEvent,
-    configuration: MissionWorkflowConfigurationSnapshot
+export function validateWorkflowEvent(
+    runtime: WorkflowRuntimeState,
+    event: WorkflowEvent,
+    configuration: WorkflowConfigurationSnapshot
 ): void {
-    const errors = getMissionWorkflowEventValidationErrors(runtime, event, configuration);
+    const errors = getWorkflowEventValidationErrors(runtime, event, configuration);
     if (errors.length === 0) {
         return;
     }
-    throw new MissionWorkflowValidationError(errors.join(' | '));
+    throw new WorkflowValidationError(errors.join(' | '));
 }
 
-export function ensureMissionWorkflowEventAccepted(
-    document: MissionStateData,
-    event: MissionWorkflowEvent
+export function ensureWorkflowEventAccepted(
+    document: WorkflowStateData,
+    event: WorkflowEvent
 ): void {
-    validateMissionWorkflowEvent(document.runtime, event, document.configuration);
+    validateWorkflowEvent(document.runtime, event, document.configuration);
 }
 
-export function getMissionWorkflowEventValidationErrors(
-    runtime: MissionWorkflowRuntimeState,
-    event: MissionWorkflowEvent,
-    configuration: MissionWorkflowConfigurationSnapshot
+export function getWorkflowEventValidationErrors(
+    runtime: WorkflowRuntimeState,
+    event: WorkflowEvent,
+    configuration: WorkflowConfigurationSnapshot
 ): string[] {
     const errors: string[] = [];
-    const findTask = (taskId: string): MissionTaskRuntimeState | undefined =>
+    const findTask = (taskId: string): WorkflowTaskRuntimeState | undefined =>
         runtime.tasks.find((task) => task.taskId === taskId);
     const findAgentExecution = (agentExecutionId: string): AgentExecutionRuntimeState | undefined =>
         runtime.agentExecutions.find((execution) => execution.agentExecutionId === agentExecutionId);
@@ -238,7 +238,7 @@ function lifecycleForAgentExecutionEvent(
     }
 }
 
-function generatedTaskPayloadMatches(task: MissionTaskRuntimeState, payload: { taskId: string; title: string; instruction: string; model?: string; reasoningEffort?: string; dependsOn: string[]; context?: MissionTaskRuntimeState['context']; agentAdapter?: string }): boolean {
+function generatedTaskPayloadMatches(task: WorkflowTaskRuntimeState, payload: { taskId: string; title: string; instruction: string; model?: string; reasoningEffort?: string; dependsOn: string[]; context?: WorkflowTaskRuntimeState['context']; agentAdapter?: string }): boolean {
     return task.taskId === payload.taskId &&
         task.title === payload.title &&
         task.instruction === payload.instruction &&
@@ -250,11 +250,11 @@ function generatedTaskPayloadMatches(task: MissionTaskRuntimeState, payload: { t
 }
 
 function requireTask(
-    task: MissionTaskRuntimeState | undefined,
+    task: WorkflowTaskRuntimeState | undefined,
     taskId: string,
     errors: string[],
     eventType: string
-): MissionTaskRuntimeState | undefined {
+): WorkflowTaskRuntimeState | undefined {
     if (!task) {
         errors.push(`${eventType} references unknown task '${taskId}'.`);
     }

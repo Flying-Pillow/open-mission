@@ -56,7 +56,7 @@ The interaction journal records schema-validated facts such as:
 - owner effects that link accepted observations to Entity events or Mission workflow events.
 - projection material such as chat or timeline items when useful for efficient reads.
 
-AgentExecution messages are owner/operator/daemon-to-AgentExecution input. Agent runtime output is not an AgentExecution message. Runtime output becomes an AgentExecution observation, optionally carrying an Agent-declared signal when the Agent authored structured output. The policy result becomes a durable decision record before state or owner effects are applied.
+AgentExecution messages are owner/operator/daemon-to-AgentExecution input. Agent runtime output is not an AgentExecution message. Runtime output becomes an AgentExecution observation, optionally carrying an Agent signal when the Agent authored structured output. The policy result becomes a durable decision record before state or owner effects are applied.
 
 Mission must keep these ledgers distinct:
 
@@ -96,7 +96,7 @@ Live process state is represented by an AgentExecution runtime snapshot overlay 
 - Airport timelines and chat views become projections over AgentExecution truth.
 - Terminal output can be displayed and audited without becoming semantic truth.
 - Mission workflow state stays focused on tasks, AgentExecutions, gates, launch queues, and lifecycle transitions.
-- Agent-declared file activity can be recorded as semantic observation or activity, but filesystem/git truth must come from filesystem/git observation or explicit daemon state.
+- Agent signal file activity can be recorded as semantic observation or activity, but filesystem/git truth must come from filesystem/git observation or explicit daemon state.
 - Interaction journal schema changes are Mission runtime data changes and must follow ADR-0005 rather than fallback parsing or compatibility aliases.
 
 ## Implementation Rules

@@ -1,6 +1,6 @@
 <script lang="ts">
-    import EntityCommandbar from "$lib/components/entities/Commandbar/EntityCommandbar.svelte";
-    import type { CommandableEntity } from "$lib/components/entities/Commandbar/CommandableEntity";
+    import EntityCommandbar from "$lib/components/entities/Entity/EntityCommandbar.svelte";
+    import type { CommandableEntity } from "$lib/components/entities/Entity/CommandableEntity";
 
     let {
         refreshNonce,
@@ -12,12 +12,12 @@
         onCommandExecuted: () => Promise<void>;
     } = $props();
 
-    const availableCommands = $derived(
-        agentExecution?.commands.filter((command) => !command.disabled) ?? [],
+    const activeCommands = $derived(
+        agentExecution?.commands.filter((command) => command.available) ?? [],
     );
 </script>
 
-{#if availableCommands.length > 0}
+{#if activeCommands.length > 0}
     <EntityCommandbar
         {refreshNonce}
         entity={agentExecution}

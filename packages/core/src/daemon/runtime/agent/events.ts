@@ -1,11 +1,11 @@
-export type MissionAgentDisposable = {
+export type AgentRuntimeDisposable = {
 	dispose(): void;
 };
 
-export class MissionAgentEventEmitter<T> implements MissionAgentDisposable {
+export class AgentRuntimeEventEmitter<T> implements AgentRuntimeDisposable {
 	private readonly listeners = new Set<(event: T) => void>();
 
-	public readonly event = (listener: (event: T) => void): MissionAgentDisposable => {
+	public readonly event = (listener: (event: T) => void): AgentRuntimeDisposable => {
 		this.listeners.add(listener);
 		return {
 			dispose: () => {

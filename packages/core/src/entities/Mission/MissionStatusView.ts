@@ -1,46 +1,75 @@
-import type { AgentExecutionRecord } from '../AgentExecution/AgentExecutionSchema.js';
-import type { MissionDossierFilesystem } from './MissionDossierFilesystem.js';
 import {
 	MISSION_ARTIFACTS,
 	MISSION_STAGES,
 	MISSION_STAGE_FOLDERS,
-	type MissionArtifactKey,
 	type MissionStageId
 } from '../../workflow/mission/manifest.js';
-import type {
-	MissionDescriptor,
-	MissionStageStatus,
-	MissionTaskState,
-	OperatorStatus
-} from './MissionSchema.js';
 import { DEFAULT_WORKFLOW_VERSION } from '../../workflow/mission/workflow.js';
 import {
-	createDraftMissionWorkflowRuntimeState,
-	createMissionWorkflowConfigurationSnapshot,
-	type MissionStateData,
-	type WorkflowDefinition
+	createDraftWorkflowRuntimeState,
+	createWorkflowConfigurationSnapshot,
+	type WorkflowDefinition,
+	type WorkflowStateData
 } from '../../workflow/engine/index.js';
+import type { AgentExecutionRecord } from '../AgentExecution/AgentExecutionSchema.js';
+import type {
+	MissionAssignee,
+	MissionDescriptor,
+	MissionEntityTypeType
+} from './MissionSchema.js';
+import type { MissionDossierFilesystem } from './MissionDossierFilesystem.js';
 import { Task } from '../Task/Task.js';
 import { Stage } from '../Stage/Stage.js';
+import type { StageStatusViewType } from '../Stage/StageSchema.js';
+import type { TaskDossierRecordType } from '../Task/TaskSchema.js';
+
+type MissionStatusView = {
+	stage?: MissionStageId;
+	stages: StageStatusViewType[];
+	branchRef: string;
+	workflow: {
+		lifecycle: string;
+		currentStageId?: MissionStageId;
+		tasks: Array<WorkflowStateData['runtime']['tasks'][number] & {
+			agentAdapter?: string;
+			model?: string;
+			reasoningEffort?: string;
+			autostart?: boolean;
+		}>;
+		gates: WorkflowStateData['runtime']['gates'];
+	};
+	missionId: string;
+	title: string;
+	issueId?: number;
+	assignee?: MissionAssignee;
+	type: MissionEntityTypeType;
+	missionDir: string;
+	missionRootDir: string;
+	productFiles: Record<string, string>;
+	activeTasks?: TaskDossierRecordType[];
+	readyTasks?: TaskDossierRecordType[];
+	agentExecutions: AgentExecutionRecord[];
+	recommendedAction: string;
+};
 
 export type MissionStatusViewInput = {
 	adapter: MissionDossierFilesystem;
 	missionDir: string;
 	descriptor: MissionDescriptor;
 	workflow: WorkflowDefinition;
-	document?: MissionStateData;
+	document?: WorkflowStateData;
 	agentExecutions: AgentExecutionRecord[];
-	hydrateRuntimeTasksForActions(tasks: MissionStateData['runtime']['tasks']): Promise<MissionStateData['runtime']['tasks']>;
+	hydrateRuntimeTasksForActions(tasks: WorkflowStateData['runtime']['tasks']): Promise<WorkflowStateData['runtime']['tasks']>;
 };
 
-export async function buildMissionStatusView(input: MissionStatusViewInput): Promise<OperatorStatus> {
+export async function buildMissionStatusView(input: MissionStatusViewInput): Promise<MissionStatusView> {
 	if (!input.document) {
-		return buildDraftMissionStatusView(input);
+		return await buildDraftMissionStatusView(input);
 	}
 
 	const hydratedWorkflowTasks = await input.hydrateRuntimeTasksForActions(input.document.runtime.tasks);
 	const stages = await buildWorkflowStageStatuses(input, input.document);
-	const projectedTasksById = new Map(stages.flatMap((stage) => stage.tasks).map((task) => [task.taskId, task]));
+	const projectedTasksById = new Map(stages.flatMap((stage) => stage.tasks).map((task) => [task.taskId, task] as const));
 	const currentStageId = resolveCurrentMissionStage(input.document);
 	const currentStage = stages.find((stage) => stage.stage === currentStageId) ?? stages[0];
 	const activeTasks = Stage.resolveActiveTasks(currentStage);
@@ -48,7 +77,6 @@ export async function buildMissionStatusView(input: MissionStatusViewInput): Pro
 	const productFiles = await collectMissionArtifactPaths({ adapter: input.adapter, missionDir: input.missionDir });
 
 	return {
-		found: true,
 		missionId: input.descriptor.missionId,
 		title: input.descriptor.brief.title,
 		...(input.descriptor.brief.issueId !== undefined ? { issueId: input.descriptor.brief.issueId } : {}),
@@ -65,68 +93,58 @@ export async function buildMissionStatusView(input: MissionStatusViewInput): Pro
 		agentExecutions: input.agentExecutions,
 		workflow: {
 			lifecycle: input.document.runtime.lifecycle,
-			pause: { ...input.document.runtime.pause },
 			...(currentStageId ? { currentStageId } : {}),
-			configuration: input.document.configuration,
-			stages: input.document.runtime.stages.map((stage) => ({
-				...stage,
-				taskIds: [...stage.taskIds],
-				readyTaskIds: [...stage.readyTaskIds],
-				queuedTaskIds: [...stage.queuedTaskIds],
-				runningTaskIds: [...stage.runningTaskIds],
-				completedTaskIds: [...stage.completedTaskIds]
-			})),
 			tasks: hydratedWorkflowTasks.map((task) => ({
 				...task,
 				title: projectedTasksById.get(task.taskId)?.subject ?? task.title,
+				...(task.agentAdapter?.trim() ? { agentAdapter: task.agentAdapter.trim() } : {}),
+				...(task.model?.trim() ? { model: task.model.trim() } : {}),
+				...(task.reasoningEffort?.trim() ? { reasoningEffort: task.reasoningEffort.trim() } : {}),
+				autostart: task.runtime.autostart,
 				dependsOn: [...task.dependsOn],
 				context: (task.context ?? []).map((contextArtifact) => ({ ...contextArtifact })),
 				waitingOnTaskIds: [...task.waitingOnTaskIds],
 				runtime: { ...task.runtime }
 			})),
-			gates: input.document.runtime.gates.map((gateView) => ({
-				...gateView,
-				reasons: [...gateView.reasons]
-			})),
-			updatedAt: input.document.runtime.updatedAt
+			gates: input.document.runtime.gates.map((gate) => ({
+				...gate,
+				reasons: [...gate.reasons]
+			}))
 		},
 		recommendedAction: buildRecommendedAction(currentStageId, activeTasks, readyTasks, stages)
 	};
 }
 
-export function resolveCurrentMissionStage(document: MissionStateData): MissionStageId {
-	return ((
-		(document.runtime.activeStageId as MissionStageId | undefined) ??
-		(document.runtime.stages.find((stage) => stage.lifecycle !== 'completed')?.stageId as MissionStageId | undefined) ??
-		(document.configuration.workflow.stageOrder[
-			document.configuration.workflow.stageOrder.length - 1
-		] as MissionStageId | undefined) ??
-		'prd'
-	) as MissionStageId);
+export function resolveCurrentMissionStage(document: WorkflowStateData): MissionStageId {
+	return (
+		document.runtime.activeStageId
+		?? document.runtime.stages.find((stage) => stage.lifecycle !== 'completed')?.stageId
+		?? document.configuration.workflow.stageOrder[document.configuration.workflow.stageOrder.length - 1]
+		?? 'prd'
+	) as MissionStageId;
 }
 
-async function buildDraftMissionStatusView(input: MissionStatusViewInput): Promise<OperatorStatus> {
-	const configuration = createMissionWorkflowConfigurationSnapshot({
+async function buildDraftMissionStatusView(input: MissionStatusViewInput): Promise<MissionStatusView> {
+	const configuration = createWorkflowConfigurationSnapshot({
 		createdAt: input.descriptor.createdAt,
 		workflowVersion: DEFAULT_WORKFLOW_VERSION,
 		workflow: input.workflow
 	});
-	const runtime = createDraftMissionWorkflowRuntimeState(configuration, input.descriptor.createdAt);
-	const stages: MissionStageStatus[] = MISSION_STAGES.map((stageId) => ({
+	const runtime = createDraftWorkflowRuntimeState(configuration, input.descriptor.createdAt);
+	const stages = MISSION_STAGES.map((stageId) => ({
 		stage: stageId,
 		folderName: MISSION_STAGE_FOLDERS[stageId],
-		status: 'pending',
+		status: stageId === (input.workflow.stageOrder[0] ?? 'prd') ? 'ready' : 'pending',
 		taskCount: 0,
 		completedTaskCount: 0,
 		activeTaskIds: [],
 		readyTaskIds: [],
 		tasks: []
-	}));
-	const currentStageId = (input.workflow.stageOrder[0] as MissionStageId | undefined) ?? 'prd';
+	})) satisfies StageStatusViewType[];
+	const currentStageId = (input.workflow.stageOrder[0] ?? 'prd') as MissionStageId;
 	const productFiles = await collectMissionArtifactPaths({ adapter: input.adapter, missionDir: input.missionDir });
 
 	return {
-		found: true,
 		missionId: input.descriptor.missionId,
 		title: input.descriptor.brief.title,
 		...(input.descriptor.brief.issueId !== undefined ? { issueId: input.descriptor.brief.issueId } : {}),
@@ -141,23 +159,12 @@ async function buildDraftMissionStatusView(input: MissionStatusViewInput): Promi
 		agentExecutions: [],
 		workflow: {
 			lifecycle: runtime.lifecycle,
-			pause: { ...runtime.pause },
 			currentStageId,
-			configuration,
-			stages: runtime.stages.map((stage) => ({
-				...stage,
-				taskIds: [...stage.taskIds],
-				readyTaskIds: [...stage.readyTaskIds],
-				queuedTaskIds: [...stage.queuedTaskIds],
-				runningTaskIds: [...stage.runningTaskIds],
-				completedTaskIds: [...stage.completedTaskIds]
-			})),
 			tasks: [],
-			gates: runtime.gates.map((gateView) => ({
-				...gateView,
-				reasons: [...gateView.reasons]
-			})),
-			updatedAt: runtime.updatedAt
+			gates: runtime.gates.map((gate) => ({
+				...gate,
+				reasons: [...gate.reasons]
+			}))
 		},
 		recommendedAction: 'Mission is still draft. Start the workflow to capture repository settings and initialize tasks.'
 	};
@@ -165,15 +172,15 @@ async function buildDraftMissionStatusView(input: MissionStatusViewInput): Promi
 
 async function buildWorkflowStageStatuses(
 	input: MissionStatusViewInput,
-	document: MissionStateData
-): Promise<MissionStageStatus[]> {
-	return Promise.all(MISSION_STAGES.map(async (stageId) => {
+	document: WorkflowStateData
+): Promise<StageStatusViewType[]> {
+	return await Promise.all(MISSION_STAGES.map(async (stageId) => {
 		const runtimeStage = document.runtime.stages.find((stage) => stage.stageId === stageId);
 		const runtimeTasks = document.runtime.tasks.filter((task) => task.stageId === stageId);
-		const runtimeTasksById = new Map(runtimeTasks.map((task, index) => [task.taskId, { task, index }]));
+		const runtimeTasksById = new Map(runtimeTasks.map((task, index) => [task.taskId, { task, index }] as const));
 		const fileTasks = await input.adapter.listTaskStates(input.missionDir, stageId).catch(() => []);
 		const fileTaskIds = new Set(fileTasks.map((task) => task.taskId));
-		const tasks: MissionTaskState[] = [];
+		const tasks = [];
 
 		for (const fileTask of fileTasks) {
 			const runtimeTaskEntry = runtimeTasksById.get(fileTask.taskId);
@@ -186,6 +193,7 @@ async function buildWorkflowStageStatuses(
 				}));
 				continue;
 			}
+
 			tasks.push({
 				...fileTask,
 				waitingOn: [...fileTask.waitingOn],
@@ -197,6 +205,7 @@ async function buildWorkflowStageStatuses(
 			if (fileTaskIds.has(taskId)) {
 				continue;
 			}
+
 			tasks.push(Task.fromWorkflowState({
 				task: runtimeTaskEntry.task,
 				index: runtimeTaskEntry.index,
@@ -205,6 +214,7 @@ async function buildWorkflowStageStatuses(
 		}
 
 		tasks.sort((left, right) => left.sequence - right.sequence || left.taskId.localeCompare(right.taskId));
+
 		return {
 			stage: stageId,
 			folderName: MISSION_STAGE_FOLDERS[stageId],
@@ -223,52 +233,47 @@ async function buildWorkflowStageStatuses(
 async function collectMissionArtifactPaths(input: {
 	adapter: MissionDossierFilesystem;
 	missionDir: string;
-}): Promise<Partial<Record<MissionArtifactKey, string>>> {
-	const entries = await Promise.all(
-		(Object.keys(MISSION_ARTIFACTS) as MissionArtifactKey[]).map(async (artifact) => {
-			const record = await input.adapter.readArtifactRecord(input.missionDir, artifact);
-			const exists = await input.adapter.artifactExists(input.missionDir, artifact);
-			return exists && record?.filePath ? ([artifact, record.filePath] as const) : undefined;
-		})
-	);
+}): Promise<Record<string, string>> {
+	const entries = await Promise.all(Object.keys(MISSION_ARTIFACTS).map(async (artifactKey) => {
+		const record = await input.adapter.readArtifactRecord(input.missionDir, artifactKey);
+		const exists = await input.adapter.artifactExists(input.missionDir, artifactKey);
+		return exists && record?.filePath ? [artifactKey, record.filePath] as const : undefined;
+	}));
+	const result: Record<string, string> = {};
 
-	const result: Partial<Record<MissionArtifactKey, string>> = {};
 	for (const entry of entries) {
 		if (!entry) {
 			continue;
 		}
 		result[entry[0]] = entry[1];
 	}
+
 	return result;
 }
 
 function buildRecommendedAction(
 	stage: MissionStageId,
-	activeTasks: MissionTaskState[],
-	readyTasks: MissionTaskState[],
-	stages: MissionStageStatus[]
+	activeTasks: StageStatusViewType['tasks'],
+	readyTasks: StageStatusViewType['tasks'],
+	stages: StageStatusViewType[]
 ): string {
 	if (Stage.isMissionDelivered(stages)) {
 		return 'Mission delivered.';
 	}
-
 	if (activeTasks.length > 0) {
 		const leadTask = activeTasks[0];
 		return activeTasks.length === 1
 			? `Continue ${leadTask?.relativePath}; Mission tracks workflow state in mission.json.`
 			: `Continue ${leadTask?.relativePath} and ${String(activeTasks.length - 1)} other active task(s); Mission tracks workflow state in mission.json.`;
 	}
-
 	if (readyTasks.length > 0) {
 		const leadTask = readyTasks[0];
 		return readyTasks.length === 1
 			? `Activate the ready task through Mission controls, then continue ${leadTask?.relativePath}.`
 			: `Activate one or more ready tasks through Mission controls, starting with ${leadTask?.relativePath}.`;
 	}
-
 	if (stage === 'delivery') {
 		return 'Complete DELIVERY.md and deliver the mission.';
 	}
-
 	return `Review tasks/${MISSION_STAGE_FOLDERS[stage]} and add the next task file.`;
 }

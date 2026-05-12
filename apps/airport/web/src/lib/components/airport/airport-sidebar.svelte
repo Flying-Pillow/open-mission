@@ -1,10 +1,13 @@
 <!-- /apps/airport/web/src/lib/components/airport/airport-sidebar.svelte: Sidebar frame for the Airport web surface, including optional GitHub user menu. -->
 <script lang="ts">
+    import { invalidateAll } from "$app/navigation";
     import { page } from "$app/state";
     import { asset } from "$app/paths";
     import Icon from "@iconify/svelte";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { app } from "$lib/client/Application.svelte.js";
+    import SystemSettings from "$lib/components/entities/System/SystemSettings.svelte";
     import NavUser from "$lib/components/nav-user.svelte";
+    import * as Dialog from "$lib/components/ui/dialog/index.js";
     import * as Sidebar from "$lib/components/ui/sidebar/index.js";
     import {
         getRepositoryDisplayDescription,
@@ -18,15 +21,8 @@
     type SidebarRepositoryView = SidebarRepositoryData & { id: string };
 
     const logo = asset("/logo.png");
-    const appContext = getAppContext();
 
     const bottomMenu = [
-        {
-            title: "Settings",
-            description: "Repository and Mission system source settings.",
-            url: "https://github.com/Flying-Pillow/mission",
-            icon: "lucide:settings",
-        },
         {
             title: "Documentation",
             description:
@@ -48,27 +44,27 @@
     }[];
 
     let { ...restProps }: ComponentProps<typeof Sidebar.Root> = $props();
+    let systemSettingsOpen = $state(false);
 
     const routeSegments = $derived(
         page.url.pathname.split("/").filter((segment) => segment.length > 0),
     );
-    const activeRepositoryId = $derived(
+    const repositoryId = $derived(
         routeSegments[0] === "airport"
             ? decodeURIComponent(routeSegments[1] ?? "")
             : undefined,
     );
-    const activeMissionId = $derived(
+    const missionId = $derived(
         routeSegments[0] === "airport"
             ? decodeURIComponent(routeSegments[2] ?? "")
-            : appContext.airport.activeMissionId,
+            : app.mission?.missionId,
     );
     const showRepositoryNavigation = $derived(routeSegments[0] === "airport");
 
     const sidebarRepositories = $derived.by(() => {
-        const repositories = (appContext?.airport.repositories ??
-            []) as SidebarRepositoryView[];
+        const repositories = app.repositoriesState as SidebarRepositoryView[];
         return repositories.map((repository) => {
-            const isSelected = repository.id === activeRepositoryId;
+            const isSelected = repository.id === repositoryId;
 
             return {
                 ...repository,
@@ -80,13 +76,17 @@
                     (mission: MissionCatalogEntryType) => ({
                         ...mission,
                         href: `/airport/${encodeURIComponent(repository.id)}/${encodeURIComponent(mission.missionId)}`,
-                        isActive:
-                            isSelected && mission.missionId === activeMissionId,
+                        isActive: isSelected && mission.missionId === missionId,
                     }),
                 ),
             };
         });
     });
+
+    async function handleSystemSettingsSaved(): Promise<void> {
+        await invalidateAll();
+        systemSettingsOpen = false;
+    }
 </script>
 
 <Sidebar.Root
@@ -150,7 +150,7 @@
                                     <Sidebar.MenuButton
                                         class="h-auto min-h-14 rounded-xl border border-transparent px-3 py-3 data-[active=true]:border-foreground/20 data-[active=true]:bg-foreground/20 data-[active=true]:shadow-sm group-data-[collapsible=icon]:size-14! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! [&_svg]:size-6"
                                         isActive={repository.id ===
-                                            activeRepositoryId}
+                                            repositoryId}
                                         tooltipContentProps={{
                                             sideOffset: 14,
                                             class: "w-80 max-w-80 border border-border bg-popover px-4 py-4 text-popover-foreground shadow-xl",
@@ -269,6 +269,52 @@
         <Sidebar.Group class="px-0">
             <Sidebar.GroupContent>
                 <Sidebar.Menu class="gap-2">
+                    <Sidebar.MenuItem>
+                        <Dialog.Root bind:open={systemSettingsOpen}>
+                            <Dialog.Trigger>
+                                {#snippet child({ props })}
+                                    <Sidebar.MenuButton
+                                        class="h-12 rounded-xl border border-transparent px-3 group-data-[collapsible=icon]:size-14! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! [&_svg]:size-6"
+                                        tooltipContentProps={{
+                                            sideOffset: 14,
+                                            class: "w-72 max-w-72 border border-border bg-popover px-4 py-4 text-popover-foreground shadow-xl",
+                                        }}
+                                        {...props}
+                                    >
+                                        <Icon icon="lucide:settings" />
+                                        <span
+                                            class="group-data-[collapsible=icon]:hidden"
+                                            >Settings</span
+                                        >
+                                        {#snippet tooltipContent()}
+                                            <div class="grid gap-1.5 text-left">
+                                                <p
+                                                    class="text-sm font-semibold text-foreground"
+                                                >
+                                                    Settings
+                                                </p>
+                                                <p
+                                                    class="text-xs leading-5 text-muted-foreground"
+                                                >
+                                                    Configure the system
+                                                    repositories root and shared
+                                                    agent settings.
+                                                </p>
+                                            </div>
+                                        {/snippet}
+                                    </Sidebar.MenuButton>
+                                {/snippet}
+                            </Dialog.Trigger>
+                            <Dialog.Content class="sm:max-w-2xl">
+                                <SystemSettings
+                                    onCancel={() => {
+                                        systemSettingsOpen = false;
+                                    }}
+                                    onSaved={handleSystemSettingsSaved}
+                                />
+                            </Dialog.Content>
+                        </Dialog.Root>
+                    </Sidebar.MenuItem>
                     {#each bottomMenu as item (item.title)}
                         <Sidebar.MenuItem>
                             <Sidebar.MenuButton

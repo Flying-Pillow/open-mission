@@ -1,22 +1,13 @@
 <script lang="ts">
-    import type { Mission } from "$lib/components/entities/Mission/Mission.svelte.js";
+    import { app } from "$lib/client/Application.svelte.js";
     import type { Stage } from "$lib/components/entities/Stage/Stage.svelte.js";
     import type { Task } from "$lib/components/entities/Task/Task.svelte.js";
     import { Badge } from "$lib/components/ui/badge";
 
-    let {
-        mission,
-        currentStageId,
-        selectedFocusId,
-        onSelectFocus,
-    }: {
-        mission?: Mission;
-        currentStageId?: string;
-        selectedFocusId?: string;
-        onSelectFocus: (focusId: string) => void;
-    } = $props();
-
-    const stages = $derived(mission?.listStages() ?? []);
+    const stages = $derived(app.mission?.listStages() ?? []);
+    const currentStageId = $derived(
+        app.mission?.controlData?.workflow?.currentStageId,
+    );
     const currentStageIndex = $derived(
         stages.findIndex((stage) => stage.stageId === currentStageId),
     );
@@ -26,7 +17,7 @@
     }
 
     function isSelected(stageId: string): boolean {
-        return selectedFocusId === stageFocusId(stageId);
+        return app.focusId === stageFocusId(stageId);
     }
 
     function stageStatusLabel(stage: Stage): string {
@@ -196,8 +187,7 @@
                     <button
                         type="button"
                         class="group flex h-full w-full flex-col items-center text-center"
-                        onclick={() =>
-                            onSelectFocus(stageFocusId(stage.stageId))}
+                        onclick={() => app.selectStage(stage)}
                     >
                         <span class="sr-only">
                             {stage.stageId}

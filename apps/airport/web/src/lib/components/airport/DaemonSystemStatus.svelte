@@ -1,6 +1,7 @@
 <script lang="ts">
     import Icon from "@iconify/svelte";
-    import type { SystemState } from "@flying-pillow/mission-core/system/SystemContract";
+    import { app } from "$lib/client/Application.svelte.js";
+    import type { SystemState } from "@flying-pillow/mission-core/entities/System/SystemSchema";
 
     const STATUS_REFRESH_MS = 5_000;
 
@@ -71,6 +72,7 @@
                 systemState?: SystemState | null;
             };
             systemState = payload.systemState ?? undefined;
+            app.setSystemState(systemState);
             statusErrorMessage = systemState
                 ? undefined
                 : "System status unavailable";

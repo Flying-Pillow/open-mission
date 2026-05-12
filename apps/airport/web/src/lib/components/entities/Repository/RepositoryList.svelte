@@ -1,12 +1,11 @@
 <script lang="ts">
     import Icon from "@iconify/svelte";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { app } from "$lib/client/Application.svelte.js";
     import GithubRepository from "$lib/components/entities/Repository/GithubRepository.svelte";
     import RepositoryPanel from "$lib/components/entities/Repository/RepositoryPanel.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
 
-    const appContext = getAppContext();
     let {
         heading,
         description,
@@ -20,7 +19,7 @@
         eyebrow?: string;
         presentation?: "panel" | "rail";
     } = $props();
-    const repositories = $derived(appContext.application.repositoryListItems);
+    const repositories = $derived(app.repositoryListItems);
     const checkedOutRepositories = $derived(
         repositories.filter((repository) => repository.isLocal),
     );
@@ -81,7 +80,7 @@
     );
 
     async function refreshRepositories(): Promise<void> {
-        await appContext.application.loadRepositories({ force: true });
+        await app.loadRepositories({ force: true });
     }
 </script>
 
@@ -165,10 +164,9 @@
 
                 {#each repositoryFilter === "external" ? [] : checkedOutRepositories as repository (repository.key)}
                     {#if repository.local}
-                        {@const localRepository =
-                            appContext.application.resolveRepository(
-                                repository.key,
-                            )}
+                        {@const localRepository = app.resolveRepository(
+                            repository.key,
+                        )}
                         <RepositoryPanel
                             {repository}
                             {localRepository}

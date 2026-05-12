@@ -1,10 +1,12 @@
 <script lang="ts">
     import type { Snippet } from "svelte";
     import Icon from "@iconify/svelte";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
-    import EntityCommandbar from "$lib/components/entities/Commandbar/EntityCommandbar.svelte";
+    import { app } from "$lib/client/Application.svelte.js";
+    import EntityCommandbar from "$lib/components/entities/Entity/EntityCommandbar.svelte";
+    import RepositoryRemoveConfirmation from "$lib/components/entities/Repository/RepositoryRemoveConfirmation.svelte";
     import RepositorySettings from "$lib/components/entities/Repository/RepositorySettings.svelte";
     import type { Repository } from "$lib/components/entities/Repository/Repository.svelte.js";
+    import type { RepositoryRemovalSummaryType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import type { EntityCommandDescriptorType } from "@flying-pillow/mission-core/entities/Entity/EntitySchema";
     import { Button } from "$lib/components/ui/button/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
@@ -22,8 +24,6 @@
         showEmptyState?: boolean;
         leadingAction?: Snippet;
     } = $props();
-
-    const appContext = getAppContext();
 
     let refreshNonce = $state(0);
     let settingsOpen = $state(false);
@@ -45,10 +45,7 @@
 
         await onCommandExecuted();
 
-        if (
-            !repository ||
-            !appContext.application.resolveRepository(repository.id)
-        ) {
+        if (!repository || !app.resolveRepository(repository.id)) {
             refreshNonce += 1;
             return;
         }
@@ -65,6 +62,22 @@
         await onCommandExecuted();
         settingsOpen = false;
         refreshNonce += 1;
+    }
+
+    async function loadCommandConfirmationContext(
+        command: EntityCommandDescriptorType,
+    ): Promise<RepositoryRemovalSummaryType | undefined> {
+        if (!repository || command.commandId !== "remove") {
+            return undefined;
+        }
+
+        return await repository.readRemovalSummary();
+    }
+
+    function asRemovalSummary(
+        input: unknown,
+    ): RepositoryRemovalSummaryType | undefined {
+        return input as RepositoryRemovalSummaryType | undefined;
     }
 </script>
 
@@ -108,9 +121,25 @@
         entity={repository}
         class={className}
         defaultVariant="outline"
+        {loadCommandConfirmationContext}
         presentation="responsive"
         menuLabel="Repository commands"
         {showEmptyState}
         onCommandExecuted={handleCommandExecuted}
-    />
+    >
+        {#snippet commandConfirmationDetails({
+            command,
+            loading,
+            error,
+            context,
+        })}
+            {#if command.commandId === "remove"}
+                <RepositoryRemoveConfirmation
+                    summary={asRemovalSummary(context)}
+                    {loading}
+                    {error}
+                />
+            {/if}
+        {/snippet}
+    </EntityCommandbar>
 </div>

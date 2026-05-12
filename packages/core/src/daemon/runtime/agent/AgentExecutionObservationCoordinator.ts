@@ -13,11 +13,12 @@ import type { AgentExecutionJournalWriter } from '../../../entities/AgentExecuti
 import {
     AgentExecutionObservationAckSchema,
     type AgentExecutionObservationAckType
-} from '../../../entities/AgentExecution/AgentExecutionSchema.js';
+} from '../../../entities/AgentExecution/AgentExecutionProtocolSchema.js';
 import {
     AgentExecutionObservationLedger,
     AgentExecutionObservationPolicy
 } from '../../../entities/AgentExecution/AgentExecutionObservationPolicy.js';
+import { deriveActivityStateFromProgressState } from '../../../entities/AgentExecution/AgentExecutionRuntimeSemantics.js';
 import type { AgentAdapter } from './AgentAdapter.js';
 import { AgentExecutionObservationRouter } from './signals/AgentExecutionObservationRouter.js';
 
@@ -149,7 +150,7 @@ export class AgentExecutionObservationCoordinator {
         const markerPrefix = AgentExecution.createProtocolDescriptorForSnapshot(snapshot).owner.markerPrefix;
         if (managed.parseAgentSignals && channel === 'stdout') {
             const observations = this.observationRouter.route({
-                kind: 'agent-declared-signal',
+                kind: 'agent-signal',
                 line,
                 address: observationAddress,
                 markerPrefix,
@@ -426,19 +427,11 @@ function shouldClearAwaitingResponseFromObservation(observation: AgentExecutionO
 }
 
 function mapProgressStateToSemanticActivity(progressState: AgentExecutionSnapshot['progress']['state']): 'idle' | 'planning' | 'communicating' | 'executing' | undefined {
-    switch (progressState) {
-        case 'idle':
-            return 'idle';
-        case 'initializing':
-            return 'planning';
-        case 'waiting-input':
-            return 'communicating';
-        case 'working':
-        case 'blocked':
-            return 'executing';
-        default:
-            return undefined;
+    const activityState = deriveActivityStateFromProgressState(progressState);
+    if (activityState === 'idle' || activityState === 'communicating' || activityState === 'executing' || activityState === 'planning') {
+        return activityState;
     }
+    return undefined;
 }
 
 function toObservationAddress(snapshot: AgentExecutionSnapshot): AgentExecutionObservationAddress {
@@ -460,7 +453,7 @@ function isDirectAgentProseLine(line: string): boolean {
 }
 
 function readObservationEventId(observation: AgentExecutionObservation): string {
-    const prefix = 'agent-declared-signal:';
+    const prefix = 'agent-signal:';
     if (observation.observationId.startsWith(prefix)) {
         const eventId = observation.observationId.slice(prefix.length).trim();
         if (eventId) {

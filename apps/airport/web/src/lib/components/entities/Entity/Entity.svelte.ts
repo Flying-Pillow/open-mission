@@ -1,4 +1,3 @@
-import type { EntityModel } from './EntityModel.svelte.js';
 import {
 	EntityClassCommandViewSchema,
 	EntityCommandViewSchema,
@@ -7,8 +6,9 @@ import {
 import { cmd } from '../../../../routes/api/entities/remote/command.remote';
 import { qry } from '../../../../routes/api/entities/remote/query.remote';
 
-export abstract class Entity<TData, TId extends string = string>
-	implements EntityModel<TData, TId> {
+export abstract class Entity<TData, TId extends string = string> {
+	protected commandDescriptors = $state<EntityCommandDescriptorType[]>([]);
+
 	public static async classCommands(entityName: string, commandInput?: unknown, input: { run?: boolean } = {}): Promise<EntityCommandDescriptorType[]> {
 		const query = qry({
 			entity: entityName,
@@ -37,6 +37,10 @@ export abstract class Entity<TData, TId extends string = string>
 	public abstract toData(): TData;
 	protected abstract get entityLocator(): Record<string, unknown>;
 
+	public get commands(): EntityCommandDescriptorType[] {
+		return structuredClone($state.snapshot(this.commandDescriptors));
+	}
+
 	public async loadCommands(): Promise<EntityCommandDescriptorType[]> {
 		const view = EntityCommandViewSchema.parse(await qry({
 			entity: this.entityName,
@@ -44,6 +48,11 @@ export abstract class Entity<TData, TId extends string = string>
 			payload: this.entityLocator
 		}).run());
 		return structuredClone(view.commands);
+	}
+
+	public async refreshCommands(): Promise<this> {
+		this.commandDescriptors = await this.loadCommands();
+		return this;
 	}
 
 	public async executeCommand<TResult = unknown>(commandId: string, input?: unknown): Promise<TResult> {

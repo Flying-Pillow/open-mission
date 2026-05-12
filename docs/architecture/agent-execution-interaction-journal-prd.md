@@ -52,7 +52,7 @@ The journal must allow the daemon to reconstruct:
 - Do not make Message a standalone Entity.
 - Do not collapse Terminal recordings, AgentExecution interaction journals, and Mission workflow event logs into one file or one event type.
 - Do not make Airport chat/timeline state authoritative.
-- Do not treat Agent-declared file activity as filesystem truth.
+- Do not treat Agent signal file activity as filesystem truth.
 - Do not store raw private reasoning as semantic `thinking` content.
 - Do not expose MCP tools as stable public automation APIs.
 - Do not introduce owner-specific execution classes such as MissionAgentExecution, TaskAgentExecution, RepositoryAgentExecution, or ArtifactAgentExecution.
@@ -207,7 +207,7 @@ The Mission dossier path is a file-store choice, not a Mission-specific journal 
 - AgentExecution state can be reconstructed from journal records in deterministic tests.
 - AgentExecution lifecycle, attention, semantic activity, runtime activity, telemetry, capabilities, and live runtime snapshots are separable in data and projections.
 - Existing stdout-marker and `mission-mcp` transports route through the same journal path.
-- Existing AgentExecution message descriptors and Agent-declared signal descriptors are materialized from one protocol catalog.
+- Existing AgentExecution message descriptors and Agent signal descriptors are materialized from one protocol catalog.
 
 ## Phase-One Product Decisions
 

@@ -11,7 +11,7 @@ import {
     type MissionTerminalSnapshotType,
     type MissionTerminalSocketClientMessageType,
     type MissionTerminalSocketServerMessageType
-} from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+} from '@flying-pillow/mission-core/entities/Terminal/MissionTerminalSchema';
 
 type TerminalSnapshotBase = {
     connected: boolean;

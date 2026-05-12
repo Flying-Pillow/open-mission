@@ -3,8 +3,7 @@ import type { AgentAdapterRuntimeOutput } from '../AgentAdapter.js';
 import {
 	cloneSignal,
 	cloneObservationAddress,
-	createAgentSignalFromPayload,
-	MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH,
+	MAX_AGENT_SIGNAL_MARKER_LENGTH,
 	MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH,
 	type AgentExecutionObservation,
 	type AgentExecutionObservationOrigin,
@@ -12,6 +11,7 @@ import {
 	type AgentExecutionSignalCandidate,
 	type AgentExecutionObservationAddress
 } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import { createAgentExecutionSignalFromPayload } from '../../../../entities/AgentExecution/AgentExecutionSignalRegistry.js';
 import {
 	AgentSignalMarkerPayloadSchema,
 	AgentExecutionOwnerMarkerPrefixSchema,
@@ -50,7 +50,7 @@ export type AgentExecutionObservationInput =
 		observedAt?: string;
 	}
 	| {
-		kind: 'agent-declared-signal';
+		kind: 'agent-signal';
 		line: string;
 		address: AgentExecutionObservationAddress;
 		markerPrefix: AgentExecutionOwnerMarkerPrefixType;
@@ -88,10 +88,10 @@ export class AgentExecutionObservationRouter {
 				observedAt
 			);
 		}
-		if (input.kind === 'agent-declared-signal') {
+		if (input.kind === 'agent-signal') {
 			return this.toObservations(
 				this.parseAgentSignals(input.line, input.markerPrefix),
-				'agent-declared-signal',
+				'agent-signal',
 				input.address,
 				observedAt
 			);
@@ -101,7 +101,7 @@ export class AgentExecutionObservationRouter {
 			? this.parseAgentSignals(input.line, input.markerPrefix)
 			: [];
 		if (markerCandidates.length > 0) {
-			return this.toObservations(markerCandidates, 'agent-declared-signal', input.address, observedAt);
+			return this.toObservations(markerCandidates, 'agent-signal', input.address, observedAt);
 		}
 		if (isAgentSignalMarkerLine(input.line)) {
 			return [];
@@ -198,10 +198,10 @@ export class AgentExecutionObservationRouter {
 		if (!trimmed.startsWith(markerPrefix)) {
 			return [];
 		}
-		if (trimmed.length > MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH) {
+		if (trimmed.length > MAX_AGENT_SIGNAL_MARKER_LENGTH) {
 			return [this.createAgentSignalDiagnostic(
-				'agent-declared-signal-oversized',
-				'Agent-declared signal marker exceeded the maximum length.',
+				'agent-signal-oversized',
+				'Agent signal marker exceeded the maximum length.',
 				line
 			)];
 		}
@@ -211,16 +211,16 @@ export class AgentExecutionObservationRouter {
 			parsed = JSON.parse(payload);
 		} catch {
 			return [this.createAgentSignalDiagnostic(
-				'agent-declared-signal-malformed',
-				'Agent-declared signal marker did not contain valid JSON.',
+				'agent-signal-malformed',
+				'Agent signal marker did not contain valid JSON.',
 				line
 			)];
 		}
 		const result = AgentSignalMarkerPayloadSchema.safeParse(parsed);
 		if (!result.success) {
 			return [this.createAgentSignalDiagnostic(
-				'agent-declared-signal-malformed',
-				'Agent-declared signal marker failed schema validation.',
+				'agent-signal-malformed',
+				'Agent signal marker failed schema validation.',
 				line,
 				result.error.issues[0]?.message
 			)];
@@ -230,12 +230,12 @@ export class AgentExecutionObservationRouter {
 			dedupeKey: result.data.eventId,
 			claimedAgentExecutionId: result.data.agentExecutionId,
 			rawText: line,
-			signal: createAgentSignalFromPayload(result.data.signal)
+			signal: createAgentExecutionSignalFromPayload(result.data.signal)
 		}];
 	}
 
 	private createAgentSignalDiagnostic(
-		code: 'agent-declared-signal-malformed' | 'agent-declared-signal-oversized',
+		code: 'agent-signal-malformed' | 'agent-signal-oversized',
 		summary: string,
 		rawText: string,
 		detail?: string
@@ -247,7 +247,7 @@ export class AgentExecutionObservationRouter {
 				code,
 				summary,
 				...(detail ? { detail } : {}),
-				source: 'agent-declared',
+				source: 'agent-signal',
 				confidence: 'diagnostic'
 			}
 		};

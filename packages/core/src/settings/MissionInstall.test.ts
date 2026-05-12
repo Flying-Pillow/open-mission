@@ -39,7 +39,9 @@ describe('config', () => {
 		expect(config).toMatchObject({
 			version: 1,
 			missionsRoot: path.join(os.homedir(), 'missions'),
-			repositoriesRoot: path.join(os.homedir(), 'repositories')
+			repositoriesRoot: path.join(os.homedir(), 'repositories'),
+			defaultAgentAdapter: 'codex',
+			enabledAgentAdapters: []
 		});
 	});
 
@@ -72,12 +74,16 @@ describe('config', () => {
 		await writeMissionConfig({
 			missionsRoot: '/tmp/missions',
 			repositoriesRoot: '/tmp/repositories',
+			defaultAgentAdapter: 'copilot',
+			enabledAgentAdapters: ['copilot', 'codex'],
 			ghBinary: '/opt/gh/bin/gh'
 		});
 
 		expect(readMissionConfig()).toMatchObject({
 			missionsRoot: '/tmp/missions',
 			repositoriesRoot: '/tmp/repositories',
+			defaultAgentAdapter: 'copilot',
+			enabledAgentAdapters: ['copilot', 'codex'],
 			ghBinary: '/opt/gh/bin/gh'
 		});
 	});
@@ -101,6 +107,8 @@ describe('config', () => {
 			version: 1,
 			missionsRoot: '/tmp/missions',
 			repositoriesRoot: '/tmp/repositories',
+			defaultAgentAdapter: 'codex',
+			enabledAgentAdapters: [],
 			ghBinary: '/opt/gh/bin/gh'
 		});
 	});
@@ -173,7 +181,9 @@ describe('config', () => {
 		expect(config).toEqual({
 			version: 1,
 			missionsRoot: '/tmp/missions',
-			repositoriesRoot: '/tmp/repositories'
+			repositoriesRoot: '/tmp/repositories',
+			defaultAgentAdapter: 'codex',
+			enabledAgentAdapters: []
 		});
 		expect(readMissionConfig()).toEqual(config);
 		expect(await fs.readFile(getMissionConfigPath(), 'utf8')).not.toContain('mission-stale-repository');

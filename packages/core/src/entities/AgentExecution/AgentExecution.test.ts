@@ -104,6 +104,30 @@ describe('AgentExecution', () => {
         expect(data.adapterLabel).toBe('Copilot CLI');
     });
 
+    it('treats initializing progress as idle bootstrap activity instead of planning work', () => {
+        const data = AgentExecution.createLive(createRuntimeSnapshot({
+            status: 'starting',
+            attention: 'none',
+            progress: {
+                state: 'initializing',
+                summary: 'Session initialized and waiting for the first task.',
+                updatedAt: '2026-05-04T00:00:00.000Z'
+            }
+        })).toData();
+
+        expect(data).toMatchObject({
+            lifecycleState: 'starting',
+            attention: 'none',
+            activityState: 'idle',
+            runtimeActivity: {
+                progress: {
+                    summary: 'Session initialized and waiting for the first task.'
+                }
+            }
+        });
+        expect(data.projection.currentActivity).toBeUndefined();
+    });
+
     it('surfaces awaiting-agent-response after an operator prompt until the agent replies', async () => {
         const execution = AgentExecution.createLive(createRuntimeSnapshot(), {
             adapterLabel: 'Copilot CLI'
@@ -117,14 +141,11 @@ describe('AgentExecution', () => {
         execution.setAwaitingResponseToMessageId('message-1');
 
         expect(execution.toData()).toMatchObject({
-            semanticActivity: 'awaiting-agent-response',
+            activityState: 'awaiting-agent-response',
             projection: {
                 currentActivity: {
                     activity: 'awaiting-agent-response'
                 }
-            },
-            runtimeActivity: {
-                activity: 'awaiting-agent-response'
             }
         });
 
@@ -138,14 +159,11 @@ describe('AgentExecution', () => {
         execution.setAwaitingResponseToMessageId(null);
 
         expect(execution.toData()).toMatchObject({
-            semanticActivity: 'executing',
+            activityState: 'executing',
             projection: {
                 currentActivity: {
                     activity: 'executing'
                 }
-            },
-            runtimeActivity: {
-                activity: 'executing'
             }
         });
     });
@@ -356,7 +374,7 @@ describe('AgentExecution', () => {
         });
     });
 
-    it('rejects singular Agent-declared signal delivery descriptors', () => {
+    it('rejects singular Agent signal delivery descriptors', () => {
         expect(() => AgentExecutionProtocolDescriptorSchema.parse({
             version: 1,
             owner: {
@@ -375,7 +393,7 @@ describe('AgentExecution', () => {
                 label: 'Progress',
                 icon: 'lucide:activity',
                 tone: 'progress',
-                payloadSchemaKey: 'agent-declared-signal.progress.v1',
+                payloadSchemaKey: 'agent-signal.progress.v1',
                 delivery: 'stdout-marker',
                 policy: 'progress',
                 outcomes: ['agent-execution-state']
@@ -404,13 +422,13 @@ describe('AgentExecution', () => {
             source: 'agent-signal' as const,
             signal: {
                 type: 'needs_input' as const,
-                source: 'agent-declared' as const,
+                source: 'agent-signal' as const,
                 confidence: 'medium' as const,
                 question: 'Which setup profile should I use?',
                 choices: [{ kind: 'fixed' as const, label: 'Default', value: 'default' }]
             },
             route: {
-                origin: 'agent-declared-signal' as const,
+                origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
                     scope: execution.getSnapshot().scope
@@ -462,11 +480,11 @@ describe('AgentExecution', () => {
                     path: 'apps/airport/web/src/app.css',
                     activity: 'edit' as const
                 }],
-                source: 'agent-declared' as const,
+                source: 'agent-signal' as const,
                 confidence: 'medium' as const
             },
             route: {
-                origin: 'agent-declared-signal' as const,
+                origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
                     scope: execution.getSnapshot().scope
@@ -520,11 +538,11 @@ describe('AgentExecution', () => {
                     label: 'Workflow definition',
                     activity: 'read' as const
                 }],
-                source: 'agent-declared' as const,
+                source: 'agent-signal' as const,
                 confidence: 'medium' as const
             },
             route: {
-                origin: 'agent-declared-signal' as const,
+                origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
                     scope: execution.getSnapshot().scope
@@ -574,11 +592,11 @@ describe('AgentExecution', () => {
                 type: 'status' as const,
                 phase: 'idle' as const,
                 summary: 'Ready for the next structured prompt.',
-                source: 'agent-declared' as const,
+                source: 'agent-signal' as const,
                 confidence: 'medium' as const
             },
             route: {
-                origin: 'agent-declared-signal' as const,
+                origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
                     scope: execution.getSnapshot().scope
@@ -620,7 +638,7 @@ describe('AgentExecution', () => {
             source: 'agent-signal' as const,
             signal: {
                 type: 'needs_input' as const,
-                source: 'agent-declared' as const,
+                source: 'agent-signal' as const,
                 confidence: 'medium' as const,
                 question: 'Which kind of task do you feel like doing next?',
                 choices: [
@@ -629,7 +647,7 @@ describe('AgentExecution', () => {
                 ]
             },
             route: {
-                origin: 'agent-declared-signal' as const,
+                origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
                     scope: execution.getSnapshot().scope
@@ -661,11 +679,11 @@ describe('AgentExecution', () => {
                 type: 'status' as const,
                 phase: 'idle' as const,
                 summary: "Waiting for the user's choice or manual answer.",
-                source: 'agent-declared' as const,
+                source: 'agent-signal' as const,
                 confidence: 'medium' as const
             },
             route: {
-                origin: 'agent-declared-signal' as const,
+                origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
                     scope: execution.getSnapshot().scope
@@ -708,7 +726,7 @@ describe('AgentExecution', () => {
             source: 'agent-signal' as const,
             signal: {
                 type: 'needs_input' as const,
-                source: 'agent-declared' as const,
+                source: 'agent-signal' as const,
                 confidence: 'medium' as const,
                 question: 'Which deepening opportunity would you like to explore?',
                 choices: [
@@ -717,7 +735,7 @@ describe('AgentExecution', () => {
                 ]
             },
             route: {
-                origin: 'agent-declared-signal' as const,
+                origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
                     scope: execution.getSnapshot().scope
@@ -747,12 +765,12 @@ describe('AgentExecution', () => {
             source: 'agent-signal' as const,
             signal: {
                 type: 'progress' as const,
-                source: 'agent-declared' as const,
+                source: 'agent-signal' as const,
                 confidence: 'medium' as const,
                 summary: 'Waiting for the operator to choose a deepening opportunity.'
             },
             route: {
-                origin: 'agent-declared-signal' as const,
+                origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
                     scope: execution.getSnapshot().scope
@@ -795,7 +813,7 @@ describe('AgentExecution', () => {
             source: 'agent-signal' as const,
             signal: {
                 type: 'needs_input' as const,
-                source: 'agent-declared' as const,
+                source: 'agent-signal' as const,
                 confidence: 'medium' as const,
                 question: 'What should I focus on next?',
                 choices: [
@@ -805,7 +823,7 @@ describe('AgentExecution', () => {
                 ]
             },
             route: {
-                origin: 'agent-declared-signal' as const,
+                origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
                     scope: execution.getSnapshot().scope
@@ -835,12 +853,12 @@ describe('AgentExecution', () => {
             source: 'agent-signal' as const,
             signal: {
                 type: 'ready_for_verification' as const,
-                source: 'agent-declared' as const,
+                source: 'agent-signal' as const,
                 confidence: 'medium' as const,
                 summary: 'Ready for review.'
             },
             route: {
-                origin: 'agent-declared-signal' as const,
+                origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
                     scope: execution.getSnapshot().scope
@@ -890,12 +908,12 @@ describe('AgentExecution', () => {
             source: 'agent-signal' as const,
             signal: {
                 type: 'ready_for_verification' as const,
-                source: 'agent-declared' as const,
+                source: 'agent-signal' as const,
                 confidence: 'medium' as const,
                 summary: 'Setup files are ready.'
             },
             route: {
-                origin: 'agent-declared-signal' as const,
+                origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
                     scope: execution.getSnapshot().scope

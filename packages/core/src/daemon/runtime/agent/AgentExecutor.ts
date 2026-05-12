@@ -23,14 +23,13 @@ import type {
 import type {
     AgentExecutionObservationAckType,
     AgentExecutionProtocolDescriptorType,
-    AgentExecutionTransportStateType,
     AgentSignalDeliveryType
-} from '../../../entities/AgentExecution/AgentExecutionSchema.js';
+} from '../../../entities/AgentExecution/AgentExecutionProtocolSchema.js';
+import type { AgentExecutionTransportStateType } from '../../../entities/AgentExecution/AgentExecutionRuntimeSchema.js';
 import type { AgentAdapter, AgentExecutionMcpAccess } from './AgentAdapter.js';
 import {
     AgentExecutionObservationCoordinator
 } from './AgentExecutionObservationCoordinator.js';
-import { AgentExecutionFactRecorder } from './AgentExecutionFactRecorder.js';
 import { AgentExecutionProcessController } from './AgentExecutionProcessController.js';
 import {
     AgentExecutionSemanticOperations,
@@ -73,6 +72,11 @@ type ManagedAgentExecution = {
     cleanup?: () => Promise<void>;
 };
 
+type DelegatedRuntimeAgentAdapter = AgentAdapter & {
+    startExecution(config: AgentLaunchConfig): Promise<AgentExecution>;
+    reconcileExecution(reference: AgentExecutionReference): Promise<AgentExecution>;
+};
+
 export class AgentExecutor {
     private readonly agentRegistry: AgentRegistry;
     private readonly journalWriter: AgentExecutionJournalWriter;
@@ -94,9 +98,7 @@ export class AgentExecutor {
         });
         this.semanticOperations = new AgentExecutionSemanticOperations({
             artifactService: new ArtifactService(),
-            factRecorder: new AgentExecutionFactRecorder({
-                journalWriter: this.journalWriter
-            })
+            journalWriter: this.journalWriter
         });
     }
 
@@ -116,6 +118,9 @@ export class AgentExecutor {
         const availability = await adapter.isAvailable();
         if (!availability.available) {
             throw new Error(availability.reason ?? `Agent '${agentId}' is unavailable.`);
+        }
+        if (AgentExecutor.isDelegatedRuntimeAdapter(adapter)) {
+            return this.startDelegatedExecution(adapter, config);
         }
 
         const executionId = AgentExecution.createFreshExecutionId(config, adapter.id);
@@ -199,6 +204,9 @@ export class AgentExecutor {
 
     public async reconcileExecution(reference: AgentExecutionReference): Promise<AgentExecution> {
         const adapter = this.agentRegistry.requireAgentAdapter(reference.agentId);
+        if (AgentExecutor.isDelegatedRuntimeAdapter(adapter)) {
+            return this.reconcileDelegatedExecution(adapter, reference);
+        }
         const runtimeController = AgentExecutionTerminalController.reconcile({
             ...adapter.terminalOptions,
             agentId: adapter.id,
@@ -220,6 +228,44 @@ export class AgentExecutor {
             })
         );
         return runtimeController.execution;
+    }
+
+    private async startDelegatedExecution(
+        adapter: DelegatedRuntimeAgentAdapter,
+        config: AgentLaunchConfig
+    ): Promise<AgentExecution> {
+        const execution = await adapter.startExecution(config);
+        const snapshot = execution.getSnapshot();
+        this.trackExecution({
+            runtimeController: AgentExecutor.createDelegatedRuntimeController(execution),
+            adapter,
+            journalScope: snapshot.scope,
+            parseAgentSignals: false,
+            observationLedger: await this.observationCoordinator.hydrateObservationLedger(
+                snapshot.agentExecutionId,
+                snapshot.scope
+            )
+        });
+        return execution;
+    }
+
+    private async reconcileDelegatedExecution(
+        adapter: DelegatedRuntimeAgentAdapter,
+        reference: AgentExecutionReference
+    ): Promise<AgentExecution> {
+        const execution = await adapter.reconcileExecution(reference);
+        const snapshot = execution.getSnapshot();
+        this.trackExecution({
+            runtimeController: AgentExecutor.createDelegatedRuntimeController(execution),
+            adapter,
+            journalScope: snapshot.scope,
+            parseAgentSignals: false,
+            observationLedger: await this.observationCoordinator.hydrateObservationLedger(
+                snapshot.agentExecutionId,
+                snapshot.scope
+            )
+        });
+        return execution;
     }
 
     public async submitPrompt(agentExecutionId: string, prompt: AgentPrompt): Promise<AgentExecutionSnapshot> {
@@ -405,6 +451,28 @@ export class AgentExecutor {
         };
     }
 
+    private static isDelegatedRuntimeAdapter(adapter: AgentAdapter): adapter is DelegatedRuntimeAgentAdapter {
+        return 'startExecution' in adapter
+            && typeof adapter.startExecution === 'function'
+            && 'reconcileExecution' in adapter
+            && typeof adapter.reconcileExecution === 'function';
+    }
+
+    private static createDelegatedRuntimeController(execution: AgentExecution): AgentExecutionRuntimeController {
+        const delegatedExecution = execution as AgentExecution & {
+            complete?: () => Promise<AgentExecutionSnapshot>;
+        };
+        return {
+            execution,
+            submitPrompt: (prompt) => execution.submitPrompt(prompt),
+            submitCommand: (command) => execution.submitCommand(command),
+            complete: () => delegatedExecution.complete ? delegatedExecution.complete() : execution.getSnapshot(),
+            cancel: (reason) => execution.cancel(reason),
+            terminate: (reason) => execution.terminate(reason),
+            dispose: () => undefined
+        };
+    }
+
     private selectSignalDelivery(adapter: AgentAdapter, launchMode: 'interactive' | 'print'): AgentSignalDeliveryType {
         const capabilities = adapter.getTransportCapabilities();
         const preferredDelivery = capabilities.preferred[launchMode];
@@ -437,6 +505,7 @@ export class AgentExecutor {
         return {
             serverName: access.serverName,
             agentExecutionId: access.agentExecutionId,
+            ownerId: readAgentExecutionOwnerId(protocolDescriptor.scope as AgentExecutionProtocolDescriptorType['scope']),
             token: access.token,
             tools: access.tools.map((tool) => ({ name: tool.name }))
         };
@@ -582,6 +651,20 @@ export class AgentExecutor {
         managed.runtimeController.dispose();
         this.managedExecutions.delete(agentExecutionId);
         void managed.cleanup?.();
+    }
+}
+
+function readAgentExecutionOwnerId(scope: AgentExecutionProtocolDescriptorType['scope']): string {
+    switch (scope.kind) {
+        case 'system':
+            return scope.label?.trim() || 'system';
+        case 'repository':
+            return scope.repositoryRootPath;
+        case 'mission':
+        case 'task':
+            return scope.missionId;
+        case 'artifact':
+            return scope.artifactId;
     }
 }
 

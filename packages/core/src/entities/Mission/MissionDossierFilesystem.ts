@@ -14,10 +14,8 @@ import {
 	MISSION_RUNTIME_EVENT_LOG_FILE_NAME,
 	type MissionBrief,
 	type MissionDescriptor,
-	type MissionSelector,
-	type MissionTaskAgent,
-	type MissionTaskState,
-	type MissionType
+	type MissionEntityTypeType,
+	type MissionSelector
 } from './MissionSchema.js';
 import type { MissionArtifactKey, MissionStageId } from '../../workflow/mission/manifest.js';
 import { renderMissionBriefBody } from '../../workflow/mission/templates/index.js';
@@ -25,7 +23,7 @@ import {
 	getMissionArtifactDefinition,
 	getMissionStageDefinition
 } from '../../workflow/mission/manifest.js';
-import { TaskContextArtifactReferenceSchema, type TaskContextArtifactReferenceType } from '../Task/TaskSchema.js';
+import { TaskContextArtifactReferenceSchema, type TaskContextArtifactReferenceType, type TaskDossierRecordType } from '../Task/TaskSchema.js';
 
 export const IGNORED_WORKTREE_ENTRY_NAMES = new Set([
 	'.git',
@@ -335,6 +333,21 @@ export class MissionDossierFilesystem {
 		this.assertGit(['push', '--set-upstream', 'origin', branchRef], cwd);
 	}
 
+	public refExists(ref: string, cwd = this.workspaceRoot): boolean {
+		return this.runGit(['rev-parse', '--verify', ref], cwd) !== '';
+	}
+
+	public refTracksPath(ref: string, relativePath: string, cwd = this.workspaceRoot): boolean {
+		const normalizedPath = relativePath.replace(/\\/g, '/').replace(/^\.?\//, '');
+		if (!normalizedPath) {
+			return false;
+		}
+		return this.runGit(['ls-tree', '-r', '--name-only', ref, '--', normalizedPath], cwd)
+			.split('\n')
+			.map((entry) => entry.trim())
+			.includes(normalizedPath);
+	}
+
 	public isWorktreeClean(cwd = this.workspaceRoot): boolean {
 		return this.runGit(['status', '--porcelain'], cwd) === '';
 	}
@@ -552,7 +565,7 @@ export class MissionDossierFilesystem {
 		});
 	}
 
-	public getMissionStateDataPath(missionDir: string): string {
+	public getWorkflowStateDataPath(missionDir: string): string {
 		return path.join(missionDir, MISSION_RUNTIME_FILE_NAME);
 	}
 
@@ -620,10 +633,10 @@ export class MissionDossierFilesystem {
 		return /^agent-journals\/[^/]+\.interaction\.jsonl$/u.test(agentJournalPath.trim());
 	}
 
-	public async readMissionStateDataFile(
+	public async readWorkflowStateDataFile(
 		missionDir: string
 	): Promise<unknown | undefined> {
-		const filePath = this.getMissionStateDataPath(missionDir);
+		const filePath = this.getWorkflowStateDataPath(missionDir);
 		try {
 			const content = await fs.readFile(filePath, 'utf8');
 			return JSON.parse(content) as unknown;
@@ -638,11 +651,11 @@ export class MissionDossierFilesystem {
 		}
 	}
 
-	public async writeMissionStateDataFile(
+	public async writeWorkflowStateDataFile(
 		missionDir: string,
 		data: unknown
 	): Promise<void> {
-		const filePath = this.getMissionStateDataPath(missionDir);
+		const filePath = this.getWorkflowStateDataPath(missionDir);
 		await fs.mkdir(path.dirname(filePath), { recursive: true });
 		const temporaryPath = `${filePath}.${process.pid.toString(36)}.${randomUUID()}.tmp`;
 		await fs.writeFile(temporaryPath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
@@ -888,7 +901,7 @@ export class MissionDossierFilesystem {
 		missionDir: string,
 		stage: MissionStageId,
 		fileName: string
-	): Promise<MissionTaskState | undefined> {
+	): Promise<TaskDossierRecordType | undefined> {
 		try {
 			const tasks = await this.listTaskStates(missionDir, stage);
 			return tasks.find((task) => task.fileName === fileName);
@@ -903,7 +916,7 @@ export class MissionDossierFilesystem {
 	public async listTaskStates(
 		missionDir: string,
 		stage: MissionStageId
-	): Promise<MissionTaskState[]> {
+	): Promise<TaskDossierRecordType[]> {
 		const stagePath = this.getStageTasksPath(missionDir, stage);
 		const fileNames = await this.listTaskFileNames(missionDir, stage);
 
@@ -975,7 +988,7 @@ export class MissionDossierFilesystem {
 			pairedTaskId?: string;
 			dependsOn?: string[];
 			context?: TaskContextArtifactReferenceType[];
-			agent?: MissionTaskAgent;
+			agent?: TaskDossierRecordType['agent'];
 		} = {}
 	): string {
 		const body = [
@@ -1014,7 +1027,7 @@ export class MissionDossierFilesystem {
 		filePath: string,
 		fileName: string,
 		sequenceFallback: number
-	): Promise<MissionTaskState> {
+	): Promise<TaskDossierRecordType> {
 		const content = await fs.readFile(filePath, 'utf8');
 		const document = parseFrontmatterDocument(content);
 		const body = document.body;
@@ -1187,7 +1200,7 @@ export class MissionDossierFilesystem {
 		attributes: Record<string, FrontmatterValue>,
 		key: string,
 		filePath: string
-	): MissionType | undefined {
+	): MissionEntityTypeType | undefined {
 		const value = attributes[key];
 		if (value === undefined) {
 			return undefined;
@@ -1295,7 +1308,7 @@ export class MissionDossierFilesystem {
 		return match ? Number(match[1]) : fallback;
 	}
 
-	private resolveTaskDependencies(tasks: MissionTaskState[]): MissionTaskState[] {
+	private resolveTaskDependencies(tasks: TaskDossierRecordType[]): TaskDossierRecordType[] {
 		return tasks.map((task, index) => {
 			const dependsOn =
 				task.dependsOn.length > 0
@@ -1314,14 +1327,14 @@ export class MissionDossierFilesystem {
 		});
 	}
 
-	private resolveDefaultTaskDependencies(index: number, tasks: MissionTaskState[]): string[] {
+	private resolveDefaultTaskDependencies(index: number, tasks: TaskDossierRecordType[]): string[] {
 		const previousTask = index > 0 ? tasks[index - 1] : undefined;
 		return previousTask ? [previousTask.taskId] : [];
 	}
 
 	private resolveExplicitTaskDependencies(
-		task: MissionTaskState,
-		tasks: MissionTaskState[]
+		task: TaskDossierRecordType,
+		tasks: TaskDossierRecordType[]
 	): string[] {
 		return [
 			...new Set(task.dependsOn.map((dependency) => this.resolveTaskDependencyReference(task, dependency, tasks)))
@@ -1329,9 +1342,9 @@ export class MissionDossierFilesystem {
 	}
 
 	private resolveTaskDependencyReference(
-		task: MissionTaskState,
+		task: TaskDossierRecordType,
 		dependency: string,
-		tasks: MissionTaskState[]
+		tasks: TaskDossierRecordType[]
 	): string {
 		const trimmedDependency = dependency.trim();
 		if (trimmedDependency.includes('/')) {

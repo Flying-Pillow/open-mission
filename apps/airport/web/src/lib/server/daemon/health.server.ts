@@ -1,5 +1,5 @@
 // /apps/airport/web/src/lib/server/daemon/health.server.ts: Reads daemon availability for Airport UI without daemon process control.
-import type { SystemState } from '@flying-pillow/mission-core/system/SystemContract';
+import type { SystemState } from '@flying-pillow/mission-core/entities/System/SystemSchema';
 import { resolveRequestAuthToken, resolveSurfacePath } from './context.server';
 import { clearSharedDaemonClient } from './shared-client.server';
 import { openDaemonConnection } from './transport.server';

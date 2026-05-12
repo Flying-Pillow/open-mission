@@ -1,10 +1,10 @@
 // /apps/airport/web/src/lib/client/runtime/EntityRuntimeStore.ts: Generic runtime store for loading, caching, and refreshing entity models by identity.
-import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
+import type { Entity } from '$lib/components/entities/Entity/Entity.svelte.js';
 
 export class EntityRuntimeStore<
     TId extends string,
     TData,
-    TEntity extends EntityModel<TData, TId>
+    TEntity extends Entity<TData, TId>
 > {
     private readonly entities = new Map<TId, TEntity>();
 
@@ -15,7 +15,7 @@ export class EntityRuntimeStore<
             loadData: (id: TId) => Promise<TData>
         ) => TEntity;
         selectId: (data: TData) => TId;
-    }) {}
+    }) { }
 
     public async get(id: TId): Promise<TEntity> {
         const existing = this.entities.get(id);

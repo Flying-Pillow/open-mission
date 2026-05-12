@@ -1,4 +1,4 @@
-import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
+import { Entity } from '$lib/components/entities/Entity/Entity.svelte.js';
 import {
     ArtifactCommandAcknowledgementSchema,
     ArtifactBodySchema,
@@ -123,7 +123,7 @@ export function createFileArtifact(input: {
     });
 }
 
-export class Artifact implements EntityModel<ArtifactDataType> {
+export class Artifact extends Entity<ArtifactDataType> {
     private dataState = $state<ArtifactDataType | undefined>();
     private bodyState = $state<ArtifactBodyType | undefined>();
     private bodyStatusState = $state<ArtifactBodyStatus>('idle');
@@ -132,6 +132,7 @@ export class Artifact implements EntityModel<ArtifactDataType> {
     private bodyRequestVersion = 0;
 
     public constructor(data: ArtifactDataType, dependencies: ArtifactDependencies) {
+        super();
         this.data = data;
         this.dependencies = dependencies;
     }
@@ -159,6 +160,13 @@ export class Artifact implements EntityModel<ArtifactDataType> {
 
     public get entityId(): string {
         return this.data.id;
+    }
+
+    protected get entityLocator(): Record<string, unknown> {
+        return {
+            id: this.id,
+            ...(this.data.repositoryRootPath ? { repositoryRootPath: this.data.repositoryRootPath } : {})
+        };
     }
 
     public get filePath(): string | undefined {

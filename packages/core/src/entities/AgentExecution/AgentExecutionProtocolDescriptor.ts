@@ -1,16 +1,16 @@
-import type { AgentExecutionScope } from './AgentExecutionProtocolTypes.js';
 import {
     AgentExecutionProtocolDescriptorSchema,
+    type AgentExecutionScopeType,
     type AgentSignalDeliveryType,
     type AgentSignalDescriptorType,
     type AgentExecutionMessageDescriptorType,
     type AgentExecutionProtocolDescriptorType,
     type AgentExecutionProtocolOwnerType
-} from './AgentExecutionSchema.js';
+} from './AgentExecutionProtocolSchema.js';
 import { baselineAgentSignalDescriptors } from './AgentExecutionSignalRegistry.js';
 
 export function createAgentExecutionProtocolDescriptor(input: {
-    scope: AgentExecutionScope;
+    scope: AgentExecutionScopeType;
     messages: AgentExecutionMessageDescriptorType[];
     signals?: AgentSignalDescriptorType[];
     deliveries?: AgentSignalDeliveryType[];
@@ -41,7 +41,7 @@ export function createAgentExecutionProtocolDescriptor(input: {
 }
 
 
-export function deriveAgentExecutionProtocolOwner(scope: AgentExecutionScope): AgentExecutionProtocolOwnerType {
+export function deriveAgentExecutionProtocolOwner(scope: AgentExecutionScopeType): AgentExecutionProtocolOwnerType {
     switch (scope.kind) {
         case 'system':
             return {

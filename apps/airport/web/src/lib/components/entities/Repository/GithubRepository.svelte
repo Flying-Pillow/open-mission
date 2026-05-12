@@ -2,14 +2,13 @@
     import { RepositoryDataSchema } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import type { RepositoryPlatformRepositoryType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import { goto } from "$app/navigation";
-    import { page } from "$app/state";
     import Icon from "@iconify/svelte";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { app } from "$lib/client/Application.svelte.js";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import { Separator } from "$lib/components/ui/separator/index.js";
-    import EntityClassCommandbar from "$lib/components/entities/Commandbar/EntityClassCommandbar.svelte";
+    import EntityClassCommandbar from "$lib/components/entities/Entity/EntityClassCommandbar.svelte";
     import { Repository as RepositoryEntity } from "$lib/components/entities/Repository/Repository.svelte.js";
 
     let {
@@ -20,11 +19,9 @@
         compact?: boolean;
     } = $props();
 
-    const appContext = getAppContext();
     const uid = $props.id();
     const configuredRepositoriesRoot = $derived(
-        page.data.systemState?.config?.repositoriesRoot?.trim() ||
-            "/repositories",
+        app.system?.config.repositoriesRoot ?? "/repositories",
     );
     let detailsOpen = $state(false);
     const cloneTargetPath = $derived(
@@ -49,14 +46,12 @@
             { label: "Issues", value: repository.openIssuesCount },
         ].filter((metric) => metric.value !== undefined),
     );
-    const repositoryClassCommands = $derived(
-        appContext.application.repositoryClassCommands,
-    );
+    const repositoryClassCommands = $derived(app.repositoryClassCommands);
     const repositoryClassCommandsLoading = $derived(
-        appContext.application.repositoryClassCommandsLoading,
+        app.repositoryClassCommandsLoading,
     );
     const repositoryClassCommandsError = $derived(
-        appContext.application.repositoryClassCommandsError,
+        app.repositoryClassCommandsError,
     );
 
     const commandInput = $derived({
@@ -71,9 +66,8 @@
         const data = RepositoryDataSchema.parse(
             await RepositoryEntity.executeClassCommand(commandId, commandInput),
         );
-        const addedRepository =
-            appContext.application.hydrateRepositoryData(data);
-        await appContext.application.loadRepositories({ force: true });
+        const addedRepository = app.hydrateRepositoryData(data);
+        await app.loadRepositories({ force: true });
         detailsOpen = false;
         await goto(`/airport/${encodeURIComponent(addedRepository.id)}`);
     }

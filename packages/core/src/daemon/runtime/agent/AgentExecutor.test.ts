@@ -369,7 +369,7 @@ describe('AgentExecutor', () => {
                 })
             ]));
             expect(execution.toData()).toMatchObject({
-                semanticActivity: 'awaiting-agent-response',
+                activityState: 'awaiting-agent-response',
                 awaitingResponseToMessageId: expect.any(String),
                 projection: {
                     currentActivity: {
@@ -516,7 +516,7 @@ describe('AgentExecutor', () => {
                 })
             ]));
             expect(execution.toData()).toMatchObject({
-                semanticActivity: 'awaiting-agent-response',
+                activityState: 'awaiting-agent-response',
                 awaitingResponseToMessageId: expect.any(String)
             });
 
@@ -619,7 +619,7 @@ describe('AgentExecutor', () => {
                 })
             ]));
             expect(execution.toData()).toMatchObject({
-                semanticActivity: 'awaiting-agent-response',
+                activityState: 'awaiting-agent-response',
                 awaitingResponseToMessageId: expect.any(String),
                 projection: {
                     currentActivity: {
@@ -669,7 +669,7 @@ describe('AgentExecutor', () => {
                     observationId: 'observation-1',
                     observedAt: '2026-05-09T00:00:10.000Z',
                     route: {
-                        origin: 'agent-declared-signal',
+                        origin: 'agent-signal',
                         address: {
                             agentExecutionId: execution.agentExecutionId,
                             scope: {
@@ -688,7 +688,7 @@ describe('AgentExecutor', () => {
                     rawText: '@repository::{...}',
                     signal: {
                         type: 'progress',
-                        source: 'agent-declared',
+                        source: 'agent-signal',
                         confidence: 'medium',
                         summary: 'Inspecting repository.'
                     }
@@ -701,7 +701,7 @@ describe('AgentExecutor', () => {
             expect(journalRecords).toEqual(expect.arrayContaining([
                 expect.objectContaining({ type: 'agent-observation', observationId: 'observation-1', source: 'pty' }),
                 expect.objectContaining({ type: 'decision.recorded', observationId: 'observation-1', action: 'update-state' }),
-                expect.objectContaining({ type: 'state.changed', lifecycle: 'running', attention: 'autonomous', currentInputRequestId: null }),
+                expect.objectContaining({ type: 'state.changed', lifecycle: 'running', attention: 'autonomous', activity: 'executing' }),
                 expect.objectContaining({ type: 'activity.updated', progress: expect.objectContaining({ summary: 'Inspecting repository.' }) })
             ]));
         } finally {
@@ -887,7 +887,7 @@ describe('AgentExecutor', () => {
                     observationId: 'observation-needs-input-1',
                     observedAt: '2026-05-09T00:00:20.000Z',
                     route: {
-                        origin: 'agent-declared-signal',
+                        origin: 'agent-signal',
                         address: {
                             agentExecutionId: execution.agentExecutionId,
                             scope: {
@@ -906,7 +906,7 @@ describe('AgentExecutor', () => {
                     rawText: '@repository::{...}',
                     signal: {
                         type: 'needs_input',
-                        source: 'agent-declared',
+                        source: 'agent-signal',
                         confidence: 'medium',
                         question: 'Should I run the verification slice?',
                         choices: [

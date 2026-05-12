@@ -15,7 +15,7 @@ The runtime boundary includes:
 - terminal input when a CLI runtime requires it
 - runtime message descriptors advertised to Airport
 - durable Agent execution logs
-- prompt-scoped stdout signal markers for agent-declared state
+- prompt-scoped stdout signal markers for agent-signal state
 
 A validated terminal-backed Agent execution receives mandatory signal instructions in its initial prompt. The Agent reports advisory state by emitting one-line stdout markers using the Mission protocol marker prefix.
 

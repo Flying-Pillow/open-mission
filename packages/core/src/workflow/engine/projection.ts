@@ -1,11 +1,11 @@
 import type {
-    MissionGateProjection,
+    WorkflowGateProjection,
     MissionStageId,
-    MissionStageRuntimeProjection,
-    MissionTaskLifecycleState,
-    MissionTaskRuntimeState,
-    MissionWorkflowConfigurationSnapshot,
-    MissionWorkflowRuntimeState
+    WorkflowStageRuntimeProjection,
+    WorkflowTaskLifecycleState,
+    WorkflowTaskRuntimeState,
+    WorkflowConfigurationSnapshot,
+    WorkflowRuntimeState
 } from './types.js';
 import {
     isStageCompletedFromTasks,
@@ -13,18 +13,18 @@ import {
     resolveEligibleStageId
 } from './policy.js';
 
-export interface MissionWorkflowDerivedProjectionState {
+export interface WorkflowDerivedProjectionState {
     activeStageId?: MissionStageId;
-    tasks: MissionTaskRuntimeState[];
-    stages: MissionStageRuntimeProjection[];
-    gates: MissionGateProjection[];
+    tasks: WorkflowTaskRuntimeState[];
+    stages: WorkflowStageRuntimeProjection[];
+    gates: WorkflowGateProjection[];
 }
 
-export function deriveMissionWorkflowProjectionState(
-    runtime: MissionWorkflowRuntimeState,
-    configuration: MissionWorkflowConfigurationSnapshot,
+export function deriveWorkflowProjectionState(
+    runtime: WorkflowRuntimeState,
+    configuration: WorkflowConfigurationSnapshot,
     updatedAt: string
-): MissionWorkflowDerivedProjectionState {
+): WorkflowDerivedProjectionState {
     const activeStageId = resolveEligibleStageId(runtime, configuration);
     const tasks = deriveTaskRuntimeStates(runtime.tasks, activeStageId);
     const stages = buildStageProjections(tasks, configuration, activeStageId);
@@ -38,14 +38,14 @@ export function deriveMissionWorkflowProjectionState(
 }
 
 function deriveTaskRuntimeStates(
-    tasks: MissionTaskRuntimeState[],
+    tasks: WorkflowTaskRuntimeState[],
     activeStageId: MissionStageId | undefined
-): MissionTaskRuntimeState[] {
+): WorkflowTaskRuntimeState[] {
     const tasksById = new Map(tasks.map((task) => [task.taskId, task]));
     return tasks.map((task) => {
         const waitingOnTaskIds = task.dependsOn.filter((dependencyTaskId) => tasksById.get(dependencyTaskId)?.lifecycle !== 'completed');
         const stageEligible = task.stageId === activeStageId;
-        let lifecycle: MissionTaskLifecycleState = task.lifecycle;
+        let lifecycle: WorkflowTaskLifecycleState = task.lifecycle;
 
         if (isTerminalTaskLifecycle(lifecycle) || lifecycle === 'queued' || lifecycle === 'running') {
             return {
@@ -73,10 +73,10 @@ function deriveTaskRuntimeStates(
 }
 
 function buildStageProjections(
-    tasks: MissionTaskRuntimeState[],
-    configuration: MissionWorkflowConfigurationSnapshot,
+    tasks: WorkflowTaskRuntimeState[],
+    configuration: WorkflowConfigurationSnapshot,
     activeStageId: MissionStageId | undefined
-): MissionStageRuntimeProjection[] {
+): WorkflowStageRuntimeProjection[] {
     return configuration.workflow.stageOrder.map((stageId) => {
         const stageTasks = tasks.filter((task) => task.stageId === stageId);
         const readyTaskIds = stageTasks.filter((task) => task.lifecycle === 'ready').map((task) => task.taskId);
@@ -85,7 +85,7 @@ function buildStageProjections(
         const completedTaskIds = stageTasks.filter((task) => task.lifecycle === 'completed').map((task) => task.taskId);
         const completed = isStageCompletedFromTasks(tasks, stageId, configuration);
         const eligible = stageId === activeStageId || completed;
-        let lifecycle: MissionStageRuntimeProjection['lifecycle'] = 'pending';
+        let lifecycle: WorkflowStageRuntimeProjection['lifecycle'] = 'pending';
 
         if (completed) {
             lifecycle = 'completed';
@@ -112,10 +112,10 @@ function buildStageProjections(
 }
 
 function buildGateProjections(
-    stages: MissionStageRuntimeProjection[],
-    configuration: MissionWorkflowConfigurationSnapshot,
+    stages: WorkflowStageRuntimeProjection[],
+    configuration: WorkflowConfigurationSnapshot,
     updatedAt: string
-): MissionGateProjection[] {
+): WorkflowGateProjection[] {
     return configuration.workflow.gates.map((gate) => {
         if (!gate.stageId) {
             return {

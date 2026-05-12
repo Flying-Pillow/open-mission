@@ -417,4 +417,5 @@ function buildTerminalCommandPrompt(command: Exclude<AgentCommand, { type: 'inte
         case 'nudge':
             return { source: 'system', text: command.reason?.trim() || 'Continue with the assigned task.' };
     }
+    throw new Error(`Unsupported AgentExecution command '${String((command as { type: string }).type)}'.`);
 }

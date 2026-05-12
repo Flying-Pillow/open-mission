@@ -1,8 +1,6 @@
 <script lang="ts">
-    import type { Snippet } from "svelte";
     import Icon from "@iconify/svelte";
     import { shimmerThinking } from "$lib/actions/shimmer";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
     import type { AgentExecution as AgentExecutionEntity } from "$lib/components/entities/AgentExecution/AgentExecution.svelte.js";
     import AgentExecutionTerminalPanel from "$lib/components/entities/AgentExecution/AgentExecution.svelte";
     import AgentChatInputBar from "$lib/components/entities/AgentExecution/AgentChatInputBar.svelte";
@@ -10,12 +8,6 @@
     import AgentChatMessages from "$lib/components/entities/AgentExecution/AgentChatMessages.svelte";
     import Artifacts from "$lib/components/entities/Artifact/Artifacts.svelte";
     import type { Artifact as ArtifactEntity } from "$lib/components/entities/Artifact/Artifact.svelte.js";
-    import {
-        agentChatShowsWorkingShine,
-        resolveAgentChatHeaderDetail,
-        resolveAgentChatHeaderTitle,
-        type AgentChatHeaderExecution,
-    } from "$lib/components/entities/AgentExecution/agentChatHeader";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import {
         ResizableHandle,
@@ -30,21 +22,22 @@
         AgentExecutionDataType["projection"]["timelineItems"][number];
     type AttentionProjection =
         AgentExecutionDataType["projection"]["currentAttention"];
+    type AgentChatOwnerEntity = {
+        agentExecution?: AgentExecutionEntity;
+    };
 
     let {
-        agentExecution,
+        ownerEntity,
         refreshNonce,
         onCommandExecuted,
         showHeader = true,
-        title = "Agent chat",
         loadingTitle = "Starting agent chat",
         loadingPlaceholder = "Starting agent chat",
     }: {
-        agentExecution?: AgentExecutionEntity;
+        ownerEntity?: AgentChatOwnerEntity;
         refreshNonce: number;
         onCommandExecuted: () => Promise<void>;
         showHeader?: boolean;
-        title?: string;
         loadingTitle?: string;
         loadingPlaceholder?: string;
     } = $props();
@@ -57,30 +50,30 @@
     let activeArtifactId = $state<string | undefined>(undefined);
     let activePanel = $state<"messages" | "journal" | "terminal">("messages");
 
-    const appContext = getAppContext();
+    const resolvedAgentExecution = $derived(ownerEntity?.agentExecution);
 
     const canSendPrompt = $derived(
-        Boolean(agentExecution?.canSendStructuredPrompt) &&
-            isExecutionTransportCommandable(agentExecution),
+        Boolean(resolvedAgentExecution?.canSendStructuredPrompt) &&
+            isExecutionTransportCommandable(resolvedAgentExecution),
     );
     const canShowTerminalPanel = $derived(
-        Boolean(agentExecution?.isTerminalBacked()),
+        Boolean(resolvedAgentExecution?.isTerminalBacked()),
     );
     const timelineItems = $derived.by(() => {
         refreshNonce;
-        return agentExecution?.timelineItems ?? [];
+        return resolvedAgentExecution?.timelineItems ?? [];
     });
     const journalRecords = $derived.by(() => {
         refreshNonce;
-        return agentExecution?.journalRecords ?? [];
+        return resolvedAgentExecution?.journalRecords ?? [];
     });
     const currentActivity = $derived.by(() => {
         refreshNonce;
-        return agentExecution?.currentActivity;
+        return resolvedAgentExecution?.currentActivity;
     });
     const currentInputRequest = $derived.by<AttentionProjection>(() => {
         refreshNonce;
-        const attention = agentExecution?.projection.currentAttention;
+        const attention = resolvedAgentExecution?.projection.currentAttention;
         if (
             attention?.primitive !== "attention.input-request" ||
             !attention.currentInputRequestId
@@ -90,33 +83,6 @@
 
         return attention;
     });
-    const headerExecution = $derived.by<AgentChatHeaderExecution | undefined>(
-        () => {
-            refreshNonce;
-            if (!agentExecution) {
-                return undefined;
-            }
-
-            return {
-                ownerId: agentExecution.ownerId,
-                scope: agentExecution.scope,
-                taskId: agentExecution.taskId,
-                assignmentLabel: agentExecution.assignmentLabel,
-                currentTurnTitle: agentExecution.currentTurnTitle,
-                lifecycleState: agentExecution.lifecycleState,
-                currentActivity: agentExecution.currentActivity,
-            };
-        },
-    );
-    const headerTitleText = $derived(
-        resolveAgentChatHeaderTitle(headerExecution, title),
-    );
-    const headerDetailText = $derived(
-        resolveAgentChatHeaderDetail(headerExecution),
-    );
-    const headerShowsWorkingShine = $derived(
-        agentChatShowsWorkingShine(headerExecution),
-    );
     const selectedArtifact = $derived.by(() => {
         if (!activeArtifactId) {
             return undefined;
@@ -132,9 +98,10 @@
     const currentActionTimelineItemId = $derived.by(() => {
         const lastItem = timelineItems.at(-1);
         if (
-            !agentExecution ||
+            !resolvedAgentExecution ||
             !lastItem ||
-            formatExecutionStatus(agentExecution).toLowerCase() === "idle" ||
+            formatExecutionStatus(resolvedAgentExecution).toLowerCase() ===
+                "idle" ||
             lastItem.behavior.class !== "live-activity"
         ) {
             return undefined;
@@ -227,15 +194,6 @@
         }
 
         return execution?.currentActivity?.summary;
-    }
-
-    function activityLineText(
-        execution: AgentExecutionEntity | undefined,
-    ): string | undefined {
-        return (
-            executionStatusSummary(execution) ??
-            formatExecutionStatus(execution)
-        );
     }
 
     function statusBadgeClasses(
@@ -356,7 +314,7 @@
 
     function itemToneClasses(item: TimelineItem): string {
         if (item.primitive === "conversation.operator-message") {
-            return "border-fuchsia-300/25 bg-[linear-gradient(135deg,rgba(255,150,227,0.98),rgba(217,188,255,0.94))] text-slate-950";
+            return "text-foreground-muted";
         }
 
         switch (item.severity) {
@@ -491,12 +449,12 @@
         event.preventDefault();
 
         if (
-            !agentExecution ||
-            !agentExecution.canSendStructuredPrompt ||
-            !isExecutionTransportCommandable(agentExecution)
+            !resolvedAgentExecution ||
+            !resolvedAgentExecution.canSendStructuredPrompt ||
+            !isExecutionTransportCommandable(resolvedAgentExecution)
         ) {
             promptError =
-                executionStatusSummary(agentExecution) ??
+                executionStatusSummary(resolvedAgentExecution) ??
                 "Refresh to launch a new agent execution before sending another prompt.";
             return;
         }
@@ -512,7 +470,7 @@
         promptPending = true;
         promptError = null;
         try {
-            await agentExecution.sendPrompt({
+            await resolvedAgentExecution.sendPrompt({
                 source: "operator",
                 text,
             });
@@ -568,7 +526,7 @@
             }
             class="flex min-h-0 flex-1 flex-col overflow-hidden gap-0"
         >
-            <div class="w-full">
+            <div class="w-full pt-2">
                 <div class="mx-auto w-full max-w-5xl">
                     <Tabs.List
                         class="w-full justify-start overflow-x-auto overflow-y-hidden"
@@ -589,15 +547,19 @@
                             <Tabs.Trigger
                                 value="terminal"
                                 class="max-w-48 flex-none"
-                                aria-label={`${agentExecution?.adapterLabel ?? "Agent"} terminal`}
-                                title={agentExecution?.adapterLabel ?? "Agent"}
+                                aria-label={`${resolvedAgentExecution?.adapterLabel ?? "Agent"} terminal`}
+                                title={resolvedAgentExecution?.adapterLabel ??
+                                    "Agent"}
                             >
                                 <Icon
-                                    icon={providerIcon(agentExecution?.agentId)}
+                                    icon={providerIcon(
+                                        resolvedAgentExecution?.agentId,
+                                    )}
                                     class="size-4 shrink-0"
                                 />
                                 <span class="min-w-0 truncate">
-                                    {agentExecution?.adapterLabel ?? "Agent"}
+                                    {resolvedAgentExecution?.adapterLabel ??
+                                        "Agent"}
                                 </span>
                             </Tabs.Trigger>
                         {/if}
@@ -616,7 +578,7 @@
                 >
                     <div class="min-h-full w-full">
                         <div class="mx-auto min-h-full w-full max-w-5xl">
-                            {#if !agentExecution}
+                            {#if !resolvedAgentExecution}
                                 <div
                                     class="m-4 rounded-lg border border-dashed border-white/15 bg-white/[0.03] px-5 py-8 text-center md:m-6"
                                 >
@@ -688,7 +650,7 @@
                 class="flex min-h-0 flex-1 flex-col overflow-hidden"
             >
                 <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-                    {#if !agentExecution}
+                    {#if !resolvedAgentExecution}
                         <div
                             class="m-4 rounded-lg border border-dashed border-white/15 bg-white/[0.03] px-5 py-8 text-center md:m-6"
                         >
@@ -717,7 +679,7 @@
                         >
                             <AgentExecutionTerminalPanel
                                 {refreshNonce}
-                                {agentExecution}
+                                agentExecution={resolvedAgentExecution}
                                 {onCommandExecuted}
                                 panelMode="terminal"
                             />
@@ -729,11 +691,13 @@
 
         <AgentChatInputBar
             bind:value={draft}
-            placeholder={agentExecution
+            placeholder={resolvedAgentExecution
                 ? "Message the assistant"
                 : loadingPlaceholder}
             activeInputRequest={currentInputRequest}
-            disabled={!agentExecution || !canSendPrompt || promptPending}
+            disabled={!resolvedAgentExecution ||
+                !canSendPrompt ||
+                promptPending}
             pending={promptPending}
             error={promptError}
             onChoiceSelect={useChoice}
@@ -742,67 +706,36 @@
     </div>
 {/snippet}
 
-<section class="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#08090b]">
+<section
+    class="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#08090b]"
+>
     {#if showHeader}
-        <div
-            class="z-20 shrink-0 border-b border-white/10 bg-[#08090b]/95 px-4 pb-3 pt-3 shadow-[0_14px_30px_rgba(0,0,0,0.35)] backdrop-blur md:px-5"
-        >
-            <div
-                class="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
-            >
-                <div class="flex min-w-0 items-start gap-3">
-                    <span
-                        class="inline-flex size-10 shrink-0 items-center justify-center text-emerald-200"
-                    >
-                        <Icon icon="lucide:bot-message-square" class="size-5" />
-                    </span>
-                    <div class="min-w-0">
-                        <h2
-                            class="min-w-0 truncate text-xs font-medium leading-5 text-muted-foreground"
-                        >
-                            {headerTitleText}
-                        </h2>
-                        {#if headerDetailText}
-                            <p class="mt-1 truncate text-xs text-slate-300">
-                                {headerDetailText}
-                            </p>
-                        {/if}
-                        {#if activityLineText(agentExecution)}
-                            <p
-                                class={`mt-1 truncate text-lg font-medium leading-6 ${headerShowsWorkingShine ? "text-muted-foreground" : "text-foreground"}`}
-                            >
-                                <span
-                                    use:shimmerThinking={{
-                                        disabled: !headerShowsWorkingShine,
-                                        speed: 2.5,
-                                    }}
-                                >
-                                    {activityLineText(agentExecution)}
-                                </span>
-                            </p>
-                        {/if}
-                    </div>
-                </div>
-                <div
-                    class="flex shrink-0 flex-wrap items-center justify-end gap-2"
+        <div class="pointer-events-none absolute right-4 top-3 z-20 md:right-5">
+            {#if resolvedAgentExecution}
+                <Badge
+                    variant="outline"
+                    class={`rounded-full px-2.5 py-1 text-[0.65rem] font-medium uppercase tracking-[0.14em] shadow-[0_10px_25px_rgba(0,0,0,0.28)] ${statusBadgeClasses(resolvedAgentExecution)}`}
                 >
-                    {#if agentExecution}
-                        <Badge
-                            variant="outline"
-                            class={`rounded-full px-2.5 py-1 text-[0.65rem] font-medium uppercase tracking-[0.14em] ${statusBadgeClasses(agentExecution)}`}
-                        >
-                            {formatExecutionStatus(agentExecution)}
-                        </Badge>
-                    {/if}
-                </div>
-            </div>
+                    <span
+                        use:shimmerThinking={{
+                            disabled:
+                                formatExecutionStatus(
+                                    resolvedAgentExecution,
+                                ).toLowerCase() === "idle",
+                            speed: 2.5,
+                        }}
+                    >
+                        {formatExecutionStatus(resolvedAgentExecution)}
+                    </span>
+                </Badge>
+            {/if}
         </div>
     {/if}
 
     {#if openArtifacts.length > 0}
         <ResizablePaneGroup
             direction="horizontal"
-            autoSaveId={`agent-chat:${agentExecution?.agentExecutionId ?? "pending"}`}
+            autoSaveId={`agent-chat:${resolvedAgentExecution?.agentExecutionId ?? "pending"}`}
             class="min-h-0 flex-1 overflow-hidden"
         >
             <ResizablePane

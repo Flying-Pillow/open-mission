@@ -6,7 +6,7 @@
     } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
     import type { MissionCatalogEntryType } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
     import Icon from "@iconify/svelte";
-    import { getScopedRepositoryContext } from "$lib/client/context/scoped-repository-context.svelte.js";
+    import { app } from "$lib/client/Application.svelte.js";
     import BriefForm from "$lib/components/entities/Brief/BriefForm.svelte";
     import { Badge } from "$lib/components/ui/badge/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
@@ -30,13 +30,10 @@
         issueLoadingNumber?: number | null;
     } = $props();
 
-    const repositoryScope = getScopedRepositoryContext();
-    const activeRepository = $derived.by(() => {
-        const repository = repositoryScope.repository;
+    const repository = $derived.by(() => {
+        const repository = app.repository;
         if (!repository) {
-            throw new Error(
-                "Repository work list requires a scoped repository context.",
-            );
+            throw new Error("Repository work list requires app.repository.");
         }
 
         return repository;
@@ -45,9 +42,9 @@
     let remoteStartFromIssueError = $state<string | null>(null);
     let createMissionOpen = $state(false);
 
-    const missions = $derived(activeRepository.missions ?? []);
-    const missionStatuses = $derived(activeRepository.missionStatuses);
-    const repositoryIssuesQuery = $derived(activeRepository.listIssuesQuery());
+    const missions = $derived(repository.missions ?? []);
+    const missionStatuses = $derived(repository.missionStatuses);
+    const repositoryIssuesQuery = $derived(repository.listIssuesQuery());
     const repositoryIssues = $derived(
         (repositoryIssuesQuery.current as
             | TrackedIssueSummaryType[]
@@ -226,7 +223,7 @@
         issueError = null;
 
         try {
-            selectedIssue = await activeRepository.getIssue(issueNumber);
+            selectedIssue = await repository.getIssue(issueNumber);
             issuePreviewOpen = true;
         } catch (error) {
             issueError = error instanceof Error ? error.message : String(error);
@@ -242,15 +239,13 @@
         remoteStartFromIssueError = null;
 
         try {
-            if (!activeRepository.data.isInitialized) {
+            if (!repository.data.isInitialized) {
                 throw new Error(
                     "Complete Repository initialization before starting regular missions.",
                 );
             }
 
-            const result = await activeRepository.startMissionFromIssue(
-                issue.number,
-            );
+            const result = await repository.startMissionFromIssue(issue.number);
             await goto(result.redirectTo);
         } catch (error) {
             remoteStartFromIssueError =
@@ -267,7 +262,7 @@
     }
 
     function missionHref(mission: MissionCatalogEntryType): string {
-        return `/airport/${encodeURIComponent(activeRepository.id)}/${encodeURIComponent(mission.missionId)}`;
+        return `/airport/${encodeURIComponent(repository.id)}/${encodeURIComponent(mission.missionId)}`;
     }
 
     function linkedIssue(
@@ -302,18 +297,18 @@
         </div>
     {/if}
 
-    <ScrollArea class="min-h-0 flex-1 bg-foreground/5">
+    <ScrollArea class="min-h-0 flex-1 pt-6">
         <Tooltip.Provider delayDuration={100}>
             <div class="px-1 pb-3">
                 {#if repositoryIssuesLoading}
                     <div
-                        class="rounded-2xl border border-dashed border-border/70 bg-background/35 px-4 py-6 text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]"
+                        class="rborder border-dashed border-border/70 bg-background/35 px-4 py-6 text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]"
                     >
                         Loading repository work items...
                     </div>
                 {:else if repositoryIssueLoadError}
                     <div
-                        class="rounded-2xl border border-dashed border-rose-300/60 bg-rose-50/60 px-4 py-6 text-sm text-rose-600 dark:border-rose-400/40 dark:bg-rose-950/20 dark:text-rose-300"
+                        class="border border-dashed border-rose-300/60 bg-rose-50/60 px-4 py-6 text-sm text-rose-600 dark:border-rose-400/40 dark:bg-rose-950/20 dark:text-rose-300"
                     >
                         {repositoryIssueLoadError}
                     </div>
@@ -338,7 +333,7 @@
                                             >
                                                 <Icon
                                                     icon="lucide:plus"
-                                                    class="size-8"
+                                                    class="size-10"
                                                 />
                                             </span>
                                             <span
@@ -673,7 +668,7 @@
                                                         )}
                                                     disabled={issueLoadingNumber ===
                                                         issue.number ||
-                                                        !activeRepository.data
+                                                        !repository.data
                                                             .isInitialized}
                                                     aria-label={`Start mission from issue ${issue.number}`}
                                                 >

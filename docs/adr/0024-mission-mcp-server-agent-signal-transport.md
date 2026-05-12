@@ -12,7 +12,7 @@ supersedes: []
 superseded_by: []
 ---
 
-Mission exposes a daemon-owned MCP server named `mission-mcp` as the preferred structured transport for Agent-declared signals from running Agent executions.
+Mission exposes a daemon-owned MCP server named `mission-mcp` as the preferred structured transport for Agent signals from running Agent executions.
 
 The MCP server starts and stops with the daemon. It is connected directly to daemon runtime services and does not own Mission, Task, Repository, Artifact, AgentExecution, workflow, or state-store behavior. Its role is to accept MCP tool calls from an Agent runtime, validate them against the Agent execution protocol descriptor, and route accepted calls into the same Agent execution observation path used by prompt-scoped stdout markers.
 
@@ -22,7 +22,7 @@ This keeps the architecture provider-neutral while making terminal and interacti
 
 ADR 0017 established prompt-scoped stdout markers as the mandatory baseline for Agent execution signaling. That baseline works for print-mode runtimes because the daemon can prepend strict signal instructions and parse the resulting stdout stream. It does not give terminal or interactive runtimes an equally reliable structured channel because terminal output is mixed with UI text, provider rendering, prompts, commands, and user interaction.
 
-ADR 0022 defines Agent execution structured interaction as an owner-Entity-addressed conversation. The source of truth is the Agent execution protocol descriptor, which includes Agent-declared signal descriptors and Agent execution message descriptors. Agent-declared signals are observations until daemon-owned policy and the owning Entity path accept their effects.
+ADR 0022 defines Agent execution structured interaction as an owner-Entity-addressed conversation. The source of truth is the Agent execution protocol descriptor, which includes Agent signal descriptors and Agent execution message descriptors. Agent signals are observations until daemon-owned policy and the owning Entity path accept their effects.
 
 MCP gives capable Agent runtimes a standard way to discover and call tools without relying on terminal text conventions. Mission should use that standard as a transport, not as a new domain model.
 
@@ -30,7 +30,7 @@ MCP gives capable Agent runtimes a standard way to discover and call tools witho
 
 The daemon owns one local Mission MCP server named `mission-mcp`. The server lifecycle is daemon lifecycle: it is started as part of daemon startup, stopped during daemon shutdown, and treated as unavailable when the daemon is unavailable.
 
-`mission-mcp` exposes Agent-declared signal payloads as MCP tools for each registered Agent execution. The exposed tool set is dynamic and session-scoped: it is derived from the Agent execution protocol descriptor, the selected Agent adapter, the launch capabilities, and the owning Entity scope. There is no single global Mission MCP tool contract that every Agent execution must receive.
+`mission-mcp` exposes Agent signal payloads as MCP tools for each registered Agent execution. The exposed tool set is dynamic and session-scoped: it is derived from the Agent execution protocol descriptor, the selected Agent adapter, the launch capabilities, and the owning Entity scope. There is no single global Mission MCP tool contract that every Agent execution must receive.
 
 The baseline tool presentation may correspond one-to-one with the baseline signal types:
 
@@ -42,7 +42,7 @@ The baseline tool presentation may correspond one-to-one with the baseline signa
 - `failed_claim`
 - `message`
 
-The MCP tool payload schemas are generated from or directly backed by the canonical Agent-declared signal schemas. The implementation must not copy payload shapes, validation limits, policy rules, outcome mapping, or owner-routing logic into MCP-specific code. If later owner-specific signals or signal variants make one-tool-per-signal too broad, `mission-mcp` may expose a smaller generic tool shape such as `emit_signal` that accepts a descriptor-backed signal type and payload. That would be a transport presentation change, not a new domain path.
+The MCP tool payload schemas are generated from or directly backed by the canonical Agent signal schemas. The implementation must not copy payload shapes, validation limits, policy rules, outcome mapping, or owner-routing logic into MCP-specific code. If later owner-specific signals or signal variants make one-tool-per-signal too broad, `mission-mcp` may expose a smaller generic tool shape such as `emit_signal` that accepts a descriptor-backed signal type and payload. That would be a transport presentation change, not a new domain path.
 
 An MCP tool call produces the same daemon-side observation and the same accepted Entity event path as the corresponding stdout marker signal. The transport may differ, but the domain route is still:
 

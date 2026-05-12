@@ -5,22 +5,29 @@
 		createAppContext,
 		setAppContext,
 	} from "$lib/client/context/app-context.svelte";
+	import { app } from "$lib/client/Application.svelte.js";
 	import type { LayoutData } from "./$types";
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
-	const appContext = createAppContext(() => data.appContext);
+	const appContext = createAppContext(() => ({
+		...data.appContext,
+		systemState: data.systemState,
+	}));
 	setAppContext(appContext);
 
 	onMount(() => {
 		void (async () => {
-			await appContext.application.initialize();
-			await appContext.loadAirportRepositories();
+			await app.initialize();
+			await app.loadAirportRepositories();
 		})().catch(() => undefined);
 	});
 
 	$effect(() => {
-		appContext.syncServerContext(data.appContext);
+		appContext.syncServerContext({
+			...data.appContext,
+			systemState: data.systemState,
+		});
 	});
 </script>
 

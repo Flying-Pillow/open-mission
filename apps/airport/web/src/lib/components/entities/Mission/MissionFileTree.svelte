@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
+    import { app } from "$lib/client/Application.svelte.js";
     import MissionFileTreeNodes from "$lib/components/entities/Mission/MissionFileTreeNodes.svelte";
     import * as TreeView from "$lib/components/ui/tree-view/index.js";
     import { cn } from "$lib/utils.js";
@@ -19,16 +19,13 @@
         class?: string;
         onSelectPath?: (node: MissionFileTreeNode) => void;
     } = $props();
-    const missionScope = getScopedMissionContext();
-
     let branchOverrides = $state<Record<string, boolean>>({});
     let tree = $state<MissionFileTreeNode[]>([]);
     let error = $state<string | null>(null);
     let loading = $state(true);
     let requestVersion = 0;
-    const mission = $derived(missionScope.mission);
-    const missionId = $derived(mission?.missionId ?? "");
-    const repositoryRootPath = $derived(mission?.missionWorktreePath ?? "");
+    const missionId = $derived(app.mission?.missionId ?? "");
+    const repositoryRootPath = $derived(app.mission?.missionWorktreePath ?? "");
 
     $effect(() => {
         const normalizedMissionId = missionId?.trim();
@@ -48,14 +45,14 @@
 
         void (async () => {
             try {
-                if (!mission) {
-                    throw new Error(
-                        "Mission worktree is unavailable until the app context is synchronized.",
-                    );
+                if (!app.mission) {
+                    throw new Error("Mission worktree is unavailable.");
                 }
 
                 const payload: MissionFileTreeResponse =
-                    await mission.getWorktree({ executionContext: "render" });
+                    await app.mission.getWorktree({
+                        executionContext: "render",
+                    });
                 if (currentVersion !== requestVersion) {
                     return;
                 }

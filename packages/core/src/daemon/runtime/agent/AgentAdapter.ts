@@ -23,6 +23,7 @@ export type AgentAdapterTransportCapabilities = {
 export type AgentExecutionMcpAccess = {
     serverName: 'mission-mcp';
     agentExecutionId: string;
+    ownerId: string;
     token: string;
     tools: Array<{ name: string }>;
 };

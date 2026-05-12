@@ -1,17 +1,13 @@
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import { TerminalRegistry, type TerminalHandle, type TerminalSnapshot } from '../entities/Terminal/TerminalRegistry.js';
-import { MissionAgentEventEmitter } from './runtime/agent/events.js';
+import { AgentRuntimeEventEmitter } from './runtime/agent/events.js';
 import type { MissionSelector } from '../entities/Mission/MissionSchema.js';
 import { MissionDossierFilesystem } from '../entities/Mission/MissionDossierFilesystem.js';
-import type { MissionTerminalSnapshotType } from '../entities/Mission/MissionSchema.js';
-
-type MissionTerminalInput = {
-    data?: string;
-    literal?: boolean;
-    cols?: number;
-    rows?: number;
-};
+import type {
+    MissionTerminalInputType,
+    MissionTerminalSnapshotType
+} from '../entities/Terminal/MissionTerminalSchema.js';
 
 type MissionTerminalRecord = {
     key: string;
@@ -30,7 +26,7 @@ export type MissionTerminalUpdate = {
 
 const missionTerminalRegistry = TerminalRegistry.shared();
 const missionTerminals = new Map<string, MissionTerminalRecord>();
-const missionTerminalEventEmitter = new MissionAgentEventEmitter<MissionTerminalUpdate>();
+const missionTerminalEventEmitter = new AgentRuntimeEventEmitter<MissionTerminalUpdate>();
 const missionContextCache = new Map<string, { context: { key: string; surfacePath: string; missionId: string; missionTerminalId: string; workingDirectory: string } | undefined; timestamp: number }>();
 const CONTEXT_CACHE_TTL_MS = 60_000;
 
@@ -76,7 +72,7 @@ export async function ensureMissionTerminalState(input: {
 export async function sendMissionTerminalInput(input: {
     surfacePath: string;
     selector?: MissionSelector;
-    terminalInput: MissionTerminalInput;
+    terminalInput: MissionTerminalInputType;
 }): Promise<MissionTerminalSnapshotType | null> {
     const resolved = await readExistingMissionTerminalRecord(input);
     if (!resolved) {

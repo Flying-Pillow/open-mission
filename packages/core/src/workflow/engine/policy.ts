@@ -1,12 +1,12 @@
 import type {
-    MissionTaskPendingLaunchContext,
+    WorkflowTaskPendingLaunchContext,
     AgentExecutionLifecycleState,
     MissionStageId,
-    MissionTaskLifecycleState,
-    MissionTaskRuntimeState,
-    MissionWorkflowConfigurationSnapshot,
-    MissionWorkflowRequest,
-    MissionWorkflowRuntimeState
+    WorkflowTaskLifecycleState,
+    WorkflowTaskRuntimeState,
+    WorkflowConfigurationSnapshot,
+    WorkflowRequest,
+    WorkflowRuntimeState
 } from './types.js';
 import { DEFAULT_TASK_MAX_REWORK_ITERATIONS } from './types.js';
 
@@ -14,19 +14,19 @@ export function isActiveAgentExecutionLifecycle(lifecycle: AgentExecutionLifecyc
     return lifecycle === 'starting' || lifecycle === 'running';
 }
 
-export function isTerminalTaskLifecycle(lifecycle: MissionTaskLifecycleState): boolean {
+export function isTerminalTaskLifecycle(lifecycle: WorkflowTaskLifecycleState): boolean {
     return lifecycle === 'completed' || lifecycle === 'failed' || lifecycle === 'cancelled';
 }
 
-export function isReopenableTaskLifecycle(lifecycle: MissionTaskLifecycleState): boolean {
+export function isReopenableTaskLifecycle(lifecycle: WorkflowTaskLifecycleState): boolean {
     return lifecycle === 'completed' || lifecycle === 'failed' || lifecycle === 'cancelled';
 }
 
-export function resolveTaskMaxReworkIterations(task: MissionTaskRuntimeState): number {
+export function resolveTaskMaxReworkIterations(task: WorkflowTaskRuntimeState): number {
     return task.runtime.maxReworkIterations ?? DEFAULT_TASK_MAX_REWORK_ITERATIONS;
 }
 
-export function buildReworkPendingLaunchContext(task: MissionTaskRuntimeState): MissionTaskPendingLaunchContext | undefined {
+export function buildReworkPendingLaunchContext(task: WorkflowTaskRuntimeState): WorkflowTaskPendingLaunchContext | undefined {
     if (!task.reworkRequest) {
         return undefined;
     }
@@ -44,8 +44,8 @@ export function buildReworkPendingLaunchContext(task: MissionTaskRuntimeState): 
 }
 
 export function resolveEligibleStageId(
-    runtime: MissionWorkflowRuntimeState,
-    configuration: MissionWorkflowConfigurationSnapshot
+    runtime: WorkflowRuntimeState,
+    configuration: WorkflowConfigurationSnapshot
 ): MissionStageId | undefined {
     for (const stageId of configuration.workflow.stageOrder) {
         if (!isStageCompletedFromTasks(runtime.tasks, stageId, configuration)) {
@@ -56,9 +56,9 @@ export function resolveEligibleStageId(
 }
 
 export function isStageCompletedFromTasks(
-    tasks: MissionTaskRuntimeState[],
+    tasks: WorkflowTaskRuntimeState[],
     stageId: MissionStageId,
-    configuration: MissionWorkflowConfigurationSnapshot
+    configuration: WorkflowConfigurationSnapshot
 ): boolean {
     const stageTasks = tasks.filter((task) => task.stageId === stageId);
     return (
@@ -68,18 +68,18 @@ export function isStageCompletedFromTasks(
 }
 
 export function isStageCompleted(
-    runtime: MissionWorkflowRuntimeState,
+    runtime: WorkflowRuntimeState,
     stageId: MissionStageId,
-    configuration: MissionWorkflowConfigurationSnapshot
+    configuration: WorkflowConfigurationSnapshot
 ): boolean {
     return isStageCompletedFromTasks(runtime.tasks, stageId, configuration);
 }
 
 export function isImplicitlyCompletedEmptyFinalStageFromTasks(
-    tasks: MissionTaskRuntimeState[],
+    tasks: WorkflowTaskRuntimeState[],
     stageId: MissionStageId,
-    stageTasks: MissionTaskRuntimeState[],
-    configuration: MissionWorkflowConfigurationSnapshot
+    stageTasks: WorkflowTaskRuntimeState[],
+    configuration: WorkflowConfigurationSnapshot
 ): boolean {
     if (stageTasks.length > 0) {
         return false;
@@ -110,17 +110,17 @@ export function isImplicitlyCompletedEmptyFinalStageFromTasks(
 }
 
 export function isImplicitlyCompletedEmptyFinalStage(
-    runtime: MissionWorkflowRuntimeState,
+    runtime: WorkflowRuntimeState,
     stageId: MissionStageId,
-    stageTasks: MissionTaskRuntimeState[],
-    configuration: MissionWorkflowConfigurationSnapshot
+    stageTasks: WorkflowTaskRuntimeState[],
+    configuration: WorkflowConfigurationSnapshot
 ): boolean {
     return isImplicitlyCompletedEmptyFinalStageFromTasks(runtime.tasks, stageId, stageTasks, configuration);
 }
 
 export function resolvePendingTaskGenerationStageId(
-    runtime: MissionWorkflowRuntimeState,
-    configuration: MissionWorkflowConfigurationSnapshot
+    runtime: WorkflowRuntimeState,
+    configuration: WorkflowConfigurationSnapshot
 ): MissionStageId | undefined {
     const eligibleStageId = resolveEligibleStageId(runtime, configuration);
     if (!eligibleStageId) {
@@ -144,10 +144,10 @@ export function resolvePendingTaskGenerationStageId(
 }
 
 export function buildWorkflowTaskGenerationRequests(
-    runtime: MissionWorkflowRuntimeState,
-    configuration: MissionWorkflowConfigurationSnapshot,
+    runtime: WorkflowRuntimeState,
+    configuration: WorkflowConfigurationSnapshot,
     issuedAt: string
-): MissionWorkflowRequest[] {
+): WorkflowRequest[] {
     const stageId = resolvePendingTaskGenerationStageId(runtime, configuration);
     if (!stageId) {
         return [];
@@ -160,11 +160,11 @@ export function buildWorkflowTaskGenerationRequests(
     }];
 }
 
-export function countOccupiedTaskExecutionSlots(runtime: MissionWorkflowRuntimeState): number {
+export function countOccupiedTaskExecutionSlots(runtime: WorkflowRuntimeState): number {
     return runtime.tasks.filter((task) => task.lifecycle === 'queued' || task.lifecycle === 'running').length;
 }
 
-export function countOccupiedAgentExecutionSlots(runtime: MissionWorkflowRuntimeState): number {
+export function countOccupiedAgentExecutionSlots(runtime: WorkflowRuntimeState): number {
     const activeAgentExecutions = runtime.agentExecutions.filter((execution) => isActiveAgentExecutionLifecycle(execution.lifecycle)).length;
     const dispatchedLaunches = runtime.launchQueue.filter((request) =>
         Boolean(request.dispatchedAt) &&
@@ -176,21 +176,21 @@ export function countOccupiedAgentExecutionSlots(runtime: MissionWorkflowRuntime
 }
 
 export function hasAvailableTaskExecutionSlot(
-    runtime: MissionWorkflowRuntimeState,
-    configuration: MissionWorkflowConfigurationSnapshot
+    runtime: WorkflowRuntimeState,
+    configuration: WorkflowConfigurationSnapshot
 ): boolean {
     return countOccupiedTaskExecutionSlots(runtime) < configuration.workflow.execution.maxParallelTasks;
 }
 
 export function hasAvailableAgentExecutionSlot(
-    runtime: MissionWorkflowRuntimeState,
-    configuration: MissionWorkflowConfigurationSnapshot
+    runtime: WorkflowRuntimeState,
+    configuration: WorkflowConfigurationSnapshot
 ): boolean {
     return countOccupiedAgentExecutionSlots(runtime) < configuration.workflow.execution.maxParallelAgentExecutions;
 }
 
 export function resolveDependentTaskIds(
-    tasks: MissionTaskRuntimeState[],
+    tasks: WorkflowTaskRuntimeState[],
     taskId: string
 ): Set<string> {
     const dependentsByTaskId = new Map<string, string[]>();
@@ -223,7 +223,7 @@ export function resolveDependentTaskIds(
 }
 
 export function hasActiveDependentActivity(
-    runtime: MissionWorkflowRuntimeState,
+    runtime: WorkflowRuntimeState,
     taskId: string
 ): boolean {
     const dependentTaskIds = resolveDependentTaskIds(runtime.tasks, taskId);
@@ -244,8 +244,8 @@ export function hasActiveDependentActivity(
 }
 
 export function isMissionCompleted(
-    runtime: MissionWorkflowRuntimeState,
-    configuration: MissionWorkflowConfigurationSnapshot
+    runtime: WorkflowRuntimeState,
+    configuration: WorkflowConfigurationSnapshot
 ): boolean {
     return configuration.workflow.stageOrder.every((stageId) => isStageCompletedFromTasks(runtime.tasks, stageId, configuration)) &&
         !runtime.tasks.some((task) => task.lifecycle === 'queued' || task.lifecycle === 'running') &&

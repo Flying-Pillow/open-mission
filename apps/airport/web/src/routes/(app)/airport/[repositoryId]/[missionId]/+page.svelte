@@ -1,10 +1,8 @@
 <script lang="ts">
     import { afterNavigate } from "$app/navigation";
     import { page } from "$app/state";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { app } from "$lib/client/Application.svelte.js";
     import Mission from "$lib/components/entities/Mission/Mission.svelte";
-
-    const appContext = getAppContext();
 
     afterNavigate(() => {
         const repositoryId = page.params.repositoryId?.trim();
@@ -13,7 +11,7 @@
             return;
         }
 
-        void appContext.loadMissionPage({ repositoryId, missionId });
+        void app.loadMissionPage({ repositoryId, missionId });
     });
 </script>
 

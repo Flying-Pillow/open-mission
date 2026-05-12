@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { MissionDossierFilesystem } from './MissionDossierFilesystem.js';
 import { Repository } from '../Repository/Repository.js';
 import { createDefaultWorkflowSettings, DEFAULT_WORKFLOW_VERSION } from '../../workflow/mission/workflow.js';
-import { createMissionStateData, createMissionWorkflowConfigurationSnapshot } from '../../workflow/engine/document.js';
+import { createWorkflowStateData, createWorkflowConfigurationSnapshot } from '../../workflow/engine/document.js';
 import { Mission } from './Mission.js';
 
 describe('MissionDossierFilesystem', () => {
@@ -22,7 +22,7 @@ describe('MissionDossierFilesystem', () => {
 		const missionDir = adapter.getTrackedMissionDir('mission-101', '/tmp/repo');
 
 		expect(missionDir).toBe(path.join('/tmp/repo', '.mission', 'missions', 'mission-101'));
-		expect(adapter.getMissionStateDataPath(missionDir)).toBe(
+		expect(adapter.getWorkflowStateDataPath(missionDir)).toBe(
 			path.join('/tmp/repo', '.mission', 'missions', 'mission-101', 'mission.json')
 		);
 		expect(adapter.getMissionStagePath(missionDir, 'prd')).toBe(
@@ -68,16 +68,16 @@ describe('MissionDossierFilesystem', () => {
 		}
 	});
 
-	it('resolves Mission-backed Agent journal paths separately from terminal recordings', () => {
+	it('resolves AgentExecution journal paths separately from terminal recordings', () => {
 		const adapter = new MissionDossierFilesystem('/tmp/repo');
 		const missionDir = path.join('/tmp/repo', '.mission', 'missions', 'mission-1');
-		const agentJournalPath = adapter.getMissionAgentJournalRelativePath('agent-execution-1');
+		const agentJournalPath = adapter.getAgentExecutionJournalRelativePath('agent-execution-1');
 
 		expect(agentJournalPath).toBe('agent-journals/agent-execution-1.interaction.jsonl');
-		expect(adapter.resolveMissionAgentJournalPath(missionDir, agentJournalPath)).toBe(
+		expect(adapter.resolveAgentExecutionJournalPath(missionDir, agentJournalPath)).toBe(
 			path.join(missionDir, 'agent-journals', 'agent-execution-1.interaction.jsonl')
 		);
-		expect(() => adapter.resolveMissionAgentJournalPath(missionDir, 'terminal-recordings/AgentExecution-1.terminal.jsonl'))
+		expect(() => adapter.resolveAgentExecutionJournalPath(missionDir, 'terminal-recordings/AgentExecution-1.terminal.jsonl'))
 			.toThrow('must use agent-journals/<agentExecutionId>.interaction.jsonl');
 	});
 
@@ -305,7 +305,7 @@ describe('MissionDossierFilesystem', () => {
 				adapter,
 				missionDir,
 				missionId: 'mission-109-runtime-document',
-				configuration: createMissionWorkflowConfigurationSnapshot({
+				configuration: createWorkflowConfigurationSnapshot({
 					workflowVersion: DEFAULT_WORKFLOW_VERSION,
 					workflow: createDefaultWorkflowSettings()
 				}),
@@ -338,18 +338,18 @@ describe('MissionDossierFilesystem', () => {
 		const missionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'filesystem-adapter-'));
 		try {
 			const adapter = new MissionDossierFilesystem('/tmp/repo');
-			const configuration = createMissionWorkflowConfigurationSnapshot({
+			const configuration = createWorkflowConfigurationSnapshot({
 				createdAt: '2026-04-01T00:00:00.000Z',
 				workflowVersion: DEFAULT_WORKFLOW_VERSION,
 				workflow: createDefaultWorkflowSettings()
 			});
-			const data = createMissionStateData({
+			const data = createWorkflowStateData({
 				missionId: 'mission-inline-event-log',
 				configuration,
 				createdAt: configuration.createdAt
 			});
 			await fs.writeFile(
-				adapter.getMissionStateDataPath(missionDir),
+				adapter.getWorkflowStateDataPath(missionDir),
 				`${JSON.stringify({
 					...data,
 					eventLog: [{

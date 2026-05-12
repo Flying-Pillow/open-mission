@@ -1,7 +1,7 @@
 import {
 	MAX_AGENT_EXECUTION_MESSAGE_LENGTH,
 	MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH,
-	MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH,
+	MAX_AGENT_SIGNAL_MARKER_LENGTH,
 	MAX_AGENT_EXECUTION_SUGGESTED_RESPONSES,
 	MAX_AGENT_EXECUTION_USAGE_ENTRIES,
 	type AgentExecutionDiagnosticCode,
@@ -14,6 +14,10 @@ import {
 	type AgentExecutionSignalDecision,
 	type AgentExecutionSnapshot
 } from './AgentExecutionProtocolTypes.js';
+import {
+	deriveAttentionFromStatusSignalPhase,
+	deriveLifecycleStateFromStatusSignalPhase
+} from './AgentExecutionRuntimeSemantics.js';
 import { projectAgentExecutionObservationSignalToTimelineItem } from './AgentExecutionSignalRegistry.js';
 
 export class AgentExecutionObservationLedger {
@@ -77,7 +81,7 @@ export class AgentExecutionObservationPolicy {
 			return 'Observation route address did not match the active Agent execution.';
 		}
 		if (observation.claimedAddress && !sameObservationAddress(observation.claimedAddress, activeAddress)) {
-			return 'Agent-declared signal address did not match the active Agent execution.';
+			return 'Agent signal address did not match the active Agent execution.';
 		}
 		const sourceBoundaryError = validateObservationSourceBoundary(observation);
 		if (sourceBoundaryError) {
@@ -162,8 +166,11 @@ export class AgentExecutionObservationPolicy {
 					action: 'update-execution',
 					eventType: 'execution.updated',
 					snapshotPatch: {
-						status: signal.phase === 'initializing' ? 'starting' : 'running',
-						attention: signal.phase === 'idle' || preservesInputRequest ? 'awaiting-operator' : 'autonomous',
+						status: deriveLifecycleStateFromStatusSignalPhase(signal.phase),
+						attention: deriveAttentionFromStatusSignalPhase({
+							phase: signal.phase,
+							preservesInputRequest
+						}),
 						progress: {
 							state: signal.phase,
 							summary: signal.summary ?? defaultStatusSummary(signal.phase),
@@ -397,7 +404,7 @@ function validateObservationSourceBoundary(observation: AgentExecutionObservatio
 	const expectedSourceByOrigin = {
 		daemon: 'daemon-authoritative',
 		'provider-output': 'provider-structured',
-		'agent-declared-signal': 'agent-declared',
+		'agent-signal': 'agent-signal',
 		'terminal-output': 'terminal-heuristic'
 	} as const;
 	const expectedSource = expectedSourceByOrigin[observation.route.origin];
@@ -425,7 +432,7 @@ function validateObservationTypeBoundary(observation: AgentExecutionObservation)
 			'diagnostic'
 		],
 		'provider-output': ['message', 'usage', 'diagnostic'],
-		'agent-declared-signal': [
+		'agent-signal': [
 			'progress',
 			'status',
 			'needs_input',
@@ -451,7 +458,7 @@ function validateObservationTypeBoundary(observation: AgentExecutionObservation)
 	> = {
 		daemon: undefined,
 		'provider-output': ['provider-execution', 'tool-call'],
-		'agent-declared-signal': ['agent-declared-signal-malformed', 'agent-declared-signal-oversized'],
+		'agent-signal': ['agent-signal-malformed', 'agent-signal-oversized'],
 		'terminal-output': ['terminal-heuristic']
 	};
 	const allowedCodes = allowedDiagnosticCodesByOrigin[observation.route.origin];
@@ -463,23 +470,23 @@ function validateObservationTypeBoundary(observation: AgentExecutionObservation)
 
 function validateClaimBoundary(observation: AgentExecutionObservation): string | undefined {
 	if (
-		observation.route.origin === 'agent-declared-signal'
+		observation.route.origin === 'agent-signal'
 		&& observation.signal.type !== 'diagnostic'
 		&& !observation.claimedAddress
 	) {
-		return 'Agent-declared signal observations must carry a claimed Agent execution address.';
+		return 'Agent signal observations must carry a claimed Agent execution address.';
 	}
 	return undefined;
 }
 
 function validateObservationPayloadBoundary(observation: AgentExecutionObservation): string | undefined {
 	if (
-		observation.route.origin === 'agent-declared-signal'
+		observation.route.origin === 'agent-signal'
 		&& observation.signal.type !== 'diagnostic'
 		&& observation.rawText
-		&& observation.rawText.trimEnd().length > MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH
+		&& observation.rawText.trimEnd().length > MAX_AGENT_SIGNAL_MARKER_LENGTH
 	) {
-		return 'Agent-declared signal marker exceeded the maximum length.';
+		return 'Agent signal marker exceeded the maximum length.';
 	}
 	return undefined;
 }
@@ -526,10 +533,10 @@ function validateObservationConfidenceBoundary(observation: AgentExecutionObserv
 			return "Observation origin 'provider-output' requires signal confidence 'high'.";
 		}
 	}
-	if (observation.route.origin === 'agent-declared-signal') {
+	if (observation.route.origin === 'agent-signal') {
 		const expectedConfidence = observation.signal.type === 'diagnostic' ? 'diagnostic' : 'medium';
 		if (observation.signal.confidence !== expectedConfidence) {
-			return `Observation origin 'agent-declared-signal' requires signal confidence '${expectedConfidence}'.`;
+			return `Observation origin 'agent-signal' requires signal confidence '${expectedConfidence}'.`;
 		}
 	}
 	if (observation.route.origin === 'terminal-output') {

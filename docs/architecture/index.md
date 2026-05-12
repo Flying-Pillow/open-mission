@@ -22,3 +22,5 @@ Temporary working specs are allowed while a refactor is in flight. For Agent exe
 For the current journal-ledger refactor, use [Agent Execution Journal Ledger Spec](agent-execution-journal-ledger-spec.md) as the temporary implementation reference for the typed journal family split and replay contract tightening.
 
 For the next AgentExecution persistence step, read [Agent Execution Interaction Journal PRD](agent-execution-interaction-journal-prd.md) and [Agent Execution Interaction Journal Spec](agent-execution-interaction-journal-spec.md). These documents define the canonical semantic interaction journal that separates AgentExecution replay truth from terminal recordings and Mission workflow events.
+
+For the Mission-native code intelligence slice, read [Repository Code Intelligence PRD](repository-code-intelligence-prd.md) and [Repository Code Intelligence Spec](repository-code-intelligence-spec.md). These temporary documents define the GitNexus-inspired, SurrealDB-backed code graph and the `mission-mcp` semantic operations that expose it to scoped Agent executions.

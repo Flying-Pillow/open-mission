@@ -17,7 +17,7 @@ It is temporary on purpose. It exists so implementation can proceed from one str
 - `CONTEXT.md`: canonical Mission language, especially Agent execution, Agent adapter, Mission MCP server, Entity, and Terminal terms.
 - ADR-0012: Entity classes own behavior.
 - ADR-0015: Entity commands are the canonical operator mutation surface.
-- ADR-0017: stdout markers are the baseline Agent-declared signal transport.
+- ADR-0017: stdout markers are the baseline Agent signal transport.
 - ADR-0018: Agent execution and Agent adapter vocabulary.
 - ADR-0022: Agent execution structured interaction vocabulary.
 - ADR-0024: `mission-mcp` is the daemon-owned MCP signal transport.
@@ -32,7 +32,7 @@ Forbidden:
 - Obsolete server-name aliases, redirects, compatibility config entries, or environment variables.
 - Compatibility exports from old module names.
 - A second MCP server name for the same daemon service.
-- Duplicated MCP-local copies of Agent-declared signal schemas.
+- Duplicated MCP-local copies of Agent signal schemas.
 - Direct workflow mutation from MCP tool handlers.
 - Hidden fallback from failed MCP provisioning to stdout markers.
 - Runtime branches that pretend a session has MCP when provisioning failed.
@@ -56,7 +56,7 @@ daemon startup
 AgentExecutor.startExecution
   -> create AgentExecution id
   -> inspect AgentAdapter transport capabilities
-  -> choose selected Agent-declared signal delivery from Mission policy and launch mode
+  -> choose selected Agent signal delivery from Mission policy and launch mode
   -> create protocol descriptor with selected signal deliveries
   -> register MCP access when the selected delivery is mcp-tool
   -> ask AgentAdapter to materialize provider-specific MCP client config
@@ -65,7 +65,7 @@ AgentExecutor.startExecution
 
 Agent runtime MCP tool call
   -> mission-mcp tool ingress
-  -> canonical Agent-declared signal schema validation
+  -> canonical Agent signal schema validation
   -> AgentExecutionRegistry route by Agent execution id
   -> AgentExecutor transport-neutral observation entry point
   -> AgentExecution observation idempotency and policy
@@ -81,8 +81,8 @@ Agent runtime MCP tool call
 
 AgentExecution owns the canonical protocol data and signal semantics:
 
-- Agent-declared signal payload schemas.
-- Agent-declared signal descriptor schemas.
+- Agent signal payload schemas.
+- Agent signal descriptor schemas.
 - Agent execution protocol descriptor schema.
 - Signal delivery vocabulary.
 - Observation identity and idempotency rules.
@@ -116,7 +116,7 @@ AgentExecution also owns the observation idempotency invariant. Implement this a
 Ledger rules:
 
 - The idempotency scope is one AgentExecution id.
-- Agent-declared signals require an Agent-supplied `eventId`.
+- Agent signals require an Agent-supplied `eventId`.
 - The same event id may create at most one accepted normalized observation for that AgentExecution.
 - Duplicate event ids must not re-run policy effects, Entity event publication, workflow effects, or AgentExecution state transitions.
 - Duplicate acknowledgement reports replay handling.
@@ -155,7 +155,7 @@ It does not own:
 
 - `MissionMcpSessionRegistry`: stores registered MCP access records for active Agent executions.
 - `MissionMcpToolCatalog`: materializes MCP tool descriptors from AgentExecution protocol descriptors.
-- `MissionMcpToolCall`: validates one inbound call and normalizes it to an Agent-declared signal input.
+- `MissionMcpToolCall`: validates one inbound call and normalizes it to an Agent signal input.
 
 Do not create generic `mcpUtils`, `signalHelpers`, or cross-package helper modules. If a behavior belongs to AgentExecution schema, put it in the AgentExecution boundary. If it belongs to adapter config translation, put it in the AgentAdapter boundary. If it belongs to daemon startup, keep it in daemon composition.
 
@@ -186,7 +186,7 @@ AgentExecutor remains the daemon-owned lifecycle coordinator for one started Age
 New responsibilities:
 
 - Ask the selected AgentAdapter for transport capabilities before launch.
-- Choose the selected Agent-declared signal delivery from adapter capability, Mission policy, launch mode, and runtime constraints.
+- Choose the selected Agent signal delivery from adapter capability, Mission policy, launch mode, and runtime constraints.
 - Create the AgentExecution protocol descriptor with the selected signal delivery.
 - Register MCP access with `MissionMcpServer` before provider launch when the selected delivery is `mcp-tool`.
 - Pass ephemeral MCP access material to the AgentAdapter launch preparation path when MCP is selected.
@@ -354,7 +354,7 @@ Acknowledgements are delivery feedback only. They are not verification success, 
 ### 2. Add AgentExecution Observation Idempotency
 
 - Add an AgentExecution-owned observation ledger.
-- Require Agent-declared signal event ids for both stdout-marker and MCP delivery.
+- Require Agent signal event ids for both stdout-marker and MCP delivery.
 - Make duplicate event ids return duplicate acknowledgements without policy effects.
 - Keep observation history append-only from the domain perspective.
 
@@ -405,7 +405,7 @@ Minimum tests:
 - Protocol descriptor exposes `mission-mcp` metadata only when MCP delivery is present.
 - MissionMcpServer starts and stops with daemon lifecycle.
 - MissionMcpServer registers per-execution access and materializes only descriptor-allowed tools.
-- MCP tool calls validate against canonical Agent-declared signal payload schemas.
+- MCP tool calls validate against canonical Agent signal payload schemas.
 - MCP tool calls route to the same observation policy path as stdout markers.
 - Duplicate event ids do not repeat policy, Entity event, workflow, or AgentExecution state effects.
 - Unknown execution, final execution, wrong token, unsupported tool, invalid payload, and oversized payload calls are rejected.

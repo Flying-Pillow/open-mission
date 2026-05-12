@@ -3,44 +3,24 @@ import { Mission } from './Mission.svelte.js';
 import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/entities/Entity/EntityRemote';
 import { AgentExecutionCommandIds, type AgentExecutionCommandAcknowledgementType, type AgentExecutionDataType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import { ArtifactCommandIds, type ArtifactDataType } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
-import { MissionCommandIds, type MissionCommandAcknowledgementType, type MissionSnapshotType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
+import { MissionCommandIds, type MissionCommandAcknowledgementType, type MissionType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { StageDataType, StageCommandAcknowledgementType } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
 import { TaskCommandIds, type TaskDataType, type TaskCommandAcknowledgementType } from '@flying-pillow/mission-core/entities/Task/TaskSchema';
 import type { MissionGatewayDependencies } from './Mission.svelte.js';
 
-describe('Mission control view reconciliation', () => {
+describe('Mission control data reconciliation', () => {
     it('reconciles targeted child entity snapshots without replacing unrelated mirrors', () => {
         const mission = createMission();
         mission.setRouteState({
-            controlViewSnapshot: {
+            controlData: {
                 missionId: 'mission-29',
-                status: {
-                    missionId: 'mission-29',
-                    title: 'Mission 29',
+                mission: createMissionSnapshot({
                     artifacts: [createArtifactData('verify', 'VERIFY.md')],
                     workflow: {
                         lifecycle: 'running',
                         currentStageId: 'implementation',
-                        stages: [createStageSnapshot({
-                            lifecycle: 'running',
-                            tasks: [
-                                createTaskSnapshot('task-1', 'ready'),
-                                createTaskSnapshot('task-2', 'pending')
-                            ]
-                        })]
-                    }
-                },
-                workflow: {
-                    lifecycle: 'running',
-                    currentStageId: 'implementation',
-                    stages: [createStageSnapshot({
-                        lifecycle: 'running',
-                        tasks: [
-                            createTaskSnapshot('task-1', 'ready'),
-                            createTaskSnapshot('task-2', 'pending')
-                        ]
-                    })]
-                },
+                    },
+                }),
                 updatedAt: '2026-04-26T15:00:00.000Z'
             }
         });
@@ -69,24 +49,28 @@ describe('Mission control view reconciliation', () => {
     });
 
     it('exposes Mission entity commands from the aggregate command view', () => {
-        const mission = createMission(
-            {
-                ...createMissionSnapshot(),
-                commandView: {
-                    revision: 'commands-1',
+        const mission = createMission();
+        mission.setRouteState({
+            controlData: {
+                missionId: 'mission-29',
+                mission: createMissionSnapshot({
                     commands: [{
-                        owner: { entity: 'Mission' },
-                        command: { commandId: MissionCommandIds.pause, label: 'Pause Mission', disabled: false }
+                        commandId: MissionCommandIds.pause,
+                        entity: 'Mission',
+                        method: 'pause',
+                        targetId: 'mission:mission-29',
+                        label: 'Pause Mission',
+                        available: true
                     }]
-                }
+                })
             }
-        );
+        });
 
         expect(mission.commands).toEqual([
             {
                 commandId: MissionCommandIds.pause,
                 label: 'Pause Mission',
-                disabled: false
+                available: true
             }
         ]);
     });
@@ -180,7 +164,7 @@ describe('Mission control view reconciliation', () => {
                 entity: 'AgentExecution',
                 method: 'command',
                 payload: {
-                    missionId: 'mission-29',
+                    ownerId: 'mission-29',
                     agentExecutionId: 'session-1',
                     commandId: AgentExecutionCommandIds.sendPrompt,
                     input: {
@@ -193,7 +177,7 @@ describe('Mission control view reconciliation', () => {
                 entity: 'AgentExecution',
                 method: 'command',
                 payload: {
-                    missionId: 'mission-29',
+                    ownerId: 'mission-29',
                     agentExecutionId: 'session-1',
                     commandId: AgentExecutionCommandIds.sendRuntimeMessage,
                     input: {
@@ -207,11 +191,11 @@ describe('Mission control view reconciliation', () => {
 });
 
 function createMission(
-    snapshot: MissionSnapshotType = createMissionSnapshot(),
+    snapshot: MissionType = createMissionSnapshot(),
     gatewayDependencies: MissionGatewayDependencies = createMissionGatewayDependencies([])
 ): Mission {
     return new Mission({
-        snapshot,
+        data: snapshot,
         loadData: async () => createMissionSnapshot(),
         gatewayDependencies
     });
@@ -238,8 +222,16 @@ async function handleCommandInvocation(
         return createStageAcknowledgement();
     }
 
+    if (input.entity === 'Stage' && input.method === 'generateTasks') {
+        return createStageAcknowledgement('generateTasks');
+    }
+
     if (input.entity === 'Task' && input.method === 'command') {
         return createTaskAcknowledgement();
+    }
+
+    if (input.entity === 'Task' && input.method === 'start') {
+        return createTaskAcknowledgement('start');
     }
 
     if (input.entity === 'Artifact' && input.method === 'command') {
@@ -264,6 +256,10 @@ async function handleCommandInvocation(
         return createMissionAcknowledgement('command');
     }
 
+    if (input.entity === 'Mission' && ['pause', 'resume', 'restartQueue', 'deliver'].includes(input.method)) {
+        return createMissionAcknowledgement(input.method as MissionCommandAcknowledgementType['method']);
+    }
+
     if (input.entity === 'Mission' && input.method === 'writeDocument') {
         return {
             filePath: '/repo/root/README.md',
@@ -286,9 +282,10 @@ async function handleQueryInvocation(
         };
     }
 
-    if (input.entity === 'Mission' && input.method === 'readControlView') {
+    if (input.entity === 'Mission' && input.method === 'readControl') {
         return {
-            missionId: 'mission-29'
+            missionId: 'mission-29',
+            mission: createMissionSnapshot()
         };
     }
 
@@ -310,11 +307,11 @@ async function handleQueryInvocation(
     throw new Error(`Unexpected query invocation: ${input.entity}.${input.method}`);
 }
 
-function createStageAcknowledgement(): StageCommandAcknowledgementType {
+function createStageAcknowledgement(method: StageCommandAcknowledgementType['method'] = 'command'): StageCommandAcknowledgementType {
     return {
         ok: true,
         entity: 'Stage',
-        method: 'command',
+        method,
         id: 'stage-1',
         missionId: 'mission-29',
         stageId: 'stage-1',
@@ -322,11 +319,11 @@ function createStageAcknowledgement(): StageCommandAcknowledgementType {
     };
 }
 
-function createTaskAcknowledgement(): TaskCommandAcknowledgementType {
+function createTaskAcknowledgement(method: TaskCommandAcknowledgementType['method'] = 'command'): TaskCommandAcknowledgementType {
     return {
         ok: true,
         entity: 'Task',
-        method: 'command',
+        method,
         id: 'task-1',
         missionId: 'mission-29',
         taskId: 'task-1',
@@ -356,7 +353,7 @@ function createMissionAcknowledgement(method: MissionCommandAcknowledgementType[
     };
 }
 
-function createMissionSnapshot(overrides: Partial<MissionSnapshotType> = {}): MissionSnapshotType {
+function createMissionSnapshot(overrides: Partial<MissionType> = {}): MissionType {
     const stages = [createStageSnapshot({
         lifecycle: 'running',
         tasks: [
@@ -365,37 +362,15 @@ function createMissionSnapshot(overrides: Partial<MissionSnapshotType> = {}): Mi
         ]
     })];
     return {
-        mission: {
-            id: 'mission:mission-29',
-            missionId: 'mission-29',
-            title: 'Mission 29',
-            type: 'task',
-            branchRef: 'mission-29',
-            missionDir: '/tmp/mission-29',
-            missionRootDir: '/tmp/mission-29/.mission/mission-29',
-            artifacts: [createArtifactData('verify', 'VERIFY.md')],
-            stages,
-            agentExecutions: [createAgentExecutionSnapshot('session-1', 'running')]
-        },
-        commandView: {
-            revision: 'commands-1',
-            commands: []
-        },
-        status: {
-            missionId: 'mission-29',
-            title: 'Mission 29',
-            artifacts: [createArtifactData('verify', 'VERIFY.md')],
-            workflow: {
-                lifecycle: 'running',
-                currentStageId: 'implementation',
-                stages
-            }
-        },
-        workflow: {
-            lifecycle: 'running',
-            currentStageId: 'implementation',
-            stages
-        },
+        id: 'mission:mission-29',
+        missionId: 'mission-29',
+        title: 'Mission 29',
+        type: 'task',
+        branchRef: 'mission-29',
+        missionDir: '/tmp/mission-29',
+        missionRootDir: '/tmp/mission-29/.mission/mission-29',
+        lifecycle: 'running',
+        currentStageId: 'implementation',
         stages,
         tasks: stages.flatMap((stage) => stage.tasks),
         artifacts: [createArtifactData('verify', 'VERIFY.md')],

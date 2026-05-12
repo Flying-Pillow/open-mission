@@ -1,57 +1,49 @@
 <script lang="ts">
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { app } from "$lib/client/Application.svelte.js";
     import RepositoryPanel from "$lib/components/entities/Repository/RepositoryPanel.svelte";
     import type { AirportRepositoryListItem } from "$lib/components/entities/types";
 
-    const appContext = getAppContext();
-    const activeRepository = $derived.by(() => {
-        const currentRepository = appContext.airport.activeRepository;
+    const repository = $derived.by(() => {
+        const currentRepository = app.repository;
         if (!currentRepository) {
-            throw new Error(
-                "Repository card requires an active repository in the app context.",
-            );
+            throw new Error("Repository card requires app.repository.");
         }
 
         return currentRepository;
     });
-    const activeRepositoryPanelItem = $derived.by(
-        (): AirportRepositoryListItem => {
-            const listedRepository =
-                appContext.application.repositoryListItems.find(
-                    (repository) => repository.key === activeRepository.id,
-                );
-            if (listedRepository) {
-                return listedRepository;
-            }
+    const repositoryPanelItem = $derived.by((): AirportRepositoryListItem => {
+        const listedRepository = app.repositoryListItems.find(
+            (listedRepository) => listedRepository.key === repository.id,
+        );
+        if (listedRepository) {
+            return listedRepository;
+        }
 
-            const platformRepositoryRef =
-                activeRepository.data.platformRepositoryRef ?? undefined;
-            return {
-                key: activeRepository.id,
-                local: {
-                    ...activeRepository.data,
-                    missions: activeRepository.missions,
-                },
-                displayName:
-                    platformRepositoryRef ?? activeRepository.data.repoName,
-                displayDescription:
-                    platformRepositoryRef ??
-                    activeRepository.data.repositoryRootPath,
-                repositoryRootPath: activeRepository.data.repositoryRootPath,
-                ...(platformRepositoryRef ? { platformRepositoryRef } : {}),
-                missions: activeRepository.missions,
-                isLocal: true,
-            };
-        },
-    );
+        const platformRepositoryRef =
+            repository.data.platformRepositoryRef ?? undefined;
+        return {
+            key: repository.id,
+            local: {
+                ...repository.data,
+                missions: repository.missions,
+            },
+            displayName: platformRepositoryRef ?? repository.data.repoName,
+            displayDescription:
+                platformRepositoryRef ?? repository.data.repositoryRootPath,
+            repositoryRootPath: repository.data.repositoryRootPath,
+            ...(platformRepositoryRef ? { platformRepositoryRef } : {}),
+            missions: repository.missions,
+            isLocal: true,
+        };
+    });
 
     async function refreshRepositories(): Promise<void> {
-        await appContext.application.loadRepositories({ force: true });
+        await app.loadRepositories({ force: true });
     }
 </script>
 
 <RepositoryPanel
-    repository={activeRepositoryPanelItem}
-    localRepository={activeRepository}
+    repository={repositoryPanelItem}
+    localRepository={repository}
     onCommandExecuted={refreshRepositories}
 />

@@ -1,6 +1,6 @@
 <script lang="ts">
-    import type { MissionTerminalSnapshotType } from "@flying-pillow/mission-core/entities/Mission/MissionSchema";
-    import { getScopedMissionContext } from "$lib/client/context/scoped-mission-context.svelte.js";
+    import type { MissionTerminalSnapshotType } from "@flying-pillow/mission-core/entities/Terminal/MissionTerminalSchema";
+    import { app } from "$lib/client/Application.svelte.js";
     import {
         createAirportTerminalRuntime,
         type AirportTerminal,
@@ -10,14 +10,11 @@
         subscribeMissionTerminalTransport,
         type SharedTerminalTransportSubscription,
     } from "$lib/client/runtime/terminal/TerminalTransportBroker";
-    const missionScope = getScopedMissionContext();
-    const mission = $derived(missionScope.mission);
-    const activeRepository = $derived(missionScope.repository);
-    const missionId = $derived(mission?.missionId ?? "");
-    const repositoryId = $derived(activeRepository?.id ?? "");
+    const missionId = $derived(app.mission?.missionId ?? "");
+    const repositoryId = $derived(app.repository?.id ?? "");
     const repositoryRootPath = $derived(
-        mission?.missionWorktreePath ??
-            activeRepository?.data.repositoryRootPath ??
+        app.mission?.missionWorktreePath ??
+            app.repository?.data.repositoryRootPath ??
             "",
     );
 
@@ -314,8 +311,10 @@
             return chunk.slice(-MAX_TERMINAL_SNAPSHOT_LENGTH);
         }
 
-        const overflow = currentScreen.length + chunk.length - MAX_TERMINAL_SNAPSHOT_LENGTH;
-        const preservedScreen = overflow > 0 ? currentScreen.slice(overflow) : currentScreen;
+        const overflow =
+            currentScreen.length + chunk.length - MAX_TERMINAL_SNAPSHOT_LENGTH;
+        const preservedScreen =
+            overflow > 0 ? currentScreen.slice(overflow) : currentScreen;
         return `${preservedScreen}${chunk}`;
     }
 </script>

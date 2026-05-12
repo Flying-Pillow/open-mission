@@ -167,9 +167,11 @@ describe('Copilot', () => {
 			mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
 		};
 		expect(mcpConfig.mcpServers?.['mission-mcp']?.args).toEqual(['mcp', 'connect', '--agent-execution', snapshot.agentExecutionId]);
+		expect(mcpConfig.mcpServers?.['mission-mcp']?.env?.['MISSION_AGENT_EXECUTION_OWNER_ID']).toBeTruthy();
 		expect(mcpConfig.mcpServers?.['mission-mcp']?.env?.['MISSION_MCP_TOKEN']).toBeTruthy();
 		expect(state.spawnedArgs.some((arg) => arg.includes('Structured status markers'))).toBe(false);
-		expect(state.spawnedArgs.some((arg) => arg.includes('Structured status tools'))).toBe(true);
+		expect(state.spawnedArgs.some((arg) => arg.includes('Mission MCP tools are already connected and available.'))).toBe(true);
+		expect(state.spawnedArgs.some((arg) => arg.includes('authoritative operator interaction protocol'))).toBe(true);
 		expect(state.spawnedArgs.some((arg) => arg.includes('Do not ask the operator for AgentExecution ids, event ids, tokens, or transport fields.'))).toBe(true);
 		expect(state.spawnedArgs.some((arg) => arg.includes('@task::'))).toBe(false);
 		expect(state.writes).not.toContain('Implement the task.');
@@ -210,6 +212,7 @@ describe('Copilot', () => {
 			'--agent-execution',
 			snapshot.agentExecutionId
 		]);
+		expect(bridge?.env?.['MISSION_AGENT_EXECUTION_OWNER_ID']).toBeTruthy();
 		expect(bridge?.env?.['MISSION_MCP_TOKEN']).toBeTruthy();
 	});
 

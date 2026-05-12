@@ -8,8 +8,8 @@ import type {
 } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import type {
     AgentExecutionProtocolDescriptorType,
-    AgentExecutionTransportStateType
-} from '../../../entities/AgentExecution/AgentExecutionSchema.js';
+} from '../../../entities/AgentExecution/AgentExecutionProtocolSchema.js';
+import type { AgentExecutionTransportStateType } from '../../../entities/AgentExecution/AgentExecutionRuntimeSchema.js';
 import type { SharedTerminalRegistryOptions } from '../../../entities/Terminal/TerminalRegistry.js';
 
 export type AgentExecutionRuntimeController = {

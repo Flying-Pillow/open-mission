@@ -1,0 +1,42 @@
+{
+  "name": "@flying-pillow/zod-surreal",
+  "version": "0.1.0-alpha.0",
+  "description": "Zod-first SurrealDB schema metadata, model compilation, provisioning, typed query support, and hydration primitives.",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.examples.json",
+    "lint": "vp lint src",
+    "test": "vp test run --config vitest.config.ts"
+  },
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./build/index.d.ts",
+      "default": "./build/index.js"
+    },
+    "./*": {
+      "types": "./build/*.d.ts",
+      "default": "./build/*.js"
+    }
+  },
+  "files": [
+    "build"
+  ],
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@surrealdb/node": "^3.0.3",
+    "@surrealdb/wasm": "^3.0.3",
+    "@types/node": "^25.6.0",
+    "surrealdb": "^2.0.3",
+    "typescript": "^6.0.3",
+    "vite-plus": "^0.1.20",
+    "vitest": "^4.0.18"
+  }
+}

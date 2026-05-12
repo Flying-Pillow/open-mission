@@ -1,9 +1,10 @@
-import type { MissionDescriptor, MissionTaskState } from '../../entities/Mission/MissionSchema.js';
+import type { MissionDescriptor } from '../../entities/Mission/MissionSchema.js';
+import type { TaskDossierRecordType } from '../../entities/Task/TaskSchema.js';
 import type { MissionStageId } from '../manifest.js';
 import {
-	type MissionDefaultAgentModeType,
-	type MissionReasoningEffortType
-} from '../../entities/Mission/MissionSchema.js';
+	type AgentExecutionLaunchModeType,
+	type AgentExecutionReasoningEffortType
+} from '../../entities/AgentExecution/AgentExecutionSchema.js';
 import { AgentIdSchema } from '../../entities/Agent/AgentSchema.js';
 import type { AgentRegistry } from '../../entities/Agent/AgentRegistry.js';
 import { AgentExecutor } from '../../daemon/runtime/agent/AgentExecutor.js';
@@ -19,19 +20,19 @@ import { getMissionArtifactDefinition } from '../mission/manifest.js';
 import { Repository } from '../../entities/Repository/Repository.js';
 import { DEFAULT_REPOSITORY_AGENT_ADAPTER_ID } from '../../entities/Repository/RepositorySchema.js';
 import {
-	type MissionWorkflowConfigurationSnapshot,
-	type MissionGeneratedTaskPayload,
-	type MissionWorkflowEvent,
-	type MissionWorkflowRequest,
-	type MissionWorkflowRuntimeState,
-	type MissionTaskRuntimeState,
+	type WorkflowConfigurationSnapshot,
+	type WorkflowGeneratedTaskPayload,
+	type WorkflowEvent,
+	type WorkflowRequest,
+	type WorkflowRuntimeState,
+	type WorkflowTaskRuntimeState,
 	type AgentExecutionRuntimeState,
-	type MissionStateData
+	type WorkflowStateData
 } from './types.js';
 import {
-	generateMissionWorkflowTasks,
+	generateWorkflowTasks,
 	normalizeGeneratedTaskDependencies,
-	type MissionWorkflowTaskGenerationResult
+	type WorkflowTaskGenerationResult
 } from './generator.js';
 import type { AgentExecution } from '../../entities/AgentExecution/AgentExecution.js';
 import type {
@@ -43,7 +44,10 @@ import type {
 	AgentExecutionReference,
 	AgentExecutionSnapshot
 } from '../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
-import type { AgentExecutionSignalDecision } from '../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import {
+	isTerminalFinalStatus,
+	type AgentExecutionSignalDecision
+} from '../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 
 type RuntimeAgentExecutionHandle = {
 	execution: AgentExecution;
@@ -52,32 +56,32 @@ type RuntimeAgentExecutionHandle = {
 
 type RuntimeEventListener = (event: AgentExecutionEvent) => void;
 
-export interface MissionWorkflowRequestExecutorOptions {
+export interface WorkflowRequestExecutorOptions {
 	adapter: MissionDossierFilesystem;
 	agentRegistry: AgentRegistry;
 	instructionsPath?: string;
 	skillsPath?: string;
 	defaultModel?: string;
-	defaultReasoningEffort?: MissionReasoningEffortType;
-	defaultMode?: MissionDefaultAgentModeType;
-	workingDirectoryResolver?: (task: MissionTaskRuntimeState, descriptor: MissionDescriptor) => string;
+	defaultReasoningEffort?: AgentExecutionReasoningEffortType;
+	defaultMode?: AgentExecutionLaunchModeType;
+	workingDirectoryResolver?: (task: WorkflowTaskRuntimeState, descriptor: MissionDescriptor) => string;
 	logger?: {
 		debug(message: string, metadata?: Record<string, unknown>): void;
 	};
 }
 
-export class MissionWorkflowRequestExecutor {
+export class WorkflowRequestExecutor {
 	private readonly runtimeAgentExecutions = new Map<AgentExecutionId, RuntimeAgentExecutionHandle>();
-	private readonly runtimeEvents: MissionWorkflowEvent[] = [];
+	private readonly runtimeEvents: WorkflowEvent[] = [];
 	private readonly agentExecutionTaskIds = new Map<AgentExecutionId, string>();
 	private readonly runtimeListeners = new Set<RuntimeEventListener>();
 	private readonly defaultModel: string | undefined;
 	private readonly defaultReasoningEffort: string | undefined;
-	private readonly defaultMode: MissionDefaultAgentModeType | undefined;
-	private readonly workingDirectoryResolver: (task: MissionTaskRuntimeState, descriptor: MissionDescriptor) => string;
+	private readonly defaultMode: AgentExecutionLaunchModeType | undefined;
+	private readonly workingDirectoryResolver: (task: WorkflowTaskRuntimeState, descriptor: MissionDescriptor) => string;
 	private readonly agentExecutor: AgentExecutor;
 
-	public constructor(private readonly options: MissionWorkflowRequestExecutorOptions) {
+	public constructor(private readonly options: WorkflowRequestExecutorOptions) {
 		this.defaultModel = options.defaultModel;
 		this.defaultReasoningEffort = options.defaultReasoningEffort;
 		this.defaultMode = options.defaultMode;
@@ -98,7 +102,7 @@ export class MissionWorkflowRequestExecutor {
 		};
 	};
 
-	public consumeRuntimeLifecycleEvents(): MissionWorkflowEvent[] {
+	public consumeRuntimeLifecycleEvents(): WorkflowEvent[] {
 		return this.drainRuntimeEvents();
 	}
 
@@ -115,11 +119,11 @@ export class MissionWorkflowRequestExecutor {
 	public async executeRequests(input: {
 		missionId: string;
 		descriptor: MissionDescriptor;
-		configuration: MissionWorkflowConfigurationSnapshot;
-		runtime: MissionWorkflowRuntimeState;
-		requests: MissionWorkflowRequest[];
-	}): Promise<MissionWorkflowEvent[]> {
-		const events: MissionWorkflowEvent[] = [];
+		configuration: WorkflowConfigurationSnapshot;
+		runtime: WorkflowRuntimeState;
+		requests: WorkflowRequest[];
+	}): Promise<WorkflowEvent[]> {
+		const events: WorkflowEvent[] = [];
 
 		for (const request of input.requests) {
 			switch (request.type) {
@@ -132,7 +136,7 @@ export class MissionWorkflowRequestExecutor {
 						throw new Error(`Workflow configuration does not define task generation for stage '${stageId}'.`);
 					}
 					await this.materializeStageArtifacts(input.descriptor, stageId as MissionStageId);
-					const generatedFromWorkflow = await generateMissionWorkflowTasks({
+					const generatedFromWorkflow = await generateWorkflowTasks({
 						descriptor: input.descriptor,
 						configuration: input.configuration,
 						stageId
@@ -143,7 +147,7 @@ export class MissionWorkflowRequestExecutor {
 							stageId
 						)
 						: [];
-					const generation: MissionWorkflowTaskGenerationResult = {
+					const generation: WorkflowTaskGenerationResult = {
 						...generatedFromWorkflow,
 						tasks: mergeGeneratedTasks(
 							generatedFromWorkflow.tasks,
@@ -336,11 +340,11 @@ export class MissionWorkflowRequestExecutor {
 		return events;
 	}
 
-	public async reconcileExecutions(document?: MissionStateData): Promise<MissionWorkflowEvent[]> {
+	public async reconcileExecutions(document?: WorkflowStateData): Promise<WorkflowEvent[]> {
 		if (document) {
 			for (const persistedAgentExecution of document.runtime.agentExecutions) {
 				this.agentExecutionTaskIds.set(persistedAgentExecution.agentExecutionId, persistedAgentExecution.taskId);
-				if (isTerminalStatus(persistedAgentExecution.lifecycle)) {
+				if (isTerminalFinalStatus(persistedAgentExecution.lifecycle)) {
 					continue;
 				}
 				if (this.runtimeAgentExecutions.has(persistedAgentExecution.agentExecutionId)) {
@@ -419,7 +423,7 @@ export class MissionWorkflowRequestExecutor {
 		agentExecutionId: AgentExecutionId,
 		reason?: string,
 		fallbackTaskId?: string
-	): Promise<MissionWorkflowEvent[]> {
+	): Promise<WorkflowEvent[]> {
 		this.rememberAgentExecutionTaskId(agentExecutionId, fallbackTaskId);
 		this.requireRuntimeAgentExecution(agentExecutionId);
 		const snapshot = await this.agentExecutor.cancelExecution(agentExecutionId, reason);
@@ -430,7 +434,7 @@ export class MissionWorkflowRequestExecutor {
 		return this.createExecutionLifecycleEvents('execution.cancelled', snapshot);
 	}
 
-	public async promptRuntimeAgentExecution(agentExecutionId: AgentExecutionId, prompt: AgentPrompt): Promise<MissionWorkflowEvent[]> {
+	public async promptRuntimeAgentExecution(agentExecutionId: AgentExecutionId, prompt: AgentPrompt): Promise<WorkflowEvent[]> {
 		this.requireRuntimeAgentExecution(agentExecutionId);
 		await this.agentExecutor.submitPrompt(agentExecutionId, prompt);
 		return this.drainRuntimeEvents();
@@ -439,7 +443,7 @@ export class MissionWorkflowRequestExecutor {
 	public async completeRuntimeAgentExecution(
 		agentExecutionId: AgentExecutionId,
 		fallbackTaskId?: string
-	): Promise<MissionWorkflowEvent[]> {
+	): Promise<WorkflowEvent[]> {
 		this.rememberAgentExecutionTaskId(agentExecutionId, fallbackTaskId);
 		this.requireRuntimeAgentExecution(agentExecutionId);
 		const snapshot = await this.agentExecutor.completeExecution(agentExecutionId);
@@ -450,7 +454,7 @@ export class MissionWorkflowRequestExecutor {
 		return this.createExecutionLifecycleEvents('execution.completed', snapshot);
 	}
 
-	public async commandRuntimeAgentExecution(agentExecutionId: AgentExecutionId, command: AgentCommand): Promise<MissionWorkflowEvent[]> {
+	public async commandRuntimeAgentExecution(agentExecutionId: AgentExecutionId, command: AgentCommand): Promise<WorkflowEvent[]> {
 		this.requireRuntimeAgentExecution(agentExecutionId);
 		await this.agentExecutor.submitCommand(agentExecutionId, command);
 		return this.drainRuntimeEvents();
@@ -460,7 +464,7 @@ export class MissionWorkflowRequestExecutor {
 		agentExecutionId: AgentExecutionId,
 		reason?: string,
 		fallbackTaskId?: string
-	): Promise<MissionWorkflowEvent[]> {
+	): Promise<WorkflowEvent[]> {
 		this.rememberAgentExecutionTaskId(agentExecutionId, fallbackTaskId);
 		const runtimeAgentExecution = this.runtimeAgentExecutions.get(agentExecutionId);
 		if (!runtimeAgentExecution) {
@@ -520,13 +524,13 @@ export class MissionWorkflowRequestExecutor {
 		}
 	}
 
-	private drainRuntimeEvents(): MissionWorkflowEvent[] {
+	private drainRuntimeEvents(): WorkflowEvent[] {
 		const drained = [...this.runtimeEvents];
 		this.runtimeEvents.length = 0;
 		return drained;
 	}
 
-	private translateRuntimeEvent(event: AgentExecutionEvent): MissionWorkflowEvent[] {
+	private translateRuntimeEvent(event: AgentExecutionEvent): WorkflowEvent[] {
 		switch (event.type) {
 			case 'execution.completed':
 				return this.createExecutionLifecycleEvents('execution.completed', event.snapshot);
@@ -541,7 +545,7 @@ export class MissionWorkflowRequestExecutor {
 		}
 	}
 
-	private translateTerminalSnapshot(snapshot: AgentExecutionSnapshot): MissionWorkflowEvent[] {
+	private translateTerminalSnapshot(snapshot: AgentExecutionSnapshot): WorkflowEvent[] {
 		switch (snapshot.status) {
 			case 'completed':
 				return this.createExecutionLifecycleEvents('execution.completed', snapshot);
@@ -559,15 +563,15 @@ export class MissionWorkflowRequestExecutor {
 	private createExecutionLifecycleEvents(
 		type: 'execution.completed' | 'execution.failed' | 'execution.cancelled' | 'execution.terminated',
 		snapshot: AgentExecutionSnapshot
-	): MissionWorkflowEvent[] {
+	): WorkflowEvent[] {
 		const taskId = this.resolveAgentExecutionTaskId(snapshot);
 		if (!taskId) {
 			return [];
 		}
-		if (isTerminalStatus(snapshot.status)) {
+		if (isTerminalFinalStatus(snapshot.status)) {
 			this.agentExecutionTaskIds.delete(snapshot.agentExecutionId);
 		}
-		const agentExecutionEvent: MissionWorkflowEvent = {
+		const agentExecutionEvent: WorkflowEvent = {
 			eventId: `runtime:${snapshot.agentExecutionId}:${type}:${snapshot.updatedAt}`,
 			type,
 			occurredAt: snapshot.updatedAt,
@@ -594,10 +598,10 @@ export class MissionWorkflowRequestExecutor {
 		requestId: string,
 		snapshot: AgentExecutionSnapshot,
 		taskId: string
-	): MissionWorkflowEvent {
+	): WorkflowEvent {
 		const agentExecutionId = snapshot.agentExecutionId;
-		const agentJournalPath = typeof this.options.adapter.getMissionAgentJournalRelativePath === 'function'
-			? this.options.adapter.getMissionAgentJournalRelativePath(agentExecutionId)
+		const agentJournalPath = typeof this.options.adapter.getAgentExecutionJournalRelativePath === 'function'
+			? this.options.adapter.getAgentExecutionJournalRelativePath(agentExecutionId)
 			: undefined;
 		const terminalRecordingPath = typeof this.options.adapter.getMissionTerminalRecordingRelativePath === 'function'
 			? this.options.adapter.getMissionTerminalRecordingRelativePath(snapshot.agentExecutionId)
@@ -651,8 +655,8 @@ export class MissionWorkflowRequestExecutor {
 
 	private createTasksGeneratedEvent(
 		requestId: string,
-		generation: MissionWorkflowTaskGenerationResult
-	): MissionWorkflowEvent {
+		generation: WorkflowTaskGenerationResult
+	): WorkflowEvent {
 		return {
 			eventId: `${requestId}:tasks-generated`,
 			type: 'tasks.generated',
@@ -666,7 +670,7 @@ export class MissionWorkflowRequestExecutor {
 
 	private async resolveLaunchPromptText(
 		payload: Record<string, unknown>,
-		task: MissionTaskRuntimeState,
+		task: WorkflowTaskRuntimeState,
 		descriptor: MissionDescriptor
 	): Promise<string> {
 		const explicitPrompt = typeof payload['prompt'] === 'string' ? payload['prompt'].trim() : '';
@@ -732,7 +736,7 @@ export class MissionWorkflowRequestExecutor {
 
 	private async materializeGeneratedTasks(
 		descriptor: MissionDescriptor,
-		generation: MissionWorkflowTaskGenerationResult
+		generation: WorkflowTaskGenerationResult
 	): Promise<void> {
 		for (const task of generation.tasks) {
 			await this.options.adapter.writeTaskRecord(
@@ -755,7 +759,7 @@ export class MissionWorkflowRequestExecutor {
 	private async readGeneratedTasksFromStageArtifacts(
 		descriptor: MissionDescriptor,
 		stageId: MissionStageId
-	): Promise<MissionGeneratedTaskPayload[]> {
+	): Promise<WorkflowGeneratedTaskPayload[]> {
 		const taskStates = await this.options.adapter.listTaskStates(descriptor.missionDir, stageId).catch(() => []);
 		return taskStates.map((taskState) => ({
 			...(normalizeGeneratedTaskAgentAdapter(taskState.agent) ?? {}),
@@ -771,7 +775,7 @@ export class MissionWorkflowRequestExecutor {
 
 	private createAttachFailureLifecycleEvent(
 		AgentExecution: AgentExecutionRuntimeState
-	): MissionWorkflowEvent | undefined {
+	): WorkflowEvent | undefined {
 		void AgentExecution;
 		// Reattach failures are not authoritative lifecycle facts.
 		// If we cannot observe a runtime AgentExecution, keep workflow state unchanged
@@ -796,8 +800,8 @@ function toAgentCommand(value: string): AgentCommand | undefined {
 }
 
 function normalizeGeneratedTaskAgentAdapter(
-	agent: MissionTaskState['agent']
-): Pick<MissionGeneratedTaskPayload, 'agentAdapter'> | undefined {
+	agent: TaskDossierRecordType['agent']
+): Pick<WorkflowGeneratedTaskPayload, 'agentAdapter'> | undefined {
 	const parsedAdapter = AgentIdSchema.safeParse(agent);
 	return parsedAdapter.success ? { agentAdapter: parsedAdapter.data } : undefined;
 }
@@ -815,7 +819,7 @@ function toTransportEventFields(snapshot: AgentExecutionSnapshot): { transportId
 	};
 }
 
-function hasMatchingTerminalLifecycle(document: MissionStateData, snapshot: AgentExecutionSnapshot): boolean {
+function hasMatchingTerminalLifecycle(document: WorkflowStateData, snapshot: AgentExecutionSnapshot): boolean {
 	const runtimeAgentExecution = document.runtime.agentExecutions.find((execution) => execution.agentExecutionId === snapshot.agentExecutionId);
 	if (!runtimeAgentExecution) {
 		return false;
@@ -834,7 +838,7 @@ function normalizeTaskId(taskId: string | undefined): string | undefined {
 	return normalizedTaskId;
 }
 
-function buildTaskArtifactLaunchPrompt(task: MissionTaskState, missionWorkspaceDir: string): string {
+function buildTaskArtifactLaunchPrompt(task: TaskDossierRecordType, missionWorkspaceDir: string): string {
 	const instruction = task.instruction.trim();
 	const lines = [
 		`You are working on task '${task.sequence} ${task.subject}'.`,
@@ -854,7 +858,7 @@ function buildTaskArtifactLaunchPrompt(task: MissionTaskState, missionWorkspaceD
 }
 
 function buildRuntimeTaskLaunchPrompt(
-	task: MissionTaskRuntimeState,
+	task: WorkflowTaskRuntimeState,
 	missionWorkspaceDir: string,
 	artifactName: string
 ): string {
@@ -875,7 +879,7 @@ function buildRuntimeTaskLaunchPrompt(
 	return lines.join('\n');
 }
 
-function appendPendingLaunchContext(basePrompt: string, task: MissionTaskRuntimeState): string {
+function appendPendingLaunchContext(basePrompt: string, task: WorkflowTaskRuntimeState): string {
 	const context = task.pendingLaunchContext;
 	if (!context) {
 		return basePrompt;
@@ -906,22 +910,15 @@ function appendPendingLaunchContext(basePrompt: string, task: MissionTaskRuntime
 	return lines.join('\n');
 }
 
-function isTerminalStatus(status: AgentExecutionSnapshot['status']): boolean {
-	return status === 'completed'
-		|| status === 'failed'
-		|| status === 'cancelled'
-		|| status === 'terminated';
-}
-
 function mergeGeneratedTasks(
-	workflowTasks: MissionGeneratedTaskPayload[],
-	artifactTasks: MissionGeneratedTaskPayload[]
-): MissionGeneratedTaskPayload[] {
+	workflowTasks: WorkflowGeneratedTaskPayload[],
+	artifactTasks: WorkflowGeneratedTaskPayload[]
+): WorkflowGeneratedTaskPayload[] {
 	if (artifactTasks.length === 0) {
 		return workflowTasks;
 	}
 
-	const mergedByTaskId = new Map<string, MissionGeneratedTaskPayload>();
+	const mergedByTaskId = new Map<string, WorkflowGeneratedTaskPayload>();
 	for (const task of workflowTasks) {
 		mergedByTaskId.set(task.taskId, task);
 	}
@@ -938,6 +935,6 @@ function mergeGeneratedTasks(
 	return normalizeGeneratedTaskDependencies(
 		orderedTaskIds
 			.map((taskId) => mergedByTaskId.get(taskId))
-			.filter((task): task is MissionGeneratedTaskPayload => Boolean(task))
+			.filter((task): task is WorkflowGeneratedTaskPayload => Boolean(task))
 	);
 }

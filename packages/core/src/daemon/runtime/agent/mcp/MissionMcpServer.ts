@@ -8,18 +8,18 @@ import {
     AgentSignalToolPayloadSchemasByType,
     AgentExecutionObservationAckSchema,
     AgentExecutionProtocolDescriptorSchema,
-    MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH,
+    MAX_AGENT_SIGNAL_MARKER_LENGTH,
     type AgentSignalDescriptorType,
     type AgentSignalPayloadType,
     type AgentExecutionObservationAckType,
     type AgentExecutionProtocolDescriptorType
-} from '../../../../entities/AgentExecution/AgentExecutionSchema.js';
+} from '../../../../entities/AgentExecution/AgentExecutionProtocolSchema.js';
 import {
     cloneAgentExecutionScope,
-    createAgentSignalFromPayload,
     type AgentExecutionScope,
     type AgentExecutionObservation
 } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import { createAgentExecutionSignalFromPayload } from '../../../../entities/AgentExecution/AgentExecutionSignalRegistry.js';
 import {
     AgentExecutionSemanticOperationDescriptors,
     type AgentExecutionReadArtifactOperationInputType,
@@ -48,12 +48,19 @@ export const MissionMcpListToolsInputSchema = z.object({
     token: z.string().trim().min(1)
 }).strict();
 
+export const MissionMcpRegisterAccessInputSchema = z.object({
+    agentExecutionId: z.string().trim().min(1),
+    token: z.string().trim().min(1).optional(),
+    protocolDescriptor: AgentExecutionProtocolDescriptorSchema
+}).strict();
+
 export const MissionMcpCallToolInputSchema = z.object({
     name: z.string().trim().min(1),
     input: z.unknown()
 }).strict();
 
 export type MissionMcpListToolsInputType = z.infer<typeof MissionMcpListToolsInputSchema>;
+export type MissionMcpRegisterAccessInputType = z.infer<typeof MissionMcpRegisterAccessInputSchema>;
 export type MissionMcpCallToolInputType = z.infer<typeof MissionMcpCallToolInputSchema>;
 
 type MissionMcpLogger = {
@@ -88,7 +95,7 @@ type AgentExecutionTransportObservationRouter = {
 
 export type MissionMcpRegisterAccessInput = {
     agentExecutionId: string;
-    token?: string;
+    token?: string | undefined;
     protocolDescriptor: AgentExecutionProtocolDescriptorType;
 };
 
@@ -263,11 +270,11 @@ export class MissionMcpServer {
             scope: cloneAgentExecutionScope(accessRecord.protocolDescriptor.scope as AgentExecutionScope)
         };
         return {
-            observationId: `agent-declared-signal:${input.eventId}`,
+            observationId: `agent-signal:${input.eventId}`,
             observedAt: new Date().toISOString(),
-            signal: createAgentSignalFromPayload(input.signal),
+            signal: createAgentExecutionSignalFromPayload(input.signal),
             route: {
-                origin: 'agent-declared-signal',
+                origin: 'agent-signal',
                 address
             },
             claimedAddress: {
@@ -373,10 +380,10 @@ class MissionMcpToolCall {
     public static parse(input: { name: string; input: unknown }):
         | { accepted: true; input: MissionMcpToolCallInput }
         | { accepted: false; ack: AgentExecutionObservationAckType } {
-        if (JSON.stringify(input.input).length > MAX_AGENT_DECLARED_SIGNAL_MARKER_LENGTH) {
+        if (JSON.stringify(input.input).length > MAX_AGENT_SIGNAL_MARKER_LENGTH) {
             return {
                 accepted: false,
-                ack: rejectedAck(readAgentExecutionId(input.input), readEventId(input.input), 'MCP tool call exceeded the maximum Agent-declared signal length.')
+                ack: rejectedAck(readAgentExecutionId(input.input), readEventId(input.input), 'MCP tool call exceeded the maximum Agent signal length.')
             };
         }
         const result = MissionMcpToolCallInputSchema.safeParse(input.input);
@@ -444,7 +451,7 @@ function parseMissionMcpDirectToolInput(toolName: string, input: unknown):
     | { success: false; reason?: string } {
     const payloadSchema = readSignalToolPayloadSchema(toolName);
     if (!payloadSchema) {
-        return { success: false, reason: `Tool '${toolName}' is not a known Agent-declared signal tool.` };
+        return { success: false, reason: `Tool '${toolName}' is not a known Agent signal tool.` };
     }
     const result = createMissionMcpDirectToolInputSchema(toolName).extend({
         agentExecutionId: z.string().trim().min(1)

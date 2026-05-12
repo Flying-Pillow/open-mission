@@ -2,16 +2,12 @@
     import Icon from "@iconify/svelte";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
-
-    const appContext = getAppContext();
+    import { app } from "$lib/client/Application.svelte.js";
 
     let notificationsOpen = $state(false);
 
-    const notifications = $derived(appContext.application.notifications);
-    const unreadCount = $derived(
-        appContext.application.unreadNotificationCount,
-    );
+    const notifications = $derived(app.notifications);
+    const unreadCount = $derived(app.unreadNotificationCount);
 
     function formatTime(value: string): string {
         return new Intl.DateTimeFormat(undefined, {
@@ -38,7 +34,7 @@
             return;
         }
 
-        appContext.application.markAllNotificationsRead();
+        app.markAllNotificationsRead();
     });
 </script>
 
@@ -84,7 +80,7 @@
                     variant="ghost"
                     size="sm"
                     class="h-7 px-2 text-xs"
-                    onclick={() => appContext.application.clearNotifications()}
+                    onclick={() => app.clearNotifications()}
                 >
                     Clear
                 </Button>
@@ -132,7 +128,7 @@
                                             href={notification.linkHref}
                                             class="text-primary mt-2 inline-flex text-xs font-medium hover:underline"
                                             onclick={() =>
-                                                appContext.application.markNotificationRead(
+                                                app.markNotificationRead(
                                                     notification.id,
                                                 )}
                                         >

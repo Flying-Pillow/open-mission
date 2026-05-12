@@ -136,6 +136,50 @@
         return undefined;
     }
 
+    function signalSummary(
+        signal: AgentExecutionJournalRecordType extends infer _T
+            ? Extract<
+                  AgentExecutionJournalRecordType,
+                  { type: "agent-observation" }
+              >["signal"]
+            : never,
+    ): string | undefined {
+        switch (signal?.type) {
+            case "progress":
+            case "status":
+            case "ready_for_verification":
+            case "completed_claim":
+            case "diagnostic":
+                return signal.summary;
+            case "needs_input":
+                return signal.question;
+            case "blocked":
+            case "failed_claim":
+                return signal.reason;
+            case "message":
+                return signal.text;
+            default:
+                return undefined;
+        }
+    }
+
+    function signalDetail(
+        signal: AgentExecutionJournalRecordType extends infer _T
+            ? Extract<
+                  AgentExecutionJournalRecordType,
+                  { type: "agent-observation" }
+              >["signal"]
+            : never,
+    ): string | undefined {
+        switch (signal?.type) {
+            case "progress":
+            case "diagnostic":
+                return signal.detail;
+            default:
+                return undefined;
+        }
+    }
+
     function recordSummary(record: AgentExecutionJournalRecordType): string {
         switch (record.type) {
             case "journal.header":
@@ -148,13 +192,10 @@
             case "turn.delivery":
                 return `${formatToken(record.status)} via ${formatToken(record.transport)}`;
             case "agent-observation":
-                if (record.signal.type === "needs_input") {
-                    return record.signal.question;
-                }
                 return (
-                    record.signal.summary ??
-                    record.signal.detail ??
-                    formatToken(record.signal.type)
+                    signalSummary(record.signal) ??
+                    signalDetail(record.signal) ??
+                    formatToken(record.signal?.type)
                 );
             case "runtime-fact":
                 return (
@@ -190,19 +231,19 @@
                     record.activity ??
                     "Activity updated"
                 );
-            case "execution-assessment.recorded":
-                return record.summary ?? formatToken(record.assessment);
-            case "transport-evidence.recorded":
-                return record.summary ?? formatToken(record.evidenceType);
+            case "execution-assessment":
+                return record.detail ?? formatToken(record.assessmentType);
+            case "transport-evidence":
+                return record.content ?? formatToken(record.evidenceType);
             case "owner-effect.recorded":
                 return formatToken(record.effectType);
             case "checkpoint.recorded":
-                return record.summary ?? formatToken(record.kind);
+                return record.detail ?? formatToken(record.checkpointId);
             case "projection.recorded":
                 return `${formatToken(record.projection)} projection recorded`;
-            default:
-                return formatToken(record.type);
         }
+
+        return "Unknown";
     }
 
     function recordDetail(
@@ -214,13 +255,13 @@
             case "turn.delivery":
                 return record.reason;
             case "agent-observation":
-                return record.rawText ?? record.signal.detail;
+                return record.rawText ?? signalDetail(record.signal);
             case "runtime-fact":
                 return record.path;
             case "activity.updated":
                 return record.progress?.detail;
-            case "transport-evidence.recorded":
-                return record.detail;
+            case "transport-evidence":
+                return record.content;
             case "checkpoint.recorded":
                 return record.detail;
             default:
@@ -253,14 +294,14 @@
                     record.artifactId,
                     record.path,
                 ]);
-            case "execution-assessment.recorded":
+            case "execution-assessment":
                 return compactParts([
-                    formatToken(record.assessment),
+                    formatToken(record.assessmentType),
                     record.score !== undefined
                         ? `Score ${record.score}`
                         : undefined,
                 ]);
-            case "transport-evidence.recorded":
+            case "transport-evidence":
                 return formatToken(record.evidenceType);
             case "decision.recorded":
                 return formatToken(record.action);
@@ -290,7 +331,10 @@
                     formatToken(record.effectType),
                 ]);
             case "checkpoint.recorded":
-                return formatToken(record.checkpointId);
+                return compactParts([
+                    formatToken(record.checkpointId),
+                    record.detail,
+                ]);
             case "projection.recorded":
                 return formatToken(record.projection);
             case "journal.header":
@@ -300,9 +344,9 @@
                         ? formatToken(record.transportState)
                         : undefined,
                 ]);
-            default:
-                return formatToken(record.type);
         }
+
+        return "Unknown";
     }
 
     function recordAuthority(record: AgentExecutionJournalRecordType): string {
@@ -359,9 +403,9 @@
                     record.factId,
                     record.artifactId,
                 ]);
-            case "execution-assessment.recorded":
+            case "execution-assessment":
                 return compactParts([record.recordId, record.assessmentId]);
-            case "transport-evidence.recorded":
+            case "transport-evidence":
                 return compactParts([record.recordId, record.evidenceId]);
             case "decision.recorded":
                 return compactParts([
@@ -380,7 +424,8 @@
                 return compactParts([
                     record.recordId,
                     record.currentTarget?.kind,
-                    record.currentTarget?.id,
+                    record.currentTarget?.label,
+                    record.currentTarget?.path,
                 ]);
             case "owner-effect.recorded":
                 return compactParts([
@@ -393,9 +438,9 @@
                 return compactParts([record.recordId, record.checkpointId]);
             case "projection.recorded":
                 return record.recordId;
-            default:
-                return record.recordId;
         }
+
+        return "";
     }
 
     function hasRecordKeys(record: AgentExecutionJournalRecordType): boolean {

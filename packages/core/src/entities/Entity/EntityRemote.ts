@@ -8,6 +8,7 @@ import { ArtifactContract } from '../Artifact/ArtifactContract.js';
 import { MissionContract } from '../Mission/MissionContract.js';
 import { RepositoryContract } from '../Repository/RepositoryContract.js';
 import { StageContract } from '../Stage/StageContract.js';
+import { SystemContract } from '../System/SystemContract.js';
 import { TaskContract } from '../Task/TaskContract.js';
 import { TerminalContract } from '../Terminal/TerminalContract.js';
 export {
@@ -33,6 +34,7 @@ const entityContracts = [
     AgentContract,
     AgentExecutionContract,
     RepositoryContract,
+    SystemContract,
     TerminalContract,
 ] as const satisfies readonly EntityContractType[];
 

@@ -1,7 +1,7 @@
 // /apps/airport/web/src/lib/components/entities/Stage/Stage.svelte.ts: OO browser entity for a mission workflow stage with task accessors.
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 import type { StageDataType } from '@flying-pillow/mission-core/entities/Stage/StageSchema';
-import type { EntityModel } from '$lib/components/entities/shared/EntityModel.svelte.js';
+import { Entity } from '$lib/components/entities/Entity/Entity.svelte.js';
 import type { Task } from '$lib/components/entities/Task/Task.svelte.js';
 
 export type StageDependencies = {
@@ -10,30 +10,31 @@ export type StageDependencies = {
     executeCommand(stageId: string, commandId: string, input?: unknown): Promise<void>;
 };
 
-export class Stage implements EntityModel<StageDataType> {
-    private snapshotState = $state<StageDataType | undefined>();
+export class Stage extends Entity<StageDataType> {
+    private data = $state<StageDataType | undefined>();
     private readonly dependencies: StageDependencies;
 
-    public constructor(snapshot: StageDataType, dependencies: StageDependencies) {
-        this.snapshot = snapshot;
+    public constructor(data: StageDataType, dependencies: StageDependencies) {
+        super();
+        this.setData(data);
         this.dependencies = dependencies;
     }
 
-    private get snapshot(): StageDataType {
-        const snapshot = this.snapshotState;
-        if (!snapshot) {
-            throw new Error('Stage snapshot is not initialized.');
+    private requireData(): StageDataType {
+        const data = this.data;
+        if (!data) {
+            throw new Error('Stage data is not initialized.');
         }
 
-        return snapshot;
+        return data;
     }
 
-    private set snapshot(snapshot: StageDataType) {
-        this.snapshotState = structuredClone(snapshot);
+    private setData(data: StageDataType): void {
+        this.data = structuredClone(data);
     }
 
     public get stageId(): string {
-        return this.snapshot.stageId;
+        return this.requireData().stageId;
     }
 
     public get id(): string {
@@ -48,16 +49,22 @@ export class Stage implements EntityModel<StageDataType> {
         return this.stageId;
     }
 
+    protected get entityLocator(): Record<string, unknown> {
+        return {
+            stageId: this.stageId
+        };
+    }
+
     public get lifecycle(): string {
-        return this.snapshot.lifecycle;
+        return this.requireData().lifecycle;
     }
 
     public get isCurrentStage(): boolean {
-        return this.snapshot.isCurrentStage;
+        return this.requireData().isCurrentStage;
     }
 
     public get artifacts(): StageDataType['artifacts'] {
-        return structuredClone($state.snapshot(this.snapshot.artifacts));
+        return structuredClone($state.snapshot(this.requireData().artifacts));
     }
 
     public get commands(): EntityCommandDescriptorType[] {
@@ -65,22 +72,23 @@ export class Stage implements EntityModel<StageDataType> {
     }
 
     public listTasks(): Task[] {
-        return this.snapshot.tasks
+        return this.requireData().tasks
             .map((task) => this.dependencies.resolveTask(task.taskId))
             .filter((task): task is Task => task !== undefined);
     }
 
-    public async executeCommand(commandId: string, input?: unknown): Promise<void> {
+    public async executeCommand<TResult = unknown>(commandId: string, input?: unknown): Promise<TResult> {
         await this.dependencies.executeCommand(this.stageId, commandId, input);
+        return undefined as TResult;
     }
 
-    public updateFromData(snapshot: StageDataType): this {
-        this.snapshot = snapshot;
+    public updateFromData(data: StageDataType): this {
+        this.setData(data);
         return this;
     }
 
     public toData(): StageDataType {
-        return structuredClone($state.snapshot(this.snapshot));
+        return structuredClone($state.snapshot(this.requireData()));
     }
 
     public toJSON(): StageDataType {

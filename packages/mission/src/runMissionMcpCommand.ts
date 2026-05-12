@@ -2,16 +2,27 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'node:crypto';
-import { DaemonClient } from '@flying-pillow/mission-core/daemon/client/DaemonClient';
+import { connectDaemon } from '@flying-pillow/mission-core/daemon/client/connectAirportDaemon';
+import {
+    startMissionDaemonProcess,
+    type DaemonRuntimeMode
+} from '@flying-pillow/mission-core/daemon/runtime/DaemonProcessControl';
 import {
     AgentSignalPayloadSchema,
-    AgentSignalToolPayloadSchemasByType
+    AgentSignalToolPayloadSchemasByType,
+    AgentExecutionProtocolDescriptorSchema
 } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import { z } from 'zod/v4';
 import type { EntryContext } from './entryContext.js';
 
 const MissionMcpBridgeToolInputBaseSchema = z.object({
     eventId: z.string().trim().min(1).optional()
+}).strict();
+const MISSION_MCP_DAEMON_HANDSHAKE_TIMEOUT_MS = 3_000;
+const MISSION_MCP_LIST_TOOLS_TIMEOUT_MS = 8_000;
+const MISSION_MCP_CALL_TOOL_TIMEOUT_MS = 30_000;
+const AgentExecutionRecoverySchema = z.object({
+    protocolDescriptor: AgentExecutionProtocolDescriptorSchema
 }).strict();
 
 type MissionMcpToolDescriptor = {
@@ -35,11 +46,13 @@ export async function runMissionMcpCommand(context: EntryContext): Promise<void>
     if (!token) {
         throw new Error('mission mcp connect requires MISSION_MCP_TOKEN.');
     }
+    const ownerId = process.env['MISSION_AGENT_EXECUTION_OWNER_ID']?.trim();
 
-    const client = new DaemonClient();
-    await client.connect({ surfacePath: context.workingDirectory });
-    const tools = await client.request<MissionMcpToolDescriptor[]>('mission-mcp.listTools', {
+    const client = await connectMissionDaemon(context);
+    const tools = await readMissionMcpTools({
+        client,
         agentExecutionId,
+        ...(ownerId ? { ownerId } : {}),
         token
     });
 
@@ -65,6 +78,8 @@ export async function runMissionMcpCommand(context: EntryContext): Promise<void>
                     token,
                     signal
                 }
+            }, {
+                timeoutMs: MISSION_MCP_CALL_TOOL_TIMEOUT_MS
             });
             return {
                 content: [{ type: 'text', text: JSON.stringify(result) }],
@@ -74,6 +89,86 @@ export async function runMissionMcpCommand(context: EntryContext): Promise<void>
     }
 
     await server.connect(new StdioServerTransport());
+}
+
+async function connectMissionDaemon(context: EntryContext) {
+    try {
+        return await connectDaemon({
+            surfacePath: context.workingDirectory,
+            handshakeTimeoutMs: MISSION_MCP_DAEMON_HANDSHAKE_TIMEOUT_MS
+        });
+    } catch {
+        await startMissionDaemonProcess({
+            surfacePath: context.workingDirectory,
+            runtimeMode: resolveMissionDaemonRuntimeMode()
+        });
+        return connectDaemon({
+            surfacePath: context.workingDirectory,
+            handshakeTimeoutMs: MISSION_MCP_DAEMON_HANDSHAKE_TIMEOUT_MS
+        });
+    }
+}
+
+async function readMissionMcpTools(input: {
+    client: Awaited<ReturnType<typeof connectDaemon>>;
+    agentExecutionId: string;
+    ownerId?: string;
+    token: string;
+}): Promise<MissionMcpToolDescriptor[]> {
+    try {
+        return await input.client.request<MissionMcpToolDescriptor[]>('mission-mcp.listTools', {
+            agentExecutionId: input.agentExecutionId,
+            token: input.token
+        }, {
+            timeoutMs: MISSION_MCP_LIST_TOOLS_TIMEOUT_MS
+        });
+    } catch (error) {
+        if (!shouldRecoverMissionMcpAccess(error) || !input.ownerId) {
+            throw error;
+        }
+        await recoverMissionMcpAccess({
+            client: input.client,
+            agentExecutionId: input.agentExecutionId,
+            ownerId: input.ownerId,
+            token: input.token
+        });
+        return input.client.request<MissionMcpToolDescriptor[]>('mission-mcp.listTools', {
+            agentExecutionId: input.agentExecutionId,
+            token: input.token
+        }, {
+            timeoutMs: MISSION_MCP_LIST_TOOLS_TIMEOUT_MS
+        });
+    }
+}
+
+async function recoverMissionMcpAccess(input: {
+    client: Awaited<ReturnType<typeof connectDaemon>>;
+    agentExecutionId: string;
+    ownerId: string;
+    token: string;
+}): Promise<void> {
+    const execution = await input.client.request<unknown>('entity.query', {
+        entity: 'AgentExecution',
+        method: 'read',
+        payload: {
+            ownerId: input.ownerId,
+            agentExecutionId: input.agentExecutionId
+        }
+    });
+    const parsedExecution = AgentExecutionRecoverySchema.parse(execution);
+    await input.client.request('mission-mcp.registerAccess' as any, {
+        agentExecutionId: input.agentExecutionId,
+        token: input.token,
+        protocolDescriptor: parsedExecution['protocolDescriptor']
+    });
+}
+
+function shouldRecoverMissionMcpAccess(error: unknown): boolean {
+    return error instanceof Error && /not registered for mission-mcp access/i.test(error.message);
+}
+
+function resolveMissionDaemonRuntimeMode(): DaemonRuntimeMode {
+    return process.env['MISSION_DAEMON_RUNTIME_MODE']?.trim() === 'source' ? 'source' : 'build';
 }
 
 function createMissionMcpBridgeToolInputSchema(toolName: string) {
@@ -88,7 +183,7 @@ function createMissionMcpEventId(toolName: string): string {
 function readMissionMcpBridgeSignalPayload(toolName: string, input: unknown): Record<string, unknown> {
     const payloadSchema = readSignalToolPayloadSchema(toolName);
     if (!payloadSchema) {
-        throw new Error(`Tool '${toolName}' is not a known Agent-declared signal tool.`);
+        throw new Error(`Tool '${toolName}' is not a known Agent signal tool.`);
     }
     return payloadSchema.parse(omitTransportFields(input)) as Record<string, unknown>;
 }
@@ -112,6 +207,7 @@ function isSignalToolName(toolName: string): toolName is Extract<keyof typeof Ag
 function isRecord(input: unknown): input is Record<string, unknown> {
     return typeof input === 'object' && input !== null && !Array.isArray(input);
 }
+
 
 function readFlagValue(args: string[], flag: string): string | undefined {
     const index = args.indexOf(flag);

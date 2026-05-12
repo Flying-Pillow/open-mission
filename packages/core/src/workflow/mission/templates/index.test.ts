@@ -11,8 +11,7 @@ describe('mission template resolution', () => {
                 branchRef: 'mission/17-reconstruct-agent-runtime-unification',
                 brief: {
                     title: 'Reconstruct agent adapter unification',
-                    body: 'Reconstruct agent adapter unification body',
-                    type: 'refactor'
+                    body: 'Reconstruct agent adapter unification body'
                 }
             }
         );
@@ -30,8 +29,7 @@ describe('mission template resolution', () => {
                 branchRef: 'mission/1-initial-setup',
                 brief: {
                     title: 'Initial setup',
-                    body: 'Initial setup body',
-                    type: 'feature'
+                    body: 'Initial setup body'
                 }
             }
         );
@@ -49,8 +47,7 @@ describe('mission template resolution', () => {
                 branchRef: 'mission/1-initial-setup',
                 brief: {
                     title: 'Initial setup',
-                    body: 'Initial setup body',
-                    type: 'feature'
+                    body: 'Initial setup body'
                 }
             }
         );
@@ -69,8 +66,7 @@ describe('mission template resolution', () => {
                 branchRef: 'mission/1-initial-setup',
                 brief: {
                     title: 'Initial setup',
-                    body: 'Initial setup body',
-                    type: 'feature'
+                    body: 'Initial setup body'
                 }
             }
         );

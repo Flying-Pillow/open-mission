@@ -1,6 +1,7 @@
 <script lang="ts">
+    import { page } from "$app/state";
     import { onDestroy } from "svelte";
-    import { getAppContext } from "$lib/client/context/app-context.svelte";
+    import { app } from "$lib/client/Application.svelte.js";
     import DaemonLogTail from "$lib/components/airport/DaemonLogTail.svelte";
     import AirportHeader from "$lib/components/airport/airport-header.svelte";
     import AirportSidebar from "$lib/components/airport/airport-sidebar.svelte";
@@ -16,12 +17,11 @@
     import type { Snippet } from "svelte";
 
     let { children }: { children: Snippet } = $props();
-    const appContext = getAppContext();
     let daemonLogsOpen = $state(false);
     let sidebarOpen = $state(false);
 
     onDestroy(() => {
-        appContext.application.clearAirportSelection();
+        app.clearAirportSelection();
     });
 </script>
 
@@ -46,7 +46,9 @@
                 minSize={48}
                 class="flex h-full min-h-0 flex-col overflow-hidden"
             >
-                {@render children()}
+                {#key page.url.pathname}
+                    {@render children()}
+                {/key}
             </ResizablePane>
 
             {#if daemonLogsOpen}

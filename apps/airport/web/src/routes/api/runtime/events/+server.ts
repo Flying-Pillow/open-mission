@@ -11,6 +11,13 @@ const airportRuntimeEventsQuerySchema = z.object({
     scope: z.enum(['mission', 'application']).optional()
 }).strict();
 
+const applicationRuntimeEventChannels = [
+    'repository:*.*',
+    'agent_execution:*.*',
+    'mission:*.status',
+    'mission:*.data.changed'
+] as const;
+
 function serializeSseEvent(input: {
     event: string;
     data: string;
@@ -96,7 +103,7 @@ export const GET: RequestHandler = async ({ locals, request, url }) => {
                             })));
                         };
                         const applicationSubscription = await gateway.openApplicationEventSubscription({
-                            channels: ['repository:*.*', 'agent_execution:*.*'],
+                            channels: [...applicationRuntimeEventChannels],
                             ...(repositoryRootPath ? { surfacePath: repositoryRootPath } : {}),
                             onDisconnect: () => {
                                 if (closed || disposeSubscription !== activeDispose) {

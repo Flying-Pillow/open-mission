@@ -1,6 +1,9 @@
 import { z } from 'zod/v4';
 import { AgentIdSchema } from '../entities/Agent/AgentSchema.js';
-import { MissionReasoningEffortSchema } from '../entities/Mission/MissionSchema.js';
+import {
+	AgentExecutionLaunchModeSchema,
+	AgentExecutionReasoningEffortSchema
+} from '../entities/AgentExecution/AgentExecutionSchema.js';
 import { StageIdSchema } from '../entities/Stage/StageSchema.js';
 import { TaskContextArtifactReferenceSchema, TaskIdSchema } from '../entities/Task/TaskSchema.js';
 
@@ -39,7 +42,7 @@ export const WorkflowGeneratedTaskDefinitionSchema = z.object({
 	title: z.string().trim().min(1),
 	instruction: z.string().trim().min(1),
 	model: z.string().trim().min(1).optional(),
-	reasoningEffort: MissionReasoningEffortSchema.optional(),
+	reasoningEffort: AgentExecutionReasoningEffortSchema.optional(),
 	taskKind: z.enum(['implementation', 'verification']).optional(),
 	pairedTaskId: TaskIdSchema.optional(),
 	dependsOn: z.array(TaskIdSchema),
@@ -147,9 +150,9 @@ export const WorkflowDefinitionSchema = z.object({
 
 export const WorkflowRuntimeSettingsSchema = z.object({
 	agentAdapter: AgentIdSchema,
-	defaultAgentMode: z.enum(['interactive', 'autonomous']).optional(),
+	defaultAgentMode: AgentExecutionLaunchModeSchema.optional(),
 	defaultModel: z.string().trim().min(1).optional(),
-	defaultReasoningEffort: MissionReasoningEffortSchema.optional()
+	defaultReasoningEffort: AgentExecutionReasoningEffortSchema.optional()
 }).strict();
 
 export const WorkflowIntegrationSettingsSchema = z.object({

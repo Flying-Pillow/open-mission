@@ -1,5 +1,5 @@
 import type { AgentAdapter } from '../../daemon/runtime/agent/AgentAdapter.js';
-import { missionAgents } from '../../daemon/runtime/agent/adapters/index.js';
+import { agentAdapterInputs } from '../../daemon/runtime/agent/adapters/index.js';
 import { Agent } from './Agent.js';
 import { Repository } from '../Repository/Repository.js';
 import {
@@ -42,7 +42,7 @@ export class AgentRegistry {
             resolveSettings,
             ...(options.logLine ? { logLine: options.logLine } : {})
         };
-        const agents = await Promise.all(missionAgents.map((agentInput) => createConfiguredAgent(agentInput, adapterContext)));
+        const agents = await Promise.all(agentAdapterInputs.map((agentInput) => createConfiguredAgent(agentInput, adapterContext)));
         return new AgentRegistry({ agents });
     }
 
@@ -114,22 +114,22 @@ function createProviderSettingsResolver(
 }
 
 function supportsDefaultReasoningEffort(agentId: string): boolean {
-    return missionAgents.some((agentInput) => agentInput.agentId === agentId && agentInput.supportsDefaultReasoningEffort === true);
+    return agentAdapterInputs.some((agentInput) => agentInput.agentId === agentId && agentInput.supportsDefaultReasoningEffort === true);
 }
 
 function isDefaultAgentId(agentId: string): boolean {
-    return missionAgents.some((agentInput) => agentInput.default === true && agentInput.agentId === agentId);
+    return agentAdapterInputs.some((agentInput) => agentInput.default === true && agentInput.agentId === agentId);
 }
 
 function readAgentOptionCatalog(agentId: string) {
-    return missionAgents.find((agentInput) => agentInput.agentId === agentId)?.optionCatalog ?? {
+    return agentAdapterInputs.find((agentInput) => agentInput.agentId === agentId)?.optionCatalog ?? {
         models: [],
         reasoningEfforts: []
     };
 }
 
 function readAgentDefaultLaunchMode(agentId: string): 'interactive' | 'print' | undefined {
-    return missionAgents.find((agentInput) => agentInput.agentId === agentId)?.adapter.defaultLaunchMode;
+    return agentAdapterInputs.find((agentInput) => agentInput.agentId === agentId)?.adapter.defaultLaunchMode;
 }
 
 function readStringMetadata(

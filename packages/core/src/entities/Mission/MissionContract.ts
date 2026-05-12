@@ -8,30 +8,30 @@ import type { EntityEventEnvelopeType } from '../Entity/EntitySchema.js';
 import { StageContract } from '../Stage/StageContract.js';
 import { TaskContract } from '../Task/TaskContract.js';
 import {
+    MissionSendTerminalInputSchema,
+    MissionTerminalSnapshotSchema
+} from '../Terminal/MissionTerminalSchema.js';
+import {
     missionEntityName,
-    MissionDataSchema,
+    MissionStorageSchema,
     MissionFindSchema,
     MissionCatalogEntrySchema,
-    MissionDocumentSnapshotSchema,
-    MissionWorktreeSnapshotSchema,
-    MissionSnapshotSchema,
-    MissionControlViewSnapshotSchema,
+    MissionDocumentSchema,
+    MissionWorktreeSchema,
+    MissionSchema,
+    MissionControlSchema,
     MissionReadDocumentInputSchema,
     MissionLocatorSchema,
-    MissionSendTerminalInputSchema,
-    MissionCommandInputSchema,
     MissionWriteDocumentInputSchema,
-    MissionTerminalSnapshotSchema,
     MissionCommandAcknowledgementSchema,
-    MissionStatusSnapshotSchema,
-    MissionSnapshotChangedEventSchema
+    MissionChangedEventSchema
 } from './MissionSchema.js';
 
 export const MissionContract: EntityContractType = {
     entity: missionEntityName,
     entityClass: Mission,
     properties: Object.fromEntries(
-        Object.entries(MissionDataSchema.shape).map(([name, schema]) => [
+        Object.entries(MissionStorageSchema.shape).map(([name, schema]) => [
             name,
             {
                 schema,
@@ -49,25 +49,25 @@ export const MissionContract: EntityContractType = {
         read: {
             kind: 'query',
             payload: MissionLocatorSchema,
-            result: MissionSnapshotSchema,
+            result: MissionSchema,
             execution: 'entity'
         },
-        readControlView: {
+        readControl: {
             kind: 'query',
             payload: MissionLocatorSchema,
-            result: MissionControlViewSnapshotSchema,
+            result: MissionControlSchema,
             execution: 'entity'
         },
         readDocument: {
             kind: 'query',
             payload: MissionReadDocumentInputSchema,
-            result: MissionDocumentSnapshotSchema,
+            result: MissionDocumentSchema,
             execution: 'entity'
         },
         readWorktree: {
             kind: 'query',
             payload: MissionLocatorSchema,
-            result: MissionWorktreeSnapshotSchema,
+            result: MissionWorktreeSchema,
             execution: 'entity'
         },
         readTerminal: {
@@ -76,16 +76,62 @@ export const MissionContract: EntityContractType = {
             result: MissionTerminalSnapshotSchema,
             execution: 'entity'
         },
-        command: {
+        pause: {
             kind: 'mutation',
-            payload: MissionCommandInputSchema,
+            payload: MissionLocatorSchema,
             result: MissionCommandAcknowledgementSchema,
-            execution: 'entity'
+            execution: 'entity',
+            ui: {
+                label: 'Pause Mission',
+                icon: 'pause',
+                presentationOrder: 10
+            }
+        },
+        resume: {
+            kind: 'mutation',
+            payload: MissionLocatorSchema,
+            result: MissionCommandAcknowledgementSchema,
+            execution: 'entity',
+            ui: {
+                label: 'Resume Mission',
+                icon: 'play',
+                presentationOrder: 20
+            }
+        },
+        restartQueue: {
+            kind: 'mutation',
+            payload: MissionLocatorSchema,
+            result: MissionCommandAcknowledgementSchema,
+            execution: 'entity',
+            ui: {
+                label: 'Restart Launch Queue',
+                icon: 'refresh-cw',
+                confirmation: {
+                    required: true,
+                    prompt: 'Clear stale launch requests and retry queued tasks now?'
+                },
+                presentationOrder: 30
+            }
+        },
+        deliver: {
+            kind: 'mutation',
+            payload: MissionLocatorSchema,
+            result: MissionCommandAcknowledgementSchema,
+            execution: 'entity',
+            ui: {
+                label: 'Deliver Mission',
+                icon: 'rocket',
+                confirmation: {
+                    required: true,
+                    prompt: 'Deliver this mission now?'
+                },
+                presentationOrder: 40
+            }
         },
         writeDocument: {
             kind: 'mutation',
             payload: MissionWriteDocumentInputSchema,
-            result: MissionDocumentSnapshotSchema,
+            result: MissionDocumentSchema,
             execution: 'entity'
         },
         ensureTerminal: {
@@ -102,11 +148,8 @@ export const MissionContract: EntityContractType = {
         }
     },
     events: {
-        'snapshot.changed': {
-            payload: MissionSnapshotChangedEventSchema
-        },
-        status: {
-            payload: MissionStatusSnapshotSchema
+        changed: {
+            payload: MissionChangedEventSchema
         },
         terminal: {
             payload: MissionTerminalSnapshotSchema

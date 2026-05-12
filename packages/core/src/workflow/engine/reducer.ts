@@ -1,15 +1,15 @@
 import {
-    type MissionWorkflowConfigurationSnapshot,
-    type MissionWorkflowEvent,
-    type MissionWorkflowRequest,
-    type MissionWorkflowReducer,
-    type MissionWorkflowReducerResult,
-    type MissionWorkflowRuntimeState,
-    type MissionWorkflowSignal,
-    type MissionTaskRuntimeState,
+    type WorkflowConfigurationSnapshot,
+    type WorkflowEvent,
+    type WorkflowRequest,
+    type WorkflowReducer,
+    type WorkflowReducerResult,
+    type WorkflowRuntimeState,
+    type WorkflowSignal,
+    type WorkflowTaskRuntimeState,
     type AgentExecutionRuntimeState
 } from './types.js';
-import { createInitialMissionWorkflowRuntimeState } from './document.js';
+import { createInitialWorkflowRuntimeState } from './document.js';
 import {
     buildReworkPendingLaunchContext,
     buildWorkflowTaskGenerationRequests,
@@ -20,35 +20,35 @@ import {
     resolveTaskMaxReworkIterations,
     resolveDependentTaskIds
 } from './policy.js';
-import { deriveMissionWorkflowProjectionState } from './projection.js';
+import { deriveWorkflowProjectionState } from './projection.js';
 
-export class DefaultMissionWorkflowReducer implements MissionWorkflowReducer {
+export class DefaultWorkflowReducer implements WorkflowReducer {
     public reduce(
-        current: MissionWorkflowRuntimeState,
-        event: MissionWorkflowEvent,
-        configuration: MissionWorkflowConfigurationSnapshot
-    ): MissionWorkflowReducerResult {
-        return new MissionWorkflowReductionCycle(current, event, configuration).reduce();
+        current: WorkflowRuntimeState,
+        event: WorkflowEvent,
+        configuration: WorkflowConfigurationSnapshot
+    ): WorkflowReducerResult {
+        return new WorkflowReductionCycle(current, event, configuration).reduce();
     }
 }
 
-class MissionWorkflowReductionCycle {
-    private readonly state: MissionWorkflowRuntimeState;
-    private readonly signals: MissionWorkflowSignal[] = [];
-    private readonly requests: MissionWorkflowRequest[] = [];
+class WorkflowReductionCycle {
+    private readonly state: WorkflowRuntimeState;
+    private readonly signals: WorkflowSignal[] = [];
+    private readonly requests: WorkflowRequest[] = [];
 
     public constructor(
-        current: MissionWorkflowRuntimeState,
-        private readonly event: MissionWorkflowEvent,
-        private readonly configuration: MissionWorkflowConfigurationSnapshot
+        current: WorkflowRuntimeState,
+        private readonly event: WorkflowEvent,
+        private readonly configuration: WorkflowConfigurationSnapshot
     ) {
         this.state = cloneRuntimeState(current);
     }
 
-    public reduce(): MissionWorkflowReducerResult {
+    public reduce(): WorkflowReducerResult {
         const suppressAutostart = isInactiveAgentExecutionLifecycleEvent(this.state, this.event);
-        new MissionWorkflowTransitionEngine(this.state, this.event, this.configuration).apply();
-        new MissionWorkflowDerivationEngine(this.state, this.event, this.configuration, this.signals, this.requests, suppressAutostart).derive();
+        new WorkflowTransitionEngine(this.state, this.event, this.configuration).apply();
+        new WorkflowDerivationEngine(this.state, this.event, this.configuration, this.signals, this.requests, suppressAutostart).derive();
         return {
             nextState: this.state,
             signals: this.signals,
@@ -57,11 +57,11 @@ class MissionWorkflowReductionCycle {
     }
 }
 
-class MissionWorkflowTransitionEngine {
+class WorkflowTransitionEngine {
     public constructor(
-        private readonly state: MissionWorkflowRuntimeState,
-        private readonly event: MissionWorkflowEvent,
-        private readonly configuration: MissionWorkflowConfigurationSnapshot
+        private readonly state: WorkflowRuntimeState,
+        private readonly event: WorkflowEvent,
+        private readonly configuration: WorkflowConfigurationSnapshot
     ) { }
 
     public apply(): void {
@@ -140,7 +140,7 @@ class MissionWorkflowTransitionEngine {
                 const existingTaskIds = new Set(this.state.tasks.map((task) => task.taskId));
                 const createdTasks = event.tasks
                     .filter((task) => !existingTaskIds.has(task.taskId))
-                    .map<MissionTaskRuntimeState>((task) => ({
+                    .map<WorkflowTaskRuntimeState>((task) => ({
                         taskId: task.taskId,
                         stageId: event.stageId,
                         title: task.title,
@@ -313,7 +313,7 @@ class MissionWorkflowTransitionEngine {
                         ...(event.sourceAgentExecutionId ? { sourceAgentExecutionId: event.sourceAgentExecutionId } : {}),
                         artifactRefs: event.artifactRefs.map((artifactRef) => ({ ...artifactRef }))
                     };
-                    const reworkedRuntimeTask: MissionTaskRuntimeState = {
+                    const reworkedRuntimeTask: WorkflowTaskRuntimeState = {
                         ...resetTask,
                         reworkIterationCount: iteration,
                         reworkRequest
@@ -430,13 +430,13 @@ class MissionWorkflowTransitionEngine {
     }
 }
 
-class MissionWorkflowDerivationEngine {
+class WorkflowDerivationEngine {
     public constructor(
-        private readonly state: MissionWorkflowRuntimeState,
-        private readonly event: MissionWorkflowEvent,
-        private readonly configuration: MissionWorkflowConfigurationSnapshot,
-        private readonly signals: MissionWorkflowSignal[],
-        private readonly requests: MissionWorkflowRequest[],
+        private readonly state: WorkflowRuntimeState,
+        private readonly event: WorkflowEvent,
+        private readonly configuration: WorkflowConfigurationSnapshot,
+        private readonly signals: WorkflowSignal[],
+        private readonly requests: WorkflowRequest[],
         private readonly suppressAutostart: boolean
     ) { }
 
@@ -486,22 +486,22 @@ class MissionWorkflowDerivationEngine {
     }
 }
 
-export function createMissionWorkflowReducer(): MissionWorkflowReducer {
-    return new DefaultMissionWorkflowReducer();
+export function createWorkflowReducer(): WorkflowReducer {
+    return new DefaultWorkflowReducer();
 }
 
-export function reduceMissionWorkflowEvent(
-    current: MissionWorkflowRuntimeState | undefined,
-    event: MissionWorkflowEvent,
-    configuration: MissionWorkflowConfigurationSnapshot
-): MissionWorkflowReducerResult {
-    const reducer = createMissionWorkflowReducer();
-    return reducer.reduce(current ?? createInitialMissionWorkflowRuntimeState(configuration), event, configuration);
+export function reduceWorkflowEvent(
+    current: WorkflowRuntimeState | undefined,
+    event: WorkflowEvent,
+    configuration: WorkflowConfigurationSnapshot
+): WorkflowReducerResult {
+    const reducer = createWorkflowReducer();
+    return reducer.reduce(current ?? createInitialWorkflowRuntimeState(configuration), event, configuration);
 }
 
 function enforceLifecycleInvariants(
-    state: MissionWorkflowRuntimeState,
-    configuration: MissionWorkflowConfigurationSnapshot,
+    state: WorkflowRuntimeState,
+    configuration: WorkflowConfigurationSnapshot,
     occurredAt: string
 ): void {
     void configuration;
@@ -524,10 +524,10 @@ function enforceLifecycleInvariants(
 }
 
 function queueAutostartTasks(
-    state: MissionWorkflowRuntimeState,
-    event: MissionWorkflowEvent,
-    _configuration: MissionWorkflowConfigurationSnapshot,
-    requests: MissionWorkflowRequest[]
+    state: WorkflowRuntimeState,
+    event: WorkflowEvent,
+    _configuration: WorkflowConfigurationSnapshot,
+    requests: WorkflowRequest[]
 ): void {
     if (state.lifecycle !== 'running' || state.pause.paused) {
         return;
@@ -627,8 +627,8 @@ function hasActiveAgentExecution(agentExecutions: AgentExecutionRuntimeState[], 
 }
 
 function isInactiveAgentExecutionLifecycleEvent(
-    state: MissionWorkflowRuntimeState,
-    event: MissionWorkflowEvent
+    state: WorkflowRuntimeState,
+    event: WorkflowEvent
 ): boolean {
     switch (event.type) {
         case 'execution.cancelled':
@@ -642,18 +642,18 @@ function isInactiveAgentExecutionLifecycleEvent(
 }
 
 function applyDerivedWorkflowProjectionState(
-    state: MissionWorkflowRuntimeState,
-    configuration: MissionWorkflowConfigurationSnapshot,
+    state: WorkflowRuntimeState,
+    configuration: WorkflowConfigurationSnapshot,
     occurredAt: string
 ): void {
-    const derived = deriveMissionWorkflowProjectionState(state, configuration, occurredAt);
+    const derived = deriveWorkflowProjectionState(state, configuration, occurredAt);
     state.tasks = derived.tasks;
     state.stages = derived.stages;
     state.gates = derived.gates;
     assignActiveStageId(state, derived.activeStageId);
 }
 
-function resetInterruptedTask(task: MissionTaskRuntimeState, occurredAt: string): MissionTaskRuntimeState {
+function resetInterruptedTask(task: WorkflowTaskRuntimeState, occurredAt: string): WorkflowTaskRuntimeState {
     const resetTask = resetLifecycleState(task, occurredAt);
     return {
         ...resetTask,
@@ -664,7 +664,7 @@ function resetInterruptedTask(task: MissionTaskRuntimeState, occurredAt: string)
     };
 }
 
-function resetLifecycleState(task: MissionTaskRuntimeState, occurredAt: string): MissionTaskRuntimeState {
+function resetLifecycleState(task: WorkflowTaskRuntimeState, occurredAt: string): WorkflowTaskRuntimeState {
     const { completedAt, failedAt, cancelledAt, ...rest } = task;
     void completedAt;
     void failedAt;
@@ -676,7 +676,7 @@ function resetLifecycleState(task: MissionTaskRuntimeState, occurredAt: string):
     };
 }
 
-function cloneRuntimeState(state: MissionWorkflowRuntimeState): MissionWorkflowRuntimeState {
+function cloneRuntimeState(state: WorkflowRuntimeState): WorkflowRuntimeState {
     return {
         lifecycle: state.lifecycle,
         ...(state.activeStageId ? { activeStageId: state.activeStageId } : {}),
@@ -720,10 +720,10 @@ function cloneRuntimeState(state: MissionWorkflowRuntimeState): MissionWorkflowR
 }
 
 function configureTaskRuntimeState(
-    task: MissionTaskRuntimeState,
-    event: Extract<MissionWorkflowEvent, { type: 'task.configured' }>
-): MissionTaskRuntimeState {
-    const next: MissionTaskRuntimeState = {
+    task: WorkflowTaskRuntimeState,
+    event: Extract<WorkflowEvent, { type: 'task.configured' }>
+): WorkflowTaskRuntimeState {
+    const next: WorkflowTaskRuntimeState = {
         ...task,
         updatedAt: event.occurredAt
     };
@@ -757,7 +757,7 @@ function configureTaskRuntimeState(
 }
 
 function assignActiveStageId(
-    state: MissionWorkflowRuntimeState,
+    state: WorkflowRuntimeState,
     activeStageId: string | undefined
 ): void {
     if (activeStageId) {
@@ -768,10 +768,10 @@ function assignActiveStageId(
 }
 
 function createSignal(
-    type: MissionWorkflowSignal['type'],
+    type: WorkflowSignal['type'],
     emittedAt: string,
     payload: Record<string, unknown>
-): MissionWorkflowSignal {
+): WorkflowSignal {
     return {
         signalId: `${type}:${emittedAt}:${JSON.stringify(payload)}`,
         type,
@@ -781,10 +781,10 @@ function createSignal(
 }
 
 function createRequest(
-    type: MissionWorkflowRequest['type'],
+    type: WorkflowRequest['type'],
     occurredAt: string,
     payload: Record<string, unknown>
-): MissionWorkflowRequest {
+): WorkflowRequest {
     return {
         requestId: `${type}:${occurredAt}:${JSON.stringify(payload)}`,
         type,

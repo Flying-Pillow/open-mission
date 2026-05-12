@@ -1,7 +1,7 @@
 import * as net from 'node:net';
 import {
-	MissionAgentEventEmitter,
-	type MissionAgentDisposable
+	AgentRuntimeEventEmitter,
+	type AgentRuntimeDisposable
 } from '../runtime/agent/events.js';
 import type { EntityEventEnvelopeType } from '../../entities/Entity/EntitySchema.js';
 import { METHOD_METADATA } from '../protocol/contracts.js';
@@ -21,14 +21,14 @@ type PendingRequest = {
 	reject: (error: Error) => void;
 };
 
-export class DaemonClient implements MissionAgentDisposable {
+export class DaemonClient implements AgentRuntimeDisposable {
 	private socket: net.Socket | undefined;
 	private socketPath: string | undefined;
 	private buffer = '';
 	private nextRequestId = 0;
 	private readonly pendingRequests = new Map<string, PendingRequest>();
-	private readonly eventEmitter = new MissionAgentEventEmitter<EntityEventEnvelopeType>();
-	private readonly disconnectEmitter = new MissionAgentEventEmitter<Error>();
+	private readonly eventEmitter = new AgentRuntimeEventEmitter<EntityEventEnvelopeType>();
+	private readonly disconnectEmitter = new AgentRuntimeEventEmitter<Error>();
 	private surfacePath = '';
 	private authToken = '';
 

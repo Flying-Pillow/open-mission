@@ -15,7 +15,7 @@ describe('AgentExecutionSignalRegistry', () => {
                         activity: 'read'
                     }
                 ],
-                source: 'agent-declared',
+                source: 'agent-signal',
                 confidence: 'medium'
             },
             provenance: {
@@ -45,7 +45,7 @@ describe('AgentExecutionSignalRegistry', () => {
                         activity: 'write'
                     }
                 ],
-                source: 'agent-declared',
+                source: 'agent-signal',
                 confidence: 'medium'
             },
             provenance: {

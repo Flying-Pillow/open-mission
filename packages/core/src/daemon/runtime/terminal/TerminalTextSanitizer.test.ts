@@ -14,10 +14,10 @@ describe('TerminalTextSanitizer', () => {
         expect(sanitizeTerminalScreenForSurface('\u001b[?1049hhello\u001b[?1049l')).toBe('hello');
     });
 
-    it('drops structural repaint escape sequences from terminal surface output', () => {
+    it('preserves non-OSC terminal control sequences for terminal surface output', () => {
         expect(
             sanitizeTerminalOutputChunkForSurface('\u001b[?2026h\u001b[1;1H\u001b[2KHello\u001b[2;1H\u001b[2KWorld\u001b[?2026l')
-        ).toBe('HelloWorld');
+        ).toBe('\u001b[?2026h\u001b[1;1H\u001b[2KHello\u001b[2;1H\u001b[2KWorld\u001b[?2026l');
     });
 
     it('preserves SGR styling sequences for terminal surface output', () => {

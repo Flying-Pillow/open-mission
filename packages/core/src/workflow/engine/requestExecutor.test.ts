@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import type { MissionDescriptor, MissionTaskState } from '../../entities/Mission/MissionSchema.js';
+import type { MissionDescriptor } from '../../entities/Mission/MissionSchema.js';
 import type { MissionDossierFilesystem, TaskArtifactWrite } from '../../entities/Mission/MissionDossierFilesystem.js';
 import {
-	createInitialMissionWorkflowRuntimeState,
-	createMissionWorkflowConfigurationSnapshot
+	createInitialWorkflowRuntimeState,
+	createWorkflowConfigurationSnapshot
 } from './document.js';
 import { DEFAULT_WORKFLOW_VERSION, createDefaultWorkflowSettings } from '../mission/workflow.js';
-import { MissionWorkflowRequestExecutor } from './requestExecutor.js';
+import { WorkflowRequestExecutor } from './requestExecutor.js';
 import { FakeAgentAdapter } from '../../daemon/runtime/agent/testing/FakeAgentAdapter.js';
 import { Agent } from '../../entities/Agent/Agent.js';
 import { AgentRegistry } from '../../entities/Agent/AgentRegistry.js';
-import type { MissionTaskRuntimeState, MissionWorkflowRequest } from './types.js';
+import type { WorkflowTaskRuntimeState, WorkflowRequest } from './types.js';
+import type { TaskDossierRecordType } from '../../entities/Task/TaskSchema.js';
 import type { AgentExecutionReference } from '../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import type { AgentExecution } from '../../entities/AgentExecution/AgentExecution.js';
 
@@ -28,7 +29,7 @@ function createDescriptor(): MissionDescriptor {
 	} as MissionDescriptor;
 }
 
-function createTask(task: Partial<MissionTaskRuntimeState> = {}): MissionTaskRuntimeState {
+function createTask(task: Partial<WorkflowTaskRuntimeState> = {}): WorkflowTaskRuntimeState {
 	return {
 		taskId: 'implementation/03-align-workflow-request-execution-with-unified-runtime',
 		stageId: 'implementation',
@@ -69,7 +70,7 @@ function createAgentRegistry(agentAdapter: FakeAgentAdapter): AgentRegistry {
 	});
 }
 
-describe('MissionWorkflowRequestExecutor', () => {
+describe('WorkflowRequestExecutor', () => {
 	it('generates implementation tasks from configured task-generation tasks', async () => {
 		const agentAdapter = new FakeAgentAdapter('fake-adapter', 'Fake Adapter', 'terminal');
 		const writtenTasks: Array<{ stage: string; fileName: string; record: TaskArtifactWrite }> = [];
@@ -81,7 +82,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 			}
 		} as unknown as MissionDossierFilesystem;
 
-		const executor = new MissionWorkflowRequestExecutor({
+		const executor = new WorkflowRequestExecutor({
 			adapter,
 			agentRegistry: createAgentRegistry(agentAdapter)
 		});
@@ -103,12 +104,12 @@ describe('MissionWorkflowRequestExecutor', () => {
 				}
 				: rule
 		);
-		const configuration = createMissionWorkflowConfigurationSnapshot({
+		const configuration = createWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-10T21:00:07.000Z',
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow
 		});
-		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
 
 		const events = await executor.executeRequests({
 			missionId: 'mission-17',
@@ -121,7 +122,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 				payload: {
 					stageId: 'implementation'
 				}
-			} satisfies MissionWorkflowRequest]
+			} satisfies WorkflowRequest]
 		});
 
 		expect(events[0]).toMatchObject({
@@ -146,7 +147,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 
 	it('generates implementation tasks from existing stage task artifacts when workflow rules are empty', async () => {
 		const agentAdapter = new FakeAgentAdapter('fake-adapter', 'Fake Adapter', 'terminal');
-		const implementationTaskArtifact: MissionTaskState = {
+		const implementationTaskArtifact: TaskDossierRecordType = {
 			taskId: 'implementation/01-from-artifact',
 			stage: 'implementation',
 			sequence: 1,
@@ -169,7 +170,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 			writeTaskRecord: async () => undefined
 		} as unknown as MissionDossierFilesystem;
 
-		const executor = new MissionWorkflowRequestExecutor({
+		const executor = new WorkflowRequestExecutor({
 			adapter,
 			agentRegistry: createAgentRegistry(agentAdapter)
 		});
@@ -184,12 +185,12 @@ describe('MissionWorkflowRequestExecutor', () => {
 				}
 				: rule
 		);
-		const configuration = createMissionWorkflowConfigurationSnapshot({
+		const configuration = createWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-10T21:00:07.000Z',
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow
 		});
-		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
 
 		const events = await executor.executeRequests({
 			missionId: 'mission-17',
@@ -202,7 +203,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 				payload: {
 					stageId: 'implementation'
 				}
-			} satisfies MissionWorkflowRequest]
+			} satisfies WorkflowRequest]
 		});
 
 		expect(events[0]).toMatchObject({
@@ -238,12 +239,12 @@ describe('MissionWorkflowRequestExecutor', () => {
 						fileName: '01-from-artifact.md',
 						filePath: '/tmp/mission-17/.mission/missions/mission-17/03-IMPLEMENTATION/tasks/01-from-artifact.md',
 						relativePath: '03-IMPLEMENTATION/tasks/01-from-artifact.md'
-					} satisfies MissionTaskState]
+					} satisfies TaskDossierRecordType]
 					: [],
 			writeTaskRecord: async () => undefined
 		} as unknown as MissionDossierFilesystem;
 
-		const executor = new MissionWorkflowRequestExecutor({
+		const executor = new WorkflowRequestExecutor({
 			adapter,
 			agentRegistry: createAgentRegistry(agentAdapter)
 		});
@@ -258,12 +259,12 @@ describe('MissionWorkflowRequestExecutor', () => {
 				}
 				: rule
 		);
-		const configuration = createMissionWorkflowConfigurationSnapshot({
+		const configuration = createWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-10T21:00:07.000Z',
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow
 		});
-		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
 
 		const events = await executor.executeRequests({
 			missionId: 'mission-17',
@@ -276,7 +277,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 				payload: {
 					stageId: 'implementation'
 				}
-			} satisfies MissionWorkflowRequest]
+			} satisfies WorkflowRequest]
 		});
 
 		expect(events[0]).toMatchObject({
@@ -294,16 +295,16 @@ describe('MissionWorkflowRequestExecutor', () => {
 			writeTaskRecord: async () => undefined
 		} as unknown as MissionDossierFilesystem;
 
-		const executor = new MissionWorkflowRequestExecutor({
+		const executor = new WorkflowRequestExecutor({
 			adapter,
 			agentRegistry: createAgentRegistry(agentAdapter)
 		});
-		const configuration = createMissionWorkflowConfigurationSnapshot({
+		const configuration = createWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-10T21:00:07.000Z',
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow: createDefaultWorkflowSettings()
 		});
-		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
 
 		const events = await executor.executeRequests({
 			missionId: 'mission-17',
@@ -316,7 +317,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 				payload: {
 					stageId: 'spec'
 				}
-			} satisfies MissionWorkflowRequest]
+			} satisfies WorkflowRequest]
 		});
 
 		expect(events[0]).toMatchObject({
@@ -339,20 +340,20 @@ describe('MissionWorkflowRequestExecutor', () => {
 		const agentAdapter = new FakeAgentAdapter('fake-adapter', 'Fake Adapter', 'terminal');
 
 		const adapter = {
-			getMissionAgentJournalRelativePath: (agentExecutionId: string) => `agent-journals/${agentExecutionId}.interaction.jsonl`,
+			getAgentExecutionJournalRelativePath: (agentExecutionId: string) => `agent-journals/${agentExecutionId}.interaction.jsonl`,
 			getMissionTerminalRecordingRelativePath: (agentExecutionId: string) => `terminal-recordings/${agentExecutionId}.terminal.jsonl`
 		} as MissionDossierFilesystem;
 
-		const executor = new MissionWorkflowRequestExecutor({
+		const executor = new WorkflowRequestExecutor({
 			adapter,
 			agentRegistry: createAgentRegistry(agentAdapter)
 		});
-		const configuration = createMissionWorkflowConfigurationSnapshot({
+		const configuration = createWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-10T21:00:07.000Z',
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow: createDefaultWorkflowSettings()
 		});
-		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
 		const task = createTask();
 		runtime.tasks = [task];
 
@@ -368,7 +369,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 					taskId: task.taskId,
 					agentId: 'fake-adapter'
 				}
-			} satisfies MissionWorkflowRequest]
+			} satisfies WorkflowRequest]
 		});
 
 		expect(agentAdapter.getLastStartRequest()?.task?.taskId).toBe(task.taskId);
@@ -388,16 +389,16 @@ describe('MissionWorkflowRequestExecutor', () => {
 
 	it('starts a new runtime AgentExecution id when relaunching the same task after termination', async () => {
 		const agentAdapter = new FakeAgentAdapter('fake-adapter', 'Fake Adapter', 'terminal');
-		const executor = new MissionWorkflowRequestExecutor({
+		const executor = new WorkflowRequestExecutor({
 			adapter: {} as MissionDossierFilesystem,
 			agentRegistry: createAgentRegistry(agentAdapter)
 		});
-		const configuration = createMissionWorkflowConfigurationSnapshot({
+		const configuration = createWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-10T21:00:07.000Z',
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow: createDefaultWorkflowSettings()
 		});
-		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
 		const task = createTask();
 		runtime.tasks = [task];
 
@@ -413,7 +414,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 					taskId: task.taskId,
 					agentId: 'fake-adapter'
 				}
-			} satisfies MissionWorkflowRequest]
+			} satisfies WorkflowRequest]
 		});
 
 		const firstAgentExecutionId = firstLaunchEvents.find((event) => event.type === 'execution.started')?.agentExecutionId;
@@ -435,7 +436,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 					taskId: task.taskId,
 					agentId: 'fake-adapter'
 				}
-			} satisfies MissionWorkflowRequest]
+			} satisfies WorkflowRequest]
 		});
 
 		const secondAgentExecutionId = secondLaunchEvents.find((event) => event.type === 'execution.started')?.agentExecutionId;
@@ -448,7 +449,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 
 	it('preserves canonical task identity when cancelling an unattached runtime AgentExecution', async () => {
 		const agentAdapter = new FakeAgentAdapter('fake-adapter', 'Fake Adapter', 'terminal');
-		const executor = new MissionWorkflowRequestExecutor({
+		const executor = new WorkflowRequestExecutor({
 			adapter: {} as MissionDossierFilesystem,
 			agentRegistry: createAgentRegistry(agentAdapter)
 		});
@@ -477,16 +478,16 @@ describe('MissionWorkflowRequestExecutor', () => {
 
 	it('emits task.completed when a task-scoped runtime AgentExecution completes successfully', async () => {
 		const agentAdapter = new FakeAgentAdapter('fake-adapter', 'Fake Adapter', 'terminal');
-		const executor = new MissionWorkflowRequestExecutor({
+		const executor = new WorkflowRequestExecutor({
 			adapter: {} as MissionDossierFilesystem,
 			agentRegistry: createAgentRegistry(agentAdapter)
 		});
-		const configuration = createMissionWorkflowConfigurationSnapshot({
+		const configuration = createWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-10T21:00:07.000Z',
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow: createDefaultWorkflowSettings()
 		});
-		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
 		const task = createTask();
 		runtime.tasks = [task];
 
@@ -502,7 +503,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 					taskId: task.taskId,
 					agentId: 'fake-adapter'
 				}
-			} satisfies MissionWorkflowRequest]
+			} satisfies WorkflowRequest]
 		});
 
 		const agentExecutionId = agentAdapter.listExecutions()[0]?.reference.agentExecutionId;
@@ -547,16 +548,16 @@ describe('MissionWorkflowRequestExecutor', () => {
 			getMissionWorkspacePath: (missionDir: string) => missionDir
 		} as unknown as MissionDossierFilesystem;
 
-		const executor = new MissionWorkflowRequestExecutor({
+		const executor = new WorkflowRequestExecutor({
 			adapter,
 			agentRegistry: createAgentRegistry(agentAdapter)
 		});
-		const configuration = createMissionWorkflowConfigurationSnapshot({
+		const configuration = createWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-10T21:00:07.000Z',
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow: createDefaultWorkflowSettings()
 		});
-		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
 		const task = createTask();
 		runtime.tasks = [task];
 
@@ -572,7 +573,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 					taskId: task.taskId,
 					agentId: 'fake-adapter'
 				}
-			} satisfies MissionWorkflowRequest]
+			} satisfies WorkflowRequest]
 		});
 
 		expect(agentAdapter.getLastStartRequest()?.initialPrompt?.text).toContain(
@@ -605,16 +606,16 @@ describe('MissionWorkflowRequestExecutor', () => {
 			getMissionWorkspacePath: (missionDir: string) => missionDir
 		} as unknown as MissionDossierFilesystem;
 
-		const executor = new MissionWorkflowRequestExecutor({
+		const executor = new WorkflowRequestExecutor({
 			adapter,
 			agentRegistry: createAgentRegistry(agentAdapter)
 		});
-		const configuration = createMissionWorkflowConfigurationSnapshot({
+		const configuration = createWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-10T21:00:07.000Z',
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow: createDefaultWorkflowSettings()
 		});
-		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
 		const task = createTask({
 			pendingLaunchContext: {
 				source: 'rework',
@@ -645,7 +646,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 					agentId: 'fake-adapter',
 					prompt: 'Operator supplied launch prompt.'
 				}
-			} satisfies MissionWorkflowRequest]
+			} satisfies WorkflowRequest]
 		});
 
 		const prompt = agentAdapter.getLastStartRequest()?.initialPrompt?.text;
@@ -666,16 +667,16 @@ describe('MissionWorkflowRequestExecutor', () => {
 		}
 
 		const agentAdapter = new ThrowingReconcileAdapter('fake-adapter', 'Fake Adapter', 'terminal');
-		const executor = new MissionWorkflowRequestExecutor({
+		const executor = new WorkflowRequestExecutor({
 			adapter: {} as MissionDossierFilesystem,
 			agentRegistry: createAgentRegistry(agentAdapter)
 		});
-		const configuration = createMissionWorkflowConfigurationSnapshot({
+		const configuration = createWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-10T21:00:07.000Z',
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow: createDefaultWorkflowSettings()
 		});
-		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
 		const task = createTask();
 		runtime.tasks = [task];
 		runtime.agentExecutions = [{
@@ -704,16 +705,16 @@ describe('MissionWorkflowRequestExecutor', () => {
 
 	it('passes task-level model and reasoning effort from mission runtime state into the launch config', async () => {
 		const agentAdapter = new FakeAgentAdapter('fake-adapter', 'Fake Adapter', 'terminal');
-		const executor = new MissionWorkflowRequestExecutor({
+		const executor = new WorkflowRequestExecutor({
 			adapter: {} as MissionDossierFilesystem,
 			agentRegistry: createAgentRegistry(agentAdapter)
 		});
-		const configuration = createMissionWorkflowConfigurationSnapshot({
+		const configuration = createWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-10T21:00:07.000Z',
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow: createDefaultWorkflowSettings()
 		});
-		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
 		const task = createTask({
 			model: 'gpt-5-codex',
 			reasoningEffort: 'high'
@@ -733,7 +734,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 					agentId: 'fake-adapter',
 					prompt: 'Operator supplied launch prompt.'
 				}
-			} satisfies MissionWorkflowRequest]
+			} satisfies WorkflowRequest]
 		});
 
 		expect(agentAdapter.getLastStartRequest()?.metadata).toMatchObject({
@@ -744,18 +745,18 @@ describe('MissionWorkflowRequestExecutor', () => {
 
 	it('passes repository-level model and reasoning effort defaults into the launch config', async () => {
 		const agentAdapter = new FakeAgentAdapter('fake-adapter', 'Fake Adapter', 'terminal');
-		const executor = new MissionWorkflowRequestExecutor({
+		const executor = new WorkflowRequestExecutor({
 			adapter: {} as MissionDossierFilesystem,
 			agentRegistry: createAgentRegistry(agentAdapter),
 			defaultModel: 'gpt-5-codex',
 			defaultReasoningEffort: 'high'
 		});
-		const configuration = createMissionWorkflowConfigurationSnapshot({
+		const configuration = createWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-10T21:00:07.000Z',
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow: createDefaultWorkflowSettings()
 		});
-		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
 		const task = createTask();
 		runtime.tasks = [task];
 
@@ -772,7 +773,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 					agentId: 'fake-adapter',
 					prompt: 'Operator supplied launch prompt.'
 				}
-			} satisfies MissionWorkflowRequest]
+			} satisfies WorkflowRequest]
 		});
 
 		expect(agentAdapter.getLastStartRequest()?.metadata).toMatchObject({
@@ -793,16 +794,16 @@ describe('MissionWorkflowRequestExecutor', () => {
 		}
 
 		const agentAdapter = new ThrowingReconcileAdapter('fake-adapter', 'Fake Adapter', 'terminal');
-		const executor = new MissionWorkflowRequestExecutor({
+		const executor = new WorkflowRequestExecutor({
 			adapter: {} as MissionDossierFilesystem,
 			agentRegistry: createAgentRegistry(agentAdapter)
 		});
-		const configuration = createMissionWorkflowConfigurationSnapshot({
+		const configuration = createWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-10T21:00:07.000Z',
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow: createDefaultWorkflowSettings()
 		});
-		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
 		const task = createTask();
 		runtime.tasks = [task];
 		runtime.agentExecutions = [{
@@ -829,7 +830,7 @@ describe('MissionWorkflowRequestExecutor', () => {
 	});
 
 	it('does not mark unattached agentExecutions terminated without runtime confirmation', async () => {
-		const executor = new MissionWorkflowRequestExecutor({
+		const executor = new WorkflowRequestExecutor({
 			adapter: {} as MissionDossierFilesystem,
 			agentRegistry: new AgentRegistry({ agents: [] })
 		});
@@ -845,16 +846,16 @@ describe('MissionWorkflowRequestExecutor', () => {
 
 	it('reconciles detached terminal snapshots even when runtime snapshot taskId is unknown', async () => {
 		const agentAdapter = new FakeAgentAdapter('fake-adapter', 'Fake Adapter', 'terminal');
-		const executor = new MissionWorkflowRequestExecutor({
+		const executor = new WorkflowRequestExecutor({
 			adapter: {} as MissionDossierFilesystem,
 			agentRegistry: createAgentRegistry(agentAdapter)
 		});
-		const configuration = createMissionWorkflowConfigurationSnapshot({
+		const configuration = createWorkflowConfigurationSnapshot({
 			createdAt: '2026-04-10T21:00:07.000Z',
 			workflowVersion: DEFAULT_WORKFLOW_VERSION,
 			workflow: createDefaultWorkflowSettings()
 		});
-		const runtime = createInitialMissionWorkflowRuntimeState(configuration, configuration.createdAt);
+		const runtime = createInitialWorkflowRuntimeState(configuration, configuration.createdAt);
 		const task = createTask();
 		runtime.tasks = [task];
 		runtime.agentExecutions = [{
