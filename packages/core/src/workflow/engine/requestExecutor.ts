@@ -321,7 +321,7 @@ export class WorkflowRequestExecutor {
 					if (!agentExecutionId) {
 						break;
 					}
-					await this.cancelRuntimeAgentExecution(agentExecutionId, 'cancelled by workflow engine');
+					await this.cancelProcessAgentExecution(agentExecutionId, 'cancelled by workflow engine');
 					break;
 				}
 				case 'execution.terminate': {
@@ -329,7 +329,7 @@ export class WorkflowRequestExecutor {
 					if (!agentExecutionId) {
 						break;
 					}
-					await this.terminateRuntimeAgentExecution(agentExecutionId, 'terminated by workflow engine');
+					await this.terminateProcessAgentExecution(agentExecutionId, 'terminated by workflow engine');
 					break;
 				}
 			}
@@ -419,7 +419,7 @@ export class WorkflowRequestExecutor {
 		return applied ?? signalAwareAgentExecution.getExecution();
 	}
 
-	public async cancelRuntimeAgentExecution(
+	public async cancelProcessAgentExecution(
 		agentExecutionId: AgentExecutionId,
 		reason?: string,
 		fallbackTaskId?: string
@@ -460,7 +460,7 @@ export class WorkflowRequestExecutor {
 		return this.drainRuntimeEvents();
 	}
 
-	public async terminateRuntimeAgentExecution(
+	public async terminateProcessAgentExecution(
 		agentExecutionId: AgentExecutionId,
 		reason?: string,
 		fallbackTaskId?: string

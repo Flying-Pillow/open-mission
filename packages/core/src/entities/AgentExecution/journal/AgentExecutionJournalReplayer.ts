@@ -10,8 +10,8 @@ import {
     type AgentExecutionActivityStateType,
     type AgentExecutionAttentionStateType,
     type AgentExecutionLifecycleStateType,
-    type AgentExecutionRuntimeActivityType,
-    type AgentExecutionTelemetry,
+    type AgentExecutionLiveActivityType,
+    type AgentExecutionTelemetryType,
     type AgentExecutionTransportStateType
 } from '../state/AgentExecutionStateSchema.js';
 import type { AgentExecutionProtocolDescriptorType } from '../protocol/AgentExecutionProtocolSchema.js';
@@ -21,7 +21,7 @@ import type {
     AgentExecutionJournalHeaderRecordType,
     AgentExecutionJournalRecordType,
     AgentExecutionObservationRecordType,
-    AgentExecutionRuntimeFactRecordType
+    AgentExecutionFactRecordType
 } from './AgentExecutionJournalSchema.js';
 import { projectAgentExecutionObservationSignalToTimelineItem } from '../protocol/AgentExecutionSignalRegistry.js';
 
@@ -34,11 +34,11 @@ export type AgentExecutionJournalReplayState = {
     activityState?: AgentExecutionActivityStateType;
     currentInputRequestId?: string | null;
     awaitingResponseToMessageId?: string | null;
-    runtimeActivity?: AgentExecutionRuntimeActivityType;
+    liveActivity?: AgentExecutionLiveActivityType;
     protocolDescriptor?: AgentExecutionProtocolDescriptorType;
     transportState?: AgentExecutionTransportStateType;
     workingDirectory?: string;
-    telemetry?: AgentExecutionTelemetry;
+    telemetry?: AgentExecutionTelemetryType;
     lastOccurredAt?: string;
 };
 
@@ -52,8 +52,8 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
     let activityState: AgentExecutionActivityStateType | undefined;
     let currentInputRequestId: string | null | undefined;
     let awaitingResponseToMessageId: string | null | undefined;
-    let runtimeActivity: AgentExecutionRuntimeActivityType | undefined;
-    let telemetry: AgentExecutionTelemetry | undefined;
+    let liveActivity: AgentExecutionLiveActivityType | undefined;
+    let telemetry: AgentExecutionTelemetryType | undefined;
     let lastOccurredAt: string | undefined;
 
     for (const record of records) {
@@ -70,8 +70,8 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
                 processedObservationIds.add(record.observationId);
                 appendUniqueTimelineItem(timelineItems, toTimelineItemFromObservation(record));
                 break;
-            case 'runtime-fact':
-                appendUniqueTimelineItem(timelineItems, toTimelineItemFromRuntimeFact(record));
+            case 'agent-execution-fact':
+                appendUniqueTimelineItem(timelineItems, toTimelineItemFromFact(record));
                 break;
             case 'state.changed':
                 lifecycleState = record.lifecycle ?? lifecycleState;
@@ -87,7 +87,7 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
                 break;
             case 'activity.updated':
                 activityState = record.activity ?? activityState;
-                runtimeActivity = mergeRuntimeActivity(runtimeActivity, record);
+                liveActivity = mergeLiveActivity(liveActivity, record);
                 telemetry = mergeTelemetry(telemetry, record);
                 appendUniqueTimelineItem(timelineItems, toTimelineItemFromActivityRecord(record));
                 break;
@@ -110,13 +110,13 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
 
     const projection = AgentExecutionProjectionSchema.parse({
         timelineItems,
-        ...(runtimeActivity || lifecycleState || attention || derivedActivityState || telemetry
+        ...(liveActivity || lifecycleState || attention || derivedActivityState || telemetry
             ? {
                 currentActivity: createCurrentActivityProjection({
                     lifecycleState,
                     attention,
                     activityState: derivedActivityState,
-                    runtimeActivity,
+                    liveActivity,
                     telemetry,
                     lastOccurredAt
                 })
@@ -143,7 +143,7 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
         ...(derivedActivityState ? { activityState: derivedActivityState } : {}),
         ...(currentInputRequestId !== undefined ? { currentInputRequestId } : {}),
         ...(awaitingResponseToMessageId !== undefined ? { awaitingResponseToMessageId } : {}),
-        ...(runtimeActivity ? { runtimeActivity } : {}),
+        ...(liveActivity ? { liveActivity } : {}),
         ...(header?.protocolDescriptor ? { protocolDescriptor: header.protocolDescriptor } : {}),
         ...(header?.transportState ? { transportState: header.transportState } : {}),
         ...(header?.workingDirectory ? { workingDirectory: header.workingDirectory } : {}),
@@ -164,14 +164,14 @@ export function hydrateAgentExecutionDataFromJournal(
         awaitingResponseToMessageId: replay.awaitingResponseToMessageId ?? data.awaitingResponseToMessageId,
         activityState: replay.activityState ?? data.activityState,
     });
-    const runtimeActivity = replay.runtimeActivity ?? data.runtimeActivity;
+    const liveActivity = replay.liveActivity ?? data.liveActivity;
     const projection = AgentExecutionProjectionSchema.parse({
         ...replay.projection,
         ...(createCurrentActivityProjection({
             lifecycleState,
             attention,
             activityState,
-            runtimeActivity,
+            liveActivity,
             telemetry: replay.telemetry ?? data.telemetry,
             lastOccurredAt: replay.lastOccurredAt ?? data.lastUpdatedAt
         })
@@ -180,7 +180,7 @@ export function hydrateAgentExecutionDataFromJournal(
                     lifecycleState,
                     attention,
                     activityState,
-                    runtimeActivity,
+                    liveActivity,
                     telemetry: replay.telemetry ?? data.telemetry,
                     lastOccurredAt: replay.lastOccurredAt ?? data.lastUpdatedAt
                 })
@@ -196,7 +196,7 @@ export function hydrateAgentExecutionDataFromJournal(
         ...(activityState ? { activityState } : {}),
         ...(replay.currentInputRequestId !== undefined ? { currentInputRequestId: replay.currentInputRequestId } : {}),
         ...(replay.awaitingResponseToMessageId !== undefined ? { awaitingResponseToMessageId: replay.awaitingResponseToMessageId } : {}),
-        ...(runtimeActivity ? { runtimeActivity } : {}),
+        ...(liveActivity ? { liveActivity } : {}),
         ...(replay.protocolDescriptor ? { protocolDescriptor: replay.protocolDescriptor } : {}),
         ...(replay.transportState ? { transportState: replay.transportState } : {}),
         ...(replay.workingDirectory && !data.workingDirectory ? { workingDirectory: replay.workingDirectory } : {}),
@@ -247,7 +247,7 @@ function toTimelineItemFromObservation(record: AgentExecutionObservationRecordTy
     });
 }
 
-function toTimelineItemFromRuntimeFact(record: AgentExecutionRuntimeFactRecordType): AgentExecutionTimelineItemType | undefined {
+function toTimelineItemFromFact(record: AgentExecutionFactRecordType): AgentExecutionTimelineItemType | undefined {
     if (record.replayClass === 'evidence-only') {
         return undefined;
     }
@@ -424,11 +424,11 @@ function createCurrentActivityProjection(input: {
     lifecycleState: AgentExecutionLifecycleStateType | undefined;
     attention: AgentExecutionAttentionStateType | undefined;
     activityState: AgentExecutionActivityStateType | undefined;
-    runtimeActivity: AgentExecutionRuntimeActivityType | undefined;
-    telemetry: AgentExecutionTelemetry | undefined;
+    liveActivity: AgentExecutionLiveActivityType | undefined;
+    telemetry: AgentExecutionTelemetryType | undefined;
     lastOccurredAt: string | undefined;
 }): AgentExecutionActivityProjectionType | undefined {
-    const updatedAt = input.runtimeActivity?.updatedAt ?? input.telemetry?.updatedAt ?? input.lastOccurredAt;
+    const updatedAt = input.liveActivity?.updatedAt ?? input.telemetry?.updatedAt ?? input.lastOccurredAt;
     if (!updatedAt) {
         return undefined;
     }
@@ -439,10 +439,10 @@ function createCurrentActivityProjection(input: {
         ...(input.activityState
             ? { activity: input.activityState }
             : {}),
-        ...(input.runtimeActivity?.progress?.summary ? { summary: input.runtimeActivity.progress.summary } : {}),
-        ...(input.runtimeActivity?.progress?.detail ? { detail: input.runtimeActivity.progress.detail } : {}),
-        ...(input.runtimeActivity?.progress?.units ? { units: input.runtimeActivity.progress.units } : {}),
-        ...(input.runtimeActivity?.currentTarget ? { currentTarget: input.runtimeActivity.currentTarget } : {}),
+        ...(input.liveActivity?.progress?.summary ? { summary: input.liveActivity.progress.summary } : {}),
+        ...(input.liveActivity?.progress?.detail ? { detail: input.liveActivity.progress.detail } : {}),
+        ...(input.liveActivity?.progress?.units ? { units: input.liveActivity.progress.units } : {}),
+        ...(input.liveActivity?.currentTarget ? { currentTarget: input.liveActivity.currentTarget } : {}),
         ...(input.telemetry?.activeToolName ? { activeToolName: input.telemetry.activeToolName } : {})
     };
 }
@@ -519,9 +519,9 @@ function resolveCurrentAttentionProjectionItem(
 }
 
 function mergeTelemetry(
-    current: AgentExecutionTelemetry | undefined,
+    current: AgentExecutionTelemetryType | undefined,
     record: AgentExecutionActivityUpdatedRecordType
-): AgentExecutionTelemetry | undefined {
+): AgentExecutionTelemetryType | undefined {
     if (!record.telemetry) {
         return current;
     }
@@ -538,10 +538,10 @@ function mergeTelemetry(
     };
 }
 
-function mergeRuntimeActivity(
-    current: AgentExecutionRuntimeActivityType | undefined,
+function mergeLiveActivity(
+    current: AgentExecutionLiveActivityType | undefined,
     record: AgentExecutionActivityUpdatedRecordType
-): AgentExecutionRuntimeActivityType | undefined {
+): AgentExecutionLiveActivityType | undefined {
     const currentTarget = record['currentTarget'];
     if (!record.progress && !record.capabilities && !currentTarget) {
         return current;

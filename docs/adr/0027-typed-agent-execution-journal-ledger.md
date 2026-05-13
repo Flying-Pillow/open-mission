@@ -12,18 +12,18 @@ supersedes: []
 superseded_by: []
 ---
 
-Mission should treat the AgentExecution interaction journal as one canonical ordered execution ledger with strongly typed entry classes. Replayable semantic truth must come from typed journal entries, not from terminal paint, provider prose, or reconstruction across multiple auxiliary stores.
+Mission should treat AgentExecution logs as one ordered audit and recovery record with strongly typed entry classes. The AgentExecution instance remains the canonical execution object while active; replayable recovery material must come from typed log entries, not from terminal paint, provider prose, or reconstruction across multiple auxiliary stores.
 
-This proposal does not require collapsing every persistence concern into one undifferentiated text stream. It requires a single canonical ordering surface and an explicit taxonomy that separates semantic observations, daemon-observed runtime facts, execution assessments, transport evidence, and replay-irrelevant projection material.
+This proposal does not require collapsing every persistence concern into one undifferentiated text stream. It requires one ordered AgentExecution log and an explicit taxonomy that separates semantic observations, daemon-observed Agent execution facts, execution assessments, transport evidence, and replay-irrelevant projection material.
 
 ## Context
 
-ADR-0011 and ADR-0025 correctly establish that AgentExecution interaction journals and terminal recordings have different authority. The current implementation also already uses one append-only JSONL interaction journal file with typed records such as `message.accepted`, `observation.recorded`, `decision.recorded`, `state.changed`, and `activity.updated`.
+ADR-0011 and ADR-0025 correctly establish that AgentExecution logs and terminal recordings have different authority. The current implementation also already uses one append-only JSONL interaction log file with typed records such as `message.accepted`, `observation.recorded`, `decision.recorded`, `state.changed`, and `activity.updated`.
 
 The current weakness is not the number of files. The weakness is that the journal vocabulary remains too signal-centric at the semantic boundary and too thin on replay-relevant execution context:
 
 - agent-authored structured signals are first-class.
-- daemon-observed runtime facts such as artifact reads and writes are not yet first-class.
+- daemon-observed Agent execution facts such as artifact reads and writes are not yet first-class.
 - replay-relevant entries do not yet carry a normalized execution context for later diagnostics, evaluation, and orchestration.
 - evaluative and verification-oriented metadata does not yet have a first-class non-semantic family.
 - transport evidence is represented only indirectly through `rawText` or separate raw recordings.
@@ -33,7 +33,7 @@ That shape pressures the system toward brittle output-to-signal inference. A pro
 
 ## Decision
 
-Mission should evolve the AgentExecution interaction journal into a typed execution ledger with one canonical ordered sequence per AgentExecution.
+Mission should evolve AgentExecution logs into typed execution logs with one ordered sequence per AgentExecution.
 
 The journal remains append-only. The important change is the taxonomy, execution context contract, and replay contract.
 
@@ -67,7 +67,7 @@ executionContext: {
     missionId: 'mission_456',
     stageId: 'implementation',
     taskId: 'task_123',
-    sessionId: 'session_789'
+    agentExecutionId: 'agent-execution-789'
   },
   repository: {
     repositoryId: 'repo_001',
@@ -148,19 +148,19 @@ The journal should model at least these first-class families:
 - `turn.accepted`: operator, daemon, owner, or system input accepted for delivery to the AgentExecution.
 - `turn.delivery`: attempted, delivered, failed, or skipped delivery feedback.
 - `agent-observation`: structured Agent-authored observations such as `message`, `status`, `progress`, `needs_input`, and other declared signals.
-- `runtime-fact`: daemon-observed structured facts such as `artifact-read`, `artifact-written`, `tool-invoked`, `tool-result`, `filesystem-change`, or `provider-event` when the daemon has structured authority.
+- `agent-execution-fact`: daemon-observed structured facts such as `artifact-read`, `artifact-written`, `tool-invoked`, `tool-result`, `filesystem-change`, or `provider-event` when the daemon has structured authority.
 - `execution-assessment`: evaluative or diagnostic metadata such as self-confidence, verification-confidence, retry-pressure, instability, contradiction-risk, hallucination-risk, task-stall-risk, unresolved-concern, or verification-gap.
 - `transport-evidence`: raw or near-raw output chunks, provider event payloads, stderr excerpts, terminal snippets, or other expandable evidence that is not semantic truth by itself.
 - `decision.recorded`: policy decisions and routing outcomes.
 - `state.changed`: authoritative lifecycle, attention, and semantic activity changes.
-- `activity.updated`: compressible runtime activity and telemetry.
-- `owner-effect.recorded`: links from accepted observations or runtime facts into owner Entity effects or workflow events.
+- `activity.updated`: compressible AgentExecution activity and telemetry.
+- `owner-effect.recorded`: links from accepted observations or Agent execution facts into owner Entity effects or workflow events.
 - `checkpoint.recorded`: optional sequencing, compaction, or linkage markers when replay needs them.
 - `projection.recorded`: optional cached projection material, explicitly non-canonical.
 
 Mission does not need to preserve the exact names above, but it must preserve the separation of concerns they express.
 
-`execution-assessment` is intentionally a top-level family rather than a subtype of observation or runtime fact. Mission needs a first-class home for assessment overlays that may influence orchestration intelligence, human-in-the-loop escalation, verification workflows, and audit interpretation without mutating semantic replay truth.
+`execution-assessment` is intentionally a top-level family rather than a subtype of observation or Agent execution fact. Mission needs a first-class home for assessment overlays that may influence orchestration intelligence, human-in-the-loop escalation, verification workflows, and audit interpretation without mutating semantic replay truth.
 
 ### Replay and compression classes
 
@@ -194,7 +194,7 @@ For example:
 
 ```ts
 {
-  family: 'runtime-fact',
+  family: 'agent-execution-fact',
   entrySemantics: 'event',
   fact: 'artifact-written'
 }
@@ -282,7 +282,7 @@ An initial target matrix is:
 | `turn.accepted` | yes | yes | no | no | `event` | accumulate | no | yes | yes |
 | `turn.delivery` | no | optional | yes | optional | `event` or `snapshot`, by subtype | subtype-defined | yes | no | yes |
 | `agent-observation` | yes | yes | optional | optional | usually `event` | usually accumulate | maybe | yes, but authority-scoped | yes |
-| `runtime-fact` | yes | yes | yes | optional | `event` | accumulate | no by default | yes | yes |
+| `agent-execution-fact` | yes | yes | yes | optional | `event` | accumulate | no by default | yes | yes |
 | `execution-assessment` | no | optional | no | yes | `assessment` | fold as evaluative overlay | yes | no | yes |
 | `transport-evidence` | no | optional | optional | optional | `evidence` | ignore for semantic replay | yes | no | yes |
 | `decision.recorded` | yes | optional | no | yes | `event` | accumulate | no | yes | yes |
@@ -300,7 +300,7 @@ Replay of AgentExecution semantic state and default timeline/chat projection mus
 
 That means:
 
-- `agent-observation`, `runtime-fact`, `decision.recorded`, `state.changed`, `activity.updated`, and `owner-effect.recorded` may affect semantic replay.
+- `agent-observation`, `agent-execution-fact`, `decision.recorded`, `state.changed`, `activity.updated`, and `owner-effect.recorded` may affect semantic replay.
 - `execution-assessment` may affect orchestration, escalation, benchmarking, and diagnostic interpretation, but not semantic replay truth.
 - `transport-evidence` must never be required to infer semantic truth.
 - `projection.recorded` may accelerate reads, but replay must remain correct if all projection records are ignored.
@@ -383,7 +383,7 @@ Large `transport-evidence` entries are the main operational pressure point. Miss
 
 For an AgentExecution that summarizes `BRIEF.md`, the acceptable outcomes are:
 
-1. Mission-owned artifact access emits a first-class `runtime-fact` such as `artifact-read(path: 'BRIEF.md')`, and replay can show that deterministically.
+1. Mission-owned artifact access emits a first-class `agent-execution-fact` such as `artifact-read(path: 'BRIEF.md')`, and replay can show that deterministically.
 2. Mission only knows the artifact was made available in context, so it records availability, not a false read.
 3. A provider reads the file through opaque private tooling and emits no structured fact, so Mission records no `artifact-read` semantic truth.
 
@@ -393,11 +393,11 @@ The unacceptable outcome is:
 
 ## Consequences
 
-- Mission gets one monotonic AgentExecution ledger for prompts, observations, runtime facts, decisions, state changes, effects, and evidence ordering.
+- Mission gets one monotonic AgentExecution ledger for prompts, observations, Agent execution facts, decisions, state changes, effects, and evidence ordering.
 - Replay remains deterministic because semantic truth never depends on parsing transport exhaust.
 - Replay-relevant entries become evaluable and diagnosable because they carry normalized execution context metadata.
 - Operator-facing chat and timeline become visibility projections over a typed ledger instead of transcript reconstruction code.
-- Daemon-observed runtime facts such as artifact reads and writes become explicit first-class contracts instead of overloading `signal` or `rawText`.
+- Daemon-observed Agent execution facts such as artifact reads and writes become explicit first-class contracts instead of overloading `signal` or `rawText`.
 - Execution assessments become first-class overlays for orchestration intelligence, audit workflows, verification analysis, and benchmarking without mutating semantic truth.
 - Replay implementation becomes less ambiguous because immutable event accumulation and latest-wins snapshot folding are explicit rather than implied.
 - Projection caching becomes safer because replay can ignore cached entries and still rebuild the same semantic state.
@@ -420,14 +420,14 @@ The unacceptable outcome is:
 - Do model execution assessments as first-class typed overlays with explicit trust and replay contracts.
 - Do allow transport evidence to be stored inline in the journal when it remains typed, collapsible, and non-canonical for replay.
 - Do allow transport evidence to be externalized by chunk or mirror while preserving canonical journal ordering.
-- Do keep one canonical ordering model across accepted turns, observations, runtime facts, decisions, state changes, and evidence.
+- Do keep one canonical ordering model across accepted turns, observations, Agent execution facts, decisions, state changes, and evidence.
 - Do preserve canonical ordering identity even when evidence, telemetry, projections, or assessments are stored out-of-line.
 - Do define replay, compression, and expansion behavior per entry family rather than leaving that behavior implicit.
 - Do define whether each family and subtype replays by accumulation or latest-wins folding.
 
 ## Follow-On Work
 
-- Refine `observation.recorded` so the schema distinguishes Agent-authored observations from daemon-observed runtime facts and transport evidence.
+- Refine `observation.recorded` so the schema distinguishes Agent-authored observations from daemon-observed Agent execution facts and transport evidence.
 - Introduce a normalized `executionContext` contract shared by replay-relevant families.
 - Add a first-class `execution-assessment` family and wire it into orchestration, verification, and audit flows as advisory metadata.
 - Add explicit `entrySemantics` fields or equivalent schema-level semantics markers so replay behavior is machine-checkable.
@@ -435,5 +435,5 @@ The unacceptable outcome is:
 - Tighten the replay contract in code so `projection.recorded` is always optional.
 - Tighten replay code so assessment and evidence families remain optional overlays rather than semantic dependencies.
 - Add replay-engine contract tests that prove semantic replay succeeds with evidence, projections, and assessments removed.
-- Add runtime-fact emission seams for artifact access, tool execution, filesystem changes, and verification outputs.
+- Add Agent execution fact emission seams for artifact access, tool execution, filesystem changes, and verification outputs.
 - Introduce Mission-owned artifact access/runtime-fact emission paths before attempting more provider-specific output parsing.

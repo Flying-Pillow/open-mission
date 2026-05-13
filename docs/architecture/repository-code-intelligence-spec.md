@@ -8,7 +8,7 @@ description: Temporary implementation spec for Mission-native code intelligence 
 
 ## Scope
 
-This spec realizes [Code Intelligence PRD](repository-code-intelligence-prd.md), ADR-0030, and ADR-0031.
+This spec realizes [Code Intelligence PRD](repository-code-intelligence-prd.md), ADR-0004.09, and ADR-0002.09.
 
 It defines the first Mission-native path for GitNexus-like code intelligence using Mission-owned scopes, SurrealDB-backed graph storage, and Agent execution semantic operations over `open-mission-mcp`.
 
@@ -17,13 +17,13 @@ This document is temporary. Durable vocabulary belongs in `CONTEXT.md`; durable 
 ## Authoritative Inputs
 
 - `CONTEXT.md`: canonical Mission language.
-- ADR-0010: State store transactions are the canonical write interface for Mission state.
-- ADR-0012: Entity classes own behavior.
-- ADR-0015: Entity commands are the canonical operator surface.
-- ADR-0024: `open-mission-mcp` is daemon-owned local MCP infrastructure.
-- ADR-0025: AgentExecution interaction journals record semantic runtime truth.
-- ADR-0030: `open-mission-mcp` exposes Agent execution semantic operations.
-- ADR-0031: Code intelligence index is SurrealDB-backed derived read material.
+- ADR-0002.03: State store transactions are the canonical write interface for Mission state.
+- ADR-0001.03: Entity classes own behavior.
+- ADR-0001.05: Entity commands are the canonical operator surface.
+- ADR-0004.06: `open-mission-mcp` is daemon-owned local MCP infrastructure.
+- ADR-0004.08: AgentExecution interaction journals record semantic runtime truth.
+- ADR-0004.09: `open-mission-mcp` exposes Agent execution semantic operations.
+- ADR-0002.09: Code intelligence index is SurrealDB-backed derived read material.
 - `@flying-pillow/zod-surreal`: Zod-first SurrealDB schema metadata and DDL primitives.
 
 ## Target Runtime Shape

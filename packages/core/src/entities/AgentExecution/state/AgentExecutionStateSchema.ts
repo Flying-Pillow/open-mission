@@ -1,9 +1,7 @@
 import { z } from 'zod/v4';
 import { AgentSignalDeliverySchema } from '../protocol/AgentExecutionProtocolSchema.js';
 
-export type AgentExecutionPrimitiveValue = string | number | boolean | null;
-
-const agentExecutionMetadataValueSchema = z.union([
+export const AgentExecutionPrimitiveValueSchema = z.union([
     z.string(),
     z.number(),
     z.boolean(),
@@ -32,7 +30,7 @@ export const AgentExecutionTransportStateSchema = z.object({
     updatedAt: z.string().trim().min(1).optional()
 }).strict();
 
-export const AgentExecutionRuntimeCommandTypeSchema = z.enum([
+export const AgentExecutionSupportedCommandTypeSchema = z.enum([
     'interrupt',
     'checkpoint',
     'nudge',
@@ -79,22 +77,14 @@ export const AgentProgressStateSchema = z.enum([
     'failed'
 ]);
 
-export type AgentExecutionPermissionKind = 'input' | 'tool' | 'filesystem' | 'command' | 'unknown';
-
-export type AgentExecutionPermissionRequest = {
-    id: string;
-    kind: AgentExecutionPermissionKind;
-    prompt: string;
-    options: string[];
-    providerDetails?: Record<string, AgentExecutionPrimitiveValue>;
-};
+export const AgentExecutionPermissionKindSchema = z.enum(['input', 'tool', 'filesystem', 'command', 'unknown']);
 
 export const AgentExecutionPermissionRequestSchema = z.object({
     id: z.string().trim().min(1),
-    kind: z.enum(['input', 'tool', 'filesystem', 'command', 'unknown']),
+    kind: AgentExecutionPermissionKindSchema,
     prompt: z.string().trim().min(1),
     options: z.array(z.string().trim().min(1)),
-    providerDetails: z.record(z.string(), agentExecutionMetadataValueSchema).optional()
+    providerDetails: z.record(z.string(), AgentExecutionPrimitiveValueSchema).optional()
 }).strict();
 
 export const AgentExecutionModelInfoSchema = z.object({
@@ -145,7 +135,7 @@ export const AgentExecutionActivityTargetSchema = z.object({
     path: z.string().trim().min(1).optional()
 }).strict();
 
-export const AgentExecutionRuntimeActivitySchema = z.object({
+export const AgentExecutionLiveActivitySchema = z.object({
     progress: AgentExecutionActivityProgressSchema.optional(),
     capabilities: AgentExecutionCapabilityStateSchema.optional(),
     currentTarget: AgentExecutionActivityTargetSchema.optional(),
@@ -164,16 +154,19 @@ export const AgentExecutionProgressSchema = z.object({
     updatedAt: z.string().trim().min(1)
 }).strict();
 
+export type AgentExecutionPrimitiveValueType = z.infer<typeof AgentExecutionPrimitiveValueSchema>;
 export type AgentExecutionTransportStateType = z.infer<typeof AgentExecutionTransportStateSchema>;
-export type AgentExecutionRuntimeCommandType = z.infer<typeof AgentExecutionRuntimeCommandTypeSchema>;
+export type AgentExecutionSupportedCommandType = z.infer<typeof AgentExecutionSupportedCommandTypeSchema>;
 export type AgentExecutionLifecycleStateType = z.infer<typeof AgentExecutionLifecycleStateSchema>;
 export type AgentExecutionAttentionStateType = z.infer<typeof AgentExecutionAttentionStateSchema>;
 export type AgentExecutionActivityStateType = z.infer<typeof AgentExecutionActivityStateSchema>;
 export type AgentProgressStateType = z.infer<typeof AgentProgressStateSchema>;
-export type AgentExecutionModelInfo = z.infer<typeof AgentExecutionModelInfoSchema>;
-export type AgentExecutionTelemetry = z.infer<typeof AgentExecutionTelemetrySchema>;
+export type AgentExecutionPermissionKindType = z.infer<typeof AgentExecutionPermissionKindSchema>;
+export type AgentExecutionPermissionRequestType = z.infer<typeof AgentExecutionPermissionRequestSchema>;
+export type AgentExecutionModelInfoType = z.infer<typeof AgentExecutionModelInfoSchema>;
+export type AgentExecutionTelemetryType = z.infer<typeof AgentExecutionTelemetrySchema>;
 export type AgentExecutionActivityProgressType = z.infer<typeof AgentExecutionActivityProgressSchema>;
 export type AgentExecutionCapabilityStateType = z.infer<typeof AgentExecutionCapabilityStateSchema>;
 export type AgentExecutionActivityTargetType = z.infer<typeof AgentExecutionActivityTargetSchema>;
-export type AgentExecutionRuntimeActivityType = z.infer<typeof AgentExecutionRuntimeActivitySchema>;
+export type AgentExecutionLiveActivityType = z.infer<typeof AgentExecutionLiveActivitySchema>;
 export type AgentExecutionProgressType = z.infer<typeof AgentExecutionProgressSchema>;

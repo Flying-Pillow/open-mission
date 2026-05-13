@@ -561,7 +561,7 @@ describe('Repository', () => {
                 artifacts: [],
                 instructions: []
             },
-            runtimeMessages: [],
+            supportedMessages: [],
             scope: {
                 kind: 'repository',
                 repositoryRootPath
@@ -631,7 +631,7 @@ describe('Repository', () => {
                 artifacts: [],
                 instructions: []
             },
-            runtimeMessages: [],
+            supportedMessages: [],
             scope: {
                 kind: 'repository',
                 repositoryRootPath
@@ -684,7 +684,7 @@ describe('Repository', () => {
                 artifacts: [],
                 instructions: []
             },
-            runtimeMessages: [],
+            supportedMessages: [],
             scope: {
                 kind: 'repository',
                 repositoryRootPath
@@ -750,7 +750,7 @@ describe('Repository', () => {
                 artifacts: [],
                 instructions: []
             },
-            runtimeMessages: [],
+            supportedMessages: [],
             scope: {
                 kind: 'repository',
                 repositoryRootPath
@@ -868,7 +868,7 @@ describe('Repository', () => {
                 artifacts: [],
                 instructions: []
             },
-            runtimeMessages: [],
+            supportedMessages: [],
             scope: {
                 kind: 'system',
                 label: '/repositories'

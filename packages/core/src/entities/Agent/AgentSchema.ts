@@ -46,7 +46,7 @@ export const AgentAdapterTransportCapabilitiesSchema = z.object({
 export const AgentAdapterDiagnosticsSchema = z.object({
     command: z.string().trim().min(1),
     supportsUsageParsing: z.boolean(),
-    runtimeMessageCount: z.number().int().nonnegative(),
+    supportedMessageCount: z.number().int().nonnegative(),
     transportCapabilities: AgentAdapterTransportCapabilitiesSchema
 }).strict();
 

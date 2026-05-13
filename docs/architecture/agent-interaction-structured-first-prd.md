@@ -8,7 +8,7 @@ description: Temporary product requirements for structured-first Agent interacti
 
 ## Temporary Agent Interaction Structured-First PRD
 
-This temporary PRD captures the product requirements behind ADR-0033. It exists to guide implementation planning while the architecture is still being shaped. When the implementation converges, fold durable language into `CONTEXT.md`, accepted ADRs, and permanent architecture pages, then delete this file.
+This temporary PRD captures the product requirements behind ADR-0004.10. It exists to guide implementation planning while the architecture is still being shaped. When the implementation converges, fold durable language into `CONTEXT.md`, accepted ADRs, and permanent architecture pages, then delete this file.
 
 ## Purpose
 

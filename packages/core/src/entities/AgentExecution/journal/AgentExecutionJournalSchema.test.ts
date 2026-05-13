@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createAgentExecutionProtocolDescriptor } from './AgentExecutionProtocolDescriptor.js';
+import { createAgentExecutionProtocolDescriptor } from '../protocol/AgentExecutionProtocolDescriptor.js';
 import {
     AgentExecutionActivityUpdatedRecordSchema,
     AgentExecutionDecisionRecordSchema,
@@ -8,7 +8,7 @@ import {
     AgentExecutionMessageAcceptedRecordSchema,
     AgentExecutionMessageDeliveryRecordSchema,
     AgentExecutionObservationRecordSchema,
-    AgentExecutionRuntimeFactRecordSchema,
+    AgentExecutionFactRecordSchema,
     AgentExecutionOwnerEffectRecordSchema,
     AgentExecutionProjectionRecordSchema,
     AgentExecutionStateChangedRecordSchema
@@ -61,8 +61,8 @@ describe('AgentExecutionJournalSchema', () => {
                     summary: 'Working through the first task.'
                 }
             }),
-            AgentExecutionRuntimeFactRecordSchema.parse({
-                ...baseRecord('runtime-fact', 4),
+            AgentExecutionFactRecordSchema.parse({
+                ...baseRecord('agent-execution-fact', 4),
                 origin: 'filesystem',
                 factId: 'fact-1',
                 factType: 'artifact-read',
@@ -140,7 +140,7 @@ describe('AgentExecutionJournalSchema', () => {
             'turn.accepted',
             'turn.delivery',
             'agent-observation',
-            'runtime-fact',
+            'agent-execution-fact',
             'decision.recorded',
             'state.changed',
             'activity.updated',
@@ -190,8 +190,8 @@ function baseRecord(type: string, sequence: number) {
                     ? 'turn.delivery'
                     : type === 'agent-observation'
                         ? 'agent-observation'
-                        : type === 'runtime-fact'
-                            ? 'runtime-fact'
+                        : type === 'agent-execution-fact'
+                            ? 'agent-execution-fact'
                             : type,
         entrySemantics: type === 'activity.updated' || type === 'projection.recorded'
             ? 'snapshot'
@@ -201,7 +201,7 @@ function baseRecord(type: string, sequence: number) {
         replayClass: type === 'turn.delivery' || type === 'activity.updated' || type === 'projection.recorded'
             ? 'replay-optional'
             : 'replay-critical',
-        origin: type === 'runtime-fact' ? 'filesystem' : 'daemon',
+        origin: type === 'agent-execution-fact' ? 'filesystem' : 'daemon',
         schemaVersion: 1,
         agentExecutionId: 'agent-execution-1',
         executionContext: {

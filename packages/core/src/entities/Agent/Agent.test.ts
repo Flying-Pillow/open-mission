@@ -30,7 +30,7 @@ describe('Agent', () => {
             diagnostics: {
                 command: process.execPath,
                 supportsUsageParsing: false,
-                runtimeMessageCount: 0
+                supportedMessageCount: 0
             },
             commands: []
         });

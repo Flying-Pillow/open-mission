@@ -121,12 +121,12 @@ export class AgentExecution extends Entity<AgentExecutionDataType> {
         return this.interactionCapabilities.reason;
     }
 
-    public get runtimeMessages(): AgentExecutionDataType['runtimeMessages'] {
-        return this.data.runtimeMessages;
+    public get supportedMessages(): AgentExecutionDataType['supportedMessages'] {
+        return this.data.supportedMessages;
     }
 
     public get protocolMessages(): AgentExecutionMessageDescriptorType[] {
-        return this.data.protocolDescriptor?.messages ?? this.runtimeMessages;
+        return this.data.protocolDescriptor?.messages ?? this.supportedMessages;
     }
 
     public get missionNativeMessages(): AgentExecutionMessageDescriptorType[] {
@@ -146,7 +146,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType> {
         }
     }
 
-    public createRuntimeMessageCommand(input: {
+    public createSupportedMessageCommand(input: {
         descriptor: AgentExecutionMessageDescriptorType;
         reason?: string;
     }): AgentExecutionCommandType {

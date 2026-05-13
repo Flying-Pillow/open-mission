@@ -8,19 +8,21 @@ description: Temporary working spec for realizing the daemon-owned open-mission-
 
 ## Temporary Mission MCP Server Spec
 
-This is the MCP transport realization slice for the Agent execution structured interaction architecture described by ADR-0022 and ADR-0024.
+> Current authority: this temporary spec contains pre-convergence AgentExecutor wording. Where it conflicts with `CONTEXT.md`, ADR-0004.01, ADR-0004.05, ADR-0004.06, or ADR-0004.10 as updated on 2026-05-13, follow the newer rule: MCP is a structured input channel into the owning `AgentExecution` instance; `AgentExecution` owns process lifecycle and observation intake; `AgentExecutor` is legacy vocabulary or a private collaborator only.
+
+This is the MCP transport realization slice for the Agent execution structured interaction architecture described by ADR-0004.05 and ADR-0004.06.
 
 It is temporary on purpose. It exists so implementation can proceed from one structural model instead of scattering MCP support through launch code, adapter code, Entity code, and daemon startup. The umbrella source of truth for descriptor shape, observation semantics, owner routing, and idempotency is [Agent Execution Structured Interaction Spec](agent-execution-structured-interaction-spec.md). This document must only specify the `open-mission-mcp` realization details under that umbrella. When the implementation converges, fold the durable parts into `CONTEXT.md`, accepted ADRs, and permanent architecture pages, then delete this file.
 
 ## Authoritative Inputs
 
 - `CONTEXT.md`: canonical Mission language, especially Agent execution, Agent adapter, Mission MCP server, Entity, and Terminal terms.
-- ADR-0012: Entity classes own behavior.
-- ADR-0015: Entity commands are the canonical operator mutation surface.
-- ADR-0017: stdout markers are the baseline Agent signal transport.
-- ADR-0018: Agent execution and Agent adapter vocabulary.
-- ADR-0022: Agent execution structured interaction vocabulary.
-- ADR-0024: `open-mission-mcp` is the daemon-owned MCP signal transport.
+- ADR-0001.03: Entity classes own behavior.
+- ADR-0001.05: Entity commands are the canonical operator mutation surface.
+- ADR-0004.04: stdout markers are the baseline Agent signal transport.
+- ADR-0004.01: Agent execution and Agent adapter vocabulary.
+- ADR-0004.05: Agent execution structured interaction vocabulary.
+- ADR-0004.06: `open-mission-mcp` is the daemon-owned MCP signal transport.
 - Agent Execution Structured Interaction Spec: controlling descriptor, observation, owner-routing, and signal vocabulary implementation reference.
 
 ## Greenfield Constraint

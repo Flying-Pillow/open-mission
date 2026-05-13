@@ -145,7 +145,7 @@ describe('Mission control data reconciliation', () => {
                         canSendStructuredPrompt: true,
                         canSendStructuredCommand: true
                     },
-                    runtimeMessages: [
+                    supportedMessages: [
                         { type: 'checkpoint', label: 'Checkpoint', delivery: 'best-effort', mutatesContext: false, portability: 'cross-agent' },
                         { type: 'resume', label: 'Resume', delivery: 'best-effort', mutatesContext: false, portability: 'cross-agent' }
                     ]
@@ -192,7 +192,7 @@ describe('Mission control data reconciliation', () => {
         ]);
     });
 
-    it('resolves AgentExecution slash shorthand before dispatching a runtime message command', async () => {
+    it('resolves AgentExecution slash shorthand before dispatching a supported message command', async () => {
         const agentExecutionCommandCalls: EntityCommandInvocation[] = [];
         const mission = createMission(
             createMissionSnapshot({
@@ -203,7 +203,7 @@ describe('Mission control data reconciliation', () => {
                         canSendStructuredPrompt: true,
                         canSendStructuredCommand: true
                     },
-                    runtimeMessages: [
+                    supportedMessages: [
                         { type: 'checkpoint', label: 'Checkpoint', delivery: 'best-effort', mutatesContext: false, portability: 'cross-agent' }
                     ]
                 })]
@@ -274,7 +274,7 @@ describe('Mission control data reconciliation', () => {
         ]);
     });
 
-    it('dispatches adapter-scoped runtime messages with descriptor ownership fields', async () => {
+    it('dispatches adapter-scoped supported messages with descriptor ownership fields', async () => {
         const agentExecutionCommandCalls: EntityCommandInvocation[] = [];
         const mission = createMission(
             createMissionSnapshot({
@@ -285,7 +285,7 @@ describe('Mission control data reconciliation', () => {
                         canSendStructuredPrompt: true,
                         canSendStructuredCommand: true
                     },
-                    runtimeMessages: [
+                    supportedMessages: [
                         {
                             type: 'compact-provider-context',
                             label: 'Compact Provider Context',
@@ -305,8 +305,8 @@ describe('Mission control data reconciliation', () => {
             throw new Error('Expected session to be available.');
         }
 
-        await agentExecution.sendCommand(agentExecution.createRuntimeMessageCommand({
-            descriptor: agentExecution.runtimeMessages[0],
+        await agentExecution.sendCommand(agentExecution.createSupportedMessageCommand({
+            descriptor: agentExecution.supportedMessages[0],
             reason: 'before verification'
         }));
 
@@ -639,7 +639,7 @@ function createAgentExecutionSnapshot(
         },
         context: { artifacts: [], instructions: [] },
         projection: { timelineItems: [] },
-        runtimeMessages: [],
+        supportedMessages: [],
         ...overrides
     };
 }

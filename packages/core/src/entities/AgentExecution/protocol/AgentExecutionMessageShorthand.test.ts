@@ -9,7 +9,7 @@ describe('AgentExecutionMessageShorthand', () => {
             kind: 'repository',
             repositoryRootPath: '/repo'
         },
-        messages: AgentExecution.createRuntimeMessageDescriptorsForCommands(['interrupt', 'checkpoint', 'nudge'])
+        messages: AgentExecution.createSupportedMessagesForCommands(['interrupt', 'checkpoint', 'nudge'])
     });
 
     it('treats non-slash text as a structured operator prompt', () => {
@@ -26,7 +26,7 @@ describe('AgentExecutionMessageShorthand', () => {
         });
     });
 
-    it('resolves advertised cross-agent slash shorthand to a runtime message', () => {
+    it('resolves advertised cross-agent slash shorthand to a supported message', () => {
         expect(resolveAgentExecutionMessageShorthand({
             text: '/checkpoint before refactor',
             protocolDescriptor
@@ -164,7 +164,7 @@ describe('AgentExecutionMessageShorthand', () => {
         });
     });
 
-    it('resolves adapter-scoped descriptor shorthand to an adapter-scoped runtime message', () => {
+    it('resolves adapter-scoped descriptor shorthand to an adapter-scoped supported message', () => {
         const adapterScopedDescriptor = createAgentExecutionProtocolDescriptor({
             scope: {
                 kind: 'repository',

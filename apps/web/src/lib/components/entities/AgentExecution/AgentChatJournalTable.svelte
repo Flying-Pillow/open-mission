@@ -197,7 +197,7 @@
                     signalDetail(record.signal) ??
                     formatToken(record.signal?.type)
                 );
-            case "runtime-fact":
+            case "agent-execution-fact":
                 return (
                     record.detail ?? record.path ?? formatToken(record.factType)
                 );
@@ -256,7 +256,7 @@
                 return record.reason;
             case "agent-observation":
                 return record.rawText ?? signalDetail(record.signal);
-            case "runtime-fact":
+            case "agent-execution-fact":
                 return record.path;
             case "activity.updated":
                 return record.progress?.detail;
@@ -288,7 +288,7 @@
                     formatToken(record.confidence),
                     record.signal ? formatToken(record.signal.type) : undefined,
                 ]);
-            case "runtime-fact":
+            case "agent-execution-fact":
                 return compactParts([
                     formatToken(record.factType),
                     record.artifactId,
@@ -397,7 +397,7 @@
                 return compactParts([record.recordId, record.messageId]);
             case "agent-observation":
                 return compactParts([record.recordId, record.observationId]);
-            case "runtime-fact":
+            case "agent-execution-fact":
                 return compactParts([
                     record.recordId,
                     record.factId,

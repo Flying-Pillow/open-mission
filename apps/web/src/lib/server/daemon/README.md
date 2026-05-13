@@ -38,7 +38,7 @@ Owns short-lived connection reuse for request-response web flows:
 - keep the shared client alive briefly across adjacent requests
 - dispose idle shared clients after the timeout window
 
-This file is for request-path reuse only. It must not own daemon health or user-facing runtime messages.
+This file is for request-path reuse only. It must not own daemon health or user-facing supported messages.
 
 ### `health.server.ts`
 

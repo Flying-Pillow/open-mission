@@ -60,19 +60,19 @@
         Boolean(agentExecution?.isTerminalBacked()),
     );
     const showFullControls = $derived(panelMode === "full");
-    const runtimeMessages = $derived(agentExecution?.runtimeMessages ?? []);
+    const supportedMessages = $derived(agentExecution?.supportedMessages ?? []);
     const missionNativeMessages = $derived(
         agentExecution?.missionNativeMessages ?? [],
     );
-    const structuredRuntimeMessages = $derived(
-        runtimeMessages.filter(
+    const structuredSupportedMessages = $derived(
+        supportedMessages.filter(
             (message) =>
                 message.portability !== "terminal-only" &&
                 message.portability !== "mission-native",
         ),
     );
     const selectedCommandDescriptor = $derived(
-        structuredRuntimeMessages.find(
+        structuredSupportedMessages.find(
             (message) => message.type === selectedCommandType,
         ),
     );
@@ -263,13 +263,13 @@
     });
 
     $effect(() => {
-        const nextCommandType = structuredRuntimeMessages[0]?.type;
-        if (structuredRuntimeMessages.length === 0) {
+        const nextCommandType = structuredSupportedMessages[0]?.type;
+        if (structuredSupportedMessages.length === 0) {
             selectedCommandType = "";
             return;
         }
         if (
-            !structuredRuntimeMessages.some(
+            !structuredSupportedMessages.some(
                 (message) => message.type === selectedCommandType,
             )
         ) {
@@ -349,7 +349,7 @@
             }
 
             await agentExecution.sendCommand(
-                agentExecution.createRuntimeMessageCommand({
+                agentExecution.createSupportedMessageCommand({
                     descriptor: selectedCommandDescriptor,
                     reason: commandReason,
                 }),
@@ -707,7 +707,7 @@
                     </form>
                 {/if}
 
-                {#if agentExecution?.canSendStructuredCommand && structuredRuntimeMessages.length > 0}
+                {#if agentExecution?.canSendStructuredCommand && structuredSupportedMessages.length > 0}
                     <form
                         class="space-y-2"
                         onsubmit={(event) => {
@@ -733,7 +733,7 @@
                                 class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
                                 disabled={interactionPending !== null}
                             >
-                                {#each structuredRuntimeMessages as message (message.type)}
+                                {#each structuredSupportedMessages as message (message.type)}
                                     <option value={message.type}>
                                         {message.label} - {AgentExecutionEntity.commandPortabilityLabel(
                                             message.portability,

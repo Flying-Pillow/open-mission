@@ -87,7 +87,7 @@ describe('workflow engine e2e', () => {
         });
         const implementationAgentExecutionId = executor.requireTerminalId('implementation/01');
 
-        document = await controller.cancelRuntimeAgentExecution(
+        document = await controller.cancelProcessAgentExecution(
             implementationAgentExecutionId,
             'restart implementation AgentExecution',
             'implementation/01'
@@ -104,7 +104,7 @@ describe('workflow engine e2e', () => {
         document = await completeTask(controller, 'implementation/01', executor.requireTerminalId('implementation/01'), '2026-04-14T10:05:00.000Z');
 
         expect(document.runtime.tasks.find((task) => task.taskId === 'audit/01')?.lifecycle).toBe('running');
-        document = await controller.terminateRuntimeAgentExecution(
+        document = await controller.terminateProcessAgentExecution(
             executor.requireTerminalId('audit/01'),
             'stop audit and relaunch',
             'audit/01'
@@ -186,7 +186,7 @@ describe('workflow engine e2e', () => {
         document = await controller.applyEvent(createTaskReopenedEvent('prd/01', '2026-04-14T11:00:30.000Z'));
         expect(document.runtime.tasks.find((task) => task.taskId === 'prd/01')?.lifecycle).toBe('running');
 
-        document = await controller.terminateRuntimeAgentExecution(
+        document = await controller.terminateProcessAgentExecution(
             executor.requireTerminalId('prd/01'),
             'reset AgentExecution',
             'prd/01'
@@ -562,7 +562,7 @@ function createScenarioExecutor(input: {
         startExecution: async () => {
             throw new Error('not implemented in workflowEngine.e2e.test.ts');
         },
-        cancelRuntimeAgentExecution: async (agentExecutionId: string, _reason?: string, fallbackTaskId?: string) => {
+        cancelProcessAgentExecution: async (agentExecutionId: string, _reason?: string, fallbackTaskId?: string) => {
             const taskId = agentExecutionTaskIds.get(agentExecutionId) ?? fallbackTaskId ?? '';
             taskAgentExecutionIds.delete(taskId);
             agentExecutionTaskIds.delete(agentExecutionId);
@@ -583,7 +583,7 @@ function createScenarioExecutor(input: {
             commandCalls.push({ agentExecutionId, command });
             return [];
         },
-        terminateRuntimeAgentExecution: async (agentExecutionId: string, _reason?: string, fallbackTaskId?: string) => {
+        terminateProcessAgentExecution: async (agentExecutionId: string, _reason?: string, fallbackTaskId?: string) => {
             const taskId = agentExecutionTaskIds.get(agentExecutionId) ?? fallbackTaskId ?? '';
             taskAgentExecutionIds.delete(taskId);
             agentExecutionTaskIds.delete(agentExecutionId);

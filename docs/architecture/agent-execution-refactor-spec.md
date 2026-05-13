@@ -8,6 +8,8 @@ description: Temporary working spec for the Agent, AgentAdapter, AgentExecutor, 
 
 ## Temporary Agent Execution Refactor Spec
 
+> Current authority: this temporary spec contains pre-convergence AgentExecutor and terminal-first wording. Where it conflicts with `CONTEXT.md` or ADR-0004.01 as updated on 2026-05-13, follow the newer rule: `AgentExecution` is the canonical in-memory Entity instance and owner of the Agent execution process; `AgentExecutor` is legacy vocabulary or a private collaborator only; `Terminal` is optional transport.
+
 This is the working spec for the current Agent, AgentAdapter, AgentExecutor, AgentExecution, and Terminal refactor.
 
 It is temporary on purpose. It exists to prevent implementation drift while the refactor is in flight. When the code converges, fold the useful parts back into the permanent architecture register and delete this file.

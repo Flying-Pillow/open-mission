@@ -49,10 +49,10 @@ export function createAgentExecutionProtocolDescriptor(input: {
 
 function mergeProtocolMessages(
     missionNativeMessages: AgentExecutionMessageDescriptorType[],
-    runtimeMessages: AgentExecutionMessageDescriptorType[]
+    supportedMessages: AgentExecutionMessageDescriptorType[]
 ): AgentExecutionMessageDescriptorType[] {
     const seenTypes = new Set<string>();
-    return [...missionNativeMessages, ...runtimeMessages].filter((message) => {
+    return [...missionNativeMessages, ...supportedMessages].filter((message) => {
         if (seenTypes.has(message.type)) {
             return false;
         }

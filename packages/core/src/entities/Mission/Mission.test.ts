@@ -73,7 +73,7 @@ const agentExecution = AgentExecutionSchema.parse({
         artifacts: [],
         instructions: []
     },
-    runtimeMessages: []
+    supportedMessages: []
 });
 
 const missionData = {

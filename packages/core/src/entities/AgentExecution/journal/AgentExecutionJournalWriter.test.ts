@@ -2,8 +2,8 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createAgentExecutionProtocolDescriptor } from './AgentExecutionProtocolDescriptor.js';
-import type { AgentExecutionSignalDecision } from './AgentExecutionProtocolTypes.js';
+import { createAgentExecutionProtocolDescriptor } from '../protocol/AgentExecutionProtocolDescriptor.js';
+import type { AgentExecutionSignalDecision } from '../protocol/AgentExecutionProtocolTypes.js';
 import {
     AgentExecutionJournalWriter,
     createAgentExecutionJournalReference,
@@ -167,8 +167,8 @@ describe('AgentExecutionJournalWriter', () => {
         });
     });
 
-    it('records daemon-observed runtime facts as top-level journal entries', async () => {
-        const repositoryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-journal-runtime-fact-'));
+    it('records daemon-observed Agent execution facts as top-level journal entries', async () => {
+        const repositoryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-journal-agent-execution-fact-'));
         temporaryDirectories.add(repositoryRoot);
         const writer = new AgentExecutionJournalWriter();
 
@@ -188,7 +188,7 @@ describe('AgentExecutionJournalWriter', () => {
             })
         });
 
-        const record = await writer.appendRuntimeFact({
+        const record = await writer.appendFact({
             agentExecutionId: 'agent-execution-1',
             scope: {
                 kind: 'repository',
@@ -200,8 +200,8 @@ describe('AgentExecutionJournalWriter', () => {
         });
 
         expect(record).toMatchObject({
-            type: 'runtime-fact',
-            family: 'runtime-fact',
+            type: 'agent-execution-fact',
+            family: 'agent-execution-fact',
             authority: 'daemon',
             assertionLevel: 'authoritative',
             replayClass: 'replay-critical',

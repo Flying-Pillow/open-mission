@@ -219,10 +219,10 @@ function createRequestExecutor() {
         startExecution: async () => {
             throw new Error('not implemented for test');
         },
-        cancelRuntimeAgentExecution: async () => [],
+        cancelProcessAgentExecution: async () => [],
         promptRuntimeAgentExecution: async () => [],
         commandRuntimeAgentExecution: async () => [],
-        terminateRuntimeAgentExecution: async () => [],
+        terminateProcessAgentExecution: async () => [],
         getExecutedRequestTypes: () => executedRequestTypes
     } as unknown as WorkflowRequestExecutor & {
         getExecutedRequestTypes(): string[];

@@ -8,20 +8,22 @@ description: Implementation spec for the canonical semantic AgentExecution inter
 
 ## Scope
 
-This spec implements the requirements in [Agent Execution Interaction Journal PRD](agent-execution-interaction-journal-prd.md) and the decision in ADR-0025.
+> Current authority: this implementation spec contains pre-convergence journal and AgentExecutor wording. Where it conflicts with `CONTEXT.md`, ADR-0004.01, ADR-0004.05, or ADR-0004.08 as updated on 2026-05-13, follow the newer rule: `AgentExecution` is the canonical in-memory Entity instance and process owner; AgentExecution logs are owned audit/recovery material, not a separate domain owner; `AgentExecutor` is legacy vocabulary or a private collaborator only.
+
+This spec implements the requirements in [Agent Execution Interaction Journal PRD](agent-execution-interaction-journal-prd.md) and the decision in ADR-0004.08.
 
 The implementation creates one durable semantic interaction path for AgentExecution without replacing Terminal recordings, Mission workflow events, AgentExecution protocol descriptors, or Entity commands.
 
 ## Authoritative Inputs
 
 - `CONTEXT.md`: canonical Mission vocabulary.
-- ADR-0004: runtime-defined AgentExecution messages.
-- ADR-0011: AgentExecution logs as daemon audit material.
-- ADR-0017: prompt-scoped Agent execution signals.
-- ADR-0018: Agent, AgentAdapter, AgentExecutor, AgentExecution, and Terminal vocabulary.
-- ADR-0022: AgentExecution structured interaction vocabulary.
-- ADR-0024: Mission MCP server Agent signal transport.
-- ADR-0025: AgentExecution interaction journal persistence.
+- ADR-0004.03: runtime-defined AgentExecution messages.
+- ADR-0004.07: AgentExecution logs as daemon audit material.
+- ADR-0004.04: prompt-scoped Agent execution signals.
+- ADR-0004.01: Agent, AgentAdapter, AgentExecutor, AgentExecution, and Terminal vocabulary.
+- ADR-0004.05: AgentExecution structured interaction vocabulary.
+- ADR-0004.06: Mission MCP server Agent signal transport.
+- ADR-0004.08: AgentExecution interaction journal persistence.
 
 ## Ownership
 
@@ -516,7 +518,7 @@ Open Mission should render from these projections and request older journal wind
 
 ## Migration Strategy
 
-This is a Mission runtime data change because Mission workflow runtime needs an Agent journal location reference. Follow ADR-0005: no tolerant readers or hidden fallback parsers.
+This is a Mission runtime data change because Mission workflow runtime needs an Agent journal location reference. Follow ADR-0002.01: no tolerant readers or hidden fallback parsers.
 
 The first implementation may initialize an interaction journal for newly launched AgentExecutions only. Existing disposable local Mission state can be regenerated or migrated through an explicit runtime migration if preservation is required.
 

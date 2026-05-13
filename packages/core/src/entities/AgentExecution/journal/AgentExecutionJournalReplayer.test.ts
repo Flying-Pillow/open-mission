@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createAgentExecutionProtocolDescriptor } from './AgentExecutionProtocolDescriptor.js';
+import { createAgentExecutionProtocolDescriptor } from '../protocol/AgentExecutionProtocolDescriptor.js';
 import {
     hydrateAgentExecutionDataFromJournal,
     replayAgentExecutionJournal
 } from './AgentExecutionJournalReplayer.js';
-import { AgentExecutionSchema, type AgentExecutionType } from './AgentExecutionSchema.js';
+import { AgentExecutionSchema, type AgentExecutionType } from '../AgentExecutionSchema.js';
 import type { AgentExecutionJournalRecordType } from './AgentExecutionJournalSchema.js';
 
 describe('AgentExecutionJournalReplayer', () => {
@@ -32,7 +32,7 @@ describe('AgentExecutionJournalReplayer', () => {
                 }
             },
             {
-                ...baseRecord('runtime-fact', 3),
+                ...baseRecord('agent-execution-fact', 3),
                 origin: 'filesystem',
                 factId: 'fact-1',
                 factType: 'artifact-read',
@@ -116,7 +116,7 @@ describe('AgentExecutionJournalReplayer', () => {
         expect(replay.activityState).toBe('reviewing');
         expect(replay.currentInputRequestId).toBe('observation-2');
         expect(replay.awaitingResponseToMessageId).toBeNull();
-        expect(replay.runtimeActivity).toEqual({
+        expect(replay.liveActivity).toEqual({
             progress: {
                 summary: 'Reviewing the generated patch.',
                 units: {
@@ -162,7 +162,7 @@ describe('AgentExecutionJournalReplayer', () => {
                 canSendStructuredCommand: true
             },
             context: { artifacts: [], instructions: [] },
-            runtimeMessages: [],
+            supportedMessages: [],
             scope: {
                 kind: 'task',
                 missionId: 'mission-1',
@@ -213,7 +213,7 @@ describe('AgentExecutionJournalReplayer', () => {
         expect(hydrated.attention).toBe('autonomous');
         expect(hydrated.activityState).toBe('executing');
         expect(hydrated.currentInputRequestId).toBeNull();
-        expect(hydrated.runtimeActivity).toEqual({
+        expect(hydrated.liveActivity).toEqual({
             progress: {
                 summary: 'Running the first slice.'
             },
@@ -245,7 +245,7 @@ describe('AgentExecutionJournalReplayer', () => {
                 canSendStructuredCommand: true
             },
             context: { artifacts: [], instructions: [] },
-            runtimeMessages: [],
+            supportedMessages: [],
             projection: { timelineItems: [] }
         } satisfies Partial<AgentExecutionType>);
 
@@ -269,7 +269,7 @@ describe('AgentExecutionJournalReplayer', () => {
         ]);
 
         expect(hydrated.activityState).toBe('awaiting-agent-response');
-        expect(hydrated.runtimeActivity).toBeUndefined();
+        expect(hydrated.liveActivity).toBeUndefined();
         expect(hydrated.projection.currentActivity).toEqual({
             lifecycleState: 'running',
             attention: 'autonomous',
@@ -420,8 +420,8 @@ function baseRecord<TType extends AgentExecutionJournalRecordType['type']>(
                     ? 'turn.delivery'
                     : type === 'agent-observation'
                         ? 'agent-observation'
-                        : type === 'runtime-fact'
-                            ? 'runtime-fact'
+                        : type === 'agent-execution-fact'
+                            ? 'agent-execution-fact'
                             : type,
         entrySemantics: type === 'activity.updated' || type === 'projection.recorded'
             ? 'snapshot'
@@ -431,7 +431,7 @@ function baseRecord<TType extends AgentExecutionJournalRecordType['type']>(
         replayClass: type === 'turn.delivery' || type === 'activity.updated' || type === 'projection.recorded'
             ? 'replay-optional'
             : 'replay-critical',
-        origin: type === 'runtime-fact' ? 'filesystem' : 'daemon',
+        origin: type === 'agent-execution-fact' ? 'filesystem' : 'daemon',
         schemaVersion: 1 as const,
         agentExecutionId: 'agent-execution-1',
         executionContext: {

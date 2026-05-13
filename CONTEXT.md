@@ -96,7 +96,7 @@ The tracked mission history and control record for one Mission, stored under `.m
 _Avoid_: mission folder, mission data, mission state folder
 
 **Mission runtime data**:
-The persisted daemon-owned MissionRuntime data shape for one Mission, including Mission task runtime state, Agent execution runtime state, configuration snapshot, and Derived workflow state. Mission runtime data is clean-slate validated: invalid runtime data is rejected rather than repaired through fallback parsing or load-time normalization.
+The persisted daemon-owned MissionRuntime data shape for one Mission, including Mission task state, Agent execution state, configuration snapshot, and Derived workflow state. Mission runtime data is clean-slate validated: invalid runtime data is rejected rather than repaired through fallback parsing or load-time normalization.
 _Avoid_: record, Mission state, Mission runtime module, agent execution schema, artifact schema, UI state file
 
 **Mission dossier state store**:
@@ -156,8 +156,12 @@ An executable unit of Mission work with instructions, dependencies, lifecycle st
 _Avoid_: job, step, todo
 
 **Agent execution**:
-A daemon-managed execution of one Agent under an explicit Agent execution scope, registered in the daemon with a session token.
-_Avoid_: chat, terminal, process, env-based routing
+A daemon-owned in-memory Entity instance representing one running or recoverable execution of one Agent under an explicit Agent execution scope. It owns execution identity, process lifecycle, structured messages, accepted signals, durable context, and serializable Entity state. A Terminal may be attached as an optional transport, but it is not the Agent execution.
+_Avoid_: chat, terminal, env-based routing, AgentExecutor-owned lifecycle
+
+**Agent execution process**:
+The OS process or process-like provider session owned by an Agent execution instance, including launch command, args, working directory, process id when available, exit state, and process lifecycle operations.
+_Avoid_: terminal, runtime session, adapter lifecycle owner, AgentExecutor process
 
 **Agent execution scope**:
 The daemon-owned attachment context for one Agent execution. Supported scopes are system, repository, mission, task, and artifact. Mission and task are scopes, not mandatory Agent execution roots.
@@ -184,8 +188,8 @@ The semantic AgentExecution activity where the daemon has delivered a turn-start
 _Avoid_: running synonym, idle opposite, lifecycle state, transport acknowledgement
 
 **Terminal**:
-A daemon-addressable Entity for one PTY-backed terminal resource. TerminalRegistry lives in the Terminal Entity boundary and remains the in-memory authority for process leases, screen state, input, resize, exit state, and update publication; daemon runtime terminal modules provide screen substrate helpers.
-_Avoid_: Agent execution, runtime session, adapter lifecycle owner
+A daemon-addressable Entity for one PTY-backed terminal transport. TerminalRegistry lives in the Terminal Entity boundary and remains the in-memory authority for terminal screen state, terminal input, resize, exit observation, and update publication. A Terminal may be attached to an Agent execution process, but it does not own AgentExecution lifecycle or Agent process authority.
+_Avoid_: Agent execution, runtime session, adapter lifecycle owner, process owner
 
 **Agent execution log**:
 The durable daemon-owned audit material retained for an Agent execution. Agent execution logs include semantic interaction journals and raw terminal recordings, which have different authority. Logs are not Mission artifacts by default.
@@ -195,12 +199,12 @@ _Avoid_: Mission artifact, Agent execution message Entity, context state, single
 The append-only semantic journal for one Agent execution. It records accepted Agent execution messages, normalized observations, policy decisions, state effects, owner effects, and projection material so AgentExecution state can be replayed deterministically. It is separate from raw terminal recordings and Mission workflow event logs.
 _Avoid_: terminal transcript, chat state, Mission workflow event log, Agent execution message Entity
 
-**Agent execution runtime fact**:
-A daemon-observed structured fact about an Agent execution, such as an artifact read, artifact write, tool invocation, tool result, filesystem change, or structured provider event. A runtime fact is not an Agent-authored signal and not raw transport evidence.
+**Agent execution fact**:
+A daemon-observed structured fact about an Agent execution, such as an artifact read, artifact write, tool invocation, tool result, filesystem change, or structured provider event. An Agent execution fact is not an Agent-authored signal and not raw transport evidence.
 _Avoid_: inferred terminal text, Agent claim, UI hint
 
 **Agent execution transport evidence**:
-Raw or near-raw adapter, provider, or terminal material retained for audit and optional operator expansion, such as output chunks, stderr excerpts, provider payloads, or PTY snippets. Transport evidence is not semantic truth unless separately promoted into a journaled runtime fact or accepted observation.
+Raw or near-raw adapter, provider, or terminal material retained for audit and optional operator expansion, such as output chunks, stderr excerpts, provider payloads, or PTY snippets. Transport evidence is not semantic truth unless separately promoted into a journaled Agent execution fact or accepted observation.
 _Avoid_: canonical replay state, inferred fact, chat message
 
 **Agent execution terminal recording**:
@@ -223,13 +227,13 @@ _Avoid_: adapter capability boolean, UI grouping, provider command name, command
 A read model derived from AgentExecution semantic state and journal records for surfaces such as Open Mission chat, timeline, status badges, and grouped activity views. It is not durable AgentExecution truth.
 _Avoid_: source of truth, transcript store, workflow state
 
-**AgentExecution runtime snapshot**:
-A live daemon runtime overlay for an active Agent execution, such as attached terminal identity, active transport connections, current PTY state, active tool calls, in-flight delivery attempts, and heartbeat data. It is not replayable semantic truth unless promoted into Agent execution interaction journal records.
-_Avoid_: interaction journal, persisted lifecycle state, workflow event, projection truth
+**AgentExecutionProcess**:
+The OS process or process-like provider session owned by an AgentExecution instance, including process identity when available, attached terminal transport identity, active tool calls, in-flight message delivery, exit state, and heartbeat data. It is the process owned by AgentExecution, not a separate AgentExecution runtime model. Storage decides which process fields are durable enough to persist.
+_Avoid_: AgentExecution runtime snapshot, runtime session, interaction journal, workflow event, projection truth, Terminal-owned lifecycle
 
-**AgentExecution runtime health**:
-A daemon-owned reconciliation assessment of whether an Agent execution is attached, detached, degraded, orphaned, protocol-incompatible, or currently reconciling with its runtime leases and transport. Runtime health governs commandability and diagnostics; it is not AgentExecution lifecycle failure unless daemon evidence proves the execution or its owned Runtime leases are dead.
-_Avoid_: terminal status, lifecycle state, agent claim, client protocol error
+**AgentExecutionProcess health**:
+A daemon-owned reconciliation assessment of whether an AgentExecutionProcess and optional transports are attached, detached, degraded, orphaned, protocol-incompatible, or currently reconciling. AgentExecutionProcess health governs commandability and diagnostics; it is not AgentExecution lifecycle failure unless daemon evidence proves the AgentExecutionProcess is dead or unrecoverable.
+_Avoid_: AgentExecution runtime health, terminal status, lifecycle state, agent claim, client protocol error
 
 **Daemon runtime supervisor**:
 The daemon-owned runtime coordination authority for live Repository, Mission, Task, Agent execution, and runtime lease relationships started by the Open Mission system. It owns runtime cleanup, cascading cancellation, startup reconciliation, and shutdown hygiene for daemon-started resources.
@@ -240,8 +244,8 @@ The daemon-owned runtime structure that records which live runtime resources bel
 _Avoid_: transcript tree, surface selection state, ad hoc registry map, log-derived process list
 
 **Runtime lease**:
-A daemon-owned claim over one live runtime resource started by the Open Mission system, such as a PTY terminal, child process, socket, or future provider session. A Runtime lease records ownership, lifecycle, and cleanup responsibility so the daemon can reconcile stale resources after crashes and release them during shutdown or cancellation.
-_Avoid_: raw PID, terminal tab, adapter state, audit log line
+A daemon-owned claim over one live resource started by the Open Mission system, such as an Agent execution process, PTY terminal transport, socket, or future provider session. A Runtime lease records ownership and cleanup responsibility so the daemon can reconcile stale resources after crashes and release them during shutdown or cancellation. For Agent executions, the AgentExecution instance remains the process lifecycle owner.
+_Avoid_: raw PID, terminal tab, adapter state, audit log line, lifecycle owner
 
 **System status snapshot**:
 A daemon-owned diagnostic read model for current Mission runtime posture, host process health, dependency readiness, runtime supervision counts, and runtime reconciliation counts. It is operator-facing status material, not durable workflow truth, audit history, or a metrics pipeline.
@@ -272,7 +276,7 @@ The daemon-owned local MCP server named `open-mission-mcp` that exposes Agent si
 _Avoid_: remote mission API, MCP-owned workflow, task session server, provider-specific signal model
 
 **Agent execution semantic operation**:
-A read-only daemon-owned operation exposed to one registered Agent execution through `open-mission-mcp`, such as Artifact reads, code search, symbol context, impact analysis, route impact, or tool context. It resolves authority from Agent execution scope, validates operation input, delegates to the owning daemon service, returns structured context, and records a bounded Agent execution runtime fact.
+A read-only daemon-owned operation exposed to one registered Agent execution through `open-mission-mcp`, such as Artifact reads, code search, symbol context, impact analysis, route impact, or tool context. It resolves authority from Agent execution scope, validates operation input, delegates to the owning daemon service, returns structured context, and records a bounded Agent execution fact.
 _Avoid_: Entity command, raw repository API, workflow mutation, arbitrary filesystem tool, public MCP tool
 
 **Code root**:
@@ -287,8 +291,8 @@ _Avoid_: Entity storage records, Mission dossier, `.gitnexus` index, workflow tr
 The graph-shaped query model inside a Code intelligence index, containing code files, code symbols, code relations, code routes, code tools, code processes, code clusters, and index snapshot metadata. Its physical storage may use SurrealDB tables and relation records behind a Mission-owned graph store adapter, with SurrealQL schema generated from Mission-owned Zod schemas annotated with `@flying-pillow/zod-surreal` metadata.
 _Avoid_: raw SurrealDB client, public graph API, Entity relationship metadata, workflow graph, Repository code graph, Mission code graph
 
-**Code intelligence runtime fact**:
-A bounded Agent execution runtime fact recording that an Agent execution used a code intelligence semantic operation, including the operation name, scoped index, query summary, result summary, staleness, and confidence metadata. It is audit material, not the full query result or source body.
+**Code intelligence Agent execution fact**:
+A bounded Agent execution fact recording that an Agent execution used a code intelligence semantic operation, including the operation name, scoped index, query summary, result summary, staleness, and confidence metadata. It is audit material, not the full query result or source body.
 _Avoid_: transcript, full code dump, persistent index record, workflow event
 
 **Agent message shorthand**:
@@ -548,7 +552,7 @@ _Avoid_: workflow projection, stage projection
 - An **Agent execution log** records delivered Agent execution interaction, while **Agent execution context** records lasting context state.
 - An **Agent execution log** is daemon-owned audit material, not an **Artifact** by default.
 - An **Agent execution semantic operation** belongs to one registered **Agent execution** and is authorized through that Agent execution's `open-mission-mcp` access.
-- An **Agent execution semantic operation** records a bounded **Agent execution runtime fact** when it reads meaningful context.
+- An **Agent execution semantic operation** records a bounded **Agent execution fact** when it reads meaningful context.
 - A code intelligence semantic operation may read a **Code intelligence index** only for the **Code root** resolved from the **Agent execution scope**.
 - An **Agent-session artifact** may reference or extract from an **Agent execution log** when the daemon or operator promotes useful material into Mission work.
 - An **Agent execution message** describes a structured message supported by an Agent execution's Agent adapter.
@@ -646,7 +650,7 @@ _Avoid_: workflow projection, stage projection
 - Code intelligence indexes are rebuildable read models over Code roots and must report staleness when stale data could affect the answer.
 - Code graph SurrealQL DDL is generated from Mission-owned zod-surreal schemas; hand-written SurQL is not the canonical code graph schema.
 - Open Mission web may render a read-only visual representation of active Code graph snapshots after Agent-facing semantic operations are stable, but it must not own graph semantics, index lifecycle, root selection, or graph mutation.
-- Code intelligence runtime facts record bounded audit summaries of semantic operation use; full source bodies and high-volume graph results are returned only in operation responses when allowed, not stored wholesale in runtime facts.
+- Code intelligence Agent execution facts record bounded audit summaries of semantic operation use; full source bodies and high-volume graph results are returned only in operation responses when allowed, not stored wholesale in Agent execution facts.
 
 ### Mission Control Task List
 

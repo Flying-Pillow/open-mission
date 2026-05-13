@@ -11,7 +11,7 @@ import {
 	type WorkflowDefinition,
 	type WorkflowStateData
 } from '../../workflow/engine/index.js';
-import type { AgentExecutionRecord } from '../AgentExecution/AgentExecutionSchema.js';
+import type { AgentExecutionRecordType } from '../AgentExecution/AgentExecutionSchema.js';
 import type {
 	MissionAssignee,
 	MissionDescriptor,
@@ -48,7 +48,7 @@ type MissionStatusView = {
 	productFiles: Record<string, string>;
 	activeTasks?: TaskDossierRecordType[];
 	readyTasks?: TaskDossierRecordType[];
-	agentExecutions: AgentExecutionRecord[];
+	agentExecutions: AgentExecutionRecordType[];
 	recommendedAction: string;
 };
 
@@ -58,7 +58,7 @@ export type MissionStatusViewInput = {
 	descriptor: MissionDescriptor;
 	workflow: WorkflowDefinition;
 	document?: WorkflowStateData;
-	agentExecutions: AgentExecutionRecord[];
+	agentExecutions: AgentExecutionRecordType[];
 	hydrateRuntimeTasksForActions(tasks: WorkflowStateData['runtime']['tasks']): Promise<WorkflowStateData['runtime']['tasks']>;
 };
 

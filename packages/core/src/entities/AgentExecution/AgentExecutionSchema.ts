@@ -13,11 +13,7 @@ import {
     AgentExecutionInteractionPostureSchema,
     AgentExecutionMessageDescriptorSchema,
     AgentExecutionProtocolDescriptorSchema,
-    AgentExecutionScopeSchema,
-    type AgentExecutionInteractionCapabilitiesType,
-    type AgentExecutionMessageDescriptorType,
-    type AgentExecutionProtocolDescriptorType,
-    type AgentExecutionScopeType
+    AgentExecutionScopeSchema
 } from './protocol/AgentExecutionProtocolSchema.js';
 import { AgentExecutionProjectionSchema } from './state/AgentExecutionProjectionSchema.js';
 import {
@@ -26,24 +22,16 @@ import {
     AgentExecutionLifecycleStateSchema,
     AgentExecutionProgressSchema,
     AgentExecutionPermissionRequestSchema,
-    AgentExecutionRuntimeCommandTypeSchema,
-    AgentExecutionRuntimeActivitySchema,
+    AgentExecutionSupportedCommandTypeSchema,
+    AgentExecutionLiveActivitySchema,
     AgentExecutionTelemetrySchema,
-    AgentExecutionTransportStateSchema,
-    type AgentExecutionPermissionRequest,
-    type AgentExecutionActivityStateType,
-    type AgentExecutionAttentionStateType,
-    type AgentExecutionLifecycleStateType,
-    type AgentExecutionRuntimeActivityType,
-    type AgentExecutionTelemetry,
-    type AgentExecutionTransportStateType
+    AgentExecutionTransportStateSchema
 } from './state/AgentExecutionStateSchema.js';
 import {
     AgentExecutionReferenceSchema,
     AgentExecutionTerminalTransportSchema,
     AgentExecutionTerminalHandleSchema,
-    AgentExecutionTerminalRecordingPathSchema,
-    type AgentExecutionTerminalHandleType
+    AgentExecutionTerminalRecordingPathSchema
 } from './state/AgentExecutionTransportSchema.js';
 
 export * from './state/AgentExecutionTransportSchema.js';
@@ -77,183 +65,138 @@ export const AgentExecutionContextSchema = z.object({
     instructions: z.array(AgentExecutionContextInstructionSchema)
 }).strict();
 
-export type AgentExecutionTurnRequest = {
-    workingDirectory: string;
-    prompt: string;
-    scope?: AgentExecutionScopeType;
-    title?: string;
-    operatorIntent?: string;
-    startFreshAgentExecution?: boolean;
-};
+export const AgentExecutionTurnRequestSchema = z.object({
+    workingDirectory: z.string().trim().min(1),
+    prompt: z.string(),
+    scope: AgentExecutionScopeSchema.optional(),
+    title: z.string().trim().min(1).optional(),
+    operatorIntent: z.string().trim().min(1).optional(),
+    startFreshAgentExecution: z.boolean().optional()
+}).strict();
 
-export type AgentExecutionState = {
-    agentId: string;
-    transportId?: string;
-    adapterLabel: string;
-    agentExecutionId: string;
-    agentJournalPath?: string;
-    terminalRecordingPath?: string;
-    terminalHandle?: AgentExecutionTerminalHandleType;
-    lifecycleState: AgentExecutionLifecycleStateType;
-    attention?: AgentExecutionAttentionStateType;
-    activityState?: AgentExecutionActivityStateType;
-    currentInputRequestId?: string | null;
-    awaitingResponseToMessageId?: string | null;
-    workingDirectory?: string;
-    currentTurnTitle?: string;
-    interactionCapabilities: AgentExecutionInteractionCapabilitiesType;
-    runtimeMessages: AgentExecutionMessageDescriptorType[];
-    protocolDescriptor?: AgentExecutionProtocolDescriptorType;
-    transportState?: AgentExecutionTransportStateType;
-    scope?: AgentExecutionScopeType;
-    runtimeActivity?: AgentExecutionRuntimeActivityType;
-    awaitingPermission?: AgentExecutionPermissionRequest;
-    telemetry?: AgentExecutionTelemetry;
-    failureMessage?: string;
-    lastUpdatedAt: string;
-};
+export const AgentExecutionStateSchema = z.object({
+    agentId: z.string().trim().min(1),
+    transportId: z.string().trim().min(1).optional(),
+    adapterLabel: z.string().trim().min(1),
+    agentExecutionId: z.string().trim().min(1),
+    agentJournalPath: AgentExecutionJournalPathSchema.optional(),
+    terminalRecordingPath: AgentExecutionTerminalRecordingPathSchema.optional(),
+    terminalHandle: AgentExecutionTerminalHandleSchema.optional(),
+    lifecycleState: AgentExecutionLifecycleStateSchema,
+    attention: AgentExecutionAttentionStateSchema.optional(),
+    activityState: AgentExecutionActivityStateSchema.optional(),
+    currentInputRequestId: z.string().trim().min(1).nullable().optional(),
+    awaitingResponseToMessageId: z.string().trim().min(1).nullable().optional(),
+    workingDirectory: z.string().trim().min(1).optional(),
+    currentTurnTitle: z.string().trim().min(1).optional(),
+    interactionCapabilities: AgentExecutionInteractionCapabilitiesSchema,
+    supportedMessages: z.array(AgentExecutionMessageDescriptorSchema),
+    protocolDescriptor: AgentExecutionProtocolDescriptorSchema.optional(),
+    transportState: AgentExecutionTransportStateSchema.optional(),
+    scope: AgentExecutionScopeSchema.optional(),
+    liveActivity: AgentExecutionLiveActivitySchema.optional(),
+    awaitingPermission: AgentExecutionPermissionRequestSchema.optional(),
+    telemetry: AgentExecutionTelemetrySchema.optional(),
+    failureMessage: z.string().trim().min(1).optional(),
+    lastUpdatedAt: z.string().trim().min(1)
+}).strict();
 
-export type AgentExecutionConsoleState = {
-    title?: string;
-    lines: string[];
-    promptOptions: string[] | null;
-    awaitingInput: boolean;
-    agentId?: string;
-    adapterLabel?: string;
-    agentExecutionId?: string;
-};
+export const AgentExecutionConsoleStateSchema = z.object({
+    title: z.string().trim().min(1).optional(),
+    lines: z.array(z.string()),
+    promptOptions: z.array(z.string()).nullable(),
+    awaitingInput: z.boolean(),
+    agentId: z.string().trim().min(1).optional(),
+    adapterLabel: z.string().trim().min(1).optional(),
+    agentExecutionId: z.string().trim().min(1).optional()
+}).strict();
 
-export type AgentExecutionConsoleEvent =
-    | {
-        type: 'reset';
-        state: AgentExecutionConsoleState;
-    }
-    | {
-        type: 'lines';
-        lines: string[];
-        state: AgentExecutionConsoleState;
-    }
-    | {
-        type: 'prompt';
-        state: AgentExecutionConsoleState;
-    };
+export const AgentExecutionConsoleEventSchema = z.discriminatedUnion('type', [
+    z.object({ type: z.literal('reset'), state: AgentExecutionConsoleStateSchema }).strict(),
+    z.object({ type: z.literal('lines'), lines: z.array(z.string()), state: AgentExecutionConsoleStateSchema }).strict(),
+    z.object({ type: z.literal('prompt'), state: AgentExecutionConsoleStateSchema }).strict()
+]);
 
-export type AgentExecutionOwnerEvent =
-    | {
-        type: 'agent-execution-state-changed';
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'prompt-accepted';
-        prompt: string;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'prompt-rejected';
-        prompt: string;
-        reason: string;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'agent-execution-started';
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'agent-execution-resumed';
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'agent-message';
-        channel: 'stdout' | 'stderr' | 'system';
-        text: string;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'permission-requested';
-        request: AgentExecutionPermissionRequest;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'tool-started';
-        toolName: string;
-        summary?: string;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'tool-finished';
-        toolName: string;
-        summary?: string;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'telemetry-updated';
-        telemetry: AgentExecutionTelemetry;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'context-updated';
-        telemetry: AgentExecutionTelemetry;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'cost-updated';
-        telemetry: AgentExecutionTelemetry;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'agent-execution-completed';
-        exitCode: number;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'agent-execution-failed';
-        errorMessage: string;
-        exitCode?: number;
-        state: AgentExecutionState;
-    }
-    | {
-        type: 'agent-execution-cancelled';
-        reason?: string;
-        state: AgentExecutionState;
-    };
+export const AgentExecutionOwnerEventSchema = z.discriminatedUnion('type', [
+    z.object({ type: z.literal('agent-execution-state-changed'), state: AgentExecutionStateSchema }).strict(),
+    z.object({ type: z.literal('prompt-accepted'), prompt: z.string(), state: AgentExecutionStateSchema }).strict(),
+    z.object({ type: z.literal('prompt-rejected'), prompt: z.string(), reason: z.string().trim().min(1), state: AgentExecutionStateSchema }).strict(),
+    z.object({ type: z.literal('agent-execution-started'), state: AgentExecutionStateSchema }).strict(),
+    z.object({ type: z.literal('agent-execution-resumed'), state: AgentExecutionStateSchema }).strict(),
+    z.object({ type: z.literal('agent-message'), channel: z.enum(['stdout', 'stderr', 'system']), text: z.string(), state: AgentExecutionStateSchema }).strict(),
+    z.object({ type: z.literal('permission-requested'), request: AgentExecutionPermissionRequestSchema, state: AgentExecutionStateSchema }).strict(),
+    z.object({ type: z.literal('tool-started'), toolName: z.string().trim().min(1), summary: z.string().trim().min(1).optional(), state: AgentExecutionStateSchema }).strict(),
+    z.object({ type: z.literal('tool-finished'), toolName: z.string().trim().min(1), summary: z.string().trim().min(1).optional(), state: AgentExecutionStateSchema }).strict(),
+    z.object({ type: z.literal('telemetry-updated'), telemetry: AgentExecutionTelemetrySchema, state: AgentExecutionStateSchema }).strict(),
+    z.object({ type: z.literal('context-updated'), telemetry: AgentExecutionTelemetrySchema, state: AgentExecutionStateSchema }).strict(),
+    z.object({ type: z.literal('cost-updated'), telemetry: AgentExecutionTelemetrySchema, state: AgentExecutionStateSchema }).strict(),
+    z.object({ type: z.literal('agent-execution-completed'), exitCode: z.number().int(), state: AgentExecutionStateSchema }).strict(),
+    z.object({ type: z.literal('agent-execution-failed'), errorMessage: z.string().trim().min(1), exitCode: z.number().int().optional(), state: AgentExecutionStateSchema }).strict(),
+    z.object({ type: z.literal('agent-execution-cancelled'), reason: z.string().trim().min(1).optional(), state: AgentExecutionStateSchema }).strict()
+]);
 
-export type AgentExecutionRecord = {
-    agentExecutionId: string;
-    agentId: string;
-    transportId?: string;
-    adapterLabel: string;
-    agentJournalPath?: string;
-    terminalRecordingPath?: string;
-    terminalHandle?: AgentExecutionTerminalHandleType;
-    lifecycleState: AgentExecutionLifecycleStateType;
-    attention?: AgentExecutionAttentionStateType;
-    activityState?: AgentExecutionActivityStateType;
-    currentInputRequestId?: string | null;
-    awaitingResponseToMessageId?: string | null;
-    taskId?: string;
-    assignmentLabel?: string;
-    workingDirectory?: string;
-    currentTurnTitle?: string;
-    interactionCapabilities: AgentExecutionInteractionCapabilitiesType;
-    runtimeMessages: AgentExecutionMessageDescriptorType[];
-    protocolDescriptor?: AgentExecutionProtocolDescriptorType;
-    transportState?: AgentExecutionTransportStateType;
-    scope?: AgentExecutionScopeType;
-    runtimeActivity?: AgentExecutionRuntimeActivityType;
-    telemetry?: AgentExecutionTelemetry;
-    failureMessage?: string;
-    createdAt: string;
-    lastUpdatedAt: string;
-};
+export const AgentExecutionRecordSchema = z.object({
+    agentExecutionId: z.string().trim().min(1),
+    agentId: z.string().trim().min(1),
+    transportId: z.string().trim().min(1).optional(),
+    adapterLabel: z.string().trim().min(1),
+    agentJournalPath: AgentExecutionJournalPathSchema.optional(),
+    terminalRecordingPath: AgentExecutionTerminalRecordingPathSchema.optional(),
+    terminalHandle: AgentExecutionTerminalHandleSchema.optional(),
+    lifecycleState: AgentExecutionLifecycleStateSchema,
+    attention: AgentExecutionAttentionStateSchema.optional(),
+    activityState: AgentExecutionActivityStateSchema.optional(),
+    currentInputRequestId: z.string().trim().min(1).nullable().optional(),
+    awaitingResponseToMessageId: z.string().trim().min(1).nullable().optional(),
+    taskId: z.string().trim().min(1).optional(),
+    assignmentLabel: z.string().trim().min(1).optional(),
+    workingDirectory: z.string().trim().min(1).optional(),
+    currentTurnTitle: z.string().trim().min(1).optional(),
+    interactionCapabilities: AgentExecutionInteractionCapabilitiesSchema,
+    supportedMessages: z.array(AgentExecutionMessageDescriptorSchema),
+    protocolDescriptor: AgentExecutionProtocolDescriptorSchema.optional(),
+    transportState: AgentExecutionTransportStateSchema.optional(),
+    scope: AgentExecutionScopeSchema.optional(),
+    liveActivity: AgentExecutionLiveActivitySchema.optional(),
+    telemetry: AgentExecutionTelemetrySchema.optional(),
+    failureMessage: z.string().trim().min(1).optional(),
+    createdAt: z.string().trim().min(1),
+    lastUpdatedAt: z.string().trim().min(1)
+}).strict();
 
-export type AgentExecutionLaunchRequest = AgentExecutionTurnRequest & {
-    agentId: string;
-    terminalName?: string;
-    transportId?: string;
-    agentExecutionId?: string;
-    taskId?: string;
-    assignmentLabel?: string;
-};
+export const AgentExecutionLaunchRequestSchema = AgentExecutionTurnRequestSchema.extend({
+    agentId: z.string().trim().min(1),
+    terminalName: z.string().trim().min(1).optional(),
+    transportId: z.string().trim().min(1).optional(),
+    agentExecutionId: z.string().trim().min(1).optional(),
+    taskId: z.string().trim().min(1).optional(),
+    assignmentLabel: z.string().trim().min(1).optional()
+}).strict();
+
+export const AgentExecutionProcessSchema = z.object({
+    agentId: z.string().trim().min(1),
+    agentExecutionId: z.string().trim().min(1),
+    scope: AgentExecutionScopeSchema,
+    workingDirectory: z.string().trim().min(1),
+    taskId: z.string().trim().min(1).optional(),
+    missionId: z.string().trim().min(1).optional(),
+    stageId: z.string().trim().min(1).optional(),
+    status: AgentExecutionLifecycleStateSchema,
+    attention: AgentExecutionAttentionStateSchema.optional(),
+    currentInputRequestId: z.string().trim().min(1).nullable().optional(),
+    progress: AgentExecutionProgressSchema,
+    waitingForInput: z.boolean(),
+    acceptsPrompts: z.boolean(),
+    acceptedCommands: z.array(AgentExecutionSupportedCommandTypeSchema),
+    interactionPosture: AgentExecutionInteractionPostureSchema,
+    interactionCapabilities: AgentExecutionInteractionCapabilitiesSchema,
+    transport: AgentExecutionTerminalTransportSchema.optional(),
+    reference: AgentExecutionReferenceSchema,
+    startedAt: z.string().trim().min(1),
+    updatedAt: z.string().trim().min(1),
+    failureMessage: z.string().trim().min(1).optional(),
+    endedAt: z.string().trim().min(1).optional()
+}).strict();
 
 export const AgentExecutionStorageSchema = EntityStorageSchema.extend({
     ownerId: z.string().trim().min(1),
@@ -277,18 +220,18 @@ export const AgentExecutionStorageSchema = EntityStorageSchema.extend({
     interactionCapabilities: AgentExecutionInteractionCapabilitiesSchema,
     context: AgentExecutionContextSchema,
     projection: AgentExecutionProjectionSchema.default({ timelineItems: [] }),
-    runtimeMessages: z.array(AgentExecutionMessageDescriptorSchema),
+    supportedMessages: z.array(AgentExecutionMessageDescriptorSchema),
     protocolDescriptor: AgentExecutionProtocolDescriptorSchema.optional(),
     transportState: AgentExecutionTransportStateSchema.optional(),
     scope: AgentExecutionScopeSchema.optional(),
     progress: AgentExecutionProgressSchema.optional(),
     waitingForInput: z.boolean().optional(),
     acceptsPrompts: z.boolean().optional(),
-    acceptedCommands: z.array(AgentExecutionRuntimeCommandTypeSchema).optional(),
+    acceptedCommands: z.array(AgentExecutionSupportedCommandTypeSchema).optional(),
     interactionPosture: AgentExecutionInteractionPostureSchema.optional(),
     transport: AgentExecutionTerminalTransportSchema.optional(),
     reference: AgentExecutionReferenceSchema.optional(),
-    runtimeActivity: AgentExecutionRuntimeActivitySchema.optional(),
+    liveActivity: AgentExecutionLiveActivitySchema.optional(),
     awaitingPermission: AgentExecutionPermissionRequestSchema.optional(),
     telemetry: AgentExecutionTelemetrySchema.optional(),
     failureMessage: z.string().trim().min(1).optional(),
@@ -322,6 +265,14 @@ export type AgentExecutionContextArtifactType = z.infer<typeof AgentExecutionCon
 export type AgentExecutionContextInstructionType = z.infer<typeof AgentExecutionContextInstructionSchema>;
 export type AgentExecutionContextType = z.infer<typeof AgentExecutionContextSchema>;
 export type AgentExecutionJournalPathType = z.infer<typeof AgentExecutionJournalPathSchema>;
+export type AgentExecutionTurnRequestType = z.infer<typeof AgentExecutionTurnRequestSchema>;
+export type AgentExecutionStateType = z.infer<typeof AgentExecutionStateSchema>;
+export type AgentExecutionConsoleStateType = z.infer<typeof AgentExecutionConsoleStateSchema>;
+export type AgentExecutionConsoleEventType = z.infer<typeof AgentExecutionConsoleEventSchema>;
+export type AgentExecutionOwnerEventType = z.infer<typeof AgentExecutionOwnerEventSchema>;
+export type AgentExecutionRecordType = z.infer<typeof AgentExecutionRecordSchema>;
+export type AgentExecutionLaunchRequestType = z.infer<typeof AgentExecutionLaunchRequestSchema>;
+export type AgentExecutionProcessType = z.infer<typeof AgentExecutionProcessSchema>;
 export type AgentExecutionStorageType = z.infer<typeof AgentExecutionStorageSchema>;
 export type AgentExecutionType = z.infer<typeof AgentExecutionSchema>;
 export type AgentExecutionCommandAcknowledgementType = z.infer<typeof AgentExecutionCommandAcknowledgementSchema>;

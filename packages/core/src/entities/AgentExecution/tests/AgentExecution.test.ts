@@ -5,7 +5,7 @@ import { AgentExecution } from '../AgentExecution.js';
 import { AgentExecutionContract, createAgentExecutionDataChangedEvent } from '../AgentExecutionContract.js';
 import { AgentExecutionObservationPolicy } from '../runtime/AgentExecutionObservationPolicy.js';
 import { AgentExecutionSchema, AgentExecutionProtocolDescriptorSchema } from '../AgentExecutionSchema.js';
-import type { AgentExecutionType, AgentExecutionRecord } from '../AgentExecutionSchema.js';
+import type { AgentExecutionType, AgentExecutionRecordType } from '../AgentExecutionSchema.js';
 import type { AgentExecutionJournalRecordType } from '../journal/AgentExecutionJournalSchema.js';
 
 describe('AgentExecution', () => {
@@ -34,7 +34,7 @@ describe('AgentExecution', () => {
                 terminalPaneId: 'terminal_1'
             }
         });
-        expect(data.runtimeMessages.map((message) => message.type)).toEqual([
+        expect(data.supportedMessages.map((message) => message.type)).toEqual([
             'interrupt',
             'checkpoint',
             'nudge'
@@ -91,7 +91,7 @@ describe('AgentExecution', () => {
             canSendStructuredPrompt: true,
             canSendStructuredCommand: true
         });
-        expect(state.runtimeMessages.map((message) => message.type)).toEqual([
+        expect(state.supportedMessages.map((message) => message.type)).toEqual([
             'checkpoint',
             'resume',
             'model'
@@ -99,7 +99,7 @@ describe('AgentExecution', () => {
     });
 
     it('uses the provided adapter label when materializing live runtime data', () => {
-        const data = AgentExecution.createLive(createRuntimeSnapshot(), {
+        const data = AgentExecution.createLive(createAgentExecutionProcess(), {
             adapterLabel: 'Copilot CLI'
         }).toData();
 
@@ -107,7 +107,7 @@ describe('AgentExecution', () => {
     });
 
     it('treats initializing progress as idle bootstrap activity instead of planning work', () => {
-        const data = AgentExecution.createLive(createRuntimeSnapshot({
+        const data = AgentExecution.createLive(createAgentExecutionProcess({
             status: 'starting',
             attention: 'none',
             progress: {
@@ -121,7 +121,7 @@ describe('AgentExecution', () => {
             lifecycleState: 'starting',
             attention: 'none',
             activityState: 'idle',
-            runtimeActivity: {
+            liveActivity: {
                 progress: {
                     summary: 'Session initialized and waiting for the first task.'
                 }
@@ -131,7 +131,7 @@ describe('AgentExecution', () => {
     });
 
     it('surfaces awaiting-agent-response after an operator prompt until the agent replies', async () => {
-        const execution = AgentExecution.createLive(createRuntimeSnapshot(), {
+        const execution = AgentExecution.createLive(createAgentExecutionProcess(), {
             adapterLabel: 'Copilot CLI'
         });
 
@@ -186,7 +186,7 @@ describe('AgentExecution', () => {
                 canSendStructuredCommand: true
             },
             context: { artifacts: [], instructions: [] },
-            runtimeMessages: [],
+            supportedMessages: [],
             scope: {
                 kind: 'task',
                 missionId: 'mission-1',
@@ -209,7 +209,7 @@ describe('AgentExecution', () => {
             canSendStructuredPrompt: true,
             canSendStructuredCommand: true
         });
-        expect(hydrated.runtimeMessages.map((message: { type: string }) => message.type)).toEqual([
+        expect(hydrated.supportedMessages.map((message: { type: string }) => message.type)).toEqual([
             'interrupt',
             'checkpoint',
             'nudge',
@@ -264,7 +264,7 @@ describe('AgentExecution', () => {
                 workingDirectory: '/repo',
                 prompt: 'Continue.'
             },
-            resolveLiveAgentExecution: async () => createRuntimeSnapshot({
+            resolveLiveAgentExecution: async () => createAgentExecutionProcess({
                 agentId: 'copilot-cli',
                 taskId: 'task-1',
                 workingDirectory: '/repo'
@@ -281,7 +281,7 @@ describe('AgentExecution', () => {
                 workingDirectory: '/repo',
                 prompt: 'Continue.'
             },
-            resolveLiveAgentExecution: async () => createRuntimeSnapshot({
+            resolveLiveAgentExecution: async () => createAgentExecutionProcess({
                 agentId: 'codex',
                 taskId: 'task-1',
                 workingDirectory: '/repo'
@@ -316,7 +316,7 @@ describe('AgentExecution', () => {
     });
 
     it('exposes the protocol descriptor as the source of truth for messages and signals', () => {
-        const descriptor = AgentExecution.createProtocolDescriptorForExecution(createRuntimeSnapshot());
+        const descriptor = AgentExecution.createProtocolDescriptorForExecution(createAgentExecutionProcess());
 
         expect(AgentExecutionProtocolDescriptorSchema.parse(descriptor)).toEqual(descriptor);
         expect(descriptor.owner).toEqual({
@@ -419,7 +419,7 @@ describe('AgentExecution', () => {
     });
 
     it('materializes protocol descriptors on live AgentExecution data', () => {
-        const data = AgentExecution.createLive(createRuntimeSnapshot()).toData();
+        const data = AgentExecution.createLive(createAgentExecutionProcess()).toData();
 
         expect(data.protocolDescriptor?.owner).toEqual({
             entity: 'Task',
@@ -427,7 +427,7 @@ describe('AgentExecution', () => {
             markerPrefix: '@task::'
         });
         expect(data.protocolDescriptor?.interactionPosture).toBe('structured-interactive');
-        expect(data.protocolDescriptor?.messages).toEqual(expect.arrayContaining(data.runtimeMessages));
+        expect(data.protocolDescriptor?.messages).toEqual(expect.arrayContaining(data.supportedMessages));
         expect(data.protocolDescriptor?.messages).toEqual(expect.arrayContaining([
             expect.objectContaining({
                 type: 'read',
@@ -441,7 +441,7 @@ describe('AgentExecution', () => {
     });
 
     it('resolves message shorthand through the AgentExecution remote query seam', async () => {
-        const data = AgentExecution.createLive(createRuntimeSnapshot()).toData();
+        const data = AgentExecution.createLive(createAgentExecutionProcess()).toData();
 
         const result = await AgentExecution.resolveMessageShorthand({
             ownerId: data.ownerId,
@@ -466,7 +466,7 @@ describe('AgentExecution', () => {
     });
 
     it('invokes semantic operations through the AgentExecution remote mutation seam', async () => {
-        const data = AgentExecution.createLive(createRuntimeSnapshot()).toData();
+        const data = AgentExecution.createLive(createAgentExecutionProcess()).toData();
         const invocations: unknown[] = [];
 
         const result = await AgentExecution.invokeSemanticOperation({
@@ -510,7 +510,7 @@ describe('AgentExecution', () => {
     });
 
     it('materializes accepted AgentExecution signals as timeline items', () => {
-        const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const execution = AgentExecution.createLive(createAgentExecutionProcess());
         const events: string[] = [];
         execution.onDidEvent((event) => events.push(event.type));
         const observation = {
@@ -564,7 +564,7 @@ describe('AgentExecution', () => {
     });
 
     it('carries artifact references into projected signal timeline items', () => {
-        const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const execution = AgentExecution.createLive(createAgentExecutionProcess());
         const observation = {
             observationId: 'observation-progress-1',
             agentExecutionId: 'AgentExecution-2',
@@ -621,7 +621,7 @@ describe('AgentExecution', () => {
     });
 
     it('keeps artifact-bearing agent messages in the live timeline projection', () => {
-        const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const execution = AgentExecution.createLive(createAgentExecutionProcess());
         const observation = {
             observationId: 'observation-message-1',
             agentExecutionId: 'AgentExecution-2',
@@ -680,7 +680,7 @@ describe('AgentExecution', () => {
     });
 
     it('materializes status signals as activity timeline items', () => {
-        const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const execution = AgentExecution.createLive(createAgentExecutionProcess());
         const observation = {
             observationId: 'observation-status-1',
             agentExecutionId: 'AgentExecution-2',
@@ -727,7 +727,7 @@ describe('AgentExecution', () => {
     });
 
     it('keeps the active input request after an idle status update', () => {
-        const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const execution = AgentExecution.createLive(createAgentExecutionProcess());
         const policy = new AgentExecutionObservationPolicy();
         const needsInputObservation = {
             observationId: 'observation-needs-input-1',
@@ -815,7 +815,7 @@ describe('AgentExecution', () => {
     });
 
     it('keeps the active input request after a progress update', () => {
-        const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const execution = AgentExecution.createLive(createAgentExecutionProcess());
         const policy = new AgentExecutionObservationPolicy();
         const needsInputObservation = {
             observationId: 'observation-needs-input-progress-1',
@@ -902,7 +902,7 @@ describe('AgentExecution', () => {
     });
 
     it('keeps the active input request question when later attention items are appended', () => {
-        const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const execution = AgentExecution.createLive(createAgentExecutionProcess());
         const policy = new AgentExecutionObservationPolicy();
         const needsInputObservation = {
             observationId: 'observation-needs-input-2',
@@ -996,7 +996,7 @@ describe('AgentExecution', () => {
     });
 
     it('notifies data changes for record-only claims that append timeline items', () => {
-        const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const execution = AgentExecution.createLive(createAgentExecutionProcess());
         const dataChanges: AgentExecutionType[] = [];
         execution.onDidDataChange((data) => dataChanges.push(data));
         const observation = {
@@ -1045,7 +1045,7 @@ describe('AgentExecution', () => {
     });
 
     it('creates AgentExecution data.changed events from canonical data', () => {
-        const data = AgentExecution.createLive(createRuntimeSnapshot()).toData();
+        const data = AgentExecution.createLive(createAgentExecutionProcess()).toData();
         const event = createAgentExecutionDataChangedEvent({ data });
 
         expect(event).toMatchObject({
@@ -1065,7 +1065,7 @@ describe('AgentExecution', () => {
     });
 
     it('publishes appended journal records in canonical data changes', () => {
-        const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const execution = AgentExecution.createLive(createAgentExecutionProcess());
         const dataChanges: AgentExecutionType[] = [];
         execution.onDidDataChange((data) => dataChanges.push(data));
 
@@ -1078,7 +1078,7 @@ describe('AgentExecution', () => {
     });
 
     it('materializes operator prompts as timeline items', async () => {
-        const execution = AgentExecution.createLive(createRuntimeSnapshot());
+        const execution = AgentExecution.createLive(createAgentExecutionProcess());
 
         await execution.submitPrompt({
             source: 'operator',
@@ -1096,7 +1096,7 @@ describe('AgentExecution', () => {
     });
 });
 
-function createAgentExecutionRecord(overrides: Partial<AgentExecutionRecord> = {}): AgentExecutionRecord {
+function createAgentExecutionRecord(overrides: Partial<AgentExecutionRecordType> = {}): AgentExecutionRecordType {
     return {
         agentExecutionId: 'AgentExecution-1',
         agentId: 'copilot-cli',
@@ -1113,7 +1113,7 @@ function createAgentExecutionRecord(overrides: Partial<AgentExecutionRecord> = {
             canSendStructuredPrompt: false,
             canSendStructuredCommand: false
         },
-        runtimeMessages: AgentExecution.createRuntimeMessageDescriptorsForCommands([
+        supportedMessages: AgentExecution.createSupportedMessagesForCommands([
             'interrupt',
             'checkpoint',
             'nudge'
@@ -1127,7 +1127,7 @@ function createAgentExecutionRecord(overrides: Partial<AgentExecutionRecord> = {
     };
 }
 
-function createRuntimeSnapshot(overrides: Partial<AgentExecutionType> = {}): AgentExecutionType {
+function createAgentExecutionProcess(overrides: Partial<AgentExecutionType> = {}): AgentExecutionType {
     return {
         agentId: 'codex',
         agentExecutionId: 'AgentExecution-2',

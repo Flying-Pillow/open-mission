@@ -1,13 +1,13 @@
 import { TerminalRegistry, type TerminalRecordingUpdate, type TerminalSnapshot } from '../../Terminal/TerminalRegistry.js';
 import {
     AgentExecutionTerminalRecordingEventSchema,
-    type AgentExecutionRecord,
+    type AgentExecutionRecordType,
     type AgentExecutionTerminalRecordingEventType
 } from '../AgentExecutionSchema.js';
 import type { MissionDossierFilesystem } from '../../Mission/MissionDossierFilesystem.js';
 
 type AgentExecutionTerminalRecordingWriterState = {
-    execution: AgentExecutionRecord;
+    execution: AgentExecutionRecordType;
     events: AgentExecutionTerminalRecordingEventType[];
     bufferBytes: number;
     queue: Promise<void>;
@@ -39,7 +39,7 @@ export class AgentExecutionTerminalRecordingWriter {
         });
     }
 
-    public reconcile(agentExecutions: AgentExecutionRecord[]): void {
+    public reconcile(agentExecutions: AgentExecutionRecordType[]): void {
         if (this.disposed) {
             return;
         }
@@ -66,7 +66,7 @@ export class AgentExecutionTerminalRecordingWriter {
         }
     }
 
-    public update(execution: AgentExecutionRecord): void {
+    public update(execution: AgentExecutionRecordType): void {
         if (this.disposed) {
             return;
         }
@@ -147,7 +147,7 @@ export class AgentExecutionTerminalRecordingWriter {
         this.scheduleFlush(writer);
     }
 
-    private ensureWriter(execution: AgentExecutionRecord): AgentExecutionTerminalRecordingWriterState | undefined {
+    private ensureWriter(execution: AgentExecutionRecordType): AgentExecutionTerminalRecordingWriterState | undefined {
         if (!execution.terminalHandle || execution.transportId !== 'terminal') {
             return undefined;
         }
@@ -226,7 +226,7 @@ export class AgentExecutionTerminalRecordingWriter {
         writer.bufferBytes += Buffer.byteLength(JSON.stringify(parsedEvent), 'utf8') + 1;
     }
 
-    private createHeaderEvent(execution: AgentExecutionRecord): AgentExecutionTerminalRecordingEventType {
+    private createHeaderEvent(execution: AgentExecutionRecordType): AgentExecutionTerminalRecordingEventType {
         const terminalSnapshot = execution.terminalHandle
             ? this.terminalRegistry.readSnapshot(execution.terminalHandle.terminalName)
             : undefined;

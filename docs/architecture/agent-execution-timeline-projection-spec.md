@@ -15,9 +15,9 @@ The implementation defines a projection contract and Open Mission rendering arch
 ## Authoritative Inputs
 
 - `CONTEXT.md`: canonical Mission vocabulary.
-- ADR-0018: AgentExecution, AgentExecutor, AgentAdapter, and Terminal vocabulary.
-- ADR-0022: AgentExecution structured interaction vocabulary.
-- ADR-0025: AgentExecution interaction journal persistence.
+- ADR-0004.01: AgentExecution, AgentExecutor, AgentAdapter, and Terminal vocabulary.
+- ADR-0004.05: AgentExecution structured interaction vocabulary.
+- ADR-0004.08: AgentExecution interaction journal persistence.
 - [Agent Execution Interaction Journal PRD](agent-execution-interaction-journal-prd.md).
 - [Agent Execution Interaction Journal Spec](agent-execution-interaction-journal-spec.md).
 - `packages/core/src/entities/AgentExecution/AgentExecutionJournalSchema.ts`: current top-level journal record family schemas and discriminated journal record contract.

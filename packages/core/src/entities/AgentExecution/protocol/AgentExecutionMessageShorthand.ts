@@ -93,7 +93,7 @@ export function resolveAgentExecutionMessageShorthand(input: ResolveAgentExecuti
         };
     const command = AgentExecutionCommandSchema.safeParse(commandInput);
     if (!command.success) {
-        return createParseError(`AgentExecution command '/${commandName}' is advertised but is not backed by a supported runtime message schema yet.`, commandName, availableCommands);
+        return createParseError(`AgentExecution command '/${commandName}' is advertised but is not backed by a supported supported message schema yet.`, commandName, availableCommands);
     }
 
     return AgentExecutionMessageShorthandResolutionSchema.parse({

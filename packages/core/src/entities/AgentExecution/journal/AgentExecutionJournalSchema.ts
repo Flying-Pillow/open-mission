@@ -86,7 +86,7 @@ export const AgentExecutionJournalRecordFamilySchema = z.enum([
     'turn.accepted',
     'turn.delivery',
     'agent-observation',
-    'runtime-fact',
+    'agent-execution-fact',
     'execution-assessment',
     'transport-evidence',
     'decision.recorded',
@@ -139,7 +139,7 @@ export const AgentExecutionJournalRecordTypeSchema = z.enum([
     'turn.accepted',
     'turn.delivery',
     'agent-observation',
-    'runtime-fact',
+    'agent-execution-fact',
     'execution-assessment',
     'transport-evidence',
     'decision.recorded',
@@ -247,7 +247,7 @@ export const AgentExecutionObservationRecordSchema = AgentExecutionJournalRecord
     payload: journalPayloadSchema.optional()
 }).strict();
 
-export const AgentExecutionRuntimeFactTypeSchema = z.enum([
+export const AgentExecutionFactTypeSchema = z.enum([
     'artifact-read',
     'artifact-written',
     'tool-invoked',
@@ -256,12 +256,12 @@ export const AgentExecutionRuntimeFactTypeSchema = z.enum([
     'provider-event'
 ]);
 
-export const AgentExecutionRuntimeFactRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
-    type: z.literal('runtime-fact'),
-    family: z.literal('runtime-fact'),
+export const AgentExecutionFactRecordSchema = AgentExecutionJournalRecordBaseSchema.extend({
+    type: z.literal('agent-execution-fact'),
+    family: z.literal('agent-execution-fact'),
     entrySemantics: z.literal('event'),
     factId: journalTextSchema,
-    factType: AgentExecutionRuntimeFactTypeSchema,
+    factType: AgentExecutionFactTypeSchema,
     path: z.string().trim().min(1).optional(),
     artifactId: z.string().trim().min(1).optional(),
     detail: z.string().trim().min(1).optional(),
@@ -390,7 +390,7 @@ export const AgentExecutionJournalRecordSchema = z.discriminatedUnion('type', [
     AgentExecutionMessageAcceptedRecordSchema,
     AgentExecutionMessageDeliveryRecordSchema,
     AgentExecutionObservationRecordSchema,
-    AgentExecutionRuntimeFactRecordSchema,
+    AgentExecutionFactRecordSchema,
     AgentExecutionAssessmentRecordSchema,
     AgentExecutionTransportEvidenceRecordSchema,
     AgentExecutionDecisionRecordSchema,
@@ -430,8 +430,8 @@ export type AgentExecutionMessageDeliveryRecordType = z.infer<typeof AgentExecut
 export type AgentExecutionObservationSourceType = z.infer<typeof AgentExecutionObservationSourceSchema>;
 export type AgentExecutionObservationConfidenceType = z.infer<typeof AgentExecutionObservationConfidenceSchema>;
 export type AgentExecutionObservationRecordType = z.infer<typeof AgentExecutionObservationRecordSchema>;
-export type AgentExecutionRuntimeFactType = z.infer<typeof AgentExecutionRuntimeFactTypeSchema>;
-export type AgentExecutionRuntimeFactRecordType = z.infer<typeof AgentExecutionRuntimeFactRecordSchema>;
+export type AgentExecutionFactType = z.infer<typeof AgentExecutionFactTypeSchema>;
+export type AgentExecutionFactRecordType = z.infer<typeof AgentExecutionFactRecordSchema>;
 export type AgentExecutionAssessmentType = z.infer<typeof AgentExecutionAssessmentTypeSchema>;
 export type AgentExecutionAssessmentRecordType = z.infer<typeof AgentExecutionAssessmentRecordSchema>;
 export type AgentExecutionTransportEvidenceType = z.infer<typeof AgentExecutionTransportEvidenceTypeSchema>;

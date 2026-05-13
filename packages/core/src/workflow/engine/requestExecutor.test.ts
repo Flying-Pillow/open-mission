@@ -419,7 +419,7 @@ describe('WorkflowRequestExecutor', () => {
 			throw new Error('Expected first launch to emit execution.started.');
 		}
 
-		await executor.terminateRuntimeAgentExecution(firstAgentExecutionId, 'restart task', task.taskId);
+		await executor.terminateProcessAgentExecution(firstAgentExecutionId, 'restart task', task.taskId);
 
 		const secondLaunchEvents = await executor.executeRequests({
 			missionId: 'mission-17',
@@ -460,7 +460,7 @@ describe('WorkflowRequestExecutor', () => {
 			}
 		});
 
-		const events = await executor.cancelRuntimeAgentExecution(
+		const events = await executor.cancelProcessAgentExecution(
 			'AgentExecution-detached',
 			'cleanup detached runtime',
 			'implementation/03-align-workflow-request-execution-with-unified-runtime'
@@ -832,7 +832,7 @@ describe('WorkflowRequestExecutor', () => {
 			agentRegistry: new AgentRegistry({ agents: [] })
 		});
 
-		const events = await executor.terminateRuntimeAgentExecution(
+		const events = await executor.terminateProcessAgentExecution(
 			'detached-AgentExecution',
 			'terminated by operator request',
 			'spec/01'

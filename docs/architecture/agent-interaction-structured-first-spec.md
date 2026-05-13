@@ -8,18 +8,18 @@ description: Temporary implementation spec for structured-first Agent interactio
 
 ## Temporary Agent Interaction Structured-First Spec
 
-This temporary SPEC describes the implementation direction for ADR-0033 and the Agent Interaction Structured-First PRD. It is intentionally provisional. When the model stabilizes, fold the durable parts into permanent architecture docs and remove this file.
+This temporary SPEC describes the implementation direction for ADR-0004.10 and the Agent Interaction Structured-First PRD. It is intentionally provisional. When the model stabilizes, fold the durable parts into permanent architecture docs and remove this file.
 
 ## Authoritative Inputs
 
 - `CONTEXT.md`: canonical Mission vocabulary.
-- ADR-0004: runtime-defined Agent execution messages.
-- ADR-0015: Entity commands as canonical operator surface.
-- ADR-0018: Agent, AgentAdapter, AgentExecutor, AgentExecution, and Terminal vocabulary.
-- ADR-0024: Mission MCP server Agent signal transport.
-- ADR-0025 and ADR-0027: AgentExecution interaction journal and typed journal ledger.
-- ADR-0030: Agent execution semantic operations.
-- ADR-0033: structured-first Agent interaction with terminal capability.
+- ADR-0004.03: runtime-defined Agent execution messages.
+- ADR-0001.05: Entity commands as canonical operator surface.
+- ADR-0004.01: Agent, AgentAdapter, AgentExecutor, AgentExecution, and Terminal vocabulary.
+- ADR-0004.06: Mission MCP server Agent signal transport.
+- ADR-0004.08 and ADR-0004.13: AgentExecution interaction journal and typed journal ledger.
+- ADR-0004.09: Agent execution semantic operations.
+- ADR-0004.10: structured-first Agent interaction with terminal capability.
 
 ## Target Model
 
@@ -254,7 +254,7 @@ transport evidence becomes semantic truth only through a daemon-owned structured
 
 ### Phase 1: Document And Preserve
 
-- Accept ADR-0033.
+- Accept ADR-0004.10.
 - Keep existing terminal-capable AgentExecution support.
 - Keep Mission UI prompt delivery structured.
 - Preserve semantic journal versus terminal recording separation.

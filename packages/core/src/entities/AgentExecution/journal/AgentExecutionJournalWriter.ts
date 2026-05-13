@@ -21,7 +21,7 @@ import type {
     AgentExecutionMessageAcceptedRecordType,
     AgentExecutionMessageDeliveryRecordType,
     AgentExecutionObservationRecordType,
-    AgentExecutionRuntimeFactRecordType,
+    AgentExecutionFactRecordType,
     AgentExecutionTransportEvidenceRecordType,
     AgentExecutionStateChangedRecordType
 } from './AgentExecutionJournalSchema.js';
@@ -34,7 +34,7 @@ import type {
     AgentExecutionSignalDecision,
     AgentPrompt
 } from '../protocol/AgentExecutionProtocolTypes.js';
-import { deriveActivityStateFromProgressState } from '../state/AgentExecutionRuntimeSemantics.js';
+import { deriveActivityStateFromProgressState } from '../state/AgentExecutionActivitySemantics.js';
 
 export type AgentExecutionJournalLaunchInput = {
     agentExecutionId: string;
@@ -204,19 +204,19 @@ export class AgentExecutionJournalWriter {
         }));
     }
 
-    public async appendRuntimeFact(input: {
+    public async appendFact(input: {
         agentExecutionId: string;
         scope: AgentExecutionScope;
-        factType: AgentExecutionRuntimeFactRecordType['factType'];
+        factType: AgentExecutionFactRecordType['factType'];
         path?: string;
         artifactId?: string;
         detail?: string;
-        payload?: AgentExecutionRuntimeFactRecordType['payload'];
-    }): Promise<AgentExecutionRuntimeFactRecordType> {
+        payload?: AgentExecutionFactRecordType['payload'];
+    }): Promise<AgentExecutionFactRecordType> {
         return this.appendRecord(input, (context) => ({
-            ...this.createRecordBase<AgentExecutionRuntimeFactRecordType>(input, context.reference, context.sequence, context.recordId, context.existingRecords, context.executionContextSeed, {
-                type: 'runtime-fact',
-                family: 'runtime-fact',
+            ...this.createRecordBase<AgentExecutionFactRecordType>(input, context.reference, context.sequence, context.recordId, context.existingRecords, context.executionContextSeed, {
+                type: 'agent-execution-fact',
+                family: 'agent-execution-fact',
                 entrySemantics: 'event',
                 authority: 'daemon',
                 assertionLevel: 'authoritative',
@@ -801,7 +801,7 @@ function buildJournalAppendState(
 
 function readMissionCoreRuntimeVersion(): string {
     try {
-        const packageJson = JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')) as { version?: unknown };
+        const packageJson = JSON.parse(readFileSync(new URL('../../../../package.json', import.meta.url), 'utf8')) as { version?: unknown };
         return typeof packageJson.version === 'string' && packageJson.version.trim().length > 0
             ? packageJson.version.trim()
             : 'unknown';

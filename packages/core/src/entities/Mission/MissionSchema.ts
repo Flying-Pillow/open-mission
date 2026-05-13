@@ -27,10 +27,10 @@ import {
     AgentExecutionSchema,
     AgentExecutionChangedSchema,
     AgentExecutionLifecycleStateSchema,
-    type AgentExecutionRecord,
-    type AgentExecutionState,
-    type AgentExecutionPermissionRequest,
-    type AgentExecutionTelemetry
+    type AgentExecutionRecordType,
+    type AgentExecutionStateType,
+    type AgentExecutionPermissionRequestType,
+    type AgentExecutionTelemetryType
 } from '../AgentExecution/AgentExecutionSchema.js';
 import {
     ArtifactEventLocatorSchema,

@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import type { AgentAdapter } from '../../daemon/runtime/agent/AgentAdapter.js';
 import type { AgentExecutionType } from '../AgentExecution/protocol/AgentExecutionProtocolTypes.js';
-import type { AgentExecutionLaunchRequest } from '../AgentExecution/AgentExecutionSchema.js';
+import type { AgentExecutionLaunchRequestType } from '../AgentExecution/AgentExecutionSchema.js';
 import type { AgentRegistry } from '../Agent/AgentRegistry.js';
 import { AgentExecution } from '../AgentExecution/AgentExecution.js';
 import { DEFAULT_REPOSITORY_AGENT_ADAPTER_ID } from '../Repository/RepositorySchema.js';
@@ -62,7 +62,7 @@ export type TaskOwner = {
 	startTaskAgentExecution(
 		task: TaskDossierRecordType,
 		adapter: AgentAdapter,
-		request: AgentExecutionLaunchRequest
+		request: AgentExecutionLaunchRequestType
 	): Promise<AgentExecutionType>;
 	recordStartedTaskAgentExecution(snapshot: AgentExecutionType): Promise<AgentExecution>;
 	recordTaskAgentExecutionLaunchFailure(taskId: string, error: unknown): Promise<void>;
@@ -366,7 +366,7 @@ export class Task extends Entity<TaskDataType, string> {
 	}
 
 	public async launchAgentExecution(
-		request: AgentExecutionLaunchRequest
+		request: AgentExecutionLaunchRequestType
 	): Promise<AgentExecution> {
 		await this.prepareForAgentExecutionLaunch();
 		const owner = this.requireOwner();

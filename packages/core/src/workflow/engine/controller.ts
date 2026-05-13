@@ -142,13 +142,13 @@ export class WorkflowController {
         return this.requestExecutor.startExecution(config);
     }
 
-    public async cancelRuntimeAgentExecution(
+    public async cancelProcessAgentExecution(
         agentExecutionId: string,
         reason?: string,
         fallbackTaskId?: string
     ): Promise<WorkflowStateData> {
         return this.ingestEmittedEvents(
-            await this.requestExecutor.cancelRuntimeAgentExecution(agentExecutionId, reason, fallbackTaskId)
+            await this.requestExecutor.cancelProcessAgentExecution(agentExecutionId, reason, fallbackTaskId)
         );
     }
 
@@ -169,13 +169,13 @@ export class WorkflowController {
         return this.ingestEmittedEvents(await this.requestExecutor.commandRuntimeAgentExecution(agentExecutionId, command));
     }
 
-    public async terminateRuntimeAgentExecution(
+    public async terminateProcessAgentExecution(
         agentExecutionId: string,
         reason?: string,
         fallbackTaskId?: string
     ): Promise<WorkflowStateData> {
         return this.ingestEmittedEvents(
-            await this.requestExecutor.terminateRuntimeAgentExecution(agentExecutionId, reason, fallbackTaskId)
+            await this.requestExecutor.terminateProcessAgentExecution(agentExecutionId, reason, fallbackTaskId)
         );
     }
 
