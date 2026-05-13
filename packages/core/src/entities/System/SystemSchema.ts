@@ -62,7 +62,16 @@ export const runtimeSystemStateSchema = z.object({
     runtimeLeases: z.number().int().nonnegative(),
     activeRuntimeLeases: z.number().int().nonnegative(),
     activeTerminalLeases: z.number().int().nonnegative(),
-    orphanedRuntimeLeases: z.number().int().nonnegative()
+    orphanedRuntimeLeases: z.number().int().nonnegative(),
+    surreal: z.object({
+        available: z.boolean(),
+        engine: z.enum(['mem', 'surrealkv']),
+        namespace: z.string().trim().min(1),
+        database: z.string().trim().min(1),
+        storagePath: z.string().trim().min(1).optional(),
+        connectedAt: z.string().trim().min(1).optional(),
+        detail: z.string().trim().min(1).optional()
+    }).strict().optional()
 }).strict();
 
 export const systemDiagnosticsStateSchema = z.object({

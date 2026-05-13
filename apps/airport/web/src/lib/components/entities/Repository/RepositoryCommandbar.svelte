@@ -16,12 +16,14 @@
         onCommandExecuted,
         class: className,
         showEmptyState = false,
+        showCodeIntelligenceToggle = false,
         leadingAction,
     }: {
         repository?: Repository;
         onCommandExecuted: () => Promise<void>;
         class?: string;
         showEmptyState?: boolean;
+        showCodeIntelligenceToggle?: boolean;
         leadingAction?: Snippet;
     } = $props();
 
@@ -79,10 +81,29 @@
     ): RepositoryRemovalSummaryType | undefined {
         return input as RepositoryRemovalSummaryType | undefined;
     }
+
+    function toggleCodeIntelligencePane(): void {
+        window.dispatchEvent(
+            new CustomEvent("mission:toggle-code-intelligence-pane"),
+        );
+    }
 </script>
 
 <div class="flex flex-wrap items-center gap-2">
     {@render leadingAction?.()}
+    {#if showCodeIntelligenceToggle}
+        <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            disabled={!repository}
+            aria-label="Toggle code intelligence graph"
+            title="Toggle code intelligence graph"
+            onclick={toggleCodeIntelligencePane}
+        >
+            <Icon icon="lucide:git-fork" class="size-4" />
+        </Button>
+    {/if}
     <Dialog.Root bind:open={settingsOpen}>
         <Dialog.Trigger>
             {#snippet child({ props })}

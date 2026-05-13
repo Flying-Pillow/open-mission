@@ -3,6 +3,24 @@
   "version": "0.1.0-alpha.0",
   "description": "Zod-first SurrealDB schema metadata, model compilation, provisioning, typed query support, and hydration primitives.",
   "type": "module",
+  "keywords": [
+    "zod",
+    "surrealdb",
+    "surrealql",
+    "schema",
+    "ddl",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Flying-Pillow/mission/tree/main/packages/zod-surreal#readme",
+  "bugs": {
+    "url": "https://github.com/Flying-Pillow/mission/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Flying-Pillow/mission.git",
+    "directory": "packages/zod-surreal"
+  },
+  "sideEffects": false,
   "publishConfig": {
     "access": "public"
   },
@@ -26,9 +44,10 @@
     }
   },
   "files": [
-    "build"
+    "build",
+    "README.md"
   ],
-  "dependencies": {
+  "peerDependencies": {
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -38,6 +57,7 @@
     "surrealdb": "^2.0.3",
     "typescript": "^6.0.3",
     "vite-plus": "^0.1.20",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "zod": "^4.4.3"
   }
 }

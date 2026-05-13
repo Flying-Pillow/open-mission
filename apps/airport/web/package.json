@@ -15,7 +15,7 @@
     "build": "vp build",
     "preview": "vp preview",
     "prepare": "svelte-kit sync || echo ''",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check": "NODE_OPTIONS=--max-old-space-size=8192 svelte-kit sync && NODE_OPTIONS=--max-old-space-size=8192 svelte-check --tsconfig ./tsconfig.json",
     "lint": "vp lint src && eslint \"src/**/*.svelte\"",
     "test": "vp test run --passWithNoTests"
   },
@@ -50,6 +50,7 @@
     "bits-ui": "^2.16.3",
     "ghostty-web": "^0.4.0",
     "github-markdown-css": "^5.9.0",
+    "graphology": "^0.26.0",
     "marked": "^16.4.1",
     "mermaid": "^11.12.2",
     "mode-watcher": "^1.1.0",
@@ -57,8 +58,9 @@
     "paneforge": "^1.0.2",
     "sanitize-html": "^2.17.0",
     "shiki": "^4.0.2",
+    "sigma": "^3.0.3",
     "svelte-sonner": "^1.1.0",
     "ws": "^8.20.0",
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   }
 }

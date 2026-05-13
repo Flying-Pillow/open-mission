@@ -1,5 +1,15 @@
 import type { CompiledSurrealField, CompiledSurrealModel, CompiledSurrealSchemaSnapshot } from './model.js';
 
+export type DdlImplicitFullTextIndex = {
+    table: string;
+    path: string;
+};
+
+type DdlCompileContext = {
+    overwrite: boolean;
+    implicitFullTextIndexes: DdlImplicitFullTextIndex[];
+};
+
 export type TableSchemaState = {
     fields: Set<string>;
     indexes: Set<string>;
@@ -17,23 +27,35 @@ export type CompileDdlPlanInput = {
     prune?: boolean;
     currentState?: Map<string, TableSchemaState>;
     overwrite?: boolean;
+    analyzers?: CompiledSurrealModel['analyzers'];
+    implicitFullTextIndexes?: DdlImplicitFullTextIndex[];
 };
 
-export function compileDefineStatements(snapshot: CompiledSurrealSchemaSnapshot): string[] {
-    return compileDdlPlan({ snapshot }).statements;
+export function compileDefineStatements(
+    snapshot: CompiledSurrealSchemaSnapshot,
+    options: Omit<CompileDdlPlanInput, 'snapshot'> = {}
+): string[] {
+    return compileDdlPlan({ snapshot, ...options }).statements;
 }
 
 export function compileDdlPlan(input: CompileDdlPlanInput): DdlPlan {
     const models = Object.values(input.snapshot.models).filter((model) => !input.scope || model.scope === input.scope);
-    const statements = models.flatMap((model) => [
-        compileDefineTableStatement(model),
-        ...Object.values(model.fields).flatMap((field) => compileDefineFieldAndIndexStatements(model, field, models)),
-        ...model.analyzers.map(compileDefineAnalyzerStatement),
-        ...model.indexes.map((index) => compileDefineTableIndexStatement(model, index))
-    ]);
+    const context: DdlCompileContext = {
+        overwrite: input.overwrite ?? false,
+        implicitFullTextIndexes: input.implicitFullTextIndexes ?? []
+    };
+    const statements = [
+        ...(input.analyzers ?? []).map((analyzer) => compileDefineAnalyzerStatement(analyzer, context)),
+        ...models.flatMap((model) => [
+            compileDefineTableStatement(model, context),
+            ...Object.values(model.fields).flatMap((field) => compileDefineFieldAndIndexStatements(model, field, models, context)),
+            ...model.analyzers.map((analyzer) => compileDefineAnalyzerStatement(analyzer, context)),
+            ...model.indexes.map((index) => compileDefineTableIndexStatement(model, index, context))
+        ])
+    ];
 
     if (input.prune && input.currentState) {
-        statements.push(...compilePruneStatements(models, input.currentState));
+        statements.push(...compilePruneStatements(models, input.currentState, context));
     }
 
     return {
@@ -43,9 +65,10 @@ export function compileDdlPlan(input: CompileDdlPlanInput): DdlPlan {
     };
 }
 
-export function compileDefineTableStatement(model: CompiledSurrealModel): string {
+export function compileDefineTableStatement(model: CompiledSurrealModel, context: Partial<DdlCompileContext> = {}): string {
     const clauses = [
         'DEFINE TABLE',
+        ...(context.overwrite ? ['OVERWRITE'] : []),
         surrealIdentifier(model.table),
         'TYPE',
         model.kind === 'relation' ? 'RELATION' : 'NORMAL',
@@ -60,10 +83,15 @@ export function compileDefineTableStatement(model: CompiledSurrealModel): string
     return `${clauses.join(' ')};`;
 }
 
-export function compileDefineFieldStatement(model: CompiledSurrealModel, field: CompiledSurrealField): string {
-    const fieldType = compileFieldType(model, field, []);
+export function compileDefineFieldStatement(
+    model: CompiledSurrealModel,
+    field: CompiledSurrealField,
+    context: Partial<DdlCompileContext> = {}
+): string {
+    const fieldType = compileFieldType(model, field, [], { validateReferences: false });
     const clauses = [
         'DEFINE FIELD',
+        ...(context.overwrite ? ['OVERWRITE'] : []),
         surrealFieldPath(field.name),
         'ON TABLE',
         surrealIdentifier(model.table),
@@ -83,32 +111,39 @@ export function compileDefineFieldStatement(model: CompiledSurrealModel, field: 
 export function compileDefineFieldAndIndexStatements(
     model: CompiledSurrealModel,
     field: CompiledSurrealField,
-    models: CompiledSurrealModel[]
+    models: CompiledSurrealModel[],
+    context: DdlCompileContext = { overwrite: false, implicitFullTextIndexes: [] }
 ): string[] {
     if (!field.storage) {
         return [];
     }
 
     return [
-        compileDefineFieldStatementWithContext(model, field, models),
-        ...compileDefineIndexStatements(model, field)
+        compileDefineFieldStatementWithContext(model, field, models, context),
+        ...compileDefineIndexStatements(model, field, context)
     ];
 }
 
-export function compileDefineIndexStatements(model: CompiledSurrealModel, field: CompiledSurrealField): string[] {
+export function compileDefineIndexStatements(
+    model: CompiledSurrealModel,
+    field: CompiledSurrealField,
+    context: DdlCompileContext = { overwrite: false, implicitFullTextIndexes: [] }
+): string[] {
     const statements: string[] = [];
-    appendIndexStatements(model, field, field.name, statements);
+    appendIndexStatements(model, field, field.name, statements, context);
     return statements;
 }
 
 function compileDefineFieldStatementWithContext(
     model: CompiledSurrealModel,
     field: CompiledSurrealField,
-    models: CompiledSurrealModel[]
+    models: CompiledSurrealModel[],
+    context: DdlCompileContext
 ): string {
     const fieldType = compileFieldType(model, field, models);
     const clauses = [
         'DEFINE FIELD',
+        ...(context.overwrite ? ['OVERWRITE'] : []),
         surrealFieldPath(field.name),
         'ON TABLE',
         surrealIdentifier(model.table),
@@ -125,9 +160,10 @@ function compileDefineFieldStatementWithContext(
     return `${clauses.join(' ')};`;
 }
 
-function compileDefineAnalyzerStatement(analyzer: CompiledSurrealModel['analyzers'][number]): string {
+function compileDefineAnalyzerStatement(analyzer: CompiledSurrealModel['analyzers'][number], context: DdlCompileContext): string {
     return [
         'DEFINE ANALYZER',
+        ...(context.overwrite ? ['OVERWRITE'] : []),
         surrealIdentifier(analyzer.name),
         'TOKENIZERS',
         analyzer.tokenizers.map(surrealIdentifier).join(', '),
@@ -138,10 +174,12 @@ function compileDefineAnalyzerStatement(analyzer: CompiledSurrealModel['analyzer
 
 function compileDefineTableIndexStatement(
     model: CompiledSurrealModel,
-    index: CompiledSurrealModel['indexes'][number]
+    index: CompiledSurrealModel['indexes'][number],
+    context: DdlCompileContext
 ): string {
     return [
         'DEFINE INDEX',
+        ...(context.overwrite ? ['OVERWRITE'] : []),
         surrealIdentifier(index.name),
         'ON TABLE',
         surrealIdentifier(model.table),
@@ -164,15 +202,24 @@ function compileFullTextIndexClauses(fulltext: NonNullable<CompiledSurrealModel[
 function compileFieldType(
     model: CompiledSurrealModel,
     field: CompiledSurrealField,
-    models: CompiledSurrealModel[]
+    models: CompiledSurrealModel[],
+    options: { validateReferences?: boolean } = {}
 ): string | undefined {
     let type = field.type;
 
     if (field.reference) {
         const tableByModelName = new Map(models.map((candidate) => [candidate.name.toLowerCase(), candidate.table]));
+        const tableByTableName = new Map(models.map((candidate) => [candidate.table.toLowerCase(), candidate.table]));
         const referencedTables = field.reference.split('|').map((name) => {
             const trimmedName = name.trim();
-            return tableByModelName.get(trimmedName.toLowerCase()) ?? trimmedName;
+            const referencedTable = tableByModelName.get(trimmedName.toLowerCase()) ?? tableByTableName.get(trimmedName.toLowerCase());
+            if (!referencedTable) {
+                if (options.validateReferences === false) {
+                    return trimmedName;
+                }
+                throw new Error(`Unknown referenced entity '${trimmedName}' for field '${model.table}.${field.name}'.`);
+            }
+            return referencedTable;
         });
         type = `record<${referencedTables.join('|')}>`;
     } else if (model.kind === 'relation' && (field.name === 'in' || field.name === 'out')) {
@@ -196,7 +243,8 @@ function appendIndexStatements(
     model: CompiledSurrealModel,
     field: CompiledSurrealField,
     path: string,
-    statements: string[]
+    statements: string[],
+    context: DdlCompileContext
 ): void {
     if (field.index) {
         if (typeof field.index === 'object' && field.index.kind === 'hnsw') {
@@ -207,6 +255,7 @@ function appendIndexStatements(
             statements.push(
                 [
                     'DEFINE INDEX',
+                    ...(context.overwrite ? ['OVERWRITE'] : []),
                     surrealIdentifier(indexName(model.table, path, 'hnsw_idx')),
                     'ON TABLE',
                     surrealIdentifier(model.table),
@@ -226,6 +275,7 @@ function appendIndexStatements(
             statements.push(
                 [
                     'DEFINE INDEX',
+                    ...(context.overwrite ? ['OVERWRITE'] : []),
                     surrealIdentifier(indexName(model.table, path, 'idx')),
                     'ON TABLE',
                     surrealIdentifier(model.table),
@@ -237,10 +287,11 @@ function appendIndexStatements(
         }
     }
 
-    if (field.searchable) {
+    if (field.searchable || shouldEmitImplicitFullTextIndex(model, path, context)) {
         statements.push(
             [
                 'DEFINE INDEX',
+                ...(context.overwrite ? ['OVERWRITE'] : []),
                 surrealIdentifier(indexName(model.table, path, 'ft_idx')),
                 'ON TABLE',
                 surrealIdentifier(model.table),
@@ -250,9 +301,20 @@ function appendIndexStatements(
             ].join(' ') + ';'
         );
     }
+
+    for (const nested of Object.values(field.fields ?? {})) {
+        if (nested.compute) {
+            continue;
+        }
+        appendIndexStatements(model, nested, `${path}.${nested.name}`, statements, context);
+    }
 }
 
-function compilePruneStatements(models: CompiledSurrealModel[], currentState: Map<string, TableSchemaState>): string[] {
+function compilePruneStatements(
+    models: CompiledSurrealModel[],
+    currentState: Map<string, TableSchemaState>,
+    context: DdlCompileContext
+): string[] {
     const statements: string[] = [];
     for (const model of models) {
         const state = currentState.get(model.table);
@@ -263,12 +325,7 @@ function compilePruneStatements(models: CompiledSurrealModel[], currentState: Ma
         const validFields = new Set(['id', ...Object.values(model.fields).filter((field) => field.storage).map((field) => field.name)]);
         const validIndexes = new Set<string>();
         for (const field of Object.values(model.fields).filter((candidate) => candidate.storage)) {
-            if (field.index) {
-                validIndexes.add(indexName(model.table, field.name, typeof field.index === 'object' ? 'hnsw_idx' : 'idx'));
-            }
-            if (field.searchable) {
-                validIndexes.add(indexName(model.table, field.name, 'ft_idx'));
-            }
+            collectValidIndexNames(model, field, field.name, validIndexes, context);
         }
 
         for (const fieldName of state.fields) {
@@ -283,6 +340,34 @@ function compilePruneStatements(models: CompiledSurrealModel[], currentState: Ma
         }
     }
     return statements;
+}
+
+function collectValidIndexNames(
+    model: CompiledSurrealModel,
+    field: CompiledSurrealField,
+    path: string,
+    validIndexes: Set<string>,
+    context: DdlCompileContext
+): void {
+    if (field.index) {
+        validIndexes.add(indexName(model.table, path, typeof field.index === 'object' ? 'hnsw_idx' : 'idx'));
+    }
+    if (field.searchable || shouldEmitImplicitFullTextIndex(model, path, context)) {
+        validIndexes.add(indexName(model.table, path, 'ft_idx'));
+    }
+    for (const nested of Object.values(field.fields ?? {})) {
+        if (!nested.compute) {
+            collectValidIndexNames(model, nested, `${path}.${nested.name}`, validIndexes, context);
+        }
+    }
+}
+
+function shouldEmitImplicitFullTextIndex(
+    model: CompiledSurrealModel,
+    path: string,
+    context: DdlCompileContext
+): boolean {
+    return context.implicitFullTextIndexes.some((index) => index.table === model.table && index.path === path);
 }
 
 export function surrealIdentifier(identifier: string): string {

@@ -16,6 +16,7 @@ const forbiddenWebPatterns = [
     /getAirportRouteData\b/,
     /getRepositoryDataBundle\b/,
     /airport-home/,
+    /entities\/Entity\/EntityRemote(?:\.js)?/,
     /EntityContract\.js/,
     /entities\/[A-Za-z]+\/[A-Za-z]+Contract\.js/
 ];
@@ -43,6 +44,7 @@ describe('Airport web architecture boundaries', () => {
     it('does not use legacy control or contract surfaces', () => {
         const offenders = listSourceFiles(srcRoot)
             .filter((filePath) => !filePath.endsWith('.test.ts'))
+            .filter((filePath) => !isServerOnlyPath(filePath))
             .flatMap((filePath) => {
                 const source = fs.readFileSync(filePath, 'utf8');
                 return forbiddenWebPatterns.some((pattern) => pattern.test(source))

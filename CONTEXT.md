@@ -255,13 +255,17 @@ _Avoid_: remote mission API, MCP-owned workflow, task session server, provider-s
 A read-only daemon-owned operation exposed to one registered Agent execution through `mission-mcp`, such as Artifact reads, code search, symbol context, impact analysis, route impact, or tool context. It resolves authority from Agent execution scope, validates operation input, delegates to the owning daemon service, returns structured context, and records a bounded Agent execution runtime fact.
 _Avoid_: Entity command, raw repository API, workflow mutation, arbitrary filesystem tool, public MCP tool
 
-**Repository code intelligence index**:
-A daemon-owned derived read model over one Repository root or Mission worktree root that records source files, code symbols, routes, tools, heuristic processes, clusters, and typed code relationships for scoped Agent execution semantic operations. It is rebuildable from repository files and Git state, not canonical Mission state.
-_Avoid_: Entity storage records, Mission dossier, `.gitnexus` index, workflow truth, source of truth
+**Code root**:
+A filesystem root containing source code that Mission may index for scoped Agent execution semantic operations. A Code root may be a Repository root or a Mission worktree root, but the code intelligence indexer and graph store treat both identically after scope resolution.
+_Avoid_: repository-only index root, mission-only index root, product workspace, raw filesystem API
 
-**Repository code graph**:
-The graph-shaped query model inside a Repository code intelligence index, containing code files, code symbols, code relations, code routes, code tools, code processes, code clusters, and index snapshot metadata. Its physical storage may use SurrealDB tables and relation records behind a Mission-owned graph store adapter.
-_Avoid_: raw SurrealDB client, public graph API, Entity relationship metadata, workflow graph
+**Code intelligence index**:
+A daemon-owned derived read model over one Code root that records source files, code symbols, routes, tools, heuristic processes, clusters, and typed code relationships for scoped Agent execution semantic operations. It is rebuildable from Code root files and Git state, not canonical Mission state.
+_Avoid_: Entity storage records, Mission dossier, `.gitnexus` index, workflow truth, source of truth, Repository code intelligence index, Mission code intelligence index
+
+**Code graph**:
+The graph-shaped query model inside a Code intelligence index, containing code files, code symbols, code relations, code routes, code tools, code processes, code clusters, and index snapshot metadata. Its physical storage may use SurrealDB tables and relation records behind a Mission-owned graph store adapter, with SurrealQL schema generated from Mission-owned Zod schemas annotated with `@flying-pillow/zod-surreal` metadata.
+_Avoid_: raw SurrealDB client, public graph API, Entity relationship metadata, workflow graph, Repository code graph, Mission code graph
 
 **Code intelligence runtime fact**:
 A bounded Agent execution runtime fact recording that an Agent execution used a code intelligence semantic operation, including the operation name, scoped index, query summary, result summary, staleness, and confidence metadata. It is audit material, not the full query result or source body.
@@ -489,12 +493,13 @@ _Avoid_: workflow projection, stage projection
 - A **Mission worktree** is materialized from one **Mission branch ref**.
 - A **Mission worktree** has exactly one **Mission worktree root**.
 - A **Repository** uses a **Git adapter** for local Git operations at its **Repository root**.
-- A **Repository code intelligence index** may be derived from a **Repository root** for repository-scoped code intelligence.
+- A **Repository root** may resolve to a **Code root** for scoped code intelligence.
 - A **Repository** uses a **GitHub adapter** for hosted operations against its **GitHub repository ref**.
 - A **Mission worktree** uses a **Git adapter** for local Git operations at its **Mission worktree root**.
-- A **Repository code intelligence index** may be derived from a **Mission worktree root** for Mission, Task, or worktree-backed Artifact Agent executions.
-- A **Repository code graph** belongs to exactly one **Repository code intelligence index** snapshot.
-- A **Repository code intelligence index** is derived read material and must not replace repository files, Git state, Mission dossiers, Entity storage records, or workflow events as source of truth.
+- A **Mission worktree root** may resolve to a **Code root** for scoped code intelligence.
+- A **Code intelligence index** belongs to exactly one **Code root**.
+- A **Code graph** belongs to exactly one **Code intelligence index** snapshot.
+- A **Code intelligence index** is derived read material and must not replace repository files, Git state, Mission dossiers, Entity storage records, or workflow events as source of truth.
 - Hosted pull request and issue operations use the **GitHub adapter** against a **GitHub repository ref**.
 - A **Mission** has exactly one **Mission dossier**.
 - A **Mission dossier** contains **Mission runtime data** and the Mission runtime event log.
@@ -524,7 +529,7 @@ _Avoid_: workflow projection, stage projection
 - An **Agent execution log** is daemon-owned audit material, not an **Artifact** by default.
 - An **Agent execution semantic operation** belongs to one registered **Agent execution** and is authorized through that Agent execution's `mission-mcp` access.
 - An **Agent execution semantic operation** records a bounded **Agent execution runtime fact** when it reads meaningful context.
-- A code intelligence semantic operation may read a **Repository code intelligence index** only for the Repository root or Mission worktree root allowed by the **Agent execution scope**.
+- A code intelligence semantic operation may read a **Code intelligence index** only for the **Code root** resolved from the **Agent execution scope**.
 - An **Agent-session artifact** may reference or extract from an **Agent execution log** when the daemon or operator promotes useful material into Mission work.
 - An **Agent execution message** describes a structured message supported by an Agent execution's Agent adapter.
 - An **Agent execution token** is the daemon-issued identifier used for structured transport and registration.
@@ -617,8 +622,10 @@ _Avoid_: workflow projection, stage projection
 - Agent execution semantic operations are read-only by default and must not mutate Entity storage records, Mission workflow state, repository files, Git refs, or Airport surface state.
 - Semantic operation availability is scoped by Agent execution scope, selected Agent adapter capability, daemon policy, and operation-specific requirements.
 - The Mission MCP bridge must proxy semantic operation inputs directly; it must not assume every MCP tool is an Agent signal payload.
-- Repository code intelligence belongs to a daemon-owned Repository code intelligence service and Repository code graph store, not to MCP handlers or Airport surfaces.
-- Repository code intelligence indexes are rebuildable read models over Repository roots or Mission worktree roots and must report staleness when stale data could affect the answer.
+- Code intelligence belongs to a daemon-owned Code intelligence service and Code graph store, not to MCP handlers or Airport surfaces.
+- Code intelligence indexes are rebuildable read models over Code roots and must report staleness when stale data could affect the answer.
+- Code graph SurrealQL DDL is generated from Mission-owned zod-surreal schemas; hand-written SurQL is not the canonical code graph schema.
+- Airport web may render a read-only visual representation of active Code graph snapshots after Agent-facing semantic operations are stable, but it must not own graph semantics, index lifecycle, root selection, or graph mutation.
 - Code intelligence runtime facts record bounded audit summaries of semantic operation use; full source bodies and high-volume graph results are returned only in operation responses when allowed, not stored wholesale in runtime facts.
 
 ### Mission Control Task List

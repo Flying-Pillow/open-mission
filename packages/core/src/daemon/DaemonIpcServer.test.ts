@@ -7,6 +7,7 @@ import { getDaemonLockPath, getDaemonRuntimePath, getDaemonTerminalLeaseStatePat
 import { MissionRegistry } from './MissionRegistry.js';
 import { executeEntityCommandInDaemon } from '../entities/Entity/EntityRemote.js';
 import { startMissionDaemon } from './DaemonIpcServer.js';
+import { resolveDaemonSurrealStorePath } from './runtime/DaemonSurrealStore.js';
 
 vi.mock('./MissionTerminal.js', () => ({
     ensureMissionTerminalState: vi.fn(async () => ({
@@ -83,6 +84,28 @@ describe('minimal source daemon request handling', () => {
 
         try {
             await expect(fs.readFile(getDaemonLockPath(), 'utf8')).resolves.toContain(`"processId": ${String(process.pid)}`);
+        } finally {
+            await daemon.dispose();
+            hydrateDaemonMissions.mockRestore();
+            restoreRuntimeDirectory(previousRuntimeDirectory);
+            await fs.rm(runtimeRoot, { recursive: true, force: true });
+            await fs.rm(workspaceRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('starts a repository-scoped SurrealDB runtime store under .mission', async () => {
+        const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-surreal-workspace-'));
+        const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-surreal-runtime-'));
+        const previousRuntimeDirectory = process.env['XDG_RUNTIME_DIR'];
+        process.env['XDG_RUNTIME_DIR'] = runtimeRoot;
+        const hydrateDaemonMissions = vi.spyOn(MissionRegistry.prototype, 'hydrateDaemonMissions').mockResolvedValue(undefined);
+        const daemon = await startMissionDaemon({
+            socketPath: path.join(runtimeRoot, 'daemon.sock'),
+            surfacePath: workspaceRoot
+        });
+
+        try {
+            await expect(fs.stat(resolveDaemonSurrealStorePath(workspaceRoot))).resolves.toBeDefined();
         } finally {
             await daemon.dispose();
             hydrateDaemonMissions.mockRestore();

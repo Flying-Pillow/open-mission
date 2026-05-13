@@ -86,6 +86,28 @@ export type CompileSchemaOptions = {
     generatedAt?: string;
 };
 
+type InferredSurrealFieldShape = {
+    type?: string;
+    array?: boolean;
+    optional?: boolean;
+    nullable?: boolean;
+};
+
+type ZodRuntimeDefinition = {
+    type?: string;
+    innerType?: z.ZodType;
+    element?: z.ZodType;
+    checks?: Array<{
+        isInt?: boolean;
+        format?: string;
+        def?: {
+            check?: string;
+            format?: string;
+        };
+    }>;
+    values?: unknown[];
+};
+
 export function defineModel(definition: ZodSurrealModelDefinition): ZodSurrealModelDefinition {
     const modelName = definition.name.trim();
     if (!modelName) {
@@ -180,13 +202,38 @@ function compileField(
 
     const name = metadata.name ?? fallbackName;
     const storage = metadata.storage ?? (storageFieldNames.has(fallbackName) || storageFieldNames.has(name));
-    return normalizeCompiledField(name, metadata, storage);
+    return normalizeCompiledField(name, metadata, storage, inferSurrealFieldShape(fieldSchema), compileNestedFields(fieldSchema, metadata));
+}
+
+function compileNestedFields(
+    fieldSchema: z.ZodType,
+    metadata: SurrealFieldMetadata
+): Record<string, CompiledSurrealField> | undefined {
+    if (metadata.fields) {
+        return Object.fromEntries(
+            Object.entries(metadata.fields)
+                .map(([fallbackName, nestedMetadata]) => {
+                    const name = nestedMetadata.name ?? fallbackName;
+                    return normalizeCompiledField(name, nestedMetadata, nestedMetadata.storage ?? false);
+                })
+                .sort((left, right) => left.name.localeCompare(right.name))
+                .map((field) => [field.name, field])
+        );
+    }
+
+    if (fieldSchema instanceof z.ZodObject) {
+        return compileFields(fieldSchema, fieldSchema);
+    }
+
+    return undefined;
 }
 
 function normalizeCompiledField(
     name: string,
     metadata: SurrealFieldMetadata,
-    storage: boolean
+    storage: boolean,
+    inferred: InferredSurrealFieldShape = {},
+    fields?: Record<string, CompiledSurrealField>
 ): CompiledSurrealField {
     return {
         name,
@@ -194,10 +241,10 @@ function normalizeCompiledField(
         ...(metadata.compute ? { compute: metadata.compute } : {}),
         ...(metadata.value ? { value: metadata.value } : {}),
         ...(metadata.reference ? { reference: metadata.reference } : {}),
-        ...(metadata.type ? { type: metadata.type } : {}),
-        array: metadata.array ?? false,
-        optional: metadata.optional ?? false,
-        nullable: metadata.nullable ?? false,
+        ...(metadata.type ?? inferred.type ? { type: metadata.type ?? inferred.type } : {}),
+        array: metadata.array ?? inferred.array ?? false,
+        optional: metadata.optional ?? inferred.optional ?? false,
+        nullable: metadata.nullable ?? inferred.nullable ?? false,
         flexible: metadata.flexible ?? false,
         ...(metadata.onDelete ? { onDelete: metadata.onDelete } : {}),
         index: metadata.index ?? false,
@@ -208,6 +255,109 @@ function normalizeCompiledField(
         ...(metadata.assertion ? { assertion: metadata.assertion } : {}),
         ...(metadata.default ? { default: metadata.default } : {}),
         readonly: metadata.readonly ?? false,
-        ...(metadata.comment ? { comment: metadata.comment } : {})
+        ...(metadata.comment ? { comment: metadata.comment } : {}),
+        ...(fields && Object.keys(fields).length > 0 ? { fields } : {})
     };
+}
+
+function inferSurrealFieldShape(schema: z.ZodType): InferredSurrealFieldShape {
+    const definition = readZodDefinition(schema);
+
+    switch (definition.type) {
+        case 'optional': {
+            return mergeInferredSurrealFieldShape(inferInnerSurrealFieldShape(definition), { optional: true });
+        }
+        case 'nullable': {
+            return mergeInferredSurrealFieldShape(inferInnerSurrealFieldShape(definition), { nullable: true });
+        }
+        case 'default':
+        case 'catch':
+        case 'readonly':
+        case 'nonoptional': {
+            return inferInnerSurrealFieldShape(definition);
+        }
+        case 'array': {
+            return mergeInferredSurrealFieldShape(inferElementSurrealFieldShape(definition), { array: true });
+        }
+        case 'string':
+        case 'enum': {
+            return { type: 'string' };
+        }
+        case 'literal': {
+            return inferLiteralSurrealFieldShape(definition.values ?? []);
+        }
+        case 'number': {
+            return { type: isIntNumberDefinition(definition) ? 'int' : 'number' };
+        }
+        case 'boolean': {
+            return { type: 'bool' };
+        }
+        case 'bigint': {
+            return { type: 'int' };
+        }
+        case 'date': {
+            return { type: 'datetime' };
+        }
+        case 'object':
+        case 'record':
+        case 'map': {
+            return { type: 'object' };
+        }
+        default: {
+            return {};
+        }
+    }
+}
+
+function inferInnerSurrealFieldShape(definition: ZodRuntimeDefinition): InferredSurrealFieldShape {
+    return definition.innerType ? inferSurrealFieldShape(definition.innerType) : {};
+}
+
+function inferElementSurrealFieldShape(definition: ZodRuntimeDefinition): InferredSurrealFieldShape {
+    return definition.element ? inferSurrealFieldShape(definition.element) : {};
+}
+
+function mergeInferredSurrealFieldShape(
+    inferred: InferredSurrealFieldShape,
+    override: InferredSurrealFieldShape
+): InferredSurrealFieldShape {
+    return {
+        ...inferred,
+        ...override
+    };
+}
+
+function inferLiteralSurrealFieldShape(values: unknown[]): InferredSurrealFieldShape {
+    const valueTypes = new Set(values.map((value) => typeof value));
+    if (valueTypes.size !== 1) {
+        return {};
+    }
+
+    switch ([...valueTypes][0]) {
+        case 'string': {
+            return { type: 'string' };
+        }
+        case 'number': {
+            return { type: 'number' };
+        }
+        case 'boolean': {
+            return { type: 'bool' };
+        }
+        case 'bigint': {
+            return { type: 'int' };
+        }
+        default: {
+            return {};
+        }
+    }
+}
+
+function isIntNumberDefinition(definition: ZodRuntimeDefinition): boolean {
+    return Boolean(definition.checks?.some((check) =>
+        check.isInt === true || check.format === 'safeint' || check.def?.format === 'safeint' || check.def?.check === 'int'
+    ));
+}
+
+function readZodDefinition(schema: z.ZodType): ZodRuntimeDefinition {
+    return (schema as z.ZodType & { _def?: ZodRuntimeDefinition })._def ?? {};
 }

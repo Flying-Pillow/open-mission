@@ -10,14 +10,17 @@
     "pnpm": ">=11"
   },
   "scripts": {
-    "build": "turbo run build --filter=!@flying-pillow/mission-airport-native",
-    "check": "turbo run check --filter=!@flying-pillow/mission-airport-native",
+    "build": "NODE_OPTIONS=--max-old-space-size=8192 turbo run build --filter=!@flying-pillow/mission-airport-native",
+    "check": "NODE_OPTIONS=--max-old-space-size=8192 turbo run check --filter=!@flying-pillow/mission-airport-native",
+    "ci:verify": "pnpm run lint && pnpm run build && pnpm run check && pnpm run test",
     "clean": "rm -rf .turbo apps/airport/web/build apps/airport/web/.svelte-kit apps/airport/native/src-tauri/target packages/*/build apps/*/*/build",
     "dev": "pnpm --filter @flying-pillow/mission run install:dev && pnpm --filter @flying-pillow/mission exec tsx --tsconfig ./tsconfig.dev.json ./src/missiond.ts stop --json && pnpm --parallel --filter @flying-pillow/mission-core --filter @flying-pillow/mission-airport-web run dev",
     "lint": "vp lint . && pnpm exec eslint \"apps/airport/web/src/**/*.svelte\"",
     "mission": "turbo run build --filter=@flying-pillow/mission-core --filter=@flying-pillow/mission && node packages/mission/build/mission.js",
     "missiond": "turbo run build --filter=@flying-pillow/mission-core --filter=@flying-pillow/mission && node packages/mission/build/missiond.js",
     "postinstall": "node ./scripts/repair-node-pty-helper-permissions.mjs",
+    "release:publish": "pnpm run build && changeset publish",
+    "release:version": "changeset version && pnpm install --lockfile-only",
     "test": "turbo run test"
   },
   "devDependencies": {

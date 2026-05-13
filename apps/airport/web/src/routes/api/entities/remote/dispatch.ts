@@ -1,5 +1,5 @@
-import type { EntityCommandInvocation, EntityFormInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/entities/Entity/EntityRemote';
-import { entityCommandInvocationSchema, entityFormInvocationSchema, entityQueryInvocationSchema } from '@flying-pillow/mission-core/entities/Entity/EntityRemote';
+import type { EntityCommandInvocation, EntityFormInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/entities/Entity/EntityInvocation';
+import { entityCommandInvocationSchema, entityFormInvocationSchema, entityQueryInvocationSchema } from '@flying-pillow/mission-core/entities/Entity/EntityInvocation';
 
 export {
     entityCommandInvocationSchema,

@@ -1,10 +1,18 @@
 <script lang="ts">
     import type { RepositoryIssueDetailType } from "@flying-pillow/mission-core/entities/Repository/RepositorySchema";
+    import { onMount } from "svelte";
+    import { MediaQuery } from "svelte/reactivity";
     import { app } from "$lib/client/Application.svelte.js";
     import AgentChat from "$lib/components/entities/AgentExecution/AgentChat.svelte";
+    import CodeIntelligence from "$lib/components/entities/CodeIntelligence/CodeIntelligence.svelte";
     import IssuePreview from "$lib/components/entities/Issue/IssuePreview.svelte";
     import RepositoryWorkList from "$lib/components/entities/Repository/RepositoryWorkList.svelte";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
+    import {
+        ResizableHandle,
+        ResizablePane,
+        ResizablePaneGroup,
+    } from "$lib/components/ui/resizable";
 
     let selectedIssue = $state<RepositoryIssueDetailType | null>(null);
     let issuePreviewOpen = $state(false);
@@ -13,8 +21,38 @@
     let repositoryChatRequestKey = $state("");
     let repositoryChatRefreshNonce = $state(0);
     let repositoryChatError = $state<string | null>(null);
+    let codeIntelligencePaneGroup = $state<{
+        getLayout: () => number[];
+        setLayout: (layout: number[]) => void;
+    }>();
+    const codeIntelligencePaneQuery = new MediaQuery("min-width: 1280px");
 
     const invalidState = $derived(app.repository?.data.invalidState);
+    const codeIntelligencePaneAvailable = $derived(
+        codeIntelligencePaneQuery.current,
+    );
+
+    onMount(() => {
+        const toggleCodeIntelligencePane = (): void => {
+            const codeIntelligenceSize =
+                codeIntelligencePaneGroup?.getLayout()[1] ?? 0;
+            codeIntelligencePaneGroup?.setLayout(
+                codeIntelligenceSize > 4 ? [100, 0] : [50, 50],
+            );
+        };
+
+        window.addEventListener(
+            "mission:toggle-code-intelligence-pane",
+            toggleCodeIntelligencePane,
+        );
+        return () => {
+            window.removeEventListener(
+                "mission:toggle-code-intelligence-pane",
+                toggleCodeIntelligencePane,
+            );
+        };
+    });
+
     function closeIssuePreview(): void {
         issuePreviewOpen = false;
         selectedIssue = null;
@@ -53,6 +91,32 @@
     });
 </script>
 
+{#snippet repositoryChatPane()}
+    {#if invalidState || !app.repository?.data.isInitialized}
+        <section
+            class="mb-2 rounded-2xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+        >
+            <p class="font-medium">Repository manager attention required.</p>
+            <p class="mt-1 text-destructive/85">
+                Regular mission start stays gated until the repository control
+                state is ready. Use the repository chat to review and continue.
+            </p>
+        </section>
+    {/if}
+
+    <section
+        class="flex min-h-0 min-w-0 flex-1 overflow-hidden border border-white/10"
+    >
+        <AgentChat
+            ownerEntity={app.repository}
+            refreshNonce={repositoryChatRefreshNonce}
+            onCommandExecuted={refreshRepositoryChat}
+            loadingTitle="Starting repository chat"
+            loadingPlaceholder="Starting repository chat"
+        />
+    </section>
+{/snippet}
+
 <div class="flex min-h-0 flex-1 flex-col">
     {#if app.repositoryLoading && !app.repository}
         <section
@@ -82,36 +146,39 @@
                 </section>
             </section>
 
-            <section
-                class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-            >
-                {#if invalidState || !app.repository.data.isInitialized}
-                    <section
-                        class="mb-2 rounded-2xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive"
-                    >
-                        <p class="font-medium">
-                            Repository manager attention required.
-                        </p>
-                        <p class="mt-1 text-destructive/85">
-                            Regular mission start stays gated until the
-                            repository control state is ready. Use the
-                            repository chat to review and continue.
-                        </p>
-                    </section>
-                {/if}
-
-                <section
-                    class="flex min-h-0 min-w-0 flex-1 overflow-hidden border border-white/10"
+            {#if codeIntelligencePaneAvailable}
+                <ResizablePaneGroup
+                    bind:this={codeIntelligencePaneGroup}
+                    direction="horizontal"
+                    class="min-h-0 min-w-0 flex-1 overflow-hidden"
+                    autoSaveId={`repository-code-intelligence-zero:${app.repository.id}`}
                 >
-                    <AgentChat
-                        ownerEntity={app.repository}
-                        refreshNonce={repositoryChatRefreshNonce}
-                        onCommandExecuted={refreshRepositoryChat}
-                        loadingTitle="Starting repository chat"
-                        loadingPlaceholder="Starting repository chat"
-                    />
+                    <ResizablePane
+                        defaultSize={100}
+                        minSize={48}
+                        class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
+                    >
+                        {@render repositoryChatPane()}
+                    </ResizablePane>
+
+                    <ResizableHandle withHandle />
+
+                    <ResizablePane
+                        defaultSize={0}
+                        minSize={0}
+                        maxSize={52}
+                        class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-white/10"
+                    >
+                        <CodeIntelligence repository={app.repository} />
+                    </ResizablePane>
+                </ResizablePaneGroup>
+            {:else}
+                <section
+                    class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+                >
+                    {@render repositoryChatPane()}
                 </section>
-            </section>
+            {/if}
         </div>
         {#if repositoryChatError}
             <div

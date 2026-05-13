@@ -1,5 +1,5 @@
 // /apps/airport/web/src/lib/client/entities/Mission.svelte.ts: OO browser entity for a mission runtime snapshot and its live agent executions.
-import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/entities/Entity/EntityRemote';
+import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/entities/Entity/EntityInvocation';
 import {
     AgentExecutionCommandAcknowledgementSchema,
     type AgentExecutionCommandAcknowledgementType,
@@ -25,7 +25,6 @@ import {
     type MissionControlType,
     type MissionType,
     type MissionDocumentType,
-    type MissionStatusType,
     type MissionWorktreeType
 } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import {
@@ -515,7 +514,7 @@ export class Mission extends Entity<MissionType> {
         return this;
     }
 
-    public applyMissionStatus(status: MissionStatusType): this {
+    public applyMissionStatus(status: MissionType): this {
         const controlData = this.controlData;
         if (!controlData) {
             return this;

@@ -19,6 +19,7 @@ import {
     createDefaultSystemAgentSettings,
     SystemAgentSettingsSchema
 } from '../System/SystemSchema.js';
+import { CodeIntelligenceIndexSchema } from '../CodeIntelligence/CodeIntelligenceSchema.js';
 
 export const RepositoryWorkflowConfigurationSchema = z.preprocess((input) => {
     try {
@@ -195,6 +196,10 @@ export const RepositoryGetIssueSchema = RepositoryLocatorSchema.extend({
 
 export const RepositoryReadRemovalSummarySchema = RepositoryLocatorSchema;
 
+export const RepositoryReadCodeIntelligenceIndexSchema = RepositoryLocatorSchema;
+
+export const RepositoryCodeIntelligenceIndexSchema = CodeIntelligenceIndexSchema.nullable();
+
 export const RepositoryWorktreeStatusSchema = z.object({
     clean: z.boolean(),
     stagedCount: z.number().int().nonnegative(),
@@ -255,6 +260,17 @@ export const RepositorySyncCommandAcknowledgementSchema = EntityCommandAcknowled
     method: z.enum(['fetchExternalState', 'fastForwardFromExternal']),
     id: z.string().trim().min(1),
     syncStatus: RepositorySyncStatusSchema
+}).strict();
+
+export const RepositoryCodeIndexAcknowledgementSchema = EntityCommandAcknowledgementSchema.extend({
+    entity: z.literal(repositoryEntityName),
+    method: z.literal('indexCode'),
+    id: z.string().trim().min(1),
+    snapshotId: z.string().trim().min(1),
+    indexedAt: z.string().trim().min(1),
+    fileCount: z.number().int().nonnegative(),
+    symbolCount: z.number().int().nonnegative(),
+    relationCount: z.number().int().nonnegative()
 }).strict();
 
 export const MissionFromIssueInputSchema = z.object({
@@ -377,11 +393,14 @@ export type RepositoryCreateType = z.infer<typeof RepositoryCreateSchema>;
 export type RepositoryLocatorType = z.infer<typeof RepositoryLocatorSchema>;
 export type RepositoryGetIssueType = z.infer<typeof RepositoryGetIssueSchema>;
 export type RepositoryReadRemovalSummaryType = z.infer<typeof RepositoryReadRemovalSummarySchema>;
+export type RepositoryReadCodeIntelligenceIndexType = z.infer<typeof RepositoryReadCodeIntelligenceIndexSchema>;
+export type RepositoryCodeIntelligenceIndexType = z.infer<typeof RepositoryCodeIntelligenceIndexSchema>;
 export type RepositorySyncStatusType = z.infer<typeof RepositorySyncStatusSchema>;
 export type RepositoryWorktreeStatusType = z.infer<typeof RepositoryWorktreeStatusSchema>;
 export type RepositoryRemovalSummaryMissionType = z.infer<typeof RepositoryRemovalSummaryMissionSchema>;
 export type RepositoryRemovalSummaryType = z.infer<typeof RepositoryRemovalSummarySchema>;
 export type RepositorySyncCommandAcknowledgementType = z.infer<typeof RepositorySyncCommandAcknowledgementSchema>;
+export type RepositoryCodeIndexAcknowledgementType = z.infer<typeof RepositoryCodeIndexAcknowledgementSchema>;
 export type RepositoryStartMissionFromIssueType = z.infer<typeof RepositoryStartMissionFromIssueSchema>;
 export type RepositoryStartMissionFromBriefType = z.infer<typeof RepositoryStartMissionFromBriefSchema>;
 export type RepositorySetupType = z.infer<typeof RepositorySetupSchema>;

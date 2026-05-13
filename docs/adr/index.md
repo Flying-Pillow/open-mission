@@ -41,7 +41,7 @@ Read them when a change touches ownership, naming, state, runtime behavior, repo
 - [Repository Workflow Settings Control Contract](0021-repository-workflow-settings-control-contract.md)
 - [Daemon-Owned Runtime Supervision Graph](0028-daemon-owned-runtime-supervision-graph.md)
 - [Daemon-Owned System Status Snapshot](0029-daemon-owned-system-status-snapshot.md)
-- [SurrealDB Backed Repository Code Intelligence Index](0031-surrealdb-backed-repository-code-intelligence-index.md)
+- [SurrealDB Backed Code Intelligence Index](0031-surrealdb-backed-repository-code-intelligence-index.md)
 
 ### Agent Execution
 

@@ -1,4 +1,4 @@
-import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/entities/Entity/EntityRemote';
+import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/entities/Entity/EntityInvocation';
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 import { z } from 'zod/v4';
 import {
@@ -8,7 +8,6 @@ import {
     MissionCatalogEntrySchema,
     MissionSchema,
     MissionRuntimeEventEnvelopeSchema,
-    MissionStatusSchema,
     type MissionCatalogEntryType,
     type MissionType,
     type MissionRuntimeEventEnvelopeType
@@ -767,6 +766,7 @@ export class AirportApplication {
         if (!input.skipMissionCatalogLoad) {
             void repository.refreshCommands().catch(() => undefined);
             void repository.refreshSyncStatus().catch(() => undefined);
+            void repository.refreshCodeIntelligenceIndex().catch(() => undefined);
         }
 
         if (!input.skipMissionCatalogLoad && repository.missions.length === 0) {
@@ -909,11 +909,6 @@ export class AirportApplication {
             case 'mission.changed': {
                 const payload = event.payload as { mission?: unknown };
                 mission.applyMissionData(MissionSchema.parse(payload.mission));
-                return;
-            }
-            case 'mission.status': {
-                const payload = event.payload as { status?: unknown };
-                mission.applyMissionStatus(MissionStatusSchema.parse(payload.status));
                 return;
             }
             case 'stage.data.changed': {
@@ -1118,21 +1113,6 @@ export class AirportApplication {
         });
 
         switch (event.type) {
-            case 'mission.status': {
-                const lifecycle = event.payload.workflow?.lifecycle;
-                this.applyMissionCatalogStatus(missionId, lifecycle);
-
-                if (trackedMission) {
-                    trackedMission.applyMissionStatus(event.payload);
-                    this.syncTrackedMission(trackedMission, repositoryRootPath);
-                    return;
-                }
-
-                if (shouldTrackMissionLifecycle(lifecycle) && repositoryRootPath) {
-                    await this.refreshMission({ missionId, repositoryRootPath });
-                }
-                return;
-            }
             case 'mission.changed': {
                 const data = event.payload.mission;
                 const mission = this.hydrateMissionData(data, {

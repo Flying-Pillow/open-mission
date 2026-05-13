@@ -86,8 +86,58 @@ describe('EntityProxy', () => {
         expect(dispose).toHaveBeenCalledTimes(1);
     });
 
+    it('routes Repository commands with repositoryRootPath to the repository daemon surface', async () => {
+        const client = {
+            request: vi.fn().mockResolvedValue({ agentExecutionId: 'repository-chat' })
+        };
+        const dispose = vi.fn();
+        connectSharedAuthenticatedDaemonClient.mockResolvedValueOnce({ client, dispose });
+
+        const { EntityProxy } = await import('./entity-proxy');
+        await expect(new EntityProxy().executeEntityCommand({
+            entity: 'Repository',
+            method: 'ensureRepositoryAgentExecution',
+            payload: {
+                id: 'repository:github/Flying-Pillow/connect-four',
+                repositoryRootPath: '/repositories/Flying-Pillow/connect-four'
+            }
+        })).resolves.toEqual({ agentExecutionId: 'repository-chat' });
+
+        expect(connectSharedAuthenticatedDaemonClient).toHaveBeenCalledWith({
+            locals: undefined,
+            surfacePath: '/repositories/Flying-Pillow/connect-four'
+        });
+        expect(dispose).toHaveBeenCalledTimes(1);
+    });
+
+    it('routes repository-owned AgentExecution commands to the owner daemon surface', async () => {
+        const client = {
+            request: vi.fn().mockResolvedValue({ ok: true })
+        };
+        const dispose = vi.fn();
+        connectSharedAuthenticatedDaemonClient.mockResolvedValueOnce({ client, dispose });
+
+        const { EntityProxy } = await import('./entity-proxy');
+        await expect(new EntityProxy().executeEntityCommand({
+            entity: 'AgentExecution',
+            method: 'command',
+            payload: {
+                ownerId: '/repositories/Flying-Pillow/connect-four',
+                agentExecutionId: 'repository-chat',
+                commandId: 'agentExecution.sendPrompt'
+            }
+        })).resolves.toEqual({ ok: true });
+
+        expect(connectSharedAuthenticatedDaemonClient).toHaveBeenCalledWith({
+            locals: undefined,
+            surfacePath: '/repositories/Flying-Pillow/connect-four'
+        });
+        expect(dispose).toHaveBeenCalledTimes(1);
+    });
+
     it.each([
         'add',
+        'indexCode',
         'setup',
         'startMissionFromIssue',
         'startMissionFromBrief'
@@ -115,6 +165,36 @@ describe('EntityProxy', () => {
         await vi.advanceTimersByTimeAsync(9_000);
 
         await expect(resultPromise).resolves.toEqual({ ok: true, method });
+        expect(dispose).toHaveBeenCalledTimes(1);
+    });
+
+    it('allows Repository readCodeIntelligenceIndex queries to outlive the default entity timeout', async () => {
+        vi.useFakeTimers();
+        const client = {
+            request: vi.fn().mockImplementation(() => new Promise((resolve) => {
+                setTimeout(() => resolve({ snapshot: null }), 9_000);
+            }))
+        };
+        const dispose = vi.fn();
+        connectSharedAuthenticatedDaemonClient.mockResolvedValueOnce({ client, dispose });
+
+        const { EntityProxy } = await import('./entity-proxy');
+        const resultPromise = new EntityProxy().executeEntityQuery({
+            entity: 'Repository',
+            method: 'readCodeIntelligenceIndex',
+            payload: {
+                id: 'repository:github/Flying-Pillow/connect-four',
+                repositoryRootPath: '/repositories/Flying-Pillow/connect-four'
+            }
+        });
+
+        await vi.advanceTimersByTimeAsync(9_000);
+
+        await expect(resultPromise).resolves.toEqual({ snapshot: null });
+        expect(connectSharedAuthenticatedDaemonClient).toHaveBeenCalledWith({
+            locals: undefined,
+            surfacePath: '/repositories/Flying-Pillow/connect-four'
+        });
         expect(dispose).toHaveBeenCalledTimes(1);
     });
 });

@@ -3,8 +3,8 @@ import type { MissionCatalogEntryType } from '@flying-pillow/mission-core/entiti
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
 import { AgentFindResultSchema, type AgentDataType } from '@flying-pillow/mission-core/entities/Agent/AgentSchema';
 import { AgentExecutionDataSchema, type AgentExecutionDataType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
-import { RepositoryDataSchema, RepositoryIssueDetailSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformOwnerSchema, RepositoryPlatformRepositorySchema, RepositoryRemovalSummarySchema, RepositorySetupResultSchema, RepositorySyncStatusSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
-import type { RepositoryDataType, RepositoryIssueDetailType, RepositoryPlatformOwnerType, RepositoryRemovalSummaryType, RepositorySetupResultType, RepositorySettingsType, RepositorySyncStatusType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import { RepositoryCodeIntelligenceIndexSchema, RepositoryDataSchema, RepositoryIssueDetailSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformOwnerSchema, RepositoryPlatformRepositorySchema, RepositoryRemovalSummarySchema, RepositorySetupResultSchema, RepositorySyncStatusSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
+import type { RepositoryCodeIntelligenceIndexType, RepositoryDataType, RepositoryIssueDetailType, RepositoryPlatformOwnerType, RepositoryRemovalSummaryType, RepositorySetupResultType, RepositorySettingsType, RepositorySyncStatusType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import { z } from 'zod/v4';
 import { getApp } from '$lib/client/globals';
 import type { AirportApplication } from '$lib/client/Application.svelte.js';
@@ -225,6 +225,9 @@ export class Repository extends Entity<RepositoryDataType> {
     private syncStatusValue = $state<RepositorySyncStatusType | undefined>();
     private repositoryAgentExecutionValue = $state<AgentExecutionDataType | undefined>();
     private repositoryAgentExecutionEntity = $state<AgentExecution | undefined>();
+    private codeIntelligenceIndexValue = $state<RepositoryCodeIntelligenceIndexType>(null);
+    private codeIntelligenceIndexLoadingValue = $state(false);
+    private codeIntelligenceIndexErrorValue = $state<string | undefined>();
     public missions = $state<MissionCatalogEntryType[]>([]);
     private missionStatusesValue = $state<Record<string, string | undefined>>({});
 
@@ -260,6 +263,19 @@ export class Repository extends Entity<RepositoryDataType> {
     public get syncStatus(): RepositorySyncStatusType | undefined {
         const status = $state.snapshot(this.syncStatusValue);
         return status ? structuredClone(status) : undefined;
+    }
+
+    public get codeIntelligenceIndex(): RepositoryCodeIntelligenceIndexType {
+        const index = $state.snapshot(this.codeIntelligenceIndexValue);
+        return index ? structuredClone(index) : null;
+    }
+
+    public get codeIntelligenceIndexLoading(): boolean {
+        return this.codeIntelligenceIndexLoadingValue;
+    }
+
+    public get codeIntelligenceIndexError(): string | undefined {
+        return this.codeIntelligenceIndexErrorValue;
     }
 
     public get repositoryAgentExecution(): AgentExecution | undefined {
@@ -512,7 +528,13 @@ export class Repository extends Entity<RepositoryDataType> {
     }
 
     public updateFromData(data: RepositoryDataType): this {
+        const previousRepositoryRootPath = this.data.repositoryRootPath;
         this.data = structuredClone(data);
+        if (previousRepositoryRootPath !== data.repositoryRootPath) {
+            this.codeIntelligenceIndexValue = null;
+            this.codeIntelligenceIndexErrorValue = undefined;
+            this.codeIntelligenceIndexLoadingValue = false;
+        }
         this.markChanged();
         return this;
     }
@@ -587,6 +609,37 @@ export class Repository extends Entity<RepositoryDataType> {
                 payload: this.entityLocator
             }).run()
         );
+    }
+
+    public async readCodeIntelligenceIndex(): Promise<RepositoryCodeIntelligenceIndexType> {
+        return RepositoryCodeIntelligenceIndexSchema.parse(
+            await qry({
+                entity: 'Repository',
+                method: 'readCodeIntelligenceIndex',
+                payload: this.entityLocator
+            }).run()
+        );
+    }
+
+    public async refreshCodeIntelligenceIndex(): Promise<this> {
+        if (this.codeIntelligenceIndexLoadingValue) {
+            return this;
+        }
+
+        this.codeIntelligenceIndexLoadingValue = true;
+        this.codeIntelligenceIndexErrorValue = undefined;
+        try {
+            this.codeIntelligenceIndexValue = await this.readCodeIntelligenceIndex();
+            this.markChanged();
+            return this;
+        } catch (error) {
+            this.codeIntelligenceIndexValue = null;
+            this.codeIntelligenceIndexErrorValue = error instanceof Error ? error.message : String(error);
+            this.markChanged();
+            throw error;
+        } finally {
+            this.codeIntelligenceIndexLoadingValue = false;
+        }
     }
 
     public async startMissionFromIssue(issueNumber: number): Promise<{ missionId: string; redirectTo: string }> {

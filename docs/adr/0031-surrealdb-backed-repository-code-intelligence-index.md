@@ -1,20 +1,20 @@
 ---
 layout: default
-title: SurrealDB Backed Repository Code Intelligence Index
+title: SurrealDB Backed Code Intelligence Index
 parent: Architecture Decisions
 nav_order: 31
 status: accepted
 date: 2026-05-12
-decision_area: repository-code-intelligence
+decision_area: code-intelligence
 owners:
   - maintainers
 supersedes: []
 superseded_by: []
 ---
 
-Mission will build a native Repository code intelligence index backed by the daemon's SurrealDB direction instead of depending on GitNexus' `.gitnexus/` storage model as the Mission integration path.
+Mission will build a native Code intelligence index backed by the daemon's SurrealDB direction instead of depending on GitNexus' `.gitnexus/` storage model as the Mission integration path.
 
-The index is a daemon-owned, rebuildable read model over a Repository root or Mission worktree root. It records source files, symbols, imports, calls, routes, tools, execution flows, clusters, and typed code relationships so Agent execution semantic operations can answer codebase questions through `mission-mcp`.
+The index is a daemon-owned, rebuildable read model over one Code root. A Code root may be a Repository root or a Mission worktree root, but the indexer and graph store treat both identically after scope resolution. The index records source files, symbols, imports, calls, routes, tools, execution flows, clusters, and typed code relationships so Agent execution semantic operations can answer codebase questions through `mission-mcp`.
 
 ## Context
 
@@ -26,11 +26,13 @@ Mission should reuse the product lesson and high-level graph ideas from GitNexus
 
 ## Decision
 
-Mission will introduce a Repository code intelligence index as a derived daemon read model.
+Mission will introduce a Code intelligence index as a derived daemon read model.
 
 The source of truth remains the Repository root, Mission worktree root, Git state, Mission dossier, Entity storage records, and workflow artifacts. The code intelligence index is rebuildable. It is not canonical Mission state, not an Entity storage record set, not a Mission dossier replacement, and not a second workflow authority.
 
-The first storage implementation should use SurrealDB through a Mission-owned code graph store. The schema should be declared from Mission-owned Zod v4 schemas with `@flying-pillow/zod-surreal` metadata where practical. Physical SurrealDB tables and relation tables are adapter details behind the code graph store contract.
+The first storage implementation should use SurrealDB through a Mission-owned Code graph store. The schema must be declared from Mission-owned Zod v4 schemas with `@flying-pillow/zod-surreal` table, field, relation, analyzer, and index metadata. Physical SurrealDB tables and relation tables are adapter details behind the Code graph store contract.
+
+Mission will generate SurrealQL schema/provisioning statements from those Zod schemas by compiling a zod-surreal model snapshot and rendering deterministic `DEFINE TABLE`, `DEFINE FIELD`, `DEFINE INDEX`, and `DEFINE ANALYZER` statements. Hand-maintained SurrealQL DDL is not the canonical schema for the code intelligence index. Generated SurQL may be checked in or snapshot-tested for reviewability, but the source of truth remains the Mission-owned Zod schema module.
 
 The index may initially live in the daemon in-memory datastore as a working read model. Durable recovery can rebuild it from repository files and Git state. Persisted index snapshots, SurrealKV, RocksDB, or exported graph files are optional optimizations and must not replace repository files or Mission dossiers as durable truth.
 
@@ -73,9 +75,9 @@ Mission may adjust names during implementation, but relationship vocabulary must
 
 ## Ownership
 
-Repository or a Repository-owned daemon service owns index lifecycle for Repository roots. Mission or a Mission-worktree-aware daemon collaborator owns index lifecycle for Mission worktree roots. The owner must be explicit in implementation; generic indexing helpers must not decide repository or worktree authority.
+A daemon-owned Code intelligence service owns index lifecycle after Agent execution scope resolves to a Code root. Repository and Mission worktree code paths may request or enqueue indexing, but they do not produce separate graph models, table prefixes, service names, or indexer behavior.
 
-The Repository code intelligence service owns:
+The Code intelligence service owns:
 
 - root eligibility and scope checks
 - index staleness evaluation
@@ -83,33 +85,42 @@ The Repository code intelligence service owns:
 - query use cases such as search, symbol context, impact, and route/tool maps
 - mapping query results into Agent execution semantic operation results
 
-The Repository code graph store owns:
+The Code graph store owns:
 
 - SurrealDB provisioning
-- physical schema mapping
+- generated SurrealQL schema provisioning from Mission-owned zod-surreal models
+- physical schema mapping from compiled zod-surreal model snapshots
 - graph writes during indexing
 - read-only graph queries
 - parameter binding and query safety
 - index snapshot reads
 
-The parser/indexer owns source scanning, language extraction, symbol registration, relation emission, and deterministic index output. Parser output is input to the graph store, not domain truth by itself.
+The parser/indexer owns source scanning, repository ignore handling, language detection, provider orchestration, symbol registration, relation emission, and deterministic index output. Parser output is input to the graph store, not domain truth by itself. Mission should prefer maintained language parsers such as the TypeScript compiler API for TS/JS and Tree-sitter language providers for broader coverage over regex-only extraction.
 
-AgentExecutionSemanticOperations owns the Agent-facing operation descriptors and runtime fact recording. It delegates code intelligence reads to the Repository code intelligence service.
+Code root scanning should honor `.gitignore` semantics for the worktree and always exclude Mission runtime state under `.mission/` so generated daemon storage never enters the Code graph even if a repository forgets to ignore it.
 
-Airport may display code intelligence results later, but it does not own the index, query semantics, or operation schemas.
+Language coverage is explicit and capability-based. Mission indexes eligible text files at file level even when no semantic parser provider exists, then enriches files through providers that declare support for symbols, imports, calls, types, routes, tools, or scope resolution. Adding semantic depth for a language must happen through a Mission-owned provider/adapter contract, not through ad hoc branches in the scanner and not by copying GitNexus source code.
+
+AgentExecutionSemanticOperations owns the Agent-facing operation descriptors and runtime fact recording. It delegates code intelligence reads to the Code intelligence service.
+
+Airport web may later render a visual representation of the Code graph for operator review and debugging, but it does not own the index, query semantics, operation schemas, graph records, or root selection.
 
 ## Scope And Staleness
 
-Indexes are scoped to a concrete root:
+Indexes are scoped to one Code root:
 
-- Repository root for control-mode or repository-scoped Agent executions.
-- Mission worktree root for Mission, Task, and worktree-backed Artifact Agent executions.
+- a Repository root for control-mode or repository-scoped Agent executions.
+- a Mission worktree root for Mission, Task, and worktree-backed Artifact Agent executions.
 
-Mission must distinguish these roots because a Mission worktree can diverge from the main Repository root during active work.
+Mission must distinguish root selection before indexing because a Mission worktree can diverge from the main Repository root during active work. After selection, both are just Code roots and use the same schemas, stores, index lifecycle, and semantic operations.
 
 Every index snapshot records enough root and Git/file fingerprint data for the daemon to report staleness. A stale index may still be usable for low-risk context queries if the operation result clearly reports staleness, but high-risk operations such as impact analysis before code changes should prefer fresh indexes or return an explicit stale result.
 
 Index rebuilds are daemon-owned background or command-triggered work. They must not silently block unrelated Entity commands for long-running parse jobs unless an explicit workflow gate requires a fresh code index.
+
+Repository setup, Repository initialization, repository hydration, and Mission worktree materialization may enqueue or request index builds, but daemon startup must not eagerly index every known Repository. AgentExecution does not own indexing. AgentExecution reaches the index through semantic operations; those operations call the Code intelligence service, which runs `ensureIndex` and applies freshness policy for the scoped Code root.
+
+Index updates publish coherent snapshots. The baseline update strategy is rebuild-and-replace when the root fingerprint, Git state, file hashes, or indexer version changes. Incremental re-indexing can be added later as an optimization behind the same snapshot contract.
 
 ## Query Surface
 
@@ -130,6 +141,7 @@ Raw SurrealQL is not part of the baseline. If a future operator/debug mode needs
 
 - Mission gains native GitNexus-like code intelligence while keeping Mission daemon authority and spec-driven workflow integration.
 - Agents can ask Mission for relevant code context in the same execution-scoped MCP channel they use for structured signals.
+- Airport web can later visualize active Code graph snapshots as a read-only operator lens without becoming the first consumer or graph authority.
 - SurrealDB becomes useful for graph traversal, full-text search, relation queries, and possible vector search without becoming a shared raw database client.
 - The index can be rebuilt, pruned, or optimized without Mission runtime migrations because it is derived read material.
 - Implementation must include deterministic fixture tests for parser output, graph loading, query behavior, staleness, scope enforcement, and MCP semantic operation results.
@@ -138,10 +150,12 @@ Raw SurrealQL is not part of the baseline. If a future operator/debug mode needs
 
 - Do not make `.gitnexus/` or `~/.gitnexus/registry.json` part of Mission's canonical architecture.
 - Do not copy GitNexus source code into Mission without a separate license decision.
-- Do not let arbitrary daemon modules write code graph records directly; graph writes go through the Repository code graph store during index builds.
+- Do not let arbitrary daemon modules write code graph records directly; graph writes go through the Code graph store during index builds.
 - Do not expose a raw SurrealDB client as the code intelligence API.
+- Do not let Airport web visual graph features mutate index records, define relation semantics, run raw SurrealQL, or choose Code roots outside daemon scope resolution.
+- Do not hand-maintain SurrealQL DDL for the code graph when the shape can be generated from Mission-owned zod-surreal schemas.
 - Do not persist code graph records as Entity storage records unless a future ADR promotes them into Entities.
 - Do not treat code clusters or code processes as workflow truth; they are heuristic read-model material.
-- Do keep relationship and node vocabularies centralized in schema-backed registries.
+- Do keep relationship and node vocabularies centralized in schema-backed registries and zod-surreal model definitions.
 - Do record index staleness in every operation result where stale data could change the answer.
 - Do use Mission worktree roots, not only Repository roots, for active Mission work.

@@ -21,8 +21,8 @@ import {
     type AgentExecutionTerminalSnapshotType
 } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import {
-    TerminalSnapshotSchema,
-    type TerminalSnapshotType
+    TerminalSchema,
+    type TerminalType
 } from '@flying-pillow/mission-core/entities/Terminal/TerminalSchema';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
@@ -168,7 +168,7 @@ async function handleTerminalConnection(
         terminalHandle = state.terminalHandle ?? terminalHandle;
     };
 
-    const createAgentExecutionTerminalState = (state: TerminalSnapshotType): AgentExecutionTerminalSnapshotType => AgentExecutionTerminalSnapshotSchema.parse({
+    const createAgentExecutionTerminalState = (state: TerminalType): AgentExecutionTerminalSnapshotType => AgentExecutionTerminalSnapshotSchema.parse({
         ownerId: query.ownerId,
         agentExecutionId,
         connected: state.connected,
@@ -186,7 +186,7 @@ async function handleTerminalConnection(
         if (!terminalHandle) {
             throw new Error(`AgentExecution '${agentExecutionId}' is not backed by a Terminal.`);
         }
-        return TerminalSnapshotSchema.parse(await daemon?.client.request('entity.command', {
+        return TerminalSchema.parse(await daemon?.client.request('entity.command', {
             entity: 'Terminal',
             method: 'sendInput',
             payload: {

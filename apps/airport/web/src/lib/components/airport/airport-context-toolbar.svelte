@@ -163,6 +163,7 @@
                     <RepositoryCommandbar
                         repository={app.repository}
                         onCommandExecuted={handleRepositoryCommandExecuted}
+                        showCodeIntelligenceToggle
                     />
                 </div>
             </div>

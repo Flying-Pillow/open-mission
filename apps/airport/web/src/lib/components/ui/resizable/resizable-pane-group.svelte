@@ -10,6 +10,11 @@
 	}: ResizablePrimitive.PaneGroupProps & {
 		this?: ResizablePrimitive.PaneGroup;
 	} = $props();
+
+	export const getLayout = (): number[] => paneGroup?.getLayout() ?? [];
+	export const setLayout = (layout: number[]): void => {
+		paneGroup?.setLayout(layout);
+	};
 </script>
 
 <ResizablePrimitive.PaneGroup
@@ -18,7 +23,7 @@
 	data-slot="resizable-pane-group"
 	class={cn(
 		"cn-resizable-panel-group flex h-full w-full data-[direction=vertical]:flex-col",
-		className
+		className,
 	)}
 	{...restProps}
 />

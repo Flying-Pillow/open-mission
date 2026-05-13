@@ -45,6 +45,8 @@ import {
 	type RepositoryGetIssueType,
 	type RepositoryLocatorType,
 	type RepositoryReadRemovalSummaryType,
+	type RepositoryReadCodeIntelligenceIndexType,
+	type RepositoryCodeIntelligenceIndexType,
 	type RepositoryAddType,
 	type RepositoryCreateType,
 	type RepositoryRemoveAcknowledgementType,
@@ -54,6 +56,7 @@ import {
 	type RepositorySetupType,
 	type RepositoryConfigureAgentsType,
 	type RepositoryConfigureDisplayType,
+	type RepositoryCodeIndexAcknowledgementType,
 	type RepositorySyncCommandAcknowledgementType,
 	type RepositorySyncStatusType,
 	type RepositoryRemovalSummaryType,
@@ -72,6 +75,8 @@ import {
 	RepositoryClassCommandsSchema,
 	RepositoryGetIssueSchema,
 	RepositoryLocatorSchema,
+	RepositoryCodeIntelligenceIndexSchema,
+	RepositoryReadCodeIntelligenceIndexSchema,
 	RepositoryReadRemovalSummarySchema,
 	RepositoryMissionStartAcknowledgementSchema,
 	RepositoryAddSchema,
@@ -81,6 +86,7 @@ import {
 	RepositoryInitializeSchema,
 	RepositoryConfigureAgentsSchema,
 	RepositoryConfigureDisplaySchema,
+	RepositoryCodeIndexAcknowledgementSchema,
 	RepositorySetupResultSchema,
 	RepositorySetupSchema,
 	RepositorySyncCommandAcknowledgementSchema,
@@ -135,6 +141,16 @@ type RepositoryWorkflowDefinitionState =
 	| { kind: 'missing'; workflowPath: string }
 	| { kind: 'valid'; workflowPath: string; workflow: WorkflowDefinition }
 	| { kind: 'invalid'; workflowPath: string; invalidState: RepositoryInvalidStateType };
+
+type RepositoryCodeIndexReadModel = {
+	snapshot: {
+		id: string;
+		indexedAt: string;
+		fileCount: number;
+		symbolCount: number;
+		relationCount: number;
+	};
+};
 
 type RepositorySettingsDocumentReadOptions = {
 	resolveWorkspaceRoot?: boolean;
@@ -1049,9 +1065,19 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return this.available();
 	}
 
+	public canIndexCode() {
+		if (this.invalidState && !this.isRecoverableSetupState()) {
+			return this.unavailable(Repository.describeInvalidState(this.invalidState));
+		}
+		if (!Repository.isLiveRepositoryRoot(this.repositoryRootPath)) {
+			return this.unavailable('Repository root does not exist.');
+		}
+		return this.available();
+	}
+
 	public async initialize(
 		input: RepositoryInitializeType,
-		_context?: EntityExecutionContext
+		context?: EntityExecutionContext
 	): Promise<RepositoryInitializeResultType> {
 		const args = RepositoryInitializeSchema.parse(input);
 		this.assertRepositoryIdentity(args);
@@ -1070,6 +1096,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 
 		if (settingsState.kind === 'valid') {
 			this.updateSettings(settingsState.settings);
+			await Repository.tryEnsurePreparedCodeIndex(this.repositoryRootPath, context);
 			return RepositoryInitializeResultSchema.parse({
 				ok: true,
 				entity: repositoryEntityName,
@@ -1085,6 +1112,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		const settings = await Repository.createPreparedRepositorySettings(this.repositoryRootPath);
 		await Repository.writeSettingsDocument(settings, this.repositoryRootPath, { resolveWorkspaceRoot: false });
 		this.updateSettings(settings).markInitialized(false);
+		await Repository.tryEnsurePreparedCodeIndex(this.repositoryRootPath, context);
 		return RepositoryInitializeResultSchema.parse({
 			ok: true,
 			entity: repositoryEntityName,
@@ -1265,6 +1293,31 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		return this.ensureRepositoryAgentExecution(args, context);
 	}
 
+	public async indexCode(
+		input: RepositoryLocatorType,
+		context?: EntityExecutionContext
+	): Promise<RepositoryCodeIndexAcknowledgementType> {
+		const args = RepositoryLocatorSchema.parse(input);
+		this.assertRepositoryIdentity(args);
+		const availability = this.canIndexCode();
+		if (!availability.available) {
+			throw new Error(availability.reason ?? 'Repository code indexing is unavailable.');
+		}
+
+		const index = await Repository.ensurePreparedCodeIndex(this.repositoryRootPath, context);
+		return RepositoryCodeIndexAcknowledgementSchema.parse({
+			ok: true,
+			entity: repositoryEntityName,
+			method: 'indexCode',
+			id: this.id,
+			snapshotId: index.snapshot.id,
+			indexedAt: index.snapshot.indexedAt,
+			fileCount: index.snapshot.fileCount,
+			symbolCount: index.snapshot.symbolCount,
+			relationCount: index.snapshot.relationCount
+		});
+	}
+
 	private async replaceActiveRepositoryAgentExecution(
 		settings: RepositorySettingsType,
 		context?: EntityExecutionContext
@@ -1393,6 +1446,9 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			const basePull = autoMerge.merged
 				? Repository.tryPullSetupBaseBranch(platform, baseBranch)
 				: { pulled: false };
+			if (autoMerge.merged) {
+				await Repository.tryEnsurePreparedCodeIndex(this.repositoryRootPath, context);
+			}
 			refreshSystemStatus({ cwd: proposalWorktreePath });
 
 			return RepositorySetupResultSchema.parse({
@@ -1418,6 +1474,54 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			await store.removeLinkedWorktree(proposalWorktreePath).catch(() => undefined);
 			await fsp.rm(temporaryRoot, { recursive: true, force: true });
 		}
+	}
+
+	private static async tryEnsurePreparedCodeIndex(
+		repositoryRootPath: string,
+		context?: EntityExecutionContext
+	): Promise<void> {
+		try {
+			await Repository.ensurePreparedCodeIndex(repositoryRootPath, context);
+		} catch {
+			// Code intelligence is derived read material; repository preparation must not fail because indexing is unavailable.
+		}
+	}
+
+	private static async ensurePreparedCodeIndex(
+		repositoryRootPath: string,
+		context?: EntityExecutionContext
+	): Promise<RepositoryCodeIndexReadModel> {
+		const service = context?.codeIntelligenceService
+			?? new (await import('../../daemon/runtime/code-intelligence/CodeIntelligenceService.js')).CodeIntelligenceService();
+		return Repository.parseCodeIndexReadModel(await service.ensureIndex({ rootPath: repositoryRootPath }));
+	}
+
+	private static parseCodeIndexReadModel(input: unknown): RepositoryCodeIndexReadModel {
+		if (!input || typeof input !== 'object' || !('snapshot' in input)) {
+			throw new Error('Code intelligence service did not return an index snapshot.');
+		}
+		const snapshot = (input as { snapshot?: unknown }).snapshot;
+		if (!snapshot || typeof snapshot !== 'object') {
+			throw new Error('Code intelligence service did not return an index snapshot.');
+		}
+		const record = snapshot as Record<string, unknown>;
+		if (typeof record['id'] !== 'string' || typeof record['indexedAt'] !== 'string') {
+			throw new Error('Code intelligence service returned an invalid index snapshot identity.');
+		}
+		for (const fieldName of ['fileCount', 'symbolCount', 'relationCount']) {
+			if (typeof record[fieldName] !== 'number') {
+				throw new Error(`Code intelligence service returned an invalid '${fieldName}' count.`);
+			}
+		}
+		return {
+			snapshot: {
+				id: record['id'],
+				indexedAt: record['indexedAt'],
+				fileCount: record['fileCount'],
+				symbolCount: record['symbolCount'],
+				relationCount: record['relationCount']
+			}
+		};
 	}
 
 	public override async remove(
@@ -1561,6 +1665,19 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			activeAgentExecutionCount,
 			missions: missionSummaries
 		});
+	}
+
+	public async readCodeIntelligenceIndex(
+		input: RepositoryReadCodeIntelligenceIndexType,
+		context?: EntityExecutionContext
+	): Promise<RepositoryCodeIntelligenceIndexType> {
+		this.assertRepositoryIdentity(RepositoryReadCodeIntelligenceIndexSchema.parse(input));
+		const service = context?.codeIntelligenceService?.readActiveIndex
+			? context.codeIntelligenceService
+			: new (await import('../../daemon/runtime/code-intelligence/CodeIntelligenceService.js')).CodeIntelligenceService();
+		return RepositoryCodeIntelligenceIndexSchema.parse(
+			await service.readActiveIndex?.({ rootPath: this.repositoryRootPath })
+		);
 	}
 
 	public async fetchExternalState(

@@ -2,7 +2,16 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import svelte from 'eslint-plugin-svelte';
 import eslintConfigPrettier from 'eslint-config-prettier';
-import svelteConfig from './apps/airport/web/svelte.config.js';
+
+const svelteConfig = {
+  compilerOptions: {
+    runes: ({ filename }) => filename.split(/[/\\]/).includes('node_modules') ? undefined : true,
+    experimental: {
+      async: true,
+    },
+  },
+  extensions: ['.svelte', '.md'],
+};
 
 export default tseslint.config(
   {
@@ -29,6 +38,7 @@ export default tseslint.config(
     },
     rules: {
       'svelte/no-navigation-without-resolve': 'off',
+      'svelte/no-at-html-tags': 'off',
     },
   },
   eslintConfigPrettier

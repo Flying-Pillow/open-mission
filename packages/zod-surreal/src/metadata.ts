@@ -74,6 +74,7 @@ export type SurrealFieldMetadata = {
     default?: string;
     readonly?: boolean;
     comment?: string;
+    fields?: Record<string, SurrealFieldMetadata>;
 };
 
 export const table = z.registry<SurrealTableMetadata>();
@@ -133,8 +134,21 @@ function normalizeFieldMetadata(metadata: SurrealFieldMetadata): SurrealFieldMet
         ...(metadata.assertion?.trim() ? { assertion: metadata.assertion.trim() } : {}),
         ...(metadata.default?.trim() ? { default: metadata.default.trim() } : {}),
         ...(metadata.readonly !== undefined ? { readonly: metadata.readonly } : {}),
-        ...(metadata.comment?.trim() ? { comment: metadata.comment.trim() } : {})
+        ...(metadata.comment?.trim() ? { comment: metadata.comment.trim() } : {}),
+        ...(metadata.fields ? { fields: normalizeFieldMetadataRecord(metadata.fields) } : {})
     };
+}
+
+function normalizeFieldMetadataRecord(fields: Record<string, SurrealFieldMetadata>): Record<string, SurrealFieldMetadata> {
+    const normalizedFields: Array<[string, SurrealFieldMetadata]> = Object.entries(fields)
+        .map(([fallbackName, metadata]) => {
+            const normalized = normalizeFieldMetadata(metadata);
+            return [normalized.name ?? fallbackName, normalized] satisfies [string, SurrealFieldMetadata];
+        })
+        .filter(([name]) => name.trim().length > 0)
+        .sort(([leftName], [rightName]) => leftName.localeCompare(rightName));
+
+    return Object.fromEntries(normalizedFields);
 }
 
 function normalizeAnalyzerMetadata(metadata: SurrealAnalyzerMetadata): SurrealAnalyzerMetadata {

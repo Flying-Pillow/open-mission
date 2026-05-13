@@ -391,9 +391,13 @@ describe('Repository', () => {
                 platformRepositoryRef: 'Flying-Pillow/example'
             });
 
+            const ensureIndex = vi.fn().mockResolvedValue(undefined);
             const result = await repository.initialize({
                 id: repository.id,
                 repositoryRootPath
+            }, {
+                surfacePath: repositoryRootPath,
+                codeIntelligenceService: { ensureIndex }
             });
             const settings = Repository.requireSettingsDocument(repositoryRootPath, {
                 resolveWorkspaceRoot: false
@@ -413,9 +417,52 @@ describe('Repository', () => {
             });
             expect(result.enabledAgentAdapters).toEqual(settings.enabledAgentAdapters);
             expect(settings.agentAdapter).toBeTruthy();
+            expect(ensureIndex).toHaveBeenCalledWith({ rootPath: repositoryRootPath });
             expect(await exists(Repository.getMissionWorkflowDefinitionPath(repositoryRootPath))).toBe(false);
             expect(data.operationalMode).toBe('setup');
             expect(data.isInitialized).toBe(false);
+        } finally {
+            await fsp.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('starts a manual Code intelligence index for a Repository root', async () => {
+        const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-index-code-'));
+        const repositoryRootPath = path.join(tempRoot, 'example');
+
+        try {
+            git(tempRoot, ['init', repositoryRootPath]);
+            const repository = Repository.create({
+                repositoryRootPath,
+                platformRepositoryRef: 'Flying-Pillow/example'
+            });
+            const ensureIndex = vi.fn().mockResolvedValue({
+                snapshot: {
+                    id: 'code_index_snapshot:test',
+                    indexedAt: '2026-05-12T00:00:00.000Z',
+                    fileCount: 3,
+                    symbolCount: 2,
+                    relationCount: 1
+                }
+            });
+
+            await expect(repository.indexCode({
+                id: repository.id,
+                repositoryRootPath
+            }, {
+                codeIntelligenceService: { ensureIndex }
+            })).resolves.toEqual({
+                ok: true,
+                entity: 'Repository',
+                method: 'indexCode',
+                id: repository.id,
+                snapshotId: 'code_index_snapshot:test',
+                indexedAt: '2026-05-12T00:00:00.000Z',
+                fileCount: 3,
+                symbolCount: 2,
+                relationCount: 1
+            });
+            expect(ensureIndex).toHaveBeenCalledWith({ rootPath: repositoryRootPath });
         } finally {
             await fsp.rm(tempRoot, { recursive: true, force: true });
         }
@@ -1212,6 +1259,7 @@ describe('Repository', () => {
         expect(view.commands.map((command) => command.commandId)).toEqual([
             'repository.fetchExternalState',
             'repository.fastForwardFromExternal',
+            'repository.indexCode',
             'repository.remove'
         ]);
         expect(view.commands.find((command) => command.commandId === 'repository.remove')).toMatchObject({
@@ -1222,6 +1270,11 @@ describe('Repository', () => {
             }
         });
         expect(view.commands.find((command) => command.commandId === 'repository.fetchExternalState')).toMatchObject({
+            available: false,
+            unavailableReason: 'Repository root does not exist.'
+        });
+        expect(view.commands.find((command) => command.commandId === 'repository.indexCode')).toMatchObject({
+            label: 'Index code',
             available: false,
             unavailableReason: 'Repository root does not exist.'
         });

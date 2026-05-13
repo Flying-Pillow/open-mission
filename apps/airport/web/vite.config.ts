@@ -1,5 +1,6 @@
 import tailwindcss from "@tailwindcss/vite";
 import { sveltekit } from "@sveltejs/kit/vite";
+import fs from "node:fs";
 import type { Server as HttpServer } from "node:http";
 import type { Server as HttpsServer } from "node:https";
 import path from "node:path";
@@ -54,9 +55,17 @@ function missionCoreSourceResolvePlugin() {
 	return {
 		name: "mission-core-source-resolve",
 		enforce: "pre",
-		resolveId(source: string) {
+		resolveId(source: string, importer?: string) {
 			if (!useSourcePackages) {
 				return null;
+			}
+
+			if (importer?.startsWith(missionCoreSourceRoot) && source.startsWith(".") && source.endsWith(".js")) {
+				const sourcePath = path.resolve(path.dirname(importer), source);
+				const typescriptSourcePath = sourcePath.replace(/\.js$/u, ".ts");
+				if (typescriptSourcePath.startsWith(missionCoreSourceRoot) && fs.existsSync(typescriptSourcePath)) {
+					return typescriptSourcePath;
+				}
 			}
 
 			if (source === "@flying-pillow/mission-core") {

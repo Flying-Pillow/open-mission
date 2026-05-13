@@ -17,14 +17,14 @@ export {
     entityQueryInvocationSchema,
     type EntityCommandInvocation,
     type EntityFormInvocation,
-    type EntityQueryInvocation
+    type EntityQueryInvocation,
+    type EntityRemoteResult
 } from './EntityInvocation.js';
 import type {
     EntityCommandInvocation,
     EntityFormInvocation,
     EntityQueryInvocation
 } from './EntityInvocation.js';
-export type EntityRemoteResult = unknown;
 
 const entityContracts = [
     MissionContract,

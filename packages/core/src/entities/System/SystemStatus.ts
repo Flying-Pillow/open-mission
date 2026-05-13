@@ -30,6 +30,7 @@ export type SystemStatusRuntimeOptions = {
     loadedRepositoryCount?: number;
     loadedMissionCount?: number;
     activeAgentExecutionCount?: number;
+    surreal?: RuntimeSystemState['surreal'];
 };
 
 export type SystemStatusReadOptions = {
@@ -350,7 +351,8 @@ function buildRuntimeSystemState(runtimeOptions: SystemStatusRuntimeOptions | un
         runtimeLeases: leases.length,
         activeRuntimeLeases: activeLeases.length,
         activeTerminalLeases: activeLeases.filter((lease) => lease.kind === 'terminal').length,
-        orphanedRuntimeLeases: leases.filter((lease) => lease.state === 'orphaned').length
+        orphanedRuntimeLeases: leases.filter((lease) => lease.state === 'orphaned').length,
+        ...(runtimeOptions?.surreal ? { surreal: runtimeOptions.surreal } : {})
     };
 }
 

@@ -12,6 +12,10 @@ import {
     AgentSignalToolPayloadSchemasByType,
     AgentExecutionProtocolDescriptorSchema
 } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
+import {
+    readAgentExecutionSemanticOperationDescriptor,
+    readAgentExecutionSemanticOperationInputSchema
+} from '@flying-pillow/mission-core/daemon/runtime/agent/AgentExecutionSemanticOperations';
 import { z } from 'zod/v4';
 import type { EntryContext } from './entryContext.js';
 
@@ -25,10 +29,11 @@ const AgentExecutionRecoverySchema = z.object({
     protocolDescriptor: AgentExecutionProtocolDescriptorSchema
 }).strict();
 
-type MissionMcpToolDescriptor = {
+export type MissionMcpToolDescriptor = {
     name: string;
     title: string;
     description?: string;
+    kind?: 'signal' | 'semantic-operation';
 };
 
 export async function runMissionMcpCommand(context: EntryContext): Promise<void> {
@@ -58,26 +63,21 @@ export async function runMissionMcpCommand(context: EntryContext): Promise<void>
 
     const server = new McpServer({ name: 'mission-mcp', version: '0.1.0-alpha.1' });
     for (const tool of tools) {
-        const inputSchema = createMissionMcpBridgeToolInputSchema(tool.name);
+        const inputSchema = createMissionMcpBridgeToolInputSchema(tool);
         server.registerTool(tool.name, {
             title: tool.title,
             ...(tool.description ? { description: tool.description } : {}),
             inputSchema: inputSchema.shape
         }, async (input: unknown): Promise<CallToolResult> => {
             const parsed = inputSchema.parse(input);
-            const signal = AgentSignalPayloadSchema.parse({
-                type: tool.name,
-                ...readMissionMcpBridgeSignalPayload(tool.name, parsed)
-            });
             const result = await client.request<unknown>('mission-mcp.callTool', {
                 name: tool.name,
-                input: {
-                    version: 1,
+                input: createMissionMcpBridgeDaemonToolInput({
+                    tool,
+                    parsed,
                     agentExecutionId,
-                    eventId: parsed.eventId ?? createMissionMcpEventId(tool.name),
-                    token,
-                    signal
-                }
+                    token
+                })
             }, {
                 timeoutMs: MISSION_MCP_CALL_TOOL_TIMEOUT_MS
             });
@@ -171,9 +171,48 @@ function resolveMissionDaemonRuntimeMode(): DaemonRuntimeMode {
     return process.env['MISSION_DAEMON_RUNTIME_MODE']?.trim() === 'source' ? 'source' : 'build';
 }
 
-function createMissionMcpBridgeToolInputSchema(toolName: string) {
-    const payloadSchema = readSignalToolPayloadSchema(toolName);
+export function createMissionMcpBridgeToolInputSchema(tool: MissionMcpToolDescriptor) {
+    if (isSemanticOperationTool(tool)) {
+        const semanticOperationDescriptor = readAgentExecutionSemanticOperationDescriptor(tool.name);
+        const operationInputSchema = semanticOperationDescriptor
+            ? readAgentExecutionSemanticOperationInputSchema(semanticOperationDescriptor.name)
+            : undefined;
+        return operationInputSchema
+            ? MissionMcpBridgeToolInputBaseSchema.extend(operationInputSchema.shape).strict()
+            : MissionMcpBridgeToolInputBaseSchema;
+    }
+
+    const payloadSchema = readSignalToolPayloadSchema(tool.name);
     return payloadSchema ? MissionMcpBridgeToolInputBaseSchema.extend(payloadSchema.shape).strict() : MissionMcpBridgeToolInputBaseSchema;
+}
+
+export function createMissionMcpBridgeDaemonToolInput(input: {
+    tool: MissionMcpToolDescriptor;
+    parsed: Record<string, unknown>;
+    agentExecutionId: string;
+    token: string;
+}): Record<string, unknown> {
+    if (isSemanticOperationTool(input.tool)) {
+        return {
+            ...input.parsed,
+            agentExecutionId: input.agentExecutionId,
+            token: input.token
+        };
+    }
+
+    const signal = AgentSignalPayloadSchema.parse({
+        type: input.tool.name,
+        ...readMissionMcpBridgeSignalPayload(input.tool.name, input.parsed)
+    });
+    return {
+        version: 1,
+        agentExecutionId: input.agentExecutionId,
+        eventId: typeof input.parsed['eventId'] === 'string' && input.parsed['eventId'].trim()
+            ? input.parsed['eventId'].trim()
+            : createMissionMcpEventId(input.tool.name),
+        token: input.token,
+        signal
+    };
 }
 
 function createMissionMcpEventId(toolName: string): string {
@@ -186,6 +225,10 @@ function readMissionMcpBridgeSignalPayload(toolName: string, input: unknown): Re
         throw new Error(`Tool '${toolName}' is not a known Agent signal tool.`);
     }
     return payloadSchema.parse(omitTransportFields(input)) as Record<string, unknown>;
+}
+
+function isSemanticOperationTool(tool: MissionMcpToolDescriptor): boolean {
+    return tool.kind === 'semantic-operation' || (!tool.kind && Boolean(readAgentExecutionSemanticOperationDescriptor(tool.name)));
 }
 
 function omitTransportFields(input: unknown): Record<string, unknown> {

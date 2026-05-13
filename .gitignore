@@ -37,6 +37,9 @@ yarn-error.log*
 .env.*.local
 
 # Repo-local Mission state
+.mission/runtime/
+packages/*/.mission/runtime/
+apps/*/*/.mission/runtime/
 .missions/pending/
 .missions/active/
 .missions/completed/

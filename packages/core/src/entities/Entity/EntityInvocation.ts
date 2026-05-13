@@ -18,3 +18,4 @@ export const entityFormInvocationSchema = entityCommandInvocationSchema;
 export type EntityQueryInvocation = z.infer<typeof entityQueryInvocationSchema>;
 export type EntityCommandInvocation = z.infer<typeof entityCommandInvocationSchema>;
 export type EntityFormInvocation = z.infer<typeof entityFormInvocationSchema>;
+export type EntityRemoteResult = unknown;

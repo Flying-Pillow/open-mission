@@ -1,4 +1,22 @@
 {
+    "inputs": [
+        {
+            "type": "promptString",
+            "id": "mission-agent-execution-id",
+            "description": "Mission AgentExecution id for the local mission-mcp bridge"
+        },
+        {
+            "type": "promptString",
+            "id": "mission-agent-execution-owner-id",
+            "description": "Mission owner id for the AgentExecution"
+        },
+        {
+            "type": "promptString",
+            "id": "mission-mcp-token",
+            "description": "Mission MCP token for the AgentExecution",
+            "password": true
+        }
+    ],
     "servers": {
         "svelte": {
             "type": "http",
@@ -11,6 +29,30 @@
                 "-y",
                 "@upstash/context7-mcp@latest"
             ]
+        },
+        "missionMcp": {
+            "type": "stdio",
+            "command": "pnpm",
+            "args": [
+                "--dir",
+                "${workspaceFolder}",
+                "--filter",
+                "@flying-pillow/mission",
+                "exec",
+                "tsx",
+                "--tsconfig",
+                "./tsconfig.dev.json",
+                "./src/mission.ts",
+                "mcp",
+                "connect",
+                "--agent-execution",
+                "${input:mission-agent-execution-id}"
+            ],
+            "env": {
+                "MISSION_AGENT_EXECUTION_OWNER_ID": "${input:mission-agent-execution-owner-id}",
+                "MISSION_MCP_TOKEN": "${input:mission-mcp-token}",
+                "MISSION_DAEMON_RUNTIME_MODE": "source"
+            }
         }
     }
 }

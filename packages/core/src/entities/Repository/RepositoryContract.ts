@@ -17,11 +17,14 @@ import {
     RepositoryClassCommandsSchema,
     RepositoryGetIssueSchema,
     RepositoryLocatorSchema,
+    RepositoryCodeIntelligenceIndexSchema,
+    RepositoryReadCodeIntelligenceIndexSchema,
     RepositoryReadRemovalSummarySchema,
     RepositoryMissionStartAcknowledgementSchema,
     RepositoryIssueDetailSchema,
     RepositoryConfigureAgentsSchema,
     RepositoryConfigureDisplaySchema,
+    RepositoryCodeIndexAcknowledgementSchema,
     RepositoryInitializeResultSchema,
     RepositoryInitializeSchema,
     RepositoryRemoveAcknowledgementSchema,
@@ -115,6 +118,12 @@ export const RepositoryContract: EntityContractType = {
             kind: 'query',
             payload: RepositoryReadRemovalSummarySchema,
             result: RepositoryRemovalSummarySchema,
+            execution: 'entity'
+        },
+        readCodeIntelligenceIndex: {
+            kind: 'query',
+            payload: RepositoryReadCodeIntelligenceIndexSchema,
+            result: RepositoryCodeIntelligenceIndexSchema,
             execution: 'entity'
         },
         add: {
@@ -220,6 +229,19 @@ export const RepositoryContract: EntityContractType = {
                     prompt: 'Pull changes from GitHub by fast-forwarding this Repository from its tracking branch? Local changes are preserved with Git autostash, and divergent local commits are not merged.'
                 },
                 presentationOrder: 25
+            }
+        },
+        indexCode: {
+            kind: 'mutation',
+            payload: RepositoryLocatorSchema,
+            result: RepositoryCodeIndexAcknowledgementSchema,
+            execution: 'entity',
+            ui: {
+                label: 'Index code',
+                description: 'Build a fresh local code intelligence index for this Repository.',
+                variant: 'outline',
+                icon: 'database-zap',
+                presentationOrder: 30
             }
         },
         startMissionFromIssue: {

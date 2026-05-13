@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Mission } from './Mission.svelte.js';
-import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/entities/Entity/EntityRemote';
+import type { EntityCommandInvocation, EntityQueryInvocation, EntityRemoteResult } from '@flying-pillow/mission-core/entities/Entity/EntityInvocation';
 import { AgentExecutionCommandIds, type AgentExecutionCommandAcknowledgementType, type AgentExecutionDataType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import { ArtifactCommandIds, type ArtifactDataType } from '@flying-pillow/mission-core/entities/Artifact/ArtifactSchema';
 import { MissionCommandIds, type MissionCommandAcknowledgementType, type MissionType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';

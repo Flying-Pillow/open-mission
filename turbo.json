@@ -21,7 +21,7 @@
             "inputs": [
                 "$TURBO_DEFAULT$",
                 ".env*",
-                "apps/airport/web/svelte.config.js",
+                "apps/airport/web/svelte.config.ts",
                 "vitest.config.ts"
             ],
             "outputs": []

@@ -46,6 +46,10 @@ export type EntityExecutionContext = {
 	missionService?: unknown;
 	entityFactory?: EntityFactory;
 	agentExecutionRegistry?: AgentExecutionRegistry;
+	codeIntelligenceService?: {
+		ensureIndex?(input: { rootPath: string }): Promise<unknown>;
+		readActiveIndex?(input: { rootPath: string }): Promise<unknown>;
+	};
 };
 
 export abstract class Entity<

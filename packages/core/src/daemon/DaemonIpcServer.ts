@@ -35,6 +35,8 @@ import { DaemonLogger } from './runtime/DaemonLogger.js';
 import type { AgentRuntimeDisposable } from './runtime/agent/events.js';
 import { TerminalRegistry } from '../entities/Terminal/TerminalRegistry.js';
 import { DaemonRuntimeSupervisor } from './runtime/DaemonRuntimeSupervisor.js';
+import { DaemonSurrealStore } from './runtime/DaemonSurrealStore.js';
+import { CodeIntelligenceService } from './runtime/code-intelligence/CodeIntelligenceService.js';
 import { getDefaultAgentExecutionRegistry, type AgentExecutionRegistry } from './runtime/agent/AgentExecutionRegistry.js';
 import {
 	MissionMcpRegisterAccessInputSchema,
@@ -96,11 +98,14 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 		startedAt,
 		terminalRegistry
 	});
+	const surfaceRootPath = resolveSurfacePath(options.surfacePath);
 	const missionRegistry = new MissionRegistryClass({ logger });
 	const agentExecutionRegistry = getDefaultAgentExecutionRegistry({ logger });
+	const surrealStore = DaemonSurrealStore.forCodeRoot({ rootPath: surfaceRootPath, logger });
+	const codeIntelligenceService = new CodeIntelligenceService({ surrealStore });
 	const missionMcpServer = new MissionMcpServer({ agentExecutionRegistry, logger });
 	agentExecutionRegistry.configure({ missionMcpServer });
-	const ipcServer = createDaemonIpcServer({ startedAt, socketPath, missionRegistry, missionMcpServer, runtimeSupervisor, agentExecutionRegistry });
+	const ipcServer = createDaemonIpcServer({ startedAt, socketPath, missionRegistry, missionMcpServer, runtimeSupervisor, agentExecutionRegistry, surrealStore, codeIntelligenceService });
 	const notificationSources = startEntityEventSources(ipcServer.broadcastEvent, terminalRegistry);
 	let shutdownPromise: Promise<void> | undefined;
 	let closeResolve: (() => void) | undefined;
@@ -114,8 +119,9 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 	let startupCompleted = false;
 
 	try {
+		await surrealStore.start();
 		await missionMcpServer.start();
-		await missionRegistry.hydrateDaemonMissions({ surfacePath: resolveSurfacePath(options.surfacePath) });
+		await missionRegistry.hydrateDaemonMissions({ surfacePath: surfaceRootPath });
 		logger.info('Mission daemon hydration completed.');
 		if (!isNamedPipePath(socketPath)) {
 			await fs.rm(socketPath, { force: true }).catch(() => undefined);
@@ -132,6 +138,7 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 	} finally {
 		if (!startupCompleted) {
 			await missionMcpServer.stop();
+			await surrealStore.stop();
 			missionRegistry.dispose();
 			notificationSources.dispose();
 			await runtimeSupervisor.releaseAll();
@@ -166,6 +173,7 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 			logger.info('Mission daemon shutting down.');
 			missionRegistry.dispose();
 			await missionMcpServer.stop();
+			await surrealStore.stop();
 			agentExecutionRegistry.dispose();
 			notificationSources.dispose();
 			await runtimeSupervisor.releaseAll();
@@ -215,6 +223,8 @@ export function createDaemonIpcServer(input: {
 	missionMcpServer: MissionMcpServer;
 	runtimeSupervisor?: DaemonRuntimeSupervisor;
 	agentExecutionRegistry?: AgentExecutionRegistry;
+	surrealStore?: DaemonSurrealStore;
+	codeIntelligenceService?: CodeIntelligenceService;
 }): DaemonIpcServer {
 	const sockets = new Set<net.Socket>();
 	const subscriptionsBySocket = new Map<net.Socket, EventSubscription[]>();
@@ -292,6 +302,8 @@ async function handleRequestLine(
 		missionMcpServer: MissionMcpServer;
 		runtimeSupervisor?: DaemonRuntimeSupervisor;
 		agentExecutionRegistry?: AgentExecutionRegistry;
+		surrealStore?: DaemonSurrealStore;
+		codeIntelligenceService?: CodeIntelligenceService;
 	},
 	subscriptionsBySocket: Map<net.Socket, EventSubscription[]>,
 ): Promise<void> {
@@ -326,6 +338,8 @@ async function createDaemonResponse(
 		missionMcpServer: MissionMcpServer;
 		runtimeSupervisor?: DaemonRuntimeSupervisor;
 		agentExecutionRegistry?: AgentExecutionRegistry;
+		surrealStore?: DaemonSurrealStore;
+		codeIntelligenceService?: CodeIntelligenceService;
 	}
 ): Promise<Response> {
 	const requestStartedAt = performance.now();
@@ -348,6 +362,8 @@ async function createDaemonResponseUnchecked(
 		missionMcpServer: MissionMcpServer;
 		runtimeSupervisor?: DaemonRuntimeSupervisor;
 		agentExecutionRegistry?: AgentExecutionRegistry;
+		surrealStore?: DaemonSurrealStore;
+		codeIntelligenceService?: CodeIntelligenceService;
 	}
 ): Promise<Response> {
 	switch (request.method) {
@@ -392,6 +408,7 @@ async function createDaemonResponseUnchecked(
 						...(context.runtimeSupervisor ? { runtimeSupervision: context.runtimeSupervisor.readSnapshot() } : {}),
 						loadedMissionCount: missionSummary.loadedMissionCount,
 						loadedRepositoryCount: missionSummary.loadedRepositoryCount,
+						...(context.surrealStore ? { surreal: context.surrealStore.readStatus() } : {}),
 						activeAgentExecutionCount: agentExecutionSummary?.activeAgentExecutionCount ?? 0
 					}
 				})
@@ -425,7 +442,7 @@ async function createDaemonResponseUnchecked(
 				ok: true,
 				result: await executeEntityQueryInDaemon(
 					entityQueryInvocationSchema.parse(request.params),
-					createEntityExecutionContext(request, context.missionRegistry)
+					createEntityExecutionContext(request, context.missionRegistry, context.codeIntelligenceService)
 				)
 			};
 		case 'entity.command': {
@@ -439,7 +456,7 @@ async function createDaemonResponseUnchecked(
 				ok: true,
 				result: await executeEntityCommandInDaemon(
 					invocation,
-					createEntityExecutionContext(request, context.missionRegistry)
+					createEntityExecutionContext(request, context.missionRegistry, context.codeIntelligenceService)
 				)
 			};
 		}
@@ -510,11 +527,16 @@ function matchesSubscription(subscription: EventSubscription, event: EntityEvent
 		|| subscription.channels.some((channel) => matchesEntityChannel(event.channel, channel));
 }
 
-function createEntityExecutionContext(request: Request, missionRegistry: MissionRegistry) {
+function createEntityExecutionContext(
+	request: Request,
+	missionRegistry: MissionRegistry,
+	codeIntelligenceService?: CodeIntelligenceService
+) {
 	return {
 		surfacePath: resolveSurfacePath(request.surfacePath),
 		missionRegistry,
 		agentExecutionRegistry: getDefaultAgentExecutionRegistry(),
+		...(codeIntelligenceService ? { codeIntelligenceService } : {}),
 		...(request.authToken?.trim() ? { authToken: request.authToken.trim() } : {})
 	};
 }
