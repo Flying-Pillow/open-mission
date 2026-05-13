@@ -12,7 +12,8 @@
 
     const context = getAppContext();
 
-    const missionRepositoryUrl = "https://github.com/Flying-Pillow/mission";
+    const missionRepositoryUrl =
+        "https://github.com/Flying-Pillow/open-mission";
     const hasActiveContext = $derived(Boolean(app.mission || app.repository));
 
     const daemonBadge = $derived.by(() => ({

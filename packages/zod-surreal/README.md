@@ -4,9 +4,9 @@
 [![SurrealDB](https://img.shields.io/badge/SurrealDB-3-FF00A0?style=for-the-badge&logo=surrealdb&logoColor=white)](https://surrealdb.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 
-[![CI](https://github.com/Flying-Pillow/mission/actions/workflows/ci.yml/badge.svg)](https://github.com/Flying-Pillow/mission/actions/workflows/ci.yml)
+[![CI](https://github.com/Flying-Pillow/open-mission/actions/workflows/ci.yml/badge.svg)](https://github.com/Flying-Pillow/open-mission/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@flying-pillow/zod-surreal?label=npm)](https://www.npmjs.com/package/@flying-pillow/zod-surreal)
-[![source](https://img.shields.io/badge/source-monorepo-222222?logo=github)](https://github.com/Flying-Pillow/mission/tree/main/packages/zod-surreal)
+[![source](https://img.shields.io/badge/source-monorepo-222222?logo=github)](https://github.com/Flying-Pillow/open-mission/tree/main/packages/zod-surreal)
 
 `@flying-pillow/zod-surreal` is a Zod-first SurrealDB modeling package. It lets TypeScript applications keep Zod schemas as the source of truth, attach SurrealDB metadata through Zod registries, compile deterministic schema snapshots, and render SurrealQL provisioning statements.
 

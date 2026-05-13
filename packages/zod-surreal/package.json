@@ -11,13 +11,13 @@
     "ddl",
     "typescript"
   ],
-  "homepage": "https://github.com/Flying-Pillow/mission/tree/main/packages/zod-surreal#readme",
+  "homepage": "https://github.com/Flying-Pillow/open-mission/tree/main/packages/zod-surreal#readme",
   "bugs": {
-    "url": "https://github.com/Flying-Pillow/mission/issues"
+    "url": "https://github.com/Flying-Pillow/open-mission/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Flying-Pillow/mission.git",
+    "url": "git+https://github.com/Flying-Pillow/open-mission.git",
     "directory": "packages/zod-surreal"
   },
   "sideEffects": false,

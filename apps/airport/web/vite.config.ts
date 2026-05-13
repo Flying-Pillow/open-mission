@@ -96,7 +96,7 @@ export default defineConfig({
 		],
 		noExternal: [
 			"@flying-pillow/mission-core",
-			"@flying-pillow/mission"
+			"@flying-pillow/open-mission"
 		]
 	},
 	resolve: {

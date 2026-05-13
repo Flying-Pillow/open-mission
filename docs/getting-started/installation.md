@@ -6,16 +6,16 @@ nav_order: 1
 description: Install Mission and launch the Airport operator surface.
 ---
 
-Mission ships as the @flying-pillow/mission CLI package.
+Mission ships as the @flying-pillow/open-mission CLI package.
 
 ~~~bash
-npx @flying-pillow/mission
+npx @flying-pillow/open-mission
 ~~~
 
 For repeated use:
 
 ~~~bash
-npm install -g @flying-pillow/mission
+npm install -g @flying-pillow/open-mission
 mission
 ~~~
 

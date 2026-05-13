@@ -5,7 +5,7 @@ echo "================================================================"
 echo "=== Mission dev container post-start                         ==="
 echo "================================================================"
 
-cd /mission
+cd /open-mission
 
 export CARGO_HOME="/home/dev/.cargo"
 export RUSTUP_HOME="/home/dev/.rustup"
@@ -121,7 +121,7 @@ if command -v sudo >/dev/null 2>&1; then
   sudo chown -R dev:dev "${CARGO_HOME}" "${RUSTUP_HOME}" "${XDG_CACHE_HOME}"
   while IFS= read -r workspace_path; do
     sudo chown -R dev:dev "${workspace_path}"
-  done < <(find /mission -maxdepth 3 \( -path '/mission/node_modules' -o -path '/mission/*/node_modules' -o -path '/mission/*/*/node_modules' -o -path '/mission/pnpm-lock.yaml' \) 2>/dev/null | sort)
+  done < <(find /open-mission -maxdepth 3 \( -path '/open-mission/node_modules' -o -path '/open-mission/*/node_modules' -o -path '/open-mission/*/*/node_modules' -o -path '/open-mission/pnpm-lock.yaml' \) 2>/dev/null | sort)
 fi
 
 if [ ! -w "${TMPDIR}" ]; then
@@ -145,14 +145,14 @@ pnpm install
 
 echo "--- Building Mission installer packages ---"
 pnpm --filter @flying-pillow/mission-core run build
-pnpm --filter @flying-pillow/mission run build
+pnpm --filter @flying-pillow/open-mission run build
 
 echo "--- Bootstrapping Mission through the local installer ---"
-node /mission/packages/mission/build/mission.js install --json
+node /open-mission/packages/open-mission/build/mission.js install --json
 
-if [ -f /mission/apps/airport/native/src-tauri/Cargo.toml ]; then
+if [ -f /open-mission/apps/airport/native/src-tauri/Cargo.toml ]; then
   echo "--- Prefetching Rust dependencies for the native host ---"
-  cargo fetch --manifest-path /mission/apps/airport/native/src-tauri/Cargo.toml
+  cargo fetch --manifest-path /open-mission/apps/airport/native/src-tauri/Cargo.toml
 fi
 
 echo "================================================================"

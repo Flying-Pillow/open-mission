@@ -1,5 +1,5 @@
 ---
-"@flying-pillow/mission": patch
+"@flying-pillow/open-mission": patch
 "@flying-pillow/mission-core": patch
 ---
 

@@ -86,7 +86,7 @@ function createSourceRuntimeBridge(access: AgentExecutionMcpAccess): AgentExecut
             '--dir',
             workspaceRoot,
             '--filter',
-            '@flying-pillow/mission',
+            '@flying-pillow/open-mission',
             'exec',
             'tsx',
             '--tsconfig',

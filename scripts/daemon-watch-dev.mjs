@@ -14,7 +14,7 @@ let restartTimeout = null;
 function startDaemon() {
   console.log('[daemon-watch] Starting daemon...');
   
-  daemonProcess = spawn('pnpm', ['--filter', '@flying-pillow/mission', 'run', 'missiond:dev'], {
+  daemonProcess = spawn('pnpm', ['--filter', '@flying-pillow/open-mission', 'run', 'missiond:dev'], {
     stdio: 'inherit',
     env: {
       ...process.env,

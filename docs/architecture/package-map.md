@@ -10,7 +10,7 @@ description: Where the main Mission responsibilities live in the monorepo.
 | --- | --- |
 | packages/core | domain contracts, Mission law, runtime contracts, Entity model |
 | apps/airport | Airport operator surfaces and daemon clients |
-| packages/mission | published Mission CLI and package boundary |
+| packages/open-mission | published Mission CLI and package boundary |
 | packages/tsconfig | shared TypeScript policy |
 | docs/adr | architectural decisions |
 | .agents | agent instructions and skills |

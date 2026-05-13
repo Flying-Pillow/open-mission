@@ -15,11 +15,11 @@ heading_anchors: true
 color_scheme: mission
 aux_links:
   "GitHub":
-    - "https://github.com/Flying-Pillow/mission"
+    - "https://github.com/Flying-Pillow/open-mission"
 aux_links_new_tab: true
 gh_edit_link: true
 gh_edit_link_text: "Open this page on GitHub"
-gh_edit_repository: "https://github.com/Flying-Pillow/mission"
+gh_edit_repository: "https://github.com/Flying-Pillow/open-mission"
 gh_edit_branch: "main"
 gh_edit_source: docs
 gh_edit_view_mode: "tree"

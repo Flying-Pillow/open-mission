@@ -4,8 +4,8 @@ services:
       context: .
       dockerfile: ./Dockerfile.development
     image: mission/development:local
-    working_dir: /mission
-    container_name: mission-development
+    working_dir: /open-mission
+    container_name: open-mission-development
     command: [ "tail", "-f", "/dev/null" ]
     init: true
     tty: true
@@ -16,7 +16,7 @@ services:
       MISSIONS_PATH: /missions
       MISSION_CONFIG_PATH: /config
     volumes:
-      - "../:/mission"
+      - "../:/open-mission"
       - "../../flying-pillow:/flying-pillow"
       - "${HOST_REPOSITORIES_PATH:-/mnt/volatile/repositories}:/repositories"
       - "${HOST_MISSIONS_PATH:-/mnt/volatile/missions}:/missions"

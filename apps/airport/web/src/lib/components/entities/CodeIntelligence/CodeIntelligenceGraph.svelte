@@ -905,10 +905,10 @@
         if (target === "@flying-pillow/mission-core") {
             return ["packages/core/src/index"];
         }
-        if (target.startsWith("@flying-pillow/mission/")) {
+        if (target.startsWith("@flying-pillow/open-mission/")) {
             return [
                 normalizePath(
-                    `packages/mission/src/${target.slice("@flying-pillow/mission/".length)}`,
+                    `packages/open-mission/src/${target.slice("@flying-pillow/open-mission/".length)}`,
                 ),
             ];
         }

@@ -34,11 +34,11 @@ _Avoid_: projection layer, Svelte package, Tauri plugin, host compatibility laye
 ### Repository Plane
 
 **Platform repository ref**:
-The hosted repository identifier used by a repository platform adapter, for example the GitHub ref `Flying-Pillow/mission`.
+The hosted repository identifier used by a repository platform adapter, for example the GitHub ref `Flying-Pillow/open-mission`.
 _Avoid_: Repository, repository root
 
 **GitHub repository ref**:
-The GitHub-shaped Platform repository ref, for example `Flying-Pillow/mission`.
+The GitHub-shaped Platform repository ref, for example `Flying-Pillow/open-mission`.
 _Avoid_: Repository, repository root
 
 **Repository**:

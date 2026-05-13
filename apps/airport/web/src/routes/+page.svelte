@@ -6,7 +6,8 @@
 	import * as Card from "$lib/components/ui/card";
 
 	const logoPath = asset("/logo.png");
-	const missionRepositoryUrl = "https://github.com/Flying-Pillow/mission";
+	const missionRepositoryUrl =
+		"https://github.com/Flying-Pillow/open-mission";
 	const agentLogos = {
 		anthropic: asset("/agents/anthropic.svg"),
 		cursor: asset("/agents/cursor.svg"),

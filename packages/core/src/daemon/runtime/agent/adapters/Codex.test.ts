@@ -181,7 +181,7 @@ describe('Codex', () => {
 
         expect(configOverrides).toHaveLength(1);
         expect(mcpConfigOverride).toContain('command="pnpm"');
-        expect(mcpConfigOverride).toContain(`args=["--dir","/mission","--filter","@flying-pillow/mission","exec","tsx","--tsconfig","./tsconfig.dev.json","./src/mission.ts","mcp","connect","--agent-execution","${snapshot.agentExecutionId}"]`);
+        expect(mcpConfigOverride).toContain(`args=["--dir","/mission","--filter","@flying-pillow/open-mission","exec","tsx","--tsconfig","./tsconfig.dev.json","./src/mission.ts","mcp","connect","--agent-execution","${snapshot.agentExecutionId}"]`);
         expect(mcpConfigOverride).toContain('env={');
         expect(mcpConfigOverride).toContain('MISSION_AGENT_EXECUTION_OWNER_ID=');
         expect(mcpConfigOverride).toContain('MISSION_MCP_TOKEN=');

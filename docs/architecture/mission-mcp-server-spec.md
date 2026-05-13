@@ -420,8 +420,8 @@ Run at minimum:
 pnpm --filter @flying-pillow/mission-core check
 pnpm --filter @flying-pillow/mission-core test
 pnpm --filter @flying-pillow/mission-core build
-pnpm --filter @flying-pillow/mission check
-pnpm --filter @flying-pillow/mission build
+pnpm --filter @flying-pillow/open-mission check
+pnpm --filter @flying-pillow/open-mission build
 ```
 
 ## Constitutionality Checklist

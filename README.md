@@ -63,12 +63,12 @@ On Linux, `mission install` provisions the Mission-managed GitHub CLI automatica
 **1. Run the published CLI package:**
 
 ```bash
-npx @flying-pillow/mission
+npx @flying-pillow/open-mission
 ```
 
 Or install it globally if you want persistent `mission` and `missiond` commands:
 
 ```bash
-npm install -g @flying-pillow/mission
+npm install -g @flying-pillow/open-mission
 mission
 ```

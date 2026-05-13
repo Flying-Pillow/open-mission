@@ -12,7 +12,8 @@
 		site: DocsSiteMeta;
 	} & ComponentProps<typeof Sidebar.Root>;
 
-	const missionRepositoryUrl = "https://github.com/Flying-Pillow/mission";
+	const missionRepositoryUrl =
+		"https://github.com/Flying-Pillow/open-mission";
 	const logo = asset("/logo.png");
 
 	let { navigation, site, ...restProps }: Props = $props();

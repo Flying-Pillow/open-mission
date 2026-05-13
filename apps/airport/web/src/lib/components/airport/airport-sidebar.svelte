@@ -33,7 +33,7 @@
         {
             title: "Search",
             description: "Search the Mission repository on GitHub.",
-            url: "https://github.com/Flying-Pillow/mission/search",
+            url: "https://github.com/Flying-Pillow/open-mission/search",
             icon: "lucide:search",
         },
     ] satisfies {

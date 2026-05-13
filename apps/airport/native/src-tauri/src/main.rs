@@ -326,7 +326,7 @@ fn resolve_repository_root() -> Result<PathBuf, String> {
             continue;
         };
 
-        if candidate_root.join("packages/mission").is_dir() {
+        if candidate_root.join("packages/open-mission").is_dir() {
             return Ok(candidate_root);
         }
     }
@@ -353,7 +353,7 @@ fn resolve_daemon_entry_path(repository_root: &Path) -> Result<PathBuf, String> 
         }
     }
 
-    let default_entry_path = repository_root.join("packages/mission/build/missiond.js");
+    let default_entry_path = repository_root.join("packages/open-mission/build/missiond.js");
     if default_entry_path.is_file() {
         return Ok(default_entry_path);
     }

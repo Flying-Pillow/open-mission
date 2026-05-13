@@ -5,7 +5,7 @@
     "@flying-pillow/mission-airport-native": "0.1.0-alpha.0",
     "@flying-pillow/mission-airport-web": "0.1.0-alpha.0",
     "@flying-pillow/mission-core": "0.1.0-alpha.0",
-    "@flying-pillow/mission": "0.1.0-alpha.0",
+    "@flying-pillow/open-mission": "0.1.0-alpha.0",
     "@flying-pillow/mission-tsconfig": "0.1.0-alpha.0",
     "@flying-pillow/zod-surreal": "0.1.0-alpha.0"
   },

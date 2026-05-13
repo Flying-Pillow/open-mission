@@ -7,7 +7,8 @@
 		site: DocsSiteMeta;
 	};
 
-	const missionRepositoryUrl = "https://github.com/Flying-Pillow/mission";
+	const missionRepositoryUrl =
+		"https://github.com/Flying-Pillow/open-mission";
 
 	let { site }: Props = $props();
 </script>
@@ -22,15 +23,22 @@
 			class="mx-2 data-[orientation=vertical]:h-4"
 		/>
 		<div class="min-w-0">
-			<p class="text-[0.68rem] font-medium uppercase tracking-[0.24em] text-muted-foreground">
+			<p
+				class="text-[0.68rem] font-medium uppercase tracking-[0.24em] text-muted-foreground"
+			>
 				Documentation
 			</p>
-			<a href="/docs" class="truncate text-sm font-semibold text-foreground sm:text-base">
+			<a
+				href="/docs"
+				class="truncate text-sm font-semibold text-foreground sm:text-base"
+			>
 				{site.title}
 			</a>
 		</div>
 		{#if site.description}
-			<p class="hidden max-w-2xl truncate text-sm text-muted-foreground xl:block">
+			<p
+				class="hidden max-w-2xl truncate text-sm text-muted-foreground xl:block"
+			>
 				{site.description}
 			</p>
 		{/if}

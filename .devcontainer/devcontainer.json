@@ -1,5 +1,5 @@
 {
-    "name": "mission-development",
+    "name": "open-mission-development",
     "dockerComposeFile": [
         "../docker/docker-compose.development.yml"
     ],
@@ -7,7 +7,7 @@
         "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
     ],
     "service": "development",
-    "workspaceFolder": "/mission",
+    "workspaceFolder": "/open-mission",
     "runServices": [
         "development"
     ],
@@ -45,7 +45,7 @@
             "onAutoForward": "silent"
         }
     },
-    "postStartCommand": "/bin/bash /mission/scripts/dev-container-post-start.sh",
+    "postStartCommand": "/bin/bash /open-mission/scripts/dev-container-post-start.sh",
     "remoteUser": "dev",
     "features": {
         "ghcr.io/devcontainers/features/docker-from-docker:1": {

@@ -3,14 +3,14 @@
   "changelog": [
     "@changesets/changelog-github",
     {
-      "repo": "Flying-Pillow/mission"
+      "repo": "Flying-Pillow/open-mission"
     }
   ],
   "commit": false,
   "linked": [],
   "fixed": [
     [
-      "@flying-pillow/mission",
+      "@flying-pillow/open-mission",
       "@flying-pillow/mission-core",
       "@flying-pillow/mission-airport-web"
     ]

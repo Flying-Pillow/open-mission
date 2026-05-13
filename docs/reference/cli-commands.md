@@ -9,7 +9,7 @@ description: Public Mission command entry points.
 The public CLI starts Mission and opens Airport.
 
 ~~~bash
-npx @flying-pillow/mission
+npx @flying-pillow/open-mission
 mission
 ~~~
 

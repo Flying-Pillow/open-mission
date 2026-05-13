@@ -201,7 +201,7 @@ describe('Copilot', () => {
 			'--dir',
 			'/mission',
 			'--filter',
-			'@flying-pillow/mission',
+			'@flying-pillow/open-mission',
 			'exec',
 			'tsx',
 			'--tsconfig',
