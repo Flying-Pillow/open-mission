@@ -237,6 +237,34 @@ importers:
         specifier: ^6.0.2
         version: 6.0.3
 
+  packages/open-mission:
+    dependencies:
+      '@clack/prompts':
+        specifier: ^1.1.0
+        version: 1.2.0
+      '@flying-pillow/mission-airport-web':
+        specifier: workspace:*
+        version: link:../../apps/airport/web
+      '@flying-pillow/mission-core':
+        specifier: workspace:*
+        version: link:../core
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@4.4.3)
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^25.5.0
+        version: 25.6.0
+      tsx:
+        specifier: ^4.20.6
+        version: 4.21.0
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
   packages/tsconfig: {}
 
   packages/zod-surreal:
