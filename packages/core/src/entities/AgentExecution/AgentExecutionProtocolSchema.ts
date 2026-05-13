@@ -250,7 +250,7 @@ export const AgentExecutionProtocolOwnerSchema = z.object({
 }).strict();
 
 export const AgentExecutionProtocolMcpSchema = z.object({
-    serverName: z.literal('mission-mcp'),
+    serverName: z.literal('open-mission-mcp'),
     exposure: z.literal('agent-execution-scoped'),
     publicApi: z.literal(false)
 }).strict();

@@ -15,6 +15,6 @@ Mission state has several owners. Do not collapse them into one generic model.
 | Entity storage records | Mission state store |
 | Entity data | hydrated daemon read shape |
 | Entity command view | query result advertising available commands |
-| Airport preferences | local surface preferences |
+| Open Mission preferences | local surface preferences |
 
 Validated state uses Zod v4 schemas and inferred TypeScript types. Invalid persisted runtime data is rejected instead of repaired by fallback parsing.

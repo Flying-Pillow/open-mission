@@ -20,6 +20,6 @@ Command views are read results. They advertise what is currently available for a
 | EntitySchema.ts | Zod schemas and inferred TypeScript types |
 | EntityContract.ts | method metadata and routing contract |
 
-This keeps Airport thin. The surface renders commands; Entity classes decide what commands mean.
+This keeps Open Mission thin. The surface renders commands; Entity classes decide what commands mean.
 
 Agent executions do not receive a separate agent-only command vocabulary. Surfaces present daemon-published Entity command views, and Agent terminal output may only make advisory state claims through strict Mission protocol markers.

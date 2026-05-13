@@ -16,7 +16,7 @@ Mission will expose a daemon-owned System status snapshot through the existing `
 
 The System status snapshot is a low-frequency diagnostic read model. It may include daemon identity, daemon uptime, protocol version, runtime path, host process memory, host load average, dependency readiness such as GitHub authentication, and aggregate counts derived from daemon-owned runtime registries. Runtime counts include loaded Repository and Mission totals, active Agent executions, Runtime leases, active terminal leases, orphaned leases, supervision graph size, and runtime reconciliation counts such as detached Agent executions, protocol-incompatible Agent executions, Runtime leases without Agent execution owners, and whether reconciliation is required.
 
-The System status snapshot is not workflow truth. It must not replace Entity state, Mission workflow state, Agent execution journals, Runtime leases, or the daemon runtime supervision graph. It is derived operator status for Airport and command-line diagnostics.
+The System status snapshot is not workflow truth. It must not replace Entity state, Mission workflow state, Agent execution journals, Runtime leases, or the daemon runtime supervision graph. It is derived operator status for Open Mission and command-line diagnostics.
 
 Protocol incompatibility is runtime communication degradation, not AgentExecution failure. A daemon/client protocol mismatch, old Agent execution protocol descriptor, detached terminal, or missing Runtime lease may make an Agent execution non-commandable or diagnostically degraded, but the AgentExecution lifecycle must not move to failed unless the daemon records evidence that the execution or its owned Runtime leases are dead.
 
@@ -24,6 +24,6 @@ The System status snapshot is not a telemetry backend. Mission will not require 
 
 The snapshot must avoid sensitive or high-volume material. It must not include prompts, terminal scrollback, full transcripts, raw environment variables, authentication tokens, secrets, or unredacted command payloads. Runtime command lines may be represented only as structured ownership or lease facts when needed for daemon cleanup and after redaction rules are explicit.
 
-Airport may display the System status snapshot in the same operator diagnostics panel that tails daemon logs. This keeps daemon logs and daemon health in one diagnostic workspace while preserving the separation between log audit material and current system status.
+Open Mission may display the System status snapshot in the same operator diagnostics panel that tails daemon logs. This keeps daemon logs and daemon health in one diagnostic workspace while preserving the separation between log audit material and current system status.
 
 The existing `system.status` request remains the canonical access point. Surfaces should poll it at a modest cadence and treat stale or unavailable results as diagnostic uncertainty, not as Mission failure.

@@ -1,12 +1,12 @@
 ---
 layout: default
-title: Tower Control
+title: Workflow Control
 parent: User Manual
 nav_order: 2
-description: Use Tower to inspect legal commands and steer active Mission work.
+description: Use Open Mission to inspect legal commands and steer active Mission work.
 ---
 
-Tower shows what the daemon says can happen now.
+Workflow Control shows what the daemon says can happen now.
 
 Use it to:
 

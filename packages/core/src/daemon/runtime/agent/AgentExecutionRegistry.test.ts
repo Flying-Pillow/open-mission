@@ -2,14 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { AgentExecutionRegistry } from './AgentExecutionRegistry.js';
 import { AgentExecution } from '../../../entities/AgentExecution/AgentExecution.js';
 import {
-    deriveAgentExecutionInteractionCapabilities,
-    type AgentExecutionSnapshot
+    deriveAgentExecutionInteractionCapabilities
 } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import type {
-    AgentExecutionDataType,
+    AgentExecutionType,
     AgentExecutionTransportStateType
 } from '../../../entities/AgentExecution/AgentExecutionSchema.js';
-import { AgentExecutionDataSchema } from '../../../entities/AgentExecution/AgentExecutionSchema.js';
+import { AgentExecutionSchema } from '../../../entities/AgentExecution/AgentExecutionSchema.js';
 
 describe('AgentExecutionRegistry', () => {
     it('does not expose a degraded execution as reusable', () => {
@@ -22,7 +21,7 @@ describe('AgentExecutionRegistry', () => {
                 degraded: true,
                 health: 'protocol-incompatible',
                 signalCompatible: false,
-                reason: 'Mission daemon protocol 32 is incompatible with client protocol 30.'
+                reason: 'Open Mission daemon protocol 32 is incompatible with client protocol 30.'
             }
         });
 
@@ -43,7 +42,7 @@ describe('AgentExecutionRegistry', () => {
                 degraded: true,
                 health: 'protocol-incompatible',
                 commandable: false,
-                reason: 'Mission daemon protocol 32 is incompatible with client protocol 30.'
+                reason: 'Open Mission daemon protocol 32 is incompatible with client protocol 30.'
             },
             terminateExecution
         });
@@ -94,14 +93,53 @@ describe('AgentExecutionRegistry', () => {
         );
         expect(result).toEqual(restarted);
     });
+
+    it('reports degraded and protocol-incompatible execution runtime summary buckets', () => {
+        const registry = new AgentExecutionRegistry();
+        installEntry(registry, {
+            ownerKey: 'Repository.agentExecution:/repo:one',
+            agentExecutionId: 'execution-1',
+            transportState: {
+                selected: 'stdout-marker',
+                degraded: true,
+                health: 'protocol-incompatible',
+                leaseAttached: false,
+                signalCompatible: false,
+                reason: 'Protocol mismatch.'
+            }
+        });
+        installEntry(registry, {
+            ownerKey: 'Repository.agentExecution:/repo:two',
+            agentExecutionId: 'execution-2',
+            terminalName: 'terminal-two',
+            transportState: {
+                selected: 'stdout-marker',
+                degraded: false,
+                health: 'attached',
+                leaseAttached: true,
+                signalCompatible: true
+            }
+        });
+
+        const summary = registry.readRuntimeSummary();
+
+        expect(summary).toMatchObject({
+            activeAgentExecutionCount: 2,
+            attachedAgentExecutionCount: 1,
+            detachedAgentExecutionCount: 1,
+            degradedAgentExecutionCount: 1,
+            protocolIncompatibleAgentExecutionCount: 1,
+            executionsWithoutRuntimeLeaseCount: 1
+        });
+    });
 });
 
 function createExecutionData(
     agentExecutionId: string,
     transportState?: AgentExecutionTransportStateType
-): AgentExecutionDataType {
-    return AgentExecutionDataSchema.parse({
-        ...AgentExecution.createLive(createSnapshot(agentExecutionId)).toData(),
+): AgentExecutionType {
+    return AgentExecutionSchema.parse({
+        ...AgentExecution.createLive(createExecution(agentExecutionId)).toData(),
         ...(transportState ? { transportState } : {})
     });
 }
@@ -111,13 +149,14 @@ function installEntry(
     input: {
         ownerKey: string;
         agentExecutionId: string;
+        terminalName?: string;
         transportState?: AgentExecutionTransportStateType;
         terminateExecution?: ReturnType<typeof vi.fn>;
     }
 ): void {
-    const execution = AgentExecution.createLive(createSnapshot(input.agentExecutionId));
+    const execution = AgentExecution.createLive(createExecution(input.agentExecutionId, input.terminalName));
     execution.updateFromData(
-        AgentExecutionDataSchema.parse({
+        AgentExecutionSchema.parse({
             ...execution.toData(),
             ...(input.transportState ? { transportState: input.transportState } : {})
         })
@@ -141,7 +180,7 @@ function installEntry(
     });
 }
 
-function createSnapshot(agentExecutionId: string): AgentExecutionSnapshot {
+function createExecution(agentExecutionId: string, terminalName?: string): AgentExecutionType {
     return {
         agentId: 'copilot-cli',
         agentExecutionId,
@@ -169,6 +208,14 @@ function createSnapshot(agentExecutionId: string): AgentExecutionSnapshot {
             agentId: 'copilot-cli',
             agentExecutionId
         },
+        ...(terminalName
+            ? {
+                transport: {
+                    kind: 'terminal' as const,
+                    terminalName
+                }
+            }
+            : {}),
         startedAt: '2026-05-10T00:00:00.000Z',
         updatedAt: '2026-05-10T00:00:00.000Z'
     };

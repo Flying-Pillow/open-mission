@@ -7,14 +7,14 @@ import { Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import { EntityClassCommandViewSchema, EntityCommandViewSchema, type EntityClassCommandViewType, type EntityCommandViewType } from '../Entity/EntitySchema.js';
 import { AgentRegistry } from '../Agent/AgentRegistry.js';
 import { getDefaultAgentExecutionRegistry } from '../../daemon/runtime/agent/AgentExecutionRegistry.js';
-import type { AgentExecutionDataType } from '../AgentExecution/AgentExecutionSchema.js';
+import type { AgentExecutionType } from '../AgentExecution/AgentExecutionSchema.js';
 import type { Mission, MissionWorkflowBindings } from '../Mission/Mission.js';
 import {
-	getDefaultMissionConfig,
-	getMissionGitHubCliBinary,
-	readMissionConfig,
+	getDefaultOpenMissionConfig,
+	getOpenMissionGitHubCliBinary,
+	readOpenMissionConfig,
 	resolveRepositoriesRoot
-} from '../../settings/MissionInstall.js';
+} from '../../settings/OpenMissionInstall.js';
 import { MissionDossierFilesystem } from '../Mission/MissionDossierFilesystem.js';
 import { resolveGitHubRepositoryFromRepositoryRoot } from '../../platforms/GitHubPlatformAdapter.js';
 import { refreshSystemStatus } from '../System/SystemStatus.js';
@@ -193,7 +193,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	): Promise<RepositoryPlatformRepositoryType[]> {
 		const args = RepositoryFindAvailableSchema.parse(input);
 		const platform = args.platform ?? 'github';
-		const ghBinary = getMissionGitHubCliBinary();
+		const ghBinary = getOpenMissionGitHubCliBinary();
 		const adapter = createRepositoryPlatformAdapter({
 			platform,
 			repositoryRootPath: context?.surfacePath?.trim() || process.cwd(),
@@ -210,7 +210,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	): Promise<RepositoryPlatformOwnerType[]> {
 		const args = RepositoryFindAvailableOwnersSchema.parse(input);
 		const platform = args.platform ?? 'github';
-		const ghBinary = getMissionGitHubCliBinary();
+		const ghBinary = getOpenMissionGitHubCliBinary();
 		const adapter = createRepositoryPlatformAdapter({
 			platform,
 			repositoryRootPath: context?.surfacePath?.trim() || process.cwd(),
@@ -224,13 +224,13 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	public static async ensureSystemAgentExecution(
 		input: RepositoryEnsureSystemAgentExecutionType = {},
 		context?: EntityExecutionContext
-	): Promise<AgentExecutionDataType> {
+	): Promise<AgentExecutionType> {
 		RepositoryEnsureSystemAgentExecutionSchema.parse(input);
-		const missionConfig = readMissionConfig() ?? getDefaultMissionConfig();
-		const repositoriesRootPath = resolveRepositoriesRoot(missionConfig);
+		const openMissionConfig = readOpenMissionConfig() ?? getDefaultOpenMissionConfig();
+		const repositoriesRootPath = resolveRepositoriesRoot(openMissionConfig);
 		const settings = createDefaultRepositorySettings();
-		settings.agentAdapter = missionConfig.defaultAgentAdapter;
-		settings.enabledAgentAdapters = missionConfig.enabledAgentAdapters;
+		settings.agentAdapter = openMissionConfig.defaultAgentAdapter;
+		settings.enabledAgentAdapters = openMissionConfig.enabledAgentAdapters;
 		const agentRegistry = await AgentRegistry.createConfigured({
 			repositoryRootPath: repositoriesRootPath,
 			settings
@@ -238,12 +238,12 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		const availableAgentIds = agentRegistry.listAgents()
 			.filter((agent) => agent.toData().availability.available)
 			.map((agent) => agent.agentId);
-		const enabledAgentIds = missionConfig.enabledAgentAdapters.length > 0
-			? missionConfig.enabledAgentAdapters.filter((agentId) => availableAgentIds.includes(agentId))
+		const enabledAgentIds = openMissionConfig.enabledAgentAdapters.length > 0
+			? openMissionConfig.enabledAgentAdapters.filter((agentId) => availableAgentIds.includes(agentId))
 			: availableAgentIds;
-		const requestedAgentId = enabledAgentIds.includes(missionConfig.defaultAgentAdapter)
-			? missionConfig.defaultAgentAdapter
-			: enabledAgentIds[0] ?? missionConfig.defaultAgentAdapter;
+		const requestedAgentId = enabledAgentIds.includes(openMissionConfig.defaultAgentAdapter)
+			? openMissionConfig.defaultAgentAdapter
+			: enabledAgentIds[0] ?? openMissionConfig.defaultAgentAdapter;
 		const agentId = agentRegistry.resolveStartAgentId(requestedAgentId);
 		if (!agentId) {
 			throw new Error('No repository manager agent is available for the repositories surface.');
@@ -259,7 +259,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 				},
 				workingDirectory: repositoriesRootPath,
 				specification: {
-					summary: 'Manage the repositories surface for Airport.',
+					summary: 'Manage the repositories surface for Open Mission.',
 					documents: []
 				},
 				requestedAdapterId: agentId,
@@ -339,7 +339,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	}
 
 	private static async discoverConfiguredRepositories(): Promise<Repository[]> {
-		const config = readMissionConfig();
+		const config = readOpenMissionConfig();
 		if (!config) {
 			return [];
 		}
@@ -865,7 +865,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		context?: EntityExecutionContext
 	): Promise<string> {
 		await Repository.assertPlatformRepositoryIsNotRegistered(input.repositoryRef, context);
-		const ghBinary = getMissionGitHubCliBinary();
+		const ghBinary = getOpenMissionGitHubCliBinary();
 		const adapter = createRepositoryPlatformAdapter({
 			platform: input.platform,
 			repositoryRootPath: context?.surfacePath?.trim() || process.cwd(),
@@ -883,7 +883,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		input: RepositoryCreateType,
 		context?: EntityExecutionContext
 	): Promise<string> {
-		const ghBinary = getMissionGitHubCliBinary();
+		const ghBinary = getOpenMissionGitHubCliBinary();
 		const adapter = createRepositoryPlatformAdapter({
 			platform: input.platform,
 			repositoryRootPath: context?.surfacePath?.trim() || process.cwd(),
@@ -1225,7 +1225,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	public async ensureRepositoryAgentExecution(
 		input: RepositoryInitializeType,
 		context?: EntityExecutionContext
-	): Promise<AgentExecutionDataType> {
+	): Promise<AgentExecutionType> {
 		const args = RepositoryInitializeSchema.parse(input);
 		this.assertRepositoryIdentity(args);
 		this.assertCanLaunchRepositoryAgentExecution();
@@ -1288,7 +1288,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	public async refreshRepositoryAgentExecution(
 		input: RepositoryInitializeType,
 		context?: EntityExecutionContext
-	): Promise<AgentExecutionDataType> {
+	): Promise<AgentExecutionType> {
 		const args = RepositoryInitializeSchema.parse(input);
 		this.assertRepositoryIdentity(args);
 		this.assertCanLaunchRepositoryAgentExecution();
@@ -1334,7 +1334,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 	private async replaceActiveRepositoryAgentExecution(
 		settings: RepositorySettingsType,
 		context?: EntityExecutionContext
-	): Promise<AgentExecutionDataType | undefined> {
+	): Promise<AgentExecutionType | undefined> {
 		const agentRegistry = await AgentRegistry.createConfigured({
 			repositoryRootPath: this.repositoryRootPath,
 			settings
@@ -1397,7 +1397,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		}
 
 		return [
-			'You are the system-scoped repositories manager for Airport.',
+			'You are the system-scoped repositories manager for Open Mission.',
 			`Repositories root: ${repositoriesRootPath}.`,
 			'Checked out repositories:',
 			localRepositoryLines,
@@ -2063,7 +2063,7 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			return undefined;
 		}
 
-		const ghBinary = getMissionGitHubCliBinary();
+		const ghBinary = getOpenMissionGitHubCliBinary();
 		return createRepositoryPlatformAdapter({
 			platform: 'github',
 			repositoryRootPath: this.repositoryRootPath,

@@ -512,7 +512,7 @@ agentJournalPath?: string;
 
 The richer journal reference belongs on AgentExecution read data, not Mission workflow runtime data.
 
-Airport should render from these projections and request older journal windows by cursor when needed.
+Open Mission should render from these projections and request older journal windows by cursor when needed.
 
 ## Migration Strategy
 
@@ -553,4 +553,4 @@ Repository and System journal roots are file-store path policy, not Mission runt
 11. Add Agent journal location references to Mission workflow runtime AgentExecution records through an explicit runtime data change.
 12. Keep `timelineItems` as a replay-derived projection without writing `projection.recorded` records in phase one.
 13. Keep input-request semantics out of lifecycle by representing them as `running` plus `attention` and `currentInputRequestId` in AgentExecution data.
-14. Update Airport readers to consume projection fields rather than inventing local transcript truth.
+14. Update Open Mission readers to consume projection fields rather than inventing local transcript truth.

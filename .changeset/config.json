@@ -11,14 +11,14 @@
   "fixed": [
     [
       "@flying-pillow/open-mission",
-      "@flying-pillow/mission-core",
-      "@flying-pillow/mission-airport-web"
+      "@flying-pillow/open-mission-core",
+      "@flying-pillow/open-mission-web"
     ]
   ],
   "access": "restricted",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
   "ignore": [
-    "@flying-pillow/mission-tsconfig"
+    "@flying-pillow/open-mission-tsconfig"
   ]
 }

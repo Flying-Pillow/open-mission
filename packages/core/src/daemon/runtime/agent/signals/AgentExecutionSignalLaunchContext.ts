@@ -22,7 +22,7 @@ export function buildAgentExecutionSignalLaunchContext(input: {
         signal: {
             type: 'progress',
             summary: 'Working on the next implementation step.',
-            artifacts: [{ path: 'apps/airport/web/src/app.css', activity: 'edit' }]
+            artifacts: [{ path: 'apps/web/src/app.css', activity: 'edit' }]
         }
     })}`;
     const statusExample = `${markerPrefix}${JSON.stringify({
@@ -86,8 +86,8 @@ function buildMcpToolLaunchContext(input: {
     return {
         launchEnv: {},
         agentExecutionInstructions: [
-            'Mission MCP is already connected and available.',
-            'Mission MCP is the authoritative operator interaction protocol for this session.',
+            'Open Mission MCP is already connected and available.',
+            'Open Mission MCP is the authoritative operator interaction protocol for this session.',
 
             'Do not start or configure MCP servers.',
             'Do not attempt to provision infrastructure for this session.',

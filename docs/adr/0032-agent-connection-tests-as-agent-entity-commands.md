@@ -12,13 +12,13 @@ supersedes: []
 superseded_by: []
 ---
 
-Mission will expose adapter readiness probes as class-level `Agent` Entity commands rather than as ad hoc Airport routes, raw terminal checks, or managed AgentExecution instances.
+Mission will expose adapter readiness probes as class-level `Agent` Entity commands rather than as ad hoc Open Mission app routes, raw terminal checks, or managed AgentExecution instances.
 
 ## Context
 
 Mission already treats Entity commands as the canonical operator mutation surface under daemon `entity.command` transport, and it treats AgentExecution as the canonical model for long-lived managed execution state. Adapter readiness probing sits between those seams: operators need a one-shot way to validate login, launch configuration, model selection, and provider CLI health before or instead of starting a managed AgentExecution.
 
-That probe is not a durable AgentExecution. It should not allocate AgentExecution ids, register runtime ownership, publish AgentExecution events, or write audit material that claims a real execution existed. At the same time, it must reuse Mission-owned adapter launch semantics instead of inventing a second launch path in Airport or in a surface-specific helper.
+That probe is not a durable AgentExecution. It should not allocate AgentExecution ids, register runtime ownership, publish AgentExecution events, or write audit material that claims a real execution existed. At the same time, it must reuse Mission-owned adapter launch semantics instead of inventing a second launch path in Open Mission or in a surface-specific helper.
 
 ## Decision
 
@@ -44,7 +44,7 @@ The daemon-owned Agent connection tester owns one-shot launch probing, timeout h
 
 ## Consequences
 
-- Airport and other surfaces call one canonical `Agent.testConnection` command through the existing remote Entity surface.
+- Open Mission and other surfaces call one canonical `Agent.testConnection` command through the existing remote Entity surface.
 - Mission keeps one authoritative adapter launch path while avoiding fake AgentExecution records for readiness probes.
 - Adapter-specific auth and launch guidance can improve incrementally behind the adapter boundary.
 - Agent connection diagnostics stay typed and bounded instead of leaking raw terminal material as canonical operator output.

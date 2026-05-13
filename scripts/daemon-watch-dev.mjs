@@ -14,12 +14,12 @@ let restartTimeout = null;
 function startDaemon() {
   console.log('[daemon-watch] Starting daemon...');
   
-  daemonProcess = spawn('pnpm', ['--filter', '@flying-pillow/open-mission', 'run', 'missiond:dev'], {
+  daemonProcess = spawn('pnpm', ['--filter', '@flying-pillow/open-mission', 'run', 'open-mission-daemon:dev'], {
     stdio: 'inherit',
     env: {
       ...process.env,
-      MISSION_SURFACE_PATH: projectRoot,
-      MISSION_DAEMON_RUNTIME_MODE: 'source'
+      OPEN_MISSION_SURFACE_PATH: projectRoot,
+      OPEN_MISSION_DAEMON_RUNTIME_MODE: 'source'
     }
   });
 

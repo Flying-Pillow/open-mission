@@ -197,7 +197,7 @@ describe('MissionDossierFilesystem', () => {
 			expect(() => adapter.commit('prepare repository')).not.toThrow();
 
 			expect(git(workspaceRoot, ['log', '-1', '--format=%an <%ae>|%cn <%ce>'])).toBe(
-				'Mission Daemon <mission-daemon@localhost>|Mission Daemon <mission-daemon@localhost>'
+				'Open Mission Daemon <open-mission-daemon@localhost>|Open Mission Daemon <open-mission-daemon@localhost>'
 			);
 		} finally {
 			restoreEnv('HOME', previousHome);

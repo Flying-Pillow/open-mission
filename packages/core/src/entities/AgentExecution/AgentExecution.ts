@@ -8,7 +8,6 @@ import type {
 	AgentExecutionScope,
 	AgentLaunchConfig,
 	AgentPrompt,
-	AgentExecutionSnapshot,
 	AgentExecutionObservation
 } from './AgentExecutionProtocolTypes.js';
 import {
@@ -25,14 +24,14 @@ import type {
 	AgentExecutionLaunchRequest,
 	AgentExecutionRecord,
 	AgentExecutionState
-} from './AgentExecutionDataSchema.js';
+} from './AgentExecutionSchema.js';
 import {
 	AgentExecutionCommandAcknowledgementSchema,
 	AgentExecutionContextSchema,
-	AgentExecutionDataSchema,
+	AgentExecutionSchema,
 	type AgentExecutionContextType,
-	type AgentExecutionDataType
-} from './AgentExecutionDataSchema.js';
+	type AgentExecutionType
+} from './AgentExecutionSchema.js';
 import {
 	AgentExecutionCommandInputSchema,
 	AgentExecutionMessageShorthandResolutionSchema,
@@ -65,9 +64,9 @@ import {
 } from './AgentExecutionTransportSchema.js';
 import {
 	type AgentExecutionTransportStateType,
-	type AgentExecutionRuntimeActivitySnapshotType,
+	type AgentExecutionRuntimeActivityType,
 	type AgentExecutionActivityStateType
-} from './AgentExecutionRuntimeSchema.js';
+} from './AgentExecutionStateSchema.js';
 import type { MissionType } from '../Mission/MissionSchema.js';
 import { MissionDossierFilesystem } from '../Mission/MissionDossierFilesystem.js';
 import { Terminal } from '../Terminal/Terminal.js';
@@ -80,7 +79,7 @@ import type { AgentExecutionJournalRecordType } from './AgentExecutionJournalSch
 import { resolveAgentExecutionMessageShorthand } from './AgentExecutionMessageShorthand.js';
 
 type LocatedAgentExecutionData = {
-	data: AgentExecutionDataType;
+	data: AgentExecutionType;
 	missionDir: string;
 };
 
@@ -100,7 +99,7 @@ type AgentExecutionLaunchRecord = {
 	updatedAt: string;
 };
 
-type SnapshotOverrides = Omit<Partial<AgentExecutionSnapshot>, 'failureMessage'> & {
+type Patch = Omit<Partial<AgentExecutionType>, 'failureMessage'> & {
 	failureMessage?: string | undefined;
 };
 
@@ -115,7 +114,7 @@ type AgentExecutionTerminalUpdateSource = {
 	onDidTerminalUpdate(listener: (update: AgentExecutionTerminalUpdate) => void): { dispose(): void };
 };
 
-export class AgentExecution extends Entity<AgentExecutionDataType, string> {
+export class AgentExecution extends Entity<AgentExecutionType, string> {
 	public static override readonly entityName = agentExecutionEntityName;
 
 	public static createEntityId(scopeId: string, agentExecutionId: string): string {
@@ -137,9 +136,9 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		return buildFreshAgentExecutionId(config.scope, agentId);
 	}
 
-	public static toDataFromRecord(record: AgentExecutionRecord): AgentExecutionDataType {
+	public static toDataFromRecord(record: AgentExecutionRecord): AgentExecutionType {
 		const scopeId = AgentExecution.requireRecordScopeId(record);
-		return AgentExecutionDataSchema.parse({
+		return AgentExecutionSchema.parse({
 			id: AgentExecution.createEntityId(scopeId, record.agentExecutionId),
 			ownerId: AgentExecution.requireRecordOwnerId(record),
 			agentExecutionId: record.agentExecutionId,
@@ -182,7 +181,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		if (!AgentExecution) {
 			throw new Error(`AgentExecution '${agentExecutionId}' could not be resolved in Mission '${data.missionId}'.`);
 		}
-		return AgentExecutionDataSchema.parse(AgentExecution);
+		return AgentExecutionSchema.parse(AgentExecution);
 	}
 
 	public static async resolve(payload: unknown, context: EntityExecutionContext): Promise<AgentExecution> {
@@ -303,7 +302,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	public static async isCompatibleForLaunch(input: {
 		AgentExecution: AgentExecutionRecord;
 		request: AgentExecutionLaunchRequest;
-		resolveLiveAgentExecution(): Promise<AgentExecutionSnapshot | undefined>;
+		resolveLiveAgentExecution(): Promise<AgentExecutionType | undefined>;
 	}): Promise<boolean> {
 		try {
 			const liveAgentExecution = await input.resolveLiveAgentExecution();
@@ -337,7 +336,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		return reason.length > 0 ? reason : undefined;
 	}
 
-	public static isTerminalFinalStatus(status: AgentExecutionSnapshot['status']): boolean {
+	public static isTerminalFinalStatus(status: AgentExecutionType['status']): boolean {
 		return isAgentExecutionTerminalFinalStatus(status);
 	}
 
@@ -367,14 +366,14 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		].filter((descriptor) => commandTypes.includes(descriptor.type as AgentCommand['type'])));
 	}
 
-	public static createProtocolDescriptorForSnapshot(snapshot: AgentExecutionSnapshot): AgentExecutionProtocolDescriptorType {
+	public static createProtocolDescriptorForExecution(execution: AgentExecutionType): AgentExecutionProtocolDescriptorType {
 		return createAgentExecutionProtocolDescriptor({
-			scope: snapshot.scope,
-			interactionPosture: snapshot.interactionPosture,
+			scope: execution.scope,
+			interactionPosture: execution.interactionPosture,
 			messages: AgentExecution.resolveRuntimeMessages({
-				lifecycleState: snapshot.status,
-				acceptsPrompts: snapshot.acceptsPrompts,
-				acceptedCommands: snapshot.acceptedCommands
+				lifecycleState: execution.status,
+				acceptsPrompts: execution.acceptsPrompts,
+				acceptedCommands: execution.acceptedCommands
 			})
 		});
 	}
@@ -400,7 +399,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	public static createRecordFromLaunch(input: {
 		launch: AgentExecutionLaunchRecord;
 		adapterLabel: string;
-		snapshot?: AgentExecutionSnapshot;
+		execution?: AgentExecutionType;
 		task?: TaskDossierRecordType;
 		missionId?: string;
 		missionDir?: string;
@@ -408,11 +407,11 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		const scope = input.task
 			? AgentExecution.buildTaskScope(input.task, input.missionId)
 			: undefined;
-		const terminalFields = getTerminalFields(input.snapshot);
-		const activityState = deriveActivityStateFromProgressState(input.snapshot?.progress.state);
+		const terminalFields = getTerminalFields(input.execution);
+		const activityState = deriveActivityStateFromProgressState(input.execution?.progress.state);
 		const effectiveActivityState = deriveActivityState(activityState, undefined);
-		const protocolDescriptor = input.snapshot
-			? AgentExecution.createProtocolDescriptorForSnapshot(input.snapshot)
+		const protocolDescriptor = input.execution
+			? AgentExecution.createProtocolDescriptorForExecution(input.execution)
 			: undefined;
 
 		return AgentExecution.cloneRecord({
@@ -427,20 +426,20 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 					? { terminalHandle: { ...input.launch.terminalHandle } }
 					: {}),
 			adapterLabel: input.adapterLabel,
-			lifecycleState: input.snapshot?.status ?? input.launch.lifecycle,
-			...(input.snapshot?.attention ? { attention: input.snapshot.attention } : {}),
+			lifecycleState: input.execution?.status ?? input.launch.lifecycle,
+			...(input.execution?.attention ? { attention: input.execution.attention } : {}),
 			...(effectiveActivityState
 				? { activityState: effectiveActivityState }
 				: {}),
 			createdAt: input.launch.launchedAt,
-			lastUpdatedAt: input.snapshot?.updatedAt ?? input.launch.updatedAt,
+			lastUpdatedAt: input.execution?.updatedAt ?? input.launch.updatedAt,
 			...(input.launch.taskId ? { taskId: input.launch.taskId } : {}),
 			...(input.task?.relativePath ? { assignmentLabel: input.task.relativePath } : {}),
-			...(input.snapshot?.workingDirectory ? { workingDirectory: input.snapshot.workingDirectory } : {}),
+			...(input.execution?.workingDirectory ? { workingDirectory: input.execution.workingDirectory } : {}),
 			...(input.task?.subject ? { currentTurnTitle: input.task.subject } : {}),
 			interactionCapabilities: AgentExecution.resolveInteractionCapabilities({
-				lifecycleState: input.snapshot?.status ?? input.launch.lifecycle,
-				transport: input.snapshot?.transport
+				lifecycleState: input.execution?.status ?? input.launch.lifecycle,
+				transport: input.execution?.transport
 					?? (terminalFields.terminalHandle
 						? {
 							kind: 'terminal',
@@ -448,49 +447,49 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 							terminalPaneId: terminalFields.terminalHandle.terminalPaneId
 						}
 						: undefined),
-				...(input.snapshot?.acceptsPrompts !== undefined
-					? { acceptsPrompts: input.snapshot.acceptsPrompts }
+				...(input.execution?.acceptsPrompts !== undefined
+					? { acceptsPrompts: input.execution.acceptsPrompts }
 					: {}),
-				...(input.snapshot?.acceptedCommands
-					? { acceptedCommands: input.snapshot.acceptedCommands }
+				...(input.execution?.acceptedCommands
+					? { acceptedCommands: input.execution.acceptedCommands }
 					: {})
 			}),
 			runtimeMessages: AgentExecution.resolveRuntimeMessages({
-				lifecycleState: input.snapshot?.status ?? input.launch.lifecycle,
-				...(input.snapshot?.acceptsPrompts !== undefined
-					? { acceptsPrompts: input.snapshot.acceptsPrompts }
+				lifecycleState: input.execution?.status ?? input.launch.lifecycle,
+				...(input.execution?.acceptsPrompts !== undefined
+					? { acceptsPrompts: input.execution.acceptsPrompts }
 					: {}),
-				...(input.snapshot?.acceptedCommands
-					? { acceptedCommands: input.snapshot.acceptedCommands }
+				...(input.execution?.acceptedCommands
+					? { acceptedCommands: input.execution.acceptedCommands }
 					: {})
 			}),
 			...(protocolDescriptor ? { protocolDescriptor } : {}),
 			...(scope ? { scope } : {}),
-			...(input.snapshot?.progress
+			...(input.execution?.progress
 				? {
-					runtimeActivity: createRuntimeActivityFromProgress(input.snapshot.progress)
+					runtimeActivity: createRuntimeActivityFromProgress(input.execution.progress)
 				}
 				: {}),
-			...(input.snapshot?.failureMessage ? { failureMessage: input.snapshot.failureMessage } : {})
+			...(input.execution?.failureMessage ? { failureMessage: input.execution.failureMessage } : {})
 		});
 	}
 
-	public static createStateFromSnapshot(input: {
-		snapshot: AgentExecutionSnapshot;
+	public static createStateFromExecution(input: {
+		execution: AgentExecutionType;
 		adapterLabel: string;
 		record?: AgentExecutionRecord;
 	}): AgentExecutionState {
-		const { snapshot, adapterLabel, record } = input;
-		const terminalFields = getTerminalFields(snapshot);
-		const activityState = deriveActivityStateFromProgressState(snapshot.progress.state);
+		const { execution, adapterLabel, record } = input;
+		const terminalFields = getTerminalFields(execution);
+		const activityState = deriveActivityStateFromProgressState(execution.progress.state);
 		const awaitingResponseToMessageId = record?.awaitingResponseToMessageId;
 		const effectiveActivityState = deriveActivityState(activityState, awaitingResponseToMessageId);
-		const protocolDescriptor = AgentExecution.createProtocolDescriptorForSnapshot(snapshot);
+		const protocolDescriptor = AgentExecution.createProtocolDescriptorForExecution(execution);
 		return AgentExecution.cloneState({
-			agentId: snapshot.agentId,
+			agentId: execution.agentId,
 			...(terminalFields.transportId ? { transportId: terminalFields.transportId } : {}),
 			adapterLabel,
-			agentExecutionId: snapshot.agentExecutionId,
+			agentExecutionId: execution.agentExecutionId,
 			...(record?.agentJournalPath ? { agentJournalPath: record.agentJournalPath } : {}),
 			...(record?.terminalRecordingPath ? { terminalRecordingPath: record.terminalRecordingPath } : {}),
 			...(terminalFields.terminalHandle
@@ -498,8 +497,8 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				: record?.terminalHandle
 					? { terminalHandle: { ...record.terminalHandle } }
 					: {}),
-			lifecycleState: snapshot.status,
-			attention: snapshot.attention,
+			lifecycleState: execution.status,
+			attention: execution.attention,
 			...(effectiveActivityState
 				? { activityState: effectiveActivityState }
 				: record?.activityState
@@ -507,38 +506,38 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 					: {}),
 			...(record?.currentInputRequestId !== undefined ? { currentInputRequestId: record.currentInputRequestId } : {}),
 			...(awaitingResponseToMessageId !== undefined ? { awaitingResponseToMessageId } : {}),
-			lastUpdatedAt: snapshot.updatedAt,
-			...(snapshot.workingDirectory
-				? { workingDirectory: snapshot.workingDirectory }
+			lastUpdatedAt: execution.updatedAt,
+			...(execution.workingDirectory
+				? { workingDirectory: execution.workingDirectory }
 				: record?.workingDirectory
 					? { workingDirectory: record.workingDirectory }
 					: {}),
 			...(record?.currentTurnTitle ? { currentTurnTitle: record.currentTurnTitle } : {}),
-			interactionCapabilities: snapshot.interactionCapabilities
-				? { ...snapshot.interactionCapabilities }
+			interactionCapabilities: execution.interactionCapabilities
+				? { ...execution.interactionCapabilities }
 				: AgentExecution.resolveInteractionCapabilities({
-					lifecycleState: snapshot.status,
-					...(snapshot.transport ? { transport: snapshot.transport } : {}),
-					acceptsPrompts: snapshot.acceptsPrompts,
-					acceptedCommands: snapshot.acceptedCommands
+					lifecycleState: execution.status,
+					...(execution.transport ? { transport: execution.transport } : {}),
+					acceptsPrompts: execution.acceptsPrompts,
+					acceptedCommands: execution.acceptedCommands
 				}),
 			runtimeMessages: AgentExecution.resolveRuntimeMessages({
-				lifecycleState: snapshot.status,
-				acceptsPrompts: snapshot.acceptsPrompts,
-				acceptedCommands: snapshot.acceptedCommands
+				lifecycleState: execution.status,
+				acceptsPrompts: execution.acceptsPrompts,
+				acceptedCommands: execution.acceptedCommands
 			}),
 			protocolDescriptor,
 			...(record?.transportState ? { transportState: AgentExecution.cloneTransportState(record.transportState) } : {}),
 			...(record?.scope ? { scope: record.scope } : {}),
-			...(snapshot.progress
+			...(execution.progress
 				? {
-					runtimeActivity: createRuntimeActivityFromProgress(snapshot.progress)
+					runtimeActivity: createRuntimeActivityFromProgress(execution.progress)
 				}
 				: record?.runtimeActivity
 					? { runtimeActivity: cloneStructured(record.runtimeActivity) }
 					: {}),
-			...(snapshot.failureMessage
-				? { failureMessage: snapshot.failureMessage }
+			...(execution.failureMessage
+				? { failureMessage: execution.failureMessage }
 				: record?.failureMessage
 					? { failureMessage: record.failureMessage }
 					: {})
@@ -653,7 +652,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	}
 
 	private static resolveRuntimeMessages(input: {
-		lifecycleState: AgentExecutionRecord['lifecycleState'] | AgentExecutionSnapshot['status'];
+		lifecycleState: AgentExecutionRecord['lifecycleState'] | AgentExecutionType['status'];
 		currentInputRequestId?: string | null;
 		acceptsPrompts?: boolean;
 		acceptedCommands?: AgentCommand['type'][];
@@ -666,7 +665,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	}
 
 	private static createNativeTerminalMessageDescriptors(
-		lifecycleState: AgentExecutionRecord['lifecycleState'] | AgentExecutionSnapshot['status']
+		lifecycleState: AgentExecutionRecord['lifecycleState'] | AgentExecutionType['status']
 	): AgentExecutionMessageDescriptorType[] {
 		if (lifecycleState !== 'starting' && lifecycleState !== 'running') {
 			return [];
@@ -683,9 +682,9 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	}
 
 	private static resolveInteractionCapabilities(input: {
-		lifecycleState: AgentExecutionRecord['lifecycleState'] | AgentExecutionSnapshot['status'];
+		lifecycleState: AgentExecutionRecord['lifecycleState'] | AgentExecutionType['status'];
 		currentInputRequestId?: string | null;
-		transport?: AgentExecutionSnapshot['transport'];
+		transport?: AgentExecutionType['transport'];
 		acceptsPrompts?: boolean;
 		acceptedCommands?: AgentCommand['type'][];
 	}): AgentExecutionInteractionCapabilitiesType {
@@ -698,7 +697,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	}
 
 	private static deriveAcceptsPrompts(
-		lifecycleState: AgentExecutionRecord['lifecycleState'] | AgentExecutionSnapshot['status'],
+		lifecycleState: AgentExecutionRecord['lifecycleState'] | AgentExecutionType['status'],
 		currentInputRequestId?: string | null
 	): boolean {
 		return lifecycleState === 'running'
@@ -706,7 +705,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	}
 
 	private static deriveAcceptedCommands(
-		lifecycleState: AgentExecutionRecord['lifecycleState'] | AgentExecutionSnapshot['status'],
+		lifecycleState: AgentExecutionRecord['lifecycleState'] | AgentExecutionType['status'],
 		currentInputRequestId?: string | null
 	): AgentCommand['type'][] {
 		if (currentInputRequestId !== undefined && currentInputRequestId !== null) {
@@ -719,84 +718,95 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	}
 
 	private readonly listeners = new Set<(event: AgentExecutionEvent) => void>();
-	private readonly dataChangeListeners = new Set<(data: AgentExecutionDataType) => void>();
+	private readonly dataChangeListeners = new Set<(data: AgentExecutionType) => void>();
 	private projection: AgentExecutionProjectionType = AgentExecutionProjectionSchema.parse({ timelineItems: [] });
-	private liveSnapshot: AgentExecutionSnapshot | undefined;
+	private liveExecution: AgentExecutionType | undefined;
 	private disposed = false;
 
-	public static createLive(snapshot: AgentExecutionSnapshot, options: { adapterLabel?: string; protocolDescriptor?: AgentExecutionProtocolDescriptorType; transportState?: AgentExecutionTransportStateType } = {}): AgentExecution {
-		const execution = new AgentExecution(AgentExecution.toDataFromRuntimeSnapshot(snapshot, options));
-		execution.liveSnapshot = cloneRuntimeSnapshot(snapshot);
-		return execution;
+	public static createLive(execution: AgentExecutionType, options: { adapterLabel?: string; protocolDescriptor?: AgentExecutionProtocolDescriptorType; transportState?: AgentExecutionTransportStateType } = {}): AgentExecution {
+		const liveExecution = new AgentExecution(AgentExecution.toDataFromExecution(execution, options));
+		liveExecution.liveExecution = cloneExecution(execution);
+		return liveExecution;
 	}
 
-	private static toDataFromRuntimeSnapshot(snapshot: AgentExecutionSnapshot, options: { adapterLabel?: string; protocolDescriptor?: AgentExecutionProtocolDescriptorType; transportState?: AgentExecutionTransportStateType } = {}): AgentExecutionDataType {
-		return AgentExecutionDataSchema.parse({
-			id: AgentExecution.createEntityId(getAgentExecutionEntityScopeId(snapshot), snapshot.agentExecutionId),
-			ownerId: getAgentExecutionOwnerId(snapshot.scope),
-			agentExecutionId: snapshot.agentExecutionId,
-			agentId: snapshot.agentId,
-			...(snapshot.transport?.kind === 'terminal' ? { transportId: 'terminal' } : {}),
-			adapterLabel: options.adapterLabel?.trim() || snapshot.agentId,
-			lifecycleState: snapshot.status,
-			attention: snapshot.attention,
-			...(deriveActivityStateFromProgressState(snapshot.progress.state)
-				? { activityState: deriveActivityStateFromProgressState(snapshot.progress.state) }
+	private static toDataFromExecution(execution: AgentExecutionType, options: { adapterLabel?: string; protocolDescriptor?: AgentExecutionProtocolDescriptorType; transportState?: AgentExecutionTransportStateType } = {}): AgentExecutionType {
+		return AgentExecutionSchema.parse({
+			id: AgentExecution.createEntityId(getAgentExecutionEntityScopeId(execution), execution.agentExecutionId),
+			ownerId: getAgentExecutionOwnerId(execution.scope),
+			agentExecutionId: execution.agentExecutionId,
+			agentId: execution.agentId,
+			...(execution.transport?.kind === 'terminal' ? { transportId: 'terminal' } : {}),
+			adapterLabel: options.adapterLabel?.trim() || execution.agentId,
+			lifecycleState: execution.status,
+			attention: execution.attention,
+			...(deriveActivityStateFromProgressState(execution.progress.state)
+				? { activityState: deriveActivityStateFromProgressState(execution.progress.state) }
 				: {}),
-			...(snapshot.transport?.kind === 'terminal'
+			...(execution.transport?.kind === 'terminal'
 				? {
 					terminalHandle: {
-						terminalName: snapshot.transport.terminalName,
-						terminalPaneId: snapshot.transport.terminalPaneId ?? snapshot.transport.terminalName
+						terminalName: execution.transport.terminalName,
+						terminalPaneId: execution.transport.terminalPaneId ?? execution.transport.terminalName
 					}
 				}
 				: {}),
-			...(snapshot.taskId ? { taskId: snapshot.taskId } : {}),
-			workingDirectory: snapshot.workingDirectory,
-			interactionCapabilities: snapshot.interactionCapabilities
-				? { ...snapshot.interactionCapabilities }
+			...(execution.taskId ? { taskId: execution.taskId } : {}),
+			workingDirectory: execution.workingDirectory,
+			interactionCapabilities: execution.interactionCapabilities
+				? { ...execution.interactionCapabilities }
 				: AgentExecution.resolveInteractionCapabilities({
-					lifecycleState: snapshot.status,
-					...(snapshot.transport ? { transport: snapshot.transport } : {}),
-					acceptsPrompts: snapshot.acceptsPrompts,
-					acceptedCommands: snapshot.acceptedCommands
+					lifecycleState: execution.status,
+					...(execution.transport ? { transport: execution.transport } : {}),
+					acceptsPrompts: execution.acceptsPrompts,
+					acceptedCommands: execution.acceptedCommands
 				}),
 			context: AgentExecutionContextSchema.parse({ artifacts: [], instructions: [] }),
 			runtimeMessages: AgentExecution.resolveRuntimeMessages({
-				lifecycleState: snapshot.status,
-				acceptsPrompts: snapshot.acceptsPrompts,
-				acceptedCommands: snapshot.acceptedCommands
+				lifecycleState: execution.status,
+				acceptsPrompts: execution.acceptsPrompts,
+				acceptedCommands: execution.acceptedCommands
 			}),
-			protocolDescriptor: options.protocolDescriptor ?? AgentExecution.createProtocolDescriptorForSnapshot(snapshot),
+			protocolDescriptor: options.protocolDescriptor ?? AgentExecution.createProtocolDescriptorForExecution(execution),
 			...(options.transportState ? { transportState: AgentExecution.cloneTransportState(options.transportState) } : {}),
-			scope: { ...snapshot.scope },
-			runtimeActivity: createRuntimeActivityFromProgress(snapshot.progress),
-			createdAt: snapshot.startedAt,
-			lastUpdatedAt: snapshot.updatedAt,
-			...(snapshot.failureMessage ? { failureMessage: snapshot.failureMessage } : {})
+			scope: { ...execution.scope },
+			progress: cloneStructured(execution.progress),
+			waitingForInput: execution.waitingForInput,
+			acceptsPrompts: execution.acceptsPrompts,
+			acceptedCommands: [...execution.acceptedCommands],
+			interactionPosture: execution.interactionPosture,
+			...(execution.transport ? { transport: { ...execution.transport } } : {}),
+			reference: {
+				...execution.reference,
+				...(execution.reference.transport ? { transport: { ...execution.reference.transport } } : {})
+			},
+			runtimeActivity: createRuntimeActivityFromProgress(execution.progress),
+			createdAt: execution.startedAt,
+			lastUpdatedAt: execution.updatedAt,
+			...(execution.failureMessage ? { failureMessage: execution.failureMessage } : {}),
+			...(execution.endedAt ? { endedAt: execution.endedAt } : {})
 		});
 	}
 
-	public constructor(data: AgentExecutionDataType) {
-		super(AgentExecutionDataSchema.parse(data));
+	public constructor(data: AgentExecutionType) {
+		super(AgentExecutionSchema.parse(data));
 		this.projection = cloneProjection(this.data.projection);
 	}
 
-	public override updateFromData(data: AgentExecutionDataType): this {
+	public override updateFromData(data: AgentExecutionType): this {
 		super.updateFromData(data);
 		this.projection = cloneProjection(this.data.projection);
 		return this;
 	}
 
-	public override toData(): AgentExecutionDataType {
-		return AgentExecutionDataSchema.parse({
+	public override toData(): AgentExecutionType {
+		return AgentExecutionSchema.parse({
 			...super.toData(),
 			projection: cloneProjection(this.projection)
 		});
 	}
 
 	public replaceJournalRecords(records: AgentExecutionJournalRecordType[]): this {
-		this.data.journalRecords = cloneStructured(records) as AgentExecutionDataType['journalRecords'];
+		this.data.journalRecords = cloneStructured(records) as AgentExecutionType['journalRecords'];
 		return this;
 	}
 
@@ -807,7 +817,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		}
 
 		existingRecords.push(cloneStructured(record));
-		this.data.journalRecords = existingRecords as AgentExecutionDataType['journalRecords'];
+		this.data.journalRecords = existingRecords as AgentExecutionType['journalRecords'];
 		this.data.lastUpdatedAt = record.occurredAt;
 
 		if (options.notify) {
@@ -826,7 +836,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	}
 
 	public get reference(): AgentExecutionReference {
-		return this.getSnapshot().reference;
+		return this.getExecution().reference;
 	}
 
 	public attachTerminal(input: {
@@ -844,11 +854,11 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		});
 	}
 
-	public getSnapshot(): AgentExecutionSnapshot {
-		if (!this.liveSnapshot) {
+	public getExecution(): AgentExecutionType {
+		if (!this.liveExecution) {
 			throw new Error(`AgentExecution '${this.agentExecutionId}' is not attached to live runtime state.`);
 		}
-		return cloneRuntimeSnapshot(this.liveSnapshot);
+		return cloneExecution(this.liveExecution);
 	}
 
 	public onDidEvent(listener: (event: AgentExecutionEvent) => void): { dispose(): void } {
@@ -860,7 +870,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		};
 	}
 
-	public onDidDataChange(listener: (data: AgentExecutionDataType) => void): { dispose(): void } {
+	public onDidDataChange(listener: (data: AgentExecutionType) => void): { dispose(): void } {
 		this.dataChangeListeners.add(listener);
 		return {
 			dispose: () => {
@@ -869,9 +879,9 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		};
 	}
 
-	public async complete(): Promise<AgentExecutionSnapshot> {
+	public async complete(): Promise<AgentExecutionType> {
 		const endedAt = new Date().toISOString();
-		const snapshot = this.updateSnapshot({
+		const execution = this.patch({
 			status: 'completed',
 			attention: 'none',
 			waitingForInput: false,
@@ -884,13 +894,13 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			endedAt,
 			failureMessage: undefined
 		});
-		this.emitEvent({ type: 'execution.completed', snapshot });
-		return snapshot;
+		this.emitEvent({ type: 'execution.completed', execution });
+		return execution;
 	}
 
-	public async submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionSnapshot> {
-		this.requireActiveSnapshot('submit a prompt', { requirePromptAcceptance: true });
-		const snapshot = this.updateSnapshot({
+	public async submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionType> {
+		this.requireActiveExecution('submit a prompt', { requirePromptAcceptance: true });
+		const execution = this.patch({
 			status: 'running',
 			attention: 'autonomous',
 			waitingForInput: false,
@@ -903,8 +913,8 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		});
 		if (prompt.source === 'operator') {
 			this.appendTimelineItem({
-				id: createProjectionItemId(snapshot.agentExecutionId, snapshot.updatedAt, 'operator', prompt.text),
-				occurredAt: snapshot.updatedAt,
+				id: createProjectionItemId(execution.agentExecutionId, execution.updatedAt, 'operator', prompt.text),
+				occurredAt: execution.updatedAt,
 				zone: 'conversation',
 				primitive: 'conversation.operator-message',
 				behavior: createProjectionBehavior('conversational'),
@@ -919,26 +929,26 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				}
 			});
 		}
-		this.emitEvent({ type: 'execution.updated', snapshot });
+		this.emitEvent({ type: 'execution.updated', execution });
 		this.emitEvent({
 			type: 'execution.message',
 			channel: prompt.source === 'operator' || prompt.source === 'system' ? 'system' : 'agent',
 			text: prompt.text,
-			snapshot
+			execution
 		});
-		return snapshot;
+		return execution;
 	}
 
-	public setAwaitingResponseToMessageId(messageId: string | null, updatedAt = new Date().toISOString()): AgentExecutionDataType {
+	public setAwaitingResponseToMessageId(messageId: string | null, updatedAt = new Date().toISOString()): AgentExecutionType {
 		const baseData = super.toData();
 		const nextActivityState = deriveActivityState(
-			this.liveSnapshot ? deriveActivityStateFromProgressState(this.liveSnapshot.progress.state) : baseData.activityState,
+			this.liveExecution ? deriveActivityStateFromProgressState(this.liveExecution.progress.state) : baseData.activityState,
 			messageId
 		);
-		const nextRuntimeActivity = this.liveSnapshot?.progress
-			? createRuntimeActivityFromProgress(this.liveSnapshot.progress)
+		const nextRuntimeActivity = this.liveExecution?.progress
+			? createRuntimeActivityFromProgress(this.liveExecution.progress)
 			: baseData.runtimeActivity;
-		this.data = AgentExecutionDataSchema.parse({
+		this.data = AgentExecutionSchema.parse({
 			...baseData,
 			...(messageId !== undefined ? { awaitingResponseToMessageId: messageId } : {}),
 			...(nextActivityState ? { activityState: nextActivityState } : {}),
@@ -951,10 +961,10 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		return this.toData();
 	}
 
-	public async submitCommand(command: AgentCommand): Promise<AgentExecutionSnapshot> {
-		this.requireActiveSnapshot(`perform '${command.type}'`);
+	public async submitCommand(command: AgentCommand): Promise<AgentExecutionType> {
+		this.requireActiveExecution(`perform '${command.type}'`);
 		if (command.type === 'interrupt') {
-			const snapshot = this.updateSnapshot({
+			const execution = this.patch({
 				status: 'running',
 				attention: 'awaiting-operator',
 				waitingForInput: true,
@@ -966,15 +976,15 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 					updatedAt: new Date().toISOString()
 				}
 			});
-			this.emitEvent({ type: 'execution.updated', snapshot });
-			return snapshot;
+			this.emitEvent({ type: 'execution.updated', execution });
+			return execution;
 		}
 		return this.submitPrompt(buildCommandPrompt(command));
 	}
 
-	public async cancelRuntime(reason?: string): Promise<AgentExecutionSnapshot> {
-		this.requireActiveSnapshot('cancel');
-		const snapshot = this.updateSnapshot({
+	public async cancelRuntime(reason?: string): Promise<AgentExecutionType> {
+		this.requireActiveExecution('cancel');
+		const execution = this.patch({
 			status: 'cancelled',
 			attention: 'none',
 			waitingForInput: false,
@@ -988,12 +998,12 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			endedAt: new Date().toISOString(),
 			...(reason ? { failureMessage: reason } : {})
 		});
-		this.emitEvent({ type: 'execution.cancelled', ...(reason ? { reason } : {}), snapshot });
-		return snapshot;
+		this.emitEvent({ type: 'execution.cancelled', ...(reason ? { reason } : {}), execution });
+		return execution;
 	}
 
-	public async terminateRuntime(reason?: string): Promise<AgentExecutionSnapshot> {
-		const snapshot = this.updateSnapshot({
+	public async terminateRuntime(reason?: string): Promise<AgentExecutionType> {
+		const execution = this.patch({
 			status: 'terminated',
 			attention: 'none',
 			waitingForInput: false,
@@ -1007,8 +1017,8 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			endedAt: new Date().toISOString(),
 			...(reason ? { failureMessage: reason } : {})
 		});
-		this.emitEvent({ type: 'execution.terminated', ...(reason ? { reason } : {}), snapshot });
-		return snapshot;
+		this.emitEvent({ type: 'execution.terminated', ...(reason ? { reason } : {}), execution });
+		return execution;
 	}
 
 	public dispose(): void {
@@ -1019,21 +1029,21 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		this.listeners.clear();
 	}
 
-	public updateSnapshot(overrides: SnapshotOverrides): AgentExecutionSnapshot {
-		const snapshot = this.getSnapshot();
-		const nextSnapshot: AgentExecutionSnapshot = {
-			...snapshot,
+	public patch(overrides: Patch): AgentExecutionType {
+		const execution = this.getExecution();
+		const nextExecution: AgentExecutionType = {
+			...execution,
 			acceptedCommands: overrides.acceptedCommands
 				? [...overrides.acceptedCommands]
-				: [...snapshot.acceptedCommands],
+				: [...execution.acceptedCommands],
 			progress: overrides.progress
 				? {
 					...overrides.progress,
 					...(overrides.progress.units ? { units: { ...overrides.progress.units } } : {})
 				}
 				: {
-					...snapshot.progress,
-					...(snapshot.progress.units ? { units: { ...snapshot.progress.units } } : {})
+					...execution.progress,
+					...(execution.progress.units ? { units: { ...execution.progress.units } } : {})
 				},
 			reference: overrides.reference
 				? {
@@ -1041,32 +1051,32 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 					...(overrides.reference.transport ? { transport: { ...overrides.reference.transport } } : {})
 				}
 				: {
-					...snapshot.reference,
-					...(snapshot.reference.transport ? { transport: { ...snapshot.reference.transport } } : {})
+					...execution.reference,
+					...(execution.reference.transport ? { transport: { ...execution.reference.transport } } : {})
 				},
 			updatedAt: new Date().toISOString()
 		};
-		for (const key of Object.keys(overrides) as Array<keyof SnapshotOverrides>) {
+		for (const key of Object.keys(overrides) as Array<keyof Patch>) {
 			const value = overrides[key];
 			if (key === 'failureMessage' && value === undefined) {
 				continue;
 			}
 			if (value !== undefined) {
-				Object.assign(nextSnapshot, { [key]: value });
+				Object.assign(nextExecution, { [key]: value });
 			}
 		}
 		if ('failureMessage' in overrides && overrides.failureMessage === undefined) {
-			delete nextSnapshot.failureMessage;
+			delete nextExecution.failureMessage;
 		}
 		if (
 			overrides.waitingForInput === false
 			&& overrides.currentInputRequestId === undefined
 		) {
-			nextSnapshot.currentInputRequestId = null;
+			nextExecution.currentInputRequestId = null;
 		}
-		nextSnapshot.interactionCapabilities = deriveAgentExecutionInteractionCapabilities(nextSnapshot);
-		this.liveSnapshot = nextSnapshot;
-		return this.getSnapshot();
+		nextExecution.interactionCapabilities = deriveAgentExecutionInteractionCapabilities(nextExecution);
+		this.liveExecution = nextExecution;
+		return this.getExecution();
 	}
 
 	public emitEvent(event: AgentExecutionEvent): void {
@@ -1074,8 +1084,8 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			return;
 		}
 		this.appendTimelineItemFromEvent(event);
-		this.liveSnapshot = cloneRuntimeSnapshot(event.snapshot);
-		this.refreshProjectionState(event.snapshot.updatedAt);
+		this.liveExecution = cloneExecution(event.execution);
+		this.refreshProjectionState(event.execution.updatedAt);
 		for (const listener of this.listeners) {
 			listener(event);
 		}
@@ -1085,31 +1095,31 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	public applySignalObservation(
 		observation: AgentExecutionObservation,
 		decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>
-	): AgentExecutionSnapshot | void {
+	): AgentExecutionType | void {
 		const appendedTimelineItem = this.appendTimelineItemFromObservation(observation, decision);
-		const snapshot = this.applySignalDecision(decision);
+		const execution = this.applySignalDecision(decision);
 		if (appendedTimelineItem && decision.action === 'record-observation-only') {
 			this.notifyDataChanged();
 		}
-		return snapshot;
+		return execution;
 	}
 
 	public applySignalDecision(
 		decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>
-	): AgentExecutionSnapshot | void {
+	): AgentExecutionType | void {
 		switch (decision.action) {
 			case 'emit-message':
 				this.emitEvent({
 					...decision.event,
-					snapshot: this.getSnapshot()
+					execution: this.getExecution()
 				});
-				return this.getSnapshot();
+				return this.getExecution();
 			case 'record-observation-only':
-				return this.getSnapshot();
+				return this.getExecution();
 			case 'update-execution': {
-				const snapshot = this.updateSnapshot(decision.snapshotPatch);
-				this.emitEvent(toRuntimeExecutionEvent(decision.eventType, snapshot));
-				return snapshot;
+				const execution = this.patch(decision.patch);
+				this.emitEvent(toRuntimeExecutionEvent(decision.eventType, execution));
+				return execution;
 			}
 		}
 	}
@@ -1142,8 +1152,8 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				return this.appendTimelineItem(event.timelineItem);
 			}
 			return this.appendTimelineItem({
-				id: createProjectionItemId(event.snapshot.agentExecutionId, event.snapshot.updatedAt, event.channel, event.text),
-				occurredAt: event.snapshot.updatedAt,
+				id: createProjectionItemId(event.execution.agentExecutionId, event.execution.updatedAt, event.channel, event.text),
+				occurredAt: event.execution.updatedAt,
 				zone: 'conversation',
 				primitive: 'conversation.agent-message',
 				behavior: createProjectionBehavior('conversational'),
@@ -1158,10 +1168,10 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				}
 			});
 		}
-		if (event.type === 'execution.completed' && event.snapshot.progress.summary) {
+		if (event.type === 'execution.completed' && event.execution.progress.summary) {
 			return this.appendTimelineItem({
-				id: createProjectionItemId(event.snapshot.agentExecutionId, event.snapshot.updatedAt, 'completed'),
-				occurredAt: event.snapshot.updatedAt,
+				id: createProjectionItemId(event.execution.agentExecutionId, event.execution.updatedAt, 'completed'),
+				occurredAt: event.execution.updatedAt,
 				zone: 'workflow',
 				primitive: 'attention.verification-result',
 				behavior: createProjectionBehavior('approval'),
@@ -1174,15 +1184,15 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				},
 				payload: {
 					title: 'Completed',
-					text: event.snapshot.progress.summary,
+					text: event.execution.progress.summary,
 					result: 'passed'
 				}
 			});
 		}
 		if (event.type === 'execution.failed') {
 			return this.appendTimelineItem({
-				id: createProjectionItemId(event.snapshot.agentExecutionId, event.snapshot.updatedAt, 'failed'),
-				occurredAt: event.snapshot.updatedAt,
+				id: createProjectionItemId(event.execution.agentExecutionId, event.execution.updatedAt, 'failed'),
+				occurredAt: event.execution.updatedAt,
 				zone: 'workflow',
 				primitive: 'attention.verification-result',
 				behavior: createProjectionBehavior('approval', { sticky: true }),
@@ -1215,7 +1225,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			...this.projection,
 			timelineItems: [...this.projection.timelineItems, parsed]
 		});
-		this.data = AgentExecutionDataSchema.parse({
+		this.data = AgentExecutionSchema.parse({
 			...super.toData(),
 			projection: cloneProjection(this.projection),
 			lastUpdatedAt: parsed.occurredAt
@@ -1226,17 +1236,17 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 
 	private refreshProjectionState(updatedAt: string): void {
 		const baseData = super.toData();
-		const snapshot = this.liveSnapshot ? this.getSnapshot() : undefined;
-		const lifecycleState = snapshot?.status ?? baseData.lifecycleState;
-		const attention = snapshot?.attention ?? baseData.attention;
-		const activityState = snapshot
+		const execution = this.liveExecution ? this.getExecution() : undefined;
+		const lifecycleState = execution?.status ?? baseData.lifecycleState;
+		const attention = execution?.attention ?? baseData.attention;
+		const activityState = execution
 			? deriveActivityState(
-				deriveActivityStateFromProgressState(snapshot.progress.state) ?? baseData.activityState,
+				deriveActivityStateFromProgressState(execution.progress.state) ?? baseData.activityState,
 				baseData.awaitingResponseToMessageId
 			)
 			: baseData.activityState;
-		const runtimeActivity = snapshot?.progress
-			? createRuntimeActivityFromProgress(snapshot.progress)
+		const runtimeActivity = execution?.progress
+			? createRuntimeActivityFromProgress(execution.progress)
 			: baseData.runtimeActivity;
 		const currentActivity = createLiveCurrentActivityProjection({
 			lifecycleState,
@@ -1244,13 +1254,13 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			activityState,
 			runtimeActivity,
 			telemetry: baseData.telemetry,
-			updatedAt: snapshot?.updatedAt ?? updatedAt
+			updatedAt: execution?.updatedAt ?? updatedAt
 		});
 		const currentAttention = createLiveCurrentAttentionProjection({
 			attention,
-			currentInputRequestId: snapshot?.currentInputRequestId ?? baseData.currentInputRequestId,
+			currentInputRequestId: execution?.currentInputRequestId ?? baseData.currentInputRequestId,
 			timelineItems: this.projection.timelineItems,
-			updatedAt: snapshot?.updatedAt ?? updatedAt
+			updatedAt: execution?.updatedAt ?? updatedAt
 		});
 		this.projection = AgentExecutionProjectionSchema.parse({
 			timelineItems: [...this.projection.timelineItems],
@@ -1260,33 +1270,33 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				? { runtimeOverlay: cloneStructured(this.projection.runtimeOverlay) }
 				: {})
 		});
-		this.data = AgentExecutionDataSchema.parse({
+		this.data = AgentExecutionSchema.parse({
 			...baseData,
 			lifecycleState,
 			...(attention !== undefined ? { attention } : {}),
 			...(activityState ? { activityState } : {}),
 			...(baseData.awaitingResponseToMessageId !== undefined ? { awaitingResponseToMessageId: baseData.awaitingResponseToMessageId } : {}),
 			...(runtimeActivity ? { runtimeActivity: cloneStructured(runtimeActivity) } : {}),
-			...(snapshot?.failureMessage ? { failureMessage: snapshot.failureMessage } : {}),
-			...(snapshot
+			...(execution?.failureMessage ? { failureMessage: execution.failureMessage } : {}),
+			...(execution
 				? {
-					interactionCapabilities: snapshot.interactionCapabilities
-						? { ...snapshot.interactionCapabilities }
+					interactionCapabilities: execution.interactionCapabilities
+						? { ...execution.interactionCapabilities }
 						: AgentExecution.resolveInteractionCapabilities({
-							lifecycleState: snapshot.status,
-							...(snapshot.transport ? { transport: snapshot.transport } : {}),
-							acceptsPrompts: snapshot.acceptsPrompts,
-							acceptedCommands: snapshot.acceptedCommands
+							lifecycleState: execution.status,
+							...(execution.transport ? { transport: execution.transport } : {}),
+							acceptsPrompts: execution.acceptsPrompts,
+							acceptedCommands: execution.acceptedCommands
 						}),
 					runtimeMessages: AgentExecution.resolveRuntimeMessages({
-						lifecycleState: snapshot.status,
-						acceptsPrompts: snapshot.acceptsPrompts,
-						acceptedCommands: snapshot.acceptedCommands
+						lifecycleState: execution.status,
+						acceptsPrompts: execution.acceptsPrompts,
+						acceptedCommands: execution.acceptedCommands
 					})
 				}
 				: {}),
 			projection: cloneProjection(this.projection),
-			lastUpdatedAt: snapshot?.updatedAt ?? updatedAt
+			lastUpdatedAt: execution?.updatedAt ?? updatedAt
 		});
 	}
 
@@ -1331,13 +1341,13 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		});
 	}
 
-	public toEntity(): AgentExecutionDataType {
-		return AgentExecutionDataSchema.parse(this.toData());
+	public toEntity(): AgentExecutionType {
+		return AgentExecutionSchema.parse(this.toData());
 	}
 
-	public toState(snapshot?: AgentExecutionSnapshot): AgentExecutionState {
+	public toState(execution?: AgentExecutionType): AgentExecutionState {
 		const record = this.toRecord();
-		if (!snapshot) {
+		if (!execution) {
 			return AgentExecution.cloneState({
 				agentId: record.agentId,
 				...(record.transportId ? { transportId: record.transportId } : {}),
@@ -1362,8 +1372,8 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			});
 		}
 
-		return AgentExecution.createStateFromSnapshot({
-			snapshot,
+		return AgentExecution.createStateFromExecution({
+			execution,
 			adapterLabel: record.adapterLabel,
 			record
 		});
@@ -1376,18 +1386,18 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		return context.agentExecutionRegistry;
 	}
 
-	private requireActiveSnapshot(
+	private requireActiveExecution(
 		action: string,
 		options: { requirePromptAcceptance?: boolean } = {}
-	): AgentExecutionSnapshot {
-		const snapshot = this.getSnapshot();
-		if (AgentExecution.isTerminalFinalStatus(snapshot.status)) {
-			throw new Error(`Cannot ${action} for execution '${snapshot.agentExecutionId}' because it is ${snapshot.status}.`);
+	): AgentExecutionType {
+		const execution = this.getExecution();
+		if (AgentExecution.isTerminalFinalStatus(execution.status)) {
+			throw new Error(`Cannot ${action} for execution '${execution.agentExecutionId}' because it is ${execution.status}.`);
 		}
-		if (options.requirePromptAcceptance && !snapshot.acceptsPrompts) {
-			throw new Error(`Cannot ${action} for execution '${snapshot.agentExecutionId}' because prompts are disabled.`);
+		if (options.requirePromptAcceptance && !execution.acceptsPrompts) {
+			throw new Error(`Cannot ${action} for execution '${execution.agentExecutionId}' because prompts are disabled.`);
 		}
-		return snapshot;
+		return execution;
 	}
 
 	private applyTerminalUpdate(update: AgentExecutionTerminalUpdate): void {
@@ -1397,15 +1407,15 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 					type: 'execution.message',
 					channel: 'stdout',
 					text: line,
-					snapshot: this.getSnapshot()
+					execution: this.getExecution()
 				});
 			}
 		}
 		if (!update.dead) {
 			return;
 		}
-		const snapshot = update.exitCode === 0
-			? this.updateSnapshot({
+		const execution = update.exitCode === 0
+			? this.patch({
 				status: 'completed',
 				attention: 'none',
 				acceptsPrompts: false,
@@ -1418,7 +1428,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				},
 				failureMessage: undefined
 			})
-			: this.updateSnapshot({
+			: this.patch({
 				status: 'failed',
 				attention: 'none',
 				acceptsPrompts: false,
@@ -1431,9 +1441,9 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 				},
 				failureMessage: `terminal command exited with status ${String(update.exitCode)}.`
 			});
-		this.emitEvent(snapshot.status === 'completed'
-			? { type: 'execution.completed', snapshot }
-			: { type: 'execution.failed', reason: snapshot.failureMessage ?? 'terminal command failed.', snapshot });
+		this.emitEvent(execution.status === 'completed'
+			? { type: 'execution.completed', execution }
+			: { type: 'execution.failed', reason: execution.failureMessage ?? 'terminal command failed.', execution });
 	}
 
 	private static requireRecordScopeId(record: AgentExecutionRecord): string {
@@ -1471,7 +1481,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	private static readRegistryExecution(
 		input: { ownerId: string; agentExecutionId: string },
 		context: EntityExecutionContext
-	): AgentExecutionDataType | undefined {
+	): AgentExecutionType | undefined {
 		if (!context.agentExecutionRegistry?.hasExecution(input.agentExecutionId)) {
 			return undefined;
 		}
@@ -1514,16 +1524,16 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		}
 	}
 
-	private static assertOwnerMatches(input: { ownerId: string; agentExecutionId: string }, data: AgentExecutionDataType): void {
+	private static assertOwnerMatches(input: { ownerId: string; agentExecutionId: string }, data: AgentExecutionType): void {
 		if (data.ownerId !== input.ownerId) {
 			throw new Error(`AgentExecution '${input.agentExecutionId}' belongs to owner '${data.ownerId}', not '${input.ownerId}'.`);
 		}
 	}
 
 	private static async hydrateDataFromJournal(
-		data: AgentExecutionDataType,
+		data: AgentExecutionType,
 		missionDir: string | undefined
-	): Promise<AgentExecutionDataType> {
+	): Promise<AgentExecutionType> {
 		if (!missionDir || !data.agentJournalPath || !data.scope) {
 			return data;
 		}
@@ -1538,12 +1548,12 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			scope: normalizeScopeFromData(data.scope)
 		}));
 		return AgentExecution.applyDerivedInteractionState(
-			AgentExecutionDataSchema.parse(hydrateAgentExecutionDataFromJournal(data, records))
+			AgentExecutionSchema.parse(hydrateAgentExecutionDataFromJournal(data, records))
 		);
 	}
 
-	private static applyDerivedInteractionState(data: AgentExecutionDataType): AgentExecutionDataType {
-		return AgentExecutionDataSchema.parse({
+	private static applyDerivedInteractionState(data: AgentExecutionType): AgentExecutionType {
+		return AgentExecutionSchema.parse({
 			...data,
 			interactionCapabilities: AgentExecution.resolveInteractionCapabilities({
 				lifecycleState: data.lifecycleState,
@@ -1568,7 +1578,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	private static async readTerminalData(
 		ownerId: string,
 		missionDir: string | undefined,
-		data: AgentExecutionDataType
+		data: AgentExecutionType
 	) {
 		const terminalHandle = AgentExecution.requireTerminalHandle(data);
 		const terminalSnapshot = Terminal.read({
@@ -1607,7 +1617,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		});
 	}
 
-	private static requireTerminalHandle(data: AgentExecutionDataType): AgentExecutionTerminalHandleType {
+	private static requireTerminalHandle(data: AgentExecutionType): AgentExecutionTerminalHandleType {
 		if (!data.terminalHandle) {
 			throw new Error(`AgentExecution '${data.agentExecutionId}' is not backed by a Terminal.`);
 		}
@@ -1616,7 +1626,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 
 }
 
-function getTerminalFields(snapshot: AgentExecutionSnapshot | undefined): {
+function getTerminalFields(snapshot: AgentExecutionType | undefined): {
 	transportId?: string;
 	terminalHandle?: AgentExecutionTerminalHandleType;
 } {
@@ -1632,7 +1642,7 @@ function getTerminalFields(snapshot: AgentExecutionSnapshot | undefined): {
 	};
 }
 
-function cloneRuntimeSnapshot(snapshot: AgentExecutionSnapshot): AgentExecutionSnapshot {
+function cloneExecution(snapshot: AgentExecutionType): AgentExecutionType {
 	return {
 		...snapshot,
 		acceptedCommands: [...snapshot.acceptedCommands],
@@ -1649,7 +1659,7 @@ function cloneRuntimeSnapshot(snapshot: AgentExecutionSnapshot): AgentExecutionS
 	};
 }
 
-function normalizeScopeFromData(scope: AgentExecutionDataType['scope']): AgentExecutionScope {
+function normalizeScopeFromData(scope: AgentExecutionType['scope']): AgentExecutionScope {
 	if (!scope) {
 		throw new Error('AgentExecution scope is required for journal-backed replay.');
 	}
@@ -1700,8 +1710,8 @@ function deriveActivityState(
 }
 
 function createRuntimeActivityFromProgress(
-	progress: AgentExecutionSnapshot['progress']
-): AgentExecutionRuntimeActivitySnapshotType {
+	progress: AgentExecutionType['progress']
+): AgentExecutionRuntimeActivityType {
 	return {
 		progress: {
 			...(progress.summary ? { summary: progress.summary } : {}),
@@ -1712,7 +1722,7 @@ function createRuntimeActivityFromProgress(
 	};
 }
 
-function getAgentExecutionEntityScopeId(snapshot: AgentExecutionSnapshot): string {
+function getAgentExecutionEntityScopeId(snapshot: AgentExecutionType): string {
 	const raw = snapshot.missionId
 		?? (snapshot.scope.kind === 'repository' ? snapshot.scope.repositoryRootPath : undefined)
 		?? `${snapshot.scope.kind}:${describeAgentExecutionScope(snapshot.scope)}`;
@@ -1755,11 +1765,11 @@ function cloneProjection(projection: AgentExecutionProjectionType): AgentExecuti
 }
 
 function createLiveCurrentActivityProjection(input: {
-	lifecycleState: AgentExecutionDataType['lifecycleState'];
-	attention: AgentExecutionDataType['attention'] | undefined;
-	activityState: AgentExecutionDataType['activityState'] | undefined;
-	runtimeActivity: AgentExecutionDataType['runtimeActivity'] | undefined;
-	telemetry: AgentExecutionDataType['telemetry'] | undefined;
+	lifecycleState: AgentExecutionType['lifecycleState'];
+	attention: AgentExecutionType['attention'] | undefined;
+	activityState: AgentExecutionType['activityState'] | undefined;
+	runtimeActivity: AgentExecutionType['runtimeActivity'] | undefined;
+	telemetry: AgentExecutionType['telemetry'] | undefined;
 	updatedAt: string;
 }): AgentExecutionActivityProjectionType | undefined {
 	if (
@@ -1787,8 +1797,8 @@ function createLiveCurrentActivityProjection(input: {
 }
 
 function createLiveCurrentAttentionProjection(input: {
-	attention: AgentExecutionDataType['attention'] | undefined;
-	currentInputRequestId: AgentExecutionDataType['currentInputRequestId'] | undefined;
+	attention: AgentExecutionType['attention'] | undefined;
+	currentInputRequestId: AgentExecutionType['currentInputRequestId'] | undefined;
 	timelineItems: AgentExecutionTimelineItemType[];
 	updatedAt: string;
 }): AgentExecutionAttentionProjectionType | undefined {
@@ -1825,7 +1835,7 @@ function createLiveCurrentAttentionProjection(input: {
 
 function resolveCurrentAttentionProjectionItem(
 	timelineItems: AgentExecutionTimelineItemType[],
-	currentInputRequestId: AgentExecutionDataType['currentInputRequestId'] | undefined
+	currentInputRequestId: AgentExecutionType['currentInputRequestId'] | undefined
 ): AgentExecutionTimelineItemType | undefined {
 	if (currentInputRequestId) {
 		const inputRequestItem = timelineItems.find((item) => item.id === currentInputRequestId);
@@ -1862,18 +1872,18 @@ function createProjectionBehavior(
 
 function toRuntimeExecutionEvent(
 	eventType: 'execution.updated' | 'execution.completed' | 'execution.failed',
-	snapshot: AgentExecutionSnapshot
+	snapshot: AgentExecutionType
 ): AgentExecutionEvent {
 	switch (eventType) {
 		case 'execution.updated':
-			return { type: 'execution.updated', snapshot };
+			return { type: 'execution.updated', execution: snapshot };
 		case 'execution.completed':
-			return { type: 'execution.completed', snapshot };
+			return { type: 'execution.completed', execution: snapshot };
 		case 'execution.failed':
 			return {
 				type: 'execution.failed',
 				reason: snapshot.failureMessage ?? snapshot.progress.detail ?? 'Agent execution failed.',
-				snapshot
+				execution: snapshot
 			};
 	}
 }

@@ -12,11 +12,11 @@ supersedes: []
 superseded_by: []
 ---
 
-Mission will extend the daemon-owned `mission-mcp` server beyond Agent signal tools by exposing Agent execution semantic operations.
+Mission will extend the daemon-owned `open-mission-mcp` server beyond Agent signal tools by exposing Agent execution semantic operations.
 
-An Agent execution semantic operation is a read-only daemon-owned operation made available to a registered Agent execution through its `mission-mcp` access. It gives the Agent structured access to Mission-approved context such as Artifact reads, repository code intelligence, symbol context, impact analysis, and route/tool maps without asking the Agent to rediscover the same information by repeatedly searching the filesystem.
+An Agent execution semantic operation is a read-only daemon-owned operation made available to a registered Agent execution through its `open-mission-mcp` access. It gives the Agent structured access to Mission-approved context such as Artifact reads, repository code intelligence, symbol context, impact analysis, and route/tool maps without asking the Agent to rediscover the same information by repeatedly searching the filesystem.
 
-This is an intentional expansion of ADR-0024. ADR-0024 kept `mission-mcp` narrowly framed as an Agent signal transport so MCP could not become a hidden workflow authority or generic repository API. Mission now needs a second MCP-backed lane: scoped semantic reads that help an Agent perform its assigned Mission work while preserving daemon ownership, scope authorization, journaling, and provider neutrality.
+This is an intentional expansion of ADR-0024. ADR-0024 kept `open-mission-mcp` narrowly framed as an Agent signal transport so MCP could not become a hidden workflow authority or generic repository API. Mission now needs a second MCP-backed lane: scoped semantic reads that help an Agent perform its assigned Mission work while preserving daemon ownership, scope authorization, journaling, and provider neutrality.
 
 ## Context
 
@@ -28,7 +28,7 @@ Mission also already has the first seed of this model: `read_artifact` is implem
 
 ## Decision
 
-`mission-mcp` may expose two classes of tools for a registered Agent execution:
+`open-mission-mcp` may expose two classes of tools for a registered Agent execution:
 
 1. Agent signal tools that route Agent-authored observations into AgentExecution policy and owner behavior.
 2. Agent execution semantic operations that perform scoped daemon-owned read operations and record runtime facts.
@@ -41,7 +41,7 @@ The canonical route for semantic operations is:
 
 ```text
 Agent runtime MCP tool call
-  -> mission-mcp tool ingress
+  -> open-mission-mcp tool ingress
   -> session authorization and operation input schema validation
   -> AgentExecutionRegistry route by Agent execution id
   -> AgentExecutor semantic operation entry point
@@ -51,7 +51,7 @@ Agent runtime MCP tool call
   -> structured operation result
 ```
 
-Semantic operations are read-only in this decision. They may read file-backed Artifacts, Repository roots, Mission worktree roots, daemon-owned read indexes, Git diff state, and Entity data views when the Agent execution scope allows that access. They must not mutate Mission workflow state, Entity storage records, repository files, Git refs, Mission dossiers, Airport surface state, or Agent execution state except for recording authorized runtime facts and activity records in the AgentExecution journal.
+Semantic operations are read-only in this decision. They may read file-backed Artifacts, Repository roots, Mission worktree roots, daemon-owned read indexes, Git diff state, and Entity data views when the Agent execution scope allows that access. They must not mutate Mission workflow state, Entity storage records, repository files, Git refs, Mission dossiers, Open Mission surface state, or Agent execution state except for recording authorized runtime facts and activity records in the AgentExecution journal.
 
 Mutation-like capabilities inspired by code intelligence tools, such as graph-assisted rename, are deliberately excluded from this ADR. If Mission later adds them, they must enter through Entity commands or another explicit mutation decision, not through read-only semantic operations.
 
@@ -93,7 +93,7 @@ Owner identity and repository/worktree roots are resolved by the daemon from the
 
 ## Security And Locality
 
-Semantic operations inherit `mission-mcp` locality rules. A stdio bridge is allowed when an Agent runtime requires stdio MCP, but the bridge is only a transport adapter to the daemon-owned server.
+Semantic operations inherit `open-mission-mcp` locality rules. A stdio bridge is allowed when an Agent runtime requires stdio MCP, but the bridge is only a transport adapter to the daemon-owned server.
 
 Operations must be least-privilege and scope-bound. A task-scoped Agent execution may read the Mission worktree and task context that the daemon granted; a system-scoped execution does not automatically gain repository code intelligence. Repository and Mission worktree access must reject path traversal and must respect ignored, binary, oversized, generated, and sensitive-file policies defined by the code intelligence indexer.
 
@@ -101,8 +101,8 @@ Raw query escape hatches are not part of the baseline semantic operation surface
 
 ## Consequences
 
-- Mission Agents can ask the Mission daemon for structured context instead of repeatedly searching the repository by hand.
-- `mission-mcp` becomes a scoped Agent execution context surface as well as a signal transport, while remaining daemon-owned and local.
+- Mission Agents can ask the Open Mission daemon for structured context instead of repeatedly searching the repository by hand.
+- `open-mission-mcp` becomes a scoped Agent execution context surface as well as a signal transport, while remaining daemon-owned and local.
 - Artifact reads, code search, symbol context, impact analysis, route impact, and tool maps can share one semantic operation catalog.
 - AgentExecution journals gain durable runtime facts for semantic reads, improving auditability and future replay/projection.
 - The MCP stdio bridge and adapter provisioning must support non-signal semantic operation schemas and must stop assuming every MCP tool is an Agent signal.

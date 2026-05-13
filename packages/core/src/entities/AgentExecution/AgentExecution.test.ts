@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { deriveAgentExecutionInteractionCapabilities, type AgentExecutionSnapshot } from './AgentExecutionProtocolTypes.js';
+import { deriveAgentExecutionInteractionCapabilities } from './AgentExecutionProtocolTypes.js';
 import { deriveAgentExecutionProtocolOwner } from './AgentExecutionProtocolDescriptor.js';
 import { AgentExecution } from './AgentExecution.js';
 import { AgentExecutionContract, createAgentExecutionDataChangedEvent } from './AgentExecutionContract.js';
 import { AgentExecutionObservationPolicy } from './AgentExecutionObservationPolicy.js';
-import { AgentExecutionDataSchema, AgentExecutionProtocolDescriptorSchema } from './AgentExecutionSchema.js';
-import type { AgentExecutionDataType, AgentExecutionRecord } from './AgentExecutionSchema.js';
+import { AgentExecutionSchema, AgentExecutionProtocolDescriptorSchema } from './AgentExecutionSchema.js';
+import type { AgentExecutionType, AgentExecutionRecord } from './AgentExecutionSchema.js';
 import type { AgentExecutionJournalRecordType } from './AgentExecutionJournalSchema.js';
 
 describe('AgentExecution', () => {
@@ -44,7 +44,7 @@ describe('AgentExecution', () => {
     });
 
     it('derives agent-message capabilities for non-terminals that accept semantic structured follow-up input', () => {
-        const snapshot: AgentExecutionSnapshot = {
+        const snapshot: AgentExecutionType = {
             agentId: 'codex',
             agentExecutionId: 'AgentExecution-2',
             scope: {
@@ -80,8 +80,8 @@ describe('AgentExecution', () => {
             updatedAt: '2026-05-04T00:00:00.000Z'
         };
 
-        const state = AgentExecution.createStateFromSnapshot({
-            snapshot,
+        const state = AgentExecution.createStateFromExecution({
+            execution: snapshot,
             adapterLabel: 'Codex'
         });
 
@@ -155,7 +155,7 @@ describe('AgentExecution', () => {
             type: 'execution.message',
             channel: 'agent',
             text: 'I am continuing now.',
-            snapshot: execution.getSnapshot()
+            execution: execution.getExecution()
         });
 
         execution.setAwaitingResponseToMessageId(null);
@@ -171,7 +171,7 @@ describe('AgentExecution', () => {
     });
 
     it('treats a replayed input request as structured follow-up input even when lifecycle stays running', async () => {
-        const execution = new AgentExecution(AgentExecutionDataSchema.parse({
+        const execution = new AgentExecution(AgentExecutionSchema.parse({
             id: 'agent_execution:mission-1/AgentExecution-1',
             ownerId: 'mission-1',
             agentExecutionId: 'AgentExecution-1',
@@ -198,7 +198,7 @@ describe('AgentExecution', () => {
         }));
 
         const privateCtor = AgentExecution as unknown as {
-            applyDerivedInteractionState(data: AgentExecutionDataType): AgentExecutionDataType;
+            applyDerivedInteractionState(data: AgentExecutionType): AgentExecutionType;
         };
 
         const hydrated = privateCtor.applyDerivedInteractionState(execution.toData());
@@ -227,7 +227,7 @@ describe('AgentExecution', () => {
             transportId: 'terminal'
         }));
 
-        expect(() => AgentExecutionDataSchema.parse({
+        expect(() => AgentExecutionSchema.parse({
             ...data,
             terminalName: 'mission-agent-execution'
         })).toThrow();
@@ -244,7 +244,7 @@ describe('AgentExecution', () => {
             selected: 'mcp-tool',
             degraded: false
         });
-        expect(AgentExecutionDataSchema.parse({
+        expect(AgentExecutionSchema.parse({
             ...data,
             transportState: {
                 selected: 'mcp-tool'
@@ -316,7 +316,7 @@ describe('AgentExecution', () => {
     });
 
     it('exposes the protocol descriptor as the source of truth for messages and signals', () => {
-        const descriptor = AgentExecution.createProtocolDescriptorForSnapshot(createRuntimeSnapshot());
+        const descriptor = AgentExecution.createProtocolDescriptorForExecution(createRuntimeSnapshot());
 
         expect(AgentExecutionProtocolDescriptorSchema.parse(descriptor)).toEqual(descriptor);
         expect(descriptor.owner).toEqual({
@@ -385,7 +385,7 @@ describe('AgentExecution', () => {
         ]);
         expect(new Set(descriptor.signals.flatMap((signal) => signal.deliveries))).toEqual(new Set(['stdout-marker', 'mcp-tool']));
         expect(descriptor.mcp).toEqual({
-            serverName: 'mission-mcp',
+            serverName: 'open-mission-mcp',
             exposure: 'agent-execution-scoped',
             publicApi: false
         });
@@ -528,18 +528,18 @@ describe('AgentExecution', () => {
                 origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
-                    scope: execution.getSnapshot().scope
+                    scope: execution.getExecution().scope
                 }
             },
             claimedAddress: {
                 agentExecutionId: 'AgentExecution-2',
-                scope: execution.getSnapshot().scope
+                scope: execution.getExecution().scope
             },
             rawText: 'signal payload',
             observedAt: '2026-05-04T00:01:00.000Z'
         };
         const policy = new AgentExecutionObservationPolicy();
-        const decision = policy.evaluate({ snapshot: execution.getSnapshot(), observation });
+        const decision = policy.evaluate({ execution: execution.getExecution(), observation });
 
         if (decision.action === 'reject') {
             throw new Error(decision.reason);
@@ -574,7 +574,7 @@ describe('AgentExecution', () => {
                 summary: 'Editing the implementation file.',
                 artifacts: [{
                     artifactId: 'artifact-1',
-                    path: 'apps/airport/web/src/app.css',
+                    path: 'apps/web/src/app.css',
                     activity: 'edit' as const
                 }],
                 source: 'agent-signal' as const,
@@ -584,18 +584,18 @@ describe('AgentExecution', () => {
                 origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
-                    scope: execution.getSnapshot().scope
+                    scope: execution.getExecution().scope
                 }
             },
             claimedAddress: {
                 agentExecutionId: 'AgentExecution-2',
-                scope: execution.getSnapshot().scope
+                scope: execution.getExecution().scope
             },
             rawText: 'signal payload',
             observedAt: '2026-05-04T00:02:00.000Z'
         };
         const policy = new AgentExecutionObservationPolicy();
-        const decision = policy.evaluate({ snapshot: execution.getSnapshot(), observation });
+        const decision = policy.evaluate({ execution: execution.getExecution(), observation });
 
         if (decision.action === 'reject') {
             throw new Error(decision.reason);
@@ -609,10 +609,10 @@ describe('AgentExecution', () => {
                 primitive: 'activity.progress',
                 payload: expect.objectContaining({
                     artifactId: 'artifact-1',
-                    path: 'apps/airport/web/src/app.css',
+                    path: 'apps/web/src/app.css',
                     artifacts: [expect.objectContaining({
                         artifactId: 'artifact-1',
-                        path: 'apps/airport/web/src/app.css',
+                        path: 'apps/web/src/app.css',
                         activity: 'edit'
                     })]
                 })
@@ -642,18 +642,18 @@ describe('AgentExecution', () => {
                 origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
-                    scope: execution.getSnapshot().scope
+                    scope: execution.getExecution().scope
                 }
             },
             claimedAddress: {
                 agentExecutionId: 'AgentExecution-2',
-                scope: execution.getSnapshot().scope
+                scope: execution.getExecution().scope
             },
             rawText: 'signal payload',
             observedAt: '2026-05-04T00:03:00.000Z'
         };
         const policy = new AgentExecutionObservationPolicy();
-        const decision = policy.evaluate({ snapshot: execution.getSnapshot(), observation });
+        const decision = policy.evaluate({ execution: execution.getExecution(), observation });
 
         if (decision.action === 'reject') {
             throw new Error(decision.reason);
@@ -696,18 +696,18 @@ describe('AgentExecution', () => {
                 origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
-                    scope: execution.getSnapshot().scope
+                    scope: execution.getExecution().scope
                 }
             },
             claimedAddress: {
                 agentExecutionId: 'AgentExecution-2',
-                scope: execution.getSnapshot().scope
+                scope: execution.getExecution().scope
             },
             rawText: 'status payload',
             observedAt: '2026-05-04T00:01:00.000Z'
         };
         const policy = new AgentExecutionObservationPolicy();
-        const decision = policy.evaluate({ snapshot: execution.getSnapshot(), observation });
+        const decision = policy.evaluate({ execution: execution.getExecution(), observation });
 
         if (decision.action === 'reject') {
             throw new Error(decision.reason);
@@ -747,18 +747,18 @@ describe('AgentExecution', () => {
                 origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
-                    scope: execution.getSnapshot().scope
+                    scope: execution.getExecution().scope
                 }
             },
             claimedAddress: {
                 agentExecutionId: 'AgentExecution-2',
-                scope: execution.getSnapshot().scope
+                scope: execution.getExecution().scope
             },
             rawText: 'needs input payload',
             observedAt: '2026-05-04T00:01:00.000Z'
         };
         const needsInputDecision = policy.evaluate({
-            snapshot: execution.getSnapshot(),
+            execution: execution.getExecution(),
             observation: needsInputObservation
         });
 
@@ -783,18 +783,18 @@ describe('AgentExecution', () => {
                 origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
-                    scope: execution.getSnapshot().scope
+                    scope: execution.getExecution().scope
                 }
             },
             claimedAddress: {
                 agentExecutionId: 'AgentExecution-2',
-                scope: execution.getSnapshot().scope
+                scope: execution.getExecution().scope
             },
             rawText: 'idle status payload',
             observedAt: '2026-05-04T00:01:05.000Z'
         };
         const idleDecision = policy.evaluate({
-            snapshot: execution.getSnapshot(),
+            execution: execution.getExecution(),
             observation: idleObservation
         });
 
@@ -835,18 +835,18 @@ describe('AgentExecution', () => {
                 origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
-                    scope: execution.getSnapshot().scope
+                    scope: execution.getExecution().scope
                 }
             },
             claimedAddress: {
                 agentExecutionId: 'AgentExecution-2',
-                scope: execution.getSnapshot().scope
+                scope: execution.getExecution().scope
             },
             rawText: 'needs input payload',
             observedAt: '2026-05-04T00:03:00.000Z'
         };
         const needsInputDecision = policy.evaluate({
-            snapshot: execution.getSnapshot(),
+            execution: execution.getExecution(),
             observation: needsInputObservation
         });
 
@@ -870,18 +870,18 @@ describe('AgentExecution', () => {
                 origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
-                    scope: execution.getSnapshot().scope
+                    scope: execution.getExecution().scope
                 }
             },
             claimedAddress: {
                 agentExecutionId: 'AgentExecution-2',
-                scope: execution.getSnapshot().scope
+                scope: execution.getExecution().scope
             },
             rawText: 'progress payload',
             observedAt: '2026-05-04T00:03:05.000Z'
         };
         const progressDecision = policy.evaluate({
-            snapshot: execution.getSnapshot(),
+            execution: execution.getExecution(),
             observation: progressObservation
         });
 
@@ -923,18 +923,18 @@ describe('AgentExecution', () => {
                 origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
-                    scope: execution.getSnapshot().scope
+                    scope: execution.getExecution().scope
                 }
             },
             claimedAddress: {
                 agentExecutionId: 'AgentExecution-2',
-                scope: execution.getSnapshot().scope
+                scope: execution.getExecution().scope
             },
             rawText: 'needs input payload',
             observedAt: '2026-05-04T00:02:00.000Z'
         };
         const needsInputDecision = policy.evaluate({
-            snapshot: execution.getSnapshot(),
+            execution: execution.getExecution(),
             observation: needsInputObservation
         });
 
@@ -958,18 +958,18 @@ describe('AgentExecution', () => {
                 origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
-                    scope: execution.getSnapshot().scope
+                    scope: execution.getExecution().scope
                 }
             },
             claimedAddress: {
                 agentExecutionId: 'AgentExecution-2',
-                scope: execution.getSnapshot().scope
+                scope: execution.getExecution().scope
             },
             rawText: 'ready for verification',
             observedAt: '2026-05-04T00:02:30.000Z'
         };
         const reviewDecision = policy.evaluate({
-            snapshot: execution.getSnapshot(),
+            execution: execution.getExecution(),
             observation: reviewObservation
         });
 
@@ -997,7 +997,7 @@ describe('AgentExecution', () => {
 
     it('notifies data changes for record-only claims that append timeline items', () => {
         const execution = AgentExecution.createLive(createRuntimeSnapshot());
-        const dataChanges: AgentExecutionDataType[] = [];
+        const dataChanges: AgentExecutionType[] = [];
         execution.onDidDataChange((data) => dataChanges.push(data));
         const observation = {
             observationId: 'observation-ready-1',
@@ -1013,18 +1013,18 @@ describe('AgentExecution', () => {
                 origin: 'agent-signal' as const,
                 address: {
                     agentExecutionId: 'AgentExecution-2',
-                    scope: execution.getSnapshot().scope
+                    scope: execution.getExecution().scope
                 }
             },
             claimedAddress: {
                 agentExecutionId: 'AgentExecution-2',
-                scope: execution.getSnapshot().scope
+                scope: execution.getExecution().scope
             },
             rawText: 'signal payload',
             observedAt: '2026-05-04T00:01:00.000Z'
         };
         const policy = new AgentExecutionObservationPolicy();
-        const decision = policy.evaluate({ snapshot: execution.getSnapshot(), observation });
+        const decision = policy.evaluate({ execution: execution.getExecution(), observation });
 
         if (decision.action === 'reject') {
             throw new Error(decision.reason);
@@ -1059,14 +1059,14 @@ describe('AgentExecution', () => {
                     ownerId: 'mission-1',
                     agentExecutionId: 'AgentExecution-2'
                 },
-                data
+                execution: data
             }
         });
     });
 
     it('publishes appended journal records in canonical data changes', () => {
         const execution = AgentExecution.createLive(createRuntimeSnapshot());
-        const dataChanges: AgentExecutionDataType[] = [];
+        const dataChanges: AgentExecutionType[] = [];
         execution.onDidDataChange((data) => dataChanges.push(data));
 
         execution.appendJournalRecord(createJournalRecord(), { notify: true });
@@ -1127,7 +1127,7 @@ function createAgentExecutionRecord(overrides: Partial<AgentExecutionRecord> = {
     };
 }
 
-function createRuntimeSnapshot(overrides: Partial<AgentExecutionSnapshot> = {}): AgentExecutionSnapshot {
+function createRuntimeSnapshot(overrides: Partial<AgentExecutionType> = {}): AgentExecutionType {
     return {
         agentId: 'codex',
         agentExecutionId: 'AgentExecution-2',

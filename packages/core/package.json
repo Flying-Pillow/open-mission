@@ -1,7 +1,7 @@
 {
-  "name": "@flying-pillow/mission-core",
+  "name": "@flying-pillow/open-mission-core",
   "version": "0.1.0-alpha.1",
-  "description": "Mission core workflow orchestrator and central mission logic",
+  "description": "Open Mission core workflow orchestrator and mission entity logic",
   "type": "module",
   "publishConfig": {
     "access": "public"
@@ -9,7 +9,7 @@
   "scripts": {
     "build": "rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json && node ./build/workflow/engine/copyTemplateFiles.js",
     "check": "tsc --noEmit -p tsconfig.json",
-    "dev": "MISSION_DAEMON_RUNTIME_MODE=source tsx --watch --tsconfig ./tsconfig.json ./src/daemon/missiond.ts run --dev",
+    "dev": "OPEN_MISSION_DAEMON_RUNTIME_MODE=source tsx --watch --tsconfig ./tsconfig.json ./src/daemon/open-missiond.ts run --dev",
     "lint": "vp lint src",
     "test": "vp test run --config vitest.config.ts"
   },

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-state_dir="${MISSION_VIRTUAL_DESKTOP_DIR:-/tmp/mission-virtual-desktop}"
+state_dir="${OPEN_MISSION_VIRTUAL_DESKTOP_DIR:-/tmp/mission-virtual-desktop}"
 
 if [[ ! -d "${state_dir}" ]]; then
   echo "Mission virtual desktop is already stopped."

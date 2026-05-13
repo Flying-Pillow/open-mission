@@ -11,7 +11,7 @@ import {
     MissionSchema,
     MissionStorageSchema
 } from './MissionSchema.js';
-import { AgentExecutionDataSchema } from '../AgentExecution/AgentExecutionSchema.js';
+import { AgentExecutionSchema } from '../AgentExecution/AgentExecutionSchema.js';
 import { ArtifactDataSchema } from '../Artifact/ArtifactSchema.js';
 import { StageDataSchema } from '../Stage/StageSchema.js';
 import { TaskCommandIds, TaskDataSchema } from '../Task/TaskSchema.js';
@@ -50,7 +50,7 @@ const stage = StageDataSchema.parse({
     tasks: [task]
 });
 
-const agentExecution = AgentExecutionDataSchema.parse({
+const agentExecution = AgentExecutionSchema.parse({
     id: 'agent_execution:mission-1/agent-execution-1',
     ownerId: 'mission-1',
     agentExecutionId: 'agent-execution-1',

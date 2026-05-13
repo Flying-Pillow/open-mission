@@ -19,7 +19,7 @@ export default tseslint.config(
   },
   ...svelte.configs.recommended,
   {
-    files: ['apps/airport/web/src/**/*.svelte'],
+    files: ['apps/web/src/**/*.svelte'],
     plugins: {
       '@typescript-eslint': tseslint.plugin,
     },

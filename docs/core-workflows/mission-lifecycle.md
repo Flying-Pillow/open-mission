@@ -16,6 +16,6 @@ A Mission is a governed unit of engineering work. Its lifecycle is derived from 
 | Implementation | Task-level changes and VERIFICATION.md evidence |
 | Audit | AUDIT.md and delivery readiness notes |
 
-The Running Mission instance owns lifecycle behavior while the Mission is live. It coordinates child Entities, applies the Mission workflow definition, evaluates gates, and publishes read data for Airport.
+The Running Mission instance owns lifecycle behavior while the Mission is live. It coordinates child Entities, applies the Mission workflow definition, evaluates gates, and publishes read data for Open Mission.
 
-Airport can request commands. It does not own the lifecycle.
+Open Mission can request commands. It does not own the lifecycle.

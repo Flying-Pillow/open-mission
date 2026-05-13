@@ -4,7 +4,7 @@ import type {
 import * as path from 'node:path';
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import type { AgentAdapter } from '../../daemon/runtime/agent/AgentAdapter.js';
-import type { AgentExecutionSnapshot } from '../AgentExecution/AgentExecutionProtocolTypes.js';
+import type { AgentExecutionType } from '../AgentExecution/AgentExecutionProtocolTypes.js';
 import type { AgentExecutionLaunchRequest } from '../AgentExecution/AgentExecutionSchema.js';
 import type { AgentRegistry } from '../Agent/AgentRegistry.js';
 import { AgentExecution } from '../AgentExecution/AgentExecution.js';
@@ -63,8 +63,8 @@ export type TaskOwner = {
 		task: TaskDossierRecordType,
 		adapter: AgentAdapter,
 		request: AgentExecutionLaunchRequest
-	): Promise<AgentExecutionSnapshot>;
-	recordStartedTaskAgentExecution(snapshot: AgentExecutionSnapshot): Promise<AgentExecution>;
+	): Promise<AgentExecutionType>;
+	recordStartedTaskAgentExecution(snapshot: AgentExecutionType): Promise<AgentExecution>;
 	recordTaskAgentExecutionLaunchFailure(taskId: string, error: unknown): Promise<void>;
 };
 

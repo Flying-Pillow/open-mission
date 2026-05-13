@@ -159,6 +159,7 @@ async function createConfiguredAgent(
             : {
                 available: false,
                 ...(availability.reason ? { reason: availability.reason } : {})
-            }
+            },
+        diagnostics: adapter.readDiagnostics()
     }), adapter);
 }

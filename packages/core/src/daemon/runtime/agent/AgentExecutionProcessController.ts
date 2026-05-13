@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { AgentExecution } from '../../../entities/AgentExecution/AgentExecution.js';
 import type {
     AgentCommand,
-    AgentExecutionSnapshot,
+    AgentExecutionType,
     AgentPrompt,
     AgentTaskContext
 } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
@@ -59,28 +59,28 @@ export class AgentExecutionProcessController implements AgentExecutionRuntimeCon
         });
     }
 
-    public submitPrompt(_prompt: AgentPrompt): Promise<AgentExecutionSnapshot> {
+    public submitPrompt(_prompt: AgentPrompt): Promise<AgentExecutionType> {
         throw new Error(`AgentExecution '${this.execution.agentExecutionId}' is running in direct stdout mode and does not accept follow-up prompts.`);
     }
 
-    public submitCommand(command: AgentCommand): Promise<AgentExecutionSnapshot> {
+    public submitCommand(command: AgentCommand): Promise<AgentExecutionType> {
         if (command.type === 'interrupt') {
             return this.cancel(command.reason);
         }
         throw new Error(`AgentExecution '${this.execution.agentExecutionId}' is running in direct stdout mode and only supports interruption.`);
     }
 
-    public complete(): Promise<AgentExecutionSnapshot> {
+    public complete(): Promise<AgentExecutionType> {
         return this.execution.complete();
     }
 
-    public async cancel(reason?: string): Promise<AgentExecutionSnapshot> {
+    public async cancel(reason?: string): Promise<AgentExecutionType> {
         this.disposed = true;
         this.child?.kill('SIGINT');
         return this.execution.cancelRuntime(reason);
     }
 
-    public async terminate(reason?: string): Promise<AgentExecutionSnapshot> {
+    public async terminate(reason?: string): Promise<AgentExecutionType> {
         this.disposed = true;
         this.child?.kill('SIGTERM');
         return this.execution.terminateRuntime(reason);
@@ -157,7 +157,7 @@ export class AgentExecutionProcessController implements AgentExecutionRuntimeCon
             type: 'execution.message',
             channel,
             text: line,
-            snapshot: this.execution.getSnapshot()
+            execution: this.execution.getExecution()
         });
     }
 }
@@ -165,10 +165,10 @@ export class AgentExecutionProcessController implements AgentExecutionRuntimeCon
 function createProcessRunningSnapshot(input: {
     agentId: string;
     agentExecutionId: string;
-    scope: AgentExecutionSnapshot['scope'];
+    scope: AgentExecutionType['scope'];
     workingDirectory: string;
     task?: AgentTaskContext;
-}): AgentExecutionSnapshot {
+}): AgentExecutionType {
     const timestamp = new Date().toISOString();
     const missionId = getAgentExecutionScopeMissionId(input.scope);
     const taskId = getAgentExecutionScopeTaskId(input.scope) ?? input.task?.taskId;

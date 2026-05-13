@@ -2,24 +2,24 @@
     "version": "0.2.0",
     "compounds": [
         {
-            "name": "Mission Full Stack",
+            "name": "Open Mission Full Stack",
             "configurations": [
-                "Mission Daemon"
+                "Open Mission Daemon"
             ],
             "stopAll": true
         },
         {
-            "name": "Airport Web Full Stack",
+            "name": "Open Mission Web Full Stack",
             "configurations": [
-                "Airport Web Server",
-                "Airport Web Client"
+                "Open Mission Web Server",
+                "Open Mission Web Client"
             ],
             "stopAll": true
         }
     ],
     "configurations": [
         {
-            "name": "Mission Daemon",
+            "name": "Open Mission Daemon",
             "type": "node",
             "request": "launch",
             "cwd": "${workspaceFolder}/packages/adapters",
@@ -40,10 +40,10 @@
             "internalConsoleOptions": "neverOpen"
         },
         {
-            "name": "Airport Web Server",
+            "name": "Open Mission Web Server",
             "type": "node",
             "request": "launch",
-            "cwd": "${workspaceFolder}/apps/airport/web",
+            "cwd": "${workspaceFolder}/apps/web",
             "runtimeExecutable": "pnpm",
             "runtimeArgs": [
                 "run",
@@ -61,11 +61,11 @@
             "internalConsoleOptions": "neverOpen"
         },
         {
-            "name": "Airport Web Client",
+            "name": "Open Mission Web Client",
             "type": "chrome",
             "request": "launch",
             "url": "http://localhost:5174",
-            "webRoot": "${workspaceFolder}/apps/airport/web",
+            "webRoot": "${workspaceFolder}/apps/web",
             "sourceMapPathOverrides": {
                 "/@vite/client": "${workspaceFolder}/node_modules/vite/dist/client/client.mjs",
                 "/src/*": "${webRoot}/src/*",

@@ -64,8 +64,8 @@ describe('AgentExecutionSignalLaunchContext', () => {
         });
 
         expect(context.launchEnv).toEqual({});
-        expect(context.agentExecutionInstructions).toContain('Mission MCP is already connected and available.');
-        expect(context.agentExecutionInstructions).toContain('Mission MCP is the authoritative operator interaction protocol for this session.');
+        expect(context.agentExecutionInstructions).toContain('Open Mission MCP is already connected and available.');
+        expect(context.agentExecutionInstructions).toContain('Open Mission MCP is the authoritative operator interaction protocol for this session.');
         expect(context.agentExecutionInstructions).toContain('Do not start or configure MCP servers.');
         expect(context.agentExecutionInstructions).toContain('Do not attempt to provision infrastructure for this session.');
         expect(context.agentExecutionInstructions).toContain('Do not use provider-native approval UI, confirmation flows, terminal permission requests, or chat-native prompts for operator interaction.');

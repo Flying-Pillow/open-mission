@@ -39,15 +39,15 @@ importers:
         specifier: ^4.0.18
         version: 4.1.4(@types/node@25.6.0)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0))
 
-  apps/airport/native:
+  apps/native:
     devDependencies:
       '@tauri-apps/cli':
         specifier: ^2.10.1
         version: 2.10.1
 
-  apps/airport/web:
+  apps/web:
     dependencies:
-      '@flying-pillow/mission-core':
+      '@flying-pillow/open-mission-core':
         specifier: workspace:*
         version: link:../../../packages/core
       '@iconify/svelte':
@@ -214,12 +214,12 @@ importers:
       '@clack/prompts':
         specifier: ^1.1.0
         version: 1.2.0
-      '@flying-pillow/mission-airport-web':
-        specifier: workspace:*
-        version: link:../../apps/airport/web
-      '@flying-pillow/mission-core':
+      '@flying-pillow/open-mission-core':
         specifier: workspace:*
         version: link:../core
+      '@flying-pillow/open-mission-web':
+        specifier: workspace:*
+        version: link:../../apps/web
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)

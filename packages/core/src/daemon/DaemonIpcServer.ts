@@ -39,20 +39,20 @@ import { DaemonSurrealStore } from './runtime/DaemonSurrealStore.js';
 import { CodeIntelligenceService } from './runtime/code-intelligence/CodeIntelligenceService.js';
 import { getDefaultAgentExecutionRegistry, type AgentExecutionRegistry } from './runtime/agent/AgentExecutionRegistry.js';
 import {
-	MissionMcpRegisterAccessInputSchema,
-	MissionMcpCallToolInputSchema,
-	MissionMcpListToolsInputSchema,
-	MissionMcpServer
-} from './runtime/agent/mcp/MissionMcpServer.js';
+	OpenMissionMcpRegisterAccessInputSchema,
+	OpenMissionMcpCallToolInputSchema,
+	OpenMissionMcpListToolsInputSchema,
+	OpenMissionMcpServer
+} from './runtime/agent/mcp/OpenMissionMcpServer.js';
 
-export type MissionDaemonHandle = {
+export type OpenMissionDaemonHandle = {
 	manifest: Manifest;
 	socketPath: string;
 	closed: Promise<void>;
 	dispose: () => Promise<void>;
 };
 
-export type MissionDaemonStartOptions = {
+export type OpenMissionDaemonStartOptions = {
 	argv?: string[];
 	socketPath?: string;
 	surfacePath?: string;
@@ -78,7 +78,7 @@ export type DaemonIpcServer = {
 	destroyConnections: () => void;
 };
 
-export async function startMissionDaemon(options: MissionDaemonStartOptions = {}): Promise<MissionDaemonHandle> {
+export async function startOpenMissionDaemon(options: OpenMissionDaemonStartOptions = {}): Promise<OpenMissionDaemonHandle> {
 	const argv = options.argv ?? process.argv.slice(2);
 	const socketPath = resolveDaemonSocketPath(options.socketPath ?? readSocketOverride(argv));
 	const manifestPath = getDaemonManifestPath();
@@ -93,19 +93,21 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 		daemonProcessId: process.pid,
 		persistedLeaseStatePath: terminalLeaseStatePath,
 	});
-	const runtimeSupervisor = new DaemonRuntimeSupervisor({
-		daemonProcessId: process.pid,
-		startedAt,
-		terminalRegistry
-	});
 	const surfaceRootPath = resolveSurfacePath(options.surfacePath);
 	const missionRegistry = new MissionRegistryClass({ logger });
 	const agentExecutionRegistry = getDefaultAgentExecutionRegistry({ logger });
+	const openMissionMcpServer = new OpenMissionMcpServer({ agentExecutionRegistry, logger });
+	const runtimeSupervisor = new DaemonRuntimeSupervisor({
+		daemonProcessId: process.pid,
+		startedAt,
+		terminalRegistry,
+		agentExecutionRegistry,
+		openMissionMcpServer
+	});
 	const surrealStore = DaemonSurrealStore.forCodeRoot({ rootPath: surfaceRootPath, logger });
 	const codeIntelligenceService = new CodeIntelligenceService({ surrealStore });
-	const missionMcpServer = new MissionMcpServer({ agentExecutionRegistry, logger });
-	agentExecutionRegistry.configure({ missionMcpServer });
-	const ipcServer = createDaemonIpcServer({ startedAt, socketPath, missionRegistry, missionMcpServer, runtimeSupervisor, agentExecutionRegistry, surrealStore, codeIntelligenceService });
+	agentExecutionRegistry.configure({ openMissionMcpServer });
+	const ipcServer = createDaemonIpcServer({ startedAt, socketPath, missionRegistry, openMissionMcpServer, runtimeSupervisor, agentExecutionRegistry, surrealStore, codeIntelligenceService });
 	const notificationSources = startEntityEventSources(ipcServer.broadcastEvent, terminalRegistry);
 	let shutdownPromise: Promise<void> | undefined;
 	let closeResolve: (() => void) | undefined;
@@ -115,14 +117,14 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 		closeReject = reject;
 	});
 
-	logger.info('Mission daemon starting.', { pid: process.pid, socketPath });
+	logger.info('Open Mission daemon starting.', { pid: process.pid, socketPath });
 	let startupCompleted = false;
 
 	try {
 		await surrealStore.start();
-		await missionMcpServer.start();
+		await runtimeSupervisor.start();
 		await missionRegistry.hydrateDaemonMissions({ surfacePath: surfaceRootPath });
-		logger.info('Mission daemon hydration completed.');
+		logger.info('Open Mission daemon hydration completed.');
 		if (!isNamedPipePath(socketPath)) {
 			await fs.rm(socketPath, { force: true }).catch(() => undefined);
 		}
@@ -137,7 +139,6 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 		startupCompleted = true;
 	} finally {
 		if (!startupCompleted) {
-			await missionMcpServer.stop();
 			await surrealStore.stop();
 			missionRegistry.dispose();
 			notificationSources.dispose();
@@ -158,7 +159,7 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 		},
 	};
 	await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
-	logger.info('Mission daemon started.', {
+	logger.info('Open Mission daemon started.', {
 		pid: process.pid,
 		protocolVersion: PROTOCOL_VERSION,
 		socketPath
@@ -170,9 +171,8 @@ export async function startMissionDaemon(options: MissionDaemonStartOptions = {}
 		}
 
 		shutdownPromise = (async () => {
-			logger.info('Mission daemon shutting down.');
+			logger.info('Open Mission daemon shutting down.');
 			missionRegistry.dispose();
-			await missionMcpServer.stop();
 			await surrealStore.stop();
 			agentExecutionRegistry.dispose();
 			notificationSources.dispose();
@@ -220,7 +220,7 @@ export function createDaemonIpcServer(input: {
 	startedAt: string;
 	socketPath?: string;
 	missionRegistry: MissionRegistry;
-	missionMcpServer: MissionMcpServer;
+	openMissionMcpServer: OpenMissionMcpServer;
 	runtimeSupervisor?: DaemonRuntimeSupervisor;
 	agentExecutionRegistry?: AgentExecutionRegistry;
 	surrealStore?: DaemonSurrealStore;
@@ -299,7 +299,7 @@ async function handleRequestLine(
 		startedAt: string;
 		socketPath?: string;
 		missionRegistry: MissionRegistry;
-		missionMcpServer: MissionMcpServer;
+		openMissionMcpServer: OpenMissionMcpServer;
 		runtimeSupervisor?: DaemonRuntimeSupervisor;
 		agentExecutionRegistry?: AgentExecutionRegistry;
 		surrealStore?: DaemonSurrealStore;
@@ -335,7 +335,7 @@ async function createDaemonResponse(
 		startedAt: string;
 		socketPath?: string;
 		missionRegistry: MissionRegistry;
-		missionMcpServer: MissionMcpServer;
+		openMissionMcpServer: OpenMissionMcpServer;
 		runtimeSupervisor?: DaemonRuntimeSupervisor;
 		agentExecutionRegistry?: AgentExecutionRegistry;
 		surrealStore?: DaemonSurrealStore;
@@ -359,7 +359,7 @@ async function createDaemonResponseUnchecked(
 		startedAt: string;
 		socketPath?: string;
 		missionRegistry: MissionRegistry;
-		missionMcpServer: MissionMcpServer;
+		openMissionMcpServer: OpenMissionMcpServer;
 		runtimeSupervisor?: DaemonRuntimeSupervisor;
 		agentExecutionRegistry?: AgentExecutionRegistry;
 		surrealStore?: DaemonSurrealStore;
@@ -409,31 +409,32 @@ async function createDaemonResponseUnchecked(
 						loadedMissionCount: missionSummary.loadedMissionCount,
 						loadedRepositoryCount: missionSummary.loadedRepositoryCount,
 						...(context.surrealStore ? { surreal: context.surrealStore.readStatus() } : {}),
-						activeAgentExecutionCount: agentExecutionSummary?.activeAgentExecutionCount ?? 0
+						activeAgentExecutionCount: agentExecutionSummary?.activeAgentExecutionCount ?? 0,
+						...(agentExecutionSummary ? { agentExecutionSummary } : {})
 					}
 				})
 			};
 		}
-		case 'mission-mcp.registerAccess':
+		case 'open-mission-mcp.registerAccess':
 			return {
 				type: 'response',
 				id: request.id,
 				ok: true,
-				result: context.missionMcpServer.registerAccess(MissionMcpRegisterAccessInputSchema.parse(request.params))
+				result: context.openMissionMcpServer.registerAccess(OpenMissionMcpRegisterAccessInputSchema.parse(request.params))
 			};
-		case 'mission-mcp.listTools':
+		case 'open-mission-mcp.listTools':
 			return {
 				type: 'response',
 				id: request.id,
 				ok: true,
-				result: context.missionMcpServer.listTools(MissionMcpListToolsInputSchema.parse(request.params))
+				result: context.openMissionMcpServer.listTools(OpenMissionMcpListToolsInputSchema.parse(request.params))
 			};
-		case 'mission-mcp.callTool':
+		case 'open-mission-mcp.callTool':
 			return {
 				type: 'response',
 				id: request.id,
 				ok: true,
-				result: await context.missionMcpServer.callTool(MissionMcpCallToolInputSchema.parse(request.params))
+				result: await context.openMissionMcpServer.callTool(OpenMissionMcpCallToolInputSchema.parse(request.params))
 			};
 		case 'entity.query':
 			return {
@@ -467,7 +468,7 @@ async function createDaemonResponseUnchecked(
 				ok: false,
 				error: {
 					code: 'NOT_IMPLEMENTED',
-					message: `Mission daemon method '${request.method}' is not implemented in the daemon transport.`
+					message: `Open Mission daemon method '${request.method}' is not implemented in the daemon transport.`
 				}
 			};
 	}
@@ -486,7 +487,7 @@ function createErrorResponse(request: Request, error: unknown): Response {
 
 function logSlowDaemonRequest(request: Request, startedAtMs: number): void {
 	const durationMs = performance.now() - startedAtMs;
-	if (process.env['MISSION_DAEMON_RUNTIME_MODE'] !== 'source' || durationMs < 1_000) {
+	if (process.env['OPEN_MISSION_DAEMON_RUNTIME_MODE'] !== 'source' || durationMs < 1_000) {
 		return;
 	}
 
@@ -495,7 +496,7 @@ function logSlowDaemonRequest(request: Request, startedAtMs: number): void {
 		method?: unknown;
 	} : undefined;
 	process.stderr.write(`${JSON.stringify({
-		source: 'mission-daemon',
+		source: 'open-mission-daemon',
 		message: 'slow ipc request',
 		method: request.method,
 		entity: typeof params?.entity === 'string' ? params.entity : undefined,
@@ -612,7 +613,7 @@ async function acquireDaemonRuntimeLock(socketPath: string): Promise<DaemonRunti
 				const reachableDaemon = await probeDaemonSocket(existingSocketPath);
 				if (reachableDaemon) {
 					throw new Error(
-						`Mission daemon is already running with pid ${String(reachableDaemon.pid)} at '${existingSocketPath}'. Stop it before starting another daemon.`
+						`Open Mission daemon is already running with pid ${String(reachableDaemon.pid)} at '${existingSocketPath}'. Stop it before starting another daemon.`
 					);
 				}
 
@@ -625,7 +626,7 @@ async function acquireDaemonRuntimeLock(socketPath: string): Promise<DaemonRunti
 		}
 	}
 
-	throw new Error('Mission daemon runtime lock could not be acquired.');
+	throw new Error('Open Mission daemon runtime lock could not be acquired.');
 }
 
 async function releaseDaemonRuntimeLock(lockPath: string): Promise<void> {
@@ -667,7 +668,7 @@ async function assertNoReachableDaemon(socketPath: string): Promise<void> {
 	}
 
 	throw new Error(
-		`Mission daemon is already running with pid ${String(reachableDaemon.pid)} at '${manifestSocketPath ?? socketPath}'. Stop it before starting another daemon.`
+		`Open Mission daemon is already running with pid ${String(reachableDaemon.pid)} at '${manifestSocketPath ?? socketPath}'. Stop it before starting another daemon.`
 	);
 }
 
@@ -777,5 +778,5 @@ function readSocketOverride(argv: string[]): string | undefined {
 }
 
 function resolveSurfacePath(surfacePath: string | undefined): string {
-	return surfacePath?.trim() || process.env['MISSION_SURFACE_PATH']?.trim() || process.cwd();
+	return surfacePath?.trim() || process.env['OPEN_MISSION_SURFACE_PATH']?.trim() || process.cwd();
 }

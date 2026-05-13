@@ -1,11 +1,11 @@
 {
   "name": "@flying-pillow/open-mission",
   "version": "0.1.0-alpha.1",
-  "description": "Mission CLI distribution package for the mission and missiond launchers; Mission now boots the native Airport host.",
+  "description": "Open Mission CLI distribution package for the open-mission and open-missiond launchers.",
   "type": "module",
   "bin": {
-    "mission": "build/mission.js",
-    "missiond": "build/missiond.js"
+    "open-mission": "build/open-mission.js",
+    "open-missiond": "build/open-missiond.js"
   },
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -24,15 +24,15 @@
   "scripts": {
     "build": "rm -rf build tsconfig.tsbuildinfo && tsc -p tsconfig.json",
     "check": "tsc --noEmit -p tsconfig.json",
-    "install:dev": "tsx --tsconfig ./tsconfig.dev.json ./src/mission.ts install --json",
-    "missiond:dev": "MISSION_DAEMON_RUNTIME_MODE=source tsx --watch --watch-path ./src --watch-path ../core/src --tsconfig ./tsconfig.dev.json ./src/missiond.ts run --dev",
+    "install:dev": "tsx --tsconfig ./tsconfig.dev.json ./src/open-mission.ts install --json",
+    "open-mission-daemon:dev": "OPEN_MISSION_DAEMON_RUNTIME_MODE=source tsx --watch --watch-path ./src --watch-path ../core/src --tsconfig ./tsconfig.dev.json ./src/open-missiond.ts run --dev",
     "lint": "vp lint src",
     "test": "vp test run --passWithNoTests"
   },
   "dependencies": {
     "@clack/prompts": "^1.1.0",
-    "@flying-pillow/mission-airport-web": "workspace:*",
-    "@flying-pillow/mission-core": "workspace:*",
+    "@flying-pillow/open-mission-web": "workspace:*",
+    "@flying-pillow/open-mission-core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^4.4.3"
   },

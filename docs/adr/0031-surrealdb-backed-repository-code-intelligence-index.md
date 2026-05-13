@@ -14,7 +14,7 @@ superseded_by: []
 
 Mission will build a native Code intelligence index backed by the daemon's SurrealDB direction instead of depending on GitNexus' `.gitnexus/` storage model as the Mission integration path.
 
-The index is a daemon-owned, rebuildable read model over one Code root. A Code root may be a Repository root or a Mission worktree root, but the indexer and graph store treat both identically after scope resolution. The index records source files, symbols, imports, calls, routes, tools, execution flows, clusters, and typed code relationships so Agent execution semantic operations can answer codebase questions through `mission-mcp`.
+The index is a daemon-owned, rebuildable read model over one Code root. A Code root may be a Repository root or a Mission worktree root, but the indexer and graph store treat both identically after scope resolution. The index records source files, symbols, imports, calls, routes, tools, execution flows, clusters, and typed code relationships so Agent execution semantic operations can answer codebase questions through `open-mission-mcp`.
 
 ## Context
 
@@ -71,7 +71,7 @@ Relationship types should begin with a small GitNexus-inspired set:
 - `STEP_IN_PROCESS`
 - `MEMBER_OF`
 
-Mission may adjust names during implementation, but relationship vocabulary must be centralized in one schema registry and must not be re-declared in MCP tools, Airport UI, tests, and storage adapters independently.
+Mission may adjust names during implementation, but relationship vocabulary must be centralized in one schema registry and must not be re-declared in MCP tools, Open Mission UI, tests, and storage adapters independently.
 
 ## Ownership
 
@@ -103,7 +103,7 @@ Language coverage is explicit and capability-based. Mission indexes eligible tex
 
 AgentExecutionSemanticOperations owns the Agent-facing operation descriptors and runtime fact recording. It delegates code intelligence reads to the Code intelligence service.
 
-Airport web may later render a visual representation of the Code graph for operator review and debugging, but it does not own the index, query semantics, operation schemas, graph records, or root selection.
+Open Mission web may later render a visual representation of the Code graph for operator review and debugging, but it does not own the index, query semantics, operation schemas, graph records, or root selection.
 
 ## Scope And Staleness
 
@@ -124,7 +124,7 @@ Index updates publish coherent snapshots. The baseline update strategy is rebuil
 
 ## Query Surface
 
-The first Agent-facing query surface is through Agent execution semantic operations over `mission-mcp`, not through a generic Airport route or public MCP server.
+The first Agent-facing query surface is through Agent execution semantic operations over `open-mission-mcp`, not through a generic Open Mission app route or public MCP server.
 
 Baseline operations:
 
@@ -139,9 +139,9 @@ Raw SurrealQL is not part of the baseline. If a future operator/debug mode needs
 
 ## Consequences
 
-- Mission gains native GitNexus-like code intelligence while keeping Mission daemon authority and spec-driven workflow integration.
+- Mission gains native GitNexus-like code intelligence while keeping Open Mission daemon authority and spec-driven workflow integration.
 - Agents can ask Mission for relevant code context in the same execution-scoped MCP channel they use for structured signals.
-- Airport web can later visualize active Code graph snapshots as a read-only operator lens without becoming the first consumer or graph authority.
+- Open Mission web can later visualize active Code graph snapshots as a read-only operator lens without becoming the first consumer or graph authority.
 - SurrealDB becomes useful for graph traversal, full-text search, relation queries, and possible vector search without becoming a shared raw database client.
 - The index can be rebuilt, pruned, or optimized without Mission runtime migrations because it is derived read material.
 - Implementation must include deterministic fixture tests for parser output, graph loading, query behavior, staleness, scope enforcement, and MCP semantic operation results.
@@ -152,7 +152,7 @@ Raw SurrealQL is not part of the baseline. If a future operator/debug mode needs
 - Do not copy GitNexus source code into Mission without a separate license decision.
 - Do not let arbitrary daemon modules write code graph records directly; graph writes go through the Code graph store during index builds.
 - Do not expose a raw SurrealDB client as the code intelligence API.
-- Do not let Airport web visual graph features mutate index records, define relation semantics, run raw SurrealQL, or choose Code roots outside daemon scope resolution.
+- Do not let Open Mission web visual graph features mutate index records, define relation semantics, run raw SurrealQL, or choose Code roots outside daemon scope resolution.
 - Do not hand-maintain SurrealQL DDL for the code graph when the shape can be generated from Mission-owned zod-surreal schemas.
 - Do not persist code graph records as Entity storage records unless a future ADR promotes them into Entities.
 - Do not treat code clusters or code processes as workflow truth; they are heuristic read-model material.

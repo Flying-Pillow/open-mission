@@ -27,6 +27,11 @@ describe('Agent', () => {
             id: 'agent:projection-agent',
             agentId: 'projection-agent',
             displayName: 'Projection Agent',
+            diagnostics: {
+                command: process.execPath,
+                supportsUsageParsing: false,
+                runtimeMessageCount: 0
+            },
             commands: []
         });
     });

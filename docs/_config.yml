@@ -1,5 +1,5 @@
-title: Mission Documentation
-description: Mission is the operator-first control tower for AI-driven software delivery.
+title: Open Mission Documentation
+description: Open Mission is the operator-first control system for AI-driven software delivery.
 remote_theme: just-the-docs/just-the-docs
 plugins:
   - jekyll-remote-theme

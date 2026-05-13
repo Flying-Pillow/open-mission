@@ -2,6 +2,7 @@ import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/E
 import type { AgentAdapter } from '../../daemon/runtime/agent/AgentAdapter.js';
 import {
     agentEntityName,
+    AgentAdapterDiagnosticsSchema,
     AgentSchema,
     AgentFindSchema,
     AgentTestConnectionInputSchema,
@@ -49,7 +50,8 @@ export class Agent extends Entity<AgentType, string> {
             displayName: adapter.displayName,
             icon: adapter.icon,
             capabilities: cloneCapabilities(capabilities),
-            availability: normalizeAvailability(availability)
+            availability: normalizeAvailability(availability),
+            diagnostics: cloneDiagnostics(adapter.readDiagnostics())
         }), adapter);
     }
 
@@ -108,5 +110,9 @@ function normalizeAvailability(input: { available: boolean; reason?: string }): 
             available: false,
             ...(input.reason ? { reason: input.reason } : {})
         };
+}
+
+function cloneDiagnostics(input: ReturnType<AgentAdapter['readDiagnostics']>) {
+    return AgentAdapterDiagnosticsSchema.parse(input);
 }
 

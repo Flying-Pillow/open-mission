@@ -2,23 +2,23 @@ import type { AgentExecution } from '../../../entities/AgentExecution/AgentExecu
 import type {
     AgentCommand,
     AgentExecutionReference,
-    AgentExecutionSnapshot,
+    AgentExecutionType,
     AgentLaunchConfig,
     AgentPrompt
 } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import type {
     AgentExecutionProtocolDescriptorType,
 } from '../../../entities/AgentExecution/AgentExecutionProtocolSchema.js';
-import type { AgentExecutionTransportStateType } from '../../../entities/AgentExecution/AgentExecutionRuntimeSchema.js';
+import type { AgentExecutionTransportStateType } from '../../../entities/AgentExecution/AgentExecutionStateSchema.js';
 import type { SharedTerminalRegistryOptions } from '../../../entities/Terminal/TerminalRegistry.js';
 
 export type AgentExecutionRuntimeController = {
     readonly execution: AgentExecution;
-    submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionSnapshot>;
-    submitCommand(command: AgentCommand): Promise<AgentExecutionSnapshot>;
-    complete(): Promise<AgentExecutionSnapshot>;
-    cancel(reason?: string): Promise<AgentExecutionSnapshot>;
-    terminate(reason?: string): Promise<AgentExecutionSnapshot>;
+    submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionType>;
+    submitCommand(command: AgentCommand): Promise<AgentExecutionType>;
+    complete(): Promise<AgentExecutionType>;
+    cancel(reason?: string): Promise<AgentExecutionType>;
+    terminate(reason?: string): Promise<AgentExecutionType>;
     dispose(): void;
 };
 

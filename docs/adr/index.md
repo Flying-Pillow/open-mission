@@ -8,7 +8,7 @@ description: Accepted architectural decisions that constrain Mission changes.
 
 ADRs are the durable architecture register for Mission.
 
-Read them when a change touches ownership, naming, state, runtime behavior, repository initialization, Airport surfaces, compatibility policy, or documentation authority. Each ADR carries frontmatter so the docs site and architecture skills can treat decisions as structured records.
+Read them when a change touches ownership, naming, state, runtime behavior, repository initialization, Open Mission surfaces, compatibility policy, or documentation authority. Each ADR carries frontmatter so the docs site and architecture skills can treat decisions as structured records.
 
 `CONTEXT.md` defines the canonical language and relationships. ADRs define the durable rules and trade-offs behind that language. The old specifications corpus has been removed from the active docs tree after its relevant architecture was registered here.
 
@@ -19,9 +19,9 @@ Read them when a change touches ownership, naming, state, runtime behavior, repo
 - [Clean-Sheet Implementation Discipline](0000-clean-sheet-implementation-discipline.md)
 - [Architecture Decision Records As System Register](0019-architecture-decision-records-as-system-register.md)
 
-### Airport Application
+### Open Mission App
 
-- [Airport Application Host Boundaries](0020-airport-application-host-boundaries.md)
+- [Open Mission App Host Boundaries](0020-open-mission-app-host-boundaries.md)
 
 ### Entity Model And Contracts
 
@@ -51,10 +51,10 @@ Read them when a change touches ownership, naming, state, runtime behavior, repo
 - [Prompt-Scoped Agent Execution Signals](0017-prompt-scoped-agent-execution-signals.md)
 - [Agent Execution And Agent Adapter Vocabulary](0018-agent-execution-and-agent-adapter-vocabulary.md)
 - [Agent Execution Structured Interaction Vocabulary](0022-agent-execution-structured-interaction-vocabulary.md)
-- [Mission MCP Server Agent Signal Transport](0024-mission-mcp-server-agent-signal-transport.md)
+- [Mission MCP Server Agent Signal Transport](0024-open-mission-mcp-server-agent-signal-transport.md)
 - [Agent Execution Interaction Journal](0025-agent-execution-interaction-journal.md)
 - [Typed Agent Execution Journal Ledger](0027-typed-agent-execution-journal-ledger.md)
-- [Mission MCP Agent Execution Semantic Operations](0030-mission-mcp-agent-execution-semantic-operations.md)
+- [Mission MCP Agent Execution Semantic Operations](0030-open-mission-mcp-agent-execution-semantic-operations.md)
 - [Agent Connection Tests As Agent Entity Commands](0032-agent-connection-tests-as-agent-entity-commands.md)
 - [Structured-First Agent Interaction With Terminal Capability](0033-structured-first-agent-interaction-with-terminal-capability.md)
 - [Runtime-Owned Agent Model Selection](0034-runtime-owned-agent-model-selection.md)

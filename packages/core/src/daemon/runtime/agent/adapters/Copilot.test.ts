@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
 	AgentCommand,
 	AgentExecutionEvent,
-	AgentExecutionSnapshot,
+	AgentExecutionType,
 	AgentLaunchConfig,
 	AgentPrompt
 } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
@@ -14,7 +14,7 @@ import { Agent } from '../../../../entities/Agent/Agent.js';
 import { AgentRegistry } from '../../../../entities/Agent/AgentRegistry.js';
 import { createAgentAdapter, type AgentAdapter } from '../AgentAdapter.js';
 import { AgentExecutor } from '../AgentExecutor.js';
-import { MissionMcpServer } from '../mcp/MissionMcpServer.js';
+import { OpenMissionMcpServer } from '../mcp/OpenMissionMcpServer.js';
 import { createMemoryAgentExecutionJournalWriter } from '../testing/createMemoryAgentExecutionJournalWriter.js';
 import { createCopilot } from './Copilot.js';
 
@@ -61,18 +61,18 @@ function createLaunchConfigWithoutInitialPrompt(): AgentLaunchConfig {
 }
 
 type StartedTerminalExecution = {
-	getSnapshot(): AgentExecutionSnapshot;
+	getSnapshot(): AgentExecutionType;
 	onDidEvent(listener: (event: AgentExecutionEvent) => void): { dispose(): void };
-	submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionSnapshot>;
-	submitCommand(command: AgentCommand): Promise<AgentExecutionSnapshot>;
-	terminate(reason?: string): Promise<AgentExecutionSnapshot>;
+	submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionType>;
+	submitCommand(command: AgentCommand): Promise<AgentExecutionType>;
+	terminate(reason?: string): Promise<AgentExecutionType>;
 };
 
 async function startExecution(
 	adapter: AgentAdapter,
 	config: AgentLaunchConfig
 ): Promise<StartedTerminalExecution> {
-	const missionMcpServer = new MissionMcpServer({
+	const openMissionMcpServer = new OpenMissionMcpServer({
 		agentExecutionRegistry: {
 			routeTransportObservation() {
 				return {
@@ -84,19 +84,19 @@ async function startExecution(
 			}
 		}
 	});
-	await missionMcpServer.start();
+	await openMissionMcpServer.start();
 	const { journalWriter } = createMemoryAgentExecutionJournalWriter();
 	const executor = new AgentExecutor({
 		agentRegistry: new AgentRegistry({
 			agents: [await Agent.fromAdapter(adapter)]
 		}),
-		missionMcpServer,
+		openMissionMcpServer,
 		journalWriter
 	});
 	const execution = await executor.startExecution(config);
-	const agentExecutionId = execution.getSnapshot().agentExecutionId;
+	const agentExecutionId = execution.getExecution().agentExecutionId;
 	return {
-		getSnapshot: () => execution.getSnapshot(),
+		getSnapshot: () => execution.getExecution(),
 		onDidEvent: (listener) => execution.onDidEvent(listener),
 		submitPrompt: (prompt) => executor.submitPrompt(agentExecutionId, prompt),
 		submitCommand: (command) => executor.submitCommand(agentExecutionId, command),
@@ -166,12 +166,12 @@ describe('Copilot', () => {
 		const mcpConfig = JSON.parse(await fs.readFile(mcpConfigReference?.slice(1) ?? '', 'utf8')) as {
 			mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
 		};
-		expect(mcpConfig.mcpServers?.['mission-mcp']?.args).toEqual(['mcp', 'connect', '--agent-execution', snapshot.agentExecutionId]);
-		expect(mcpConfig.mcpServers?.['mission-mcp']?.env?.['MISSION_AGENT_EXECUTION_OWNER_ID']).toBeTruthy();
-		expect(mcpConfig.mcpServers?.['mission-mcp']?.env?.['MISSION_MCP_TOKEN']).toBeTruthy();
+		expect(mcpConfig.mcpServers?.['open-mission-mcp']?.args).toEqual(['mcp', 'connect', '--agent-execution', snapshot.agentExecutionId]);
+		expect(mcpConfig.mcpServers?.['open-mission-mcp']?.env?.['OPEN_MISSION_AGENT_EXECUTION_OWNER_ID']).toBeTruthy();
+		expect(mcpConfig.mcpServers?.['open-mission-mcp']?.env?.['OPEN_MISSION_MCP_TOKEN']).toBeTruthy();
 		expect(state.spawnedArgs.some((arg) => arg.includes('Structured status markers'))).toBe(false);
-		expect(state.spawnedArgs.some((arg) => arg.includes('Mission MCP is already connected and available.'))).toBe(true);
-		expect(state.spawnedArgs.some((arg) => arg.includes('Mission MCP is the authoritative operator interaction protocol'))).toBe(true);
+		expect(state.spawnedArgs.some((arg) => arg.includes('Open Mission MCP is already connected and available.'))).toBe(true);
+		expect(state.spawnedArgs.some((arg) => arg.includes('Open Mission MCP is the authoritative operator interaction protocol'))).toBe(true);
 		expect(state.spawnedArgs.some((arg) => arg.includes('Do not ask the operator for AgentExecution ids, event ids, tokens, or transport fields.'))).toBe(true);
 		expect(state.spawnedArgs.some((arg) => arg.includes('@task::'))).toBe(false);
 		expect(state.writes).not.toContain('Implement the task.');
@@ -179,7 +179,7 @@ describe('Copilot', () => {
 
 
 	it('uses the source Mission CLI bridge for MCP config in source runtime mode', async () => {
-		vi.stubEnv('MISSION_DAEMON_RUNTIME_MODE', 'source');
+		vi.stubEnv('OPEN_MISSION_DAEMON_RUNTIME_MODE', 'source');
 		const adapter = createAgentAdapter(createCopilot({
 			launchMode: 'interactive',
 			command: 'copilot',
@@ -194,7 +194,7 @@ describe('Copilot', () => {
 		const mcpConfig = JSON.parse(await fs.readFile(mcpConfigReference?.slice(1) ?? '', 'utf8')) as {
 			mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
 		};
-		const bridge = mcpConfig.mcpServers?.['mission-mcp'];
+		const bridge = mcpConfig.mcpServers?.['open-mission-mcp'];
 
 		expect(bridge?.command).toBe('pnpm');
 		expect(bridge?.args).toEqual([
@@ -206,19 +206,19 @@ describe('Copilot', () => {
 			'tsx',
 			'--tsconfig',
 			'./tsconfig.dev.json',
-			'./src/mission.ts',
+			'./src/open-mission.ts',
 			'mcp',
 			'connect',
 			'--agent-execution',
 			snapshot.agentExecutionId
 		]);
-		expect(bridge?.env?.['MISSION_AGENT_EXECUTION_OWNER_ID']).toBeTruthy();
-		expect(bridge?.env?.['MISSION_MCP_TOKEN']).toBeTruthy();
+		expect(bridge?.env?.['OPEN_MISSION_AGENT_EXECUTION_OWNER_ID']).toBeTruthy();
+		expect(bridge?.env?.['OPEN_MISSION_MCP_TOKEN']).toBeTruthy();
 	});
 
 	it('honors an explicit Mission CLI bridge command override', async () => {
-		vi.stubEnv('MISSION_DAEMON_RUNTIME_MODE', 'source');
-		vi.stubEnv('MISSION_CLI_COMMAND', '/opt/mission/bin/mission');
+		vi.stubEnv('OPEN_MISSION_DAEMON_RUNTIME_MODE', 'source');
+		vi.stubEnv('OPEN_MISSION_CLI_COMMAND', '/opt/open-mission/bin/open-mission');
 		const adapter = createAgentAdapter(createCopilot({
 			launchMode: 'interactive',
 			command: 'copilot',
@@ -233,9 +233,9 @@ describe('Copilot', () => {
 		const mcpConfig = JSON.parse(await fs.readFile(mcpConfigReference?.slice(1) ?? '', 'utf8')) as {
 			mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
 		};
-		const bridge = mcpConfig.mcpServers?.['mission-mcp'];
+		const bridge = mcpConfig.mcpServers?.['open-mission-mcp'];
 
-		expect(bridge?.command).toBe('/opt/mission/bin/mission');
+		expect(bridge?.command).toBe('/opt/open-mission/bin/open-mission');
 		expect(bridge?.args).toEqual(['mcp', 'connect', '--agent-execution', snapshot.agentExecutionId]);
 	});
 

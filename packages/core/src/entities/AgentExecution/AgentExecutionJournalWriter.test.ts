@@ -134,7 +134,7 @@ describe('AgentExecutionJournalWriter', () => {
         const decision: Extract<AgentExecutionSignalDecision, { action: 'update-execution' }> = {
             action: 'update-execution',
             eventType: 'execution.updated',
-            snapshotPatch: {
+            patch: {
                 status: 'running',
                 attention: 'awaiting-operator',
                 waitingForInput: true,
@@ -244,7 +244,7 @@ describe('AgentExecutionJournalWriter', () => {
         const decision = {
             action: 'update-execution' as const,
             eventType: 'execution.updated' as const,
-            snapshotPatch: {
+            patch: {
                 status: 'starting' as const,
                 attention: 'none' as const,
                 waitingForInput: false,

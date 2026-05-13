@@ -8,7 +8,7 @@ import {
     type AgentCommand,
     type AgentExecutionReference,
     type AgentExecutionScope,
-    type AgentExecutionSnapshot,
+    type AgentExecutionType,
     type AgentPrompt,
     type AgentTaskContext
 } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
@@ -140,18 +140,18 @@ export class AgentExecutionTerminalController implements AgentExecutionRuntimeCo
         });
     }
 
-    public complete(): Promise<AgentExecutionSnapshot> {
+    public complete(): Promise<AgentExecutionType> {
         this.requireTerminalHandle('mark the execution done');
         return this.execution.complete();
     }
 
-    public submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionSnapshot> {
+    public submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionType> {
         const terminalHandle = this.requireTerminalHandle('submit a prompt');
         sendTerminalText(this.registry, terminalHandle, prompt.text);
         return this.execution.submitPrompt(prompt);
     }
 
-    public submitCommand(command: AgentCommand): Promise<AgentExecutionSnapshot> {
+    public submitCommand(command: AgentCommand): Promise<AgentExecutionType> {
         const terminalHandle = this.requireTerminalHandle(`perform '${command.type}'`);
         if (command.type === 'interrupt') {
             this.registry.sendKeys(terminalHandle.terminalName, 'C-c');
@@ -160,7 +160,7 @@ export class AgentExecutionTerminalController implements AgentExecutionRuntimeCo
         return this.submitPrompt(buildTerminalCommandPrompt(command));
     }
 
-    public async cancel(reason?: string): Promise<AgentExecutionSnapshot> {
+    public async cancel(reason?: string): Promise<AgentExecutionType> {
         const terminalHandle = this.requireTerminalHandle('cancel');
         this.registry.sendKeys(terminalHandle.terminalName, 'C-c');
         let terminalState = await waitForTerminalExit(this.registry, terminalHandle, 1_500);
@@ -174,7 +174,7 @@ export class AgentExecutionTerminalController implements AgentExecutionRuntimeCo
         return this.execution.cancelRuntime(reason);
     }
 
-    public async terminate(reason?: string): Promise<AgentExecutionSnapshot> {
+    public async terminate(reason?: string): Promise<AgentExecutionType> {
         const terminalHandle = this.requireTerminalHandle('terminate');
         let terminalState = await this.registry.killTerminal(terminalHandle.terminalName);
         if (!terminalState.dead) {
@@ -199,7 +199,7 @@ export class AgentExecutionTerminalController implements AgentExecutionRuntimeCo
     }
 }
 
-function toSnapshotTransport(handle: TerminalHandle): NonNullable<AgentExecutionSnapshot['transport']> {
+function toSnapshotTransport(handle: TerminalHandle): NonNullable<AgentExecutionType['transport']> {
     return {
         kind: 'terminal',
         terminalName: handle.terminalName,
@@ -256,8 +256,8 @@ function createRunningSnapshot(input: {
     scope: AgentExecutionScope;
     workingDirectory: string;
     task?: AgentTaskContext;
-    transport: NonNullable<AgentExecutionSnapshot['transport']>;
-}): AgentExecutionSnapshot {
+    transport: NonNullable<AgentExecutionType['transport']>;
+}): AgentExecutionType {
     return createTerminalSnapshot({
         ...input,
         status: 'running',
@@ -273,14 +273,14 @@ function createTerminalSnapshot(input: {
     scope: AgentExecutionScope;
     workingDirectory: string;
     task?: AgentTaskContext;
-    transport: NonNullable<AgentExecutionSnapshot['transport']>;
-    status: AgentExecutionSnapshot['status'];
-    progressState: AgentExecutionSnapshot['progress']['state'];
+    transport: NonNullable<AgentExecutionType['transport']>;
+    status: AgentExecutionType['status'];
+    progressState: AgentExecutionType['progress']['state'];
     acceptsPrompts: boolean;
     acceptedCommands: AgentCommand['type'][];
     failureMessage?: string;
     endedAt?: string;
-}): AgentExecutionSnapshot {
+}): AgentExecutionType {
     const timestamp = new Date().toISOString();
     const missionId = getAgentExecutionScopeMissionId(input.scope);
     const taskId = getAgentExecutionScopeTaskId(input.scope) ?? input.task?.taskId;
@@ -331,7 +331,7 @@ function createDetachedTerminalControllerSnapshot(
     agentId: string,
     reference: AgentExecutionReference,
     reason: string
-): AgentExecutionSnapshot {
+): AgentExecutionType {
     const timestamp = new Date().toISOString();
     return {
         agentId,

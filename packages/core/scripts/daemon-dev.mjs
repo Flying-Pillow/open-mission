@@ -8,7 +8,7 @@ const { createServer } = await import(vitePlusRequire.resolve('@voidzero-dev/vit
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const daemonEntry = '/src/daemon/startDaemon.ts';
 
-process.env.MISSION_DAEMON_RUNTIME_MODE = 'source';
+process.env.OPEN_MISSION_DAEMON_RUNTIME_MODE = 'source';
 
 const server = await createServer({
 	root: packageRoot,
@@ -37,7 +37,7 @@ server.watcher.on('change', queueReload);
 server.watcher.on('add', queueReload);
 server.watcher.on('unlink', queueReload);
 
-process.stdout.write('Mission daemon dev runtime ready (Vite+ SSR source loader).\n');
+process.stdout.write('Open Mission daemon dev runtime ready (Vite+ SSR source loader).\n');
 
 process.once('SIGINT', () => {
 	void shutdown('SIGINT');
@@ -56,13 +56,13 @@ function queueReload(filePath) {
 	clearTimeout(reloadTimer);
 	reloadTimer = setTimeout(() => {
 		reloadInFlight = reloadInFlight.then(() => reloadDaemon(filePath)).catch((error) => {
-			process.stderr.write(`Mission daemon reload failed: ${formatError(error)}\n`);
+			process.stderr.write(`Open Mission daemon reload failed: ${formatError(error)}\n`);
 		});
 	}, 100);
 }
 
 async function reloadDaemon(filePath) {
-	process.stdout.write(`Mission daemon source changed: ${path.relative(packageRoot, filePath)}\n`);
+	process.stdout.write(`Open Mission daemon source changed: ${path.relative(packageRoot, filePath)}\n`);
 	server.moduleGraph.invalidateAll();
 	const nextModule = await loadDaemonModule();
 	const previousModule = daemonModule;
@@ -74,15 +74,15 @@ async function reloadDaemon(filePath) {
 		daemonModule = nextModule;
 	} catch (error) {
 		if (previousModule) {
-			process.stderr.write(`Mission daemon reload rollback: ${formatError(error)}\n`);
+			process.stderr.write(`Open Mission daemon reload rollback: ${formatError(error)}\n`);
 			daemonHandle = await startDaemonFromModule(previousModule);
 			daemonModule = previousModule;
-			process.stderr.write('Mission daemon rollback completed.\n');
+			process.stderr.write('Open Mission daemon rollback completed.\n');
 			return;
 		}
 		throw error;
 	}
-	process.stdout.write('Mission daemon reloaded.\n');
+	process.stdout.write('Open Mission daemon reloaded.\n');
 }
 
 async function startDaemon() {
@@ -94,16 +94,16 @@ async function startDaemon() {
 async function loadDaemonModule() {
 	reloadSequence += 1;
 	const module = await server.ssrLoadModule(`${daemonEntry}?reload=${reloadSequence}`);
-	if (typeof module.startMissionDaemon !== 'function') {
-		throw new TypeError('Daemon entry does not export startMissionDaemon().');
+	if (typeof module.startOpenMissionDaemon !== 'function') {
+		throw new TypeError('Daemon entry does not export startOpenMissionDaemon().');
 	}
 	return module;
 }
 
 async function startDaemonFromModule(module) {
-	return await module.startMissionDaemon({
+	return await module.startOpenMissionDaemon({
 		argv: process.argv.slice(2),
-		surfacePath: process.env.MISSION_SURFACE_PATH,
+		surfacePath: process.env.OPEN_MISSION_SURFACE_PATH,
 		installSignalHandlers: false
 	});
 }

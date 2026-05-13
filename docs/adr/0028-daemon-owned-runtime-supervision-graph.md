@@ -12,9 +12,9 @@ supersedes: []
 superseded_by: []
 ---
 
-Mission daemon runtime cleanup and cancellation semantics must be anchored in one daemon-owned runtime supervision model rather than spread across unrelated registries, OS process scans, or log heuristics.
+Open Mission daemon runtime cleanup and cancellation semantics must be anchored in one daemon-owned runtime supervision model rather than spread across unrelated registries, OS process scans, or log heuristics.
 
-The daemon is the authoritative runtime supervisor for everything started by the Mission product inside the server runtime. That includes Repository-scoped management sessions, Mission-scoped runtime state, Task-scoped live work, Agent executions, mission terminals, Agent execution terminals, and future daemon-started provider or socket resources. Airport surfaces remain operator clients; they do not own runtime cleanup policy or runtime relationship truth.
+The daemon is the authoritative runtime supervisor for everything started by the Mission product inside the server runtime. That includes Repository-scoped management sessions, Mission-scoped runtime state, Task-scoped live work, Agent executions, mission terminals, Agent execution terminals, and future daemon-started provider or socket resources. Open Mission surfaces remain operator clients; they do not own runtime cleanup policy or runtime relationship truth.
 
 The daemon-owned runtime supervision graph is the canonical relationship model for live runtime ownership. It records which Repository, Mission, Task, Agent execution, and Runtime lease records belong together. Runtime leases cover external runtime resources such as PTY terminals, child processes, sockets, or future provider sessions. A Runtime lease is not only a raw PID or terminal tab label; it carries owner identity, lifecycle, and cleanup responsibility.
 
@@ -25,7 +25,7 @@ Daemon runtime registries may remain separate implementation modules when that i
 - which Runtime leases belong to an Agent execution or Mission terminal session
 - which cleanup actions are required when an owner is cancelled, terminated, replaced, or reconciled after a crash
 
-Lifecycle operations cascade through ownership, not through UI-specific call chains. If an operator cancels a Task from an Airport surface, the daemon must interpret that as a domain lifecycle operation on the Task owner and cascade the required runtime cleanup through the supervision graph. That cascade may include cancelling or terminating owned Agent executions, closing owned terminals, killing owned child processes, releasing owned Runtime leases, and marking resulting runtime state accordingly. The surface requests the Task command; the daemon decides the cleanup fan-out.
+Lifecycle operations cascade through ownership, not through UI-specific call chains. If an operator cancels a Task from an Open Mission surface, the daemon must interpret that as a domain lifecycle operation on the Task owner and cascade the required runtime cleanup through the supervision graph. That cascade may include cancelling or terminating owned Agent executions, closing owned terminals, killing owned child processes, releasing owned Runtime leases, and marking resulting runtime state accordingly. The surface requests the Task command; the daemon decides the cleanup fan-out.
 
 Startup recovery follows the same model. Persisted daemon runtime supervision state may exist in the daemon runtime directory as recovery material. On startup, the daemon reconciles persisted Runtime leases and ownership records against the current daemon identity and the OS. If the persisted owner daemon is gone, the new daemon reaps orphaned Runtime leases, clears stale runtime supervision state, and rebuilds live registries. Logs remain audit material and the OS process table remains recovery evidence, but neither is the canonical runtime ownership model.
 

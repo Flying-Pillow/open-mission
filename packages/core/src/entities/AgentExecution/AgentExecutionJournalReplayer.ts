@@ -10,12 +10,12 @@ import {
     type AgentExecutionActivityStateType,
     type AgentExecutionAttentionStateType,
     type AgentExecutionLifecycleStateType,
-    type AgentExecutionRuntimeActivitySnapshotType,
-    type AgentExecutionTelemetrySnapshot,
+    type AgentExecutionRuntimeActivityType,
+    type AgentExecutionTelemetry,
     type AgentExecutionTransportStateType
-} from './AgentExecutionRuntimeSchema.js';
+} from './AgentExecutionStateSchema.js';
 import type { AgentExecutionProtocolDescriptorType } from './AgentExecutionProtocolSchema.js';
-import type { AgentExecutionDataType } from './AgentExecutionDataSchema.js';
+import type { AgentExecutionType } from './AgentExecutionSchema.js';
 import type {
     AgentExecutionActivityUpdatedRecordType,
     AgentExecutionJournalHeaderRecordType,
@@ -34,11 +34,11 @@ export type AgentExecutionJournalReplayState = {
     activityState?: AgentExecutionActivityStateType;
     currentInputRequestId?: string | null;
     awaitingResponseToMessageId?: string | null;
-    runtimeActivity?: AgentExecutionRuntimeActivitySnapshotType;
+    runtimeActivity?: AgentExecutionRuntimeActivityType;
     protocolDescriptor?: AgentExecutionProtocolDescriptorType;
     transportState?: AgentExecutionTransportStateType;
     workingDirectory?: string;
-    telemetry?: AgentExecutionTelemetrySnapshot;
+    telemetry?: AgentExecutionTelemetry;
     lastOccurredAt?: string;
 };
 
@@ -52,8 +52,8 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
     let activityState: AgentExecutionActivityStateType | undefined;
     let currentInputRequestId: string | null | undefined;
     let awaitingResponseToMessageId: string | null | undefined;
-    let runtimeActivity: AgentExecutionRuntimeActivitySnapshotType | undefined;
-    let telemetry: AgentExecutionTelemetrySnapshot | undefined;
+    let runtimeActivity: AgentExecutionRuntimeActivityType | undefined;
+    let telemetry: AgentExecutionTelemetry | undefined;
     let lastOccurredAt: string | undefined;
 
     for (const record of records) {
@@ -153,9 +153,9 @@ export function replayAgentExecutionJournal(records: AgentExecutionJournalRecord
 }
 
 export function hydrateAgentExecutionDataFromJournal(
-    data: AgentExecutionDataType,
+    data: AgentExecutionType,
     records: AgentExecutionJournalRecordType[]
-): AgentExecutionDataType {
+): AgentExecutionType {
     const replay = replayAgentExecutionJournal(records);
     const lifecycleState = replay.lifecycleState ?? data.lifecycleState;
     const attention = replay.attention ?? data.attention;
@@ -424,8 +424,8 @@ function createCurrentActivityProjection(input: {
     lifecycleState: AgentExecutionLifecycleStateType | undefined;
     attention: AgentExecutionAttentionStateType | undefined;
     activityState: AgentExecutionActivityStateType | undefined;
-    runtimeActivity: AgentExecutionRuntimeActivitySnapshotType | undefined;
-    telemetry: AgentExecutionTelemetrySnapshot | undefined;
+    runtimeActivity: AgentExecutionRuntimeActivityType | undefined;
+    telemetry: AgentExecutionTelemetry | undefined;
     lastOccurredAt: string | undefined;
 }): AgentExecutionActivityProjectionType | undefined {
     const updatedAt = input.runtimeActivity?.updatedAt ?? input.telemetry?.updatedAt ?? input.lastOccurredAt;
@@ -519,9 +519,9 @@ function resolveCurrentAttentionProjectionItem(
 }
 
 function mergeTelemetry(
-    current: AgentExecutionTelemetrySnapshot | undefined,
+    current: AgentExecutionTelemetry | undefined,
     record: AgentExecutionActivityUpdatedRecordType
-): AgentExecutionTelemetrySnapshot | undefined {
+): AgentExecutionTelemetry | undefined {
     if (!record.telemetry) {
         return current;
     }
@@ -539,9 +539,9 @@ function mergeTelemetry(
 }
 
 function mergeRuntimeActivity(
-    current: AgentExecutionRuntimeActivitySnapshotType | undefined,
+    current: AgentExecutionRuntimeActivityType | undefined,
     record: AgentExecutionActivityUpdatedRecordType
-): AgentExecutionRuntimeActivitySnapshotType | undefined {
+): AgentExecutionRuntimeActivityType | undefined {
     const currentTarget = record['currentTarget'];
     if (!record.progress && !record.capabilities && !currentTarget) {
         return current;

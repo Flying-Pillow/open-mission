@@ -3,14 +3,14 @@ layout: default
 title: Mission MCP Server Spec
 parent: Architecture
 nav_order: 8.5
-description: Temporary working spec for realizing the daemon-owned mission-mcp server and Agent execution MCP signaling path.
+description: Temporary working spec for realizing the daemon-owned open-mission-mcp server and Agent execution MCP signaling path.
 ---
 
 ## Temporary Mission MCP Server Spec
 
 This is the MCP transport realization slice for the Agent execution structured interaction architecture described by ADR-0022 and ADR-0024.
 
-It is temporary on purpose. It exists so implementation can proceed from one structural model instead of scattering MCP support through launch code, adapter code, Entity code, and daemon startup. The umbrella source of truth for descriptor shape, observation semantics, owner routing, and idempotency is [Agent Execution Structured Interaction Spec](agent-execution-structured-interaction-spec.md). This document must only specify the `mission-mcp` realization details under that umbrella. When the implementation converges, fold the durable parts into `CONTEXT.md`, accepted ADRs, and permanent architecture pages, then delete this file.
+It is temporary on purpose. It exists so implementation can proceed from one structural model instead of scattering MCP support through launch code, adapter code, Entity code, and daemon startup. The umbrella source of truth for descriptor shape, observation semantics, owner routing, and idempotency is [Agent Execution Structured Interaction Spec](agent-execution-structured-interaction-spec.md). This document must only specify the `open-mission-mcp` realization details under that umbrella. When the implementation converges, fold the durable parts into `CONTEXT.md`, accepted ADRs, and permanent architecture pages, then delete this file.
 
 ## Authoritative Inputs
 
@@ -20,7 +20,7 @@ It is temporary on purpose. It exists so implementation can proceed from one str
 - ADR-0017: stdout markers are the baseline Agent signal transport.
 - ADR-0018: Agent execution and Agent adapter vocabulary.
 - ADR-0022: Agent execution structured interaction vocabulary.
-- ADR-0024: `mission-mcp` is the daemon-owned MCP signal transport.
+- ADR-0024: `open-mission-mcp` is the daemon-owned MCP signal transport.
 - Agent Execution Structured Interaction Spec: controlling descriptor, observation, owner-routing, and signal vocabulary implementation reference.
 
 ## Greenfield Constraint
@@ -41,7 +41,7 @@ Forbidden:
 Allowed:
 
 - Non-MCP Agent runtimes may use stdout-marker signal delivery when their protocol descriptor declares that delivery from the start.
-- MCP-capable Agent runtimes may use a stdio bridge process when the bridge is only a transport adapter to the daemon-owned `mission-mcp` service.
+- MCP-capable Agent runtimes may use a stdio bridge process when the bridge is only a transport adapter to the daemon-owned `open-mission-mcp` service.
 - Small pure functions may live near the class that owns their behavior when they are private implementation details, not reusable cross-domain utilities.
 
 ## Target Runtime Shape
@@ -49,7 +49,7 @@ Allowed:
 ```text
 daemon startup
   -> AgentExecutionRegistry
-  -> MissionMcpServer named mission-mcp
+  -> MissionMcpServer named open-mission-mcp
       -> session-scoped MCP access registry
       -> dynamic tool materialization from AgentExecution protocol descriptors
 
@@ -64,7 +64,7 @@ AgentExecutor.startExecution
   -> launch provider runtime
 
 Agent runtime MCP tool call
-  -> mission-mcp tool ingress
+  -> open-mission-mcp tool ingress
   -> canonical Agent signal schema validation
   -> AgentExecutionRegistry route by Agent execution id
   -> AgentExecutor transport-neutral observation entry point
@@ -73,7 +73,7 @@ Agent runtime MCP tool call
   -> AgentExecution state, Entity event, workflow event, or rejection
 ```
 
-`mission-mcp` is not an Entity, not a workflow owner, not a repository API, and not a public automation API. It is daemon runtime infrastructure that exposes per-execution structured signal transport to Agent runtimes.
+`open-mission-mcp` is not an Entity, not a workflow owner, not a repository API, and not a public automation API. It is daemon runtime infrastructure that exposes per-execution structured signal transport to Agent runtimes.
 
 ## Ownership Map
 
@@ -130,12 +130,12 @@ Ledger rules:
 packages/core/src/daemon/runtime/agent/mcp/MissionMcpServer.ts
 ```
 
-It owns MCP protocol ingress and the server lifecycle for the daemon-owned `mission-mcp` service.
+It owns MCP protocol ingress and the server lifecycle for the daemon-owned `open-mission-mcp` service.
 
 Responsibilities:
 
 - Start and stop with the daemon.
-- Present the MCP server name `mission-mcp`.
+- Present the MCP server name `open-mission-mcp`.
 - Register AgentExecution-scoped MCP access records.
 - Materialize the dynamic tool set for one registered Agent execution from that execution's protocol descriptor.
 - Validate MCP tool calls at ingress with canonical AgentExecution schemas.
@@ -161,7 +161,7 @@ Do not create generic `mcpUtils`, `signalHelpers`, or cross-package helper modul
 
 ### AgentExecutionRegistry
 
-AgentExecutionRegistry is the daemon collection and lookup boundary for active AgentExecution instances. `mission-mcp` must route through it instead of keeping its own execution map with domain meaning.
+AgentExecutionRegistry is the daemon collection and lookup boundary for active AgentExecution instances. `open-mission-mcp` must route through it instead of keeping its own execution map with domain meaning.
 
 Add a narrow routing method to AgentExecutionRegistry, such as:
 
@@ -177,7 +177,7 @@ The exact names can change, but the method must:
 - Delegate policy and state effects through the registered AgentExecutor or AgentExecution-owned observation path.
 - Return a schema-backed acknowledgement.
 
-AgentExecutionRegistry may also publish MCP access state in AgentExecution data when Airport needs it, but it must not become an MCP protocol server or adapter-specific config writer.
+AgentExecutionRegistry may also publish MCP access state in AgentExecution data when Open Mission needs it, but it must not become an MCP protocol server or adapter-specific config writer.
 
 ### AgentExecutor
 
@@ -234,20 +234,20 @@ For this greenfield realization, do not model transport as a single `mcp-require
 
 Adapter launch preparation receives an ephemeral MCP access object only when `AgentExecutionTransportState.selected` is `mcp-tool`. That object may include:
 
-- server name: `mission-mcp`
+- server name: `open-mission-mcp`
 - bridge command or local endpoint
 - AgentExecution id
 - session capability token
 - dynamic tool descriptors
 - config cleanup callback
 
-Do not store tokens or per-execution config in tracked repository files. Do not put secrets into durable AgentExecution data. Static project config may refer to `mission-mcp` only through environment-variable placeholders or adapter-owned untracked runtime files.
+Do not store tokens or per-execution config in tracked repository files. Do not put secrets into durable AgentExecution data. Static project config may refer to `open-mission-mcp` only through environment-variable placeholders or adapter-owned untracked runtime files.
 
 If the selected delivery is `mcp-tool` and MCP provisioning fails, the launch fails. The daemon may create a new execution attempt that selects `stdout-marker` only when Mission policy and operator intent permit that before launch. It must not mutate the active execution from MCP to stdout markers and call that degradation transparent.
 
 ### Daemon Startup
 
-`startMissionDaemon` is the daemon composition root for this feature.
+`startOpenMissionDaemon` is the daemon composition root for this feature.
 
 Startup sequence target:
 
@@ -264,7 +264,7 @@ If startup fails after MissionMcpServer starts, shutdown must dispose it. This i
 
 ### CLI Stdio Bridge
 
-Some MCP clients prefer or require a stdio server process. Mission may add a CLI command that acts as a stdio bridge to the daemon-owned `mission-mcp` service.
+Some MCP clients prefer or require a stdio server process. Mission may add a CLI command that acts as a stdio bridge to the daemon-owned `open-mission-mcp` service.
 
 Suggested command shape:
 
@@ -272,11 +272,11 @@ Suggested command shape:
 mission mcp connect --agent-execution <id>
 ```
 
-This command is not the authoritative MCP server. It is an adapter between a stdio MCP client and the daemon-owned `mission-mcp` service. If the daemon is stopped, the bridge fails. It must not create Mission state, parse workflows, or keep its own AgentExecution registry.
+This command is not the authoritative MCP server. It is an adapter between a stdio MCP client and the daemon-owned `open-mission-mcp` service. If the daemon is stopped, the bridge fails. It must not create Mission state, parse workflows, or keep its own AgentExecution registry.
 
 ## Protocol Descriptor Realization
 
-The protocol descriptor defined by Agent Execution Structured Interaction Spec is the single source for both transports. The shape is restated here only to show the MCP fields that `mission-mcp` consumes; do not evolve this copy independently.
+The protocol descriptor defined by Agent Execution Structured Interaction Spec is the single source for both transports. The shape is restated here only to show the MCP fields that `open-mission-mcp` consumes; do not evolve this copy independently.
 
 Suggested shape:
 
@@ -288,7 +288,7 @@ type AgentExecutionProtocolDescriptor = {
   messages: AgentExecutionMessageDescriptor[];
   signals: AgentSignalDescriptor[];
   mcp?: {
-    serverName: 'mission-mcp';
+    serverName: 'open-mission-mcp';
     exposure: 'session-scoped';
     publicApi: false;
   };
@@ -347,7 +347,7 @@ Acknowledgements are delivery feedback only. They are not verification success, 
 - Replace `AgentSignalDeliverySchema = z.enum(['stdout-marker'])` with `z.enum(['stdout-marker', 'mcp-tool'])`.
 - Replace singular `delivery` with `deliveries` in `AgentSignalDescriptorSchema`.
 - Update baseline descriptors to use `deliveries`.
-- Add descriptor metadata for `mission-mcp` when any signal supports `mcp-tool`.
+- Add descriptor metadata for `open-mission-mcp` when any signal supports `mcp-tool`.
 - Update tests without keeping old field aliases.
 - Keep this step in lockstep with Agent Execution Structured Interaction Spec. Do not implement a different MCP-local descriptor shape.
 
@@ -384,8 +384,8 @@ Acknowledgements are delivery feedback only. They are not verification success, 
 
 ### 6. Add Optional CLI Bridge
 
-- Add a `mission mcp connect` bridge only if needed by the first supported adapter.
-- The bridge connects to the daemon-owned `mission-mcp` service.
+- Add a `open-mission mcp connect` bridge only if needed by the first supported adapter.
+- The bridge connects to the daemon-owned `open-mission-mcp` service.
 - The bridge does not own schemas, policy, Entity state, or workflow behavior.
 
 ### 7. Remove Conflicts
@@ -402,7 +402,7 @@ Minimum tests:
 
 - AgentExecution signal descriptor schema accepts `deliveries` with `stdout-marker` and `mcp-tool`.
 - Old singular `delivery` is rejected.
-- Protocol descriptor exposes `mission-mcp` metadata only when MCP delivery is present.
+- Protocol descriptor exposes `open-mission-mcp` metadata only when MCP delivery is present.
 - MissionMcpServer starts and stops with daemon lifecycle.
 - MissionMcpServer registers per-execution access and materializes only descriptor-allowed tools.
 - MCP tool calls validate against canonical Agent signal payload schemas.
@@ -417,9 +417,9 @@ Minimum tests:
 Run at minimum:
 
 ```bash
-pnpm --filter @flying-pillow/mission-core check
-pnpm --filter @flying-pillow/mission-core test
-pnpm --filter @flying-pillow/mission-core build
+pnpm --filter @flying-pillow/open-mission-core check
+pnpm --filter @flying-pillow/open-mission-core test
+pnpm --filter @flying-pillow/open-mission-core build
 pnpm --filter @flying-pillow/open-mission check
 pnpm --filter @flying-pillow/open-mission build
 ```

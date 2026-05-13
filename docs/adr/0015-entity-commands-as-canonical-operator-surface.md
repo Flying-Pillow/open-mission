@@ -14,7 +14,7 @@ superseded_by: []
 
 Entity commands are the canonical operator surface for Repository, Mission, Stage, Task, Artifact, AgentExecution, and future command-capable Entities. An Entity command is a surface-facing invocation descriptor for a mutation method declared by an Entity contract and implemented by the owning Entity class. A command descriptor carries the derived `commandId`, `entity`, `method`, optional `targetId`, UI metadata, and advisory availability.
 
-Airport is a control surface and proxy. It renders `EntityCommandDescriptor` values from hydrated Entity `commands` fields or Entity command views, gathers any command input or confirmation, and forwards the descriptor method with the target Entity locator through the SvelteKit gateway to daemon `entity.command`. Airport may keep helper methods for artifacts, worktrees, terminals, prompt delivery, and event streams where those helpers represent distinct transport behavior, but it must not invent Mission behavior or a second command vocabulary.
+Open Mission is a control surface and proxy. It renders `EntityCommandDescriptor` values from hydrated Entity `commands` fields or Entity command views, gathers any command input or confirmation, and forwards the descriptor method with the target Entity locator through the SvelteKit gateway to daemon `entity.command`. Open Mission may keep helper methods for artifacts, worktrees, terminals, prompt delivery, and event streams where those helpers represent distinct transport behavior, but it must not invent Mission behavior or a second command vocabulary.
 
 Entity command descriptors are generated generically by iterating `<Entity>Contract.ts` methods. A method becomes a command when it is a mutation with `ui` metadata. `commandId` is derived from the Entity name and method name, such as `task.start`; it is not a behavior switch. Availability is derived from the owning Entity method named `can<MethodName>` when present, such as `canStart`, and defaults to available when absent. The daemon rechecks `can<MethodName>` before invoking the mutation, so descriptor availability is advisory surface material rather than authority.
 
@@ -31,7 +31,7 @@ Command acknowledgements mean the command was accepted and attempted at the auth
 Consequences:
 
 - Command payloads use the target Entity locator and the typed input needed by the owning Entity contract; callers do not supply extra transport ids or `eventId` fields.
-- Airport command UI uses Commandbar naming.
+- Open Mission command UI uses Commandbar naming.
 - Entity command views advertise Entity method descriptors. `<Entity>StorageSchema` must not contain command descriptors. Hydrated `<Entity>Schema` may contain `commands` because command availability is derived Entity boundary read material, not persisted truth.
 - Class-level commands are advertised through `classCommands`, not through ambiguous source, collection, or global command vocabulary.
 - Callers invoke the advertised descriptor method with the target Entity locator and typed input required by the owning Entity contract.

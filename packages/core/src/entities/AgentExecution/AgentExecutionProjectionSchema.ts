@@ -9,7 +9,7 @@ import {
     AgentExecutionActivityTargetSchema,
     AgentExecutionAttentionStateSchema,
     AgentExecutionLifecycleStateSchema
-} from './AgentExecutionRuntimeSchema.js';
+} from './AgentExecutionStateSchema.js';
 
 export const AgentExecutionTimelineZoneSchema = z.enum(['conversation', 'activity', 'workflow', 'runtime', 'artifact']);
 export const AgentExecutionTimelineSeveritySchema = z.enum(['info', 'success', 'warning', 'error', 'critical']);

@@ -16,7 +16,7 @@ import type {
     AgentExecutionObservation,
     AgentExecutionReference,
     AgentExecutionScope,
-    AgentExecutionSnapshot,
+    AgentExecutionType,
     AgentLaunchConfig,
     AgentPrompt
 } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
@@ -26,7 +26,7 @@ import type {
     AgentExecutionProtocolDescriptorType,
     AgentSignalDeliveryType
 } from '../../../entities/AgentExecution/AgentExecutionProtocolSchema.js';
-import type { AgentExecutionTransportStateType } from '../../../entities/AgentExecution/AgentExecutionRuntimeSchema.js';
+import type { AgentExecutionTransportStateType } from '../../../entities/AgentExecution/AgentExecutionStateSchema.js';
 import type { AgentAdapter, AgentExecutionMcpAccess } from './AgentAdapter.js';
 import {
     AgentExecutionObservationCoordinator
@@ -42,7 +42,7 @@ import type {
     AgentExecutionRuntimeController
 } from './AgentExecutionRuntimeController.js';
 import { ArtifactService } from './ArtifactService.js';
-import type { MissionMcpServer } from './mcp/MissionMcpServer.js';
+import type { OpenMissionMcpServer } from './mcp/OpenMissionMcpServer.js';
 import { buildAgentExecutionSignalLaunchContext } from './signals/AgentExecutionSignalLaunchContext.js';
 import { AgentExecutionObservationRouter } from './signals/AgentExecutionObservationRouter.js';
 
@@ -50,7 +50,7 @@ export { AGENT_EXECUTION_IDLE_QUIET_PERIOD_MS } from './AgentExecutionObservatio
 
 export type AgentExecutorOptions = {
     agentRegistry: AgentRegistry;
-    missionMcpServer?: MissionMcpServer;
+    openMissionMcpServer?: OpenMissionMcpServer;
     journalWriter?: AgentExecutionJournalWriter;
     logger?: {
         debug(message: string, metadata?: Record<string, unknown>): void;
@@ -81,7 +81,7 @@ type DelegatedRuntimeAgentAdapter = AgentAdapter & {
 export class AgentExecutor {
     private readonly agentRegistry: AgentRegistry;
     private readonly journalWriter: AgentExecutionJournalWriter;
-    private readonly missionMcpServer: MissionMcpServer | undefined;
+    private readonly openMissionMcpServer: OpenMissionMcpServer | undefined;
     private readonly observationCoordinator: AgentExecutionObservationCoordinator;
     private readonly semanticOperations: AgentExecutionSemanticOperations;
     private readonly managedExecutions = new Map<string, ManagedAgentExecution>();
@@ -89,7 +89,7 @@ export class AgentExecutor {
     public constructor(options: AgentExecutorOptions) {
         this.agentRegistry = options.agentRegistry;
         this.journalWriter = options.journalWriter ?? createDefaultAgentExecutionJournalWriter();
-        this.missionMcpServer = options.missionMcpServer;
+        this.openMissionMcpServer = options.openMissionMcpServer;
         const observationRouter = new AgentExecutionObservationRouter({
             ...(options.logger ? { logger: options.logger } : {})
         });
@@ -172,7 +172,7 @@ export class AgentExecutor {
                 }
             });
         const cleanup = combineCleanup(adapterPrepared.cleanup, mcpAccess ? async () => {
-            this.missionMcpServer?.unregisterAccess(prepared.executionId);
+            this.openMissionMcpServer?.unregisterAccess(prepared.executionId);
         } : undefined);
         this.trackExecution({
             runtimeController,
@@ -214,7 +214,7 @@ export class AgentExecutor {
             displayName: adapter.displayName,
             reference
         });
-        const scope = runtimeController.execution.getSnapshot().scope;
+        const scope = runtimeController.execution.getExecution().scope;
         this.trackExecution({
             runtimeController,
             adapter,
@@ -236,7 +236,7 @@ export class AgentExecutor {
         config: AgentLaunchConfig
     ): Promise<AgentExecution> {
         const execution = await adapter.startExecution(config);
-        const snapshot = execution.getSnapshot();
+        const snapshot = execution.getExecution();
         this.trackExecution({
             runtimeController: AgentExecutor.createDelegatedRuntimeController(execution),
             adapter,
@@ -255,7 +255,7 @@ export class AgentExecutor {
         reference: AgentExecutionReference
     ): Promise<AgentExecution> {
         const execution = await adapter.reconcileExecution(reference);
-        const snapshot = execution.getSnapshot();
+        const snapshot = execution.getExecution();
         this.trackExecution({
             runtimeController: AgentExecutor.createDelegatedRuntimeController(execution),
             adapter,
@@ -269,7 +269,7 @@ export class AgentExecutor {
         return execution;
     }
 
-    public async submitPrompt(agentExecutionId: string, prompt: AgentPrompt): Promise<AgentExecutionSnapshot> {
+    public async submitPrompt(agentExecutionId: string, prompt: AgentPrompt): Promise<AgentExecutionType> {
         const managed = this.requireManagedExecution(agentExecutionId);
         const deliveryTransport = this.resolveDeliveryTransport(managed);
         const accepted = await this.journalWriter.appendPromptAccepted({
@@ -309,7 +309,7 @@ export class AgentExecutor {
         }
     }
 
-    public async submitCommand(agentExecutionId: string, command: AgentCommand): Promise<AgentExecutionSnapshot> {
+    public async submitCommand(agentExecutionId: string, command: AgentCommand): Promise<AgentExecutionType> {
         const managed = this.requireManagedExecution(agentExecutionId);
         const deliveryTransport = this.resolveDeliveryTransport(managed);
         const accepted = await this.journalWriter.appendCommandAccepted({
@@ -349,23 +349,23 @@ export class AgentExecutor {
         }
     }
 
-    public async completeExecution(agentExecutionId: string): Promise<AgentExecutionSnapshot> {
+    public async completeExecution(agentExecutionId: string): Promise<AgentExecutionType> {
         const managed = this.requireManagedExecution(agentExecutionId);
         return managed.runtimeController.complete();
     }
 
-    public async cancelExecution(agentExecutionId: string, reason?: string): Promise<AgentExecutionSnapshot> {
+    public async cancelExecution(agentExecutionId: string, reason?: string): Promise<AgentExecutionType> {
         const managed = this.requireManagedExecution(agentExecutionId);
         return managed.runtimeController.cancel(reason);
     }
 
-    public async terminateExecution(agentExecutionId: string, reason?: string): Promise<AgentExecutionSnapshot> {
+    public async terminateExecution(agentExecutionId: string, reason?: string): Promise<AgentExecutionType> {
         const managed = this.requireManagedExecution(agentExecutionId);
         return managed.runtimeController.terminate(reason);
     }
 
-    public getExecutionSnapshot(agentExecutionId: string): AgentExecutionSnapshot | undefined {
-        return this.managedExecutions.get(agentExecutionId)?.execution.getSnapshot();
+    public getExecutionSnapshot(agentExecutionId: string): AgentExecutionType | undefined {
+        return this.managedExecutions.get(agentExecutionId)?.execution.getExecution();
     }
 
     public async routeTransportObservation(input: {
@@ -467,13 +467,13 @@ export class AgentExecutor {
 
     private static createDelegatedRuntimeController(execution: AgentExecution): AgentExecutionRuntimeController {
         const delegatedExecution = execution as AgentExecution & {
-            complete?: () => Promise<AgentExecutionSnapshot>;
+            complete?: () => Promise<AgentExecutionType>;
         };
         return {
             execution,
             submitPrompt: (prompt) => execution.submitPrompt(prompt),
             submitCommand: (command) => execution.submitCommand(command),
-            complete: () => delegatedExecution.complete ? delegatedExecution.complete() : execution.getSnapshot(),
+            complete: () => delegatedExecution.complete ? delegatedExecution.complete() : execution.getExecution(),
             cancel: (reason) => execution.cancel(reason),
             terminate: (reason) => execution.terminate(reason),
             dispose: () => undefined
@@ -487,8 +487,8 @@ export class AgentExecutor {
             if (!capabilities.supported.includes(preferredDelivery)) {
                 throw new Error(`AgentAdapter '${adapter.id}' prefers unsupported AgentExecution signal delivery '${preferredDelivery}'.`);
             }
-            if (preferredDelivery === 'mcp-tool' && !this.missionMcpServer) {
-                throw new Error(`AgentAdapter '${adapter.id}' selected mcp-tool delivery but mission-mcp is unavailable.`);
+            if (preferredDelivery === 'mcp-tool' && !this.openMissionMcpServer) {
+                throw new Error(`AgentAdapter '${adapter.id}' selected mcp-tool delivery but open-mission-mcp is unavailable.`);
             }
             return preferredDelivery;
         }
@@ -496,8 +496,8 @@ export class AgentExecutor {
             return 'stdout-marker';
         }
         if (capabilities.supported.includes('mcp-tool')) {
-            if (!this.missionMcpServer) {
-                throw new Error(`AgentAdapter '${adapter.id}' selected mcp-tool delivery but mission-mcp is unavailable.`);
+            if (!this.openMissionMcpServer) {
+                throw new Error(`AgentAdapter '${adapter.id}' selected mcp-tool delivery but open-mission-mcp is unavailable.`);
             }
             return 'mcp-tool';
         }
@@ -505,10 +505,10 @@ export class AgentExecutor {
     }
 
     private registerMcpAccess(agentExecutionId: string, protocolDescriptor: AgentExecutionProtocolDescriptorType): AgentExecutionMcpAccess {
-        if (!this.missionMcpServer) {
-            throw new Error(`AgentExecution '${agentExecutionId}' selected mcp-tool delivery but mission-mcp is unavailable.`);
+        if (!this.openMissionMcpServer) {
+            throw new Error(`AgentExecution '${agentExecutionId}' selected mcp-tool delivery but open-mission-mcp is unavailable.`);
         }
-        const access = this.missionMcpServer.registerAccess({ agentExecutionId, protocolDescriptor });
+        const access = this.openMissionMcpServer.registerAccess({ agentExecutionId, protocolDescriptor });
         return {
             serverName: access.serverName,
             agentExecutionId: access.agentExecutionId,
@@ -527,7 +527,7 @@ export class AgentExecutor {
         cleanup?: () => Promise<void>;
     }): void {
         const execution = input.runtimeController.execution;
-        const agentExecutionId = execution.getSnapshot().agentExecutionId;
+        const agentExecutionId = execution.getExecution().agentExecutionId;
         this.disposeManagedExecution(agentExecutionId);
         const eventSubscription = execution.onDidEvent((event) => this.handleExecutionEvent(agentExecutionId, event));
         this.managedExecutions.set(agentExecutionId, {
@@ -545,7 +545,7 @@ export class AgentExecutor {
             idleObservationTimer: undefined,
             ...(input.cleanup ? { cleanup: input.cleanup } : {})
         });
-        this.observationCoordinator.syncIdleObservationTimer(this.requireManagedExecution(agentExecutionId), execution.getSnapshot(), {
+        this.observationCoordinator.syncIdleObservationTimer(this.requireManagedExecution(agentExecutionId), execution.getExecution(), {
             publishJournalRecord: (record) => {
                 const managed = this.managedExecutions.get(agentExecutionId);
                 if (managed) {
@@ -577,7 +577,7 @@ export class AgentExecutor {
     }
 
     private resolveDeliveryTransport(managed: ManagedAgentExecution): 'pty-terminal' | 'agent-message' {
-        return managed.execution.getSnapshot().transport?.kind === 'terminal' ? 'pty-terminal' : 'agent-message';
+        return managed.execution.getExecution().transport?.kind === 'terminal' ? 'pty-terminal' : 'agent-message';
     }
 
     private async recordInitialPromptDelivery(
@@ -598,7 +598,7 @@ export class AgentExecutor {
             status: 'attempted',
             transport: deliveryTransport
         }));
-        const snapshot = managed.execution.getSnapshot();
+        const snapshot = managed.execution.getExecution();
         this.publishJournalRecord(managed, await this.journalWriter.appendMessageDelivery({
             agentExecutionId: managed.execution.agentExecutionId,
             scope: managed.journalScope,
@@ -612,7 +612,7 @@ export class AgentExecutor {
     private async promoteDeliveredTurnMessage(
         managed: ManagedAgentExecution,
         messageId: string,
-        snapshot: AgentExecutionSnapshot,
+        snapshot: AgentExecutionType,
         message: AgentPrompt | AgentCommand
     ): Promise<void> {
         if (!startsAgentExecutionTurn(message)) {

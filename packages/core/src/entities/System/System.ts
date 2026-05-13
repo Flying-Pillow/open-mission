@@ -1,10 +1,10 @@
 import { Entity } from '../Entity/Entity.js';
 import {
-    getDefaultMissionConfig,
-    readMissionConfig,
+    getDefaultOpenMissionConfig,
+    readOpenMissionConfig,
     resolveRepositoriesRoot,
-    writeMissionConfig
-} from '../../settings/MissionInstall.js';
+    writeOpenMissionConfig
+} from '../../settings/OpenMissionInstall.js';
 import {
     SystemConfigureSchema,
     SystemDataSchema,
@@ -33,8 +33,8 @@ export class System extends Entity<SystemDataType, string> {
 
     public static async configure(payload: unknown): Promise<SystemDataType> {
         const input = SystemConfigureSchema.parse(payload);
-        const current = readMissionConfig() ?? getDefaultMissionConfig();
-        await writeMissionConfig({
+        const current = readOpenMissionConfig() ?? getDefaultOpenMissionConfig();
+        await writeOpenMissionConfig({
             ...current,
             ...input
         });
@@ -43,9 +43,9 @@ export class System extends Entity<SystemDataType, string> {
 
     public static async configureAgent(payload: unknown): Promise<SystemDataType> {
         const input: SystemAgentSettingsType = SystemAgentSettingsSchema.parse(payload);
-        const current = readMissionConfig() ?? getDefaultMissionConfig();
+        const current = readOpenMissionConfig() ?? getDefaultOpenMissionConfig();
         const defaultAgentChanged = current.defaultAgentAdapter !== input.defaultAgentAdapter;
-        await writeMissionConfig({
+        await writeOpenMissionConfig({
             ...current,
             ...input,
             defaultAgentMode: input.defaultAgentMode ?? current.defaultAgentMode,
@@ -57,7 +57,7 @@ export class System extends Entity<SystemDataType, string> {
 }
 
 function readSystemConfig(): SystemDataType {
-    const config = readMissionConfig() ?? getDefaultMissionConfig();
+    const config = readOpenMissionConfig() ?? getDefaultOpenMissionConfig();
     return SystemDataSchema.parse({
         repositoriesRoot: resolveRepositoriesRoot(config),
         defaultAgentAdapter: config.defaultAgentAdapter,

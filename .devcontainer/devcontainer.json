@@ -21,7 +21,7 @@
     ],
     "portsAttributes": {
         "5174": {
-            "label": "Mission web dev server",
+            "label": "Open Mission web dev server",
             "onAutoForward": "silent"
         },
         "1420": {

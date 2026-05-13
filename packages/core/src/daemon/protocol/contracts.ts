@@ -6,9 +6,9 @@ export type Method =
 	| 'ping'
 	| 'event.subscribe'
 	| 'system.status'
-	| 'mission-mcp.registerAccess'
-	| 'mission-mcp.listTools'
-	| 'mission-mcp.callTool'
+	| 'open-mission-mcp.registerAccess'
+	| 'open-mission-mcp.listTools'
+	| 'open-mission-mcp.callTool'
 	| 'entity.query'
 	| 'entity.command';
 
@@ -23,9 +23,9 @@ export const METHOD_METADATA: Record<Method, MethodMetadata> = {
 	'ping': { includeSurfacePath: false, workspaceRoute: 'none' },
 	'event.subscribe': { includeSurfacePath: false, workspaceRoute: 'none' },
 	'system.status': { includeSurfacePath: true, workspaceRoute: 'none' },
-	'mission-mcp.registerAccess': { includeSurfacePath: false, workspaceRoute: 'none' },
-	'mission-mcp.listTools': { includeSurfacePath: false, workspaceRoute: 'none' },
-	'mission-mcp.callTool': { includeSurfacePath: false, workspaceRoute: 'none' },
+	'open-mission-mcp.registerAccess': { includeSurfacePath: false, workspaceRoute: 'none' },
+	'open-mission-mcp.listTools': { includeSurfacePath: false, workspaceRoute: 'none' },
+	'open-mission-mcp.callTool': { includeSurfacePath: false, workspaceRoute: 'none' },
 	'entity.query': { includeSurfacePath: true, workspaceRoute: 'control' },
 	'entity.command': { includeSurfacePath: true, workspaceRoute: 'control' }
 };

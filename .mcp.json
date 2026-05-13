@@ -3,7 +3,7 @@
         {
             "type": "promptString",
             "id": "mission-agent-execution-id",
-            "description": "Mission AgentExecution id for the local mission-mcp bridge"
+            "description": "Mission AgentExecution id for the local open-mission-mcp bridge"
         },
         {
             "type": "promptString",
@@ -12,7 +12,7 @@
         },
         {
             "type": "promptString",
-            "id": "mission-mcp-token",
+            "id": "open-mission-mcp-token",
             "description": "Mission MCP token for the AgentExecution",
             "password": true
         }
@@ -42,16 +42,16 @@
                 "tsx",
                 "--tsconfig",
                 "./tsconfig.dev.json",
-                "./src/mission.ts",
+                "./src/open-mission.ts",
                 "mcp",
                 "connect",
                 "--agent-execution",
                 "${input:mission-agent-execution-id}"
             ],
             "env": {
-                "MISSION_AGENT_EXECUTION_OWNER_ID": "${input:mission-agent-execution-owner-id}",
-                "MISSION_MCP_TOKEN": "${input:mission-mcp-token}",
-                "MISSION_DAEMON_RUNTIME_MODE": "source"
+                "OPEN_MISSION_AGENT_EXECUTION_OWNER_ID": "${input:mission-agent-execution-owner-id}",
+                "OPEN_MISSION_MCP_TOKEN": "${input:open-mission-mcp-token}",
+                "OPEN_MISSION_DAEMON_RUNTIME_MODE": "source"
             }
         }
     }

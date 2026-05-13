@@ -9,7 +9,7 @@ import type {
     AgentCommand,
     AgentPrompt,
     AgentExecutionReference,
-    AgentExecutionSnapshot
+    AgentExecutionType
 } from '../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import type { AgentExecutionSignalDecision } from '../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import {
@@ -119,26 +119,26 @@ export class WorkflowController {
         return nextDocument;
     }
 
-    public listRuntimeAgentExecutions(): AgentExecutionSnapshot[] {
+    public listRuntimeAgentExecutions(): AgentExecutionType[] {
         return this.requestExecutor.listRuntimeAgentExecutions();
     }
 
-    public getRuntimeAgentExecution(agentExecutionId: string): AgentExecutionSnapshot | undefined {
+    public getRuntimeAgentExecution(agentExecutionId: string): AgentExecutionType | undefined {
         return this.requestExecutor.getRuntimeAgentExecution(agentExecutionId);
     }
 
     public applyRuntimeAgentExecutionSignalDecision(
         agentExecutionId: string,
         decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>
-    ): AgentExecutionSnapshot | undefined {
+    ): AgentExecutionType | undefined {
         return this.requestExecutor.applyRuntimeAgentExecutionSignalDecision(agentExecutionId, decision);
     }
 
-    public async attachRuntimeAgentExecution(reference: AgentExecutionReference): Promise<AgentExecutionSnapshot> {
+    public async attachRuntimeAgentExecution(reference: AgentExecutionReference): Promise<AgentExecutionType> {
         return this.requestExecutor.reconcileExecution(reference);
     }
 
-    public async startRuntimeAgentExecution(config: AgentLaunchConfig): Promise<AgentExecutionSnapshot> {
+    public async startRuntimeAgentExecution(config: AgentLaunchConfig): Promise<AgentExecutionType> {
         return this.requestExecutor.startExecution(config);
     }
 

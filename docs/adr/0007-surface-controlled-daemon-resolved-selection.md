@@ -14,18 +14,18 @@ superseded_by: []
 
 Mission control selection represents an operator's current focus in one surface: a Mission stage, Mission task, Mission artifact, Agent execution, or other valid focus target. It is not part of the Mission's durable work record.
 
-Selection is surface-controlled and resolved by Airport against canonical Entity data. A surface may request selection changes, but it validates and normalizes those requests against the Entity instances it has received from the daemon. This prevents surfaces from inventing invalid focus while keeping focus local to the operator/session that requested it.
+Selection is surface-controlled and resolved by Open Mission against canonical Entity data. A surface may request selection changes, but it validates and normalizes those requests against the Entity instances it has received from the daemon. This prevents surfaces from inventing invalid focus while keeping focus local to the operator/session that requested it.
 
 Mission control selection must not be persisted as durable Mission state or broadcast as the current focus for every surface. One operator clicking a task should not move another operator's current focus. Durable shared navigation changes belong in canonical Entity relationships, not selection.
 
 Mission uses two selection layers in Mission mode:
 
 1. raw selection: the current surface/operator focus target
-2. resolved selection: the Airport-resolved work bundle companion panes consume
+2. resolved selection: the Open Mission app-resolved work bundle companion panes consume
 
 Raw selection records what the operator selected. Resolved selection records what the Mission control surface should present alongside that target, such as an active instruction artifact, an active stage result artifact, or an active Agent execution.
 
-Selection resolution belongs to the Airport application model layer or a shared semantic selection resolver beneath it. It must not be duplicated in Briefing Room bindings, Runway bindings, terminal substrate observations, or host-specific Airport code.
+Selection resolution belongs to the Open Mission app model layer or a shared semantic selection resolver beneath it. It must not be duplicated in artifact bindings, Agent execution bindings, terminal substrate observations, or host-specific Open Mission code.
 
 Task selection resolves from explicit semantic relationships. A task row resolves to its canonical instruction artifact and, when task-scoped Agent executions exist, the most recently updated task-scoped Agent execution. A task artifact row may pin the active instruction artifact while preserving the same preferred execution rule. A task without a resolvable canonical instruction artifact is invalid Mission state, not a UI fallback case.
 

@@ -93,7 +93,7 @@ export class DaemonClient implements AgentRuntimeDisposable {
 			socket.once('error', onError);
 			if (timeoutMs && timeoutMs > 0) {
 				timeoutHandle = setTimeout(() => {
-					fail(new Error(`Mission daemon connection timed out after ${String(timeoutMs)}ms.`));
+					fail(new Error(`Open Mission daemon connection timed out after ${String(timeoutMs)}ms.`));
 				}, timeoutMs);
 			}
 		});
@@ -152,7 +152,7 @@ export class DaemonClient implements AgentRuntimeDisposable {
 			if (options.timeoutMs && options.timeoutMs > 0) {
 				timeoutHandle = setTimeout(() => {
 					this.pendingRequests.delete(id);
-					reject(new Error(`Mission daemon request '${method}' timed out after ${String(options.timeoutMs)}ms.`));
+					reject(new Error(`Open Mission daemon request '${method}' timed out after ${String(options.timeoutMs)}ms.`));
 				}, options.timeoutMs);
 			}
 			this.socket?.write(`${JSON.stringify(request)}\n`);
@@ -199,10 +199,10 @@ export class DaemonClient implements AgentRuntimeDisposable {
 		socket.once('close', () => {
 			if (this.socket === socket) {
 				this.socket = undefined;
-				this.disconnectEmitter.fire(new Error('Mission daemon connection closed.'));
+				this.disconnectEmitter.fire(new Error('Open Mission daemon connection closed.'));
 			}
 			this.buffer = '';
-			this.rejectPendingRequests(new Error('Mission daemon connection closed.'));
+			this.rejectPendingRequests(new Error('Open Mission daemon connection closed.'));
 		});
 	}
 

@@ -10,7 +10,7 @@ description: Temporary implementation spec for Mission-native code intelligence 
 
 This spec realizes [Code Intelligence PRD](repository-code-intelligence-prd.md), ADR-0030, and ADR-0031.
 
-It defines the first Mission-native path for GitNexus-like code intelligence using Mission-owned scopes, SurrealDB-backed graph storage, and Agent execution semantic operations over `mission-mcp`.
+It defines the first Mission-native path for GitNexus-like code intelligence using Mission-owned scopes, SurrealDB-backed graph storage, and Agent execution semantic operations over `open-mission-mcp`.
 
 This document is temporary. Durable vocabulary belongs in `CONTEXT.md`; durable decisions belong in ADRs. When implementation converges, fold stable details into permanent architecture docs and delete this working spec.
 
@@ -20,9 +20,9 @@ This document is temporary. Durable vocabulary belongs in `CONTEXT.md`; durable 
 - ADR-0010: State store transactions are the canonical write interface for Mission state.
 - ADR-0012: Entity classes own behavior.
 - ADR-0015: Entity commands are the canonical operator surface.
-- ADR-0024: `mission-mcp` is daemon-owned local MCP infrastructure.
+- ADR-0024: `open-mission-mcp` is daemon-owned local MCP infrastructure.
 - ADR-0025: AgentExecution interaction journals record semantic runtime truth.
-- ADR-0030: `mission-mcp` exposes Agent execution semantic operations.
+- ADR-0030: `open-mission-mcp` exposes Agent execution semantic operations.
 - ADR-0031: Code intelligence index is SurrealDB-backed derived read material.
 - `@flying-pillow/zod-surreal`: Zod-first SurrealDB schema metadata and DDL primitives.
 
@@ -43,12 +43,12 @@ Repository preparation
 
 AgentExecutor.startExecution
   -> create AgentExecution protocol descriptor
-  -> register mission-mcp access
+  -> register open-mission-mcp access
   -> semantic operation catalog filters tools by AgentExecution scope
   -> adapter receives MCP config
 
 Agent calls code_search
-  -> mission-mcp authorizes AgentExecution token
+  -> open-mission-mcp authorizes AgentExecution token
   -> validates code_search input
   -> AgentExecutionRegistry resolves active execution
   -> AgentExecutor invokes AgentExecutionSemanticOperations
@@ -133,7 +133,7 @@ type CodeGraphStore = {
 
 The store owns parameter binding, table naming, relation table traversal, query limits, and SurrealDB-specific behavior. No caller receives a raw SurrealDB client.
 
-SurrealDB provisioning should use generated statements from the code graph schema module. A package script such as `pnpm --filter @flying-pillow/mission-core generate:code-graph-schema` should refresh any checked-in `.surql` fixture or generated schema file. Tests should fail when generated SurQL drifts from the committed fixture.
+SurrealDB provisioning should use generated statements from the code graph schema module. A package script such as `pnpm --filter @flying-pillow/open-mission-core generate:code-graph-schema` should refresh any checked-in `.surql` fixture or generated schema file. Tests should fail when generated SurQL drifts from the committed fixture.
 
 ### CodeIndexer
 
@@ -515,9 +515,9 @@ Index rebuilds may be long-running. Phase one can run rebuilds synchronously for
 - Redact sensitive path names or content according to the indexer's sensitive-file policy.
 - Return structured errors, not stack traces.
 
-## Airport Web Visualization
+## Open Mission Web Visualization
 
-Airport web will eventually render a visual representation of the Code graph. This is a surface feature over daemon-owned code intelligence, not a separate graph product or an alternate graph authority.
+Open Mission web will eventually render a visual representation of the Code graph. This is a surface feature over daemon-owned code intelligence, not a separate graph product or an alternate graph authority.
 
 The visualization should read from bounded daemon APIs that expose active snapshot metadata, visible nodes, visible relations, impact paths, and freshness status. It must not receive a raw SurrealDB client, run raw SurrealQL, mutate index records, create relationship semantics, or choose Code roots independently of daemon scope resolution.
 
@@ -527,13 +527,13 @@ Baseline interactions:
 - filter by file, symbol, relation type, impact depth, stale/fresh status, or search query
 - inspect a node or relation summary
 - trace an impact path returned by semantic operations
-- open a related file or Artifact through existing daemon/Airport navigation affordances
+- open a related file or Artifact through existing daemon/Open Mission navigation affordances
 
-This view should follow the Agent-facing semantic operation model. The Agent path proves the graph, scope, staleness, and runtime fact contracts first; Airport web visualization becomes a read-only operator lens after those contracts are stable.
+This view should follow the Agent-facing semantic operation model. The Agent path proves the graph, scope, staleness, and runtime fact contracts first; Open Mission web visualization becomes a read-only operator lens after those contracts are stable.
 
 ## Implementation Sequence
 
-1. Update `mission mcp connect` bridge to support semantic operation descriptors.
+1. Update `open-mission mcp connect` bridge to support semantic operation descriptors.
 2. Refactor `read_artifact` to prove signal and semantic operation tools both work through the bridge.
 3. Add code intelligence schemas and graph store interface with an in-memory fake for tests.
 4. Add zod-surreal model definitions for code index snapshots, files, symbols, relation tables, routes, tools, processes, and clusters.
@@ -544,7 +544,7 @@ This view should follow the Agent-facing semantic operation model. The Agent pat
 9. Implement `impact_analysis` traversal.
 10. Add `changed_code_impact`, `route_impact`, and `tool_context`.
 11. Add staleness diagnostics and optional explicit rebuild command.
-12. Add read-only Airport web visual graph APIs and UI after the Agent path is stable.
+12. Add read-only Open Mission web visual graph APIs and UI after the Agent path is stable.
 
 ## Testing
 
@@ -563,11 +563,11 @@ Required tests:
 - `impact_analysis` respects depth, direction, relation filters, and confidence.
 - stale indexes are reported in operation results.
 - runtime facts are appended for accepted operations and bounded in size.
-- Airport web visual graph APIs expose only daemon-owned read models and reject mutation or raw query behavior.
+- Open Mission web visual graph APIs expose only daemon-owned read models and reject mutation or raw query behavior.
 
 ## Open Implementation Questions
 
 - Should the first graph store share the daemon in-memory datastore instance or use a separate SurrealDB database namespace behind the same daemon process?
 - Which TypeScript parser path should phase one use: TypeScript compiler API, tree-sitter, or a smaller local extractor tuned for Mission's codebase?
 - Should code graph records include snippets, or should snippets always be fetched through `read_artifact` after graph narrowing?
-- How should index rebuild progress and visual graph loading state be surfaced to Airport without making Airport the owner of index lifecycle?
+- How should index rebuild progress and visual graph loading state be surfaced to Open Mission without making Open Mission the owner of index lifecycle?

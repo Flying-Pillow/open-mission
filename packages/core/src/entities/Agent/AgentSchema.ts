@@ -30,6 +30,26 @@ export const AgentAvailabilitySchema = z.object({
     reason: z.string().trim().min(1).optional()
 }).strict();
 
+export const AgentAdapterTransportCapabilitiesSchema = z.object({
+    supported: z.array(z.string().trim().min(1)),
+    preferred: z.object({
+        interactive: z.string().trim().min(1).optional(),
+        print: z.string().trim().min(1).optional()
+    }).strict(),
+    provisioning: z.object({
+        requiresRuntimeConfig: z.boolean(),
+        supportsStdioBridge: z.boolean(),
+        supportsAgentExecutionScopedTools: z.boolean()
+    }).strict()
+}).strict();
+
+export const AgentAdapterDiagnosticsSchema = z.object({
+    command: z.string().trim().min(1),
+    supportsUsageParsing: z.boolean(),
+    runtimeMessageCount: z.number().int().nonnegative(),
+    transportCapabilities: AgentAdapterTransportCapabilitiesSchema
+}).strict();
+
 export const AgentOwnerSettingsSchema = z.object({
     defaultAgentAdapter: AgentIdSchema,
     enabledAgentAdapters: z.array(AgentIdSchema).default([]),
@@ -82,7 +102,8 @@ export const AgentConnectionTestResultSchema = z.object({
 
 export const AgentStorageSchema = AgentPrimaryDataSchema.extend({
     capabilities: AgentCapabilitySchema,
-    availability: AgentAvailabilitySchema
+    availability: AgentAvailabilitySchema,
+    diagnostics: AgentAdapterDiagnosticsSchema.optional()
 }).strict();
 
 const AgentStoragePayloadSchema = AgentStorageSchema.omit({ id: true });
@@ -101,6 +122,7 @@ export type AgentInput<TAgentAdapterInput = unknown> = AgentPrimaryDataType & {
 export type AgentIdType = z.infer<typeof AgentIdSchema>;
 export type AgentCapabilityType = z.infer<typeof AgentCapabilitySchema>;
 export type AgentAvailabilityType = z.infer<typeof AgentAvailabilitySchema>;
+export type AgentAdapterDiagnosticsType = z.infer<typeof AgentAdapterDiagnosticsSchema>;
 export type AgentOwnerSettingsType = z.infer<typeof AgentOwnerSettingsSchema>;
 export type AgentLocatorType = z.infer<typeof AgentLocatorSchema>;
 export type AgentFindType = z.infer<typeof AgentFindSchema>;

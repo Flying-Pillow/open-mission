@@ -164,7 +164,7 @@ describe('Mission', () => {
                 const cancelled = await mission.cancelAgentExecution(launched.agentExecutionId, 'operator cancelled');
 
                 expect(cancelled.lifecycleState).toBe('cancelled');
-                expect(agentAdapter.getAgentExecution(launched.agentExecutionId)?.getSnapshot().phase).toBe('cancelled');
+                expect(agentAdapter.getAgentExecution(launched.agentExecutionId)?.getExecution().phase).toBe('cancelled');
                 expect(mission.getAgentExecution(launched.agentExecutionId)?.lifecycleState).toBe('cancelled');
             } finally {
                 mission.dispose();
@@ -289,7 +289,7 @@ describe('Mission', () => {
                 const terminated = await mission.terminateAgentExecution(launched.agentExecutionId, 'operator terminated');
 
                 expect(terminated.lifecycleState).toBe('terminated');
-                expect(agentAdapter.getAgentExecution(launched.agentExecutionId)?.getSnapshot().phase).toBe('terminated');
+                expect(agentAdapter.getAgentExecution(launched.agentExecutionId)?.getExecution().phase).toBe('terminated');
                 expect(mission.getAgentExecution(launched.agentExecutionId)?.lifecycleState).toBe('terminated');
             } finally {
                 mission.dispose();
@@ -331,12 +331,12 @@ describe('Mission', () => {
 
                 await mission.startTask(taskId, {
                     agentAdapter: agentAdapter.id,
-                    terminalName: 'airport-terminal-AgentExecution'
+                    terminalName: 'open-mission-terminal-AgentExecution'
                 });
                 const nextMission = await mission.buildMission();
                 expect(await agentAdapter.listExecutions()).toHaveLength(1);
                 expect(agentAdapter.getLastStartRequest()?.workingDirectory).toBe(startedStatus.missionDir);
-                expect(agentAdapter.getLastStartRequest()?.terminalName).toBe('airport-terminal-AgentExecution');
+                expect(agentAdapter.getLastStartRequest()?.terminalName).toBe('open-mission-terminal-AgentExecution');
                 expect(agentAdapter.getLastStartRequest()?.initialPrompt?.text).toContain(
                     `Stay strictly within this mission workspace: ${startedStatus.missionDir}`
                 );
@@ -382,14 +382,14 @@ describe('Mission', () => {
                     agentAdapter: agentAdapter.id,
                     model: 'gpt-5-codex',
                     reasoningEffort: 'high',
-                    terminalName: 'airport-terminal-AgentExecution'
+                    terminalName: 'open-mission-terminal-AgentExecution'
                 });
 
                 expect(agentAdapter.getLastStartRequest()?.requestedAdapterId).toBe(agentAdapter.id);
                 expect(agentAdapter.getLastStartRequest()?.metadata).toMatchObject({
                     model: 'gpt-5-codex',
                     reasoningEffort: 'high',
-                    terminalName: 'airport-terminal-AgentExecution'
+                    terminalName: 'open-mission-terminal-AgentExecution'
                 });
                 const persisted = await Mission.readStateData(adapter, mission.getMissionDir());
                 const persistedTask = persisted?.runtime.tasks.find((task) => task.taskId === taskId);
@@ -986,7 +986,7 @@ describe('Mission', () => {
 
                 const completedAgentExecution = mission.getAgentExecution(launched.agentExecutionId);
                 expect(completedAgentExecution?.lifecycleState).toBe('completed');
-                expect(agentAdapter.getAgentExecution(launched.agentExecutionId)?.getSnapshot().status).toBe('completed');
+                expect(agentAdapter.getAgentExecution(launched.agentExecutionId)?.getExecution().status).toBe('completed');
             } finally {
                 mission.dispose();
             }

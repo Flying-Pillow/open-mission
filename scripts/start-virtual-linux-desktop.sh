@@ -25,11 +25,11 @@ EOF
   exit 1
 fi
 
-display_value="${MISSION_VIRTUAL_DISPLAY:-:99}"
-screen_value="${MISSION_VIRTUAL_SCREEN:-1440x900x24}"
-state_dir="${MISSION_VIRTUAL_DESKTOP_DIR:-/tmp/mission-virtual-desktop}"
-vnc_port="${MISSION_VNC_PORT:-5900}"
-novnc_port="${MISSION_NOVNC_PORT:-6080}"
+display_value="${OPEN_MISSION_VIRTUAL_DISPLAY:-:99}"
+screen_value="${OPEN_MISSION_VIRTUAL_SCREEN:-1440x900x24}"
+state_dir="${OPEN_MISSION_VIRTUAL_DESKTOP_DIR:-/tmp/mission-virtual-desktop}"
+vnc_port="${OPEN_MISSION_VNC_PORT:-5900}"
+novnc_port="${OPEN_MISSION_NOVNC_PORT:-6080}"
 
 mkdir -p "${state_dir}/logs"
 
@@ -87,5 +87,5 @@ VNC:    localhost:${vnc_port}
 noVNC:  http://localhost:${novnc_port}/vnc.html
 
 Use this display for visible Tauri runs:
-  DISPLAY=${display_value} pnpm --dir apps/airport/native run dev
+  DISPLAY=${display_value} pnpm --dir apps/native run dev
 EOF

@@ -3,14 +3,14 @@ layout: default
 title: Agent Execution Timeline Projection Spec
 parent: Architecture
 nav_order: 8.10
-description: Implementation spec for the Airport AgentExecution timeline projection model.
+description: Implementation spec for the Open Mission AgentExecution timeline projection model.
 ---
 
 ## Scope
 
 This spec implements the requirements in [Agent Execution Timeline Projection PRD](agent-execution-timeline-projection-prd.md).
 
-The implementation defines a projection contract and Airport rendering architecture for AgentExecution timelines. It does not change AgentExecution journal authority, terminal recording authority, Mission workflow authority, or any ADR.
+The implementation defines a projection contract and Open Mission rendering architecture for AgentExecution timelines. It does not change AgentExecution journal authority, terminal recording authority, Mission workflow authority, or any ADR.
 
 ## Authoritative Inputs
 
@@ -38,16 +38,16 @@ AgentExecution owns:
 - using the journal record registry as the source of top-level journal record family coverage and replay dispatch.
 - using the AgentExecution signal registry as the source of signal payload variants, signal descriptors, and signal-specific projection behavior.
 
-### Airport Application
+### Open Mission App
 
-Airport owns:
+Open Mission owns:
 
 - rendering AgentExecution projection data.
 - grouping, filtering, layout, and component composition for timeline items.
 - local UI state such as expanded/collapsed items, scroll position, selected filters, and active terminal panel visibility.
 - accessibility labels, responsive layout, and visual hierarchy.
 
-Airport does not own:
+Open Mission does not own:
 
 - AgentExecution journal records.
 - AgentExecution journal record registry semantics.
@@ -59,7 +59,7 @@ Airport does not own:
 
 ### Terminal
 
-Terminal remains the owner of raw PTY screen state, terminal input, resize, exit, and terminal recordings. Airport may embed terminal replay or selected terminal snippets, but those views are inspectable runtime evidence, not semantic interaction truth.
+Terminal remains the owner of raw PTY screen state, terminal input, resize, exit, and terminal recordings. Open Mission may embed terminal replay or selected terminal snippets, but those views are inspectable runtime evidence, not semantic interaction truth.
 
 ## Registry-Driven Projection Semantics
 
@@ -67,14 +67,14 @@ AgentExecution projection must be driven by the same registries and schemas that
 
 The journal record registry is the canonical source for top-level journal entry families. In the current implementation, that registry is represented by `AgentExecutionJournalRecordTypeSchema` and `AgentExecutionJournalRecordSchema`; if the implementation later exposes a named `AgentExecutionJournalRecordRegistry`, the projection layer should consume that named registry rather than preserve a parallel mapping. Record-family coverage includes `journal.header`, `message.accepted`, `message.delivery`, `observation.recorded`, `decision.recorded`, `state.changed`, `activity.updated`, `owner-effect.recorded`, and `projection.recorded`.
 
-The AgentExecution signal registry is the canonical source for structured signals inside `observation.recorded.signal`. It owns signal payload validation, descriptor publication through `baselineAgentSignalDescriptors`, and signal-specific timeline projection through `projectAgentExecutionObservationSignalToTimelineItem`. Timeline projection should extend this ownership model rather than introduce a second signal switch in Airport.
+The AgentExecution signal registry is the canonical source for structured signals inside `observation.recorded.signal`. It owns signal payload validation, descriptor publication through `baselineAgentSignalDescriptors`, and signal-specific timeline projection through `projectAgentExecutionObservationSignalToTimelineItem`. Timeline projection should extend this ownership model rather than introduce a second signal switch in Open Mission.
 
 Registry ownership rules:
 
-- New journal record families must be added to the journal record registry/schema before projection code or Airport components can treat them as first-class timeline sources.
+- New journal record families must be added to the journal record registry/schema before projection code or Open Mission components can treat them as first-class timeline sources.
 - New signal families must be added to the signal registry before projection code can render them as first-class signal-derived timeline items.
 - Projection code may map registry-backed records and signals into timeline primitives, zones, behavior, severity, payloads, and provenance.
-- Airport components must select render components from projection behavior and primitive metadata, not directly from raw journal record type or signal type.
+- Open Mission components must select render components from projection behavior and primitive metadata, not directly from raw journal record type or signal type.
 - Coverage tests must fail when a registry-backed record or descriptor-backed signal has no intentional projection behavior, explicit hidden/collapsed behavior, or documented non-UI reason.
 
 ## Projection Contract
@@ -147,7 +147,7 @@ Severity rules:
 - Use `critical` only when the AgentExecution or daemon can no longer provide a reliable operator experience without intervention.
 - Omit severity for ordinary conversation and neutral activity.
 
-Backend projection should provide severity when derived from canonical state. Airport may derive display severity from primitive and payload only as a presentation fallback, not as domain truth.
+Backend projection should provide severity when derived from canonical state. Open Mission may derive display severity from primitive and payload only as a presentation fallback, not as domain truth.
 
 ## Primitive Type
 
@@ -206,7 +206,7 @@ type AgentExecutionRenderBehavior = {
 
 Behavior class controls component selection. Primitive controls item-specific rendering within that class. Zone controls placement and grouping. Severity controls urgency and notification treatment.
 
-Attention is represented through `behavior.class: 'approval'`, selected `attention.*` primitives, and optional severity in phase one. A future projection version may introduce an explicit `attention` field if Airport needs to filter, group, notify, or navigate attention states independently from primitive and zone.
+Attention is represented through `behavior.class: 'approval'`, selected `attention.*` primitives, and optional severity in phase one. A future projection version may introduce an explicit `attention` field if Open Mission needs to filter, group, notify, or navigate attention states independently from primitive and zone.
 
 `actionable` means the item should render with an action-capable shape. It is not the permission contract for what the operator can do. Operator permissions and available controls should come from interaction affordances.
 
@@ -229,14 +229,14 @@ type AgentExecutionInteractionAffordance = {
 Affordance rules:
 
 - Affordances derive from AgentExecution message descriptors, Entity command descriptors, interaction capabilities, runtime state, ownership, scope, and policy.
-- Airport may hide, disable, or explain controls based on affordances, but it must not invent authority that the AgentExecution contract does not expose.
+- Open Mission may hide, disable, or explain controls based on affordances, but it must not invent authority that the AgentExecution contract does not expose.
 - `canReply` applies to conversational or input-request items that can accept an operator AgentExecutionMessage.
 - `canApprove` and `canReject` apply to verification, approval, permission, or review items whose owner Entity exposes a legal decision path.
 - `canInterrupt` and `canResume` apply to execution-level controls and must respect current lifecycle, attention, runtime capabilities, and command descriptors.
 - `canExpandTerminal` applies only when terminal inspection is available through Terminal-owned data.
 - `canInspectArtifact` applies only when an artifact reference or structured output reference is available.
 
-Phase one should continue using `behavior.actionable` as a render hint only. Future Airport work should migrate control rendering to affordances so permissions, capabilities, runtime state, ownership, and execution mode are not collapsed into one generic flag.
+Phase one should continue using `behavior.actionable` as a render hint only. Future Open Mission work should migrate control rendering to affordances so permissions, capabilities, runtime state, ownership, and execution mode are not collapsed into one generic flag.
 
 ## Provenance
 
@@ -253,8 +253,8 @@ Rules:
 
 - Journal-derived items set `durable: true` and include source record ids when available.
 - Live runtime overlay items set `durable: false` and `liveOverlay: true`.
-- Projection material derived from low-confidence observations should expose that confidence so Airport can collapse or label it.
-- Airport must not invent source record ids.
+- Projection material derived from low-confidence observations should expose that confidence so Open Mission can collapse or label it.
+- Open Mission must not invent source record ids.
 
 ## Payload Families
 
@@ -312,7 +312,7 @@ type ArtifactPayload = {
 
 ## Registry-Backed Journal-To-Projection Mapping
 
-Baseline mapping from semantic journal records. This table defines required registry coverage, not an Airport-owned switch table.
+Baseline mapping from semantic journal records. This table defines required registry coverage, not an Open Mission-owned switch table.
 
 | Source | Projection |
 | --- | --- |
@@ -333,9 +333,9 @@ Baseline mapping from semantic journal records. This table defines required regi
 
 Projection mapping must be implemented in an AgentExecution-owned projection/replay module or shared contract layer, not in Svelte components.
 
-The backend projects `observation.recorded.signal` directly to `timelineItems` through `AgentExecutionSignalRegistry.ts`. Timeline projection should continue to reuse that registry-driven dispatch model and add timeline-specific projection metadata either to the signal registry entry or to an AgentExecution-owned projection registry keyed by signal type. It must not re-create the signal mapping inside Airport.
+The backend projects `observation.recorded.signal` directly to `timelineItems` through `AgentExecutionSignalRegistry.ts`. Timeline projection should continue to reuse that registry-driven dispatch model and add timeline-specific projection metadata either to the signal registry entry or to an AgentExecution-owned projection registry keyed by signal type. It must not re-create the signal mapping inside Open Mission.
 
-## Airport Component Architecture
+## Open Mission Component Architecture
 
 Target component structure:
 
@@ -369,7 +369,7 @@ Phase one can keep the existing component files and introduce these names gradua
 
 ## Journal Entry Component Matrix
 
-Airport must not render journal records one-to-one as raw rows. It should render projection items produced from registry-backed journal replay through specialized components.
+Open Mission must not render journal records one-to-one as raw rows. It should render projection items produced from registry-backed journal replay through specialized components.
 
 This matrix is a component coverage matrix for projection families. It is not a replacement for the journal record registry or the signal registry.
 
@@ -427,7 +427,7 @@ This matrix is a component coverage matrix for projection families. It is not a 
 
 ## Grouping And Compaction Rules
 
-Airport and/or backend projection may group items, but semantic correctness belongs to AgentExecution replay.
+Open Mission and/or backend projection may group items, but semantic correctness belongs to AgentExecution replay.
 
 Required grouping rules:
 
@@ -486,7 +486,7 @@ Examples:
 - provider stream interrupted.
 - in-flight delivery attempt.
 
-If a runtime overlay fact must survive restart or explain a past decision, backend code should promote it into a journal record. Airport must not make that promotion locally.
+If a runtime overlay fact must survive restart or explain a past decision, backend code should promote it into a journal record. Open Mission must not make that promotion locally.
 
 Runtime overlay composition may drive sticky progress, terminal attachment badges, synchronized terminal evidence affordances, and streaming indicators. These UI states must be visibly live or provisional when they are not journal-backed.
 
@@ -538,7 +538,7 @@ The first multi-agent view should prefer bounded composition and explicit delega
 
 ## Execution Graph Visualization
 
-Execution graph visualization is a later frontier, not a phase-one requirement. Once timelines, delegation, causality, artifacts, workflow effects, ownership, and concurrency coexist in operator workflows, Airport may need a graph or timeline-and-graph hybrid view.
+Execution graph visualization is a later frontier, not a phase-one requirement. Once timelines, delegation, causality, artifacts, workflow effects, ownership, and concurrency coexist in operator workflows, Open Mission may need a graph or timeline-and-graph hybrid view.
 
 The graph view should be a higher-level projection over existing owners:
 
@@ -559,7 +559,7 @@ Implementation should add deterministic coverage when code changes begin:
 - signal registry coverage tests proving every descriptor-backed signal has intentional timeline projection behavior.
 - tests proving `usage` and `diagnostic` signals are intentionally projected, collapsed, or excluded according to severity and operator value.
 - grouping tests that preserve highest severity and unresolved actionable items.
-- Airport component tests for input request, blocked, runtime warning, verification result, activity, and normal conversation rendering.
+- Open Mission component tests for input request, blocked, runtime warning, verification result, activity, and normal conversation rendering.
 - accessibility checks for severity labels and actionable controls.
 - responsive checks for mobile layout with long text, unresolved input requests, and runtime warnings.
 - terminal separation tests proving terminal panel/snippets do not become semantic timeline truth.
@@ -573,7 +573,7 @@ Implementation should add deterministic coverage when code changes begin:
 
 1. Keep the AgentExecution signal registry and journal replay as the only projection sources.
 2. Add AgentExecution-owned projection coverage tests for the journal record registry and signal registry.
-3. Refactor Airport AgentExecution presentation around behavior-class components while preserving visual parity.
+3. Refactor Open Mission AgentExecution presentation around behavior-class components while preserving visual parity.
 4. Add current activity and attention presentation surfaces when backend data exposes them.
 5. Add grouping, filtering, and compaction once item volume and product workflows justify the complexity.
 6. Add cursor windows and virtualization after measured performance need.
@@ -582,13 +582,13 @@ Implementation should add deterministic coverage when code changes begin:
 ## Open Questions
 
 1. Should `AgentExecutionTimelineItem.payload` be a discriminated union from the start, or a strict record with primitive-specific parsing in phase one?
-2. Should backend projection provide render behavior directly, or should it provide only primitive plus zone and let Airport derive behavior from a shared table?
-3. Should runtime overlay indicators be mixed into `timelineItems`, or exposed as a separate `runtimeOverlay` collection that Airport composes visually?
+2. Should backend projection provide render behavior directly, or should it provide only primitive plus zone and let Open Mission derive behavior from a shared table?
+3. Should runtime overlay indicators be mixed into `timelineItems`, or exposed as a separate `runtimeOverlay` collection that Open Mission composes visually?
 4. What event should mark an input request as superseded when the operator responds through a normal prompt rather than a fixed choice?
 5. What is the smallest useful journal cursor API for older timeline windows without prematurely designing search and replay navigation?
 6. Should attention become an explicit projection axis once blocked states span runtime, workflow, conversation, collaboration, and artifact review?
 7. What higher-level projection should compose delegated or concurrent AgentExecutions without weakening each AgentExecution's own timeline provenance?
-8. Which affordances should be derived by AgentExecution projection, and which should stay as Airport-only control state?
+8. Which affordances should be derived by AgentExecution projection, and which should stay as Open Mission-only control state?
 9. What graph nodes and edges are useful enough to justify an execution graph visualization without overbuilding before multi-agent workflows require it?
 10. Which timeline replay controls are necessary for operators before cursor-based replay windows exist?
 11. What provenance is required before terminal synchronization can be authoritative rather than timestamp-approximate?

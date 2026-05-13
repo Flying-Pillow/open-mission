@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { getDaemonLockPath, getDaemonRuntimePath, getDaemonTerminalLeaseStatePath } from './daemonPaths.js';
 import { MissionRegistry } from './MissionRegistry.js';
 import { executeEntityCommandInDaemon } from '../entities/Entity/EntityRemote.js';
-import { startMissionDaemon } from './DaemonIpcServer.js';
+import { startOpenMissionDaemon } from './DaemonIpcServer.js';
 import { resolveDaemonSurrealStorePath } from './runtime/DaemonSurrealStore.js';
 
 vi.mock('./MissionTerminal.js', () => ({
@@ -37,22 +37,22 @@ vi.mock('./MissionTerminal.js', () => ({
 
 describe('minimal source daemon request handling', () => {
     it('refuses to start a second daemon while one process owns the runtime', async () => {
-        const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-singleton-workspace-'));
-        const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-singleton-runtime-'));
+        const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-singleton-workspace-'));
+        const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-singleton-runtime-'));
         const previousRuntimeDirectory = process.env['XDG_RUNTIME_DIR'];
         process.env['XDG_RUNTIME_DIR'] = runtimeRoot;
         const hydrateDaemonMissions = vi.spyOn(MissionRegistry.prototype, 'hydrateDaemonMissions').mockResolvedValue(undefined);
         const socketPath = path.join(runtimeRoot, 'daemon.sock');
-        const daemon = await startMissionDaemon({
+        const daemon = await startOpenMissionDaemon({
             socketPath,
             surfacePath: workspaceRoot
         });
 
         try {
-            await expect(startMissionDaemon({
+            await expect(startOpenMissionDaemon({
                 socketPath,
                 surfacePath: workspaceRoot
-            })).rejects.toThrow(/Mission daemon is already running with pid/u);
+            })).rejects.toThrow(/Open Mission daemon is already running with pid/u);
             expect(hydrateDaemonMissions).toHaveBeenCalledTimes(1);
         } finally {
             await daemon.dispose();
@@ -64,8 +64,8 @@ describe('minimal source daemon request handling', () => {
     });
 
     it('replaces a stale daemon runtime lock before starting', async () => {
-        const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-stale-lock-workspace-'));
-        const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-stale-lock-runtime-'));
+        const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-stale-lock-workspace-'));
+        const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-stale-lock-runtime-'));
         const previousRuntimeDirectory = process.env['XDG_RUNTIME_DIR'];
         process.env['XDG_RUNTIME_DIR'] = runtimeRoot;
         const hydrateDaemonMissions = vi.spyOn(MissionRegistry.prototype, 'hydrateDaemonMissions').mockResolvedValue(undefined);
@@ -77,7 +77,7 @@ describe('minimal source daemon request handling', () => {
             socketPath: path.join(runtimeRoot, 'daemon.sock')
         }, null, 2)}\n`, 'utf8');
 
-        const daemon = await startMissionDaemon({
+        const daemon = await startOpenMissionDaemon({
             socketPath: path.join(runtimeRoot, 'daemon.sock'),
             surfacePath: workspaceRoot
         });
@@ -94,12 +94,12 @@ describe('minimal source daemon request handling', () => {
     });
 
     it('starts a repository-scoped SurrealDB runtime store under .mission', async () => {
-        const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-surreal-workspace-'));
-        const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-surreal-runtime-'));
+        const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-surreal-workspace-'));
+        const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-surreal-runtime-'));
         const previousRuntimeDirectory = process.env['XDG_RUNTIME_DIR'];
         process.env['XDG_RUNTIME_DIR'] = runtimeRoot;
         const hydrateDaemonMissions = vi.spyOn(MissionRegistry.prototype, 'hydrateDaemonMissions').mockResolvedValue(undefined);
-        const daemon = await startMissionDaemon({
+        const daemon = await startOpenMissionDaemon({
             socketPath: path.join(runtimeRoot, 'daemon.sock'),
             surfacePath: workspaceRoot
         });
@@ -116,8 +116,8 @@ describe('minimal source daemon request handling', () => {
     });
 
     it('terminates a live but unreachable daemon lock owner before starting', async () => {
-        const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-unreachable-lock-workspace-'));
-        const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-unreachable-lock-runtime-'));
+        const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-unreachable-lock-workspace-'));
+        const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-unreachable-lock-runtime-'));
         const previousRuntimeDirectory = process.env['XDG_RUNTIME_DIR'];
         process.env['XDG_RUNTIME_DIR'] = runtimeRoot;
         const staleProcess = spawnStaleDaemonProcess();
@@ -130,7 +130,7 @@ describe('minimal source daemon request handling', () => {
             socketPath: path.join(runtimeRoot, 'missing-daemon.sock')
         }, null, 2)}\n`, 'utf8');
 
-        const daemon = await startMissionDaemon({
+        const daemon = await startOpenMissionDaemon({
             socketPath: path.join(runtimeRoot, 'daemon.sock'),
             surfacePath: workspaceRoot
         });
@@ -153,8 +153,8 @@ describe('minimal source daemon request handling', () => {
             return;
         }
 
-        const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-stale-terminal-workspace-'));
-        const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-stale-terminal-runtime-'));
+        const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-stale-terminal-workspace-'));
+        const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-stale-terminal-runtime-'));
         const previousRuntimeDirectory = process.env['XDG_RUNTIME_DIR'];
         process.env['XDG_RUNTIME_DIR'] = runtimeRoot;
         const staleTerminalProcess = spawnDetachedStaleTerminalProcess();
@@ -183,7 +183,7 @@ describe('minimal source daemon request handling', () => {
             }],
         }, null, 2)}\n`, 'utf8');
 
-        const daemon = await startMissionDaemon({
+        const daemon = await startOpenMissionDaemon({
             socketPath: path.join(runtimeRoot, 'daemon.sock'),
             surfacePath: workspaceRoot
         });

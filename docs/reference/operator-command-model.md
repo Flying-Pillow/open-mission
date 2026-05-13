@@ -16,6 +16,6 @@ Operator commands should be Entity commands whenever they change or depend on do
 | Mission task | assign, launch, verify, retry |
 | Agent execution | send message, interrupt, read log |
 
-Airport renders command views. The daemon dispatches methods. Entity classes own behavior.
+Open Mission renders command views. The daemon dispatches methods. Entity classes own behavior.
 
 If a command needs provider-specific work, the Entity should call an adapter. The provider shape should not become the command contract.

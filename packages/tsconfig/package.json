@@ -1,5 +1,5 @@
 {
-  "name": "@flying-pillow/mission-tsconfig",
+  "name": "@flying-pillow/open-mission-tsconfig",
   "version": "0.1.0-alpha.0",
   "description": "Shared TypeScript configuration for the Mission monorepo",
   "type": "module",

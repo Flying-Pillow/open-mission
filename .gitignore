@@ -16,8 +16,8 @@ out/
 coverage/
 target/
 src-tauri/gen/
-apps/airport/native/resources/embedded-server/
-apps/airport/native/resources/runtime/
+apps/native/resources/embedded-server/
+apps/native/resources/runtime/
 
 # local test repositories
 .test

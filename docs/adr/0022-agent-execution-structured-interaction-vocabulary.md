@@ -26,7 +26,7 @@ An **Agent execution message** is structured daemon-to-AgentExecution input. It 
 
 An **Agent execution turn** is one accepted and delivered turn-starting Agent execution message. Launch prompts, follow-up prompts, and turn-starting runtime messages such as `resume`, `checkpoint`, or `nudge` each begin a new turn. A turn begins from daemon-owned acceptance and delivery records, not from Agent-authored acknowledgement text.
 
-An **Agent execution message descriptor** describes one daemon-to-AgentExecution message that is available for a specific execution. It names the message type, label, input shape, delivery behavior, and context effect so Airport and daemon modules can present and send messages from the same source of truth.
+An **Agent execution message descriptor** describes one daemon-to-AgentExecution message that is available for a specific execution. It names the message type, label, input shape, delivery behavior, and context effect so Open Mission and daemon modules can present and send messages from the same source of truth.
 
 An **Agent signal** is structured text emitted by the Agent process to the Entity that owns the execution scope. The signal marker prefix is derived from the owning Entity, such as `@task::`, `@mission::`, `@repository::`, or `@artifact::`, followed by strict JSON on the same line. The current `@mission::` marker is the first implementation of this owner-addressed pattern for Mission/task work and should converge into the owner-derived prefix model as scope support broadens.
 
@@ -99,7 +99,7 @@ Agent execution message accepted by the daemon
   -> later Agent observation clears or refines the turn state
 ```
 
-Surface attachment is not a turn. Attaching Airport or another surface to an existing AgentExecution only resolves transport and live state. If a surface-triggered action also starts work, it must do so by sending an explicit Agent execution message that begins a new turn and therefore enters `awaiting-agent-response` through the same daemon-owned delivery path as any other turn.
+Surface attachment is not a turn. Attaching Open Mission or another surface to an existing AgentExecution only resolves transport and live state. If a surface-triggered action also starts work, it must do so by sending an explicit Agent execution message that begins a new turn and therefore enters `awaiting-agent-response` through the same daemon-owned delivery path as any other turn.
 
 An Agent signal may produce an AgentExecution Entity event after policy acceptance. When a signal represents a request for owner action, the owning Entity evaluates it as an observation or claim and decides the resulting domain behavior through its own methods, policies, and workflow delegate. The Agent is not asked to echo Mission, Task, Artifact, Repository, or owner ids in the marker payload; the daemon attaches the active route scope and rejects markers whose `agentExecutionId` does not match the active execution.
 

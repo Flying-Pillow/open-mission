@@ -8,7 +8,7 @@ description: How Mission keeps the operator above automation.
 
 Mission treats the human operator as the authority over launch, pause, recovery, and delivery.
 
-The daemon can advertise available Entity commands. Airport can render them. Agent adapters can execute bounded tasks. None of those replace operator judgment at workflow gates.
+The daemon can advertise available Entity commands. Open Mission can render them. Agent adapters can execute bounded tasks. None of those replace operator judgment at workflow gates.
 
 Operator controls include:
 

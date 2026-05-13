@@ -39,7 +39,7 @@ The implementation must make the available structured interaction inspectable be
 - ADR-0017: prompt-scoped Agent execution signals are the current transport baseline.
 - ADR-0018: Agent, AgentAdapter, AgentExecutor, AgentExecution, and Terminal vocabulary.
 - ADR-0022: structured Agent execution interaction vocabulary and owner-addressed signal model.
-- ADR-0024: `mission-mcp` is the daemon-owned MCP signal transport for Agent signals.
+- ADR-0024: `open-mission-mcp` is the daemon-owned MCP signal transport for Agent signals.
 - Mission MCP Server Spec: subordinate realization blueprint for the MCP transport. It must not redefine descriptor, observation, owner-routing, or idempotency semantics independently of this spec.
 
 ## Vocabulary To Implement
@@ -54,7 +54,7 @@ It combines:
 - Agent signal descriptors: Agent-to-owner structured signal payloads and their declared delivery transports.
 - Owner addressing metadata: marker prefix, owning Entity name, owning Entity id, and scope identifiers.
 - Policy metadata: which outcomes each accepted signal may produce.
-- Transport metadata: whether this execution exposes stdout-marker delivery, `mission-mcp` delivery, or both.
+- Transport metadata: whether this execution exposes stdout-marker delivery, `open-mission-mcp` delivery, or both.
 
 ### Agent Execution Message
 
@@ -70,7 +70,7 @@ Message examples:
 
 ### Agent Signal
 
-An Agent signal is structured Agent-authored input to the owning Entity path. It may arrive as a stdout marker or as a `mission-mcp` tool call. The signal payload shape is the same regardless of transport.
+An Agent signal is structured Agent-authored input to the owning Entity path. It may arrive as a stdout marker or as a `open-mission-mcp` tool call. The signal payload shape is the same regardless of transport.
 
 For stdout-marker delivery, the marker prefix is derived from the owning Entity, not from the transport or adapter.
 
@@ -86,15 +86,15 @@ The stdout marker payload is strict JSON. The MCP tool payload is schema-validat
 
 ### Mission MCP Server
 
-The Mission MCP server is the daemon-owned local MCP service named `mission-mcp`. It materializes session-scoped tools from the Agent execution protocol descriptor and converts accepted MCP tool calls into Agent execution observations. It is a transport adapter into the same observation path as stdout markers, not an Entity, workflow owner, repository API, public automation API, or separate Agent execution model.
+The Mission MCP server is the daemon-owned local MCP service named `open-mission-mcp`. It materializes session-scoped tools from the Agent execution protocol descriptor and converts accepted MCP tool calls into Agent execution observations. It is a transport adapter into the same observation path as stdout markers, not an Entity, workflow owner, repository API, public automation API, or separate Agent execution model.
 
 ### Agent Execution Observation
 
-An Agent execution observation is the daemon-normalized form of runtime output or structured Agent-authored transport input. Observations come from parsed Agent signal stdout markers, `mission-mcp` tool calls, provider-structured output, terminal diagnostics, or daemon-authored runtime facts.
+An Agent execution observation is the daemon-normalized form of runtime output or structured Agent-authored transport input. Observations come from parsed Agent signal stdout markers, `open-mission-mcp` tool calls, provider-structured output, terminal diagnostics, or daemon-authored runtime facts.
 
 Observation handling belongs to the owning Entity path. AgentExecutor can observe and route. The owning Entity decides scoped meaning.
 
-Agent execution observations are append-only and idempotent. An Agent signal event id may produce policy effects at most once for one AgentExecution, regardless of whether it arrived through stdout-marker delivery, `mission-mcp`, adapter replay, or a transport retry.
+Agent execution observations are append-only and idempotent. An Agent signal event id may produce policy effects at most once for one AgentExecution, regardless of whether it arrived through stdout-marker delivery, `open-mission-mcp`, adapter replay, or a transport retry.
 
 ### Agent Execution Claim
 
@@ -179,7 +179,7 @@ AgentExecutor owns:
 - terminal attachment
 - provider output parsing
 - stdout/stderr observation capture
-- `mission-mcp` access registration coordination
+- `open-mission-mcp` access registration coordination
 - routing observations to the owner path
 - delivery attempts for Agent execution messages
 
@@ -228,7 +228,7 @@ type AgentExecutionProtocolDescriptor = {
   messages: AgentExecutionMessageDescriptor[];
   signals: AgentSignalDescriptor[];
   mcp?: {
-    serverName: 'mission-mcp';
+    serverName: 'open-mission-mcp';
     exposure: 'session-scoped';
     publicApi: false;
   };
@@ -276,7 +276,7 @@ Add signal descriptor schemas beside or near existing message descriptors. Prefe
 
 Replace singular `delivery` with `deliveries: Array<'stdout-marker' | 'mcp-tool'>`. Remove all singular field usage in the same change. This is greenfield cleanup, not a compatibility migration.
 
-Expose the protocol descriptor in AgentExecution data or a protocol snapshot query so launch code, Airport, tests, and prompt rendering read the same descriptor.
+Expose the protocol descriptor in AgentExecution data or a protocol snapshot query so launch code, Open Mission, tests, and prompt rendering read the same descriptor.
 
 ### 2. Resolve Owning Entity From Scope
 
@@ -305,7 +305,7 @@ The rendered instructions include:
 - supported signal payloads from descriptors
 - examples generated from descriptors
 
-For executions that declare `mcp-tool` delivery, `mission-mcp` materializes tools from the same signal descriptors. MCP tool names are execution-scoped transport affordances, not stable public APIs.
+For executions that declare `mcp-tool` delivery, `open-mission-mcp` materializes tools from the same signal descriptors. MCP tool names are execution-scoped transport affordances, not stable public APIs.
 
 ### 4. Parse Owner-Addressed Signals
 
@@ -319,7 +319,7 @@ The current parser and tests are useful source material, but the new parsing pat
 
 ### 4a. Materialize Mission MCP Tools
 
-Use the Mission MCP Server Spec for concrete MCP realization. Architecturally, `mission-mcp` must:
+Use the Mission MCP Server Spec for concrete MCP realization. Architecturally, `open-mission-mcp` must:
 
 - start and stop with the daemon
 - register access for active Agent executions that declare `mcp-tool` delivery
@@ -366,29 +366,29 @@ Minimum test coverage:
 - descriptor schema rejects singular `delivery` and accepts `deliveries`
 - owner prefix derivation for task, mission, repository, and artifact scopes
 - prompt instructions generated from descriptors
-- `mission-mcp` tools generated from the same descriptors
+- `open-mission-mcp` tools generated from the same descriptors
 - parser accepts only the active execution's owner prefix and descriptor payloads
 - parser rejects malformed, oversized, wrong-execution, duplicate, and unsupported markers
 - MCP tool calls reject malformed, oversized, wrong-execution, duplicate, unauthorized, and unsupported inputs
 - AgentExecutor routes stdout-marker and MCP observations to owner handling rather than applying scoped meaning directly
 - Task-owned ready/completion/failure claims remain claims until owner workflow behavior accepts lifecycle changes
-- Airport reads message and signal descriptors from the same protocol source used for launch instructions
+- Open Mission reads message and signal descriptors from the same protocol source used for launch instructions
 
 Run at minimum:
 
 ```bash
-pnpm --filter @flying-pillow/mission-core check
-pnpm --filter @flying-pillow/mission-core test
-pnpm --filter @flying-pillow/mission-core build
-pnpm --filter @flying-pillow/mission-airport-web check
-pnpm --filter @flying-pillow/mission-airport-web build
+pnpm --filter @flying-pillow/open-mission-core check
+pnpm --filter @flying-pillow/open-mission-core test
+pnpm --filter @flying-pillow/open-mission-core build
+pnpm --filter @flying-pillow/open-mission-web check
+pnpm --filter @flying-pillow/open-mission-web build
 ```
 
 ## Open Design Questions
 
 1. Should artifact-scoped execution always use `@artifact::`, or should task-owned artifact work use `@task::` when `taskId` is present?
 2. Should owner observation handling be a daemon-internal Entity method first, then promoted to Entity contract only when a client-facing need appears?
-3. Should AgentExecution publish separate events for `progress.changed`, `claim.created`, and `input.requested`, or keep only `data.changed` until Airport needs more specific event channels?
+3. Should AgentExecution publish separate events for `progress.changed`, `claim.created`, and `input.requested`, or keep only `data.changed` until Open Mission needs more specific event channels?
 4. Should `@system::` be implemented now, or postponed until a System Entity contract exists?
 
 ## Working Implementation Rule

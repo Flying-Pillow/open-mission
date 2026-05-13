@@ -24,8 +24,15 @@ export type AgentAdapterTransportCapabilities = {
     };
 };
 
+export type AgentAdapterDiagnostics = {
+    command: string;
+    supportsUsageParsing: boolean;
+    runtimeMessageCount: number;
+    transportCapabilities: AgentAdapterTransportCapabilities;
+};
+
 export type AgentExecutionMcpAccess = {
-    serverName: 'mission-mcp';
+    serverName: 'open-mission-mcp';
     agentExecutionId: string;
     ownerId: string;
     token: string;
@@ -209,6 +216,7 @@ export class AgentAdapter {
     public readonly id: string;
     public readonly displayName: string;
     public readonly icon: string;
+    private readonly command: string;
     private readonly createLaunchPlanHook: (config: AgentLaunchConfig) => AgentAdapterLaunchPlan;
     private readonly parseRuntimeOutputLineHook: ((line: string) => AgentAdapterRuntimeOutput[]) | undefined;
     private readonly parseAgentExecutionUsageContentHook: ((content: string) => AgentAdapterRuntimeOutput | undefined) | undefined;
@@ -231,9 +239,11 @@ export class AgentAdapter {
         if (!this.id) {
             throw new ProviderInitializationError('unknown', 'AgentAdapter requires a non-empty id.');
         }
-        if (!options.command.trim()) {
+        const command = options.command.trim();
+        if (!command) {
             throw new ProviderInitializationError(this.id, `AgentAdapter '${this.id}' requires a non-empty command.`);
         }
+        this.command = command;
         this.createLaunchPlanHook = options.createLaunchPlan;
         this.parseRuntimeOutputLineHook = options.parseRuntimeOutputLine;
         this.parseAgentExecutionUsageContentHook = options.parseAgentExecutionUsageContent;
@@ -264,6 +274,15 @@ export class AgentAdapter {
             supported: [...this.transportCapabilities.supported],
             preferred: { ...this.transportCapabilities.preferred },
             provisioning: { ...this.transportCapabilities.provisioning }
+        };
+    }
+
+    public readDiagnostics(): AgentAdapterDiagnostics {
+        return {
+            command: this.command,
+            supportsUsageParsing: this.supportsUsageParsing(),
+            runtimeMessageCount: this.runtimeMessages.length,
+            transportCapabilities: this.getTransportCapabilities()
         };
     }
 
@@ -552,7 +571,7 @@ async function prepareConfiguredLaunchConfig(config: AgentLaunchConfig, trustedF
 function resolveAgentAdapterSettings<TAgentId extends string>(input: { config: AgentLaunchConfig; agentId: TAgentId; resolveSettings?: AgentAdapterSettingsResolver<TAgentId> }): ResolvedAgentAdapterSettings {
     const raw = input.resolveSettings
         ? input.resolveSettings(input.config, input.agentId)
-        : { model: process.env['MISSION_DEFAULT_MODEL']?.trim() || '', launchMode: 'interactive' as const, runtimeEnv: process.env };
+        : { model: process.env['OPEN_MISSION_DEFAULT_MODEL']?.trim() || '', launchMode: 'interactive' as const, runtimeEnv: process.env };
     const model = raw.model?.trim();
     return {
         model: model ?? '',

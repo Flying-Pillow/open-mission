@@ -40,7 +40,7 @@ ensure_mission_gh_path_in_bashrc() {
   cat >> "${bashrc_path}" <<'EOF'
 
 # mission: gh-path-begin
-mission_gh_binary="$(node -e "const fs = require('node:fs'); try { const raw = fs.readFileSync('/config/mission/config.json', 'utf8'); const parsed = JSON.parse(raw); if (typeof parsed.ghBinary === 'string') process.stdout.write(parsed.ghBinary.trim()); } catch {}" 2>/dev/null)"
+mission_gh_binary="$(node -e "const fs = require('node:fs'); try { const raw = fs.readFileSync('/config/open-mission/config.json', 'utf8'); const parsed = JSON.parse(raw); if (typeof parsed.ghBinary === 'string') process.stdout.write(parsed.ghBinary.trim()); } catch {}" 2>/dev/null)"
 if [[ -n "${mission_gh_binary}" ]]; then
   mission_gh_dir="$(dirname "${mission_gh_binary}")"
   case ":${PATH}:" in
@@ -53,7 +53,7 @@ unset mission_gh_binary mission_gh_dir
 EOF
 }
 
-mission_gh_binary="$(node -e "const fs = require('node:fs'); try { const raw = fs.readFileSync('/config/mission/config.json', 'utf8'); const parsed = JSON.parse(raw); if (typeof parsed.ghBinary === 'string') process.stdout.write(parsed.ghBinary.trim()); } catch {}" 2>/dev/null || true)"
+mission_gh_binary="$(node -e "const fs = require('node:fs'); try { const raw = fs.readFileSync('/config/open-mission/config.json', 'utf8'); const parsed = JSON.parse(raw); if (typeof parsed.ghBinary === 'string') process.stdout.write(parsed.ghBinary.trim()); } catch {}" 2>/dev/null || true)"
 if [[ -n "${mission_gh_binary}" ]]; then
   prepend_path_once "$(dirname "${mission_gh_binary}")"
 fi
@@ -144,15 +144,15 @@ echo "--- Installing pnpm workspace dependencies ---"
 pnpm install
 
 echo "--- Building Mission installer packages ---"
-pnpm --filter @flying-pillow/mission-core run build
+pnpm --filter @flying-pillow/open-mission-core run build
 pnpm --filter @flying-pillow/open-mission run build
 
 echo "--- Bootstrapping Mission through the local installer ---"
-node /open-mission/packages/open-mission/build/mission.js install --json
+node /open-mission/packages/open-mission/build/open-mission.js install --json
 
-if [ -f /open-mission/apps/airport/native/src-tauri/Cargo.toml ]; then
+if [ -f /open-mission/apps/native/src-tauri/Cargo.toml ]; then
   echo "--- Prefetching Rust dependencies for the native host ---"
-  cargo fetch --manifest-path /open-mission/apps/airport/native/src-tauri/Cargo.toml
+  cargo fetch --manifest-path /open-mission/apps/native/src-tauri/Cargo.toml
 fi
 
 echo "================================================================"

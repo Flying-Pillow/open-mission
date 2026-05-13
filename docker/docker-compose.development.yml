@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile.development
-    image: mission/development:local
+    image: open-mission/development:local
     working_dir: /open-mission
     container_name: open-mission-development
     command: [ "tail", "-f", "/dev/null" ]
@@ -14,13 +14,13 @@ services:
       - ../.env
     environment:
       MISSIONS_PATH: /missions
-      MISSION_CONFIG_PATH: /config
+      OPEN_MISSION_CONFIG_PATH: /config
     volumes:
       - "../:/open-mission"
       - "../../flying-pillow:/flying-pillow"
       - "${HOST_REPOSITORIES_PATH:-/mnt/volatile/repositories}:/repositories"
       - "${HOST_MISSIONS_PATH:-/mnt/volatile/missions}:/missions"
-      - "${HOST_MISSION_CONFIG_PATH:-/mnt/volatile/config}:/config"
+      - "${HOST_OPEN_MISSION_CONFIG_PATH:-/mnt/volatile/config}:/config"
       - "cargo-registry:/home/dev/.cargo/registry"
       - "cargo-git:/home/dev/.cargo/git"
       - "rustup:/home/dev/.rustup"

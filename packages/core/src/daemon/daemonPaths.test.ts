@@ -16,8 +16,8 @@ import {
 
 describe('daemonPaths', () => {
 	it('resolves runtime state outside the repository', async () => {
-		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-paths-'));
-		const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-paths-runtime-'));
+		const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-paths-'));
+		const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-paths-runtime-'));
 		const previousRuntimeDirectory = process.env['XDG_RUNTIME_DIR'];
 		process.env['XDG_RUNTIME_DIR'] = runtimeRoot;
 

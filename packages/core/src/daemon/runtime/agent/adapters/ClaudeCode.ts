@@ -12,7 +12,7 @@ import { provisionAgentExecutionMcpConfig } from '../mcp/AgentExecutionMcpProvis
 
 const CLAUDE_CODE_AGENT_ID = 'claude-code' as const;
 
-const CLAUDE_MCP_CONFIG_ENV = 'MISSION_AGENT_MCP_CONFIG';
+const CLAUDE_MCP_CONFIG_ENV = 'OPEN_MISSION_AGENT_MCP_CONFIG';
 
 export type ClaudeCodeInput = {
     command?: string;
@@ -34,7 +34,7 @@ export function createClaudeCode(input: ClaudeCodeInput = {}): AgentInput {
         displayName: 'Claude Code',
         icon: 'simple-icons:anthropic',
         adapter: {
-            command: command?.trim() || process.env['MISSION_CLAUDE_CODE_CLI_COMMAND']?.trim() || 'claude',
+            command: command?.trim() || process.env['OPEN_MISSION_CLAUDE_CODE_CLI_COMMAND']?.trim() || 'claude',
             providerSettings: {
                 allowDangerouslySkipPermissions: true,
                 allowCaptureAgentExecutions: true
@@ -100,7 +100,7 @@ async function prepareClaudeCodeLaunchConfig(
         config,
         access: mcpAccess,
         launchEnvName: CLAUDE_MCP_CONFIG_ENV,
-        configFileName: 'mission-mcp.json',
+        configFileName: 'open-mission-mcp.json',
         createDocument: (bridge) => ({
             mcpServers: {
                 [mcpAccess.serverName]: bridge

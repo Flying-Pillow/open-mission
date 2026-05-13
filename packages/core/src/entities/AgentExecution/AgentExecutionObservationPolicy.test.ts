@@ -3,7 +3,7 @@ import { AgentExecutionObservationLedger, AgentExecutionObservationPolicy } from
 import {
 	MAX_AGENT_SIGNAL_MARKER_LENGTH,
 	type AgentExecutionObservation,
-	type AgentExecutionSnapshot
+	type AgentExecutionType
 } from './AgentExecutionProtocolTypes.js';
 
 const markerPrefix = '@task::';
@@ -18,7 +18,7 @@ const address = {
 	}
 };
 
-function createSnapshot(): AgentExecutionSnapshot {
+function createExecution(): AgentExecutionType {
 	return {
 		agentId: 'claude-code',
 		agentExecutionId: 'agent-execution-7',
@@ -75,11 +75,11 @@ describe('AgentExecutionObservationPolicy', () => {
 	it('promotes valid medium-confidence progress and needs-input signals', () => {
 		const policy = new AgentExecutionObservationPolicy();
 		const progressDecision = policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation()
 		});
 		const needsInputDecision = policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({
 				observationId: 'observation-2',
 				signal: {
@@ -99,7 +99,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		expect(progressDecision).toEqual({
 			action: 'update-execution',
 			eventType: 'execution.updated',
-			snapshotPatch: {
+			patch: {
 				status: 'running',
 				attention: 'autonomous',
 				progress: {
@@ -112,7 +112,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		expect(needsInputDecision).toEqual({
 			action: 'update-execution',
 			eventType: 'execution.updated',
-			snapshotPatch: {
+			patch: {
 				status: 'running',
 				attention: 'awaiting-operator',
 				currentInputRequestId: 'observation-2',
@@ -130,7 +130,7 @@ describe('AgentExecutionObservationPolicy', () => {
 	it('promotes status phases into machine-readable AgentExecution state', () => {
 		const policy = new AgentExecutionObservationPolicy();
 		const initializingDecision = policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({
 				observationId: 'observation-status-1',
 				signal: {
@@ -143,7 +143,7 @@ describe('AgentExecutionObservationPolicy', () => {
 			})
 		});
 		const idleDecision = policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({
 				observationId: 'observation-status-2',
 				signal: {
@@ -159,7 +159,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		expect(initializingDecision).toEqual({
 			action: 'update-execution',
 			eventType: 'execution.updated',
-			snapshotPatch: {
+			patch: {
 				status: 'starting',
 				attention: 'none',
 				progress: {
@@ -172,7 +172,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		expect(idleDecision).toEqual({
 			action: 'update-execution',
 			eventType: 'execution.updated',
-			snapshotPatch: {
+			patch: {
 				status: 'running',
 				attention: 'awaiting-operator',
 				progress: {
@@ -187,7 +187,7 @@ describe('AgentExecutionObservationPolicy', () => {
 	it('rejects spoofed addresses and duplicate observations', () => {
 		const policy = new AgentExecutionObservationPolicy();
 		const spoofed = policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({
 				claimedAddress: {
 					...address,
@@ -196,11 +196,11 @@ describe('AgentExecutionObservationPolicy', () => {
 			})
 		});
 		const accepted = policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({ observationId: 'observation-2' })
 		});
 		const duplicate = policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({ observationId: 'observation-2' })
 		});
 
@@ -221,11 +221,11 @@ describe('AgentExecutionObservationPolicy', () => {
 		const secondPolicy = new AgentExecutionObservationPolicy(ledger);
 
 		expect(firstPolicy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({ observationId: 'shared-observation' })
 		}).action).toBe('update-execution');
 		expect(secondPolicy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({ observationId: 'shared-observation' })
 		})).toEqual({
 			action: 'reject',
@@ -236,7 +236,7 @@ describe('AgentExecutionObservationPolicy', () => {
 	it('records terminal heuristics as diagnostics and keeps completion claims out of workflow truth', () => {
 		const policy = new AgentExecutionObservationPolicy();
 		const heuristic = policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({
 				observationId: 'observation-3',
 				route: {
@@ -258,7 +258,7 @@ describe('AgentExecutionObservationPolicy', () => {
 			})
 		});
 		const completedClaim = policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({
 				observationId: 'observation-4',
 				signal: {
@@ -283,7 +283,7 @@ describe('AgentExecutionObservationPolicy', () => {
 	it('rejects route/source boundary mismatches and route address mismatches', () => {
 		const policy = new AgentExecutionObservationPolicy();
 		const mismatchedSource = policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({
 				observationId: 'observation-5',
 				signal: {
@@ -295,7 +295,7 @@ describe('AgentExecutionObservationPolicy', () => {
 			})
 		});
 		const mismatchedRouteAddress = policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({
 				observationId: 'observation-6',
 				route: {
@@ -327,7 +327,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		const policy = new AgentExecutionObservationPolicy();
 
 		expect(policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({
 				observationId: 'observation-provider-progress',
 				route: {
@@ -355,7 +355,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		delete observation.claimedAddress;
 
 		expect(policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation
 		})).toEqual({
 			action: 'reject',
@@ -367,7 +367,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		const policy = new AgentExecutionObservationPolicy();
 
 		expect(policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({
 				observationId: 'observation-7',
 				route: {
@@ -392,7 +392,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		const policy = new AgentExecutionObservationPolicy();
 
 		expect(policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({
 				observationId: 'observation-terminal-progress',
 				route: {
@@ -416,7 +416,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		const policy = new AgentExecutionObservationPolicy();
 
 		expect(policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({
 				observationId: 'observation-10',
 				signal: {
@@ -435,7 +435,7 @@ describe('AgentExecutionObservationPolicy', () => {
 	it('requires authoritative daemon claims', () => {
 		const policy = new AgentExecutionObservationPolicy();
 		const nonAuthoritativeDaemon = policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({
 				observationId: 'observation-daemon-high',
 				route: {
@@ -461,7 +461,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		const policy = new AgentExecutionObservationPolicy();
 
 		expect(policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({
 				observationId: 'observation-8',
 				route: {
@@ -470,7 +470,7 @@ describe('AgentExecutionObservationPolicy', () => {
 				},
 				signal: {
 					type: 'completed_claim',
-					summary: 'Mission daemon confirmed completion.',
+					summary: 'Open Mission daemon confirmed completion.',
 					source: 'daemon-authoritative',
 					confidence: 'authoritative'
 				}
@@ -478,13 +478,13 @@ describe('AgentExecutionObservationPolicy', () => {
 		})).toEqual({
 			action: 'update-execution',
 			eventType: 'execution.completed',
-			snapshotPatch: {
+			patch: {
 				status: 'completed',
 				attention: 'none',
 				waitingForInput: false,
 				progress: {
 					state: 'done',
-					summary: 'Mission daemon confirmed completion.',
+					summary: 'Open Mission daemon confirmed completion.',
 					updatedAt: '2026-05-04T12:00:00.000Z'
 				},
 				endedAt: '2026-05-04T12:00:00.000Z'
@@ -496,7 +496,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		const policy = new AgentExecutionObservationPolicy();
 
 		expect(policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({
 				observationId: 'observation-9',
 				signal: {
@@ -525,7 +525,7 @@ describe('AgentExecutionObservationPolicy', () => {
 		const policy = new AgentExecutionObservationPolicy();
 
 		expect(policy.evaluate({
-			snapshot: createSnapshot(),
+			execution: createExecution(),
 			observation: createObservation({
 				observationId: 'observation-oversized-marker',
 				rawText: `${markerPrefix}${'x'.repeat(MAX_AGENT_SIGNAL_MARKER_LENGTH)}`
@@ -540,8 +540,8 @@ describe('AgentExecutionObservationPolicy', () => {
 		const policy = new AgentExecutionObservationPolicy();
 
 		expect(policy.evaluate({
-			snapshot: {
-				...createSnapshot(),
+			execution: {
+				...createExecution(),
 				status: 'completed',
 				attention: 'none',
 				endedAt: '2026-05-04T12:00:00.000Z'

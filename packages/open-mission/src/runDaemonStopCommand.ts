@@ -1,11 +1,11 @@
 import { note, outro } from '@clack/prompts';
-import { getDaemonManifestPath } from '@flying-pillow/mission-core/daemon/daemonPaths';
-import { stopMissionDaemonProcess } from '@flying-pillow/mission-core/daemon/runtime/DaemonProcessControl';
+import { getDaemonManifestPath } from '@flying-pillow/open-mission-core/daemon/daemonPaths';
+import { stopOpenMissionDaemonProcess } from '@flying-pillow/open-mission-core/daemon/runtime/DaemonProcessControl';
 import type { EntryContext } from './entryContext.js';
 
 export async function runDaemonStopCommand(context: EntryContext): Promise<void> {
 	const manifestPath = getDaemonManifestPath();
-	const result = await stopMissionDaemonProcess();
+	const result = await stopOpenMissionDaemonProcess();
 
 	if (context.json) {
 		process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

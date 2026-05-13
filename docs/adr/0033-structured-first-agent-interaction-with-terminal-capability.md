@@ -26,9 +26,9 @@ Open Design demonstrates the opposite end of this spectrum: most coding-agent ru
 
 Mission chooses a structured-first, terminal-capable Agent interaction architecture.
 
-Structured AgentExecution messages, Agent signals, Agent execution semantic operations, accepted observations, AgentExecution journal records, and Entity command effects are canonical. Mission chat and other Airport controls submit structured messages or Entity commands, even when the selected Agent adapter ultimately delivers those messages to a terminal-backed CLI.
+Structured AgentExecution messages, Agent signals, Agent execution semantic operations, accepted observations, AgentExecution journal records, and Entity command effects are canonical. Mission chat and other Open Mission controls submit structured messages or Entity commands, even when the selected Agent adapter ultimately delivers those messages to a terminal-backed CLI.
 
-Terminal interaction remains supported for adapters and operators that need native CLI affordances. A Terminal may be attached to an AgentExecution as a live native surface and raw transport evidence source. Raw terminal input and terminal UI output are not canonical Mission semantics unless they are accepted through a structured Mission path such as a runtime message descriptor, `mission-mcp` tool call, stdout marker, provider-structured parser event, or daemon-normalized runtime fact.
+Terminal interaction remains supported for adapters and operators that need native CLI affordances. A Terminal may be attached to an AgentExecution as a live native surface and raw transport evidence source. Raw terminal input and terminal UI output are not canonical Mission semantics unless they are accepted through a structured Mission path such as a runtime message descriptor, `open-mission-mcp` tool call, stdout marker, provider-structured parser event, or daemon-normalized runtime fact.
 
 Mission slash commands are shorthand for structured Mission operations. They are not provider slash commands by default. Adapter-native slash commands may be surfaced only when an AgentAdapter advertises them as runtime message descriptors or when the operator intentionally uses the native terminal lane.
 
@@ -88,7 +88,7 @@ Structured interactive and structured headless are canonical Mission postures. N
 
 `Terminal` and `TerminalRegistry` own PTY process leases, terminal input, screen state, snapshots, and terminal recordings. They do not own Mission workflow, AgentExecution semantic state, or command meaning.
 
-Airport owns presentation and interaction. It renders descriptor-backed messages, Mission-native commands, and optional terminal views. It must not invent a parallel command vocabulary or parse terminal output into Mission meaning locally.
+Open Mission owns presentation and interaction. It renders descriptor-backed messages, Mission-native commands, and optional terminal views. It must not invent a parallel command vocabulary or parse terminal output into Mission meaning locally.
 
 ## Consequences
 

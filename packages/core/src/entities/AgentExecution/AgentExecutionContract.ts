@@ -14,24 +14,24 @@ import {
 import { AgentExecutionSemanticOperationResultSchema } from './AgentExecutionSemanticOperationSchema.js';
 import {
     AgentExecutionStorageSchema,
-    AgentExecutionDataSchema,
+    AgentExecutionSchema,
     AgentExecutionCommandAcknowledgementSchema,
-    AgentExecutionDataChangedSchema
-} from './AgentExecutionDataSchema.js';
+    AgentExecutionChangedSchema
+} from './AgentExecutionSchema.js';
 import { AgentExecutionTerminalSnapshotSchema } from './AgentExecutionTransportSchema.js';
-import type { AgentExecutionDataType } from './AgentExecutionDataSchema.js';
+import type { AgentExecutionType } from './AgentExecutionSchema.js';
 
 export const AgentExecutionContract: EntityContractType = {
     entity: agentExecutionEntityName,
     entityClass: AgentExecution,
     inputSchema: AgentExecutionLocatorSchema,
     storageSchema: AgentExecutionStorageSchema,
-    dataSchema: AgentExecutionDataSchema,
+    dataSchema: AgentExecutionSchema,
     methods: {
         read: {
             kind: 'query',
             payload: AgentExecutionLocatorSchema,
-            result: AgentExecutionDataSchema,
+            result: AgentExecutionSchema,
             execution: 'class'
         },
         readTerminal: {
@@ -79,7 +79,7 @@ export const AgentExecutionContract: EntityContractType = {
     },
     events: {
         'data.changed': {
-            payload: AgentExecutionDataChangedSchema
+            payload: AgentExecutionChangedSchema
         },
         terminal: {
             payload: AgentExecutionTerminalSnapshotSchema
@@ -108,19 +108,19 @@ export function createAgentExecutionTerminalEvent(input: {
 }
 
 export function createAgentExecutionDataChangedEvent(input: {
-    data: AgentExecutionDataType;
+    data: AgentExecutionType;
 }): EntityEventEnvelopeType {
-    const data = AgentExecutionDataSchema.parse(input.data);
-    const payload = AgentExecutionDataChangedSchema.parse({
+    const execution = AgentExecutionSchema.parse(input.data);
+    const payload = AgentExecutionChangedSchema.parse({
         reference: {
             entity: agentExecutionEntityName,
-            ownerId: data.ownerId,
-            agentExecutionId: data.agentExecutionId
+            ownerId: execution.ownerId,
+            agentExecutionId: execution.agentExecutionId
         },
-        data
+        execution
     });
     return createEntityEventEnvelope({
-        entityId: createEntityId('agent_execution', `${data.ownerId}/${data.agentExecutionId}`),
+        entityId: createEntityId('agent_execution', `${execution.ownerId}/${execution.agentExecutionId}`),
         eventName: 'data.changed',
         type: 'agentExecution.data.changed',
         payload

@@ -17,4 +17,4 @@ It is responsible for:
 - coordinating Agent executions, daemon-issued session tokens, and runtime delivery
 - checkpointing accepted Mission runtime data
 
-Airport connects to the daemon. It does not recreate daemon state or workflow legality locally.
+Open Mission connects to the daemon. It does not recreate daemon state or workflow legality locally.

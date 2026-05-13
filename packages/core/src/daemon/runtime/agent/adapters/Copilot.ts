@@ -34,7 +34,7 @@ export function createCopilot(input: CopilotInput = {}): AgentInput {
         displayName: 'Copilot CLI',
         icon: 'simple-icons:githubcopilot',
         adapter: {
-            command: command?.trim() || process.env['MISSION_COPILOT_CLI_COMMAND']?.trim() || 'copilot',
+            command: command?.trim() || process.env['OPEN_MISSION_COPILOT_CLI_COMMAND']?.trim() || 'copilot',
             providerSettings: false,
             defaultLaunchMode: resolvedLaunchMode,
             trustedFolders: { configDir: resolvedTrustedConfigDir },
@@ -58,7 +58,7 @@ export function createCopilot(input: CopilotInput = {}): AgentInput {
                     '--allow-all-paths',
                     '--allow-all-tools',
                     '--allow-all-urls',
-                    { launchEnv: 'MISSION_AGENT_MCP_CONFIG', flag: '--additional-mcp-config' },
+                    { launchEnv: 'OPEN_MISSION_AGENT_MCP_CONFIG', flag: '--additional-mcp-config' },
                     { trustedConfigDir: true, flag: '--config-dir' },
                     { trustedDirectories: true, flag: '--add-dir' },
                     { prompt: 'initial', flag: '-i', trim: true, omitWhenEmpty: true }
@@ -86,12 +86,12 @@ export function createCopilot(input: CopilotInput = {}): AgentInput {
 export const copilot = createCopilot();
 
 function resolveTrustedConfigDir(): string {
-    const fromEnv = process.env['MISSION_COPILOT_CONFIG_DIR']?.trim();
+    const fromEnv = process.env['OPEN_MISSION_COPILOT_CONFIG_DIR']?.trim();
     return fromEnv ? path.resolve(fromEnv) : path.join(os.homedir(), '.mission', 'copilot-cli');
 }
 
 function resolveLaunchMode(): 'interactive' | 'print' {
-    const fromEnv = process.env['MISSION_COPILOT_LAUNCH_MODE']?.trim();
+    const fromEnv = process.env['OPEN_MISSION_COPILOT_LAUNCH_MODE']?.trim();
     return fromEnv === 'print' ? 'print' : 'interactive';
 }
 
@@ -107,8 +107,8 @@ async function prepareCopilotLaunchConfig(
     return provisionAgentExecutionMcpConfig({
         config,
         access: mcpAccess,
-        launchEnvName: 'MISSION_AGENT_MCP_CONFIG',
-        configFileName: 'mission-mcp.json',
+        launchEnvName: 'OPEN_MISSION_AGENT_MCP_CONFIG',
+        configFileName: 'open-mission-mcp.json',
         referenceConfigPath: (configPath) => `@${configPath}`,
         createDocument: (bridge) => ({
             mcpServers: {

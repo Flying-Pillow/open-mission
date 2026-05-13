@@ -114,7 +114,7 @@ The AgentExecution interaction journal records accepted meaning. Raw output rema
 
 ### R1: Execution Posture Visibility
 
-Every live AgentExecution snapshot must expose enough information for Airport to tell whether the execution is structured interactive, structured headless, or native terminal escape hatch.
+Every live AgentExecution snapshot must expose enough information for Open Mission to tell whether the execution is structured interactive, structured headless, or native terminal escape hatch.
 
 ### R2: Descriptor-Backed Commands
 

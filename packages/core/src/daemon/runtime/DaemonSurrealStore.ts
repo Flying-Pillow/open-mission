@@ -35,7 +35,7 @@ export class DaemonSurrealStore {
     private status: DaemonSurrealStoreStatus;
 
     public constructor(options: DaemonSurrealStoreOptions = {}) {
-        this.namespace = options.namespace?.trim() || 'mission_daemon';
+        this.namespace = options.namespace?.trim() || 'open_mission_daemon';
         this.database = options.database?.trim() || 'mission';
         this.endpoint = options.endpoint ?? 'mem://';
         this.engine = this.endpoint === 'mem://' ? 'mem' : 'surrealkv';

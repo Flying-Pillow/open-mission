@@ -22,7 +22,7 @@ export function createOpenCode(input: OpenCodeInput = {}): AgentInput {
         displayName: 'OpenCode',
         icon: 'lucide:code-xml',
         adapter: {
-            command: command?.trim() || process.env['MISSION_OPENCODE_CLI_COMMAND']?.trim() || 'opencode',
+            command: command?.trim() || process.env['OPEN_MISSION_OPENCODE_CLI_COMMAND']?.trim() || 'opencode',
             providerSettings: {},
             defaultLaunchMode: 'interactive',
             transportCapabilities: {

@@ -3,12 +3,12 @@ layout: default
 title: Code Intelligence PRD
 parent: Architecture
 nav_order: 8.95
-description: Temporary product requirements for Mission-native code intelligence exposed through mission-mcp semantic operations.
+description: Temporary product requirements for Mission-native code intelligence exposed through open-mission-mcp semantic operations.
 ---
 
 ## Purpose
 
-Mission should give a running Agent execution structured codebase awareness through `mission-mcp` so the Agent can do spec-driven work without repeatedly searching the repository by hand.
+Mission should give a running Agent execution structured codebase awareness through `open-mission-mcp` so the Agent can do spec-driven work without repeatedly searching the repository by hand.
 
 The product requirement is:
 
@@ -34,7 +34,7 @@ This produces slow Missions, repeated work, inconsistent grounding, and weak ver
 
 ## Goal
 
-Build native Code intelligence that lets a running Agent execution ask scoped questions about the Code root resolved from its scope through `mission-mcp`. A Code root may be a Repository root or a Mission worktree root, but indexing and graph querying do not branch into separate Repository or Mission models.
+Build native Code intelligence that lets a running Agent execution ask scoped questions about the Code root resolved from its scope through `open-mission-mcp`. A Code root may be a Repository root or a Mission worktree root, but indexing and graph querying do not branch into separate Repository or Mission models.
 
 The first user-visible outcome is an Agent that can call semantic operations such as:
 
@@ -57,7 +57,7 @@ Primary users:
 
 Secondary users:
 
-- Airport web operators who later inspect code graph context, impact paths, and indexed root freshness visually
+- Open Mission web operators who later inspect code graph context, impact paths, and indexed root freshness visually
 - CLI operators who need diagnostics about index freshness
 - future workflow gates that may require code impact evidence before stage completion
 
@@ -81,11 +81,11 @@ The index is derived from source files and Git state. It can be stale, rebuilt, 
 
 ### Agent-First Capability
 
-The first-class consumer is a running Agent execution inside a controlled Mission workflow. Airport diagnostics and visual graph exploration may become useful later, but the first milestone is bounded semantic context for the Agent, not a standalone repository intelligence product.
+The first-class consumer is a running Agent execution inside a controlled Mission workflow. Open Mission diagnostics and visual graph exploration may become useful later, but the first milestone is bounded semantic context for the Agent, not a standalone repository intelligence product.
 
-### Read-Only Airport Visualization
+### Read-Only Open Mission Visualization
 
-Airport web should eventually provide a visual representation of the active Code graph for operator understanding, review, and debugging. That visualization is a read-only surface over daemon-owned code intelligence results and must not define graph semantics, mutate index records, or become the primary query API.
+Open Mission web should eventually provide a visual representation of the active Code graph for operator understanding, review, and debugging. That visualization is a read-only surface over daemon-owned code intelligence results and must not define graph semantics, mutate index records, or become the primary query API.
 
 ### Small Derived Record Set
 
@@ -119,7 +119,7 @@ The baseline tools are read-only. They may guide edits, but they do not edit fil
 
 ### Semantic Operations
 
-- Expose read-only code intelligence operations through `mission-mcp` for registered Agent executions.
+- Expose read-only code intelligence operations through `open-mission-mcp` for registered Agent executions.
 - Validate every operation input with Zod schemas.
 - Resolve accessible root from AgentExecution scope.
 - Return structured results rather than prose-only text.
@@ -150,12 +150,12 @@ The baseline tools are read-only. They may guide edits, but they do not edit fil
 - `route_impact` reports route handler, consumers, response keys, error keys, middleware, and related processes when detected.
 - `tool_context` reports MCP/RPC tool definitions, handler files, descriptions, and callers when detected.
 
-### Airport Web Visualization
+### Open Mission Web Visualization
 
-- Provide a later Airport web view for code graph exploration once the Agent-facing semantic operations and structural graph are stable.
+- Provide a later Open Mission web view for code graph exploration once the Agent-facing semantic operations and structural graph are stable.
 - Render active Code root snapshots, files, symbols, relations, impact paths, and freshness/staleness status from daemon-owned read APIs.
 - Keep visual graph interactions read-only in the baseline: select, filter, inspect, trace, and open related files or semantic operation results.
-- Do not let Airport web create graph records, change index lifecycle, run raw SurrealQL, or redefine code intelligence relationship semantics.
+- Do not let Open Mission web create graph records, change index lifecycle, run raw SurrealQL, or redefine code intelligence relationship semantics.
 
 ## Non-Goals
 
@@ -165,12 +165,12 @@ The baseline tools are read-only. They may guide edits, but they do not edit fil
 - Do not make code graph records canonical Entity storage records.
 - Do not block all Mission work on a perfect or complete code index.
 - Do not implement graph-assisted file mutation or rename in the baseline.
-- Do not make Airport the first owner of code intelligence behavior.
+- Do not make Open Mission the first owner of code intelligence behavior.
 - Do not make the first milestone an interactive graph visualization, repository chat UI, general code browser, or standalone GitNexus-like product inside Mission.
 
 ## Acceptance Criteria
 
-- A task-scoped Agent execution can call `code_search` through `mission-mcp` and receive scoped results from the Code root resolved from its AgentExecution scope.
+- A task-scoped Agent execution can call `code_search` through `open-mission-mcp` and receive scoped results from the Code root resolved from its AgentExecution scope.
 - A task-scoped Agent execution can call `symbol_context` for a known symbol and receive callers/callees with file locations.
 - A task-scoped Agent execution can call `impact_analysis` and receive depth-grouped affected symbols and processes.
 - Every accepted semantic operation records an AgentExecution runtime fact.
@@ -183,7 +183,7 @@ The baseline tools are read-only. They may guide edits, but they do not edit fil
 
 ## Phase-One Product Cut
 
-1. Fix `mission mcp connect` so it can proxy semantic operations without wrapping them as Agent signals.
+1. Fix `open-mission mcp connect` so it can proxy semantic operations without wrapping them as Agent signals.
 2. Promote `read_artifact` into the same descriptor model that future semantic operations use.
 3. Build the structural code graph for eligible text files in any Code root, with TypeScript/JavaScript as the first parser-backed symbol and relation provider: `CodeIndexSnapshot`, `CodeFile`, `CodeSymbol`, and `CodeRelation`.
 4. Add daemon-owned `ensureIndex` lifecycle with Code root snapshots.
@@ -192,8 +192,8 @@ The baseline tools are read-only. They may guide edits, but they do not edit fil
 7. Add `impact_analysis` after one real graph traversal can be tested end-to-end.
 8. Add `changed_code_impact` after worktree-aware diff mapping is reliable.
 9. Add `route_impact`, `tool_context`, process context, and test context as framework-specific intelligence after the structural graph is stable.
-10. Add a read-only Airport web visual graph after Agent-facing operations and graph query semantics are stable.
-11. Keep Airport UI out of the first slice except for diagnostics if needed.
+10. Add a read-only Open Mission web visual graph after Agent-facing operations and graph query semantics are stable.
+11. Keep Open Mission UI out of the first slice except for diagnostics if needed.
 
 ## Open Product Questions
 

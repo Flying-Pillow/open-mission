@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { getMissionGitHubCliBinary } from '../settings/MissionInstall.js';
+import { getOpenMissionGitHubCliBinary } from '../settings/OpenMissionInstall.js';
 import type { RepositoryIssueDetailType, RepositoryPlatformOwnerType, RepositoryPlatformRepositoryType, TrackedIssueSummaryType } from '../entities/Repository/RepositorySchema.js';
 import type { MissionBrief } from '../entities/Mission/MissionSchema.js';
 
@@ -614,7 +614,7 @@ export class GitHubPlatformAdapter {
 	}
 
 	private resolveGhBinary(): string {
-		return this.options.ghBinary?.trim() || getMissionGitHubCliBinary() || 'gh';
+		return this.options.ghBinary?.trim() || getOpenMissionGitHubCliBinary() || 'gh';
 	}
 }
 

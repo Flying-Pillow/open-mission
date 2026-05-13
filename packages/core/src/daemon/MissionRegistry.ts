@@ -14,7 +14,7 @@ import type {
     AgentExecutionObservation,
     AgentExecutionObservationAddress,
     AgentExecutionSignalDecision,
-    AgentExecutionSnapshot
+    AgentExecutionType
 } from '../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import { getAgentExecutionScopeMissionId } from '../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 
@@ -43,7 +43,7 @@ export class MissionRegistry {
         const roots = new Set<string>([path.resolve(context.surfacePath)]);
         for (const repository of await Repository.find({}, context)) {
             if (repository.invalidState) {
-                this.options.logger?.warn(`Mission daemon skipped invalid Repository '${repository.id}'.`, {
+                this.options.logger?.warn(`Open Mission daemon skipped invalid Repository '${repository.id}'.`, {
                     repositoryId: repository.id,
                     repositoryRootPath: repository.repositoryRootPath,
                     invalidState: repository.invalidState
@@ -66,7 +66,7 @@ export class MissionRegistry {
             repositoryRootPath: repositoryRoot
         });
         if (repositoryData.invalidState) {
-            this.options.logger?.warn(`Mission daemon skipped invalid Repository '${repositoryData.id}'.`, {
+            this.options.logger?.warn(`Open Mission daemon skipped invalid Repository '${repositoryData.id}'.`, {
                 repositoryId: repositoryData.id,
                 repositoryRootPath: repositoryData.repositoryRootPath,
                 invalidState: repositoryData.invalidState
@@ -87,7 +87,7 @@ export class MissionRegistry {
                         { surfacePath: missionRepositoryRoot }
                     );
                 } catch (error) {
-                    const message = `Mission daemon could not hydrate mission '${mission.descriptor.missionId}' at '${mission.missionDir}': ${error instanceof Error ? error.message : String(error)}`;
+                    const message = `Open Mission daemon could not hydrate mission '${mission.descriptor.missionId}' at '${mission.missionDir}': ${error instanceof Error ? error.message : String(error)}`;
                     this.options.logger?.warn(message, {
                         missionId: mission.descriptor.missionId,
                         missionDir: mission.missionDir
@@ -122,7 +122,7 @@ export class MissionRegistry {
         };
     }
 
-    public getRuntimeAgentExecutionSnapshot(address: AgentExecutionObservationAddress): AgentExecutionSnapshot | undefined {
+    public getRuntimeAgentExecutionSnapshot(address: AgentExecutionObservationAddress): AgentExecutionType | undefined {
         const missionId = getAgentExecutionScopeMissionId(address.scope);
         const mission = missionId ? this.findLoadedMission(missionId) : undefined;
         return mission?.getRuntimeAgentExecutionSnapshot(address.agentExecutionId);
@@ -132,7 +132,7 @@ export class MissionRegistry {
         address: AgentExecutionObservationAddress;
         observation: AgentExecutionObservation;
         decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>;
-    }): AgentExecutionSnapshot | undefined {
+    }): AgentExecutionType | undefined {
         const missionId = getAgentExecutionScopeMissionId(input.address.scope);
         const mission = missionId ? this.findLoadedMission(missionId) : undefined;
         return mission?.applyRuntimeAgentExecutionSignalDecision(

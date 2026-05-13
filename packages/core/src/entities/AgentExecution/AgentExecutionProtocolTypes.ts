@@ -13,13 +13,13 @@ import {
     type AgentStatusSignalPayloadType
 } from './AgentExecutionProtocolSchema.js';
 import type { AgentExecutionTimelineItemType } from './AgentExecutionProjectionSchema.js';
+import type { AgentExecutionType as CanonicalAgentExecutionType } from './AgentExecutionSchema.js';
 import type {
     AgentExecutionAttentionStateType,
     AgentExecutionLifecycleStateType,
-    AgentExecutionSnapshotType,
-    AgentProgressSnapshotType,
+    AgentExecutionProgressType,
     AgentProgressStateType
-} from './AgentExecutionRuntimeSchema.js';
+} from './AgentExecutionStateSchema.js';
 import type {
     AgentExecutionReferenceType,
     AgentExecutionTerminalTransportType
@@ -62,7 +62,7 @@ export type AgentExecutionInteractionMode = AgentExecutionInteractionModeType;
 
 export type AgentExecutionInteractionCapabilities = AgentExecutionInteractionCapabilitiesType;
 
-export type AgentProgressSnapshot = AgentProgressSnapshotType;
+export type AgentExecutionProgress = AgentExecutionProgressType;
 
 export type AgentExecutionReference = AgentExecutionReferenceType;
 
@@ -121,7 +121,7 @@ export type AgentPrompt = AgentExecutionPromptType;
 
 export type AgentCommand = AgentExecutionCommandType;
 
-export type AgentExecutionSnapshot = AgentExecutionSnapshotType;
+export type AgentExecutionType = CanonicalAgentExecutionType;
 
 export interface AgentExecutionProtocolError extends Error {
     readonly code: AgentExecutionProtocolErrorCode;
@@ -186,41 +186,41 @@ export function describeAgentExecutionScope(scope: AgentExecutionScope): string 
 export type AgentExecutionEvent =
     | {
         type: 'execution.started';
-        snapshot: AgentExecutionSnapshot;
+        execution: AgentExecutionType;
     }
     | {
         type: 'execution.attached';
-        snapshot: AgentExecutionSnapshot;
+        execution: AgentExecutionType;
     }
     | {
         type: 'execution.updated';
-        snapshot: AgentExecutionSnapshot;
+        execution: AgentExecutionType;
     }
     | {
         type: 'execution.message';
         channel: 'stdout' | 'stderr' | 'system' | 'agent';
         text: string;
         timelineItem?: AgentExecutionTimelineItemType;
-        snapshot: AgentExecutionSnapshot;
+        execution: AgentExecutionType;
     }
     | {
         type: 'execution.completed';
-        snapshot: AgentExecutionSnapshot;
+        execution: AgentExecutionType;
     }
     | {
         type: 'execution.failed';
         reason: string;
-        snapshot: AgentExecutionSnapshot;
+        execution: AgentExecutionType;
     }
     | {
         type: 'execution.cancelled';
         reason?: string;
-        snapshot: AgentExecutionSnapshot;
+        execution: AgentExecutionType;
     }
     | {
         type: 'execution.terminated';
         reason?: string;
-        snapshot: AgentExecutionSnapshot;
+        execution: AgentExecutionType;
     };
 
 export const MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH = AGENT_EXECUTION_SIGNAL_TEXT_LENGTH;
@@ -295,7 +295,7 @@ export type AgentExecutionSignalDecision =
     | {
         action: 'update-execution';
         eventType: 'execution.updated' | 'execution.completed' | 'execution.failed';
-        snapshotPatch: Partial<AgentExecutionSnapshot>;
+        patch: Partial<AgentExecutionType>;
     };
 
 export function cloneObservationAddress(address: AgentExecutionObservationAddress): AgentExecutionObservationAddress {
@@ -361,7 +361,7 @@ export function isScalarAgentMetadataValue(value: unknown): value is AgentMetada
 }
 
 export function deriveAgentExecutionInteractionCapabilities(input: Pick<
-    AgentExecutionSnapshot,
+    AgentExecutionType,
     'status' | 'transport' | 'acceptsPrompts' | 'acceptedCommands'
 >): AgentExecutionInteractionCapabilities {
     const terminalBacked = input.transport?.kind === 'terminal';
@@ -405,7 +405,7 @@ export function deriveAgentExecutionInteractionCapabilities(input: Pick<
     };
 }
 
-export function isTerminalFinalStatus(status: AgentExecutionSnapshot['status']): boolean {
+export function isTerminalFinalStatus(status: AgentExecutionType['status']): boolean {
     return status === 'completed'
         || status === 'failed'
         || status === 'cancelled'

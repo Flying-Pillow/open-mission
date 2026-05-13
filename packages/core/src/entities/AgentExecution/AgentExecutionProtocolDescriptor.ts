@@ -38,7 +38,7 @@ export function createAgentExecutionProtocolDescriptor(input: {
         ...(signals.some((signal) => signal.deliveries.includes('mcp-tool'))
             ? {
                 mcp: {
-                    serverName: 'mission-mcp',
+                    serverName: 'open-mission-mcp',
                     exposure: 'agent-execution-scoped',
                     publicApi: false
                 }

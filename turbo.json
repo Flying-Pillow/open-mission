@@ -21,7 +21,7 @@
             "inputs": [
                 "$TURBO_DEFAULT$",
                 ".env*",
-                "apps/airport/web/svelte.config.ts",
+                "apps/web/svelte.config.ts",
                 "vitest.config.ts"
             ],
             "outputs": []
@@ -46,7 +46,7 @@
             "cache": false,
             "persistent": true
         },
-        "@flying-pillow/mission-airport-native#build": {
+        "@flying-pillow/open-mission-native#build": {
             "cache": false,
             "outputs": []
         }

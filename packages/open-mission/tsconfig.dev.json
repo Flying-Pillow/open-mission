@@ -2,10 +2,10 @@
     "extends": "./tsconfig.json",
     "compilerOptions": {
         "paths": {
-            "@flying-pillow/mission-core": [
+            "@flying-pillow/open-mission-core": [
                 "../core/src/index.ts"
             ],
-            "@flying-pillow/mission-core/*": [
+            "@flying-pillow/open-mission-core/*": [
                 "../core/src/*.ts"
             ]
         }

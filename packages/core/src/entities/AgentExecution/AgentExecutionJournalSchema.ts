@@ -4,10 +4,10 @@ import {
     AgentExecutionActivityStateSchema,
     AgentExecutionActivityTargetSchema,
     AgentExecutionAttentionStateSchema,
-    AgentExecutionCapabilitySnapshotSchema,
+    AgentExecutionCapabilityStateSchema,
     AgentExecutionLifecycleStateSchema,
     AgentExecutionTransportStateSchema
-} from './AgentExecutionRuntimeSchema.js';
+} from './AgentExecutionStateSchema.js';
 import {
     AgentExecutionProtocolDescriptorSchema,
     AgentExecutionProtocolOwnerEntitySchema
@@ -351,7 +351,7 @@ export const AgentExecutionActivityUpdatedRecordSchema = AgentExecutionJournalRe
         totalTokens: z.number().int().nonnegative().optional(),
         activeToolName: z.string().trim().min(1).optional()
     }).strict().optional(),
-    capabilities: AgentExecutionCapabilitySnapshotSchema.optional(),
+    capabilities: AgentExecutionCapabilityStateSchema.optional(),
     currentTarget: AgentExecutionActivityTargetSchema.optional()
 }).strict();
 

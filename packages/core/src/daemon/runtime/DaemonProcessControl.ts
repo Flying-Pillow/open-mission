@@ -47,14 +47,14 @@ export type DaemonStopResult = {
 	message: string;
 };
 
-export async function getMissionDaemonProcessStatus(): Promise<DaemonStatusResult> {
+export async function getOpenMissionDaemonProcessStatus(): Promise<DaemonStatusResult> {
 	const manifestPath = getDaemonManifestPath();
 	const manifest = await readDaemonManifest();
 	if (!manifest) {
 		return {
 			manifestPath,
 			running: false,
-			message: 'Mission daemon is not running.'
+			message: 'Open Mission daemon is not running.'
 		};
 	}
 
@@ -71,7 +71,7 @@ export async function getMissionDaemonProcessStatus(): Promise<DaemonStatusResul
 		return {
 			manifestPath,
 			running: true,
-			message: 'Mission daemon is running.',
+			message: 'Open Mission daemon is running.',
 			pid: ping.pid,
 			startedAt: ping.startedAt,
 			endpointPath: manifest.endpoint.path,
@@ -81,7 +81,7 @@ export async function getMissionDaemonProcessStatus(): Promise<DaemonStatusResul
 		return {
 			manifestPath,
 			running: false,
-			message: `Mission daemon manifest exists but is unreachable: ${error instanceof Error ? error.message : String(error)}`,
+			message: `Open Mission daemon manifest exists but is unreachable: ${error instanceof Error ? error.message : String(error)}`,
 			pid: manifest.pid,
 			startedAt: manifest.startedAt,
 			endpointPath: manifest.endpoint.path,
@@ -92,12 +92,12 @@ export async function getMissionDaemonProcessStatus(): Promise<DaemonStatusResul
 	}
 }
 
-export async function startMissionDaemonProcess(options: {
+export async function startOpenMissionDaemonProcess(options: {
 	socketPath?: string;
 	surfacePath?: string;
 	runtimeMode?: DaemonRuntimeMode;
 }): Promise<DaemonStartResult> {
-	let currentStatus = await getMissionDaemonProcessStatus();
+	let currentStatus = await getOpenMissionDaemonProcessStatus();
 	if (currentStatus.running) {
 		return {
 			...currentStatus,
@@ -120,7 +120,7 @@ export async function startMissionDaemonProcess(options: {
 	let latestStatus = currentStatus;
 	while (Date.now() < timeoutAt) {
 		await new Promise((resolve) => setTimeout(resolve, 150));
-		latestStatus = await getMissionDaemonProcessStatus();
+		latestStatus = await getOpenMissionDaemonProcessStatus();
 		if (latestStatus.running) {
 			return {
 				...latestStatus,
@@ -130,20 +130,20 @@ export async function startMissionDaemonProcess(options: {
 		}
 	}
 
-	throw new Error(`Mission daemon did not become ready: ${latestStatus.message}`);
+	throw new Error(`Open Mission daemon did not become ready: ${latestStatus.message}`);
 }
 
-export async function stopMissionDaemonProcess(): Promise<DaemonStopResult> {
+export async function stopOpenMissionDaemonProcess(): Promise<DaemonStopResult> {
 	const manifestPath = getDaemonManifestPath();
 	const manifest = await readDaemonManifest();
-	const staleProcessIds = await listMissionDaemonProcessIds();
+	const staleProcessIds = await listOpenMissionDaemonProcessIds();
 
 	if (!manifest && staleProcessIds.length === 0) {
 		return {
 			stopped: true,
 			manifestPath,
 			killed: false,
-			message: 'Mission daemon is already stopped.'
+			message: 'Open Mission daemon is already stopped.'
 		};
 	}
 
@@ -165,8 +165,8 @@ export async function stopMissionDaemonProcess(): Promise<DaemonStopResult> {
 		...(manifest?.pid ? { pid: manifest.pid } : {}),
 		killed,
 		message: killed
-			? 'Mission daemon stop signal sent and control files cleaned.'
-			: 'Mission daemon control files cleaned; process was not running.'
+			? 'Open Mission daemon stop signal sent and control files cleaned.'
+			: 'Open Mission daemon control files cleaned; process was not running.'
 	};
 }
 
@@ -177,7 +177,7 @@ async function cleanupUnreachableDaemonRuntime(
 	const staleProcessIds = new Set<number>([
 		...(manifest?.pid ? [manifest.pid] : []),
 		...(currentStatus.pid ? [currentStatus.pid] : []),
-		...(await listMissionDaemonProcessIds())
+		...(await listOpenMissionDaemonProcessIds())
 	]);
 
 	for (const processId of staleProcessIds) {
@@ -185,11 +185,11 @@ async function cleanupUnreachableDaemonRuntime(
 	}
 
 	await cleanupDaemonRuntimeFilesIfUnreachable(manifest?.endpoint.path ?? currentStatus.endpointPath);
-	return getMissionDaemonProcessStatus();
+	return getOpenMissionDaemonProcessStatus();
 }
 
 async function cleanupDaemonRuntimeFilesIfUnreachable(endpointPath: string | undefined): Promise<void> {
-	const currentStatus = await getMissionDaemonProcessStatus();
+	const currentStatus = await getOpenMissionDaemonProcessStatus();
 	if (currentStatus.running) {
 		return;
 	}
@@ -280,14 +280,14 @@ async function spawnDaemonAdapter(options: {
 }) {
 	const packageRoot = resolveCorePackageRoot();
 	const runtimeMode =
-		options.runtimeMode ?? (process.env['MISSION_DAEMON_RUNTIME_MODE']?.trim() === 'source' ? 'source' : 'build');
+		options.runtimeMode ?? (process.env['OPEN_MISSION_DAEMON_RUNTIME_MODE']?.trim() === 'source' ? 'source' : 'build');
 	const socketArgs = options.socketPath ? ['--socket', options.socketPath] : [];
-	const sourceEntry = path.join(packageRoot, 'src', 'daemon', 'missiond.ts');
-	const buildEntry = path.join(packageRoot, 'build', 'daemon', 'missiond.js');
+	const sourceEntry = path.join(packageRoot, 'src', 'daemon', 'open-missiond.ts');
+	const buildEntry = path.join(packageRoot, 'build', 'daemon', 'open-missiond.js');
 	const env = {
 		...process.env,
-		...(options.surfacePath ? { MISSION_SURFACE_PATH: options.surfacePath } : {}),
-		MISSION_DAEMON_RUNTIME_MODE: runtimeMode,
+		...(options.surfacePath ? { OPEN_MISSION_SURFACE_PATH: options.surfacePath } : {}),
+		OPEN_MISSION_DAEMON_RUNTIME_MODE: runtimeMode,
 		...(runtimeMode === 'source'
 			? { NODE_OPTIONS: appendNodeCondition(process.env['NODE_OPTIONS'], 'typescript') }
 			: {})
@@ -327,7 +327,7 @@ async function spawnDaemonAdapter(options: {
 function resolveCorePackageRoot(): string {
 	try {
 		const require = createRequire(import.meta.url);
-		const resolvedPackageEntry = require.resolve('@flying-pillow/mission-core');
+		const resolvedPackageEntry = require.resolve('@flying-pillow/open-mission-core');
 		return path.resolve(resolvedPackageEntry, '..', '..');
 	} catch {
 		// Fall back to the local source layout when package resolution is unavailable.
@@ -348,7 +348,7 @@ function appendNodeCondition(existingOptions: string | undefined, condition: str
 	return `${existingOptions} ${nextFlag}`;
 }
 
-async function listMissionDaemonProcessIds(): Promise<number[]> {
+async function listOpenMissionDaemonProcessIds(): Promise<number[]> {
 	if (process.platform === 'win32') {
 		return [];
 	}
@@ -358,7 +358,7 @@ async function listMissionDaemonProcessIds(): Promise<number[]> {
 		return result.stdout
 			.split(/\r?\n/gu)
 			.map((line) => line.trim())
-			.filter((line) => line.includes('/packages/core/build/daemon/missiond.js run') || line.includes('/packages/core/src/daemon/missiond.ts run'))
+			.filter((line) => line.includes('/packages/core/build/daemon/open-missiond.js run') || line.includes('/packages/core/src/daemon/open-missiond.ts run'))
 			.map((line) => Number.parseInt(line.split(/\s+/u, 1)[0] ?? '', 10))
 			.filter((pid) => Number.isInteger(pid) && pid > 0 && pid !== process.pid);
 	} catch {

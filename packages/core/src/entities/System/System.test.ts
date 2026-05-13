@@ -6,7 +6,7 @@ import { System } from './System.js';
 
 describe('System', () => {
     beforeEach(() => {
-        delete process.env['MISSION_CONFIG_PATH'];
+        delete process.env['OPEN_MISSION_CONFIG_PATH'];
         delete process.env['MISSIONS_PATH'];
         delete process.env['REPOSITORIES_PATH'];
     });
@@ -17,7 +17,7 @@ describe('System', () => {
             await fs.rm(configHome, { recursive: true, force: true });
             delete process.env['XDG_CONFIG_HOME'];
         }
-        delete process.env['MISSION_CONFIG_PATH'];
+        delete process.env['OPEN_MISSION_CONFIG_PATH'];
         delete process.env['MISSIONS_PATH'];
         delete process.env['REPOSITORIES_PATH'];
     });

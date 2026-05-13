@@ -12,7 +12,7 @@ supersedes: []
 superseded_by: []
 ---
 
-Repositories that do not contain `.mission/settings.json` remain uninitialized after clone or registration. Airport presents the normal Repository control surface, not a separate setup screen or setup-only route. A stable Repository-scoped Agent execution is available on that surface from first load onward so initialization and later repository management happen in the same place. Mission must not create a first issue, a preparation Mission, or a Mission worktree to initialize Repository control state.
+Repositories that do not contain `.mission/settings.json` remain uninitialized after clone or registration. Open Mission presents the normal Repository control surface, not a separate setup screen or setup-only route. A stable Repository-scoped Agent execution is available on that surface from first load onward so initialization and later repository management happen in the same place. Mission must not create a first issue, a preparation Mission, or a Mission worktree to initialize Repository control state.
 
 Repository initialization is Repository-owned Entity behavior. When a Repository is first added to Mission, the daemon immediately invokes the Repository initialization command to seed local Repository control state before the operator starts interacting with the Repository surface. The surface may gather settings directly or through Repository-scoped Agent execution interaction, then calls the Repository setup command; it does not write `.mission/settings.json` directly. The daemon validates the submitted Repository settings, creates a setup branch and linked setup worktree, scaffolds `.mission/settings.json`, `.mission/workflow/workflow.json`, and the default workflow template preset, commits those files, pushes the branch, opens a pull request against the Repository default branch, attempts an immediate merge, falls back to an auto-merge request when immediate merge is blocked, and fast-forwards the local default branch after a completed setup merge.
 
@@ -25,7 +25,7 @@ Consequences:
 - `repository.initialize` replaces `repository.prepare` as the Repository bootstrap command that seeds local control state.
 - The previous first issue titled `Prepare repo for Mission` is retired.
 - The previous preparation Mission/worktree initialization path is retired.
-- Airport renders one Repository surface for initialized and uninitialized Repositories.
+- Open Mission renders one Repository surface for initialized and uninitialized Repositories.
 - Repository-scoped Agent execution is the primary control surface for initialization and later repository management.
 - Repository add invokes `repository.initialize` immediately after clone or registration.
 - Setup PR merge/auto-merge is best-effort and must report failure without pretending setup completed.

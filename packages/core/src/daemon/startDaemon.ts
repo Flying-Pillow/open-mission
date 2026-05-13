@@ -1,27 +1,27 @@
 import * as fsSync from 'node:fs';
 import * as fs from 'node:fs/promises';
 import {
-	startMissionDaemon,
-	type MissionDaemonHandle,
-	type MissionDaemonStartOptions
+	startOpenMissionDaemon,
+	type OpenMissionDaemonHandle,
+	type OpenMissionDaemonStartOptions
 } from './DaemonIpcServer.js';
 import { getDaemonLogPath } from './daemonPaths.js';
 import { readDaemonLogLines } from './runtime/DaemonLogger.js';
 import {
-	getMissionDaemonProcessStatus,
-	startMissionDaemonProcess,
-	stopMissionDaemonProcess,
+	getOpenMissionDaemonProcessStatus,
+	startOpenMissionDaemonProcess,
+	stopOpenMissionDaemonProcess,
 	type DaemonRuntimeMode
 } from './runtime/DaemonProcessControl.js';
 
 export {
-	startMissionDaemon,
-	type MissionDaemonHandle,
-	type MissionDaemonStartOptions
+	startOpenMissionDaemon,
+	type OpenMissionDaemonHandle,
+	type OpenMissionDaemonStartOptions
 };
 
-export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): Promise<void> {
-	const handle = await startMissionDaemon({
+export async function runOpenMissionDaemon(argv: string[] = process.argv.slice(2)): Promise<void> {
+	const handle = await startOpenMissionDaemon({
 		argv,
 		installSignalHandlers: true
 	});
@@ -33,39 +33,39 @@ export async function runMissionDaemon(argv: string[] = process.argv.slice(2)): 
 	}
 }
 
-export async function runMissiondCommand(argv: string[] = process.argv.slice(2)): Promise<void> {
+export async function runOpenMissiondCommand(argv: string[] = process.argv.slice(2)): Promise<void> {
 	const parsed = parseDaemonArgs(argv);
-	const runtimeMode: DaemonRuntimeMode = parsed.dev || process.env['MISSION_DAEMON_RUNTIME_MODE']?.trim() === 'source' ? 'source' : 'build';
+	const runtimeMode: DaemonRuntimeMode = parsed.dev || process.env['OPEN_MISSION_DAEMON_RUNTIME_MODE']?.trim() === 'source' ? 'source' : 'build';
 
 	switch (parsed.command) {
 		case 'run':
-			await runMissionDaemon(argv);
+			await runOpenMissionDaemon(argv);
 			break;
 		case 'start': {
-			const result = await startMissionDaemonProcess({
+			const result = await startOpenMissionDaemonProcess({
 				...(parsed.socketPath ? { socketPath: parsed.socketPath } : {}),
 				runtimeMode
 			});
-			renderResult('missiond', result, parsed.json, result.message, result.alreadyRunning ? 'already running' : 'started');
+			renderResult('open-missiond', result, parsed.json, result.message, result.alreadyRunning ? 'already running' : 'started');
 			break;
 		}
 		case 'stop': {
-			const result = await stopMissionDaemonProcess();
-			renderResult('missiond', result, parsed.json, result.message, result.killed || result.endpointPath ? 'stopped' : 'already stopped');
+			const result = await stopOpenMissionDaemonProcess();
+			renderResult('open-missiond', result, parsed.json, result.message, result.killed || result.endpointPath ? 'stopped' : 'already stopped');
 			break;
 		}
 		case 'restart': {
-			await stopMissionDaemonProcess();
-			const result = await startMissionDaemonProcess({
+			await stopOpenMissionDaemonProcess();
+			const result = await startOpenMissionDaemonProcess({
 				...(parsed.socketPath ? { socketPath: parsed.socketPath } : {}),
 				runtimeMode
 			});
-			renderResult('missiond', result, parsed.json, 'Mission daemon restarted.', 'restarted');
+			renderResult('open-missiond', result, parsed.json, 'Open Mission daemon restarted.', 'restarted');
 			break;
 		}
 		case 'status': {
-			const result = await getMissionDaemonProcessStatus();
-			renderResult('missiond', result, parsed.json, result.message, result.running ? 'running' : 'stopped');
+			const result = await getOpenMissionDaemonProcessStatus();
+			renderResult('open-missiond', result, parsed.json, result.message, result.running ? 'running' : 'stopped');
 			break;
 		}
 		case 'logs': {
@@ -117,7 +117,7 @@ function parseDaemonArgs(argv: string[]): {
 				? commandToken
 				: undefined;
 	if (!command) {
-		throw new Error(`Unknown missiond command '${commandToken}'. Use one of: start, stop, restart, status, run, logs, tail.`);
+		throw new Error(`Unknown open-missiond command '${commandToken}'. Use one of: start, stop, restart, status, run, logs, tail.`);
 	}
 	const socketFlagIndex = filtered.indexOf('--socket');
 	const socketPath = socketFlagIndex >= 0 ? filtered[socketFlagIndex + 1] : undefined;

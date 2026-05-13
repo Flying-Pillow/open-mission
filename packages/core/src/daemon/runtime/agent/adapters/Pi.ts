@@ -29,7 +29,7 @@ export function createPi(input: PiInput = {}): AgentInput {
         displayName: 'Pi',
         icon: 'lucide:pi',
         adapter: {
-            command: command?.trim() || process.env['MISSION_PI_CLI_COMMAND']?.trim() || 'pi',
+            command: command?.trim() || process.env['OPEN_MISSION_PI_CLI_COMMAND']?.trim() || 'pi',
             providerSettings: {},
             defaultLaunchMode: 'print',
             transportCapabilities: {

@@ -12,7 +12,7 @@ supersedes: []
 superseded_by: []
 ---
 
-Mission exposes a daemon-owned MCP server named `mission-mcp` as the preferred structured transport for Agent signals from running Agent executions.
+Mission exposes a daemon-owned MCP server named `open-mission-mcp` as the preferred structured transport for Agent signals from running Agent executions.
 
 The MCP server starts and stops with the daemon. It is connected directly to daemon runtime services and does not own Mission, Task, Repository, Artifact, AgentExecution, workflow, or state-store behavior. Its role is to accept MCP tool calls from an Agent runtime, validate them against the Agent execution protocol descriptor, and route accepted calls into the same Agent execution observation path used by prompt-scoped stdout markers.
 
@@ -28,9 +28,9 @@ MCP gives capable Agent runtimes a standard way to discover and call tools witho
 
 ## Decision
 
-The daemon owns one local Mission MCP server named `mission-mcp`. The server lifecycle is daemon lifecycle: it is started as part of daemon startup, stopped during daemon shutdown, and treated as unavailable when the daemon is unavailable.
+The daemon owns one local Mission MCP server named `open-mission-mcp`. The server lifecycle is daemon lifecycle: it is started as part of daemon startup, stopped during daemon shutdown, and treated as unavailable when the daemon is unavailable.
 
-`mission-mcp` exposes Agent signal payloads as MCP tools for each registered Agent execution. The exposed tool set is dynamic and session-scoped: it is derived from the Agent execution protocol descriptor, the selected Agent adapter, the launch capabilities, and the owning Entity scope. There is no single global Mission MCP tool contract that every Agent execution must receive.
+`open-mission-mcp` exposes Agent signal payloads as MCP tools for each registered Agent execution. The exposed tool set is dynamic and session-scoped: it is derived from the Agent execution protocol descriptor, the selected Agent adapter, the launch capabilities, and the owning Entity scope. There is no single global Mission MCP tool contract that every Agent execution must receive.
 
 The baseline tool presentation may correspond one-to-one with the baseline signal types:
 
@@ -42,7 +42,7 @@ The baseline tool presentation may correspond one-to-one with the baseline signa
 - `failed_claim`
 - `message`
 
-The MCP tool payload schemas are generated from or directly backed by the canonical Agent signal schemas. The implementation must not copy payload shapes, validation limits, policy rules, outcome mapping, or owner-routing logic into MCP-specific code. If later owner-specific signals or signal variants make one-tool-per-signal too broad, `mission-mcp` may expose a smaller generic tool shape such as `emit_signal` that accepts a descriptor-backed signal type and payload. That would be a transport presentation change, not a new domain path.
+The MCP tool payload schemas are generated from or directly backed by the canonical Agent signal schemas. The implementation must not copy payload shapes, validation limits, policy rules, outcome mapping, or owner-routing logic into MCP-specific code. If later owner-specific signals or signal variants make one-tool-per-signal too broad, `open-mission-mcp` may expose a smaller generic tool shape such as `emit_signal` that accepts a descriptor-backed signal type and payload. That would be a transport presentation change, not a new domain path.
 
 An MCP tool call produces the same daemon-side observation and the same accepted Entity event path as the corresponding stdout marker signal. The transport may differ, but the domain route is still:
 
@@ -55,13 +55,13 @@ Agent runtime structured signal
   -> AgentExecution state, Entity event, workflow event, or rejection
 ```
 
-The MCP transport is preferred for Agent adapters that can receive MCP configuration. Stdout markers remain a supported declared transport for Agent adapters or Agent runtimes that cannot support MCP. The selected transport must be explicit in the Agent execution protocol or launch state so Airport and logs can distinguish MCP-backed structured signaling from marker-backed signaling.
+The MCP transport is preferred for Agent adapters that can receive MCP configuration. Stdout markers remain a supported declared transport for Agent adapters or Agent runtimes that cannot support MCP. The selected transport must be explicit in the Agent execution protocol or launch state so Open Mission and logs can distinguish MCP-backed structured signaling from marker-backed signaling.
 
 MCP tools are not stable public APIs for external automation. They are execution-descriptor-scoped transport affordances provisioned for a running Agent execution. Adapter provisioning negotiates or materializes the available tools for that execution, and Mission may evolve tool names, grouping, and transport presentation as long as the canonical signal descriptors and owner-routing semantics remain coherent.
 
 ## Ownership
 
-`mission-mcp` is a daemon runtime adapter into Agent execution observation routing. It validates and translates transport calls, but it does not decide workflow legality or mutate owner state directly.
+`open-mission-mcp` is a daemon runtime adapter into Agent execution observation routing. It validates and translates transport calls, but it does not decide workflow legality or mutate owner state directly.
 
 AgentExecution remains the single execution model. The MCP server must not introduce MCP-specific execution classes, MCP-specific task sessions, or owner-specific wrapper records. Scope remains data on AgentExecution, and owning Entity resolution remains derived from `AgentExecutionScope` and the protocol descriptor.
 
@@ -86,17 +86,17 @@ MCP acknowledgements are delivery feedback. They may report accepted, rejected, 
 
 ## Adapter Provisioning
 
-Agent adapters are responsible for translating Mission's MCP access contract into each Agent runtime's configuration mechanism. The shared contract is MCP availability and the `mission-mcp` server name; client configuration files and commands are adapter concerns.
+Agent adapters are responsible for translating Mission's MCP access contract into each Agent runtime's configuration mechanism. The shared contract is MCP availability and the `open-mission-mcp` server name; client configuration files and commands are adapter concerns.
 
-Mission must not assume that every Agent runtime consumes one universal MCP config file. Claude Code, Copilot CLI, OpenCode, Codex, and future adapters may require different registration paths. Adapter-specific MCP setup belongs behind Agent adapter or Agent launch provisioning boundaries, not in Entity behavior, workflow logic, Airport surfaces, or the MCP tool handlers.
+Mission must not assume that every Agent runtime consumes one universal MCP config file. Claude Code, Copilot CLI, OpenCode, Codex, and future adapters may require different registration paths. Adapter-specific MCP setup belongs behind Agent adapter or Agent launch provisioning boundaries, not in Entity behavior, workflow logic, Open Mission surfaces, or the MCP tool handlers.
 
-Generated per-execution configuration must be ephemeral or untracked when it contains session identity, capabilities, or credentials. Static repository configuration may reference `mission-mcp` only if live secrets stay outside tracked files.
+Generated per-execution configuration must be ephemeral or untracked when it contains session identity, capabilities, or credentials. Static repository configuration may reference `open-mission-mcp` only if live secrets stay outside tracked files.
 
 If an adapter declares MCP for a launch mode, provisioning failure must fail launch explicitly. Mission must not silently degrade an MCP-declared launch into stdout markers. Agent runtimes that cannot support MCP must declare stdout-marker delivery before launch.
 
 ## Security And Locality
 
-`mission-mcp` is local to the daemon runtime. It must not expose a remote unauthenticated Mission mutation endpoint. Any network transport must be loopback-only or otherwise protected by daemon-issued session capabilities. Stdio bridge processes are acceptable when an Agent runtime requires stdio MCP, but they are bridges to the daemon-owned server contract, not independent Mission authorities.
+`open-mission-mcp` is local to the daemon runtime. It must not expose a remote unauthenticated Mission mutation endpoint. Any network transport must be loopback-only or otherwise protected by daemon-issued session capabilities. Stdio bridge processes are acceptable when an Agent runtime requires stdio MCP, but they are bridges to the daemon-owned server contract, not independent Mission authorities.
 
 Tool exposure is least-privilege and session-scoped. An Agent execution sees only the tools allowed by its current protocol descriptor and launch capability. MCP must not become a general Entity command surface, repository filesystem API, or workflow mutation API unless a future ADR explicitly expands the contract.
 
@@ -107,8 +107,8 @@ Tool exposure is least-privilege and session-scoped. An Agent execution sees onl
 - Signal payload schemas, descriptor metadata, validation limits, idempotency, policy evaluation, and owner routing stay DRY and AgentExecution-owned.
 - MCP tool calls write the same semantic journal records as stdout-marker observations after transport validation.
 - AgentExecutor or its daemon runtime collaborators need a transport-neutral observation entry point so stdout markers, MCP tool calls, provider structured output, and terminal heuristics can converge before policy evaluation.
-- Agent adapters need a small MCP provisioning boundary that can inject `mission-mcp` into provider-specific launch configuration without leaking session secrets into tracked repository files.
-- Airport and logs can display whether an Agent execution has MCP-backed, marker-backed, or unavailable structured signaling.
+- Agent adapters need a small MCP provisioning boundary that can inject `open-mission-mcp` into provider-specific launch configuration without leaking session secrets into tracked repository files.
+- Open Mission and logs can display whether an Agent execution has MCP-backed, marker-backed, or unavailable structured signaling.
 - The MCP server does not replace TerminalRegistry, PTY interaction, Agent execution messages, Entity commands, or workflow verification.
 
 ## Implementation Rules

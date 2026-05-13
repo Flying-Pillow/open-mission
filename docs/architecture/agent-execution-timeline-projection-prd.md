@@ -3,31 +3,31 @@ layout: default
 title: Agent Execution Timeline Projection PRD
 parent: Architecture
 nav_order: 8.9
-description: Product requirements for the Airport AgentExecution timeline projection UI.
+description: Product requirements for the Open Mission AgentExecution timeline projection UI.
 ---
 
 ## Purpose
 
-Airport needs a canonical operator-facing presentation model for AgentExecution interaction journals. The product surface should evolve from an AI chat transcript into an execution timeline that can present conversation, activity, workflow, runtime, and artifact material without making Airport the source of truth.
+Open Mission needs a canonical operator-facing presentation model for AgentExecution interaction journals. The product surface should evolve from an AI chat transcript into an execution timeline that can present conversation, activity, workflow, runtime, and artifact material without making Open Mission the source of truth.
 
 The central product requirement is:
 
 ```text
-AgentExecution interaction journal -> AgentExecution projection -> Airport timeline UI
+AgentExecution interaction journal -> AgentExecution projection -> Open Mission timeline UI
 ```
 
-Airport must render a projection derived from AgentExecution semantic state, AgentExecution journal records, and live runtime snapshot overlays. It must not interpret raw terminal output, local component state, or provider-specific events as semantic interaction truth.
+Open Mission must render a projection derived from AgentExecution semantic state, AgentExecution journal records, and live runtime snapshot overlays. It must not interpret raw terminal output, local component state, or provider-specific events as semantic interaction truth.
 
 The AgentExecution projection must stay aligned with the two phase-one registries defined by the interaction journal specification:
 
 - the journal record registry owns top-level journal record families, record discrimination, schema validation, and replay routing.
 - the signal registry owns `observation.recorded.signal` payload variants, signal descriptors, and signal-specific projection behavior.
 
-Airport consumes the resulting AgentExecution projection. It does not duplicate either registry in component code.
+Open Mission consumes the resulting AgentExecution projection. It does not duplicate either registry in component code.
 
 ## Problem
 
-The current Airport AgentExecution surface is useful but still too conversation-weighted. It renders bounded timeline items and can show a terminal panel, but the emerging AgentExecution journal contains richer semantic material:
+The current Open Mission AgentExecution surface is useful but still too conversation-weighted. It renders bounded timeline items and can show a terminal panel, but the emerging AgentExecution journal contains richer semantic material:
 
 - operator and daemon messages.
 - Agent-authored observations and claims.
@@ -37,13 +37,13 @@ The current Airport AgentExecution surface is useful but still too conversation-
 - owner effects linked to Entity events or workflow events.
 - future artifact, terminal snippet, replay, and summary material.
 
-If Airport keeps treating this as a list of messages, it will hide important product distinctions. Progress is not a message. Verification is not a message. Runtime warning state is not a message. Terminal output is not the product UI. Mission needs a timeline architecture rather than a messenger architecture.
+If Open Mission keeps treating this as a list of messages, it will hide important product distinctions. Progress is not a message. Verification is not a message. Runtime warning state is not a message. Terminal output is not the product UI. Mission needs a timeline architecture rather than a messenger architecture.
 
 ## Goal
 
-Define the AgentExecution timeline projection product model used by Airport surfaces.
+Define the AgentExecution timeline projection product model used by Open Mission surfaces.
 
-The projection must allow Airport to present:
+The projection must allow Open Mission to present:
 
 - durable human conversation.
 - current and historical activity.
@@ -58,8 +58,8 @@ The first implementation should preserve the existing operator workflow while im
 
 ## Non-Goals
 
-- Do not modify AgentExecution journal authority or journal record schemas in Airport.
-- Do not make Airport chat, timeline, browser state, or component state authoritative.
+- Do not modify AgentExecution journal authority or journal record schemas in Open Mission.
+- Do not make Open Mission chat, timeline, browser state, or component state authoritative.
 - Do not parse raw terminal output into semantic UI truth.
 - Do not require a full virtualized timeline engine before the existing chat surface evolves.
 - Do not require filesystem, git, artifact, or diff projection support before backend journal replay and idempotency are stable.
@@ -70,19 +70,19 @@ The first implementation should preserve the existing operator workflow while im
 
 ### Timeline Before Transcript
 
-Airport presents an AgentExecution timeline. Conversation is one timeline region, not the whole model.
+Open Mission presents an AgentExecution timeline. Conversation is one timeline region, not the whole model.
 
 ### Projection Before Component
 
-Airport components should render projection primitives and behavior classes. They should not infer domain meaning directly from journal record internals or terminal text.
+Open Mission components should render projection primitives and behavior classes. They should not infer domain meaning directly from journal record internals or terminal text.
 
 ### Registry-Driven Semantics
 
-Projection semantics come from AgentExecution-owned replay and registries. The journal record registry decides which record families exist and how replay dispatches them. The signal registry decides which structured signal types exist, what descriptors are advertised to Agents, and how signals project into operator-facing material. Airport may adapt projection items for layout, but it must not maintain a parallel switch table for journal record or signal meaning.
+Projection semantics come from AgentExecution-owned replay and registries. The journal record registry decides which record families exist and how replay dispatches them. The signal registry decides which structured signal types exist, what descriptors are advertised to Agents, and how signals project into operator-facing material. Open Mission may adapt projection items for layout, but it must not maintain a parallel switch table for journal record or signal meaning.
 
 ### Intelligent Timeline, Not Journal List
 
-Airport must not render journal records as a flat chronological list. Journal records are source material for a composed operator experience: grouped progress, collapsible reasoning summaries, synchronized terminal evidence, streaming diffs, review surfaces, replay controls, and navigation landmarks.
+Open Mission must not render journal records as a flat chronological list. Journal records are source material for a composed operator experience: grouped progress, collapsible reasoning summaries, synchronized terminal evidence, streaming diffs, review surfaces, replay controls, and navigation landmarks.
 
 ### Terminal Is Inspectable, Not Primary
 
@@ -90,7 +90,7 @@ Terminal output is an execution viewport, runtime substrate, and audit surface. 
 
 ### Durable And Live Facts Stay Distinct
 
-Journal-derived items are durable projection material. Live runtime snapshot data is an overlay. Airport may compose both in one view, but it must not present live-only runtime facts as replayable truth.
+Journal-derived items are durable projection material. Live runtime snapshot data is an overlay. Open Mission may compose both in one view, but it must not present live-only runtime facts as replayable truth.
 
 ### Attention Has A Stronger Shape Than Chat
 
@@ -110,11 +110,11 @@ Phase one can represent attention-oriented states with `attention.*` primitives 
 
 ### Affordances Are Not Just Styling
 
-Phase-one behavior can use `actionable` as a rendering hint. Future projection work should introduce explicit interaction affordance semantics so Airport can distinguish what an operator can reply to, approve, reject, interrupt, resume, inspect, or expand. Affordances should derive from AgentExecution permissions, capabilities, runtime state, ownership, and interaction mode rather than local component assumptions.
+Phase-one behavior can use `actionable` as a rendering hint. Future projection work should introduce explicit interaction affordance semantics so Open Mission can distinguish what an operator can reply to, approve, reject, interrupt, resume, inspect, or expand. Affordances should derive from AgentExecution permissions, capabilities, runtime state, ownership, and interaction mode rather than local component assumptions.
 
 ## Timeline Zones
 
-Airport should treat each timeline item as belonging to one zone:
+Open Mission should treat each timeline item as belonging to one zone:
 
 | Zone | Meaning | Typical UI Region |
 | --- | --- | --- |
@@ -233,7 +233,7 @@ The mature AgentExecution timeline should support the following UX capabilities 
 
 ## Future Experience Requirements
 
-As `timelineItems` mature beyond the bounded phase-one projection, Airport should support:
+As `timelineItems` mature beyond the bounded phase-one projection, Open Mission should support:
 
 - zone filters.
 - severity filters.
@@ -248,13 +248,13 @@ As `timelineItems` mature beyond the bounded phase-one projection, Airport shoul
 - synchronized terminal evidence panes linked to timeline items by provenance or timestamp window.
 - streaming diff and artifact viewers for in-progress output projection.
 
-Later multi-agent timelines should support concurrent AgentExecution lanes, delegated execution cards, merged activity regions, shared artifact evolution, and cross-Agent workflow causality without making any one Airport surface own execution truth.
+Later multi-agent timelines should support concurrent AgentExecution lanes, delegated execution cards, merged activity regions, shared artifact evolution, and cross-Agent workflow causality without making any one Open Mission surface own execution truth.
 
 Beyond multi-agent timeline composition, Mission may need execution graph visualization. Timelines, delegation, causality, artifacts, workflow effects, ownership, and concurrency naturally produce a timeline-and-graph hybrid view. That graph should be a higher-level projection over AgentExecution, Mission workflow, and Artifact projections, not a replacement for their canonical owners.
 
 ## Acceptance Criteria
 
-- Airport can render current `timelineItems` without losing existing operator workflows.
+- Open Mission can render current `timelineItems` without losing existing operator workflows.
 - The documented target model can express non-message timeline items.
 - Timeline items have a required zone.
 - Timeline items can carry optional severity.
@@ -263,11 +263,11 @@ Beyond multi-agent timeline composition, Mission may need execution graph visual
 - Terminal output remains available for inspection without becoming semantic UI truth.
 - High-frequency activity can be collapsed or summarized without changing durable semantic state.
 - The UI model remains provider-neutral and scope-neutral.
-- Projection material is derived from AgentExecution data and journal replay, not locally invented by Airport components.
+- Projection material is derived from AgentExecution data and journal replay, not locally invented by Open Mission components.
 - Projection semantics are registry-driven: record-family coverage comes from the journal record registry, and signal-family coverage comes from the AgentExecution signal registry.
 - Every descriptor-backed signal that can produce operator-facing material has a projection path into `timelineItems` or another explicit projection family.
-- Airport defines component shapes for each projection behavior class and journal-derived primitive family.
-- Airport can navigate, replay, collapse, expand, and synchronize timeline regions without treating journal records as raw UI rows.
+- Open Mission defines component shapes for each projection behavior class and journal-derived primitive family.
+- Open Mission can navigate, replay, collapse, expand, and synchronize timeline regions without treating journal records as raw UI rows.
 
 ## Phase Plan
 
@@ -281,8 +281,8 @@ Beyond multi-agent timeline composition, Mission may need execution graph visual
 
 ## Open Questions
 
-1. Should the Airport route and visible heading use Agent execution, Agent timeline, or retain Agent chat during phase one?
-2. Should severity be authored by the backend projection, derived by Airport from primitive and payload, or both with backend severity taking precedence?
+1. Should the Open Mission app route and visible heading use Agent execution, Agent timeline, or retain Agent chat during phase one?
+2. Should severity be authored by the backend projection, derived by Open Mission from primitive and payload, or both with backend severity taking precedence?
 3. Should attention input requests remain in the conversation zone, or should future multi-agent coordination introduce a separate attention zone?
 4. What is the first cursor window size that keeps long AgentExecutions usable without premature virtualization complexity?
 5. Should attention become an orthogonal projection axis once blocked states span runtime, workflow, conversation, collaboration, and artifact review?

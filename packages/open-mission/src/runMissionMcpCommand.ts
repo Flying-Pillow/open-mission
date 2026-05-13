@@ -2,20 +2,20 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'node:crypto';
-import { connectDaemon } from '@flying-pillow/mission-core/daemon/client/connectAirportDaemon';
+import { connectDaemon } from '@flying-pillow/open-mission-core/daemon/client/connectDaemon';
 import {
-    startMissionDaemonProcess,
+    startOpenMissionDaemonProcess,
     type DaemonRuntimeMode
-} from '@flying-pillow/mission-core/daemon/runtime/DaemonProcessControl';
+} from '@flying-pillow/open-mission-core/daemon/runtime/DaemonProcessControl';
 import {
     AgentSignalPayloadSchema,
     AgentSignalToolPayloadSchemasByType,
     AgentExecutionProtocolDescriptorSchema
-} from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
+} from '@flying-pillow/open-mission-core/entities/AgentExecution/AgentExecutionSchema';
 import {
     readAgentExecutionSemanticOperationDescriptor,
     readAgentExecutionSemanticOperationInputSchema
-} from '@flying-pillow/mission-core/daemon/runtime/agent/AgentExecutionSemanticOperations';
+} from '@flying-pillow/open-mission-core/daemon/runtime/agent/AgentExecutionSemanticOperations';
 import { z } from 'zod/v4';
 import type { EntryContext } from './entryContext.js';
 
@@ -47,13 +47,13 @@ export async function runMissionMcpCommand(context: EntryContext): Promise<void>
         throw new Error("mission mcp connect requires '--agent-execution <id>'.");
     }
 
-    const token = process.env['MISSION_MCP_TOKEN']?.trim();
+    const token = process.env['OPEN_MISSION_MCP_TOKEN']?.trim();
     if (!token) {
-        throw new Error('mission mcp connect requires MISSION_MCP_TOKEN.');
+        throw new Error('mission mcp connect requires OPEN_MISSION_MCP_TOKEN.');
     }
-    const ownerId = process.env['MISSION_AGENT_EXECUTION_OWNER_ID']?.trim();
+    const ownerId = process.env['OPEN_MISSION_AGENT_EXECUTION_OWNER_ID']?.trim();
 
-    const client = await connectMissionDaemon(context);
+    const client = await connectOpenMissionDaemon(context);
     const tools = await readMissionMcpTools({
         client,
         agentExecutionId,
@@ -61,7 +61,7 @@ export async function runMissionMcpCommand(context: EntryContext): Promise<void>
         token
     });
 
-    const server = new McpServer({ name: 'mission-mcp', version: '0.1.0-alpha.1' });
+    const server = new McpServer({ name: 'open-mission-mcp', version: '0.1.0-alpha.1' });
     for (const tool of tools) {
         const inputSchema = createMissionMcpBridgeToolInputSchema(tool);
         server.registerTool(tool.name, {
@@ -70,7 +70,7 @@ export async function runMissionMcpCommand(context: EntryContext): Promise<void>
             inputSchema: inputSchema.shape
         }, async (input: unknown): Promise<CallToolResult> => {
             const parsed = inputSchema.parse(input);
-            const result = await client.request<unknown>('mission-mcp.callTool', {
+            const result = await client.request<unknown>('open-mission-mcp.callTool', {
                 name: tool.name,
                 input: createMissionMcpBridgeDaemonToolInput({
                     tool,
@@ -91,16 +91,16 @@ export async function runMissionMcpCommand(context: EntryContext): Promise<void>
     await server.connect(new StdioServerTransport());
 }
 
-async function connectMissionDaemon(context: EntryContext) {
+async function connectOpenMissionDaemon(context: EntryContext) {
     try {
         return await connectDaemon({
             surfacePath: context.workingDirectory,
             handshakeTimeoutMs: MISSION_MCP_DAEMON_HANDSHAKE_TIMEOUT_MS
         });
     } catch {
-        await startMissionDaemonProcess({
+        await startOpenMissionDaemonProcess({
             surfacePath: context.workingDirectory,
-            runtimeMode: resolveMissionDaemonRuntimeMode()
+            runtimeMode: resolveOpenMissionDaemonRuntimeMode()
         });
         return connectDaemon({
             surfacePath: context.workingDirectory,
@@ -116,7 +116,7 @@ async function readMissionMcpTools(input: {
     token: string;
 }): Promise<MissionMcpToolDescriptor[]> {
     try {
-        return await input.client.request<MissionMcpToolDescriptor[]>('mission-mcp.listTools', {
+        return await input.client.request<MissionMcpToolDescriptor[]>('open-mission-mcp.listTools', {
             agentExecutionId: input.agentExecutionId,
             token: input.token
         }, {
@@ -132,7 +132,7 @@ async function readMissionMcpTools(input: {
             ownerId: input.ownerId,
             token: input.token
         });
-        return input.client.request<MissionMcpToolDescriptor[]>('mission-mcp.listTools', {
+        return input.client.request<MissionMcpToolDescriptor[]>('open-mission-mcp.listTools', {
             agentExecutionId: input.agentExecutionId,
             token: input.token
         }, {
@@ -156,7 +156,7 @@ async function recoverMissionMcpAccess(input: {
         }
     });
     const parsedExecution = AgentExecutionRecoverySchema.parse(execution);
-    await input.client.request('mission-mcp.registerAccess' as any, {
+    await input.client.request('open-mission-mcp.registerAccess' as any, {
         agentExecutionId: input.agentExecutionId,
         token: input.token,
         protocolDescriptor: parsedExecution['protocolDescriptor']
@@ -164,11 +164,11 @@ async function recoverMissionMcpAccess(input: {
 }
 
 function shouldRecoverMissionMcpAccess(error: unknown): boolean {
-    return error instanceof Error && /not registered for mission-mcp access/i.test(error.message);
+    return error instanceof Error && /not registered for open-mission-mcp access/i.test(error.message);
 }
 
-function resolveMissionDaemonRuntimeMode(): DaemonRuntimeMode {
-    return process.env['MISSION_DAEMON_RUNTIME_MODE']?.trim() === 'source' ? 'source' : 'build';
+function resolveOpenMissionDaemonRuntimeMode(): DaemonRuntimeMode {
+    return process.env['OPEN_MISSION_DAEMON_RUNTIME_MODE']?.trim() === 'source' ? 'source' : 'build';
 }
 
 export function createMissionMcpBridgeToolInputSchema(tool: MissionMcpToolDescriptor) {

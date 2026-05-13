@@ -32,7 +32,7 @@ Mission-specific architecture work must also respect the current OOD reset:
 
 - Domain behavior belongs in explicit Entity classes, policies, repositories, adapters, orchestrators, or strict contract-bearing objects.
 - Entity behavior belongs in `<Entity>.ts`; validated shapes belong in `<Entity>Schema.ts`; remote method metadata belongs in `<Entity>Contract.ts`.
-- Airport and other surfaces render daemon-owned state and command views; they do not own workflow law, Entity behavior, or persisted runtime truth.
+- Open Mission and other surfaces render daemon-owned state and command views; they do not own workflow law, Entity behavior, or persisted runtime truth.
 - Adapters translate external systems into Mission concepts instead of leaking provider protocol shapes inward.
 
 ## Process

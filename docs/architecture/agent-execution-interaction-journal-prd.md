@@ -8,7 +8,7 @@ description: Product requirements for the canonical semantic AgentExecution inte
 
 ## Purpose
 
-Mission needs one canonical semantic interaction model for AgentExecution. The current architecture already separates Agent adapters, Terminal, AgentExecution, Mission workflow state, stdout markers, MCP tools, observations, and terminal recordings. The missing piece is a durable semantic journal that records what the Mission system understood and accepted during an AgentExecution.
+Open Mission needs one canonical semantic interaction model for AgentExecution. The current architecture already separates Agent adapters, Terminal, AgentExecution, Mission workflow state, stdout markers, MCP tools, observations, and terminal recordings. The missing piece is a durable semantic journal that records what the Open Mission system understood and accepted during an AgentExecution.
 
 The central product requirement is:
 
@@ -30,7 +30,7 @@ AgentExecution interaction is currently split across several useful but incomple
 - `execution.message` events carry loose text rather than a schema-backed semantic interaction record.
 - Input requests must not be modeled as lifecycle. They are collaboration attention plus current input-request state.
 
-Without a canonical semantic journal, Airport timelines, recovery, audit, replay, and future provider integrations will each be tempted to derive truth from different sources.
+Without a canonical semantic journal, Open Mission timelines, recovery, audit, replay, and future provider integrations will each be tempted to derive truth from different sources.
 
 ## Goal
 
@@ -51,7 +51,7 @@ The journal must allow the daemon to reconstruct:
 
 - Do not make Message a standalone Entity.
 - Do not collapse Terminal recordings, AgentExecution interaction journals, and Mission workflow event logs into one file or one event type.
-- Do not make Airport chat/timeline state authoritative.
+- Do not make Open Mission chat/timeline state authoritative.
 - Do not treat Agent signal file activity as filesystem truth.
 - Do not store raw private reasoning as semantic `thinking` content.
 - Do not expose MCP tools as stable public automation APIs.
@@ -65,7 +65,7 @@ The journal is the source for AgentExecution semantic state. Chat messages, time
 
 ### Transport Neutrality
 
-The same semantic observation can arrive through stdout marker, `mission-mcp`, provider SDK output, terminal heuristic, filesystem watcher, git watcher, or daemon-owned runtime code. Transport affects provenance and confidence, not the domain path.
+The same semantic observation can arrive through stdout marker, `open-mission-mcp`, provider SDK output, terminal heuristic, filesystem watcher, git watcher, or daemon-owned runtime code. Transport affects provenance and confidence, not the domain path.
 
 ### Owner Separation
 
@@ -92,7 +92,7 @@ Mission must preserve these directional terms:
 | Direction | Canonical term | Meaning |
 | --- | --- | --- |
 | owner/operator/daemon to AgentExecution | AgentExecutionMessage | structured input accepted by the daemon for delivery or context mutation |
-| Agent runtime to Mission system | Observation | normalized observed thing from a transport, adapter, runtime, filesystem, git, or daemon source |
+| Agent runtime to Open Mission system | Observation | normalized observed thing from a transport, adapter, runtime, filesystem, git, or daemon source |
 | Agent-authored structured output | AgentSignal | one possible observation payload authored by the Agent |
 | policy result | AgentExecutionDecision | accepted, rejected, recorded-only, promoted, or state-changing interpretation |
 | durable audit | AgentExecutionJournalRecord | append-only semantic interaction record |
@@ -201,17 +201,17 @@ The Mission dossier path is a file-store choice, not a Mission-specific journal 
 - Semantic state transitions are distinct from runtime activity or telemetry updates.
 - Terminal recordings remain raw transport audit and are not used as semantic source of truth.
 - Mission workflow event logs remain orchestration truth and do not become transcripts.
-- AgentExecution projection data and Airport timelines are projections over the journal.
+- AgentExecution projection data and Open Mission timelines are projections over the journal.
 - Observation duplicate detection survives daemon restart and replay.
 - `needs_input` creates a durable input-request record; operator response is a separate AgentExecutionMessage record.
 - AgentExecution state can be reconstructed from journal records in deterministic tests.
 - AgentExecution lifecycle, attention, semantic activity, runtime activity, telemetry, capabilities, and live runtime snapshots are separable in data and projections.
-- Existing stdout-marker and `mission-mcp` transports route through the same journal path.
+- Existing stdout-marker and `open-mission-mcp` transports route through the same journal path.
 - Existing AgentExecution message descriptors and Agent signal descriptors are materialized from one protocol catalog.
 
 ## Phase-One Product Decisions
 
-1. Airport reads the bounded `projection.timelineItems` projection on AgentExecution data. Cursor-based older journal windows can be added after the replay path is stable.
+1. Open Mission reads the bounded `projection.timelineItems` projection on AgentExecution data. Cursor-based older journal windows can be added after the replay path is stable.
 2. Owner effect records are written only when an accepted observation actually emits an Entity event or Mission workflow event. No placeholder owner-effect records in phase one.
 3. Filesystem and git observations wait until the interaction journal, replay path, and observation idempotency hydration are stable.
 4. Journal compaction waits until there is measured read or storage pressure. Phase one keeps append-only records and derives projection at replay time.

@@ -8,13 +8,13 @@ import { AgentRegistry } from '../../../../entities/Agent/AgentRegistry.js';
 import type {
     AgentCommand,
     AgentExecutionEvent,
-    AgentExecutionSnapshot,
+    AgentExecutionType,
     AgentLaunchConfig,
     AgentPrompt
 } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import { createAgentAdapter, type AgentAdapter } from '../AgentAdapter.js';
 import { AgentExecutor } from '../AgentExecutor.js';
-import { MissionMcpServer } from '../mcp/MissionMcpServer.js';
+import { OpenMissionMcpServer } from '../mcp/OpenMissionMcpServer.js';
 import { createMemoryAgentExecutionJournalWriter } from '../testing/createMemoryAgentExecutionJournalWriter.js';
 import { createCodex } from './Codex.js';
 
@@ -55,18 +55,18 @@ function createLaunchConfig(overrides: Partial<AgentLaunchConfig> = {}): AgentLa
 }
 
 type StartedTerminalExecution = {
-    getSnapshot(): AgentExecutionSnapshot;
+    getSnapshot(): AgentExecutionType;
     onDidEvent(listener: (event: AgentExecutionEvent) => void): { dispose(): void };
-    submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionSnapshot>;
-    submitCommand(command: AgentCommand): Promise<AgentExecutionSnapshot>;
-    terminate(reason?: string): Promise<AgentExecutionSnapshot>;
+    submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionType>;
+    submitCommand(command: AgentCommand): Promise<AgentExecutionType>;
+    terminate(reason?: string): Promise<AgentExecutionType>;
 };
 
 async function startExecution(
     adapter: AgentAdapter,
     config: AgentLaunchConfig
 ): Promise<StartedTerminalExecution> {
-    const missionMcpServer = new MissionMcpServer({
+    const openMissionMcpServer = new OpenMissionMcpServer({
         agentExecutionRegistry: {
             routeTransportObservation() {
                 return {
@@ -78,19 +78,19 @@ async function startExecution(
             }
         }
     });
-    await missionMcpServer.start();
+    await openMissionMcpServer.start();
     const { journalWriter } = createMemoryAgentExecutionJournalWriter();
     const executor = new AgentExecutor({
         agentRegistry: new AgentRegistry({
             agents: [await Agent.fromAdapter(adapter)]
         }),
-        missionMcpServer,
+        openMissionMcpServer,
         journalWriter
     });
     const execution = await executor.startExecution(config);
-    const agentExecutionId = execution.getSnapshot().agentExecutionId;
+    const agentExecutionId = execution.getExecution().agentExecutionId;
     return {
-        getSnapshot: () => execution.getSnapshot(),
+        getSnapshot: () => execution.getExecution(),
         onDidEvent: (listener) => execution.onDidEvent(listener),
         submitPrompt: (prompt) => executor.submitPrompt(agentExecutionId, prompt),
         submitCommand: (command) => executor.submitCommand(agentExecutionId, command),
@@ -122,7 +122,7 @@ describe('Codex', () => {
         vi.useRealTimers();
     });
 
-    it('starts with agent-execution-scoped mission-mcp configuration overrides', async () => {
+    it('starts with agent-execution-scoped open-mission-mcp configuration overrides', async () => {
         const adapter = createAgentAdapter(createCodex({
             command: 'codex',
             env: { PATH: runtimeDirectory },
@@ -147,22 +147,22 @@ describe('Codex', () => {
         expect(state.spawnedArgs).toContain('--model');
         expect(state.spawnedArgs).toContain('gpt-5-codex');
         expect(configOverrides).toHaveLength(1);
-        expect(mcpConfigOverride).toContain('mcp_servers={"mission-mcp"={');
+        expect(mcpConfigOverride).toContain('mcp_servers={"open-mission-mcp"={');
         expect(mcpConfigOverride).toContain('command="mission"');
         expect(mcpConfigOverride).toContain(`args=["mcp","connect","--agent-execution","${snapshot.agentExecutionId}"]`);
         expect(mcpConfigOverride).toContain('env={');
-        expect(mcpConfigOverride).toContain('MISSION_AGENT_EXECUTION_OWNER_ID=');
-        expect(mcpConfigOverride).toContain('MISSION_MCP_TOKEN=');
+        expect(mcpConfigOverride).toContain('OPEN_MISSION_AGENT_EXECUTION_OWNER_ID=');
+        expect(mcpConfigOverride).toContain('OPEN_MISSION_MCP_TOKEN=');
         expect(mcpConfigOverride).toContain('default_tools_approval_mode="approve"');
         expect(state.spawnedArgs.some((arg) => arg.includes('Structured status markers'))).toBe(false);
-        expect(state.spawnedArgs.some((arg) => arg.includes('Mission MCP is already connected and available.'))).toBe(true);
-        expect(state.spawnedArgs.some((arg) => arg.includes('Mission MCP is the authoritative operator interaction protocol'))).toBe(true);
+        expect(state.spawnedArgs.some((arg) => arg.includes('Open Mission MCP is already connected and available.'))).toBe(true);
+        expect(state.spawnedArgs.some((arg) => arg.includes('Open Mission MCP is the authoritative operator interaction protocol'))).toBe(true);
         expect(state.spawnedArgs.some((arg) => arg.includes('@task::'))).toBe(false);
         expect(state.writes).not.toContain('Implement the task.');
     });
 
     it('uses the source Mission CLI bridge for MCP config in source runtime mode', async () => {
-        vi.stubEnv('MISSION_DAEMON_RUNTIME_MODE', 'source');
+        vi.stubEnv('OPEN_MISSION_DAEMON_RUNTIME_MODE', 'source');
         const adapter = createAgentAdapter(createCodex({
             command: 'codex',
             env: { PATH: runtimeDirectory },
@@ -181,11 +181,11 @@ describe('Codex', () => {
 
         expect(configOverrides).toHaveLength(1);
         expect(mcpConfigOverride).toContain('command="pnpm"');
-        expect(mcpConfigOverride).toContain(`args=["--dir","/mission","--filter","@flying-pillow/open-mission","exec","tsx","--tsconfig","./tsconfig.dev.json","./src/mission.ts","mcp","connect","--agent-execution","${snapshot.agentExecutionId}"]`);
+        expect(mcpConfigOverride).toContain(`args=["--dir","/mission","--filter","@flying-pillow/open-mission","exec","tsx","--tsconfig","./tsconfig.dev.json","./src/open-mission.ts","mcp","connect","--agent-execution","${snapshot.agentExecutionId}"]`);
         expect(mcpConfigOverride).toContain('env={');
-        expect(mcpConfigOverride).toContain('MISSION_AGENT_EXECUTION_OWNER_ID=');
-        expect(mcpConfigOverride).toContain('MISSION_MCP_TOKEN=');
-        expect(mcpConfigOverride).toContain('MISSION_DAEMON_RUNTIME_MODE="source"');
+        expect(mcpConfigOverride).toContain('OPEN_MISSION_AGENT_EXECUTION_OWNER_ID=');
+        expect(mcpConfigOverride).toContain('OPEN_MISSION_MCP_TOKEN=');
+        expect(mcpConfigOverride).toContain('OPEN_MISSION_DAEMON_RUNTIME_MODE="source"');
         expect(mcpConfigOverride).toContain('default_tools_approval_mode="approve"');
     });
 

@@ -106,7 +106,7 @@ AgentAdapter does not own:
 - prompt-scoped signal instruction
 - AgentExecution creation or mutation
 - Mission workflow state transitions
-- Airport behavior
+- Open Mission behavior
 - signal promotion policy
 
 ### AgentExecutor
@@ -199,7 +199,7 @@ Terminal may carry owner metadata for an AgentExecution, Mission, task, reposito
 7. Split or rename `daemon/runtime/agent/adapters/AgentPtyAdapter.ts` because the current name hides executor responsibilities.
 8. Move configured runtime construction out of `entities/Agent/AgentRegistry.ts` into daemon composition or AgentExecutor setup.
 9. Extract TerminalRegistry and process supervision out of `entities/AgentExecution/AgentExecution.ts` into the Terminal Entity boundary, with AgentExecutor coordinating lifecycle use.
-10. Promote Terminal to a first-class Entity so AgentExecution and Airport surfaces no longer import agent runtime glue to read or write terminal state.
+10. Promote Terminal to a first-class Entity so AgentExecution and Open Mission surfaces no longer import agent runtime glue to read or write terminal state.
 
 ## Removed Swamp
 

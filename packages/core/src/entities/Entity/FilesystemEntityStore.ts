@@ -1,11 +1,11 @@
 import * as path from 'node:path';
-import { getMissionDaemonDirectory } from '../../settings/MissionInstall.js';
+import { getOpenMissionRuntimeDirectory } from '../../settings/OpenMissionInstall.js';
 import { JsonFileAdapter } from '../../lib/formats/JsonFileAdapter.js';
 import { EntityTableSchema, type EntityStore } from './EntitySchema.js';
 
 export class FilesystemEntityStore implements EntityStore {
     public constructor(
-        private readonly rootPath = path.join(getMissionDaemonDirectory(), 'entities'),
+        private readonly rootPath = path.join(getOpenMissionRuntimeDirectory(), 'entities'),
         private readonly jsonFiles = new JsonFileAdapter()
     ) { }
 

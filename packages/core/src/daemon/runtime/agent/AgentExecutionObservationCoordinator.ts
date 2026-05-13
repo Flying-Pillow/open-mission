@@ -5,7 +5,7 @@ import type {
     AgentExecutionObservation,
     AgentExecutionObservationAddress,
     AgentExecutionScope,
-    AgentExecutionSnapshot
+    AgentExecutionType
 } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import type { AgentExecutionJournalRecordType } from '../../../entities/AgentExecution/AgentExecutionJournalSchema.js';
 import { replayAgentExecutionJournal } from '../../../entities/AgentExecution/AgentExecutionJournalReplayer.js';
@@ -68,13 +68,13 @@ export class AgentExecutionObservationCoordinator {
                 if (managed.retainRuntimeOutput) {
                     managed.retainedRuntimeOutput = appendRetainedRuntimeOutput(managed.retainedRuntimeOutput, event.text);
                 }
-                this.routeRuntimeOutput(managed, event.snapshot, event.channel, event.text, callbacks);
-                this.syncIdleObservationTimer(managed, managed.execution.getSnapshot(), callbacks);
+                this.routeRuntimeOutput(managed, event.execution, event.channel, event.text, callbacks);
+                this.syncIdleObservationTimer(managed, managed.execution.getExecution(), callbacks);
                 return;
             case 'execution.completed':
             case 'execution.failed':
                 this.clearIdleObservationTimer(managed);
-                const usageObservation = this.routeUsageObservation(managed, event.snapshot, callbacks);
+                const usageObservation = this.routeUsageObservation(managed, event.execution, callbacks);
                 void managed.observationQueue
                     .then(() => usageObservation)
                     .finally(() => callbacks.disposeManagedExecution());
@@ -87,7 +87,7 @@ export class AgentExecutionObservationCoordinator {
             case 'execution.attached':
             case 'execution.started':
             case 'execution.updated':
-                this.syncIdleObservationTimer(managed, event.snapshot, callbacks);
+                this.syncIdleObservationTimer(managed, event.execution, callbacks);
                 return;
         }
     }
@@ -99,7 +99,7 @@ export class AgentExecutionObservationCoordinator {
 
     public syncIdleObservationTimer(
         managed: AgentExecutionManagedObservationState,
-        snapshot: AgentExecutionSnapshot,
+        snapshot: AgentExecutionType,
         callbacks: AgentExecutionObservationCallbacks
     ): void {
         if (!shouldArmIdleObservationTimer(snapshot)) {
@@ -110,12 +110,12 @@ export class AgentExecutionObservationCoordinator {
         this.clearIdleObservationTimer(managed);
         managed.idleObservationTimer = setTimeout(() => {
             managed.idleObservationTimer = undefined;
-            const currentSnapshot = managed.execution.getSnapshot();
+            const currentSnapshot = managed.execution.getExecution();
             if (!shouldArmIdleObservationTimer(currentSnapshot)) {
                 return;
             }
             void managed.observationQueue
-                .then(() => this.applyObservations(managed, [createDaemonIdleObservation(managed.execution.getSnapshot())], callbacks));
+                .then(() => this.applyObservations(managed, [createDaemonIdleObservation(managed.execution.getExecution())], callbacks));
         }, AGENT_EXECUTION_IDLE_QUIET_PERIOD_MS);
     }
 
@@ -141,13 +141,13 @@ export class AgentExecutionObservationCoordinator {
 
     private routeRuntimeOutput(
         managed: AgentExecutionManagedObservationState,
-        snapshot: AgentExecutionSnapshot,
+        snapshot: AgentExecutionType,
         channel: 'stdout' | 'stderr',
         line: string,
         callbacks: AgentExecutionObservationCallbacks
     ): void {
         const observationAddress = toObservationAddress(snapshot);
-        const markerPrefix = AgentExecution.createProtocolDescriptorForSnapshot(snapshot).owner.markerPrefix;
+        const markerPrefix = AgentExecution.createProtocolDescriptorForExecution(snapshot).owner.markerPrefix;
         if (managed.parseAgentSignals && channel === 'stdout') {
             const observations = this.observationRouter.route({
                 kind: 'agent-signal',
@@ -181,7 +181,7 @@ export class AgentExecutionObservationCoordinator {
 
     private async routeUsageObservation(
         managed: AgentExecutionManagedObservationState,
-        snapshot: AgentExecutionSnapshot,
+        snapshot: AgentExecutionType,
         callbacks: AgentExecutionObservationCallbacks
     ): Promise<void> {
         if (!managed.retainRuntimeOutput) {
@@ -249,7 +249,7 @@ export class AgentExecutionObservationCoordinator {
             observation
         }));
         const decision = managed.observationPolicy.evaluate({
-            snapshot: managed.execution.getSnapshot(),
+            execution: managed.execution.getExecution(),
             observation
         });
         callbacks.publishJournalRecord(await this.journalWriter.appendDecision({
@@ -268,9 +268,9 @@ export class AgentExecutionObservationCoordinator {
             });
         }
         if (decision.action === 'update-execution') {
-            const currentInputRequestId = decision.snapshotPatch.waitingForInput === true
+            const currentInputRequestId = decision.patch.waitingForInput === true
                 ? observation.observationId
-                : decision.snapshotPatch.waitingForInput === false
+                : decision.patch.waitingForInput === false
                     ? null
                     : undefined;
             callbacks.publishJournalRecord(await this.journalWriter.appendStateChanged({
@@ -292,9 +292,9 @@ export class AgentExecutionObservationCoordinator {
                 callbacks.publishJournalRecord(await this.journalWriter.appendExecutionStateChanged({
                     agentExecutionId: managed.execution.agentExecutionId,
                     scope: managed.journalScope,
-                    lifecycle: managed.execution.getSnapshot().status,
-                    attention: managed.execution.getSnapshot().attention,
-                    activity: mapProgressStateToSemanticActivity(managed.execution.getSnapshot().progress.state),
+                    lifecycle: managed.execution.getExecution().status,
+                    attention: managed.execution.getExecution().attention,
+                    activity: mapProgressStateToSemanticActivity(managed.execution.getExecution().progress.state),
                     awaitingResponseToMessageId: null
                 }));
             }
@@ -360,7 +360,7 @@ function deriveTransportEvidenceFromObservation(observation: AgentExecutionObser
     return [];
 }
 
-function shouldArmIdleObservationTimer(snapshot: AgentExecutionSnapshot): boolean {
+function shouldArmIdleObservationTimer(snapshot: AgentExecutionType): boolean {
     if (snapshot.status !== 'starting' && snapshot.status !== 'running') {
         return false;
     }
@@ -373,7 +373,7 @@ function shouldArmIdleObservationTimer(snapshot: AgentExecutionSnapshot): boolea
 }
 
 function createDaemonAgentMessageObservation(
-    snapshot: AgentExecutionSnapshot,
+    snapshot: AgentExecutionType,
     text: string
 ): AgentExecutionObservation {
     const observedAt = new Date().toISOString();
@@ -395,7 +395,7 @@ function createDaemonAgentMessageObservation(
     };
 }
 
-function createDaemonIdleObservation(snapshot: AgentExecutionSnapshot): AgentExecutionObservation {
+function createDaemonIdleObservation(snapshot: AgentExecutionType): AgentExecutionObservation {
     const observedAt = new Date().toISOString();
     return {
         observationId: `daemon:${snapshot.agentExecutionId}:idle:${randomUUID()}`,
@@ -426,7 +426,7 @@ function shouldClearAwaitingResponseFromObservation(observation: AgentExecutionO
     }
 }
 
-function mapProgressStateToSemanticActivity(progressState: AgentExecutionSnapshot['progress']['state']): 'idle' | 'planning' | 'communicating' | 'executing' | undefined {
+function mapProgressStateToSemanticActivity(progressState: AgentExecutionType['progress']['state']): 'idle' | 'planning' | 'communicating' | 'executing' | undefined {
     const activityState = deriveActivityStateFromProgressState(progressState);
     if (activityState === 'idle' || activityState === 'communicating' || activityState === 'executing' || activityState === 'planning') {
         return activityState;
@@ -434,7 +434,7 @@ function mapProgressStateToSemanticActivity(progressState: AgentExecutionSnapsho
     return undefined;
 }
 
-function toObservationAddress(snapshot: AgentExecutionSnapshot): AgentExecutionObservationAddress {
+function toObservationAddress(snapshot: AgentExecutionType): AgentExecutionObservationAddress {
     return {
         agentExecutionId: snapshot.agentExecutionId,
         scope: snapshot.scope

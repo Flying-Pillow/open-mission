@@ -6,14 +6,14 @@ import type {
 } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import {
     AgentExecutionCommandSchema,
-    AgentExecutionDataSchema,
+    AgentExecutionSchema,
     AgentExecutionObservationAckSchema,
     AgentExecutionPromptSchema,
     type AgentExecutionObservationAckType,
-    type AgentExecutionDataType
+    type AgentExecutionType
 } from '../../../entities/AgentExecution/AgentExecutionSchema.js';
 import { AgentExecutor } from './AgentExecutor.js';
-import type { MissionMcpServer } from './mcp/MissionMcpServer.js';
+import type { OpenMissionMcpServer } from './mcp/OpenMissionMcpServer.js';
 import type {
     AgentExecutionSemanticOperationInvocationType,
     AgentExecutionSemanticOperationInvoker,
@@ -27,6 +27,30 @@ type AgentExecutionRegistryEntry = {
     dataChangeSubscription: { dispose(): void };
 };
 
+export type AgentExecutionRuntimeSummaryEntry = {
+    ownerId: string;
+    agentId: string;
+    agentExecutionId: string;
+    scope: AgentExecutionType['scope'];
+    status: AgentExecutionType['lifecycleState'];
+    transportState?: AgentExecutionType['transportState'];
+    terminalName?: string;
+    hasRuntimeLease: boolean;
+    attached: boolean;
+    degraded: boolean;
+    protocolIncompatible: boolean;
+};
+
+export type AgentExecutionRuntimeSummary = {
+    activeAgentExecutionCount: number;
+    attachedAgentExecutionCount: number;
+    detachedAgentExecutionCount: number;
+    degradedAgentExecutionCount: number;
+    protocolIncompatibleAgentExecutionCount: number;
+    executionsWithoutRuntimeLeaseCount: number;
+    executions: AgentExecutionRuntimeSummaryEntry[];
+};
+
 export type AgentExecutionRegistryCommand =
     | { commandId: 'agentExecution.complete' }
     | { commandId: 'agentExecution.cancel'; input?: unknown }
@@ -34,7 +58,7 @@ export type AgentExecutionRegistryCommand =
     | { commandId: 'agentExecution.sendRuntimeMessage'; input?: unknown };
 
 type AgentExecutionRegistryOptions = {
-    missionMcpServer?: MissionMcpServer;
+    openMissionMcpServer?: OpenMissionMcpServer;
     logger?: {
         debug(message: string, metadata?: Record<string, unknown>): void;
     };
@@ -43,21 +67,21 @@ type AgentExecutionRegistryOptions = {
 export class AgentExecutionRegistry implements AgentExecutionSemanticOperationInvoker {
     private readonly executionsByAgentExecutionId = new Map<string, AgentExecutionRegistryEntry>();
     private readonly agentExecutionIdsByOwnerKey = new Map<string, string>();
-    private readonly dataChangeListeners = new Set<(data: AgentExecutionDataType) => void>();
-    private missionMcpServer: MissionMcpServer | undefined;
+    private readonly dataChangeListeners = new Set<(data: AgentExecutionType) => void>();
+    private openMissionMcpServer: OpenMissionMcpServer | undefined;
     private logger: AgentExecutionRegistryOptions['logger'];
 
     public constructor(options: AgentExecutionRegistryOptions = {}) {
         this.logger = options.logger;
-        this.missionMcpServer = options.missionMcpServer;
+        this.openMissionMcpServer = options.openMissionMcpServer;
     }
 
     public configure(options: AgentExecutionRegistryOptions = {}): void {
         if (options.logger) {
             this.logger = options.logger;
         }
-        if (options.missionMcpServer) {
-            this.missionMcpServer = options.missionMcpServer;
+        if (options.openMissionMcpServer) {
+            this.openMissionMcpServer = options.openMissionMcpServer;
         }
     }
 
@@ -65,13 +89,13 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
         ownerKey: string;
         agentRegistry: AgentRegistry;
         config: AgentLaunchConfig;
-    }): Promise<AgentExecutionDataType> {
+    }): Promise<AgentExecutionType> {
         const requestedAgentId = input.agentRegistry.resolveStartAgentId(input.config.requestedAdapterId);
         const existingAgentExecutionId = this.agentExecutionIdsByOwnerKey.get(input.ownerKey);
         if (existingAgentExecutionId) {
             const existing = this.executionsByAgentExecutionId.get(existingAgentExecutionId);
             if (existing) {
-                const snapshot = existing.execution.getSnapshot();
+                const snapshot = existing.execution.getExecution();
                 if (!AgentExecution.isTerminalFinalStatus(snapshot.status)) {
                     if (this.isReusableExecution(existing.execution, requestedAgentId)) {
                         return this.toExecutionData(existing.execution);
@@ -94,7 +118,7 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
     public readReusableExecution(input: {
         ownerKey: string;
         requestedAgentId?: string;
-    }): AgentExecutionDataType | undefined {
+    }): AgentExecutionType | undefined {
         const existingAgentExecutionId = this.agentExecutionIdsByOwnerKey.get(input.ownerKey);
         if (!existingAgentExecutionId) {
             return undefined;
@@ -106,7 +130,7 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
             return undefined;
         }
 
-        const snapshot = existing.execution.getSnapshot();
+        const snapshot = existing.execution.getExecution();
         if (AgentExecution.isTerminalFinalStatus(snapshot.status)) {
             this.disposeAgentExecution(existingAgentExecutionId);
             return undefined;
@@ -123,7 +147,7 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
         ownerKey: string;
         agentRegistry: AgentRegistry;
         config: AgentLaunchConfig;
-    }): Promise<AgentExecutionDataType | undefined> {
+    }): Promise<AgentExecutionType | undefined> {
         const existingAgentExecutionId = this.agentExecutionIdsByOwnerKey.get(input.ownerKey);
         if (!existingAgentExecutionId) {
             return undefined;
@@ -133,7 +157,7 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
             this.agentExecutionIdsByOwnerKey.delete(input.ownerKey);
             return undefined;
         }
-        const snapshot = existing.execution.getSnapshot();
+        const snapshot = existing.execution.getExecution();
         if (AgentExecution.isTerminalFinalStatus(snapshot.status)) {
             this.disposeAgentExecution(existingAgentExecutionId);
             return undefined;
@@ -153,10 +177,10 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
         ownerKey: string;
         agentRegistry: AgentRegistry;
         config: AgentLaunchConfig;
-    }): Promise<AgentExecutionDataType> {
+    }): Promise<AgentExecutionType> {
         const agentExecutor = new AgentExecutor({
             agentRegistry: input.agentRegistry,
-            ...(this.missionMcpServer ? { missionMcpServer: this.missionMcpServer } : {}),
+            ...(this.openMissionMcpServer ? { openMissionMcpServer: this.openMissionMcpServer } : {}),
             ...(this.logger ? { logger: this.logger } : {})
         });
         const execution = await agentExecutor.startExecution(input.config);
@@ -174,12 +198,12 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
         return this.toExecutionData(execution);
     }
 
-    public readExecution(agentExecutionId: string): AgentExecutionDataType {
+    public readExecution(agentExecutionId: string): AgentExecutionType {
         const entry = this.requireExecution(agentExecutionId);
         return this.toExecutionData(entry.execution);
     }
 
-    public async commandExecution(agentExecutionId: string, command: AgentExecutionRegistryCommand): Promise<AgentExecutionDataType> {
+    public async commandExecution(agentExecutionId: string, command: AgentExecutionRegistryCommand): Promise<AgentExecutionType> {
         const entry = this.requireExecution(agentExecutionId);
         switch (command.commandId) {
             case 'agentExecution.complete':
@@ -202,14 +226,43 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
         return this.executionsByAgentExecutionId.has(agentExecutionId);
     }
 
-    public readRuntimeSummary(): { activeAgentExecutionCount: number } {
-        let activeAgentExecutionCount = 0;
+    public readRuntimeSummary(): AgentExecutionRuntimeSummary {
+        const executions: AgentExecutionRuntimeSummaryEntry[] = [];
         for (const entry of this.executionsByAgentExecutionId.values()) {
-            if (!AgentExecution.isTerminalFinalStatus(entry.execution.getSnapshot().status)) {
-                activeAgentExecutionCount += 1;
+            const snapshot = entry.execution.getExecution();
+            if (AgentExecution.isTerminalFinalStatus(snapshot.status)) {
+                continue;
             }
+            const data = this.toExecutionData(entry.execution);
+            const terminalName = snapshot.transport?.kind === 'terminal' ? snapshot.transport.terminalName : undefined;
+            const hasRuntimeLease = Boolean(terminalName) && data.transportState?.leaseAttached !== false;
+            const health = data.transportState?.health;
+            const protocolIncompatible = health === 'protocol-incompatible';
+            const degraded = Boolean(data.transportState?.degraded) || protocolIncompatible || health === 'degraded';
+            const detached = health === 'detached' || health === 'orphaned' || !hasRuntimeLease;
+            executions.push({
+                ownerId: data.ownerId,
+                agentId: data.agentId,
+                agentExecutionId: data.agentExecutionId,
+                scope: data.scope,
+                status: data.lifecycleState,
+                ...(data.transportState ? { transportState: data.transportState } : {}),
+                ...(terminalName ? { terminalName } : {}),
+                hasRuntimeLease,
+                attached: !detached && !degraded,
+                degraded: degraded || detached,
+                protocolIncompatible
+            });
         }
-        return { activeAgentExecutionCount };
+        return {
+            activeAgentExecutionCount: executions.length,
+            attachedAgentExecutionCount: executions.filter((entry) => entry.attached).length,
+            detachedAgentExecutionCount: executions.filter((entry) => !entry.hasRuntimeLease).length,
+            degradedAgentExecutionCount: executions.filter((entry) => entry.degraded).length,
+            protocolIncompatibleAgentExecutionCount: executions.filter((entry) => entry.protocolIncompatible).length,
+            executionsWithoutRuntimeLeaseCount: executions.filter((entry) => !entry.hasRuntimeLease).length,
+            executions
+        };
     }
 
     public async routeTransportObservation(input: {
@@ -237,7 +290,7 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
         return entry.agentExecutor.invokeSemanticOperation(input);
     }
 
-    public onDidExecutionDataChange(listener: (data: AgentExecutionDataType) => void): { dispose(): void } {
+    public onDidExecutionDataChange(listener: (data: AgentExecutionType) => void): { dispose(): void } {
         this.dataChangeListeners.add(listener);
         return {
             dispose: () => {
@@ -301,12 +354,12 @@ export class AgentExecutionRegistry implements AgentExecutionSemanticOperationIn
         }
     }
 
-    private toExecutionData(execution: AgentExecution): AgentExecutionDataType {
-        return AgentExecutionDataSchema.parse(execution.toData());
+    private toExecutionData(execution: AgentExecution): AgentExecutionType {
+        return AgentExecutionSchema.parse(execution.toData());
     }
 
-    private emitDataChanged(data: AgentExecutionDataType): void {
-        const parsed = AgentExecutionDataSchema.parse(data);
+    private emitDataChanged(data: AgentExecutionType): void {
+        const parsed = AgentExecutionSchema.parse(data);
         for (const listener of this.dataChangeListeners) {
             listener(parsed);
         }
@@ -333,7 +386,7 @@ function readReason(input: unknown): string | undefined {
     return reason.length > 0 ? reason : undefined;
 }
 
-function isReusableTransportState(transportState: AgentExecutionDataType['transportState']): boolean {
+function isReusableTransportState(transportState: AgentExecutionType['transportState']): boolean {
     if (!transportState) {
         return true;
     }

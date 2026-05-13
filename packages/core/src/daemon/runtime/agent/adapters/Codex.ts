@@ -13,7 +13,7 @@ import type { AgentLaunchConfig } from '../../../../entities/AgentExecution/Agen
 import { createAgentExecutionMcpBridge } from '../mcp/AgentExecutionMcpProvisioner.js';
 
 const CODEX_AGENT_ID = 'codex' as const;
-const CODEX_MCP_CONFIG_ENV = 'MISSION_CODEX_MCP_CONFIG';
+const CODEX_MCP_CONFIG_ENV = 'OPEN_MISSION_CODEX_MCP_CONFIG';
 const execFile = promisify(execFileCallback);
 
 export type CodexInput = {
@@ -37,7 +37,7 @@ export function createCodex(input: CodexInput = {}): AgentInput {
         icon: 'simple-icons:openai',
         default: true,
         adapter: {
-            command: command?.trim() || process.env['MISSION_CODEX_CLI_COMMAND']?.trim() || 'codex',
+            command: command?.trim() || process.env['OPEN_MISSION_CODEX_CLI_COMMAND']?.trim() || 'codex',
             providerSettings: {},
             transportCapabilities: {
                 supported: ['stdout-marker', 'mcp-tool'],
@@ -96,9 +96,9 @@ async function prepareCodexLaunchConfig(
     }
 
     const bridge = createAgentExecutionMcpBridge(mcpAccess);
-    const bridgeToken = bridge.env['MISSION_MCP_TOKEN'];
+    const bridgeToken = bridge.env['OPEN_MISSION_MCP_TOKEN'];
     if (!bridgeToken) {
-        throw new Error(`AgentExecution '${mcpAccess.agentExecutionId}' selected mcp-tool delivery but mission-mcp token provisioning failed.`);
+        throw new Error(`AgentExecution '${mcpAccess.agentExecutionId}' selected mcp-tool delivery but open-mission-mcp token provisioning failed.`);
     }
     return {
         config: {
@@ -114,7 +114,7 @@ async function prepareCodexLaunchConfig(
 function createCodexMcpConfigOverride(command: string, args: string[], env: Record<string, string>): string {
     return [
         'mcp_servers={',
-        '"mission-mcp"={',
+        '"open-mission-mcp"={',
         `command=${JSON.stringify(command)},`,
         `args=${JSON.stringify(args)},`,
         `env=${createTomlInlineTable(env)},`,

@@ -1438,10 +1438,10 @@ export class MissionDossierFilesystem {
 	private createGitEnvironment(): NodeJS.ProcessEnv {
 		return {
 			...process.env,
-			GIT_AUTHOR_NAME: process.env['GIT_AUTHOR_NAME'] ?? 'Mission Daemon',
-			GIT_AUTHOR_EMAIL: process.env['GIT_AUTHOR_EMAIL'] ?? 'mission-daemon@localhost',
-			GIT_COMMITTER_NAME: process.env['GIT_COMMITTER_NAME'] ?? process.env['GIT_AUTHOR_NAME'] ?? 'Mission Daemon',
-			GIT_COMMITTER_EMAIL: process.env['GIT_COMMITTER_EMAIL'] ?? process.env['GIT_AUTHOR_EMAIL'] ?? 'mission-daemon@localhost'
+			GIT_AUTHOR_NAME: process.env['GIT_AUTHOR_NAME'] ?? 'Open Mission Daemon',
+			GIT_AUTHOR_EMAIL: process.env['GIT_AUTHOR_EMAIL'] ?? 'open-mission-daemon@localhost',
+			GIT_COMMITTER_NAME: process.env['GIT_COMMITTER_NAME'] ?? process.env['GIT_AUTHOR_NAME'] ?? 'Open Mission Daemon',
+			GIT_COMMITTER_EMAIL: process.env['GIT_COMMITTER_EMAIL'] ?? process.env['GIT_AUTHOR_EMAIL'] ?? 'open-mission-daemon@localhost'
 		};
 	}
 

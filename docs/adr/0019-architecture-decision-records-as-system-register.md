@@ -12,7 +12,7 @@ supersedes: []
 superseded_by: []
 ---
 
-Mission uses `docs/adr/` as the durable architecture register for the whole Mission system.
+Open Mission uses `docs/adr/` as the durable architecture register for the whole Open Mission system.
 
 An ADR is not a loose note. Each accepted ADR records one architecture rule or decision that future implementation must obey. Together, the accepted ADR set is the logical registration of Mission's architecture: ownership, vocabulary, runtime boundaries, persistence rules, surface boundaries, compatibility policy, and refactor constraints.
 

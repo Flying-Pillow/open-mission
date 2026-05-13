@@ -8,7 +8,7 @@ description: Prepare a repository by creating its repository-owned Mission contr
 
 A repository is Mission-ready only after .mission/settings.json exists in the usable local checkout.
 
-Setup is owned by the Repository Entity. Airport gathers operator choices, then calls the Repository setup command. The surface does not write .mission files directly.
+Setup is owned by the Repository Entity. Open Mission gathers operator choices, then calls the Repository setup command. The surface does not write .mission files directly.
 
 ## Setup Creates
 

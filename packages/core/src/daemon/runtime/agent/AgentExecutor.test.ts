@@ -8,7 +8,7 @@ import { AgentRegistry } from '../../../entities/Agent/AgentRegistry.js';
 import { AgentAdapter } from './AgentAdapter.js';
 import { AGENT_EXECUTION_IDLE_QUIET_PERIOD_MS, AgentExecutor } from './AgentExecutor.js';
 import type { AgentExecutionSemanticOperationInvocationType } from './AgentExecutionSemanticOperations.js';
-import { MissionMcpServer } from './mcp/MissionMcpServer.js';
+import { OpenMissionMcpServer } from './mcp/OpenMissionMcpServer.js';
 import { createMemoryAgentExecutionJournalWriter } from './testing/createMemoryAgentExecutionJournalWriter.js';
 
 describe('AgentExecutor', () => {
@@ -59,7 +59,7 @@ describe('AgentExecutor', () => {
             });
 
             const data = await new Promise((resolve, reject) => {
-                if (execution.toData().projection.timelineItems.length > 1 || AgentExecution.isTerminalFinalStatus(execution.getSnapshot().status)) {
+                if (execution.toData().projection.timelineItems.length > 1 || AgentExecution.isTerminalFinalStatus(execution.getExecution().status)) {
                     resolve(execution.toData());
                     return;
                 }
@@ -178,7 +178,7 @@ describe('AgentExecutor', () => {
     });
 
     it('keeps mcp-delivered terminal output out of agent chat messages', async () => {
-        const mcpServer = new MissionMcpServer({
+        const mcpServer = new OpenMissionMcpServer({
             agentExecutionRegistry: {
                 routeTransportObservation: (input) => ({
                     status: 'accepted',
@@ -216,7 +216,7 @@ describe('AgentExecutor', () => {
         const executor = new AgentExecutor({
             agentRegistry: new AgentRegistry({ agents: [agent] }),
             journalWriter,
-            missionMcpServer: mcpServer
+            openMissionMcpServer: mcpServer
         });
 
         try {
@@ -316,7 +316,7 @@ describe('AgentExecutor', () => {
             const idleEvent = new Promise((resolve, reject) => {
                 const timeout = setTimeout(() => reject(new Error('Timed out waiting for idle status.')), 5_000);
                 const subscription = execution.onDidEvent((event) => {
-                    if (event.type === 'execution.updated' && event.snapshot.progress.state === 'idle') {
+                    if (event.type === 'execution.updated' && event.execution.progress.state === 'idle') {
                         clearTimeout(timeout);
                         subscription.dispose();
                         resolve(event);
@@ -327,7 +327,7 @@ describe('AgentExecutor', () => {
             await vi.advanceTimersByTimeAsync(AGENT_EXECUTION_IDLE_QUIET_PERIOD_MS + 1);
             await idleEvent;
 
-            expect(execution.getSnapshot()).toMatchObject({
+            expect(execution.getExecution()).toMatchObject({
                 status: 'running',
                 attention: 'awaiting-operator',
                 waitingForInput: false,
@@ -1034,7 +1034,7 @@ describe('AgentExecutor', () => {
             });
 
             await new Promise<void>((resolve, reject) => {
-                if (AgentExecution.isTerminalFinalStatus(execution.getSnapshot().status)) {
+                if (AgentExecution.isTerminalFinalStatus(execution.getExecution().status)) {
                     resolve();
                     return;
                 }

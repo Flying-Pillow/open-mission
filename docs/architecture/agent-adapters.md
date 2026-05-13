@@ -13,7 +13,7 @@ The runtime boundary includes:
 - Agent execution creation, daemon-issued session tokens, and lifecycle
 - structured Agent execution messages
 - terminal input when a CLI runtime requires it
-- runtime message descriptors advertised to Airport
+- runtime message descriptors advertised to Open Mission
 - durable Agent execution logs
 - prompt-scoped stdout signal markers for agent-signal state
 

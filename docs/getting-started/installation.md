@@ -3,7 +3,7 @@ layout: default
 title: Installation
 parent: Getting Started
 nav_order: 1
-description: Install Mission and launch the Airport operator surface.
+description: Install Mission and launch the Open Mission operator surface.
 ---
 
 Mission ships as the @flying-pillow/open-mission CLI package.
@@ -26,10 +26,10 @@ mission
 - Git
 - GitHub CLI access for the currently implemented tracking flows
 
-On Linux, mission install can provision the Mission-managed GitHub CLI when it is missing and records the resolved binary path in Mission config.
+On Linux, open-mission install can provision the Open Mission-managed GitHub CLI when it is missing and records the resolved binary path in Open Mission config.
 
 ## What Starts
 
-The CLI opens Airport and connects it to the Mission daemon. The daemon owns repository state, Mission runtime state, Entity command dispatch, and agent adapter coordination.
+The CLI opens Open Mission and connects it to the Open Mission daemon. The daemon owns repository state, Mission runtime state, Entity command dispatch, and agent adapter coordination.
 
-After Airport opens, continue with [Repository Setup](repository-setup.md).
+After Open Mission opens, continue with [Repository Setup](repository-setup.md).

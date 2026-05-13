@@ -24,13 +24,13 @@ import {
 import {
     AgentExecutionEventSubjectSchema,
     AgentExecutionTerminalSnapshotSchema,
-    AgentExecutionDataSchema,
-    AgentExecutionDataChangedSchema,
+    AgentExecutionSchema,
+    AgentExecutionChangedSchema,
     AgentExecutionLifecycleStateSchema,
     type AgentExecutionRecord,
     type AgentExecutionState,
     type AgentExecutionPermissionRequest,
-    type AgentExecutionTelemetrySnapshot
+    type AgentExecutionTelemetry
 } from '../AgentExecution/AgentExecutionSchema.js';
 import {
     ArtifactEventLocatorSchema,
@@ -201,7 +201,7 @@ export const MissionStorageSchema = EntityStorageSchema.extend({
     currentStageId: z.string().trim().min(1).optional(),
     artifacts: z.array(ArtifactDataSchema),
     stages: z.array(StageDataSchema),
-    agentExecutions: z.array(AgentExecutionDataSchema),
+    agentExecutions: z.array(AgentExecutionSchema),
     recommendedAction: z.string().trim().min(1).optional()
 }).strict();
 
@@ -284,7 +284,7 @@ export const MissionRuntimeEventEnvelopeSchema = z.discriminatedUnion('type', [
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
         type: z.literal('agentExecution.data.changed'),
-        payload: AgentExecutionDataChangedSchema
+        payload: AgentExecutionChangedSchema
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
         type: z.literal('execution.terminal'),
@@ -292,7 +292,7 @@ export const MissionRuntimeEventEnvelopeSchema = z.discriminatedUnion('type', [
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
         type: z.literal('execution.event'),
-        payload: AgentExecutionDataSchema
+        payload: AgentExecutionSchema
     }),
     MissionRuntimeEventEnvelopeBaseSchema.extend({
         type: z.literal('execution.lifecycle'),

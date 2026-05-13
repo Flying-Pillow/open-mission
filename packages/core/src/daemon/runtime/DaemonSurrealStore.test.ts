@@ -9,7 +9,7 @@ describe('DaemonSurrealStore', () => {
         const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-surreal-root-'));
         const store = DaemonSurrealStore.forCodeRoot({
             rootPath,
-            namespace: 'mission_daemon_test'
+            namespace: 'open_mission_daemon_test'
         });
         const storagePath = resolveDaemonSurrealStorePath(rootPath);
 
@@ -18,7 +18,7 @@ describe('DaemonSurrealStore', () => {
             expect(store.readStatus()).toMatchObject({
                 available: true,
                 engine: 'surrealkv',
-                namespace: 'mission_daemon_test',
+                namespace: 'open_mission_daemon_test',
                 database: 'code_intelligence',
                 storagePath
             });
@@ -33,7 +33,7 @@ describe('DaemonSurrealStore', () => {
 
     it('keeps in-memory storage available only by explicit construction', async () => {
         const store = DaemonSurrealStore.inMemory({
-            namespace: 'mission_daemon_memory_test',
+            namespace: 'open_mission_daemon_memory_test',
             database: 'mission'
         });
 
@@ -43,7 +43,7 @@ describe('DaemonSurrealStore', () => {
         expect(store.readStatus()).toMatchObject({
             available: false,
             engine: 'mem',
-            namespace: 'mission_daemon_memory_test',
+            namespace: 'open_mission_daemon_memory_test',
             database: 'mission'
         });
     });

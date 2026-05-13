@@ -16,7 +16,7 @@ Mission will not maintain adapter-declared model or reasoning catalogues as Agen
 
 ## Context
 
-Agent adapters previously carried static option catalogues for provider models and reasoning levels. Airport setup rendered these catalogues in Agent cards and persisted selected defaults through owner settings.
+Agent adapters previously carried static option catalogues for provider models and reasoning levels. Open Mission setup rendered these catalogues in Agent cards and persisted selected defaults through owner settings.
 
 That model made adapter source code a false authority for provider inventory. Provider CLIs expose their own live model state, update model availability independently, and may combine model and reasoning selection behind native session commands. A static catalogue quickly becomes stale and creates uneven UI behavior, such as one Agent card showing selectors while another has none.
 
@@ -32,7 +32,7 @@ Agent adapters may still translate explicit launch metadata such as `model` or `
 
 ## Consequences
 
-- Airport setup cards configure agent enablement, default agent, and launch mode only.
+- Open Mission setup cards configure agent enablement, default agent, and launch mode only.
 - Provider model choices are discovered and changed in an active Agent session through `/model`.
 - Static adapter catalogues cannot drift out of date because they no longer exist in the Agent Entity contract.
 - Connection tests can probe adapter readiness without requiring a catalogue-selected model.
@@ -44,4 +44,4 @@ Agent adapters may still translate explicit launch metadata such as `model` or `
 - Do not render setup-time model or reasoning selectors from adapter metadata.
 - Do allow explicit launch metadata to pass through when already present in owner or workflow settings.
 - Do route `/model` through the terminal lane until a daemon-owned structured model-selection contract exists.
-- Do keep provider-specific model inventory out of Airport components.
+- Do keep provider-specific model inventory out of Open Mission components.

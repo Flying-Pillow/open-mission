@@ -48,7 +48,7 @@ describe('DaemonClient', () => {
 			}
 
 			await expect(disconnected).resolves.toMatchObject({
-				message: 'Mission daemon connection closed.'
+				message: 'Open Mission daemon connection closed.'
 			});
 			client.dispose();
 		} finally {
@@ -167,7 +167,7 @@ describe('DaemonClient', () => {
 			const client = new DaemonClient();
 			await client.connect({ surfacePath: workspaceRoot, timeoutMs: 250 });
 			await expect(client.request('ping', undefined, { timeoutMs: 50 })).rejects.toThrow(
-				"Mission daemon request 'ping' timed out after 50ms."
+				"Open Mission daemon request 'ping' timed out after 50ms."
 			);
 			client.dispose();
 		} finally {

@@ -12,7 +12,7 @@ import {
 	type AgentExecutionInputChoice,
 	type AgentExecutionSignal,
 	type AgentExecutionSignalDecision,
-	type AgentExecutionSnapshot
+	type AgentExecutionType
 } from './AgentExecutionProtocolTypes.js';
 import {
 	deriveAttentionFromStatusSignalPhase,
@@ -52,19 +52,19 @@ export class AgentExecutionObservationPolicy {
 	}
 
 	public evaluate(input: {
-		snapshot: AgentExecutionSnapshot;
+		execution: AgentExecutionType;
 		observation: AgentExecutionObservation;
 	}): AgentExecutionSignalDecision {
-		const rejection = this.validateObservation(input.snapshot, input.observation);
+		const rejection = this.validateObservation(input.execution, input.observation);
 		if (rejection) {
 			return { action: 'reject', reason: rejection };
 		}
 		this.observationLedger.record(input.observation.observationId);
-		return this.decide(input.snapshot, input.observation);
+		return this.decide(input.execution, input.observation);
 	}
 
 	private validateObservation(
-		snapshot: AgentExecutionSnapshot,
+		execution: AgentExecutionType,
 		observation: AgentExecutionObservation
 	): string | undefined {
 		if (!observation.observationId.trim()) {
@@ -74,8 +74,8 @@ export class AgentExecutionObservationPolicy {
 			return `Observation '${observation.observationId}' was already processed.`;
 		}
 		const activeAddress: AgentExecutionObservationAddress = {
-			agentExecutionId: snapshot.agentExecutionId,
-			scope: snapshot.scope
+			agentExecutionId: execution.agentExecutionId,
+			scope: execution.scope
 		};
 		if (!sameObservationAddress(observation.route.address, activeAddress)) {
 			return 'Observation route address did not match the active Agent execution.';
@@ -103,14 +103,14 @@ export class AgentExecutionObservationPolicy {
 		if (claimBoundaryError) {
 			return claimBoundaryError;
 		}
-		const lifecycleBoundaryError = validateAgentExecutionLifecycleBoundary(snapshot, observation);
+		const lifecycleBoundaryError = validateAgentExecutionLifecycleBoundary(execution, observation);
 		if (lifecycleBoundaryError) {
 			return lifecycleBoundaryError;
 		}
 		return validateSignalShape(observation.signal);
 	}
 
-	private decide(snapshot: AgentExecutionSnapshot, observation: AgentExecutionObservation): AgentExecutionSignalDecision {
+	private decide(snapshot: AgentExecutionType, observation: AgentExecutionObservation): AgentExecutionSignalDecision {
 		const signal = observation.signal;
 		const preservesInputRequest = hasActiveInputRequest(snapshot);
 		switch (signal.type) {
@@ -137,7 +137,7 @@ export class AgentExecutionObservationPolicy {
 						channel: signal.channel,
 						text: signal.text,
 						...(timelineItem ? { timelineItem } : {}),
-						snapshot
+						execution: snapshot
 					}
 				};
 			case 'progress':
@@ -147,7 +147,7 @@ export class AgentExecutionObservationPolicy {
 				return {
 					action: 'update-execution',
 					eventType: 'execution.updated',
-					snapshotPatch: {
+					patch: {
 						status: 'running',
 						attention: preservesInputRequest ? 'awaiting-operator' : 'autonomous',
 						progress: {
@@ -165,7 +165,7 @@ export class AgentExecutionObservationPolicy {
 				return {
 					action: 'update-execution',
 					eventType: 'execution.updated',
-					snapshotPatch: {
+					patch: {
 						status: deriveLifecycleStateFromStatusSignalPhase(signal.phase),
 						attention: deriveAttentionFromStatusSignalPhase({
 							phase: signal.phase,
@@ -185,7 +185,7 @@ export class AgentExecutionObservationPolicy {
 				return {
 					action: 'update-execution',
 					eventType: 'execution.updated',
-					snapshotPatch: {
+					patch: {
 						status: 'running',
 						attention: 'awaiting-operator',
 						currentInputRequestId: observation.observationId,
@@ -205,7 +205,7 @@ export class AgentExecutionObservationPolicy {
 				return {
 					action: 'update-execution',
 					eventType: 'execution.updated',
-					snapshotPatch: {
+					patch: {
 						status: 'running',
 						attention: 'awaiting-system',
 						waitingForInput: false,
@@ -231,7 +231,7 @@ export class AgentExecutionObservationPolicy {
 				return {
 					action: 'update-execution',
 					eventType: 'execution.completed',
-					snapshotPatch: {
+					patch: {
 						status: 'completed',
 						attention: 'none',
 						waitingForInput: false,
@@ -253,7 +253,7 @@ export class AgentExecutionObservationPolicy {
 				return {
 					action: 'update-execution',
 					eventType: 'execution.failed',
-					snapshotPatch: {
+					patch: {
 						status: 'failed',
 						attention: 'awaiting-system',
 						waitingForInput: false,
@@ -390,7 +390,7 @@ function isPromotableProgressSignal(
 		&& signal.confidence !== 'diagnostic';
 }
 
-function hasActiveInputRequest(snapshot: AgentExecutionSnapshot): boolean {
+function hasActiveInputRequest(snapshot: AgentExecutionType): boolean {
 	return snapshot.currentInputRequestId !== undefined && snapshot.currentInputRequestId !== null;
 }
 
@@ -492,7 +492,7 @@ function validateObservationPayloadBoundary(observation: AgentExecutionObservati
 }
 
 function validateAgentExecutionLifecycleBoundary(
-	snapshot: AgentExecutionSnapshot,
+	snapshot: AgentExecutionType,
 	observation: AgentExecutionObservation
 ): string | undefined {
 	if (snapshot.status !== 'completed' && snapshot.status !== 'failed') {

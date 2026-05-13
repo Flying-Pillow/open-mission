@@ -27,7 +27,7 @@ import type {
 } from './AgentExecutionJournalSchema.js';
 import { AgentExecutionJournalFileStore, type AgentExecutionJournalFileStorePath } from './AgentExecutionJournalFileStore.js';
 import { Repository } from '../Repository/Repository.js';
-import { getMissionDaemonDirectory } from '../../settings/MissionInstall.js';
+import { getOpenMissionRuntimeDirectory } from '../../settings/OpenMissionInstall.js';
 import type {
     AgentCommand,
     AgentExecutionObservation,
@@ -293,9 +293,9 @@ export class AgentExecutionJournalWriter {
             agentExecutionId: input.agentExecutionId,
             scope: input.scope,
             lifecycle: mapStateChangedLifecycle(input.decision),
-            attention: input.decision.snapshotPatch.attention,
-            activity: input.decision.snapshotPatch.progress?.state
-                ? deriveActivityStateFromProgressState(input.decision.snapshotPatch.progress.state)
+            attention: input.decision.patch.attention,
+            activity: input.decision.patch.progress?.state
+                ? deriveActivityStateFromProgressState(input.decision.patch.progress.state)
                 : undefined,
             ...(input.currentInputRequestId !== undefined ? { currentInputRequestId: input.currentInputRequestId } : {}),
             ...(input.awaitingResponseToMessageId !== undefined ? { awaitingResponseToMessageId: input.awaitingResponseToMessageId } : {})
@@ -334,7 +334,7 @@ export class AgentExecutionJournalWriter {
         scope: AgentExecutionScope;
         decision: Extract<AgentExecutionSignalDecision, { action: 'update-execution' }>;
     }): Promise<AgentExecutionActivityUpdatedRecordType | undefined> {
-        const progress = input.decision.snapshotPatch.progress;
+        const progress = input.decision.patch.progress;
         if (!progress) {
             return undefined;
         }
@@ -637,7 +637,7 @@ function readDecisionReason(decision: AgentExecutionSignalDecision): string | un
 function mapStateChangedLifecycle(
     decision: Extract<AgentExecutionSignalDecision, { action: 'update-execution' }>
 ): AgentExecutionStateChangedRecordType['lifecycle'] | undefined {
-    const status = decision.snapshotPatch.status;
+    const status = decision.patch.status;
     if (!status) {
         return undefined;
     }
@@ -840,7 +840,7 @@ function readMissionIdFromScope(scope: AgentExecutionScope): string | undefined 
 function resolveFileBackedJournalRoot(scope: AgentExecutionScope, workingDirectory?: string): string {
     switch (scope.kind) {
         case 'system':
-            return getMissionDaemonDirectory();
+            return getOpenMissionRuntimeDirectory();
         case 'repository':
             return Repository.getMissionDirectoryPath(scope.repositoryRootPath);
         case 'mission': {

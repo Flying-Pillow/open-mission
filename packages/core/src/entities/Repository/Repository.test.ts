@@ -5,10 +5,10 @@ import { spawnSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { Repository } from './Repository.js';
 import { createDefaultRepositorySettings, RepositoryDataSchema } from './RepositorySchema.js';
-import { AgentExecutionDataSchema } from '../AgentExecution/AgentExecutionSchema.js';
+import { AgentExecutionSchema } from '../AgentExecution/AgentExecutionSchema.js';
 import { createDefaultWorkflowSettings } from '../../workflow/mission/workflow.js';
-import { resolveRepositoriesRoot } from '../../settings/MissionInstall.js';
-import { writeMissionConfig } from '../../settings/MissionInstall.js';
+import { resolveRepositoriesRoot } from '../../settings/OpenMissionInstall.js';
+import { writeOpenMissionConfig } from '../../settings/OpenMissionInstall.js';
 import type { EntityExecutionContext } from '../Entity/Entity.js';
 import { MissionDossierFilesystem } from '../Mission/MissionDossierFilesystem.js';
 import { createInitialWorkflowRuntimeState, createWorkflowStateData, createWorkflowConfigurationSnapshot } from '../../workflow/engine/index.js';
@@ -544,7 +544,7 @@ describe('Repository', () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-setup-agent-'));
         const repositoryRootPath = path.join(tempRoot, 'example');
         const settings = createDefaultRepositorySettings();
-        const execution = AgentExecutionDataSchema.parse({
+        const execution = AgentExecutionSchema.parse({
             id: 'agent_execution:setup-test',
             ownerId: repositoryRootPath,
             agentExecutionId: 'setup-test',
@@ -614,7 +614,7 @@ describe('Repository', () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-stale-setup-agent-'));
         const repositoryRootPath = path.join(tempRoot, 'example');
         const settings = createDefaultRepositorySettings();
-        const execution = AgentExecutionDataSchema.parse({
+        const execution = AgentExecutionSchema.parse({
             id: 'agent_execution:stale-setup-test',
             ownerId: repositoryRootPath,
             agentExecutionId: 'stale-setup-test',
@@ -667,7 +667,7 @@ describe('Repository', () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-reuse-agent-'));
         const repositoryRootPath = path.join(tempRoot, 'example');
         const settings = createDefaultRepositorySettings();
-        const execution = AgentExecutionDataSchema.parse({
+        const execution = AgentExecutionSchema.parse({
             id: 'agent_execution:setup-test',
             ownerId: repositoryRootPath,
             agentExecutionId: 'setup-test',
@@ -733,7 +733,7 @@ describe('Repository', () => {
         const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-refresh-agent-'));
         const repositoryRootPath = path.join(tempRoot, 'example');
         const settings = createDefaultRepositorySettings();
-        const execution = AgentExecutionDataSchema.parse({
+        const execution = AgentExecutionSchema.parse({
             id: 'agent_execution:refresh-test',
             ownerId: repositoryRootPath,
             agentExecutionId: 'refresh-test',
@@ -839,7 +839,7 @@ describe('Repository', () => {
 
     it('ensures a system-scoped repositories AgentExecution', async () => {
         process.env['XDG_CONFIG_HOME'] = await fsp.mkdtemp(path.join(os.tmpdir(), 'mission-repository-system-config-'));
-        await writeMissionConfig({
+        await writeOpenMissionConfig({
             missionsRoot: '/missions',
             repositoriesRoot: '/repositories',
             defaultAgentAdapter: 'copilot-cli'
@@ -851,7 +851,7 @@ describe('Repository', () => {
             defaultAgentAdapter: 'copilot-cli',
             enabledAgentAdapters: []
         });
-        const execution = AgentExecutionDataSchema.parse({
+        const execution = AgentExecutionSchema.parse({
             id: 'agent_execution:repositories-system',
             ownerId: '/repositories',
             agentExecutionId: 'repositories-system',

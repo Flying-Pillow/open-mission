@@ -13,11 +13,11 @@ supersedes:
 superseded_by: []
 ---
 
-Mission Control no longer publishes or consumes a daemon-shaped tree or tower projection. Airport web and native are the supported operator surfaces, and they render Mission stages, Mission tasks, artifacts, Agent executions, and `commands` directly from hydrated Entity schemas and Mission workflow state.
+Mission Control no longer publishes or consumes a daemon-shaped tree or surface-specific projection. Open Mission web and native are the supported operator surfaces, and they render Mission stages, Mission tasks, artifacts, Agent executions, and `commands` directly from hydrated Entity schemas and Mission workflow state.
 
-The Mission Control task surface is a stage-filtered task list. It defaults to the active Mission stage, lets the operator move between stages locally, and presents each Mission task as a compact card with task lifecycle, autostart configuration, and available Entity commands. The task list is an Airport surface view; it does not define workflow legality, duplicate Entity state, or persist ordering as Mission state.
+The Mission Control task surface is a stage-filtered task list. It defaults to the active Mission stage, lets the operator move between stages locally, and presents each Mission task as a compact card with task lifecycle, autostart configuration, and available Entity commands. The task list is an Open Mission surface view; it does not define workflow legality, duplicate Entity state, or persist ordering as Mission state.
 
-The core Mission status contract no longer exposes `MissionTowerProjection`, `stageRail`, `treeNodes`, or a `tower` field. Mission status and Mission control view payloads carry status, workflow, artifact, task, Agent execution, and command data through `MissionSchema`, child Entity schemas, and Entity contracts. Surfaces compose those Entity records into operator layouts.
+The core Mission status contract no longer exposes surface-specific projection payloads, stage rail state, tree nodes, or operator-pane fields. Mission status and Mission control view payloads carry status, workflow, artifact, task, Agent execution, and command data through `MissionSchema`, child Entity schemas, and Entity contracts. Surfaces compose those Entity records into operator layouts.
 
 Selection is surface-local focus over canonical Entity data. A selected stage or task may determine companion artifacts or preferred Agent execution panes, but that focus is not durable Mission coordination state and is not broadcast as shared operator state.
 

@@ -37,7 +37,7 @@ This spec exists to keep the next implementation step narrow:
 
 - schema first
 - replay contract explicit
-- Airport unchanged until the backend contract is clean
+- Open Mission unchanged until the backend contract is clean
 
 ## Concrete-First Guardrails
 
@@ -380,11 +380,11 @@ Default direction:
 4. Add shared base metadata for `entrySemantics`, `authority`, `assertionLevel`, `replayClass`, `origin`, and `executionContext`.
 5. Update the journal replayer so event families accumulate, snapshot families fold by latest-wins behavior, and evidence or assessment families remain non-semantic overlays.
 6. Update the journal writer so daemon-observed runtime facts have a first-class append path and assessment emitters have an explicit advisory append path.
-7. Only after the schema and replay boundary are clean, update Airport/chat/timeline projection.
+7. Only after the schema and replay boundary are clean, update Open Mission/chat/timeline projection.
 
 ## Explicit Non-Goals For This Step
 
-- Do not redesign Airport components yet.
+- Do not redesign Open Mission components yet.
 - Do not infer `artifact-read` from terminal paint.
 - Do not collapse terminal recordings into the semantic replay path.
 - Do not treat `execution-assessment` as semantic truth.

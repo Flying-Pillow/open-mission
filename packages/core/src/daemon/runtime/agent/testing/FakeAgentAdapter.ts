@@ -7,11 +7,11 @@ import type {
 	AgentCapabilities,
 	AgentExecutionEvent,
 	AgentExecutionReference,
-	AgentExecutionSnapshot
+	AgentExecutionType
 } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 
-export type FakeAgentExecutionSnapshot = AgentExecutionSnapshot & {
-	phase: AgentExecutionSnapshot['status'];
+export type FakeAgentExecutionView = AgentExecutionType & {
+	phase: AgentExecutionType['status'];
 	awaitingInput: boolean;
 	transportId?: string;
 	terminalName?: string;
@@ -24,27 +24,27 @@ export type FakeAgentStartRequest = AgentLaunchConfig & {
 
 export interface FakeAgentExecution {
 	reference: AgentExecutionReference;
-	getSnapshot(): FakeAgentExecutionSnapshot;
+	getExecution(): FakeAgentExecutionView;
 	onDidEvent(listener: (event: AgentExecutionEvent) => void): { dispose(): void };
-	done(): Promise<AgentExecutionSnapshot>;
-	submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionSnapshot>;
-	submitCommand(command: AgentCommand): Promise<AgentExecutionSnapshot>;
-	cancel(reason?: string): Promise<AgentExecutionSnapshot>;
-	terminate(reason?: string): Promise<AgentExecutionSnapshot>;
+	done(): Promise<AgentExecutionType>;
+	submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionType>;
+	submitCommand(command: AgentCommand): Promise<AgentExecutionType>;
+	cancel(reason?: string): Promise<AgentExecutionType>;
+	terminate(reason?: string): Promise<AgentExecutionType>;
 	emitMessage(text: string, channel?: 'stdout' | 'stderr' | 'system' | 'agent'): void;
 	emitAwaitingInput(reason?: string): void;
 	overrideWorkingDirectory(workingDirectory: string): void;
-	cancelRuntime(reason?: string): Promise<AgentExecutionSnapshot>;
-	terminateRuntime(reason?: string): Promise<AgentExecutionSnapshot>;
+	cancelRuntime(reason?: string): Promise<AgentExecutionType>;
+	terminateRuntime(reason?: string): Promise<AgentExecutionType>;
 	fail(reason: string): void;
 }
 
-type SnapshotOverrides = Omit<Partial<AgentExecutionSnapshot>, 'failureMessage'> & {
+type Patch = Omit<Partial<AgentExecutionType>, 'failureMessage'> & {
 	failureMessage?: string | undefined;
 };
 
 type FakeAgentExecutionRecord = {
-	snapshot: AgentExecutionSnapshot;
+	execution: AgentExecutionType;
 	listeners: Set<(event: AgentExecutionEvent) => void>;
 };
 
@@ -84,10 +84,10 @@ export class FakeAgentAdapter extends AgentAdapter {
 
 	public async startExecution(config: AgentLaunchConfig): Promise<AgentExecution> {
 		const agentExecutionId = `${this.id}-AgentExecution-${String(++this.nextAgentExecutionId)}`;
-		const snapshot = createSnapshot(config, this.id, agentExecutionId, this.transportId);
+		const execution = createExecution(config, this.id, agentExecutionId, this.transportId);
 		this.startRequests.push(cloneStartRequest(config));
 		this.agentExecutionIds.add(agentExecutionId);
-		this.records.set(agentExecutionId, { snapshot, listeners: new Set() });
+		this.records.set(agentExecutionId, { execution, listeners: new Set() });
 		return this.createInspectableAgentExecution(agentExecutionId) as unknown as AgentExecution;
 	}
 
@@ -95,7 +95,7 @@ export class FakeAgentAdapter extends AgentAdapter {
 		if (this.agentExecutionIds.has(reference.agentExecutionId)) {
 			return this.createInspectableAgentExecution(reference.agentExecutionId) as unknown as AgentExecution;
 		}
-		return createDetachedExecution(createDetachedSnapshot(this.id, reference, 'AgentExecution no longer exists in fake runtime.'));
+		return createDetachedExecution(createDetachedExecutionData(this.id, reference, 'AgentExecution no longer exists in fake runtime.'));
 	}
 
 	public listExecutions(): FakeAgentExecution[] {
@@ -115,7 +115,7 @@ export class FakeAgentAdapter extends AgentAdapter {
 	}
 
 	public overrideAgentExecutionWorkingDirectory(agentExecutionId: string, workingDirectory: string): void {
-		this.updateSnapshot(agentExecutionId, {
+		this.patchExecution(agentExecutionId, {
 			workingDirectory,
 			status: 'running',
 			attention: 'autonomous',
@@ -129,7 +129,7 @@ export class FakeAgentAdapter extends AgentAdapter {
 		});
 		this.emitExecutionEvent({
 			type: 'execution.updated',
-			snapshot: this.requireSnapshot(agentExecutionId)
+			execution: this.requireExecution(agentExecutionId)
 		});
 	}
 
@@ -140,7 +140,7 @@ export class FakeAgentAdapter extends AgentAdapter {
 
 	private createInspectableAgentExecution(agentExecutionId: string): FakeAgentExecution {
 		return new FakeManagedAgentExecution({
-			getSnapshot: () => toLegacySnapshot(this.requireSnapshot(agentExecutionId), this.transportId),
+			getExecution: () => toLegacyExecution(this.requireExecution(agentExecutionId), this.transportId),
 			observe: (listener) => this.observeAgentExecution(agentExecutionId, listener),
 			done: () => this.completeAgentExecution(agentExecutionId),
 			submitPrompt: (prompt) => this.submitPrompt(agentExecutionId, prompt),
@@ -157,8 +157,8 @@ export class FakeAgentAdapter extends AgentAdapter {
 		});
 	}
 
-	private async submitPrompt(agentExecutionId: string, _prompt: AgentPrompt): Promise<AgentExecutionSnapshot> {
-		const snapshot = this.updateSnapshot(agentExecutionId, {
+	private async submitPrompt(agentExecutionId: string, _prompt: AgentPrompt): Promise<AgentExecutionType> {
+		const execution = this.patchExecution(agentExecutionId, {
 			status: 'running',
 			attention: 'autonomous',
 			waitingForInput: false,
@@ -171,14 +171,14 @@ export class FakeAgentAdapter extends AgentAdapter {
 		});
 		this.emitExecutionEvent({
 			type: 'execution.updated',
-			snapshot
+			execution
 		});
-		return snapshot;
+		return execution;
 	}
 
-	private async submitCommand(agentExecutionId: string, command: AgentCommand): Promise<AgentExecutionSnapshot> {
+	private async submitCommand(agentExecutionId: string, command: AgentCommand): Promise<AgentExecutionType> {
 		if (command.type === 'interrupt') {
-			const snapshot = this.updateSnapshot(agentExecutionId, {
+			const execution = this.patchExecution(agentExecutionId, {
 				status: 'running',
 				attention: 'awaiting-operator',
 				waitingForInput: true,
@@ -192,17 +192,17 @@ export class FakeAgentAdapter extends AgentAdapter {
 			});
 			this.emitExecutionEvent({
 				type: 'execution.updated',
-				snapshot
+				execution
 			});
-			return snapshot;
+			return execution;
 		}
 
 		return this.submitPrompt(agentExecutionId, buildCommandPrompt(command));
 	}
 
-	private async cancelAgentExecution(agentExecutionId: string, reason?: string): Promise<AgentExecutionSnapshot> {
+	private async cancelAgentExecution(agentExecutionId: string, reason?: string): Promise<AgentExecutionType> {
 		const endedAt = now();
-		const snapshot = this.updateSnapshot(agentExecutionId, {
+		const execution = this.patchExecution(agentExecutionId, {
 			status: 'cancelled',
 			attention: 'none',
 			waitingForInput: false,
@@ -219,14 +219,14 @@ export class FakeAgentAdapter extends AgentAdapter {
 		this.emitExecutionEvent({
 			type: 'execution.cancelled',
 			...(reason ? { reason } : {}),
-			snapshot
+			execution
 		});
-		return snapshot;
+		return execution;
 	}
 
-	private async terminateAgentExecution(agentExecutionId: string, reason?: string): Promise<AgentExecutionSnapshot> {
+	private async terminateAgentExecution(agentExecutionId: string, reason?: string): Promise<AgentExecutionType> {
 		const endedAt = now();
-		const snapshot = this.updateSnapshot(agentExecutionId, {
+		const execution = this.patchExecution(agentExecutionId, {
 			status: 'terminated',
 			attention: 'none',
 			waitingForInput: false,
@@ -243,9 +243,9 @@ export class FakeAgentAdapter extends AgentAdapter {
 		this.emitExecutionEvent({
 			type: 'execution.terminated',
 			...(reason ? { reason } : {}),
-			snapshot
+			execution
 		});
-		return snapshot;
+		return execution;
 	}
 
 	private emitMessage(
@@ -253,7 +253,7 @@ export class FakeAgentAdapter extends AgentAdapter {
 		text: string,
 		channel: 'stdout' | 'stderr' | 'system' | 'agent' = 'stdout'
 	): void {
-		const snapshot = this.updateSnapshot(agentExecutionId, {
+		const execution = this.patchExecution(agentExecutionId, {
 			status: 'running',
 			attention: 'autonomous',
 			progress: {
@@ -265,12 +265,12 @@ export class FakeAgentAdapter extends AgentAdapter {
 			type: 'execution.message',
 			channel,
 			text,
-			snapshot
+			execution
 		});
 	}
 
 	private emitAwaitingInput(agentExecutionId: string, reason?: string): void {
-		const snapshot = this.updateSnapshot(agentExecutionId, {
+		const execution = this.patchExecution(agentExecutionId, {
 			status: 'running',
 			attention: 'awaiting-operator',
 			waitingForInput: true,
@@ -284,13 +284,13 @@ export class FakeAgentAdapter extends AgentAdapter {
 		});
 		this.emitExecutionEvent({
 			type: 'execution.updated',
-			snapshot
+			execution
 		});
 	}
 
-	private async completeAgentExecution(agentExecutionId: string): Promise<AgentExecutionSnapshot> {
+	private async completeAgentExecution(agentExecutionId: string): Promise<AgentExecutionType> {
 		const endedAt = now();
-		const snapshot = this.updateSnapshot(agentExecutionId, {
+		const execution = this.patchExecution(agentExecutionId, {
 			status: 'completed',
 			attention: 'none',
 			waitingForInput: false,
@@ -305,14 +305,14 @@ export class FakeAgentAdapter extends AgentAdapter {
 		});
 		this.emitExecutionEvent({
 			type: 'execution.completed',
-			snapshot
+			execution
 		});
-		return snapshot;
+		return execution;
 	}
 
 	private failAgentExecution(agentExecutionId: string, reason: string): void {
 		const endedAt = now();
-		const snapshot = this.updateSnapshot(agentExecutionId, {
+		const execution = this.patchExecution(agentExecutionId, {
 			status: 'failed',
 			attention: 'none',
 			waitingForInput: false,
@@ -329,39 +329,39 @@ export class FakeAgentAdapter extends AgentAdapter {
 		this.emitExecutionEvent({
 			type: 'execution.failed',
 			reason,
-			snapshot
+			execution
 		});
 	}
 
-	private updateSnapshot(agentExecutionId: string, overrides: SnapshotOverrides): AgentExecutionSnapshot {
+	private patchExecution(agentExecutionId: string, overrides: Patch): AgentExecutionType {
 		const record = this.requireRecord(agentExecutionId);
-		const nextSnapshot: AgentExecutionSnapshot = {
-			...record.snapshot,
+		const nextExecution: AgentExecutionType = {
+			...record.execution,
 			acceptedCommands: overrides.acceptedCommands
 				? [...overrides.acceptedCommands]
-				: [...record.snapshot.acceptedCommands],
+				: [...record.execution.acceptedCommands],
 			progress: overrides.progress
 				? { ...overrides.progress, ...(overrides.progress.units ? { units: { ...overrides.progress.units } } : {}) }
-				: { ...record.snapshot.progress, ...(record.snapshot.progress.units ? { units: { ...record.snapshot.progress.units } } : {}) },
+				: { ...record.execution.progress, ...(record.execution.progress.units ? { units: { ...record.execution.progress.units } } : {}) },
 			reference: overrides.reference
 				? { ...overrides.reference, ...(overrides.reference.transport ? { transport: { ...overrides.reference.transport } } : {}) }
-				: { ...record.snapshot.reference, ...(record.snapshot.reference.transport ? { transport: { ...record.snapshot.reference.transport } } : {}) },
+				: { ...record.execution.reference, ...(record.execution.reference.transport ? { transport: { ...record.execution.reference.transport } } : {}) },
 			updatedAt: now()
 		};
-		for (const key of Object.keys(overrides) as Array<keyof SnapshotOverrides>) {
+		for (const key of Object.keys(overrides) as Array<keyof Patch>) {
 			const value = overrides[key];
 			if (key === 'failureMessage' && value === undefined) {
 				continue;
 			}
 			if (value !== undefined) {
-				Object.assign(nextSnapshot, { [key]: value });
+				Object.assign(nextExecution, { [key]: value });
 			}
 		}
 		if ('failureMessage' in overrides && overrides.failureMessage === undefined) {
-			delete nextSnapshot.failureMessage;
+			delete nextExecution.failureMessage;
 		}
-		record.snapshot = nextSnapshot;
-		return cloneSnapshot(record.snapshot);
+		record.execution = nextExecution;
+		return cloneExecution(record.execution);
 	}
 
 	private requireRecord(agentExecutionId: string): FakeAgentExecutionRecord {
@@ -372,8 +372,8 @@ export class FakeAgentAdapter extends AgentAdapter {
 		return record;
 	}
 
-	private requireSnapshot(agentExecutionId: string): AgentExecutionSnapshot {
-		return cloneSnapshot(this.requireRecord(agentExecutionId).snapshot);
+	private requireExecution(agentExecutionId: string): AgentExecutionType {
+		return cloneExecution(this.requireRecord(agentExecutionId).execution);
 	}
 
 	private observeAgentExecution(agentExecutionId: string, listener: (event: AgentExecutionEvent) => void): { dispose(): void } {
@@ -387,11 +387,11 @@ export class FakeAgentAdapter extends AgentAdapter {
 	}
 
 	private emitExecutionEvent(event: AgentExecutionEvent): void {
-		const record = this.records.get(event.snapshot.agentExecutionId);
+		const record = this.records.get(event.execution.agentExecutionId);
 		if (!record) {
 			return;
 		}
-		record.snapshot = cloneSnapshot(event.snapshot);
+		record.execution = cloneExecution(event.execution);
 		for (const listener of record.listeners) {
 			listener(event);
 		}
@@ -399,19 +399,19 @@ export class FakeAgentAdapter extends AgentAdapter {
 }
 
 type FakeManagedAgentExecutionOptions = {
-	getSnapshot(): FakeAgentExecutionSnapshot;
+	getExecution(): FakeAgentExecutionView;
 	observe(listener: (event: AgentExecutionEvent) => void): { dispose(): void };
-	done(): Promise<AgentExecutionSnapshot>;
-	submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionSnapshot>;
-	submitCommand(command: AgentCommand): Promise<AgentExecutionSnapshot>;
-	cancel(reason?: string): Promise<AgentExecutionSnapshot>;
-	terminate(reason?: string): Promise<AgentExecutionSnapshot>;
+	done(): Promise<AgentExecutionType>;
+	submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionType>;
+	submitCommand(command: AgentCommand): Promise<AgentExecutionType>;
+	cancel(reason?: string): Promise<AgentExecutionType>;
+	terminate(reason?: string): Promise<AgentExecutionType>;
 	emitMessage(text: string, channel?: 'stdout' | 'stderr' | 'system' | 'agent'): void;
 	emitAwaitingInput(reason?: string): void;
 	overrideWorkingDirectory(workingDirectory: string): void;
-	complete(): Promise<AgentExecutionSnapshot>;
-	cancelRuntime(reason?: string): Promise<AgentExecutionSnapshot>;
-	terminateRuntime(reason?: string): Promise<AgentExecutionSnapshot>;
+	complete(): Promise<AgentExecutionType>;
+	cancelRuntime(reason?: string): Promise<AgentExecutionType>;
+	terminateRuntime(reason?: string): Promise<AgentExecutionType>;
 	fail(reason: string): void;
 };
 
@@ -419,38 +419,38 @@ class FakeManagedAgentExecution implements FakeAgentExecution {
 	public constructor(private readonly options: FakeManagedAgentExecutionOptions) { }
 
 	public get agentExecutionId(): string {
-		return this.options.getSnapshot().agentExecutionId;
+		return this.options.getExecution().agentExecutionId;
 	}
 
 	public get reference(): AgentExecutionReference {
-		return this.options.getSnapshot().reference;
+		return this.options.getExecution().reference;
 	}
 
-	public getSnapshot(): FakeAgentExecutionSnapshot {
-		return this.options.getSnapshot();
+	public getExecution(): FakeAgentExecutionView {
+		return this.options.getExecution();
 	}
 
 	public onDidEvent(listener: (event: AgentExecutionEvent) => void): { dispose(): void } {
 		return this.options.observe(listener);
 	}
 
-	public done(): Promise<AgentExecutionSnapshot> {
+	public done(): Promise<AgentExecutionType> {
 		return this.options.done();
 	}
 
-	public submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionSnapshot> {
+	public submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionType> {
 		return this.options.submitPrompt(prompt);
 	}
 
-	public submitCommand(command: AgentCommand): Promise<AgentExecutionSnapshot> {
+	public submitCommand(command: AgentCommand): Promise<AgentExecutionType> {
 		return this.options.submitCommand(command);
 	}
 
-	public cancel(reason?: string): Promise<AgentExecutionSnapshot> {
+	public cancel(reason?: string): Promise<AgentExecutionType> {
 		return this.options.cancel(reason);
 	}
 
-	public terminate(reason?: string): Promise<AgentExecutionSnapshot> {
+	public terminate(reason?: string): Promise<AgentExecutionType> {
 		return this.options.terminate(reason);
 	}
 
@@ -466,15 +466,15 @@ class FakeManagedAgentExecution implements FakeAgentExecution {
 		this.options.overrideWorkingDirectory(workingDirectory);
 	}
 
-	public complete(): Promise<AgentExecutionSnapshot> {
+	public complete(): Promise<AgentExecutionType> {
 		return this.options.complete();
 	}
 
-	public cancelRuntime(reason?: string): Promise<AgentExecutionSnapshot> {
+	public cancelRuntime(reason?: string): Promise<AgentExecutionType> {
 		return this.options.cancelRuntime(reason);
 	}
 
-	public terminateRuntime(reason?: string): Promise<AgentExecutionSnapshot> {
+	public terminateRuntime(reason?: string): Promise<AgentExecutionType> {
 		return this.options.terminateRuntime(reason);
 	}
 
@@ -491,42 +491,42 @@ class FakeManagedAgentExecution implements FakeAgentExecution {
 	}
 }
 
-function createDetachedExecution(snapshot: AgentExecutionSnapshot): AgentExecution {
+function createDetachedExecution(execution: AgentExecutionType): AgentExecution {
 	return new FakeManagedAgentExecution({
-		getSnapshot: () => toLegacySnapshot(snapshot),
+		getExecution: () => toLegacyExecution(execution),
 		observe: () => ({ dispose() { } }),
-		done: async () => cloneSnapshot(snapshot),
+		done: async () => cloneExecution(execution),
 		submitPrompt: async () => {
-			throw new Error(`Fake agent execution '${snapshot.agentExecutionId}' is no longer available.`);
+			throw new Error(`Fake agent execution '${execution.agentExecutionId}' is no longer available.`);
 		},
 		submitCommand: async () => {
-			throw new Error(`Fake agent execution '${snapshot.agentExecutionId}' is no longer available.`);
+			throw new Error(`Fake agent execution '${execution.agentExecutionId}' is no longer available.`);
 		},
-		cancel: async () => cloneSnapshot(snapshot),
-		terminate: async () => cloneSnapshot(snapshot),
-		cancelRuntime: async () => cloneSnapshot(snapshot),
-		terminateRuntime: async () => cloneSnapshot(snapshot),
+		cancel: async () => cloneExecution(execution),
+		terminate: async () => cloneExecution(execution),
+		cancelRuntime: async () => cloneExecution(execution),
+		terminateRuntime: async () => cloneExecution(execution),
 		emitMessage: () => undefined,
 		emitAwaitingInput: () => undefined,
 		overrideWorkingDirectory: () => undefined,
-		complete: async () => cloneSnapshot(snapshot),
+		complete: async () => cloneExecution(execution),
 		fail: () => undefined
 	}) as unknown as AgentExecution;
 }
 
-function cloneSnapshot(snapshot: AgentExecutionSnapshot): AgentExecutionSnapshot {
+function cloneExecution(execution: AgentExecutionType): AgentExecutionType {
 	return {
-		...snapshot,
-		acceptedCommands: [...snapshot.acceptedCommands],
+		...execution,
+		acceptedCommands: [...execution.acceptedCommands],
 		progress: {
-			...snapshot.progress,
-			...(snapshot.progress.units ? { units: { ...snapshot.progress.units } } : {})
+			...execution.progress,
+			...(execution.progress.units ? { units: { ...execution.progress.units } } : {})
 		},
 		reference: {
-			...snapshot.reference,
-			...(snapshot.reference.transport ? { transport: { ...snapshot.reference.transport } } : {})
+			...execution.reference,
+			...(execution.reference.transport ? { transport: { ...execution.reference.transport } } : {})
 		},
-		...(snapshot.transport ? { transport: { ...snapshot.transport } } : {})
+		...(execution.transport ? { transport: { ...execution.transport } } : {})
 	};
 }
 
@@ -534,12 +534,12 @@ function now(): string {
 	return new Date().toISOString();
 }
 
-function createSnapshot(
+function createExecution(
 	request: AgentLaunchConfig,
 	agentId: string,
 	agentExecutionId: string,
 	transportId?: string
-): AgentExecutionSnapshot {
+): AgentExecutionType {
 	const timestamp = now();
 	const transport = transportId === 'terminal'
 		? {
@@ -580,7 +580,7 @@ function createSnapshot(
 	};
 }
 
-function createDetachedSnapshot(agentId: string, reference: AgentExecutionReference, reason: string): AgentExecutionSnapshot {
+function createDetachedExecutionData(agentId: string, reference: AgentExecutionReference, reason: string): AgentExecutionType {
 	const timestamp = now();
 	return {
 		agentId,
@@ -629,16 +629,16 @@ function buildCommandPrompt(command: Exclude<AgentCommand, { type: 'interrupt' }
 	throw new Error(`Unsupported AgentExecution command '${String((command as { type: string }).type)}'.`);
 }
 
-function toLegacySnapshot(snapshot: AgentExecutionSnapshot, transportId?: string): FakeAgentExecutionSnapshot {
+function toLegacyExecution(execution: AgentExecutionType, transportId?: string): FakeAgentExecutionView {
 	return {
-		...snapshot,
-		phase: snapshot.status,
-		awaitingInput: snapshot.waitingForInput,
+		...execution,
+		phase: execution.status,
+		awaitingInput: execution.waitingForInput,
 		...(transportId ? { transportId } : {}),
-		...(snapshot.transport
+		...(execution.transport
 			? {
-				terminalName: snapshot.transport.terminalName,
-				...(snapshot.transport.terminalPaneId ? { terminalPaneId: snapshot.transport.terminalPaneId } : {})
+				terminalName: execution.transport.terminalName,
+				...(execution.transport.terminalPaneId ? { terminalPaneId: execution.transport.terminalPaneId } : {})
 			}
 			: {})
 	};

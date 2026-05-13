@@ -59,7 +59,7 @@ describe('workflow reducer delivery completion', () => {
             transportId: 'terminal',
             agentJournalPath: 'agent-journals/AgentExecution-1.interaction.jsonl',
             terminalHandle: {
-                terminalName: 'airport-terminal-AgentExecution',
+                terminalName: 'open-mission-terminal-AgentExecution',
                 terminalPaneId: 'terminal_44'
             }
         };
@@ -71,13 +71,13 @@ describe('workflow reducer delivery completion', () => {
             agentExecutionId: 'AgentExecution-1',
             agentJournalPath: 'agent-journals/AgentExecution-1.interaction.jsonl',
             terminalHandle: {
-                terminalName: 'airport-terminal-AgentExecution',
+                terminalName: 'open-mission-terminal-AgentExecution',
                 terminalPaneId: 'terminal_44'
             }
         }));
         expect(() => AgentExecutionRuntimeStateSchema.parse({
             ...runtime.agentExecutions[0],
-            terminalName: 'airport-terminal-AgentExecution'
+            terminalName: 'open-mission-terminal-AgentExecution'
         })).toThrow();
         expect(() => AgentExecutionRuntimeStateSchema.parse({
             ...runtime.agentExecutions[0],

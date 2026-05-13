@@ -52,7 +52,7 @@ import {
 import type { AgentAdapter } from '../../daemon/runtime/agent/AgentAdapter.js';
 import type {
 	AgentExecutionEvent,
-	AgentExecutionSnapshot,
+	AgentExecutionType,
 	AgentExecutionObservation,
 	AgentExecutionSignalDecision
 } from '../AgentExecution/AgentExecutionProtocolTypes.js';
@@ -608,8 +608,8 @@ export class Mission extends Entity<MissionStorageType, string> {
 		const commands = this.lastKnownCommands
 			&& this.lastKnownStatus.workflow?.lifecycle !== 'draft'
 			&& !this.hasActiveAgentExecutions()
-				? this.lastKnownCommands
-				: await this.buildCommandList();
+			? this.lastKnownCommands
+			: await this.buildCommandList();
 		this.lastKnownCommands = commands;
 		const stages = await this.buildHydratedStagesWithCommands(entity.stages, this.lastKnownStatus);
 		return buildMission({
@@ -750,7 +750,7 @@ export class Mission extends Entity<MissionStorageType, string> {
 		this.agentEventEmitter.dispose();
 	}
 
-	public getRuntimeAgentExecutionSnapshot(agentExecutionId: string): AgentExecutionSnapshot | undefined {
+	public getRuntimeAgentExecutionSnapshot(agentExecutionId: string): AgentExecutionType | undefined {
 		return this.workflowController.getRuntimeAgentExecution(agentExecutionId);
 	}
 
@@ -758,11 +758,11 @@ export class Mission extends Entity<MissionStorageType, string> {
 		agentExecutionId: string,
 		_observation: AgentExecutionObservation,
 		decision: Exclude<AgentExecutionSignalDecision, { action: 'reject' }>
-	): AgentExecutionSnapshot | undefined {
+	): AgentExecutionType | undefined {
 		return this.workflowController.applyRuntimeAgentExecutionSignalDecision(agentExecutionId, decision);
 	}
 
-	private async resolveLiveAgentExecution(execution: AgentExecutionRecord): Promise<AgentExecutionSnapshot | undefined> {
+	private async resolveLiveAgentExecution(execution: AgentExecutionRecord): Promise<AgentExecutionType | undefined> {
 		return this.workflowController.getRuntimeAgentExecution(execution.agentExecutionId)
 			?? await this.workflowController.attachRuntimeAgentExecution({
 				agentId: execution.agentId,
@@ -1108,7 +1108,7 @@ export class Mission extends Entity<MissionStorageType, string> {
 		task: TaskDossierRecordType,
 		adapter: AgentAdapter,
 		request: AgentExecutionLaunchRequest
-	): Promise<AgentExecutionSnapshot> {
+	): Promise<AgentExecutionType> {
 		return this.workflowController.startRuntimeAgentExecution({
 			scope: {
 				kind: 'task',
@@ -1142,7 +1142,7 @@ export class Mission extends Entity<MissionStorageType, string> {
 		});
 	}
 
-	private async recordStartedTaskAgentExecution(snapshot: AgentExecutionSnapshot): Promise<AgentExecution> {
+	private async recordStartedTaskAgentExecution(snapshot: AgentExecutionType): Promise<AgentExecution> {
 		if (!snapshot.taskId) {
 			throw new Error(`AgentExecution '${snapshot.agentExecutionId}' requires a task scope before it can be recorded on a Mission task.`);
 		}
@@ -1368,16 +1368,16 @@ export class Mission extends Entity<MissionStorageType, string> {
 		}
 	}
 
-	private emitSyntheticAgentExecutionStart(snapshot: AgentExecutionSnapshot): void {
+	private emitSyntheticAgentExecutionStart(snapshot: AgentExecutionType): void {
 		const agentExecutionRecord = this.getAgentExecution(snapshot.agentExecutionId);
 		const state = agentExecutionRecord
-			? AgentExecution.createStateFromSnapshot({
-				snapshot,
+			? AgentExecution.createStateFromExecution({
+				execution: snapshot,
 				adapterLabel: agentExecutionRecord.adapterLabel,
 				record: agentExecutionRecord
 			})
-			: AgentExecution.createStateFromSnapshot({
-				snapshot,
+			: AgentExecution.createStateFromExecution({
+				execution: snapshot,
 				adapterLabel: this.agentRegistry.resolveAgent(snapshot.agentId)?.displayName ?? snapshot.agentId
 			});
 		this.agentEventEmitter.fire({
@@ -1387,19 +1387,19 @@ export class Mission extends Entity<MissionStorageType, string> {
 	}
 
 	private handleAgentExecutionRuntimeEvent(event: AgentExecutionEvent): void {
-		const agentExecutionRecord = this.getAgentExecution(event.snapshot.agentExecutionId);
+		const agentExecutionRecord = this.getAgentExecution(event.execution.agentExecutionId);
 		const state = agentExecutionRecord
-			? AgentExecution.createStateFromSnapshot({
-				snapshot: event.snapshot,
+			? AgentExecution.createStateFromExecution({
+				execution: event.execution,
 				adapterLabel: agentExecutionRecord.adapterLabel,
 				record: agentExecutionRecord
 			})
-			: AgentExecution.createStateFromSnapshot({
-				snapshot: event.snapshot,
+			: AgentExecution.createStateFromExecution({
+				execution: event.execution,
 				adapterLabel:
-					this.agentRegistry.resolveAgent(event.snapshot.agentId)?.displayName ?? event.snapshot.agentId
+					this.agentRegistry.resolveAgent(event.execution.agentId)?.displayName ?? event.execution.agentId
 			});
-		const currentConsole = this.consoleStates.get(event.snapshot.agentExecutionId) ?? Mission.createEmptyAgentConsoleState({
+		const currentConsole = this.consoleStates.get(event.execution.agentExecutionId) ?? Mission.createEmptyAgentConsoleState({
 			awaitingInput: Mission.hasSemanticInputRequest(state),
 			agentId: state.agentId,
 			adapterLabel: state.adapterLabel,

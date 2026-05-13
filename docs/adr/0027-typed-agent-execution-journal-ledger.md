@@ -121,7 +121,7 @@ For example, these two records are not equivalent:
   path: 'BRIEF.md',
   authority: 'mission-artifact-tool',
   assertionLevel: 'authoritative',
-  sourceSurface: 'mission-mcp'
+  sourceSurface: 'open-mission-mcp'
 }
 ```
 
@@ -324,7 +324,7 @@ If Mission cannot reconstruct semantic state without parsing `transport-evidence
 
 Raw output and evidence may live in the same ordered journal if they are explicitly typed as `transport-evidence` and marked non-canonical for semantic replay.
 
-Airport surfaces should project compact operator views by default and expose transport evidence, telemetry overlays, or assessment overlays only when the operator expands a row or opens a deeper execution trace. The UI must not need to infer semantics from evidence; it only reveals already-recorded supporting detail.
+Open Mission surfaces should project compact operator views by default and expose transport evidence, telemetry overlays, or assessment overlays only when the operator expands a row or opens a deeper execution trace. The UI must not need to infer semantics from evidence; it only reveals already-recorded supporting detail.
 
 Diagnostic overlays and confidence overlays may enrich the operator view, but they are additive projections over the typed ledger rather than hidden semantic dependencies.
 

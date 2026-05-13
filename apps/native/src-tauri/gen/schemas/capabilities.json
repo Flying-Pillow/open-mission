@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Default capability set for the Open Mission native host.","local":true,"windows":["main"],"permissions":["core:default"]}}

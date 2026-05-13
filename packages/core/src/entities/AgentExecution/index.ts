@@ -1,8 +1,8 @@
 export * from './AgentExecutionTransportSchema.js';
-export * from './AgentExecutionRuntimeSchema.js';
+export * from './AgentExecutionStateSchema.js';
 export * from './AgentExecutionProtocolSchema.js';
 export * from './AgentExecutionProjectionSchema.js';
-export * from './AgentExecutionDataSchema.js';
+export * from './AgentExecutionSchema.js';
 export {
     AgentExecutionJournalSchemaVersionSchema,
     AgentExecutionJournalRecordFamilySchema,

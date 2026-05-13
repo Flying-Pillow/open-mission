@@ -12,9 +12,9 @@ supersedes: []
 superseded_by: []
 ---
 
-The Mission system persists AgentExecution semantic interaction in an append-only AgentExecution interaction journal that is separate from terminal recordings and Mission workflow event logs.
+The Open Mission system persists AgentExecution semantic interaction in an append-only AgentExecution interaction journal that is separate from terminal recordings and Mission workflow event logs.
 
-The interaction journal is the durable source for AgentExecution semantic state, replay, audit, and UI projection. Terminal recordings remain raw PTY transport audit. Mission workflow event logs remain orchestration truth. Airport chat and timeline views are projections over AgentExecution journal records and live runtime snapshots, not independent sources of truth.
+The interaction journal is the durable source for AgentExecution semantic state, replay, audit, and UI projection. Terminal recordings remain raw PTY transport audit. Mission workflow event logs remain orchestration truth. Open Mission chat and timeline views are projections over AgentExecution journal records and live runtime snapshots, not independent sources of truth.
 
 ## Context
 
@@ -93,7 +93,7 @@ Live process state is represented by an AgentExecution runtime snapshot overlay 
 - AgentExecution state can be reconstructed from journal records after daemon restart or reconcile.
 - Semantic replay does not require retaining every noisy progress or telemetry update.
 - Duplicate observation detection is hydrated from durable journal records, not only in-memory sets.
-- Airport timelines and chat views become projections over AgentExecution truth.
+- Open Mission timelines and chat views become projections over AgentExecution truth.
 - Terminal output can be displayed and audited without becoming semantic truth.
 - Mission workflow state stays focused on tasks, AgentExecutions, gates, launch queues, and lifecycle transitions.
 - Agent signal file activity can be recorded as semantic observation or activity, but filesystem/git truth must come from filesystem/git observation or explicit daemon state.
@@ -105,7 +105,7 @@ Live process state is represented by an AgentExecution runtime snapshot overlay 
 - Do not use terminal recordings as the source of AgentExecution semantic state.
 - Do not store raw private reasoning as semantic thinking content.
 - Do not put high-frequency progress, token usage, streaming summaries, or transient target metadata inside semantic `state.changed` records.
-- Do not let Airport write transcript truth.
+- Do not let Open Mission write transcript truth.
 - Do not let MCP, stdout markers, provider SDK events, terminal heuristics, filesystem observation, or git observation bypass the observation to decision to journal path.
 - Do not encode filesystem backend kinds such as Mission dossier, Repository control state, or local config folder as AgentExecution journal domain identity.
 - Do not fork AgentExecution journal storage behavior by owning Entity scope; only storage adapter path/table resolution may vary by scope.

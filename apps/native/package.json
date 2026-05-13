@@ -1,0 +1,18 @@
+{
+  "name": "@flying-pillow/open-mission-native",
+  "private": true,
+  "version": "0.1.0-alpha.0",
+  "type": "module",
+  "scripts": {
+    "doctor:linux": "bash ../../scripts/check-linux-native-env.sh",
+    "frontend:dev": "node ./scripts/frontend-dev.mjs",
+    "frontend:build": "pnpm --dir ../.. run build && node ./scripts/prepare-embedded-web-server.mjs",
+    "dev": "node -e \"const { spawn } = require('node:child_process'); const platform = process.platform; const run = (command, args, extraEnv = {}) => { const child = spawn(command, args, { stdio: 'inherit', env: { ...process.env, ...extraEnv } }); child.on('exit', (code) => process.exit(code ?? 0)); child.on('error', (error) => { throw error; }); }; const devEnv = { OPEN_MISSION_NATIVE_DAEMON_AUTOSTART: '0' }; if (platform === 'linux') { run('bash', ['-lc', 'bash ../../scripts/check-linux-native-env.sh --require-display && LANG=${LANG:-en_US.UTF-8} LC_ALL=${LC_ALL:-en_US.UTF-8} NO_AT_BRIDGE=${NO_AT_BRIDGE:-1} CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/open-mission-native-target tauri dev'], devEnv); } else if (platform === 'darwin') { run('tauri', ['dev'], { LANG: process.env.LANG || 'en_US.UTF-8', LC_ALL: process.env.LC_ALL || 'en_US.UTF-8', CARGO_INCREMENTAL: '0', CARGO_TARGET_DIR: '/tmp/open-mission-native-target', ...devEnv }); } else { console.error('error: unsupported native dev platform: ' + platform); process.exit(1); }\"",
+    "dev:xvfb": "LANG=${LANG:-en_US.UTF-8} LC_ALL=${LC_ALL:-en_US.UTF-8} NO_AT_BRIDGE=${NO_AT_BRIDGE:-1} xvfb-run -a --server-args='-screen 0 1440x900x24 -ac +extension RANDR' pnpm run dev",
+    "build": "node -e \"const { spawnSync } = require('node:child_process'); const run = (command, args) => { const result = spawnSync(command, args, { stdio: 'inherit' }); if (result.error) throw result.error; process.exit(result.status ?? 1); }; if (process.platform === 'linux') { run('bash', ['../../scripts/check-linux-native-env.sh']); } else if (process.platform === 'darwin') { run('tauri', ['build', '--config', 'src-tauri/tauri.conf.json', '--config', 'src-tauri/tauri.macos.conf.json']); } else { console.error('error: unsupported native build platform: ' + process.platform); process.exit(1); }\"",
+    "check": "cargo check --manifest-path src-tauri/Cargo.toml"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.1"
+  }
+}

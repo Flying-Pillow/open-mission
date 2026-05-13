@@ -26,7 +26,7 @@ This temporary SPEC describes the implementation direction for ADR-0033 and the 
 Mission implements a structured-first AgentExecution interaction model with optional terminal capability.
 
 ```text
-Airport Mission UI
+Open Mission Mission UI
   -> Entity commands / AgentExecution messages / semantic operation requests
   -> AgentExecution protocol descriptor
   -> AgentExecutor delivery and runtime coordination
@@ -113,7 +113,7 @@ Rules:
 
 - Parser output is a typed invocation.
 - Payloads use canonical schemas.
-- Airport may autocomplete and preview, but daemon/Entity boundaries validate.
+- Open Mission may autocomplete and preview, but daemon/Entity boundaries validate.
 - Mission-native command names must not mirror provider-specific names unless the meaning is truly Mission-owned.
 
 ### Cross-Agent Runtime Command
@@ -205,7 +205,7 @@ The exact schemas should be introduced in the AgentExecution Entity module when 
 
 ## Slash Command Resolution
 
-Slash command resolution should be a daemon-owned parse and validation path, with Airport providing autocomplete and previews.
+Slash command resolution should be a daemon-owned parse and validation path, with Open Mission providing autocomplete and previews.
 
 Resolution order:
 

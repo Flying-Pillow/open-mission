@@ -1,6 +1,6 @@
-# Mission System
+# Open Mission System
 
-Mission system is a local-first engineering control system for coordinating repository-scoped missions, daemon-owned runtime state, Airport surfaces, and agent adapters.
+Open Mission is a local-first engineering control system for coordinating repository-scoped missions, daemon-owned runtime state, Open Mission surfaces, and agent adapters.
 
 ## Language
 
@@ -10,25 +10,25 @@ Mission system is a local-first engineering control system for coordinating repo
 A long-lived unit of engineering work with a brief, workflow state, artifacts, tasks, and agent executions.
 _Avoid_: project, job, run, workflow
 
-**Mission system**:
-The local-first engineering control system that coordinates repositories, missions, daemon-owned runtime state, Airport surfaces, and agent adapters.
+**Open Mission system**:
+The local-first engineering control system that coordinates repositories, missions, daemon-owned runtime state, Open Mission surfaces, and agent adapters.
 _Avoid_: Mission, app, platform
 
 **Control plane**:
-The daemon-owned live coordination layer that composes repository state, Mission state, Airport state, and client connections into live operator-facing views and routing state.
-Use only as a runtime-plane umbrella term, not as the default name for module folders, types, or adapters when a narrower owner such as daemon projection, Airport substrate, Entity contract, or daemon client is known.
+The daemon-owned live coordination layer that composes repository state, Mission state, Open Mission state, and client connections into live operator-facing views and routing state.
+Use only as a runtime-plane umbrella term, not as the default name for module folders, types, or adapters when a narrower owner such as daemon projection, Open Mission substrate, Entity contract, or daemon client is known.
 _Avoid_: generic folder prefix, catch-all type prefix, surface-owned state
 
-**Airport application**:
-The shared operator application model consumed by Airport hosts. It owns UI routes, component composition, application state shape, and query/command/subscription semantics through an abstract application client, not through host-specific APIs.
+**Open Mission app**:
+The shared operator application model consumed by Open Mission hosts. It owns UI routes, component composition, application state shape, and query/command/subscription semantics through an abstract application client, not through host-specific APIs.
 _Avoid_: web app only, native fork, host compatibility layer, daemon authority
 
-**Airport host**:
-A concrete runtime host for the Airport application, such as web or native. A host owns delivery and host capabilities only; it does not redefine Mission, workflow, repository, or Agent execution semantics.
+**Open Mission host**:
+A concrete runtime host for the Open Mission app, such as web or native. A host owns delivery and host capabilities only; it does not redefine Mission, workflow, repository, or Agent execution semantics.
 _Avoid_: separate product, domain owner, command authority
 
-**Airport application model layer**:
-The `packages/airport` application-facing model and view-contract layer over daemon truth and repository state. It is not renderer-specific code, a host-specific package, or a browser state store.
+**Open Mission app model layer**:
+The application-facing model and view-contract layer over daemon truth and repository state. It is not renderer-specific code, a host-specific package, or a browser state store.
 _Avoid_: projection layer, Svelte package, Tauri plugin, host compatibility layer, canonical daemon state
 
 ### Repository Plane
@@ -42,7 +42,7 @@ The GitHub-shaped Platform repository ref, for example `Flying-Pillow/open-missi
 _Avoid_: Repository, repository root
 
 **Repository**:
-The local checked-out Git repository, preferably on the main branch, that the Mission system uses as the base for Mission worktrees.
+The local checked-out Git repository, preferably on the main branch, that the Open Mission system uses as the base for Mission worktrees.
 _Avoid_: GitHub repository, mission worktree, workspace
 
 **Repository root**:
@@ -50,7 +50,7 @@ The filesystem root path of a Repository.
 _Avoid_: workspace root, mission worktree root
 
 **Repository control state**:
-Durable repository-scoped Mission system state stored under `.mission/`.
+Durable repository-scoped Open Mission system state stored under `.mission/`.
 _Avoid_: workspace state, editor state, surface state
 
 **Repository settings document**:
@@ -100,7 +100,7 @@ The persisted daemon-owned MissionRuntime data shape for one Mission, including 
 _Avoid_: record, Mission state, Mission runtime module, agent execution schema, artifact schema, UI state file
 
 **Mission dossier state store**:
-A per-Mission daemon runtime module that accepts validated Mission runtime data changes, keeps live in-memory state for one Mission, and checkpoints Mission runtime data and the Mission runtime event log into the Mission dossier. It is not the daemon-wide Mission state store.
+A per-Open Mission daemon runtime module that accepts validated Mission runtime data changes, keeps live in-memory state for one Mission, and checkpoints Mission runtime data and the Mission runtime event log into the Mission dossier. It is not the daemon-wide Mission state store.
 _Avoid_: Mission state store, MissionState, MissionRuntimeDossier, JSON live store
 
 **Mission runtime schema version**:
@@ -112,7 +112,7 @@ A deliberate, separately decided replacement of one Mission runtime data layout 
 _Avoid_: surface migration, per-field fallback, ad hoc compatibility shim
 
 **Running Mission instance**:
-The daemon-owned in-memory authoritative Mission Entity for one Mission. It owns Mission lifecycle behavior, child-entity coordination, workflow-definition application, and hydration of the complete Mission Entity instance while the Mission is live, and it can run without any Airport surface connected.
+The daemon-owned in-memory authoritative Mission Entity for one Mission. It owns Mission lifecycle behavior, child-entity coordination, workflow-definition application, and hydration of the complete Mission Entity instance while the Mission is live, and it can run without any Open Mission surface connected.
 _Avoid_: UI session mission, workflow controller, mission projection, surface-owned mission state
 
 **Mission workflow definition**:
@@ -172,7 +172,7 @@ A daemon-issued opaque token that identifies and authorizes one registered Agent
 _Avoid_: taskId env var, agentExecutionId env var, routing secret
 
 **Agent execution message**:
-A structured non-terminal message sent to an Agent execution through the Mission system. The payload carries only message-specific fields. Base Agent execution messages are common, and Agent child adapters may advertise additional supported messages.
+A structured non-terminal message sent to an Agent execution through the Open Mission system. The payload carries only message-specific fields. Base Agent execution messages are common, and Agent child adapters may advertise additional supported messages.
 _Avoid_: terminal input, raw prompt, CLI text injection, reliable state acknowledgement, transport envelope, hardcoded UI command, slash command
 
 **Agent execution turn**:
@@ -220,7 +220,7 @@ The portability classification for one Agent execution message descriptor: Missi
 _Avoid_: adapter capability boolean, UI grouping, provider command name, command success state
 
 **AgentExecution projection**:
-A read model derived from AgentExecution semantic state and journal records for surfaces such as Airport chat, timeline, status badges, and grouped activity views. It is not durable AgentExecution truth.
+A read model derived from AgentExecution semantic state and journal records for surfaces such as Open Mission chat, timeline, status badges, and grouped activity views. It is not durable AgentExecution truth.
 _Avoid_: source of truth, transcript store, workflow state
 
 **AgentExecution runtime snapshot**:
@@ -232,7 +232,7 @@ A daemon-owned reconciliation assessment of whether an Agent execution is attach
 _Avoid_: terminal status, lifecycle state, agent claim, client protocol error
 
 **Daemon runtime supervisor**:
-The daemon-owned runtime coordination authority for live Repository, Mission, Task, Agent execution, and runtime lease relationships started by the Mission system. It owns runtime cleanup, cascading cancellation, startup reconciliation, and shutdown hygiene for daemon-started resources.
+The daemon-owned runtime coordination authority for live Repository, Mission, Task, Agent execution, and runtime lease relationships started by the Open Mission system. It owns runtime cleanup, cascading cancellation, startup reconciliation, and shutdown hygiene for daemon-started resources.
 _Avoid_: surface manager, log reader, process poller, UI coordinator
 
 **Daemon runtime ownership graph**:
@@ -240,7 +240,7 @@ The daemon-owned runtime structure that records which live runtime resources bel
 _Avoid_: transcript tree, surface selection state, ad hoc registry map, log-derived process list
 
 **Runtime lease**:
-A daemon-owned claim over one live runtime resource started by the Mission system, such as a PTY terminal, child process, socket, or future provider session. A Runtime lease records ownership, lifecycle, and cleanup responsibility so the daemon can reconcile stale resources after crashes and release them during shutdown or cancellation.
+A daemon-owned claim over one live runtime resource started by the Open Mission system, such as a PTY terminal, child process, socket, or future provider session. A Runtime lease records ownership, lifecycle, and cleanup responsibility so the daemon can reconcile stale resources after crashes and release them during shutdown or cancellation.
 _Avoid_: raw PID, terminal tab, adapter state, audit log line
 
 **System status snapshot**:
@@ -268,11 +268,11 @@ A strict one-line stdout marker emitted by an Agent execution and parsed by the 
 _Avoid_: prose state claim, hidden side channel, workflow authority, terminal heuristic
 
 **Mission MCP server**:
-The daemon-owned local MCP server named `mission-mcp` that exposes Agent signal payloads and Agent execution semantic operations as tools for running Agent executions. It is a structured transport into Agent execution observation routing and scoped semantic reads, not a workflow authority, Entity command surface, public repository API, or separate Agent execution model.
+The daemon-owned local MCP server named `open-mission-mcp` that exposes Agent signal payloads and Agent execution semantic operations as tools for running Agent executions. It is a structured transport into Agent execution observation routing and scoped semantic reads, not a workflow authority, Entity command surface, public repository API, or separate Agent execution model.
 _Avoid_: remote mission API, MCP-owned workflow, task session server, provider-specific signal model
 
 **Agent execution semantic operation**:
-A read-only daemon-owned operation exposed to one registered Agent execution through `mission-mcp`, such as Artifact reads, code search, symbol context, impact analysis, route impact, or tool context. It resolves authority from Agent execution scope, validates operation input, delegates to the owning daemon service, returns structured context, and records a bounded Agent execution runtime fact.
+A read-only daemon-owned operation exposed to one registered Agent execution through `open-mission-mcp`, such as Artifact reads, code search, symbol context, impact analysis, route impact, or tool context. It resolves authority from Agent execution scope, validates operation input, delegates to the owning daemon service, returns structured context, and records a bounded Agent execution runtime fact.
 _Avoid_: Entity command, raw repository API, workflow mutation, arbitrary filesystem tool, public MCP tool
 
 **Code root**:
@@ -314,7 +314,7 @@ _Avoid_: raw Agent execution log, terminal output, ephemeral log, session state,
 ### Entity Remote
 
 **Entity**:
-A daemon-addressable domain object in the Mission system with an Entity class, Entity id, schemas, and remote methods. An Entity is authoritative for its own domain behavior and invariants; it is not a passive data shape with behavior owned elsewhere.
+A daemon-addressable domain object in the Open Mission system with an Entity class, Entity id, schemas, and remote methods. An Entity is authoritative for its own domain behavior and invariants; it is not a passive data shape with behavior owned elsewhere.
 _Avoid_: model, component, resource
 
 **Entity id**:
@@ -398,7 +398,7 @@ The small atomic write unit the daemon accepts after validating Entity input com
 _Avoid_: direct storage mutation, ad hoc database write, private daemon write path, surface transaction
 
 **Daemon in-memory datastore**:
-The embedded SurrealDB datastore inside the Mission daemon, initially using SurrealMX-backed memory as the fast canonical working store behind the Mission state store.
+The embedded SurrealDB datastore inside the Open Mission daemon, initially using SurrealMX-backed memory as the fast canonical working store behind the Mission state store.
 _Avoid_: surface cache, browser database, external database server
 
 **State store persistence policy**:
@@ -438,7 +438,7 @@ The hydrated read shape produced from Entity storage records and Entity data sch
 _Avoid_: storage record, replicated record, source of truth
 
 **Surface state replica**:
-An Airport surface/client-local datastore that may cache or mirror daemon-published Entity storage records for local querying, reconnect, or offline read behavior.
+An Open Mission surface/client-local datastore that may cache or mirror daemon-published Entity storage records for local querying, reconnect, or offline read behavior.
 _Avoid_: canonical state, second daemon, surface-owned Mission state
 
 **Entity change stream**:
@@ -456,39 +456,39 @@ _Avoid_: local storage mutation, conflict resolver, offline source of truth
 ### Runtime Communication
 
 **System snapshot**:
-A daemon-owned read model of current Mission system state used for bootstrapping and reconnecting clients.
+A daemon-owned read model of current Open Mission system state used for bootstrapping and reconnecting clients.
 _Avoid_: projection, full mission projection
 
 **Daemon protocol version**:
-The wire-compatibility version used by Airport surfaces and daemon clients to decide whether they can talk to the running Mission daemon.
+The wire-compatibility version used by Open Mission surfaces and daemon clients to decide whether they can talk to the running Open Mission daemon.
 _Avoid_: Mission runtime schema version, Entity schema version, workflow version
 
 **Entity event**:
 A fine-grained daemon notification that communicates a change to one Entity.
 _Avoid_: projection update, partial projection
 
-**Airport pane view**:
-A daemon-derived view of one Airport pane for a surface to render.
+**Open Mission app pane view**:
+A daemon-derived view of one Open Mission pane for a surface to render.
 _Avoid_: pane projection
 
 **Mission control view**:
-A daemon-derived operator view for one Mission that contains Mission status and workflow snapshots for Airport surfaces.
+A daemon-derived operator view for one Mission that contains Mission status and workflow snapshots for Open Mission surfaces.
 _Avoid_: mission projection
 
 **Mission control selection**:
-The Airport surface-controlled operator focus for one Mission, such as active Mission stage or Mission task.
+The Open Mission surface-controlled operator focus for one Mission, such as active Mission stage or Mission task.
 _Avoid_: tree node selection, durable Mission coordination state, shared operator focus
 
 **Raw mission control selection**:
-The current surface/operator focus target before Airport resolves the companion work bundle.
+The current surface/operator focus target before Open Mission resolves the companion work bundle.
 _Avoid_: pane route state, durable Mission state, resolved work bundle
 
 **Resolved mission control selection**:
-The Airport-resolved companion work bundle derived from raw Mission control selection and semantic Mission relationships, such as active instruction artifact, active stage result artifact, or active Agent execution.
+The Open Mission app-resolved companion work bundle derived from raw Mission control selection and semantic Mission relationships, such as active instruction artifact, active stage result artifact, or active Agent execution.
 _Avoid_: filename heuristic, tree-order heuristic, persisted pane state
 
 **Mission surface preference**:
-An Airport surface/client-local affordance such as panel sizes, selected stage tab, or temporary focus that does not change Mission runtime data, Entity storage records, or Agent execution context.
+An Open Mission surface/client-local affordance such as panel sizes, selected stage tab, or temporary focus that does not change Mission runtime data, Entity storage records, or Agent execution context.
 _Avoid_: durable Mission state, daemon preference, workflow setting
 
 **Derived workflow state**:
@@ -497,9 +497,9 @@ _Avoid_: workflow projection, stage projection
 
 ## Relationships
 
-- The **Mission system** coordinates one or more **Missions**.
-- The **Airport application** is hosted by one or more **Airport hosts**.
-- An **Airport host** consumes daemon and **Airport application model layer** contracts; it does not own Mission truth.
+- The **Open Mission system** coordinates one or more **Missions**.
+- The **Open Mission app** is hosted by one or more **Open Mission native hosts**.
+- An **Open Mission native host** consumes daemon and **Open Mission app model layer** contracts; it does not own Mission truth.
 - A live **Mission** is executed by exactly one **Running Mission instance** in the daemon.
 - A **Repository** may have one **GitHub repository ref**.
 - A **Repository** has exactly one **Repository root**.
@@ -544,10 +544,10 @@ _Avoid_: workflow projection, stage projection
 - An **Agent execution context** owns the order of artifacts and instructions made available to its **Agent execution**.
 - An **Agent execution message** is accepted through the daemon, not by writing raw text directly into an Agent execution terminal; the daemon resolves the session from its token instead of env-passed ids.
 - **Agent adapter delivery** is best-effort and must not be treated as proof that an **Agent execution** applied a context change.
-- An **Agent execution message** is not a first-class durable Entity unless the Mission system later needs queryable structured message history.
+- An **Agent execution message** is not a first-class durable Entity unless the Open Mission system later needs queryable structured message history.
 - An **Agent execution log** records delivered Agent execution interaction, while **Agent execution context** records lasting context state.
 - An **Agent execution log** is daemon-owned audit material, not an **Artifact** by default.
-- An **Agent execution semantic operation** belongs to one registered **Agent execution** and is authorized through that Agent execution's `mission-mcp` access.
+- An **Agent execution semantic operation** belongs to one registered **Agent execution** and is authorized through that Agent execution's `open-mission-mcp` access.
 - An **Agent execution semantic operation** records a bounded **Agent execution runtime fact** when it reads meaningful context.
 - A code intelligence semantic operation may read a **Code intelligence index** only for the **Code root** resolved from the **Agent execution scope**.
 - An **Agent-session artifact** may reference or extract from an **Agent execution log** when the daemon or operator promotes useful material into Mission work.
@@ -582,7 +582,7 @@ _Avoid_: workflow projection, stage projection
 - A **State store transaction** is the only canonical write interface for the **Mission state store**.
 - **Entity input commands**, workflow commands, and daemon-owned domain intent are applied through **State store transactions** before storage records change.
 - Daemon internals must not bypass **State store transactions** with direct **Entity storage record** writes.
-- The **Daemon in-memory datastore** is the first intended Mission state store adapter and keeps canonical working state inside the Mission daemon.
+- The **Daemon in-memory datastore** is the first intended Mission state store adapter and keeps canonical working state inside the Open Mission daemon.
 - A **State store persistence policy** belongs to the daemon and determines how the Daemon in-memory datastore is made durable or recoverable.
 - **Mission dossier-backed persistence** is the first State store persistence policy.
 - **State store hydration** reads the **Mission dossier** once when the daemon starts or resumes a Mission; live reads and queries should use the **Daemon in-memory datastore** after hydration.
@@ -599,13 +599,13 @@ _Avoid_: workflow projection, stage projection
 - An **Entity channel** belongs to one **Entity id**.
 - An **Entity contract** routes remote methods described by Entity schemas to an **Entity class**.
 - A **System snapshot** bootstraps client state before **Entity events** keep it current.
-- An **Airport pane view** is derived from daemon-owned Airport state.
+- An **Open Mission app pane view** is derived from daemon-owned Open Mission state.
 - A **Mission control view** is derived from Entity data, workflow definition, and runtime state for operator navigation.
-- A **Mission surface preference** belongs to the Airport surface/client layer, not the daemon.
+- A **Mission surface preference** belongs to the Open Mission surface/client layer, not the daemon.
 - A **Mission surface preference** must not encode durable Mission workflow ordering.
-- Mission Control task lists are rendered by Airport surfaces from Mission stage, Mission task, Artifact, Agent execution, and Entity command descriptors.
+- Mission Control task lists are rendered by Open Mission surfaces from Mission stage, Mission task, Artifact, Agent execution, and Entity command descriptors.
 - Mission Control task lists must not duplicate canonical labels, lifecycle state, artifact paths, task status, or agent execution details owned by Entities.
-- A **Mission control selection** is controlled by one surface/operator session and resolved by Airport against Entity data.
+- A **Mission control selection** is controlled by one surface/operator session and resolved by Open Mission against Entity data.
 - A **Mission control selection** is not durable Mission coordination state and must not be shared as the current focus for every surface.
 - A **Raw mission control selection** resolves to one **Resolved mission control selection** for companion panes.
 - **Resolved mission control selection** is derived view state; it is not persisted as pane state.
@@ -617,8 +617,8 @@ _Avoid_: workflow projection, stage projection
 
 ### Agent Execution Context Synchronization
 
-- The Mission daemon is the single source of truth for Agent execution context and Mission artifact state.
-- Airport surfaces and panes subscribe to daemon-driven updates and never own or persist Agent execution context independently.
+- The Open Mission daemon is the single source of truth for Agent execution context and Mission artifact state.
+- Open Mission surfaces and panes subscribe to daemon-driven updates and never own or persist Agent execution context independently.
 - Updates are daemon-published: the daemon notifies all surfaces of changes, ensuring multi-pane consistency.
 - Surfaces may send selection or action hints, but the daemon resolves and rebroadcasts canonical state.
 
@@ -638,29 +638,29 @@ _Avoid_: workflow projection, stage projection
 
 ### Agent Execution Semantic Operations And Code Intelligence
 
-- `mission-mcp` may expose Agent execution semantic operations alongside Agent signal tools for registered Agent executions.
-- Agent execution semantic operations are read-only by default and must not mutate Entity storage records, Mission workflow state, repository files, Git refs, or Airport surface state.
+- `open-mission-mcp` may expose Agent execution semantic operations alongside Agent signal tools for registered Agent executions.
+- Agent execution semantic operations are read-only by default and must not mutate Entity storage records, Mission workflow state, repository files, Git refs, or Open Mission surface state.
 - Semantic operation availability is scoped by Agent execution scope, selected Agent adapter capability, daemon policy, and operation-specific requirements.
 - The Mission MCP bridge must proxy semantic operation inputs directly; it must not assume every MCP tool is an Agent signal payload.
-- Code intelligence belongs to a daemon-owned Code intelligence service and Code graph store, not to MCP handlers or Airport surfaces.
+- Code intelligence belongs to a daemon-owned Code intelligence service and Code graph store, not to MCP handlers or Open Mission surfaces.
 - Code intelligence indexes are rebuildable read models over Code roots and must report staleness when stale data could affect the answer.
 - Code graph SurrealQL DDL is generated from Mission-owned zod-surreal schemas; hand-written SurQL is not the canonical code graph schema.
-- Airport web may render a read-only visual representation of active Code graph snapshots after Agent-facing semantic operations are stable, but it must not own graph semantics, index lifecycle, root selection, or graph mutation.
+- Open Mission web may render a read-only visual representation of active Code graph snapshots after Agent-facing semantic operations are stable, but it must not own graph semantics, index lifecycle, root selection, or graph mutation.
 - Code intelligence runtime facts record bounded audit summaries of semantic operation use; full source bodies and high-volume graph results are returned only in operation responses when allowed, not stored wholesale in runtime facts.
 
 ### Mission Control Task List
 
-- Mission Control task lists are Airport surface views over Mission stages, Mission tasks, Artifacts, Agent executions, and Entity command descriptors.
+- Mission Control task lists are Open Mission surface views over Mission stages, Mission tasks, Artifacts, Agent executions, and Entity command descriptors.
 - Mission Control task lists are filtered by the selected Mission stage and default to the active Mission stage.
-- Airport surfaces may keep selected stage tabs and temporary focus locally, but they must not persist task-list structure as Mission state.
+- Open Mission surfaces may keep selected stage tabs and temporary focus locally, but they must not persist task-list structure as Mission state.
 - Mission Control task cards submit Entity commands through canonical Entity command descriptors; they do not define workflow legality.
-- Mission surface preferences are local Airport surface/client state only.
+- Mission surface preferences are local Open Mission surface/client state only.
 - The daemon must not store Mission surface preferences.
 
 ### Mission Control Selection
 
-- Mission control selection is surface-controlled and Airport-resolved from Entity data.
-- Airport validates and normalizes requested selection against client-side Entity instances so surfaces do not invent invalid focus.
+- Mission control selection is surface-controlled and Open Mission app-resolved from Entity data.
+- Open Mission validates and normalizes requested selection against client-side Entity instances so surfaces do not invent invalid focus.
 - Selection is not durable Mission coordination state; one operator's current focus must not change every other surface's current focus.
 - Shared Mission navigation state belongs in canonical Entity relationships, not selection.
 
@@ -674,7 +674,7 @@ _Avoid_: workflow projection, stage projection
 
 ### Concurrent Agent Execution Context Updates
 
-- The Mission daemon serializes Agent execution context and Mission artifact updates.
+- The Open Mission daemon serializes Agent execution context and Mission artifact updates.
 - Concurrent updates are resolved by last-write-wins; there is no explicit locking, merge strategy, or user-facing conflict resolution.
 - Surfaces must reactively update to reflect the latest daemon state.
 
@@ -684,7 +684,7 @@ _Avoid_: workflow projection, stage projection
 - Persisted workflow runtime state is versioned by the **Mission runtime schema version** on the **Mission runtime data**.
 - The daemon persistence layer rejects unsupported Mission runtime schema versions instead of allowing surfaces to interpret stale state.
 - Future replacements of Mission runtime data layouts require explicit **Mission runtime migrations** or conversion commands; ordinary State store hydration rejects invalid data and does not repair it.
-- Airport surfaces rely on Entity schemas, System snapshots, Entity events, and the **Daemon protocol version** for runtime compatibility; they do not run Mission runtime migrations.
+- Open Mission surfaces rely on Entity schemas, System snapshots, Entity events, and the **Daemon protocol version** for runtime compatibility; they do not run Mission runtime migrations.
 
 ### Mission State Store And Surface Replication
 
@@ -701,11 +701,11 @@ _Avoid_: workflow projection, stage projection
 - If a Mission dossier checkpoint fails after a State store transaction was accepted, Mission does not roll back the accepted transaction. Agent executions and Agent adapters may already have changed files in the Mission worktree, and the Mission state store cannot emulate each agent adapter's checkpoint or rollback semantics.
 - A Mission checkpoint failure places the Mission in Mission recovery attention while keeping the Daemon in-memory datastore live so the daemon can retry, record diagnostics, or run recovery handling.
 - Mission recovery attention is non-blocking: the daemon continues to accept new State store transactions while persistence recovery is pending, unless a separate future safety policy explicitly pauses a Mission.
-- Mission recovery attention is daemon-only by default. Airport surfaces do not receive it through Mission control view, System snapshot, or Entity data unless a future operator-facing recovery design explicitly promotes it.
+- Mission recovery attention is daemon-only by default. Open Mission surfaces do not receive it through Mission control view, System snapshot, or Entity data unless a future operator-facing recovery design explicitly promotes it.
 - Batching, debouncing, or lifecycle-only checkpoints are future State store persistence policy optimizations and require a new decision before replacing direct checkpoints.
 - SurrealDB capabilities remain available for live querying, indexing, relationships, change streams, and in-memory working state. Configured SurrealDB memory persistence, SurrealKV, RocksDB, or export/import may be added as recovery optimizations, but they must not replace the Mission dossier as the canonical durable recovery format without a new ADR.
 - The daemon owns the State store persistence policy; surfaces and replicas must not define persistence for the Mission state store.
-- Airport surfaces may maintain a Surface state replica for local querying, reconnect, or offline read behavior, but a replica must be populated from daemon-published Entity storage records and Entity change streams.
+- Open Mission surfaces may maintain a Surface state replica for local querying, reconnect, or offline read behavior, but a replica must be populated from daemon-published Entity storage records and Entity change streams.
 - Entity RPC methods remain the surface mutation interface: surfaces submit Entity input commands to the daemon, and the daemon validates and applies those commands through State store transactions before storage changes are checkpointed and published.
 - A future offline surface may queue Entity input commands in an Entity command outbox, but replay must go through the daemon before changes become canonical.
 - Surface state replicas replicate Entity storage records only. Entity data views are derived read surfaces and must not be treated as replicated source of truth.
@@ -714,18 +714,18 @@ _Avoid_: workflow projection, stage projection
 
 ## Example Dialogue
 
-> **Dev:** "When the **Mission system** starts, should it resume every **Mission**?"
-> **Domain expert:** "No. The **Mission system** may discover many **Missions**, but each **Mission** keeps its own execution state."
+> **Dev:** "When the **Open Mission system** starts, should it resume every **Mission**?"
+> **Domain expert:** "No. The **Open Mission system** may discover many **Missions**, but each **Mission** keeps its own execution state."
 
 ## Flagged Ambiguities
 
-- "Mission" was used to mean both the product/system and a long-lived unit of work. Resolved: **Mission** means the unit of work; **Mission system** means the whole product/runtime.
+- "Mission" was used to mean both the product/system and a long-lived unit of work. Resolved: **Mission** means the unit of work; **Open Mission** means the product/runtime.
 - "Repository" can be confused with a checked-out mission worktree. Resolved: **Repository** means the base Git checkout, not a mission checkout.
 - "Branch" was used to mean both a Git ref and a checked-out worktree. Resolved: names or refs use **Ref**; local checked-out Git work uses **Mission worktree**; filesystem locations use **Root** or **Path**.
 - "Stage" can sound like a materialized folder or independently edited state. Resolved: **Mission stage** is derived from **Mission task** progress.
 - Entity schemas used entity-specific id field names such as `repositoryId` or `missionId`. Resolved: an **Entity schema** uses a canonical `id` field for the Entity's identity.
 - Entity behavior was described as if an outboard **Entity adapter** satisfied remote methods. Resolved: the **Entity class** is the behavior owner, while the **Entity contract** holds remote method metadata.
-- "Projection" was used for old coarse-grained mission synchronization, Airport pane data, and workflow-derived state. Resolved: **Projection** is legacy/transition vocabulary; use **System snapshot**, **Entity event**, **Airport pane view**, **Mission control view**, or **Derived workflow state**.
+- "Projection" was used for old coarse-grained mission synchronization, Open Mission pane data, and workflow-derived state. Resolved: **Projection** is legacy/transition vocabulary; use **System snapshot**, **Entity event**, **Open Mission app pane view**, **Mission control view**, or **Derived workflow state**.
 - "Prompt" was used for both raw CLI input and structured operator intent. Resolved: use **Terminal input** for raw CLI bytes and **Agent execution message** or **Agent execution message** for structured daemon-mediated input.
 - Agent execution messages could be mistaken for a new durable Entity. Resolved: session logs record delivered interaction, and **Agent execution context** records lasting context state; no separate message Entity is canonical yet.
 - Agent adapter support was described with broad boolean capabilities. Resolved: use **Agent execution message descriptors** to advertise supported structured messages and their input shapes.

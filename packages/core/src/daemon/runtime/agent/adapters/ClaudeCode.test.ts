@@ -7,13 +7,13 @@ import { Agent } from '../../../../entities/Agent/Agent.js';
 import { AgentRegistry } from '../../../../entities/Agent/AgentRegistry.js';
 import type {
     AgentExecutionEvent,
-    AgentExecutionSnapshot,
+    AgentExecutionType,
     AgentLaunchConfig,
     AgentPrompt
 } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import { createAgentAdapter, type AgentAdapter } from '../AgentAdapter.js';
 import { AgentExecutor } from '../AgentExecutor.js';
-import { MissionMcpServer } from '../mcp/MissionMcpServer.js';
+import { OpenMissionMcpServer } from '../mcp/OpenMissionMcpServer.js';
 import { createMemoryAgentExecutionJournalWriter } from '../testing/createMemoryAgentExecutionJournalWriter.js';
 import { createClaudeCode } from './ClaudeCode.js';
 
@@ -54,16 +54,16 @@ function createLaunchConfig(overrides: Partial<AgentLaunchConfig> = {}): AgentLa
 }
 
 type StartedTerminalExecution = {
-    getSnapshot(): AgentExecutionSnapshot;
+    getSnapshot(): AgentExecutionType;
     onDidEvent(listener: (event: AgentExecutionEvent) => void): { dispose(): void };
-    submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionSnapshot>;
+    submitPrompt(prompt: AgentPrompt): Promise<AgentExecutionType>;
 };
 
 async function startExecution(
     adapter: AgentAdapter,
     config: AgentLaunchConfig
 ): Promise<StartedTerminalExecution> {
-    const missionMcpServer = new MissionMcpServer({
+    const openMissionMcpServer = new OpenMissionMcpServer({
         agentExecutionRegistry: {
             routeTransportObservation() {
                 return {
@@ -75,19 +75,19 @@ async function startExecution(
             }
         }
     });
-    await missionMcpServer.start();
+    await openMissionMcpServer.start();
     const { journalWriter } = createMemoryAgentExecutionJournalWriter();
     const executor = new AgentExecutor({
         agentRegistry: new AgentRegistry({
             agents: [await Agent.fromAdapter(adapter)]
         }),
-        missionMcpServer,
+        openMissionMcpServer,
         journalWriter
     });
     const execution = await executor.startExecution(config);
-    const agentExecutionId = execution.getSnapshot().agentExecutionId;
+    const agentExecutionId = execution.getExecution().agentExecutionId;
     return {
-        getSnapshot: () => execution.getSnapshot(),
+        getSnapshot: () => execution.getExecution(),
         onDidEvent: (listener) => execution.onDidEvent(listener),
         submitPrompt: (prompt) => executor.submitPrompt(agentExecutionId, prompt)
     };
@@ -151,13 +151,13 @@ describe('ClaudeCode', () => {
             mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
         };
 
-        expect(mcpConfig.mcpServers?.['mission-mcp']?.args).toEqual([
+        expect(mcpConfig.mcpServers?.['open-mission-mcp']?.args).toEqual([
             'mcp',
             'connect',
             '--agent-execution',
             snapshot.agentExecutionId
         ]);
-        expect(mcpConfig.mcpServers?.['mission-mcp']?.env?.['MISSION_MCP_TOKEN']).toBeTruthy();
+        expect(mcpConfig.mcpServers?.['open-mission-mcp']?.env?.['OPEN_MISSION_MCP_TOKEN']).toBeTruthy();
     });
 
     it('classifies login failures for connection diagnostics', async () => {

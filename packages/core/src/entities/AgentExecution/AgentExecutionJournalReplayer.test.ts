@@ -4,7 +4,7 @@ import {
     hydrateAgentExecutionDataFromJournal,
     replayAgentExecutionJournal
 } from './AgentExecutionJournalReplayer.js';
-import { AgentExecutionDataSchema, type AgentExecutionDataType } from './AgentExecutionSchema.js';
+import { AgentExecutionSchema, type AgentExecutionType } from './AgentExecutionSchema.js';
 import type { AgentExecutionJournalRecordType } from './AgentExecutionJournalSchema.js';
 
 describe('AgentExecutionJournalReplayer', () => {
@@ -148,7 +148,7 @@ describe('AgentExecutionJournalReplayer', () => {
     });
 
     it('hydrates AgentExecution data from the journal projection', () => {
-        const baseData = AgentExecutionDataSchema.parse({
+        const baseData = AgentExecutionSchema.parse({
             id: 'agent_execution:mission-1/agent-execution-1',
             ownerId: 'mission-1',
             agentExecutionId: 'agent-execution-1',
@@ -170,7 +170,7 @@ describe('AgentExecutionJournalReplayer', () => {
             },
             agentJournalPath: 'agent-journals/agent-execution-1.interaction.jsonl',
             projection: { timelineItems: [] }
-        } satisfies Partial<AgentExecutionDataType>);
+        } satisfies Partial<AgentExecutionType>);
 
         const hydrated = hydrateAgentExecutionDataFromJournal(baseData, [
             createHeaderRecord(),
@@ -230,7 +230,7 @@ describe('AgentExecutionJournalReplayer', () => {
     });
 
     it('hydrates awaiting-agent-response from explicit state', () => {
-        const baseData = AgentExecutionDataSchema.parse({
+        const baseData = AgentExecutionSchema.parse({
             id: 'agent_execution:mission-1/agent-execution-1',
             ownerId: 'mission-1',
             agentExecutionId: 'agent-execution-1',
@@ -247,7 +247,7 @@ describe('AgentExecutionJournalReplayer', () => {
             context: { artifacts: [], instructions: [] },
             runtimeMessages: [],
             projection: { timelineItems: [] }
-        } satisfies Partial<AgentExecutionDataType>);
+        } satisfies Partial<AgentExecutionType>);
 
         const hydrated = hydrateAgentExecutionDataFromJournal(baseData, [
             createHeaderRecord(),

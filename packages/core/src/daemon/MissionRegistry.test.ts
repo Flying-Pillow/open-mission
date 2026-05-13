@@ -38,7 +38,7 @@ describe('MissionRegistry', () => {
 			})).resolves.toBeUndefined();
 
 			expect(loadMission).toHaveBeenCalledTimes(2);
-			expect(consoleError).toHaveBeenCalledWith(expect.stringContaining("Mission daemon could not hydrate mission 'mission-bad'"));
+			expect(consoleError).toHaveBeenCalledWith(expect.stringContaining("Open Mission daemon could not hydrate mission 'mission-bad'"));
 		} finally {
 			consoleError.mockRestore();
 		}
@@ -113,7 +113,7 @@ describe('MissionRegistry', () => {
 
 			expect(loadMission).not.toHaveBeenCalled();
 			expect(logger.warn).toHaveBeenCalledWith(
-				expect.stringContaining("Mission daemon skipped invalid Repository 'repository:github/Flying-Pillow/invalid-repository'"),
+				expect.stringContaining("Open Mission daemon skipped invalid Repository 'repository:github/Flying-Pillow/invalid-repository'"),
 				expect.objectContaining({ repositoryRootPath: invalidRepositoryRoot })
 			);
 		} finally {
@@ -157,7 +157,7 @@ describe('MissionRegistry', () => {
 
 		expect(loadMission).not.toHaveBeenCalled();
 		expect(logger.warn).toHaveBeenCalledWith(
-			expect.stringContaining("Mission daemon skipped invalid Repository 'repository:local/"),
+			expect.stringContaining("Open Mission daemon skipped invalid Repository 'repository:local/"),
 			expect.objectContaining({
 				repositoryRootPath: workspaceRoot,
 				invalidState: expect.objectContaining({
@@ -170,7 +170,7 @@ describe('MissionRegistry', () => {
 });
 
 async function createTempWorkspace(): Promise<string> {
-	const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-daemon-service-'));
+	const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-daemon-service-'));
 	temporaryWorkspaceRoots.add(workspaceRoot);
 	await fs.mkdir(path.join(workspaceRoot, '.mission'), { recursive: true });
 	await fs.writeFile(

@@ -24,7 +24,7 @@ export async function provisionAgentExecutionMcpConfig(input: {
     createDocument: (bridge: AgentExecutionMcpBridge) => unknown;
     referenceConfigPath?: (configPath: string) => string;
 }): Promise<AgentAdapterLaunchPreparation> {
-    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-agent-mcp-'));
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'open-mission-agent-mcp-'));
     const configPath = path.join(directory, input.configFileName);
     const bridge = createAgentExecutionMcpBridge(input.access);
     await fs.writeFile(configPath, `${JSON.stringify(input.createDocument(bridge), null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
@@ -45,14 +45,14 @@ export async function provisionAgentExecutionMcpConfig(input: {
 }
 
 export function createAgentExecutionMcpBridge(access: AgentExecutionMcpAccess): AgentExecutionMcpBridge {
-    const explicitCommand = process.env['MISSION_CLI_COMMAND']?.trim();
+    const explicitCommand = process.env['OPEN_MISSION_CLI_COMMAND']?.trim();
     if (explicitCommand) {
         return {
             command: explicitCommand,
             args: ['mcp', 'connect', '--agent-execution', access.agentExecutionId],
             env: {
-                MISSION_AGENT_EXECUTION_OWNER_ID: access.ownerId,
-                MISSION_MCP_TOKEN: access.token
+                OPEN_MISSION_AGENT_EXECUTION_OWNER_ID: access.ownerId,
+                OPEN_MISSION_MCP_TOKEN: access.token
             }
         };
     }
@@ -63,17 +63,17 @@ export function createAgentExecutionMcpBridge(access: AgentExecutionMcpAccess): 
     }
 
     return {
-        command: 'mission',
+        command: 'open-mission',
         args: ['mcp', 'connect', '--agent-execution', access.agentExecutionId],
         env: {
-            MISSION_AGENT_EXECUTION_OWNER_ID: access.ownerId,
-            MISSION_MCP_TOKEN: access.token
+            OPEN_MISSION_AGENT_EXECUTION_OWNER_ID: access.ownerId,
+            OPEN_MISSION_MCP_TOKEN: access.token
         }
     };
 }
 
 function createSourceRuntimeBridge(access: AgentExecutionMcpAccess): AgentExecutionMcpBridge | undefined {
-    if (process.env['MISSION_DAEMON_RUNTIME_MODE']?.trim() !== 'source') {
+    if (process.env['OPEN_MISSION_DAEMON_RUNTIME_MODE']?.trim() !== 'source') {
         return undefined;
     }
     const workspaceRoot = resolveWorkspaceRoot(process.cwd());
@@ -91,16 +91,16 @@ function createSourceRuntimeBridge(access: AgentExecutionMcpAccess): AgentExecut
             'tsx',
             '--tsconfig',
             './tsconfig.dev.json',
-            './src/mission.ts',
+            './src/open-mission.ts',
             'mcp',
             'connect',
             '--agent-execution',
             access.agentExecutionId
         ],
         env: {
-            MISSION_AGENT_EXECUTION_OWNER_ID: access.ownerId,
-            MISSION_MCP_TOKEN: access.token,
-            MISSION_DAEMON_RUNTIME_MODE: 'source'
+            OPEN_MISSION_AGENT_EXECUTION_OWNER_ID: access.ownerId,
+            OPEN_MISSION_MCP_TOKEN: access.token,
+            OPEN_MISSION_DAEMON_RUNTIME_MODE: 'source'
         }
     };
 }
@@ -109,7 +109,7 @@ function resolveWorkspaceRoot(startDirectory: string): string | undefined {
     let current = path.resolve(startDirectory);
     while (true) {
         if (existsSync(path.join(current, 'pnpm-workspace.yaml'))
-            && existsSync(path.join(current, 'packages', 'mission', 'src', 'mission.ts'))) {
+            && existsSync(path.join(current, 'packages', 'open-mission', 'src', 'open-mission.ts'))) {
             return current;
         }
         const parent = path.dirname(current);

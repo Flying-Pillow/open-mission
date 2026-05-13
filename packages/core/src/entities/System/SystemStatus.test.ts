@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { writeMissionConfig } from '../../settings/MissionInstall.js';
+import { writeOpenMissionConfig } from '../../settings/OpenMissionInstall.js';
 
 describe('SystemStatus', () => {
     afterEach(async () => {
@@ -31,7 +31,7 @@ exit 1
             { mode: 0o755 }
         );
 
-        stubMissionConfigHome(configHome);
+        stubOpenMissionConfigHome(configHome);
         vi.stubEnv('PATH', `${binDirectory}:${process.env['PATH'] ?? ''}`);
 
         const { readSystemStatus } = await import('./SystemStatus.js');
@@ -53,9 +53,9 @@ exit 1
         const emptyPathDirectory = path.join(sandboxRoot, 'empty-path');
         await fs.mkdir(emptyPathDirectory, { recursive: true });
 
-        stubMissionConfigHome(configHome);
+        stubOpenMissionConfigHome(configHome);
         vi.stubEnv('PATH', emptyPathDirectory);
-        await writeMissionConfig({
+        await writeOpenMissionConfig({
             repositoriesRoot: '/tmp/repositories',
             defaultAgentAdapter: 'copilot',
             enabledAgentAdapters: ['copilot', 'codex']
@@ -79,7 +79,7 @@ exit 1
         const emptyPathDirectory = path.join(sandboxRoot, 'empty-path');
         await fs.mkdir(emptyPathDirectory, { recursive: true });
 
-        stubMissionConfigHome(configHome);
+        stubOpenMissionConfigHome(configHome);
         vi.stubEnv('PATH', emptyPathDirectory);
 
         const { readSystemStatus } = await import('./SystemStatus.js');
@@ -115,7 +115,7 @@ exit 1
             { mode: 0o755 }
         );
 
-        stubMissionConfigHome(configHome);
+        stubOpenMissionConfigHome(configHome);
         vi.stubEnv('PATH', missingPathDirectory);
 
         const { readSystemStatus } = await import('./SystemStatus.js');
@@ -156,7 +156,7 @@ exit 1
             { mode: 0o755 }
         );
 
-        stubMissionConfigHome(configHome);
+        stubOpenMissionConfigHome(configHome);
         vi.stubEnv('PATH', `${binDirectory}:${process.env['PATH'] ?? ''}`);
 
         const { readSystemStatus } = await import('./SystemStatus.js');
@@ -175,7 +175,7 @@ exit 1
         const emptyPathDirectory = path.join(sandboxRoot, 'empty-path');
         await fs.mkdir(emptyPathDirectory, { recursive: true });
 
-        stubMissionConfigHome(configHome);
+        stubOpenMissionConfigHome(configHome);
         vi.stubEnv('PATH', emptyPathDirectory);
 
         const { readSystemStatus } = await import('./SystemStatus.js');
@@ -242,7 +242,7 @@ exit 1
         const emptyPathDirectory = path.join(sandboxRoot, 'empty-path');
         await fs.mkdir(emptyPathDirectory, { recursive: true });
 
-        stubMissionConfigHome(configHome);
+        stubOpenMissionConfigHome(configHome);
         vi.stubEnv('PATH', emptyPathDirectory);
 
         const { readSystemStatus } = await import('./SystemStatus.js');
@@ -278,9 +278,54 @@ exit 1
 
         await fs.rm(sandboxRoot, { recursive: true, force: true });
     });
+
+    it('prefers daemon-provided agent execution runtime summary when available', async () => {
+        const sandboxRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-system-status-'));
+        const configHome = path.join(sandboxRoot, 'config-home');
+        const emptyPathDirectory = path.join(sandboxRoot, 'empty-path');
+        await fs.mkdir(emptyPathDirectory, { recursive: true });
+
+        stubOpenMissionConfigHome(configHome);
+        vi.stubEnv('PATH', emptyPathDirectory);
+
+        const { readSystemStatus } = await import('./SystemStatus.js');
+        const status = readSystemStatus({
+            cwd: sandboxRoot,
+            runtime: {
+                activeAgentExecutionCount: 4,
+                agentExecutionSummary: {
+                    activeAgentExecutionCount: 4,
+                    attachedAgentExecutionCount: 2,
+                    detachedAgentExecutionCount: 2,
+                    degradedAgentExecutionCount: 3,
+                    protocolIncompatibleAgentExecutionCount: 1,
+                    executionsWithoutRuntimeLeaseCount: 2,
+                    executions: []
+                },
+                runtimeSupervision: {
+                    daemonProcessId: 4242,
+                    startedAt: '2026-05-10T00:00:00.000Z',
+                    owners: [],
+                    relationships: [],
+                    leases: []
+                }
+            }
+        });
+
+        expect(status.runtime).toMatchObject({
+            activeAgentExecutions: 4,
+            attachedAgentExecutions: 2,
+            detachedAgentExecutions: 2,
+            degradedAgentExecutions: 3,
+            protocolIncompatibleAgentExecutions: 1,
+            agentExecutionsWithoutRuntimeLease: 2
+        });
+
+        await fs.rm(sandboxRoot, { recursive: true, force: true });
+    });
 });
 
-function stubMissionConfigHome(configHome: string): void {
+function stubOpenMissionConfigHome(configHome: string): void {
     vi.stubEnv('XDG_CONFIG_HOME', configHome);
-    vi.stubEnv('MISSION_CONFIG_PATH', configHome);
+    vi.stubEnv('OPEN_MISSION_CONFIG_PATH', configHome);
 }

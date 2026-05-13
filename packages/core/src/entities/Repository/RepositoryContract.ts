@@ -1,5 +1,5 @@
 import { EntityClassCommandViewSchema, EntityCommandViewSchema, type EntityContractType } from '../Entity/EntitySchema.js';
-import { AgentExecutionDataSchema } from '../AgentExecution/AgentExecutionSchema.js';
+import { AgentExecutionSchema } from '../AgentExecution/AgentExecutionSchema.js';
 import { Repository } from './Repository.js';
 import {
     RepositoryAddSchema,
@@ -76,7 +76,7 @@ export const RepositoryContract: EntityContractType = {
         ensureSystemAgentExecution: {
             kind: 'mutation',
             payload: RepositoryEnsureSystemAgentExecutionSchema,
-            result: AgentExecutionDataSchema,
+            result: AgentExecutionSchema,
             execution: 'class'
         },
         classCommands: {
@@ -200,13 +200,13 @@ export const RepositoryContract: EntityContractType = {
         ensureRepositoryAgentExecution: {
             kind: 'mutation',
             payload: RepositoryInitializeSchema,
-            result: AgentExecutionDataSchema,
+            result: AgentExecutionSchema,
             execution: 'entity'
         },
         refreshRepositoryAgentExecution: {
             kind: 'mutation',
             payload: RepositoryInitializeSchema,
-            result: AgentExecutionDataSchema,
+            result: AgentExecutionSchema,
             execution: 'entity'
         },
         fetchExternalState: {

@@ -11,7 +11,7 @@ describe('AgentExecutionSignalRegistry', () => {
                 summary: 'Inspecting ArtifactViewer.svelte',
                 artifacts: [
                     {
-                        path: 'apps/airport/web/src/lib/components/entities/Artifact/ArtifactViewer.svelte',
+                        path: 'apps/web/src/lib/components/entities/Artifact/ArtifactViewer.svelte',
                         activity: 'read'
                     }
                 ],
@@ -28,7 +28,7 @@ describe('AgentExecutionSignalRegistry', () => {
         expect(item?.primitive).toBe('activity.progress');
         expect(item?.behavior.class).toBe('live-activity');
         expect(item?.payload.title).toBe('Reading artifact');
-        expect(item?.payload.path).toBe('apps/airport/web/src/lib/components/entities/Artifact/ArtifactViewer.svelte');
+        expect(item?.payload.path).toBe('apps/web/src/lib/components/entities/Artifact/ArtifactViewer.svelte');
     });
 
     it('projects write-focused messages as artifact timeline items', () => {
@@ -41,7 +41,7 @@ describe('AgentExecutionSignalRegistry', () => {
                 text: 'Applied the close button change.',
                 artifacts: [
                     {
-                        path: 'apps/airport/web/src/lib/components/entities/Artifact/ArtifactViewer.svelte',
+                        path: 'apps/web/src/lib/components/entities/Artifact/ArtifactViewer.svelte',
                         activity: 'write'
                     }
                 ],

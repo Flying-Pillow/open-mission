@@ -1,6 +1,6 @@
 import * as os from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { getDefaultMissionConfig, getMissionGitHubCliBinary, readMissionConfig, resolveRepositoriesRoot } from '../../settings/MissionInstall.js';
+import { getDefaultOpenMissionConfig, getOpenMissionGitHubCliBinary, readOpenMissionConfig, resolveRepositoriesRoot } from '../../settings/OpenMissionInstall.js';
 import { getDaemonRuntimePath } from '../../daemon/daemonPaths.js';
 import { PROTOCOL_VERSION } from '../../daemon/protocol/contracts.js';
 import type {
@@ -8,6 +8,7 @@ import type {
     DaemonRuntimeOwnerReference,
     DaemonRuntimeSupervisionSnapshot
 } from '../../daemon/runtime/DaemonRuntimeSupervisionSchema.js';
+import type { AgentExecutionRuntimeSummary } from '../../daemon/runtime/agent/AgentExecutionRegistry.js';
 import { systemConfigSchema, systemStateSchema, type RuntimeSystemState, type SystemConfig, type SystemState } from './SystemSchema.js';
 
 const GITHUB_CLI_TIMEOUT_MS = 1_500;
@@ -30,6 +31,7 @@ export type SystemStatusRuntimeOptions = {
     loadedRepositoryCount?: number;
     loadedMissionCount?: number;
     activeAgentExecutionCount?: number;
+    agentExecutionSummary?: AgentExecutionRuntimeSummary;
     surreal?: RuntimeSystemState['surreal'];
 };
 
@@ -45,7 +47,7 @@ export function readSystemStatus(options: SystemStatusReadOptions = {}): SystemS
     const now = Date.now();
     const authToken = options.authToken?.trim();
     const cwd = options.cwd?.trim() || process.cwd();
-    const ghBinary = getMissionGitHubCliBinary() ?? 'gh';
+    const ghBinary = getOpenMissionGitHubCliBinary() ?? 'gh';
     const cacheKey = createSystemStatusCacheKey({
         cwd,
         ghBinary,
@@ -62,7 +64,7 @@ export function readSystemStatus(options: SystemStatusReadOptions = {}): SystemS
 export function refreshSystemStatus(options: SystemStatusReadOptions = {}): SystemState {
     const authToken = options.authToken?.trim();
     const cwd = options.cwd?.trim() || process.cwd();
-    const ghBinary = getMissionGitHubCliBinary() ?? 'gh';
+    const ghBinary = getOpenMissionGitHubCliBinary() ?? 'gh';
     const cacheKey = createSystemStatusCacheKey({
         cwd,
         ghBinary,
@@ -79,7 +81,7 @@ export function refreshSystemStatus(options: SystemStatusReadOptions = {}): Syst
 export function peekCachedSystemStatus(options: SystemStatusReadOptions = {}): SystemState {
     const authToken = options.authToken?.trim();
     const cwd = options.cwd?.trim() || process.cwd();
-    const ghBinary = getMissionGitHubCliBinary() ?? 'gh';
+    const ghBinary = getOpenMissionGitHubCliBinary() ?? 'gh';
     const cacheKey = createSystemStatusCacheKey({
         cwd,
         ghBinary,
@@ -309,7 +311,8 @@ function buildRuntimeSystemState(runtimeOptions: SystemStatusRuntimeOptions | un
     const runtimeSupervision = runtimeOptions?.runtimeSupervision;
     const leases = runtimeSupervision?.leases ?? [];
     const activeLeases = leases.filter((lease) => lease.state === 'active');
-    const activeAgentExecutions = runtimeOptions?.activeAgentExecutionCount ?? 0;
+    const activeAgentExecutionSummary = runtimeOptions?.agentExecutionSummary;
+    const activeAgentExecutions = activeAgentExecutionSummary?.activeAgentExecutionCount ?? runtimeOptions?.activeAgentExecutionCount ?? 0;
     const activeAgentExecutionOwners = runtimeSupervision?.owners.filter(isAgentExecutionOwner) ?? [];
     const activeAgentExecutionOwnerKeys = new Set(
         activeAgentExecutionOwners.map((owner) => createAgentExecutionOwnerKey(owner.ownerId, owner.agentExecutionId))
@@ -325,16 +328,20 @@ function buildRuntimeSystemState(runtimeOptions: SystemStatusRuntimeOptions | un
         }
         return !activeAgentExecutionOwnerKeys.has(createAgentExecutionOwnerKey(lease.owner.ownerId, lease.owner.agentExecutionId));
     }).length;
-    const agentExecutionsWithoutRuntimeLease = Math.max(0, activeAgentExecutions - activeAgentExecutionRuntimeLeaseOwnerKeys.size);
+    const agentExecutionsWithoutRuntimeLease = activeAgentExecutionSummary?.executionsWithoutRuntimeLeaseCount
+        ?? Math.max(0, activeAgentExecutions - activeAgentExecutionRuntimeLeaseOwnerKeys.size);
     const terminalLeasesWithoutOwner = activeLeases.filter((lease) => lease.kind === 'terminal' && lease.owner.kind !== 'agent-execution').length;
-    const detachedAgentExecutions = Math.max(agentExecutionsWithoutRuntimeLease, Math.max(0, activeAgentExecutions - activeAgentExecutionOwners.length));
-    const protocolIncompatibleAgentExecutions = activeLeases.filter((lease) => lease.owner.kind === 'agent-execution' && lease.metadata?.['runtimeHealth'] === 'protocol-incompatible').length;
-    const degradedAgentExecutions = Math.max(detachedAgentExecutions, protocolIncompatibleAgentExecutions);
+    const detachedAgentExecutions = activeAgentExecutionSummary?.detachedAgentExecutionCount
+        ?? Math.max(agentExecutionsWithoutRuntimeLease, Math.max(0, activeAgentExecutions - activeAgentExecutionOwners.length));
+    const protocolIncompatibleAgentExecutions = activeAgentExecutionSummary?.protocolIncompatibleAgentExecutionCount
+        ?? activeLeases.filter((lease) => lease.owner.kind === 'agent-execution' && lease.metadata?.['runtimeHealth'] === 'protocol-incompatible').length;
+    const degradedAgentExecutions = activeAgentExecutionSummary?.degradedAgentExecutionCount
+        ?? Math.max(detachedAgentExecutions, protocolIncompatibleAgentExecutions);
     return {
         loadedRepositories: runtimeOptions?.loadedRepositoryCount ?? 0,
         loadedMissions: runtimeOptions?.loadedMissionCount ?? 0,
         activeAgentExecutions,
-        attachedAgentExecutions: Math.max(0, activeAgentExecutions - detachedAgentExecutions),
+        attachedAgentExecutions: activeAgentExecutionSummary?.attachedAgentExecutionCount ?? Math.max(0, activeAgentExecutions - detachedAgentExecutions),
         detachedAgentExecutions,
         degradedAgentExecutions,
         protocolIncompatibleAgentExecutions,
@@ -371,14 +378,14 @@ function hasAgentExecutionOwner(lease: DaemonRuntimeLease): lease is DaemonRunti
 }
 
 function buildSystemConfig(): SystemConfig {
-    const missionConfig = readMissionConfig() ?? getDefaultMissionConfig();
+    const openMissionConfig = readOpenMissionConfig() ?? getDefaultOpenMissionConfig();
     return systemConfigSchema.parse({
-        repositoriesRoot: resolveRepositoriesRoot(missionConfig),
-        defaultAgentAdapter: missionConfig.defaultAgentAdapter,
-        enabledAgentAdapters: missionConfig.enabledAgentAdapters,
-        ...(missionConfig.defaultAgentMode ? { defaultAgentMode: missionConfig.defaultAgentMode } : {}),
-        ...(missionConfig.defaultModel ? { defaultModel: missionConfig.defaultModel } : {}),
-        ...(missionConfig.defaultReasoningEffort ? { defaultReasoningEffort: missionConfig.defaultReasoningEffort } : {})
+        repositoriesRoot: resolveRepositoriesRoot(openMissionConfig),
+        defaultAgentAdapter: openMissionConfig.defaultAgentAdapter,
+        enabledAgentAdapters: openMissionConfig.enabledAgentAdapters,
+        ...(openMissionConfig.defaultAgentMode ? { defaultAgentMode: openMissionConfig.defaultAgentMode } : {}),
+        ...(openMissionConfig.defaultModel ? { defaultModel: openMissionConfig.defaultModel } : {}),
+        ...(openMissionConfig.defaultReasoningEffort ? { defaultReasoningEffort: openMissionConfig.defaultReasoningEffort } : {})
     });
 }
 
