@@ -5,11 +5,11 @@ import type {
     AgentExecutionType,
     AgentLaunchConfig,
     AgentPrompt
-} from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import type {
     AgentExecutionProtocolDescriptorType,
-} from '../../../entities/AgentExecution/AgentExecutionProtocolSchema.js';
-import type { AgentExecutionTransportStateType } from '../../../entities/AgentExecution/AgentExecutionStateSchema.js';
+} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolSchema.js';
+import type { AgentExecutionTransportStateType } from '../../../entities/AgentExecution/state/AgentExecutionStateSchema.js';
 import type { SharedTerminalRegistryOptions } from '../../../entities/Terminal/TerminalRegistry.js';
 
 export type AgentExecutionRuntimeController = {

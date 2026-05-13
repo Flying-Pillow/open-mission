@@ -2,7 +2,7 @@ import { z } from 'zod/v4';
 import {
     AgentSignalArtifactReferenceSchema,
     AgentSignalInputChoiceSchema
-} from './AgentExecutionProtocolSchema.js';
+} from '../protocol/AgentExecutionProtocolSchema.js';
 import {
     AgentExecutionActivityProgressSchema,
     AgentExecutionActivityStateSchema,

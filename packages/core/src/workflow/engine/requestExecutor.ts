@@ -43,11 +43,11 @@ import type {
 	AgentExecutionId,
 	AgentExecutionReference,
 	AgentExecutionType
-} from '../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+} from '../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import {
 	isTerminalFinalStatus,
 	type AgentExecutionSignalDecision
-} from '../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+} from '../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 
 type RuntimeAgentExecutionHandle = {
 	execution: AgentExecution;

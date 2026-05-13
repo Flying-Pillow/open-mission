@@ -6,19 +6,19 @@ import type {
     AgentExecutionObservationAddress,
     AgentExecutionScope,
     AgentExecutionType
-} from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
-import type { AgentExecutionJournalRecordType } from '../../../entities/AgentExecution/AgentExecutionJournalSchema.js';
-import { replayAgentExecutionJournal } from '../../../entities/AgentExecution/AgentExecutionJournalReplayer.js';
-import type { AgentExecutionJournalWriter } from '../../../entities/AgentExecution/AgentExecutionJournalWriter.js';
+} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+import type { AgentExecutionJournalRecordType } from '../../../entities/AgentExecution/journal/AgentExecutionJournalSchema.js';
+import { replayAgentExecutionJournal } from '../../../entities/AgentExecution/journal/AgentExecutionJournalReplayer.js';
+import type { AgentExecutionJournalWriter } from '../../../entities/AgentExecution/journal/AgentExecutionJournalWriter.js';
 import {
     AgentExecutionObservationAckSchema,
     type AgentExecutionObservationAckType
-} from '../../../entities/AgentExecution/AgentExecutionProtocolSchema.js';
+} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolSchema.js';
 import {
     AgentExecutionObservationLedger,
     AgentExecutionObservationPolicy
-} from '../../../entities/AgentExecution/AgentExecutionObservationPolicy.js';
-import { deriveActivityStateFromProgressState } from '../../../entities/AgentExecution/AgentExecutionRuntimeSemantics.js';
+} from '../../../entities/AgentExecution/runtime/AgentExecutionObservationPolicy.js';
+import { deriveActivityStateFromProgressState } from '../../../entities/AgentExecution/state/AgentExecutionRuntimeSemantics.js';
 import type { AgentAdapter } from './AgentAdapter.js';
 import { AgentExecutionObservationRouter } from './signals/AgentExecutionObservationRouter.js';
 

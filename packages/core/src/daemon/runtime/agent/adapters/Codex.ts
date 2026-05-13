@@ -9,7 +9,7 @@ import {
     getStringField,
     parseJsonLine
 } from '../AgentAdapter.js';
-import type { AgentLaunchConfig } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import type { AgentLaunchConfig } from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import { createAgentExecutionMcpBridge } from '../mcp/AgentExecutionMcpProvisioner.js';
 
 const CODEX_AGENT_ID = 'codex' as const;

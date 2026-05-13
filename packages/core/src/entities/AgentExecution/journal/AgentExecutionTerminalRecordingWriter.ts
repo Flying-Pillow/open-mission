@@ -1,10 +1,10 @@
-import { TerminalRegistry, type TerminalRecordingUpdate, type TerminalSnapshot } from '../Terminal/TerminalRegistry.js';
+import { TerminalRegistry, type TerminalRecordingUpdate, type TerminalSnapshot } from '../../Terminal/TerminalRegistry.js';
 import {
     AgentExecutionTerminalRecordingEventSchema,
     type AgentExecutionRecord,
     type AgentExecutionTerminalRecordingEventType
-} from './AgentExecutionSchema.js';
-import type { MissionDossierFilesystem } from '../Mission/MissionDossierFilesystem.js';
+} from '../AgentExecutionSchema.js';
+import type { MissionDossierFilesystem } from '../../Mission/MissionDossierFilesystem.js';
 
 type AgentExecutionTerminalRecordingWriterState = {
     execution: AgentExecutionRecord;

@@ -4,7 +4,7 @@ import type {
 import * as path from 'node:path';
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import type { AgentAdapter } from '../../daemon/runtime/agent/AgentAdapter.js';
-import type { AgentExecutionType } from '../AgentExecution/AgentExecutionProtocolTypes.js';
+import type { AgentExecutionType } from '../AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import type { AgentExecutionLaunchRequest } from '../AgentExecution/AgentExecutionSchema.js';
 import type { AgentRegistry } from '../Agent/AgentRegistry.js';
 import { AgentExecution } from '../AgentExecution/AgentExecution.js';

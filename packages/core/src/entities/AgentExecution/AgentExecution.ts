@@ -9,14 +9,14 @@ import type {
 	AgentLaunchConfig,
 	AgentPrompt,
 	AgentExecutionObservation
-} from './AgentExecutionProtocolTypes.js';
+} from './protocol/AgentExecutionProtocolTypes.js';
 import {
 	deriveAgentExecutionInteractionCapabilities,
 	describeAgentExecutionScope,
 	isTerminalFinalStatus as isAgentExecutionTerminalFinalStatus,
 	type AgentExecutionSignalDecision
-} from './AgentExecutionProtocolTypes.js';
-import { createAgentExecutionProtocolDescriptor } from './AgentExecutionProtocolDescriptor.js';
+} from './protocol/AgentExecutionProtocolTypes.js';
+import { createAgentExecutionProtocolDescriptor } from './protocol/AgentExecutionProtocolDescriptor.js';
 import { createEntityId, Entity, type EntityExecutionContext } from '../Entity/Entity.js';
 import type { TaskDossierRecordType } from '../Task/TaskSchema.js';
 import { Repository } from '../Repository/Repository.js';
@@ -47,8 +47,8 @@ import {
 	type AgentExecutionMessageDescriptorType,
 	type AgentExecutionProtocolDescriptorType,
 	type AgentExecutionInteractionCapabilitiesType
-} from './AgentExecutionProtocolSchema.js';
-import { AgentExecutionSemanticOperationResultSchema } from './AgentExecutionSemanticOperationSchema.js';
+} from './protocol/AgentExecutionProtocolSchema.js';
+import { AgentExecutionSemanticOperationResultSchema } from './protocol/AgentExecutionSemanticOperationSchema.js';
 import {
 	AgentExecutionProjectionSchema,
 	AgentExecutionTimelineItemSchema,
@@ -56,27 +56,27 @@ import {
 	type AgentExecutionActivityProjectionType,
 	type AgentExecutionProjectionType,
 	type AgentExecutionTimelineItemType
-} from './AgentExecutionProjectionSchema.js';
+} from './state/AgentExecutionProjectionSchema.js';
 import {
 	AgentExecutionTerminalRecordingSchema,
 	AgentExecutionTerminalSnapshotSchema,
 	type AgentExecutionTerminalHandleType
-} from './AgentExecutionTransportSchema.js';
+} from './state/AgentExecutionTransportSchema.js';
 import {
 	type AgentExecutionTransportStateType,
 	type AgentExecutionRuntimeActivityType,
 	type AgentExecutionActivityStateType
-} from './AgentExecutionStateSchema.js';
+} from './state/AgentExecutionStateSchema.js';
 import type { MissionType } from '../Mission/MissionSchema.js';
 import { MissionDossierFilesystem } from '../Mission/MissionDossierFilesystem.js';
 import { Terminal } from '../Terminal/Terminal.js';
-import { hydrateAgentExecutionDataFromJournal } from './AgentExecutionJournalReplayer.js';
-import { AgentExecutionJournalFileStore } from './AgentExecutionJournalFileStore.js';
-import { createAgentExecutionJournalReference } from './AgentExecutionJournalWriter.js';
-import { deriveActivityStateFromProgressState } from './AgentExecutionRuntimeSemantics.js';
-import { projectAgentExecutionObservationSignalToTimelineItem } from './AgentExecutionSignalRegistry.js';
-import type { AgentExecutionJournalRecordType } from './AgentExecutionJournalSchema.js';
-import { resolveAgentExecutionMessageShorthand } from './AgentExecutionMessageShorthand.js';
+import { hydrateAgentExecutionDataFromJournal } from './journal/AgentExecutionJournalReplayer.js';
+import { AgentExecutionJournalFileStore } from './journal/AgentExecutionJournalFileStore.js';
+import { createAgentExecutionJournalReference } from './journal/AgentExecutionJournalWriter.js';
+import { deriveActivityStateFromProgressState } from './state/AgentExecutionRuntimeSemantics.js';
+import { projectAgentExecutionObservationSignalToTimelineItem } from './protocol/AgentExecutionSignalRegistry.js';
+import type { AgentExecutionJournalRecordType } from './journal/AgentExecutionJournalSchema.js';
+import { resolveAgentExecutionMessageShorthand } from './protocol/AgentExecutionMessageShorthand.js';
 
 type LocatedAgentExecutionData = {
 	data: AgentExecutionType;

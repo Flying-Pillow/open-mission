@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentLaunchConfig } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import type { AgentLaunchConfig } from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import { createAgentAdapter } from '../AgentAdapter.js';
 import { createPi } from './Pi.js';
 

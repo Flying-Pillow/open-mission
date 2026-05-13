@@ -2,7 +2,7 @@ import { z } from 'zod/v4';
 import {
     EntityCommandInputDescriptorSchema,
     EntityPresentationToneSchema
-} from '../Entity/EntitySchema.js';
+} from '../../Entity/EntitySchema.js';
 import {
     AgentExecutionSemanticOperationPayloadSchema,
     AgentExecutionSemanticOperationResultSchema,

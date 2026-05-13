@@ -1,15 +1,15 @@
-import { createAgentExecutionProtocolDescriptor } from '../../../entities/AgentExecution/AgentExecutionProtocolDescriptor.js';
+import { createAgentExecutionProtocolDescriptor } from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolDescriptor.js';
 import type { AgentRegistry } from '../../../entities/Agent/AgentRegistry.js';
 import { AgentExecution } from '../../../entities/AgentExecution/AgentExecution.js';
 import {
     createDefaultAgentExecutionJournalWriter,
     type AgentExecutionJournalWriter
-} from '../../../entities/AgentExecution/AgentExecutionJournalWriter.js';
-import type { AgentExecutionJournalRecordType } from '../../../entities/AgentExecution/AgentExecutionJournalSchema.js';
+} from '../../../entities/AgentExecution/journal/AgentExecutionJournalWriter.js';
+import type { AgentExecutionJournalRecordType } from '../../../entities/AgentExecution/journal/AgentExecutionJournalSchema.js';
 import {
     AgentExecutionObservationLedger,
     AgentExecutionObservationPolicy
-} from '../../../entities/AgentExecution/AgentExecutionObservationPolicy.js';
+} from '../../../entities/AgentExecution/runtime/AgentExecutionObservationPolicy.js';
 import type {
     AgentCommand,
     AgentExecutionEvent,
@@ -19,14 +19,14 @@ import type {
     AgentExecutionType,
     AgentLaunchConfig,
     AgentPrompt
-} from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import type {
     AgentExecutionObservationAckType,
     AgentExecutionMessageDescriptorType,
     AgentExecutionProtocolDescriptorType,
     AgentSignalDeliveryType
-} from '../../../entities/AgentExecution/AgentExecutionProtocolSchema.js';
-import type { AgentExecutionTransportStateType } from '../../../entities/AgentExecution/AgentExecutionStateSchema.js';
+} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolSchema.js';
+import type { AgentExecutionTransportStateType } from '../../../entities/AgentExecution/state/AgentExecutionStateSchema.js';
 import type { AgentAdapter, AgentExecutionMcpAccess } from './AgentAdapter.js';
 import {
     AgentExecutionObservationCoordinator

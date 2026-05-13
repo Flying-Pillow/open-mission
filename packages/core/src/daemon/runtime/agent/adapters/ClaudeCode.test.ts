@@ -10,7 +10,7 @@ import type {
     AgentExecutionType,
     AgentLaunchConfig,
     AgentPrompt
-} from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+} from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import { createAgentAdapter, type AgentAdapter } from '../AgentAdapter.js';
 import { AgentExecutor } from '../AgentExecutor.js';
 import { OpenMissionMcpServer } from '../mcp/OpenMissionMcpServer.js';

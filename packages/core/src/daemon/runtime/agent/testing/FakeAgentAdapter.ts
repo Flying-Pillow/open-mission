@@ -8,7 +8,7 @@ import type {
 	AgentExecutionEvent,
 	AgentExecutionReference,
 	AgentExecutionType
-} from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+} from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 
 export type FakeAgentExecutionView = AgentExecutionType & {
 	phase: AgentExecutionType['status'];

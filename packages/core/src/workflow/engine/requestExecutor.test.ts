@@ -12,7 +12,7 @@ import { Agent } from '../../entities/Agent/Agent.js';
 import { AgentRegistry } from '../../entities/Agent/AgentRegistry.js';
 import type { WorkflowTaskRuntimeState, WorkflowRequest } from './types.js';
 import type { TaskDossierRecordType } from '../../entities/Task/TaskSchema.js';
-import type { AgentExecutionReference } from '../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import type { AgentExecutionReference } from '../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import type { AgentExecution } from '../../entities/AgentExecution/AgentExecution.js';
 
 function createDescriptor(): MissionDescriptor {

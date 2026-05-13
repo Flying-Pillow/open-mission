@@ -1,9 +1,9 @@
-import { AgentExecutionJournalWriter } from '../../../../entities/AgentExecution/AgentExecutionJournalWriter.js';
+import { AgentExecutionJournalWriter } from '../../../../entities/AgentExecution/journal/AgentExecutionJournalWriter.js';
 import type {
     AgentExecutionJournalReferenceType,
     AgentExecutionJournalStore
-} from '../../../../entities/AgentExecution/AgentExecutionJournalSchema.js';
-import type { AgentExecutionJournalRecordType } from '../../../../entities/AgentExecution/AgentExecutionJournalSchema.js';
+} from '../../../../entities/AgentExecution/journal/AgentExecutionJournalSchema.js';
+import type { AgentExecutionJournalRecordType } from '../../../../entities/AgentExecution/journal/AgentExecutionJournalSchema.js';
 
 export function createMemoryAgentExecutionJournalWriter(options: {
     ensureError?: Error;

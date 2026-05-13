@@ -2,7 +2,7 @@ import { z } from 'zod/v4';
 import {
     type AgentExecutionLaunchModeType,
     AgentExecutionReasoningEffortSchema
-} from '../AgentExecution/AgentExecutionProtocolSchema.js';
+} from '../AgentExecution/protocol/AgentExecutionProtocolSchema.js';
 import {
     WorkflowConfigurationSnapshotSchema,
     WorkflowGateProjectionSchema,

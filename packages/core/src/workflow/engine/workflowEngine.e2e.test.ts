@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MissionDescriptor } from '../../entities/Mission/MissionSchema.js';
 import type { MissionDossierFilesystem } from '../../entities/Mission/MissionDossierFilesystem.js';
-import type { AgentCommand, AgentPrompt } from '../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import type { AgentCommand, AgentPrompt } from '../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import {
     createWorkflowConfigurationSnapshot,
     createWorkflowStateData,

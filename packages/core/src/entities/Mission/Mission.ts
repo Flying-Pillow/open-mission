@@ -12,7 +12,7 @@ import {
 import type {
 	AgentExecutionLaunchModeType,
 	AgentExecutionReasoningEffortType
-} from '../AgentExecution/AgentExecutionProtocolSchema.js';
+} from '../AgentExecution/protocol/AgentExecutionProtocolSchema.js';
 import type {
 	AgentExecutionConsoleEvent,
 	AgentExecutionConsoleState,
@@ -24,9 +24,9 @@ import type {
 import type {
 	AgentCommand,
 	AgentPrompt
-} from '../AgentExecution/AgentExecutionProtocolTypes.js';
+} from '../AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import { AgentExecution } from '../AgentExecution/AgentExecution.js';
-import { AgentExecutionTerminalRecordingWriter } from '../AgentExecution/AgentExecutionTerminalRecordingWriter.js';
+import { AgentExecutionTerminalRecordingWriter } from '../AgentExecution/journal/AgentExecutionTerminalRecordingWriter.js';
 import {
 	type GateIntent,
 	type MissionBrief,
@@ -55,7 +55,7 @@ import type {
 	AgentExecutionType,
 	AgentExecutionObservation,
 	AgentExecutionSignalDecision
-} from '../AgentExecution/AgentExecutionProtocolTypes.js';
+} from '../AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import { MISSION_ARTIFACT_KEYS, getMissionStageDefinition } from '../../workflow/mission/manifest.js';
 import { Artifact } from '../Artifact/Artifact.js';
 import { Task, type TaskConfigureOptions } from '../Task/Task.js';

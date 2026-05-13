@@ -7,20 +7,20 @@ import {
     AgentExecutionCapabilityStateSchema,
     AgentExecutionLifecycleStateSchema,
     AgentExecutionTransportStateSchema
-} from './AgentExecutionStateSchema.js';
+} from '../state/AgentExecutionStateSchema.js';
 import {
     AgentExecutionProtocolDescriptorSchema,
     AgentExecutionProtocolOwnerEntitySchema
-} from './AgentExecutionProtocolSchema.js';
+} from '../protocol/AgentExecutionProtocolSchema.js';
 import {
     AgentExecutionJournalSignalSchema
-} from './AgentExecutionSignalRegistry.js';
+} from '../protocol/AgentExecutionSignalRegistry.js';
 export type {
     AgentExecutionJournalInputChoiceType,
     AgentExecutionJournalSignalConfidenceType,
     AgentExecutionJournalSignalSourceType,
     AgentExecutionJournalSignalType
-} from './AgentExecutionSignalRegistry.js';
+} from '../protocol/AgentExecutionSignalRegistry.js';
 
 const journalTextSchema = z.string().trim().min(1);
 const journalPayloadSchema = z.record(z.string(), z.unknown());

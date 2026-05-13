@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AgentExecution } from './AgentExecution.js';
+import { AgentExecution } from '../AgentExecution.js';
 import { createAgentExecutionProtocolDescriptor } from './AgentExecutionProtocolDescriptor.js';
 import { resolveAgentExecutionMessageShorthand } from './AgentExecutionMessageShorthand.js';
 

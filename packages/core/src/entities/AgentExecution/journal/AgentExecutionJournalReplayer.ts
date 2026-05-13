@@ -5,7 +5,7 @@ import {
     type AgentExecutionActivityProjectionType,
     type AgentExecutionProjectionType,
     type AgentExecutionTimelineItemType
-} from './AgentExecutionProjectionSchema.js';
+} from '../state/AgentExecutionProjectionSchema.js';
 import {
     type AgentExecutionActivityStateType,
     type AgentExecutionAttentionStateType,
@@ -13,9 +13,9 @@ import {
     type AgentExecutionRuntimeActivityType,
     type AgentExecutionTelemetry,
     type AgentExecutionTransportStateType
-} from './AgentExecutionStateSchema.js';
-import type { AgentExecutionProtocolDescriptorType } from './AgentExecutionProtocolSchema.js';
-import type { AgentExecutionType } from './AgentExecutionSchema.js';
+} from '../state/AgentExecutionStateSchema.js';
+import type { AgentExecutionProtocolDescriptorType } from '../protocol/AgentExecutionProtocolSchema.js';
+import type { AgentExecutionType } from '../AgentExecutionSchema.js';
 import type {
     AgentExecutionActivityUpdatedRecordType,
     AgentExecutionJournalHeaderRecordType,
@@ -23,7 +23,7 @@ import type {
     AgentExecutionObservationRecordType,
     AgentExecutionRuntimeFactRecordType
 } from './AgentExecutionJournalSchema.js';
-import { projectAgentExecutionObservationSignalToTimelineItem } from './AgentExecutionSignalRegistry.js';
+import { projectAgentExecutionObservationSignalToTimelineItem } from '../protocol/AgentExecutionSignalRegistry.js';
 
 export type AgentExecutionJournalReplayState = {
     projection: AgentExecutionProjectionType;

@@ -4,7 +4,7 @@ import type {
     AgentConnectionDiagnostic,
     AgentLaunchConfig,
     AgentMetadata
-} from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 
 const DEFAULT_PROMPT = 'Reply with only: ok';
 const DEFAULT_TIMEOUT_MS = 15_000;

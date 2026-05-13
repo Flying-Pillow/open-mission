@@ -18,7 +18,7 @@ import {
     type AgentSignalInputChoiceType,
     type AgentExecutionTimelineItemType,
     type AgentExecutionTimelineProvenanceType
-} from './AgentExecutionSchema.js';
+} from '../AgentExecutionSchema.js';
 
 const journalSignalTextSchema = z.string().trim().min(1).max(MAX_AGENT_EXECUTION_SIGNAL_TEXT_LENGTH);
 const journalSignalPayloadValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);

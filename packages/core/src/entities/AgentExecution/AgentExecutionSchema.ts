@@ -18,8 +18,8 @@ import {
     type AgentExecutionMessageDescriptorType,
     type AgentExecutionProtocolDescriptorType,
     type AgentExecutionScopeType
-} from './AgentExecutionProtocolSchema.js';
-import { AgentExecutionProjectionSchema } from './AgentExecutionProjectionSchema.js';
+} from './protocol/AgentExecutionProtocolSchema.js';
+import { AgentExecutionProjectionSchema } from './state/AgentExecutionProjectionSchema.js';
 import {
     AgentExecutionActivityStateSchema,
     AgentExecutionAttentionStateSchema,
@@ -37,20 +37,20 @@ import {
     type AgentExecutionRuntimeActivityType,
     type AgentExecutionTelemetry,
     type AgentExecutionTransportStateType
-} from './AgentExecutionStateSchema.js';
+} from './state/AgentExecutionStateSchema.js';
 import {
     AgentExecutionReferenceSchema,
     AgentExecutionTerminalTransportSchema,
     AgentExecutionTerminalHandleSchema,
     AgentExecutionTerminalRecordingPathSchema,
     type AgentExecutionTerminalHandleType
-} from './AgentExecutionTransportSchema.js';
+} from './state/AgentExecutionTransportSchema.js';
 
-export * from './AgentExecutionTransportSchema.js';
-export * from './AgentExecutionStateSchema.js';
-export * from './AgentExecutionProtocolSchema.js';
-export * from './AgentExecutionSemanticOperationSchema.js';
-export * from './AgentExecutionProjectionSchema.js';
+export * from './state/AgentExecutionTransportSchema.js';
+export * from './state/AgentExecutionStateSchema.js';
+export * from './protocol/AgentExecutionProtocolSchema.js';
+export * from './protocol/AgentExecutionSemanticOperationSchema.js';
+export * from './state/AgentExecutionProjectionSchema.js';
 
 export const AgentExecutionJournalPathSchema = z.string()
     .trim()

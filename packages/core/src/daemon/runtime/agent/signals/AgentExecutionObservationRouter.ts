@@ -10,8 +10,8 @@ import {
 	type AgentExecutionSignal,
 	type AgentExecutionSignalCandidate,
 	type AgentExecutionObservationAddress
-} from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
-import { createAgentExecutionSignalFromPayload } from '../../../../entities/AgentExecution/AgentExecutionSignalRegistry.js';
+} from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+import { createAgentExecutionSignalFromPayload } from '../../../../entities/AgentExecution/protocol/AgentExecutionSignalRegistry.js';
 import {
 	AgentSignalMarkerPayloadSchema,
 	AgentExecutionOwnerMarkerPrefixSchema,

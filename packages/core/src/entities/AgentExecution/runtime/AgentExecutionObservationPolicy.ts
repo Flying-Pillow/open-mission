@@ -13,12 +13,12 @@ import {
 	type AgentExecutionSignal,
 	type AgentExecutionSignalDecision,
 	type AgentExecutionType
-} from './AgentExecutionProtocolTypes.js';
+} from '../protocol/AgentExecutionProtocolTypes.js';
 import {
 	deriveAttentionFromStatusSignalPhase,
 	deriveLifecycleStateFromStatusSignalPhase
-} from './AgentExecutionRuntimeSemantics.js';
-import { projectAgentExecutionObservationSignalToTimelineItem } from './AgentExecutionSignalRegistry.js';
+} from '../state/AgentExecutionRuntimeSemantics.js';
+import { projectAgentExecutionObservationSignalToTimelineItem } from '../protocol/AgentExecutionSignalRegistry.js';
 
 export class AgentExecutionObservationLedger {
 	private readonly observedIds = new Set<string>();

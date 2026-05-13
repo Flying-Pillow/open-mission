@@ -11,7 +11,7 @@ import {
     type AgentExecutionType,
     type AgentPrompt,
     type AgentTaskContext
-} from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import { Repository } from '../../../entities/Repository/Repository.js';
 import {
     TerminalRegistry,

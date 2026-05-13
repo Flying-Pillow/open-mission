@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { FilesystemAdapter } from '../../lib/filesystem/FilesystemAdapter.js';
+import { FilesystemAdapter } from '../../../lib/filesystem/FilesystemAdapter.js';
 import {
     AgentExecutionJournalReferenceSchema,
     AgentExecutionJournalRecordSchema,

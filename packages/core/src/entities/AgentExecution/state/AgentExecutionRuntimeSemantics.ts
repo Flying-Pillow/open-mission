@@ -6,7 +6,7 @@ import type {
 import type {
     AgentExecutionStatusPhase,
     AgentProgressState
-} from './AgentExecutionProtocolTypes.js';
+} from '../protocol/AgentExecutionProtocolTypes.js';
 
 const PROGRESS_STATE_ACTIVITY: Record<AgentProgressState, AgentExecutionActivityStateType | undefined> = {
     initializing: 'idle',

@@ -13,13 +13,13 @@ import {
     type AgentSignalPayloadType,
     type AgentExecutionObservationAckType,
     type AgentExecutionProtocolDescriptorType
-} from '../../../../entities/AgentExecution/AgentExecutionProtocolSchema.js';
+} from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolSchema.js';
 import {
     cloneAgentExecutionScope,
     type AgentExecutionScope,
     type AgentExecutionObservation
-} from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
-import { createAgentExecutionSignalFromPayload } from '../../../../entities/AgentExecution/AgentExecutionSignalRegistry.js';
+} from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+import { createAgentExecutionSignalFromPayload } from '../../../../entities/AgentExecution/protocol/AgentExecutionSignalRegistry.js';
 import {
     AgentExecutionSemanticOperationDescriptors,
     type AgentExecutionReadArtifactOperationInputType,

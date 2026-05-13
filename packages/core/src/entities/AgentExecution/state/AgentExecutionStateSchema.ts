@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { AgentSignalDeliverySchema } from './AgentExecutionProtocolSchema.js';
+import { AgentSignalDeliverySchema } from '../protocol/AgentExecutionProtocolSchema.js';
 
 export type AgentExecutionPrimitiveValue = string | number | boolean | null;
 

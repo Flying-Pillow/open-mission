@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { AgentLaunchConfig } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import type { AgentLaunchConfig } from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import type { AgentAdapterLaunchPreparation, AgentExecutionMcpAccess } from '../AgentAdapter.js';
 
 export type AgentExecutionMcpBridge = {

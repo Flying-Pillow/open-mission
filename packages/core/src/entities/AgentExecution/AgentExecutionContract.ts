@@ -10,15 +10,15 @@ import {
     AgentExecutionMessageShorthandResolutionSchema,
     AgentExecutionResolveMessageShorthandInputSchema,
     AgentExecutionSendTerminalInputSchema
-} from './AgentExecutionProtocolSchema.js';
-import { AgentExecutionSemanticOperationResultSchema } from './AgentExecutionSemanticOperationSchema.js';
+} from './protocol/AgentExecutionProtocolSchema.js';
+import { AgentExecutionSemanticOperationResultSchema } from './protocol/AgentExecutionSemanticOperationSchema.js';
 import {
     AgentExecutionStorageSchema,
     AgentExecutionSchema,
     AgentExecutionCommandAcknowledgementSchema,
     AgentExecutionChangedSchema
 } from './AgentExecutionSchema.js';
-import { AgentExecutionTerminalSnapshotSchema } from './AgentExecutionTransportSchema.js';
+import { AgentExecutionTerminalSnapshotSchema } from './state/AgentExecutionTransportSchema.js';
 import type { AgentExecutionType } from './AgentExecutionSchema.js';
 
 export const AgentExecutionContract: EntityContractType = {

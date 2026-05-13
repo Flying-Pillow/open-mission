@@ -1,6 +1,6 @@
-import type { AgentExecutionScope } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
-import type { AgentExecutionJournalRecordType } from '../../../entities/AgentExecution/AgentExecutionJournalSchema.js';
-import type { AgentExecutionJournalWriter } from '../../../entities/AgentExecution/AgentExecutionJournalWriter.js';
+import type { AgentExecutionScope } from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+import type { AgentExecutionJournalRecordType } from '../../../entities/AgentExecution/journal/AgentExecutionJournalSchema.js';
+import type { AgentExecutionJournalWriter } from '../../../entities/AgentExecution/journal/AgentExecutionJournalWriter.js';
 import {
     AgentExecutionReadArtifactOperationInputSchema,
     READ_ARTIFACT_OPERATION_NAME,
@@ -9,7 +9,7 @@ import {
     type AgentExecutionSemanticOperationInvocationType,
     type AgentExecutionSemanticOperationNameType,
     type AgentExecutionSemanticOperationResultType
-} from '../../../entities/AgentExecution/AgentExecutionSemanticOperationSchema.js';
+} from '../../../entities/AgentExecution/protocol/AgentExecutionSemanticOperationSchema.js';
 import { ArtifactService } from './ArtifactService.js';
 
 type AgentExecutionSemanticOperationHandler = {

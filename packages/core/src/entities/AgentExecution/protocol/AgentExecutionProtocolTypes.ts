@@ -12,18 +12,18 @@ import {
     type AgentExecutionScopeType,
     type AgentStatusSignalPayloadType
 } from './AgentExecutionProtocolSchema.js';
-import type { AgentExecutionTimelineItemType } from './AgentExecutionProjectionSchema.js';
-import type { AgentExecutionType as CanonicalAgentExecutionType } from './AgentExecutionSchema.js';
+import type { AgentExecutionTimelineItemType } from '../state/AgentExecutionProjectionSchema.js';
+import type { AgentExecutionType as CanonicalAgentExecutionType } from '../AgentExecutionSchema.js';
 import type {
     AgentExecutionAttentionStateType,
     AgentExecutionLifecycleStateType,
     AgentExecutionProgressType,
     AgentProgressStateType
-} from './AgentExecutionStateSchema.js';
+} from '../state/AgentExecutionStateSchema.js';
 import type {
     AgentExecutionReferenceType,
     AgentExecutionTerminalTransportType
-} from './AgentExecutionTransportSchema.js';
+} from '../state/AgentExecutionTransportSchema.js';
 import {
     type AgentExecutionJournalSignalConfidenceType,
     type AgentExecutionJournalInputChoiceType,

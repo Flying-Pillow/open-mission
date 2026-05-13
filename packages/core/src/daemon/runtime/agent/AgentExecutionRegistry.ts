@@ -3,7 +3,7 @@ import { AgentExecution } from '../../../entities/AgentExecution/AgentExecution.
 import type {
     AgentExecutionObservation,
     AgentLaunchConfig
-} from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import {
     AgentExecutionCommandSchema,
     AgentExecutionSchema,

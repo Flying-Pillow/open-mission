@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     AgentMessageSignalPayloadSchema,
     MAX_AGENT_EXECUTION_SIGNAL_ARTIFACT_REFERENCES
-} from './AgentExecutionSchema.js';
+} from '../AgentExecutionSchema.js';
 
 describe('AgentExecutionSchema', () => {
     it('accepts message signals with more than eight artifact references', () => {

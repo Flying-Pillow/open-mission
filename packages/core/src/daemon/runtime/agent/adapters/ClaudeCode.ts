@@ -1,4 +1,4 @@
-import type { AgentLaunchConfig } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import type { AgentLaunchConfig } from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import {
     type AgentAdapterRuntimeOutput,
     type AgentAdapterTerminalOptions,

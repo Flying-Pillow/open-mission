@@ -7,12 +7,12 @@ import type {
     AgentCapabilities,
     AgentLaunchConfig,
     AgentMetadata
-} from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import type { AgentSignalDeliveryType } from '../../../entities/AgentExecution/AgentExecutionSchema.js';
 import {
     AgentExecutionMessageDescriptorSchema,
     type AgentExecutionMessageDescriptorType
-} from '../../../entities/AgentExecution/AgentExecutionProtocolSchema.js';
+} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolSchema.js';
 
 export type AgentAdapterTransportCapabilities = {
     supported: AgentSignalDeliveryType[];

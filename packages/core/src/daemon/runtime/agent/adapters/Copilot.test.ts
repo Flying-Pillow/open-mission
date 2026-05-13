@@ -9,7 +9,7 @@ import type {
 	AgentExecutionType,
 	AgentLaunchConfig,
 	AgentPrompt
-} from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+} from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import { Agent } from '../../../../entities/Agent/Agent.js';
 import { AgentRegistry } from '../../../../entities/Agent/AgentRegistry.js';
 import { createAgentAdapter, type AgentAdapter } from '../AgentAdapter.js';

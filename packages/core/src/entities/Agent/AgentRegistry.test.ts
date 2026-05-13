@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AgentRegistry } from './AgentRegistry.js';
 import { createDefaultRepositorySettings } from '../Repository/RepositorySchema.js';
-import type { AgentLaunchConfig } from '../AgentExecution/AgentExecutionProtocolTypes.js';
+import type { AgentLaunchConfig } from '../AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 
 function createLaunchConfig(overrides: Partial<AgentLaunchConfig> = {}): AgentLaunchConfig {
     return {

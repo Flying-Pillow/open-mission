@@ -4,7 +4,7 @@ import {
 	MAX_AGENT_SIGNAL_MARKER_LENGTH,
 	type AgentExecutionObservation,
 	type AgentExecutionType
-} from './AgentExecutionProtocolTypes.js';
+} from '../protocol/AgentExecutionProtocolTypes.js';
 
 const markerPrefix = '@task::';
 

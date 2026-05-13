@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildAgentExecutionSignalLaunchContext } from './AgentExecutionSignalLaunchContext.js';
-import { createAgentExecutionProtocolDescriptor } from '../../../../entities/AgentExecution/AgentExecutionProtocolDescriptor.js';
+import { createAgentExecutionProtocolDescriptor } from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolDescriptor.js';
 
 describe('AgentExecutionSignalLaunchContext', () => {
     it('builds mandatory stdout marker instructions without transport env', () => {

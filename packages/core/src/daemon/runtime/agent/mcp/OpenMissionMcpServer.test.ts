@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { OpenMissionMcpServer } from './OpenMissionMcpServer.js';
-import { createAgentExecutionProtocolDescriptor } from '../../../../entities/AgentExecution/AgentExecutionProtocolDescriptor.js';
-import type { AgentExecutionObservation } from '../../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+import { createAgentExecutionProtocolDescriptor } from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolDescriptor.js';
+import type { AgentExecutionObservation } from '../../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import type { AgentExecutionObservationAckType } from '../../../../entities/AgentExecution/AgentExecutionSchema.js';
 import type { AgentExecutionSemanticOperationResultType } from '../AgentExecutionSemanticOperations.js';
 

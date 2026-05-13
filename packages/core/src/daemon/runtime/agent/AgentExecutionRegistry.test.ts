@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { AgentExecutionRegistry } from './AgentExecutionRegistry.js';
 import { AgentExecution } from '../../../entities/AgentExecution/AgentExecution.js';
 import {
-    deriveAgentExecutionInteractionCapabilities
-} from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+    deriveAgentExecutionInteractionCapabilities,
+} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import type {
     AgentExecutionType,
     AgentExecutionTransportStateType

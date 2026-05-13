@@ -9,7 +9,7 @@ import {
 import {
     AgentExecutionLaunchModeSchema,
     AgentExecutionReasoningEffortSchema
-} from '../AgentExecution/AgentExecutionProtocolSchema.js';
+} from '../AgentExecution/protocol/AgentExecutionProtocolSchema.js';
 import { AgentOwnerSettingsSchema } from '../Agent/AgentSchema.js';
 import {
     EntityCommandAcknowledgementSchema,

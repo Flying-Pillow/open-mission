@@ -15,8 +15,8 @@ import type {
     AgentExecutionObservationAddress,
     AgentExecutionSignalDecision,
     AgentExecutionType
-} from '../entities/AgentExecution/AgentExecutionProtocolTypes.js';
-import { getAgentExecutionScopeMissionId } from '../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+} from '../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
+import { getAgentExecutionScopeMissionId } from '../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 
 export type MissionLoader = (
     input: MissionLocatorType,

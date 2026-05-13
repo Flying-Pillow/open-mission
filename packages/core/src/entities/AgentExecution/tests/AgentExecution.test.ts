@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { deriveAgentExecutionInteractionCapabilities } from './AgentExecutionProtocolTypes.js';
-import { deriveAgentExecutionProtocolOwner } from './AgentExecutionProtocolDescriptor.js';
-import { AgentExecution } from './AgentExecution.js';
-import { AgentExecutionContract, createAgentExecutionDataChangedEvent } from './AgentExecutionContract.js';
-import { AgentExecutionObservationPolicy } from './AgentExecutionObservationPolicy.js';
-import { AgentExecutionSchema, AgentExecutionProtocolDescriptorSchema } from './AgentExecutionSchema.js';
-import type { AgentExecutionType, AgentExecutionRecord } from './AgentExecutionSchema.js';
-import type { AgentExecutionJournalRecordType } from './AgentExecutionJournalSchema.js';
+import { deriveAgentExecutionInteractionCapabilities } from '../protocol/AgentExecutionProtocolTypes.js';
+import { deriveAgentExecutionProtocolOwner } from '../protocol/AgentExecutionProtocolDescriptor.js';
+import { AgentExecution } from '../AgentExecution.js';
+import { AgentExecutionContract, createAgentExecutionDataChangedEvent } from '../AgentExecutionContract.js';
+import { AgentExecutionObservationPolicy } from '../runtime/AgentExecutionObservationPolicy.js';
+import { AgentExecutionSchema, AgentExecutionProtocolDescriptorSchema } from '../AgentExecutionSchema.js';
+import type { AgentExecutionType, AgentExecutionRecord } from '../AgentExecutionSchema.js';
+import type { AgentExecutionJournalRecordType } from '../journal/AgentExecutionJournalSchema.js';
 
 describe('AgentExecution', () => {
     it('materializes terminal identity through terminalHandle only', () => {

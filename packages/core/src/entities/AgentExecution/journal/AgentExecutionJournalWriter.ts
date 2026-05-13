@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
-import type { AgentExecutionScope, AgentLaunchConfig } from './AgentExecutionProtocolTypes.js';
+import type { AgentExecutionScope, AgentLaunchConfig } from '../protocol/AgentExecutionProtocolTypes.js';
 import type {
     AgentExecutionProtocolDescriptorType,
     AgentExecutionProtocolOwnerEntityType,
     AgentExecutionTransportStateType
-} from './AgentExecutionSchema.js';
+} from '../AgentExecutionSchema.js';
 import type {
     AgentExecutionActivityUpdatedRecordType,
     AgentExecutionDecisionRecordType,
@@ -26,15 +26,15 @@ import type {
     AgentExecutionStateChangedRecordType
 } from './AgentExecutionJournalSchema.js';
 import { AgentExecutionJournalFileStore, type AgentExecutionJournalFileStorePath } from './AgentExecutionJournalFileStore.js';
-import { Repository } from '../Repository/Repository.js';
-import { getOpenMissionRuntimeDirectory } from '../../settings/OpenMissionInstall.js';
+import { Repository } from '../../Repository/Repository.js';
+import { getOpenMissionRuntimeDirectory } from '../../../settings/OpenMissionInstall.js';
 import type {
     AgentCommand,
     AgentExecutionObservation,
     AgentExecutionSignalDecision,
     AgentPrompt
-} from './AgentExecutionProtocolTypes.js';
-import { deriveActivityStateFromProgressState } from './AgentExecutionRuntimeSemantics.js';
+} from '../protocol/AgentExecutionProtocolTypes.js';
+import { deriveActivityStateFromProgressState } from '../state/AgentExecutionRuntimeSemantics.js';
 
 export type AgentExecutionJournalLaunchInput = {
     agentExecutionId: string;

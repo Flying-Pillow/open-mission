@@ -5,13 +5,13 @@ import type {
     AgentExecutionType,
     AgentPrompt,
     AgentTaskContext
-} from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import {
     deriveAgentExecutionInteractionCapabilities,
     getAgentExecutionScopeMissionId,
     getAgentExecutionScopeStageId,
     getAgentExecutionScopeTaskId
-} from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
+} from '../../../entities/AgentExecution/protocol/AgentExecutionProtocolTypes.js';
 import type { AgentExecutionRuntimeController, AgentExecutionTerminalStartOptions } from './AgentExecutionRuntimeController.js';
 import { createAgentExecutionLiveOptions } from './AgentExecutionRuntimeController.js';
 
