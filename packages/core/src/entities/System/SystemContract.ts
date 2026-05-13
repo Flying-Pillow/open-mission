@@ -2,6 +2,7 @@ import type { EntityContractType } from '../Entity/EntitySchema.js';
 import { System } from './System.js';
 import {
     systemEntityName,
+    SystemAgentSettingsSchema,
     SystemConfigureSchema,
     SystemDataSchema,
     SystemReadSchema
@@ -23,6 +24,12 @@ export const SystemContract: EntityContractType = {
         configure: {
             kind: 'mutation',
             payload: SystemConfigureSchema,
+            result: SystemDataSchema,
+            execution: 'class'
+        },
+        configureAgent: {
+            kind: 'mutation',
+            payload: SystemAgentSettingsSchema,
             result: SystemDataSchema,
             execution: 'class'
         }

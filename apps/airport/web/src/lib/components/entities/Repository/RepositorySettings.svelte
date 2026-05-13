@@ -20,6 +20,9 @@
     let selectedRepositoryIcon = $state("");
     let selectedEnabledAgentAdapters = $state<string[]>([]);
     let selectedDefaultAgentAdapter = $state("");
+    let selectedDefaultAgentMode = $state<
+        "interactive" | "autonomous" | undefined
+    >(undefined);
     let initializedSettingsKey = $state("");
     let canSaveAgentSettings = $state(false);
     let availableAgentCount = $state(0);
@@ -29,7 +32,7 @@
     );
 
     $effect(() => {
-        const nextRepositoryKey = `${repository.id}:${repository.data.repositoryRootPath}:${repository.data.settings.enabledAgentAdapters.join(",")}:${repository.data.settings.agentAdapter}:${repository.data.settings.icon ?? ""}`;
+        const nextRepositoryKey = `${repository.id}:${repository.data.repositoryRootPath}:${repository.data.settings.enabledAgentAdapters.join(",")}:${repository.data.settings.agentAdapter}:${repository.data.settings.defaultAgentMode ?? ""}:${repository.data.settings.icon ?? ""}`;
         if (initializedSettingsKey === nextRepositoryKey) {
             return;
         }
@@ -40,6 +43,7 @@
             ...repository.data.settings.enabledAgentAdapters,
         ];
         selectedDefaultAgentAdapter = repository.data.settings.agentAdapter;
+        selectedDefaultAgentMode = repository.data.settings.defaultAgentMode;
     });
 
     async function saveSettings(): Promise<void> {
@@ -54,9 +58,12 @@
                 icon: selectedRepositoryIcon.trim() || null,
             });
             if (availableAgentCount > 0) {
-                await repository.configureAgents({
+                await repository.configureAgent({
                     defaultAgentAdapter: selectedDefaultAgentAdapter,
                     enabledAgentAdapters: [...selectedEnabledAgentAdapters],
+                    ...(selectedDefaultAgentMode
+                        ? { defaultAgentMode: selectedDefaultAgentMode }
+                        : {}),
                 });
             }
             await onSaved();
@@ -86,17 +93,17 @@
                 />
             </div>
 
-            <div class="rounded-lg border px-3 py-3">
-                <AgentSettings
-                    repositoryRootPath={repository.data.repositoryRootPath}
-                    bind:enabledAgentAdapters={selectedEnabledAgentAdapters}
-                    bind:defaultAgentAdapter={selectedDefaultAgentAdapter}
-                    bind:canSave={canSaveAgentSettings}
-                    bind:availableAgentCount
-                    title="Repository agents"
-                    description="Choose which agents this repository may use and which one should start by default."
-                />
-            </div>
+            <AgentSettings
+                agentResolutionRootPath={repository.data.repositoryRootPath}
+                testWorkingDirectory={repository.data.repositoryRootPath}
+                bind:enabledAgentAdapters={selectedEnabledAgentAdapters}
+                bind:defaultAgentAdapter={selectedDefaultAgentAdapter}
+                bind:defaultAgentMode={selectedDefaultAgentMode}
+                bind:canSave={canSaveAgentSettings}
+                bind:availableAgentCount
+                title="Repository agents"
+                description="Choose which agents this repository may use and how its Agent executions should start."
+            />
 
             {#if saveError}
                 <p class="text-sm text-rose-600">{saveError}</p>

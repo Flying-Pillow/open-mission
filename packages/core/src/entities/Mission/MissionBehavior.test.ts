@@ -1371,6 +1371,7 @@ function createWorkflowBindings(adapter: FakeAgentAdapter): MissionWorkflowBindi
                 id: Agent.createEntityId(adapter.id),
                 agentId: adapter.id,
                 displayName: adapter.displayName,
+                icon: 'lucide:bot',
                 capabilities: {
                     acceptsPromptSubmission: true,
                     acceptsCommands: true,
@@ -1378,11 +1379,7 @@ function createWorkflowBindings(adapter: FakeAgentAdapter): MissionWorkflowBindi
                     supportsResumeByReference: true,
                     supportsCheckpoint: true
                 },
-                availability: { available: true },
-                optionCatalog: {
-                    models: [],
-                    reasoningEfforts: []
-                }
+                availability: { available: true }
             }, adapter)]
         })
     };

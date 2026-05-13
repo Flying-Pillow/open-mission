@@ -10,6 +10,7 @@ import {
     AgentExecutionLaunchModeSchema,
     AgentExecutionReasoningEffortSchema
 } from '../AgentExecution/AgentExecutionProtocolSchema.js';
+import { AgentOwnerSettingsSchema } from '../Agent/AgentSchema.js';
 import {
     EntityCommandAcknowledgementSchema,
     EntityStorageSchema,
@@ -298,8 +299,13 @@ export const RepositorySetupSchema = RepositoryLocatorSchema.extend({
 
 export const RepositoryConfigureAgentsSchema = RepositoryLocatorSchema.extend({
     defaultAgentAdapter: SystemAgentSettingsSchema.shape.defaultAgentAdapter,
-    enabledAgentAdapters: SystemAgentSettingsSchema.shape.enabledAgentAdapters
+    enabledAgentAdapters: SystemAgentSettingsSchema.shape.enabledAgentAdapters,
+    defaultAgentMode: SystemAgentSettingsSchema.shape.defaultAgentMode,
+    defaultModel: SystemAgentSettingsSchema.shape.defaultModel,
+    defaultReasoningEffort: SystemAgentSettingsSchema.shape.defaultReasoningEffort
 }).strict();
+
+export const RepositoryConfigureAgentSchema = RepositoryLocatorSchema.extend(AgentOwnerSettingsSchema.shape).strict();
 
 export const RepositoryConfigureDisplaySchema = RepositoryLocatorSchema.extend({
     icon: RepositoryIconSchema.nullable()
@@ -405,6 +411,7 @@ export type RepositoryStartMissionFromIssueType = z.infer<typeof RepositoryStart
 export type RepositoryStartMissionFromBriefType = z.infer<typeof RepositoryStartMissionFromBriefSchema>;
 export type RepositorySetupType = z.infer<typeof RepositorySetupSchema>;
 export type RepositoryConfigureAgentsType = z.infer<typeof RepositoryConfigureAgentsSchema>;
+export type RepositoryConfigureAgentType = z.infer<typeof RepositoryConfigureAgentSchema>;
 export type RepositoryConfigureDisplayType = z.infer<typeof RepositoryConfigureDisplaySchema>;
 export type RepositoryInitializeType = z.infer<typeof RepositoryInitializeSchema>;
 export type RepositoryOperationalModeType = z.infer<typeof RepositoryOperationalModeSchema>;

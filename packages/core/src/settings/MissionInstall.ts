@@ -47,7 +47,10 @@ export function getDefaultMissionConfig(overrides: Partial<MissionConfig> = {}):
 	const ghBinary = normalizeOptionalString(overrides.ghBinary);
 	const systemAgentSettings = parseSystemAgentSettings({
 		...(overrides.defaultAgentAdapter !== undefined ? { defaultAgentAdapter: overrides.defaultAgentAdapter } : {}),
-		...(overrides.enabledAgentAdapters !== undefined ? { enabledAgentAdapters: overrides.enabledAgentAdapters } : {})
+		...(overrides.enabledAgentAdapters !== undefined ? { enabledAgentAdapters: overrides.enabledAgentAdapters } : {}),
+		...(overrides.defaultAgentMode !== undefined ? { defaultAgentMode: overrides.defaultAgentMode } : {}),
+		...(overrides.defaultModel !== undefined ? { defaultModel: overrides.defaultModel } : {}),
+		...(overrides.defaultReasoningEffort !== undefined ? { defaultReasoningEffort: overrides.defaultReasoningEffort } : {})
 	});
 	return {
 		version: 1,
@@ -137,11 +140,22 @@ function normalizeResolvedConfig(rawConfig: unknown): MissionConfig | undefined 
 	const enabledAgentAdapters = Array.isArray(candidate['enabledAgentAdapters']) && candidate['enabledAgentAdapters'].every((value) => typeof value === 'string')
 		? candidate['enabledAgentAdapters']
 		: undefined;
+	const defaultAgentMode = candidate['defaultAgentMode'];
+	const defaultReasoningEffort = candidate['defaultReasoningEffort'];
 	const systemAgentSettings = parseSystemAgentSettings({
 		...(typeof candidate['defaultAgentAdapter'] === 'string'
 			? { defaultAgentAdapter: candidate['defaultAgentAdapter'] }
 			: {}),
-		...(enabledAgentAdapters ? { enabledAgentAdapters } : {})
+		...(enabledAgentAdapters ? { enabledAgentAdapters } : {}),
+		...(defaultAgentMode === 'interactive' || defaultAgentMode === 'autonomous'
+			? { defaultAgentMode }
+			: {}),
+		...(typeof candidate['defaultModel'] === 'string'
+			? { defaultModel: candidate['defaultModel'] }
+			: {}),
+		...(defaultReasoningEffort === 'low' || defaultReasoningEffort === 'medium' || defaultReasoningEffort === 'high' || defaultReasoningEffort === 'xhigh'
+			? { defaultReasoningEffort }
+			: {})
 	});
 	return getDefaultMissionConfig({
 		missionsRoot: candidate['missionsRoot'],

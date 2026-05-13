@@ -1,6 +1,7 @@
 import { z } from 'zod/v4';
 import {
     AgentExecutionInteractionCapabilitiesSchema,
+    AgentExecutionInteractionPostureSchema,
     AgentExecutionScopeSchema,
     AgentSignalDeliverySchema
 } from './AgentExecutionProtocolSchema.js';
@@ -192,6 +193,7 @@ export const AgentExecutionSnapshotSchema = z.object({
     waitingForInput: z.boolean(),
     acceptsPrompts: z.boolean(),
     acceptedCommands: z.array(AgentExecutionRuntimeCommandTypeSchema),
+    interactionPosture: AgentExecutionInteractionPostureSchema,
     interactionCapabilities: AgentExecutionInteractionCapabilitiesSchema.optional(),
     transport: AgentExecutionTerminalTransportSchema.optional(),
     reference: AgentExecutionReferenceSchema,

@@ -35,9 +35,12 @@ import {
 } from './AgentExecutionDataSchema.js';
 import {
 	AgentExecutionCommandInputSchema,
+	AgentExecutionMessageShorthandResolutionSchema,
 	AgentExecutionMessageDescriptorSchema,
 	AgentExecutionLocatorSchema,
 	AgentExecutionPromptSchema,
+	AgentExecutionResolveMessageShorthandInputSchema,
+	AgentExecutionInvokeSemanticOperationInputSchema,
 	AgentExecutionCommandSchema,
 	AgentExecutionSendTerminalInputSchema,
 	AgentExecutionCommandIds,
@@ -46,6 +49,7 @@ import {
 	type AgentExecutionProtocolDescriptorType,
 	type AgentExecutionInteractionCapabilitiesType
 } from './AgentExecutionProtocolSchema.js';
+import { AgentExecutionSemanticOperationResultSchema } from './AgentExecutionSemanticOperationSchema.js';
 import {
 	AgentExecutionProjectionSchema,
 	AgentExecutionTimelineItemSchema,
@@ -73,6 +77,7 @@ import { createAgentExecutionJournalReference } from './AgentExecutionJournalWri
 import { deriveActivityStateFromProgressState } from './AgentExecutionRuntimeSemantics.js';
 import { projectAgentExecutionObservationSignalToTimelineItem } from './AgentExecutionSignalRegistry.js';
 import type { AgentExecutionJournalRecordType } from './AgentExecutionJournalSchema.js';
+import { resolveAgentExecutionMessageShorthand } from './AgentExecutionMessageShorthand.js';
 
 type LocatedAgentExecutionData = {
 	data: AgentExecutionDataType;
@@ -189,6 +194,36 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		const input = AgentExecutionLocatorSchema.parse(payload);
 		const located = await AgentExecution.requireDataForOwner(input, context);
 		return AgentExecution.readTerminalData(input.ownerId, located.missionDir, located.data);
+	}
+
+	public static async resolveMessageShorthand(payload: unknown, context: EntityExecutionContext) {
+		const input = AgentExecutionResolveMessageShorthandInputSchema.parse(payload);
+		const located = await AgentExecution.requireDataForOwner(input, context);
+		const protocolDescriptor = located.data.protocolDescriptor
+			?? (located.data.scope
+				? createAgentExecutionProtocolDescriptor({
+					scope: located.data.scope,
+					messages: located.data.runtimeMessages
+				})
+				: undefined);
+		if (!protocolDescriptor) {
+			throw new Error(`AgentExecution '${input.agentExecutionId}' does not expose a protocol descriptor for message shorthand resolution.`);
+		}
+		return AgentExecutionMessageShorthandResolutionSchema.parse(resolveAgentExecutionMessageShorthand({
+			text: input.text,
+			protocolDescriptor,
+			...(input.terminalLane !== undefined ? { terminalLane: input.terminalLane } : {})
+		}));
+	}
+
+	public static async invokeSemanticOperation(payload: unknown, context: EntityExecutionContext) {
+		const input = AgentExecutionInvokeSemanticOperationInputSchema.parse(payload);
+		AgentExecution.readRegistryExecution(input, context);
+		return AgentExecutionSemanticOperationResultSchema.parse(await AgentExecution.requireRegistry(context).invokeSemanticOperation({
+			agentExecutionId: input.agentExecutionId,
+			name: input.name,
+			input: input.input
+		}));
 	}
 
 
@@ -325,16 +360,17 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		commandTypes: AgentCommand['type'][]
 	): AgentExecutionMessageDescriptorType[] {
 		return AgentExecutionMessageDescriptorSchema.array().parse([
-			{ type: 'interrupt', label: 'Interrupt', icon: 'lucide:pause', tone: 'attention', delivery: 'best-effort', mutatesContext: false },
-			{ type: 'checkpoint', label: 'Checkpoint', icon: 'lucide:milestone', tone: 'neutral', delivery: 'best-effort', mutatesContext: false },
-			{ type: 'nudge', label: 'Nudge', icon: 'lucide:message-circle-more', tone: 'progress', delivery: 'best-effort', mutatesContext: false },
-			{ type: 'resume', label: 'Resume', icon: 'lucide:play', tone: 'success', delivery: 'best-effort', mutatesContext: false }
+			{ type: 'interrupt', label: 'Interrupt', icon: 'lucide:pause', tone: 'attention', delivery: 'best-effort', mutatesContext: false, portability: 'cross-agent' },
+			{ type: 'checkpoint', label: 'Checkpoint', icon: 'lucide:milestone', tone: 'neutral', delivery: 'best-effort', mutatesContext: false, portability: 'cross-agent' },
+			{ type: 'nudge', label: 'Nudge', icon: 'lucide:message-circle-more', tone: 'progress', delivery: 'best-effort', mutatesContext: false, portability: 'cross-agent' },
+			{ type: 'resume', label: 'Resume', icon: 'lucide:play', tone: 'success', delivery: 'best-effort', mutatesContext: false, portability: 'cross-agent' }
 		].filter((descriptor) => commandTypes.includes(descriptor.type as AgentCommand['type'])));
 	}
 
 	public static createProtocolDescriptorForSnapshot(snapshot: AgentExecutionSnapshot): AgentExecutionProtocolDescriptorType {
 		return createAgentExecutionProtocolDescriptor({
 			scope: snapshot.scope,
+			interactionPosture: snapshot.interactionPosture,
 			messages: AgentExecution.resolveRuntimeMessages({
 				lifecycleState: snapshot.status,
 				acceptsPrompts: snapshot.acceptsPrompts,
@@ -584,6 +620,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 	): AgentExecutionMessageDescriptorType[] {
 		return runtimeMessages.map((descriptor) => ({
 			...descriptor,
+			...(descriptor.adapterId ? { adapterId: descriptor.adapterId } : {}),
 			...(descriptor.input ? { input: { ...descriptor.input } } : {})
 		}));
 	}
@@ -595,6 +632,7 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 			version: protocolDescriptor.version,
 			owner: { ...protocolDescriptor.owner },
 			scope: { ...protocolDescriptor.scope },
+			interactionPosture: protocolDescriptor.interactionPosture,
 			messages: AgentExecution.cloneRuntimeMessages(protocolDescriptor.messages),
 			signals: protocolDescriptor.signals.map((descriptor) => ({
 				...descriptor,
@@ -621,7 +659,27 @@ export class AgentExecution extends Entity<AgentExecutionDataType, string> {
 		acceptedCommands?: AgentCommand['type'][];
 	}): AgentExecutionMessageDescriptorType[] {
 		const acceptedCommands = input.acceptedCommands ?? AgentExecution.deriveAcceptedCommands(input.lifecycleState, input.currentInputRequestId);
-		return AgentExecution.createRuntimeMessageDescriptorsForCommands(acceptedCommands);
+		return [
+			...AgentExecution.createRuntimeMessageDescriptorsForCommands(acceptedCommands),
+			...AgentExecution.createNativeTerminalMessageDescriptors(input.lifecycleState)
+		];
+	}
+
+	private static createNativeTerminalMessageDescriptors(
+		lifecycleState: AgentExecutionRecord['lifecycleState'] | AgentExecutionSnapshot['status']
+	): AgentExecutionMessageDescriptorType[] {
+		if (lifecycleState !== 'starting' && lifecycleState !== 'running') {
+			return [];
+		}
+		return AgentExecutionMessageDescriptorSchema.array().parse([{
+			type: 'model',
+			label: 'Model',
+			description: 'Open the running Agent session model selector.',
+			icon: 'lucide:brain-circuit',
+			delivery: 'best-effort',
+			mutatesContext: false,
+			portability: 'terminal-only'
+		}]);
 	}
 
 	private static resolveInteractionCapabilities(input: {
@@ -1821,6 +1879,19 @@ function toRuntimeExecutionEvent(
 }
 
 function buildCommandPrompt(command: Exclude<AgentCommand, { type: 'interrupt' }>): AgentPrompt {
+	if ('portability' in command && command.portability === 'adapter-scoped') {
+		return {
+			source: 'system',
+			text: command.reason?.trim()
+				? `Run adapter-scoped command '${command.type}': ${command.reason.trim()}`
+				: `Run adapter-scoped command '${command.type}'.`,
+			metadata: {
+				...(command.metadata ?? {}),
+				'mission.command.portability': 'adapter-scoped',
+				'mission.command.adapterId': command.adapterId
+			}
+		};
+	}
 	switch (command.type) {
 		case 'resume':
 			return { source: 'system', text: command.reason?.trim() || 'Resume execution.' };

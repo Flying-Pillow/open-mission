@@ -159,6 +159,7 @@ function createSnapshot(agentExecutionId: string): AgentExecutionSnapshot {
         waitingForInput: false,
         acceptsPrompts: true,
         acceptedCommands: ['resume', 'checkpoint', 'nudge'],
+        interactionPosture: 'structured-headless',
         interactionCapabilities: deriveAgentExecutionInteractionCapabilities({
             status: 'running',
             acceptsPrompts: true,

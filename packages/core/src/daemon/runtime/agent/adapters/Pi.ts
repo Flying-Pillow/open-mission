@@ -27,18 +27,10 @@ export function createPi(input: PiInput = {}): AgentInput {
         id: `agent:${PI_AGENT_ID}`,
         agentId: PI_AGENT_ID,
         displayName: 'Pi',
-        optionCatalog: {
-            models: [
-                { value: 'gpt-5.5', label: 'GPT-5.5' },
-                { value: 'gpt-5.4', label: 'GPT-5.4' }
-            ],
-            reasoningEfforts: ['low', 'medium', 'high', 'xhigh']
-        },
+        icon: 'lucide:pi',
         adapter: {
             command: command?.trim() || process.env['MISSION_PI_CLI_COMMAND']?.trim() || 'pi',
-            providerSettings: {
-                reasoningEfforts: ['low', 'medium', 'high', 'xhigh']
-            },
+            providerSettings: {},
             defaultLaunchMode: 'print',
             transportCapabilities: {
                 supported: ['stdout-marker'],

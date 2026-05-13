@@ -3,6 +3,12 @@ import {
     EntityCommandInputDescriptorSchema,
     EntityPresentationToneSchema
 } from '../Entity/EntitySchema.js';
+import {
+    AgentExecutionSemanticOperationPayloadSchema,
+    AgentExecutionSemanticOperationResultSchema,
+    AgentExecutionSemanticOperationNameSchema,
+    AgentExecutionReadArtifactOperationInputSchema
+} from './AgentExecutionSemanticOperationSchema.js';
 
 export const agentExecutionEntityName = 'AgentExecution' as const;
 
@@ -47,14 +53,40 @@ export const AgentExecutionReasoningEffortSchema = z.enum(['low', 'medium', 'hig
 
 export const AgentExecutionLaunchModeSchema = z.enum(['interactive', 'autonomous']);
 
-export const AgentExecutionCommandSchema = z.discriminatedUnion('type', [
+export const AgentExecutionCrossAgentCommandSchema = z.discriminatedUnion('type', [
     z.object({ type: z.literal('interrupt'), reason: z.string().trim().min(1).optional(), metadata: agentExecutionMetadataSchema.optional() }).strict(),
     z.object({ type: z.literal('checkpoint'), reason: z.string().trim().min(1).optional(), metadata: agentExecutionMetadataSchema.optional() }).strict(),
     z.object({ type: z.literal('nudge'), reason: z.string().trim().min(1).optional(), metadata: agentExecutionMetadataSchema.optional() }).strict(),
     z.object({ type: z.literal('resume'), reason: z.string().trim().min(1).optional(), metadata: agentExecutionMetadataSchema.optional() }).strict()
 ]);
 
+export const AgentExecutionAdapterScopedCommandSchema = z.object({
+    type: z.string().trim().min(1),
+    portability: z.literal('adapter-scoped'),
+    adapterId: z.string().trim().min(1),
+    reason: z.string().trim().min(1).optional(),
+    metadata: agentExecutionMetadataSchema.optional()
+}).strict();
+
+export const AgentExecutionCommandSchema = z.union([
+    AgentExecutionCrossAgentCommandSchema,
+    AgentExecutionAdapterScopedCommandSchema
+]);
+
 export const AgentExecutionInteractionModeSchema = z.enum(['pty-terminal', 'agent-message', 'read-only']);
+
+export const AgentExecutionInteractionPostureSchema = z.enum([
+    'structured-interactive',
+    'structured-headless',
+    'native-terminal-escape-hatch'
+]);
+
+export const AgentExecutionCommandPortabilitySchema = z.enum([
+    'mission-native',
+    'cross-agent',
+    'adapter-scoped',
+    'terminal-only'
+]);
 
 export const AgentExecutionInteractionCapabilitiesSchema = z.object({
     mode: AgentExecutionInteractionModeSchema,
@@ -91,6 +123,16 @@ export const AgentExecutionSendTerminalInputSchema = AgentExecutionLocatorSchema
     message: 'AgentExecution terminal input requires data or a complete cols/rows resize payload.'
 });
 
+export const AgentExecutionResolveMessageShorthandInputSchema = AgentExecutionLocatorSchema.extend({
+    text: z.string(),
+    terminalLane: z.boolean().optional()
+}).strict();
+
+export const AgentExecutionInvokeSemanticOperationInputSchema = AgentExecutionLocatorSchema.extend({
+    name: AgentExecutionSemanticOperationNameSchema,
+    input: AgentExecutionReadArtifactOperationInputSchema
+}).strict();
+
 export const AgentExecutionContextArtifactRoleSchema = z.enum(['instruction', 'reference', 'evidence', 'output']);
 
 export const AgentExecutionMessageDescriptorSchema = z.object({
@@ -101,6 +143,8 @@ export const AgentExecutionMessageDescriptorSchema = z.object({
     tone: EntityPresentationToneSchema.optional(),
     delivery: z.enum(['best-effort']),
     mutatesContext: z.boolean(),
+    portability: AgentExecutionCommandPortabilitySchema.default('cross-agent'),
+    adapterId: z.string().trim().min(1).optional(),
     input: EntityCommandInputDescriptorSchema.optional()
 }).strict();
 
@@ -215,19 +259,61 @@ export const AgentExecutionProtocolDescriptorSchema = z.object({
     version: z.literal(1),
     owner: AgentExecutionProtocolOwnerSchema,
     scope: AgentExecutionScopeSchema,
+    interactionPosture: AgentExecutionInteractionPostureSchema.default('structured-headless'),
     messages: z.array(AgentExecutionMessageDescriptorSchema),
     signals: z.array(AgentSignalDescriptorSchema),
     mcp: AgentExecutionProtocolMcpSchema.optional()
 }).strict();
+
+export const AgentExecutionMessageShorthandResolutionSchema = z.discriminatedUnion('kind', [
+    z.object({
+        kind: z.literal('prompt'),
+        commandId: z.literal(AgentExecutionCommandIds.sendPrompt),
+        input: AgentExecutionPromptSchema
+    }).strict(),
+    z.object({
+        kind: z.literal('runtime-message'),
+        commandId: z.literal(AgentExecutionCommandIds.sendRuntimeMessage),
+        input: AgentExecutionCommandSchema,
+        descriptor: AgentExecutionMessageDescriptorSchema
+    }).strict(),
+    z.object({
+        kind: z.literal('semantic-operation'),
+        method: z.literal('invokeSemanticOperation'),
+        input: AgentExecutionSemanticOperationPayloadSchema,
+        descriptor: AgentExecutionMessageDescriptorSchema
+    }).strict(),
+    z.object({
+        kind: z.literal('terminal-input'),
+        method: z.literal('sendTerminalInput'),
+        input: z.object({
+            data: z.string().min(1),
+            literal: z.literal(true)
+        }).strict(),
+        reason: z.string().trim().min(1).optional()
+    }).strict(),
+    z.object({
+        kind: z.literal('parse-error'),
+        summary: z.string().trim().min(1),
+        commandName: z.string().trim().min(1).optional(),
+        availableCommands: z.array(z.string().trim().min(1))
+    }).strict()
+]);
 
 export type AgentExecutionCommandIdType = z.infer<typeof AgentExecutionCommandIdSchema>;
 export type AgentExecutionReasoningEffortType = z.infer<typeof AgentExecutionReasoningEffortSchema>;
 export type AgentExecutionLaunchModeType = z.infer<typeof AgentExecutionLaunchModeSchema>;
 export type AgentExecutionCommandInputType = z.infer<typeof AgentExecutionCommandInputSchema>;
 export type AgentExecutionSendTerminalInputType = z.infer<typeof AgentExecutionSendTerminalInputSchema>;
+export type AgentExecutionResolveMessageShorthandInputType = z.infer<typeof AgentExecutionResolveMessageShorthandInputSchema>;
+export type AgentExecutionInvokeSemanticOperationInputType = z.infer<typeof AgentExecutionInvokeSemanticOperationInputSchema>;
 export type AgentExecutionPromptType = z.infer<typeof AgentExecutionPromptSchema>;
+export type AgentExecutionCrossAgentCommandType = z.infer<typeof AgentExecutionCrossAgentCommandSchema>;
+export type AgentExecutionAdapterScopedCommandType = z.infer<typeof AgentExecutionAdapterScopedCommandSchema>;
 export type AgentExecutionCommandType = z.infer<typeof AgentExecutionCommandSchema>;
 export type AgentExecutionInteractionModeType = z.infer<typeof AgentExecutionInteractionModeSchema>;
+export type AgentExecutionInteractionPostureType = z.infer<typeof AgentExecutionInteractionPostureSchema>;
+export type AgentExecutionCommandPortabilityType = z.infer<typeof AgentExecutionCommandPortabilitySchema>;
 export type AgentExecutionInteractionCapabilitiesType = z.infer<typeof AgentExecutionInteractionCapabilitiesSchema>;
 export type AgentExecutionLocatorType = z.infer<typeof AgentExecutionLocatorSchema>;
 export type AgentExecutionEventSubjectType = z.infer<typeof AgentExecutionEventSubjectSchema>;
@@ -256,3 +342,5 @@ export type AgentExecutionObservationAckType = z.infer<typeof AgentExecutionObse
 export type AgentExecutionProtocolOwnerType = z.infer<typeof AgentExecutionProtocolOwnerSchema>;
 export type AgentExecutionProtocolMcpType = z.infer<typeof AgentExecutionProtocolMcpSchema>;
 export type AgentExecutionProtocolDescriptorType = z.infer<typeof AgentExecutionProtocolDescriptorSchema>;
+export type AgentExecutionMessageShorthandResolutionType = z.infer<typeof AgentExecutionMessageShorthandResolutionSchema>;
+export type AgentExecutionSemanticOperationRemoteResultType = z.infer<typeof AgentExecutionSemanticOperationResultSchema>;

@@ -54,6 +54,7 @@ function createAgentRegistry(agentAdapter: FakeAgentAdapter): AgentRegistry {
 			id: Agent.createEntityId(agentAdapter.id),
 			agentId: agentAdapter.id,
 			displayName: agentAdapter.displayName,
+			icon: 'lucide:bot',
 			capabilities: {
 				acceptsPromptSubmission: true,
 				acceptsCommands: true,
@@ -61,11 +62,7 @@ function createAgentRegistry(agentAdapter: FakeAgentAdapter): AgentRegistry {
 				supportsResumeByReference: true,
 				supportsCheckpoint: true
 			},
-			availability: { available: true },
-			optionCatalog: {
-				models: [],
-				reasoningEfforts: []
-			}
+			availability: { available: true }
 		}, agentAdapter)]
 	});
 }

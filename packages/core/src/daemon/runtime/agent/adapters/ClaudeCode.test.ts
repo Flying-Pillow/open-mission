@@ -159,6 +159,29 @@ describe('ClaudeCode', () => {
         ]);
         expect(mcpConfig.mcpServers?.['mission-mcp']?.env?.['MISSION_MCP_TOKEN']).toBeTruthy();
     });
+
+    it('classifies login failures for connection diagnostics', async () => {
+        const adapter = createAgentAdapter(createClaudeCode({
+            command: 'claude',
+            env: { PATH: runtimeDirectory },
+            spawn: createSpawn(state, () => createFakePty(state))
+        }), {
+            resolveSettings: () => ({
+                model: 'claude-sonnet-4-6-20260415',
+                runtimeEnv: { PATH: runtimeDirectory }
+            })
+        });
+
+        const diagnostic = adapter.diagnoseConnectionFailure({
+            stdout: '',
+            stderr: 'authentication failed, run /login to continue'
+        });
+
+        expect(diagnostic).toMatchObject({
+            kind: 'auth-failed',
+            diagnosticCode: 'claude-auth'
+        });
+    });
 });
 
 type FakePty = IPty & {

@@ -125,7 +125,9 @@
                 </Button>
             {/snippet}
         </Dialog.Trigger>
-        <Dialog.Content class="sm:max-w-xl">
+        <Dialog.Content
+            class="flex h-[100dvh] max-h-[100dvh] w-[100dvw] max-w-[100dvw] flex-col gap-0 overflow-hidden rounded-none p-0 md:h-[82dvh] md:max-h-[82dvh] md:w-[88dvw] md:max-w-6xl md:rounded-4xl"
+        >
             {#if repository}
                 <RepositorySettings
                     {repository}

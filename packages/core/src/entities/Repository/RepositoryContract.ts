@@ -22,6 +22,7 @@ import {
     RepositoryReadRemovalSummarySchema,
     RepositoryMissionStartAcknowledgementSchema,
     RepositoryIssueDetailSchema,
+    RepositoryConfigureAgentSchema,
     RepositoryConfigureAgentsSchema,
     RepositoryConfigureDisplaySchema,
     RepositoryCodeIndexAcknowledgementSchema,
@@ -175,6 +176,12 @@ export const RepositoryContract: EntityContractType = {
         configureAgents: {
             kind: 'mutation',
             payload: RepositoryConfigureAgentsSchema,
+            result: RepositoryDataSchema,
+            execution: 'entity'
+        },
+        configureAgent: {
+            kind: 'mutation',
+            payload: RepositoryConfigureAgentSchema,
             result: RepositoryDataSchema,
             execution: 'entity'
         },

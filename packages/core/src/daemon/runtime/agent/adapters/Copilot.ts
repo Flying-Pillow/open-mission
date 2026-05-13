@@ -32,6 +32,7 @@ export function createCopilot(input: CopilotInput = {}): AgentInput {
         id: `agent:${COPILOT_AGENT_ID}`,
         agentId: COPILOT_AGENT_ID,
         displayName: 'Copilot CLI',
+        icon: 'simple-icons:githubcopilot',
         adapter: {
             command: command?.trim() || process.env['MISSION_COPILOT_CLI_COMMAND']?.trim() || 'copilot',
             providerSettings: false,
@@ -76,7 +77,8 @@ export function createCopilot(input: CopilotInput = {}): AgentInput {
                     { trustedDirectories: true, flag: '--add-dir' },
                     { prompt: 'initial', flag: '-p', trim: true, omitWhenEmpty: true }
                 ]
-            }
+            },
+            diagnoseConnectionFailure
         }
     };
 }
@@ -114,4 +116,20 @@ async function prepareCopilotLaunchConfig(
             }
         })
     });
+}
+
+function diagnoseConnectionFailure(input: {
+    stdout: string;
+    stderr: string;
+}): import('../AgentAdapter.js').AgentConnectionFailureDiagnostic | undefined {
+    const text = `${input.stdout}\n${input.stderr}`;
+    if (/login required|not logged in|authenticate|authentication failed|sign in/i.test(text)) {
+        return {
+            kind: 'auth-failed',
+            summary: 'Copilot CLI is not authenticated.',
+            detail: 'Run `copilot login` in the Mission runtime environment, then retry the connection test.',
+            diagnosticCode: 'copilot-auth'
+        };
+    }
+    return undefined;
 }

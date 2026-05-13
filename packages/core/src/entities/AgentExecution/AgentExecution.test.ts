@@ -66,6 +66,7 @@ describe('AgentExecution', () => {
             waitingForInput: true,
             acceptsPrompts: true,
             acceptedCommands: ['resume', 'checkpoint'],
+            interactionPosture: 'structured-headless',
             interactionCapabilities: deriveAgentExecutionInteractionCapabilities({
                 status: 'running',
                 acceptsPrompts: true,
@@ -92,7 +93,8 @@ describe('AgentExecution', () => {
         });
         expect(state.runtimeMessages.map((message) => message.type)).toEqual([
             'checkpoint',
-            'resume'
+            'resume',
+            'model'
         ]);
     });
 
@@ -211,7 +213,8 @@ describe('AgentExecution', () => {
             'interrupt',
             'checkpoint',
             'nudge',
-            'resume'
+            'resume',
+            'model'
         ]);
     });
 
@@ -321,20 +324,34 @@ describe('AgentExecution', () => {
             entityId: 'task-2',
             markerPrefix: '@task::'
         });
+        expect(descriptor.interactionPosture).toBe('structured-interactive');
         expect(descriptor.messages.map((message) => message.type)).toEqual([
+            'read',
             'interrupt',
             'checkpoint',
-            'nudge'
+            'nudge',
+            'model'
+        ]);
+        expect(descriptor.messages.map((message) => message.portability)).toEqual([
+            'mission-native',
+            'cross-agent',
+            'cross-agent',
+            'cross-agent',
+            'terminal-only'
         ]);
         expect(descriptor.messages.map((message) => message.icon)).toEqual([
+            'lucide:file-search',
             'lucide:pause',
             'lucide:milestone',
-            'lucide:message-circle-more'
+            'lucide:message-circle-more',
+            'lucide:brain-circuit'
         ]);
         expect(descriptor.messages.map((message) => message.tone)).toEqual([
+            'neutral',
             'attention',
             'neutral',
-            'progress'
+            'progress',
+            undefined
         ]);
         expect(descriptor.signals.map((signal) => signal.type)).toEqual([
             'progress',
@@ -409,7 +426,87 @@ describe('AgentExecution', () => {
             entityId: 'task-2',
             markerPrefix: '@task::'
         });
-        expect(data.protocolDescriptor?.messages).toEqual(data.runtimeMessages);
+        expect(data.protocolDescriptor?.interactionPosture).toBe('structured-interactive');
+        expect(data.protocolDescriptor?.messages).toEqual(expect.arrayContaining(data.runtimeMessages));
+        expect(data.protocolDescriptor?.messages).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                type: 'read',
+                portability: 'mission-native'
+            }),
+            expect.objectContaining({
+                type: 'model',
+                portability: 'terminal-only'
+            })
+        ]));
+    });
+
+    it('resolves message shorthand through the AgentExecution remote query seam', async () => {
+        const data = AgentExecution.createLive(createRuntimeSnapshot()).toData();
+
+        const result = await AgentExecution.resolveMessageShorthand({
+            ownerId: data.ownerId,
+            agentExecutionId: data.agentExecutionId,
+            text: '/nudge check status'
+        }, {
+            surfacePath: '/repo',
+            agentExecutionRegistry: {
+                hasExecution: () => true,
+                readExecution: () => data
+            } as never
+        });
+
+        expect(result).toMatchObject({
+            kind: 'runtime-message',
+            commandId: 'agentExecution.sendRuntimeMessage',
+            input: {
+                type: 'nudge',
+                reason: 'check status'
+            }
+        });
+    });
+
+    it('invokes semantic operations through the AgentExecution remote mutation seam', async () => {
+        const data = AgentExecution.createLive(createRuntimeSnapshot()).toData();
+        const invocations: unknown[] = [];
+
+        const result = await AgentExecution.invokeSemanticOperation({
+            ownerId: data.ownerId,
+            agentExecutionId: data.agentExecutionId,
+            name: 'read_artifact',
+            input: {
+                path: 'docs/architecture/agent-interaction-structured-first-spec.md'
+            }
+        }, {
+            surfacePath: '/repo',
+            agentExecutionRegistry: {
+                hasExecution: () => true,
+                readExecution: () => data,
+                invokeSemanticOperation: async (input: unknown) => {
+                    invocations.push(input);
+                    return {
+                        operationName: 'read_artifact',
+                        agentExecutionId: data.agentExecutionId,
+                        eventId: 'event-1',
+                        path: 'docs/architecture/agent-interaction-structured-first-spec.md',
+                        content: '# Spec',
+                        factType: 'artifact-read'
+                    };
+                }
+            } as never
+        });
+
+        expect(invocations).toEqual([{
+            agentExecutionId: data.agentExecutionId,
+            name: 'read_artifact',
+            input: {
+                path: 'docs/architecture/agent-interaction-structured-first-spec.md'
+            }
+        }]);
+        expect(result).toMatchObject({
+            operationName: 'read_artifact',
+            factType: 'artifact-read',
+            content: '# Spec'
+        });
     });
 
     it('materializes accepted AgentExecution signals as timeline items', () => {
@@ -1053,6 +1150,7 @@ function createRuntimeSnapshot(overrides: Partial<AgentExecutionSnapshot> = {}):
         waitingForInput: false,
         acceptsPrompts: true,
         acceptedCommands: ['interrupt', 'checkpoint', 'nudge'],
+        interactionPosture: 'structured-interactive',
         interactionCapabilities: deriveAgentExecutionInteractionCapabilities({
             status: 'running',
             transport: {

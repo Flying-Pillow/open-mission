@@ -238,6 +238,23 @@ export type AgentExecutionInputChoice = AgentExecutionJournalInputChoiceType;
 
 export type AgentExecutionDiagnosticCode = Extract<AgentExecutionJournalSignalType, { type: 'diagnostic' }>['code'];
 
+export type AgentConnectionTestKind =
+    | 'success'
+    | 'auth-failed'
+    | 'spawn-failed'
+    | 'timeout'
+    | 'invalid-model'
+    | 'unknown';
+
+export type AgentConnectionDiagnostic = {
+    kind: AgentConnectionTestKind;
+    summary: string;
+    detail?: string;
+    diagnosticCode?: string;
+    sampleOutput?: string;
+    metadata?: AgentMetadata;
+};
+
 export type AgentExecutionSignal = AgentExecutionJournalSignalType;
 
 export type AgentExecutionObservationAddress = {

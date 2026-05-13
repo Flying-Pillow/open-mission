@@ -311,6 +311,7 @@ function createTerminalSnapshot(input: {
         waitingForInput: false,
         acceptsPrompts: input.acceptsPrompts,
         acceptedCommands: [...input.acceptedCommands],
+        interactionPosture: 'structured-interactive',
         interactionCapabilities: deriveAgentExecutionInteractionCapabilities({
             status: input.status,
             transport: input.transport,
@@ -347,6 +348,7 @@ function createDetachedTerminalControllerSnapshot(
         waitingForInput: false,
         acceptsPrompts: false,
         acceptedCommands: [],
+        interactionPosture: 'native-terminal-escape-hatch',
         interactionCapabilities: deriveAgentExecutionInteractionCapabilities({
             status: 'terminated',
             ...(reference.transport ? { transport: { ...reference.transport } } : {}),
@@ -406,6 +408,19 @@ function delay(ms: number): Promise<void> {
 }
 
 function buildTerminalCommandPrompt(command: Exclude<AgentCommand, { type: 'interrupt' }>): AgentPrompt {
+    if ('portability' in command && command.portability === 'adapter-scoped') {
+        return {
+            source: 'system',
+            text: command.reason?.trim()
+                ? `Run adapter-scoped command '${command.type}': ${command.reason.trim()}`
+                : `Run adapter-scoped command '${command.type}'.`,
+            metadata: {
+                ...(command.metadata ?? {}),
+                'mission.command.portability': 'adapter-scoped',
+                'mission.command.adapterId': command.adapterId
+            }
+        };
+    }
     switch (command.type) {
         case 'resume':
             return { source: 'system', text: command.reason?.trim() || 'Resume execution.' };

@@ -6,8 +6,12 @@ import {
     agentExecutionEntityName,
     AgentExecutionLocatorSchema,
     AgentExecutionCommandInputSchema,
+    AgentExecutionInvokeSemanticOperationInputSchema,
+    AgentExecutionMessageShorthandResolutionSchema,
+    AgentExecutionResolveMessageShorthandInputSchema,
     AgentExecutionSendTerminalInputSchema
 } from './AgentExecutionProtocolSchema.js';
+import { AgentExecutionSemanticOperationResultSchema } from './AgentExecutionSemanticOperationSchema.js';
 import {
     AgentExecutionStorageSchema,
     AgentExecutionDataSchema,
@@ -35,6 +39,30 @@ export const AgentExecutionContract: EntityContractType = {
             payload: AgentExecutionLocatorSchema,
             result: AgentExecutionTerminalSnapshotSchema,
             execution: 'class'
+        },
+        resolveMessageShorthand: {
+            kind: 'query',
+            payload: AgentExecutionResolveMessageShorthandInputSchema,
+            result: AgentExecutionMessageShorthandResolutionSchema,
+            execution: 'class',
+            ui: {
+                label: 'Resolve message shorthand',
+                description: 'Resolve operator-facing slash shorthand into a structured AgentExecution invocation.',
+                tone: 'neutral',
+                presentationOrder: 90
+            }
+        },
+        invokeSemanticOperation: {
+            kind: 'mutation',
+            payload: AgentExecutionInvokeSemanticOperationInputSchema,
+            result: AgentExecutionSemanticOperationResultSchema,
+            execution: 'class',
+            ui: {
+                label: 'Invoke semantic operation',
+                description: 'Invoke a Mission-owned AgentExecution semantic operation for the live execution.',
+                tone: 'neutral',
+                presentationOrder: 95
+            }
         },
         command: {
             kind: 'mutation',

@@ -22,6 +22,7 @@ import type {
 } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import type {
     AgentExecutionObservationAckType,
+    AgentExecutionMessageDescriptorType,
     AgentExecutionProtocolDescriptorType,
     AgentSignalDeliveryType
 } from '../../../entities/AgentExecution/AgentExecutionProtocolSchema.js';
@@ -126,7 +127,7 @@ export class AgentExecutor {
         const executionId = AgentExecution.createFreshExecutionId(config, adapter.id);
         const preliminaryLaunchPlan = adapter.createLaunchPlan(config);
         const selectedDelivery = this.selectSignalDelivery(adapter, preliminaryLaunchPlan.mode);
-        const prepared = await this.prepareLaunch(config, executionId, selectedDelivery);
+        const prepared = await this.prepareLaunch(config, executionId, selectedDelivery, preliminaryLaunchPlan.mode, adapter.getRuntimeMessageDescriptors());
         const mcpAccess = selectedDelivery === 'mcp-tool'
             ? this.registerMcpAccess(prepared.executionId, prepared.protocolDescriptor)
             : undefined;
@@ -406,7 +407,9 @@ export class AgentExecutor {
     private async prepareLaunch(
         config: AgentLaunchConfig,
         executionId: string,
-        selectedDelivery: AgentSignalDeliveryType
+        selectedDelivery: AgentSignalDeliveryType,
+        launchMode: 'interactive' | 'print',
+        adapterRuntimeMessages: AgentExecutionMessageDescriptorType[]
     ): Promise<{
         config: AgentLaunchConfig;
         executionId: string;
@@ -415,8 +418,12 @@ export class AgentExecutor {
     }> {
         const protocolDescriptor = createAgentExecutionProtocolDescriptor({
             scope: config.scope,
+            interactionPosture: launchMode === 'print' ? 'structured-headless' : 'structured-interactive',
             deliveries: [selectedDelivery],
-            messages: AgentExecution.createRuntimeMessageDescriptorsForCommands(['interrupt', 'checkpoint', 'nudge'])
+            messages: mergeAgentExecutionMessageDescriptors(
+                AgentExecution.createRuntimeMessageDescriptorsForCommands(['interrupt', 'checkpoint', 'nudge']),
+                adapterRuntimeMessages
+            )
         });
         const transportState: AgentExecutionTransportStateType = {
             selected: selectedDelivery,
@@ -652,6 +659,23 @@ export class AgentExecutor {
         this.managedExecutions.delete(agentExecutionId);
         void managed.cleanup?.();
     }
+}
+
+function mergeAgentExecutionMessageDescriptors(
+    baseMessages: AgentExecutionMessageDescriptorType[],
+    additionalMessages: AgentExecutionMessageDescriptorType[]
+): AgentExecutionMessageDescriptorType[] {
+    const seenTypes = new Set(baseMessages.map((message) => message.type));
+    return [
+        ...baseMessages,
+        ...additionalMessages.filter((message) => {
+            if (seenTypes.has(message.type)) {
+                return false;
+            }
+            seenTypes.add(message.type);
+            return true;
+        })
+    ];
 }
 
 function readAgentExecutionOwnerId(scope: AgentExecutionProtocolDescriptorType['scope']): string {

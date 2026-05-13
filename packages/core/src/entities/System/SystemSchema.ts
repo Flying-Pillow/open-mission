@@ -1,12 +1,9 @@
 import { z } from 'zod/v4';
-import { AgentIdSchema } from '../Agent/AgentSchema.js';
+import { AgentOwnerSettingsSchema } from '../Agent/AgentSchema.js';
 
 export const DEFAULT_SYSTEM_AGENT_ADAPTER_ID = 'codex';
 
-export const SystemAgentSettingsSchema = z.object({
-    defaultAgentAdapter: AgentIdSchema,
-    enabledAgentAdapters: z.array(AgentIdSchema).default([])
-}).strict();
+export const SystemAgentSettingsSchema = AgentOwnerSettingsSchema;
 
 export const githubSystemStateSchema = z.object({
     cliAvailable: z.boolean(),
@@ -19,6 +16,10 @@ export const githubSystemStateSchema = z.object({
 
 export const systemConfigSchema = SystemAgentSettingsSchema.extend({
     repositoriesRoot: z.string().trim().min(1)
+}).strict();
+
+export const SystemRepositoriesSettingsSchema = z.object({
+    repositoriesRoot: systemConfigSchema.shape.repositoriesRoot
 }).strict();
 
 export const daemonSystemStateSchema = z.object({
@@ -97,7 +98,7 @@ const defaultSystemAgentSettings: SystemAgentSettingsType = {
 export const systemEntityName = 'System' as const;
 
 export const SystemReadSchema = z.object({}).strict();
-export const SystemConfigureSchema = systemConfigSchema;
+export const SystemConfigureSchema = SystemRepositoriesSettingsSchema;
 export const SystemDataSchema = systemConfigSchema;
 
 export function createDefaultSystemAgentSettings(): SystemAgentSettingsType {
@@ -108,13 +109,17 @@ export function parseSystemAgentSettings(input: Partial<SystemAgentSettingsType>
     const defaults = createDefaultSystemAgentSettings();
     return SystemAgentSettingsSchema.parse({
         defaultAgentAdapter: input.defaultAgentAdapter ?? defaults.defaultAgentAdapter,
-        enabledAgentAdapters: input.enabledAgentAdapters ?? defaults.enabledAgentAdapters
+        enabledAgentAdapters: input.enabledAgentAdapters ?? defaults.enabledAgentAdapters,
+        ...(input.defaultAgentMode ? { defaultAgentMode: input.defaultAgentMode } : {}),
+        ...(input.defaultModel ? { defaultModel: input.defaultModel } : {}),
+        ...(input.defaultReasoningEffort ? { defaultReasoningEffort: input.defaultReasoningEffort } : {})
     });
 }
 
 export type SystemAgentSettingsType = z.infer<typeof SystemAgentSettingsSchema>;
 export type GithubSystemState = z.infer<typeof githubSystemStateSchema>;
 export type SystemConfig = z.infer<typeof systemConfigSchema>;
+export type SystemRepositoriesSettingsType = z.infer<typeof SystemRepositoriesSettingsSchema>;
 export type DaemonSystemState = z.infer<typeof daemonSystemStateSchema>;
 export type HostSystemState = z.infer<typeof hostSystemStateSchema>;
 export type RuntimeSystemState = z.infer<typeof runtimeSystemStateSchema>;

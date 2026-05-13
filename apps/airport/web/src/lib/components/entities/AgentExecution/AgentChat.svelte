@@ -470,10 +470,7 @@
         promptPending = true;
         promptError = null;
         try {
-            await resolvedAgentExecution.sendPrompt({
-                source: "operator",
-                text,
-            });
+            await resolvedAgentExecution.sendMessageText(text);
             draft = "";
             await onCommandExecuted();
         } catch (submitError) {

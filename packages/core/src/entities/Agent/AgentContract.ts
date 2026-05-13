@@ -2,23 +2,26 @@ import type { EntityContractType } from '../Entity/EntitySchema.js';
 import { Agent } from './Agent.js';
 import {
     agentEntityName,
-    AgentDataSchema,
+    AgentConnectionTestResultSchema,
+    AgentSchema,
+    AgentStorageSchema,
     AgentFindResultSchema,
     AgentFindSchema,
-    AgentLocatorSchema
+    AgentLocatorSchema,
+    AgentTestConnectionInputSchema
 } from './AgentSchema.js';
 
 export const AgentContract: EntityContractType = {
     entity: agentEntityName,
     entityClass: Agent,
     inputSchema: AgentLocatorSchema,
-    storageSchema: AgentDataSchema,
-    dataSchema: AgentDataSchema,
+    storageSchema: AgentStorageSchema,
+    dataSchema: AgentSchema,
     methods: {
         read: {
             kind: 'query',
             payload: AgentLocatorSchema,
-            result: AgentDataSchema,
+            result: AgentSchema,
             execution: 'class'
         },
         find: {
@@ -26,6 +29,18 @@ export const AgentContract: EntityContractType = {
             payload: AgentFindSchema,
             result: AgentFindResultSchema,
             execution: 'class'
+        },
+        testConnection: {
+            kind: 'mutation',
+            payload: AgentTestConnectionInputSchema,
+            result: AgentConnectionTestResultSchema,
+            execution: 'class',
+            ui: {
+                label: 'Test connection',
+                description: 'Run a one-shot adapter readiness probe without starting a managed AgentExecution.',
+                tone: 'neutral',
+                presentationOrder: 100
+            }
         }
     },
     events: {}

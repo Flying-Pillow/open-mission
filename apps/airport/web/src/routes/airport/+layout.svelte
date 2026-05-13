@@ -1,7 +1,12 @@
 <script lang="ts">
     import { page } from "$app/state";
+    import { onMount } from "svelte";
     import { onDestroy } from "svelte";
     import { app } from "$lib/client/Application.svelte.js";
+    import {
+        createAppContext,
+        setAppContext,
+    } from "$lib/client/context/app-context.svelte";
     import DaemonLogTail from "$lib/components/airport/DaemonLogTail.svelte";
     import AirportHeader from "$lib/components/airport/airport-header.svelte";
     import AirportSidebar from "$lib/components/airport/airport-sidebar.svelte";
@@ -15,13 +20,34 @@
         SidebarProvider,
     } from "$lib/components/ui/sidebar/index.js";
     import type { Snippet } from "svelte";
+    import type { LayoutData } from "./$types";
 
-    let { children }: { children: Snippet } = $props();
+    let { data, children }: { data: LayoutData; children: Snippet } = $props();
     let daemonLogsOpen = $state(false);
     let sidebarOpen = $state(false);
 
+    const appContext = createAppContext(() => ({
+        ...data.appContext,
+        systemState: data.systemState,
+    }));
+    setAppContext(appContext);
+
+    onMount(() => {
+        void (async () => {
+            await app.initialize();
+            await app.loadAirportRepositories();
+        })().catch(() => undefined);
+    });
+
     onDestroy(() => {
         app.clearAirportSelection();
+    });
+
+    $effect(() => {
+        appContext.syncServerContext({
+            ...data.appContext,
+            systemState: data.systemState,
+        });
     });
 </script>
 

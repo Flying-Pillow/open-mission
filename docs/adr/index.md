@@ -55,6 +55,9 @@ Read them when a change touches ownership, naming, state, runtime behavior, repo
 - [Agent Execution Interaction Journal](0025-agent-execution-interaction-journal.md)
 - [Typed Agent Execution Journal Ledger](0027-typed-agent-execution-journal-ledger.md)
 - [Mission MCP Agent Execution Semantic Operations](0030-mission-mcp-agent-execution-semantic-operations.md)
+- [Agent Connection Tests As Agent Entity Commands](0032-agent-connection-tests-as-agent-entity-commands.md)
+- [Structured-First Agent Interaction With Terminal Capability](0033-structured-first-agent-interaction-with-terminal-capability.md)
+- [Runtime-Owned Agent Model Selection](0034-runtime-owned-agent-model-selection.md)
 
 ### Mission Control And Surfaces
 

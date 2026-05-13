@@ -64,19 +64,20 @@ describe('AgentExecutionSignalLaunchContext', () => {
         });
 
         expect(context.launchEnv).toEqual({});
-        expect(context.agentExecutionInstructions).toContain('Mission MCP tools are already connected and available.');
-        expect(context.agentExecutionInstructions).toContain('Mission MCP tools are the authoritative operator interaction protocol for this session.');
+        expect(context.agentExecutionInstructions).toContain('Mission MCP is already connected and available.');
+        expect(context.agentExecutionInstructions).toContain('Mission MCP is the authoritative operator interaction protocol for this session.');
         expect(context.agentExecutionInstructions).toContain('Do not start or configure MCP servers.');
         expect(context.agentExecutionInstructions).toContain('Do not attempt to provision infrastructure for this session.');
         expect(context.agentExecutionInstructions).toContain('Do not use provider-native approval UI, confirmation flows, terminal permission requests, or chat-native prompts for operator interaction.');
-        expect(context.agentExecutionInstructions).toContain('Translate any approval, permission, clarification, or decision requirement into a Mission signal instead of leaving it in provider-native UI.');
-        expect(context.agentExecutionInstructions).toContain('When answering an operator/user question or providing a final operator-facing response, call the message tool with channel "agent" and put the response in text as concise GitHub-flavored Markdown.');
-        expect(context.agentExecutionInstructions).toContain('Do not duplicate final operator-facing responses in stdout, stderr, terminal prose, or provider-native chat text.');
+        expect(context.agentExecutionInstructions).toContain('If provider-native UI requests approval or confirmation, do not wait for provider-native interaction. Use needs_input instead.');
+        expect(context.agentExecutionInstructions).toContain('When responding to the operator or providing a final operator-facing response, call the message tool with channel="agent" and provide concise GitHub-flavored Markdown.');
+        expect(context.agentExecutionInstructions).toContain('Do not duplicate canonical operator-facing responses in stdout, stderr, terminal prose, or provider-native chat text.');
         expect(context.agentExecutionInstructions).toContain('Do not ask the operator for AgentExecution ids, event ids, tokens, or transport fields.');
-        expect(context.agentExecutionInstructions).toContain('Omit eventId unless you are intentionally retrying the exact same signal.');
+        expect(context.agentExecutionInstructions).toContain('Omit eventId unless intentionally retrying the exact same signal.');
         expect(context.agentExecutionInstructions).not.toContain('Use normal prose for explanation; use tools only');
         expect(context.agentExecutionInstructions).not.toContain('@repository::');
         expect(context.agentExecutionInstructions).toContain('Available tools: progress, status, needs_input, blocked, ready_for_verification, completed_claim, failed_claim, message.');
-        expect(context.agentExecutionInstructions).toContain('Use needs_input whenever a command requires approval');
+        expect(context.agentExecutionInstructions).toContain('Use needs_input whenever:');
+        expect(context.agentExecutionInstructions).toContain('- a command requires approval.');
     });
 });

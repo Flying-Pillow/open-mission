@@ -1,0 +1,110 @@
+---
+layout: default
+title: Structured-First Agent Interaction With Terminal Capability
+parent: Architecture Decisions
+nav_order: 33
+status: accepted
+date: 2026-05-13
+decision_area: agent-execution-interaction
+owners:
+  - maintainers
+supersedes: []
+superseded_by: []
+---
+
+Mission will use structured AgentExecution interaction as the canonical operator and daemon control plane while preserving terminal interaction as an optional non-authoritative capability surface.
+
+## Context
+
+Mission is integrating coding-agent CLIs whose native terminal experiences still matter to developers. Claude Code, Codex, Copilot CLI, Pi, OpenCode, and future adapters expose different interactive affordances, slash commands, approval flows, tool displays, resume behavior, and provider-specific features.
+
+Mission also has stronger architectural requirements than a CLI wrapper. Mission owns AgentExecution scope, context, Entity commands, semantic operations, AgentExecution journals, Mission MCP tools, workflow effects, runtime facts, and operator-facing state. If terminal text remains the primary source of meaning, Mission must reverse-engineer workflow truth from provider UI output. If Mission removes native terminal capability too early, it discards useful provider functionality before Mission can provide a portable equivalent.
+
+Open Design demonstrates the opposite end of this spectrum: most coding-agent runs are headless one-shot child processes whose output is parsed and streamed back to the web UI. That model is valuable for consistency, but Mission's long-lived AgentExecution model, scoped Entity interaction, and developer-control goals require a different split.
+
+## Decision
+
+Mission chooses a structured-first, terminal-capable Agent interaction architecture.
+
+Structured AgentExecution messages, Agent signals, Agent execution semantic operations, accepted observations, AgentExecution journal records, and Entity command effects are canonical. Mission chat and other Airport controls submit structured messages or Entity commands, even when the selected Agent adapter ultimately delivers those messages to a terminal-backed CLI.
+
+Terminal interaction remains supported for adapters and operators that need native CLI affordances. A Terminal may be attached to an AgentExecution as a live native surface and raw transport evidence source. Raw terminal input and terminal UI output are not canonical Mission semantics unless they are accepted through a structured Mission path such as a runtime message descriptor, `mission-mcp` tool call, stdout marker, provider-structured parser event, or daemon-normalized runtime fact.
+
+Mission slash commands are shorthand for structured Mission operations. They are not provider slash commands by default. Adapter-native slash commands may be surfaced only when an AgentAdapter advertises them as runtime message descriptors or when the operator intentionally uses the native terminal lane.
+
+## Command Taxonomy
+
+Mission recognizes four command categories.
+
+### Mission-Native Commands
+
+Mission-native commands are portable operations owned by Mission Entities, AgentExecution messages, or Agent execution semantic operations. Examples include reading or attaching an Artifact, requesting verification, checkpointing, summarizing a diff, inspecting symbol context, asking for approval, and recording blocked state.
+
+These commands belong in Mission UI and may be rendered with slash-command syntax, menus, buttons, keyboard shortcuts, or other surface affordances. The slash syntax is presentation shorthand only; canonical meaning comes from the structured operation.
+
+### Cross-Agent Runtime Commands
+
+Cross-agent runtime commands are portable-enough interactions that affect a running AgentExecution but still depend on adapter delivery. Examples include interrupt, continue, checkpoint, compact, resume, request status, change reasoning effort, and retry.
+
+These commands must be descriptor-backed AgentExecution messages. Surfaces render only the commands advertised by the active AgentExecution protocol descriptor.
+
+### Adapter-Scoped Commands
+
+Adapter-scoped commands expose provider-specific behavior that Mission can describe but not normalize into a portable command. They may be rendered in Mission UI only when the selected AgentAdapter advertises a runtime message descriptor with adapter-scoped semantics.
+
+Adapter-scoped commands must be visibly non-portable in operator-facing surfaces and must not mutate Mission workflow state except through explicit structured observations or Entity effects.
+
+### Terminal-Only Native Commands
+
+Terminal-only native commands are provider CLI features that Mission has not normalized or cannot safely represent. They remain available only through the attached Terminal. Mission may capture raw terminal evidence for audit, but the terminal command itself is not a Mission command.
+
+This category is an accepted compatibility residue, not the desired end state. Mission should reduce it over time by promoting stable high-value intents into Mission-native or descriptor-backed commands.
+
+## Journaling
+
+Mission must preserve the distinction between semantic truth and transport evidence.
+
+The AgentExecution interaction journal records accepted semantic material: messages, observations, policy decisions, runtime facts, state effects, owner effects, and projection material. It must not attempt to make every stdout byte or terminal screen update semantic.
+
+Raw or near-raw terminal recordings, stdout/stderr chunks, provider JSON payloads, and parser tails remain transport evidence. They are retained for audit and debugging, but they are not replayable workflow truth unless a daemon-owned path promotes them into a structured journal record.
+
+## Execution Postures
+
+Mission supports three execution postures:
+
+- Structured interactive: a structured AgentExecution with an attached Terminal and structured signal/message transport.
+- Structured headless: a structured AgentExecution whose operator interaction is Mission UI, messages, MCP tools, semantic operations, and parsed provider output without requiring terminal interaction.
+- Native terminal escape hatch: an attached Terminal used for direct provider-native interaction while Mission still captures transport evidence and accepts any declared structured observations.
+
+Structured interactive and structured headless are canonical Mission postures. Native terminal escape hatch is compatibility behavior.
+
+## Ownership
+
+`AgentExecution` owns the canonical interaction model, protocol descriptors, accepted messages, observation identity, semantic state, and journal records.
+
+`AgentExecutor` owns launch coordination, delivery attempts, terminal attachment, observation routing, selected signal transport, and adapter execution posture selection.
+
+`AgentAdapter` owns provider-specific launch translation, parser hooks, transport capability declaration, MCP provisioning, and advertised adapter-scoped runtime messages.
+
+`Terminal` and `TerminalRegistry` own PTY process leases, terminal input, screen state, snapshots, and terminal recordings. They do not own Mission workflow, AgentExecution semantic state, or command meaning.
+
+Airport owns presentation and interaction. It renders descriptor-backed messages, Mission-native commands, and optional terminal views. It must not invent a parallel command vocabulary or parse terminal output into Mission meaning locally.
+
+## Consequences
+
+- Mission can provide a unified operator chat and command surface without discarding native provider terminal affordances.
+- Developers keep access to CLI-specific workflows during the transition to richer structured Mission controls.
+- Slash commands become durable Mission interaction shorthand rather than terminal-only text conventions.
+- Adapter-specific behavior remains available without becoming core Mission vocabulary prematurely.
+- Headless operation becomes viable for unattended, routine, verification, and batch workflows while interactive terminal support remains available for developer-led work.
+- The semantic journal stays bounded and replayable because raw output remains transport evidence unless accepted through a structured path.
+
+## Implementation Rules
+
+- Do not treat terminal text as canonical Mission intent, context mutation, workflow state, or command result.
+- Do not remove terminal support merely because a headless path exists.
+- Do not expose provider-native slash commands as Mission commands unless they are descriptor-backed or explicitly terminal-only.
+- Do not parse every terminal byte into the semantic journal.
+- Do keep Mission-native slash commands backed by Entity commands, AgentExecution messages, or Agent execution semantic operations.
+- Do keep adapter-native commands behind AgentAdapter-declared runtime message descriptors.
+- Do clearly distinguish structured interactive, structured headless, and native terminal escape-hatch postures in protocol snapshots and operator surfaces.

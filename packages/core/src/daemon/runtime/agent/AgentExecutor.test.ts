@@ -124,6 +124,59 @@ describe('AgentExecutor', () => {
         }
     });
 
+    it('publishes adapter-scoped runtime message descriptors in the launch protocol', async () => {
+        const workingDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-agent-executor-descriptors-'));
+        temporaryDirectories.add(workingDirectory);
+        const adapter = new AgentAdapter({
+            id: 'descriptor-agent',
+            command: process.execPath,
+            displayName: 'Descriptor Agent',
+            runtimeMessages: [{
+                type: 'compact-provider-context',
+                label: 'Compact Provider Context',
+                delivery: 'best-effort',
+                mutatesContext: false,
+                portability: 'adapter-scoped',
+                adapterId: 'descriptor-agent'
+            }],
+            createLaunchPlan: () => ({
+                mode: 'print',
+                command: process.execPath,
+                args: ['-e', 'process.exit(0)']
+            })
+        });
+        const agent = await Agent.fromAdapter(adapter);
+        const executor = new AgentExecutor({
+            agentRegistry: new AgentRegistry({ agents: [agent] })
+        });
+
+        try {
+            const execution = await executor.startExecution({
+                scope: {
+                    kind: 'repository',
+                    repositoryRootPath: workingDirectory
+                },
+                workingDirectory,
+                requestedAdapterId: 'descriptor-agent',
+                resume: { mode: 'new' },
+                initialPrompt: {
+                    source: 'system',
+                    text: 'Start.'
+                }
+            });
+
+            expect(execution.toData().protocolDescriptor?.messages).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    type: 'compact-provider-context',
+                    portability: 'adapter-scoped',
+                    adapterId: 'descriptor-agent'
+                })
+            ]));
+        } finally {
+            executor.dispose();
+        }
+    });
+
     it('keeps mcp-delivered terminal output out of agent chat messages', async () => {
         const mcpServer = new MissionMcpServer({
             agentExecutionRegistry: {

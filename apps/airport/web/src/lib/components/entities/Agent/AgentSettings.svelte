@@ -1,103 +1,108 @@
 <script lang="ts">
     import {
-        AgentFindResultSchema,
-        type AgentDataType,
+        type AgentConnectionTestResultType,
+        type AgentType,
+        type AgentOwnerSettingsType,
     } from "@flying-pillow/mission-core/entities/Agent/AgentSchema";
-    import { Button } from "$lib/components/ui/button/index.js";
-    import { Checkbox } from "$lib/components/ui/checkbox/index.js";
-    import { qry } from "../../../../routes/api/entities/remote/query.remote";
+    import AgentList from "$lib/components/entities/Agent/AgentList.svelte";
+    import { Agent } from "$lib/components/entities/Agent/Agent.svelte.js";
 
     let {
-        repositoryRootPath,
+        agentResolutionRootPath = "",
+        testWorkingDirectory,
         enabledAgentAdapters = $bindable<string[]>([]),
         defaultAgentAdapter = $bindable(""),
+        defaultAgentMode = $bindable<
+            AgentOwnerSettingsType["defaultAgentMode"]
+        >(undefined),
         canSave = $bindable(false),
         availableAgentCount = $bindable(0),
-        title = "Agents",
-        description = "Choose which agents are enabled and which one is the default.",
-        emptyRootPathMessage = "Enter a repositories root to load available agents.",
+        title = "Agent defaults",
+        description = "Choose which agents this owner may use and how new Agent executions should start.",
     }: {
-        repositoryRootPath: string;
+        agentResolutionRootPath?: string;
+        testWorkingDirectory?: string;
         enabledAgentAdapters?: string[];
         defaultAgentAdapter?: string;
+        defaultAgentMode?: AgentOwnerSettingsType["defaultAgentMode"];
         canSave?: boolean;
         availableAgentCount?: number;
         title?: string;
         description?: string;
-        emptyRootPathMessage?: string;
     } = $props();
 
-    const trimmedRepositoryRootPath = $derived(repositoryRootPath.trim());
-    const agentsQuery = $derived.by(() => {
-        if (!trimmedRepositoryRootPath) {
-            return undefined;
-        }
-
-        return qry({
-            entity: "Agent",
-            method: "find",
-            payload: {
-                repositoryRootPath: trimmedRepositoryRootPath,
-            },
-        });
-    });
-    const agents = $derived.by((): AgentDataType[] => {
-        const current = agentsQuery?.current;
-        return Array.isArray(current)
-            ? AgentFindResultSchema.parse(current)
-            : [];
-    });
-    const loading = $derived(agentsQuery?.loading ?? false);
-    const loadError = $derived.by(() => {
-        const error = agentsQuery?.error;
-        if (!error) {
-            return null;
-        }
-
-        return error instanceof Error ? error.message : String(error);
-    });
-    const availableAgents = $derived(
-        agents.filter((agent) => agent.availability.available),
+    const trimmedRootPath = $derived(agentResolutionRootPath.trim());
+    const agentsQuery = $derived.by(() =>
+        Agent.findQuery(
+            trimmedRootPath ? { repositoryRootPath: trimmedRootPath } : {},
+        ),
     );
+    const agents = $derived.by((): AgentType[] =>
+        Agent.readFindQueryCurrent(agentsQuery),
+    );
+    const loading = $derived(Agent.readQueryLoading(agentsQuery));
+    const loadError = $derived(Agent.readQueryError(agentsQuery));
+    const availableAgents = $derived(Agent.availableAgents(agents));
+    const effectiveMode = $derived(defaultAgentMode ?? "interactive");
+
+    let connectionTestState = $state<
+        | { status: "idle" }
+        | { status: "running"; agentId: string }
+        | {
+              status: "done";
+              agentId: string;
+              result: AgentConnectionTestResultType;
+          }
+    >({ status: "idle" });
 
     $effect(() => {
         availableAgentCount = availableAgents.length;
-        canSave =
-            availableAgents.length === 0 ||
-            (enabledAgentAdapters.length > 0 &&
-                enabledAgentAdapters.includes(defaultAgentAdapter));
+        canSave = Agent.canSaveOwnerSettings({
+            availableAgents,
+            settings: currentSettings(),
+        });
     });
 
     $effect(() => {
-        const availableAgentIds = availableAgents.map((agent) => agent.agentId);
-        if (availableAgentIds.length === 0) {
-            return;
-        }
+        const nextSettings = Agent.normalizeOwnerSettings({
+            availableAgents,
+            settings: currentSettings(),
+        });
 
-        const normalizedEnabledAgentAdapters = [
-            ...new Set(
-                enabledAgentAdapters.filter((agentId) =>
-                    availableAgentIds.includes(agentId),
-                ),
-            ),
-        ];
-        const nextEnabledAgentAdapters =
-            normalizedEnabledAgentAdapters.length > 0
-                ? normalizedEnabledAgentAdapters
-                : [...availableAgentIds];
-        const nextDefaultAgentAdapter = nextEnabledAgentAdapters.includes(
-            defaultAgentAdapter,
-        )
-            ? defaultAgentAdapter
-            : (nextEnabledAgentAdapters[0] ?? "");
-
-        if (!sameStringList(enabledAgentAdapters, nextEnabledAgentAdapters)) {
-            enabledAgentAdapters = nextEnabledAgentAdapters;
+        if (
+            !sameStringList(
+                enabledAgentAdapters,
+                nextSettings.enabledAgentAdapters,
+            )
+        ) {
+            enabledAgentAdapters = nextSettings.enabledAgentAdapters;
         }
-        if (defaultAgentAdapter !== nextDefaultAgentAdapter) {
-            defaultAgentAdapter = nextDefaultAgentAdapter;
+        if (defaultAgentAdapter !== nextSettings.defaultAgentAdapter) {
+            defaultAgentAdapter = nextSettings.defaultAgentAdapter;
+        }
+        if (defaultAgentMode !== nextSettings.defaultAgentMode) {
+            defaultAgentMode = nextSettings.defaultAgentMode;
         }
     });
+
+    $effect(() => {
+        defaultAgentAdapter;
+        connectionTestState = { status: "idle" };
+    });
+
+    function currentSettings(): AgentOwnerSettingsType {
+        return {
+            defaultAgentAdapter,
+            enabledAgentAdapters,
+            ...(defaultAgentMode ? { defaultAgentMode } : {}),
+        };
+    }
+
+    function applySettings(settings: AgentOwnerSettingsType): void {
+        defaultAgentAdapter = settings.defaultAgentAdapter;
+        enabledAgentAdapters = settings.enabledAgentAdapters;
+        defaultAgentMode = settings.defaultAgentMode;
+    }
 
     function sameStringList(left: string[], right: string[]): boolean {
         return (
@@ -107,96 +112,96 @@
     }
 
     function toggleAgent(agentId: string, checked: boolean): void {
-        if (checked) {
-            enabledAgentAdapters = [
-                ...new Set([...enabledAgentAdapters, agentId]),
-            ];
-            if (!defaultAgentAdapter) {
-                defaultAgentAdapter = agentId;
-            }
+        applySettings(
+            Agent.toggleEnabledAgentSettings({
+                settings: currentSettings(),
+                agentId,
+                enabled: checked,
+            }),
+        );
+    }
+
+    function chooseDefaultAgent(agentId: string): void {
+        applySettings(
+            Agent.chooseDefaultAgentSettings({
+                settings: currentSettings(),
+                agentId,
+            }),
+        );
+    }
+
+    function canTestAgent(agent: AgentType): boolean {
+        return agent.availability.available && !!effectiveMode;
+    }
+
+    async function testConnection(agent: AgentType): Promise<void> {
+        if (!canTestAgent(agent)) {
             return;
         }
 
-        const nextEnabledAgentAdapters = enabledAgentAdapters.filter(
-            (candidate) => candidate !== agentId,
-        );
-        enabledAgentAdapters = nextEnabledAgentAdapters;
-        if (defaultAgentAdapter === agentId) {
-            defaultAgentAdapter = nextEnabledAgentAdapters[0] ?? "";
-        }
+        const workingDirectory =
+            testWorkingDirectory?.trim() || trimmedRootPath || undefined;
+        connectionTestState = { status: "running", agentId: agent.agentId };
+        const result = await Agent.testConnection({
+            agentId: agent.agentId,
+            agentName: agent.displayName,
+            ...(trimmedRootPath ? { repositoryRootPath: trimmedRootPath } : {}),
+            ...(workingDirectory ? { workingDirectory } : {}),
+            launchMode: effectiveMode,
+        });
+        connectionTestState = {
+            status: "done",
+            agentId: agent.agentId,
+            result,
+        };
     }
 </script>
 
-<div class="grid gap-3">
-    <div class="grid gap-1">
-        <h3 class="text-sm font-semibold text-foreground">{title}</h3>
-        <p class="text-sm text-muted-foreground">{description}</p>
+<div class="grid gap-4">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="grid gap-1">
+            <h3 class="text-sm font-semibold text-foreground">{title}</h3>
+            <p class="max-w-3xl text-sm text-muted-foreground">{description}</p>
+        </div>
+        {#if agents.length > 0}
+            <label
+                class="flex items-center gap-2 text-xs font-medium text-muted-foreground"
+            >
+                <span>Launch mode</span>
+                <select
+                    class="h-8 rounded-md border bg-background px-2 text-xs text-foreground"
+                    value={effectiveMode}
+                    onchange={(event) => {
+                        defaultAgentMode = event.currentTarget
+                            .value as AgentOwnerSettingsType["defaultAgentMode"];
+                    }}
+                >
+                    <option value="interactive">Interactive</option>
+                    <option value="autonomous">Autonomous</option>
+                </select>
+            </label>
+        {/if}
     </div>
 
-    {#if !trimmedRepositoryRootPath}
-        <p class="text-sm text-muted-foreground">{emptyRootPathMessage}</p>
-    {:else if loading}
+    {#if loading}
         <p class="text-sm text-muted-foreground">Loading agents...</p>
     {:else if loadError}
         <p class="text-sm text-rose-600">{loadError}</p>
     {:else if agents.length === 0}
         <p class="text-sm text-muted-foreground">
-            No runtime agents were discovered for this surface.
+            No runtime agents were discovered for this owner.
         </p>
     {:else}
-        {#each agents as agent (agent.id)}
-            <div class="rounded-lg border px-3 py-3">
-                <div class="flex items-start justify-between gap-3">
-                    <label class="flex min-w-0 items-start gap-3">
-                        <Checkbox
-                            checked={enabledAgentAdapters.includes(
-                                agent.agentId,
-                            )}
-                            disabled={!agent.availability.available}
-                            onCheckedChange={(checked) =>
-                                toggleAgent(agent.agentId, checked === true)}
-                        />
-                        <div class="min-w-0">
-                            <div class="flex items-center gap-2">
-                                <span
-                                    class="text-sm font-medium text-foreground"
-                                >
-                                    {agent.displayName}
-                                </span>
-                                <span
-                                    class={`text-xs ${agent.availability.available ? "text-emerald-600" : "text-rose-600"}`}
-                                >
-                                    {agent.availability.available
-                                        ? "Available"
-                                        : "Unavailable"}
-                                </span>
-                            </div>
-                            <p class="text-xs text-muted-foreground">
-                                {agent.agentId}
-                            </p>
-                            {#if agent.availability.reason}
-                                <p class="mt-1 text-xs text-muted-foreground">
-                                    {agent.availability.reason}
-                                </p>
-                            {/if}
-                        </div>
-                    </label>
-
-                    <Button
-                        type="button"
-                        variant={defaultAgentAdapter === agent.agentId
-                            ? "default"
-                            : "outline"}
-                        size="sm"
-                        disabled={!enabledAgentAdapters.includes(agent.agentId)}
-                        onclick={() => {
-                            defaultAgentAdapter = agent.agentId;
-                        }}
-                    >
-                        Default
-                    </Button>
-                </div>
-            </div>
-        {/each}
+        <AgentList
+            {agents}
+            {availableAgents}
+            {enabledAgentAdapters}
+            {defaultAgentAdapter}
+            {connectionTestState}
+            {canTestAgent}
+            onToggleEnabled={toggleAgent}
+            onChooseDefault={chooseDefaultAgent}
+            onTestConnection={testConnection}
+        />
     {/if}
 </div>

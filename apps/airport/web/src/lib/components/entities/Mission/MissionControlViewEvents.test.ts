@@ -69,6 +69,9 @@ describe('Mission control data reconciliation', () => {
         expect(mission.commands).toEqual([
             {
                 commandId: MissionCommandIds.pause,
+                entity: 'Mission',
+                method: 'pause',
+                targetId: 'mission:mission-29',
                 label: 'Pause Mission',
                 available: true
             }
@@ -143,8 +146,8 @@ describe('Mission control data reconciliation', () => {
                         canSendStructuredCommand: true
                     },
                     runtimeMessages: [
-                        { type: 'checkpoint', label: 'Checkpoint', delivery: 'best-effort', mutatesContext: false },
-                        { type: 'resume', label: 'Resume', delivery: 'best-effort', mutatesContext: false }
+                        { type: 'checkpoint', label: 'Checkpoint', delivery: 'best-effort', mutatesContext: false, portability: 'cross-agent' },
+                        { type: 'resume', label: 'Resume', delivery: 'best-effort', mutatesContext: false, portability: 'cross-agent' }
                     ]
                 })]
             }),
@@ -183,6 +186,143 @@ describe('Mission control data reconciliation', () => {
                     input: {
                         type: 'resume',
                         reason: 'Operator approved continuation.'
+                    }
+                }
+            }
+        ]);
+    });
+
+    it('resolves AgentExecution slash shorthand before dispatching a runtime message command', async () => {
+        const agentExecutionCommandCalls: EntityCommandInvocation[] = [];
+        const mission = createMission(
+            createMissionSnapshot({
+                agentExecutions: [createAgentExecutionSnapshot('session-1', 'running', {
+                    interactionCapabilities: {
+                        mode: 'agent-message',
+                        canSendTerminalInput: false,
+                        canSendStructuredPrompt: true,
+                        canSendStructuredCommand: true
+                    },
+                    runtimeMessages: [
+                        { type: 'checkpoint', label: 'Checkpoint', delivery: 'best-effort', mutatesContext: false, portability: 'cross-agent' }
+                    ]
+                })]
+            }),
+            createMissionGatewayDependencies([], [], agentExecutionCommandCalls)
+        );
+        const agentExecution = mission.getAgentExecution('session-1');
+
+        if (!agentExecution) {
+            throw new Error('Expected session to be available.');
+        }
+
+        await agentExecution.sendMessageText('/checkpoint before refactor');
+
+        expect(agentExecutionCommandCalls).toEqual([
+            {
+                entity: 'AgentExecution',
+                method: 'command',
+                payload: {
+                    ownerId: 'mission-29',
+                    agentExecutionId: 'session-1',
+                    commandId: AgentExecutionCommandIds.sendRuntimeMessage,
+                    input: {
+                        type: 'checkpoint',
+                        reason: 'before refactor'
+                    }
+                }
+            }
+        ]);
+    });
+
+    it('routes Mission-native read shorthand to an AgentExecution semantic operation', async () => {
+        const agentExecutionCommandCalls: EntityCommandInvocation[] = [];
+        const mission = createMission(
+            createMissionSnapshot({
+                agentExecutions: [createAgentExecutionSnapshot('session-1', 'running', {
+                    interactionCapabilities: {
+                        mode: 'agent-message',
+                        canSendTerminalInput: false,
+                        canSendStructuredPrompt: true,
+                        canSendStructuredCommand: true
+                    }
+                })]
+            }),
+            createMissionGatewayDependencies([], [], agentExecutionCommandCalls)
+        );
+        const agentExecution = mission.getAgentExecution('session-1');
+
+        if (!agentExecution) {
+            throw new Error('Expected session to be available.');
+        }
+
+        await agentExecution.sendMessageText('/read docs/architecture/agent-interaction-structured-first-spec.md');
+
+        expect(agentExecutionCommandCalls).toEqual([
+            {
+                entity: 'AgentExecution',
+                method: 'invokeSemanticOperation',
+                payload: {
+                    ownerId: 'mission-29',
+                    agentExecutionId: 'session-1',
+                    name: 'read_artifact',
+                    input: {
+                        path: 'docs/architecture/agent-interaction-structured-first-spec.md'
+                    }
+                }
+            }
+        ]);
+    });
+
+    it('dispatches adapter-scoped runtime messages with descriptor ownership fields', async () => {
+        const agentExecutionCommandCalls: EntityCommandInvocation[] = [];
+        const mission = createMission(
+            createMissionSnapshot({
+                agentExecutions: [createAgentExecutionSnapshot('session-1', 'running', {
+                    interactionCapabilities: {
+                        mode: 'agent-message',
+                        canSendTerminalInput: false,
+                        canSendStructuredPrompt: true,
+                        canSendStructuredCommand: true
+                    },
+                    runtimeMessages: [
+                        {
+                            type: 'compact-provider-context',
+                            label: 'Compact Provider Context',
+                            delivery: 'best-effort',
+                            mutatesContext: false,
+                            portability: 'adapter-scoped',
+                            adapterId: 'descriptor-agent'
+                        }
+                    ]
+                })]
+            }),
+            createMissionGatewayDependencies([], [], agentExecutionCommandCalls)
+        );
+        const agentExecution = mission.getAgentExecution('session-1');
+
+        if (!agentExecution) {
+            throw new Error('Expected session to be available.');
+        }
+
+        await agentExecution.sendCommand(agentExecution.createRuntimeMessageCommand({
+            descriptor: agentExecution.runtimeMessages[0],
+            reason: 'before verification'
+        }));
+
+        expect(agentExecutionCommandCalls).toEqual([
+            {
+                entity: 'AgentExecution',
+                method: 'command',
+                payload: {
+                    ownerId: 'mission-29',
+                    agentExecutionId: 'session-1',
+                    commandId: AgentExecutionCommandIds.sendRuntimeMessage,
+                    input: {
+                        type: 'compact-provider-context',
+                        portability: 'adapter-scoped',
+                        adapterId: 'descriptor-agent',
+                        reason: 'before verification'
                     }
                 }
             }
@@ -252,8 +392,20 @@ async function handleCommandInvocation(
         return createAgentExecutionAcknowledgement('command');
     }
 
+    if (input.entity === 'AgentExecution' && input.method === 'invokeSemanticOperation') {
+        agentExecutionCommandCalls.push(input);
+        return {
+            operationName: 'read_artifact',
+            agentExecutionId: 'session-1',
+            eventId: 'event-1',
+            path: 'docs/architecture/agent-interaction-structured-first-spec.md',
+            content: '# Spec',
+            factType: 'artifact-read'
+        };
+    }
+
     if (input.entity === 'Mission' && input.method === 'command') {
-        return createMissionAcknowledgement('command');
+        return createMissionAcknowledgement('pause');
     }
 
     if (input.entity === 'Mission' && ['pause', 'resume', 'restartQueue', 'deliver'].includes(input.method)) {
@@ -301,6 +453,54 @@ async function handleQueryInvocation(
             rootPath: '/repo/root',
             fetchedAt: '2026-04-27T00:00:00.000Z',
             tree: []
+        };
+    }
+
+    if (input.entity === 'AgentExecution' && input.method === 'resolveMessageShorthand') {
+        const payload = input.payload as { text: string };
+        if (payload.text.startsWith('/checkpoint')) {
+            return {
+                kind: 'runtime-message',
+                commandId: AgentExecutionCommandIds.sendRuntimeMessage,
+                input: {
+                    type: 'checkpoint',
+                    reason: payload.text.replace(/^\/checkpoint\s*/u, '')
+                },
+                descriptor: {
+                    type: 'checkpoint',
+                    label: 'Checkpoint',
+                    delivery: 'best-effort',
+                    mutatesContext: false,
+                    portability: 'cross-agent'
+                }
+            };
+        }
+        if (payload.text.startsWith('/read ')) {
+            return {
+                kind: 'semantic-operation',
+                method: 'invokeSemanticOperation',
+                input: {
+                    name: 'read_artifact',
+                    input: {
+                        path: payload.text.replace(/^\/read\s*/u, '')
+                    }
+                },
+                descriptor: {
+                    type: 'read',
+                    label: 'Read Artifact',
+                    delivery: 'best-effort',
+                    mutatesContext: false,
+                    portability: 'mission-native'
+                }
+            };
+        }
+        return {
+            kind: 'prompt',
+            commandId: AgentExecutionCommandIds.sendPrompt,
+            input: {
+                source: 'operator',
+                text: payload.text
+            }
         };
     }
 

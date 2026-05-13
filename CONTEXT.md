@@ -211,6 +211,14 @@ _Avoid_: interaction journal, chat transcript, workflow event log, Agent executi
 A daemon-published description of one supported Agent execution message, including its type, label, input shape, delivery behavior, and whether it mutates Agent execution context.
 _Avoid_: boolean capability, UI method, runtime method
 
+**Agent execution interaction posture**:
+A daemon-published classification of how one Agent execution is operated: structured interactive, structured headless, or native terminal escape hatch. It tells surfaces which control lanes are canonical without changing AgentExecution lifecycle state.
+_Avoid_: launch mode, lifecycle state, terminal status, adapter type
+
+**Agent execution command portability**:
+The portability classification for one Agent execution message descriptor: Mission-native, cross-Agent, adapter-scoped, or terminal-only. It tells surfaces how broadly a command can be understood without making provider-specific terminal commands canonical Mission operations.
+_Avoid_: adapter capability boolean, UI grouping, provider command name, command success state
+
 **AgentExecution projection**:
 A read model derived from AgentExecution semantic state and journal records for surfaces such as Airport chat, timeline, status badges, and grouped activity views. It is not durable AgentExecution truth.
 _Avoid_: source of truth, transcript store, workflow state
@@ -242,6 +250,18 @@ _Avoid_: telemetry source of truth, observability backend, workflow state, log r
 **Agent adapter delivery**:
 A best-effort attempt to send an Agent execution message to an Agent adapter; it is not proof that the indeterministic Agent execution read, understood, applied, or structurally acknowledged the message.
 _Avoid_: context mutation, state acknowledgement, reliable command result
+
+**Agent connection test**:
+A daemon-owned one-shot readiness probe for one Agent adapter that reuses the adapter's real launch semantics, runs without creating a managed AgentExecution, and returns a typed diagnostic result for operator use.
+_Avoid_: fake AgentExecution, raw terminal poke, surface-owned smoke test, REST health check
+
+**Agent connection diagnostic**:
+The typed outcome of an Agent connection test, including success, auth failure, spawn failure, timeout, invalid model selection, or unknown failure with bounded detail.
+_Avoid_: transcript, audit log, AgentExecution signal, terminal status line
+
+**Agent model selection**:
+The provider-native model and reasoning selection surface exposed by a running Agent session, currently reached through the terminal-only `/model` command advertised by the active AgentExecution protocol descriptor. It is runtime-owned session behavior, not adapter-declared Agent metadata and not setup-time owner settings UI.
+_Avoid_: adapter model catalogue, static model list, setup card model selector
 
 **Mission protocol marker**:
 A strict one-line stdout marker emitted by an Agent execution and parsed by the daemon as an advisory Agent execution signal. The marker starts with the Mission protocol prefix and carries strict JSON with Mission id, task id, Agent execution id, event id, and signal payload.

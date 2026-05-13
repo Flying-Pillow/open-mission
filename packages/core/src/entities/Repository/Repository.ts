@@ -54,6 +54,7 @@ import {
 	type RepositoryInitializeType,
 	type RepositorySetupResultType,
 	type RepositorySetupType,
+	type RepositoryConfigureAgentType,
 	type RepositoryConfigureAgentsType,
 	type RepositoryConfigureDisplayType,
 	type RepositoryCodeIndexAcknowledgementType,
@@ -85,6 +86,7 @@ import {
 	RepositoryInitializeResultSchema,
 	RepositoryInitializeSchema,
 	RepositoryConfigureAgentsSchema,
+	RepositoryConfigureAgentSchema,
 	RepositoryConfigureDisplaySchema,
 	RepositoryCodeIndexAcknowledgementSchema,
 	RepositorySetupResultSchema,
@@ -1129,7 +1131,14 @@ export class Repository extends Entity<RepositoryDataType, string> {
 		input: RepositoryConfigureAgentsType,
 		context?: EntityExecutionContext
 	): Promise<RepositoryDataType> {
-		const args = RepositoryConfigureAgentsSchema.parse(input);
+		return this.configureAgent(RepositoryConfigureAgentsSchema.parse(input), context);
+	}
+
+	public async configureAgent(
+		input: RepositoryConfigureAgentType,
+		context?: EntityExecutionContext
+	): Promise<RepositoryDataType> {
+		const args = RepositoryConfigureAgentSchema.parse(input);
 		this.assertRepositoryIdentity(args);
 
 		const settingsState = Repository.inspectSettingsDocument(this.repositoryRootPath);
@@ -1163,10 +1172,14 @@ export class Repository extends Entity<RepositoryDataType, string> {
 			throw new Error(`Repository '${this.id}' must select a default agent from the enabled agents.`);
 		}
 
+		const defaultAgentChanged = currentSettings.agentAdapter !== args.defaultAgentAdapter;
 		const nextSettings = RepositorySettingsSchema.parse({
 			...currentSettings,
 			agentAdapter: args.defaultAgentAdapter,
-			enabledAgentAdapters: requestedEnabledAgentIds
+			enabledAgentAdapters: requestedEnabledAgentIds,
+			defaultAgentMode: args.defaultAgentMode ?? currentSettings.defaultAgentMode,
+			defaultModel: args.defaultModel ?? (defaultAgentChanged ? undefined : currentSettings.defaultModel),
+			defaultReasoningEffort: args.defaultReasoningEffort ?? (defaultAgentChanged ? undefined : currentSettings.defaultReasoningEffort)
 		});
 		await Repository.writeSettingsDocument(nextSettings, this.repositoryRootPath, { resolveWorkspaceRoot: false });
 		this.updateSettings(nextSettings);

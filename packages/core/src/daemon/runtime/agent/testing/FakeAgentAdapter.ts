@@ -572,6 +572,7 @@ function createSnapshot(
 		waitingForInput: false,
 		acceptsPrompts: true,
 		acceptedCommands: ['interrupt', 'checkpoint', 'nudge'],
+		interactionPosture: transport ? 'structured-interactive' : 'structured-headless',
 		...(transport ? { transport } : {}),
 		reference,
 		startedAt: timestamp,
@@ -599,6 +600,7 @@ function createDetachedSnapshot(agentId: string, reference: AgentExecutionRefere
 		waitingForInput: false,
 		acceptsPrompts: false,
 		acceptedCommands: [],
+		interactionPosture: reference.transport ? 'native-terminal-escape-hatch' : 'structured-headless',
 		reference: {
 			agentId,
 			agentExecutionId: reference.agentExecutionId,

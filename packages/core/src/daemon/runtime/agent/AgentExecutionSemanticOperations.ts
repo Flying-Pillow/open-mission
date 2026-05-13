@@ -1,37 +1,33 @@
-import { z } from 'zod';
 import type { AgentExecutionScope } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import type { AgentExecutionJournalRecordType } from '../../../entities/AgentExecution/AgentExecutionJournalSchema.js';
 import type { AgentExecutionJournalWriter } from '../../../entities/AgentExecution/AgentExecutionJournalWriter.js';
+import {
+    AgentExecutionReadArtifactOperationInputSchema,
+    READ_ARTIFACT_OPERATION_NAME,
+    type AgentExecutionReadArtifactOperationInputType,
+    type AgentExecutionReadArtifactOperationResultType,
+    type AgentExecutionSemanticOperationInvocationType,
+    type AgentExecutionSemanticOperationNameType,
+    type AgentExecutionSemanticOperationResultType
+} from '../../../entities/AgentExecution/AgentExecutionSemanticOperationSchema.js';
 import { ArtifactService } from './ArtifactService.js';
 
 type AgentExecutionSemanticOperationHandler = {
-    name: AgentExecutionSemanticOperationName;
+    name: AgentExecutionSemanticOperationNameType;
     invoke(input: AgentExecutionSemanticOperationRequestType): Promise<AgentExecutionSemanticOperationResultType>;
 };
 
-export const READ_ARTIFACT_OPERATION_NAME = 'read_artifact' as const;
-
-export const AgentExecutionReadArtifactOperationInputSchema = z.object({
-    path: z.string().trim().min(1),
-    eventId: z.string().trim().min(1).optional()
-}).strict();
-
-export type AgentExecutionReadArtifactOperationInputType = z.infer<typeof AgentExecutionReadArtifactOperationInputSchema>;
-
-export type AgentExecutionReadArtifactOperationResultType = {
-    operationName: 'read_artifact';
-    agentExecutionId: string;
-    eventId: string;
-    path: string;
-    content: string;
-    factType: 'artifact-read';
+export { AgentExecutionReadArtifactOperationInputSchema, READ_ARTIFACT_OPERATION_NAME };
+export type {
+    AgentExecutionReadArtifactOperationInputType,
+    AgentExecutionReadArtifactOperationResultType,
+    AgentExecutionSemanticOperationInvocationType,
+    AgentExecutionSemanticOperationNameType as AgentExecutionSemanticOperationName,
+    AgentExecutionSemanticOperationResultType
 };
 
-export type AgentExecutionSemanticOperationName = typeof READ_ARTIFACT_OPERATION_NAME;
-export type AgentExecutionSemanticOperationResultType = AgentExecutionReadArtifactOperationResultType;
-
 export type AgentExecutionSemanticOperationDescriptorType = {
-    name: AgentExecutionSemanticOperationName;
+    name: AgentExecutionSemanticOperationNameType;
     title: string;
     description: string;
 };
@@ -43,12 +39,6 @@ export const AgentExecutionSemanticOperationDescriptors: AgentExecutionSemanticO
         description: 'Reads a repository-relative artifact through Mission-owned semantic access and records an authoritative artifact-read runtime fact.'
     }
 ];
-
-export type AgentExecutionSemanticOperationInvocationType = {
-    agentExecutionId: string;
-    name: typeof READ_ARTIFACT_OPERATION_NAME;
-    input: AgentExecutionReadArtifactOperationInputType;
-};
 
 export type AgentExecutionSemanticOperationRequestType = AgentExecutionSemanticOperationInvocationType & {
     scope: AgentExecutionScope;
@@ -63,7 +53,7 @@ export type AgentExecutionSemanticOperationInvoker = {
 
 // Keep semantic operations closed and concrete. Add handlers only for real Mission features.
 export class AgentExecutionSemanticOperations {
-    private readonly handlersByName: Map<AgentExecutionSemanticOperationName, AgentExecutionSemanticOperationHandler>;
+    private readonly handlersByName: Map<AgentExecutionSemanticOperationNameType, AgentExecutionSemanticOperationHandler>;
 
     public constructor(input: {
         artifactService: ArtifactService;
@@ -91,7 +81,7 @@ export function readAgentExecutionSemanticOperationDescriptor(name: string): Age
     return AgentExecutionSemanticOperationDescriptors.find((descriptor) => descriptor.name === name);
 }
 
-export function readAgentExecutionSemanticOperationInputSchema(name: AgentExecutionSemanticOperationName) {
+export function readAgentExecutionSemanticOperationInputSchema(name: AgentExecutionSemanticOperationNameType) {
     switch (name) {
         case READ_ARTIFACT_OPERATION_NAME:
             return AgentExecutionReadArtifactOperationInputSchema;

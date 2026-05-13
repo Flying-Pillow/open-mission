@@ -9,6 +9,10 @@ import type {
     AgentMetadata
 } from '../../../entities/AgentExecution/AgentExecutionProtocolTypes.js';
 import type { AgentSignalDeliveryType } from '../../../entities/AgentExecution/AgentExecutionSchema.js';
+import {
+    AgentExecutionMessageDescriptorSchema,
+    type AgentExecutionMessageDescriptorType
+} from '../../../entities/AgentExecution/AgentExecutionProtocolSchema.js';
 
 export type AgentAdapterTransportCapabilities = {
     supported: AgentSignalDeliveryType[];
@@ -113,7 +117,6 @@ export type AgentAdapterLaunchInput = {
 };
 
 export type AgentAdapterProviderSettingsInput = {
-    reasoningEfforts?: readonly string[];
     allowDangerouslySkipPermissions?: boolean;
     allowCaptureAgentExecutions?: boolean;
     allowResumeAgentExecution?: boolean;
@@ -149,6 +152,13 @@ export type AgentAdapterRuntimeOutput =
     | { kind: 'usage'; payload: AgentMetadata }
     | { kind: 'none' };
 
+export type AgentConnectionFailureDiagnostic = {
+    kind: 'auth-failed' | 'spawn-failed' | 'timeout' | 'invalid-model' | 'unknown';
+    summary: string;
+    detail?: string;
+    diagnosticCode?: string;
+};
+
 export type AgentAdapterInput = {
     command: string;
     interactive: AgentAdapterLaunchInput;
@@ -159,6 +169,14 @@ export type AgentAdapterInput = {
     trustedFolders?: AgentAdapterTrustedFoldersInput;
     parseRuntimeOutputLine?: (line: string, agent: AgentInput) => AgentAdapterRuntimeOutput[];
     parseAgentExecutionUsageContent?: (content: string, agent: AgentInput) => AgentAdapterRuntimeOutput | undefined;
+    runtimeMessages?: AgentExecutionMessageDescriptorType[];
+    diagnoseConnectionFailure?: (input: {
+        exitCode?: number | null;
+        signal?: NodeJS.Signals | null;
+        stdout: string;
+        stderr: string;
+        error?: unknown;
+    }, agent: AgentInput) => AgentConnectionFailureDiagnostic | undefined;
     prepareLaunchConfig?: (config: AgentLaunchConfig, agent: AgentInput, mcpAccess?: AgentExecutionMcpAccess) => AgentAdapterLaunchPreparation | Promise<AgentAdapterLaunchPreparation>;
     transportCapabilities?: AgentAdapterTransportCapabilities;
     terminalOptions?: Partial<AgentAdapterTerminalOptions>;
@@ -170,9 +188,18 @@ export type AgentAdapterOptions = {
     id: string;
     command: string;
     displayName?: string;
+    icon?: string;
     createLaunchPlan(config: AgentLaunchConfig): AgentAdapterLaunchPlan;
     parseRuntimeOutputLine?: (line: string) => AgentAdapterRuntimeOutput[];
     parseAgentExecutionUsageContent?: (content: string) => AgentAdapterRuntimeOutput | undefined;
+    runtimeMessages?: AgentExecutionMessageDescriptorType[];
+    diagnoseConnectionFailure?: (input: {
+        exitCode?: number | null;
+        signal?: NodeJS.Signals | null;
+        stdout: string;
+        stderr: string;
+        error?: unknown;
+    }) => AgentConnectionFailureDiagnostic | undefined;
     prepareLaunchConfig?: (config: AgentLaunchConfig, mcpAccess?: AgentExecutionMcpAccess) => AgentAdapterLaunchPreparation | Promise<AgentAdapterLaunchPreparation>;
     transportCapabilities?: AgentAdapterTransportCapabilities;
     terminalOptions?: Partial<AgentAdapterTerminalOptions>;
@@ -181,9 +208,18 @@ export type AgentAdapterOptions = {
 export class AgentAdapter {
     public readonly id: string;
     public readonly displayName: string;
+    public readonly icon: string;
     private readonly createLaunchPlanHook: (config: AgentLaunchConfig) => AgentAdapterLaunchPlan;
     private readonly parseRuntimeOutputLineHook: ((line: string) => AgentAdapterRuntimeOutput[]) | undefined;
     private readonly parseAgentExecutionUsageContentHook: ((content: string) => AgentAdapterRuntimeOutput | undefined) | undefined;
+    private readonly runtimeMessages: AgentExecutionMessageDescriptorType[];
+    private readonly diagnoseConnectionFailureHook: ((input: {
+        exitCode?: number | null;
+        signal?: NodeJS.Signals | null;
+        stdout: string;
+        stderr: string;
+        error?: unknown;
+    }) => AgentConnectionFailureDiagnostic | undefined) | undefined;
     private readonly prepareLaunchConfigHook: ((config: AgentLaunchConfig, mcpAccess?: AgentExecutionMcpAccess) => AgentAdapterLaunchPreparation | Promise<AgentAdapterLaunchPreparation>) | undefined;
     private readonly transportCapabilities: AgentAdapterTransportCapabilities;
     public readonly terminalOptions: Partial<AgentAdapterTerminalOptions>;
@@ -191,6 +227,7 @@ export class AgentAdapter {
     public constructor(options: AgentAdapterOptions) {
         this.id = options.id.trim();
         this.displayName = options.displayName?.trim() || this.id;
+        this.icon = options.icon?.trim() || 'lucide:bot';
         if (!this.id) {
             throw new ProviderInitializationError('unknown', 'AgentAdapter requires a non-empty id.');
         }
@@ -200,6 +237,8 @@ export class AgentAdapter {
         this.createLaunchPlanHook = options.createLaunchPlan;
         this.parseRuntimeOutputLineHook = options.parseRuntimeOutputLine;
         this.parseAgentExecutionUsageContentHook = options.parseAgentExecutionUsageContent;
+        this.runtimeMessages = AgentExecutionMessageDescriptorSchema.array().parse(options.runtimeMessages ?? []);
+        this.diagnoseConnectionFailureHook = options.diagnoseConnectionFailure;
         this.prepareLaunchConfigHook = options.prepareLaunchConfig;
         this.transportCapabilities = options.transportCapabilities ?? {
             supported: ['stdout-marker'],
@@ -251,6 +290,23 @@ export class AgentAdapter {
         return this.parseAgentExecutionUsageContentHook?.(content);
     }
 
+    public getRuntimeMessageDescriptors(): AgentExecutionMessageDescriptorType[] {
+        return this.runtimeMessages.map((descriptor) => ({
+            ...descriptor,
+            ...(descriptor.input ? { input: { ...descriptor.input } } : {})
+        }));
+    }
+
+    public diagnoseConnectionFailure(input: {
+        exitCode?: number | null;
+        signal?: NodeJS.Signals | null;
+        stdout: string;
+        stderr: string;
+        error?: unknown;
+    }): AgentConnectionFailureDiagnostic | undefined {
+        return this.diagnoseConnectionFailureHook?.(input);
+    }
+
     public supportsUsageParsing(): boolean {
         return this.parseAgentExecutionUsageContentHook !== undefined;
     }
@@ -266,12 +322,17 @@ export function createAgentAdapter(agent: AgentInput, context: AgentAdapterConte
         id: agent.agentId,
         command: agent.adapter.command,
         displayName: agent.displayName,
+        icon: agent.icon,
         createLaunchPlan: (config) => createConfiguredLaunchPlan(config, context, agent),
         ...(agent.adapter.parseRuntimeOutputLine
             ? { parseRuntimeOutputLine: (line: string) => agent.adapter.parseRuntimeOutputLine?.(line, agent) ?? [{ kind: 'none' }] }
             : {}),
         ...(agent.adapter.parseAgentExecutionUsageContent
             ? { parseAgentExecutionUsageContent: (content: string) => agent.adapter.parseAgentExecutionUsageContent?.(content, agent) }
+            : {}),
+        ...(agent.adapter.runtimeMessages ? { runtimeMessages: agent.adapter.runtimeMessages } : {}),
+        ...(agent.adapter.diagnoseConnectionFailure
+            ? { diagnoseConnectionFailure: (input) => agent.adapter.diagnoseConnectionFailure?.(input, agent) }
             : {}),
         prepareLaunchConfig: (config: AgentLaunchConfig, mcpAccess?: AgentExecutionMcpAccess) => prepareAgentLaunchConfig(config, agent, trustedFolders, mcpAccess),
         ...(agent.adapter.transportCapabilities ? { transportCapabilities: agent.adapter.transportCapabilities } : {}),
@@ -386,7 +447,6 @@ function resolveConfiguredProviderSettings(config: AgentLaunchConfig, context: A
         agentId: agent.agentId,
         ...(context.resolveSettings ? { resolveSettings: context.resolveSettings } : {})
     });
-    validateReasoningEffort(agent.agentId, settings.reasoningEffort, settingsInput.reasoningEfforts);
     if (settings.dangerouslySkipPermissions && !settingsInput.allowDangerouslySkipPermissions) {
         throw new ProviderInitializationError(agent.agentId, `Adapter '${agent.agentId}' does not support configurable permission bypass.`);
     }
@@ -494,11 +554,8 @@ function resolveAgentAdapterSettings<TAgentId extends string>(input: { config: A
         ? input.resolveSettings(input.config, input.agentId)
         : { model: process.env['MISSION_DEFAULT_MODEL']?.trim() || '', launchMode: 'interactive' as const, runtimeEnv: process.env };
     const model = raw.model?.trim();
-    if (!model) {
-        throw new ProviderInitializationError(input.agentId, `Adapter '${input.agentId}' requires a non-empty provider model.`);
-    }
     return {
-        model,
+        model: model ?? '',
         launchMode: raw.launchMode ?? 'interactive',
         ...(raw.reasoningEffort ? { reasoningEffort: raw.reasoningEffort.trim() } : {}),
         dangerouslySkipPermissions: raw.dangerouslySkipPermissions ?? false,
@@ -508,18 +565,6 @@ function resolveAgentAdapterSettings<TAgentId extends string>(input: { config: A
         runtimeEnv: sanitizeProcessEnv(raw.runtimeEnv),
         launchEnv: validateStringRecord(input.agentId, { ...(raw.launchEnv ?? {}), ...(input.config.launchEnv ?? {}) }, 'launch env')
     };
-}
-
-function validateReasoningEffort(agentId: string, value: string | undefined, allowedValues: readonly string[] | undefined): void {
-    if (value === undefined) {
-        return;
-    }
-    if (!allowedValues) {
-        throw new ProviderInitializationError(agentId, `Adapter '${agentId}' does not support a reasoning effort option.`);
-    }
-    if (!allowedValues.includes(value)) {
-        throw new ProviderInitializationError(agentId, `Adapter '${agentId}' received unsupported reasoning effort '${value}'.`);
-    }
 }
 
 function validateCaptureAgentExecutions(agentId: string, value: boolean | undefined): void {

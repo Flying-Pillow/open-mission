@@ -6,7 +6,7 @@ import {
     createDefaultRepositorySettings,
     type RepositorySettingsType
 } from '../Repository/RepositorySchema.js';
-import { AgentDataSchema, type AgentIdType } from './AgentSchema.js';
+import { AgentSchema, type AgentIdType } from './AgentSchema.js';
 import {
     createAgentAdapter,
     type AgentInput,
@@ -86,14 +86,9 @@ function createProviderSettingsResolver(
     defaults: { settings: RepositorySettingsType }
 ): AgentAdapterSettingsResolver<string> {
     return (config, agentId) => {
-        const optionCatalog = readAgentOptionCatalog(agentId);
-        const defaultReasoningEffort = supportsDefaultReasoningEffort(agentId)
-            ? readStringMetadata(config, 'reasoningEffort')
-            ?? defaults.settings.defaultReasoningEffort?.trim()
-            ?? optionCatalog.reasoningEfforts[0]
-            : undefined;
-        const defaultModel = defaults.settings.defaultModel?.trim()
-            ?? optionCatalog.models[0]?.value;
+        const defaultReasoningEffort = readStringMetadata(config, 'reasoningEffort')
+            ?? defaults.settings.defaultReasoningEffort?.trim();
+        const defaultModel = defaults.settings.defaultModel?.trim();
         const settings = {
             model: readStringMetadata(config, 'model') ?? defaultModel ?? '',
             launchMode: readLaunchModeMetadata(config) ?? readAgentDefaultLaunchMode(agentId) ?? 'interactive' as const,
@@ -113,19 +108,8 @@ function createProviderSettingsResolver(
     };
 }
 
-function supportsDefaultReasoningEffort(agentId: string): boolean {
-    return agentAdapterInputs.some((agentInput) => agentInput.agentId === agentId && agentInput.supportsDefaultReasoningEffort === true);
-}
-
 function isDefaultAgentId(agentId: string): boolean {
     return agentAdapterInputs.some((agentInput) => agentInput.default === true && agentInput.agentId === agentId);
-}
-
-function readAgentOptionCatalog(agentId: string) {
-    return agentAdapterInputs.find((agentInput) => agentInput.agentId === agentId)?.optionCatalog ?? {
-        models: [],
-        reasoningEfforts: []
-    };
 }
 
 function readAgentDefaultLaunchMode(agentId: string): 'interactive' | 'print' | undefined {
@@ -164,15 +148,12 @@ async function createConfiguredAgent(
         adapter.getCapabilities(),
         adapter.isAvailable()
     ]);
-    return new Agent(AgentDataSchema.parse({
+    return new Agent(AgentSchema.parse({
         id: agentInput.id,
         agentId: agentInput.agentId,
         displayName: agentInput.displayName,
+        icon: agentInput.icon,
         capabilities,
-        optionCatalog: agentInput.optionCatalog ?? {
-            models: [],
-            reasoningEfforts: []
-        },
         availability: availability.available
             ? { available: true }
             : {

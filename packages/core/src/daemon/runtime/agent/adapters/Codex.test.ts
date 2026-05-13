@@ -155,8 +155,8 @@ describe('Codex', () => {
         expect(mcpConfigOverride).toContain('MISSION_MCP_TOKEN=');
         expect(mcpConfigOverride).toContain('default_tools_approval_mode="approve"');
         expect(state.spawnedArgs.some((arg) => arg.includes('Structured status markers'))).toBe(false);
-        expect(state.spawnedArgs.some((arg) => arg.includes('Mission MCP tools are already connected and available.'))).toBe(true);
-        expect(state.spawnedArgs.some((arg) => arg.includes('authoritative operator interaction protocol'))).toBe(true);
+        expect(state.spawnedArgs.some((arg) => arg.includes('Mission MCP is already connected and available.'))).toBe(true);
+        expect(state.spawnedArgs.some((arg) => arg.includes('Mission MCP is the authoritative operator interaction protocol'))).toBe(true);
         expect(state.spawnedArgs.some((arg) => arg.includes('@task::'))).toBe(false);
         expect(state.writes).not.toContain('Implement the task.');
     });

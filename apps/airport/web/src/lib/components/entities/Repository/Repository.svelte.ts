@@ -1,7 +1,7 @@
 // /apps/airport/web/src/lib/components/entities/Repository/Repository.svelte.ts: OO browser entity for repository data with remote issue and mission commands.
 import type { MissionCatalogEntryType } from '@flying-pillow/mission-core/entities/Mission/MissionSchema';
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import { AgentFindResultSchema, type AgentDataType } from '@flying-pillow/mission-core/entities/Agent/AgentSchema';
+import type { AgentType, AgentOwnerSettingsType } from '@flying-pillow/mission-core/entities/Agent/AgentSchema';
 import { AgentExecutionDataSchema, type AgentExecutionDataType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import { RepositoryCodeIntelligenceIndexSchema, RepositoryDataSchema, RepositoryIssueDetailSchema, RepositoryMissionStartAcknowledgementSchema, RepositoryPlatformOwnerSchema, RepositoryPlatformRepositorySchema, RepositoryRemovalSummarySchema, RepositorySetupResultSchema, RepositorySyncStatusSchema, TrackedIssueSummarySchema } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
 import type { RepositoryCodeIntelligenceIndexType, RepositoryDataType, RepositoryIssueDetailType, RepositoryPlatformOwnerType, RepositoryRemovalSummaryType, RepositorySetupResultType, RepositorySettingsType, RepositorySyncStatusType, TrackedIssueSummaryType } from '@flying-pillow/mission-core/entities/Repository/RepositorySchema';
@@ -11,6 +11,8 @@ import type { AirportApplication } from '$lib/client/Application.svelte.js';
 import { cmd } from '../../../../routes/api/entities/remote/command.remote';
 import { qry } from '../../../../routes/api/entities/remote/query.remote';
 import { AgentExecution } from '$lib/components/entities/AgentExecution/AgentExecution.svelte.js';
+import { AgentExecutionGateway } from '$lib/components/entities/AgentExecution/AgentExecutionGateway.svelte.js';
+import { Agent } from '$lib/components/entities/Agent/Agent.svelte.js';
 import { Entity } from '$lib/components/entities/Entity/Entity.svelte.js';
 
 export type RepositoryNotificationTone = 'info' | 'success' | 'warning' | 'error';
@@ -228,6 +230,10 @@ export class Repository extends Entity<RepositoryDataType> {
     private codeIntelligenceIndexValue = $state<RepositoryCodeIntelligenceIndexType>(null);
     private codeIntelligenceIndexLoadingValue = $state(false);
     private codeIntelligenceIndexErrorValue = $state<string | undefined>();
+    private readonly agentExecutionGateway = new AgentExecutionGateway({
+        commandRemote: cmd,
+        queryRemote: async (input) => qry(input).run()
+    });
     public missions = $state<MissionCatalogEntryType[]>([]);
     private missionStatusesValue = $state<Record<string, string | undefined>>({});
 
@@ -668,12 +674,19 @@ export class Repository extends Entity<RepositoryDataType> {
         defaultAgentAdapter: string;
         enabledAgentAdapters: string[];
     }): Promise<this> {
+        return this.configureAgent(input);
+    }
+
+    public async configureAgent(input: AgentOwnerSettingsType): Promise<this> {
         const commandInput = {
             defaultAgentAdapter: input.defaultAgentAdapter,
-            enabledAgentAdapters: [...input.enabledAgentAdapters]
+            enabledAgentAdapters: [...input.enabledAgentAdapters],
+            ...(input.defaultAgentMode ? { defaultAgentMode: input.defaultAgentMode } : {}),
+            ...(input.defaultModel ? { defaultModel: input.defaultModel } : {}),
+            ...(input.defaultReasoningEffort ? { defaultReasoningEffort: input.defaultReasoningEffort } : {})
         };
         this.applyData(RepositoryDataSchema.parse(await this.executeCommand(
-            this.commandIdFor('configureAgents'),
+            this.commandIdFor('configureAgent'),
             commandInput
         )));
         await this.refreshCommands();
@@ -691,31 +704,20 @@ export class Repository extends Entity<RepositoryDataType> {
         return this;
     }
 
-    public async findAgents(): Promise<AgentDataType[]> {
-        const agentsQuery = qry({
-            entity: 'Agent',
-            method: 'find',
-            payload: {
-                repositoryRootPath: this.data.repositoryRootPath
-            }
+    public async findAgents(): Promise<AgentType[]> {
+        return Agent.find({
+            repositoryRootPath: this.data.repositoryRootPath
         });
-        return AgentFindResultSchema.parse(await agentsQuery.run());
     }
 
     public findAgentsQuery() {
-        return qry({
-            entity: 'Agent',
-            method: 'find',
-            payload: {
-                repositoryRootPath: this.data.repositoryRootPath
-            }
+        return Agent.findQuery({
+            repositoryRootPath: this.data.repositoryRootPath
         });
     }
 
-    public readAgentsQueryCurrent(input: { current?: unknown }): AgentDataType[] {
-        return Array.isArray(input.current)
-            ? AgentFindResultSchema.parse(input.current)
-            : [];
+    public readAgentsQueryCurrent(input: { current?: unknown }): AgentType[] {
+        return Agent.readFindQueryCurrent(input);
     }
 
     public async ensureRepositoryAgentExecution(): Promise<AgentExecutionDataType> {
@@ -771,17 +773,11 @@ export class Repository extends Entity<RepositoryDataType> {
             return nextData;
         }
 
-        this.repositoryAgentExecutionEntity = new AgentExecution(nextData, {
-            resolveCommands: () => [],
-            executeCommand: async (ownerId, agentExecutionId, commandId, input) => {
-                await this.commandRepositoryAgentExecution({
-                    ownerId,
-                    agentExecutionId,
-                    commandId,
-                    ...(input !== undefined ? { input } : {})
-                });
+        this.repositoryAgentExecutionEntity = new AgentExecution(nextData, this.agentExecutionGateway.createEntityDependencies({
+            afterMutation: async () => {
+                await this.refreshRepositoryAgentExecution();
             }
-        });
+        }));
         this.markChanged();
         return nextData;
     }

@@ -32,19 +32,10 @@ export function createClaudeCode(input: ClaudeCodeInput = {}): AgentInput {
         id: `agent:${CLAUDE_CODE_AGENT_ID}`,
         agentId: CLAUDE_CODE_AGENT_ID,
         displayName: 'Claude Code',
-        optionCatalog: {
-            models: [
-                { value: 'claude-opus-4-7-20260501', label: 'Claude Opus 4.7' },
-                { value: 'claude-sonnet-4-6-20260415', label: 'Claude Sonnet 4.6' },
-                { value: 'claude-haiku-4-5-20260310', label: 'Claude Haiku 4.5' }
-            ],
-            reasoningEfforts: ['low', 'medium', 'high']
-        },
-        supportsDefaultReasoningEffort: true,
+        icon: 'simple-icons:anthropic',
         adapter: {
             command: command?.trim() || process.env['MISSION_CLAUDE_CODE_CLI_COMMAND']?.trim() || 'claude',
             providerSettings: {
-                reasoningEfforts: ['low', 'medium', 'high', 'max'],
                 allowDangerouslySkipPermissions: true,
                 allowCaptureAgentExecutions: true
             },
@@ -88,7 +79,8 @@ export function createClaudeCode(input: ClaudeCodeInput = {}): AgentInput {
                 ]
             },
             parseRuntimeOutputLine,
-            parseAgentExecutionUsageContent
+            parseAgentExecutionUsageContent,
+            diagnoseConnectionFailure
         }
     } satisfies AgentInput;
 }
@@ -179,4 +171,28 @@ function parseAgentExecutionUsageContent(content: string): AgentAdapterRuntimeOu
             ...(typeof usageRecord['output_tokens'] === 'number' ? { outputTokens: usageRecord['output_tokens'] } : {})
         }
     };
+}
+
+function diagnoseConnectionFailure(input: {
+    stdout: string;
+    stderr: string;
+}): import('../AgentAdapter.js').AgentConnectionFailureDiagnostic | undefined {
+    const text = `${input.stdout}\n${input.stderr}`;
+    if (/\b401\b/.test(text) || /\/login/.test(text) || /(auth|oauth|credential|token).*(fail|invalid|missing|expired|unauthorized)/i.test(text)) {
+        return {
+            kind: 'auth-failed',
+            summary: 'Claude Code authentication is missing or invalid.',
+            detail: 'Run `claude` and use `/login`, or verify the configured Claude profile and proxy credentials before retrying.',
+            diagnosticCode: 'claude-auth'
+        };
+    }
+    if (/anthropic_base_url|proxy/i.test(text)) {
+        return {
+            kind: 'auth-failed',
+            summary: 'Claude Code custom endpoint or proxy authentication failed.',
+            detail: 'Check the configured Claude proxy base URL and credentials, then retry the connection test.',
+            diagnosticCode: 'claude-proxy-auth'
+        };
+    }
+    return undefined;
 }

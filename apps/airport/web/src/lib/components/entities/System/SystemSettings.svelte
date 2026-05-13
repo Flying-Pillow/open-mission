@@ -2,8 +2,8 @@
     import { invalidateAll } from "$app/navigation";
     import { app } from "$lib/client/Application.svelte.js";
     import {
-        systemConfigSchema,
-        type SystemConfig,
+        SystemConfigureSchema,
+        type SystemConfigureType,
     } from "@flying-pillow/mission-core/entities/System/SystemSchema";
     import AgentSettings from "$lib/components/entities/Agent/AgentSettings.svelte";
     import { Button } from "$lib/components/ui/button/index.js";
@@ -23,11 +23,17 @@
     let repositoriesRoot = $state("");
     let selectedEnabledAgentAdapters = $state<string[]>([]);
     let selectedDefaultAgentAdapter = $state("");
+    let selectedDefaultAgentMode = $state<
+        "interactive" | "autonomous" | undefined
+    >(undefined);
     let canSaveAgentSettings = $state(false);
     let availableAgentCount = $state(0);
     let saveError = $state<string | null>(null);
     let saving = $state(false);
     let initializedSettingsKey = $state("");
+
+    const trimmedRepositoriesRoot = $derived(repositoriesRoot.trim());
+    const settingsLoaded = $derived(initializedSettingsKey.length > 0);
 
     $effect(() => {
         const config = currentConfig;
@@ -35,7 +41,7 @@
             return;
         }
 
-        const nextKey = `${config.repositoriesRoot}:${config.defaultAgentAdapter}:${config.enabledAgentAdapters.join(",")}`;
+        const nextKey = `${config.repositoriesRoot}:${config.defaultAgentAdapter}:${config.enabledAgentAdapters.join(",")}:${config.defaultAgentMode ?? ""}`;
         if (initializedSettingsKey === nextKey) {
             return;
         }
@@ -44,29 +50,54 @@
         repositoriesRoot = config.repositoriesRoot;
         selectedEnabledAgentAdapters = [...config.enabledAgentAdapters];
         selectedDefaultAgentAdapter = config.defaultAgentAdapter;
+        selectedDefaultAgentMode = config.defaultAgentMode;
     });
 
-    const parsedConfig = $derived.by(() =>
-        systemConfigSchema.safeParse({
-            repositoriesRoot,
-            defaultAgentAdapter: selectedDefaultAgentAdapter,
-            enabledAgentAdapters: selectedEnabledAgentAdapters,
-        } satisfies SystemConfig),
+    const parsedRepositorySettings = $derived.by(() =>
+        SystemConfigureSchema.safeParse({
+            repositoriesRoot: trimmedRepositoriesRoot,
+        } satisfies SystemConfigureType),
     );
     const canSaveSettings = $derived(
-        parsedConfig.success &&
+        parsedRepositorySettings.success &&
             (availableAgentCount === 0 || canSaveAgentSettings),
     );
+    const validationMessage = $derived.by(() => {
+        if (!trimmedRepositoriesRoot || parsedRepositorySettings.success) {
+            return null;
+        }
+
+        const issue = parsedRepositorySettings.error.issues[0];
+        const field = issue?.path[0];
+        if (field === "repositoriesRoot") {
+            return "Enter a repositories root to continue.";
+        }
+
+        return issue?.message ?? "Repository root settings are invalid.";
+    });
 
     async function saveSettings(): Promise<void> {
-        if (!parsedConfig.success || !canSaveSettings) {
+        if (
+            !settingsLoaded ||
+            !parsedRepositorySettings.success ||
+            !canSaveSettings
+        ) {
             return;
         }
 
         saving = true;
         saveError = null;
         try {
-            await app.system?.configure(parsedConfig.data);
+            await app.system?.configure(parsedRepositorySettings.data);
+            if (availableAgentCount > 0) {
+                await app.system?.configureAgent({
+                    defaultAgentAdapter: selectedDefaultAgentAdapter,
+                    enabledAgentAdapters: [...selectedEnabledAgentAdapters],
+                    ...(selectedDefaultAgentMode
+                        ? { defaultAgentMode: selectedDefaultAgentMode }
+                        : {}),
+                });
+            }
             await invalidateAll();
             await onSaved();
         } catch (error) {
@@ -87,50 +118,55 @@
 
 <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
     <div class="min-h-0 flex-1 overflow-auto px-6 py-5">
-        <div class="grid gap-4">
-            <div class="grid gap-2 rounded-lg border px-3 py-3">
-                <label
-                    class="text-sm font-medium text-foreground"
-                    for="repositories-root"
-                >
-                    Repositories root
-                </label>
-                <FolderPicker
-                    id="repositories-root"
-                    bind:value={repositoriesRoot}
-                    placeholder="/home/user/repositories"
-                    browseLabel="Browse folders"
-                    helperText="Browse the runtime filesystem, then use the current folder or choose a child folder."
-                />
-                <p class="text-xs text-muted-foreground">
-                    This root is used for the repositories system surface and
-                    agent availability checks.
-                </p>
-            </div>
+        {#if !settingsLoaded}
+            <p class="text-sm text-muted-foreground">
+                Loading system settings...
+            </p>
+        {:else}
+            <div class="grid gap-4">
+                <div class="grid gap-2 rounded-lg border px-3 py-3">
+                    <label
+                        class="text-sm font-medium text-foreground"
+                        for="repositories-root"
+                    >
+                        Repositories root
+                    </label>
+                    <FolderPicker
+                        id="repositories-root"
+                        bind:value={repositoriesRoot}
+                        placeholder="/home/user/repositories"
+                        browseLabel="Browse folders"
+                        helperText="Browse the runtime filesystem, then use the current folder or choose a child folder."
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        This root is used for the repositories system surface
+                        and agent availability checks.
+                    </p>
+                </div>
 
-            <div class="rounded-lg border px-3 py-3">
                 <AgentSettings
-                    repositoryRootPath={repositoriesRoot}
+                    agentResolutionRootPath={trimmedRepositoriesRoot}
+                    testWorkingDirectory={trimmedRepositoriesRoot}
                     bind:enabledAgentAdapters={selectedEnabledAgentAdapters}
                     bind:defaultAgentAdapter={selectedDefaultAgentAdapter}
+                    bind:defaultAgentMode={selectedDefaultAgentMode}
                     bind:canSave={canSaveAgentSettings}
                     bind:availableAgentCount
                     title="System agents"
-                    description="Choose which agents the repositories system surface may use."
+                    description="Choose which agents the system owner may use and how its Agent executions should start."
                 />
+
+                {#if validationMessage}
+                    <p class="text-sm text-rose-600">
+                        {validationMessage}
+                    </p>
+                {/if}
+
+                {#if saveError}
+                    <p class="text-sm text-rose-600">{saveError}</p>
+                {/if}
             </div>
-
-            {#if !parsedConfig.success}
-                <p class="text-sm text-rose-600">
-                    {parsedConfig.error.issues[0]?.message ??
-                        "System settings are invalid."}
-                </p>
-            {/if}
-
-            {#if saveError}
-                <p class="text-sm text-rose-600">{saveError}</p>
-            {/if}
-        </div>
+        {/if}
     </div>
 
     <Dialog.Footer class="border-t px-6 py-4">
@@ -139,7 +175,7 @@
         >
         <Button
             type="button"
-            disabled={!canSaveSettings || saving}
+            disabled={!settingsLoaded || !canSaveSettings || saving}
             onclick={saveSettings}
         >
             {saving ? "Saving..." : "Save"}

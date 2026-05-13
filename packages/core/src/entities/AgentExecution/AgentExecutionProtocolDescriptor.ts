@@ -5,8 +5,10 @@ import {
     type AgentSignalDescriptorType,
     type AgentExecutionMessageDescriptorType,
     type AgentExecutionProtocolDescriptorType,
-    type AgentExecutionProtocolOwnerType
+    type AgentExecutionProtocolOwnerType,
+    type AgentExecutionInteractionPostureType
 } from './AgentExecutionProtocolSchema.js';
+import { defaultAgentExecutionMissionNativeCommandRegistry } from './AgentExecutionMissionNativeCommandRegistry.js';
 import { baselineAgentSignalDescriptors } from './AgentExecutionSignalRegistry.js';
 
 export function createAgentExecutionProtocolDescriptor(input: {
@@ -14,6 +16,7 @@ export function createAgentExecutionProtocolDescriptor(input: {
     messages: AgentExecutionMessageDescriptorType[];
     signals?: AgentSignalDescriptorType[];
     deliveries?: AgentSignalDeliveryType[];
+    interactionPosture?: AgentExecutionInteractionPostureType;
 }): AgentExecutionProtocolDescriptorType {
     const signals = (input.signals ?? baselineAgentSignalDescriptors).map((signal) => ({
         ...signal,
@@ -26,7 +29,11 @@ export function createAgentExecutionProtocolDescriptor(input: {
         version: 1,
         owner: deriveAgentExecutionProtocolOwner(input.scope),
         scope: input.scope,
-        messages: input.messages,
+        interactionPosture: input.interactionPosture ?? 'structured-headless',
+        messages: mergeProtocolMessages(
+            defaultAgentExecutionMissionNativeCommandRegistry.listDescriptors(),
+            input.messages
+        ),
         signals,
         ...(signals.some((signal) => signal.deliveries.includes('mcp-tool'))
             ? {
@@ -37,6 +44,20 @@ export function createAgentExecutionProtocolDescriptor(input: {
                 }
             }
             : {})
+    });
+}
+
+function mergeProtocolMessages(
+    missionNativeMessages: AgentExecutionMessageDescriptorType[],
+    runtimeMessages: AgentExecutionMessageDescriptorType[]
+): AgentExecutionMessageDescriptorType[] {
+    const seenTypes = new Set<string>();
+    return [...missionNativeMessages, ...runtimeMessages].filter((message) => {
+        if (seenTypes.has(message.type)) {
+            return false;
+        }
+        seenTypes.add(message.type);
+        return true;
     });
 }
 

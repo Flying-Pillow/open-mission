@@ -1,12 +1,14 @@
 // /apps/airport/web/src/lib/components/entities/AgentExecution/AgentExecution.svelte.ts: OO browser entity for a mission agent execution hydrated from validated runtime snapshots.
 import type { EntityCommandDescriptorType } from '@flying-pillow/mission-core/entities/Entity/EntitySchema';
-import { AgentExecutionCommandIds, type AgentExecutionCommandType, type AgentExecutionPromptType, type AgentExecutionDataType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
+import { AgentExecutionCommandIds, AgentExecutionCommandSchema, AgentExecutionMessageShorthandResolutionSchema, type AgentExecutionCommandPortabilityType, type AgentExecutionCommandType, type AgentExecutionPromptType, type AgentExecutionDataType, type AgentExecutionMessageDescriptorType, type AgentExecutionMessageShorthandResolutionType, type AgentExecutionSemanticOperationPayloadType, type AgentExecutionSemanticOperationResultType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionSchema';
 import type { AgentExecutionJournalRecordType } from '@flying-pillow/mission-core/entities/AgentExecution/AgentExecutionJournalSchema';
 import { Entity } from '$lib/components/entities/Entity/Entity.svelte.js';
 
 export type AgentExecutionDependencies = {
     resolveCommands(agentExecutionId: string): EntityCommandDescriptorType[];
     executeCommand(ownerId: string, agentExecutionId: string, commandId: string, input?: unknown): Promise<void>;
+    resolveMessageShorthand(ownerId: string, agentExecutionId: string, text: string, terminalLane?: boolean): Promise<AgentExecutionMessageShorthandResolutionType>;
+    invokeSemanticOperation(ownerId: string, agentExecutionId: string, operation: AgentExecutionSemanticOperationPayloadType): Promise<AgentExecutionSemanticOperationResultType>;
 };
 
 export class AgentExecution extends Entity<AgentExecutionDataType> {
@@ -123,6 +125,55 @@ export class AgentExecution extends Entity<AgentExecutionDataType> {
         return this.data.runtimeMessages;
     }
 
+    public get protocolMessages(): AgentExecutionMessageDescriptorType[] {
+        return this.data.protocolDescriptor?.messages ?? this.runtimeMessages;
+    }
+
+    public get missionNativeMessages(): AgentExecutionMessageDescriptorType[] {
+        return this.protocolMessages.filter((message) => message.portability === 'mission-native');
+    }
+
+    public static commandPortabilityLabel(portability: AgentExecutionCommandPortabilityType): string {
+        switch (portability) {
+            case 'mission-native':
+                return 'Mission-native';
+            case 'cross-agent':
+                return 'Cross-agent';
+            case 'adapter-scoped':
+                return 'Adapter-scoped';
+            case 'terminal-only':
+                return 'Terminal-only';
+        }
+    }
+
+    public createRuntimeMessageCommand(input: {
+        descriptor: AgentExecutionMessageDescriptorType;
+        reason?: string;
+    }): AgentExecutionCommandType {
+        const reason = input.reason?.trim();
+        if (input.descriptor.portability === 'terminal-only') {
+            throw new Error(`AgentExecution command '${input.descriptor.type}' is terminal-only and must be sent from the terminal pane.`);
+        }
+        if (input.descriptor.portability === 'mission-native') {
+            throw new Error(`AgentExecution command '${input.descriptor.type}' is Mission-native and must be routed through its owning Mission command.`);
+        }
+        if (input.descriptor.portability === 'adapter-scoped' && !input.descriptor.adapterId) {
+            throw new Error(`Adapter-scoped AgentExecution command '${input.descriptor.type}' is missing an adapter id.`);
+        }
+
+        return AgentExecutionCommandSchema.parse(input.descriptor.portability === 'adapter-scoped'
+            ? {
+                type: input.descriptor.type,
+                portability: 'adapter-scoped',
+                adapterId: input.descriptor.adapterId,
+                ...(reason ? { reason } : {})
+            }
+            : {
+                type: input.descriptor.type,
+                ...(reason ? { reason } : {})
+            });
+    }
+
     public get projection(): AgentExecutionDataType['projection'] {
         return this.data.projection;
     }
@@ -180,6 +231,38 @@ export class AgentExecution extends Entity<AgentExecutionDataType> {
     public async sendPrompt(prompt: AgentExecutionPromptType): Promise<this> {
         await this.executeCommand(AgentExecutionCommandIds.sendPrompt, prompt);
         return this;
+    }
+
+    public async sendMessageText(text: string): Promise<this> {
+        const resolution = await this.resolveMessageShorthand(text);
+        switch (resolution.kind) {
+            case 'prompt':
+                await this.sendPrompt(resolution.input);
+                return this;
+            case 'runtime-message':
+                await this.sendCommand(resolution.input);
+                return this;
+            case 'semantic-operation':
+                await this.invokeSemanticOperation(resolution.input);
+                return this;
+            case 'terminal-input':
+                throw new Error('Terminal-only Agent commands must be sent from the terminal pane.');
+            case 'parse-error':
+                throw new Error(resolution.summary);
+        }
+    }
+
+    public async resolveMessageShorthand(text: string, options: { terminalLane?: boolean } = {}): Promise<AgentExecutionMessageShorthandResolutionType> {
+        return AgentExecutionMessageShorthandResolutionSchema.parse(await this.dependencies.resolveMessageShorthand(
+            this.ownerId,
+            this.agentExecutionId,
+            text,
+            options.terminalLane
+        ));
+    }
+
+    public async invokeSemanticOperation(operation: AgentExecutionSemanticOperationPayloadType): Promise<AgentExecutionSemanticOperationResultType> {
+        return this.dependencies.invokeSemanticOperation(this.ownerId, this.agentExecutionId, operation);
     }
 
     public async executeCommand<TResult = unknown>(commandId: string, input?: unknown): Promise<TResult> {

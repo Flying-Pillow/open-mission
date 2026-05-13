@@ -190,6 +190,7 @@ function createProcessRunningSnapshot(input: {
         waitingForInput: false,
         acceptsPrompts: false,
         acceptedCommands: ['interrupt'],
+        interactionPosture: 'structured-headless',
         interactionCapabilities: deriveAgentExecutionInteractionCapabilities({
             status: 'running',
             acceptsPrompts: false,

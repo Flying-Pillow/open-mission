@@ -20,13 +20,7 @@ export function createOpenCode(input: OpenCodeInput = {}): AgentInput {
         id: `agent:${OPENCODE_AGENT_ID}`,
         agentId: OPENCODE_AGENT_ID,
         displayName: 'OpenCode',
-        optionCatalog: {
-            models: [
-                { value: 'openai/gpt-5.5', label: 'OpenAI GPT-5.5' },
-                { value: 'openai/gpt-5.4', label: 'OpenAI GPT-5.4' }
-            ],
-            reasoningEfforts: []
-        },
+        icon: 'lucide:code-xml',
         adapter: {
             command: command?.trim() || process.env['MISSION_OPENCODE_CLI_COMMAND']?.trim() || 'opencode',
             providerSettings: {},

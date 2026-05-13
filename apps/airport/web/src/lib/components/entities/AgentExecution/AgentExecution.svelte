@@ -2,7 +2,7 @@
     import AgentExecutionCommandbar from "$lib/components/entities/AgentExecution/AgentExecutionCommandbar.svelte";
     import AgentExecutionTerminalReplay from "$lib/components/entities/AgentExecution/AgentExecutionTerminalReplay.svelte";
     import { Button } from "$lib/components/ui/button/index.js";
-    import type { AgentExecution as AgentExecutionEntity } from "$lib/components/entities/AgentExecution/AgentExecution.svelte.js";
+    import { AgentExecution as AgentExecutionEntity } from "$lib/components/entities/AgentExecution/AgentExecution.svelte.js";
     import { app } from "$lib/client/Application.svelte.js";
     import {
         createAirportTerminalRuntime,
@@ -61,6 +61,21 @@
     );
     const showFullControls = $derived(panelMode === "full");
     const runtimeMessages = $derived(agentExecution?.runtimeMessages ?? []);
+    const missionNativeMessages = $derived(
+        agentExecution?.missionNativeMessages ?? [],
+    );
+    const structuredRuntimeMessages = $derived(
+        runtimeMessages.filter(
+            (message) =>
+                message.portability !== "terminal-only" &&
+                message.portability !== "mission-native",
+        ),
+    );
+    const selectedCommandDescriptor = $derived(
+        structuredRuntimeMessages.find(
+            (message) => message.type === selectedCommandType,
+        ),
+    );
     const canShowStructuredComposer = $derived(
         Boolean(
             agentExecution &&
@@ -248,13 +263,13 @@
     });
 
     $effect(() => {
-        const nextCommandType = runtimeMessages[0]?.type;
-        if (runtimeMessages.length === 0) {
+        const nextCommandType = structuredRuntimeMessages[0]?.type;
+        if (structuredRuntimeMessages.length === 0) {
             selectedCommandType = "";
             return;
         }
         if (
-            !runtimeMessages.some(
+            !structuredRuntimeMessages.some(
                 (message) => message.type === selectedCommandType,
             )
         ) {
@@ -288,10 +303,7 @@
         interactionPending = "prompt";
         interactionError = null;
         try {
-            await agentExecution.sendPrompt({
-                source: "operator",
-                text,
-            });
+            await agentExecution.sendMessageText(text);
             promptText = "";
             await onCommandExecuted();
         } catch (submitError) {
@@ -302,6 +314,16 @@
         } finally {
             interactionPending = null;
         }
+    }
+
+    function insertMissionNativeCommand(
+        message: AgentExecutionEntity["missionNativeMessages"][number],
+    ): void {
+        const slashCommand = `/${message.type} `;
+        const currentText = promptText.trimStart();
+        promptText = currentText.startsWith(slashCommand)
+            ? promptText
+            : `${slashCommand}${promptText}`.trimEnd();
     }
 
     async function submitStructuredCommand(): Promise<void> {
@@ -321,12 +343,17 @@
         interactionPending = "command";
         interactionError = null;
         try {
-            await agentExecution.sendCommand({
-                type: selectedCommandType,
-                ...(commandReason.trim()
-                    ? { reason: commandReason.trim() }
-                    : {}),
-            });
+            if (!selectedCommandDescriptor) {
+                interactionError = "Select an available command to continue.";
+                return;
+            }
+
+            await agentExecution.sendCommand(
+                agentExecution.createRuntimeMessageCommand({
+                    descriptor: selectedCommandDescriptor,
+                    reason: commandReason,
+                }),
+            );
             commandReason = "";
             await onCommandExecuted();
         } catch (submitError) {
@@ -510,6 +537,20 @@
         return sanitizedData;
     }
 
+    function commandPortabilityBadgeClass(portability: string): string {
+        switch (portability) {
+            case "mission-native":
+                return "border-emerald-500/25 bg-emerald-500/10 text-emerald-200";
+            case "adapter-scoped":
+                return "border-amber-500/25 bg-amber-500/10 text-amber-200";
+            case "terminal-only":
+                return "border-slate-500/25 bg-slate-500/10 text-slate-300";
+            case "cross-agent":
+            default:
+                return "border-sky-500/25 bg-sky-500/10 text-sky-200";
+        }
+    }
+
     function writeToTerminalSafely(data: string, fallbackScreen: string): void {
         if (!terminal || data.length === 0) {
             return;
@@ -636,6 +677,23 @@
                             placeholder="Explain what the agent should do next."
                             disabled={interactionPending !== null}
                         ></textarea>
+                        {#if missionNativeMessages.length > 0}
+                            <div class="flex flex-wrap gap-2">
+                                {#each missionNativeMessages as message (message.type)}
+                                    <button
+                                        type="button"
+                                        class={`inline-flex h-7 items-center rounded-md border px-2 text-xs font-medium transition hover:bg-muted/70 ${commandPortabilityBadgeClass(message.portability)}`}
+                                        disabled={interactionPending !== null}
+                                        onclick={() =>
+                                            insertMissionNativeCommand(message)}
+                                        title={message.description ??
+                                            message.label}
+                                    >
+                                        /{message.type}
+                                    </button>
+                                {/each}
+                            </div>
+                        {/if}
                         <Button
                             type="submit"
                             size="sm"
@@ -649,7 +707,7 @@
                     </form>
                 {/if}
 
-                {#if agentExecution?.canSendStructuredCommand}
+                {#if agentExecution?.canSendStructuredCommand && structuredRuntimeMessages.length > 0}
                     <form
                         class="space-y-2"
                         onsubmit={(event) => {
@@ -675,13 +733,35 @@
                                 class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
                                 disabled={interactionPending !== null}
                             >
-                                {#each runtimeMessages as message (message.type)}
+                                {#each structuredRuntimeMessages as message (message.type)}
                                     <option value={message.type}>
-                                        {message.label}
+                                        {message.label} - {AgentExecutionEntity.commandPortabilityLabel(
+                                            message.portability,
+                                        )}
                                     </option>
                                 {/each}
                             </select>
                         </label>
+                        {#if selectedCommandDescriptor}
+                            <div
+                                class="flex flex-wrap items-center gap-2 text-xs"
+                            >
+                                <span
+                                    class={`inline-flex items-center rounded-md border px-2 py-1 font-medium ${commandPortabilityBadgeClass(selectedCommandDescriptor.portability)}`}
+                                >
+                                    {AgentExecutionEntity.commandPortabilityLabel(
+                                        selectedCommandDescriptor.portability,
+                                    )}
+                                </span>
+                                {#if selectedCommandDescriptor.adapterId}
+                                    <span
+                                        class="inline-flex items-center rounded-md border border-border bg-muted/30 px-2 py-1 text-muted-foreground"
+                                    >
+                                        {selectedCommandDescriptor.adapterId}
+                                    </span>
+                                {/if}
+                            </div>
+                        {/if}
                         <label class="space-y-1 text-sm">
                             <span class="text-xs text-muted-foreground">
                                 Reason

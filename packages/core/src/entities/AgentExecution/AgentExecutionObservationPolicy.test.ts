@@ -42,6 +42,7 @@ function createSnapshot(): AgentExecutionSnapshot {
 		waitingForInput: false,
 		acceptsPrompts: true,
 		acceptedCommands: [],
+		interactionPosture: 'structured-headless',
 		reference: {
 			agentId: 'claude-code',
 			agentExecutionId: 'agent-execution-7'

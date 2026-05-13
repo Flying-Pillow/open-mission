@@ -32,19 +32,43 @@ describe('System', () => {
         });
     });
 
-    it('persists configured system settings', async () => {
+    it('persists configured repositories root without changing Agent settings', async () => {
         process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-system-entity-'));
 
         const result = await System.configure({
-            repositoriesRoot: '/tmp/repositories',
-            defaultAgentAdapter: 'copilot',
-            enabledAgentAdapters: ['copilot', 'codex']
+            repositoriesRoot: '/tmp/repositories'
         });
 
         expect(result).toEqual({
             repositoriesRoot: '/tmp/repositories',
-            defaultAgentAdapter: 'copilot',
-            enabledAgentAdapters: ['copilot', 'codex']
+            defaultAgentAdapter: 'codex',
+            enabledAgentAdapters: []
+        });
+        await expect(System.read({})).resolves.toEqual(result);
+    });
+
+    it('persists shared system agent defaults independently from the repositories root', async () => {
+        process.env['XDG_CONFIG_HOME'] = await fs.mkdtemp(path.join(os.tmpdir(), 'mission-system-entity-'));
+
+        await System.configure({
+            repositoriesRoot: '/tmp/repositories'
+        });
+
+        const result = await System.configureAgent({
+            defaultAgentAdapter: 'codex',
+            enabledAgentAdapters: ['codex', 'claude-code'],
+            defaultAgentMode: 'autonomous',
+            defaultModel: 'gpt-5.3-codex',
+            defaultReasoningEffort: 'high'
+        });
+
+        expect(result).toEqual({
+            repositoriesRoot: '/tmp/repositories',
+            defaultAgentAdapter: 'codex',
+            enabledAgentAdapters: ['codex', 'claude-code'],
+            defaultAgentMode: 'autonomous',
+            defaultModel: 'gpt-5.3-codex',
+            defaultReasoningEffort: 'high'
         });
         await expect(System.read({})).resolves.toEqual(result);
     });

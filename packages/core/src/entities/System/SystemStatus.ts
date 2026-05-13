@@ -375,7 +375,10 @@ function buildSystemConfig(): SystemConfig {
     return systemConfigSchema.parse({
         repositoriesRoot: resolveRepositoriesRoot(missionConfig),
         defaultAgentAdapter: missionConfig.defaultAgentAdapter,
-        enabledAgentAdapters: missionConfig.enabledAgentAdapters
+        enabledAgentAdapters: missionConfig.enabledAgentAdapters,
+        ...(missionConfig.defaultAgentMode ? { defaultAgentMode: missionConfig.defaultAgentMode } : {}),
+        ...(missionConfig.defaultModel ? { defaultModel: missionConfig.defaultModel } : {}),
+        ...(missionConfig.defaultReasoningEffort ? { defaultReasoningEffort: missionConfig.defaultReasoningEffort } : {})
     });
 }
 

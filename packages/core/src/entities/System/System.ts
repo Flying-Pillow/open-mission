@@ -10,7 +10,8 @@ import {
     SystemDataSchema,
     SystemReadSchema,
     systemEntityName,
-    type SystemConfigureType,
+    SystemAgentSettingsSchema,
+    type SystemAgentSettingsType,
     type SystemDataType
 } from './SystemSchema.js';
 
@@ -32,7 +33,25 @@ export class System extends Entity<SystemDataType, string> {
 
     public static async configure(payload: unknown): Promise<SystemDataType> {
         const input = SystemConfigureSchema.parse(payload);
-        await writeMissionConfig(input);
+        const current = readMissionConfig() ?? getDefaultMissionConfig();
+        await writeMissionConfig({
+            ...current,
+            ...input
+        });
+        return readSystemConfig();
+    }
+
+    public static async configureAgent(payload: unknown): Promise<SystemDataType> {
+        const input: SystemAgentSettingsType = SystemAgentSettingsSchema.parse(payload);
+        const current = readMissionConfig() ?? getDefaultMissionConfig();
+        const defaultAgentChanged = current.defaultAgentAdapter !== input.defaultAgentAdapter;
+        await writeMissionConfig({
+            ...current,
+            ...input,
+            defaultAgentMode: input.defaultAgentMode ?? current.defaultAgentMode,
+            defaultModel: input.defaultModel ?? (defaultAgentChanged ? undefined : current.defaultModel),
+            defaultReasoningEffort: input.defaultReasoningEffort ?? (defaultAgentChanged ? undefined : current.defaultReasoningEffort)
+        });
         return readSystemConfig();
     }
 }
@@ -42,6 +61,9 @@ function readSystemConfig(): SystemDataType {
     return SystemDataSchema.parse({
         repositoriesRoot: resolveRepositoriesRoot(config),
         defaultAgentAdapter: config.defaultAgentAdapter,
-        enabledAgentAdapters: config.enabledAgentAdapters
-    } satisfies SystemConfigureType);
+        enabledAgentAdapters: config.enabledAgentAdapters,
+        ...(config.defaultAgentMode ? { defaultAgentMode: config.defaultAgentMode } : {}),
+        ...(config.defaultModel ? { defaultModel: config.defaultModel } : {}),
+        ...(config.defaultReasoningEffort ? { defaultReasoningEffort: config.defaultReasoningEffort } : {})
+    } satisfies SystemDataType);
 }
